@@ -418,6 +418,200 @@ $shortcut.WorkingDirectory
 
 The Start Menu/Desktop shortcut must launch a user-facing Project Truth CLI/console entrypoint, not a stale repo path.
 
+## End-To-End User Journey Acceptance
+
+The overnight output must make the install experience obvious to a normal Windows user.
+
+There are four user journeys. Build and verify each one as far as the machine allows.
+
+### Journey A: Normal Windows User Install
+
+This is the main product journey.
+
+```text
+User has:
+  Windows Pro/Enterprise with Hyper-V available
+  ProjectTruthSetup.exe or install-project-truth.ps1
+  a prebuilt Project Truth VHDX artifact or a configured download URL
+
+User does:
+  1. Runs ProjectTruthSetup.exe
+     or runs .\installer\install-project-truth.ps1
+
+  2. Opens Start Menu -> Project Truth
+
+  3. Sees Project Truth CLI run doctor
+
+  4. Runs:
+       project-truth doctor
+       project-truth select-image
+       project-truth terraform-plan
+       project-truth terraform-apply
+       project-truth watch-until-healthy
+
+Expected result:
+  DEV health URL works
+  UAT health URL works
+  PROD health URL works
+  inside-VM Kubernetes/Argo CD state is printed
+```
+
+The installed entrypoint must work without a Git checkout:
+
+```text
+%ProgramFiles%\ProjectTruth\ProjectTruth.cmd
+%ProgramFiles%\ProjectTruth\scripts\project-truth.ps1
+```
+
+The shortcut must point to installed files, not the source repo.
+
+### Journey B: Maintainer Builds New Base Image
+
+This is not the normal user path.
+
+```text
+Maintainer has:
+  Packer
+  Hyper-V
+  Ubuntu ISO access
+  image-factory/packer/
+
+Maintainer does:
+  1. Runs packer validate
+  2. Runs packer build only if base platform changed
+  3. Publishes:
+       project-truth-node-<version>.vhdx
+       project-truth-node-<version>.sha256
+  4. Updates release notes or image manifest
+
+Expected result:
+  normal users consume the VHDX through select-image/download-image
+  Terraform never runs packer build
+```
+
+Do not create an OVA in the new normal path. OVA is a legacy VirtualBox artifact. If OVA compatibility is requested later, create a clearly separate legacy compatibility track and do not mix it with the Hyper-V/Terraform path.
+
+### Journey C: Developer CI/CD Promotion
+
+```text
+Developer has:
+  GitHub repo
+  GitHub Actions validation
+  GitOps overlays
+
+Developer does:
+  1. Pushes branch or opens PR
+  2. Watches validate workflow
+  3. Promotes an image tag to DEV/UAT/PROD through promote-gitops.yml
+  4. Watches Argo CD sync and health
+
+Expected result:
+  GitHub Actions changes GitOps manifests
+  Argo CD applies manifests
+  CI does not manually kubectl apply as the default deployment path
+```
+
+### Journey D: Operator Repair / Watch Mode
+
+```text
+Operator has:
+  installed Project Truth
+  maybe a missing image, failed Terraform plan, missing IP, or failed health endpoint
+
+Operator does:
+  project-truth repair-and-verify
+
+Expected result:
+  script checks prerequisites
+  script checks installer/shortcut
+  script checks image artifact
+  script checks Terraform
+  script checks Hyper-V VM state
+  script checks host-local health
+  script checks LAN health
+  script checks inside-VM state
+  script writes a final report with exact next command
+```
+
+## Commands The Overnight Run Must Execute
+
+Run these commands yourself and record results in `docs/INSTALLER_TEST_REPORT.md`, `docs/OPERATIONS.md`, and `docs/GAPS_AND_NEXT_GOALS.md`.
+
+Static validation:
+
+```powershell
+node -c app/server.js
+terraform -chdir=terraform-hyperv fmt -recursive
+terraform -chdir=terraform-hyperv init
+terraform -chdir=terraform-hyperv validate
+packer validate image-factory\packer\ubuntu-hyperv.pkr.hcl
+kubectl kustomize gitops\overlays\dev
+kubectl kustomize gitops\overlays\uat
+kubectl kustomize gitops\overlays\prod
+```
+
+PowerShell validation:
+
+```powershell
+$files = Get-ChildItem scripts,installer -Recurse -Include *.ps1 -File
+foreach ($file in $files) {
+  $tokens = $null
+  $errors = $null
+  [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+  if ($errors.Count -gt 0) { throw "PowerShell parse failed: $($file.FullName)" }
+}
+```
+
+Installer journey:
+
+```powershell
+.\installer\build-installer.ps1
+.\installer\install-project-truth.ps1 -InstallDir C:\tmp\ProjectTruthInstallTest
+.\installer\verify-install.ps1 -InstallDir C:\tmp\ProjectTruthInstallTest
+& C:\tmp\ProjectTruthInstallTest\ProjectTruth.cmd doctor
+```
+
+Terraform dry run:
+
+```powershell
+Copy-Item terraform-hyperv\terraform.tfvars.example .runtime\terraform.test.tfvars
+terraform -chdir=terraform-hyperv plan -var-file=..\.runtime\terraform.test.tfvars
+```
+
+Do not run Terraform apply unless:
+
+```text
+a real VHDX exists
+the target switch is known
+the run is elevated or Hyper-V permissions are confirmed
+the safety gate is explicitly enabled
+```
+
+GitHub / CI watch:
+
+```powershell
+git push
+gh run list --limit 10
+gh run watch <run-id>
+gh run view <run-id> --log-failed
+```
+
+If a command cannot run, classify it:
+
+```text
+PASS:
+  command succeeded
+
+REPO BUG:
+  fix code and rerun
+
+ENVIRONMENT BLOCKER:
+  missing VHDX, missing Hyper-V permission, missing Inno Setup, missing trusted runner
+
+POLICY DECISION:
+  requires user choice, such as production approval policy or image registry
+```
+
 ## Execution Budget And Safety Gates
 
 The overnight run should be persistent, but not reckless.
