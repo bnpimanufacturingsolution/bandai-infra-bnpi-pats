@@ -45,3 +45,10 @@ jobs:
         run: |
           terraform -chdir=terraform-hyperv init
           terraform -chdir=terraform-hyperv validate
+
+      - name: Render GitOps overlays
+        shell: powershell
+        run: |
+          kubectl kustomize gitops/overlays/dev
+          kubectl kustomize gitops/overlays/uat
+          kubectl kustomize gitops/overlays/prod

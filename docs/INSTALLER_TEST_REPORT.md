@@ -11,5 +11,9 @@ Generated during implementation on 2026-06-15.
 | Installed CLI launch | PASS | `C:\tmp\ProjectTruthInstallTest\ProjectTruth.cmd doctor` ran successfully. |
 | Clean-user or Sandbox test | BLOCKED | Windows Sandbox was not launched automatically in this run. Current-user test install was used instead. |
 | Shortcut inspection | PASS | Shortcut target was `C:\tmp\ProjectTruthInstallTest\ProjectTruth.cmd`; working directory was `C:\tmp\ProjectTruthInstallTest`. |
+| Helper shortcuts | PASS | 9 Start Menu shortcuts created and inspected. |
+| Config file | PASS | `C:\ProgramData\ProjectTruth\config\project-truth.json` exists and is preserved/backed up on configure. |
+| Installed terraform-plan | PASS | Dry-run plan renders Hyper-V switch, VHDX, and VM resources without apply. |
+| Installed repair-and-verify | PASS/BLOCKED | Loop runs and reports the correct blocker: no selected prebuilt VHDX / no live VM health yet. |
 
 The installer is designed to avoid Packer in the normal path and to launch the installed CLI, not repo-local legacy scripts.

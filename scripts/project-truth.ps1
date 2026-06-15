@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','select-image','download-image','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify')]
+  [ValidateSet('doctor','configure','select-image','download-image','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -12,6 +12,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $scriptMap = @{
   'doctor'              = 'doctor.ps1'
+  'configure'           = 'configure.ps1'
   'select-image'        = 'select-image.ps1'
   'download-image'      = 'download-image.ps1'
   'terraform-plan'      = 'terraform-plan.ps1'
@@ -19,6 +20,8 @@ $scriptMap = @{
   'verify'              = 'verify-host-health.ps1'
   'watch-until-healthy' = 'watch-until-healthy.ps1'
   'repair-and-verify'   = 'repair-and-verify.ps1'
+  'watch-github-run'    = 'watch-github-run.ps1'
+  'verify-gitops-state' = 'verify-gitops-state.ps1'
 }
 
 $target = Join-Path $scriptRoot $scriptMap[$Command]

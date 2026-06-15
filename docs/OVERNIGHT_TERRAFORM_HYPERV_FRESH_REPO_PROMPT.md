@@ -418,6 +418,178 @@ $shortcut.WorkingDirectory
 
 The Start Menu/Desktop shortcut must launch a user-facing Project Truth CLI/console entrypoint, not a stale repo path.
 
+## Required Shortcuts And Helper Entry Points
+
+The installer must create visible, useful shortcuts. Do not create only one vague shortcut and call the installer done.
+
+Create and validate these Start Menu shortcuts:
+
+```text
+Start Menu / Project Truth /
+|
+|-- Project Truth Doctor
+|   `-- runs ProjectTruth.cmd doctor
+|
+|-- Select Project Truth Image
+|   `-- runs ProjectTruth.cmd select-image
+|
+|-- Terraform Plan
+|   `-- runs ProjectTruth.cmd terraform-plan
+|
+|-- Apply Hyper-V VM
+|   `-- runs ProjectTruth.cmd terraform-apply
+|
+|-- Watch Until Healthy
+|   `-- runs ProjectTruth.cmd watch-until-healthy
+|
+|-- Repair And Verify
+|   `-- runs ProjectTruth.cmd repair-and-verify
+|
+|-- Open Project Truth Folder
+|   `-- opens the install directory
+|
+|-- Open Logs
+|   `-- opens %ProgramData%\ProjectTruth\logs
+|
+`-- Open Documentation
+    `-- opens installed README or docs folder
+```
+
+Optional Desktop shortcuts:
+
+```text
+Project Truth Doctor
+Project Truth Repair And Verify
+```
+
+Every shortcut must be inspected after install:
+
+```powershell
+$shell = New-Object -ComObject WScript.Shell
+Get-ChildItem "<shortcut-folder>" -Filter *.lnk | ForEach-Object {
+  $shortcut = $shell.CreateShortcut($_.FullName)
+  [pscustomobject]@{
+    Name = $_.Name
+    TargetPath = $shortcut.TargetPath
+    Arguments = $shortcut.Arguments
+    WorkingDirectory = $shortcut.WorkingDirectory
+  }
+}
+```
+
+Shortcut validation rules:
+
+```text
+TargetPath must point under the installed Project Truth folder or a Windows shell executable used only to open installed folders/docs.
+Arguments must invoke the intended Project Truth command.
+WorkingDirectory must be the installed Project Truth folder.
+No shortcut may point to the development repo.
+No shortcut may point to VirtualBox, VBoxManage, OVA import, or old appliance scripts.
+```
+
+Create:
+
+```text
+docs/SHORTCUTS.md
+```
+
+It must list every shortcut, target, arguments, working directory, and validation result.
+
+## Configuration User Journey
+
+The user needs an obvious place to configure the install.
+
+Create one or both:
+
+```text
+preferred:
+  ProjectTruth.cmd configure
+
+acceptable:
+  ProjectTruth.cmd select-image
+  ProjectTruth.cmd doctor
+  documented config file under %ProgramData%\ProjectTruth\config\
+```
+
+Configuration must show or manage:
+
+```text
+selected VHDX path
+expected SHA256
+VM name
+Hyper-V switch name
+VM storage path
+CPU count
+memory MB
+guest IP hint, if known
+DEV/UAT/PROD health ports
+GitHub repo URL for GitOps
+Argo CD application names
+```
+
+Create:
+
+```text
+%ProgramData%\ProjectTruth\config\project-truth.json
+```
+
+The installer should create this config if it does not exist. It must not overwrite user config without backing it up.
+
+## Screenshot And Visual Proof Requirements
+
+If the run succeeds visually, collect proof. If screenshots cannot be captured, explain why and provide textual inspection output.
+
+Preferred screenshots:
+
+```text
+docs/screenshots/start-menu-project-truth.png
+docs/screenshots/installed-folder.png
+docs/screenshots/doctor-output.png
+docs/screenshots/terraform-plan-output.png
+docs/screenshots/health-success-output.png
+docs/screenshots/github-actions-green.png
+docs/screenshots/argocd-apps-healthy.png, if Argo CD UI or CLI is available
+```
+
+Screenshot alternatives:
+
+```text
+Start Menu shortcut table
+installed file tree
+doctor output
+terraform validate/plan output
+gh run view output
+kubectl/argocd output
+curl health output
+```
+
+Do not fake screenshots. If a screenshot is not available, say:
+
+```text
+SCREENSHOT NOT CAPTURED:
+  reason:
+  replacement proof:
+```
+
+Create:
+
+```text
+docs/USER_JOURNEY_PROOF.md
+```
+
+It must summarize:
+
+```text
+what the user installed
+where it installed
+which shortcuts appeared
+which shortcut was launched
+what command ran
+what passed
+what blocked
+what the user should do next
+```
+
 ## End-To-End User Journey Acceptance
 
 The overnight output must make the install experience obvious to a normal Windows user.
@@ -569,6 +741,17 @@ Installer journey:
 .\installer\install-project-truth.ps1 -InstallDir C:\tmp\ProjectTruthInstallTest
 .\installer\verify-install.ps1 -InstallDir C:\tmp\ProjectTruthInstallTest
 & C:\tmp\ProjectTruthInstallTest\ProjectTruth.cmd doctor
+```
+
+Shortcut journey:
+
+```powershell
+$startMenu = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs\Project Truth'
+Get-ChildItem $startMenu -Filter *.lnk
+.\installer\verify-install.ps1 -InstallDir C:\tmp\ProjectTruthInstallTest
+& C:\tmp\ProjectTruthInstallTest\ProjectTruth.cmd doctor
+& C:\tmp\ProjectTruthInstallTest\ProjectTruth.cmd terraform-plan
+& C:\tmp\ProjectTruthInstallTest\ProjectTruth.cmd repair-and-verify
 ```
 
 Terraform dry run:
@@ -1315,6 +1498,8 @@ Create:
 ```text
 docs/DEVOPS_RUNBOOK.md
 docs/GAPS_AND_NEXT_GOALS.md
+docs/SHORTCUTS.md
+docs/USER_JOURNEY_PROOF.md
 scripts/watch-github-run.ps1
 scripts/verify-gitops-state.ps1
 ```
@@ -1358,6 +1543,10 @@ Legacy files removed or quarantined:
 Installer build result:
 Installed layout result:
 Shortcut inspection result:
+Shortcut helper list:
+Configuration file result:
+User journey proof:
+Screenshot proof:
 Clean-user or Windows Sandbox journey result:
 Terraform init/validate result:
 CLI doctor result:
