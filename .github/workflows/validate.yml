@@ -1,0 +1,43 @@
+name: Validate Project Truth Hyper-V Repo
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - terraform-hyperv-clean-plan
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Node app syntax
+        shell: powershell
+        run: node -c app/server.js
+
+      - name: Validate PowerShell scripts parse
+        shell: powershell
+        run: |
+          $files = Get-ChildItem -Recurse -Include *.ps1
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | Format-List | Out-String | Write-Error
+              throw "PowerShell parse failed: $($file.FullName)"
+            }
+          }
+
+      - name: Terraform fmt
+        shell: powershell
+        run: terraform -chdir=terraform-hyperv fmt -check -recursive
+
+      - name: Terraform init and validate
+        shell: powershell
+        run: |
+          terraform -chdir=terraform-hyperv init
+          terraform -chdir=terraform-hyperv validate

@@ -1,0 +1,13 @@
+vm_name           = "project-truth-node-01"
+switch_name       = "ProjectTruth-External"
+switch_type       = "External"
+net_adapter_names = ["YOUR-LAN-OR-WIFI-ADAPTER"]
+source_image_path = "C:\\ProgramData\\ProjectTruth\\images\\project-truth-node-latest.vhdx"
+vm_path           = "C:\\ProgramData\\ProjectTruth\\HyperV"
+memory_mb         = 4096
+cpu_count         = 2
+ssh_port          = 2222
+dev_port          = 3001
+uat_port          = 3002
+prod_port         = 3000
+guest_ip_hint     = ""

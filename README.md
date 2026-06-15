@@ -1,0 +1,133 @@
+# Project Truth Hyper-V Terraform
+
+This branch is the clean Hyper-V/Terraform direction for Project Truth.
+
+The normal user flow is:
+
+```text
+prebuilt Hyper-V image
+  -> Terraform apply on the Windows host
+  -> Argo CD sync inside the VM
+  -> host-local, LAN, and inside-VM verification
+```
+
+Packer is not part of the normal install path. Packer belongs only to the optional maintainer image-factory flow that publishes a new VHDX when the base platform changes.
+
+## Current Working Branch
+
+```text
+terraform-hyperv-clean-plan
+```
+
+## Main Documents
+
+- [Terraform Hyper-V Architecture](docs/TERRAFORM_HYPERV_ARCHITECTURE.md)
+- [Overnight Fresh Repo Prompt](docs/OVERNIGHT_TERRAFORM_HYPERV_FRESH_REPO_PROMPT.md)
+- [Operations](docs/OPERATIONS.md)
+- [Health Checks](docs/HEALTHCHECKS.md)
+- [Installer Test Report](docs/INSTALLER_TEST_REPORT.md)
+
+## Normal CLI Flow
+
+```powershell
+.\scripts\project-truth.ps1 doctor
+.\scripts\project-truth.ps1 select-image -ImagePath C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx
+.\scripts\project-truth.ps1 terraform-plan
+.\scripts\project-truth.ps1 terraform-apply -Apply
+.\scripts\project-truth.ps1 watch-until-healthy -GuestIp <guest-lan-ip>
+```
+
+`terraform-apply` requires `-Apply` on purpose. The default path does not delete existing VMs and does not run Packer.
+
+## Installer Flow
+
+```powershell
+.\installer\build-installer.ps1
+.\installer\install-project-truth.ps1 -InstallDir "$env:ProgramFiles\ProjectTruth"
+```
+
+If Inno Setup is installed, `build-installer.ps1` compiles `dist\ProjectTruthSetup.exe`. If it is not installed, the PowerShell installer remains the fallback.
+
+## Target Architecture
+
+```text
+Windows Host
+|
+|-- Project Truth CLI
+|   |-- doctor
+|   |-- select-image
+|   |-- download-image
+|   |-- terraform-plan
+|   |-- terraform-apply
+|   `-- verify
+|
+|-- Prebuilt Hyper-V Image
+|   |-- project-truth-node-<version>.vhdx
+|   `-- project-truth-node-<version>.sha256
+|
+`-- Terraform Host Layer
+    |-- creates/selects Hyper-V switch
+    |-- creates Hyper-V VM
+    |-- attaches VHDX
+    |-- sets CPU and memory
+    `-- outputs VM access info
+
+Hyper-V Ubuntu VM
+|
+`-- K3s + Argo CD
+    |
+    |-- dev  -> NodePort 3001 -> /health
+    |-- uat  -> NodePort 3002 -> /health
+    `-- prod -> NodePort 3000 -> /health
+```
+
+## Target Repo Shape
+
+```text
+app/
+gitops/
+terraform-hyperv/
+image-factory/
+scripts/
+docs/
+.github/workflows/
+```
+
+## Ownership Rules
+
+| Concern | Owner |
+|---|---|
+| Hyper-V VM lifecycle | Terraform on Windows host |
+| Base VM image rebuild | Optional Packer image factory |
+| K3s and Argo CD platform | Prebuilt image or platform bootstrap |
+| DEV/UAT/PROD application state | GitOps manifests synced by Argo CD |
+| Health verification | Project Truth CLI scripts |
+
+## Verification Goal
+
+The final verifier must prove:
+
+```text
+Host-local health:
+  http://127.0.0.1:3001/health
+  http://127.0.0.1:3002/health
+  http://127.0.0.1:3000/health
+
+LAN health:
+  http://<guest-lan-ip>:3001/health
+  http://<guest-lan-ip>:3002/health
+  http://<guest-lan-ip>:3000/health
+
+Inside VM:
+  hostname
+  IP addresses
+  Docker containers, if present
+  Kubernetes nodes
+  Kubernetes pods
+  Kubernetes services
+  Argo CD applications
+```
+
+## Legacy Note
+
+Older VirtualBox, OVA, and Terraform-inside-VM workflows may exist in the source history. They are source material only and are not the target architecture for this branch.

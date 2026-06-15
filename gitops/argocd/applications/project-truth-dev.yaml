@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: project-truth-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ernestdodz/INFRA.git
+    targetRevision: terraform-hyperv-clean-plan
+    path: gitops/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

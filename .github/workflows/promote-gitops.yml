@@ -1,0 +1,52 @@
+name: Promote GitOps Image Tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to promote
+        required: true
+        type: choice
+        options:
+          - dev
+          - uat
+          - prod
+      image_tag:
+        description: Container image tag to write into the overlay
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update selected overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_name="${{ inputs.environment }}"
+          tag="${{ inputs.image_tag }}"
+          case "$env_name" in
+            dev|uat|prod) ;;
+            *) echo "Unsupported environment: $env_name" >&2; exit 1 ;;
+          esac
+          [[ "$tag" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid image tag" >&2; exit 1; }
+          file="gitops/overlays/$env_name/deployment-patch.yaml"
+          sed -i -E "s#image: project-truth-health:[A-Za-z0-9._-]+#image: project-truth-health:$tag#g" "$file"
+          sed -i -E "s#value: (dev|uat|prod|local|[A-Za-z0-9._-]+)#value: $tag#2" "$file"
+
+      - name: Commit change
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gitops/overlays/${{ inputs.environment }}/deployment-patch.yaml
+          git diff --cached --quiet && exit 0
+          git commit -m "gitops: promote ${{ inputs.environment }} ${{ inputs.image_tag }}"
+          git push

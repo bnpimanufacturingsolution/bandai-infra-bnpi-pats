@@ -1,0 +1,9 @@
+namespace: dev
+
+resources:
+  - ../../base
+  - namespace.yaml
+
+patches:
+  - path: deployment-patch.yaml
+  - path: service-patch.yaml
