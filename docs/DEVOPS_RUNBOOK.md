@@ -18,6 +18,9 @@ node -c app/server.js
 PowerShell parser for scripts and installer
 terraform fmt/init/validate
 kubectl kustomize for dev/uat/prod
+packer validate image-factory/packer/ubuntu-hyperv.pkr.hcl
+PowerShell fallback installer build
+temp-path installer install and shortcut contract verification
 ```
 
 ## Promotion

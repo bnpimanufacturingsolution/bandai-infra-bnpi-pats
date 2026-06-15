@@ -12,6 +12,8 @@ Run the persistent loop:
 .\scripts\project-truth.ps1 watch-until-healthy -GuestIp <guest-lan-ip> -MaxHours 8
 ```
 
+`-GuestIp` is required. Without it, the watcher exits with `BLOCKED` because LAN, SSH, Kubernetes, and Argo CD proof require a booted VM with a discovered IP.
+
 The verifier checks:
 
 ```text
@@ -25,3 +27,16 @@ ssh infra@<guest-lan-ip> "hostname; ip -br addr; docker ps || true; sudo kubectl
 ```
 
 Logs are written under `.runtime/` and are not committed.
+
+## Latest Local Result
+
+Date: 2026-06-15
+
+```text
+Selected VHDX: BLOCKED, C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx does not exist.
+Terraform apply: SKIPPED BY SAFETY GATE, no real selected VHDX and shell not elevated.
+VM IP: NOT TESTED, no VM boot.
+Host-local DEV/UAT/PROD health: NOT TESTED, no VM boot.
+LAN DEV/UAT/PROD health: NOT TESTED, no guest IP.
+SSH/Kubernetes/Argo CD: NOT TESTED, no guest IP.
+```

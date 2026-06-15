@@ -10,6 +10,13 @@ $runDir = Join-Path (Join-Path (Split-Path -Parent $PSScriptRoot) '.runtime\heal
 New-Item -ItemType Directory -Force -Path $runDir | Out-Null
 $log = Join-Path $runDir 'watch.log'
 
+if ([string]::IsNullOrWhiteSpace($GuestIp)) {
+  "[$(Get-Date -Format o)] BLOCKED: GuestIp is required for LAN, SSH, Kubernetes, and Argo CD health proof." |
+    Tee-Object -FilePath $log -Append
+  Write-Warning "BLOCKED: GuestIp is required. Boot the Hyper-V VM from a selected VHDX, discover its IP, then rerun with -GuestIp <guest-lan-ip>. Log: $log"
+  exit 2
+}
+
 while ((Get-Date) -lt $deadline) {
   "[$(Get-Date -Format o)] health attempt" | Tee-Object -FilePath $log -Append
   & "$PSScriptRoot\verify-host-health.ps1" -GuestIp $GuestIp *>&1 | Tee-Object -FilePath $log -Append

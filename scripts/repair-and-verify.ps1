@@ -36,7 +36,12 @@ if ($EnableTerraformApply) {
 }
 
 Add-Report '## Health'
-& "$PSScriptRoot\watch-until-healthy.ps1" -GuestIp $GuestIp -MaxHours $MaxHours *>&1 | Tee-Object -FilePath (Join-Path $runDir 'health.log') | Out-String | Add-Content -LiteralPath $report
+if ([string]::IsNullOrWhiteSpace($GuestIp)) {
+  $message = 'BLOCKED: GuestIp was not provided. Health, SSH, Kubernetes, and Argo CD proof require a booted VM with a discovered LAN IP.'
+  $message | Tee-Object -FilePath (Join-Path $runDir 'health.log') | Out-String | Add-Content -LiteralPath $report
+} else {
+  & "$PSScriptRoot\watch-until-healthy.ps1" -GuestIp $GuestIp -MaxHours $MaxHours *>&1 | Tee-Object -FilePath (Join-Path $runDir 'health.log') | Out-String | Add-Content -LiteralPath $report
+}
 
 Add-Report ''
 Add-Report "Finished: $(Get-Date -Format o)"

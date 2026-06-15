@@ -18,6 +18,10 @@ jobs:
         with:
           terraform_version: 1.15.6
 
+      - uses: hashicorp/setup-packer@v3
+        with:
+          version: 1.14.2
+
       - name: Validate Node app syntax
         shell: powershell
         run: node -c app/server.js
@@ -52,3 +56,17 @@ jobs:
           kubectl kustomize gitops/overlays/dev
           kubectl kustomize gitops/overlays/uat
           kubectl kustomize gitops/overlays/prod
+
+      - name: Validate maintainer-only Packer template
+        shell: powershell
+        run: |
+          packer init image-factory/packer/ubuntu-hyperv.pkr.hcl
+          packer validate image-factory/packer/ubuntu-hyperv.pkr.hcl
+
+      - name: Validate installer and shortcut contract
+        shell: powershell
+        run: |
+          .\installer\build-installer.ps1
+          $installDir = Join-Path $env:RUNNER_TEMP 'ProjectTruthInstallTest'
+          .\installer\install-project-truth.ps1 -InstallDir $installDir
+          .\installer\verify-install.ps1 -InstallDir $installDir
