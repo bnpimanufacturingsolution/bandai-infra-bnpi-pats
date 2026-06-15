@@ -195,6 +195,133 @@ Use the tool boundaries from primary docs:
 - Hyper-V PowerShell cmdlets are the official Windows host management surface for detecting switches, VMs, adapters, and host capability: https://learn.microsoft.com/en-us/powershell/module/hyper-v/
 - Windows Sandbox is a disposable isolated Windows desktop environment suitable for installer/user-journey testing: https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/
 - Inno Setup supports command-line and silent install parameters for logged installer verification: https://jrsoftware.org/ishelp/topic_setupcmdline.htm
+- GitHub Actions deployments support environments, concurrency groups, and protection rules for controlled releases: https://docs.github.com/actions/deployment/about-deployments/deploying-with-github-actions
+- GitHub Actions concurrency prevents overlapping workflow/job runs for the same group: https://docs.github.com/actions/writing-workflows/choosing-what-your-workflow-does/control-the-concurrency-of-workflows-and-jobs
+- GitHub warns that self-hosted runners are not clean ephemeral machines and can be persistently compromised by untrusted workflow code: https://docs.github.com/en/actions/reference/security/secure-use
+- Argo CD automated sync lets CI/CD deploy by committing desired state to Git instead of directly calling the cluster: https://argo-cd.readthedocs.io/en/latest/user-guide/auto_sync/
+- Argo CD sync phases and waves let manifests/hooks run in a predictable order: https://argo-cd.readthedocs.io/en/stable/user-guide/sync-waves/
+- Kubernetes readiness, liveness, and startup probes are the platform-native health gates for containers: https://kubernetes.io/docs/concepts/workloads/pods/probes/
+
+## DevOps / CI-CD Goal
+
+The overnight work must prove the DevOps story, not only the local scripts.
+
+The correct delivery model is:
+
+```text
+Developer push / PR
+  -> GitHub Actions validate
+  -> optional image build
+  -> GitOps overlay update
+  -> Argo CD detects Git drift
+  -> Argo CD syncs DEV/UAT/PROD
+  -> verifier watches GitHub run, Argo CD status, Kubernetes rollout, and health URLs
+```
+
+CI/CD must respect this boundary:
+
+```text
+GitHub Actions:
+  validates code
+  builds/pushes app images when configured
+  updates GitOps manifests
+  watches workflow status
+
+Argo CD:
+  owns Kubernetes apply/sync
+  owns self-heal/prune behavior
+  reports Synced/OutOfSync and Healthy/Degraded
+
+Project Truth CLI:
+  verifies host tools, image artifact, Terraform VM layer, health URLs, and inside-VM state
+```
+
+Do not make CI/CD SSH into the VM and manually mutate Kubernetes as the default deployment path. SSH is allowed only for diagnostics, image loading in a local lab fallback, or inside-VM verification.
+
+Required CI/CD files:
+
+```text
+.github/workflows/
+|-- validate.yml
+|-- promote-gitops.yml
+|-- release-image.yml, if image publishing is implemented
+`-- nightly-verify.yml, if scheduled verification is safe
+```
+
+Required DevOps scripts/docs:
+
+```text
+scripts/watch-github-run.ps1
+scripts/verify-gitops-state.ps1
+docs/DEVOPS_RUNBOOK.md
+docs/GAPS_AND_NEXT_GOALS.md
+```
+
+Minimum GitHub Actions expectations:
+
+```text
+validate.yml:
+  runs on PR and push
+  installs Terraform explicitly
+  checks Node syntax/tests
+  checks PowerShell parse
+  checks Terraform fmt/init/validate
+  checks Kustomize render for dev/uat/prod
+  does not require Hyper-V on GitHub-hosted runners
+
+promote-gitops.yml:
+  workflow_dispatch only, unless release policy is decided
+  validates environment input is dev/uat/prod
+  validates image tag format
+  updates only the selected overlay
+  commits desired state to Git
+  uses concurrency per environment
+
+nightly-verify.yml:
+  only if a trusted self-hosted runner is configured
+  runs doctor
+  verifies selected VHDX
+  optionally runs terraform plan
+  does not apply/destroy by default
+  watches health and reports exact blockers
+```
+
+GitHub environments:
+
+```text
+DEV:
+  automatic promotion allowed after validate
+
+UAT:
+  manual workflow_dispatch or protected environment gate
+
+PROD:
+  manual approval/protected environment gate
+  no overlapping prod deploys
+```
+
+Self-hosted runner safety:
+
+```text
+Use self-hosted runner only for trusted private repo workflows.
+Do not run untrusted fork PR code on the Windows Hyper-V runner.
+Do not store long-lived secrets in the runner workspace.
+Prefer repository/environment secrets and variables.
+Clean workspaces after jobs where possible.
+Label the runner clearly, for example: self-hosted, Windows, X64, project-truth-hyperv.
+```
+
+Watch commands the overnight run should use:
+
+```powershell
+gh run list --limit 10
+gh run view <run-id>
+gh run view <run-id> --log-failed
+gh run watch <run-id>
+gh pr checks --watch
+```
+
+DevOps success is not "workflow file exists." DevOps success means a workflow run is observed, failures are repaired, and the final run is green or has an exact external blocker.
 
 ## Installer And User Journey Goal
 
@@ -942,6 +1069,83 @@ gh pr list --state open
 
 Leave the local branch committed and report the exact commit SHA whenever remote work is impossible.
 
+### Phase 12: DevOps Watch, Repair, And Gap Report
+
+After pushing, watch the CI/CD system.
+
+Required run loop:
+
+```powershell
+gh run list --limit 10
+gh run watch <latest-run-id>
+gh run view <latest-run-id> --log-failed
+```
+
+If a workflow fails:
+
+```text
+read the failed log
+classify the failure
+repair the repo when the failure is under repo control
+commit and push the fix
+watch the next run
+repeat until green or external blocker
+```
+
+Failure classification:
+
+```text
+REPO BUG:
+  syntax error
+  missing setup action
+  wrong file path
+  bad workflow permissions
+  bad kustomize/terraform syntax
+
+ENVIRONMENT BLOCKER:
+  missing GitHub secret/variable
+  missing trusted self-hosted runner
+  missing VHDX artifact
+  Hyper-V unavailable on runner
+  GitHub permission/plan restriction
+
+POLICY DECISION:
+  how dev promotes to uat/prod
+  whether prod requires approval
+  image registry choice
+  whether nightly verify may run terraform apply
+```
+
+Create:
+
+```text
+docs/DEVOPS_RUNBOOK.md
+docs/GAPS_AND_NEXT_GOALS.md
+scripts/watch-github-run.ps1
+scripts/verify-gitops-state.ps1
+```
+
+`docs/DEVOPS_RUNBOOK.md` must explain:
+
+```text
+what each workflow does
+which runner each workflow needs
+which secrets/variables are required
+how DEV/UAT/PROD promotion works
+how to watch and debug a failed run
+how Argo CD sync is expected to happen
+```
+
+`docs/GAPS_AND_NEXT_GOALS.md` must list:
+
+```text
+done now
+blocked by missing artifact/runner/secret
+recommended next goal
+exact next command
+risk level
+```
+
 ## Overnight Success Criteria
 
 By morning, report:
@@ -953,6 +1157,8 @@ Commit SHA:
 Remote push status:
 PR status:
 Merge status:
+GitHub Actions latest run:
+GitHub Actions watch/repair result:
 Fresh repo tree:
 Legacy files removed or quarantined:
 Installer build result:
@@ -969,6 +1175,8 @@ LAN health DEV/UAT/PROD:
 Inside-VM Docker/Kubernetes state:
 Argo CD app state:
 Self-repair loop result:
+DevOps runbook:
+Gaps and next goals:
 Blockers:
 Next exact command:
 ```
