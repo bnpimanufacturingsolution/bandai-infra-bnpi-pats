@@ -18,6 +18,7 @@
 | GitOps overlays for DEV/UAT/PROD | DONE |
 | GitHub validation workflow | DONE |
 | Health watcher missing-IP fast fail | DONE |
+| Legit self-elevating proof runner | DONE |
 
 ## Current Blockers
 
@@ -33,6 +34,12 @@
 Produce or select the first real Project Truth Hyper-V VHDX, then run the full Terraform apply and health watch.
 
 Risk level: medium, because it creates/runs a Hyper-V VM.
+
+Preferred command:
+
+```powershell
+.\scripts\project-truth.ps1 run-elevated-proof -Apply -ImagePath C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx -WatchGitHubActions
+```
 
 ## Truth
 

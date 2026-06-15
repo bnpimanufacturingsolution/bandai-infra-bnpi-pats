@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','configure','select-image','download-image','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state')]
+  [ValidateSet('doctor','configure','select-image','download-image','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','run-elevated-proof')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -22,6 +22,7 @@ $scriptMap = @{
   'repair-and-verify'   = 'repair-and-verify.ps1'
   'watch-github-run'    = 'watch-github-run.ps1'
   'verify-gitops-state' = 'verify-gitops-state.ps1'
+  'run-elevated-proof'  = 'run-elevated-proof.ps1'
 }
 
 $target = Join-Path $scriptRoot $scriptMap[$Command]
