@@ -30,11 +30,11 @@ Logs are written under `.runtime/` and are not committed.
 
 ## Latest Local Result
 
-Date: 2026-06-15
+Date: 2026-06-16
 
 ```text
 Selected VHDX: BLOCKED, C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx does not exist.
-Terraform apply: SKIPPED BY SAFETY GATE, no real selected VHDX and shell not elevated.
+Terraform apply: SKIPPED BY SAFETY GATE, no real selected VHDX.
 VM IP: NOT TESTED, no VM boot.
 Host-local DEV/UAT/PROD health: NOT TESTED, no VM boot.
 LAN DEV/UAT/PROD health: NOT TESTED, no guest IP.

@@ -16,32 +16,25 @@ Install Project Truth
 
 ## Latest Local Proof
 
-Date: 2026-06-15
+Date: 2026-06-16
 
 Run folder:
 
 ```text
-.runtime\overnight\20260615-232143
+.runtime\overnight\20260616-071428
 ```
 
-Install command attempted:
+Elevated install command:
 
 ```powershell
 .\installer\install-project-truth.ps1 -InstallDir "$env:ProgramFiles\ProjectTruth"
-```
-
-Result:
-
-```text
-BLOCKED: the shell was not elevated.
-New-Item : Access to the path 'ProjectTruth' is denied.
 ```
 
 Installed layout:
 
 ```text
 C:\Program Files\ProjectTruth
-BLOCKED: not created in this run because the shell was not elevated.
+PROVEN: ProjectTruth.cmd, app, docs, gitops, image-factory, installer, scripts, and terraform-hyperv were installed.
 ```
 
 Config file:
@@ -54,19 +47,21 @@ PROVEN: exists and points at C:\ProgramData\ProjectTruth\images\project-truth-no
 Shortcut proof:
 
 ```text
-BLOCKED: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Project Truth did not exist after the failed Program Files install.
-CI now validates the shortcut contract through a writable temp install path.
+C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Project Truth
+PROVEN: 9 common Start Menu shortcuts were created and verified.
+All command shortcuts target C:\Program Files\ProjectTruth\ProjectTruth.cmd.
+Open Logs targets C:\ProgramData\ProjectTruth\logs.
+Open Documentation targets C:\Program Files\ProjectTruth\docs.
 ```
 
-Repo command proof:
+Installed command proof:
 
 ```text
 .\scripts\project-truth.ps1 doctor
-  PASS: PowerShell, Hyper-V module, Terraform, Git, gh, curl, ssh detected.
-  WARN: not elevated.
+  PASS: Administrator, Hyper-V module, Terraform, Git, gh, curl, ssh detected.
   WARN: no selected image yet.
 
-.\scripts\terraform-plan.ps1
+.\scripts\project-truth.ps1 terraform-plan
   PASS: terraform init and validate succeeded.
   PASS: dry-run plan showed Hyper-V switch, copied VHDX, and VM resources.
   BLOCKED FOR APPLY: source VHDX does not exist at C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx.
@@ -90,6 +85,6 @@ Screenshots are preferred when a UI is available. If screenshots cannot be captu
 SCREENSHOT NOT CAPTURED:
 
 ```text
-reason: this run used CLI validation rather than GUI/browser screenshot tooling.
-replacement proof: preflight output, install permission error, doctor output, terraform plan output, repair report, and GitHub Actions run status.
+reason: this run used elevated CLI validation rather than GUI/browser screenshot tooling.
+replacement proof: elevated installer output, common Start Menu shortcut inspection, doctor output, terraform plan output, repair report, and GitHub Actions run status.
 ```
