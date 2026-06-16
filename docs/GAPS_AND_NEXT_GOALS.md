@@ -20,12 +20,13 @@
 | Health watcher missing-IP fast fail | DONE |
 | Direct admin proof without elevation wrapper | DONE |
 | Wrapper removal from CLI/docs | DONE |
+| Maintainer image-factory build command | DONE |
 
 ## Current Blockers
 
 | Blocker | Type | Next command |
 |---|---|---|
-| No selected prebuilt VHDX | Environment | `.\scripts\project-truth.ps1 select-image -ImagePath C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx` |
+| No selected prebuilt VHDX | Environment | Create one: `.\scripts\project-truth.ps1 build-image`; or publish an existing bootable image: `.\scripts\project-truth.ps1 build-image -SkipBuild -BuiltImagePath <path-to-bootable-project-truth.vhdx>` |
 | Inno Setup compiler not installed locally | Environment | Install Inno Setup or use PowerShell fallback installer |
 | Real Hyper-V apply not run | Safety | Run from an Administrator PowerShell after image selection: `.\scripts\project-truth.ps1 terraform-apply -Apply` |
 | No live guest IP yet | Environment | Apply VM, then run `.\scripts\project-truth.ps1 watch-until-healthy -GuestIp <ip>` |
@@ -39,12 +40,13 @@ Risk level: medium, because it creates/runs a Hyper-V VM.
 Preferred command:
 
 ```powershell
+.\scripts\project-truth.ps1 build-image
 .\scripts\project-truth.ps1 terraform-apply -Apply
 ```
 
 ## Truth
 
-The current repo proves elevated install, common Start Menu shortcuts, config, CLI doctor, Terraform init/validate/plan, GitOps overlay rendering, and GitHub validation. It does not yet prove a real VM boot or health endpoint because there is no selected prebuilt VHDX artifact in this environment.
+The current repo proves elevated install, common Start Menu shortcuts, config, CLI doctor, Terraform init/validate/plan, GitOps overlay rendering, GitHub validation, and Packer template validation. It now includes a maintainer `build-image` command for creating and publishing the bootable Project Truth VHDX. It does not yet prove a real VM boot or health endpoint because the Packer image build and Terraform apply have not completed in this environment.
 
 Latest evidence folder: `.runtime\overnight\20260616-090206`.
 

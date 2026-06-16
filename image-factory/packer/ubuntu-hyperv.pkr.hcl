@@ -56,12 +56,11 @@ source "hyperv-iso" "ubuntu" {
   shutdown_command = "echo '${var.ssh_password}' | sudo -S shutdown -P now"
   output_directory = "output/${var.vm_name}"
 
-  boot_wait = "45s"
+  boot_wait = "5s"
   boot_command = [
-    "<esc><wait5>",
     "c<wait5>",
     "set gfxpayload=keep<enter><wait2>",
-    "linux /casper/vmlinuz autoinstall ds=\"nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/\" ---<enter><wait5>",
+    "linux /casper/vmlinuz autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<enter><wait5>",
     "initrd /casper/initrd<enter><wait5>",
     "boot<enter><wait10>"
   ]

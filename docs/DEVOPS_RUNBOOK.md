@@ -36,6 +36,30 @@ image_tag: safe container tag
 
 The workflow updates only the selected overlay. Argo CD is expected to detect the Git change and sync it into the cluster.
 
+## Image Factory
+
+Normal users consume a released VHDX. Maintainers can create and publish the local proof artifact with:
+
+```powershell
+.\scripts\project-truth.ps1 build-image
+```
+
+That command runs the Packer Hyper-V image factory, publishes the newest produced VHDX to:
+
+```text
+C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx
+```
+
+It also writes a `.sha256` file, updates Project Truth config, selects the image, and writes `terraform-hyperv\terraform.tfvars`.
+
+If a bootable Project Truth VHDX already exists, publish it without rebuilding:
+
+```powershell
+.\scripts\project-truth.ps1 build-image -SkipBuild -BuiltImagePath <path-to-bootable-project-truth.vhdx>
+```
+
+Do not use `New-VHD` to bypass the image-factory path. An empty VHDX is not a bootable Project Truth image.
+
 ## Watch
 
 ```powershell

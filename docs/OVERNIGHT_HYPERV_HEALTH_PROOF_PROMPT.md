@@ -1,171 +1,147 @@
-# Overnight Prompt: Prove Project Truth Hyper-V End To End
+# Overnight Self-Loop Prompt: Project Truth VHDX Gate To Full Hyper-V Proof
+
+## Research Summary On Current Blocker
+
+- `New-VHD` can create a `.vhdx`, but that would be an empty virtual disk, not a bootable Project Truth image. Microsoft docs: https://learn.microsoft.com/en-us/powershell/module/hyper-v/new-vhd
+- `Convert-VHD` only converts an existing virtual disk; it cannot create the missing bootable K3s/Argo image from nothing. Microsoft docs: https://learn.microsoft.com/en-us/powershell/module/hyper-v/convert-vhd
+- `Get-VHD` is the right proof command once a VHDX exists. Microsoft docs: https://learn.microsoft.com/en-us/powershell/module/hyper-v/get-vhd
+- Packer Hyper-V can build/export a Hyper-V VM/image from ISO, but that is the maintainer image-factory path, not the normal installed-user path. HashiCorp docs: https://developer.hashicorp.com/packer/integrations/hashicorp/hyperv/latest/components/builder/iso
+
+The real blocker is this:
+
+```text
+You need a bootable Project Truth VHDX artifact, not just any .vhdx file.
+```
+
+Important: do not create a fake empty VHDX. That would pass `Test-Path` but fail the real goal. The missing artifact must be a bootable Project Truth VHDX with K3s/Argo content.
 
 ## Mission
 
-You are running the next overnight Project Truth proof pass.
-
-Do not stop at "repo looks good." Do not stop at "scripts exist." The missing proof is a real installed user journey plus a real Hyper-V VM boot from a selected Project Truth VHDX, followed by host-local health, LAN health, SSH, Kubernetes, Argo CD, and GitHub CI/CD verification.
-
-The target architecture remains:
+Run Project Truth proof in a safe self-loop until the actual goal is achieved:
 
 ```text
-prebuilt Project Truth Hyper-V VHDX
-  -> Terraform on the Windows host creates/manages the VM
-  -> VM boots K3s + Argo CD
-  -> Argo CD syncs DEV/UAT/PROD GitOps manifests
-  -> verifier proves host-local, LAN, and inside-VM health
+PROVEN: full installed user journey + Hyper-V VM + health + SSH + Kubernetes + Argo CD pass
 ```
 
-Packer is maintainer-only. Terraform must not run `packer build`. VirtualBox/OVA is legacy only unless explicitly requested later.
+Do not stop merely because the VHDX is missing. The agent must try to create it through the real image-factory path. Packer is expected to download the Ubuntu Server ISO declared in `image-factory\packer\ubuntu-hyperv.pkr.hcl`, install Ubuntu, provision K3s and Argo CD, and produce the bootable VHDX.
+
+Hard stop only for conditions the agent cannot safely repair:
+
+```text
+BLOCKED: current shell is not Administrator
+BLOCKED: Hyper-V is unavailable on this Windows host
+BLOCKED: Packer cannot download Ubuntu after repeated retry with captured error
+BLOCKED: bootable image build repeatedly fails with evidence
+BLOCKED: a destructive operation would be required but was not explicitly allowed
+```
+
+For all other failures, repair or retry and keep looping.
+
+Do not use:
+
+- UACME
+- Akagi
+- UAC bypasses
+- token tricks
+- `Start-Process -Verb RunAs`
+- `scripts\run-elevated-proof.ps1`
+- security weakening steps
+
+Work only from the current already-elevated Administrator shell.
 
 ## Working Folder
 
-Primary fresh repo:
-
-```text
-C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH
-```
-
-Reference clean worktree, if needed:
-
-```text
-C:\Users\anoni\OneDrive\Desktop\INFRA_TERRAFORM_FIRST_CLEAN
-```
-
-Installed state to inspect first:
-
-```text
-C:\ProgramData\ProjectTruth\
-|-- config\
-|-- images\
-|-- logs\
-`-- state\
-```
-
-Current known gap:
-
-```text
-C:\ProgramData\ProjectTruth\images is empty or no valid Project Truth VHDX is selected.
-Real terraform apply and live health have not been proven yet.
-```
-
-## Non-Negotiables
-
-- Keep working until SUCCESS, TIMEOUT, or a real BLOCKED state with evidence.
-- Use real paths and real command output. Do not invent health results.
-- Run as Administrator for Hyper-V/Terraform apply work when needed.
-- Do not delete existing VMs unless `DestroyExistingVmEnabled = true` is explicitly set by the user.
-- Do not create a Windows user or invent a password.
-- Do not install unrelated apps.
-- Do not commit runtime logs, screenshots, local tfvars, credentials, or downloaded images.
-- Every blocker must include the exact next command and the exact file/path that is missing or wrong.
-- If a step fails, repair it once when safe, then rerun the exact validation.
-- Final answer must distinguish PROVEN, BLOCKED, SKIPPED BY SAFETY GATE, and NOT TESTED.
-
-## Research Anchors To Respect
-
-- Terraform provisioners should be avoided unless there is no better option because Terraform cannot model their side effects predictably: https://developer.hashicorp.com/terraform/language/provisioners
-- Hyper-V host and VM facts should be inspected with official Hyper-V PowerShell cmdlets such as `Get-VM` and `Get-VMNetworkAdapter`: https://learn.microsoft.com/en-us/powershell/module/hyper-v/
-- Argo CD application state must be checked as live desired-vs-actual sync and health state: https://argo-cd.readthedocs.io/
-- GitHub self-hosted runners require safety boundaries, especially for private repos and trusted workflows: https://docs.github.com/actions/hosting-your-own-runners
-- Inno Setup silent installer behavior should be validated with documented command-line switches: https://jrsoftware.org/ishelp/topic_setupcmdline.htm
-
-## Overnight Runtime Defaults
-
-Use these defaults unless the user has explicitly overridden them:
-
-```text
-MaxHours = 8
-TerraformApplyEnabled = true
-DestroyExistingVmEnabled = false
-CreateWindowsUserEnabled = false
-UsePackerForNormalPath = false
-CaptureScreenshots = true
-PushGitHubChanges = true
-WatchGitHubActions = true
-```
-
-If Administrator permission is required, open or instruct use of an elevated PowerShell and continue there. Do not silently skip Hyper-V proof because the shell is not elevated.
-
-## Required Output Files
-
-Create or update:
-
-```text
-docs\USER_JOURNEY_PROOF.md
-docs\INSTALLER_TEST_REPORT.md
-docs\HEALTHCHECKS.md
-docs\DEVOPS_RUNBOOK.md
-docs\GAPS_AND_NEXT_GOALS.md
-.runtime\overnight\<timestamp>\run.log
-.runtime\overnight\<timestamp>\summary.md
-.runtime\overnight\<timestamp>\screenshots\
-```
-
-Do not commit `.runtime`.
-
-## Ordered Execution
-
-### Phase 0: Preflight Truth Capture
-
-Run and log:
-
 ```powershell
 cd C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH
-git status --short --branch
-git remote -v
-gh auth status
-gh run list --limit 5
-$PSVersionTable
-whoami /groups
-Get-Command terraform, git, gh, ssh, curl -ErrorAction SilentlyContinue
-Get-Command Get-VM, Get-VMSwitch, Get-VMNetworkAdapter -ErrorAction SilentlyContinue
-Get-ChildItem -Recurse C:\ProgramData\ProjectTruth -ErrorAction SilentlyContinue
 ```
 
-Write the truth into `.runtime\overnight\<timestamp>\preflight.md`.
-
-If Hyper-V cmdlets are missing, document the Windows edition/feature blocker and continue installer, repo, CI, and static validation.
-
-### Phase 1: Fresh Repo Drift Check
-
-Verify the repo still matches the clean architecture:
+## Runtime Defaults
 
 ```powershell
-rg -n "VirtualBox|VBoxManage|OVA|terraform inside|packer build" .
-rg -n "source_image_path|project-truth-node|NodePort|3001|3002|3000|argocd|k3s" .
+$CheckpointHours = 8
+$SleepMinutes = 15
+$RequiredVhdx = "C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx"
+$NextCheckpoint = (Get-Date).AddHours($CheckpointHours)
+$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$runRoot = ".runtime\overnight\$stamp"
+New-Item -ItemType Directory -Force -Path $runRoot, "$runRoot\screenshots" | Out-Null
+"RunRoot=$runRoot" | Tee-Object "$runRoot\run.log"
 ```
 
-Rules:
+## Stop Condition
 
-- Any VirtualBox/OVA wording must be legacy-only, not normal path.
-- `terraform-hyperv` must consume a VHDX path.
-- Terraform must not call Packer.
-- Packer must live under `image-factory`.
+The agent stops only when this file exists and says `PROVEN`:
 
-Repair docs or scripts if they contradict this.
-
-### Phase 2: Installer And Shortcut Proof
-
-Build and install:
-
-```powershell
-.\installer\build-installer.ps1
-.\installer\install-project-truth.ps1 -InstallDir "$env:ProgramFiles\ProjectTruth"
+```text
+$runRoot\final-truth.txt
 ```
 
-If Inno Setup exists, also build and run:
+The goal is achieved only when all of these are proven from real command output:
 
-```powershell
-iscc .\installer\project-truth.iss
-.\dist\ProjectTruthSetup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="$env:TEMP\project-truth-install.log"
+```text
+PROVEN: installed Project Truth works from Program Files
+PROVEN: Start Menu shortcuts target installed files
+PROVEN: bootable Project Truth VHDX exists and has SHA256
+PROVEN: Terraform init/validate/plan pass
+PROVEN: Terraform apply created/runs project-truth-node-01
+PROVEN: VM IP discovered
+PROVEN: host-local DEV/UAT/PROD health pass
+PROVEN: LAN DEV/UAT/PROD health pass
+PROVEN: SSH works
+PROVEN: Kubernetes node is Ready
+PROVEN: DEV/UAT/PROD pods and services exist
+PROVEN: Argo CD applications are visible, ideally Synced/Healthy
 ```
 
-If Inno Setup is missing, mark it as FALLBACK USED and prove the PowerShell installer works.
-
-Inspect actual shortcuts:
+## Phase 1: Fail Fast Admin Proof
 
 ```powershell
+whoami /groups *>&1 | Tee-Object "$runRoot\whoami-groups.txt"
+net session *>&1 | Tee-Object "$runRoot\net-session.txt"
+
+if ($LASTEXITCODE -ne 0) {
+  "BLOCKED ON ADMIN SHELL. Open Administrator PowerShell and rerun from C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH" | Tee-Object "$runRoot\final-truth.txt"
+  exit 1
+}
+```
+
+## Phase 2: Repo And Wrapper Proof
+
+```powershell
+git status --short --branch *>&1 | Tee-Object "$runRoot\git-status.txt"
+git rev-parse --short HEAD *>&1 | Tee-Object "$runRoot\git-commit.txt"
+git remote -v *>&1 | Tee-Object "$runRoot\git-remote.txt"
+
+Test-Path scripts\run-elevated-proof.ps1 *>&1 | Tee-Object "$runRoot\wrapper-script-testpath.txt"
+Test-Path docs\ELEVATED_OVERNIGHT_PROOF_PROMPT.md *>&1 | Tee-Object "$runRoot\wrapper-doc-testpath.txt"
+rg -n "run-elevated-proof|ELEVATED_OVERNIGHT_PROOF_PROMPT|run-elevated" . *>&1 | Tee-Object "$runRoot\wrapper-rg.txt"
+```
+
+## Phase 3: Syntax And Preflight
+
+```powershell
+$errors = @()
+Get-ChildItem -Recurse -Include *.ps1 | Where-Object { $_.FullName -notmatch '\\.runtime\\|\\dist\\' } | ForEach-Object {
+  $tokens = $null
+  $parseErrors = $null
+  [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors) | Out-Null
+  if ($parseErrors.Count -gt 0) { $errors += $parseErrors }
+}
+if ($errors.Count -gt 0) { throw $errors }
+
+gh auth status *>&1 | Tee-Object "$runRoot\gh-auth.txt"
+gh run list --limit 10 *>&1 | Tee-Object "$runRoot\gh-runs-before.txt"
+Get-Command terraform, git, gh, ssh, curl -ErrorAction SilentlyContinue | Format-Table -AutoSize | Out-String | Tee-Object "$runRoot\commands.txt"
+Get-Command Get-VM, Get-VMSwitch, Get-VMNetworkAdapter, Get-VHD -ErrorAction SilentlyContinue | Format-Table -AutoSize | Out-String | Tee-Object "$runRoot\hyperv-commands.txt"
+```
+
+## Phase 4: Installed User Journey
+
+```powershell
+.\installer\build-installer.ps1 *>&1 | Tee-Object "$runRoot\installer-build.txt"
+.\installer\install-project-truth.ps1 -InstallDir "$env:ProgramFiles\ProjectTruth" *>&1 | Tee-Object "$runRoot\installer-install-programfiles.txt"
+.\installer\verify-install.ps1 -InstallDir "$env:ProgramFiles\ProjectTruth" *>&1 | Tee-Object "$runRoot\installer-verify-programfiles.txt"
+
 $shell = New-Object -ComObject WScript.Shell
 $shortcutRoot = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\Project Truth"
 Get-ChildItem $shortcutRoot -Filter *.lnk | ForEach-Object {
@@ -176,226 +152,183 @@ Get-ChildItem $shortcutRoot -Filter *.lnk | ForEach-Object {
     Arguments = $s.Arguments
     WorkingDirectory = $s.WorkingDirectory
   }
+} | Format-Table -AutoSize | Out-String | Tee-Object "$runRoot\shortcut-proof.txt"
+```
+
+## Phase 5: Self-Loop VHDX Gate
+
+First try to create the missing artifact through the real maintainer image-factory path. This is allowed because it uses Packer to build a bootable Project Truth image. It must not use `New-VHD` as a shortcut.
+
+```powershell
+if (-not (Test-Path $RequiredVhdx)) {
+  "ACTION: starting real Packer Hyper-V image build. Packer will download Ubuntu ISO if not cached." | Tee-Object "$runRoot\image-build.txt"
+  .\scripts\project-truth.ps1 build-image *>&1 | Tee-Object "$runRoot\image-build.txt" -Append
 }
 ```
 
-Required shortcuts:
+If a bootable VHDX already exists somewhere else, publish it explicitly instead of running a new build:
+
+```powershell
+.\scripts\project-truth.ps1 build-image -SkipBuild -BuiltImagePath "<path-to-bootable-project-truth.vhdx>" *>&1 | Tee-Object "$runRoot\image-publish-existing.txt"
+```
+
+Then loop until a real selected VHDX exists. Missing VHDX is not a stop condition.
+
+```powershell
+while ($true) {
+  "LoopStart=$(Get-Date -Format o)" | Tee-Object "$runRoot\vhdx-loop.log" -Append
+
+  Get-Content C:\ProgramData\ProjectTruth\config\project-truth.json *>&1 | Tee-Object "$runRoot\project-truth-config.txt"
+  Get-ChildItem C:\ProgramData\ProjectTruth\images -Force *>&1 | Tee-Object "$runRoot\programdata-images.txt"
+  Test-Path $RequiredVhdx | Tee-Object "$runRoot\selected-vhdx-testpath.txt"
+
+  if (Test-Path $RequiredVhdx) {
+    Get-VHD -Path $RequiredVhdx | Format-List * | Out-String | Tee-Object "$runRoot\vhd-facts.txt"
+    Get-FileHash $RequiredVhdx -Algorithm SHA256 | Format-List | Out-String | Tee-Object "$runRoot\vhdx-checksum.txt"
+    "PROVEN: selected VHDX exists at $RequiredVhdx" | Tee-Object "$runRoot\vhdx-loop.log" -Append
+    break
+  }
+
+  $roots = @(
+    "C:\ProgramData\ProjectTruth\images",
+    "C:\Users\anoni\OneDrive\Desktop",
+    "C:\Users\anoni\Downloads"
+  )
+
+  $found = $roots | ForEach-Object {
+    Get-ChildItem $_ -Recurse -Include *.vhdx,*.sha256 -ErrorAction SilentlyContinue |
+      Select-Object FullName,Length,LastWriteTime
+  }
+
+  $found | Format-Table -AutoSize | Out-String | Tee-Object "$runRoot\vhdx-search.txt"
+
+  $projectTruthCandidate = $found |
+    Where-Object { $_.FullName -like "*.vhdx" -and $_.FullName -match "project-truth|project_truth|projecttruth" } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+  if ($projectTruthCandidate) {
+    "ACTION: publishing trusted Project Truth VHDX candidate: $($projectTruthCandidate.FullName)" | Tee-Object "$runRoot\vhdx-loop.log" -Append
+    .\scripts\project-truth.ps1 build-image -SkipBuild -BuiltImagePath $projectTruthCandidate.FullName *>&1 | Tee-Object "$runRoot\image-publish-candidate.txt"
+    continue
+  }
+
+  if ((Get-Date) -ge $NextCheckpoint) {
+    "CHECKPOINT: still building/searching for bootable Project Truth VHDX. Continuing until goal is achieved." | Tee-Object "$runRoot\checkpoint.txt" -Append
+    gh run list --limit 10 *>&1 | Tee-Object "$runRoot\gh-runs-checkpoint.txt"
+    $NextCheckpoint = (Get-Date).AddHours($CheckpointHours)
+  }
+
+  "ACTION: no trusted Project Truth VHDX yet. Retrying real Packer image build, then sleeping $SleepMinutes minutes." | Tee-Object "$runRoot\vhdx-loop.log" -Append
+  .\scripts\project-truth.ps1 build-image *>&1 | Tee-Object "$runRoot\image-build-retry.txt"
+  Start-Sleep -Seconds ($SleepMinutes * 60)
+}
+```
+
+## Phase 6: Terraform Static Proof
+
+```powershell
+terraform -chdir=terraform-hyperv fmt -recursive *>&1 | Tee-Object "$runRoot\terraform-fmt.txt"
+terraform -chdir=terraform-hyperv init *>&1 | Tee-Object "$runRoot\terraform-init.txt"
+terraform -chdir=terraform-hyperv validate *>&1 | Tee-Object "$runRoot\terraform-validate.txt"
+.\scripts\project-truth.ps1 terraform-plan *>&1 | Tee-Object "$runRoot\terraform-plan.txt"
+```
+
+## Phase 7: Terraform Apply
+
+Only runs because the VHDX gate passed.
+
+```powershell
+.\scripts\project-truth.ps1 terraform-apply -Apply *>&1 | Tee-Object "$runRoot\terraform-apply.txt"
+```
+
+## Phase 8: VM Facts And IP Discovery
+
+```powershell
+Get-VM -Name project-truth-node-01 | Format-List * | Out-String | Tee-Object "$runRoot\vm-facts.txt"
+Get-VMNetworkAdapter -VMName project-truth-node-01 | Format-List * | Out-String | Tee-Object "$runRoot\vm-network.txt"
+
+Get-VMNetworkAdapter -VMName project-truth-node-01 |
+  Select-Object VMName,SwitchName,MacAddress,IPAddresses,Status |
+  Format-List | Out-String | Tee-Object "$runRoot\guest-ip-discovery.txt"
+
+arp -a *>&1 | Tee-Object "$runRoot\arp.txt"
+Get-NetNeighbor -AddressFamily IPv4 *>&1 | Tee-Object "$runRoot\net-neighbor.txt"
+```
+
+If no guest IP is discovered, run:
+
+```powershell
+.\scripts\repair-and-verify.ps1 -MaxHours 8 *>&1 | Tee-Object "$runRoot\repair-and-verify.txt"
+```
+
+## Phase 9: Health, SSH, Kubernetes, Argo CD
+
+Replace `<guest-lan-ip>` with the discovered VM IP.
+
+```powershell
+curl.exe http://127.0.0.1:3001/health *>&1 | Tee-Object "$runRoot\health-host-dev.txt"
+curl.exe http://127.0.0.1:3002/health *>&1 | Tee-Object "$runRoot\health-host-uat.txt"
+curl.exe http://127.0.0.1:3000/health *>&1 | Tee-Object "$runRoot\health-host-prod.txt"
+
+curl.exe http://<guest-lan-ip>:3001/health *>&1 | Tee-Object "$runRoot\health-lan-dev.txt"
+curl.exe http://<guest-lan-ip>:3002/health *>&1 | Tee-Object "$runRoot\health-lan-uat.txt"
+curl.exe http://<guest-lan-ip>:3000/health *>&1 | Tee-Object "$runRoot\health-lan-prod.txt"
+
+ssh infra@<guest-lan-ip> "hostname; ip -br addr; docker ps || true; sudo kubectl get nodes -o wide; sudo kubectl get pods -A -o wide; sudo kubectl get svc -A -o wide; sudo kubectl get applications -n argocd -o wide || true" *>&1 | Tee-Object "$runRoot\inside-vm-proof.txt"
+```
+
+## Phase 10: CI And Docs
+
+```powershell
+gh run list --limit 10 *>&1 | Tee-Object "$runRoot\gh-runs-after.txt"
+gh pr list --state open *>&1 | Tee-Object "$runRoot\gh-prs-open.txt"
+```
+
+## Phase 11: Goal Achievement Loop
+
+After each full pass, evaluate the proof files. If any required proof is missing, repair the failing layer and loop back to the correct phase:
 
 ```text
-Project Truth Doctor
-Select Project Truth Image
-Terraform Plan
-Apply Hyper-V VM
-Watch Until Healthy
-Repair And Verify
-Open Project Truth Folder
-Open Logs
-Open Documentation
+Missing VHDX -> Phase 5, run real Packer image build again
+Terraform failure -> Phase 6, capture error, repair tfvars/provider/config, retry
+VM not running -> Phase 7/8, inspect Hyper-V state, retry apply without destructive reset
+No guest IP -> Phase 8, poll Hyper-V adapter/ARP/neighbor table, run repair-and-verify, retry
+Health failure -> Phase 9, collect curl + SSH + kubectl evidence, retry repair-and-verify
+Kubernetes/Argo failure -> Phase 9, collect pods/events/apps, retry until healthy or hard blocker
+CI failure -> Phase 10, inspect failed logs, repair source/docs/workflow, rerun
 ```
 
-Acceptance:
-
-- Shortcuts point to installed files under `%ProgramFiles%\ProjectTruth`, not the repo.
-- Logs shortcut points to `C:\ProgramData\ProjectTruth\logs`.
-- Docs shortcut points to installed docs.
-- Doctor, configure, terraform-plan, and repair-and-verify run from the installed CLI.
-
-Capture screenshots if a desktop UI or Start Menu inspection is available. Save under `.runtime\overnight\<timestamp>\screenshots`.
-
-### Phase 3: Image Artifact Truth
-
-Inspect config and images:
+Use this completion check:
 
 ```powershell
-Get-Content C:\ProgramData\ProjectTruth\config\project-truth.json
-Get-ChildItem C:\ProgramData\ProjectTruth\images -Force
-.\scripts\project-truth.ps1 doctor
-```
+$requiredProof = @{
+  Installed = Test-Path "$runRoot\installer-verify-programfiles.txt"
+  Shortcuts = Test-Path "$runRoot\shortcut-proof.txt"
+  Vhdx = Test-Path $RequiredVhdx
+  VhdxChecksum = Test-Path "$runRoot\vhdx-checksum.txt"
+  TerraformInit = Test-Path "$runRoot\terraform-init.txt"
+  TerraformValidate = Test-Path "$runRoot\terraform-validate.txt"
+  TerraformPlan = Test-Path "$runRoot\terraform-plan.txt"
+  TerraformApply = Test-Path "$runRoot\terraform-apply.txt"
+  VmFacts = Test-Path "$runRoot\vm-facts.txt"
+  GuestIp = Test-Path "$runRoot\guest-ip-discovery.txt"
+  HostDev = Test-Path "$runRoot\health-host-dev.txt"
+  HostUat = Test-Path "$runRoot\health-host-uat.txt"
+  HostProd = Test-Path "$runRoot\health-host-prod.txt"
+  LanDev = Test-Path "$runRoot\health-lan-dev.txt"
+  LanUat = Test-Path "$runRoot\health-lan-uat.txt"
+  LanProd = Test-Path "$runRoot\health-lan-prod.txt"
+  InsideVm = Test-Path "$runRoot\inside-vm-proof.txt"
+}
 
-If no VHDX is selected, search likely local locations without scanning the whole disk forever:
-
-```powershell
-$roots = @(
-  "C:\ProgramData\ProjectTruth\images",
-  "C:\Users\anoni\OneDrive\Desktop",
-  "C:\Users\anoni\Downloads"
-)
-$roots | ForEach-Object {
-  Get-ChildItem $_ -Recurse -Include *.vhdx,*.sha256 -ErrorAction SilentlyContinue |
-    Select-Object FullName,Length,LastWriteTime
+$missing = $requiredProof.GetEnumerator() | Where-Object { -not $_.Value } | Select-Object -ExpandProperty Key
+if ($missing.Count -eq 0) {
+  "PROVEN: full Project Truth installed user journey, VHDX, Hyper-V VM, health, SSH, Kubernetes, and Argo CD proof completed." | Tee-Object "$runRoot\final-truth.txt"
+} else {
+  "CHECKPOINT: missing proof: $($missing -join ', '). Continue loop; do not stop." | Tee-Object "$runRoot\checkpoint.txt" -Append
 }
 ```
-
-If a likely Project Truth VHDX exists:
-
-```powershell
-.\scripts\project-truth.ps1 select-image -ImagePath "<real-vhdx-path>"
-.\scripts\project-truth.ps1 doctor
-```
-
-If no VHDX exists:
-
-- Do not fake it.
-- Do not switch to OVA.
-- Do not run Packer unless the user explicitly approves maintainer image build.
-- Mark BLOCKED: missing prebuilt VHDX.
-- Still complete all static, installer, CI/CD, and runbook proof.
-- Write the exact required artifact contract: file name, expected folder, checksum file, and next command.
-
-### Phase 4: Terraform Static Proof
-
-Run:
-
-```powershell
-terraform -chdir=terraform-hyperv fmt -recursive
-terraform -chdir=terraform-hyperv init
-terraform -chdir=terraform-hyperv validate
-.\scripts\project-truth.ps1 terraform-plan
-```
-
-If plan fails from missing VHDX, repair image config if the VHDX exists. If no VHDX exists, report BLOCKED at the image artifact layer, not repo failure.
-
-### Phase 5: Real Hyper-V Apply
-
-Only run if a real selected VHDX exists and Hyper-V is available:
-
-```powershell
-.\scripts\project-truth.ps1 terraform-apply -Apply
-```
-
-After apply, inspect:
-
-```powershell
-Get-VM -Name project-truth-node-01 | Format-List *
-Get-VMNetworkAdapter -VMName project-truth-node-01 | Format-List *
-Get-VHD -Path "<selected-vhdx-or-created-vhdx-path>" | Format-List *
-```
-
-Do not destroy or recreate a conflicting VM by default. If a VM already exists, inspect and report whether it matches expected name, switch, memory, CPU, disk, and network.
-
-### Phase 6: Guest IP Discovery
-
-Find the guest IP using multiple sources:
-
-```powershell
-Get-VMNetworkAdapter -VMName project-truth-node-01 |
-  Select-Object VMName,SwitchName,MacAddress,IPAddresses,Status
-
-arp -a
-Get-NetNeighbor -AddressFamily IPv4
-```
-
-If no IP appears, poll until timeout. Log VM state every loop. Do not call success without an IP or explicit host-local port forwarding proof.
-
-### Phase 7: Health Watch
-
-When guest IP is known:
-
-```powershell
-.\scripts\project-truth.ps1 watch-until-healthy -GuestIp <guest-lan-ip> -MaxHours 8
-```
-
-Required host-local checks:
-
-```powershell
-curl.exe http://127.0.0.1:3001/health
-curl.exe http://127.0.0.1:3002/health
-curl.exe http://127.0.0.1:3000/health
-```
-
-Required LAN checks:
-
-```powershell
-curl.exe http://<guest-lan-ip>:3001/health
-curl.exe http://<guest-lan-ip>:3002/health
-curl.exe http://<guest-lan-ip>:3000/health
-```
-
-Each health response must prove environment identity:
-
-```json
-{"status":"ok","environment":"DEV","version":"...","hostname":"..."}
-```
-
-If host-local fails but LAN passes, report the host-local port-forwarding/design gap and propose the exact fix. Do not hide it.
-
-### Phase 8: Inside-VM Proof
-
-Run:
-
-```powershell
-ssh infra@<guest-lan-ip> "hostname; ip -br addr; docker ps || true; sudo kubectl get nodes -o wide; sudo kubectl get pods -A -o wide; sudo kubectl get svc -A -o wide; sudo kubectl get applications -n argocd -o wide || true"
-```
-
-Also capture useful failure detail:
-
-```powershell
-ssh infra@<guest-lan-ip> "sudo kubectl get events -A --sort-by=.lastTimestamp | tail -80; sudo kubectl -n dev get deploy,svc,pods; sudo kubectl -n uat get deploy,svc,pods; sudo kubectl -n prod get deploy,svc,pods"
-```
-
-Acceptance:
-
-- SSH connects.
-- Hostname is captured.
-- IP addresses are captured.
-- Docker state is captured if Docker exists.
-- Kubernetes node is Ready.
-- DEV/UAT/PROD pods are Running or reason is documented.
-- DEV/UAT/PROD services expose NodePorts 3001, 3002, 3000.
-- Argo CD applications are Synced and Healthy, or exact drift is documented.
-
-### Phase 9: GitHub CI/CD Watch
-
-Run:
-
-```powershell
-gh run list --limit 10
-gh run watch
-gh run view --log-failed
-gh pr list --state open
-```
-
-If workflows need changes, implement and push:
-
-```powershell
-git status --short
-git add .
-git commit -m "Prove Project Truth Hyper-V health journey"
-git push
-gh run watch
-```
-
-Validate at minimum:
-
-- Node app syntax/install.
-- PowerShell parser checks.
-- Terraform fmt/init/validate.
-- Kustomize render for dev/uat/prod.
-- Packer validate only under image-factory, not normal install.
-- Installer script validation.
-- Shortcut contract validation if possible in CI.
-
-### Phase 10: Self-Repair Loop
-
-Run:
-
-```powershell
-.\scripts\project-truth.ps1 repair-and-verify -MaxHours 8
-```
-
-Repair policy:
-
-- Missing Terraform: document install command; continue static checks where possible.
-- Missing Hyper-V module: document Windows feature blocker; continue installer/CI/docs.
-- Missing VHDX: search approved paths; if absent, BLOCKED with artifact contract.
-- Bad checksum: delete only under `C:\ProgramData\ProjectTruth\images`, redownload once if URL configured, then BLOCKED if still bad.
-- Terraform init provider failure: retry once; log failure.
-- Existing VM: inspect, do not delete.
-- No guest IP: poll Hyper-V adapter, ARP, DHCP hints; timeout with last known state.
-- Health failure: collect curl output, Kubernetes events, pods, service state, app logs if available; retry until success or timeout.
-- Bad shortcut: repair shortcut target and re-inspect.
-
-### Phase 11: Final Report
 
 Update:
 
@@ -403,75 +336,38 @@ Update:
 docs\USER_JOURNEY_PROOF.md
 docs\INSTALLER_TEST_REPORT.md
 docs\HEALTHCHECKS.md
+docs\DEVOPS_RUNBOOK.md
 docs\GAPS_AND_NEXT_GOALS.md
 ```
 
-Final answer must include:
+Never commit:
 
 ```text
-Branch:
-Commit:
-Remote:
-GitHub Actions:
-Installed path:
-ProgramData path:
-Shortcut proof:
-Screenshot folder:
-Selected VHDX:
-VHDX checksum:
-Terraform init:
-Terraform validate:
-Terraform plan:
-Terraform apply:
-VM name:
-VM switch:
-VM IP:
-Host-local DEV/UAT/PROD health:
-LAN DEV/UAT/PROD health:
-SSH:
-Inside VM hostname/IPs:
-Docker state:
-Kubernetes nodes:
-Kubernetes DEV/UAT/PROD pods:
-Kubernetes DEV/UAT/PROD services:
-Argo CD apps:
-Self-repair result:
-Truth:
-Drift:
-Gaps:
-Next exact command:
+.runtime
+logs
+screenshots
+tfstate
+tfvars
+credentials
+VHDX files
+images
 ```
 
-Do not say "success" unless the real VM, health, and inside-VM proof passed. If blocked by missing VHDX, the correct final status is:
+## Final Truth
+
+Use only:
 
 ```text
-BLOCKED ON IMAGE ARTIFACT, NOT REPO IMPLEMENTATION.
-Installer/CLI/Terraform/GitOps/CI are proven.
-Real Hyper-V boot and health are pending until a Project Truth VHDX exists at <exact path>.
-Next exact command: .\scripts\project-truth.ps1 select-image -ImagePath <path-to-project-truth-node.vhdx>
+PROVEN
+BLOCKED
 ```
 
-## One-Shot Command Skeleton
+There is no final success until the full goal is achieved.
 
-Use this as the top-level flow:
+Only write final `PROVEN` when all required proof exists and the command outputs show real success:
 
-```powershell
-$ErrorActionPreference = "Continue"
-$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$runRoot = ".runtime\overnight\$stamp"
-New-Item -ItemType Directory -Force -Path $runRoot, "$runRoot\screenshots" | Out-Null
-
-git status --short --branch | Tee-Object "$runRoot\git-status.txt"
-.\installer\build-installer.ps1 *>&1 | Tee-Object "$runRoot\installer-build.txt"
-.\installer\install-project-truth.ps1 -InstallDir "$env:ProgramFiles\ProjectTruth" *>&1 | Tee-Object "$runRoot\installer-install.txt"
-.\installer\verify-install.ps1 -InstallDir "$env:ProgramFiles\ProjectTruth" *>&1 | Tee-Object "$runRoot\installer-verify.txt"
-.\scripts\project-truth.ps1 doctor *>&1 | Tee-Object "$runRoot\doctor.txt"
-terraform -chdir=terraform-hyperv fmt -recursive *>&1 | Tee-Object "$runRoot\terraform-fmt.txt"
-terraform -chdir=terraform-hyperv init *>&1 | Tee-Object "$runRoot\terraform-init.txt"
-terraform -chdir=terraform-hyperv validate *>&1 | Tee-Object "$runRoot\terraform-validate.txt"
-.\scripts\project-truth.ps1 terraform-plan *>&1 | Tee-Object "$runRoot\terraform-plan.txt"
-.\scripts\project-truth.ps1 repair-and-verify -MaxHours 8 *>&1 | Tee-Object "$runRoot\repair-and-verify.txt"
-gh run list --limit 10 *>&1 | Tee-Object "$runRoot\gh-runs.txt"
+```text
+PROVEN: full Project Truth installed user journey, VHDX, Hyper-V VM, health, SSH, Kubernetes, and Argo CD proof completed.
 ```
 
-Then continue manually from the first BLOCKED/SUCCESS/TIMEOUT line. Do not abandon the run without writing the final report.
+Only write final `BLOCKED` for a hard stop condition the agent cannot repair safely, with the exact command output and next manual action.
