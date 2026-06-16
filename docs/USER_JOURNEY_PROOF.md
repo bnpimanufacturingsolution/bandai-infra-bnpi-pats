@@ -21,7 +21,14 @@ Date: 2026-06-16
 Run folder:
 
 ```text
-.runtime\overnight\20260616-071428
+.runtime\overnight\20260616-090206
+```
+
+Admin proof:
+
+```text
+PROVEN: whoami /groups reported Mandatory Label\High Mandatory Level.
+PROVEN: net session succeeded.
 ```
 
 Elevated install command:
@@ -65,6 +72,16 @@ Installed command proof:
   PASS: terraform init and validate succeeded.
   PASS: dry-run plan showed Hyper-V switch, copied VHDX, and VM resources.
   BLOCKED FOR APPLY: source VHDX does not exist at C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx.
+```
+
+Image artifact proof:
+
+```text
+Test-Path C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx
+  False
+
+Approved-path search:
+  BLOCKED: no .vhdx found under C:\ProgramData\ProjectTruth\images, C:\Users\anoni\OneDrive\Desktop, or C:\Users\anoni\Downloads.
 ```
 
 Repair proof:

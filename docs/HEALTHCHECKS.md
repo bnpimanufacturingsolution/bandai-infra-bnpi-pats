@@ -33,10 +33,13 @@ Logs are written under `.runtime/` and are not committed.
 Date: 2026-06-16
 
 ```text
+Evidence folder: .runtime\overnight\20260616-090206
 Selected VHDX: BLOCKED, C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx does not exist.
+Approved-path VHDX search: BLOCKED, no .vhdx found.
 Terraform apply: SKIPPED BY SAFETY GATE, no real selected VHDX.
 VM IP: NOT TESTED, no VM boot.
 Host-local DEV/UAT/PROD health: NOT TESTED, no VM boot.
 LAN DEV/UAT/PROD health: NOT TESTED, no guest IP.
 SSH/Kubernetes/Argo CD: NOT TESTED, no guest IP.
+Self-repair: PROVEN, completed and reported health blocked until a guest IP exists.
 ```

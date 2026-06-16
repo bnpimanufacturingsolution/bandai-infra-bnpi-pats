@@ -44,6 +44,15 @@ gh run list --limit 10
 gh run view <run-id> --log-failed
 ```
 
+Latest local check on 2026-06-16:
+
+```text
+Evidence folder: .runtime\overnight\20260616-090206
+GitHub auth: PROVEN for ernestdodz.
+Recent validation runs: latest listed runs succeeded except the original repository creation run, which remains a historical failure.
+Open PR list: logged to gh-prs-open.txt.
+```
+
 ## Required Secrets And Variables
 
 None are required for static validation.

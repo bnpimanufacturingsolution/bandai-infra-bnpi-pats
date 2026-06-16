@@ -18,7 +18,8 @@
 | GitOps overlays for DEV/UAT/PROD | DONE |
 | GitHub validation workflow | DONE |
 | Health watcher missing-IP fast fail | DONE |
-| Legit self-elevating proof runner | DONE |
+| Direct admin proof without elevation wrapper | DONE |
+| Wrapper removal from CLI/docs | DONE |
 
 ## Current Blockers
 
@@ -26,7 +27,7 @@
 |---|---|---|
 | No selected prebuilt VHDX | Environment | `.\scripts\project-truth.ps1 select-image -ImagePath C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx` |
 | Inno Setup compiler not installed locally | Environment | Install Inno Setup or use PowerShell fallback installer |
-| Real Hyper-V apply not run | Safety | Run from elevated shell after image selection: `.\scripts\project-truth.ps1 terraform-apply -Apply` |
+| Real Hyper-V apply not run | Safety | Run from an Administrator PowerShell after image selection: `.\scripts\project-truth.ps1 terraform-apply -Apply` |
 | No live guest IP yet | Environment | Apply VM, then run `.\scripts\project-truth.ps1 watch-until-healthy -GuestIp <ip>` |
 
 ## Recommended Next Goal
@@ -38,9 +39,13 @@ Risk level: medium, because it creates/runs a Hyper-V VM.
 Preferred command:
 
 ```powershell
-.\scripts\project-truth.ps1 run-elevated-proof -Apply -ImagePath C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx -WatchGitHubActions
+.\scripts\project-truth.ps1 terraform-apply -Apply
 ```
 
 ## Truth
 
 The current repo proves elevated install, common Start Menu shortcuts, config, CLI doctor, Terraform init/validate/plan, GitOps overlay rendering, and GitHub validation. It does not yet prove a real VM boot or health endpoint because there is no selected prebuilt VHDX artifact in this environment.
+
+Latest evidence folder: `.runtime\overnight\20260616-090206`.
+
+The self-elevating proof wrapper has been removed. Future proof runs must start from an already elevated Administrator PowerShell and must fail fast on `net session` failure.
