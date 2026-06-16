@@ -661,7 +661,7 @@ Expected result:
   Terraform never runs packer build
 ```
 
-Do not create an OVA in the new normal path. OVA is a legacy VirtualBox artifact. If OVA compatibility is requested later, create a clearly separate legacy compatibility track and do not mix it with the Hyper-V/Terraform path.
+Do not create an OVA in the new normal Hyper-V path. OVA/VDI compatibility belongs in a clearly separate VirtualBox compatibility track and must not be mixed with the Hyper-V/Terraform path.
 
 ### Journey C: Developer CI/CD Promotion
 

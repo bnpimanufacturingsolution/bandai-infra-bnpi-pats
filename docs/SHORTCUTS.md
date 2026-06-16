@@ -11,7 +11,7 @@ Expected shortcuts:
 | Shortcut | Target | Arguments | Purpose |
 |---|---|---|---|
 | Project Truth Doctor | `ProjectTruth.cmd` | `doctor` | Check local prerequisites and selected image state. |
-| Select Project Truth Image | `ProjectTruth.cmd` | `select-image` | Select a prebuilt VHDX. |
+| Select Project Truth Image | `ProjectTruth.cmd` | `select-image` | Select a prebuilt platform image. |
 | Terraform Plan | `ProjectTruth.cmd` | `terraform-plan` | Validate and plan the Hyper-V VM layer. |
 | Apply Hyper-V VM | `ProjectTruth.cmd` | `terraform-apply` | Apply only when safety gate is explicitly used. |
 | Watch Until Healthy | `ProjectTruth.cmd` | `watch-until-healthy` | Watch DEV/UAT/PROD health. |

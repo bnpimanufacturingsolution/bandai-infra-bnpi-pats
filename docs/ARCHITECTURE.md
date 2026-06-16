@@ -1,6 +1,6 @@
 # Project Truth Hyper-V Architecture
 
-The fresh architecture is:
+The fresh Hyper-V architecture is:
 
 ```text
 prebuilt Hyper-V image
@@ -10,14 +10,14 @@ prebuilt Hyper-V image
   -> Project Truth CLI verifies host-local, LAN, and inside-VM health
 ```
 
-Normal users do not run Packer. Packer lives in `image-factory/packer/` for maintainers who need to publish a new VHDX when the base platform changes.
+Normal users do not run Packer. Packer lives in `image-factory/packer/` for maintainers who need to publish a new target artifact when the base platform changes.
 
 ## Responsibility Split
 
 | Concern | Owner |
 |---|---|
 | VM lifecycle | `terraform-hyperv/` on the Windows host |
-| Base image rebuild | `image-factory/packer/` maintainer flow |
+| Base image rebuild | `image-factory/packer/` maintainer flow for Hyper-V VHDX or VirtualBox VDI/OVA |
 | Application desired state | `gitops/` consumed by Argo CD |
 | User workflow | `scripts/project-truth.ps1` and installer shortcuts |
 | Diagnostics | `scripts/watch-until-healthy.ps1` and `scripts/repair-and-verify.ps1` |
@@ -32,4 +32,4 @@ Normal users do not run Packer. Packer lives in `image-factory/packer/` for main
 
 ## Legacy Boundary
 
-VirtualBox, OVA handover artifacts, and Terraform-inside-VM deployment are not part of this branch's normal product path.
+Terraform-inside-VM deployment is not part of this branch's normal product path. VirtualBox is supported only as a separate client image artifact track; it does not use `terraform-hyperv/`.

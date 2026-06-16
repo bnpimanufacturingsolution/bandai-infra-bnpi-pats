@@ -1,13 +1,16 @@
 param(
   [string]$ImagePath,
   [string]$ExpectedSha256 = '',
+  [ValidateSet('hyperv','virtualbox')]
+  [string]$TargetPlatform = 'hyperv',
   [string]$ConfigPath = "$env:ProgramData\ProjectTruth\config\image.json"
 )
 
 $ErrorActionPreference = 'Stop'
 
 if (-not $ImagePath) {
-  $default = "$env:ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx"
+  $defaultExtension = if ($TargetPlatform -eq 'virtualbox') { 'vdi' } else { 'vhdx' }
+  $default = "$env:ProgramData\ProjectTruth\images\project-truth-node-latest.$defaultExtension"
   if (Test-Path -LiteralPath $default) {
     $ImagePath = $default
   } else {
@@ -16,17 +19,20 @@ if (-not $ImagePath) {
 }
 
 $resolved = (Resolve-Path -LiteralPath $ImagePath).Path
-if ([IO.Path]::GetExtension($resolved).ToLowerInvariant() -ne '.vhdx') {
-  throw "Selected image must be a .vhdx file: $resolved"
+$extension = [IO.Path]::GetExtension($resolved).ToLowerInvariant()
+$allowedExtensions = if ($TargetPlatform -eq 'virtualbox') { @('.vdi', '.ova') } else { @('.vhdx') }
+if ($extension -notin $allowedExtensions) {
+  throw "Selected $TargetPlatform image must use one of these extensions: $($allowedExtensions -join ', '). Got: $resolved"
 }
 
 $configDir = Split-Path -Parent $ConfigPath
 New-Item -ItemType Directory -Force -Path $configDir | Out-Null
 
 [pscustomobject]@{
-  imagePath = $resolved
-  sha256    = $ExpectedSha256
+  imagePath      = $resolved
+  targetPlatform = $TargetPlatform
+  sha256         = $ExpectedSha256
   selectedAt = (Get-Date).ToString('o')
 } | ConvertTo-Json | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
 
-Write-Host "Selected Project Truth image: $resolved"
+Write-Host "Selected Project Truth $TargetPlatform image: $resolved"

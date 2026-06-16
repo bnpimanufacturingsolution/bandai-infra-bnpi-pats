@@ -26,14 +26,15 @@
 
 | Blocker | Type | Next command |
 |---|---|---|
-| No selected prebuilt VHDX | Environment | Create one: `.\scripts\project-truth.ps1 build-image`; or publish an existing bootable image: `.\scripts\project-truth.ps1 build-image -SkipBuild -BuiltImagePath <path-to-bootable-project-truth.vhdx>` |
+| No selected prebuilt Hyper-V VHDX | Environment | Create one: `.\scripts\project-truth.ps1 build-image -TargetPlatform hyperv`; or publish an existing bootable image: `.\scripts\project-truth.ps1 build-image -TargetPlatform hyperv -SkipBuild -BuiltImagePath <path-to-bootable-project-truth.vhdx>` |
+| No selected prebuilt VirtualBox VDI | Environment | Create one on a VirtualBox-capable builder: `.\scripts\project-truth.ps1 build-image -TargetPlatform virtualbox`; or publish an existing bootable image: `.\scripts\project-truth.ps1 build-image -TargetPlatform virtualbox -SkipBuild -BuiltImagePath <path-to-bootable-project-truth.vdi>` |
 | Inno Setup compiler not installed locally | Environment | Install Inno Setup or use PowerShell fallback installer |
 | Real Hyper-V apply not run | Safety | Run from an Administrator PowerShell after image selection: `.\scripts\project-truth.ps1 terraform-apply -Apply` |
 | No live guest IP yet | Environment | Apply VM, then run `.\scripts\project-truth.ps1 watch-until-healthy -GuestIp <ip>` |
 
 ## Recommended Next Goal
 
-Produce or select the first real Project Truth Hyper-V VHDX, then run the full Terraform apply and health watch.
+Produce or select the first real Project Truth Hyper-V VHDX for the Terraform path, or the first real VirtualBox VDI for client handoff. Then run the full Terraform apply and health watch for Hyper-V.
 
 Risk level: medium, because it creates/runs a Hyper-V VM.
 

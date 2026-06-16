@@ -2,6 +2,8 @@ param(
   [string]$ConfigPath = "$env:ProgramData\ProjectTruth\config\project-truth.json",
   [string]$ImagePath = "$env:ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx",
   [string]$ExpectedSha256 = '',
+  [ValidateSet('hyperv','virtualbox')]
+  [string]$TargetPlatform = 'hyperv',
   [string]$VmName = 'project-truth-node-01',
   [string]$SwitchName = 'ProjectTruth-External',
   [string]$VmPath = "$env:ProgramData\ProjectTruth\HyperV",
@@ -24,6 +26,7 @@ if (Test-Path -LiteralPath $ConfigPath) {
 $config = [ordered]@{
   image = [ordered]@{
     path = $ImagePath
+    targetPlatform = $TargetPlatform
     sha256 = $ExpectedSha256
   }
   hyperv = [ordered]@{

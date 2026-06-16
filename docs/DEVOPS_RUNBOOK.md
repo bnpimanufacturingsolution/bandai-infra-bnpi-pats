@@ -19,6 +19,7 @@ PowerShell parser for scripts and installer
 terraform fmt/init/validate
 kubectl kustomize for dev/uat/prod
 packer validate image-factory/packer/ubuntu-hyperv.pkr.hcl
+packer validate image-factory/packer/ubuntu-virtualbox.pkr.hcl
 PowerShell fallback installer build
 temp-path installer install and shortcut contract verification
 ```
@@ -38,7 +39,7 @@ The workflow updates only the selected overlay. Argo CD is expected to detect th
 
 ## Image Factory
 
-Normal users consume a released VHDX. Maintainers can create and publish the local proof artifact with:
+Normal Hyper-V users consume a released VHDX. VirtualBox clients consume a released VDI/OVA. Maintainers can create and publish the local Hyper-V proof artifact with:
 
 ```powershell
 .\scripts\project-truth.ps1 build-image
@@ -55,10 +56,22 @@ It also writes a `.sha256` file, updates Project Truth config, selects the image
 If a bootable Project Truth VHDX already exists, publish it without rebuilding:
 
 ```powershell
-.\scripts\project-truth.ps1 build-image -SkipBuild -BuiltImagePath <path-to-bootable-project-truth.vhdx>
+.\scripts\project-truth.ps1 build-image -TargetPlatform hyperv -SkipBuild -BuiltImagePath <path-to-bootable-project-truth.vhdx>
 ```
 
-Do not use `New-VHD` to bypass the image-factory path. An empty VHDX is not a bootable Project Truth image.
+Create the VirtualBox client artifact with:
+
+```powershell
+.\scripts\project-truth.ps1 build-image -TargetPlatform virtualbox
+```
+
+If a bootable Project Truth VDI already exists, publish it without rebuilding:
+
+```powershell
+.\scripts\project-truth.ps1 build-image -TargetPlatform virtualbox -SkipBuild -BuiltImagePath <path-to-bootable-project-truth.vdi>
+```
+
+Do not use `New-VHD` or empty placeholder disks to bypass the image-factory path. The artifact must be a bootable Project Truth image.
 
 ## Watch
 

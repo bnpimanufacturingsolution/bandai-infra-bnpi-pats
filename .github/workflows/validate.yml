@@ -62,6 +62,8 @@ jobs:
         run: |
           packer init image-factory/packer/ubuntu-hyperv.pkr.hcl
           packer validate image-factory/packer/ubuntu-hyperv.pkr.hcl
+          packer init image-factory/packer/ubuntu-virtualbox.pkr.hcl
+          packer validate image-factory/packer/ubuntu-virtualbox.pkr.hcl
 
       - name: Validate installer and shortcut contract
         shell: powershell

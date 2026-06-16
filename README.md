@@ -1,6 +1,7 @@
 # Project Truth Hyper-V Terraform
 
-This branch is the clean Hyper-V/Terraform direction for Project Truth.
+This branch is the clean Hyper-V/Terraform direction for Project Truth, with a
+separate maintainer image-factory track for VirtualBox client artifacts.
 
 The normal user flow is:
 
@@ -11,7 +12,7 @@ prebuilt Hyper-V image
   -> host-local, LAN, and inside-VM verification
 ```
 
-Packer is not part of the normal install path. Packer belongs only to the optional maintainer image-factory flow that publishes a new VHDX when the base platform changes.
+Packer is not part of the normal install path. Packer belongs only to the optional maintainer image-factory flow that publishes a new Hyper-V VHDX or VirtualBox VDI/OVA when the base platform changes.
 
 ## Current Working Branch
 
@@ -24,6 +25,7 @@ terraform-hyperv-clean-plan
 - [Terraform Hyper-V Architecture](docs/TERRAFORM_HYPERV_ARCHITECTURE.md)
 - [Overnight Fresh Repo Prompt](docs/OVERNIGHT_TERRAFORM_HYPERV_FRESH_REPO_PROMPT.md)
 - [Operations](docs/OPERATIONS.md)
+- [Image Formats](docs/IMAGE_FORMATS.md)
 - [Health Checks](docs/HEALTHCHECKS.md)
 - [Installer Test Report](docs/INSTALLER_TEST_REPORT.md)
 
@@ -93,6 +95,16 @@ docs/
 .github/workflows/
 ```
 
+## Image Format Targets
+
+```powershell
+.\scripts\project-truth.ps1 build-image -TargetPlatform hyperv
+.\scripts\project-truth.ps1 build-image -TargetPlatform virtualbox
+```
+
+Hyper-V uses `.vhdx` and remains the Terraform-managed host path. VirtualBox uses
+`.vdi` first, with `.ova` allowed as a handoff appliance format.
+
 ## Ownership Rules
 
 | Concern | Owner |
@@ -130,4 +142,4 @@ Inside VM:
 
 ## Legacy Note
 
-Older VirtualBox, OVA, and Terraform-inside-VM workflows may exist in the source history. They are source material only and are not the target architecture for this branch.
+Older VirtualBox-first and Terraform-inside-VM workflows may exist in the source history. They are source material only. The current VirtualBox support is limited to a separate image artifact track, not the Hyper-V Terraform runtime path.

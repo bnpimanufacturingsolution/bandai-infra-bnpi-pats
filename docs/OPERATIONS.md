@@ -4,9 +4,10 @@
 
 This branch is a fresh Hyper-V/Terraform implementation.
 
-Legacy VirtualBox, OVA, and Terraform-inside-VM behavior is source material only.
+Legacy VirtualBox-first and Terraform-inside-VM behavior is source material only.
+Current VirtualBox support is an image artifact track only.
 
-Normal users consume a prebuilt VHDX. Packer is maintainer-only. Terraform runs on the Windows host. Kubernetes and Argo CD run inside the VM.
+Normal Hyper-V users consume a prebuilt VHDX. VirtualBox clients consume a prebuilt VDI/OVA. Packer is maintainer-only. Terraform runs on the Windows host for the Hyper-V path. Kubernetes and Argo CD run inside the VM.
 
 ## Inventory Snapshot
 

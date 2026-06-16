@@ -1,7 +1,9 @@
 param(
   [string]$PackerDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'image-factory\packer'),
   [string]$ImagesDir = "$env:ProgramData\ProjectTruth\images",
-  [string]$PublishedImagePath = "$env:ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx",
+  [ValidateSet('hyperv','virtualbox')]
+  [string]$TargetPlatform = 'hyperv',
+  [string]$PublishedImagePath = '',
   [string]$BuiltImagePath = '',
   [string]$IsoUrl = 'https://releases.ubuntu.com/24.04/ubuntu-24.04.4-live-server-amd64.iso',
   [string]$IsoSha256 = 'e907d92eeec9df64163a7e454cbc8d7755e8ddc7ed42f99dbc80c40f1a138433',
@@ -22,6 +24,18 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$publishedImagePathProvided = -not [string]::IsNullOrWhiteSpace($PublishedImagePath)
+
+$artifactExtensions = @{
+  hyperv     = @('.vhdx')
+  virtualbox = @('.vdi', '.ova')
+}
+
+if (-not $publishedImagePathProvided) {
+  $defaultExtension = if ($TargetPlatform -eq 'virtualbox') { 'vdi' } else { 'vhdx' }
+  $PublishedImagePath = Join-Path $ImagesDir "project-truth-node-latest.$defaultExtension"
+}
+
 if (-not (Get-Command packer -ErrorAction SilentlyContinue)) {
   throw 'packer not found in PATH. Install HashiCorp Packer before building the Project Truth image.'
 }
@@ -30,7 +44,11 @@ if ($PredownloadIso -and -not (Get-Command curl.exe -ErrorAction SilentlyContinu
   throw 'curl.exe not found in PATH. It is required for explicit Ubuntu ISO predownload.'
 }
 
-if (-not (Get-Command Get-VHD -ErrorAction SilentlyContinue)) {
+if ($TargetPlatform -eq 'virtualbox' -and -not $SkipBuild -and -not (Get-Command VBoxManage -ErrorAction SilentlyContinue)) {
+  throw 'VBoxManage not found in PATH. Install Oracle VirtualBox on the image-builder host before building the VirtualBox image.'
+}
+
+if ($TargetPlatform -eq 'hyperv' -and -not (Get-Command Get-VHD -ErrorAction SilentlyContinue)) {
   throw 'Hyper-V PowerShell cmdlets are missing. Get-VHD is required to validate the published VHDX.'
 }
 
@@ -166,15 +184,21 @@ if (-not $SkipBuild) {
     }
   }
 
+  $packerTemplateName = if ($TargetPlatform -eq 'virtualbox') { 'ubuntu-virtualbox.pkr.hcl' } else { 'ubuntu-hyperv.pkr.hcl' }
+  $packerTemplate = Join-Path $PackerDir $packerTemplateName
+  if (-not (Test-Path -LiteralPath $packerTemplate)) {
+    throw "Packer template not found for ${TargetPlatform}: $packerTemplate"
+  }
+
   Push-Location $PackerDir
   try {
-    packer init .
-    packer validate .
+    packer init $packerTemplateName
+    packer validate $packerTemplateName
     if ($PredownloadIso) {
       $resolvedIso = (Resolve-Path -LiteralPath $IsoCachePath).Path
-      packer build -force -var "iso_url=$resolvedIso" -var "iso_checksum=sha256:$IsoSha256" .
+      packer build -force -var "iso_url=$resolvedIso" -var "iso_checksum=sha256:$IsoSha256" $packerTemplateName
     } else {
-      packer build -force .
+      packer build -force $packerTemplateName
     }
   } finally {
     Pop-Location
@@ -192,16 +216,24 @@ if ($BuiltImagePath) {
     throw "Built image path not found: $BuiltImagePath"
   }
   $candidate = Get-Item -LiteralPath $BuiltImagePath
+  if ($candidate.Extension.ToLowerInvariant() -notin $artifactExtensions[$TargetPlatform]) {
+    throw "Built image for $TargetPlatform must use one of these extensions: $($artifactExtensions[$TargetPlatform] -join ', '). Got: $($candidate.FullName)"
+  }
 } else {
   $candidate = $searchRoots |
     Where-Object { Test-Path -LiteralPath $_ } |
-    ForEach-Object { Get-ChildItem -LiteralPath $_ -Recurse -Filter *.vhdx -ErrorAction SilentlyContinue } |
+    ForEach-Object { Get-ChildItem -LiteralPath $_ -Recurse -File -ErrorAction SilentlyContinue } |
+    Where-Object { $_.Extension.ToLowerInvariant() -in $artifactExtensions[$TargetPlatform] } |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1
 }
 
 if (-not $candidate) {
-  throw "No VHDX produced by Packer. Searched: $($searchRoots -join '; '). Run without -SkipBuild, or pass -BuiltImagePath <bootable-project-truth.vhdx>."
+  throw "No $TargetPlatform artifact produced by Packer. Expected extensions: $($artifactExtensions[$TargetPlatform] -join ', '). Searched: $($searchRoots -join '; '). Run without -SkipBuild, or pass -BuiltImagePath <bootable-project-truth-image>."
+}
+
+if (-not $publishedImagePathProvided -and [IO.Path]::GetExtension($PublishedImagePath).ToLowerInvariant() -ne $candidate.Extension.ToLowerInvariant()) {
+  $PublishedImagePath = Join-Path $ImagesDir "project-truth-node-latest$($candidate.Extension.ToLowerInvariant())"
 }
 
 Copy-Item -LiteralPath $candidate.FullName -Destination $PublishedImagePath -Force
@@ -210,24 +242,30 @@ $hash = Get-FileHash -LiteralPath $PublishedImagePath -Algorithm SHA256
 $shaPath = "$PublishedImagePath.sha256"
 "$($hash.Hash.ToLowerInvariant())  $(Split-Path -Leaf $PublishedImagePath)" | Set-Content -LiteralPath $shaPath -Encoding ASCII
 
-Get-VHD -Path $PublishedImagePath | Format-List * | Out-String | Write-Host
+if ($TargetPlatform -eq 'hyperv') {
+  Get-VHD -Path $PublishedImagePath | Format-List * | Out-String | Write-Host
+} else {
+  Get-Item -LiteralPath $PublishedImagePath | Format-List FullName,Length,LastWriteTime | Out-String | Write-Host
+}
 
 & "$PSScriptRoot\configure.ps1" `
   -ImagePath $PublishedImagePath `
   -ExpectedSha256 $hash.Hash `
+  -TargetPlatform $TargetPlatform `
   -VmName $VmName `
   -SwitchName $SwitchName `
   -VmPath $VmPath `
   -CpuCount $CpuCount `
   -MemoryMb $MemoryMb
 
-& "$PSScriptRoot\select-image.ps1" -ImagePath $PublishedImagePath -ExpectedSha256 $hash.Hash
+& "$PSScriptRoot\select-image.ps1" -ImagePath $PublishedImagePath -ExpectedSha256 $hash.Hash -TargetPlatform $TargetPlatform
 
-$adapterList = ($NetAdapterNames | ForEach-Object {
-  $escaped = $_ -replace '\\', '\\' -replace '"', '\"'
-  '"{0}"' -f $escaped
-}) -join ', '
-@"
+if ($TargetPlatform -eq 'hyperv') {
+  $adapterList = ($NetAdapterNames | ForEach-Object {
+    $escaped = $_ -replace '\\', '\\' -replace '"', '\"'
+    '"{0}"' -f $escaped
+  }) -join ', '
+  @"
 vm_name           = "$VmName"
 switch_name       = "$SwitchName"
 switch_type       = "$SwitchType"
@@ -242,8 +280,11 @@ uat_port          = 3002
 prod_port         = 3000
 guest_ip_hint     = ""
 "@ | Set-Content -LiteralPath $TerraformVarsPath -Encoding ASCII
+  Write-Host "Terraform vars: $TerraformVarsPath"
+} else {
+  Write-Host "Skipped Hyper-V Terraform vars because target platform is virtualbox."
+}
 
-Write-Host "Published Project Truth VHDX: $PublishedImagePath"
+Write-Host "Published Project Truth $TargetPlatform image: $PublishedImagePath"
 Write-Host "SHA256: $($hash.Hash)"
 Write-Host "Checksum file: $shaPath"
-Write-Host "Terraform vars: $TerraformVarsPath"
