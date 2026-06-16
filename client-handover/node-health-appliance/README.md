@@ -1,11 +1,11 @@
 # Project Truth VirtualBox OVA
 
-Verified: 2026-06-17 00:27 local host time
+Verified: 2026-06-17 06:24 local host time
 
 - Final artifact: `node-health-appliance-latest.ova`
 - Artifact type: Oracle VirtualBox OVA
-- Size: 2.727 GiB / 2,927,792,128 bytes
-- SHA256: `babd5d7f18f46ec0371834e365b87297f380c23e410cc598a579b534b20c872c`
+- Size: 2.574 GiB / 2,763,731,968 bytes
+- SHA256: `4928ae882716967013edf0bc6371f57411d841065cf13bb740f620b897394683`
 - Network default: Adapter 1 bridged, Adapter 2 disabled
 - Bridge adapter tested: `Hyper-V Virtual Ethernet Adapter #3`
 - Windows host IP: `192.168.100.174`
@@ -26,4 +26,8 @@ curl.exe http://192.168.100.77:3000/health
 {"status":"ok","environment":"PROD","version":"gitops-prod-001"}
 ```
 
-The appliance uses DHCP on Adapter 1, so the actual LAN IP may change on another network. Run `project-truth-status` in the VM console to see the current IP and curl commands.
+The appliance is pinned to `192.168.100.77/24` for this bridged LAN. Run `project-truth-status` in the VM console to see the current IP and curl commands.
+
+
+Watchdog fix proof: `logs\watchdog-fix-final-status.txt`.
+

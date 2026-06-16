@@ -4,8 +4,8 @@
 
 - Path: `client-handover\node-health-appliance\node-health-appliance-latest.ova`
 - Type: Oracle VirtualBox OVA
-- Size: 2.727 GiB / 2,927,792,128 bytes
-- SHA256: `babd5d7f18f46ec0371834e365b87297f380c23e410cc598a579b534b20c872c`
+- Size: 2.574 GiB / 2,763,731,968 bytes
+- SHA256: `4928ae882716967013edf0bc6371f57411d841065cf13bb740f620b897394683`
 
 ## Network
 
@@ -41,3 +41,7 @@ curl.exe http://192.168.100.77:3000/health
 ## WARN
 
 The disposable repair VM required VirtualBox poweroff after guest OS and ACPI shutdown did not complete. The final OVA was still re-imported cleanly afterward and passed Windows host LAN curl without manual repair.
+
+
+Watchdog fix proof: `logs\watchdog-fix-final-status.txt`.
+
