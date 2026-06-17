@@ -53,6 +53,7 @@ source "virtualbox-iso" "ubuntu" {
   shutdown_command     = "echo '${var.ssh_password}' | sudo -S shutdown -P now"
   output_directory     = "output/${var.vm_name}-virtualbox"
   skip_export          = true
+  keep_registered      = true
 
   boot_wait = "5s"
   boot_command = [

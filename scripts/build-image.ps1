@@ -256,11 +256,18 @@ if (-not $SkipBuild) {
   try {
     packer init $packerTemplateName
     packer validate $packerTemplateName
+    $packerBuildArgs = @('build', '-force')
+    if ($TargetPlatform -eq 'virtualbox') {
+      $packerBuildArgs += '-on-error=abort'
+    }
     if ($PredownloadIso) {
       $resolvedIso = (Resolve-Path -LiteralPath $IsoCachePath).Path
-      packer build -force -var "iso_url=$resolvedIso" -var "iso_checksum=sha256:$IsoSha256" $packerTemplateName
+      $packerBuildArgs += @('-var', "iso_url=$resolvedIso", '-var', "iso_checksum=sha256:$IsoSha256")
+      $packerBuildArgs += $packerTemplateName
+      & packer @packerBuildArgs
     } else {
-      packer build -force $packerTemplateName
+      $packerBuildArgs += $packerTemplateName
+      & packer @packerBuildArgs
     }
   } finally {
     Pop-Location
