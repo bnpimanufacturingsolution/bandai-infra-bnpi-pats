@@ -44,6 +44,13 @@ if ($PredownloadIso -and -not (Get-Command curl.exe -ErrorAction SilentlyContinu
   throw 'curl.exe not found in PATH. It is required for explicit Ubuntu ISO predownload.'
 }
 
+if ($TargetPlatform -eq 'virtualbox' -and -not (Get-Command VBoxManage -ErrorAction SilentlyContinue)) {
+  $defaultVBoxManage = Join-Path $env:ProgramFiles 'Oracle\VirtualBox\VBoxManage.exe'
+  if (Test-Path -LiteralPath $defaultVBoxManage) {
+    $env:Path = "$(Split-Path -Parent $defaultVBoxManage);$env:Path"
+  }
+}
+
 if ($TargetPlatform -eq 'virtualbox' -and -not $SkipBuild -and -not (Get-Command VBoxManage -ErrorAction SilentlyContinue)) {
   throw 'VBoxManage not found in PATH. Install Oracle VirtualBox on the image-builder host before building the VirtualBox image.'
 }
