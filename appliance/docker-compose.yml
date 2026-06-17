@@ -1,4 +1,37 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hris-postgres
+    restart: unless-stopped
+    env_file:
+      - ./env/hris-api.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgresdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-hris}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  hris-api-db-init:
+    build:
+      context: ../hris-api
+      dockerfile: Dockerfile
+      target: db-init
+    image: hris-api-db-init:develop
+    container_name: hris-api-db-init
+    restart: "no"
+    env_file:
+      - ./env/hris-api.env
+    command: >
+      sh -c "npm run prisma-postgres:push
+      && npm run prisma-seed"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   hris-api:
     build:
       context: ../hris-api
@@ -10,6 +43,9 @@ services:
       - ./env/hris-api.env
     ports:
       - "3001:3001"
+    depends_on:
+      hris-api-db-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3001/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
       interval: 15s
@@ -40,3 +76,6 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+
+volumes:
+  postgresdata:

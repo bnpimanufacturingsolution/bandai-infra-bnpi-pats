@@ -21,7 +21,14 @@ echo "Local App URL: http://127.0.0.1:3000"
 echo "Local API Health URL: http://127.0.0.1:3001/health"
 
 echo "Docker services:"
-docker ps --filter "name=hris-api" --filter "name=hris-app" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+docker ps --filter "name=hris-" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+
+echo "Postgres:"
+if docker ps --format '{{.Names}}' | grep -qx 'hris-postgres'; then
+  docker exec hris-postgres pg_isready -U postgres -d hris
+else
+  echo "hris-postgres is not running"
+fi
 
 if docker ps --format '{{.Names}}' | grep -Eiq '(^|[-_])health($|[-_])'; then
   echo "Standalone health container: PRESENT"
