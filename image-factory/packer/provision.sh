@@ -16,7 +16,7 @@ sudo systemctl start docker
 curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode=644 --disable=traefik" sh -
 
 sudo kubectl create namespace argocd --dry-run=client -o yaml | sudo kubectl apply -f -
-sudo kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+sudo kubectl apply --server-side -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
 sudo tee /usr/local/bin/project-truth-status >/dev/null <<'STATUS'
 #!/usr/bin/env bash
