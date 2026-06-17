@@ -9,6 +9,10 @@ sudo apt-get install -y ca-certificates curl gnupg lsb-release unzip ufw open-is
 sudo ufw allow OpenSSH
 sudo ufw allow 3000/tcp
 sudo ufw allow 3001/tcp
+sudo ufw allow 3100/tcp
+sudo ufw allow 3101/tcp
+sudo ufw allow 3200/tcp
+sudo ufw allow 3201/tcp
 sudo ufw --force enable
 sudo systemctl enable docker
 sudo systemctl start docker
