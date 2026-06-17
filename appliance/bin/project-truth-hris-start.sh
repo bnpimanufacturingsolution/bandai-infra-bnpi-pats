@@ -12,7 +12,11 @@ if ! docker image inspect hris-api-local:develop >/dev/null 2>&1 || ! docker ima
 fi
 
 if command -v docker compose >/dev/null 2>&1; then
-  docker compose up -d
+  docker compose up -d postgres
+  docker compose up -d --no-deps hris-api
+  docker compose up -d --no-deps hris-app
 else
-  docker-compose up -d
+  docker-compose up -d postgres
+  docker-compose up -d --no-deps hris-api
+  docker-compose up -d --no-deps hris-app
 fi

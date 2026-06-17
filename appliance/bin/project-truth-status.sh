@@ -69,12 +69,12 @@ print_container_row hris-app app
 echo
 
 echo "Database"
-if docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1; then
+if timeout 8 docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1; then
   echo "  postgres: accepting connections"
 else
   echo "  postgres: not ready"
 fi
-if docker exec hris-api printenv PG_DATABASE_URL >/dev/null 2>&1; then
+if timeout 8 docker exec hris-api printenv PG_DATABASE_URL >/dev/null 2>&1; then
   echo "  api env: PG_DATABASE_URL present"
 else
   echo "  api env: PG_DATABASE_URL missing"
