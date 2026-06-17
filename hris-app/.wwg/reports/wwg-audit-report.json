@@ -1,0 +1,1259 @@
+{
+  "summary": {
+    "reportType": "wwg-audit",
+    "command": "wwg audit --target C:\\Users\\1biss\\Documents\\Projects\\hris-app",
+    "mode": "existing-adopted-project",
+    "recommendedMode": "conservative",
+    "repositoryType": "wwg-native-project",
+    "registryPresent": true,
+    "missingAgentReadyArtifacts": [],
+    "missingCodexReadyArtifacts": [],
+    "readiness": {
+      "target": "C:\\Users\\1biss\\Documents\\Projects\\hris-app",
+      "targetDisplay": ".",
+      "context": "audit",
+      "mustHave": [
+        {
+          "id": "wwg-workspace",
+          "label": "WWG workspace present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg"
+          ]
+        },
+        {
+          "id": "project-config",
+          "label": "Project config present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/config/wwg.project.yaml"
+          ]
+        },
+        {
+          "id": "project-truth",
+          "label": "Project Truth present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/wiki/project-truth.md"
+          ]
+        },
+        {
+          "id": "terminology",
+          "label": "Terminology present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/wiki/terminology.md"
+          ]
+        },
+        {
+          "id": "principles-readme",
+          "label": "Principles README present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/wiki/principles/README.md"
+          ]
+        },
+        {
+          "id": "workspace-current-task",
+          "label": "Workspace current task present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/workspace/current-task.md"
+          ]
+        },
+        {
+          "id": "governance-drift-guard",
+          "label": "Governance drift guard present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/governance/drift-guard.md"
+          ]
+        },
+        {
+          "id": "recommendation-registry",
+          "label": "Recommendation Registry present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/governance/recommendation-registry.md"
+          ]
+        },
+        {
+          "id": "reports-directory",
+          "label": "Reports directory present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/reports"
+          ]
+        },
+        {
+          "id": "root-agents",
+          "label": "Root AGENTS.md present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            "AGENTS.md"
+          ]
+        },
+        {
+          "id": "test-enforcement",
+          "label": "Test enforcement governance present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/governance/test-enforcement.md"
+          ]
+        },
+        {
+          "id": "regression-guardrail",
+          "label": "Regression guardrail governance present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/governance/regression-guardrail-catalog.md"
+          ]
+        },
+        {
+          "id": "validation-readiness",
+          "label": "Validation report present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/reports/wwg-validate-report.md"
+          ]
+        },
+        {
+          "id": "audit-readiness",
+          "label": "Audit can run",
+          "category": "must-have",
+          "status": "available",
+          "severity": "info",
+          "show": true,
+          "reason": "Run audit when structural or governance confidence matters.",
+          "evidence": [
+            ".wwg/reports/wwg-audit-report.md"
+          ],
+          "cliAction": "wwg audit"
+        },
+        {
+          "id": "agent-handoff",
+          "label": "Agent handoff present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/reports/wwg-agent-handoff.md",
+            ".wwg/reports/wwg-handoff-to-codex.md"
+          ]
+        },
+        {
+          "id": "adoption-regression-baseline",
+          "label": "Adoption regression baseline present",
+          "category": "must-have",
+          "status": "present",
+          "severity": "success",
+          "show": true,
+          "evidence": [
+            ".wwg/governance/regression-manifest.md",
+            ".wwg/governance/regression-manifest.json"
+          ]
+        }
+      ],
+      "otherFeatures": [
+        {
+          "id": "readme-support",
+          "label": "README missing",
+          "category": "other-feature",
+          "status": "present",
+          "severity": "success",
+          "show": false,
+          "reason": "The project front door is not present.",
+          "evidence": [
+            "README.md"
+          ],
+          "cliAction": "wwg readme generate --dry-run",
+          "agentAction": "Prepare a README handoff or reviewed scaffold; do not invent final README prose."
+        },
+        {
+          "id": "changelog-support",
+          "label": "Changelog missing",
+          "category": "other-feature",
+          "status": "missing",
+          "severity": "warning",
+          "show": true,
+          "reason": "Package, product, or git history signals make release memory relevant.",
+          "evidence": [
+            "CHANGELOG.md"
+          ],
+          "cliAction": "wwg changelog generate --from-git --weekly --dry-run",
+          "agentAction": "Prepare or review release narrative before treating changelog wording as final."
+        },
+        {
+          "id": "source-index-support",
+          "label": "Source index missing",
+          "category": "other-feature",
+          "status": "missing",
+          "severity": "warning",
+          "show": false,
+          "reason": "Source references exist, but no generated source index was detected.",
+          "evidence": [
+            ".wwg/wiki/01-sources/source-index.md",
+            ".wwg/wiki/01-sources/source-index.json",
+            "wiki/01-sources/source-index.md",
+            "wiki/01-sources/source-index.json"
+          ],
+          "cliAction": "wwg sources index",
+          "agentAction": "Review the source registry/index before relying on external truth."
+        },
+        {
+          "id": "infra-readiness",
+          "label": "Infrastructure readiness not checked",
+          "category": "other-feature",
+          "status": "present",
+          "severity": "success",
+          "show": false,
+          "reason": "Build, deploy, env, or infrastructure indicators were detected.",
+          "evidence": [
+            "package.json scripts",
+            ".env",
+            "Dockerfile",
+            ".github/workflows"
+          ],
+          "cliAction": "wwg infra check",
+          "agentAction": "Inspect infrastructure readiness before deployment-related work."
+        },
+        {
+          "id": "github-publish-readiness",
+          "label": "GitHub publishing readiness not checked",
+          "category": "other-feature",
+          "status": "available",
+          "severity": "info",
+          "show": true,
+          "reason": "Git or GitHub context exists.",
+          "evidence": [
+            ".git",
+            ".github",
+            "package.json repository"
+          ],
+          "cliAction": "wwg publish github --dry-run",
+          "agentAction": "Do not publish without explicit approval; review readiness and secret safety first."
+        },
+        {
+          "id": "doctor-self-heal",
+          "label": "Doctor/self-heal available for repairable issues",
+          "category": "other-feature",
+          "status": "available",
+          "severity": "warning",
+          "show": true,
+          "reason": "Repairable WWG-owned issues were detected by the current command.",
+          "evidence": [],
+          "cliAction": "wwg doctor",
+          "agentAction": "Inspect repair reports before applying fixes."
+        },
+        {
+          "id": "upgrade-migration",
+          "label": "Upgrade or migration review available",
+          "category": "other-feature",
+          "status": "not_applicable",
+          "severity": "info",
+          "show": false,
+          "reason": "Template version drift or migration-pack indicators were detected.",
+          "evidence": [
+            "wwg.template_version",
+            "migrations/"
+          ],
+          "cliAction": "wwg migrations plan --from <current> --to <target>",
+          "agentAction": "Review a migration plan before applying upgrade or migration changes."
+        },
+        {
+          "id": "wizard-onboarding",
+          "label": "Wizard onboarding available",
+          "category": "other-feature",
+          "status": "not_applicable",
+          "severity": "info",
+          "show": false,
+          "reason": "Wizard is shown only for onboarding, init, or adoption contexts.",
+          "evidence": [],
+          "cliAction": "wwg wizard",
+          "agentAction": "Use the Wizard only when the user wants guided setup."
+        }
+      ],
+      "recommendedNext": [
+        {
+          "id": "review-relevant-other-features",
+          "label": "Review relevant Other Features",
+          "category": "recommended-next",
+          "status": "available",
+          "severity": "info",
+          "show": true,
+          "reason": "Only detected gaps or context-relevant actions are shown.",
+          "cliAction": "wwg brief",
+          "agentAction": "Treat recommendations as scoped support, not permission to expand the current task."
+        }
+      ],
+      "developerDetail": [
+        {
+          "id": "developer-validate",
+          "label": "Run structural validation",
+          "category": "developer-detail",
+          "status": "available",
+          "severity": "info",
+          "show": true,
+          "cliAction": "wwg validate"
+        },
+        {
+          "id": "developer-audit",
+          "label": "Run lower-level audit",
+          "category": "developer-detail",
+          "status": "available",
+          "severity": "info",
+          "show": true,
+          "cliAction": "wwg audit"
+        }
+      ]
+    },
+    "generatedProjectUpgradeReview": {
+      "riskLevel": "medium",
+      "safeAdds": 2,
+      "safeUpdates": 0,
+      "mergeRequired": 5,
+      "neverOverwrite": 9,
+      "reportPaths": {
+        "markdown": ".wwg/reports/generated-project-upgrade-review.md",
+        "json": ".wwg/reports/generated-project-upgrade-review.json"
+      }
+    },
+    "findingSummary": "critical: 0, high: 0, medium: 9, low: 16, info: 50"
+  },
+  "findings": [
+    {
+      "severity": "medium",
+      "code": "recommended-changelog",
+      "message": "Recommended artifact is not currently mapped or detected.",
+      "path": "CHANGELOG.md",
+      "evidence_level": "likely",
+      "recommendation": "Create only in a later explicit adoption/init phase.",
+      "risk": "medium",
+      "category": "existing-audit",
+      "id": "recommended-changelog",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "medium",
+      "code": "recommended-maintenance_matrix",
+      "message": "Recommended artifact is not currently mapped or detected.",
+      "path": "docs/ai-context/context-maintenance-matrix.md",
+      "evidence_level": "likely",
+      "recommendation": "Create only in a later explicit adoption/init phase.",
+      "risk": "medium",
+      "category": "existing-audit",
+      "id": "recommended-maintenance_matrix",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "medium",
+      "code": "recommended-public_discovery_context",
+      "message": "Recommended artifact is not currently mapped or detected.",
+      "path": "docs/ai-context/public-discovery-context.md",
+      "evidence_level": "likely",
+      "recommendation": "Create only in a later explicit adoption/init phase.",
+      "risk": "medium",
+      "category": "existing-audit",
+      "id": "recommended-public_discovery_context",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "medium",
+      "code": "registry-report-missing",
+      "message": "Registry references missing report generate_workspace.",
+      "id": "registry-report-missing",
+      "category": "generation-freshness",
+      "path": ".wwg/reports/wwg-generate-workspace-report.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Run the related command or remove the stale report reference through a safe registry update.",
+      "risk": "low",
+      "auto_fix_available": true
+    },
+    {
+      "severity": "medium",
+      "code": "registry-report-missing",
+      "message": "Registry references missing report refresh_context.",
+      "id": "registry-report-missing",
+      "category": "generation-freshness",
+      "path": ".wwg/reports/wwg-refresh-context-report.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Run the related command or remove the stale report reference through a safe registry update.",
+      "risk": "low",
+      "auto_fix_available": true
+    },
+    {
+      "severity": "medium",
+      "code": "registry-report-missing",
+      "message": "Registry references missing report refresh_skills.",
+      "id": "registry-report-missing",
+      "category": "generation-freshness",
+      "path": ".wwg/reports/wwg-refresh-skills-report.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Run the related command or remove the stale report reference through a safe registry update.",
+      "risk": "low",
+      "auto_fix_available": true
+    },
+    {
+      "severity": "medium",
+      "code": "registry-report-missing",
+      "message": "Registry references missing report infra_plan.",
+      "id": "registry-report-missing",
+      "category": "generation-freshness",
+      "path": ".wwg/reports/wwg-infra-plan-report.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Run the related command or remove the stale report reference through a safe registry update.",
+      "risk": "low",
+      "auto_fix_available": true
+    },
+    {
+      "severity": "medium",
+      "code": "registry-report-missing",
+      "message": "Registry references missing report env_example.",
+      "id": "registry-report-missing",
+      "category": "generation-freshness",
+      "path": ".wwg/reports/wwg-env-example-report.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Run the related command or remove the stale report reference through a safe registry update.",
+      "risk": "low",
+      "auto_fix_available": true
+    },
+    {
+      "severity": "medium",
+      "code": "report-index-missing",
+      "message": ".wwg/reports exists without its promoted report index.",
+      "id": "report-index-missing",
+      "category": "report-policy",
+      "path": ".wwg/reports/README.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Add `.wwg/reports/README.md` before claiming native report policy readiness.",
+      "risk": "medium",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "agent-readiness-report-missing",
+      "message": "Validation or audit evidence report is missing.",
+      "id": "agent-readiness-report-missing",
+      "category": "agent-readiness",
+      "path": ".wwg/reports/wwg-audit-report.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Run validate and audit before claiming agent readiness.",
+      "risk": "low",
+      "auto_fix_available": true
+    },
+    {
+      "severity": "low",
+      "code": "canonical-context-policy-missing",
+      "message": "Expected policy or coverage artifact is missing.",
+      "id": "canonical-context-policy-missing",
+      "category": "policy-coverage",
+      "path": "wiki-template/base/09-agent-context/canonical-context-policy.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Restore the policy artifact or document an equivalent canonical source.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "changelog-missing",
+      "message": "CHANGELOG.md is missing, so project memory and release subtext are not yet first-class.",
+      "id": "changelog-missing",
+      "category": "changelog-governance",
+      "path": "CHANGELOG.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Run `wwg changelog generate --target . --from-git --weekly --dry-run` before creating one.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "evidence-standards-missing",
+      "message": "Expected policy or coverage artifact is missing.",
+      "id": "evidence-standards-missing",
+      "category": "policy-coverage",
+      "path": "governance-template/base/evidence-standards.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Restore the policy artifact or document an equivalent canonical source.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "generated-output-missing",
+      "message": "Expected generated output is missing after WWG init/generation.",
+      "id": "generated-output-missing",
+      "category": "generation-freshness",
+      "path": ".wwg/workspace/context/project-context.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Run the relevant generate or refresh command.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "generated-output-missing",
+      "message": "Expected generated output is missing after WWG init/generation.",
+      "id": "generated-output-missing",
+      "category": "generation-freshness",
+      "path": ".wwg/workspace/skills/skill-index.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Run the relevant generate or refresh command.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "gitignore-native-report-backups-missing",
+      "message": "Report policy expects `.wwg/reports/backups/` to be ignored.",
+      "id": "gitignore-native-report-backups-missing",
+      "category": "report-policy",
+      "path": ".gitignore",
+      "evidence_level": "confirmed",
+      "recommendation": "Add a narrow ignore rule for `.wwg/reports/backups/` or `.wwg/.gitignore` `reports/backups/`.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "maintenance-matrix-missing",
+      "message": "Maintenance matrix artifact is missing.",
+      "id": "maintenance-matrix-missing",
+      "category": "maintenance-matrix",
+      "path": "wiki-template/base/12-maintenance/context-maintenance-matrix.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Add matrix coverage when this layer exists.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "maintenance-matrix-missing",
+      "message": "Maintenance matrix artifact is missing.",
+      "id": "maintenance-matrix-missing",
+      "category": "maintenance-matrix",
+      "path": "workspace-template/base/context/context-maintenance-matrix.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Add matrix coverage when this layer exists.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "maintenance-matrix-missing",
+      "message": "Maintenance matrix artifact is missing.",
+      "id": "maintenance-matrix-missing",
+      "category": "maintenance-matrix",
+      "path": ".wwg/wiki/12-maintenance/self-maintenance-loop.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Add matrix coverage when this layer exists.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "public-discovery-review-missing",
+      "message": "Expected policy or coverage artifact is missing.",
+      "id": "public-discovery-review-missing",
+      "category": "policy-coverage",
+      "path": "governance-template/base/public-discovery-review.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Restore the policy artifact or document an equivalent canonical source.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "public-surface-review-missing",
+      "message": "Expected policy or coverage artifact is missing.",
+      "id": "public-surface-review-missing",
+      "category": "policy-coverage",
+      "path": "governance-template/base/public-surface-review.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Restore the policy artifact or document an equivalent canonical source.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "readme-agent-routing-missing",
+      "message": "WWG is present but README.md does not route agents to AGENTS.md and .wwg context.",
+      "id": "readme-agent-routing-missing",
+      "category": "readme-governance",
+      "path": "README.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Add a short For Agents section.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "readme-docs-map-missing",
+      "message": "README.md is missing a documentation map.",
+      "id": "readme-docs-map-missing",
+      "category": "readme-governance",
+      "path": "README.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Add a concise Documentation section.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "runtime-monitoring-missing",
+      "message": "Expected policy or coverage artifact is missing.",
+      "id": "runtime-monitoring-missing",
+      "category": "policy-coverage",
+      "path": "wiki-template/base/08-operations/monitoring.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Restore the policy artifact or document an equivalent canonical source.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "low",
+      "code": "truth-conflict-policy-missing",
+      "message": "Expected policy or coverage artifact is missing.",
+      "id": "truth-conflict-policy-missing",
+      "category": "policy-coverage",
+      "path": "governance-template/base/truth-conflict-resolution.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Restore the policy artifact or document an equivalent canonical source.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "ambiguous-report-classification",
+      "message": "Some report-like files need human classification.",
+      "id": "ambiguous-report-classification",
+      "category": "report-policy",
+      "evidence_level": "confirmed",
+      "recommendation": "Run `wwg reports --target .` and review the Ambiguous / Needs Review section.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "candidate-principle-like-content",
+      "message": "Potential principle-like content was found outside the principles folder.",
+      "id": "candidate-principle-like-content",
+      "category": "principles",
+      "path": "AGENTS.md",
+      "evidence_level": "likely",
+      "recommendation": "Review whether this durable guidance should become a candidate Principle Brief; do not treat this as a critical error.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "duplicate-concepts-clear",
+      "message": "No duplicate concept hints detected beyond normal WWG structure.",
+      "id": "duplicate-concepts-clear",
+      "category": "duplicate-concepts",
+      "evidence_level": "confirmed",
+      "recommendation": "No action required.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "generated-markers-balanced",
+      "message": "Generated marker pairs are balanced where present.",
+      "status": "PASS",
+      "category": "generated-markers",
+      "id": "generated-markers-balanced",
+      "evidence_level": "unknown",
+      "recommendation": "Review and document the appropriate next step.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "governance-detected",
+      "message": "Detected 25 governance artifact(s).",
+      "evidence_level": "confirmed",
+      "recommendation": "Reuse and register existing governance artifacts.",
+      "risk": "low",
+      "category": "existing-audit",
+      "id": "governance-detected",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "json-schemas-parse",
+      "message": "Parsed and compiled 0 JSON schema file(s).",
+      "status": "PASS",
+      "category": "schemas",
+      "id": "json-schemas-parse",
+      "evidence_level": "unknown",
+      "recommendation": "Review and document the appropriate next step.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "maintenance-review-recommended",
+      "message": "This project shows maintenance drift signals. Run `wwg maintain --target <path>` to generate a structured maintenance review.",
+      "id": "maintenance-review-recommended",
+      "category": "maintenance",
+      "evidence_level": "confirmed",
+      "recommendation": "Run `wwg maintain --target .` for a non-destructive maintenance recommendation report.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "mapping-project_master_context",
+      "message": "Detected candidate for project_master_context.",
+      "path": "governance/context-drift-detection.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register governance/context-drift-detection.md as project_master_context; do not duplicate it.",
+      "risk": "low",
+      "category": "existing-audit",
+      "id": "mapping-project_master_context",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "mapping-root_agents",
+      "message": "Detected candidate for root_agents.",
+      "path": "AGENTS.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register AGENTS.md as root_agents; do not duplicate it.",
+      "risk": "low",
+      "category": "existing-audit",
+      "id": "mapping-root_agents",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "markdown-readable",
+      "message": "Markdown files are non-empty and readable.",
+      "status": "PASS",
+      "category": "markdown",
+      "id": "markdown-readable",
+      "evidence_level": "unknown",
+      "recommendation": "Review and document the appropriate next step.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "principle-files-present",
+      "message": "No Principle Brief files beyond README were found.",
+      "id": "principle-files-present",
+      "category": "principles",
+      "path": ".wwg/wiki/principles",
+      "evidence_level": "confirmed",
+      "recommendation": "Add Principle Briefs only when durable guidance is explicit.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "project-registry-valid",
+      "message": "WWG project registry parses and matches the registry schema.",
+      "path": ".wwg/config/wwg.project.yaml",
+      "status": "PASS",
+      "category": "registry",
+      "id": "project-registry-valid",
+      "evidence_level": "unknown",
+      "recommendation": "Review and document the appropriate next step.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": ".react-router/types/app/routes/legal/+types/privacy-policy.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": ".react-router/types/app/routes/legal/+types/terms-of-use.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": ".react-router/types/app/routes/support/+types/faq.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": ".react-router/types/app/routes/support/+types/help-desk.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": ".wwg/changelog/config.yml",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": ".wwg/changelog/state.json",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "app/routes/legal/privacy-policy.tsx",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "app/routes/legal/terms-of-use.tsx",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "app/routes/support/faq.tsx",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "app/routes/support/help-desk.tsx",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "build/client/assets/privacy-policy-CNE0q99c.js",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "build/client/assets/terms-of-use-qn4NvFW0.js",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "reports/changelog-bump-recommendation.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "reports/changelog-preview.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "reports/wwg-changelog-handoff.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low",
+      "category": "existing-audit",
+      "id": "public-surface-artifact",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-detected",
+      "message": "Detected 15 public surface/public discovery artifact(s).",
+      "evidence_level": "confirmed",
+      "recommendation": "Map existing public discovery sources before proposing new ones.",
+      "risk": "low",
+      "category": "existing-audit",
+      "id": "public-surface-detected",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "readme-detected",
+      "message": "README.md was detected at 52 lines.",
+      "id": "readme-detected",
+      "category": "readme-governance",
+      "path": "README.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Validate it with `wwg readme validate --target .`.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "recommendation-governance-present",
+      "message": "Recommendation capture is available through the Governance registry and policy.",
+      "id": "recommendation-governance-present",
+      "category": "recommendation-governance",
+      "path": ".wwg/governance/recommendation-registry.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Use the registry for useful future work discovered by agents, audits, maintenance runs, or closeouts; do not promote recommendations automatically.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "root-agents-detected",
+      "message": "Root agent instructions were detected.",
+      "path": "AGENTS.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Map this file as canonical_artifacts.root_agents.",
+      "risk": "low",
+      "category": "existing-audit",
+      "id": "root-agents-detected",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "runtime-skill-candidates-not-generated",
+      "message": "Runtime skill candidate contract: not generated.",
+      "id": "runtime-skill-candidates-not-generated",
+      "category": "runtime-skill-candidates",
+      "path": ".wwg/reports/runtime-skill-candidates.json",
+      "evidence_level": "confirmed",
+      "recommendation": "No action required. Candidate artifacts are optional and absence is valid.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "skill-manifest-absent",
+      "message": "Skill Manifest is not present. This remains valid for backward compatibility.",
+      "id": "skill-manifest-absent",
+      "category": "skill-manifest",
+      "path": ".wwg/config/skill-manifest.yaml",
+      "evidence_level": "confirmed",
+      "recommendation": "Run `wwg refresh-skills --target .` when you want WWG to generate project skill state.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "structure-present",
+      "message": "Expected structure is present for existing-adopted-project.",
+      "id": "structure-present",
+      "category": "repository-structure",
+      "evidence_level": "confirmed",
+      "recommendation": "No action required.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "template-boundary-scope-skipped",
+      "message": "Template asset boundary checks apply only to WWG template repositories.",
+      "id": "template-boundary-scope-skipped",
+      "category": "template-boundary",
+      "evidence_level": "confirmed",
+      "recommendation": "No action required.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "app/lib/document-request-handler.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "app/lib/employee-to-bir2316.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "app/lib/hooks/useEmployees.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "app/services/attendance-approval.service.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "build/client/assets/TextLayer-BhDlSm80.js",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "build/client/assets/face-api.esm-CT-VR31B.js",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "governance/regression-guardrail-catalog.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "reports/context-skill-quality.json",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "reports/context-skill-quality.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "reports/wwg-agent-handoff.json",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "reports/wwg-agent-handoff.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "reports/wwg-handoff-to-codex.json",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "todo-fixme-tbd-detected",
+      "message": "TODO/FIXME/TBD marker detected.",
+      "id": "todo-fixme-tbd-detected",
+      "category": "todo-usage",
+      "path": "reports/wwg-handoff-to-codex.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Confirm whether this is intentional tracked work or convert it into a report/follow-up.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "wwg-principles-valid",
+      "message": "Principles folder and lightweight Principle Brief checks passed.",
+      "status": "PASS",
+      "id": "wwg-principles-valid",
+      "category": "general",
+      "evidence_level": "unknown",
+      "recommendation": "Review and document the appropriate next step.",
+      "risk": "low",
+      "auto_fix_available": false
+    },
+    {
+      "severity": "info",
+      "code": "yaml-files-parse",
+      "message": "Parsed 1 YAML file(s).",
+      "status": "PASS",
+      "category": "schemas",
+      "id": "yaml-files-parse",
+      "evidence_level": "unknown",
+      "recommendation": "Review and document the appropriate next step.",
+      "risk": "low",
+      "auto_fix_available": false
+    }
+  ]
+}

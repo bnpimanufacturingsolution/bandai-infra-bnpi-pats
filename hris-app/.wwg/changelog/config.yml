@@ -1,0 +1,36 @@
+changelog:
+  enabled: true
+  file: CHANGELOG.md
+  language: non-technical
+  audience:
+    - project-owner
+    - developer
+    - agent
+    - user
+  cadence:
+    default: weekly
+    patchWindowDays: 7
+    mode: project-start-anchor
+    releaseDay: end-of-window
+  versioning:
+    automaticPatch: true
+    automaticMinor: false
+    automaticMajor: false
+    minorRequiresExplicitUserCommand: true
+    majorRequiresExplicitUserCommand: true
+  sources:
+    git: true
+    wwgReports: true
+    currentTask: true
+    projectTruth: true
+  inclusion:
+    meaningfulOnly: true
+    groupRelatedCommits: true
+    ignoreFormattingOnly: true
+    ignoreLockfileOnly: true
+    ignoreNoiseCommits: true
+  writing:
+    preferOutcomeLanguage: true
+    avoidCommitLanguage: true
+    avoidTechnicalJargon: true
+    allowTechnicalNamesWhenHelpful: true

@@ -56,21 +56,15 @@ variable "ssh_port" {
   default     = 2222
 }
 
-variable "dev_port" {
+variable "api_port" {
   type        = number
-  description = "DEV health NodePort."
+  description = "HRIS API LAN port."
   default     = 3001
 }
 
-variable "uat_port" {
+variable "app_port" {
   type        = number
-  description = "UAT health NodePort."
-  default     = 3002
-}
-
-variable "prod_port" {
-  type        = number
-  description = "PROD health NodePort."
+  description = "HRIS App LAN port."
   default     = 3000
 }
 

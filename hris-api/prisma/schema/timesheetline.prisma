@@ -1,0 +1,76 @@
+model Timesheetline {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  organizationId  String
+  employee        Employee      @relation(fields: [employeeId], references: [id])
+  employeeId      String        @db.ObjectId
+  timesheet       Timesheet     @relation(fields: [timesheetId], references: [id])
+  timesheetId     String        @db.ObjectId
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id])
+  payrollPeriodId String        @db.ObjectId
+  attendance      Attendance?   @relation(fields: [attendanceId], references: [id])
+  attendanceId    String?       @db.ObjectId
+
+  date DateTime @db.Date
+
+  timeIn        DateTime?
+  timeBreak     DateTime?
+  timeOut       DateTime?
+  status        String    @default("NOT_CLOCKED_IN")
+  behaviorFlags String[]  @default([])
+
+  scheduleSnapshot Json?
+  hoursWorked      String?
+  regularHours     String?
+  overtimeHours    String?
+  undertimeHours   String?
+  lateHours        String?
+  earlyOutHours    String?
+  breakMinutes     Int?
+
+  employeeNotes String?
+  approverNotes String?
+  notes         String?
+  metadata      Json?
+  primaryMarker String?
+  isManualEntry Boolean @default(false)
+  isVirtual     Boolean @default(false)
+
+  revisionNo       Int       @default(1)
+  isEffective      Boolean   @default(true)
+  ledgerType       String    @default("SNAPSHOT")
+  supersedesLineId String?   @db.ObjectId
+  supersededById   String?   @db.ObjectId
+  supersededAt     DateTime?
+  editedAt         DateTime?
+  editedBy         String?   @db.ObjectId
+  editReason       String?
+
+  employeeCodeSnapshot    String?
+  employeeNameSnapshot    String?
+  departmentIdSnapshot    String?                @db.ObjectId
+  departmentNameSnapshot  String?
+  reportToIdSnapshot      String?                @db.ObjectId
+  workforceSourceSnapshot WorkforceSource?
+  agencyIdSnapshot        String?                @db.ObjectId
+  attendanceObligations   AttendanceObligation[]
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, timesheetId, date, revisionNo])
+  @@index([organizationId, date, isDeleted])
+  @@index([organizationId, payrollPeriodId, date, isDeleted])
+  @@index([organizationId, employeeId, date, isDeleted])
+  @@index([organizationId, timesheetId, date, isEffective])
+  @@index([organizationId, employeeId, date, isEffective])
+  @@index([organizationId, status, date, isDeleted])
+  @@index([organizationId, departmentIdSnapshot, date, isDeleted])
+  @@index([organizationId, reportToIdSnapshot, date, isDeleted])
+  @@index([timesheetId])
+  @@index([attendanceId])
+  @@index([supersedesLineId])
+  @@index([supersededById])
+  @@map("timesheet_lines")
+}

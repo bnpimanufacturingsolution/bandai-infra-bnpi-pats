@@ -1,0 +1,2 @@
+enableAutoApprove,enableEditBeforeSubmission,rejectBehavior,overtimeFlagThresholdMinutes
+false,true,REVISE,60

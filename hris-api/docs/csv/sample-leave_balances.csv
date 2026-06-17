@@ -1,0 +1,9 @@
+employeeId,leaveType,balance,asOfDate,carryover,metadata
+BNEI-001,VACATION,5,2026-04-15T00:00:00.000Z,0,"{""source"":""sample-pack""}"
+BNEI-002,SICK,6,2026-04-15T00:00:00.000Z,1,"{""source"":""sample-pack""}"
+BNEI-003,VACATION,7,2026-04-15T00:00:00.000Z,2,"{""source"":""sample-pack""}"
+00050,SICK,8,2026-04-15T00:00:00.000Z,0,"{""source"":""sample-pack""}"
+00062,VACATION,5,2026-04-15T00:00:00.000Z,1,"{""source"":""sample-pack""}"
+00065,SICK,6,2026-04-15T00:00:00.000Z,2,"{""source"":""sample-pack""}"
+00073,VACATION,7,2026-04-15T00:00:00.000Z,0,"{""source"":""sample-pack""}"
+00083,SICK,8,2026-04-15T00:00:00.000Z,1,"{""source"":""sample-pack""}"

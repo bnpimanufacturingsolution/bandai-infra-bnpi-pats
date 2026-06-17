@@ -1,0 +1,47 @@
+model SOALineItem {
+  id                   String             @id @default(cuid())
+  statementOfAccount   StatementOfAccount @relation(fields: [statementOfAccountId], references: [id], onDelete: Cascade)
+  statementOfAccountId String
+
+  category    String? // Remittance category (e.g., "TAX", "SSS", "LOAN", "BENEFIT")
+  description String?
+
+  // Employee relation
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employeeId String?
+
+  // Source references
+  employeePayroll   EmployeePayroll? @relation(fields: [employeePayrollId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employeePayrollId String?
+  employeeLoan      EmployeeLoan?    @relation(fields: [employeeLoanId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employeeLoanId    String?
+  employeeBenefit   EmployeeBenefit? @relation(fields: [employeeBenefitId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employeeBenefitId String?
+
+  // Amounts
+  taxableAmount Float @default(0) // Base amount used for tax calculation
+  taxAmount     Float @default(0) // Tax amount represented by this line item
+  employeeShare Float @default(0)
+  employerShare Float @default(0)
+  totalAmount   Float @default(0) // employee + employer
+
+  metadata Json? // {
+  //   employeeName: "Dela Cruz, Juan",
+  //   employeeNumber: "EMP-001",
+  //   externalReferenceNumber: "SSS-1234567890",
+  //   loanBalance: 45000,
+  //   installmentNumber: 3,
+  //   contributionBase: 25000,
+  //   rate: 0.05
+  // }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([statementOfAccountId])
+  @@index([employeeId])
+  @@index([employeePayrollId])
+  @@index([employeeLoanId])
+  @@index([employeeBenefitId])
+  @@map("soa_line_items")
+}

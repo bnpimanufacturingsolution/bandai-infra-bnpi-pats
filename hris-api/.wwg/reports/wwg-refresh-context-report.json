@@ -1,0 +1,73 @@
+{
+  "kind": "context",
+  "target": "C:\\Users\\1biss\\Documents\\Projects\\hris-api",
+  "targetDisplay": ".",
+  "command": "wwg refresh-context --target C:\\Users\\1biss\\Documents\\Projects\\hris-api",
+  "dryRun": false,
+  "sourceArtifactsRead": [
+    "wiki/12-maintenance/self-maintenance-loop.md",
+    "wiki/principles/README.md",
+    "wiki/principles/adopted-principles.md"
+  ],
+  "missingCanonicalSources": [
+    "wiki/12-maintenance/context-maintenance-matrix.md",
+    "wiki/12-maintenance/drift-policy.md",
+    "wiki/12-maintenance/maintenance-contract.md",
+    "wiki/index.md"
+  ],
+  "writes": [
+    {
+      "path": "workspace/context/project-context.md",
+      "action": "skipped",
+      "ownership": "wwg-generated",
+      "reason": "Generated section COMPILED_CONTEXT was not found.",
+      "sectionName": "COMPILED_CONTEXT"
+    },
+    {
+      "path": "workspace/context/architecture-context.md",
+      "action": "unchanged",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "COMPILED_CONTEXT"
+    },
+    {
+      "path": "workspace/context/domain-context.md",
+      "action": "unchanged",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "COMPILED_CONTEXT"
+    },
+    {
+      "path": "workspace/context/ux-context.md",
+      "action": "unchanged",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "COMPILED_CONTEXT"
+    },
+    {
+      "path": "workspace/context/governance-context.md",
+      "action": "unchanged",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "COMPILED_CONTEXT"
+    },
+    {
+      "path": "workspace/context/context-maintenance-matrix.md",
+      "action": "unchanged",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "COMPILED_CONTEXT"
+    }
+  ],
+  "filesCreated": [],
+  "filesUpdated": [],
+  "filesSkipped": [
+    "workspace/context/project-context.md - Generated section COMPILED_CONTEXT was not found."
+  ],
+  "generatedSectionsUpdated": [],
+  "warnings": [
+    "workspace/context/project-context.md: Generated section COMPILED_CONTEXT was not found."
+  ],
+  "validationPerformed": [
+    "Verified wwg.project.yaml exists and can be parsed.",
+    "Compiled generation inputs deterministically without LLM calls.",
+    "Applied generated-section safety rules.",
+    "Recorded markdown and JSON generation reports."
+  ],
+  "registryUpdated": true
+}

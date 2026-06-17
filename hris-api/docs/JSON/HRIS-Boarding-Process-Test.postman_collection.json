@@ -1,0 +1,316 @@
+{
+	"info": {
+		"name": "HRIS - Boarding Process & Checklist",
+		"description": "Complete test collection for Boarding Process creation with templates and checklist items",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:5000/api",
+			"type": "string"
+		},
+		{
+			"key": "organizationId",
+			"value": "YOUR_ORGANIZATION_ID",
+			"type": "string"
+		},
+		{
+			"key": "employeeId",
+			"value": "YOUR_EMPLOYEE_ID",
+			"type": "string"
+		},
+		{
+			"key": "templateId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "boardingProcessId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "authToken",
+			"value": "YOUR_AUTH_TOKEN",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "1. Create Boarding Template",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 201) {",
+							"    const response = pm.response.json();",
+							"    if (response.data && response.data.id) {",
+							"        pm.collectionVariables.set('templateId', response.data.id);",
+							"        console.log('Template ID saved:', response.data.id);",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"name\": \"Standard Employee Onboarding Template\",\n  \"description\": \"Complete onboarding process for new employees\",\n  \"type\": \"ONBOARDING\",\n  \"isActive\": true,\n  \"items\": [\n    {\n      \"title\": \"Complete Personal Information Form\",\n      \"description\": \"Fill out personal details including contact information and emergency contacts\",\n      \"category\": \"HR_DOCUMENTATION\",\n      \"status\": \"PENDING\",\n      \"priority\": \"HIGH\",\n      \"dueDate\": \"2026-01-15T00:00:00.000Z\",\n      \"order\": 1,\n      \"daysOffset\": 2\n    },\n    {\n      \"title\": \"Setup Workstation & Email\",\n      \"description\": \"Configure laptop, email account, and access credentials\",\n      \"category\": \"IT_SETUP\",\n      \"status\": \"PENDING\",\n      \"priority\": \"HIGH\",\n      \"dueDate\": \"2026-01-16T00:00:00.000Z\",\n      \"order\": 2,\n      \"daysOffset\": 3\n    },\n    {\n      \"title\": \"Attend Welcome Orientation\",\n      \"description\": \"Join the team meeting and learn about company culture\",\n      \"category\": \"ORIENTATION\",\n      \"status\": \"PENDING\",\n      \"priority\": \"MEDIUM\",\n      \"dueDate\": \"2026-01-17T00:00:00.000Z\",\n      \"order\": 3,\n      \"daysOffset\": 4\n    },\n    {\n      \"title\": \"Complete Compliance Training\",\n      \"description\": \"Review and complete required compliance and safety training modules\",\n      \"category\": \"COMPLIANCE\",\n      \"status\": \"PENDING\",\n      \"priority\": \"HIGH\",\n      \"dueDate\": \"2026-01-20T00:00:00.000Z\",\n      \"order\": 4,\n      \"daysOffset\": 7\n    },\n    {\n      \"title\": \"Meet Department Team\",\n      \"description\": \"Introduction meeting with immediate team members\",\n      \"category\": \"ORIENTATION\",\n      \"status\": \"PENDING\",\n      \"priority\": \"MEDIUM\",\n      \"dueDate\": \"2026-01-22T00:00:00.000Z\",\n      \"order\": 5,\n      \"daysOffset\": 9\n    },\n    {\n      \"title\": \"Setup Benefits & Payroll\",\n      \"description\": \"Complete benefits enrollment and payroll information\",\n      \"category\": \"BENEFITS\",\n      \"status\": \"PENDING\",\n      \"priority\": \"HIGH\",\n      \"dueDate\": \"2026-01-24T00:00:00.000Z\",\n      \"order\": 6,\n      \"daysOffset\": 11\n    }\n  ]\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/boarding-templates",
+					"host": ["{{baseUrl}}"],
+					"path": ["boarding-templates"]
+				},
+				"description": "Create a boarding template with checklist items"
+			},
+			"response": []
+		},
+		{
+			"name": "2. Create Boarding Process from Template",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 201) {",
+							"    const response = pm.response.json();",
+							"    if (response.data && response.data.id) {",
+							"        pm.collectionVariables.set('boardingProcessId', response.data.id);",
+							"        console.log('Boarding Process ID saved:', response.data.id);",
+							"        console.log('Checklist Items created:', response.data.checklistItems?.length || 0);",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"employeeId\": \"{{employeeId}}\",\n  \"boardingTemplateId\": \"{{templateId}}\",\n  \"type\": \"ONBOARDING\",\n  \"status\": \"IN_PROGRESS\",\n  \"startDate\": \"2026-01-13T00:00:00.000Z\",\n  \"targetDate\": \"2026-02-13T00:00:00.000Z\",\n  \"assignedToId\": \"507f1f77bcf86cd799439014\",\n  \"assignedToName\": \"HR Manager\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/boarding-processes",
+					"host": ["{{baseUrl}}"],
+					"path": ["boarding-processes"]
+				},
+				"description": "Create a boarding process from template - this will automatically create checklist items"
+			},
+			"response": []
+		},
+		{
+			"name": "3. Get Boarding Process with Checklist",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/boarding-processes/{{boardingProcessId}}?fields=id,type,status,startDate,targetDate,checklistItems.id,checklistItems.title,checklistItems.status,checklistItems.priority,checklistItems.dueDate,checklistItems.order",
+					"host": ["{{baseUrl}}"],
+					"path": ["boarding-processes", "{{boardingProcessId}}"],
+					"query": [
+						{
+							"key": "fields",
+							"value": "id,type,status,startDate,targetDate,checklistItems.id,checklistItems.title,checklistItems.status,checklistItems.priority,checklistItems.dueDate,checklistItems.order"
+						}
+					]
+				},
+				"description": "Retrieve boarding process with all checklist items"
+			},
+			"response": []
+		},
+		{
+			"name": "4. Get All Boarding Processes for Employee",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/boarding-processes?filter[employeeId]={{employeeId}}&fields=id,type,status,startDate,targetDate,checklistItems&document=true&count=true",
+					"host": ["{{baseUrl}}"],
+					"path": ["boarding-processes"],
+					"query": [
+						{
+							"key": "filter[employeeId]",
+							"value": "{{employeeId}}"
+						},
+						{
+							"key": "fields",
+							"value": "id,type,status,startDate,targetDate,checklistItems"
+						},
+						{
+							"key": "document",
+							"value": "true"
+						},
+						{
+							"key": "count",
+							"value": "true"
+						}
+					]
+				},
+				"description": "Get all boarding processes for a specific employee"
+			},
+			"response": []
+		},
+		{
+			"name": "5. Update Checklist Item Status",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"status\": \"COMPLETED\",\n  \"completedDate\": \"2026-01-13T10:30:00.000Z\",\n  \"completedBy\": \"{{employeeId}}\",\n  \"completedByName\": \"John Doe\",\n  \"comments\": \"Task completed successfully\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/checklist-items/:checklistItemId",
+					"host": ["{{baseUrl}}"],
+					"path": ["checklist-items", ":checklistItemId"],
+					"variable": [
+						{
+							"key": "checklistItemId",
+							"value": "REPLACE_WITH_CHECKLIST_ITEM_ID"
+						}
+					]
+				},
+				"description": "Update a checklist item status to completed"
+			},
+			"response": []
+		},
+		{
+			"name": "6. Get Checklist Items for Process",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/checklist-items?filter[processId]={{boardingProcessId}}&sort=order&order=asc&document=true",
+					"host": ["{{baseUrl}}"],
+					"path": ["checklist-items"],
+					"query": [
+						{
+							"key": "filter[processId]",
+							"value": "{{boardingProcessId}}"
+						},
+						{
+							"key": "sort",
+							"value": "order"
+						},
+						{
+							"key": "order",
+							"value": "asc"
+						},
+						{
+							"key": "document",
+							"value": "true"
+						}
+					]
+				},
+				"description": "Get all checklist items for a boarding process, ordered by sequence"
+			},
+			"response": []
+		},
+		{
+			"name": "7. Update Boarding Process Status",
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"status\": \"COMPLETED\",\n  \"actualCompleteDate\": \"2026-02-10T00:00:00.000Z\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/boarding-processes/{{boardingProcessId}}",
+					"host": ["{{baseUrl}}"],
+					"path": ["boarding-processes", "{{boardingProcessId}}"]
+				},
+				"description": "Update boarding process status to completed"
+			},
+			"response": []
+		},
+		{
+			"name": "8. Create Offboarding Process",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{authToken}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"employeeId\": \"{{employeeId}}\",\n  \"boardingTemplateId\": \"{{templateId}}\",\n  \"type\": \"OFFBOARDING\",\n  \"status\": \"NOT_STARTED\",\n  \"startDate\": \"2026-02-01T00:00:00.000Z\",\n  \"targetDate\": \"2026-02-15T00:00:00.000Z\",\n  \"exitReason\": \"Resignation - Better opportunity\",\n  \"assignedToId\": \"507f1f77bcf86cd799439014\",\n  \"assignedToName\": \"HR Manager\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/boarding-processes",
+					"host": ["{{baseUrl}}"],
+					"path": ["boarding-processes"]
+				},
+				"description": "Create an offboarding process"
+			},
+			"response": []
+		}
+	]
+}

@@ -1,0 +1,23 @@
+model ScheduleOverride {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  employeeId          String
+  date                DateTime
+  shiftTypeId         String?
+  shiftSnapshot       Json?
+  reason              String?
+  createdByEmployeeId String?
+  isDeleted           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  employee          Employee   @relation("EmployeeScheduleOverrides", fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shiftType         ShiftType? @relation(fields: [shiftTypeId], references: [id], onDelete: NoAction, onUpdate: Cascade)
+  createdByEmployee Employee?  @relation("ScheduleOverridesCreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([organizationId, employeeId, date], map: "employee_schedule_override_unique")
+  @@index([organizationId, employeeId, isDeleted])
+  @@index([organizationId, employeeId, date, isDeleted])
+  @@index([organizationId, date, isDeleted])
+  @@map("schedule_overrides")
+}

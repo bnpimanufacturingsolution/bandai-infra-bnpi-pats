@@ -1,0 +1,239 @@
+{
+  "kind": "workspace",
+  "target": "C:\\Users\\1biss\\Documents\\Projects\\hris-app",
+  "targetDisplay": ".",
+  "command": "wwg generate-workspace --target C:\\Users\\1biss\\Documents\\Projects\\hris-app",
+  "dryRun": false,
+  "sourceArtifactsRead": [
+    "wiki/principles/README.md"
+  ],
+  "missingCanonicalSources": [
+    "wiki/12-maintenance/context-maintenance-matrix.md",
+    "wiki/12-maintenance/drift-policy.md",
+    "wiki/12-maintenance/maintenance-contract.md",
+    "wiki/index.md"
+  ],
+  "writes": [
+    {
+      "path": "workspace/context/project-context.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/context/architecture-context.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/context/domain-context.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/context/ux-context.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/context/governance-context.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/context/context-maintenance-matrix.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/prompts/task-router.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/prompts/feature-implementation.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/prompts/bug-fix.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/prompts/runtime-infrastructure.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/prompts/public-surface-update.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/prompts/public-discovery-maintenance.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/prompts/production-monitoring.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/agents/codex.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/agents/claude-code.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/agents/cursor.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/agents/vscode.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/current-task.md",
+      "action": "skipped",
+      "ownership": "wwg-generated",
+      "reason": "Existing file has no safe generated section."
+    },
+    {
+      "path": "workspace/AGENTS.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/AGENTS.md",
+      "action": "unchanged",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "SELECTED_PROFILES"
+    },
+    {
+      "path": "workspace/AGENTS.md",
+      "action": "unchanged",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "MAINTENANCE_CONTRACT"
+    },
+    {
+      "path": "AGENTS.md",
+      "action": "skipped",
+      "ownership": "human-authored",
+      "reason": "Generated section PROJECT_CONTEXT was not found.",
+      "sectionName": "PROJECT_CONTEXT"
+    },
+    {
+      "path": "AGENTS.md",
+      "action": "skipped",
+      "ownership": "human-authored",
+      "reason": "Generated section SELECTED_PROFILES was not found.",
+      "sectionName": "SELECTED_PROFILES"
+    },
+    {
+      "path": "AGENTS.md",
+      "action": "skipped",
+      "ownership": "human-authored",
+      "reason": "Generated section MAINTENANCE_CONTRACT was not found.",
+      "sectionName": "MAINTENANCE_CONTRACT"
+    },
+    {
+      "path": "workspace/skills/change-classifier.skill.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/skills/context-skill-maintenance.skill.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/skills/drift-detector.skill.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/skills/regression-guardrail-maintenance.skill.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/skills/task-router.skill.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/skills/README.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": "workspace/skills/skill-index.md",
+      "action": "created",
+      "ownership": "missing"
+    },
+    {
+      "path": ".wwg/config/skill-manifest.yaml",
+      "action": "created",
+      "ownership": "wwg-generated",
+      "reason": "Skill Manifest records project skill state only; recommended/reference-only skills are not runtime-active."
+    }
+  ],
+  "filesCreated": [
+    "workspace/context/project-context.md",
+    "workspace/context/architecture-context.md",
+    "workspace/context/domain-context.md",
+    "workspace/context/ux-context.md",
+    "workspace/context/governance-context.md",
+    "workspace/context/context-maintenance-matrix.md",
+    "workspace/prompts/task-router.md",
+    "workspace/prompts/feature-implementation.md",
+    "workspace/prompts/bug-fix.md",
+    "workspace/prompts/runtime-infrastructure.md",
+    "workspace/prompts/public-surface-update.md",
+    "workspace/prompts/public-discovery-maintenance.md",
+    "workspace/prompts/production-monitoring.md",
+    "workspace/agents/codex.md",
+    "workspace/agents/claude-code.md",
+    "workspace/agents/cursor.md",
+    "workspace/agents/vscode.md",
+    "workspace/AGENTS.md",
+    "workspace/skills/change-classifier.skill.md",
+    "workspace/skills/context-skill-maintenance.skill.md",
+    "workspace/skills/drift-detector.skill.md",
+    "workspace/skills/regression-guardrail-maintenance.skill.md",
+    "workspace/skills/task-router.skill.md",
+    "workspace/skills/README.md",
+    "workspace/skills/skill-index.md",
+    ".wwg/config/skill-manifest.yaml"
+  ],
+  "filesUpdated": [],
+  "filesSkipped": [
+    "workspace/current-task.md - Existing file has no safe generated section.",
+    "AGENTS.md - Generated section PROJECT_CONTEXT was not found.",
+    "AGENTS.md - Generated section SELECTED_PROFILES was not found.",
+    "AGENTS.md - Generated section MAINTENANCE_CONTRACT was not found."
+  ],
+  "generatedSectionsUpdated": [],
+  "warnings": [
+    ".wwg/config/skill-manifest.yaml: Skill Manifest records project skill state only; recommended/reference-only skills are not runtime-active.",
+    "AGENTS.md: Generated section MAINTENANCE_CONTRACT was not found.",
+    "AGENTS.md: Generated section PROJECT_CONTEXT was not found.",
+    "AGENTS.md: Generated section SELECTED_PROFILES was not found.",
+    "workspace/current-task.md: Existing file has no safe generated section."
+  ],
+  "validationPerformed": [
+    "Verified wwg.project.yaml exists and can be parsed.",
+    "Compiled generation inputs deterministically without LLM calls.",
+    "Applied generated-section safety rules.",
+    "Recorded markdown and JSON generation reports.",
+    "Generated project-local Skill Manifest from profile recommendations, registry metadata, local evidence, and governed compatibility copy policy without activating skills."
+  ],
+  "registryUpdated": true
+}

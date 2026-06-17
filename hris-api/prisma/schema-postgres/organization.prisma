@@ -1,0 +1,16 @@
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  code        String   @unique
+  branding    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isDeleted   Boolean  @default(false)
+
+  users         User[]
+  migrationRuns MigrationRun[]
+
+  @@index([isDeleted])
+  @@map("organizations")
+}

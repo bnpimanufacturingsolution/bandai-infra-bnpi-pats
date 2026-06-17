@@ -1,0 +1,50 @@
+type DocumentTypeFieldOption {
+  label String
+  value String
+}
+
+type DocumentTypeFieldValidation {
+  preset       String?
+  pattern      String?
+  message      String?
+  normalize    String?
+  minLength    Int?
+  maxLength    Int?
+  allowHyphens Boolean @default(true)
+}
+
+type DocumentTypeField {
+  key         String
+  label       String
+  type        String
+  required    Boolean                      @default(false)
+  helperText  String?
+  placeholder String?
+  options     DocumentTypeFieldOption[]
+  validation  DocumentTypeFieldValidation?
+}
+
+model DocumentType {
+  id                String              @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId    String
+  code              String
+  name              String
+  category          String?
+  uploadBy          String              @default("HR")
+  isRequired        Boolean             @default(false)
+  isEmployeeVisible Boolean             @default(true)
+  isActive          Boolean             @default(true)
+  displayOrder      Int                 @default(0)
+  fields            DocumentTypeField[]
+  metadata          Json?
+  isDeleted         Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  documents Document[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isActive, isDeleted])
+  @@index([organizationId, isRequired, isDeleted])
+  @@map("document_types")
+}

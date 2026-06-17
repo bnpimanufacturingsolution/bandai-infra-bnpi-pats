@@ -1,0 +1,23 @@
+stack_name             = "hris-local"
+redis_host_port        = 6380
+app_port_fallback      = 3001
+redis_password_fallback = "replace-with-strong-redis-password"
+app_image_name         = "hris-local-app:latest"
+mongodb_host_port      = 27018
+mongodb_root_username  = "root"
+mongodb_root_password  = "replace-with-strong-mongodb-password"
+mongodb_database       = "hris"
+minio_host_port        = 9000
+minio_console_host_port = 9001
+minio_root_user        = "replace-minio-user"
+minio_root_password    = "replace-with-strong-minio-password"
+minio_bucket           = "hris-images"
+storage_provider       = "minio"
+allow_insecure_local_defaults = false
+
+# Optional if auto-detection is not correct:
+# project_root = "C:/Users/Renz/Documents/GitHub/hris-api"
+
+app_extra_env  = []
+cron_extra_env = []
+

@@ -1,0 +1,112 @@
+enum WorkflowDomain {
+  REQUEST
+  RECRUITMENT
+  PAYROLL
+}
+
+enum WorkflowStepType {
+  SUBMISSION
+  APPROVAL
+  TASK
+}
+
+enum WorkflowAssigneeType {
+  REQUESTER
+  SUPERVISOR
+  TARGET_DEPARTMENT_MANAGER
+  HR
+  SYSTEM
+}
+
+enum WorkflowStepStatus {
+  PENDING
+  IN_PROGRESS
+  APPROVED
+  REJECTED
+  COMPLETED
+  SKIPPED
+}
+
+model WorkflowInstance {
+  id             String @id @default(cuid())
+  organizationId String
+
+  domain         WorkflowDomain
+  domainRecordId String?
+  requestType    RequestType?
+
+  code        String?
+  name        String?
+  description String?
+
+  steps  Json
+  states Json?
+
+  currentStateKey String   @default("OPEN")
+  stateHistory    Json[]   @default([])
+  isDeleted       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  requests              Request[]               @relation("RequestWorkflowInstance")
+  applicants            Applicant[]             @relation("ApplicantWorkflowInstance")
+  stepExecutions        WorkflowStepExecution[]
+  requestTransactions   RequestTransaction[]
+  recruitmentActivities RecruitmentActivity[]   @relation("RecruitmentActivityWorkflowInstance")
+
+  @@index([organizationId, domain, isDeleted])
+  @@index([organizationId, domain, requestType, isDeleted])
+  @@index([domain, domainRecordId])
+  @@map("workflow_instances")
+}
+
+model WorkflowStepExecution {
+  id             String @id @default(cuid())
+  organizationId String
+
+  workflowInstance   WorkflowInstance @relation(fields: [workflowInstanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  workflowInstanceId String
+
+  request     Request?   @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  requestId   String?
+  applicant   Applicant? @relation("ApplicantWorkflowStepExecutions", fields: [applicantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  applicantId String?
+
+  requestsAsCurrent         Request[]             @relation("RequestCurrentWorkflowStep")
+  requestsAsLastCompleted   Request[]             @relation("RequestLastCompletedWorkflowStep")
+  requestTransactions       RequestTransaction[]
+  applicantsAsCurrent       Applicant[]           @relation("ApplicantCurrentWorkflowStep")
+  applicantsAsLastCompleted Applicant[]           @relation("ApplicantLastCompletedWorkflowStep")
+  recruitmentActivities     RecruitmentActivity[] @relation("RecruitmentActivityStepExecution")
+
+  stepNumber Int
+  stepName   String
+  stepType   WorkflowStepType
+
+  assigneeType WorkflowAssigneeType
+  assigneeRole String?
+
+  assignee   Employee? @relation(fields: [assigneeId], references: [id])
+  assigneeId String?
+
+  status      WorkflowStepStatus @default(PENDING)
+  completedAt DateTime?
+  comments    String?
+  metadata    Json?
+
+  isRequired Boolean  @default(true)
+  isDeleted  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([workflowInstanceId])
+  @@index([requestId])
+  @@index([applicantId])
+  @@index([assigneeId])
+  @@index([status])
+  @@index([organizationId])
+  @@index([workflowInstanceId, isDeleted, status, stepNumber])
+  @@index([requestId, isDeleted, status, stepNumber])
+  @@index([applicantId, isDeleted, status, stepNumber])
+  @@map("workflow_step_executions")
+}

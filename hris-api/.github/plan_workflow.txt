@@ -1,0 +1,467 @@
+┌─────────────────────────────────────────────────────────────────────┐
+│                    EMPLOYEE RESIGNATION LIFECYCLE                    │
+└─────────────────────────────────────────────────────────────────────┘
+
+    ACTIVE_EMPLOYEE
+           │
+           │ Employee submits resignation
+           ▼
+    RESIGNATION_REQUESTED ────────┐
+           │                       │
+           │ Auto-notify manager   │ Employee can withdraw
+           ▼                       │
+    MANAGER_REVIEW                 │
+           │                       │
+           ├─── Approve ──────────►│
+           ├─── Request Discussion │
+           └─── Reject ────────────┤
+                                   │
+           ▼                       │
+    HR_REVIEW                      │
+           │                       │
+           ├─── Approve ──────────►│
+           └─── Reject ────────────┤
+                                   │
+           ▼                       │
+    OFFBOARDING_IN_PROGRESS        │
+           │                       │
+           │ Checklist execution   │
+           │ (Multiple tasks)      │
+           ▼                       │
+    FINAL_CLEARANCE                │
+           │                       │
+           │ All items completed   │
+           ▼                       │
+    COMPLETED ◄────────────────────┘
+           │
+           ▼
+    FORMER_EMPLOYEE
+    (System access disabled)
+
+    ┌──────────────────────────────────────────────────────────────┐
+│ STEP 1: Employee Submits Resignation                         │
+└──────────────────────────────────────────────────────────────┘
+
+Employee Action:
+├─ Opens resignation form
+├─ Fills required fields:
+│  ├─ Last Working Day (date picker)
+│  ├─ Resignation Reason (dropdown)
+│  │  └─ Options: Better Opportunity, Career Growth, 
+│     │           Relocation, Personal, Health, Education,
+│     │           Retirement, Culture, Compensation, etc.
+│  ├─ Detailed Explanation (text area)
+│  └─ Optional: Upload attachments (resignation letter)
+│
+└─ Clicks "Submit Resignation"
+
+System Actions:
+├─ Validates notice period
+│  └─ Example: If notice period = 30 days, last working day 
+│              must be >= 30 days from today
+│
+├─ Creates Resignation record with status: RESIGNATION_REQUESTED
+├─ Updates Employee status: ACTIVE_EMPLOYEE → RESIGNATION_REQUESTED
+├─ Creates first Audit Log entry
+├─ Locks certain employee profile fields (prevent changes)
+├─ Sends notifications:
+│  ├─ To Manager: "Your employee [Name] has submitted resignation"
+│  └─ To HR: "New resignation submitted - [Employee Name]"
+│
+└─ Displays confirmation to employee
+
+Status: RESIGNATION_REQUESTED
+Who can act: Manager, HR (Employee can withdraw)
+
+
+┌──────────────────────────────────────────────────────────────┐
+│ STEP 2: Manager Reviews Resignation                          │
+└──────────────────────────────────────────────────────────────┘
+
+Manager receives notification and opens resignation details
+
+Manager sees:
+├─ Employee information
+├─ Last working day
+├─ Resignation reason
+├─ Employee's comments
+└─ Attachments (if any)
+
+Manager has 3 options:
+
+OPTION A: APPROVE
+├─ Manager clicks "Approve"
+├─ System prompts for optional comments
+├─ System actions:
+│  ├─ Update status: RESIGNATION_REQUESTED → HR_REVIEW
+│  ├─ Log: "Manager approved on [date]"
+│  ├─ Notify HR: "Resignation approved by manager, awaiting HR review"
+│  └─ Notify Employee: "Your manager has approved your resignation"
+
+OPTION B: REQUEST DISCUSSION
+├─ Manager clicks "Request Discussion"
+├─ Manager enters reason/comments
+├─ System actions:
+│  ├─ Status remains: MANAGER_REVIEW
+│  ├─ Flag: discussion_requested = true
+│  ├─ Notify Employee: "Your manager wants to discuss your resignation"
+│  └─ Employee can still withdraw or wait for manager's final decision
+
+OPTION C: REJECT
+├─ Manager clicks "Reject"
+├─ Manager must provide reason
+├─ System actions:
+│  ├─ Update status: RESIGNATION_REQUESTED → COMPLETED (Rejected)
+│  ├─ Revert Employee status: RESIGNATION_REQUESTED → ACTIVE_EMPLOYEE
+│  ├─ Log rejection with reason
+│  └─ Notify Employee: "Your resignation was not approved"
+
+Status after approval: HR_REVIEW
+Who can act: HR (Employee can still withdraw)
+
+
+┌──────────────────────────────────────────────────────────────┐
+│ STEP 3: HR Reviews and Confirms Resignation                  │
+└──────────────────────────────────────────────────────────────┘
+
+HR receives notification and opens resignation
+
+HR reviews:
+├─ Employment contract details
+├─ Notice period compliance
+├─ Pending leave balances
+├─ Outstanding dues
+├─ Manager's approval and comments
+└─ Company policies
+
+HR has 3 options:
+
+OPTION A: APPROVE (Most Common)
+├─ HR clicks "Approve Resignation"
+├─ HR confirms/adjusts last working day if needed
+├─ System actions:
+│  ├─ Update status: HR_REVIEW → OFFBOARDING_IN_PROGRESS
+│  ├─ Update Employee status: HR_REVIEW → OFFBOARDING_IN_PROGRESS
+│  ├─ 🎯 TRIGGER: Generate Offboarding Checklist (see Phase 4)
+│  ├─ Schedule exit interview
+│  ├─ Send formal resignation acknowledgment email
+│  ├─ Notify:
+│  │  ├─ Employee: "Your resignation is approved, offboarding begins"
+│  │  ├─ Manager: "Offboarding process started for [Employee]"
+│  │  ├─ IT: "Schedule access revocation for [Last Working Day]"
+│  │  ├─ Finance: "Process final payroll for [Employee]"
+│  │  └─ Admin: "Schedule asset collection"
+│  └─ Generate official resignation acceptance letter
+
+OPTION B: REQUEST CLARIFICATION
+├─ HR requests more information
+├─ Status remains: HR_REVIEW
+├─ Notify employee or manager
+
+OPTION C: REJECT
+├─ HR rejects (rare - policy violation, etc.)
+├─ Status: COMPLETED (Rejected)
+├─ Employee reverts to: ACTIVE_EMPLOYEE
+
+Status after approval: OFFBOARDING_IN_PROGRESS
+Who can act: Employee, Manager, HR, IT, Finance (via checklist)
+
+
+┌──────────────────────────────────────────────────────────────┐
+│ STEP 4: Automated Offboarding Checklist Generation           │
+└──────────────────────────────────────────────────────────────┘
+
+When HR approves resignation, system automatically:
+
+1. Finds applicable checklist template
+   └─ Based on: Department, Position, Company policies
+
+2. Creates Offboarding Checklist from template
+
+3. Generates checklist items with owners and due dates
+
+Sample Offboarding Checklist:
+
+┌─────────────────────────────────────────────────────────────┐
+│ OFFBOARDING CHECKLIST - John Doe (OFF-2025-00123)          │
+│ Progress: 3/15 items completed (20%)                        │
+└─────────────────────────────────────────────────────────────┘
+
+CATEGORY: KNOWLEDGE TRANSFER (Owner: Employee + Manager)
+├─ [IN_PROGRESS] Document ongoing projects and tasks
+│  └─ Due: 7 days before LWD | Assigned to: Employee
+│
+├─ [PENDING] Conduct handover meetings
+│  └─ Due: 5 days before LWD | Assigned to: Employee
+│
+└─ [COMPLETED] ✓ Share access credentials and documentation
+   └─ Completed by: John Doe on Jan 05, 2025
+
+CATEGORY: ASSET RETURN (Owner: Admin/Facilities)
+├─ [PENDING] Return laptop and accessories
+│  └─ Due: Last Working Day | Assigned to: Employee
+│
+├─ [PENDING] Return access cards and keys
+│  └─ Due: Last Working Day | Assigned to: Admin
+│
+└─ [PENDING] Return mobile phone
+   └─ Due: Last Working Day | Assigned to: Employee
+
+CATEGORY: IT & ACCESS (Owner: IT Department)
+├─ [PENDING] Backup employee files to shared drive
+│  └─ Due: 2 days before LWD | Assigned to: IT
+│
+├─ [PENDING] Schedule account deactivation
+│  └─ Due: End of Last Working Day | Assigned to: IT
+│
+├─ [PENDING] Revoke system access (Email, Slack, etc.)
+│  └─ Due: End of Last Working Day | Assigned to: IT
+│
+└─ [PENDING] Remove from distribution lists
+   └─ Due: 1 day after LWD | Assigned to: IT
+
+CATEGORY: HR & COMPLIANCE (Owner: HR)
+├─ [COMPLETED] ✓ Schedule exit interview
+│  └─ Completed by: HR Team on Jan 03, 2025
+│
+├─ [COMPLETED] ✓ Conduct exit interview
+│  └─ Completed by: HR Manager on Jan 06, 2025
+│
+├─ [PENDING] Calculate final leave encashment
+│  └─ Due: 3 days before LWD | Assigned to: HR
+│
+└─ [PENDING] Generate Certificate of Employment
+   └─ Due: Last Working Day | Assigned to: HR
+
+CATEGORY: FINANCE (Owner: Finance Department)
+├─ [PENDING] Process final payroll
+│  └─ Due: Next pay cycle after LWD | Assigned to: Finance
+│
+└─ [PENDING] Clear any outstanding dues/advances
+   └─ Due: Last Working Day | Assigned to: Finance
+
+Each checklist item has:
+├─ Status: PENDING, IN_PROGRESS, COMPLETED, BLOCKED
+├─ Owner: Who is responsible
+├─ Due Date: Calculated from last working day
+├─ Priority: LOW, MEDIUM, HIGH, CRITICAL
+├─ Dependencies: Some items depend on others
+└─ Comments: For updates and blockers
+
+
+┌──────────────────────────────────────────────────────────────┐
+│ STEP 5: Exit Interview (Part of Checklist)                   │
+└──────────────────────────────────────────────────────────────┘
+
+HR schedules exit interview (usually 1 week before LWD)
+
+Exit Interview Form:
+├─ Scheduled Date & Time
+├─ Conducted By (HR representative)
+│
+├─ STRUCTURED FEEDBACK:
+│  ├─ Primary reason for leaving
+│  ├─ Overall satisfaction rating (1-5)
+│  ├─ Work environment rating (1-5)
+│  ├─ Management rating (1-5)
+│  ├─ Compensation rating (1-5)
+│  ├─ Career growth opportunities rating (1-5)
+│  └─ Work-life balance rating (1-5)
+│
+├─ OPEN FEEDBACK:
+│  ├─ What did you like most about working here?
+│  ├─ What did you like least?
+│  ├─ Suggestions for improvement
+│  ├─ Would you recommend company to others? (Yes/No)
+│  └─ Would you consider returning? (Yes/No)
+│
+└─ Additional comments
+
+After completion:
+├─ HR marks exit interview as COMPLETED
+├─ System updates checklist item
+├─ Feedback stored for analytics
+└─ Data used for company improvement initiatives
+
+
+┌──────────────────────────────────────────────────────────────┐
+│ STEP 6: Final Clearance (Last Working Day)                   │
+└──────────────────────────────────────────────────────────────┘
+
+System checks if ALL checklist items are completed:
+
+VALIDATION:
+├─ Knowledge Transfer: ✓ All completed
+├─ Asset Return: ✓ All completed
+├─ IT & Access: ✓ All completed
+├─ HR & Compliance: ✓ All completed
+└─ Finance: ✓ All completed
+
+Progress: 15/15 items (100%)
+
+If 100% complete:
+├─ Status changes: OFFBOARDING_IN_PROGRESS → FINAL_CLEARANCE
+├─ HR receives notification: "Ready for final clearance"
+│
+└─ HR performs final actions:
+   ├─ Reviews all completed items
+   ├─ Verifies no pending dues
+   ├─ Generates final documents:
+   │  ├─ Certificate of Employment
+   │  ├─ Final settlement statement
+   │  └─ No-dues certificate
+   │
+   └─ Clicks "Approve Final Clearance"
+
+System actions after final clearance:
+├─ Status: FINAL_CLEARANCE → COMPLETED
+├─ Employee status: OFFBOARDING_IN_PROGRESS → FORMER_EMPLOYEE
+├─ Disable all system access immediately
+├─ Archive employee data (for compliance)
+├─ Send final email to employee:
+│  └─ "Thank you for your service. Your final documents are attached."
+│
+└─ Close resignation record
+
+Status: COMPLETED
+Employee is now: FORMER_EMPLOYEE
+
+
+🎭 User Roles & Permissions
+1. EMPLOYEE (Resigning Person)
+Can do:
+├─ Submit resignation
+├─ Upload resignation letter
+├─ View own resignation status
+├─ Complete assigned checklist items (knowledge transfer)
+├─ Withdraw resignation (before manager approval)
+├─ Participate in exit interview
+└─ View own offboarding progress
+
+Cannot do:
+├─ Approve/reject any resignation
+├─ Modify system dates
+├─ Access others' resignations
+└─ Edit locked profile fields after submission
+2. MANAGER (Employee's Direct Supervisor)
+Can do:
+├─ View subordinates' resignations
+├─ Approve resignation
+├─ Reject resignation (with reason)
+├─ Request discussion with employee
+├─ Add comments
+├─ Complete manager-assigned checklist items
+├─ View offboarding progress of subordinates
+└─ Receive notifications
+
+Cannot do:
+├─ Submit resignation on behalf of employee
+├─ Skip HR review
+├─ Access other managers' team resignations
+└─ Modify final settlement
+3. HR (Human Resources)
+Can do:
+├─ View ALL resignations (company-wide)
+├─ Approve/reject resignations
+├─ Modify last working day
+├─ Generate offboarding checklists
+├─ Schedule/conduct exit interviews
+├─ Approve final clearance
+├─ Generate employment certificates
+├─ View resignation analytics
+├─ Manage checklist templates
+├─ Override checklist items (if necessary)
+└─ Access historical data
+
+This is the highest permission level.
+4. IT DEPARTMENT
+Can do:
+├─ View assigned checklist items
+├─ Complete IT-related tasks:
+│  ├─ Backup employee files
+│  ├─ Schedule access revocation
+│  └─ Remove from distribution lists
+└─ Receive notifications for IT tasks
+
+Cannot do:
+├─ View salary/compensation details
+├─ Approve/reject resignations
+└─ Access exit interview feedback
+5. FINANCE
+Can do:
+├─ View assigned checklist items
+├─ Process final payroll
+├─ Calculate leave encashment
+├─ Clear outstanding dues
+└─ Generate final settlement
+
+Cannot do:
+├─ Approve/reject resignations
+├─ Modify resignation dates
+└─ Access exit interview feedback
+
+🔔 Notification System
+NOTIFICATION TRIGGERS:
+
+1. Resignation Submitted
+   └─ Notify: Manager, HR
+
+2. Manager Approved
+   └─ Notify: Employee, HR
+
+3. Manager Rejected
+   └─ Notify: Employee, HR
+
+4. Manager Requests Discussion
+   └─ Notify: Employee
+
+5. HR Approved
+   └─ Notify: Employee, Manager, IT, Finance, Admin
+
+6. Offboarding Started
+   └─ Notify: All checklist owners with their tasks
+
+7. Checklist Item Overdue
+   └─ Notify: Item owner, HR
+
+8. Exit Interview Scheduled
+   └─ Notify: Employee, HR
+
+9. All Items Completed
+   └─ Notify: HR (ready for final clearance)
+
+10. Final Clearance Approved
+    └─ Notify: Employee (with final documents)
+
+📈 System Benefits
+For Employees:
+
+✅ Clear, transparent process
+✅ Track resignation status in real-time
+✅ Know exactly what's needed from them
+✅ Smooth exit experience
+
+For Managers:
+
+✅ Quick approval workflow
+✅ Option to discuss retention
+✅ Visibility into knowledge transfer
+✅ Track team turnover
+
+For HR:
+
+✅ Centralized resignation management
+✅ Automated checklist generation
+✅ Exit interview analytics
+✅ Compliance and audit trail
+✅ Reduce manual work
+
+For Company:
+
+✅ Standardized offboarding process
+✅ Protect intellectual property (knowledge transfer)
+✅ Recover company assets
+✅ Learn from employee feedback
+✅ Reduce security risks (timely access revocation)
+✅ Maintain positive employer brand
+

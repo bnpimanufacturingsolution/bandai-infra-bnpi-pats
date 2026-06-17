@@ -1,0 +1,61 @@
+enum BenefitCategory {
+  INSURANCE
+  ALLOWANCE
+  BONUS
+  RETIREMENT
+  HEALTH
+  EDUCATION
+  TRANSPORTATION
+  OTHER
+}
+
+enum BenefitPayrollDirection {
+  COMPENSATION
+  DEDUCTION
+}
+
+model BenefitType {
+  id                   String                  @id @default(cuid())
+  organizationId       String // Multi-tenancy support
+  code                 String
+  name                 String
+  description          String?
+  category             BenefitCategory         @default(OTHER)
+  payrollDirection     BenefitPayrollDirection @default(COMPENSATION)
+  reconciliationAction String?
+
+  provider String?
+  coverage Float?
+
+  // Value settings
+  minAmount   Float?
+  maxAmount   Float?
+  fixedAmount Float?
+  percentage  Float? // Percentage of basic salary
+
+  // Eligibility
+  minServiceMonths Int? // Minimum months of service required
+
+  // Tax treatment
+  isTaxable Boolean @default(false)
+
+  // Program defaults (EPP-style benefits)
+  defaultInstallments   Int     @default(6)
+  payrollCycleDays      Int     @default(15)
+  requireTermsAgreement Boolean @default(true)
+
+  isActive  Boolean  @default(true)
+  isDeleted Boolean  @default(false)
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  employeeBenefits EmployeeBenefit[]
+
+  @@unique([organizationId, name])
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([organizationId, payrollDirection])
+  @@map("benefit_types")
+}

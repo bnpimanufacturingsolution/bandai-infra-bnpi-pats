@@ -1,0 +1,42 @@
+model Position {
+  id                           String                       @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId               String
+  title                        String
+  code                         String
+  description                  String?
+  sectionId                    String?                      @db.ObjectId
+  minSalary                    Float?
+  maxSalary                    Float?
+  section                      Section?                     @relation(fields: [sectionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  isActive                     Boolean                      @default(true)
+  isDeleted                    Boolean                      @default(false)
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+  employees                    Employee[]
+  levels                       PositionLevel[]
+  applicants                   Applicant[]
+  jobs                         Job[]
+  workforceRecruitmentPolicies WorkforceRecruitmentPolicy[]
+  isOffer                      Boolean                      @default(false)
+  isManager                    Boolean                      @default(false)
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([organizationId, sectionId])
+  @@map("positions")
+}
+
+model PositionLevel {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  positionId String   @db.ObjectId
+  levelId    String   @db.ObjectId
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  level      Level    @relation(fields: [levelId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([positionId, levelId])
+  @@index([positionId])
+  @@index([levelId])
+  @@map("position_levels")
+}

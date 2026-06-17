@@ -1,0 +1,617 @@
+version: 1
+generated_by: wwg
+updated_at: 2026-05-16T15:46:22.442Z
+selected_profiles: []
+detected_domains:
+  - business.compliance
+  - business.decision
+  - business.operations
+  - business.strategy
+  - creative.story
+  - game-design
+  - software.api
+  - software.security
+  - software.testing
+  - software.web
+skills:
+  business.business-brief:
+    state: recommended
+    source: bundled
+    class: domain
+    reason: Business, strategy, proposal, stakeholder, or requirements evidence detected.
+    materialization: reference
+    path: null
+    recommended_by:
+      - domain:business.strategy
+      - prompt_keyword:PRD
+    enabled_by: null
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: prompt_keyword
+        value: PRD
+        strength: explicit
+        reason: Current task prompt mentions PRD in .wwg/workspace/current-task.md,
+          workspace/current-task.md.
+      - type: domain
+        value: business.strategy
+        strength: strong
+        reason: Fintech profile or business, strategy, proposal, stakeholder, or requirements files
+          detected.
+      - type: domain
+        value: business.strategy
+        strength: explicit
+        reason: Current task prompt mentions PRD in .wwg/workspace/current-task.md,
+          workspace/current-task.md.
+  business.decision-memo:
+    state: recommended
+    source: bundled
+    class: domain
+    reason: Decision, options, tradeoff, governance, or memo evidence detected.
+    materialization: reference
+    path: null
+    recommended_by:
+      - domain:business.decision
+    enabled_by: null
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: domain
+        value: business.decision
+        strength: strong
+        reason: Decision, memo, ADR, options, tradeoff, or docs/governance files detected.
+  business.sop-writing:
+    state: recommended
+    source: bundled
+    class: domain
+    reason: SOP, process, operations, runbook, workflow, or approval evidence detected.
+    materialization: reference
+    path: null
+    recommended_by:
+      - domain:business.operations
+      - file:.github/plan_workflow.txt
+      - file:helper/leave-policy.helper.ts
+      - file:helper/workflow-config.helper.ts
+      - file:scripts/check-workflows.ts
+      - file:tests/workflow-config.helper.spec.ts
+      - file:trash-bin/test-document-workflow.ts
+      - file:zod/leave-policy.zod.ts
+      - prompt_keyword:workflow
+    enabled_by: null
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: file
+        value: .github/plan_workflow.txt
+        strength: strong
+        reason: .github/plan_workflow.txt matches *workflow*.
+      - type: file
+        value: helper/workflow-config.helper.ts
+        strength: strong
+        reason: helper/workflow-config.helper.ts matches *workflow*.
+      - type: file
+        value: scripts/check-workflows.ts
+        strength: strong
+        reason: scripts/check-workflows.ts matches *workflow*.
+      - type: file
+        value: tests/workflow-config.helper.spec.ts
+        strength: strong
+        reason: tests/workflow-config.helper.spec.ts matches *workflow*.
+      - type: file
+        value: trash-bin/test-document-workflow.ts
+        strength: strong
+        reason: trash-bin/test-document-workflow.ts matches *workflow*.
+      - type: file
+        value: helper/leave-policy.helper.ts
+        strength: strong
+        reason: helper/leave-policy.helper.ts matches *policy*.
+      - type: file
+        value: zod/leave-policy.zod.ts
+        strength: strong
+        reason: zod/leave-policy.zod.ts matches *policy*.
+      - type: prompt_keyword
+        value: workflow
+        strength: explicit
+        reason: Current task prompt mentions workflow in .wwg/workspace/current-task.md,
+          workspace/current-task.md.
+      - type: domain
+        value: business.operations
+        strength: strong
+        reason: Internal-tool profile or operations, SOP, process, runbook, workflow, approval, or policy
+          files detected.
+      - type: domain
+        value: business.operations
+        strength: explicit
+        reason: Current task prompt mentions workflow in .wwg/workspace/current-task.md,
+          workspace/current-task.md.
+  core.change-classifier:
+    state: enabled
+    source: bundled
+    class: core
+    reason: Core WWG change classification behavior.
+    materialization: copied
+    path: .wwg/workspace/skills/change-classifier.skill.md
+    recommended_by:
+      - core
+      - compatibility
+    enabled_by: wwg
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: compatibility
+        value: change-classifier
+        strength: explicit
+        reason: Legacy copied Workspace skill file is physically present.
+    compatibility:
+      legacy_copied: true
+      copied_by_legacy_init: true
+      copied_by_legacy_refresh: true
+      migration_status: keep_copied
+      migration_reason: Historically copied into every workspace before governed Skills existed.
+      future_default_materialization: copied
+  core.context-skill-maintenance:
+    state: enabled
+    source: bundled
+    class: core
+    reason: Core WWG context and skill synchronization behavior.
+    materialization: copied
+    path: .wwg/workspace/skills/context-skill-maintenance.skill.md
+    recommended_by:
+      - core
+      - compatibility
+    enabled_by: wwg
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: compatibility
+        value: context-skill-maintenance
+        strength: explicit
+        reason: Legacy copied Workspace skill file is physically present.
+    compatibility:
+      legacy_copied: true
+      copied_by_legacy_init: true
+      copied_by_legacy_refresh: true
+      migration_status: keep_copied
+      migration_reason: Historically copied into every workspace before governed Skills existed.
+      future_default_materialization: copied
+  core.drift-detector:
+    state: enabled
+    source: bundled
+    class: core
+    reason: Core WWG drift detection behavior.
+    materialization: copied
+    path: .wwg/workspace/skills/drift-detector.skill.md
+    recommended_by:
+      - core
+      - compatibility
+    enabled_by: wwg
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: compatibility
+        value: drift-detector
+        strength: explicit
+        reason: Legacy copied Workspace skill file is physically present.
+    compatibility:
+      legacy_copied: true
+      copied_by_legacy_init: true
+      copied_by_legacy_refresh: true
+      migration_status: keep_copied
+      migration_reason: Historically copied into every workspace before governed Skills existed.
+      future_default_materialization: copied
+  core.regression-guardrail-maintenance:
+    state: enabled
+    source: bundled
+    class: core
+    reason: Core WWG regression guardrail behavior.
+    materialization: copied
+    path: .wwg/workspace/skills/regression-guardrail-maintenance.skill.md
+    recommended_by:
+      - core
+      - compatibility
+    enabled_by: wwg
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: compatibility
+        value: regression-guardrail-maintenance
+        strength: explicit
+        reason: Legacy copied Workspace skill file is physically present.
+    compatibility:
+      legacy_copied: true
+      copied_by_legacy_init: true
+      copied_by_legacy_refresh: true
+      migration_status: keep_copied
+      migration_reason: Historically copied into every workspace before governed Skills existed.
+      future_default_materialization: copied
+  core.task-router:
+    state: enabled
+    source: bundled
+    class: core
+    reason: Core WWG task routing behavior.
+    materialization: copied
+    path: .wwg/workspace/skills/task-router.skill.md
+    recommended_by:
+      - core
+      - compatibility
+    enabled_by: wwg
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: compatibility
+        value: task-router
+        strength: explicit
+        reason: Legacy copied Workspace skill file is physically present.
+    compatibility:
+      legacy_copied: true
+      copied_by_legacy_init: true
+      copied_by_legacy_refresh: true
+      migration_status: keep_copied
+      migration_reason: Historically copied into every workspace before governed Skills existed.
+      future_default_materialization: copied
+  core.truth-loop:
+    state: enabled
+    source: bundled
+    class: core
+    reason: Core WWG governance behavior.
+    materialization: reference
+    path: null
+    recommended_by:
+      - core
+    enabled_by: wwg
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: governance
+        value: core
+        strength: explicit
+        reason: Core WWG governance behavior.
+  creative.storytelling:
+    state: recommended
+    source: bundled
+    class: domain
+    reason: Story, narrative, lore, campaign, or game profile evidence detected.
+    materialization: reference
+    path: null
+    recommended_by:
+      - domain:creative.story
+      - file:prisma/schema-postgres/employeeScheduleHistory.prisma
+      - file:prisma/schema/employeeScheduleHistory.prisma
+      - file:tests_legacy/compensationhistory.controller.spec.ts
+    enabled_by: null
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: file
+        value: tests_legacy/compensationhistory.controller.spec.ts
+        strength: strong
+        reason: tests_legacy/compensationhistory.controller.spec.ts matches *story*.
+      - type: file
+        value: prisma/schema-postgres/employeeScheduleHistory.prisma
+        strength: strong
+        reason: prisma/schema-postgres/employeeScheduleHistory.prisma matches *story*.
+      - type: file
+        value: prisma/schema/employeeScheduleHistory.prisma
+        strength: strong
+        reason: prisma/schema/employeeScheduleHistory.prisma matches *story*.
+      - type: domain
+        value: creative.story
+        strength: weak
+        reason: Game profile or narrative documents detected.
+  public.public-discovery-maintenance:
+    state: recommended
+    source: bundled
+    class: domain
+    reason: Public surface or discovery evidence suggests this skill may help.
+    materialization: reference
+    path: null
+    recommended_by:
+      - file:app/activityLogging/activityLogging.controller.ts
+      - file:app/activityLogging/activityLogging.router.ts
+      - file:app/activityLogging/index.ts
+      - file:app/agency/agency.controller.ts
+      - file:app/agency/agency.router.ts
+    enabled_by: null
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: file
+        value: app/activityLogging/activityLogging.controller.ts
+        strength: strong
+        reason: app/activityLogging/activityLogging.controller.ts matches app/**.
+      - type: file
+        value: app/activityLogging/activityLogging.router.ts
+        strength: strong
+        reason: app/activityLogging/activityLogging.router.ts matches app/**.
+      - type: file
+        value: app/activityLogging/index.ts
+        strength: strong
+        reason: app/activityLogging/index.ts matches app/**.
+      - type: file
+        value: app/agency/agency.controller.ts
+        strength: strong
+        reason: app/agency/agency.controller.ts matches app/**.
+      - type: file
+        value: app/agency/agency.router.ts
+        strength: strong
+        reason: app/agency/agency.router.ts matches app/**.
+    compatibility:
+      legacy_copied: true
+      copied_by_legacy_init: true
+      copied_by_legacy_refresh: true
+      migration_status: future_reference_only
+      migration_reason: Historically copied into every workspace before governed Skills existed.
+      future_default_materialization: reference
+  public.public-surface-update:
+    state: recommended
+    source: bundled
+    class: domain
+    reason: Public or customer-facing communication evidence suggests this skill may help.
+    materialization: reference
+    path: null
+    recommended_by:
+      - file:.wwg/governance/README.md
+      - file:README.md
+      - file:docs/API_EMPLOYEE_IMPORT.md
+      - file:docs/APPROVAL_CHAIN_TEST_GUIDE.md
+      - file:docs/ATTENDANCE_DATE_FIX.md
+      - file:docs/ATTENDANCE_FLOW.md
+      - file:docs/COLUMN_CONCAT_GUIDE.md
+      - file:gcp/README.md
+      - file:tests_legacy/README.md
+      - file:utils/README.md
+    enabled_by: null
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: file
+        value: docs/API_EMPLOYEE_IMPORT.md
+        strength: strong
+        reason: docs/API_EMPLOYEE_IMPORT.md matches docs/**.
+      - type: file
+        value: docs/APPROVAL_CHAIN_TEST_GUIDE.md
+        strength: strong
+        reason: docs/APPROVAL_CHAIN_TEST_GUIDE.md matches docs/**.
+      - type: file
+        value: docs/ATTENDANCE_DATE_FIX.md
+        strength: strong
+        reason: docs/ATTENDANCE_DATE_FIX.md matches docs/**.
+      - type: file
+        value: docs/ATTENDANCE_FLOW.md
+        strength: strong
+        reason: docs/ATTENDANCE_FLOW.md matches docs/**.
+      - type: file
+        value: docs/COLUMN_CONCAT_GUIDE.md
+        strength: strong
+        reason: docs/COLUMN_CONCAT_GUIDE.md matches docs/**.
+      - type: file
+        value: README.md
+        strength: strong
+        reason: README.md matches README.md.
+      - type: file
+        value: gcp/README.md
+        strength: strong
+        reason: gcp/README.md matches README.md.
+      - type: file
+        value: tests_legacy/README.md
+        strength: strong
+        reason: tests_legacy/README.md matches README.md.
+      - type: file
+        value: utils/README.md
+        strength: strong
+        reason: utils/README.md matches README.md.
+      - type: file
+        value: .wwg/governance/README.md
+        strength: strong
+        reason: .wwg/governance/README.md matches README.md.
+    compatibility:
+      legacy_copied: true
+      copied_by_legacy_init: true
+      copied_by_legacy_refresh: true
+      migration_status: future_reference_only
+      migration_reason: Historically copied into every workspace before governed Skills existed.
+      future_default_materialization: reference
+  software.bug-fix:
+    state: recommended
+    source: bundled
+    class: domain
+    reason: Software, testing, bug, or incident evidence suggests this skill may help.
+    materialization: reference
+    path: null
+    recommended_by:
+      - dependency:mocha
+      - domain:software.testing
+      - file:generated/prisma-postgres/package.json
+      - file:generated/prisma/package.json
+      - file:package.json
+      - file:tests_legacy/aduittrail.controller.spec.ts
+      - file:tests_legacy/audittrail.controller.spec.ts
+      - file:tests_legacy/calendar.controller.spec.ts
+      - file:tests_legacy/calendarEvent.controller.spec.ts
+      - file:tests_legacy/calendarItem.controller.spec.ts
+    enabled_by: null
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: dependency
+        value: mocha
+        strength: strong
+        reason: package.json contains mocha.
+      - type: file
+        value: package.json
+        strength: strong
+        reason: package.json matches package.json.
+      - type: file
+        value: generated/prisma-postgres/package.json
+        strength: strong
+        reason: generated/prisma-postgres/package.json matches package.json.
+      - type: file
+        value: generated/prisma/package.json
+        strength: strong
+        reason: generated/prisma/package.json matches package.json.
+      - type: file
+        value: tests_legacy/aduittrail.controller.spec.ts
+        strength: strong
+        reason: tests_legacy/aduittrail.controller.spec.ts matches **/*.spec.*.
+      - type: file
+        value: tests_legacy/audittrail.controller.spec.ts
+        strength: strong
+        reason: tests_legacy/audittrail.controller.spec.ts matches **/*.spec.*.
+      - type: file
+        value: tests_legacy/calendar.controller.spec.ts
+        strength: strong
+        reason: tests_legacy/calendar.controller.spec.ts matches **/*.spec.*.
+      - type: file
+        value: tests_legacy/calendarEvent.controller.spec.ts
+        strength: strong
+        reason: tests_legacy/calendarEvent.controller.spec.ts matches **/*.spec.*.
+      - type: file
+        value: tests_legacy/calendarItem.controller.spec.ts
+        strength: strong
+        reason: tests_legacy/calendarItem.controller.spec.ts matches **/*.spec.*.
+      - type: domain
+        value: software.testing
+        strength: strong
+        reason: Test files or test framework dependencies detected.
+    compatibility:
+      legacy_copied: true
+      copied_by_legacy_init: true
+      copied_by_legacy_refresh: true
+      migration_status: future_reference_only
+      migration_reason: Historically copied into every workspace before governed Skills existed.
+      future_default_materialization: reference
+  software.feature-implementation:
+    state: recommended
+    source: bundled
+    class: domain
+    reason: Software project or implementation task evidence suggests this skill may help.
+    materialization: reference
+    path: null
+    recommended_by:
+      - dependency:typescript
+      - file:generated/prisma-postgres/package.json
+      - file:generated/prisma/package.json
+      - file:package.json
+    enabled_by: null
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: dependency
+        value: typescript
+        strength: strong
+        reason: package.json contains typescript.
+      - type: file
+        value: package.json
+        strength: strong
+        reason: package.json matches package.json.
+      - type: file
+        value: generated/prisma-postgres/package.json
+        strength: strong
+        reason: generated/prisma-postgres/package.json matches package.json.
+      - type: file
+        value: generated/prisma/package.json
+        strength: strong
+        reason: generated/prisma/package.json matches package.json.
+    compatibility:
+      legacy_copied: true
+      copied_by_legacy_init: true
+      copied_by_legacy_refresh: true
+      migration_status: future_reference_only
+      migration_reason: Historically copied into every workspace before governed Skills existed.
+      future_default_materialization: reference
+  software.runtime-infrastructure:
+    state: recommended
+    source: bundled
+    class: domain
+    reason: Runtime, deployment, or infrastructure evidence suggests this skill may help.
+    materialization: reference
+    path: null
+    recommended_by:
+      - file:.env.example
+      - file:Dockerfile
+      - file:docker-compose.yml
+      - file:exports/local-infra/.env.example
+      - file:infrastructure/onprem/observability/.env.example
+      - file:infrastructure/onprem/observability/backup/.env.example
+    enabled_by: null
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: file
+        value: docker-compose.yml
+        strength: strong
+        reason: docker-compose.yml matches docker-compose.*.
+      - type: file
+        value: Dockerfile
+        strength: strong
+        reason: Dockerfile matches Dockerfile.
+      - type: file
+        value: .env.example
+        strength: strong
+        reason: .env.example matches .env.example.
+      - type: file
+        value: exports/local-infra/.env.example
+        strength: strong
+        reason: exports/local-infra/.env.example matches .env.example.
+      - type: file
+        value: infrastructure/onprem/observability/.env.example
+        strength: strong
+        reason: infrastructure/onprem/observability/.env.example matches .env.example.
+      - type: file
+        value: infrastructure/onprem/observability/backup/.env.example
+        strength: strong
+        reason: infrastructure/onprem/observability/backup/.env.example matches .env.example.
+    compatibility:
+      legacy_copied: true
+      copied_by_legacy_init: true
+      copied_by_legacy_refresh: true
+      migration_status: future_reference_only
+      migration_reason: Historically copied into every workspace before governed Skills existed.
+      future_default_materialization: reference
+  software.web.rendering-strategy:
+    state: recommended
+    source: bundled
+    class: domain
+    reason: Rendering, SEO, hydration, or framework evidence detected.
+    materialization: reference
+    path: null
+    recommended_by:
+      - domain:software.web
+      - file:app/activityLogging/activityLogging.controller.ts
+      - file:app/activityLogging/activityLogging.router.ts
+      - file:app/activityLogging/index.ts
+      - file:app/agency/agency.controller.ts
+      - file:app/agency/agency.router.ts
+    enabled_by: null
+    disabled_reason: null
+    last_refreshed: 2026-05-16T15:46:22.442Z
+    evidence:
+      - type: file
+        value: app/activityLogging/activityLogging.controller.ts
+        strength: strong
+        reason: app/activityLogging/activityLogging.controller.ts matches app/**.
+      - type: file
+        value: app/activityLogging/activityLogging.router.ts
+        strength: strong
+        reason: app/activityLogging/activityLogging.router.ts matches app/**.
+      - type: file
+        value: app/activityLogging/index.ts
+        strength: strong
+        reason: app/activityLogging/index.ts matches app/**.
+      - type: file
+        value: app/agency/agency.controller.ts
+        strength: strong
+        reason: app/agency/agency.controller.ts matches app/**.
+      - type: file
+        value: app/agency/agency.router.ts
+        strength: strong
+        reason: app/agency/agency.router.ts matches app/**.
+      - type: domain
+        value: software.web
+        strength: strong
+        reason: Repository contains package.json or JavaScript/TypeScript source files.
+      - type: domain
+        value: software.web
+        strength: strong
+        reason: Repository contains web source files.
+local_skills: {}

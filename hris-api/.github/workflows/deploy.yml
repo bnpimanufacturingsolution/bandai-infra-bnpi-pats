@@ -1,0 +1,378 @@
+name: GCP CI/CD (DEV/UAT)
+
+on:
+  push:
+    branches:
+      - develop
+      - uat
+    paths-ignore:
+      - docker-compose.yml
+      - .env.example
+      - docs/DOCKER_SETUP.md
+      - exports/**
+  pull_request:
+    branches:
+      - develop
+      - uat
+    paths-ignore:
+      - docker-compose.yml
+      - .env.example
+      - docs/DOCKER_SETUP.md
+      - exports/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: gcp-cicd-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --legacy-peer-deps
+
+      - name: Fast source-truth tests
+        run: npm run test:ci:source-truth
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --legacy-peer-deps
+
+      - name: Lint
+        run: npm run lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --legacy-peer-deps
+
+      - name: Typecheck
+        run: npm run typecheck
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - tests
+      - lint
+      - typecheck
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --legacy-peer-deps
+
+      - name: Build
+        run: npm run build
+
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - build
+    if: ${{ github.event_name != 'pull_request' && (github.ref_name == 'develop' || github.ref_name == 'uat') }}
+
+    env:
+      AUTH_MODE: ""
+      GCP_PROJECT_ID: ""
+      GCP_REGION: ""
+      CLOUD_RUN_SERVICE: ""
+      ARTIFACT_REPOSITORY: ""
+      ALLOW_UNAUTHENTICATED: ""
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ""
+      GCP_SERVICE_ACCOUNT_EMAIL: ""
+      GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL: ""
+      SECRET_DATABASE_URL: ""
+      SECRET_JWT_SECRET: ""
+      SECRET_CORS_ORIGINS: ""
+      SECRET_CORS_CREDENTIALS: ""
+      SECRET_GCS_BUCKET_NAME: ""
+      SECRET_GCS_PROJECT_ID: ""
+      SECRET_GCS_PUBLIC_BASE_URL: ""
+      SECRET_BETTER_STACK_SOURCE_TOKEN: ""
+      SECRET_BETTER_STACK_HOST: ""
+      SECRET_CLOUDINARY_CLOUD_NAME: ""
+      SECRET_CLOUDINARY_API_KEY: ""
+      SECRET_CLOUDINARY_API_SECRET: ""
+      GCP_PROJECT_ID_DEV: ${{ secrets.GCP_PROJECT_ID_DEV }}
+      GCP_PROJECT_ID_UAT: ${{ secrets.GCP_PROJECT_ID_UAT }}
+      GCP_REGION_DEV: ${{ secrets.GCP_REGION_DEV }}
+      GCP_REGION_UAT: ${{ secrets.GCP_REGION_UAT }}
+      CLOUD_RUN_SERVICE_DEV: ${{ secrets.CLOUD_RUN_SERVICE_DEV }}
+      CLOUD_RUN_SERVICE_UAT: ${{ secrets.CLOUD_RUN_SERVICE_UAT }}
+      ARTIFACT_REPOSITORY_DEV: ${{ secrets.ARTIFACT_REPOSITORY_DEV }}
+      ARTIFACT_REPOSITORY_UAT: ${{ secrets.ARTIFACT_REPOSITORY_UAT }}
+      ALLOW_UNAUTHENTICATED_DEV: ${{ secrets.ALLOW_UNAUTHENTICATED_DEV }}
+      ALLOW_UNAUTHENTICATED_UAT: ${{ secrets.ALLOW_UNAUTHENTICATED_UAT }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_DEV: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_DEV }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER_UAT: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_UAT }}
+      GCP_SERVICE_ACCOUNT_EMAIL_DEV: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL_DEV }}
+      GCP_SERVICE_ACCOUNT_EMAIL_UAT: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL_UAT }}
+      GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL_DEV: ${{ secrets.GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL_DEV }}
+      GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL_UAT: ${{ secrets.GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL_UAT }}
+      SECRET_DATABASE_URL_DEV: ${{ secrets.SECRET_DATABASE_URL_DEV }}
+      SECRET_DATABASE_URL_UAT: ${{ secrets.SECRET_DATABASE_URL_UAT }}
+      SECRET_JWT_SECRET_DEV: ${{ secrets.SECRET_JWT_SECRET_DEV }}
+      SECRET_JWT_SECRET_UAT: ${{ secrets.SECRET_JWT_SECRET_UAT }}
+      SECRET_CORS_ORIGINS_DEV: ${{ secrets.SECRET_CORS_ORIGINS_DEV }}
+      SECRET_CORS_ORIGINS_UAT: ${{ secrets.SECRET_CORS_ORIGINS_UAT }}
+      SECRET_CORS_CREDENTIALS_DEV: ${{ secrets.SECRET_CORS_CREDENTIALS_DEV }}
+      SECRET_CORS_CREDENTIALS_UAT: ${{ secrets.SECRET_CORS_CREDENTIALS_UAT }}
+      SECRET_GCS_BUCKET_NAME_DEV: ${{ secrets.SECRET_GCS_BUCKET_NAME_DEV }}
+      SECRET_GCS_BUCKET_NAME_UAT: ${{ secrets.SECRET_GCS_BUCKET_NAME_UAT }}
+      SECRET_GCS_PROJECT_ID_DEV: ${{ secrets.SECRET_GCS_PROJECT_ID_DEV }}
+      SECRET_GCS_PROJECT_ID_UAT: ${{ secrets.SECRET_GCS_PROJECT_ID_UAT }}
+      SECRET_GCS_PUBLIC_BASE_URL_DEV: ${{ secrets.SECRET_GCS_PUBLIC_BASE_URL_DEV }}
+      SECRET_GCS_PUBLIC_BASE_URL_UAT: ${{ secrets.SECRET_GCS_PUBLIC_BASE_URL_UAT }}
+      SECRET_BETTER_STACK_SOURCE_TOKEN_DEV: ${{ secrets.SECRET_BETTER_STACK_SOURCE_TOKEN_DEV }}
+      SECRET_BETTER_STACK_SOURCE_TOKEN_UAT: ${{ secrets.SECRET_BETTER_STACK_SOURCE_TOKEN_UAT }}
+      SECRET_BETTER_STACK_HOST_DEV: ${{ secrets.SECRET_BETTER_STACK_HOST_DEV }}
+      SECRET_BETTER_STACK_HOST_UAT: ${{ secrets.SECRET_BETTER_STACK_HOST_UAT }}
+      SECRET_CLOUDINARY_CLOUD_NAME_DEV: ${{ secrets.SECRET_CLOUDINARY_CLOUD_NAME_DEV }}
+      SECRET_CLOUDINARY_CLOUD_NAME_UAT: ${{ secrets.SECRET_CLOUDINARY_CLOUD_NAME_UAT }}
+      SECRET_CLOUDINARY_API_KEY_DEV: ${{ secrets.SECRET_CLOUDINARY_API_KEY_DEV }}
+      SECRET_CLOUDINARY_API_KEY_UAT: ${{ secrets.SECRET_CLOUDINARY_API_KEY_UAT }}
+      SECRET_CLOUDINARY_API_SECRET_DEV: ${{ secrets.SECRET_CLOUDINARY_API_SECRET_DEV }}
+      SECRET_CLOUDINARY_API_SECRET_UAT: ${{ secrets.SECRET_CLOUDINARY_API_SECRET_UAT }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Resolve branch environment
+        run: |
+          branch="${GITHUB_REF_NAME}"
+          case "$branch" in
+            develop)
+              echo "DEPLOY_ENV=DEV" >> "$GITHUB_ENV"
+              echo "GCP_PROJECT_ID=$GCP_PROJECT_ID_DEV" >> "$GITHUB_ENV"
+              echo "GCP_REGION=$GCP_REGION_DEV" >> "$GITHUB_ENV"
+              echo "CLOUD_RUN_SERVICE=$CLOUD_RUN_SERVICE_DEV" >> "$GITHUB_ENV"
+              echo "ARTIFACT_REPOSITORY=$ARTIFACT_REPOSITORY_DEV" >> "$GITHUB_ENV"
+              echo "ALLOW_UNAUTHENTICATED=$ALLOW_UNAUTHENTICATED_DEV" >> "$GITHUB_ENV"
+              echo "GCP_WORKLOAD_IDENTITY_PROVIDER=$GCP_WORKLOAD_IDENTITY_PROVIDER_DEV" >> "$GITHUB_ENV"
+              echo "GCP_SERVICE_ACCOUNT_EMAIL=$GCP_SERVICE_ACCOUNT_EMAIL_DEV" >> "$GITHUB_ENV"
+              echo "GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL=$GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL_DEV" >> "$GITHUB_ENV"
+              echo "SECRET_DATABASE_URL=$SECRET_DATABASE_URL_DEV" >> "$GITHUB_ENV"
+              echo "SECRET_JWT_SECRET=$SECRET_JWT_SECRET_DEV" >> "$GITHUB_ENV"
+              echo "SECRET_CORS_ORIGINS=$SECRET_CORS_ORIGINS_DEV" >> "$GITHUB_ENV"
+              echo "SECRET_CORS_CREDENTIALS=$SECRET_CORS_CREDENTIALS_DEV" >> "$GITHUB_ENV"
+              echo "SECRET_GCS_BUCKET_NAME=$SECRET_GCS_BUCKET_NAME_DEV" >> "$GITHUB_ENV"
+              echo "SECRET_GCS_PROJECT_ID=$SECRET_GCS_PROJECT_ID_DEV" >> "$GITHUB_ENV"
+              echo "SECRET_GCS_PUBLIC_BASE_URL=$SECRET_GCS_PUBLIC_BASE_URL_DEV" >> "$GITHUB_ENV"
+              echo "SECRET_BETTER_STACK_SOURCE_TOKEN=$SECRET_BETTER_STACK_SOURCE_TOKEN_DEV" >> "$GITHUB_ENV"
+              echo "SECRET_BETTER_STACK_HOST=$SECRET_BETTER_STACK_HOST_DEV" >> "$GITHUB_ENV"
+              echo "SECRET_CLOUDINARY_CLOUD_NAME=$SECRET_CLOUDINARY_CLOUD_NAME_DEV" >> "$GITHUB_ENV"
+              echo "SECRET_CLOUDINARY_API_KEY=$SECRET_CLOUDINARY_API_KEY_DEV" >> "$GITHUB_ENV"
+              echo "SECRET_CLOUDINARY_API_SECRET=$SECRET_CLOUDINARY_API_SECRET_DEV" >> "$GITHUB_ENV"
+              ;;
+            uat)
+              echo "DEPLOY_ENV=UAT" >> "$GITHUB_ENV"
+              echo "GCP_PROJECT_ID=$GCP_PROJECT_ID_UAT" >> "$GITHUB_ENV"
+              echo "GCP_REGION=$GCP_REGION_UAT" >> "$GITHUB_ENV"
+              echo "CLOUD_RUN_SERVICE=$CLOUD_RUN_SERVICE_UAT" >> "$GITHUB_ENV"
+              echo "ARTIFACT_REPOSITORY=$ARTIFACT_REPOSITORY_UAT" >> "$GITHUB_ENV"
+              echo "ALLOW_UNAUTHENTICATED=$ALLOW_UNAUTHENTICATED_UAT" >> "$GITHUB_ENV"
+              echo "GCP_WORKLOAD_IDENTITY_PROVIDER=$GCP_WORKLOAD_IDENTITY_PROVIDER_UAT" >> "$GITHUB_ENV"
+              echo "GCP_SERVICE_ACCOUNT_EMAIL=$GCP_SERVICE_ACCOUNT_EMAIL_UAT" >> "$GITHUB_ENV"
+              echo "GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL=$GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL_UAT" >> "$GITHUB_ENV"
+              echo "SECRET_DATABASE_URL=$SECRET_DATABASE_URL_UAT" >> "$GITHUB_ENV"
+              echo "SECRET_JWT_SECRET=$SECRET_JWT_SECRET_UAT" >> "$GITHUB_ENV"
+              echo "SECRET_CORS_ORIGINS=$SECRET_CORS_ORIGINS_UAT" >> "$GITHUB_ENV"
+              echo "SECRET_CORS_CREDENTIALS=$SECRET_CORS_CREDENTIALS_UAT" >> "$GITHUB_ENV"
+              echo "SECRET_GCS_BUCKET_NAME=$SECRET_GCS_BUCKET_NAME_UAT" >> "$GITHUB_ENV"
+              echo "SECRET_GCS_PROJECT_ID=$SECRET_GCS_PROJECT_ID_UAT" >> "$GITHUB_ENV"
+              echo "SECRET_GCS_PUBLIC_BASE_URL=$SECRET_GCS_PUBLIC_BASE_URL_UAT" >> "$GITHUB_ENV"
+              echo "SECRET_BETTER_STACK_SOURCE_TOKEN=$SECRET_BETTER_STACK_SOURCE_TOKEN_UAT" >> "$GITHUB_ENV"
+              echo "SECRET_BETTER_STACK_HOST=$SECRET_BETTER_STACK_HOST_UAT" >> "$GITHUB_ENV"
+              echo "SECRET_CLOUDINARY_CLOUD_NAME=$SECRET_CLOUDINARY_CLOUD_NAME_UAT" >> "$GITHUB_ENV"
+              echo "SECRET_CLOUDINARY_API_KEY=$SECRET_CLOUDINARY_API_KEY_UAT" >> "$GITHUB_ENV"
+              echo "SECRET_CLOUDINARY_API_SECRET=$SECRET_CLOUDINARY_API_SECRET_UAT" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "Unsupported branch for deploy workflow: $branch"
+              exit 1
+              ;;
+          esac
+
+      - name: Validate required deploy config
+        run: |
+          required=(GCP_PROJECT_ID GCP_REGION CLOUD_RUN_SERVICE ARTIFACT_REPOSITORY GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL)
+          for key in "${required[@]}"; do
+            if [ -z "${!key}" ]; then
+              echo "Missing required secret: $key"
+              exit 1
+            fi
+          done
+
+      - name: Validate auth config
+        run: |
+          if [ -n "$GCP_WORKLOAD_IDENTITY_PROVIDER" ] && [ -n "$GCP_SERVICE_ACCOUNT_EMAIL" ]; then
+            echo "AUTH_MODE=workload_identity" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          echo "Missing Google auth configuration."
+          echo "Provide:"
+          echo "  - GCP_WORKLOAD_IDENTITY_PROVIDER_<ENV>"
+          echo "  - GCP_SERVICE_ACCOUNT_EMAIL_<ENV>"
+          exit 1
+
+      - name: Authenticate to Google Cloud via Workload Identity
+        if: ${{ env.AUTH_MODE == 'workload_identity' }}
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Configure Docker auth for Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push image
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/${CLOUD_RUN_SERVICE}:${IMAGE_TAG}"
+          LATEST_IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/${CLOUD_RUN_SERVICE}:latest"
+          docker pull "$LATEST_IMAGE" || true
+          docker build \
+            --platform linux/amd64 \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --cache-from "$LATEST_IMAGE" \
+            -t "$IMAGE" \
+            -t "$LATEST_IMAGE" \
+            .
+          docker push "$IMAGE"
+          docker push "$LATEST_IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Build Cloud Run --update-secrets args
+        run: |
+          secret_pairs=()
+          add_secret_pair() {
+            env_name="$1"
+            secret_name="$2"
+            if [ -n "$secret_name" ]; then
+              secret_pairs+=("${env_name}=${secret_name}:latest")
+            fi
+          }
+
+          if [ "$DEPLOY_ENV" != "DEV" ]; then
+            add_secret_pair "DATABASE_URL" "$SECRET_DATABASE_URL"
+            add_secret_pair "PG_DATABASE_URL" "$SECRET_DATABASE_URL"
+          fi
+          add_secret_pair "JWT_SECRET" "$SECRET_JWT_SECRET"
+          add_secret_pair "CORS_ORIGINS" "$SECRET_CORS_ORIGINS"
+          add_secret_pair "CORS_CREDENTIALS" "$SECRET_CORS_CREDENTIALS"
+          add_secret_pair "GCS_BUCKET_NAME" "$SECRET_GCS_BUCKET_NAME"
+          add_secret_pair "GCS_PROJECT_ID" "$SECRET_GCS_PROJECT_ID"
+          add_secret_pair "GCS_PUBLIC_BASE_URL" "$SECRET_GCS_PUBLIC_BASE_URL"
+          add_secret_pair "BETTER_STACK_SOURCE_TOKEN" "$SECRET_BETTER_STACK_SOURCE_TOKEN"
+          add_secret_pair "BETTER_STACK_HOST" "$SECRET_BETTER_STACK_HOST"
+          add_secret_pair "CLOUDINARY_CLOUD_NAME" "$SECRET_CLOUDINARY_CLOUD_NAME"
+          add_secret_pair "CLOUDINARY_API_KEY" "$SECRET_CLOUDINARY_API_KEY"
+          add_secret_pair "CLOUDINARY_API_SECRET" "$SECRET_CLOUDINARY_API_SECRET"
+
+          if [ "${#secret_pairs[@]}" -gt 0 ]; then
+            joined="$(IFS=,; echo "${secret_pairs[*]}")"
+            echo "SECRET_ARGS=--update-secrets=$joined" >> "$GITHUB_ENV"
+          else
+            echo "SECRET_ARGS=" >> "$GITHUB_ENV"
+          fi
+
+      - name: Clear DEV database secret bindings
+        if: ${{ env.DEPLOY_ENV == 'DEV' }}
+        run: |
+          gcloud run services update "$CLOUD_RUN_SERVICE" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --platform managed \
+            --remove-secrets=DATABASE_URL,PG_DATABASE_URL \
+            --quiet
+
+      - name: Deploy to Cloud Run
+        run: |
+          unauth_flag=""
+          if [ "${ALLOW_UNAUTHENTICATED}" = "true" ]; then
+            unauth_flag="--allow-unauthenticated"
+          else
+            unauth_flag="--no-allow-unauthenticated"
+          fi
+
+          runtime_env_pairs=("NODE_ENV=production")
+          if [ "$DEPLOY_ENV" = "DEV" ]; then
+            db_url="$(node -e 'const fs = require("fs"); const text = fs.readFileSync(".env.dev", "utf8"); const line = text.split(/\r?\n/).find((item) => /^(PG_DATABASE_URL|DATABASE_URL)=/.test(item)); if (!line) throw new Error("DATABASE_URL or PG_DATABASE_URL is missing in .env.dev"); let value = line.slice(line.indexOf("=") + 1).trim(); if (value.startsWith("\"") && value.endsWith("\"")) value = value.slice(1, -1); if (!/^postgres(ql)?:\/\//.test(value)) throw new Error(".env.dev database URL must be PostgreSQL"); process.stdout.write(value);')"
+            runtime_env_pairs+=("DATABASE_URL=$db_url" "PG_DATABASE_URL=$db_url")
+          fi
+          runtime_env_vars="$(IFS=,; echo "${runtime_env_pairs[*]}")"
+
+          gcloud run deploy "$CLOUD_RUN_SERVICE" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --platform managed \
+            --image "$IMAGE" \
+            --service-account "$GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL" \
+            --port 3001 \
+            --set-env-vars "$runtime_env_vars" \
+            $SECRET_ARGS \
+            $unauth_flag
+

@@ -1,0 +1,89 @@
+enum RequestType {
+  LEAVE
+  TIMESHEET
+  ATTENDANCE_CORRECTION
+  EXPENSE_REIMBURSEMENT
+  DOCUMENT_REQUEST
+  RESIGNATION
+  TERMINATION
+  REGULARIZATION
+  PROMOTION
+  SALARY_CHANGE
+  TRANSFER
+  SCHEDULE_CHANGE
+  OTHER
+}
+
+model Request {
+  id             String  @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String // Multi-tenancy support
+  code           String? @unique // Human-readable request code (e.g., REQ-001)
+
+  type                    RequestType
+  currentWorkflowStateKey String      @default("OPEN")
+  startDate               DateTime?
+  endDate                 DateTime?
+  description             String
+  attachments             Json[]      @default([]) // Array of file URLs/paths (zdefaults to empty)
+
+  requester   Employee @relation("RequestRequester", fields: [requesterId], references: [id])
+  requesterId String   @db.ObjectId
+
+  targetEmployeeId String?   @db.ObjectId
+  targetEmployee   Employee? @relation("RequestTargetEmployee", fields: [targetEmployeeId], references: [id])
+
+  // Workflow runtime
+  workflowInstance   WorkflowInstance? @relation("RequestWorkflowInstance", fields: [workflowInstanceId], references: [id])
+  workflowInstanceId String?           @db.ObjectId
+
+  // Workflow step executions (replaces departmentReviewers/employeeReviewers)
+  stepExecutions WorkflowStepExecution[]
+  transactions   RequestTransaction[]
+
+  // Timesheet edit-permission targets using this request
+  timesheetEditPermissionTargets Timesheet[] @relation("TimesheetEditPermissionRequest")
+  createdJobs                    Job[]       @relation("JobSourceRequest")
+
+  // Current step execution reference (many-to-one: multiple requests could theoretically point to same step, though unlikely)
+  // This avoids the @unique requirement that causes issues with nullable fields
+  currentStepExecution   WorkflowStepExecution? @relation("RequestCurrentWorkflowStep", fields: [currentStepExecutionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  currentStepExecutionId String?                @db.ObjectId
+
+  // Last completed step execution reference (many-to-one)
+  lastCompletedStepExecution   WorkflowStepExecution? @relation("RequestLastCompletedWorkflowStep", fields: [lastCompletedStepExecutionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lastCompletedStepExecutionId String?                @db.ObjectId
+
+  notes String?
+
+  // Metadata structure:
+  // {
+  //   "employee_snapshot": {
+  //     "id": "...",
+  //     "employeeId": "EMP-001",
+  //     "firstName": "John",
+  //     "lastName": "Doe",
+  //     "position": "Software Engineer",
+  //     "department": "Engineering",
+  //     "level": "Senior",
+  //     "reportTo": { "id": "...", "name": "Jane Smith" }
+  //   },
+  //   "request_details": {
+  //     // Request-type specific data
+  //     // LEAVE: { leaveType, totalDays, etc. }
+  //     // OVERTIME: { overtimeHours, reason, etc. }
+  //     // PROMOTION: { newPosition, newLevel, effectiveDate, etc. }
+  //   }
+  // }
+  metadata Json?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([requesterId])
+  @@index([currentWorkflowStateKey])
+  @@index([workflowInstanceId])
+  @@index([organizationId, requesterId, type, isDeleted, createdAt])
+  @@map("requests")
+}

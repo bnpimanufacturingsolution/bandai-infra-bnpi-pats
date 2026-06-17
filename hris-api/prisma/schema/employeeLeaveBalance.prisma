@@ -1,0 +1,30 @@
+model EmployeeLeaveBalance {
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String
+
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  employeeId String   @db.ObjectId
+
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  leaveTypeId String    @db.ObjectId
+
+  leaveTypeCodeSnapshot String
+  leaveTypeNameSnapshot String
+
+  totalEntitled Float
+  used          Float    @default(0)
+  pending       Float    @default(0)
+  available     Float
+  carriedOver   Float?
+  maxCarryOver  Float?
+  periodStart   DateTime
+  periodEnd     DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, employeeId, leaveTypeId, periodStart, periodEnd])
+  @@index([organizationId, employeeId, periodStart, periodEnd])
+  @@index([organizationId, leaveTypeId])
+  @@map("employee_leave_balances")
+}

@@ -1,0 +1,47 @@
+enum RuleCategory {
+  ATTENDANCE
+  BEHAVIOR
+  PERFORMANCE
+  SAFETY
+  POLICY_VIOLATION
+  MISCONDUCT
+  HARASSMENT
+  DRESS_CODE
+  PUNCTUALITY
+  OTHER
+}
+
+enum SeverityLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Rule {
+  id             String        @id @default(cuid())
+  title          String
+  code           String?       @unique // Rule code (e.g., "ATT-001")
+  category       RuleCategory
+  severity       SeverityLevel
+  description    String
+  consequences   String? // Consequences for violation
+  isActive       Boolean       @default(true)
+  effectiveDate  DateTime      @default(now())
+  expiryDate     DateTime? // Optional expiry date
+  organizationId String
+  createdById    String? // User who created the rule
+  isDeleted      Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations - commented out until models are created
+  // organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // disciplinaryActions DisciplinaryAction[]
+  // ruleVersions        RuleVersion[]
+
+  @@index([organizationId])
+  @@index([category])
+  @@index([isActive])
+  @@map("rules")
+}

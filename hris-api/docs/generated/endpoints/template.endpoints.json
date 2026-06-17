@@ -1,0 +1,569 @@
+[
+  {
+    "id": "GET /api/template/{id}",
+    "method": "GET",
+    "url": "/api/template/{id}",
+    "summary": "Get template by ID",
+    "description": "Retrieve a specific template by its unique identifier with optional field selection",
+    "tags": [
+      "Template"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        "description": "Template ID (MongoDB ObjectId format)"
+      }
+    ],
+    "queryParams": [
+      {
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Comma-separated list of fields to include (supports nested fields with dot notation)"
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "Template retrieved successfully",
+        "schema": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/Success"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "template": {
+                      "$ref": "#/components/schemas/Template"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "contentTypes": [
+          "application/json"
+        ]
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "401": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "500": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "PATCH /api/template/{id}",
+    "method": "PATCH",
+    "url": "/api/template/{id}",
+    "summary": "Update template",
+    "description": "Update template data by ID (partial update)",
+    "tags": [
+      "Template"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [
+      "application/json"
+    ],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        "description": "Template ID (MongoDB ObjectId format)"
+      }
+    ],
+    "queryParams": [],
+    "requestBody": {
+      "required": true,
+      "schema": {
+        "type": "object",
+        "minProperties": 1,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Template name",
+            "example": "Updated Email Template"
+          },
+          "description": {
+            "type": "string",
+            "description": "Template description",
+            "example": "Updated description for the template"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "email",
+              "sms",
+              "push",
+              "form"
+            ],
+            "description": "Template type for categorization",
+            "example": "email"
+          },
+          "isDeleted": {
+            "type": "boolean",
+            "description": "Soft delete flag",
+            "example": false
+          }
+        }
+      },
+      "contentTypes": [
+        "application/json"
+      ]
+    },
+    "responses": {
+      "200": {
+        "description": "Template updated successfully",
+        "schema": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/Success"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "template": {
+                      "$ref": "#/components/schemas/Template"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "contentTypes": [
+          "application/json"
+        ]
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "401": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "500": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "DELETE /api/template/{id}",
+    "method": "DELETE",
+    "url": "/api/template/{id}",
+    "summary": "Delete template",
+    "description": "Permanently delete a template by ID",
+    "tags": [
+      "Template"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$"
+        },
+        "description": "Template ID (MongoDB ObjectId format)"
+      }
+    ],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Template deleted successfully",
+        "schema": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/Success"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "description": "Empty object for successful deletion"
+                }
+              }
+            }
+          ]
+        },
+        "contentTypes": [
+          "application/json"
+        ]
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "401": {
+        "contentTypes": []
+      },
+      "404": {
+        "contentTypes": []
+      },
+      "500": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/template",
+    "method": "GET",
+    "url": "/api/template",
+    "summary": "Get all templates",
+    "description": "Retrieve templates with advanced filtering, pagination, sorting, field selection, and optional grouping",
+    "tags": [
+      "Template"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [
+      {
+        "name": "page",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "description": "Page number for pagination"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10
+        },
+        "description": "Number of records per page"
+      },
+      {
+        "name": "order",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "asc",
+            "desc"
+          ],
+          "default": "desc"
+        },
+        "description": "Sort order for results"
+      },
+      {
+        "name": "sort",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Field to sort by or JSON object for multi-field sorting"
+      },
+      {
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Comma-separated list of fields to include (supports dot notation)"
+      },
+      {
+        "name": "query",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Search query to filter by name or description"
+      },
+      {
+        "name": "filter",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "JSON array of filter objects for advanced filtering"
+      },
+      {
+        "name": "groupBy",
+        "required": false,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Group results by a field name"
+      },
+      {
+        "name": "document",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        },
+        "description": "Include template documents in response"
+      },
+      {
+        "name": "pagination",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        },
+        "description": "Include pagination metadata in response"
+      },
+      {
+        "name": "count",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true"
+          ]
+        },
+        "description": "Include total count in response"
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "Templates retrieved successfully",
+        "schema": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/Success"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "templates": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Template"
+                      },
+                      "description": "Present when document=\"true\" and no groupBy"
+                    },
+                    "groups": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/Template"
+                        }
+                      },
+                      "description": "Present when groupBy is used and document=\"true\""
+                    },
+                    "count": {
+                      "type": "integer",
+                      "description": "Present when count=\"true\""
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination",
+                      "description": "Present when pagination=\"true\""
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "contentTypes": [
+          "application/json"
+        ]
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "401": {
+        "contentTypes": []
+      },
+      "500": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": true,
+      "hasSearchParam": true,
+      "hasSortParams": true
+    }
+  },
+  {
+    "id": "POST /api/template",
+    "method": "POST",
+    "url": "/api/template",
+    "summary": "Create new template",
+    "description": "Create a new template with the provided data",
+    "tags": [
+      "Template"
+    ],
+    "deprecated": false,
+    "security": [
+      {
+        "bearerAuth": []
+      }
+    ],
+    "contentTypes": [
+      "application/json",
+      "application/x-www-form-urlencoded",
+      "multipart/form-data"
+    ],
+    "pathParams": [],
+    "queryParams": [],
+    "requestBody": {
+      "required": true,
+      "schema": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Template name",
+            "example": "Email Welcome Template"
+          },
+          "description": {
+            "type": "string",
+            "description": "Template description",
+            "example": "Welcome email template for new users"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "email",
+              "sms",
+              "push",
+              "form"
+            ],
+            "description": "Template type for categorization",
+            "example": "email"
+          },
+          "isDeleted": {
+            "type": "boolean",
+            "description": "Soft delete flag",
+            "default": false
+          }
+        }
+      },
+      "contentTypes": [
+        "application/json",
+        "application/x-www-form-urlencoded",
+        "multipart/form-data"
+      ]
+    },
+    "responses": {
+      "201": {
+        "description": "Template created successfully",
+        "schema": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/Success"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "template": {
+                      "$ref": "#/components/schemas/Template"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "contentTypes": [
+          "application/json"
+        ]
+      },
+      "400": {
+        "contentTypes": []
+      },
+      "401": {
+        "contentTypes": []
+      },
+      "500": {
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]

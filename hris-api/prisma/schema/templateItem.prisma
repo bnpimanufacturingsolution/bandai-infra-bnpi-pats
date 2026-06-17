@@ -1,0 +1,23 @@
+model TemplateItem {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  organizationId String @db.ObjectId
+
+  templateId String           @db.ObjectId
+  template   BoardingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  category    ChecklistCategory
+  dueOffset   Int // Days offset (positive for onboarding, negative for offboarding from target date)
+  priority    Priority          @default(MEDIUM)
+  order       Int // Display order
+
+  uiElement String? // CSS selector for tour
+
+  metadata Json? // Flexible field for custom data
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

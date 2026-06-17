@@ -1,0 +1,3 @@
+departmentCode,scheduleTemplateCode,source,isActive
+HR,STD-5D,department_default,true
+ENG,STD-5D,department_default,true

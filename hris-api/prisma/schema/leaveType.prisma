@@ -1,0 +1,28 @@
+model LeaveType {
+  id             String  @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String
+  code           String
+  name           String
+  description    String?
+  sortOrder      Int     @default(0)
+  isActive       Boolean @default(true)
+
+  enabled                Boolean          @default(true)
+  isPaid                 Boolean          @default(true)
+  requiresApproval       Boolean          @default(true)
+  minAdvanceNoticeDays   Int              @default(0)
+  maxDaysPerRequest      Float            @default(5)
+  allowHalfDay           Boolean          @default(true)
+  requireAttachment      Boolean          @default(false)
+  allowedEmploymentTypes EmploymentType[]
+
+  employeeLeaveBalances EmployeeLeaveBalance[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isActive])
+  @@index([organizationId, enabled])
+  @@map("leave_types")
+}

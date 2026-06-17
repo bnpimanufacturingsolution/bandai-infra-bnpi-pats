@@ -1,0 +1,26 @@
+title,code,description,departmentCode,minSalary,maxSalary
+HR Manager,HR-MGR,Human resources manager,HR,70000,120000
+Engineering Manager,ENG-MGR,Engineering manager,ENG,90000,150000
+Software Engineer,ENG-DEV,Software engineer,ENG,35000,90000
+Deputy General Manager,DGM,Deputy general manager,STRAT-PLAN,120000,180000
+Senior Engineer,SR-ENG,Senior engineer,PROJ-ENG,70000,120000
+Senior Supervisor,SR-SUP,Senior supervisor,PROD-ADMIN,50000,85000
+Senior Manager,SR-MGR,Senior manager,PROD-ADMIN,90000,150000
+Assistant Manager,ASST-MGR,Assistant manager,PROD-ADMIN,70000,110000
+Manager,MGR,Manager,PROD-ADMIN,65000,105000
+Supervisor,SUP,Supervisor,PROD-ADMIN,45000,75000
+Senior Staff,SR-STF,Senior staff,PROD-ADMIN,35000,60000
+Junior Supervisor,JR-SUP,Junior supervisor,PROD-ADMIN,32000,55000
+Staff,STF,Staff,PROD-ADMIN,22000,42000
+Engineer,ENG,Engineer,PROJ-ENG,30000,70000
+Senior Operator,SR-OPR,Senior operator,ASM,30000,50000
+Staff Engineer,STF-ENG,Staff engineer,PROJ-ENG,32000,72000
+Operator,OPR,Operator,ASM,20000,38000
+Junior Engineer,JR-ENG,Junior engineer,PROJ-ENG,24000,50000
+President,PRES,President,STRAT-PLAN,150000,220000
+General Manager,GM,General manager,STRAT-PLAN,130000,190000
+Specialist,SPEC,Specialist,PROD-ADMIN,28000,52000
+Junior Specialist,JR-SPEC,Junior specialist,PROD-ADMIN,22000,40000
+Technician,TECH,Technician,PROD-ADMIN,22000,40000
+Management Trainee,MGMT-TRN,Management trainee,PROD-ADMIN,18000,32000
+Factory Manager,FACT-MGR,Factory manager,PROD-ADMIN,80000,140000

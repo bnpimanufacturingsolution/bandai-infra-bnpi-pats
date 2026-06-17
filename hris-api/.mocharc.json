@@ -1,0 +1,8 @@
+{
+	"extension": ["ts"],
+	"spec": "tests/**/*.spec.ts",
+	"ignore": ["tests/aduittrail.controller.spec.ts", "tests/audittrail.controller.spec.ts"],
+	"require": ["ts-node/register"],
+	"node-option": ["loader=ts-node/esm"],
+	"recursive": true
+}

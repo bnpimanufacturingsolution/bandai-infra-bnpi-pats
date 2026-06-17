@@ -1,0 +1,1600 @@
+{
+  "summary": {
+    "target": "C:\\Users\\1biss\\Documents\\Projects\\hris-app",
+    "targetDisplay": ".",
+    "githubRepository": "Not published.",
+    "selectedProfiles": [],
+    "openQuestionsCount": 1,
+    "validationResult": "- Report: .wwg/reports/wwg-validate-report.md",
+    "auditResult": "- Report: .wwg/reports/wwg-audit-report.md",
+    "missingInputs": [
+      ".wwg/config/intake.answers.yaml",
+      ".wwg/reports/wwg-sources-report.md",
+      ".wwg/wiki/01-sources/source-index.json",
+      ".wwg/wiki/01-sources/source-index.md",
+      ".wwg/wiki/07-ux/design-preferences.md",
+      ".wwg/wiki/11-synthesis/planning-summary.md",
+      "intake answers"
+    ],
+    "recommendedPrompt": "Read AGENTS.md and .wwg/reports/wwg-handoff-to-codex.md. Follow the WWG operating loop, then continue from the WWG plan and begin implementation with Codex."
+  },
+  "projectSummary": "- Project: hris-app\n- Summary: Adopted HRIS/workforce management web application; final product name needs confirmation.\n- Status: adopted-inferred",
+  "keyDecisions": [
+    "Use Wiki truth as the source of planning and implementation context.",
+    "Use Workspace context, prompts, and skills as generated agent operating material.",
+    "Use Governance checks for validation, release, evidence, and approval gates.",
+    "Keep secrets out of Wiki truth, reports, Workspace, and commits."
+  ],
+  "usersAndRoles": "TBD",
+  "mvpFeatures": "TBD",
+  "pagesScreens": "TBD",
+  "architectureHostingPreferences": "TBD",
+  "designPreferences": "TBD",
+  "sources": [],
+  "sourceCapturePolicy": "Register accessible external-chat files through WWG source intake; if the file is not accessible, add a raw source note documenting the missing artifact.",
+  "infrastructureReadiness": "WWG infrastructure readiness check complete.\nMust Have items are required for agent-safe operation. Other Features are recommendations, not automatic authorization to expand task scope.\n- [x] WWG workspace present (present)\n- Evidence: `.wwg`\n- [x] Project config present (present)\n- Evidence: `.wwg/config/wwg.project.yaml`\n- [x] Project Truth present (present)\n- Evidence: `.wwg/wiki/project-truth.md`",
+  "governanceLevelAndApprovalGates": "standard",
+  "principleReview": {
+    "principlesReviewed": [],
+    "principlesUpdated": [],
+    "candidatePrincipleChanges": [],
+    "principleDriftConcerns": [],
+    "summary": "No principle-impacting changes detected."
+  },
+  "truthLoopReview": {
+    "projectTruthUpdated": "N/A",
+    "terminologyUpdated": "N/A",
+    "principlesUpdated": "N/A",
+    "governanceUpdated": "N/A",
+    "workspaceUpdated": "N/A",
+    "templatesTestsUpdated": "N/A",
+    "reportsUpdated": [
+      ".wwg/reports/wwg-handoff-to-codex.md",
+      ".wwg/reports/wwg-handoff-to-codex.json",
+      ".wwg/reports/runtime-skill-candidates.json",
+      ".wwg/reports/runtime-skill-candidates.md"
+    ],
+    "summary": "No truth-loop-impacting changes detected."
+  },
+  "nativeStructureReview": {
+    "nativeConfigPresent": true,
+    "nativeReportsPresent": true,
+    "legacyRootMetadataFoldersPresent": [],
+    "configFallbackMirrorStatus": "canonical config present; no root fallback detected"
+  },
+  "maintenanceAwareness": {
+    "maintenanceReviewRecommended": true,
+    "reason": "Current audit or handoff inputs contain maintenance drift signals.",
+    "suggestedCommand": "wwg maintain --target <path>"
+  },
+  "governedSkillState": "- Skill manifest: `.wwg/config/skill-manifest.yaml` (valid/readable)\n- Enabled core skills: 6\n- Recommended domain skills: 13\n- Recommended reference-only skills: business.business-brief, business.decision-memo, business.sop-writing, creative.pitch-deck, creative.storytelling, public.public-discovery-maintenance, public.public-surface-update, software.bug-fix, software.feature-implementation, software.runtime-infrastructure, software.web.component-architecture, software.web.react-patterns, software.web.rendering-strategy\n- Creative/Business recommendations: business.business-brief, business.decision-memo, business.sop-writing, creative.pitch-deck, creative.storytelling (reference-only; no skill files copied)\n- Local project skills: 0\n- Disabled skills: 0\n- Skill materialization: none 0, reference 14, copied 5, local 0\n- Skill policy: manifest present, no policy violations\n- Detected domains: business.compliance, business.decision, business.operations, business.strategy, creative.presentation, creative.story, game-design, software.security, software.testing, software.web\n- Legacy copied skills: 5 compatibility-core, 0 compatibility-domain\n- Runtime activation: not performed by WWG; future Vorter responsibility.",
+  "runtimeSkillCandidates": {
+    "version": 1,
+    "generated_by": "wwg",
+    "generated_at": "2026-05-25T02:59:22.275Z",
+    "activation_owner": "vorter",
+    "activation_status": "candidate_only",
+    "project": {
+      "selected_profiles": [],
+      "detected_domains": [
+        "business.compliance",
+        "business.decision",
+        "business.operations",
+        "business.strategy",
+        "creative.presentation",
+        "creative.story",
+        "game-design",
+        "software.security",
+        "software.testing",
+        "software.web"
+      ]
+    },
+    "source_files": {
+      "skill_manifest": ".wwg/config/skill-manifest.yaml",
+      "skill_registry": "skills/registry.yaml"
+    },
+    "candidates": [
+      {
+        "id": "business.business-brief",
+        "name": "Business Brief",
+        "class": "domain",
+        "domain": "business.strategy",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Business, strategy, proposal, stakeholder, or requirements evidence detected.",
+        "evidence": [
+          {
+            "type": "file",
+            "value": "route-structure-proposal.md",
+            "strength": "strong",
+            "reason": "route-structure-proposal.md matches *proposal*."
+          },
+          {
+            "type": "file",
+            "value": "build/client/assets/briefcase-CjFpY3Ki.js",
+            "strength": "strong",
+            "reason": "build/client/assets/briefcase-CjFpY3Ki.js matches *brief*."
+          },
+          {
+            "type": "domain",
+            "value": "business.strategy",
+            "strength": "strong",
+            "reason": "Fintech profile or business, strategy, proposal, stakeholder, or requirements files detected."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": "skills/domains/creative-business/business-brief.skill.md"
+        }
+      },
+      {
+        "id": "business.decision-memo",
+        "name": "Decision Memo",
+        "class": "domain",
+        "domain": "business.decision",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Decision, options, tradeoff, governance, or memo evidence detected.",
+        "evidence": [
+          {
+            "type": "domain",
+            "value": "business.decision",
+            "strength": "strong",
+            "reason": "Decision, memo, ADR, options, tradeoff, or docs/governance files detected."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": "skills/domains/creative-business/decision-memo.skill.md"
+        }
+      },
+      {
+        "id": "business.sop-writing",
+        "name": "SOP Writing",
+        "class": "domain",
+        "domain": "business.operations",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "SOP, process, operations, runbook, workflow, or approval evidence detected.",
+        "evidence": [
+          {
+            "type": "file",
+            "value": "app/zod/boarding-process.ts",
+            "strength": "strong",
+            "reason": "app/zod/boarding-process.ts matches *process*."
+          },
+          {
+            "type": "file",
+            "value": ".github/workflows/firebase-hosting-develop.yml",
+            "strength": "strong",
+            "reason": ".github/workflows/firebase-hosting-develop.yml matches *workflow*."
+          },
+          {
+            "type": "file",
+            "value": ".github/workflows/firebase-hosting-merge.yml",
+            "strength": "strong",
+            "reason": ".github/workflows/firebase-hosting-merge.yml matches *workflow*."
+          },
+          {
+            "type": "file",
+            "value": ".github/workflows/firebase-hosting-pull-request.yml",
+            "strength": "strong",
+            "reason": ".github/workflows/firebase-hosting-pull-request.yml matches *workflow*."
+          },
+          {
+            "type": "file",
+            "value": "app/services/request-workflow-runtime.service.ts",
+            "strength": "strong",
+            "reason": "app/services/request-workflow-runtime.service.ts matches *workflow*."
+          },
+          {
+            "type": "file",
+            "value": "app/services/workflow-configs.service.ts",
+            "strength": "strong",
+            "reason": "app/services/workflow-configs.service.ts matches *workflow*."
+          },
+          {
+            "type": "file",
+            "value": "app/services/attendance-approval.service.ts",
+            "strength": "strong",
+            "reason": "app/services/attendance-approval.service.ts matches *approval*."
+          },
+          {
+            "type": "file",
+            "value": "app/components/organisms/timesheet-modal-approval.tsx",
+            "strength": "strong",
+            "reason": "app/components/organisms/timesheet-modal-approval.tsx matches *approval*."
+          },
+          {
+            "type": "file",
+            "value": "app/routes/hr/approvals.$type.tsx",
+            "strength": "strong",
+            "reason": "app/routes/hr/approvals.$type.tsx matches *approval*."
+          },
+          {
+            "type": "file",
+            "value": "app/routes/employee/approvals.$type.tsx",
+            "strength": "strong",
+            "reason": "app/routes/employee/approvals.$type.tsx matches *approval*."
+          },
+          {
+            "type": "file",
+            "value": "app/routes/employee/approvals.tsx",
+            "strength": "strong",
+            "reason": "app/routes/employee/approvals.tsx matches *approval*."
+          },
+          {
+            "type": "file",
+            "value": "build/client/assets/privacy-policy-CNE0q99c.js",
+            "strength": "strong",
+            "reason": "build/client/assets/privacy-policy-CNE0q99c.js matches *policy*."
+          },
+          {
+            "type": "file",
+            "value": "app/routes/legal/privacy-policy.tsx",
+            "strength": "strong",
+            "reason": "app/routes/legal/privacy-policy.tsx matches *policy*."
+          },
+          {
+            "type": "file",
+            "value": ".react-router/types/app/routes/legal/+types/privacy-policy.ts",
+            "strength": "strong",
+            "reason": ".react-router/types/app/routes/legal/+types/privacy-policy.ts matches *policy*."
+          },
+          {
+            "type": "domain",
+            "value": "business.operations",
+            "strength": "strong",
+            "reason": "Internal-tool profile or operations, SOP, process, runbook, workflow, approval, or policy files detected."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": "skills/domains/creative-business/sop-writing.skill.md"
+        }
+      },
+      {
+        "id": "creative.pitch-deck",
+        "name": "Pitch Deck",
+        "class": "domain",
+        "domain": "creative.presentation",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Pitch deck, presentation, or proposal evidence detected.",
+        "evidence": [
+          {
+            "type": "file",
+            "value": "route-structure-proposal.md",
+            "strength": "strong",
+            "reason": "route-structure-proposal.md matches *proposal*."
+          },
+          {
+            "type": "domain",
+            "value": "creative.presentation",
+            "strength": "strong",
+            "reason": "Pitch deck, presentation, or proposal files detected."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": "skills/domains/creative-business/pitch-deck.skill.md"
+        }
+      },
+      {
+        "id": "creative.storytelling",
+        "name": "Storytelling",
+        "class": "domain",
+        "domain": "creative.story",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Story, narrative, lore, campaign, or game profile evidence detected.",
+        "evidence": [
+          {
+            "type": "file",
+            "value": "build/client/assets/history-C5kYvrA5.js",
+            "strength": "strong",
+            "reason": "build/client/assets/history-C5kYvrA5.js matches *story*."
+          },
+          {
+            "type": "file",
+            "value": "build/client/assets/history-details-hNoeRLdx.js",
+            "strength": "strong",
+            "reason": "build/client/assets/history-details-hNoeRLdx.js matches *story*."
+          },
+          {
+            "type": "file",
+            "value": "app/routes/profile/history-details.tsx",
+            "strength": "strong",
+            "reason": "app/routes/profile/history-details.tsx matches *story*."
+          },
+          {
+            "type": "file",
+            "value": "app/routes/profile/history.tsx",
+            "strength": "strong",
+            "reason": "app/routes/profile/history.tsx matches *story*."
+          },
+          {
+            "type": "file",
+            "value": "app/components/organisms/attendance/AttendanceHistory.tsx",
+            "strength": "strong",
+            "reason": "app/components/organisms/attendance/AttendanceHistory.tsx matches *story*."
+          },
+          {
+            "type": "domain",
+            "value": "creative.story",
+            "strength": "weak",
+            "reason": "Game profile or narrative documents detected."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": "skills/domains/creative-business/storytelling.skill.md"
+        }
+      },
+      {
+        "id": "public.public-discovery-maintenance",
+        "name": "Public Discovery Maintenance",
+        "class": "domain",
+        "domain": "public-surface",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Public surface or discovery evidence suggests this skill may help.",
+        "evidence": [
+          {
+            "type": "file",
+            "value": "public/favicon.ico",
+            "strength": "strong",
+            "reason": "public/favicon.ico matches public/**."
+          },
+          {
+            "type": "file",
+            "value": "public/logo-header.png",
+            "strength": "strong",
+            "reason": "public/logo-header.png matches public/**."
+          },
+          {
+            "type": "file",
+            "value": "public/logo.png",
+            "strength": "strong",
+            "reason": "public/logo.png matches public/**."
+          },
+          {
+            "type": "file",
+            "value": "public/sample-bir-2316-data.json",
+            "strength": "strong",
+            "reason": "public/sample-bir-2316-data.json matches public/**."
+          },
+          {
+            "type": "file",
+            "value": "public/client/index.html",
+            "strength": "strong",
+            "reason": "public/client/index.html matches public/**."
+          },
+          {
+            "type": "file",
+            "value": "app/app.css",
+            "strength": "strong",
+            "reason": "app/app.css matches app/**."
+          },
+          {
+            "type": "file",
+            "value": "app/root.tsx",
+            "strength": "strong",
+            "reason": "app/root.tsx matches app/**."
+          },
+          {
+            "type": "file",
+            "value": "app/routes.ts",
+            "strength": "strong",
+            "reason": "app/routes.ts matches app/**."
+          },
+          {
+            "type": "file",
+            "value": "app/assets/bandai_logo.png",
+            "strength": "strong",
+            "reason": "app/assets/bandai_logo.png matches app/**."
+          },
+          {
+            "type": "file",
+            "value": "app/assets/careers-image.jpg",
+            "strength": "strong",
+            "reason": "app/assets/careers-image.jpg matches app/**."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": null
+        }
+      },
+      {
+        "id": "public.public-surface-update",
+        "name": "Public Surface Update",
+        "class": "domain",
+        "domain": "public-surface",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Public or customer-facing communication evidence suggests this skill may help.",
+        "evidence": [
+          {
+            "type": "file",
+            "value": "docs/employee-status-changes-eligibility.md",
+            "strength": "strong",
+            "reason": "docs/employee-status-changes-eligibility.md matches docs/**."
+          },
+          {
+            "type": "file",
+            "value": "public/favicon.ico",
+            "strength": "strong",
+            "reason": "public/favicon.ico matches public/**."
+          },
+          {
+            "type": "file",
+            "value": "public/logo-header.png",
+            "strength": "strong",
+            "reason": "public/logo-header.png matches public/**."
+          },
+          {
+            "type": "file",
+            "value": "public/logo.png",
+            "strength": "strong",
+            "reason": "public/logo.png matches public/**."
+          },
+          {
+            "type": "file",
+            "value": "public/sample-bir-2316-data.json",
+            "strength": "strong",
+            "reason": "public/sample-bir-2316-data.json matches public/**."
+          },
+          {
+            "type": "file",
+            "value": "public/client/index.html",
+            "strength": "strong",
+            "reason": "public/client/index.html matches public/**."
+          },
+          {
+            "type": "file",
+            "value": "PDF_GENERATOR_README.md",
+            "strength": "strong",
+            "reason": "PDF_GENERATOR_README.md matches README.md."
+          },
+          {
+            "type": "file",
+            "value": "README.md",
+            "strength": "strong",
+            "reason": "README.md matches README.md."
+          },
+          {
+            "type": "file",
+            "value": "firebase/README.md",
+            "strength": "strong",
+            "reason": "firebase/README.md matches README.md."
+          },
+          {
+            "type": "file",
+            "value": ".wwg/governance/README.md",
+            "strength": "strong",
+            "reason": ".wwg/governance/README.md matches README.md."
+          },
+          {
+            "type": "file",
+            "value": ".wwg/wiki/principles/README.md",
+            "strength": "strong",
+            "reason": ".wwg/wiki/principles/README.md matches README.md."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": null
+        }
+      },
+      {
+        "id": "software.bug-fix",
+        "name": "Bug Fix",
+        "class": "domain",
+        "domain": "software.testing",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Software, testing, bug, or incident evidence suggests this skill may help.",
+        "evidence": [
+          {
+            "type": "dependency",
+            "value": "playwright",
+            "strength": "strong",
+            "reason": "package.json contains playwright."
+          },
+          {
+            "type": "dependency",
+            "value": "vitest",
+            "strength": "strong",
+            "reason": "package.json contains vitest."
+          },
+          {
+            "type": "file",
+            "value": "package.json",
+            "strength": "strong",
+            "reason": "package.json matches package.json."
+          },
+          {
+            "type": "file",
+            "value": "tests/unreachable-routes.test.ts",
+            "strength": "strong",
+            "reason": "tests/unreachable-routes.test.ts matches **/*.test.*."
+          },
+          {
+            "type": "file",
+            "value": "tests/unused-routes.test.ts",
+            "strength": "strong",
+            "reason": "tests/unused-routes.test.ts matches **/*.test.*."
+          },
+          {
+            "type": "file",
+            "value": "app/lib/utils/default-employee-password.test.ts",
+            "strength": "strong",
+            "reason": "app/lib/utils/default-employee-password.test.ts matches **/*.test.*."
+          },
+          {
+            "type": "file",
+            "value": "app/lib/utils/employee-form-draft-idb.test.ts",
+            "strength": "strong",
+            "reason": "app/lib/utils/employee-form-draft-idb.test.ts matches **/*.test.*."
+          },
+          {
+            "type": "file",
+            "value": "app/lib/utils/employee-import-preview-validation.test.ts",
+            "strength": "strong",
+            "reason": "app/lib/utils/employee-import-preview-validation.test.ts matches **/*.test.*."
+          },
+          {
+            "type": "file",
+            "value": "tests/document-onboarding-real-scenario.spec.ts",
+            "strength": "strong",
+            "reason": "tests/document-onboarding-real-scenario.spec.ts matches **/*.spec.*."
+          },
+          {
+            "type": "file",
+            "value": "tests/hr-tickets-accordion.spec.ts",
+            "strength": "strong",
+            "reason": "tests/hr-tickets-accordion.spec.ts matches **/*.spec.*."
+          },
+          {
+            "type": "file",
+            "value": "tests/perf/hr-attendance.spec.ts",
+            "strength": "strong",
+            "reason": "tests/perf/hr-attendance.spec.ts matches **/*.spec.*."
+          },
+          {
+            "type": "domain",
+            "value": "software.testing",
+            "strength": "strong",
+            "reason": "Test files or test framework dependencies detected."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": null
+        }
+      },
+      {
+        "id": "software.feature-implementation",
+        "name": "Feature Implementation",
+        "class": "domain",
+        "domain": "software",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Software project or implementation task evidence suggests this skill may help.",
+        "evidence": [
+          {
+            "type": "dependency",
+            "value": "react",
+            "strength": "strong",
+            "reason": "package.json contains react."
+          },
+          {
+            "type": "dependency",
+            "value": "typescript",
+            "strength": "strong",
+            "reason": "package.json contains typescript."
+          },
+          {
+            "type": "dependency",
+            "value": "vite",
+            "strength": "strong",
+            "reason": "package.json contains vite."
+          },
+          {
+            "type": "file",
+            "value": "package.json",
+            "strength": "strong",
+            "reason": "package.json matches package.json."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": null
+        }
+      },
+      {
+        "id": "software.runtime-infrastructure",
+        "name": "Runtime Infrastructure",
+        "class": "domain",
+        "domain": "operations",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Runtime, deployment, or infrastructure evidence suggests this skill may help.",
+        "evidence": [
+          {
+            "type": "file",
+            "value": "Dockerfile",
+            "strength": "strong",
+            "reason": "Dockerfile matches Dockerfile."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "medium",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": null
+        }
+      },
+      {
+        "id": "software.web.component-architecture",
+        "name": "Component Architecture",
+        "class": "domain",
+        "domain": "software.web",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Component or UI architecture evidence detected.",
+        "evidence": [
+          {
+            "type": "dependency",
+            "value": "react",
+            "strength": "strong",
+            "reason": "package.json contains react."
+          },
+          {
+            "type": "file_extension",
+            "value": ".tsx",
+            "strength": "strong",
+            "reason": ".TSX files are present."
+          },
+          {
+            "type": "file_extension",
+            "value": ".tsx",
+            "strength": "strong",
+            "reason": ".TSX files are present."
+          },
+          {
+            "type": "file_extension",
+            "value": ".tsx",
+            "strength": "strong",
+            "reason": ".TSX files are present."
+          },
+          {
+            "type": "file_extension",
+            "value": ".tsx",
+            "strength": "strong",
+            "reason": ".TSX files are present."
+          },
+          {
+            "type": "file_extension",
+            "value": ".tsx",
+            "strength": "strong",
+            "reason": ".TSX files are present."
+          },
+          {
+            "type": "domain",
+            "value": "software.web",
+            "strength": "strong",
+            "reason": "Repository contains package.json or JavaScript/TypeScript source files."
+          },
+          {
+            "type": "domain",
+            "value": "software.web",
+            "strength": "strong",
+            "reason": "Repository contains web source files."
+          },
+          {
+            "type": "domain",
+            "value": "software.web",
+            "strength": "strong",
+            "reason": "Frontend framework dependency or JSX/TSX files detected."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": "skills/domains/software/web/component-architecture.skill.md"
+        }
+      },
+      {
+        "id": "software.web.react-patterns",
+        "name": "React Patterns",
+        "class": "domain",
+        "domain": "software.web",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "React project evidence detected.",
+        "evidence": [
+          {
+            "type": "dependency",
+            "value": "react",
+            "strength": "strong",
+            "reason": "package.json contains react."
+          },
+          {
+            "type": "file_extension",
+            "value": ".tsx",
+            "strength": "strong",
+            "reason": ".TSX files are present."
+          },
+          {
+            "type": "file_extension",
+            "value": ".tsx",
+            "strength": "strong",
+            "reason": ".TSX files are present."
+          },
+          {
+            "type": "file_extension",
+            "value": ".tsx",
+            "strength": "strong",
+            "reason": ".TSX files are present."
+          },
+          {
+            "type": "file_extension",
+            "value": ".tsx",
+            "strength": "strong",
+            "reason": ".TSX files are present."
+          },
+          {
+            "type": "file_extension",
+            "value": ".tsx",
+            "strength": "strong",
+            "reason": ".TSX files are present."
+          },
+          {
+            "type": "file",
+            "value": "vite.config.ts",
+            "strength": "strong",
+            "reason": "vite.config.ts matches vite.config.*."
+          },
+          {
+            "type": "file",
+            "value": "vite.config.ts.timestamp-1768962486646-4f8a5c3707863.mjs",
+            "strength": "strong",
+            "reason": "vite.config.ts.timestamp-1768962486646-4f8a5c3707863.mjs matches vite.config.*."
+          },
+          {
+            "type": "file",
+            "value": "vite.config.ts.timestamp-1769736048825-923a77a9845b4.mjs",
+            "strength": "strong",
+            "reason": "vite.config.ts.timestamp-1769736048825-923a77a9845b4.mjs matches vite.config.*."
+          },
+          {
+            "type": "file",
+            "value": "vite.config.ts.timestamp-1769739873113-a72f5fccf6416.mjs",
+            "strength": "strong",
+            "reason": "vite.config.ts.timestamp-1769739873113-a72f5fccf6416.mjs matches vite.config.*."
+          },
+          {
+            "type": "file",
+            "value": "vite.config.ts.timestamp-1770086495362-5b3f3c11daa01.mjs",
+            "strength": "strong",
+            "reason": "vite.config.ts.timestamp-1770086495362-5b3f3c11daa01.mjs matches vite.config.*."
+          },
+          {
+            "type": "domain",
+            "value": "software.web",
+            "strength": "strong",
+            "reason": "Repository contains package.json or JavaScript/TypeScript source files."
+          },
+          {
+            "type": "domain",
+            "value": "software.web",
+            "strength": "strong",
+            "reason": "Repository contains web source files."
+          },
+          {
+            "type": "domain",
+            "value": "software.web",
+            "strength": "strong",
+            "reason": "Frontend framework dependency or JSX/TSX files detected."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": "skills/domains/software/web/react-patterns.skill.md"
+        }
+      },
+      {
+        "id": "software.web.rendering-strategy",
+        "name": "Rendering Strategy",
+        "class": "domain",
+        "domain": "software.web",
+        "state": "recommended",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Rendering, SEO, hydration, or framework evidence detected.",
+        "evidence": [
+          {
+            "type": "file",
+            "value": "app/app.css",
+            "strength": "strong",
+            "reason": "app/app.css matches app/**."
+          },
+          {
+            "type": "file",
+            "value": "app/root.tsx",
+            "strength": "strong",
+            "reason": "app/root.tsx matches app/**."
+          },
+          {
+            "type": "file",
+            "value": "app/routes.ts",
+            "strength": "strong",
+            "reason": "app/routes.ts matches app/**."
+          },
+          {
+            "type": "file",
+            "value": "app/assets/bandai_logo.png",
+            "strength": "strong",
+            "reason": "app/assets/bandai_logo.png matches app/**."
+          },
+          {
+            "type": "file",
+            "value": "app/assets/careers-image.jpg",
+            "strength": "strong",
+            "reason": "app/assets/careers-image.jpg matches app/**."
+          },
+          {
+            "type": "domain",
+            "value": "software.web",
+            "strength": "strong",
+            "reason": "Repository contains package.json or JavaScript/TypeScript source files."
+          },
+          {
+            "type": "domain",
+            "value": "software.web",
+            "strength": "strong",
+            "reason": "Repository contains web source files."
+          },
+          {
+            "type": "domain",
+            "value": "software.web",
+            "strength": "strong",
+            "reason": "Frontend framework dependency or JSX/TSX files detected."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "standard",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": "skills/domains/software/web/rendering-strategy.skill.md"
+        }
+      },
+      {
+        "id": "core.change-classifier",
+        "name": "Change Classifier",
+        "class": "core",
+        "domain": "governance",
+        "state": "enabled",
+        "materialization": "copied",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Core WWG change classification behavior.",
+        "evidence": [
+          {
+            "type": "compatibility",
+            "value": "change-classifier",
+            "strength": "explicit",
+            "reason": "Legacy copied Workspace skill file is physically present."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "core",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": ".wwg/workspace/skills/change-classifier.skill.md"
+        }
+      },
+      {
+        "id": "core.context-skill-maintenance",
+        "name": "Context Skill Maintenance",
+        "class": "core",
+        "domain": "governance",
+        "state": "enabled",
+        "materialization": "copied",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Core WWG context and skill synchronization behavior.",
+        "evidence": [
+          {
+            "type": "compatibility",
+            "value": "context-skill-maintenance",
+            "strength": "explicit",
+            "reason": "Legacy copied Workspace skill file is physically present."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "core",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": ".wwg/workspace/skills/context-skill-maintenance.skill.md"
+        }
+      },
+      {
+        "id": "core.drift-detector",
+        "name": "Drift Detector",
+        "class": "core",
+        "domain": "governance",
+        "state": "enabled",
+        "materialization": "copied",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Core WWG drift detection behavior.",
+        "evidence": [
+          {
+            "type": "compatibility",
+            "value": "drift-detector",
+            "strength": "explicit",
+            "reason": "Legacy copied Workspace skill file is physically present."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "core",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": ".wwg/workspace/skills/drift-detector.skill.md"
+        }
+      },
+      {
+        "id": "core.regression-guardrail-maintenance",
+        "name": "Regression Guardrail Maintenance",
+        "class": "core",
+        "domain": "governance",
+        "state": "enabled",
+        "materialization": "copied",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Core WWG regression guardrail behavior.",
+        "evidence": [
+          {
+            "type": "compatibility",
+            "value": "regression-guardrail-maintenance",
+            "strength": "explicit",
+            "reason": "Legacy copied Workspace skill file is physically present."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "core",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": ".wwg/workspace/skills/regression-guardrail-maintenance.skill.md"
+        }
+      },
+      {
+        "id": "core.task-router",
+        "name": "Task Router",
+        "class": "core",
+        "domain": "governance",
+        "state": "enabled",
+        "materialization": "copied",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Core WWG task routing behavior.",
+        "evidence": [
+          {
+            "type": "compatibility",
+            "value": "task-router",
+            "strength": "explicit",
+            "reason": "Legacy copied Workspace skill file is physically present."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "core",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": ".wwg/workspace/skills/task-router.skill.md"
+        }
+      },
+      {
+        "id": "core.truth-loop",
+        "name": "Truth Loop",
+        "class": "core",
+        "domain": "governance",
+        "state": "enabled",
+        "materialization": "reference",
+        "activation_owner": "vorter",
+        "activation_status": "candidate_only",
+        "confidence": "high",
+        "reason": "Core WWG governance behavior.",
+        "evidence": [
+          {
+            "type": "governance",
+            "value": "core",
+            "strength": "explicit",
+            "reason": "Core WWG governance behavior."
+          }
+        ],
+        "constraints": {
+          "disabled": false,
+          "requires_confirmation": false,
+          "permission_sensitivity": "low",
+          "trust_tier": "core",
+          "required_tools": []
+        },
+        "source": {
+          "registry": "bundled",
+          "manifest": ".wwg/config/skill-manifest.yaml",
+          "skill_file": null
+        }
+      }
+    ]
+  },
+  "recommendationCapture": {
+    "registry": ".wwg/governance/recommendation-registry.md",
+    "newRecommendationsAdded": "unknown",
+    "recommendationsUpdated": "unknown",
+    "recommendationIds": [],
+    "notes": "Review whether this task revealed useful future work outside the approved scope.\nIf yes, add or update `.wwg/governance/recommendation-registry.md`.\nIf no, state that no new recommendations were identified.\n\nRecommendations are candidate work only. They are not project truth, active work, or commitments until reviewed and promoted."
+  },
+  "wwgReadiness": {
+    "target": "C:\\Users\\1biss\\Documents\\Projects\\hris-app",
+    "targetDisplay": ".",
+    "context": "brief",
+    "mustHave": [
+      {
+        "id": "wwg-workspace",
+        "label": "WWG workspace present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg"
+        ]
+      },
+      {
+        "id": "project-config",
+        "label": "Project config present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/config/wwg.project.yaml"
+        ]
+      },
+      {
+        "id": "project-truth",
+        "label": "Project Truth present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/wiki/project-truth.md"
+        ]
+      },
+      {
+        "id": "terminology",
+        "label": "Terminology present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/wiki/terminology.md"
+        ]
+      },
+      {
+        "id": "principles-readme",
+        "label": "Principles README present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/wiki/principles/README.md"
+        ]
+      },
+      {
+        "id": "workspace-current-task",
+        "label": "Workspace current task present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/workspace/current-task.md"
+        ]
+      },
+      {
+        "id": "governance-drift-guard",
+        "label": "Governance drift guard present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/drift-guard.md"
+        ]
+      },
+      {
+        "id": "recommendation-registry",
+        "label": "Recommendation Registry present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/recommendation-registry.md"
+        ]
+      },
+      {
+        "id": "reports-directory",
+        "label": "Reports directory present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/reports"
+        ]
+      },
+      {
+        "id": "root-agents",
+        "label": "Root AGENTS.md present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          "AGENTS.md"
+        ]
+      },
+      {
+        "id": "test-enforcement",
+        "label": "Test enforcement governance present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/test-enforcement.md"
+        ]
+      },
+      {
+        "id": "regression-guardrail",
+        "label": "Regression guardrail governance present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/regression-guardrail-catalog.md"
+        ]
+      },
+      {
+        "id": "validation-readiness",
+        "label": "Validation report present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/reports/wwg-validate-report.md"
+        ]
+      },
+      {
+        "id": "audit-readiness",
+        "label": "Audit report present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/reports/wwg-audit-report.md"
+        ]
+      },
+      {
+        "id": "agent-handoff",
+        "label": "Agent handoff present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/reports/wwg-agent-handoff.md",
+          ".wwg/reports/wwg-handoff-to-codex.md"
+        ]
+      },
+      {
+        "id": "adoption-regression-baseline",
+        "label": "Adoption regression baseline present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/regression-manifest.md",
+          ".wwg/governance/regression-manifest.json"
+        ]
+      }
+    ],
+    "otherFeatures": [
+      {
+        "id": "readme-support",
+        "label": "README missing",
+        "category": "other-feature",
+        "status": "present",
+        "severity": "success",
+        "show": false,
+        "reason": "The project front door is not present.",
+        "evidence": [
+          "README.md"
+        ],
+        "cliAction": "wwg readme generate --dry-run",
+        "agentAction": "Prepare a README handoff or reviewed scaffold; do not invent final README prose."
+      },
+      {
+        "id": "changelog-support",
+        "label": "Changelog missing",
+        "category": "other-feature",
+        "status": "missing",
+        "severity": "warning",
+        "show": true,
+        "reason": "Package, product, or git history signals make release memory relevant.",
+        "evidence": [
+          "CHANGELOG.md"
+        ],
+        "cliAction": "wwg changelog generate --from-git --weekly --dry-run",
+        "agentAction": "Prepare or review release narrative before treating changelog wording as final."
+      },
+      {
+        "id": "source-index-support",
+        "label": "Source index missing",
+        "category": "other-feature",
+        "status": "missing",
+        "severity": "warning",
+        "show": false,
+        "reason": "Source references exist, but no generated source index was detected.",
+        "evidence": [
+          ".wwg/wiki/01-sources/source-index.md",
+          ".wwg/wiki/01-sources/source-index.json",
+          "wiki/01-sources/source-index.md",
+          "wiki/01-sources/source-index.json"
+        ],
+        "cliAction": "wwg sources index",
+        "agentAction": "Review the source registry/index before relying on external truth."
+      },
+      {
+        "id": "infra-readiness",
+        "label": "Infrastructure readiness not checked",
+        "category": "other-feature",
+        "status": "present",
+        "severity": "success",
+        "show": false,
+        "reason": "Build, deploy, env, or infrastructure indicators were detected.",
+        "evidence": [
+          "package.json scripts",
+          ".env",
+          ".env.local",
+          "Dockerfile",
+          ".github/workflows"
+        ],
+        "cliAction": "wwg infra check",
+        "agentAction": "Inspect infrastructure readiness before deployment-related work."
+      },
+      {
+        "id": "github-publish-readiness",
+        "label": "GitHub publishing readiness not checked",
+        "category": "other-feature",
+        "status": "available",
+        "severity": "info",
+        "show": true,
+        "reason": "Git or GitHub context exists.",
+        "evidence": [
+          ".git",
+          ".github",
+          "package.json repository"
+        ],
+        "cliAction": "wwg publish github --dry-run",
+        "agentAction": "Do not publish without explicit approval; review readiness and secret safety first."
+      },
+      {
+        "id": "doctor-self-heal",
+        "label": "Doctor/self-heal available for repairable issues",
+        "category": "other-feature",
+        "status": "not_applicable",
+        "severity": "info",
+        "show": false,
+        "reason": "Repairable WWG-owned issues were detected by the current command.",
+        "evidence": [],
+        "cliAction": "wwg doctor",
+        "agentAction": "Inspect repair reports before applying fixes."
+      },
+      {
+        "id": "upgrade-migration",
+        "label": "Upgrade or migration review available",
+        "category": "other-feature",
+        "status": "not_applicable",
+        "severity": "info",
+        "show": false,
+        "reason": "Template version drift or migration-pack indicators were detected.",
+        "evidence": [
+          "wwg.template_version",
+          "migrations/"
+        ],
+        "cliAction": "wwg migrations plan --from <current> --to <target>",
+        "agentAction": "Review a migration plan before applying upgrade or migration changes."
+      },
+      {
+        "id": "wizard-onboarding",
+        "label": "Wizard onboarding available",
+        "category": "other-feature",
+        "status": "not_applicable",
+        "severity": "info",
+        "show": false,
+        "reason": "Wizard is shown only for onboarding, init, or adoption contexts.",
+        "evidence": [],
+        "cliAction": "wwg wizard",
+        "agentAction": "Use the Wizard only when the user wants guided setup."
+      }
+    ],
+    "recommendedNext": [
+      {
+        "id": "review-relevant-other-features",
+        "label": "Review relevant Other Features",
+        "category": "recommended-next",
+        "status": "available",
+        "severity": "info",
+        "show": true,
+        "reason": "Only detected gaps or context-relevant actions are shown.",
+        "cliAction": "wwg status",
+        "agentAction": "Treat recommendations as scoped support, not permission to expand the current task."
+      }
+    ],
+    "developerDetail": [
+      {
+        "id": "developer-validate",
+        "label": "Run structural validation",
+        "category": "developer-detail",
+        "status": "available",
+        "severity": "info",
+        "show": true,
+        "cliAction": "wwg validate"
+      },
+      {
+        "id": "developer-audit",
+        "label": "Run lower-level audit",
+        "category": "developer-detail",
+        "status": "available",
+        "severity": "info",
+        "show": true,
+        "cliAction": "wwg audit"
+      }
+    ]
+  },
+  "wwgTruthSynchronization": {
+    "taskMode": "TBD",
+    "newTruthDetected": "YES / NO",
+    "wikiUpdated": "YES / NO / N/A",
+    "workspaceUpdated": "YES / NO",
+    "governanceReviewCompleted": "YES / NO",
+    "driftStatus": "NONE / LOW / MEDIUM / HIGH",
+    "canonicalFilesChanged": [
+      "TBD"
+    ],
+    "implementationDiscoveriesSynced": [
+      "TBD"
+    ],
+    "remainingStaleContext": [
+      "TBD"
+    ]
+  },
+  "openQuestions": [
+    "Missing planning input: .wwg/wiki/11-synthesis/planning-summary.md."
+  ],
+  "generatedFiles": [
+    ".wwg/config/skill-manifest.yaml",
+    ".wwg/config/wwg.project.yaml",
+    ".wwg/governance",
+    ".wwg/governance/drift-guard.md",
+    ".wwg/reports/wwg-audit-report.md",
+    ".wwg/reports/wwg-infra-check-report.md",
+    ".wwg/reports/wwg-validate-report.md",
+    ".wwg/wiki",
+    ".wwg/wiki/02-project/project-brief.md",
+    ".wwg/wiki/03-requirements/functional-requirements.md",
+    ".wwg/wiki/05-architecture/deployment-model.md",
+    ".wwg/wiki/07-ux/screens.md",
+    ".wwg/wiki/11-synthesis/open-questions.md",
+    ".wwg/wiki/principles/README.md",
+    ".wwg/wiki/project-truth.md",
+    ".wwg/wiki/terminology.md",
+    ".wwg/workspace",
+    ".wwg/workspace/current-task.md",
+    "AGENTS.md"
+  ],
+  "implementationLogPath": ".wwg/reports/agent-implementation-log.md",
+  "recommendedPrompt": "Read AGENTS.md and .wwg/reports/wwg-handoff-to-codex.md. Follow the WWG operating loop, then continue from the WWG plan and begin implementation with Codex.",
+  "suggestedFirstImplementationTasks": [
+    "1. Read WWG project context and confirm assumptions.",
+    "2. Review open questions before building.",
+    "3. Create the initial app architecture plan.",
+    "4. Implement the first MVP page/screen.",
+    "5. Add tests and update WWG context after implementation."
+  ]
+}

@@ -1,0 +1,567 @@
+{
+  "schemaVersion": 1,
+  "kind": "wwg.workspace.proposedExecutableTests",
+  "generatedAt": "2026-05-15T06:29:49.934Z",
+  "sourceGovernance": {
+    "manifestPath": ".wwg/governance/regression-manifest.json",
+    "gapsPath": ".wwg/governance/regression-gaps.json",
+    "traceabilityPath": ".wwg/governance/rule-traceability.json",
+    "candidateReviewPath": ".wwg/workspace/testing/regression-candidate-review.json",
+    "manualEvidencePath": ".wwg/workspace/testing/manual-verification-evidence.json"
+  },
+  "selection": {
+    "allSafe": false
+  },
+  "summary": {
+    "total": 10,
+    "eligibleToApply": 0,
+    "proposalOnly": 0,
+    "safeToDraft": 0,
+    "unsafeNeedsHuman": 10,
+    "blocked": 0,
+    "writtenTestFiles": 0
+  },
+  "proposals": [
+    {
+      "proposalId": "proposal-auth-permission-test",
+      "relatedCandidateId": "candidate-auth-permission-test",
+      "relatedGapId": "gap-uncovered-behavior-auth-and-permission-behavior",
+      "relatedTraceabilityId": "trace-auth-and-permission-behavior",
+      "title": "Auth/permission test candidate executable test draft",
+      "testType": "auth-permission",
+      "targetFramework": {
+        "name": "playwright",
+        "confidence": "high",
+        "evidence": [
+          "package.json: @playwright/test",
+          "package.json: playwright",
+          "package.json script test:attendance-perf",
+          "playwright.config.ts"
+        ]
+      },
+      "proposedFilePath": "app/components/dashboards/shared/candidate-auth-permission-test-auth-permission.test.ts",
+      "proposedTestName": "Confirm access control and failure paths. regression proposal",
+      "sourceEvidence": [
+        "class-variance-authority: auth/security indicator",
+        "Detected tests do not obviously map to this behavior by path/name."
+      ],
+      "behaviorUnderTest": "Confirm access control and failure paths.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Unauthorized or disallowed access fails safely for Confirm access control and failure paths..",
+        "Allowed access succeeds only through local test doubles."
+      ],
+      "mockStubNeeds": [
+        "Mock users, roles, permissions, and denied states."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "critical",
+      "confidence": "high",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    },
+    {
+      "proposalId": "proposal-payment-failure-path-test",
+      "relatedCandidateId": "candidate-payment-failure-path-test",
+      "relatedGapId": "gap-uncovered-behavior-payment-behavior",
+      "relatedTraceabilityId": "trace-payment-behavior",
+      "title": "Payment failure-path test candidate executable test draft",
+      "testType": "failure-path",
+      "targetFramework": {
+        "name": "playwright",
+        "confidence": "high",
+        "evidence": [
+          "package.json: @playwright/test",
+          "package.json: playwright",
+          "package.json script test:attendance-perf",
+          "playwright.config.ts"
+        ]
+      },
+      "proposedFilePath": "app/components/dashboards/shared/candidate-payment-failure-path-test-failure-path.test.ts",
+      "proposedTestName": "Confirm payment safe and failure states. regression proposal",
+      "sourceEvidence": [
+        ".react-router/types/app/routes/hr/+types/billings.$id.ts: payments/billing indicator",
+        "Detected tests do not obviously map to this behavior by path/name."
+      ],
+      "behaviorUnderTest": "Confirm payment safe and failure states.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Failure states for Confirm payment safe and failure states. return explicit safe outcomes.",
+        "No external payment, network, or production service is called."
+      ],
+      "mockStubNeeds": [
+        "Mock provider/client failures and timeout-like responses locally."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "critical",
+      "confidence": "high",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    },
+    {
+      "proposalId": "proposal-persistence-migration-check",
+      "relatedCandidateId": "candidate-persistence-migration-check",
+      "relatedGapId": "gap-uncovered-behavior-data-persistence-behavior",
+      "relatedTraceabilityId": "trace-data-persistence-behavior",
+      "title": "Persistence/migration check candidate executable test draft",
+      "testType": "data-validation",
+      "targetFramework": {
+        "name": "playwright",
+        "confidence": "high",
+        "evidence": [
+          "package.json: @playwright/test",
+          "package.json: playwright",
+          "package.json script test:attendance-perf",
+          "playwright.config.ts"
+        ]
+      },
+      "proposedFilePath": "app/components/dashboards/shared/candidate-persistence-migration-check-data-validation.test.ts",
+      "proposedTestName": "Confirm stored data, migrations, and invalid data behavior. regression proposal",
+      "sourceEvidence": [
+        "mongoose: persistence indicator",
+        "Detected tests do not obviously map to this behavior by path/name."
+      ],
+      "behaviorUnderTest": "Confirm stored data, migrations, and invalid data behavior.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Confirm stored data, migrations, and invalid data behavior. produces the expected local result.",
+        "The test uses local mocks/stubs instead of production integrations."
+      ],
+      "mockStubNeeds": [
+        "Use in-memory or fixture data only; do not touch production databases."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "critical",
+      "confidence": "high",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    },
+    {
+      "proposalId": "proposal-process-regression-checklist",
+      "relatedCandidateId": "candidate-process-regression-checklist",
+      "relatedGapId": "gap-uncovered-behavior-process-and-approval-workflow",
+      "relatedTraceabilityId": "trace-process-and-approval-workflow",
+      "title": "Process regression checklist candidate executable test draft",
+      "testType": "unit",
+      "targetFramework": {
+        "name": "playwright",
+        "confidence": "high",
+        "evidence": [
+          "package.json: @playwright/test",
+          "package.json: playwright",
+          "package.json script test:attendance-perf",
+          "playwright.config.ts"
+        ]
+      },
+      "proposedFilePath": "app/components/dashboards/shared/candidate-process-regression-checklist-unit.test.ts",
+      "proposedTestName": "Confirm documented process steps remain current. regression proposal",
+      "sourceEvidence": [
+        ".github/pull_request_template.md",
+        ".impeccable.md",
+        "ARCHITECTURE_JOB_APPLICATION_FORM.md",
+        "ATOMIC_COMPONENTS.md",
+        "ATTENDANCE_APPROVAL.md",
+        "DEEP_LINKING_IMPLEMENTATION.md",
+        "DOCUMENTATION_INDEX.md",
+        "IMPLEMENTATION_CHECKLIST.md",
+        "Detected tests do not obviously map to this behavior by path/name."
+      ],
+      "behaviorUnderTest": "Confirm documented process steps remain current.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Confirm documented process steps remain current. produces the expected local result.",
+        "The test uses local mocks/stubs instead of production integrations."
+      ],
+      "mockStubNeeds": [
+        "Use existing project test helpers when present; otherwise keep the draft local and side-effect free."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "high",
+      "confidence": "medium",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    },
+    {
+      "proposalId": "proposal-approval-flow-check",
+      "relatedCandidateId": "candidate-approval-flow-check",
+      "relatedGapId": "gap-uncovered-behavior-process-and-approval-workflow",
+      "relatedTraceabilityId": "trace-process-and-approval-workflow",
+      "title": "Approval-flow check candidate executable test draft",
+      "testType": "unit",
+      "targetFramework": {
+        "name": "playwright",
+        "confidence": "high",
+        "evidence": [
+          "package.json: @playwright/test",
+          "package.json: playwright",
+          "package.json script test:attendance-perf",
+          "playwright.config.ts"
+        ]
+      },
+      "proposedFilePath": "app/components/dashboards/shared/candidate-approval-flow-check-unit.test.ts",
+      "proposedTestName": "Confirm sensitive changes have review and approval evidence. regression proposal",
+      "sourceEvidence": [
+        ".github/pull_request_template.md",
+        ".impeccable.md",
+        "ARCHITECTURE_JOB_APPLICATION_FORM.md",
+        "ATOMIC_COMPONENTS.md",
+        "ATTENDANCE_APPROVAL.md",
+        "DEEP_LINKING_IMPLEMENTATION.md",
+        "DOCUMENTATION_INDEX.md",
+        "IMPLEMENTATION_CHECKLIST.md",
+        "Detected tests do not obviously map to this behavior by path/name."
+      ],
+      "behaviorUnderTest": "Confirm sensitive changes have review and approval evidence.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Confirm sensitive changes have review and approval evidence. produces the expected local result.",
+        "The test uses local mocks/stubs instead of production integrations."
+      ],
+      "mockStubNeeds": [
+        "Use existing project test helpers when present; otherwise keep the draft local and side-effect free."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "high",
+      "confidence": "medium",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    },
+    {
+      "proposalId": "proposal-core-feature-workflow-regression",
+      "relatedCandidateId": "candidate-core-feature-workflow-regression",
+      "relatedGapId": "gap-uncovered-behavior-core-feature-workflow",
+      "relatedTraceabilityId": "trace-core-feature-workflow",
+      "title": "Core feature workflow regression candidate executable test draft",
+      "testType": "unit",
+      "targetFramework": {
+        "name": "playwright",
+        "confidence": "high",
+        "evidence": [
+          "package.json: @playwright/test",
+          "package.json: playwright",
+          "package.json script test:attendance-perf",
+          "playwright.config.ts"
+        ]
+      },
+      "proposedFilePath": "app/components/dashboards/shared/candidate-core-feature-workflow-regression-unit.test.ts",
+      "proposedTestName": "Confirm core feature workflow remains covered as the project changes. regression proposal",
+      "sourceEvidence": [
+        "Detected tests do not obviously map to this behavior by path/name.",
+        "README.md: README headings or route files"
+      ],
+      "behaviorUnderTest": "Confirm core feature workflow remains covered as the project changes.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Confirm core feature workflow remains covered as the project changes. produces the expected local result.",
+        "The test uses local mocks/stubs instead of production integrations."
+      ],
+      "mockStubNeeds": [
+        "Use existing project test helpers when present; otherwise keep the draft local and side-effect free."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "high",
+      "confidence": "medium",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    },
+    {
+      "proposalId": "proposal-main-entry-point-behavior-regression",
+      "relatedCandidateId": "candidate-main-entry-point-behavior-regression",
+      "relatedGapId": "gap-uncovered-behavior-main-entry-point-behavior",
+      "relatedTraceabilityId": "trace-main-entry-point-behavior",
+      "title": "Main entry point behavior regression candidate executable test draft",
+      "testType": "unit",
+      "targetFramework": {
+        "name": "playwright",
+        "confidence": "high",
+        "evidence": [
+          "package.json: @playwright/test",
+          "package.json: playwright",
+          "package.json script test:attendance-perf",
+          "playwright.config.ts"
+        ]
+      },
+      "proposedFilePath": "app/components/dashboards/shared/candidate-main-entry-point-behavior-regression-unit.test.ts",
+      "proposedTestName": "Confirm main entry point behavior remains covered as the project changes. regression proposal",
+      "sourceEvidence": [
+        "Detected tests do not obviously map to this behavior by path/name.",
+        ".react-router/types/app/routes/hr/settings/+types/index.ts: entry point candidate",
+        ".react-router/types/app/routes/site/+types/index.ts: entry point candidate",
+        "app/components/atoms/index.ts: entry point candidate",
+        "app/components/atoms/settings/index.ts: entry point candidate",
+        "app/components/molecules/boarding-template/index.ts: entry point candidate",
+        "app/components/molecules/employee/index.ts: entry point candidate",
+        "app/components/molecules/hr-admin/index.ts: entry point candidate",
+        "app/components/molecules/hr-user/index.ts: entry point candidate",
+        "app/components/molecules/index.ts: entry point candidate",
+        "app/components/molecules/settings/index.ts: entry point candidate",
+        "app/components/molecules/shared/index.ts: entry point candidate"
+      ],
+      "behaviorUnderTest": "Confirm main entry point behavior remains covered as the project changes.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Confirm main entry point behavior remains covered as the project changes. produces the expected local result.",
+        "The test uses local mocks/stubs instead of production integrations."
+      ],
+      "mockStubNeeds": [
+        "Use existing project test helpers when present; otherwise keep the draft local and side-effect free."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "high",
+      "confidence": "high",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    },
+    {
+      "proposalId": "proposal-runtime-build-behavior-regression",
+      "relatedCandidateId": "candidate-runtime-build-behavior-regression",
+      "relatedGapId": "gap-uncovered-behavior-runtime-build-behavior",
+      "relatedTraceabilityId": "trace-runtime-build-behavior",
+      "title": "Runtime/build behavior regression candidate executable test draft",
+      "testType": "smoke",
+      "targetFramework": {
+        "name": "playwright",
+        "confidence": "high",
+        "evidence": [
+          "package.json: @playwright/test",
+          "package.json: playwright",
+          "package.json script test:attendance-perf",
+          "playwright.config.ts"
+        ]
+      },
+      "proposedFilePath": "app/components/dashboards/shared/candidate-runtime-build-behavior-regression-smoke.test.ts",
+      "proposedTestName": "Confirm runtime/build behavior remains covered as the project changes. regression proposal",
+      "sourceEvidence": [
+        "Detected tests do not obviously map to this behavior by path/name.",
+        "package.json: scripts"
+      ],
+      "behaviorUnderTest": "Confirm runtime/build behavior remains covered as the project changes.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Confirm runtime/build behavior remains covered as the project changes. produces the expected local result.",
+        "The test uses local mocks/stubs instead of production integrations."
+      ],
+      "mockStubNeeds": [
+        "Use existing project test helpers when present; otherwise keep the draft local and side-effect free."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "medium",
+      "confidence": "high",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    },
+    {
+      "proposalId": "proposal-data-persistence-behavior-regression",
+      "relatedCandidateId": "candidate-data-persistence-behavior-regression",
+      "relatedGapId": "gap-uncovered-behavior-data-persistence-behavior",
+      "relatedTraceabilityId": "trace-data-persistence-behavior",
+      "title": "Data persistence behavior regression candidate executable test draft",
+      "testType": "data-validation",
+      "targetFramework": {
+        "name": "playwright",
+        "confidence": "high",
+        "evidence": [
+          "package.json: @playwright/test",
+          "package.json: playwright",
+          "package.json script test:attendance-perf",
+          "playwright.config.ts"
+        ]
+      },
+      "proposedFilePath": "app/components/dashboards/shared/candidate-data-persistence-behavior-regression-data-validation.test.ts",
+      "proposedTestName": "Confirm data persistence behavior remains covered as the project changes. regression proposal",
+      "sourceEvidence": [
+        "Detected tests do not obviously map to this behavior by path/name.",
+        "mongoose: persistence indicator"
+      ],
+      "behaviorUnderTest": "Confirm data persistence behavior remains covered as the project changes.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Confirm data persistence behavior remains covered as the project changes. produces the expected local result.",
+        "The test uses local mocks/stubs instead of production integrations."
+      ],
+      "mockStubNeeds": [
+        "Use in-memory or fixture data only; do not touch production databases."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "critical",
+      "confidence": "high",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    },
+    {
+      "proposalId": "proposal-auth-and-permission-behavior-regression",
+      "relatedCandidateId": "candidate-auth-and-permission-behavior-regression",
+      "relatedGapId": "gap-uncovered-behavior-auth-and-permission-behavior",
+      "relatedTraceabilityId": "trace-auth-and-permission-behavior",
+      "title": "Auth and permission behavior regression candidate executable test draft",
+      "testType": "auth-permission",
+      "targetFramework": {
+        "name": "playwright",
+        "confidence": "high",
+        "evidence": [
+          "package.json: @playwright/test",
+          "package.json: playwright",
+          "package.json script test:attendance-perf",
+          "playwright.config.ts"
+        ]
+      },
+      "proposedFilePath": "app/components/dashboards/shared/candidate-auth-and-permission-behavior-regression-auth-permission.test.ts",
+      "proposedTestName": "Confirm auth and permission behavior remains covered as the project changes. regression proposal",
+      "sourceEvidence": [
+        "Detected tests do not obviously map to this behavior by path/name.",
+        "class-variance-authority: auth/security indicator"
+      ],
+      "behaviorUnderTest": "Confirm auth and permission behavior remains covered as the project changes.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Unauthorized or disallowed access fails safely for Confirm auth and permission behavior remains covered as the project changes..",
+        "Allowed access succeeds only through local test doubles."
+      ],
+      "mockStubNeeds": [
+        "Mock users, roles, permissions, and denied states."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "critical",
+      "confidence": "high",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    }
+  ],
+  "safetyNotes": [
+    "Proposed executable tests are drafts, not coverage.",
+    "Draft content inside `.wwg/workspace/testing/` is not executable evidence.",
+    "WWG writes source test files only when `--write-source-scaffolds` is explicit with `--apply` and safety checks pass.",
+    "This flow never modifies application source files and never overwrites existing tests.",
+    "Non-technical regression candidates should use manual/process checklist evidence."
+  ]
+}

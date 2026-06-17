@@ -1,0 +1,95 @@
+enum AttendanceStatus {
+  PRESENT
+  LEAVE
+  INCOMPLETE
+  ABSENT
+  REST_DAY
+}
+
+enum AttendanceLedgerType {
+  RAW
+  CORRECTION
+}
+
+model Attendance {
+  id                String           @id @default(cuid())
+  organizationId    String // Multi-tenancy support
+  employee          Employee         @relation(fields: [employeeId], references: [id])
+  employeeId        String
+  appliedByEmployee Employee?        @relation("AttendanceAppliedBy", fields: [appliedBy], references: [id])
+  date              DateTime?        @default(now())
+  timeIn            DateTime?        @default(now())
+  timeBreak         DateTime?
+  timeOut           DateTime?
+  status            AttendanceStatus @default(PRESENT)
+  behaviorFlags     String[]         @default([])
+
+  // Resolved schedule snapshot for this attendance date.
+  // Captures override/template source and effective shift fields.
+  scheduleSnapshot Json?
+
+  // Geolocation data
+  timeInLocation  Json? // {lat: number, lng: number, address: string}
+  timeOutLocation Json? // {lat: number, lng: number, address: string}
+
+  // Biometric/Device info
+  deviceInfo             Json? // Device details for mobile check-in
+  isManualEntry          Boolean              @default(false)
+  approvedBy             String?
+  ledgerType             AttendanceLedgerType @default(RAW)
+  sourceRequestId        String?
+  supersedesAttendanceId String?
+  appliedAt              DateTime?
+  appliedBy              String?
+  isEffective            Boolean              @default(true)
+
+  // Timekeeping calculations (auto-calculated from timeIn, timeOut, and schedule)
+  // Minute precision (for calculations)
+  totalMinutesWorked Int? // Total minutes worked (timeOut - timeIn - breaks)
+  regularMinutes     Int? // Regular minutes within schedule
+  overtimeMinutes    Int? // Minutes exceeding schedule
+  undertimeMinutes   Int? // Minutes short of schedule
+  lateMinutes        Int? // Minutes late for clock-in after grace deduction
+  earlyOutMinutes    Int? // Minutes early for clock-out
+  breakMinutes       Int? // Total break time in minutes
+
+  // Lightweight employee snapshots for aggregate filtering/search
+  employeeCodeSnapshot    String?
+  employeeNameSnapshot    String?
+  departmentIdSnapshot    String?
+  departmentNameSnapshot  String?
+  reportToIdSnapshot      String?
+  workforceSourceSnapshot WorkforceSource?
+  agencyIdSnapshot        String?
+
+  // Formatted hours (for display) - e.g. "8:30"
+  hoursWorked    String?
+  regularHours   String?
+  overtimeHours  String?
+  undertimeHours String?
+  lateHours      String?
+  earlyOutHours  String?
+
+  // Timesheet reference - links this attendance to a timesheet
+  timesheet             Timesheet?             @relation(fields: [timesheetId], references: [id])
+  timesheetId           String?
+  timesheetlines        Timesheetline[]
+  attendanceObligations AttendanceObligation[]
+
+  notes     String?
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([timesheetId])
+  @@index([organizationId, employeeId, date])
+  @@index([organizationId, employeeId, date, isEffective])
+  @@index([organizationId, employeeId, sourceRequestId])
+  @@index([organizationId, isDeleted, isEffective, date])
+  @@index([organizationId, isDeleted, isEffective, date, status])
+  @@index([organizationId, isDeleted, isEffective, date, employeeId])
+  @@index([organizationId, isDeleted, isEffective, date, departmentIdSnapshot])
+  @@index([organizationId, isDeleted, isEffective, date, reportToIdSnapshot])
+  @@map("attendances")
+}

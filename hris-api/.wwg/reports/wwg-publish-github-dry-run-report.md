@@ -1,0 +1,1024 @@
+# WWG GitHub Publish Dry Run Report
+
+## Summary
+
+WWG GitHub publish dry run complete.
+
+## WWG Readiness
+
+Must Have items are required for agent-safe operation. Other Features are recommendations, not automatic authorization to expand task scope.
+
+### Must Have
+
+- [x] WWG workspace present (present)
+  - Evidence: `.wwg`
+- [x] Project config present (present)
+  - Evidence: `.wwg/config/wwg.project.yaml`
+- [x] Project Truth present (present)
+  - Evidence: `.wwg/wiki/project-truth.md`
+- [x] Terminology present (present)
+  - Evidence: `.wwg/wiki/terminology.md`
+- [x] Principles README present (present)
+  - Evidence: `.wwg/wiki/principles/README.md`
+- [x] Workspace current task present (present)
+  - Evidence: `.wwg/workspace/current-task.md`
+- [x] Governance drift guard present (present)
+  - Evidence: `.wwg/governance/drift-guard.md`
+- [x] Recommendation Registry present (present)
+  - Evidence: `.wwg/governance/recommendation-registry.md`
+- [x] Reports directory present (present)
+  - Evidence: `.wwg/reports`
+- [x] Root AGENTS.md present (present)
+  - Evidence: `AGENTS.md`
+- [x] Test enforcement governance present (present)
+  - Evidence: `.wwg/governance/test-enforcement.md`
+- [x] Regression guardrail governance present (present)
+  - Evidence: `.wwg/governance/regression-guardrail-catalog.md`
+- [x] Validation report present (present)
+  - Evidence: `.wwg/reports/wwg-validate-report.md`
+- [x] Audit report present (present)
+  - Evidence: `.wwg/reports/wwg-audit-report.md`
+- [x] Agent handoff present (present)
+  - Evidence: `.wwg/reports/wwg-agent-handoff.md`, `.wwg/reports/wwg-handoff-to-codex.md`
+- [x] Adoption regression baseline present (present)
+  - Evidence: `.wwg/governance/regression-manifest.md`, `.wwg/governance/regression-manifest.json`
+
+### Other Features
+
+- [ ] GitHub publishing readiness not checked (available)
+  - Reason: Git or GitHub context exists.
+  - Agent action: Do not publish without explicit approval; review readiness and secret safety first.
+  - CLI support: `wwg publish github --dry-run`
+  - Evidence: `.git`, `.github`, `package.json repository`
+- [ ] Upgrade or migration review available (available)
+  - Reason: Template version drift or migration-pack indicators were detected.
+  - Agent action: Review a migration plan before applying upgrade or migration changes.
+  - CLI support: `wwg migrations plan --from <current> --to <target>`
+  - Evidence: `wwg.template_version`, `migrations/`
+
+### Recommended Next
+
+- [ ] Review relevant Other Features (available)
+  - Reason: Only detected gaps or context-relevant actions are shown.
+  - Agent action: Treat recommendations as scoped support, not permission to expand the current task.
+  - CLI support: `wwg brief`
+
+Agents should follow Must Have items first. Missing Other Features are not blockers unless the current task depends on them.
+
+## Target
+
+.
+
+## Repository
+
+hrisworkforcesystem-coder/hris-api
+
+## Visibility
+
+private
+
+## Readiness Checks
+
+- PASS: Target path exists - C:\Users\Renz\Documents\hris\hris-api
+- PASS: .wwg/config/wwg.project.yaml exists - .wwg/config/wwg.project.yaml
+- PASS: AGENTS.md exists - AGENTS.md
+- PASS: Agent handoff report - Handoff report exists.
+- PASS: Validation report - Validation report exists.
+- PASS: Audit report - Audit report exists.
+- PASS: GitHub CLI available - `gh` is available.
+- PASS: GitHub CLI authenticated - `gh auth status` passed.
+- PASS: Repository exists - Repository exists.
+- PASS: Git available - `git` is available.
+- PASS: Git repository - Target is already a git repository.
+
+## Safety Checks
+
+- WARN: .gitignore protects secrets and sessions - Missing patterns: .wwg/, .env.*, !.env.example, tmp/
+- FAIL: Obvious secret files - Blocked files exist or are staged and will not be published.
+- PASS: Source index secret safety - No blocked source filenames found.
+
+## Commands That Would Run
+
+- ensure .gitignore includes WWG safety patterns
+- git remote add origin https://github.com/hrisworkforcesystem-coder/hris-api.git (or set-url if origin exists)
+- git add -- 888 allowed file(s)
+- git commit -m "Initialize WWG project"
+- git push -u origin HEAD
+
+## Files That Would Be Staged
+
+- .claude/settings.local.json
+- .cloudinary-api-key.tmp
+- .cloudinary-api-secret.tmp
+- .cloudinary-cloud-name.tmp
+- .dockerignore
+- .env.dev
+- .env.example
+- .env.uat
+- .fix-temp.txt
+- .github/plan_workflow.txt
+- .github/workflows/deploy-local-tailscale.yml
+- .github/workflows/deploy.yml
+- .github/workflows/heirarchy.md
+- .github/workflows/infra-validate.yml
+- .github/workflows/mgiration-guide.md
+- .github/workflows/rollback.yml
+- .gitignore
+- .gitignore copy
+- .mocharc.json
+- .prettierrc
+- AGENTS.md
+- CHANGELOG.md
+- Dockerfile
+- LICENSE
+- PROMPT_TEMPLATE.md
+- Procfile
+- README.md
+- app/Rule/index.ts
+- app/Rule/rule.controller.ts
+- app/Rule/rule.router.ts
+- app/activityLogging/activityLogging.controller.ts
+- app/activityLogging/activityLogging.router.ts
+- app/activityLogging/index.ts
+- app/agency/agency.controller.ts
+- app/agency/agency.router.ts
+- app/agency/index.ts
+- app/applicant/applicant.controller.ts
+- app/applicant/applicant.router.ts
+- app/applicant/index.ts
+- app/attendance/attendance-import.service.ts
+- app/attendance/attendance.controller.ts
+- app/attendance/attendance.controller.ts.backup
+- app/attendance/attendance.router.ts
+- app/attendance/index.ts
+- app/auditLogging/auditLogging.controller.ts
+- app/auditLogging/auditLogging.router.ts
+- app/auditLogging/index.ts
+- app/auth/auth.controller.ts
+- app/auth/auth.router.ts
+- app/auth/index.ts
+- app/benefitType/benefitType.controller.ts
+- app/benefitType/benefitType.router.ts
+- app/benefitType/index.ts
+- app/boardingProcess/boardingProcess.controller.ts
+- app/boardingProcess/boardingProcess.router.ts
+- app/boardingProcess/index.ts
+- app/boardingTemplate/boardingTemplate.router.ts
+- app/boardingTemplate/boardingtemplate.controller.ts
+- app/boardingTemplate/index.ts
+- app/calculator/calculator.controller.ts
+- app/calculator/calculator.router.ts
+- app/calculator/index.ts
+- app/calendar-item/calendar-item.controller.ts
+- app/calendar-item/calendar-item.router.ts
+- app/calendar-item/index.ts
+- app/celebrations/celebrations.controller.ts
+- app/celebrations/celebrations.router.ts
+- app/celebrations/index.ts
+- app/checklistItem/checklistItem.controller.ts
+- app/checklistItem/checklistItem.router.ts
+- app/checklistItem/index.ts
+- app/cron/cron.service.ts
+- app/dashboard/dashboard.controller.ts
+- app/dashboard/dashboard.router.ts
+- app/dashboard/index.ts
+- app/department/department.controller.ts
+- app/department/department.router.ts
+- app/department/index.ts
+- app/device/device.controller.ts
+- app/device/device.router.ts
+- app/device/index.ts
+- app/docs/docs.controller.ts
+- app/docs/docs.router.ts
+- app/docs/docs.ts
+- app/docs/endpointGenerator.ts
+- app/docs/index.ts
+- app/document/document.controller.ts
+- app/document/document.router.ts
+- app/document/index.ts
+- app/documentFolder/documentFolder.controller.ts
+- app/documentFolder/documentFolder.router.ts
+- app/documentFolder/index.ts
+- app/documentType/documentType.controller.ts
+- app/documentType/documentType.router.ts
+- app/documentType/index.ts
+- app/eligibility/index.ts
+- app/employee/employee-import.service.ts
+- app/employee/employee.controller.ts
+- app/employee/employee.router.ts
+- app/employee/index.ts
+- app/employeeBenefit/employeeBenefit.controller.ts
+- app/employeeBenefit/employeeBenefit.router.ts
+- app/employeeBenefit/index.ts
+- app/employeeDocuments/employeeDocuments.controller.ts
+- app/employeeDocuments/employeeDocuments.router.ts
+- app/employeeDocuments/index.ts
+- app/employeeLoan/employeeLoan.controller.ts
+- app/employeeLoan/employeeLoan.router.ts
+- app/employeeLoan/index.ts
+- app/employeeSchedule/employeeSchedule.controller.ts
+- app/employeeSchedule/employeeSchedule.router.ts
+- app/employeeSchedule/index.ts
+- app/employeepayroll/employeepayroll.controller.ts
+- app/employeepayroll/employeepayroll.router.ts
+- app/employeepayroll/index.ts
+- app/guide/guide.controller.ts
+- app/guide/guide.router.ts
+- app/guide/index.ts
+- app/hikvision/controller/access.control.controller.ts
+- app/hikvision/controller/callback.controller.ts
+- app/hikvision/controller/users.controller.ts
+- app/hikvision/hikvision.router.ts
+- app/hikvision/index.ts
+- app/hikvision/routes/access.control.router.ts
+- app/hikvision/routes/callback.router.ts
+- app/hikvision/routes/public.router.ts
+- app/hikvision/routes/users.router.ts
+- app/job/index.ts
+- app/job/job.controller.ts
+- app/job/job.router.ts
+- app/leaveSetting/index.ts
+- app/leaveSetting/leaveSetting.controller.ts
+- app/leaveSetting/leaveSetting.router.ts
+- app/level/index.ts
+- app/level/level.controller.ts
+- app/level/level.router.ts
+- app/loanType/index.ts
+- app/loanType/loanType.controller.ts
+- app/loanType/loanType.router.ts
+- app/metrics/index.ts
+- app/metrics/metrics.controller.ts
+- app/metrics/metrics.router.ts
+- app/migration/index.ts
+- app/migration/migration.controller.ts
+- app/migration/migration.router.ts
+- app/migration/migration.service.ts
+- app/note/index.ts
+- app/note/note.controller.ts
+- app/note/note.router.ts
+- app/notification/index.ts
+- app/notification/notification.controller.ts
+- app/notification/notification.router.ts
+- app/payrollperiod/index.ts
+- app/payrollperiod/payroll-cycle.helper.ts
+- app/payrollperiod/payroll-generation-job.service.ts
+- app/payrollperiod/payrollperiod.controller.ts
+- app/payrollperiod/payrollperiod.router.ts
+- app/person/index.ts
+- app/person/person.controller.ts
+- app/person/person.router.ts
+- app/position/index.ts
+- app/position/position.controller.ts
+- app/position/position.router.ts
+- app/report/index.ts
+- app/report/report.controller.ts
+- app/report/report.router.ts
+- app/request/index.ts
+- app/request/request.controller.ts
+- app/request/request.router.ts
+- app/requestTransaction/index.ts
+- app/requestTransaction/requestTransaction.controller.ts
+- app/requestTransaction/requestTransaction.router.ts
+- app/scheduleOverride/index.ts
+- app/scheduleOverride/scheduleOverride.controller.ts
+- app/scheduleOverride/scheduleOverride.router.ts
+- app/scheduleTemplate/index.ts
+- app/scheduleTemplate/scheduleScheduleTemplate.controller.ts
+- app/scheduleTemplate/scheduleScheduleTemplate.router.ts
+- app/shiftType/index.ts
+- app/shiftType/shiftType.controller.ts
+- app/shiftType/shiftType.router.ts
+- app/soalineitem/index.ts
+- app/soalineitem/soalineitem.controller.ts
+- app/soalineitem/soalineitem.router.ts
+- app/soaremittance/index.ts
+- app/soaremittance/soaremittance.controller.ts
+- app/soaremittance/soaremittance.router.ts
+- app/statementofaccount/index.ts
+- app/statementofaccount/statementofaccount.controller.ts
+- app/statementofaccount/statementofaccount.router.ts
+- app/status/index.ts
+- app/status/status.controller.ts
+- app/status/status.router.ts
+- app/status/status.service.ts
+- app/status/status.types.ts
+- app/systemProvisioning/index.ts
+- app/systemProvisioning/systemProvisioning.controller.ts
+- app/systemProvisioning/systemProvisioning.router.ts
+- app/systemProvisioning/systemProvisioning.service.ts
+- app/template/index.ts
+- app/template/template.controller.ts
+- app/template/template.router.ts
+- app/templateItem/index.ts
+- app/templateItem/templateItem.controller.ts
+- app/templateItem/templateItem.router.ts
+- app/termination/index.ts
+- app/termination/termination.controller.ts
+- app/termination/termination.router.ts
+- app/timesheet/index.ts
+- app/timesheet/timesheet.controller.ts
+- app/timesheet/timesheet.router.ts
+- app/timesheetline/index.ts
+- app/timesheetline/timesheetline.controller.ts
+- app/timesheetline/timesheetline.router.ts
+- app/workflowConfig/index.ts
+- app/workflowConfig/workflowConfig.controller.ts
+- app/workflowConfig/workflowConfig.router.ts
+- app/workflowEngine/index.ts
+- app/workflowEngine/workflowEngine.controller.ts
+- app/workflowEngine/workflowEngine.router.ts
+- app/workforceRecruitmentSetting/index.ts
+- app/workforceRecruitmentSetting/workforceRecruitmentSetting.controller.ts
+- app/workforceRecruitmentSetting/workforceRecruitmentSetting.router.ts
+- assets/201-TEMPLATES/Company Contract.png
+- assets/201-TEMPLATES/MEDICAL CERT.png
+- assets/201-TEMPLATES/National ID/8D15A37A-0BE3-4A4F-8769-4ED70C9ABC59.png
+- assets/201-TEMPLATES/PAG IBIG ID/PAG IBIG ID.png
+- assets/201-TEMPLATES/Philhealth ID/IMG_3434.JPG
+- assets/201-TEMPLATES/Philhealth ID/IMG_3435.JPG
+- assets/201-TEMPLATES/SSS ID/2021B53C-3464-47BA-B95D-F070FF03A0B6.png
+- assets/201-TEMPLATES/SSS ID/DE887C0D-8EA5-42F7-8EA9-28A9355CDFFA.png
+- assets/201-TEMPLATES/TIN ID/IMG_3436.JPG
+- assets/201-TEMPLATES/TIN ID/IMG_3437.JPG
+- assets/forms/2316 Sep 2021 ENCS_Final_corrected.pdf
+- assets/images/bandai_logo.png
+- assets/pdf-field-mapping.json
+- assets/templates/employment-contract-template.txt
+- config/cloudinary.ts
+- config/config.ts
+- config/constant.ts
+- config/database.ts
+- config/email.config.ts
+- config/employee-email.config.ts
+- config/hikvision.endpoint.ts
+- config/metrics.config.ts
+- config/payroll.config.ts
+- config/redis.ts
+- config/security.ts
+- cron-entry.ts
+- docker-compose.yml
+- docs/API_EMPLOYEE_IMPORT.md
+- docs/APPROVAL_CHAIN_TEST_GUIDE.md
+- docs/ATTENDANCE_DATE_FIX.md
+- docs/ATTENDANCE_FLOW.md
+- docs/COLUMN_CONCAT_GUIDE.md
+- docs/CONSOLIDATED_SCHEMA.md
+- docs/CRON_SETUP.md
+- docs/CSV/sample-attendance.csv
+- docs/CSV/sample-departments.csv
+- docs/CSV/sample-employees.csv
+- docs/CSV/sample-levels.csv
+- docs/CSV/sample-positions.csv
+- docs/Create a New Service Guide.md
+- docs/DASHBOARD_SETUP.md
+- docs/DEPLOYMENT_ARCHITECTURE.md
+- docs/DOCKER_SETUP.md
+- docs/EMPLOYEE_IMPORT_COLUMNS.md
+- docs/EMPLOYEE_MIGRATION_REUSABLE_GUIDE.md
+- docs/JSON/HRIS-Boarding-Process-Test.postman_collection.json
+- docs/JSON/update-employee-default-schedule.json
+- docs/LOCAL_TAILSCALE_DEPLOY.md
+- docs/MD Files/MIGRATION_GUIDE.md
+- docs/MD Files/REFACTORING_SUMMARY.md
+- docs/MD Files/TAX_CALCULATOR_REFACTORING.md
+- docs/MD Files/auth-api.md
+- docs/MIGRATION_CSV_UPLOAD_TESTING.md
+- docs/MIGRATION_GUIDE.md
+- docs/MIGRATION_TO_SINGLE_TABLE.md
+- docs/PAYROLL_CYCLE_RULES_CONFIG.md
+- docs/PAYROLL_SCHEMA_DESIGN.md
+- docs/POSTGRES_MIGRATION_HANDOFF_2026-05-16.md
+- docs/POSTMAN_SETUP.md
+- docs/PRISMA_MONGODB_TO_POSTGRES_PLAN.md
+- docs/REDIS_SETUP.md
+- docs/REQUEST_WORKFLOW_GUIDE.md
+- docs/SCHEDULE_IMPORT_GUIDE.md
+- docs/SECURITY.md
+- docs/SECURITY_IMPLEMENTATION.md
+- docs/SINGLE_VS_SEPARATE_TABLES.md
+- docs/STATUS_API.md
+- docs/TIMESHEET_EDIT_PERMISSION_UI_OPTIONS.md
+- docs/TIMESHEET_EDIT_PERMISSION_WORKFLOW_PRD.md
+- docs/TIMESHEET_UNIFIED_REQUEST_WORKFLOW_PLAN.md
+- docs/generated/endpoints.json
+- docs/generated/endpoints/documentation.endpoints.json
+- docs/generated/endpoints/template.endpoints.json
+- docs/generated/postman.collection.json
+- docs/generated/swagger.json
+- docs/generated/swagger.yaml
+- docs/grouping-functionality.md
+- docs/models/securitySchemes.yaml
+- docs/models/user.yaml
+- docs/multi-period-tax-calculation-plan.md
+- docs/openApiOptions.json
+- docs/openApiSpecs.ts
+- docs/template.md
+- eslint.config.js
+- exports/local-infra/.env.example
+- exports/local-infra/README.md
+- exports/local-infra/docker-compose.yml
+- gcp/README.md
+- gcp/audit-github-deploy-secrets.ps1
+- gcp/gcp-deploy.ps1
+- gcp/setup-all-environments.ps1
+- gcp/setup-gcs-local.ps1
+- gcp/setup-github-cd.ps1
+- gcp/setup-github-workload-identity.ps1
+- gcp/sync-github-deploy-secrets.ps1
+- gcp/sync-secret-manager-env.ps1
+- generated/prisma-postgres/default.d.ts
+- generated/prisma-postgres/default.js
+- generated/prisma-postgres/edge.d.ts
+- generated/prisma-postgres/edge.js
+- generated/prisma-postgres/index-browser.js
+- generated/prisma-postgres/index.d.ts
+- generated/prisma-postgres/index.js
+- generated/prisma-postgres/package.json
+- generated/prisma-postgres/query_engine-windows.dll.node
+- generated/prisma-postgres/runtime/edge-esm.js
+- generated/prisma-postgres/runtime/edge.js
+- generated/prisma-postgres/runtime/index-browser.d.ts
+- generated/prisma-postgres/runtime/index-browser.js
+- generated/prisma-postgres/runtime/library.d.ts
+- generated/prisma-postgres/runtime/library.js
+- generated/prisma-postgres/runtime/react-native.js
+- generated/prisma-postgres/runtime/wasm.js
+- generated/prisma-postgres/schema.prisma
+- generated/prisma-postgres/wasm.d.ts
+- generated/prisma-postgres/wasm.js
+- generated/prisma/default.d.ts
+- generated/prisma/default.js
+- generated/prisma/edge.d.ts
+- generated/prisma/edge.js
+- generated/prisma/index-browser.js
+- generated/prisma/index.d.ts
+- generated/prisma/index.js
+- generated/prisma/package.json
+- generated/prisma/query_engine-windows.dll.node
+- generated/prisma/runtime/edge-esm.js
+- generated/prisma/runtime/edge.js
+- generated/prisma/runtime/index-browser.d.ts
+- generated/prisma/runtime/index-browser.js
+- generated/prisma/runtime/library.d.ts
+- generated/prisma/runtime/library.js
+- generated/prisma/runtime/react-native.js
+- generated/prisma/runtime/wasm.js
+- generated/prisma/schema.prisma
+- generated/prisma/wasm.d.ts
+- generated/prisma/wasm.js
+- governance-template/base/evidence-standards.md
+- governance-template/base/public-discovery-review.md
+- governance-template/base/public-surface-review.md
+- governance-template/base/truth-conflict-resolution.md
+- helper/action-metrics.helper.ts
+- helper/attendance-materialization.helper.ts
+- helper/attendance-metrics-common.helper.ts
+- helper/attendance-metrics-detailed.helper.ts
+- helper/attendance-metrics.helper.ts
+- helper/attendance-obligation-metrics.helper.ts
+- helper/attendance-obligation.helper.ts
+- helper/attendance-summary.helper.ts
+- helper/attendance.helper.ts
+- helper/auth-cookie.helper.ts
+- helper/bir-1601c-metrics.helper.ts
+- helper/bir-2316-pdf.helper.ts
+- helper/bir-2316-report.helper.ts
+- helper/bir-2316.generator.ts
+- helper/bir-2316.types.ts
+- helper/bir-part4.helper.ts
+- helper/boarding-documents.helper.ts
+- helper/boarding.helper.ts
+- helper/bulk-password.helper.ts
+- helper/cloudinary.helper.ts
+- helper/config-code.helper.ts
+- helper/dataGrouping.ts
+- helper/day-context.helper.ts
+- helper/default-leave-balances.helper.ts
+- helper/department-schedule.helper.ts
+- helper/document-field-validation.helper.ts
+- helper/document-review.helper.ts
+- helper/eligibility.helper.ts
+- helper/email.helper.ts
+- helper/employee-action-block.helper.ts
+- helper/employee-benefit-program.helper.ts
+- helper/employee-credentials-email.helper.ts
+- helper/employee-date-validation.helper.ts
+- helper/employee-document-compliance.helper.ts
+- helper/employee-document-priority.helper.ts
+- helper/employee-id-code.helper.ts
+- helper/employee-import.helper.ts
+- helper/employee-post-actions.helper.ts
+- helper/employee-schedule.helper.ts
+- helper/employee-to-bir2316.ts
+- helper/employee.helper.ts
+- helper/error-handler.ts
+- helper/error-helper.ts
+- helper/generate-document.helper.ts
+- helper/generate-schedule-code.ts
+- helper/get-reviewer-departments.helper.ts
+- helper/id-validation.helper.ts
+- helper/leave-balance-metrics.helper.ts
+- helper/leave-policy.helper.ts
+- helper/leave-session.helper.ts
+- helper/logger.helper.ts
+- helper/metrics.helper.ts
+- helper/notification-dispatch.helper.ts
+- helper/overtime-metrics.helper.ts
+- helper/pan-post-actions.helper.ts
+- helper/payroll-calculator.helper.ts
+- helper/payroll-period-code.helper.ts
+- helper/payroll-period.helper.ts
+- helper/payroll-with-attendance.helper.ts
+- helper/payslip-pdf.helper.ts
+- helper/perfect-attendance-metrics.helper.ts
+- helper/prisma-datasource.helper.ts
+- helper/provisioning-state.helper.ts
+- helper/query-builder.helper.ts
+- helper/rate-calculator.helper.ts
+- helper/recruitment-runtime.helper.ts
+- helper/request-runtime.helper.ts
+- helper/request-transaction.helper.ts
+- helper/request-type-post-action.helper.ts
+- helper/schedule-work-metrics.helper.ts
+- helper/schedule.helper.ts
+- helper/seed-auth.helper.ts
+- helper/success-handler.helper.ts
+- helper/tardiness-metrics.helper.ts
+- helper/tax-calculator.helper.ts
+- helper/tax-calculator.ts
+- helper/telemetry.ts
+- helper/timekeeping.helper.ts
+- helper/timesheet-line-version.helper.ts
+- helper/timesheet.helper.ts
+- helper/transformObject.ts
+- helper/validation-helper.ts
+- helper/workflow-config.helper.ts
+- helper/workforce-metrics.helper.ts
+- helper/workforce-recruitment.helper.ts
+- index.ts
+- infrastructure/onprem/.terraform.lock.hcl
+- infrastructure/onprem/README.md
+- infrastructure/onprem/main.tf
+- infrastructure/onprem/observability/.env.example
+- infrastructure/onprem/observability/README.md
+- infrastructure/onprem/observability/alertmanager/alertmanager.yml
+- infrastructure/onprem/observability/backup/.env.example
+- infrastructure/onprem/observability/backup/backup.sh
+- infrastructure/onprem/observability/backup/loop.sh
+- infrastructure/onprem/observability/backup/restore.sh
+- infrastructure/onprem/observability/blackbox/blackbox.yml
+- infrastructure/onprem/observability/docker-compose.yml
+- infrastructure/onprem/observability/grafana/provisioning/dashboards/dashboards.yml
+- infrastructure/onprem/observability/grafana/provisioning/dashboards/hris-container-logs.json
+- infrastructure/onprem/observability/grafana/provisioning/dashboards/hris-observability-overview.json
+- infrastructure/onprem/observability/grafana/provisioning/datasources/datasources.yml
+- infrastructure/onprem/observability/loki/loki-config.yml
+- infrastructure/onprem/observability/prometheus/alerts.yml
+- infrastructure/onprem/observability/prometheus/prometheus.yml
+- infrastructure/onprem/observability/promtail/promtail-config.yml
+- infrastructure/onprem/observability/rclone/rclone.conf.example
+- infrastructure/onprem/outputs.tf
+- infrastructure/onprem/terraform.tfvars
+- infrastructure/onprem/terraform.tfvars.example
+- infrastructure/onprem/variables.tf
+- infrastructure/onprem/versions.tf
+- lib/hikvision-client.ts
+- logs/error.log
+- logs/exception.log
+- logs/info.log
+- logs/mongo-postgres-backfill-checkpoint.json
+- logs/rejection.log
+- middleware/cache.ts
+- middleware/observability.ts
+- middleware/rateLimiter.ts
+- middleware/requestTimeout.ts
+- middleware/security.ts
+- middleware/tenant.ts
+- middleware/tenantEnforce.ts
+- middleware/upload.ts
+- middleware/verifyRole.ts
+- middleware/verifyToken.ts
+- nginx.conf
+- package-lock.json
+- package.json
+- postman/benefit_type_creation.json
+- postman/exit-clearance-flow.postman_collection.json
+- prisma/schema-postgres/activityLogging.prisma
+- prisma/schema-postgres/agency.prisma
+- prisma/schema-postgres/applicant.prisma
+- prisma/schema-postgres/attendance.prisma
+- prisma/schema-postgres/attendanceObligation.prisma
+- prisma/schema-postgres/auditLogging.prisma
+- prisma/schema-postgres/benefittype.prisma
+- prisma/schema-postgres/boardingProcess.prisma
+- prisma/schema-postgres/boardingTemplate.prisma
+- prisma/schema-postgres/bootstrap.sql
+- prisma/schema-postgres/calculator.prisma
+- prisma/schema-postgres/calendar-item.prisma
+- prisma/schema-postgres/checklist-item.prisma
+- prisma/schema-postgres/department.prisma
+- prisma/schema-postgres/departmentScheduleTemplate.prisma
+- prisma/schema-postgres/device.prisma
+- prisma/schema-postgres/document.prisma
+- prisma/schema-postgres/documentFolder.prisma
+- prisma/schema-postgres/documentType.prisma
+- prisma/schema-postgres/employee.prisma
+- prisma/schema-postgres/employeeScheduleHistory.prisma
+- prisma/schema-postgres/employeebenefit.prisma
+- prisma/schema-postgres/employeeloan.prisma
+- prisma/schema-postgres/employeepayroll.prisma
+- prisma/schema-postgres/guide.prisma
+- prisma/schema-postgres/job.prisma
+- prisma/schema-postgres/leavePolicyConfig.prisma
+- prisma/schema-postgres/level.prisma
+- prisma/schema-postgres/loantype.prisma
+- prisma/schema-postgres/note.prisma
+- prisma/schema-postgres/notification.prisma
+- prisma/schema-postgres/organization.prisma
+- prisma/schema-postgres/payrollCycleConfig.prisma
+- prisma/schema-postgres/payrollperiod.prisma
+- prisma/schema-postgres/person.prisma
+- prisma/schema-postgres/position.prisma
+- prisma/schema-postgres/request.prisma
+- prisma/schema-postgres/requestTransaction.prisma
+- prisma/schema-postgres/rule.prisma
+- prisma/schema-postgres/schedule.prisma
+- prisma/schema-postgres/scheduleOverride.prisma
+- prisma/schema-postgres/scheduleTemplate.prisma
+- prisma/schema-postgres/scheduleTypes.prisma
+- prisma/schema-postgres/schema.combined.prisma
+- prisma/schema-postgres/schema.prisma
+- prisma/schema-postgres/shiftType.prisma
+- prisma/schema-postgres/soalineitem.prisma
+- prisma/schema-postgres/soaremittance.prisma
+- prisma/schema-postgres/statementofaccount.prisma
+- prisma/schema-postgres/statusIncident.prisma
+- prisma/schema-postgres/statusState.prisma
+- prisma/schema-postgres/template.prisma
+- prisma/schema-postgres/templateItem.prisma
+- prisma/schema-postgres/termination.prisma
+- prisma/schema-postgres/timesheet.prisma
+- prisma/schema-postgres/timesheetline.prisma
+- prisma/schema-postgres/user.prisma
+- prisma/schema-postgres/workflowEngine.prisma
+- prisma/schema-postgres/workforceRecruitmentSetting.prisma
+- prisma/schema/activityLogging.prisma
+- prisma/schema/agency.prisma
+- prisma/schema/applicant.prisma
+- prisma/schema/attendance.prisma
+- prisma/schema/attendanceObligation.prisma
+- prisma/schema/auditLogging.prisma
+- prisma/schema/benefittype.prisma
+- prisma/schema/boardingProcess.prisma
+- prisma/schema/boardingTemplate.prisma
+- prisma/schema/calculator.prisma
+- prisma/schema/calendar-item.prisma
+- prisma/schema/checklist-item.prisma
+- prisma/schema/department.prisma
+- prisma/schema/departmentScheduleTemplate.prisma
+- prisma/schema/device.prisma
+- prisma/schema/document.prisma
+- prisma/schema/documentFolder.prisma
+- prisma/schema/documentType.prisma
+- prisma/schema/employee.prisma
+- prisma/schema/employeeScheduleHistory.prisma
+- prisma/schema/employeebenefit.prisma
+- prisma/schema/employeeloan.prisma
+- prisma/schema/employeepayroll.prisma
+- prisma/schema/guide.prisma
+- prisma/schema/job.prisma
+- prisma/schema/leavePolicyConfig.prisma
+- prisma/schema/level.prisma
+- prisma/schema/loantype.prisma
+- prisma/schema/note.prisma
+- prisma/schema/notification.prisma
+- prisma/schema/organization.prisma
+- prisma/schema/payrollCycleConfig.prisma
+- prisma/schema/payrollperiod.prisma
+- prisma/schema/person.prisma
+- prisma/schema/position.prisma
+- prisma/schema/request.prisma
+- prisma/schema/requestTransaction.prisma
+- prisma/schema/rule.prisma
+- prisma/schema/schedule.prisma
+- prisma/schema/scheduleOverride.prisma
+- prisma/schema/scheduleTemplate.prisma
+- prisma/schema/scheduleTypes.prisma
+- prisma/schema/schema.prisma
+- prisma/schema/shiftType.prisma
+- prisma/schema/soalineitem.prisma
+- prisma/schema/soaremittance.prisma
+- prisma/schema/statementofaccount.prisma
+- prisma/schema/statusIncident.prisma
+- prisma/schema/statusState.prisma
+- prisma/schema/template.prisma
+- prisma/schema/templateItem.prisma
+- prisma/schema/termination.prisma
+- prisma/schema/timesheet.prisma
+- prisma/schema/timesheetline.prisma
+- prisma/schema/user.prisma
+- prisma/schema/workflowEngine.prisma
+- prisma/schema/workforceRecruitmentSetting.prisma
+- prisma/seed-pan.ts
+- prisma/seed-priority0.ts
+- prisma/seed.ts
+- prisma/seeds/addReportToId.ts
+- prisma/seeds/benefitTypeSeeder.ts
+- prisma/seeds/bulkBackdatedEmployeeSeeder.ts
+- prisma/seeds/calculatorSeeder.ts
+- prisma/seeds/checkReportToId.ts
+- prisma/seeds/data/employees-6000.csv
+- prisma/seeds/defaultProjectSeeder.ts
+- prisma/seeds/deviceSeeder.ts
+- prisma/seeds/exports/bulkBackdatedEmployeeSeeder-credentials-2026-04-14T06-23-40-416Z.json
+- prisma/seeds/exports/bulkBackdatedEmployeeSeeder-progress.json
+- prisma/seeds/exports/generalEmployeeSeeder-credentials-2026-04-15T05-15-06-554Z.json
+- prisma/seeds/exports/generalEmployeeSeeder-credentials-2026-04-15T07-08-07-362Z.json
+- prisma/seeds/exports/generalEmployeeSeeder-credentials-2026-04-16T05-13-28-832Z.json
+- prisma/seeds/exports/generalEmployeeSeeder-credentials-2026-04-16T05-32-08-342Z.json
+- prisma/seeds/exports/generalEmployeeSeeder-credentials-2026-04-16T06-28-45-842Z.json
+- prisma/seeds/exports/generalEmployeeSeeder-credentials-2026-04-17T02-07-51-275Z.json
+- prisma/seeds/exports/generalEmployeeSeeder-credentials-2026-04-17T02-59-07-021Z.json
+- prisma/seeds/generalEmployeeSeeder.shared.ts
+- prisma/seeds/generalEmployeeSeeder.ts
+- prisma/seeds/holidaySeeder.ts
+- prisma/seeds/jobSeed.ts
+- prisma/seeds/payrollPeriodSeeder.ts
+- prisma/seeds/requestWorkflowCatalog.ts
+- prisma/seeds/resetDemoRequests.ts
+- prisma/seeds/seedAuthModeAdapter.ts
+- prisma/seeds/seedOrganizationResolver.ts
+- prisma/seeds/soaSeeder.ts
+- prisma/seeds/workflowInstanceTemplateSeeder.ts
+- reports/README.md
+- reports/archive/wwg-doctor-report.md
+- reports/archive/wwg-upgrade-plan.md
+- reports/archive/wwg-upgrade-report.md
+- scripts/README-TIMESHEETS.md
+- scripts/api-list.ts
+- scripts/apply-indexes.ts
+- scripts/backfill-attendance-obligations.ts
+- scripts/backfill-employee-documents.ts
+- scripts/calculate-single-attendance.ts
+- scripts/check-attendance-status.ts
+- scripts/check-workflows.ts
+- scripts/cleanup-emitted-js.cjs
+- scripts/delete-employee-with-relations.ts
+- scripts/deploy/onprem-auto-deploy.sh
+- scripts/deploy/remote-ssh-deploy.ps1
+- scripts/dry-run-attendance-obligations.ts
+- scripts/employee-compliance-metrics.ts
+- scripts/export-openapi.ts
+- scripts/generate-bir-2316.ts
+- scripts/generate-employee-csv.ts
+- scripts/generate-openapi.ts
+- scripts/generate-timesheets.ts
+- scripts/import-migration-csv.ts
+- scripts/materialize-computed-attendance.ts
+- scripts/migrate-attendance-schedule.ts
+- scripts/migrate-attendance-status-and-flags.ts
+- scripts/migrate-attendance-undertime-status.ts
+- scripts/migrate-document-dates.ts
+- scripts/migrate-payroll-cycle-rules.ts
+- scripts/migrate-timesheet-codes.ts
+- scripts/migration/mongo-postgres-parity.ts
+- scripts/migration/mongo-to-postgres-backfill.ts
+- scripts/profile-attendance-metrics.ts
+- scripts/qa-migration-post-actions.ts
+- scripts/recalculate-attendance-metrics.ts
+- scripts/seed-eligibility.ts
+- scripts/sync-github-deploy-secrets.ts
+- scripts/test-absence-calculation.ts
+- scripts/test-assignee-resolution.ts
+- scripts/test-attendance-all-metrics.ts
+- scripts/test-attendance-clock-in.ts
+- scripts/test-attendance-debug.ts
+- scripts/test-attendance-detailed.ts
+- scripts/test-attendance-metrics-reports.ts
+- scripts/test-attendance-metrics.ts
+- scripts/test-attendance-summary.ts
+- scripts/test-bir-2316.ts
+- scripts/test-bir-part4.ts
+- scripts/test-bulk-adjust-endpoint.ts
+- scripts/test-bulk-adjust-function.ts
+- scripts/test-doc-requests.ts
+- scripts/test-employee-import.ts
+- scripts/test-notification-debug.ts
+- scripts/test-org-chart.ts
+- scripts/test-payroll-attendance.ts
+- scripts/test-payroll-calculation.ts
+- scripts/test-tax-calculator.ts
+- scripts/test-timekeeping.ts
+- scripts/test-workforce.ts
+- scripts/update-hikvision-metadata.ts
+- set-heroku-env.bat
+- test-artifacts/qa-migration-post-actions-1772591080785-668fdd.json
+- test-artifacts/qa-migration-post-actions-1772593541792-dc7c00.json
+- test-artifacts/qa-migration-post-actions-1772593794123-f6a967.json
+- test-artifacts/qa-migration-post-actions-1772593900632-7b02d5.json
+- test-artifacts/strict-smoke.csv
+- tests/attendance-obligation.helper.spec.ts
+- tests/auditLogger.spec.ts
+- tests/bulk-password.helper.spec.ts
+- tests/document-field-validation.helper.spec.ts
+- tests/employee-action-block.helper.spec.ts
+- tests/employee-helper-credentials.spec.ts
+- tests/leave-session.helper.spec.ts
+- tests/prisma-datasource.helper.spec.ts
+- tests/query-builder-search-fields.spec.ts
+- tests/request.zod.spec.ts
+- tests/role-derivation.spec.ts
+- tests/security.middleware.spec.ts
+- tests/service-name-validation.spec.ts
+- tests/timekeeping.helper.spec.ts
+- tests/timesheet-line-version.helper.spec.ts
+- tests/timesheet-submit-eligibility.spec.ts
+- tests/workflow-config.helper.spec.ts
+- tests/wwg-regression-coverage.spec.ts
+- tests_legacy/README.md
+- tests_legacy/WorkflowInstance.controller.spec.ts
+- tests_legacy/aduittrail.controller.spec.ts
+- tests_legacy/audittrail.controller.spec.ts
+- tests_legacy/calendar.controller.spec.ts
+- tests_legacy/calendarEvent.controller.spec.ts
+- tests_legacy/calendarItem.controller.spec.ts
+- tests_legacy/checklistTemplate.controller.spec.ts
+- tests_legacy/compensationhistory.controller.spec.ts
+- tests_legacy/controllers/applicant.controller.spec.ts
+- tests_legacy/controllers/attendance.controller.spec.ts
+- tests_legacy/controllers/auth.controller.spec.ts
+- tests_legacy/controllers/benefit.controller.spec.ts
+- tests_legacy/controllers/benefitType.controller.spec.ts
+- tests_legacy/controllers/boardingProcess.controller.spec.ts
+- tests_legacy/controllers/boardingTemplate.controller.spec.ts
+- tests_legacy/controllers/calculator.controller.spec.ts
+- tests_legacy/controllers/celebrations.controller.spec.ts
+- tests_legacy/controllers/checklistItem.controller.spec.ts
+- tests_legacy/controllers/dashboard.controller.spec.ts
+- tests_legacy/controllers/department.controller.spec.ts
+- tests_legacy/controllers/device.controller.spec.ts
+- tests_legacy/controllers/document.controller.spec.ts
+- tests_legacy/controllers/employee.controller.spec.ts
+- tests_legacy/controllers/employeeLoan.controller.spec.ts
+- tests_legacy/controllers/employeebenefit.controller.spec.ts
+- tests_legacy/controllers/employeepayroll.controller.spec.ts
+- tests_legacy/controllers/guide.controller.spec.ts
+- tests_legacy/controllers/job.controller.spec.ts
+- tests_legacy/controllers/level.controller.spec.ts
+- tests_legacy/controllers/loanType.controller.spec.ts
+- tests_legacy/controllers/note.controller.spec.ts
+- tests_legacy/controllers/notification.controller.spec.ts
+- tests_legacy/controllers/payrollperiod.controller.spec.ts
+- tests_legacy/controllers/person.controller.spec.ts
+- tests_legacy/controllers/position.controller.spec.ts
+- tests_legacy/controllers/request.controller.spec.ts
+- tests_legacy/controllers/requestTransaction.controller.spec.ts
+- tests_legacy/controllers/rule.controller.spec.ts
+- tests_legacy/controllers/scheduleOverride.controller.spec.ts
+- tests_legacy/controllers/shiftType.controller.spec.ts
+- tests_legacy/controllers/soalineitem.controller.spec.ts
+- tests_legacy/controllers/soaremittance.controller.spec.ts
+- tests_legacy/controllers/statementofaccount.controller.spec.ts
+- tests_legacy/controllers/template.controller.spec.ts
+- tests_legacy/controllers/timesheetline.controller.spec.ts
+- tests_legacy/controllers/workflowEngine.controller.spec.ts
+- tests_legacy/disciplinaryaction.controller.spec.ts
+- tests_legacy/exitInterview.controller.spec.ts
+- tests_legacy/flaky/attendance-obligation.helper.archived.ts
+- tests_legacy/flaky/employee-document-priority.helper.spec.ts
+- tests_legacy/flaky/payslip-pdf.helper.spec.ts
+- tests_legacy/flaky/scheduleOverride.upsert-create.spec.ts
+- tests_legacy/flaky/verifyToken.middleware.spec.ts
+- tests_legacy/holiday.controller.spec.ts
+- tests_legacy/leaveapplication.controller.spec.ts
+- tests_legacy/leavetype.controller.spec.ts
+- tests_legacy/offBoardingChecklist.controller.spec.ts
+- tests_legacy/payrollrecord.controller.spec.ts
+- tests_legacy/performance.controller.spec.ts
+- tests_legacy/performancereview.controller.spec.ts
+- tests_legacy/requestReviewer.controller.spec.ts
+- tests_legacy/requestStepExecution.controller.spec.ts
+- tests_legacy/requestWorkflow.controller.spec.ts
+- tests_legacy/resignation.controller.spec.ts
+- tests_legacy/role.controller.spec.ts
+- tests_legacy/routers/systemProvisioning.router.spec.ts
+- tests_legacy/scheduleTemplate.controller.spec.ts
+- tests_legacy/templateItem.controller.spec.ts
+- tests_legacy/workschedule.controller.spec.ts
+- tests_legacy/yearlyschedule.controller.spec.ts
+- trash-bin/check-attendance.js
+- trash-bin/check-hr-user.ts
+- trash-bin/debug-date-string.ts
+- trash-bin/debug-eligibility.ts
+- trash-bin/debug-generate-document.ts
+- trash-bin/find-admin.ts
+- trash-bin/replace-import-function.ps1
+- trash-bin/test-attendance-debug.js
+- trash-bin/test-document-workflow.ts
+- trash-bin/test-metrics-debug.js
+- trash-bin/test-validation.ts
+- trash-bin/test_output.txt
+- tsconfig.json
+- tsconfig.lib.json
+- type/email.type.ts
+- types/digest-fetch.d.ts
+- utils/README.md
+- utils/activityLogger.ts
+- utils/auditLogger.ts
+- utils/email.validator.ts
+- utils/formDataHelper.ts
+- utils/redisExample.ts
+- utils/role-derivation.ts
+- utils/tenantContext.ts
+- webpack.config.js
+- wiki-template/base/08-operations/monitoring.md
+- wiki-template/base/09-agent-context/canonical-context-policy.md
+- wiki-template/base/12-maintenance/context-maintenance-matrix.md
+- workspace-template/base/context/context-maintenance-matrix.md
+- zod/WorkflowInstance.zod.ts
+- zod/activityLogging.zod.ts
+- zod/agency.zod.ts
+- zod/applicant.zod.ts
+- zod/applicantAttachment.zod.ts
+- zod/attendance.zod.ts
+- zod/auditLogging.zod.ts
+- zod/audittrail.zod.ts
+- zod/benefittype.zod.ts
+- zod/boardingProcess.zod.ts
+- zod/boardingTemplate.zod.ts
+- zod/calculator.zod.ts
+- zod/calendarItem.zod.ts
+- zod/celebrations.zod.ts
+- zod/checklist-item.ts
+- zod/department.zod.ts
+- zod/device.zod.ts
+- zod/document.zod.ts
+- zod/documentFolder.zod.ts
+- zod/documentType.zod.ts
+- zod/employee.zod.ts
+- zod/employeeSchedule.zod.ts
+- zod/employeebenefit.zod.ts
+- zod/employeeloan.zod.ts
+- zod/employeepayroll.zod.ts
+- zod/exitInterview.zod.ts
+- zod/guide.zod.ts
+- zod/job.zod.ts
+- zod/leave-policy.zod.ts
+- zod/level.zod.ts
+- zod/loantype.zod.ts
+- zod/metrics.zod.ts
+- zod/migration.zod.ts
+- zod/note.zod.ts
+- zod/notification.zod.ts
+- zod/payrollperiod.zod.ts
+- zod/person.zod.ts
+- zod/position.zod.ts
+- zod/recruitmentActivity.zod.ts
+- zod/request.zod.ts
+- zod/requestTransaction.zod.ts
+- zod/rule.zod.ts
+- zod/schedule.zod.ts
+- zod/scheduleOverride.zod.ts
+- zod/scheduleTemplate.zod.ts
+- zod/scheduling.zod.ts
+- zod/shiftType.zod.ts
+- zod/soalineitem.zod.ts
+- zod/soaremittance.zod.ts
+- zod/statementofaccount.zod.ts
+- zod/template.zod.ts
+- zod/templateItem.zod.ts
+- zod/termination.zod.ts
+- zod/timesheet.zod.ts
+- zod/timesheetconfig.zod.ts
+- zod/timesheetline.zod.ts
+- zod/user.zod.ts
+- zod/workflowEngine.zod.ts
+- zod/workflowstepexecution.zod.ts
+- zod/workforceRecruitmentSetting.zod.ts
+
+## Files That Would Be Blocked
+
+- .env
+
+## Risks / Warnings
+
+- Obvious secret files: Blocked files exist or are staged and will not be published.
+
+## Next Steps
+
+- Resolve failed readiness or safety checks before publishing.
+
+## WWG Truth Synchronization
+
+- Task mode: maintenance
+- New truth detected: NO
+- Wiki updated: NO / N/A
+- Workspace updated: NO / N/A
+- Governance review completed: YES
+- Drift status: NONE / LOW / MEDIUM / HIGH
+- Canonical files changed:
+  - None by this dry-run report.
+- Implementation discoveries synced:
+  - None.
+- Remaining stale context:
+  - Review risks/warnings above.

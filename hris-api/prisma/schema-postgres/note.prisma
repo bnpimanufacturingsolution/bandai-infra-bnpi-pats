@@ -1,0 +1,18 @@
+model Note {
+  id String @id @default(cuid())
+
+  organizationId String
+
+  processId String
+  process   BoardingProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  content    String
+  authorId   String
+  authorName String
+
+  metadata Json? // Flexible field for attachments, tags, etc.
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

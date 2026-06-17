@@ -1,0 +1,9 @@
+		// Only update fields that exist in the schema
+		const updateData: any = {
+			status: isApprove ? "APPROVED" : "REJECTED",
+		};
+		
+		// Add notes/comment if provided
+		if (validation.data.comment) {
+			updateData.notes = validation.data.comment;
+		}

@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "kind": "wwg.workspace.proposedExecutableTests",
+  "generatedAt": "2026-05-16T12:58:46.768Z",
+  "sourceGovernance": {
+    "manifestPath": ".wwg/governance/regression-manifest.json",
+    "gapsPath": ".wwg/governance/regression-gaps.json",
+    "traceabilityPath": ".wwg/governance/rule-traceability.json",
+    "candidateReviewPath": ".wwg/workspace/testing/regression-candidate-review.json",
+    "manualEvidencePath": ".wwg/workspace/testing/manual-verification-evidence.json"
+  },
+  "selection": {
+    "allSafe": false
+  },
+  "summary": {
+    "total": 3,
+    "eligibleToApply": 0,
+    "proposalOnly": 0,
+    "safeToDraft": 0,
+    "unsafeNeedsHuman": 3,
+    "blocked": 0,
+    "writtenTestFiles": 0
+  },
+  "proposals": [
+    {
+      "proposalId": "proposal-core-feature-workflow-regression",
+      "relatedCandidateId": "candidate-core-feature-workflow-regression",
+      "relatedGapId": "gap-uncovered-behavior-core-feature-workflow",
+      "relatedTraceabilityId": "trace-core-feature-workflow",
+      "title": "Core feature workflow regression candidate executable test draft",
+      "testType": "unit",
+      "targetFramework": {
+        "name": "mocha",
+        "confidence": "high",
+        "evidence": [
+          "package.json: mocha"
+        ]
+      },
+      "proposedFilePath": "tests/candidate-core-feature-workflow-regression-unit.spec.ts",
+      "proposedTestName": "Confirm core feature workflow remains covered as the project changes. regression proposal",
+      "sourceEvidence": [
+        "Detected tests do not obviously map to this behavior by path/name.",
+        "README.md: README headings or route files"
+      ],
+      "behaviorUnderTest": "Confirm core feature workflow remains covered as the project changes.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Confirm core feature workflow remains covered as the project changes. produces the expected local result.",
+        "The test uses local mocks/stubs instead of production integrations."
+      ],
+      "mockStubNeeds": [
+        "Use existing project test helpers when present; otherwise keep the draft local and side-effect free."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "high",
+      "confidence": "medium",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    },
+    {
+      "proposalId": "proposal-main-entry-point-behavior-regression",
+      "relatedCandidateId": "candidate-main-entry-point-behavior-regression",
+      "relatedGapId": "gap-uncovered-behavior-main-entry-point-behavior",
+      "relatedTraceabilityId": "trace-main-entry-point-behavior",
+      "title": "Main entry point behavior regression candidate executable test draft",
+      "testType": "unit",
+      "targetFramework": {
+        "name": "mocha",
+        "confidence": "high",
+        "evidence": [
+          "package.json: mocha"
+        ]
+      },
+      "proposedFilePath": "tests/candidate-main-entry-point-behavior-regression-unit.spec.ts",
+      "proposedTestName": "Confirm main entry point behavior remains covered as the project changes. regression proposal",
+      "sourceEvidence": [
+        "Detected tests do not obviously map to this behavior by path/name.",
+        "dist/lib-entry.js: entry point candidate",
+        "app/Rule/index.ts: entry point candidate",
+        "app/activityLogging/index.ts: entry point candidate",
+        "app/agency/index.ts: entry point candidate",
+        "app/applicant/index.ts: entry point candidate",
+        "app/attendance/index.ts: entry point candidate",
+        "app/auditLogging/index.ts: entry point candidate",
+        "app/auth/index.ts: entry point candidate",
+        "app/benefitType/index.ts: entry point candidate",
+        "app/boardingProcess/index.ts: entry point candidate",
+        "app/boardingTemplate/index.ts: entry point candidate"
+      ],
+      "behaviorUnderTest": "Confirm main entry point behavior remains covered as the project changes.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Confirm main entry point behavior remains covered as the project changes. produces the expected local result.",
+        "The test uses local mocks/stubs instead of production integrations."
+      ],
+      "mockStubNeeds": [
+        "Use existing project test helpers when present; otherwise keep the draft local and side-effect free."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "high",
+      "confidence": "high",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    },
+    {
+      "proposalId": "proposal-deployment-runtime-readiness-regression",
+      "relatedCandidateId": "candidate-deployment-runtime-readiness-regression",
+      "relatedGapId": "gap-uncovered-behavior-deployment-runtime-readiness",
+      "relatedTraceabilityId": "trace-deployment-runtime-readiness",
+      "title": "Deployment/runtime readiness regression candidate executable test draft",
+      "testType": "unit",
+      "targetFramework": {
+        "name": "mocha",
+        "confidence": "high",
+        "evidence": [
+          "package.json: mocha"
+        ]
+      },
+      "proposedFilePath": "tests/candidate-deployment-runtime-readiness-regression-unit.spec.ts",
+      "proposedTestName": "Confirm deployment/runtime readiness remains covered as the project changes. regression proposal",
+      "sourceEvidence": [
+        "Detected tests do not obviously map to this behavior by path/name.",
+        ".github/workflows/deploy-local-tailscale.yml: deployment config",
+        ".github/workflows/deploy.yml: deployment config",
+        ".github/workflows/infra-validate.yml: deployment config",
+        ".github/workflows/rollback.yml: deployment config",
+        "Dockerfile: deployment config",
+        "docker-compose.yml: deployment config",
+        "exports/local-infra/docker-compose.yml: deployment config",
+        "infrastructure/onprem/observability/docker-compose.yml: deployment config"
+      ],
+      "behaviorUnderTest": "Confirm deployment/runtime readiness remains covered as the project changes.",
+      "preconditions": [
+        "Review the related gap and traceability record before implementation.",
+        "Use local test fixtures or mocks only.",
+        "Do not call production services or secrets. Use no destructive operations."
+      ],
+      "testSteps": [
+        "Arrange the smallest safe local representation of the behavior.",
+        "Act through an existing exported unit, CLI helper, or documented contract.",
+        "Assert the expected success or failure-path behavior."
+      ],
+      "expectedAssertions": [
+        "Confirm deployment/runtime readiness remains covered as the project changes. produces the expected local result.",
+        "The test uses local mocks/stubs instead of production integrations."
+      ],
+      "mockStubNeeds": [
+        "Use existing project test helpers when present; otherwise keep the draft local and side-effect free."
+      ],
+      "fixtureDataNeeds": [
+        "Add minimal local fixture data only when the existing test harness already uses fixtures."
+      ],
+      "riskLevel": "medium",
+      "confidence": "high",
+      "safetyStatus": "unsafe-needs-human",
+      "applyEligibility": "not-eligible",
+      "reason": "Human review is needed before a framework-specific executable draft can be safely created.",
+      "nextAction": "Have a human or implementation agent wire the outline to the existing test harness."
+    }
+  ],
+  "safetyNotes": [
+    "Proposed executable tests are drafts, not coverage.",
+    "Draft content inside `.wwg/workspace/testing/` is not executable evidence.",
+    "WWG writes source test files only when `--write-source-scaffolds` is explicit with `--apply` and safety checks pass.",
+    "This flow never modifies application source files and never overwrites existing tests.",
+    "Non-technical regression candidates should use manual/process checklist evidence."
+  ]
+}

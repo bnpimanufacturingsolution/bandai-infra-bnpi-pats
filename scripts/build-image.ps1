@@ -275,9 +275,8 @@ vm_path           = "$($VmPath -replace '\\', '\\')"
 memory_mb         = $MemoryMb
 cpu_count         = $CpuCount
 ssh_port          = 2222
-dev_port          = 3001
-uat_port          = 3002
-prod_port         = 3000
+api_port          = 3001
+app_port          = 3000
 guest_ip_hint     = ""
 "@ | Set-Content -LiteralPath $TerraformVarsPath -Encoding ASCII
   Write-Host "Terraform vars: $TerraformVarsPath"

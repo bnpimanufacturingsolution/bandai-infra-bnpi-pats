@@ -1,0 +1,2 @@
+defaultPayFrequency,payDateOffsetDays,businessDayRule,includeHolidaysInBusinessDayCheck,cycleRules
+SEMI_MONTHLY,5,NEXT_BUSINESS_DAY,true,"[{""cutoff"":""1-15"",""payDateOffsetDays"":5},{""cutoff"":""16-30"",""payDateOffsetDays"":5}]"

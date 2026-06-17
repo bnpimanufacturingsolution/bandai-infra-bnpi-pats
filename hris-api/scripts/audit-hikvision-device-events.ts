@@ -1,0 +1,366 @@
+import { PrismaClient } from "../generated/prisma";
+import { hikvisionFetch } from "../lib/hikvision-client";
+import { hikvisionEndpoint } from "../config/hikvision.endpoint";
+import { controller as callbackController } from "../app/hikvision/controller/callback.controller";
+import {
+	buildHikvisionDeviceEventDedupeKey,
+	extractHikvisionEventData,
+	getHikvisionClockSkewSecondsFromSystemTime,
+	getHikvisionObservedClockSkewSeconds,
+	normalizeHikvisionAcsEventListTimes,
+	normalizeHikvisionDeviceEventSource,
+	parseHikvisionBodyPayload,
+	parseHikvisionEventTime,
+} from "../helper/hikvision-event-contract.helper";
+
+const prisma = new PrismaClient();
+
+const parseArgs = () => {
+	const args = process.argv.slice(2);
+	const options: Record<string, string | boolean> = {};
+	for (const arg of args) {
+		if (arg.startsWith("--") && arg.includes("=")) {
+			const [key, ...rest] = arg.slice(2).split("=");
+			options[key] = rest.join("=");
+		} else if (arg.startsWith("--")) {
+			options[arg.slice(2)] = true;
+		}
+	}
+	for (const [key, value] of Object.entries(process.env)) {
+		if (!key.startsWith("npm_config_") || value === undefined) continue;
+		const normalizedKey = key
+			.slice("npm_config_".length)
+			.replace(/_/g, "-")
+			.replace(/^deviceid$/i, "deviceId");
+		if (options[normalizedKey] === undefined) {
+			options[normalizedKey] = value;
+		}
+	}
+	if (!options.deviceId && process.env.DEVICE_ID) {
+		options.deviceId = process.env.DEVICE_ID;
+	}
+	return options;
+};
+
+const toManilaDate = (date: Date) =>
+	new Intl.DateTimeFormat("en-CA", {
+		timeZone: "Asia/Manila",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).format(date);
+
+const loadLivePayload = async (options: Record<string, string | boolean>, deviceId: string) => {
+	if (typeof options["live-json"] === "string") {
+		const fs = await import("fs/promises");
+		const raw = await fs.readFile(options["live-json"], "utf8");
+		return JSON.parse(raw);
+	}
+
+	const from = String(
+		options.from ||
+			toManilaDate(new Date(Date.now() - 24 * 60 * 60 * 1000)),
+	);
+	const to = String(options.to || toManilaDate(new Date()));
+	const limit = Math.min(Math.max(Number(options.limit || 100), 1), 200);
+
+	return hikvisionFetch(hikvisionEndpoint.accessControl.acsEvent.list, {
+		method: "POST",
+		prisma,
+		request: { organizationId: options.organizationId || undefined } as any,
+		body: {
+			deviceId,
+			AcsEventCond: {
+				searchID: String(options.searchID || `audit-${Date.now()}`),
+				searchResultPosition: Number(options.position || 0),
+				maxResults: limit,
+				startTime: `${from}T00:00:00+08:00`,
+				endTime: `${to}T23:59:59+08:00`,
+				major: Number(options.major || 0),
+				minor: Number(options.minor || 0),
+				timeReverseOrder: true,
+			},
+		},
+	});
+};
+
+const getAcsEvents = (payload: any) => {
+	const acsEvent = payload?.data?.AcsEvent || payload?.AcsEvent || payload?.AcsEventSearch || {};
+	return Array.isArray(acsEvent.InfoList) ? acsEvent.InfoList : [];
+};
+
+const getSerialNoFromPayload = (payload: any) =>
+	payload?.serialNo ||
+	payload?.AcsEventInfo?.serialNo ||
+	payload?.EventNotificationAlert?.AccessControllerEvent?.serialNo ||
+	payload?.AccessControllerEvent?.serialNo ||
+	null;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const callCallback = async (payload: Record<string, any>) => {
+	const ctrl = callbackController(prisma);
+	let statusCode = 200;
+	let jsonBody: any = null;
+	const req = {
+		body: payload,
+		query: {},
+		get: () => "application/json",
+	} as any;
+	const res = {
+		status(code: number) {
+			statusCode = code;
+			return this;
+		},
+		json(body: any) {
+			jsonBody = body;
+			return this;
+		},
+	} as any;
+
+	await ctrl.handleCallback(req, res, (() => undefined) as any);
+	return { statusCode, body: jsonBody };
+};
+
+const runAudit = async (options: Record<string, string | boolean>) => {
+	const deviceId = String(options.deviceId || "").trim();
+	if (!deviceId) {
+		throw new Error("Missing --deviceId=<id>");
+	}
+
+	const apply = options.apply === true;
+	const device = await prisma.device.findFirst({
+		where: { id: deviceId, isDeleted: false },
+		select: { id: true, organizationId: true, name: true, address: true, port: true, config: true },
+	});
+	if (!device) {
+		throw new Error(`Device not found: ${deviceId}`);
+	}
+
+	if (!options.organizationId) {
+		options.organizationId = device.organizationId;
+	}
+
+	const livePayload = await loadLivePayload(options, deviceId);
+	const rawLiveEvents = getAcsEvents(livePayload);
+	const knownSkewSeconds = Number((device.config as any)?.hikvisionClockSkewSeconds || 0);
+	let deviceClockSkewSeconds = 0;
+	try {
+		const timePayload = await hikvisionFetch(hikvisionEndpoint.system.time, {
+			method: "GET",
+			prisma,
+			deviceId,
+			request: { organizationId: device.organizationId } as any,
+		});
+		deviceClockSkewSeconds = getHikvisionClockSkewSecondsFromSystemTime(timePayload);
+	} catch {
+		deviceClockSkewSeconds = 0;
+	}
+	const observedSkewSeconds = getHikvisionObservedClockSkewSeconds(rawLiveEvents);
+	const skewSeconds = deviceClockSkewSeconds || knownSkewSeconds || observedSkewSeconds;
+	if (skewSeconds > 0 && skewSeconds !== knownSkewSeconds) {
+		await (prisma as any).device.update({
+			where: { id: device.id },
+			data: {
+				config: {
+					...((device.config as any) || {}),
+					hikvisionClockSkewSeconds: skewSeconds,
+					hikvisionClockSkewObservedAt: new Date().toISOString(),
+				},
+			},
+		});
+		(device as any).config = {
+			...((device.config as any) || {}),
+			hikvisionClockSkewSeconds: skewSeconds,
+		};
+	}
+	const liveEvents = normalizeHikvisionAcsEventListTimes(
+		rawLiveEvents,
+		new Date(),
+		skewSeconds,
+	);
+	const normalized = liveEvents.map((item: any) => {
+		const payload = parseHikvisionBodyPayload({ deviceId, AcsEventInfo: item });
+		const event = extractHikvisionEventData(payload);
+		const employeeNo = String(event.employeeNo || "").trim();
+		const eventTime = parseHikvisionEventTime(event.time);
+		const source = normalizeHikvisionDeviceEventSource(event.source);
+		const dedupeKey = buildHikvisionDeviceEventDedupeKey({
+			deviceId,
+			source,
+			eventTime,
+			employeeNo,
+			event,
+		});
+		return { raw: item, payload, event, employeeNo, eventTime, source, dedupeKey };
+	});
+
+	const dedupeKeys = normalized.map((item) => item.dedupeKey);
+	const savedEvents = dedupeKeys.length
+		? await (prisma as any).deviceEvent.findMany({
+				where: {
+					organizationId: device.organizationId,
+					deviceId,
+					dedupeKey: { in: dedupeKeys },
+				},
+				select: {
+					id: true,
+					dedupeKey: true,
+					status: true,
+					employeeNo: true,
+					employeeId: true,
+					attendanceId: true,
+					eventTime: true,
+					payload: true,
+				},
+			})
+		: [];
+	const employeeNos = Array.from(
+		new Set(normalized.map((item) => item.employeeNo).filter(Boolean)),
+	);
+	const serialNos = Array.from(
+		new Set(normalized.map((item) => String(item.event.serialNo || "").trim()).filter(Boolean)),
+	);
+	const eventTimes = normalized.map((item) => item.eventTime.getTime());
+	const candidateStart = eventTimes.length ? new Date(Math.min(...eventTimes) - 24 * 60 * 60 * 1000) : null;
+	const candidateEnd = eventTimes.length ? new Date(Math.max(...eventTimes) + 24 * 60 * 60 * 1000) : null;
+	const serialCandidates =
+		employeeNos.length && serialNos.length && candidateStart && candidateEnd
+			? await (prisma as any).deviceEvent.findMany({
+					where: {
+						organizationId: device.organizationId,
+						deviceId,
+						employeeNo: { in: employeeNos },
+						eventTime: { gte: candidateStart, lte: candidateEnd },
+					},
+					select: {
+						id: true,
+						dedupeKey: true,
+						status: true,
+						employeeNo: true,
+						employeeId: true,
+						attendanceId: true,
+						eventTime: true,
+						payload: true,
+					},
+					orderBy: { receivedAt: "desc" },
+					take: 500,
+				})
+			: [];
+	const savedByKey = new Map(savedEvents.map((event: any) => [event.dedupeKey, event]));
+	const savedBySerial = new Map<string, any>();
+	for (const event of [...serialCandidates, ...savedEvents]) {
+		const serial = String(getSerialNoFromPayload(event.payload) || "").trim();
+		if (event.employeeNo && serial) {
+			savedBySerial.set(`${event.employeeNo}|${serial}`, event);
+		}
+	}
+	for (const item of normalized) {
+		const serial = String(item.event.serialNo || "").trim();
+		const serialMatch = serial ? savedBySerial.get(`${item.employeeNo}|${serial}`) : null;
+		if (serialMatch && !savedByKey.has(item.dedupeKey)) {
+			savedByKey.set(item.dedupeKey, serialMatch);
+		}
+	}
+	const missing = normalized.filter((item) => !savedByKey.has(item.dedupeKey));
+	const needsClockNormalization = normalized.filter((item) => {
+		const serial = String(item.event.serialNo || "").trim();
+		if (!serial || !item.employeeNo) return false;
+		const serialMatch = savedBySerial.get(`${item.employeeNo}|${serial}`);
+		return serialMatch && serialMatch.dedupeKey !== item.dedupeKey;
+	});
+	const missingWithEmployeeNo = missing.filter((item) => item.employeeNo);
+	const missingEmployeeNo = missing.filter((item) => !item.employeeNo);
+
+	const applied: any[] = [];
+	if (apply) {
+		for (const item of [...missingWithEmployeeNo, ...needsClockNormalization]) {
+			applied.push({
+				dedupeKey: item.dedupeKey,
+				employeeNo: item.employeeNo,
+				eventTime: item.eventTime.toISOString(),
+				reason: missingWithEmployeeNo.includes(item) ? "missing" : "clock_normalization",
+				result: await callCallback(item.payload),
+			});
+		}
+	}
+
+	const postApplySavedCount = apply
+		? liveEvents.length - missingEmployeeNo.length
+		: savedByKey.size;
+
+	const report = {
+		mode: apply ? "apply" : "dry-run",
+		checkedAt: new Date().toISOString(),
+		device: {
+			id: device.id,
+			organizationId: device.organizationId,
+			name: device.name,
+			address: device.address,
+			port: device.port,
+			hikvisionClockSkewSeconds: Number(
+				((device as any).config as any)?.hikvisionClockSkewSeconds || 0,
+			),
+		},
+		live: {
+			total: liveEvents.length,
+			withEmployeeNo: normalized.filter((item) => item.employeeNo).length,
+			withoutEmployeeNo: normalized.filter((item) => !item.employeeNo).length,
+		},
+		saved: {
+			matchingBeforeApply: savedByKey.size,
+			matchingAfterApply: postApplySavedCount,
+		},
+		gap: {
+			missing: missing.length,
+			missingWithEmployeeNo: missingWithEmployeeNo.length,
+			missingEmployeeNo: missingEmployeeNo.length,
+			needsClockNormalization: needsClockNormalization.length,
+			sample: missing.slice(0, 10).map((item) => ({
+				dedupeKey: item.dedupeKey,
+				employeeNo: item.employeeNo || null,
+				eventTime: item.eventTime.toISOString(),
+				major: item.event.major ?? null,
+				minor: item.event.minor ?? null,
+				doorNo: item.event.doorNo ?? null,
+				verifyMode: item.event.verifyMode ?? null,
+				serialNo: item.event.serialNo ?? null,
+			})),
+		},
+		applied,
+	};
+
+	return report;
+};
+
+const main = async () => {
+	const options = parseArgs();
+	const watch = options.watch === true;
+	const intervalSeconds = Math.min(Math.max(Number(options.interval || 10), 3), 120);
+	const maxLoops = Math.max(Number(options.loops || 0), 0);
+	const untilClean = options["until-clean"] === true;
+	let loop = 0;
+	let sawLiveEvents = false;
+
+	do {
+		loop += 1;
+		const report = await runAudit(options);
+		sawLiveEvents = sawLiveEvents || report.live.total > 0;
+		console.log(JSON.stringify({ loop, ...report }, null, 2));
+
+		if (!watch) break;
+		if (untilClean && sawLiveEvents && report.gap.missingWithEmployeeNo === 0) break;
+		if (maxLoops > 0 && loop >= maxLoops) break;
+
+		await wait(intervalSeconds * 1000);
+	} while (true);
+};
+
+main()
+	.catch((error) => {
+		console.error(error);
+		process.exitCode = 1;
+	})
+	.finally(async () => {
+		await prisma.$disconnect();
+	});

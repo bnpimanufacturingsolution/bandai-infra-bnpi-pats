@@ -1,0 +1,258 @@
+[
+  {
+    "id": "GET /api/docs/api-list",
+    "method": "GET",
+    "url": "/api/docs/api-list",
+    "summary": "Get API endpoints list",
+    "description": "Get a list of all API endpoints in various formats",
+    "tags": [
+      "Documentation"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [
+      {
+        "name": "format",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "json",
+            "text"
+          ]
+        },
+        "description": "Output format (default json)"
+      },
+      {
+        "name": "tag",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Filter by tag (case-insensitive)"
+      },
+      {
+        "name": "method",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "description": "Filter by HTTP method"
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "API endpoints list retrieved successfully",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "endpoints": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "total": {
+                  "type": "integer"
+                },
+                "filters": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "contentTypes": [
+          "application/json",
+          "text/plain"
+        ]
+      },
+      "400": {
+        "description": "Invalid format or validation error",
+        "contentTypes": []
+      },
+      "404": {
+        "description": "Endpoints file not found",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/docs/swagger",
+    "method": "GET",
+    "url": "/api/docs/swagger",
+    "summary": "Get Swagger documentation",
+    "description": "Get the complete Swagger/OpenAPI specification",
+    "tags": [
+      "Documentation"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Swagger documentation retrieved successfully",
+        "schema": {
+          "type": "object"
+        },
+        "contentTypes": [
+          "application/json"
+        ]
+      },
+      "404": {
+        "description": "Swagger file not found",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/docs/postman",
+    "method": "GET",
+    "url": "/api/docs/postman",
+    "summary": "Get Postman collection",
+    "description": "Get the Postman collection for API testing",
+    "tags": [
+      "Documentation"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [],
+    "responses": {
+      "200": {
+        "description": "Postman collection retrieved successfully",
+        "schema": {
+          "type": "object"
+        },
+        "contentTypes": [
+          "application/json"
+        ]
+      },
+      "404": {
+        "description": "Postman collection not found",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  },
+  {
+    "id": "GET /api/docs/iml",
+    "method": "GET",
+    "url": "/api/docs/iml",
+    "summary": "Generate iml files",
+    "description": "Generate iml files them to docs/generated/endpoints/ directory",
+    "tags": [
+      "Documentation"
+    ],
+    "deprecated": false,
+    "contentTypes": [],
+    "pathParams": [],
+    "queryParams": [
+      {
+        "name": "tag",
+        "schema": {
+          "type": "string"
+        },
+        "description": "Filter by specific tag (e.g., \"template\", \"docs\", \"api\")"
+      },
+      {
+        "name": "includeContent",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true",
+            "false"
+          ],
+          "default": "true"
+        },
+        "description": "Whether to include file contents in response or just file names"
+      },
+      {
+        "name": "format",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "json",
+            "xml"
+          ],
+          "default": "json"
+        },
+        "description": "Output format (json or xml)"
+      }
+    ],
+    "responses": {
+      "200": {
+        "description": "iml files generated successfully",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "tagFiles": {
+                  "type": "object",
+                  "description": "Object containing tag names as keys and iml arrays as values"
+                },
+                "availableTagFiles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Available tag file names (when includeContent=false)"
+                }
+              }
+            }
+          }
+        },
+        "contentTypes": [
+          "application/json",
+          "application/xml"
+        ]
+      },
+      "500": {
+        "description": "Internal server error",
+        "contentTypes": []
+      }
+    },
+    "paginationHints": {
+      "hasPaginationParams": false,
+      "hasSearchParam": false,
+      "hasSortParams": false
+    }
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(heroku config:set:*)",
+      "Bash(mkdir:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
