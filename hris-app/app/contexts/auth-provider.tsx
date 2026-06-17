@@ -13,6 +13,7 @@ const AUTH_TOKEN_STORAGE_ENABLED =
 	String(import.meta.env.VITE_AUTH_TOKEN_STORAGE_ENABLED || "true")
 		.trim()
 		.toLowerCase() !== "disabled";
+const AUTH_TOKEN_STORAGE_KEY = "authToken";
 const E2E_AUTH_BOOTSTRAP_ENABLED =
 	String(import.meta.env.VITE_E2E_AUTH_BOOTSTRAP || "false")
 		.trim()
@@ -171,10 +172,10 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 				};
 			});
 		} catch (error: any) {
-			console.error("Error fetching current user:", error);
 			setUser(null);
 			// Only set error if it's not a 401/403 (unauthorized) which is expected when not logged in
 			if (error.status && error.status !== 401 && error.status !== 403) {
+				console.error("Error fetching current user:", error);
 				setError("Failed to fetch user data. Please try again.");
 			}
 		} finally {
@@ -337,6 +338,14 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 	// Check for existing authentication on mount
 	useEffect(() => {
 		if (E2E_AUTH_BOOTSTRAP_ENABLED && getE2eAuthUser()) return;
+		if (
+			AUTH_TOKEN_STORAGE_ENABLED &&
+			typeof window !== "undefined" &&
+			!window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+		) {
+			setIsLoading(false);
+			return;
+		}
 		getCurrentUser();
 	}, []);
 

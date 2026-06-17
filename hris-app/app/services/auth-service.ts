@@ -103,7 +103,9 @@ class AuthService extends APIService {
 
 			return userData as User;
 		} catch (error: any) {
-			console.error("Error getting current user:", error);
+			if (error?.status !== 401 && error?.status !== 403) {
+				console.error("Error getting current user:", error);
+			}
 			throw error;
 		}
 	}

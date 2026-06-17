@@ -105,3 +105,55 @@ SCREENSHOT NOT CAPTURED:
 reason: this run used elevated CLI validation rather than GUI/browser screenshot tooling.
 replacement proof: elevated installer output, common Start Menu shortcut inspection, doctor output, terraform plan output, repair report, and GitHub Actions run status.
 ```
+
+## VirtualBox GCP Appliance Proof Attempt
+
+Date: 2026-06-17
+
+Run folder:
+
+```text
+.runtime\overnight-virtualbox-gcp\20260617-210518
+```
+
+Result:
+
+```text
+BLOCKED: clean VirtualBox import could not proceed because local C: free space was only 925,638,656 bytes.
+```
+
+Artifact proof:
+
+```text
+PROVEN: GCP image exists: project-truth-node-gcp-1781686573 in project hris-492904.
+PROVEN: exported VirtualBox VDI exists:
+  gs://project-truth-image-export-hris-492904-161377059311/project-truth-node-gcp-1781686573.vdi
+  size: 11,647,910,400 bytes
+```
+
+Host proof:
+
+```text
+PROVEN: Oracle VirtualBox 7.2.8r173730 is installed.
+PROVEN: bridged adapter is available: Hyper-V Virtual Ethernet Adapter #3 at 192.168.100.174.
+```
+
+Clean import proof:
+
+```text
+NOT RUN: the VDI could not be downloaded to C:\ProgramData\ProjectTruth\images because the disk had less than 1 GiB free.
+```
+
+Existing VM note:
+
+```text
+project-truth-hris-local is present and running, but it is not clean proof.
+VirtualBox guest properties reported 192.168.100.79.
+Ping, SSH, and HTTP probes to 192.168.100.79 timed out or were unreachable.
+```
+
+Next exact command after freeing at least 25 GiB on C::
+
+```powershell
+gsutil cp gs://project-truth-image-export-hris-492904-161377059311/project-truth-node-gcp-1781686573.vdi C:\ProgramData\ProjectTruth\images\project-truth-node-gcp-1781686573.vdi
+```
