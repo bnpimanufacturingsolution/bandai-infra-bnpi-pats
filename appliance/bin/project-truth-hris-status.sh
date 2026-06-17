@@ -15,6 +15,7 @@ else
   echo "LAN IP: NOT DETECTED"
   echo "Reason: no active non-loopback IPv4 address found"
   echo "Next check: verify VM adapter is bridged/external and DHCP is enabled"
+  echo "Repair command: project-truth-lan-dhcp"
 fi
 
 echo "Local App URL: http://127.0.0.1:3000"
@@ -26,6 +27,7 @@ docker ps --filter "name=hris-" --format "table {{.Names}}\t{{.Image}}\t{{.Statu
 echo "Postgres:"
 if docker ps --format '{{.Names}}' | grep -qx 'hris-postgres'; then
   docker exec hris-postgres pg_isready -U postgres -d hris
+  echo "Host Postgres bridge: 127.0.0.1:15432 -> hris-postgres:5432/hris"
 else
   echo "hris-postgres is not running"
 fi

@@ -86,6 +86,7 @@ sudo systemctl enable project-truth-firstboot-k3s-cleanup.service
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-start.sh /usr/local/bin/project-truth-hris-start
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-status.sh /usr/local/bin/project-truth-hris-status
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-seed.sh /usr/local/bin/project-truth-hris-seed
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-dhcp.sh /usr/local/bin/project-truth-lan-dhcp
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-hris.service /etc/systemd/system/project-truth-hris.service
 sudo tee /etc/profile.d/project-truth-hris-help.sh >/dev/null <<'HELP'
 #!/usr/bin/env bash
@@ -104,6 +105,7 @@ echo
 echo "Run:"
 echo "  project-truth-hris-status"
 echo "  project-truth-hris-seed"
+echo "  project-truth-lan-dhcp   # repair LAN IP after router/subnet changes"
 echo
 HELP
 sudo chmod 0644 /etc/profile.d/project-truth-hris-help.sh

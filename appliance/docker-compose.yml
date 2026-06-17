@@ -6,7 +6,7 @@ services:
     env_file:
       - ./env/hris-api.env
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - postgresdata:/var/lib/postgresql/data
     healthcheck:
@@ -65,6 +65,7 @@ services:
     environment:
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
+      HRIS_API_ORIGIN: "http://hris-api:3001"
     ports:
       - "3000:3000"
     depends_on:

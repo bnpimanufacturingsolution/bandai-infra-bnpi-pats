@@ -28,6 +28,7 @@ const path = require("path");
 
 const root = path.join(__dirname, "build", "client");
 const port = Number(process.env.PORT || 3000);
+const apiOrigin = process.env.HRIS_API_ORIGIN || "http://hris-api:3001";
 
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -47,6 +48,32 @@ const mime = {
 
 http
   .createServer((req, res) => {
+    if ((req.url || "/").startsWith("/api/")) {
+      const target = new URL(req.url || "/", apiOrigin);
+      const proxyReq = http.request(
+        target,
+        {
+          method: req.method,
+          headers: {
+            ...req.headers,
+            host: target.host,
+          },
+        },
+        (proxyRes) => {
+          res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+          proxyRes.pipe(res);
+        },
+      );
+
+      proxyReq.on("error", (error) => {
+        res.writeHead(502, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ status: "error", message: error.message }));
+      });
+
+      req.pipe(proxyReq);
+      return;
+    }
+
     if ((req.url || "/").split("?")[0] === "/health") {
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       res.end(JSON.stringify({ status: "ok", service: "hris-app" }));
