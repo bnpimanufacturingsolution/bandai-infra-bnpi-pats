@@ -6,6 +6,7 @@ param(
   [string]$TargetPlatform = 'hyperv',
   [string]$VmName = 'project-truth-node-01',
   [string]$SwitchName = 'ProjectTruth-External',
+  [string]$BridgeAdapterName = '',
   [string]$VmPath = "$env:ProgramData\ProjectTruth\HyperV",
   [int]$CpuCount = 2,
   [int]$MemoryMb = 4096,
@@ -33,6 +34,13 @@ $config = [ordered]@{
     vmName = $VmName
     switchName = $SwitchName
     vmPath = $VmPath
+    cpuCount = $CpuCount
+    memoryMb = $MemoryMb
+    guestIpHint = $GuestIpHint
+  }
+  virtualbox = [ordered]@{
+    vmName = $VmName
+    bridgeAdapterName = $BridgeAdapterName
     cpuCount = $CpuCount
     memoryMb = $MemoryMb
     guestIpHint = $GuestIpHint

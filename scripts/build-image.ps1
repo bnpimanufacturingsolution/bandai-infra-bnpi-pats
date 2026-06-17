@@ -13,6 +13,7 @@ param(
   [string]$TerraformVarsPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'terraform-hyperv\terraform.tfvars'),
   [string]$VmName = 'project-truth-node-01',
   [string]$SwitchName = 'ProjectTruth-Internal',
+  [string]$BridgeAdapterName = '',
   [ValidateSet('External','Internal','Private')]
   [string]$SwitchType = 'Internal',
   [string[]]$NetAdapterNames = @(),
@@ -323,6 +324,7 @@ if ($TargetPlatform -eq 'hyperv') {
   -TargetPlatform $TargetPlatform `
   -VmName $VmName `
   -SwitchName $SwitchName `
+  -BridgeAdapterName $BridgeAdapterName `
   -VmPath $VmPath `
   -CpuCount $CpuCount `
   -MemoryMb $MemoryMb
@@ -350,6 +352,16 @@ guest_ip_hint     = ""
 "@ | Set-Content -LiteralPath $TerraformVarsPath -Encoding ASCII
   Write-Host "Terraform vars: $TerraformVarsPath"
 } else {
+  $configureVirtualBoxArgs = @(
+    '-ImagePath', $PublishedImagePath,
+    '-VmName', $VmName,
+    '-MemoryMb', $MemoryMb,
+    '-CpuCount', $CpuCount
+  )
+  if (-not [string]::IsNullOrWhiteSpace($BridgeAdapterName)) {
+    $configureVirtualBoxArgs += @('-BridgeAdapterName', $BridgeAdapterName)
+  }
+  & "$PSScriptRoot\configure-virtualbox.ps1" @configureVirtualBoxArgs
   Write-Host "Skipped Hyper-V Terraform vars because target platform is virtualbox."
 }
 
