@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: project-truth-environment
+  labels:
+    app.kubernetes.io/name: project-truth
+    app.kubernetes.io/component: hris-environment
+data:
+  app_family: hris
+  runtime: docker-compose
+  note: "HRIS runtime services run on the appliance Docker stack; this GitOps object records the environment contract."

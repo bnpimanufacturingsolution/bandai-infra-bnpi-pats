@@ -2,6 +2,7 @@
 set -euo pipefail
 
 compose_file="/opt/project-truth/appliance/docker-compose.yml"
+env_compose_file="/opt/project-truth/appliance/docker-compose.environments.yml"
 
 lan_ip() {
   ip -4 -o addr show scope global up 2>/dev/null |
@@ -28,6 +29,35 @@ print_container_row() {
   local ports
   ports="$(docker port "$name" 2>/dev/null | paste -sd ', ' - || true)"
   printf '  %-12s %-18s %s\n' "$label" "$(container_state "$name")" "${ports:-no published ports}"
+}
+
+print_env_row() {
+  local env_name="$1"
+  local app_port="$2"
+  local api_port="$3"
+  local db_port="$4"
+  local app_container="$5"
+  local api_container="$6"
+  local db_container="$7"
+  local app_state api_state db_state app_status api_status app_url api_url
+
+  app_state="$(container_state "$app_container")"
+  api_state="$(container_state "$api_container")"
+  db_state="$(container_state "$db_container")"
+  app_status="$(http_status "http://127.0.0.1:${app_port}/")"
+  api_status="$(http_status "http://127.0.0.1:${api_port}/health")"
+
+  if [ -n "$ip_addr" ]; then
+    app_url="http://${ip_addr}:${app_port}/auth/login"
+    api_url="http://${ip_addr}:${api_port}/health"
+  else
+    app_url="http://<lan-ip>:${app_port}/auth/login"
+    api_url="http://<lan-ip>:${api_port}/health"
+  fi
+
+  printf '  %-4s app:%-5s api:%-5s db:%-6s  %-17s %-17s %-17s\n' \
+    "$env_name" "$app_port" "$api_port" "$db_port" "$app_state" "$api_state" "$db_state"
+  printf '       checks app=%-7s api=%-7s login=%s api=%s\n' "$app_status" "$api_status" "$app_url" "$api_url"
 }
 
 ip_addr="$(lan_ip || true)"
@@ -68,6 +98,12 @@ print_container_row hris-api api
 print_container_row hris-app app
 echo
 
+echo "Environment matrix"
+print_env_row prod 3000 3001 15432 hris-app hris-api hris-postgres
+print_env_row dev  3100 3101 15433 hris-app-dev hris-api-dev hris-postgres-dev
+print_env_row uat  3200 3201 15434 hris-app-uat hris-api-uat hris-postgres-uat
+echo
+
 echo "Database"
 if timeout 8 docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1; then
   echo "  postgres: accepting connections"
@@ -99,8 +135,11 @@ echo
 echo "Useful commands"
 echo "  project-truth-monitor"
 echo "  project-truth-hris-status"
+echo "  project-truth-hris-env-start dev|uat|prod|all"
+echo "  project-truth-hris-env-seed dev|uat|prod|all"
 echo "  project-truth-lan-dhcp"
 echo "  docker compose -f ${compose_file} ps"
+echo "  docker compose -f ${env_compose_file} ps"
 
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^node-health-'; then
   echo
