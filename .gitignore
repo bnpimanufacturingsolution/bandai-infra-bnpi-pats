@@ -13,6 +13,7 @@ dist/
 *.log
 packer/packer.auto.pkrvars.hcl
 image-factory/packer/packer.auto.pkrvars.hcl
+image-factory/packer/staging/
 .terraform/
 terraform.tfstate
 terraform.tfstate.backup

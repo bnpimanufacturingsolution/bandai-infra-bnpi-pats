@@ -1,12 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-lan_ip="$(hostname -I | awk '{print $1}')"
+lan_ip="$(ip -4 -o addr show scope global up | awk '!/ docker| br-| veth/ { split($4, a, "/"); print a[1]; exit }')"
 
 echo "Project Truth HRIS appliance status"
 hostname
 ip -br addr
-docker ps --filter "name=hris-api" --filter "name=hris-app"
+
+if [ -n "$lan_ip" ]; then
+  echo "LAN IP: ${lan_ip}"
+  echo "HRIS App URL: http://${lan_ip}:3000"
+  echo "HRIS API Health URL: http://${lan_ip}:3001/health"
+else
+  echo "LAN IP: NOT DETECTED"
+  echo "Reason: no active non-loopback IPv4 address found"
+  echo "Next check: verify VM adapter is bridged/external and DHCP is enabled"
+fi
+
+echo "Local App URL: http://127.0.0.1:3000"
+echo "Local API Health URL: http://127.0.0.1:3001/health"
+
+echo "Docker services:"
+docker ps --filter "name=hris-api" --filter "name=hris-app" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+
+if docker ps --format '{{.Names}}' | grep -Eiq '(^|[-_])health($|[-_])'; then
+  echo "Standalone health container: PRESENT"
+else
+  echo "Standalone health container: absent"
+fi
 
 echo "API:"
 curl -fsS "http://127.0.0.1:3001/health"
@@ -24,5 +45,8 @@ fi
 
 if [ -n "$lan_ip" ]; then
   echo "CORS:"
-  curl -fsSI -H "Origin: http://${lan_ip}:3000" "http://${lan_ip}:3001/health" | grep -i '^access-control-allow-origin:' || true
+  curl -fsSI -X OPTIONS \
+    -H "Origin: http://${lan_ip}:3000" \
+    -H "Access-Control-Request-Method: GET" \
+    "http://${lan_ip}:3001/health" | grep -i '^access-control-allow-origin:' || true
 fi

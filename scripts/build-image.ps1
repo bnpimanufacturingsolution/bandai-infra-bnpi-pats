@@ -153,6 +153,53 @@ function Save-FileInChunks {
   }
 }
 
+function Sync-PackerStagingDirectory {
+  param(
+    [string]$Source,
+    [string]$Destination
+  )
+
+  if (-not (Test-Path -LiteralPath $Source)) {
+    throw "Staging source not found: $Source"
+  }
+
+  New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+
+  $excludedDirectories = @(
+    '.git',
+    '.github',
+    'node_modules',
+    'dist',
+    'build',
+    '.next',
+    '.react-router',
+    'coverage',
+    'test-results',
+    'playwright-report',
+    'output',
+    '.runtime',
+    'logs',
+    '.cache',
+    '.prisma'
+  )
+
+  $excludedFiles = @(
+    '.env',
+    '.env.*',
+    '*.tmp',
+    '*.log',
+    'npm-debug.log*',
+    'yarn-debug.log*',
+    'yarn-error.log*',
+    'pnpm-debug.log*'
+  )
+
+  & robocopy.exe $Source $Destination /MIR /NFL /NDL /NJH /NJS /NP /XD $excludedDirectories /XF $excludedFiles | Out-Host
+  if ($LASTEXITCODE -gt 7) {
+    throw "robocopy failed while staging $Source to $Destination with exit code $LASTEXITCODE"
+  }
+}
+
 if (-not $SkipBuild) {
   if ($PredownloadIso) {
     $isoDir = Split-Path -Parent $IsoCachePath
@@ -189,6 +236,14 @@ if (-not $SkipBuild) {
   if (-not (Test-Path -LiteralPath $packerTemplate)) {
     throw "Packer template not found for ${TargetPlatform}: $packerTemplate"
   }
+
+  $repoRoot = Split-Path -Parent (Split-Path -Parent $PackerDir)
+  $stagingRoot = Join-Path $PackerDir 'staging'
+  New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'gitops') -Destination (Join-Path $stagingRoot 'gitops')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'appliance') -Destination (Join-Path $stagingRoot 'appliance')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-api') -Destination (Join-Path $stagingRoot 'hris-api')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-app') -Destination (Join-Path $stagingRoot 'hris-app')
 
   Push-Location $PackerDir
   try {
