@@ -6,6 +6,13 @@ export DEBIAN_FRONTEND=noninteractive
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl gnupg lsb-release unzip ufw open-iscsi docker.io docker-compose-v2
 
+echo "infra:infra" | sudo chpasswd
+sudo passwd -u infra || true
+sudo install -d -m 0755 /etc/ssh/sshd_config.d
+printf 'PasswordAuthentication yes\nKbdInteractiveAuthentication yes\n' | sudo tee /etc/ssh/sshd_config.d/90-project-truth-password-auth.conf >/dev/null
+echo 'infra ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/90-infra >/dev/null
+sudo chmod 0440 /etc/sudoers.d/90-infra
+
 sudo ufw allow OpenSSH
 sudo ufw allow 3000/tcp
 sudo ufw allow 3001/tcp
@@ -80,11 +87,26 @@ sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-start.s
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-status.sh /usr/local/bin/project-truth-hris-status
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-seed.sh /usr/local/bin/project-truth-hris-seed
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-dhcp.sh /usr/local/bin/project-truth-lan-dhcp
+sudo tee /etc/systemd/system/project-truth-lan-dhcp.service >/dev/null <<'LANDHCP'
+[Unit]
+Description=Project Truth first boot LAN DHCP
+Before=network-online.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/project-truth-lan-dhcp
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+LANDHCP
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-hris.service /etc/systemd/system/project-truth-hris.service
 sudo install -m 0644 /opt/project-truth/appliance/profile.d/project-truth-hris-help.sh /etc/profile.d/project-truth-hris-help.sh
 sudo chmod 0644 /etc/profile.d/project-truth-hris-help.sh
 sudo docker compose -f /opt/project-truth/appliance/docker-compose.yml build
 sudo systemctl daemon-reload
+sudo systemctl enable project-truth-lan-dhcp.service
 sudo systemctl enable project-truth-hris.service
 
 sudo systemctl enable ssh

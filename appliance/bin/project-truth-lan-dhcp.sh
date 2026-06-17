@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-iface="${1:-enp0s3}"
+iface="${1:-}"
 netplan_file="/etc/netplan/99-project-truth-dhcp.yaml"
+
+if [ -z "$iface" ]; then
+  iface="$(ip -o link show |
+    awk -F': ' '$2 != "lo" { print $2; exit }' |
+    sed 's/@.*//')"
+fi
 
 if ! ip link show "$iface" >/dev/null 2>&1; then
   echo "Network interface not found: $iface" >&2
