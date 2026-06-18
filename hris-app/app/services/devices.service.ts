@@ -27,7 +27,7 @@ export type DeviceEventStatus =
 	| "UNMATCHED"
 	| "FAILED";
 
-export type DeviceEventSource = "HIKVISION_CALLBACK" | "EN_HCNETSDK_ALARM";
+export type DeviceEventSource = "HIKVISION_CALLBACK" | "EN_HCNETSDK_ALARM" | "ZKTECO_EVENT";
 
 export interface DeviceEvent {
 	id: string;

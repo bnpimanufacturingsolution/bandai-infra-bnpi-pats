@@ -58,6 +58,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
     volumes:
       - apiuploads-dev:/app/uploads
+      - ../hris-api/dist/server.js:/app/dist/server.js:ro
     ports:
       - "3101:3001"
     depends_on:
@@ -84,6 +85,8 @@ services:
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
       HRIS_API_ORIGIN: "http://hris-api-dev:3001"
+    volumes:
+      - ../hris-app/app/assets:/app/build/client/app/assets:ro
     ports:
       - "3100:3000"
     depends_on:
@@ -95,6 +98,19 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+
+  zkteco-bridge-dev:
+    profiles:
+      - zkteco
+    build:
+      context: ../vendor/zkteco-sdk
+      dockerfile: Dockerfile.windows
+    image: project-truth-zkteco-bridge:develop
+    container_name: project-truth-zkteco-bridge-dev
+    restart: unless-stopped
+    environment:
+      ZKTECO_DEVICE_IPS: ${ZKTECO_DEVICE_IPS:-}
+      ZKTECO_WEBHOOK_URL: ${ZKTECO_WEBHOOK_URL:-http://host.docker.internal:3101/api/zkteco/events}
 
   hris-postgres-uat:
     image: postgres:16-alpine
@@ -181,6 +197,8 @@ services:
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
       HRIS_API_ORIGIN: "http://hris-api-uat:3001"
+    volumes:
+      - ../hris-app/app/assets:/app/build/client/app/assets:ro
     ports:
       - "3200:3000"
     depends_on:
@@ -192,6 +210,19 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+
+  zkteco-bridge-uat:
+    profiles:
+      - zkteco
+    build:
+      context: ../vendor/zkteco-sdk
+      dockerfile: Dockerfile.windows
+    image: project-truth-zkteco-bridge:develop
+    container_name: project-truth-zkteco-bridge-uat
+    restart: unless-stopped
+    environment:
+      ZKTECO_DEVICE_IPS: ${ZKTECO_DEVICE_IPS:-}
+      ZKTECO_WEBHOOK_URL: ${ZKTECO_WEBHOOK_URL:-http://host.docker.internal:3201/api/zkteco/events}
 
 volumes:
   postgresdata-dev:

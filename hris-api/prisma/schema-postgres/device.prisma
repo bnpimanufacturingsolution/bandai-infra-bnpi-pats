@@ -18,6 +18,7 @@ enum DeviceEventStatus {
 enum DeviceEventSource {
   HIKVISION_CALLBACK
   EN_HCNETSDK_ALARM
+  ZKTECO_EVENT
 }
 
 model Device {

@@ -352,6 +352,7 @@ const dashboard = require("./app/dashboard")(prisma);
 const employee = require("./app/employee")(prisma);
 const employeeSchedule = require("./app/employeeSchedule")(prisma);
 const hikvision = config.enableDeviceServices ? require("./app/hikvision")(prisma) : null;
+const zkteco = config.enableDeviceServices ? require("./app/zkteco")(prisma) : null;
 const metrics = config.enableMetricsServices ? require("./app/metrics")(prisma) : null;
 const report = require("./app/report")(prisma);
 const level = require("./app/level")(prisma);
@@ -403,6 +404,12 @@ app.use(
 	express.static(process.env.LOCAL_UPLOAD_ROOT || path.resolve(process.cwd(), "uploads"), {
 		fallthrough: false,
 		maxAge: "1h",
+		setHeaders: (res) => {
+			res.setHeader("Access-Control-Allow-Origin", "*");
+			res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+			res.removeHeader("Cross-Origin-Embedder-Policy");
+			res.removeHeader("Content-Security-Policy");
+		},
 	}),
 );
 app.use(apiDebugLoggingMiddleware);
@@ -631,6 +638,7 @@ app.use(config.baseApiPath, (req: Request, res: Response, next: NextFunction) =>
 		req.path.startsWith("/auth") ||
 		req.path.startsWith("/system-provisioning") ||
 		req.path.startsWith("/hikvision") ||
+		req.path.startsWith("/zkteco") ||
 		req.path.startsWith("/applicant") ||
 		req.path.startsWith("/person") ||
 		req.path.startsWith("/job") ||
@@ -665,6 +673,9 @@ app.use(config.baseApiPath, employee);
 app.use(config.baseApiPath, employeeSchedule);
 if (config.enableDeviceServices && hikvision) {
 	app.use(`${config.baseApiPath}/hikvision`, hikvision);
+}
+if (config.enableDeviceServices && zkteco) {
+	app.use(config.baseApiPath, zkteco);
 }
 app.use(config.baseApiPath, person);
 if (config.enableMetricsServices && metrics) {

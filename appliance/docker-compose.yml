@@ -81,6 +81,19 @@ services:
       retries: 12
       start_period: 20s
 
+  zkteco-bridge:
+    profiles:
+      - zkteco
+    build:
+      context: ../vendor/zkteco-sdk
+      dockerfile: Dockerfile.windows
+    image: project-truth-zkteco-bridge:develop
+    container_name: project-truth-zkteco-bridge
+    restart: unless-stopped
+    environment:
+      ZKTECO_DEVICE_IPS: ${ZKTECO_DEVICE_IPS:-}
+      ZKTECO_WEBHOOK_URL: ${ZKTECO_WEBHOOK_URL:-http://host.docker.internal:3001/api/zkteco/events}
+
 volumes:
   postgresdata:
   apiuploads:
