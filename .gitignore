@@ -5,6 +5,7 @@ source-inputs-organized/
 logs/
 .runtime/
 dist/
+backup-test/
 *.exe
 *.vhd
 *.vhdx

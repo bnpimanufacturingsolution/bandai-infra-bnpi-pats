@@ -54,13 +54,13 @@ RUN npm run build \
 # Production image, copy all the files and run the app
 FROM base AS runner
 
-# Install system dependencies for Prisma
-RUN apk add --no-cache libc6-compat openssl
+# Install system dependencies for Prisma and database backups.
+RUN apk add --no-cache libc6-compat openssl postgresql16-client
 
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nodeuser
-RUN mkdir -p /app/logs && chown -R nodeuser:nodejs /app/logs
+RUN mkdir -p /app/logs /var/backups/hris && chown -R nodeuser:nodejs /app/logs /var/backups/hris
 
 # Copy built application with final ownership to avoid expensive recursive chown
 COPY --chown=nodeuser:nodejs --from=production-build /app/dist ./dist
