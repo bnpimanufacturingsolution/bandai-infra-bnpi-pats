@@ -133,6 +133,7 @@ echo "  employee@seed.local / Password123!"
 echo
 
 echo "Useful commands"
+echo "  project-truth-progress --watch"
 echo "  project-truth-monitor"
 echo "  project-truth-hris-status"
 echo "  project-truth-hris-env-start dev|uat|prod|all"

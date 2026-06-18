@@ -15,6 +15,7 @@ else
 fi
 echo
 echo "Run:"
+echo "  project-truth-progress --watch"
 echo "  project-truth-status"
 echo "  project-truth-monitor"
 echo "  project-truth-hris-status"
