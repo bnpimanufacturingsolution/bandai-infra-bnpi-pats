@@ -3,6 +3,23 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
+retry() {
+  local attempts="$1"
+  local delay="$2"
+  shift 2
+  local attempt
+  for attempt in $(seq 1 "$attempts"); do
+    if "$@"; then
+      return 0
+    fi
+    if [ "$attempt" -lt "$attempts" ]; then
+      echo "Attempt $attempt failed; retrying in ${delay}s: $*" >&2
+      sleep "$delay"
+    fi
+  done
+  return 1
+}
+
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl gnupg lsb-release unzip ufw open-iscsi docker.io docker-compose-v2
 
@@ -24,10 +41,40 @@ sudo ufw --force enable
 sudo systemctl enable docker
 sudo systemctl start docker
 
-curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode=644 --disable=traefik" sh -
+if [ -f /etc/default/grub ]; then
+  sudo cp /etc/default/grub /etc/default/grub.project-truth-before-quiet-boot
+  sudo sed -i \
+    -e 's/^GRUB_TERMINAL=.*/GRUB_TERMINAL=gfxterm/' \
+    -e 's/^GRUB_TERMINAL_INPUT=.*/GRUB_TERMINAL_INPUT=console/' \
+    -e 's/^GRUB_TERMINAL_OUTPUT=.*/GRUB_TERMINAL_OUTPUT=gfxterm/' \
+    -e 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' \
+    -e 's/ console=ttyS[0-9],[0-9]\+n[0-9]//g' \
+    -e 's/ console=ttyS[0-9]//g' \
+    /etc/default/grub
+  sudo tee /etc/default/grub.d/99-project-truth-quiet-boot.cfg >/dev/null <<'GRUBQUIET'
+GRUB_TERMINAL=console
+GRUB_TERMINAL_INPUT=console
+GRUB_TERMINAL_OUTPUT=console
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
+GRUB_CMDLINE_LINUX=""
+GRUBQUIET
+  if command -v update-grub >/dev/null 2>&1; then
+    sudo update-grub || true
+  fi
+fi
+
+install_k3s() {
+  curl -sfL --retry 5 --retry-delay 10 --retry-all-errors https://get.k3s.io |
+    INSTALL_K3S_VERSION="v1.36.1+k3s1" INSTALL_K3S_EXEC="--write-kubeconfig-mode=644 --disable=traefik" sh -
+}
+
+retry 5 20 install_k3s
 
 sudo kubectl create namespace argocd --dry-run=client -o yaml | sudo kubectl apply -f -
-sudo kubectl apply --server-side -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+curl -sfL --retry 5 --retry-delay 10 --retry-all-errors \
+  https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml \
+  -o /tmp/argocd-install.yaml
+sudo kubectl apply --server-side -n argocd -f /tmp/argocd-install.yaml
 
 sudo tee /usr/local/bin/project-truth-firstboot-k3s-cleanup >/dev/null <<'CLEANUP'
 #!/usr/bin/env bash
@@ -83,6 +130,7 @@ sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-status.sh /u
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-monitor.sh /usr/local/bin/project-truth-monitor
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-env-start.sh /usr/local/bin/project-truth-hris-env-start
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-env-seed.sh /usr/local/bin/project-truth-hris-env-seed
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-dev-current-restore.sh /usr/local/bin/project-truth-hris-dev-current-restore
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-start.sh /usr/local/bin/project-truth-hris-start
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-status.sh /usr/local/bin/project-truth-hris-status
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-seed.sh /usr/local/bin/project-truth-hris-seed

@@ -2,6 +2,80 @@
 
 This file is updated by implementation and validation runs.
 
+## Latest DEV Current VirtualBox Appliance Proof
+
+Date: 2026-06-18
+
+Current execution run:
+
+```text
+.runtime\overnight-virtualbox-gcp\20260618-081608
+```
+
+Result:
+
+```text
+PROVEN WITH VIRTUALBOX BOOT WORKAROUND
+```
+
+Evidence folder:
+
+```text
+.runtime\overnight-dev-current-gcp\20260618-014413
+```
+
+Artifact:
+
+```text
+https://storage.googleapis.com/project-truth-image-export-hris-492904-161377059311/public/project-truth/virtualbox/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vdi
+```
+
+Local import proof:
+
+```text
+VDI path: C:\ProgramData\ProjectTruth\images\project-truth-node-devcurrent-postinstall-20260618-020148.vdi
+VDI size: 14,859,698,688 bytes
+VDI SHA256: 860221ACF838356158C6F6600325002D743B2BC8E20570B683E7E160212C5404
+VirtualBox VM: project-truth-devcurrent-proof-20260618-070929
+Bridge adapter: Hyper-V Virtual Ethernet Adapter #3
+Guest LAN IP: 192.168.100.84
+```
+
+Acceptance proof:
+
+```text
+PROD app/API: 3000/3001 -> 200
+DEV app/API: 3100/3101 -> 200
+UAT app/API: 3200/3201 -> 200
+DEV current data: dev_tables=70, dev_employees=2217, dev_users=2039
+Browser login: PROD/DEV/UAT passed before reboot and after reboot warm-up.
+```
+
+Live re-check during the current execution:
+
+```text
+http://192.168.100.84:3000/auth/login -> 200
+http://192.168.100.84:3001/health     -> 200
+http://192.168.100.84:3100/auth/login -> 200
+http://192.168.100.84:3101/health     -> 200
+http://192.168.100.84:3200/auth/login -> 200
+http://192.168.100.84:3201/health     -> 200
+```
+
+Important import setting:
+
+```text
+Use --cpus 1 for this VDI in VirtualBox.
+```
+
+At 4 vCPU the imported GCP kernel stalled in initramfs on `raid6_pq` under VirtualBox. The one-vCPU import booted, got LAN DHCP, started Docker/HRIS, and passed login proof.
+
+Full result:
+
+```text
+docs\DEV_CURRENT_GCP_VDI_PROOF_RESULT.md
+```
+
 ## Intended Journey
 
 ```text

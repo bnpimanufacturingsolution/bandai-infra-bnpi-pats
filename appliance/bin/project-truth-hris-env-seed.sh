@@ -15,7 +15,18 @@ case "${1:-prod}" in
   prod)
     project-truth-hris-seed
     ;;
-  dev|uat)
+  dev)
+    if [ -s /opt/project-truth/appliance/seeds/dev-current/dev-current.dump ]; then
+      project-truth-hris-dev-current-restore
+    else
+      env_name="$1"
+      compose_env up -d "hris-postgres-${env_name}"
+      compose_env rm -f "hris-api-db-init-${env_name}" >/dev/null 2>&1 || true
+      compose_env up --build --abort-on-container-exit --exit-code-from "hris-api-db-init-${env_name}" "hris-api-db-init-${env_name}"
+      compose_env up -d --no-deps "hris-api-${env_name}" "hris-app-${env_name}"
+    fi
+    ;;
+  uat)
     env_name="$1"
     compose_env up -d "hris-postgres-${env_name}"
     compose_env rm -f "hris-api-db-init-${env_name}" >/dev/null 2>&1 || true

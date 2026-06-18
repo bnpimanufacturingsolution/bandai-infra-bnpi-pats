@@ -4,11 +4,18 @@ param(
   [string]$TemplateName = 'ubuntu-googlecompute.pkr.hcl',
   [string]$ProjectId = 'hris-492904',
   [string]$Zone = 'asia-southeast1-a',
+  [string]$SourceInputsDir = 'C:\Users\anoni\OneDrive\Desktop\HRIS-PROJECT\source-inputs-organized',
+  [switch]$IncludeSourceInputs,
   [switch]$ValidateOnly,
   [switch]$SkipStage
 )
 
 $ErrorActionPreference = 'Stop'
+
+if (-not [System.IO.Path]::IsPathRooted($RuntimeDir)) {
+  $RuntimeDir = Join-Path (Get-Location).Path $RuntimeDir
+}
+$RuntimeDir = [System.IO.Path]::GetFullPath($RuntimeDir)
 
 function Write-Checkpoint {
   param(
@@ -123,6 +130,12 @@ if (-not $SkipStage) {
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'appliance') -Destination (Join-Path $stagingRoot 'appliance')
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-api') -Destination (Join-Path $stagingRoot 'hris-api')
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-app') -Destination (Join-Path $stagingRoot 'hris-app')
+
+  if ($IncludeSourceInputs) {
+    $sourceInputsDestination = Join-Path $stagingRoot 'appliance\source-inputs-organized'
+    Write-Checkpoint -Name 'stage-source-inputs' -IntendedAction 'Stage organized HRIS source input workbooks for baking into the GCP image.' -Command "robocopy `"$SourceInputsDir`" `"$sourceInputsDestination`" /MIR"
+    Sync-PackerStagingDirectory -Source $SourceInputsDir -Destination $sourceInputsDestination
+  }
 }
 
 Push-Location $PackerDir

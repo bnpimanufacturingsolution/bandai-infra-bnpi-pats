@@ -1,6 +1,7 @@
 app/node_modules/
 node_modules/
 output/
+source-inputs-organized/
 logs/
 .runtime/
 dist/
