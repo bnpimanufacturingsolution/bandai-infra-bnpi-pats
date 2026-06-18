@@ -1,0 +1,38 @@
+{
+	"info": {
+		"_postman_id": "benefit-type-test",
+		"name": "BenefitType Tests",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Create Benefit Type",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"Health Insurance\",\n    \"description\": \"Comprehensive health coverage\",\n    \"category\": \"HEALTH\",\n    \"provider\": \"Maxicare\",\n    \"coverage\": 150000.00,\n    \"fixedAmount\": 0,\n    \"percentage\": 0,\n    \"isTaxable\": false,\n    \"isActive\": true\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/benefitType",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "benefitType"]
+				}
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000",
+			"type": "string"
+		}
+	]
+}

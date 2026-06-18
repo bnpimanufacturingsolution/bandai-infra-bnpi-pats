@@ -1,0 +1,101 @@
+enum BenefitProgramStatus {
+  PENDING
+  APPROVED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  DEFAULTED
+}
+
+enum BenefitDeductionStatus {
+  SCHEDULED
+  DEDUCTED
+  FAILED
+  WAIVED
+}
+
+model   EmployeeBenefit {
+  id             String      @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String // Multi-tenancy support
+  employee       Employee?   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId     String?     @db.ObjectId
+  benefitType    BenefitType @relation(fields: [benefitTypeId], references: [id], onDelete: Cascade)
+  benefitTypeId  String      @db.ObjectId
+  payrollPeriod  PayrollPeriod? @relation(fields: [payrollPeriodId], references: [id])
+  payrollPeriodId String?    @db.ObjectId
+
+  // Legacy/basic metadata
+  name        String?
+  description String?
+
+  // EPP-style benefit details
+  totalAmount       Float
+  currency          String @default("USD")
+  totalInstallments Int    @default(6)
+  installmentAmount Float
+  remainingBalance  Float
+
+  // Legacy/simple details (kept for backward compatibility)
+  amount    Float?
+  startDate DateTime? @db.Date
+  endDate   DateTime? @db.Date
+
+  // Payroll schedule
+  startPayrollCutOff DateTime?
+  endPayrollCutOff   DateTime?
+
+  // Terms/agreement audit
+  agreedToTerms Boolean   @default(false)
+  agreedAt      DateTime?
+  agreedByIp    String?
+
+  // Status and approval
+  status       BenefitProgramStatus @default(PENDING)
+  isActive     Boolean              @default(true)
+  approvedById String?              @db.ObjectId
+  approvedAt   DateTime?
+  notes        String?
+  remarks      String?
+  isDeleted    Boolean              @default(false)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  // Relations
+  installments EmployeeBenefitInstallment[]
+  soaLineItems SOALineItem[]
+
+  @@index([organizationId])
+  @@index([employeeId])
+  @@index([benefitTypeId])
+  @@index([payrollPeriodId])
+  @@index([organizationId, status])
+  @@index([organizationId, payrollPeriodId, isDeleted])
+  @@index([employeeId, status])
+  @@map("employee_benefits")
+}
+
+model EmployeeBenefitInstallment {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  employeeBenefitId String          @db.ObjectId
+  employeeBenefit   EmployeeBenefit @relation(fields: [employeeBenefitId], references: [id], onDelete: Cascade)
+
+  installmentNumber Int
+  amount            Float
+  scheduledDate     DateTime
+  processedDate     DateTime?
+
+  payrollCutOffId String? @db.ObjectId
+  payrollRunId    String? @db.ObjectId
+
+  status        BenefitDeductionStatus @default(SCHEDULED)
+  failureReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeBenefitId])
+  @@index([scheduledDate])
+  @@index([payrollCutOffId])
+  @@map("employee_benefit_installments")
+}

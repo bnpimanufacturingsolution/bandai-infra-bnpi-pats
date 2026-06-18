@@ -1,0 +1,739 @@
+{
+  "summary": {
+    "reportType": "adoption-plan",
+    "recommendedMode": "conservative",
+    "registryPreview": "wwg:\n  instance_type: existing-project\n  template_version: 0.6.0\n  adoption_mode: conservative\n  created_by: wwg-cli\n  created_at: 2026-05-16\n  last_updated_at: 2026-05-16\n  registry_owner: wwg\n  registry_update_policy: safe_merge\nlayers:\n  wiki:\n    root: wiki\n    strategy: mapped-existing\n  workspace:\n    root: .\n    strategy: mapped-existing\n  governance:\n    root: governance\n    strategy: mapped-existing\ncanonical_artifacts:\n  root_agents: AGENTS.md\n  changelog: CHANGELOG.md\n  project_master_context: workspace/context/project-context.md\n  maintenance_matrix: workspace-template/base/context/context-maintenance-matrix.md\n  architecture_context: workspace/context/architecture-context.md\n  runtime_context: wiki-template/base/08-operations/monitoring.md\n  public_discovery_context: workspace/prompts/public-discovery-maintenance.md\n  domain_context: workspace/context/domain-context.md\nrecommended_artifacts: {}\nscoped_agents: []\nreports:\n  adoption_audit: reports/wwg-existing-audit-report.md\n  adoption_audit_json: reports/wwg-existing-audit-report.json\n  adoption_plan: reports/wwg-adoption-plan.md\n  adoption_plan_json: reports/wwg-adoption-plan.json\n  adoption_report: reports/wwg-adoption-report.md\n  adoption_report_json: reports/wwg-adoption-report.json\n  adoption_regression_baseline: .wwg/reports/adoption-regression-report.md\n  adoption_regression_baseline_json: .wwg/reports/adoption-regression-report.json\n  regression_manifest: .wwg/governance/regression-manifest.md\n  regression_manifest_json: .wwg/governance/regression-manifest.json\n  regression_gaps: .wwg/governance/regression-gaps.md\n  regression_gaps_json: .wwg/governance/regression-gaps.json\n  rule_traceability: .wwg/governance/rule-traceability.md\n  rule_traceability_json: .wwg/governance/rule-traceability.json"
+  },
+  "findings": [
+    {
+      "severity": "info",
+      "code": "root-agents-detected",
+      "message": "Root agent instructions were detected.",
+      "path": "AGENTS.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Map this file as canonical_artifacts.root_agents.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-root_agents",
+      "message": "Detected candidate for root_agents.",
+      "path": "AGENTS.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register AGENTS.md as root_agents; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-changelog",
+      "message": "Detected candidate for changelog.",
+      "path": "CHANGELOG.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register CHANGELOG.md as changelog; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-project_master_context",
+      "message": "Detected candidate for project_master_context.",
+      "path": "workspace/context/project-context.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register workspace/context/project-context.md as project_master_context; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-maintenance_matrix",
+      "message": "Detected candidate for maintenance_matrix.",
+      "path": "workspace-template/base/context/context-maintenance-matrix.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register workspace-template/base/context/context-maintenance-matrix.md as maintenance_matrix; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-architecture_context",
+      "message": "Detected candidate for architecture_context.",
+      "path": "workspace/context/architecture-context.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register workspace/context/architecture-context.md as architecture_context; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-runtime_context",
+      "message": "Detected candidate for runtime_context.",
+      "path": "wiki-template/base/08-operations/monitoring.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register wiki-template/base/08-operations/monitoring.md as runtime_context; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-public_discovery_context",
+      "message": "Detected candidate for public_discovery_context.",
+      "path": "workspace/prompts/public-discovery-maintenance.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register workspace/prompts/public-discovery-maintenance.md as public_discovery_context; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-domain_context",
+      "message": "Detected candidate for domain_context.",
+      "path": "workspace/context/domain-context.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register workspace/context/domain-context.md as domain_context; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": ".wwg/changelog/config.yml",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": ".wwg/changelog/state.json",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "CHANGELOG.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "reports/changelog-bump-recommendation.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "reports/changelog-preview.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "reports/wwg-changelog-handoff.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "scripts/update-hikvision-metadata.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-detected",
+      "message": "Detected 7 public surface/public discovery artifact(s).",
+      "evidence_level": "confirmed",
+      "recommendation": "Map existing public discovery sources before proposing new ones.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "governance-detected",
+      "message": "Detected 29 governance artifact(s).",
+      "evidence_level": "confirmed",
+      "recommendation": "Reuse and register existing governance artifacts.",
+      "risk": "low"
+    }
+  ],
+  "detectedArtifacts": {
+    "agentInstructions": [
+      {
+        "path": "AGENTS.md",
+        "kind": "root agent policy",
+        "suggestedRole": "root_agents",
+        "confidence": "high",
+        "category": "agentInstructions"
+      },
+      {
+        "path": "workspace/AGENTS.md",
+        "kind": "unknown scoped agent policy",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "agentInstructions"
+      }
+    ],
+    "canonicalContext": [
+      {
+        "path": "governance/context-drift-detection.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "reports/context-skill-quality.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "reports/wwg-refresh-context-report.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "wiki",
+        "kind": "context root",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "wiki-template/base/09-agent-context/canonical-context-policy.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "wiki-template/base/12-maintenance/context-maintenance-matrix.md",
+        "kind": "maintenance matrix",
+        "suggestedRole": "maintenance_matrix",
+        "confidence": "high",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "workspace-template/base/context/context-maintenance-matrix.md",
+        "kind": "maintenance matrix",
+        "suggestedRole": "maintenance_matrix",
+        "confidence": "high",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "workspace/context/architecture-context.md",
+        "kind": "architecture source",
+        "suggestedRole": "architecture_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "workspace/context/context-maintenance-matrix.md",
+        "kind": "maintenance matrix",
+        "suggestedRole": "maintenance_matrix",
+        "confidence": "high",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "workspace/context/domain-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "domain_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "workspace/context/governance-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "workspace/context/project-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "workspace/context/ux-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      }
+    ],
+    "skillsPrompts": [
+      {
+        "path": "workspace/prompts/bug-fix.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "workspace/prompts/feature-implementation.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "workspace/prompts/production-monitoring.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "workspace/prompts/public-discovery-maintenance.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "workspace/prompts/public-surface-update.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "workspace/prompts/runtime-infrastructure.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "workspace/prompts/task-router.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "workspace/skills",
+        "kind": "skills root",
+        "suggestedRole": "workspace_skills",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "workspace/skills/change-classifier.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "workspace/skills/context-skill-maintenance.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "workspace/skills/drift-detector.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "workspace/skills/regression-guardrail-maintenance.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "workspace/skills/task-router.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      }
+    ],
+    "governance": [
+      {
+        "path": "docs/MIGRATION_CSV_UPLOAD_TESTING.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "governance",
+        "kind": "governance root",
+        "suggestedRole": "quality_gates",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "governance/audit-log.md",
+        "kind": "governance artifact",
+        "suggestedRole": "audit_log",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "governance/quality-gates.md",
+        "kind": "governance artifact",
+        "suggestedRole": "quality_gates",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "governance/regression-gaps.json",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "governance/regression-gaps.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "governance/regression-guardrail-catalog.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "governance/regression-manifest.json",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "governance/regression-manifest.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "governance/release-checklist.md",
+        "kind": "governance artifact",
+        "suggestedRole": "release_checklist",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "governance/security-review.md",
+        "kind": "governance artifact",
+        "suggestedRole": "quality_gates",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "governance/test-plan.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "prisma/schema-postgres/statusIncident.prisma",
+        "kind": "governance artifact",
+        "suggestedRole": "reference_history",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "prisma/schema/statusIncident.prisma",
+        "kind": "governance artifact",
+        "suggestedRole": "reference_history",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "reports",
+        "kind": "governance root",
+        "suggestedRole": "reference_history",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "reports/adoption-regression-report.json",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "reports/adoption-regression-report.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "reports/regression-quality-report.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "reports/wwg-regression-handoff.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "tests/wwg-regression-coverage.spec.ts",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "wiki-template/base/08-operations/monitoring.md",
+        "kind": "governance artifact",
+        "suggestedRole": "operational_readiness",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "workspace/skills/regression-guardrail-maintenance.skill.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "workspace/testing/manual-verification-checklist.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "workspace/testing/manual-verification-evidence.json",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "workspace/testing/non-technical-regression-checklist.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "workspace/testing/proposed-executable-tests.json",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "workspace/testing/proposed-executable-tests.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "workspace/testing/regression-candidate-review.json",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "workspace/testing/regression-candidate-review.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      }
+    ],
+    "publicSurface": [
+      {
+        "path": ".wwg/changelog/config.yml",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": ".wwg/changelog/state.json",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "CHANGELOG.md",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "reports/changelog-bump-recommendation.md",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "reports/changelog-preview.md",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "reports/wwg-changelog-handoff.md",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "scripts/update-hikvision-metadata.ts",
+        "kind": "public surface",
+        "suggestedRole": "public_discovery_context",
+        "confidence": "medium",
+        "category": "publicSurface"
+      }
+    ],
+    "projectStructure": [
+      {
+        "path": ".github/workflows",
+        "kind": "project structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": ".github/workflows",
+        "kind": "project structure",
+        "suggestedRole": "impact_zone",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": "docker-compose.yml",
+        "kind": "runtime structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": "Dockerfile",
+        "kind": "runtime structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": "exports/local-infra/docker-compose.yml",
+        "kind": "runtime structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": "infrastructure/onprem/observability/docker-compose.yml",
+        "kind": "runtime structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      }
+    ]
+  },
+  "suggestedMappings": {
+    "root_agents": "AGENTS.md",
+    "changelog": "CHANGELOG.md",
+    "project_master_context": "workspace/context/project-context.md",
+    "maintenance_matrix": "workspace-template/base/context/context-maintenance-matrix.md",
+    "architecture_context": "workspace/context/architecture-context.md",
+    "runtime_context": "wiki-template/base/08-operations/monitoring.md",
+    "public_discovery_context": "workspace/prompts/public-discovery-maintenance.md",
+    "domain_context": "workspace/context/domain-context.md"
+  },
+  "recommendedArtifacts": {},
+  "scopedAgents": {
+    "recommended": [],
+    "notRecommended": [
+      {
+        "path": "auth",
+        "recommendation": "not-recommended",
+        "reason": "Authentication is usually cross-cutting; keep policy in canonical context unless ownership is isolated."
+      },
+      {
+        "path": "billing",
+        "recommendation": "not-recommended",
+        "reason": "Billing is approval-sensitive and cross-cutting; use governance and canonical context first."
+      },
+      {
+        "path": "shared",
+        "recommendation": "not-recommended",
+        "reason": "Shared code affects multiple owners; scoped instructions can conflict with broader truth."
+      },
+      {
+        "path": "features/*",
+        "recommendation": "not-recommended",
+        "reason": "Feature folders are often too narrow; prefer the maintenance matrix for routing."
+      }
+    ]
+  },
+  "risks": [
+    {
+      "level": "low",
+      "path": "wwg.project.yaml",
+      "message": "Create or safe-merge a WWG-owned project registry.",
+      "recommendation": "Allowed in conservative apply."
+    },
+    {
+      "level": "low",
+      "path": "reports",
+      "message": "Create audit, adoption plan, adoption report, JSON reports, and registry backups.",
+      "recommendation": "Allowed in conservative apply."
+    },
+    {
+      "level": "medium",
+      "message": "Add missing WWG index or generated context files.",
+      "recommendation": "Defer until a later explicit init or adoption expansion phase."
+    },
+    {
+      "level": "high",
+      "message": "Move docs, rewrite AGENTS.md, or reorganize context structure.",
+      "recommendation": "Do not perform in Phase 2B conservative apply."
+    },
+    {
+      "level": "approval-gated",
+      "message": "Change production config, compliance-sensitive docs, public customer notices, permissions, security, data deletion, or migrations.",
+      "recommendation": "Require explicit approval and evidence-backed plan."
+    }
+  ],
+  "recommendedNextCommand": "wwg adopt --mode conservative --dry-run"
+}

@@ -1,0 +1,59 @@
+xlsColumn,prismaField,status,matchType,confidence,sheet,sourceRef,completeness,candidates
+Employee No.,employeeId,MATCH,alias,0.95,PBCMEY | TIN Library,PBCMEY | TIN Library!A1,,employeeId; employeeCode
+Date Hired,employmentHireDate,MATCH,alias,0.95,PBCMEY | TIN Library,PBCMEY | TIN Library!C1,,employmentHireDate; hiredAt
+Employee Name,,MISSING,none,0,PBCMEY | TIN Library,PBCMEY | TIN Library!D1,,
+Division,departmentId,REFERENCE,alias,0.95,PBCMEY | TIN Library,PBCMEY | TIN Library!E1,,departmentId
+Last Name,,MISSING,none,0,PBCMEY | TIN Library,PBCMEY | TIN Library!F1,,
+First Name,,MISSING,none,0,PBCMEY | TIN Library,PBCMEY | TIN Library!G1,,
+Middle Name,,MISSING,none,0,PBCMEY | TIN Library,PBCMEY | TIN Library!H1,,
+Registered Address,metadata,MATCH,alias,0.95,PBCMEY | TIN Library,PBCMEY | TIN Library!J1,,metadata
+Zip Code,,MISSING,none,0,PBCMEY | TIN Library,PBCMEY | TIN Library!K1,,
+Birthday,metadata,MATCH,alias,0.95,PBCMEY | TIN Library,PBCMEY | TIN Library!L1,,metadata
+TIN,metadata,MATCH,alias,0.95,PBCMEY | TIN Library,PBCMEY | TIN Library!M1,,employer; metadata
+STATUS,,MISSING,none,0,PBCMEY | TIN Library,PBCMEY | TIN Library!N1,,
+NO OF DEPENDENTS,,MISSING,none,0,PBCMEY | TIN Library,PBCMEY | TIN Library!O1,,
+Previous Employer,employmentHistory,REFERENCE,alias,0.95,PBCMEY | TIN Library,PBCMEY | TIN Library!P1,,employmentHistory
+Position,positionId,REFERENCE,exact,1,PBCMEY | TIN Library,PBCMEY | TIN Library!Q1,,
+Period of Employment,employmentHistory,REFERENCE,alias,0.95,PBCMEY | TIN Library,PBCMEY | TIN Library!R1,,employmentHistory
+Active as of Dec.2024,employmentStatus,DERIVED,alias,0.95,PBCMEY | TIN Library,PBCMEY | TIN Library!S1,,employmentStatus
+DATE of RESIGNATION,employmentTerminationDate,DERIVED,alias,0.95,PBCMEY | TIN Library,PBCMEY | TIN Library!T1,,employmentTerminationDate
+REMARKS,,UNKNOWN,none,0,PBCMEY | TIN Library,PBCMEY | TIN Library!U1,,
+Employee No.,employeeId,MATCH,alias,0.95,TIN LIBRARY,TIN LIBRARY!A1,,employeeId; employeeCode
+S.N.,,UNKNOWN,none,0,TIN LIBRARY,TIN LIBRARY!B1,,
+Date Hired,employmentHireDate,MATCH,alias,0.95,TIN LIBRARY,TIN LIBRARY!D1,,employmentHireDate; hiredAt
+Employee Name,,MISSING,none,0,TIN LIBRARY,TIN LIBRARY!E1,,
+Section,departmentId,REFERENCE,alias,0.95,TIN LIBRARY,TIN LIBRARY!F1,,departmentId
+Last Name,,MISSING,none,0,TIN LIBRARY,TIN LIBRARY!G1,,
+First Name,,MISSING,none,0,TIN LIBRARY,TIN LIBRARY!H1,,
+Middle Name,,MISSING,none,0,TIN LIBRARY,TIN LIBRARY!I1,,
+Registered Address,metadata,MATCH,alias,0.95,TIN LIBRARY,TIN LIBRARY!K1,,metadata
+Zip Code,,MISSING,none,0,TIN LIBRARY,TIN LIBRARY!L1,,
+Birthday,metadata,MATCH,alias,0.95,TIN LIBRARY,TIN LIBRARY!M1,,metadata
+TIN,metadata,MATCH,alias,0.95,TIN LIBRARY,TIN LIBRARY!N1,,employer; metadata
+Status,,MISSING,none,0,TIN LIBRARY,TIN LIBRARY!O1,,
+No. of Dependents,,MISSING,none,0,TIN LIBRARY,TIN LIBRARY!P1,,
+Previous Employer,employmentHistory,REFERENCE,alias,0.95,TIN LIBRARY,TIN LIBRARY!Q1,,employmentHistory
+Position,positionId,REFERENCE,exact,1,TIN LIBRARY,TIN LIBRARY!R1,,
+Period of Employment,employmentHistory,REFERENCE,alias,0.95,TIN LIBRARY,TIN LIBRARY!S1,,employmentHistory
+Active as of Dec. 2025,employmentStatus,DERIVED,alias,0.95,TIN LIBRARY,TIN LIBRARY!T1,,employmentStatus
+Date of Resignation,employmentTerminationDate,DERIVED,alias,0.95,TIN LIBRARY,TIN LIBRARY!U1,,employmentTerminationDate
+REMARKS,,UNKNOWN,none,0,TIN LIBRARY,TIN LIBRARY!V1,,
+Employee No.,employeeId,MATCH,alias,0.95,EXPATS,EXPATS!A1,,employeeId; employeeCode
+Date Hired,employmentHireDate,MATCH,alias,0.95,EXPATS,EXPATS!C1,,employmentHireDate; hiredAt
+Employee Name,,MISSING,none,0,EXPATS,EXPATS!D1,,
+Division,departmentId,REFERENCE,alias,0.95,EXPATS,EXPATS!E1,,departmentId
+Last Name,,MISSING,none,0,EXPATS,EXPATS!F1,,
+First Name,,MISSING,none,0,EXPATS,EXPATS!G1,,
+Middle Name,,MISSING,none,0,EXPATS,EXPATS!H1,,
+Registered Address,metadata,MATCH,alias,0.95,EXPATS,EXPATS!I1,,metadata
+Zip Code,,MISSING,none,0,EXPATS,EXPATS!J1,,
+Birthday,metadata,MATCH,alias,0.95,EXPATS,EXPATS!K1,,metadata
+TIN,metadata,MATCH,alias,0.95,EXPATS,EXPATS!L1,,employer; metadata
+Status,,MISSING,none,0,EXPATS,EXPATS!M1,,
+No. of Dependents,,MISSING,none,0,EXPATS,EXPATS!N1,,
+Previous Employer,employmentHistory,REFERENCE,alias,0.95,EXPATS,EXPATS!O1,,employmentHistory
+Position,positionId,REFERENCE,exact,1,EXPATS,EXPATS!P1,,
+Period of Employment,employmentHistory,REFERENCE,alias,0.95,EXPATS,EXPATS!Q1,,employmentHistory
+Active as of Dec.2024,employmentStatus,DERIVED,alias,0.95,EXPATS,EXPATS!R1,,employmentStatus
+Date of Resignation,employmentTerminationDate,DERIVED,alias,0.95,EXPATS,EXPATS!S1,,employmentTerminationDate
+REMARKS,,UNKNOWN,none,0,EXPATS,EXPATS!T1,,

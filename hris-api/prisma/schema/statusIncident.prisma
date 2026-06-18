@@ -1,0 +1,17 @@
+model StatusIncident {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  incidentKey String    @unique
+  moduleSlug  String
+  moduleName  String
+  status      String
+  message     String
+  startedAt   DateTime
+  resolvedAt  DateTime?
+  isResolved  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([moduleSlug, startedAt])
+  @@index([isResolved, startedAt])
+  @@map("status_incidents")
+}

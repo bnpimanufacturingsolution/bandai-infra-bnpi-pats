@@ -16,9 +16,8 @@ function Test-HealthUrl {
 }
 
 $checks = @(
-  (Test-HealthUrl 'host-local-dev' 'http://127.0.0.1:3001/health'),
-  (Test-HealthUrl 'host-local-uat' 'http://127.0.0.1:3002/health'),
-  (Test-HealthUrl 'host-local-prod' 'http://127.0.0.1:3000/health')
+  (Test-HealthUrl 'host-local-hris-api' 'http://127.0.0.1:3001/health'),
+  (Test-HealthUrl 'host-local-hris-app-health' 'http://127.0.0.1:3000/health')
 )
 
 if ($GuestIp) {

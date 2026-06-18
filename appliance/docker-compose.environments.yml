@@ -1,0 +1,231 @@
+services:
+  hris-postgres-dev:
+    image: postgres:16-alpine
+    container_name: hris-postgres-dev
+    restart: unless-stopped
+    env_file:
+      - ./env/hris-api.env
+    ports:
+      - "15433:5432"
+    volumes:
+      - postgresdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-hris}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  hris-api-db-init-dev:
+    build:
+      context: ../hris-api
+      dockerfile: Dockerfile
+      target: db-init
+    image: hris-api-db-init:develop
+    container_name: hris-api-db-init-dev
+    restart: "no"
+    env_file:
+      - ./env/hris-api.env
+    environment:
+      NODE_ENV: development
+      APP_ENV: dev
+      PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+      DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+    command: >
+      sh -c "npm run prisma-postgres:push
+      && npm run prisma-seed"
+    depends_on:
+      hris-postgres-dev:
+        condition: service_healthy
+
+  hris-api-dev:
+    build:
+      context: ../hris-api
+      dockerfile: Dockerfile
+    image: hris-api-local:develop
+    container_name: hris-api-dev
+    restart: unless-stopped
+    env_file:
+      - ./env/hris-api.env
+    environment:
+      NODE_ENV: development
+      APP_ENV: dev
+      STORAGE_PROVIDER: local
+      LOCAL_UPLOAD_ROOT: /app/uploads
+      LOCAL_UPLOAD_PUBLIC_BASE_URL: http://192.168.1.54:3101
+      PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+      DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+    volumes:
+      - apiuploads-dev:/app/uploads
+      - ../hris-api/dist/server.js:/app/dist/server.js:ro
+    ports:
+      - "3101:3001"
+    depends_on:
+      hris-postgres-dev:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3001/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  hris-app-dev:
+    build:
+      context: ../hris-app
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+    image: hris-app-local:develop
+    container_name: hris-app-dev
+    restart: unless-stopped
+    environment:
+      APP_ENV: dev
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      HRIS_API_ORIGIN: "http://hris-api-dev:3001"
+    volumes:
+      - ../hris-app/app/assets:/app/build/client/app/assets:ro
+    ports:
+      - "3100:3000"
+    depends_on:
+      hris-api-dev:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  zkteco-bridge-dev:
+    profiles:
+      - zkteco
+    build:
+      context: ../vendor/zkteco-sdk
+      dockerfile: Dockerfile.windows
+    image: project-truth-zkteco-bridge:develop
+    container_name: project-truth-zkteco-bridge-dev
+    restart: unless-stopped
+    environment:
+      ZKTECO_DEVICE_IPS: ${ZKTECO_DEVICE_IPS:-}
+      ZKTECO_WEBHOOK_URL: ${ZKTECO_WEBHOOK_URL:-http://host.docker.internal:3101/api/zkteco/events}
+
+  hris-postgres-uat:
+    image: postgres:16-alpine
+    container_name: hris-postgres-uat
+    restart: unless-stopped
+    env_file:
+      - ./env/hris-api.env
+    ports:
+      - "15434:5432"
+    volumes:
+      - postgresdata-uat:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-hris}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  hris-api-db-init-uat:
+    build:
+      context: ../hris-api
+      dockerfile: Dockerfile
+      target: db-init
+    image: hris-api-db-init:develop
+    container_name: hris-api-db-init-uat
+    restart: "no"
+    env_file:
+      - ./env/hris-api.env
+    environment:
+      NODE_ENV: production
+      APP_ENV: uat
+      PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+      DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+    command: >
+      sh -c "npm run prisma-postgres:push
+      && npm run prisma-seed"
+    depends_on:
+      hris-postgres-uat:
+        condition: service_healthy
+
+  hris-api-uat:
+    build:
+      context: ../hris-api
+      dockerfile: Dockerfile
+    image: hris-api-local:develop
+    container_name: hris-api-uat
+    restart: unless-stopped
+    env_file:
+      - ./env/hris-api.env
+    environment:
+      NODE_ENV: production
+      APP_ENV: uat
+      STORAGE_PROVIDER: local
+      LOCAL_UPLOAD_ROOT: /app/uploads
+      LOCAL_UPLOAD_PUBLIC_BASE_URL: http://192.168.1.54:3201
+      PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+      DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+    volumes:
+      - apiuploads-uat:/app/uploads
+    ports:
+      - "3201:3001"
+    depends_on:
+      hris-postgres-uat:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3001/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  hris-app-uat:
+    build:
+      context: ../hris-app
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+    image: hris-app-local:develop
+    container_name: hris-app-uat
+    restart: unless-stopped
+    environment:
+      APP_ENV: uat
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      HRIS_API_ORIGIN: "http://hris-api-uat:3001"
+    volumes:
+      - ../hris-app/app/assets:/app/build/client/app/assets:ro
+    ports:
+      - "3200:3000"
+    depends_on:
+      hris-api-uat:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  zkteco-bridge-uat:
+    profiles:
+      - zkteco
+    build:
+      context: ../vendor/zkteco-sdk
+      dockerfile: Dockerfile.windows
+    image: project-truth-zkteco-bridge:develop
+    container_name: project-truth-zkteco-bridge-uat
+    restart: unless-stopped
+    environment:
+      ZKTECO_DEVICE_IPS: ${ZKTECO_DEVICE_IPS:-}
+      ZKTECO_WEBHOOK_URL: ${ZKTECO_WEBHOOK_URL:-http://host.docker.internal:3201/api/zkteco/events}
+
+volumes:
+  postgresdata-dev:
+  postgresdata-uat:
+  apiuploads-dev:
+  apiuploads-uat:

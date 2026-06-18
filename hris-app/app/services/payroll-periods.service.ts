@@ -1,0 +1,518 @@
+import { hrisApiClient } from "../lib/api-client";
+import { APIService } from "./api-service";
+import type { ApiQueryParams } from "./api-service";
+
+export interface PayrollPeriod {
+	id: string;
+	name: string;
+	code?: string;
+	startDate: string;
+	endDate: string;
+	payDate: string;
+	payFrequency?:
+		| "DAILY"
+		| "WEEKLY"
+		| "BIWEEKLY"
+		| "SEMI_MONTHLY"
+		| "MONTHLY"
+		| "QUARTERLY"
+		| "ANNUALLY";
+	calculatorId?: string;
+	status: "DRAFT" | "OPEN" | "PROCESSING" | "COMPLETED" | "CLOSED";
+	cutoffDay?: number;
+	periodNumber?: number;
+	notes?: string;
+	generationMetadata?: Record<string, any>;
+	processedBy?: string;
+	processedAt?: string;
+	createdAt: string;
+	updatedAt: string;
+	_count?: {
+		attendanceObligations?: number;
+		timesheets?: number;
+		timesheetlines?: number;
+		employeePayrolls?: number;
+	};
+}
+
+/**
+ * Prefer `code` when present (stable, human-friendly), otherwise fallback to `id`.
+ * This works with the API which supports `GET /api/payrollperiod/:identifier` (id or code).
+ */
+export function getPayrollPeriodIdentifier(period?: { id?: string; code?: string | null }) {
+	const code = typeof period?.code === "string" ? period.code.trim() : "";
+	if (code) return code;
+	return typeof period?.id === "string" ? period.id : "";
+}
+
+export interface CreatePayrollPeriodRequest {
+	name: string;
+	startDate: string;
+	endDate: string;
+	payDate: string;
+	calculatorId?: string;
+	payFrequency?:
+		| "DAILY"
+		| "WEEKLY"
+		| "BIWEEKLY"
+		| "SEMI_MONTHLY"
+		| "MONTHLY"
+		| "QUARTERLY"
+		| "ANNUALLY";
+	status?: "DRAFT" | "OPEN" | "PROCESSING" | "COMPLETED" | "CLOSED";
+	cutoffDay?: number;
+	periodNumber?: number;
+	notes?: string;
+	organizationId: string;
+}
+
+export interface UpdatePayrollPeriodRequest {
+	name?: string;
+	startDate?: string;
+	endDate?: string;
+	payDate?: string;
+	payFrequency?:
+		| "DAILY"
+		| "WEEKLY"
+		| "BIWEEKLY"
+		| "SEMI_MONTHLY"
+		| "MONTHLY"
+		| "QUARTERLY"
+		| "ANNUALLY";
+	calculatorId?: string;
+	status?: "DRAFT" | "OPEN" | "PROCESSING" | "COMPLETED" | "CLOSED";
+	cutoffDay?: number;
+	periodNumber?: number;
+	notes?: string;
+}
+
+export interface PayrollPeriodResponse {
+	status: string;
+	message: string;
+	data: PayrollPeriod;
+	code?: number;
+	timestamp?: string;
+}
+
+export interface PayrollPeriodsResponse {
+	status: string;
+	message: string;
+	data: {
+		payrollPeriods: PayrollPeriod[];
+		pagination?: {
+			total: number;
+			page: number;
+			limit: number;
+		};
+	};
+	code?: number;
+	timestamp?: string;
+}
+
+export interface PayrollGenerationStartResponse {
+	action?: "started" | "pause_requested" | "cancellation_requested" | "reopened";
+	cancellationRequested?: boolean;
+	pauseRequested?: boolean;
+	jobId?: string;
+	message: string;
+	total?: number;
+}
+
+export interface PayrollGenerationProgress {
+	jobId: string;
+	periodId?: string;
+	status: "processing" | "paused" | "completed" | "failed" | "cancelled";
+	total: number;
+	processed: number;
+	success: number;
+	failed: number;
+	errors: Array<{ row: number; employeeId: string; error: string }>;
+	startedAt: string;
+	completedAt?: string;
+	message?: string;
+	cancellationRequested?: boolean;
+	cancellationRequestedAt?: string;
+	pauseRequested?: boolean;
+	pauseRequestedAt?: string;
+}
+
+export type PayrollBusinessDayRule = "NONE" | "NEXT_BUSINESS_DAY";
+export type PayrollFrequency =
+	| "DAILY"
+	| "WEEKLY"
+	| "BIWEEKLY"
+	| "SEMI_MONTHLY"
+	| "MONTHLY"
+	| "QUARTERLY"
+	| "ANNUALLY";
+
+export interface PayrollCycleRules {
+	SEMI_MONTHLY?: {
+		firstStartDay: number;
+		secondStartDay: number;
+		secondEndDay: number | "LAST_DAY";
+	};
+	WEEKLY?: { anchorWeekday: number };
+	BIWEEKLY?: { anchorWeekday: number };
+	MONTHLY?: { startDay: number; endDay: number | "LAST_DAY" };
+	QUARTERLY?: { startMonth: number };
+	ANNUALLY?: { startMonth: number };
+}
+
+export interface PayrollCycleConfig {
+	id: string;
+	organizationId: string;
+	defaultPayFrequency: PayrollFrequency;
+	payDateOffsetDays: number;
+	businessDayRule: PayrollBusinessDayRule;
+	includeHolidaysInBusinessDayCheck: boolean;
+	cycleRules?: PayrollCycleRules;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface UpdatePayrollCycleConfigRequest {
+	defaultPayFrequency?: PayrollFrequency;
+	payDateOffsetDays?: number;
+	businessDayRule?: PayrollBusinessDayRule;
+	includeHolidaysInBusinessDayCheck?: boolean;
+	cycleRules?: PayrollCycleRules;
+}
+
+export interface BulkGeneratePayrollPeriodsRequest {
+	frequency: PayrollFrequency;
+	rangeStart: string;
+	rangeEnd: string;
+	calculatorId?: string;
+	namingMode?: "DEFAULT" | "MONTHLY_LABEL" | "CUSTOM_PREFIX";
+	customNamePrefix?: string;
+	dryRun?: boolean;
+}
+
+export interface BulkGeneratePayrollPeriodsResponse {
+	totalComputed: number;
+	created: number;
+	updated: number;
+	skipped: number;
+	items: Array<{ code: string; action: string; reason?: string }>;
+}
+
+export interface BulkAdjustPayrollPeriodsRequest {
+	frequency?: PayrollFrequency;
+	periodIds?: string[];
+	forceRetroactive?: boolean;
+	dryRun?: boolean;
+}
+
+export interface BulkAdjustPayrollPeriodsResponse {
+	total: number;
+	updated: number;
+	skipped: number;
+	dryRunApplied?: boolean;
+	items: Array<{ id: string; code?: string | null; action: string; reason?: string }>;
+}
+
+export interface TimesheetPayrollPreviewSummary {
+	scopeEmployeesCount?: number;
+	approvedTimesheetsCount: number;
+	includedEmployeesCount: number;
+	excludedEmployeesCount: number;
+	approvedExcludedEmployeesCount?: number;
+	notSubmittedEmployeesCount?: number;
+	estimatedGrossPay: number;
+	estimatedTotalDeductions: number;
+	estimatedNetPay: number;
+}
+
+export interface TimesheetPayrollPreviewEmployee {
+	employeeId: string;
+	employeeCode?: string | null;
+	name: string;
+	department: string;
+	position: string;
+	payFrequency: string;
+	basicSalary: number;
+	timesheetId: string;
+	timesheetCode?: string;
+	timesheetStatus?: string;
+	payrollComputationStatus?: string;
+	basicPay?: number;
+	overtimePay?: number;
+	nightDiffPay?: number;
+	holidayPay?: number;
+	grossPay?: number;
+	taxableIncome?: number;
+	totalDeductions?: number;
+	netPay?: number;
+	allowances?: number;
+	loanDeductions?: number;
+	otherDeductions?: number;
+	totalReceivable?: number;
+	payrollRegister?: Record<string, number | string | null | undefined>;
+	payrollRegisterColumns?: Array<{
+		column: string;
+		label: string;
+		field: string;
+		value: number;
+		source?: string;
+	}>;
+	deductions?: {
+		sssContribution: number;
+		philHealthContribution: number;
+		pagibigContribution: number;
+		taxAmount: number;
+		absentDeduction: number;
+		lateDeduction: number;
+		earlyOutDeduction: number;
+	};
+	metadata?: Record<string, any>;
+}
+
+export interface TimesheetPayrollSourceDetail {
+	id: string;
+	source: "employeeBenefit" | "employeeLoan";
+	code?: string | null;
+	name: string;
+	direction: "COMPENSATION" | "DEDUCTION" | "LOAN";
+	reconciliationAction?: string | null;
+	amount: number;
+	startDate?: string | null;
+	endDate?: string | null;
+	payrollPeriodId?: string | null;
+	payrollPeriodCode?: string | null;
+}
+
+export interface TimesheetPayrollPreviewExcludedEmployee {
+	employeeId?: string | null;
+	employeeCode?: string | null;
+	name: string;
+	department?: string | null;
+	position?: string | null;
+	payFrequency?: string | null;
+	basicSalary?: number | null;
+	timesheetId?: string | null;
+	timesheetStatus?: string | null;
+	reason: string;
+	blockerType: string;
+}
+
+export interface TimesheetPayrollPreviewPagination {
+	page: number;
+	limit: number;
+	totalItems: number;
+	totalPages: number;
+	hasNextPage: boolean;
+	hasPreviousPage: boolean;
+}
+
+export interface TimesheetPayrollPreviewParams {
+	page?: number;
+	limit?: number;
+	query?: string;
+	departmentId?: string | null;
+	sectionId?: string | null;
+	employeeId?: string | null;
+}
+
+export interface TimesheetPayrollPreviewResponse {
+	period: {
+		id: string;
+		code?: string | null;
+		name: string;
+		startDate: string;
+		endDate: string;
+		payDate: string;
+		status: string;
+	};
+	summary: TimesheetPayrollPreviewSummary;
+	includedEmployees: TimesheetPayrollPreviewEmployee[];
+	excludedEmployees?: TimesheetPayrollPreviewExcludedEmployee[];
+	pagination: TimesheetPayrollPreviewPagination;
+}
+
+class PayrollPeriodsService extends APIService {
+	async getPayrollPeriods(): Promise<PayrollPeriodsResponse> {
+		const queryString = this.getQueryString();
+		const response = await hrisApiClient.get<PayrollPeriodsResponse>(
+			`/api/payrollperiod${queryString}`,
+		);
+		if (!response?.data) throw new Error("Invalid payroll periods response");
+		return response.data;
+	}
+
+	async getPayrollPeriod(id: string): Promise<PayrollPeriod> {
+		const queryString = this.getQueryString();
+		const response = await hrisApiClient.get<any>(`/api/payrollperiod/${id}${queryString}`);
+		if (!response?.data) throw new Error("Invalid payroll period response");
+
+		// Extract period from nested structure: response.data.data
+		let periodData = response.data;
+		if (periodData && typeof periodData === "object" && "data" in periodData) {
+			periodData = periodData.data;
+		}
+
+		if (!periodData) {
+			throw new Error("Payroll period data is undefined");
+		}
+
+		return periodData as PayrollPeriod;
+	}
+
+	async createPayrollPeriod(payload: CreatePayrollPeriodRequest): Promise<PayrollPeriodResponse> {
+		const response = await hrisApiClient.post<PayrollPeriodResponse>(
+			"/api/payrollperiod",
+			payload,
+		);
+		if (!response?.data) throw new Error("Invalid create payroll period response");
+		return response.data;
+	}
+
+	async updatePayrollPeriod(
+		id: string,
+		payload: UpdatePayrollPeriodRequest,
+	): Promise<PayrollPeriodResponse> {
+		const response = await hrisApiClient.patch<PayrollPeriodResponse>(
+			`/api/payrollperiod/${id}`,
+			payload,
+		);
+		if (!response?.data) throw new Error("Invalid update payroll period response");
+		return response.data;
+	}
+
+	async deletePayrollPeriod(id: string): Promise<void> {
+		await hrisApiClient.delete(`/api/payrollperiod/${id}`);
+	}
+
+	async generatePayroll(id: string): Promise<any> {
+		const response = await hrisApiClient.post<any>(`/api/payrollperiod/${id}/generate`);
+		if (!response?.data) throw new Error("Invalid generate payroll response");
+		return response.data;
+	}
+
+	async generateTimesheetPayroll(
+		id: string,
+		scope?: { departmentId?: string | null; sectionId?: string | null },
+	): Promise<PayrollGenerationStartResponse> {
+		const response = await hrisApiClient.post<any>(
+			`/api/payrollperiod/${id}/generate-timesheet`,
+			{
+				...(scope?.departmentId ? { departmentId: scope.departmentId } : {}),
+				...(scope?.sectionId ? { sectionId: scope.sectionId } : {}),
+			},
+		);
+		if (!response?.data) throw new Error("Invalid generate timesheet payroll response");
+		const payload = response.data?.data || response.data;
+		return payload as PayrollGenerationStartResponse;
+	}
+
+	async requestStopTimesheetPayroll(id: string): Promise<PayrollGenerationStartResponse> {
+		const response = await hrisApiClient.post<any>(
+			`/api/payrollperiod/${id}/generate-timesheet/stop`,
+		);
+		if (!response?.data) throw new Error("Invalid stop timesheet payroll response");
+		const payload = response.data?.data || response.data;
+		return payload as PayrollGenerationStartResponse;
+	}
+
+	async requestPauseTimesheetPayroll(id: string): Promise<PayrollGenerationStartResponse> {
+		const response = await hrisApiClient.post<any>(
+			`/api/payrollperiod/${id}/generate-timesheet/pause`,
+		);
+		if (!response?.data) throw new Error("Invalid pause timesheet payroll response");
+		const payload = response.data?.data || response.data;
+		return payload as PayrollGenerationStartResponse;
+	}
+
+	async getGenerateTimesheetPayrollPreview(
+		id: string,
+		params?: TimesheetPayrollPreviewParams,
+	): Promise<TimesheetPayrollPreviewResponse> {
+		const query = new URLSearchParams();
+		if (params?.page) {
+			query.set("page", String(params.page));
+		}
+		if (params?.limit) {
+			query.set("limit", String(params.limit));
+		}
+		if (params?.query) {
+			query.set("query", params.query);
+		}
+		if (params?.departmentId) {
+			query.set("departmentId", params.departmentId);
+		}
+		if (params?.sectionId) {
+			query.set("sectionId", params.sectionId);
+		}
+		if (params?.employeeId) {
+			query.set("employeeId", params.employeeId);
+		}
+		const queryString = query.toString();
+		const response = await hrisApiClient.get<any>(
+			`/api/payrollperiod/${id}/generate-timesheet/preview${
+				queryString ? `?${queryString}` : ""
+			}`,
+		);
+		if (!response?.data) throw new Error("Invalid timesheet payroll preview response");
+		const payload = response.data?.data || response.data;
+		return payload as TimesheetPayrollPreviewResponse;
+	}
+
+	async getGenerateTimesheetPayrollProgress(
+		jobId: string,
+	): Promise<PayrollGenerationProgress> {
+		const response = await hrisApiClient.get<any>(
+			`/api/payrollperiod/generate-timesheet/progress/${jobId}`,
+		);
+		if (!response?.data) throw new Error("Invalid payroll generation progress response");
+		const payload = response.data?.data || response.data;
+		return payload as PayrollGenerationProgress;
+	}
+
+	async getActiveTimesheetPayrollProgress(
+		id: string,
+	): Promise<PayrollGenerationProgress | null> {
+		const response = await hrisApiClient.get<any>(
+			`/api/payrollperiod/${id}/generate-timesheet/progress`,
+		);
+		if (!response?.data) throw new Error("Invalid active payroll generation progress response");
+		const payload = response.data?.data ?? null;
+		return payload as PayrollGenerationProgress | null;
+	}
+
+	async getPayrollCycleConfig(): Promise<PayrollCycleConfig> {
+		const response = await hrisApiClient.get<any>("/api/payrollperiod/config");
+		if (!response?.data) throw new Error("Invalid payroll cycle config response");
+		const payload = response.data?.data || response.data;
+		return payload as PayrollCycleConfig;
+	}
+
+	async updatePayrollCycleConfig(
+		payload: UpdatePayrollCycleConfigRequest,
+	): Promise<PayrollCycleConfig> {
+		const response = await hrisApiClient.patch<any>("/api/payrollperiod/config", payload);
+		if (!response?.data) throw new Error("Invalid update payroll cycle config response");
+		const responsePayload = response.data?.data || response.data;
+		return responsePayload as PayrollCycleConfig;
+	}
+
+	async bulkGeneratePayrollPeriods(
+		payload: BulkGeneratePayrollPeriodsRequest,
+	): Promise<BulkGeneratePayrollPeriodsResponse> {
+		const response = await hrisApiClient.post<any>("/api/payrollperiod/bulk-generate", payload);
+		if (!response?.data) throw new Error("Invalid bulk generate payroll periods response");
+		const responsePayload = response.data?.data || response.data;
+		return responsePayload as BulkGeneratePayrollPeriodsResponse;
+	}
+
+	async bulkAdjustPayrollPeriods(
+		payload: BulkAdjustPayrollPeriodsRequest,
+	): Promise<BulkAdjustPayrollPeriodsResponse> {
+		const response = await hrisApiClient.post<any>("/api/payrollperiod/bulk-adjust", payload);
+		if (!response?.data) throw new Error("Invalid bulk adjust payroll periods response");
+		const responsePayload = response.data?.data || response.data;
+		return responsePayload as BulkAdjustPayrollPeriodsResponse;
+	}
+}
+
+const payrollPeriodsService = new PayrollPeriodsService();
+export default payrollPeriodsService;

@@ -1,0 +1,78 @@
+enum Protocol {
+  http
+  https
+  tcp
+  udp
+}
+
+enum DeviceEventStatus {
+  RECEIVED
+  MATCHED
+  ATTENDANCE_CREATED
+  ATTENDANCE_UPDATED
+  IGNORED
+  UNMATCHED
+  FAILED
+}
+
+enum DeviceEventSource {
+  HIKVISION_CALLBACK
+  EN_HCNETSDK_ALARM
+  ZKTECO_EVENT
+}
+
+model Device {
+  id             String @id @default(cuid())
+  organizationId String
+  name           String
+  address        String
+  port           Int
+
+  protocol Protocol @default(http)
+
+  config Json?
+
+  access Json
+
+  employees Employee[]
+  events    DeviceEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  isDeleted Boolean  @default(false)
+
+  @@unique([organizationId, address, port])
+}
+
+model DeviceEvent {
+  id             String            @id @default(cuid())
+  organizationId String
+  device         Device            @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId       String
+  employeeId     String?
+  attendanceId   String?
+
+  eventTime    DateTime
+  receivedAt   DateTime          @default(now())
+  employeeNo   String?
+  source       DeviceEventSource @default(HIKVISION_CALLBACK)
+  status       DeviceEventStatus @default(RECEIVED)
+  eventType    String?
+  major        String?
+  minor        String?
+  doorNo       String?
+  verifyMode   String?
+  dedupeKey    String
+  payload      Json?
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, dedupeKey])
+  @@index([organizationId, deviceId, receivedAt])
+  @@index([organizationId, status, receivedAt])
+  @@index([organizationId, source, receivedAt])
+  @@index([organizationId, employeeNo, receivedAt])
+  @@map("device_events")
+}

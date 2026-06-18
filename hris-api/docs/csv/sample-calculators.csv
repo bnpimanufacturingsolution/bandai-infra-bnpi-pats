@@ -1,0 +1,2 @@
+code,name,description,type,isActive,isDefault,taxRates,sssRates,philHealthRates,pagibigRates,rateMultipliers
+CALC-STD,Standard Payroll Calculator,Minimal calculator configuration for migration validation,BASIC,true,true,"{""brackets"":[{""from"":0,""to"":250000,""rate"":0.2}]}","{""employee"":0.045}","{""employee"":0.025}","{""employee"":100}","{""regular"":1,""overtime"":1.25}"

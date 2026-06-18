@@ -6,6 +6,7 @@ param(
   [string]$TargetPlatform = 'hyperv',
   [string]$VmName = 'project-truth-node-01',
   [string]$SwitchName = 'ProjectTruth-External',
+  [string]$BridgeAdapterName = '',
   [string]$VmPath = "$env:ProgramData\ProjectTruth\HyperV",
   [int]$CpuCount = 2,
   [int]$MemoryMb = 4096,
@@ -37,15 +38,21 @@ $config = [ordered]@{
     memoryMb = $MemoryMb
     guestIpHint = $GuestIpHint
   }
+  virtualbox = [ordered]@{
+    vmName = $VmName
+    bridgeAdapterName = $BridgeAdapterName
+    cpuCount = $CpuCount
+    memoryMb = $MemoryMb
+    guestIpHint = $GuestIpHint
+  }
   ports = [ordered]@{
-    dev = 3001
-    uat = 3002
-    prod = 3000
+    hrisApi = 3001
+    hrisApp = 3000
     ssh = 2222
   }
   gitops = [ordered]@{
     repoUrl = $GitOpsRepoUrl
-    applications = @('project-truth-dev', 'project-truth-uat', 'project-truth-prod')
+    applications = @('project-truth-hris-api', 'project-truth-hris-app')
   }
   updatedAt = (Get-Date).ToString('o')
 }

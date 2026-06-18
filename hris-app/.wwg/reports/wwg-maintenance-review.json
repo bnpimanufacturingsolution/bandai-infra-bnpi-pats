@@ -1,0 +1,1333 @@
+{
+  "targetDisplay": ".",
+  "generatedAt": "2026-05-15T06:32:05.846Z",
+  "command": "wwg maintain --target C:\\Users\\1biss\\Documents\\Projects\\hris-app --json",
+  "dryRun": true,
+  "alignmentStatus": "red",
+  "truthAlignment": {
+    "level": "red",
+    "label": "Critical Alignment Break",
+    "recommendedDecision": "Regression / Quality Repair",
+    "driftScore": 10,
+    "maxDriftScore": 10,
+    "reasons": [
+      "Test Enforcement requires regression repair or reports removed/weakened verification.",
+      "A high-severity finding touches tests, regression, or a high-risk product area.",
+      "Governance, audit, report, history, or regression evidence appears to be removed without documented approval.",
+      "Recent docs use admin, customer terminology not fully reflected in canonical terminology.",
+      "Recent reports suggest documentation lag or stale context that may need Project Truth synchronization."
+    ],
+    "categoryFindings": {
+      "requirementEvolution": [],
+      "undocumentedRequirementChange": [],
+      "documentationLag": [
+        "Recent reports suggest documentation lag or stale context that may need Project Truth synchronization.",
+        "Low-severity findings are present; review alongside Truth Alignment Status instead of treating them as harmful drift by default."
+      ],
+      "implementationDrift": [],
+      "regressionQualityDrift": [
+        "Test Enforcement requires regression repair or reports removed/weakened verification.",
+        "A high-severity finding touches tests, regression, or a high-risk product area.",
+        "Governance, audit, report, history, or regression evidence appears to be removed without documented approval."
+      ],
+      "terminologyDrift": [
+        "Recent docs use admin, customer terminology not fully reflected in canonical terminology."
+      ]
+    },
+    "recommendedNaturalPrompt": "Treat this as a regression or quality gap. Add or update meaningful tests, document the issue, and repair the implementation.",
+    "backupCliCommands": [
+      "wwg regression-check"
+    ],
+    "interpretation": "Drift Score 10/10 indicates a critical conflict, regression, missing verification, or high-risk change that needs planning/reconciliation before more implementation.",
+    "executionGate": {
+      "level": "stop",
+      "label": "Stop",
+      "reasons": [
+        "Test Enforcement found removed/weakened tests or missing regression coverage.",
+        "Test Enforcement requires regression repair or reports removed/weakened verification.",
+        "A high-severity finding touches tests, regression, or a high-risk product area.",
+        "Governance, audit, report, history, or regression evidence appears to be removed without documented approval.",
+        "Recent docs use admin, customer terminology not fully reflected in canonical terminology.",
+        "Recent reports suggest documentation lag or stale context that may need Project Truth synchronization."
+      ],
+      "recommendedNaturalPrompt": "Stop implementation and resolve the Project Truth conflict or regression first.",
+      "backupCliCommands": [
+        "wwg regression-check",
+        "wwg reconcile",
+        "wwg plan"
+      ]
+    }
+  },
+  "summary": {
+    "total": 21,
+    "critical": 1,
+    "high": 1,
+    "medium": 2,
+    "low": 3,
+    "info": 14,
+    "safeToApplyRecommendations": 0,
+    "requiresUserConfirmation": 18,
+    "archiveCandidates": 0,
+    "mergeCandidates": 4,
+    "renameCandidates": 0,
+    "staleContextCandidates": 1
+  },
+  "findings": [
+    {
+      "id": "regression-governance-open-high-gaps",
+      "title": "Critical or high regression governance gaps remain open",
+      "description": "Adoption regression gaps include critical or high open items that should be reviewed before strict CI enforcement.",
+      "category": "regression-governance",
+      "severity": "critical",
+      "path": ".wwg/governance/regression-gaps.md",
+      "recommendedAction": "review",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Review `.wwg/governance/regression-gaps.md` and convert safe report-first candidates into real tests or checklists as part of normal implementation work."
+    },
+    {
+      "id": "regression-candidate-confirmation-needed",
+      "title": "Regression candidates need confirmation evidence",
+      "description": "Safe report-first candidates exist, but some remain proposed or candidate-only and are not coverage.",
+      "category": "regression-governance",
+      "severity": "high",
+      "path": ".wwg/workspace/testing/regression-candidate-review.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Review `.wwg/workspace/testing/regression-candidate-review.md` and record explicit manual/process, executable, or waiver evidence in `.wwg/workspace/testing/manual-verification-evidence.json`."
+    },
+    {
+      "id": "regression-governance-traceability-incomplete",
+      "title": "Regression traceability remains uncovered or unknown",
+      "description": "Adopted-project behavior traceability exists but still contains uncovered or unknown records.",
+      "category": "regression-governance",
+      "severity": "medium",
+      "path": ".wwg/governance/rule-traceability.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Review `.wwg/governance/rule-traceability.md` and map uncovered behavior to confirmed evidence."
+    },
+    {
+      "id": "report-index-missing",
+      "title": "Report policy drift",
+      "description": ".wwg/reports exists without its promoted report index.",
+      "category": "report-policy-drift",
+      "severity": "medium",
+      "path": ".wwg/reports/README.md",
+      "recommendedAction": "review",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Add `.wwg/reports/README.md` before claiming native report policy readiness."
+    },
+    {
+      "id": "gitignore-native-report-backups-missing",
+      "title": "Report policy drift",
+      "description": "Report policy expects `.wwg/reports/backups/` to be ignored.",
+      "category": "gitignore-policy-drift",
+      "severity": "low",
+      "path": ".gitignore",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Add a narrow ignore rule for `.wwg/reports/backups/` or `.wwg/.gitignore` `reports/backups/`."
+    },
+    {
+      "id": "changelog-missing",
+      "title": "Changelog project memory is missing",
+      "description": "CHANGELOG.md is not present, so meaningful project history is not yet governed as WWG product memory.",
+      "category": "truth-loop-drift",
+      "severity": "low",
+      "path": "CHANGELOG.md",
+      "recommendedAction": "create",
+      "risk": "low",
+      "requiresUserConfirmation": false,
+      "canApplySafely": false,
+      "reason": "Run `wwg changelog generate --target . --from-git --weekly --dry-run` before creating or applying changelog history."
+    },
+    {
+      "id": "readme-governance-review-needed",
+      "title": "README front door needs governance review",
+      "description": "README.md has bloat, phase/pass wording, missing routing, or missing front-door structure.",
+      "category": "truth-loop-drift",
+      "severity": "low",
+      "path": "README.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": false,
+      "canApplySafely": false,
+      "reason": "Run `wwg readme preview --target .` and `wwg readme route-docs --target . --dry-run`."
+    },
+    {
+      "id": "fragmented-guidance-candidate",
+      "title": "Potential fragmented guidance: readiness",
+      "description": "Several durable surfaces appear to cover the same concept.",
+      "category": "fragmented-guidance",
+      "severity": "info",
+      "paths": [
+        ".wwg/governance/infrastructure-readiness-checklist.md",
+        ".wwg/governance/operational-readiness-review.md",
+        ".wwg/governance/project-readiness-checklist.md",
+        ".wwg/workspace/testing/manual-verification-checklist.md",
+        ".wwg/workspace/testing/non-technical-regression-checklist.md"
+      ],
+      "recommendedAction": "merge",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "This is a consolidation candidate only; template, dogfood, docs, and compatibility boundaries must be reviewed before merging guidance."
+    },
+    {
+      "id": "fragmented-guidance-candidate",
+      "title": "Potential fragmented guidance: maintenance",
+      "description": "Several durable surfaces appear to cover the same concept.",
+      "category": "fragmented-guidance",
+      "severity": "info",
+      "paths": [
+        ".wwg/governance/README.md",
+        ".wwg/governance/maintenance-review-checklist.md",
+        ".wwg/workspace/AGENTS.md",
+        ".wwg/workspace/context/architecture-context.md",
+        ".wwg/workspace/context/context-maintenance-matrix.md",
+        ".wwg/workspace/context/domain-context.md",
+        ".wwg/workspace/context/governance-context.md",
+        ".wwg/workspace/context/project-context.md",
+        ".wwg/workspace/context/ux-context.md",
+        ".wwg/workspace/prompts/public-discovery-maintenance.md",
+        ".wwg/workspace/skills/README.md",
+        ".wwg/workspace/skills/change-classifier.skill.md"
+      ],
+      "recommendedAction": "merge",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "This is a consolidation candidate only; template, dogfood, docs, and compatibility boundaries must be reviewed before merging guidance."
+    },
+    {
+      "id": "fragmented-guidance-candidate",
+      "title": "Potential fragmented guidance: principles",
+      "description": "Several durable surfaces appear to cover the same concept.",
+      "category": "fragmented-guidance",
+      "severity": "info",
+      "paths": [
+        ".wwg/governance/recommendation-policy.md",
+        ".wwg/wiki/principles/README.md",
+        ".wwg/workspace/context/architecture-context.md",
+        ".wwg/workspace/context/governance-context.md",
+        ".wwg/workspace/context/project-context.md",
+        ".wwg/workspace/context/ux-context.md"
+      ],
+      "recommendedAction": "merge",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "This is a consolidation candidate only; template, dogfood, docs, and compatibility boundaries must be reviewed before merging guidance."
+    },
+    {
+      "id": "fragmented-guidance-candidate",
+      "title": "Potential fragmented guidance: handoff",
+      "description": "Several durable surfaces appear to cover the same concept.",
+      "category": "fragmented-guidance",
+      "severity": "info",
+      "paths": [
+        ".wwg/workspace/AGENTS.md",
+        ".wwg/workspace/testing/manual-verification-checklist.md",
+        ".wwg/workspace/testing/non-technical-regression-checklist.md",
+        "AGENTS.md"
+      ],
+      "recommendedAction": "merge",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "This is a consolidation candidate only; template, dogfood, docs, and compatibility boundaries must be reviewed before merging guidance."
+    },
+    {
+      "id": "skill-copy-policy-current",
+      "title": "Governed skill copy policy is current",
+      "description": "Compatibility-domain skills are not copied by default for this project.",
+      "category": "generated-artifact-freshness",
+      "severity": "info",
+      "path": ".wwg/config/skill-manifest.yaml",
+      "recommendedAction": "keep",
+      "risk": "low",
+      "requiresUserConfirmation": false,
+      "canApplySafely": false,
+      "reason": "Core/compatibility-core skill support remains available. Compatibility-domain skills are reference-only recommendations when relevant. Cleanup runs only through explicit --apply-skill-cleanup, and WWG does not activate runtime skills."
+    },
+    {
+      "id": "ambiguous-report-name",
+      "title": "Report filename has unclear purpose suffix",
+      "description": "A report-like Markdown file does not clearly signal report, handoff, review, plan, index, or historical purpose.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": ".wwg/reports/adoption-audit.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Ambiguous report names should be indexed or renamed only through a deliberate report policy pass."
+    },
+    {
+      "id": "ambiguous-report-name",
+      "title": "Report filename has unclear purpose suffix",
+      "description": "A report-like Markdown file does not clearly signal report, handoff, review, plan, index, or historical purpose.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": ".wwg/reports/changelog-bump-recommendation.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Ambiguous report names should be indexed or renamed only through a deliberate report policy pass."
+    },
+    {
+      "id": "ambiguous-report-name",
+      "title": "Report filename has unclear purpose suffix",
+      "description": "A report-like Markdown file does not clearly signal report, handoff, review, plan, index, or historical purpose.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": ".wwg/reports/changelog-preview.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Ambiguous report names should be indexed or renamed only through a deliberate report policy pass."
+    },
+    {
+      "id": "ambiguous-report-name",
+      "title": "Report filename has unclear purpose suffix",
+      "description": "A report-like Markdown file does not clearly signal report, handoff, review, plan, index, or historical purpose.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": ".wwg/reports/context-skill-quality.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Ambiguous report names should be indexed or renamed only through a deliberate report policy pass."
+    },
+    {
+      "id": "ambiguous-report-name",
+      "title": "Report filename has unclear purpose suffix",
+      "description": "A report-like Markdown file does not clearly signal report, handoff, review, plan, index, or historical purpose.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": ".wwg/reports/readme-preview.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Ambiguous report names should be indexed or renamed only through a deliberate report policy pass."
+    },
+    {
+      "id": "ambiguous-report-name",
+      "title": "Report filename has unclear purpose suffix",
+      "description": "A report-like Markdown file does not clearly signal report, handoff, review, plan, index, or historical purpose.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": ".wwg/reports/runtime-skill-candidates.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Ambiguous report names should be indexed or renamed only through a deliberate report policy pass."
+    },
+    {
+      "id": "principle-candidate-outside-principles",
+      "title": "Principle-like guidance exists outside principles",
+      "description": "Some durable guidance surfaces mention principle/doctrine concepts outside `.wwg/wiki/principles/`.",
+      "category": "principle-drift",
+      "severity": "info",
+      "paths": [
+        ".wwg/workspace/AGENTS.md"
+      ],
+      "recommendedAction": "promote",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Promotion to active principles requires deliberate human or task-level confirmation."
+    },
+    {
+      "id": "ambiguous-report-classification",
+      "title": "Report policy drift",
+      "description": "Some report-like files need human classification.",
+      "category": "report-policy-drift",
+      "severity": "info",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Run `wwg reports --target .` and review the Ambiguous / Needs Review section."
+    },
+    {
+      "id": "ambiguous-json-report-review",
+      "title": "Ambiguous JSON reports need classification",
+      "description": "Machine-readable reports are present outside temporary report folders without an index or recognized routine/compatibility role.",
+      "category": "report-policy-drift",
+      "severity": "info",
+      "paths": [
+        ".wwg/reports/adoption-regression-report.json",
+        ".wwg/reports/context-skill-quality.json",
+        ".wwg/reports/generated-project-upgrade-review.json",
+        ".wwg/reports/wwg-generate-governance-report.json",
+        ".wwg/reports/wwg-generate-workspace-report.json"
+      ],
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "JSON reports are not promoted by default; classify as compatibility JSON, promoted JSON, routine generated JSON, transient JSON, or ambiguous JSON before committing policy decisions."
+    }
+  ],
+  "markdownReportPath": ".wwg/reports/wwg-maintenance-review.md",
+  "jsonReportPath": ".wwg/reports/wwg-maintenance-review.json",
+  "regressionGovernance": {
+    "present": true,
+    "adoptedProject": true,
+    "manifestPresent": true,
+    "gapsPresent": true,
+    "traceabilityPresent": true,
+    "fallbackBaselinePresent": true,
+    "source": {
+      "manifest": ".wwg/governance/regression-manifest.json",
+      "gaps": ".wwg/governance/regression-gaps.json",
+      "traceability": ".wwg/governance/rule-traceability.json",
+      "fallbackBaseline": ".wwg/reports/adoption-regression-report.json"
+    },
+    "projectClassification": {
+      "type": "mixed",
+      "confidence": "high"
+    },
+    "ciReadiness": {
+      "status": "partial",
+      "reasons": [
+        "Some test/check evidence exists, but readiness gaps remain.",
+        "17 report-first candidate(s) still have no confirmed evidence.",
+        "9 open regression gap(s) remain.",
+        "12 executable evidence record(s) were found.",
+        "Some behavior traceability remains uncovered or unknown."
+      ],
+      "strictBlockingReasons": [
+        "6 high/critical behavior(s) are not mapped to detected tests.",
+        "3 critical open regression gap(s) remain.",
+        "3 high open regression gap(s) remain.",
+        "17 report-first candidate(s) remain candidate-only and do not count as coverage.",
+        "1 behavior traceability record(s) are unknown."
+      ]
+    },
+    "gapSummary": {
+      "total": 9,
+      "open": 9,
+      "critical": 3,
+      "high": 3,
+      "medium": 3,
+      "low": 0,
+      "info": 0
+    },
+    "traceabilitySummary": {
+      "total": 10,
+      "covered": 0,
+      "partial": 2,
+      "uncovered": 0,
+      "unknown": 1,
+      "candidate-only": 8,
+      "manual-partial": 0,
+      "manual-covered": 0,
+      "executable-partial": 1,
+      "executable-covered": 0,
+      "waived": 0
+    },
+    "candidateSummary": {
+      "total": 17,
+      "technical": 0,
+      "nonTechnical": 0,
+      "mixed": 17
+    },
+    "evidenceSummary": {
+      "manualChecklistPresent": true,
+      "manualEvidencePresent": true,
+      "nonTechnicalChecklistPresent": true,
+      "candidateReviewMarkdownPresent": true,
+      "candidateReviewJsonPresent": true,
+      "total": 17,
+      "proposed": 17,
+      "reviewed": 0,
+      "confirmed": 0,
+      "implemented": 0,
+      "waived": 0,
+      "rejected": 0,
+      "manualConfirmed": 0,
+      "executableDetected": 12,
+      "candidateOnly": 17,
+      "manualPartial": 0,
+      "manualCovered": 0,
+      "executablePartial": 0,
+      "executableCovered": 0,
+      "uncovered": 17,
+      "unknown": 11,
+      "unconfirmedCandidates": 17,
+      "missingChecklist": false
+    },
+    "proposedExecutableTests": {
+      "markdownPresent": true,
+      "jsonPresent": true,
+      "total": 10,
+      "eligibleToApply": 0,
+      "proposalOnly": 0,
+      "safeToDraft": 0,
+      "unsafeNeedsHuman": 10,
+      "blocked": 0,
+      "stale": false
+    },
+    "warnings": [
+      "9 open regression gap(s) remain.",
+      "Some behavior traceability remains uncovered or unknown."
+    ],
+    "recommendedNextAction": "Review `.wwg/workspace/testing/regression-candidate-review.md` and confirm candidates with manual/process or executable evidence before claiming coverage."
+  },
+  "recommendationGovernance": {
+    "registryPath": ".wwg/governance/recommendation-registry.md",
+    "policyPath": ".wwg/governance/recommendation-policy.md",
+    "registryFound": true,
+    "policyFound": true,
+    "registryReview": {
+      "recommendations": [
+        {
+          "id": "REC-0001",
+          "name": "Reconcile stale template identity",
+          "type": "Documentation",
+          "source": "WWG adoption readiness review",
+          "reason": "README.md and package.json still identify the project as `react-app-template`, while source/docs/Firebase naming show an HRIS/workforce application.",
+          "suggestedTiming": "Before public release or next major agent handoff",
+          "impact": "High",
+          "effort": "Medium",
+          "riskIfIgnored": "Agents and humans may plan from stale product identity and produce wrong docs, prompts, or release notes.",
+          "status": "Proposed",
+          "owner": "Unassigned",
+          "created": "2026-05-15",
+          "reviewBy": "2026-05-22",
+          "links": "`.wwg/wiki/project-truth.md`, `README.md`, `package.json`",
+          "normalizedStatus": "Proposed",
+          "normalizedImpact": "High",
+          "normalizedEffort": "Medium"
+        },
+        {
+          "id": "REC-0002",
+          "name": "Review Firebase admin SDK JSON files",
+          "type": "Security",
+          "source": "WWG adoption readiness review",
+          "reason": "Firebase admin SDK JSON filenames are present under `firebase/` and `firebase/scripts/`; contents were not inspected.",
+          "suggestedTiming": "Immediate security triage",
+          "impact": "High",
+          "effort": "Medium",
+          "riskIfIgnored": "Potential secret material may remain in the repo, creating credential exposure risk if committed or shared.",
+          "status": "Proposed",
+          "owner": "Unassigned",
+          "created": "2026-05-15",
+          "reviewBy": "2026-05-16",
+          "links": "`firebase/`, `.wwg/wiki/project-truth.md`",
+          "normalizedStatus": "Proposed",
+          "normalizedImpact": "High",
+          "normalizedEffort": "Medium"
+        },
+        {
+          "id": "REC-0003",
+          "name": "Track WWG generator missing test-enforcement file",
+          "type": "Governance",
+          "source": "WWG adoption readiness review",
+          "reason": "`wwg status` requires `.wwg/governance/test-enforcement.md`, but `wwg generate-governance` in package version 0.6.0 did not create it from the shipped template.",
+          "suggestedTiming": "Next WWG package review",
+          "impact": "Medium",
+          "effort": "Low",
+          "riskIfIgnored": "Future adopted projects may remain not-ready until the file is restored manually.",
+          "status": "Proposed",
+          "owner": "Unassigned",
+          "created": "2026-05-15",
+          "reviewBy": "2026-05-22",
+          "links": "`.wwg/governance/test-enforcement.md`, `.wwg/reports/wwg-generate-governance-report.md`",
+          "normalizedStatus": "Proposed",
+          "normalizedImpact": "Medium",
+          "normalizedEffort": "Unknown",
+          "parseWarnings": [
+            "Row 28 has unknown effort: Low."
+          ]
+        }
+      ],
+      "warnings": [
+        "Row 28 has unknown effort: Low."
+      ],
+      "summary": {
+        "runDate": "2026-05-15",
+        "total": 3,
+        "byStatus": {
+          "Proposed": 3
+        },
+        "byImpact": {
+          "High": 2,
+          "Medium": 1
+        },
+        "byType": {
+          "Documentation": 1,
+          "Security": 1,
+          "Governance": 1
+        },
+        "itemsNeedingReview": [
+          {
+            "id": "REC-0001",
+            "name": "Reconcile stale template identity",
+            "status": "Proposed",
+            "impact": "High",
+            "owner": "Unassigned",
+            "reviewBy": "2026-05-22",
+            "suggestedTiming": "Before public release or next major agent handoff",
+            "suggestedAction": "Review for promotion",
+            "reasons": [
+              "High-impact Proposed recommendation"
+            ]
+          },
+          {
+            "id": "REC-0002",
+            "name": "Review Firebase admin SDK JSON files",
+            "status": "Proposed",
+            "impact": "High",
+            "owner": "Unassigned",
+            "reviewBy": "2026-05-16",
+            "suggestedTiming": "Immediate security triage",
+            "suggestedAction": "Review for promotion",
+            "reasons": [
+              "High-impact Proposed recommendation"
+            ]
+          },
+          {
+            "id": "REC-0003",
+            "name": "Track WWG generator missing test-enforcement file",
+            "status": "Proposed",
+            "impact": "Medium",
+            "owner": "Unassigned",
+            "reviewBy": "2026-05-22",
+            "suggestedTiming": "Next WWG package review",
+            "suggestedAction": "Review recommendation",
+            "reasons": [
+              "Parsing warning present"
+            ]
+          }
+        ],
+        "highImpactOpenRecommendations": [
+          {
+            "id": "REC-0001",
+            "name": "Reconcile stale template identity",
+            "status": "Proposed",
+            "impact": "High",
+            "owner": "Unassigned",
+            "reviewBy": "2026-05-22",
+            "suggestedTiming": "Before public release or next major agent handoff",
+            "suggestedAction": "Review for promotion",
+            "reasons": []
+          },
+          {
+            "id": "REC-0002",
+            "name": "Review Firebase admin SDK JSON files",
+            "status": "Proposed",
+            "impact": "High",
+            "owner": "Unassigned",
+            "reviewBy": "2026-05-16",
+            "suggestedTiming": "Immediate security triage",
+            "suggestedAction": "Review for promotion",
+            "reasons": []
+          }
+        ],
+        "staleReviewByItems": []
+      }
+    }
+  },
+  "skillManifest": {
+    "present": true,
+    "path": ".wwg/config/skill-manifest.yaml",
+    "valid": true,
+    "recommended": 13,
+    "recommendedReferenceOnlySkillIds": [
+      "business.business-brief",
+      "business.decision-memo",
+      "business.sop-writing",
+      "creative.pitch-deck",
+      "creative.storytelling",
+      "public.public-discovery-maintenance",
+      "public.public-surface-update",
+      "software.bug-fix",
+      "software.feature-implementation",
+      "software.runtime-infrastructure",
+      "software.web.component-architecture",
+      "software.web.react-patterns",
+      "software.web.rendering-strategy"
+    ],
+    "recommendedCreativeBusinessReferenceOnlySkillIds": [
+      "business.business-brief",
+      "business.decision-memo",
+      "business.sop-writing",
+      "creative.pitch-deck",
+      "creative.storytelling"
+    ],
+    "enabledCore": 6,
+    "local": 0,
+    "disabled": 0,
+    "materialization": {
+      "none": 0,
+      "reference": 14,
+      "copied": 5,
+      "local": 0
+    },
+    "policyViolations": [],
+    "detectedDomains": [
+      "business.compliance",
+      "business.decision",
+      "business.operations",
+      "business.strategy",
+      "creative.presentation",
+      "creative.story",
+      "game-design",
+      "software.security",
+      "software.testing",
+      "software.web"
+    ],
+    "selectedProfiles": [],
+    "skillIds": [
+      "business.business-brief",
+      "business.decision-memo",
+      "business.sop-writing",
+      "core.change-classifier",
+      "core.context-skill-maintenance",
+      "core.drift-detector",
+      "core.regression-guardrail-maintenance",
+      "core.task-router",
+      "core.truth-loop",
+      "creative.pitch-deck",
+      "creative.storytelling",
+      "public.public-discovery-maintenance",
+      "public.public-surface-update",
+      "software.bug-fix",
+      "software.feature-implementation",
+      "software.runtime-infrastructure",
+      "software.web.component-architecture",
+      "software.web.react-patterns",
+      "software.web.rendering-strategy"
+    ],
+    "warnings": [],
+    "legacyCopied": {
+      "detected": 5,
+      "compatibilityCore": 5,
+      "compatibilityDomain": 0,
+      "copiedDomain": 0,
+      "disabledCopied": [],
+      "missingManifestEntries": [],
+      "missingCompatibilityMetadata": [],
+      "localConflicts": []
+    }
+  },
+  "skillCleanupReview": {
+    "markdownReportPath": ".wwg/reports/skill-cleanup-review.md",
+    "jsonReportPath": ".wwg/reports/skill-cleanup-review.json",
+    "mode": "review",
+    "summary": {
+      "total": 11,
+      "review_candidate": 0,
+      "preserve_required": 5,
+      "not_applicable": 0,
+      "already_reference_only": 6,
+      "needs_manual_review": 0
+    },
+    "applySummary": {
+      "total": 11,
+      "review_candidate": 0,
+      "cleanup_applied": 0,
+      "preserved_protected": 5,
+      "reference_only": 6,
+      "already_clean": 0,
+      "manual_review_required": 0
+    },
+    "reviewCandidates": [],
+    "cleanupApplied": [],
+    "preservedProtected": [
+      {
+        "skillId": "core.change-classifier",
+        "name": "Change Classifier",
+        "currentMaterialization": "copied",
+        "futureMaterialization": "copied",
+        "manifestState": "enabled",
+        "path": ".wwg/workspace/skills/change-classifier.skill.md",
+        "status": "preserve_required",
+        "reasons": [
+          "Core or compatibility-core skills are not cleanup candidates."
+        ],
+        "recommendedAction": "Keep copied or referenced according to core compatibility policy.",
+        "applyStatus": "preserved_protected"
+      },
+      {
+        "skillId": "core.context-skill-maintenance",
+        "name": "Context Skill Maintenance",
+        "currentMaterialization": "copied",
+        "futureMaterialization": "copied",
+        "manifestState": "enabled",
+        "path": ".wwg/workspace/skills/context-skill-maintenance.skill.md",
+        "status": "preserve_required",
+        "reasons": [
+          "Core or compatibility-core skills are not cleanup candidates."
+        ],
+        "recommendedAction": "Keep copied or referenced according to core compatibility policy.",
+        "applyStatus": "preserved_protected"
+      },
+      {
+        "skillId": "core.drift-detector",
+        "name": "Drift Detector",
+        "currentMaterialization": "copied",
+        "futureMaterialization": "copied",
+        "manifestState": "enabled",
+        "path": ".wwg/workspace/skills/drift-detector.skill.md",
+        "status": "preserve_required",
+        "reasons": [
+          "Core or compatibility-core skills are not cleanup candidates."
+        ],
+        "recommendedAction": "Keep copied or referenced according to core compatibility policy.",
+        "applyStatus": "preserved_protected"
+      },
+      {
+        "skillId": "core.regression-guardrail-maintenance",
+        "name": "Regression Guardrail Maintenance",
+        "currentMaterialization": "copied",
+        "futureMaterialization": "copied",
+        "manifestState": "enabled",
+        "path": ".wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
+        "status": "preserve_required",
+        "reasons": [
+          "Core or compatibility-core skills are not cleanup candidates."
+        ],
+        "recommendedAction": "Keep copied or referenced according to core compatibility policy.",
+        "applyStatus": "preserved_protected"
+      },
+      {
+        "skillId": "core.task-router",
+        "name": "Task Router",
+        "currentMaterialization": "copied",
+        "futureMaterialization": "copied",
+        "manifestState": "enabled",
+        "path": ".wwg/workspace/skills/task-router.skill.md",
+        "status": "preserve_required",
+        "reasons": [
+          "Core or compatibility-core skills are not cleanup candidates."
+        ],
+        "recommendedAction": "Keep copied or referenced according to core compatibility policy.",
+        "applyStatus": "preserved_protected"
+      }
+    ],
+    "referenceOnly": [
+      {
+        "skillId": "software.bug-fix",
+        "name": "Bug Fix",
+        "currentMaterialization": "reference",
+        "futureMaterialization": "reference",
+        "manifestState": "recommended",
+        "path": null,
+        "status": "already_reference_only",
+        "reasons": [
+          "Skill is not physically copied in the workspace."
+        ],
+        "recommendedAction": "Keep as reference-only unless future evidence changes the recommendation.",
+        "applyStatus": "reference_only"
+      },
+      {
+        "skillId": "software.feature-implementation",
+        "name": "Feature Implementation",
+        "currentMaterialization": "reference",
+        "futureMaterialization": "reference",
+        "manifestState": "recommended",
+        "path": null,
+        "status": "already_reference_only",
+        "reasons": [
+          "Skill is not physically copied in the workspace."
+        ],
+        "recommendedAction": "Keep as reference-only unless future evidence changes the recommendation.",
+        "applyStatus": "reference_only"
+      },
+      {
+        "skillId": "software.production-monitoring",
+        "name": "Production Monitoring",
+        "currentMaterialization": "none",
+        "futureMaterialization": "reference",
+        "manifestState": "missing",
+        "path": null,
+        "status": "already_reference_only",
+        "reasons": [
+          "Skill is not physically copied in the workspace."
+        ],
+        "recommendedAction": "Keep as reference-only unless future evidence changes the recommendation.",
+        "applyStatus": "reference_only"
+      },
+      {
+        "skillId": "public.public-discovery-maintenance",
+        "name": "Public Discovery Maintenance",
+        "currentMaterialization": "reference",
+        "futureMaterialization": "reference",
+        "manifestState": "recommended",
+        "path": null,
+        "status": "already_reference_only",
+        "reasons": [
+          "Skill is not physically copied in the workspace."
+        ],
+        "recommendedAction": "Keep as reference-only unless future evidence changes the recommendation.",
+        "applyStatus": "reference_only"
+      },
+      {
+        "skillId": "public.public-surface-update",
+        "name": "Public Surface Update",
+        "currentMaterialization": "reference",
+        "futureMaterialization": "reference",
+        "manifestState": "recommended",
+        "path": null,
+        "status": "already_reference_only",
+        "reasons": [
+          "Skill is not physically copied in the workspace."
+        ],
+        "recommendedAction": "Keep as reference-only unless future evidence changes the recommendation.",
+        "applyStatus": "reference_only"
+      },
+      {
+        "skillId": "software.runtime-infrastructure",
+        "name": "Runtime Infrastructure",
+        "currentMaterialization": "reference",
+        "futureMaterialization": "reference",
+        "manifestState": "recommended",
+        "path": null,
+        "status": "already_reference_only",
+        "reasons": [
+          "Skill is not physically copied in the workspace."
+        ],
+        "recommendedAction": "Keep as reference-only unless future evidence changes the recommendation.",
+        "applyStatus": "reference_only"
+      }
+    ],
+    "alreadyClean": [],
+    "manualReviewRequired": [],
+    "preserveRequired": [
+      {
+        "skillId": "core.change-classifier",
+        "name": "Change Classifier",
+        "currentMaterialization": "copied",
+        "futureMaterialization": "copied",
+        "manifestState": "enabled",
+        "path": ".wwg/workspace/skills/change-classifier.skill.md",
+        "status": "preserve_required",
+        "reasons": [
+          "Core or compatibility-core skills are not cleanup candidates."
+        ],
+        "recommendedAction": "Keep copied or referenced according to core compatibility policy.",
+        "applyStatus": "preserved_protected"
+      },
+      {
+        "skillId": "core.context-skill-maintenance",
+        "name": "Context Skill Maintenance",
+        "currentMaterialization": "copied",
+        "futureMaterialization": "copied",
+        "manifestState": "enabled",
+        "path": ".wwg/workspace/skills/context-skill-maintenance.skill.md",
+        "status": "preserve_required",
+        "reasons": [
+          "Core or compatibility-core skills are not cleanup candidates."
+        ],
+        "recommendedAction": "Keep copied or referenced according to core compatibility policy.",
+        "applyStatus": "preserved_protected"
+      },
+      {
+        "skillId": "core.drift-detector",
+        "name": "Drift Detector",
+        "currentMaterialization": "copied",
+        "futureMaterialization": "copied",
+        "manifestState": "enabled",
+        "path": ".wwg/workspace/skills/drift-detector.skill.md",
+        "status": "preserve_required",
+        "reasons": [
+          "Core or compatibility-core skills are not cleanup candidates."
+        ],
+        "recommendedAction": "Keep copied or referenced according to core compatibility policy.",
+        "applyStatus": "preserved_protected"
+      },
+      {
+        "skillId": "core.regression-guardrail-maintenance",
+        "name": "Regression Guardrail Maintenance",
+        "currentMaterialization": "copied",
+        "futureMaterialization": "copied",
+        "manifestState": "enabled",
+        "path": ".wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
+        "status": "preserve_required",
+        "reasons": [
+          "Core or compatibility-core skills are not cleanup candidates."
+        ],
+        "recommendedAction": "Keep copied or referenced according to core compatibility policy.",
+        "applyStatus": "preserved_protected"
+      },
+      {
+        "skillId": "core.task-router",
+        "name": "Task Router",
+        "currentMaterialization": "copied",
+        "futureMaterialization": "copied",
+        "manifestState": "enabled",
+        "path": ".wwg/workspace/skills/task-router.skill.md",
+        "status": "preserve_required",
+        "reasons": [
+          "Core or compatibility-core skills are not cleanup candidates."
+        ],
+        "recommendedAction": "Keep copied or referenced according to core compatibility policy.",
+        "applyStatus": "preserved_protected"
+      }
+    ],
+    "manualReview": [],
+    "noFilesRemoved": true,
+    "filesRemoved": [],
+    "manifestUpdated": false
+  },
+  "readiness": {
+    "target": "C:\\Users\\1biss\\Documents\\Projects\\hris-app",
+    "targetDisplay": ".",
+    "context": "maintain",
+    "mustHave": [
+      {
+        "id": "wwg-workspace",
+        "label": "WWG workspace present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg"
+        ]
+      },
+      {
+        "id": "project-config",
+        "label": "Project config present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/config/wwg.project.yaml"
+        ]
+      },
+      {
+        "id": "project-truth",
+        "label": "Project Truth present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/wiki/project-truth.md"
+        ]
+      },
+      {
+        "id": "terminology",
+        "label": "Terminology present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/wiki/terminology.md"
+        ]
+      },
+      {
+        "id": "principles-readme",
+        "label": "Principles README present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/wiki/principles/README.md"
+        ]
+      },
+      {
+        "id": "workspace-current-task",
+        "label": "Workspace current task present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/workspace/current-task.md"
+        ]
+      },
+      {
+        "id": "governance-drift-guard",
+        "label": "Governance drift guard present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/drift-guard.md"
+        ]
+      },
+      {
+        "id": "recommendation-registry",
+        "label": "Recommendation Registry present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/recommendation-registry.md"
+        ]
+      },
+      {
+        "id": "reports-directory",
+        "label": "Reports directory present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/reports"
+        ]
+      },
+      {
+        "id": "root-agents",
+        "label": "Root AGENTS.md present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          "AGENTS.md"
+        ]
+      },
+      {
+        "id": "test-enforcement",
+        "label": "Test enforcement governance present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/test-enforcement.md"
+        ]
+      },
+      {
+        "id": "regression-guardrail",
+        "label": "Regression guardrail governance present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/regression-guardrail-catalog.md"
+        ]
+      },
+      {
+        "id": "validation-readiness",
+        "label": "Validation report present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/reports/wwg-validate-report.md"
+        ]
+      },
+      {
+        "id": "audit-readiness",
+        "label": "Audit report present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/reports/wwg-audit-report.md"
+        ]
+      },
+      {
+        "id": "agent-handoff",
+        "label": "Agent handoff present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/reports/wwg-agent-handoff.md",
+          ".wwg/reports/wwg-handoff-to-codex.md"
+        ]
+      },
+      {
+        "id": "adoption-regression-baseline",
+        "label": "Adoption regression baseline present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/regression-manifest.md",
+          ".wwg/governance/regression-manifest.json"
+        ]
+      }
+    ],
+    "otherFeatures": [
+      {
+        "id": "readme-support",
+        "label": "README missing",
+        "category": "other-feature",
+        "status": "present",
+        "severity": "success",
+        "show": false,
+        "reason": "The project front door is not present.",
+        "evidence": [
+          "README.md"
+        ],
+        "cliAction": "wwg readme generate --dry-run",
+        "agentAction": "Prepare a README handoff or reviewed scaffold; do not invent final README prose."
+      },
+      {
+        "id": "changelog-support",
+        "label": "Changelog missing",
+        "category": "other-feature",
+        "status": "missing",
+        "severity": "warning",
+        "show": true,
+        "reason": "Package, product, or git history signals make release memory relevant.",
+        "evidence": [
+          "CHANGELOG.md"
+        ],
+        "cliAction": "wwg changelog generate --from-git --weekly --dry-run",
+        "agentAction": "Prepare or review release narrative before treating changelog wording as final."
+      },
+      {
+        "id": "source-index-support",
+        "label": "Source index missing",
+        "category": "other-feature",
+        "status": "missing",
+        "severity": "warning",
+        "show": false,
+        "reason": "Source references exist, but no generated source index was detected.",
+        "evidence": [
+          ".wwg/wiki/01-sources/source-index.md",
+          ".wwg/wiki/01-sources/source-index.json",
+          "wiki/01-sources/source-index.md",
+          "wiki/01-sources/source-index.json"
+        ],
+        "cliAction": "wwg sources index",
+        "agentAction": "Review the source registry/index before relying on external truth."
+      },
+      {
+        "id": "infra-readiness",
+        "label": "Infrastructure readiness not checked",
+        "category": "other-feature",
+        "status": "present",
+        "severity": "success",
+        "show": false,
+        "reason": "Build, deploy, env, or infrastructure indicators were detected.",
+        "evidence": [
+          "package.json scripts",
+          ".env",
+          "Dockerfile",
+          ".github/workflows"
+        ],
+        "cliAction": "wwg infra check",
+        "agentAction": "Inspect infrastructure readiness before deployment-related work."
+      },
+      {
+        "id": "github-publish-readiness",
+        "label": "GitHub publishing readiness not checked",
+        "category": "other-feature",
+        "status": "available",
+        "severity": "info",
+        "show": true,
+        "reason": "Git or GitHub context exists.",
+        "evidence": [
+          ".git",
+          ".github",
+          "package.json repository"
+        ],
+        "cliAction": "wwg publish github --dry-run",
+        "agentAction": "Do not publish without explicit approval; review readiness and secret safety first."
+      },
+      {
+        "id": "doctor-self-heal",
+        "label": "Doctor/self-heal available for repairable issues",
+        "category": "other-feature",
+        "status": "not_applicable",
+        "severity": "info",
+        "show": false,
+        "reason": "Repairable WWG-owned issues were detected by the current command.",
+        "evidence": [],
+        "cliAction": "wwg doctor",
+        "agentAction": "Inspect repair reports before applying fixes."
+      },
+      {
+        "id": "upgrade-migration",
+        "label": "Upgrade or migration review available",
+        "category": "other-feature",
+        "status": "not_applicable",
+        "severity": "info",
+        "show": false,
+        "reason": "Template version drift or migration-pack indicators were detected.",
+        "evidence": [
+          "wwg.template_version",
+          "migrations/"
+        ],
+        "cliAction": "wwg migrations plan --from <current> --to <target>",
+        "agentAction": "Review a migration plan before applying upgrade or migration changes."
+      },
+      {
+        "id": "wizard-onboarding",
+        "label": "Wizard onboarding available",
+        "category": "other-feature",
+        "status": "not_applicable",
+        "severity": "info",
+        "show": false,
+        "reason": "Wizard is shown only for onboarding, init, or adoption contexts.",
+        "evidence": [],
+        "cliAction": "wwg wizard",
+        "agentAction": "Use the Wizard only when the user wants guided setup."
+      }
+    ],
+    "recommendedNext": [
+      {
+        "id": "review-relevant-other-features",
+        "label": "Review relevant Other Features",
+        "category": "recommended-next",
+        "status": "available",
+        "severity": "info",
+        "show": true,
+        "reason": "Only detected gaps or context-relevant actions are shown.",
+        "cliAction": "wwg brief",
+        "agentAction": "Treat recommendations as scoped support, not permission to expand the current task."
+      }
+    ],
+    "developerDetail": [
+      {
+        "id": "developer-validate",
+        "label": "Run structural validation",
+        "category": "developer-detail",
+        "status": "available",
+        "severity": "info",
+        "show": true,
+        "cliAction": "wwg validate"
+      },
+      {
+        "id": "developer-audit",
+        "label": "Run lower-level audit",
+        "category": "developer-detail",
+        "status": "available",
+        "severity": "info",
+        "show": true,
+        "cliAction": "wwg audit"
+      }
+    ]
+  },
+  "allowlistedReferences": {
+    "agentBrandDrift": [],
+    "stableDocPhasePollution": []
+  }
+}

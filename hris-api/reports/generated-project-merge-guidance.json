@@ -1,0 +1,170 @@
+{
+  "projectPath": "C:\\Users\\Renz\\Documents\\hris\\hris-api",
+  "readOnly": true,
+  "filesReviewed": [
+    ".wwg/governance/drift-guard.md",
+    ".wwg/wiki/project-truth.md",
+    ".wwg/wiki/terminology.md",
+    ".wwg/workspace/AGENTS.md",
+    ".wwg/workspace/context/project-context.md",
+    ".wwg/workspace/skills/change-classifier.skill.md",
+    ".wwg/workspace/skills/context-skill-maintenance.skill.md",
+    ".wwg/workspace/skills/drift-detector.skill.md",
+    ".wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
+    ".wwg/workspace/skills/task-router.skill.md",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "README.md"
+  ],
+  "guidanceItems": [
+    {
+      "filePath": ".wwg/governance/drift-guard.md",
+      "category": "drift-guard",
+      "riskLevel": "medium",
+      "finding": "governance-missing-purpose: Governance file is missing 'Purpose'.; governance-missing-applies-to: Governance file is missing 'Applies To'.; governance-missing-rules: Governance file is missing 'Rules'.; governance-missing-enforcement: Governance file is missing 'Enforcement'.; governance-missing-reports-artifacts: Governance file is missing 'Reports / Artifacts'.; governance-missing-references: Governance file is missing 'References'.",
+      "recommendedAction": "Review and merge manually. Do not apply an automatic overwrite.",
+      "preserveSections": [
+        "local safety rules",
+        "truth-loop requirements",
+        "validation requirements",
+        "approval gates"
+      ],
+      "neverOverwriteSections": [
+        "safety gates",
+        "approval gates",
+        "truth-loop rules",
+        "validation requirements"
+      ],
+      "candidateSnippet": "## Applies To\n\n- agents\n- maintainers\n- docs, governance, context, and skill changes\n\n## Rules\n\n### Must\n\n- Preserve canonical truth and validation requirements.\n\n### Must Not\n\n- Do not overwrite Project Truth or Terminology.\n\n## Enforcement\n\n- Stop and report safety-critical conflicts.\n\n## Reports / Artifacts\n\n- Record upgrade evidence under `.wwg/reports/`.\n\n<!-- Candidate snippet only. Preserve stricter local governance. -->",
+      "canonicalReferences": [
+        ".wwg/wiki/project-truth.md",
+        ".wwg/wiki/terminology.md",
+        ".wwg/governance/drift-guard.md"
+      ],
+      "humanReviewRequired": true
+    },
+    {
+      "filePath": ".wwg/wiki/project-truth.md",
+      "category": "canonical-truth",
+      "riskLevel": "high",
+      "finding": "File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings.",
+      "recommendedAction": "Review and merge manually. Do not apply an automatic overwrite.",
+      "preserveSections": [
+        "all accepted canonical truth"
+      ],
+      "neverOverwriteSections": [
+        "canonical Project Truth body",
+        "accepted decisions",
+        "project-specific facts"
+      ],
+      "candidateSnippet": "<!-- Candidate guidance only. Review canonical sources and preserve project-specific content before editing. -->",
+      "canonicalReferences": [
+        ".wwg/wiki/project-truth.md",
+        ".wwg/wiki/terminology.md",
+        ".wwg/governance/drift-guard.md"
+      ],
+      "humanReviewRequired": true
+    },
+    {
+      "filePath": ".wwg/wiki/terminology.md",
+      "category": "canonical-truth",
+      "riskLevel": "high",
+      "finding": "File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings.",
+      "recommendedAction": "Review and merge manually. Do not apply an automatic overwrite.",
+      "preserveSections": [
+        "all accepted canonical truth"
+      ],
+      "neverOverwriteSections": [
+        "accepted canonical terms",
+        "project-specific vocabulary"
+      ],
+      "candidateSnippet": "<!-- Candidate guidance only. Review canonical sources and preserve project-specific content before editing. -->",
+      "canonicalReferences": [
+        ".wwg/wiki/project-truth.md",
+        ".wwg/wiki/terminology.md",
+        ".wwg/governance/drift-guard.md"
+      ],
+      "humanReviewRequired": true
+    },
+    {
+      "filePath": ".wwg/workspace/context/project-context.md",
+      "category": "active-context",
+      "riskLevel": "medium",
+      "finding": "context-missing-purpose: Context file is missing 'Purpose'.; context-missing-scope: Context file is missing 'Scope'.; context-missing-current-state: Context file is missing 'Current State'.; context-missing-canonical-terms: Context file is missing 'Canonical Terms'.; context-missing-decisions: Context file is missing 'Decisions'.; context-missing-constraints: Context file is missing 'Constraints'.; context-missing-references: Context file is missing 'References'.",
+      "recommendedAction": "Review and merge manually. Do not apply an automatic overwrite.",
+      "preserveSections": [
+        "current decisions",
+        "constraints",
+        "project-specific terms",
+        "canonical references"
+      ],
+      "neverOverwriteSections": [
+        "human-authored content outside generated markers",
+        "project-specific truth",
+        "accepted decisions"
+      ],
+      "candidateSnippet": "## Purpose\n\n- Define active context for repeated agent loading.\n\n## Current State\n\n- Requires human review: summarize current accepted state.\n\n## Constraints\n\n### Must\n\n- Link to canonical truth instead of duplicating long history.\n\n<!-- Candidate snippet only. Preserve project-specific decisions. -->",
+      "canonicalReferences": [
+        ".wwg/wiki/project-truth.md",
+        ".wwg/wiki/terminology.md",
+        ".wwg/governance/drift-guard.md",
+        ".wwg/governance/context-writer.md"
+      ],
+      "humanReviewRequired": true
+    },
+    {
+      "filePath": "AGENTS.md",
+      "category": "agent-instruction",
+      "riskLevel": "medium",
+      "finding": "agent-instruction-missing-required-reading: Agent Instruction file is missing 'Required Reading'.; agent-instruction-missing-operating-rules: Agent Instruction file is missing 'Operating Rules'.",
+      "recommendedAction": "Review and merge manually. Do not apply an automatic overwrite.",
+      "preserveSections": [
+        "local rules",
+        "required reading",
+        "safety gates",
+        "handoff rules"
+      ],
+      "neverOverwriteSections": [
+        "human-authored content outside generated markers",
+        "project-specific truth",
+        "accepted decisions"
+      ],
+      "candidateSnippet": "## Required Reading\n\n- `.wwg/wiki/project-truth-summary.md`\n- `.wwg/wiki/terminology-summary.md`\n- `.wwg/workspace/current-task.md`\n- `.wwg/governance/drift-guard.md`\n\n## Safety Gates\n\n- Do not overwrite project-specific truth.\n- Stop and report conflicts with canonical truth.\n\n## Handoff / Reporting Rules\n\n- Report changes, validation, risks, and unresolved ambiguity.\n\n<!-- Candidate snippet only. Preserve local instructions. -->",
+      "canonicalReferences": [
+        ".wwg/wiki/project-truth.md",
+        ".wwg/wiki/terminology.md",
+        ".wwg/governance/drift-guard.md",
+        ".wwg/governance/markdown-contracts.md"
+      ],
+      "humanReviewRequired": true
+    },
+    {
+      "filePath": "README.md",
+      "category": "public-doc",
+      "riskLevel": "medium",
+      "finding": "File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings.",
+      "recommendedAction": "Review and merge manually. Do not apply an automatic overwrite.",
+      "preserveSections": [
+        "user-authored content",
+        "local decisions",
+        "accepted evidence"
+      ],
+      "neverOverwriteSections": [
+        "human-authored content outside generated markers",
+        "project-specific truth",
+        "accepted decisions"
+      ],
+      "candidateSnippet": "<!-- Candidate guidance only. Review canonical sources and preserve project-specific content before editing. -->",
+      "canonicalReferences": [
+        ".wwg/wiki/project-truth.md",
+        ".wwg/wiki/terminology.md",
+        ".wwg/governance/drift-guard.md"
+      ],
+      "humanReviewRequired": true
+    }
+  ],
+  "reportPaths": {
+    "markdown": ".wwg/reports/generated-project-merge-guidance.md",
+    "json": ".wwg/reports/generated-project-merge-guidance.json"
+  }
+}

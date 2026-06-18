@@ -21,6 +21,8 @@ autoinstall:
     - gnupg
     - lsb-release
   late-commands:
+    - mkdir -p /target/etc/ssh/sshd_config.d
+    - printf 'PasswordAuthentication yes\nKbdInteractiveAuthentication yes\n' > /target/etc/ssh/sshd_config.d/90-packer-password-auth.conf
     - curtin in-target --target=/target -- systemctl enable ssh
     - curtin in-target --target=/target -- usermod -aG sudo infra
     - echo 'infra ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/90-infra

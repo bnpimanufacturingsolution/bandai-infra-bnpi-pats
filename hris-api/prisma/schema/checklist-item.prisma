@@ -1,0 +1,69 @@
+model ChecklistItem {
+  id             String          @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String          @db.ObjectId
+  processId      String          @db.ObjectId
+  process        BoardingProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  title           String
+  description     String?
+  category        ChecklistCategory
+  status          ChecklistStatus   @default(PENDING)
+  priority        Priority          @default(MEDIUM)
+  dueDate         DateTime
+  completedDate   DateTime?
+  completedBy     String?
+  completedByName String?
+  order           Int
+
+  uiElement String? // CSS selector for tour
+
+  comments String?
+  metadata Json? // Flexible field for custom data
+
+  // Add these helpful fields:
+  isOptional    Boolean  @default(false)
+  estimatedTime Int? // Minutes to complete
+  dependencies  String[] @db.ObjectId // IDs of tasks that must be completed first
+
+  // Tracking
+  viewedAt     DateTime?
+  startedAt    DateTime? // When user clicked "Start"
+  reminderSent DateTime?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum ChecklistCategory {
+  HR_DOCUMENTATION
+  IT_SETUP
+  WORKSPACE_SETUP
+  TRAINING
+  COMPLIANCE
+  ACCESS_MANAGEMENT
+  EQUIPMENT
+  BENEFITS
+  KNOWLEDGE_TRANSFER
+  EXIT_INTERVIEW
+  ORIENTATION
+  SECURITY
+  PAYROLL
+  OTHER
+}
+
+enum ChecklistStatus {
+  PENDING
+  IN_PROGRESS
+  FOR_REVIEW
+  COMPLETED
+  SKIPPED
+  BLOCKED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}

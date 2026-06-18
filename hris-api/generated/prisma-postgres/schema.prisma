@@ -1,0 +1,3011 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../../generated/prisma-postgres"
+  previewFeatures = ["prismaSchemaFolder"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PG_DATABASE_URL")
+}
+
+model ActivityLogging {
+  id             String    @id @default(cuid())
+  employeeId     String?
+  employee       Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  headers        Json?
+  ip             String
+  path           String
+  method         String
+  page           Json?
+  action         String
+  description    String
+  payload        Json? // Request/Response payload (can contain {entry: {...}, exit: {...}})
+  organizationId String?
+  entityType     String?
+  archive        Json?
+  isDeleted      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+enum WorkforceSource {
+  DIRECT
+  AGENCY
+}
+
+enum AgencyStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Agency {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  code           String
+  status         AgencyStatus @default(ACTIVE)
+  contactName    String?
+  contactEmail   String?
+  contactPhone   String?
+  metadata       Json?
+  isDeleted      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  employees Employee[]
+
+  @@unique([organizationId, name])
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("agencies")
+}
+
+enum ApplicationSource {
+  WEBSITE
+  REFERRAL
+  JOB_BOARD
+  SOCIAL_MEDIA
+  RECRUITER
+  INTERNAL
+  WALK_IN
+  OTHER
+}
+
+enum RecruitmentActivityType {
+  NOTE
+  INTERVIEW
+  REJECTION
+  OFFER
+  ASSIGNMENT
+  EMAIL_EVENT
+  SYSTEM_EVENT
+}
+
+enum ApplicantAttachmentType {
+  RESUME
+  CONTRACT
+  PORTFOLIO
+  CERTIFICATE
+  OTHER
+}
+
+model Applicant {
+  id             String  @id @default(cuid())
+  organizationId String
+  applicantId    String? // Optional unique identifier for the applicant
+
+  // Personal Information (can reference Person or store directly)
+  personId     String? // Optional reference to Person model
+  person       Person? @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  portfolioUrl String?
+
+  // Application Details
+  jobId String?
+  job   Job?    @relation(fields: [jobId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  positionId String?
+  position   Position? @relation(fields: [positionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // Application Information
+  appliedDate                  DateTime           @default(now())
+  applicationSource            ApplicationSource?
+  workflowInstanceId           String?
+  currentWorkflowStateKey      String             @default("APPLIED")
+  currentStepExecutionId       String?
+  lastCompletedStepExecutionId String?
+
+  // Expected Salary & Availability
+  expectedSalary   Float?
+  currency         String?   @default("PHP")
+  availabilityDate DateTime? // When can they start
+  noticePeriod     Int? // Days of notice period in current job
+  metadata         Json?
+
+  // Referral Information
+  referredBy    String? // Employee ID who referred this applicant
+  referralBonus Float?
+
+  // Soft delete & timestamps
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  // Can add relation to Employee if they get hired (converted from applicant to employee)
+  convertedToEmployeeId      String? // Reference to Employee ID if hired
+  convertedToEmployee        Employee?               @relation("ApplicantConvertedEmployee", fields: [convertedToEmployeeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  workflowInstance           WorkflowInstance?       @relation("ApplicantWorkflowInstance", fields: [workflowInstanceId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  currentStepExecution       WorkflowStepExecution?  @relation("ApplicantCurrentWorkflowStep", fields: [currentStepExecutionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  lastCompletedStepExecution WorkflowStepExecution?  @relation("ApplicantLastCompletedWorkflowStep", fields: [lastCompletedStepExecutionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  stepExecutions             WorkflowStepExecution[] @relation("ApplicantWorkflowStepExecutions")
+  activities                 RecruitmentActivity[]
+  attachments                ApplicantAttachment[]
+
+  @@index([organizationId])
+  @@index([applicantId]) // Index for applicantId if provided
+  @@index([positionId])
+  @@index([jobId])
+  @@index([departmentId])
+  @@index([appliedDate])
+  @@index([personId])
+  @@index([workflowInstanceId])
+  @@index([currentWorkflowStateKey])
+  @@index([currentStepExecutionId])
+  @@index([lastCompletedStepExecutionId])
+  @@index([convertedToEmployeeId])
+  @@map("applicants")
+}
+
+model RecruitmentActivity {
+  id                 String                  @id @default(cuid())
+  organizationId     String
+  applicantId        String
+  workflowInstanceId String?
+  stepExecutionId    String?
+  stateKey           String?
+  type               RecruitmentActivityType
+  title              String
+  details            Json?
+  actorEmployeeId    String?
+  occurredAt         DateTime                @default(now())
+  isDeleted          Boolean                 @default(false)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  applicant        Applicant              @relation(fields: [applicantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  workflowInstance WorkflowInstance?      @relation("RecruitmentActivityWorkflowInstance", fields: [workflowInstanceId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  stepExecution    WorkflowStepExecution? @relation("RecruitmentActivityStepExecution", fields: [stepExecutionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  actorEmployee    Employee?              @relation("RecruitmentActivityActor", fields: [actorEmployeeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([organizationId, applicantId, occurredAt])
+  @@index([workflowInstanceId])
+  @@index([stepExecutionId])
+  @@index([actorEmployeeId])
+  @@map("recruitment_activities")
+}
+
+model ApplicantAttachment {
+  id                   String                  @id @default(cuid())
+  organizationId       String
+  applicantId          String
+  type                 ApplicantAttachmentType
+  name                 String
+  url                  String
+  mimeType             String?
+  size                 Int?
+  uploadedByEmployeeId String?
+  uploadedAt           DateTime                @default(now())
+  isDeleted            Boolean                 @default(false)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  applicant          Applicant @relation(fields: [applicantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  uploadedByEmployee Employee? @relation("ApplicantAttachmentUploader", fields: [uploadedByEmployeeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([organizationId, applicantId, uploadedAt])
+  @@index([uploadedByEmployeeId])
+  @@map("applicant_attachments")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LEAVE
+  INCOMPLETE
+  ABSENT
+  REST_DAY
+}
+
+enum AttendanceLedgerType {
+  RAW
+  CORRECTION
+}
+
+model Attendance {
+  id                String           @id @default(cuid())
+  organizationId    String // Multi-tenancy support
+  employee          Employee         @relation(fields: [employeeId], references: [id])
+  employeeId        String
+  appliedByEmployee Employee?        @relation("AttendanceAppliedBy", fields: [appliedBy], references: [id])
+  date              DateTime?        @default(now())
+  timeIn            DateTime?        @default(now())
+  timeBreak         DateTime?
+  timeOut           DateTime?
+  status            AttendanceStatus @default(PRESENT)
+  behaviorFlags     String[]         @default([])
+
+  // Resolved schedule snapshot for this attendance date.
+  // Captures override/template source and effective shift fields.
+  scheduleSnapshot Json?
+
+  // Geolocation data
+  timeInLocation  Json? // {lat: number, lng: number, address: string}
+  timeOutLocation Json? // {lat: number, lng: number, address: string}
+
+  // Biometric/Device info
+  deviceInfo             Json? // Device details for mobile check-in
+  isManualEntry          Boolean              @default(false)
+  approvedBy             String?
+  ledgerType             AttendanceLedgerType @default(RAW)
+  sourceRequestId        String?
+  supersedesAttendanceId String?
+  appliedAt              DateTime?
+  appliedBy              String?
+  isEffective            Boolean              @default(true)
+
+  // Timekeeping calculations (auto-calculated from timeIn, timeOut, and schedule)
+  // Minute precision (for calculations)
+  totalMinutesWorked Int? // Total minutes worked (timeOut - timeIn - breaks)
+  regularMinutes     Int? // Regular minutes within schedule
+  overtimeMinutes    Int? // Minutes exceeding schedule
+  undertimeMinutes   Int? // Minutes short of schedule
+  lateMinutes        Int? // Minutes late for clock-in after grace deduction
+  earlyOutMinutes    Int? // Minutes early for clock-out
+  breakMinutes       Int? // Total break time in minutes
+
+  // Lightweight employee snapshots for aggregate filtering/search
+  employeeCodeSnapshot    String?
+  employeeNameSnapshot    String?
+  departmentIdSnapshot    String?
+  departmentNameSnapshot  String?
+  reportToIdSnapshot      String?
+  workforceSourceSnapshot WorkforceSource?
+  agencyIdSnapshot        String?
+
+  // Formatted hours (for display) - e.g. "8:30"
+  hoursWorked    String?
+  regularHours   String?
+  overtimeHours  String?
+  undertimeHours String?
+  lateHours      String?
+  earlyOutHours  String?
+
+  // Timesheet reference - links this attendance to a timesheet
+  timesheet             Timesheet?             @relation(fields: [timesheetId], references: [id])
+  timesheetId           String?
+  timesheetlines        Timesheetline[]
+  attendanceObligations AttendanceObligation[]
+
+  notes     String?
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([timesheetId])
+  @@index([organizationId, employeeId, date])
+  @@index([organizationId, employeeId, date, isEffective])
+  @@index([organizationId, employeeId, sourceRequestId])
+  @@index([organizationId, isDeleted, isEffective, date])
+  @@index([organizationId, isDeleted, isEffective, date, status])
+  @@index([organizationId, isDeleted, isEffective, date, employeeId])
+  @@index([organizationId, isDeleted, isEffective, date, departmentIdSnapshot])
+  @@index([organizationId, isDeleted, isEffective, date, reportToIdSnapshot])
+  @@map("attendances")
+}
+
+model AttendanceObligation {
+  id String @id @default(cuid())
+
+  organizationId  String
+  employee        Employee      @relation(fields: [employeeId], references: [id])
+  employeeId      String
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id])
+  payrollPeriodId String
+
+  date         DateTime @db.Date
+  businessDate String
+  timezone     String   @default("Asia/Manila")
+  status       String   @default("EXPECTED")
+  phase        String   @default("PLANNED")
+
+  attendance      Attendance?    @relation(fields: [attendanceId], references: [id])
+  attendanceId    String?
+  timesheet       Timesheet?     @relation(fields: [timesheetId], references: [id])
+  timesheetId     String?
+  timesheetline   Timesheetline? @relation(fields: [timesheetlineId], references: [id])
+  timesheetlineId String?
+
+  expectedStartAt DateTime?
+  expectedEndAt   DateTime?
+  timeIn          DateTime?
+  timeBreak       DateTime?
+  timeOut         DateTime?
+
+  hoursWorked    String?
+  regularHours   String?
+  overtimeHours  String?
+  undertimeHours String?
+  lateHours      String?
+  earlyOutHours  String?
+  breakMinutes   Int?
+
+  behaviorFlags       String[] @default([])
+  scheduleSnapshot    Json?
+  scheduleFingerprint String?
+  source              String
+  sourceRequestId     String?
+  metadata            Json?
+
+  employeeCodeSnapshot    String?
+  employeeNameSnapshot    String?
+  departmentIdSnapshot    String?
+  departmentNameSnapshot  String?
+  reportToIdSnapshot      String?
+  workforceSourceSnapshot WorkforceSource?
+  agencyIdSnapshot        String?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, employeeId, payrollPeriodId, date])
+  @@index([organizationId, payrollPeriodId, status, isDeleted])
+  @@index([organizationId, date, status, isDeleted])
+  @@index([organizationId, employeeId, date, isDeleted])
+  @@index([organizationId, departmentIdSnapshot, date, isDeleted])
+  @@index([organizationId, reportToIdSnapshot, date, isDeleted])
+  @@index([attendanceId])
+  @@index([timesheetId])
+  @@index([timesheetlineId])
+  @@map("attendance_obligations")
+}
+
+model AuditLogging {
+  id            String    @id @default(cuid())
+  employeeId    String?
+  employee      Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  type          String
+  severity      String
+  entity        Json
+  changes       Json?
+  metadata      Json?
+  description   String?
+  payload       Json? // Request/Response payload (can contain {entry: {...}, exit: {...}})
+  archiveStatus Boolean   @default(false)
+  archiveDate   DateTime?
+  isDeleted     Boolean   @default(false)
+  timestamp     DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+enum BenefitCategory {
+  INSURANCE
+  ALLOWANCE
+  BONUS
+  RETIREMENT
+  HEALTH
+  EDUCATION
+  TRANSPORTATION
+  OTHER
+}
+
+model BenefitType {
+  id             String          @id @default(cuid())
+  organizationId String // Multi-tenancy support
+  name           String
+  description    String?
+  category       BenefitCategory @default(OTHER)
+
+  provider String?
+  coverage Float?
+
+  // Value settings
+  minAmount   Float?
+  maxAmount   Float?
+  fixedAmount Float?
+  percentage  Float? // Percentage of basic salary
+
+  // Eligibility
+  minServiceMonths Int? // Minimum months of service required
+
+  // Tax treatment
+  isTaxable Boolean @default(false)
+
+  // Program defaults (EPP-style benefits)
+  defaultInstallments   Int     @default(6)
+  payrollCycleDays      Int     @default(15)
+  requireTermsAgreement Boolean @default(true)
+
+  isActive  Boolean  @default(true)
+  isDeleted Boolean  @default(false)
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  employeeBenefits EmployeeBenefit[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("benefit_types")
+}
+
+model BoardingProcess {
+  id String @id @default(cuid())
+
+  organizationId String
+
+  employeeId String
+  employee   Employee @relation("EmployeeBoardingProcesses", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  type   BoardingType
+  status BoardingStatus @default(NOT_STARTED)
+
+  startDate          DateTime  @default(now())
+  targetDate         DateTime // Complete date for onboarding, last working day for offboarding
+  actualCompleteDate DateTime?
+
+  exitReason String? // For offboarding only
+
+  assignedToId   String?
+  assignedToName String?
+
+  checklistItems ChecklistItem[]
+  notes          Note[]
+
+  metadata Json? // Flexible field for additional data
+
+  lastViewedAt         DateTime?
+  reminderFrequency    String? // DAILY, WEEKLY, etc.
+  completionPercentage Int       @default(0) // Cache this for performance
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum BoardingType {
+  ONBOARDING
+  OFFBOARDING
+}
+
+enum BoardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model BoardingTemplate {
+  id String @id @default(cuid())
+
+  organizationId String
+
+  // Role-based boarding template (e.g., hris-employee, hris-hr-manager)
+  // Only one template per role is allowed
+  role String
+
+  name        String
+  description String?
+  type        BoardingType
+  isDefault   Boolean      @default(false)
+  isActive    Boolean      @default(true)
+
+  items TemplateItem[]
+
+  metadata Json?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum CalculatorType {
+  BASIC
+  GROSS_TO_NET
+  NET_TO_GROSS
+  THIRTEENTH_MONTH
+  CUSTOM
+}
+
+model Calculator {
+  id             String         @id @default(cuid())
+  organizationId String // Multi-tenancy support
+  code           String? // Unique code for calculator (e.g., CALC-DEFAULT-2026)
+  name           String
+  description    String?
+  type           CalculatorType @default(BASIC)
+
+  // Tax and contribution settings
+  // Configured based on TRAIN Law patterns (see tax-calculator.helper.ts)
+  taxRates Json? // [
+  //   {
+  //     annualBase: 0,
+  //     annualCap: 250000,
+  //     annualFixedTax: 0,
+  //     monthlyBase: 0,
+  //     monthlyCap: 20833,
+  //     monthlyFixedTax: 0,
+  //     rate: 0
+  //   },
+  //   {
+  //     annualBase: 250000,
+  //     annualCap: 400000,
+  //     annualFixedTax: 0,
+  //     monthlyBase: 20833,
+  //     monthlyCap: 33332,
+  //     monthlyFixedTax: 0,
+  //     rate: 0.15
+  //   },
+  //   {
+  //     annualBase: 400000,
+  //     annualCap: 800000,
+  //     annualFixedTax: 22500,
+  //     monthlyBase: 33333,
+  //     monthlyCap: 66666,
+  //     monthlyFixedTax: 1875,
+  //     rate: 0.2
+  //   },
+  //   {
+  //     annualBase: 800000,
+  //     annualCap: 2000000,
+  //     annualFixedTax: 102500,
+  //     monthlyBase: 66667,
+  //     monthlyCap: 166666,
+  //     monthlyFixedTax: 8542,
+  //     rate: 0.25
+  //   },
+  //   {
+  //     annualBase: 2000000,
+  //     annualCap: 8000000,
+  //     annualFixedTax: 402500,
+  //     monthlyBase: 166667,
+  //     monthlyCap: 666666,
+  //     monthlyFixedTax: 33542,
+  //     rate: 0.3
+  //   },
+  //   {
+  //     annualBase: 8000000,
+  //     annualCap: null,
+  //     annualFixedTax: 2202500,
+  //     monthlyBase: 666667,
+  //     monthlyCap: null,
+  //     monthlyFixedTax: 183542,
+  //     rate: 0.35
+  //   }
+  // ]
+
+  // SSS Contribution Configuration
+  sssRates Json? // {
+  //   employeeRate: 0.05,  // 5%
+  //   employerRate: 0.1, // 10%
+  //   totalRate: 0.15,    // 15%
+  //   minimumBase: 250,
+  //   maximumCeiling: 1750,
+  // }
+
+  // PhilHealth Contribution Configuration
+  philHealthRates Json? // {
+  //   employeeRate: 0.025, // 2.5%
+  //   employerRate: 0.025, // 2.5%
+  //   totalRate: 0.05,     // 5%
+  //   minimumBase: 250,
+  //   maximumCeiling: 2500, // Ceiling for now
+  // }
+
+  // PAG-IBIG Contribution Configuration
+  pagibigRates Json? // {
+  //   rateBelowThreshold: 0.01, // 1% for monthly income 1500 and below
+  //   rateAboveThreshold: 0.02, // 2% for monthly income above 1500
+  //   threshold: 1500,
+  //   maximumCeiling: 200,      // Max contribution (100 employee + 100 employer)
+  // }
+
+  // Rate Multipliers for all pay types based on DOLE standards
+  // Organized by scenario with work, OT, ND (night diff), and NDOT rates
+  rateMultipliers Json? // {
+  //   ordinaryDay: {
+  //     work: 1.000,  // Work (1st 8h) - 100%
+  //     ot: 1.250,    // OT (>8h) - 125%
+  //     nd: 1.100,    // ND (10pm-6am) - 110%
+  //     ndot: 1.375   // NDOT - 137.5%
+  //   },
+  //   restDayOrSpecialHoliday: {
+  //     work: 1.300,  // 130%
+  //     ot: 1.690,    // 169%
+  //     nd: 1.430,    // 143%
+  //     ndot: 1.859   // 185.9%
+  //   },
+  //   specialHolidayOnRestDay: {
+  //     work: 1.500,  // 150%
+  //     ot: 1.950,    // 195%
+  //     nd: 1.650,    // 165%
+  //     ndot: 2.145   // 214.5%
+  //   },
+  //   regularHoliday: {
+  //     work: 2.000,  // 200%
+  //     ot: 2.600,    // 260%
+  //     nd: 2.200,    // 220%
+  //     ndot: 2.860   // 286%
+  //   },
+  //   regularHolidayOnRestDay: {
+  //     work: 2.600,  // 260%
+  //     ot: 3.380,    // 338%
+  //     nd: 2.860,    // 286%
+  //     ndot: 3.718   // 371.8%
+  //   },
+  //   doubleHoliday: {
+  //     work: 3.000,  // 300%
+  //     ot: 3.900,    // 390%
+  //     nd: 3.300,    // 330%
+  //     ndot: 4.290   // 429%
+  //   },
+  //   doubleHolidayOnRestDay: {
+  //     work: 3.900,  // 390%
+  //     ot: 5.070,    // 507%
+  //     nd: 4.290,    // 429%
+  //     ndot: 5.577   // 557.7%
+  //   }
+  // }
+
+  isActive  Boolean @default(true)
+  isDefault Boolean @default(false)
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  payrollPeriods PayrollPeriod[]
+
+  @@unique([organizationId, name])
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("calculators")
+}
+
+enum CalendarItemType {
+  HOLIDAY // Holidays visible to all users
+  EVENT // Events that can be assigned to specific users
+  COMPANY_EVENT // Company-wide events
+  MEETING // Regular meetings
+  DEADLINE // Task deadlines
+  REMINDER // Personal reminders
+  BIRTHDAY // Emplyoee Birthday
+}
+
+enum ItemStatus {
+  ACTIVE
+  CANCELLED
+  COMPLETED
+  DRAFT
+}
+
+model CalendarItem {
+  id String @id @default(cuid())
+
+  organizationId String
+  year           Int? // Year for grouping calendar items
+  title          String
+  description    String?
+
+  type CalendarItemType
+
+  startDate DateTime
+  endDate   DateTime
+  isAllDay  Boolean  @default(false)
+  timezone  String   @default("UTC")
+
+  recurrence Json?
+
+  metadata Json?
+
+  reminders Json?
+
+  tags String[]
+
+  status ItemStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedEmployee   Employee? @relation(fields: [assignedEmployeeId], references: [id])
+  assignedEmployeeId String?
+
+  @@index([type])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([tags])
+  @@index([status])
+  @@index([organizationId])
+  @@index([year])
+  @@index([organizationId, year])
+  @@map("calendar_items")
+}
+
+model ChecklistItem {
+  id             String          @id @default(cuid())
+  organizationId String
+  processId      String
+  process        BoardingProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  title           String
+  description     String?
+  category        ChecklistCategory
+  status          ChecklistStatus   @default(PENDING)
+  priority        Priority          @default(MEDIUM)
+  dueDate         DateTime
+  completedDate   DateTime?
+  completedBy     String?
+  completedByName String?
+  order           Int
+
+  uiElement String? // CSS selector for tour
+
+  comments String?
+  metadata Json? // Flexible field for custom data
+
+  // Add these helpful fields:
+  isOptional    Boolean  @default(false)
+  estimatedTime Int? // Minutes to complete
+  dependencies  String[] // IDs of tasks that must be completed first
+
+  // Tracking
+  viewedAt     DateTime?
+  startedAt    DateTime? // When user clicked "Start"
+  reminderSent DateTime?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum ChecklistCategory {
+  HR_DOCUMENTATION
+  IT_SETUP
+  WORKSPACE_SETUP
+  TRAINING
+  COMPLIANCE
+  ACCESS_MANAGEMENT
+  EQUIPMENT
+  BENEFITS
+  KNOWLEDGE_TRANSFER
+  EXIT_INTERVIEW
+  ORIENTATION
+  SECURITY
+  PAYROLL
+  OTHER
+}
+
+enum ChecklistStatus {
+  PENDING
+  IN_PROGRESS
+  FOR_REVIEW
+  COMPLETED
+  SKIPPED
+  BLOCKED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Department {
+  id             String  @id @default(cuid())
+  organizationId String
+  name           String
+  code           String
+  description    String?
+
+  // Manager: Optional, one-to-one
+  managerId String?
+  manager   Employee? @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  parentId String?
+  parent   Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children Department[] @relation("DepartmentHierarchy")
+
+  isHr Boolean @default(false) // Flag to indicate if this department is HR (for special handling in workflows)
+
+  boardings BoardingProcess[]
+  isActive  Boolean           @default(true)
+  isDefault Boolean           @default(false)
+  isDeleted Boolean           @default(false)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  positions                    Position[]
+  employees                    Employee[]
+  scheduleTemplates            DepartmentScheduleTemplate[] @relation("DepartmentScheduleTemplates")
+  applicants                   Applicant[]
+  workforceRecruitmentPolicies WorkforceRecruitmentPolicy[]
+  jobs                         Job[]
+
+  @@unique([organizationId, name])
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("departments")
+}
+
+model DepartmentScheduleTemplate {
+  id                  String                           @id @default(cuid())
+  organizationId      String
+  departmentId        String
+  scheduleTemplateId  String
+  source              DepartmentScheduleTemplateSource @default(department_head_linked)
+  createdByEmployeeId String?
+  isActive            Boolean                          @default(true)
+  isDeleted           Boolean                          @default(false)
+  createdAt           DateTime                         @default(now())
+  updatedAt           DateTime                         @updatedAt
+
+  department        Department       @relation("DepartmentScheduleTemplates", fields: [departmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  scheduleTemplate  ScheduleTemplate @relation(fields: [scheduleTemplateId], references: [id], onDelete: NoAction, onUpdate: Cascade)
+  createdByEmployee Employee?        @relation("DepartmentScheduleTemplatesCreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([departmentId, scheduleTemplateId], map: "department_schedule_template_unique")
+  @@index([organizationId, departmentId, isDeleted])
+  @@index([organizationId, scheduleTemplateId, isDeleted])
+  @@index([createdByEmployeeId])
+  @@map("department_schedule_templates")
+}
+
+enum Protocol {
+  http
+  https
+  tcp
+  udp
+}
+
+model Device {
+  id             String @id @default(cuid())
+  organizationId String
+  name           String
+  address        String
+  port           Int
+
+  protocol Protocol @default(http)
+
+  config Json?
+
+  access Json
+
+  employees Employee[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  isDeleted Boolean  @default(false)
+
+  @@unique([organizationId, address, port])
+}
+
+enum DocumentReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum DocumentReviewSource {
+  EMPLOYEE_UPLOAD
+  HR_UPLOAD
+  MIGRATION
+  SYSTEM
+}
+
+enum DocumentReviewEventType {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  RESUBMITTED
+  SUPERSEDED
+  SYSTEM_SYNCED
+}
+
+model Document {
+  id                    String                @id @default(cuid())
+  name                  String
+  type                  String // Document type (e.g., passport, driver_license, sss_id, etc.)
+  number                String // Document number/identifier
+  issueDate             DateTime // Date when document was issued
+  expiryDate            DateTime? // Expiry date (optional, for documents that expire)
+  fileUrl               String? // URL to uploaded file (PDF/image)
+  ext                   String?
+  documentTypeId        String?
+  fieldValues           Json?
+  reviewStatus          DocumentReviewStatus?
+  reviewSubmittedAt     DateTime?
+  reviewSubmittedById   String?
+  reviewApprovedAt      DateTime?
+  reviewApprovedById    String?
+  reviewRejectedAt      DateTime?
+  reviewRejectedById    String?
+  reviewRejectionReason String?
+  reviewSource          DocumentReviewSource?
+  metadata              Json?
+
+  employeeId   String // Reference to the employee this document belongs to
+  employee     Employee              @relation("EmployeeDocuments", fields: [employeeId], references: [id], onDelete: Cascade, onUpdate: Cascade) // Employee associated with this document
+  documentType DocumentType?         @relation(fields: [documentTypeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  reviewEvents DocumentReviewEvent[]
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([number])
+  @@index([documentTypeId])
+  @@index([employeeId, reviewStatus])
+  @@index([documentTypeId, reviewStatus])
+  @@map("documents")
+}
+
+model DocumentReviewEvent {
+  id              String                  @id @default(cuid())
+  organizationId  String
+  documentId      String
+  document        Document                @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  employeeId      String
+  actorEmployeeId String?
+  eventType       DocumentReviewEventType
+  fromStatus      DocumentReviewStatus?
+  toStatus        DocumentReviewStatus?
+  reason          String?
+  comments        String?
+  source          DocumentReviewSource
+  fileUrl         String?
+  fieldChanges    Json?
+  occurredAt      DateTime                @default(now())
+  createdAt       DateTime                @default(now())
+
+  @@index([organizationId, employeeId, occurredAt])
+  @@index([documentId, occurredAt])
+  @@index([actorEmployeeId])
+  @@map("document_review_events")
+}
+
+model DocumentFolder {
+  id   String @id @default(cuid())
+  name String
+
+  employeeId String
+  employee   Employee @relation("EmployeeDocumentFolders", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
+  @@map("documentFolders")
+}
+
+model DocumentType {
+  id                String   @id @default(cuid())
+  organizationId    String
+  code              String
+  name              String
+  category          String?
+  uploadBy          String   @default("HR")
+  isRequired        Boolean  @default(false)
+  isEmployeeVisible Boolean  @default(true)
+  isActive          Boolean  @default(true)
+  displayOrder      Int      @default(0)
+  fields            Json
+  metadata          Json?
+  isDeleted         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  documents Document[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isActive, isDeleted])
+  @@index([organizationId, isRequired, isDeleted])
+  @@map("document_types")
+}
+
+enum EmploymentStatus {
+  ACTIVE // Currently working
+  RESIGNATION_REQUESTED // Resignation submitted, pending approval
+  SERVING_NOTICE // Exit clearance done, working final days
+  OFFBOARDING // Approved resignation, offboarding in progress
+  ONBOARDING // New hire, onboarding in progress
+  INACTIVE // Temporarily inactive
+  TERMINATED // Terminated by company
+  RESIGNED // Completed resignation process
+  FORMER_EMPLOYEE // No longer with company (resigned/terminated)
+  RETIRED // Retired
+  ON_LEAVE // On leave
+}
+
+enum EmploymentType {
+  REGULAR
+  PROBATIONARY
+  CONTRACTUAL
+  PART_TIME
+  CONSULTANT
+  INTERN
+}
+
+enum PayFrequency {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  SEMI_MONTHLY
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+}
+
+enum WorkLocation {
+  ONSITE
+  REMOTE
+  HYBRID
+}
+
+enum LeaveType {
+  VACATION
+  SICK
+  PERSONAL
+  MATERNITY
+  PATERNITY
+  BEREAVEMENT
+  UNPAID
+  COMPENSATORY
+}
+
+// type EmployeeDocument {
+//   name       String
+//   type       String // Document type (e.g., passport, driver_license, sss_id, etc.)
+//   number     String // Document number/identifier
+//   issueDate  DateTime // Date when document was issued
+//   expiryDate DateTime? // Expiry date (optional, for documents that expire)
+//   fileUrl    String? // URL to uploaded file (PDF/image)
+//   ext        String?
+// }
+
+model Employee {
+  id             String @id @default(cuid())
+  organizationId String
+  employeeId     String
+
+  userId                    String?
+  role                      String
+  // Employment Details
+  employmentHireDate        DateTime?
+  employmentStartDate       DateTime? // Actual start date when employee began working
+  employmentTerminationDate DateTime?
+  employmentStatus          EmploymentStatus @default(ACTIVE)
+  employmentType            EmploymentType   @default(PROBATIONARY)
+  workforceSource           WorkforceSource  @default(DIRECT)
+  agencyId                  String?
+  agency                    Agency?          @relation(fields: [agencyId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  employer                  Json?
+
+  probationEndDate DateTime?
+
+  // Position & Department
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  departmentId String
+
+  position   Position @relation(fields: [positionId], references: [id])
+  positionId String
+
+  // Level
+  level   Level?  @relation(fields: [levelId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  levelId String?
+
+  // Reporting Structure
+  reportTo      Employee?  @relation("EmployeeReportsTo", fields: [reportToId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reportToId    String?
+  directReports Employee[] @relation("EmployeeReportsTo") //employees that reports to this employee
+
+  workLocation             WorkLocation @default(ONSITE)
+  // Leave Balances (stored as embedded array)
+  leaveBalances            Json
+  leaveBalancesLastUpdated DateTime?
+
+  // Compensation
+  basicSalary  Float
+  currency     String       @default("PHP")
+  payFrequency PayFrequency @default(SEMI_MONTHLY)
+
+  deviceEmpId String?
+
+  // Soft delete & timestamps
+  isTour           Boolean  @default(false)
+  isDeleted        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  isManager        Boolean  @default(false)
+  /// true when role === "hris-hr-manager" (derived from dept + level, never both isManager + isHrManager)
+  isHrManager      Boolean  @default(false)
+  embeddedSchedule Json?
+  metadata         Json?
+
+  // Relations
+  person   Person? @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  personId String  @unique
+
+  device   Device? @relation(fields: [deviceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  deviceId String?
+
+  attendances                        Attendance[]
+  attendanceObligations              AttendanceObligation[]
+  appliedAttendanceCorrections       Attendance[]                 @relation("AttendanceAppliedBy")
+  timesheets                         Timesheet[]
+  timesheetlines                     Timesheetline[]
+  timesheetEditPermissionsGranted    Timesheet[]                  @relation("TimesheetEditPermissionGrantedBy")
+  timesheetEditPermissionsRejected   Timesheet[]                  @relation("TimesheetEditPermissionRejectedBy")
+  requests                           Request[]                    @relation("RequestRequester") // Requests this employee submitted
+  eligibilityRequests                Request[]                    @relation("RequestTargetEmployee") // Requests where this employee is the subject
+  stepExecutions                     WorkflowStepExecution[] // Workflow steps assigned to this employee
+  requestTransactions                RequestTransaction[]         @relation("RequestTransactionActor")
+  scheduleOverrides                  ScheduleOverride[]           @relation("EmployeeScheduleOverrides")
+  scheduleOverridesCreated           ScheduleOverride[]           @relation("ScheduleOverridesCreatedBy")
+  departmentScheduleTemplatesCreated DepartmentScheduleTemplate[] @relation("DepartmentScheduleTemplatesCreatedBy")
+
+  employeePayrolls             EmployeePayroll[]
+  employeeBenefits             EmployeeBenefit[]
+  employeeLoans                EmployeeLoan[]
+  // documents          EmployeeDocument[]
+  documents                    Document[]            @relation("EmployeeDocuments") // Employee's documents stored in separate collection for better querying and file management
+  employmentHistory            Json
+  managedDepartments           Department[]          @relation("DepartmentManager")
+  documentFolders              DocumentFolder[]      @relation("EmployeeDocumentFolders")
+  convertedApplicants          Applicant[]           @relation("ApplicantConvertedEmployee") // Applicants converted into this employee record
+  recruitmentActivities        RecruitmentActivity[] @relation("RecruitmentActivityActor")
+  uploadedApplicantAttachments ApplicantAttachment[] @relation("ApplicantAttachmentUploader")
+
+  calendarItem CalendarItem[]
+
+  boardingProcesses             BoardingProcess[]         @relation("EmployeeBoardingProcesses")
+  notificationsCreated          Notification[]            @relation("NotificationSource") // Notifications sourced/created by this employee
+  activityLogs                  ActivityLogging[]
+  auditLogs                     AuditLogging[]
+  scheduleHistoryRecords        EmployeeScheduleHistory[] @relation("EmployeeScheduleHistoryTarget")
+  scheduleHistoryRecordsCreated EmployeeScheduleHistory[] @relation("EmployeeScheduleHistoryActor")
+
+  // Termination relations
+  terminationsAsEmployee   Termination[] @relation("EmployeeTerminations") // Terminations where this employee is the terminated one
+  terminationsInitiated    Termination[] @relation("TerminationInitiator") // Terminations this employee initiated
+  terminationsAsHRDirector Termination[] @relation("HRDirectorApprovals") // Terminations this employee approved as HR Director
+  terminationsAsLegal      Termination[] @relation("LegalApprovals") // Terminations this employee approved as Legal
+
+  soaLineItems SOALineItem[]
+
+  soasReconciled StatementOfAccount[] @relation("SOAReconciledBy")
+
+  @@unique([organizationId, employeeId])
+  @@index([organizationId])
+  @@index([userId]) // safe for nulls
+  @@index([role])
+  @@index([levelId]) // safe for nulls
+  @@index([reportToId]) // fast lookup for employees reporting to a manager
+  @@index([departmentId, levelId]) // B-tree compound index for hierarchy queries (dept â†’ level traversal)
+  @@index([organizationId, departmentId]) // Optimized org+dept lookup for migration & reporting
+  @@index([organizationId, workforceSource])
+  @@index([organizationId, workforceSource, payFrequency, isDeleted])
+  @@index([organizationId, isDeleted, employmentStatus, payFrequency, updatedAt])
+  @@index([organizationId, agencyId])
+  @@index([organizationId, employeeId, isDeleted])
+  @@map("employees")
+}
+
+enum BenefitProgramStatus {
+  PENDING
+  APPROVED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  DEFAULTED
+}
+
+enum BenefitDeductionStatus {
+  SCHEDULED
+  DEDUCTED
+  FAILED
+  WAIVED
+}
+
+model EmployeeBenefit {
+  id             String      @id @default(cuid())
+  organizationId String // Multi-tenancy support
+  employee       Employee?   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId     String?
+  benefitType    BenefitType @relation(fields: [benefitTypeId], references: [id], onDelete: Cascade)
+  benefitTypeId  String
+
+  // Legacy/basic metadata
+  name        String?
+  description String?
+
+  // EPP-style benefit details
+  totalAmount       Float
+  currency          String @default("USD")
+  totalInstallments Int    @default(6)
+  installmentAmount Float
+  remainingBalance  Float
+
+  // Legacy/simple details (kept for backward compatibility)
+  amount    Float?
+  startDate DateTime? @db.Date
+  endDate   DateTime? @db.Date
+
+  // Payroll schedule
+  startPayrollCutOff DateTime?
+  endPayrollCutOff   DateTime?
+
+  // Terms/agreement audit
+  agreedToTerms Boolean   @default(false)
+  agreedAt      DateTime?
+  agreedByIp    String?
+
+  // Status and approval
+  status       BenefitProgramStatus @default(PENDING)
+  isActive     Boolean              @default(true)
+  approvedById String?
+  approvedAt   DateTime?
+  notes        String?
+  remarks      String?
+  isDeleted    Boolean              @default(false)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  // Relations
+  installments EmployeeBenefitInstallment[]
+  soaLineItems SOALineItem[]
+
+  @@index([organizationId])
+  @@index([employeeId])
+  @@index([benefitTypeId])
+  @@index([organizationId, status])
+  @@index([employeeId, status])
+  @@map("employee_benefits")
+}
+
+model EmployeeBenefitInstallment {
+  id String @id @default(cuid())
+
+  employeeBenefitId String
+  employeeBenefit   EmployeeBenefit @relation(fields: [employeeBenefitId], references: [id], onDelete: Cascade)
+
+  installmentNumber Int
+  amount            Float
+  scheduledDate     DateTime
+  processedDate     DateTime?
+
+  payrollCutOffId String?
+  payrollRunId    String?
+
+  status        BenefitDeductionStatus @default(SCHEDULED)
+  failureReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeBenefitId])
+  @@index([scheduledDate])
+  @@index([payrollCutOffId])
+  @@map("employee_benefit_installments")
+}
+
+enum LoanStatus {
+  PENDING
+  APPROVED
+  ACTIVE
+  PAID
+  DEFAULTED
+  CANCELLED
+}
+
+model EmployeeLoan {
+  id             String   @id @default(cuid())
+  organizationId String // Multi-tenancy support
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId     String
+  loanType       LoanType @relation(fields: [loanTypeId], references: [id])
+  loanTypeId     String
+
+  // Loan details
+  principalAmount Float
+  interestRate    Float @default(0)
+  totalAmount     Float // Principal + Interest
+
+  // Repayment
+  termMonths     Int
+  monthlyPayment Float
+  startDate      DateTime @db.Date
+  endDate        DateTime @db.Date
+
+  // Balance tracking
+  amountPaid Float @default(0)
+  balance    Float
+
+  // Status
+  status LoanStatus @default(PENDING)
+
+  // Approval
+  approvedBy String?
+  approvedAt DateTime?
+
+  notes     String?
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  soaLineItems SOALineItem[]
+
+  @@index([organizationId])
+  @@index([employeeId])
+  @@index([loanTypeId])
+  @@index([status])
+  @@map("employee_loans")
+}
+
+model EmployeePayroll {
+  id              String        @id @default(cuid())
+  organizationId  String // Multi-tenancy support
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId      String
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  payrollPeriodId String
+
+  // Direct link to timesheet - source of truth (one-to-one)
+  timesheet   Timesheet? @relation(fields: [timesheetId], references: [id])
+  timesheetId String?    @unique
+
+  // Earnings
+  basicPay     Float @default(0)
+  overtimePay  Float @default(0)
+  nightDiffPay Float @default(0)
+  holidayPay   Float @default(0)
+  allowances   Float @default(0)
+  bonuses      Float @default(0)
+
+  // Deductions
+  taxAmount              Float @default(0)
+  sssContribution        Float @default(0)
+  philHealthContribution Float @default(0)
+  pagibigContribution    Float @default(0)
+  loanDeductions         Float @default(0)
+  absentDeduction        Float @default(0)
+  lateDeduction          Float @default(0)
+  earlyOutDeduction      Float @default(0)
+  otherDeductions        Float @default(0)
+
+  // Totals
+  grossPay        Float @default(0)
+  taxableIncome   Float @default(0) // Gross pay minus contributions (SSS, PhilHealth, PagIbig)
+  totalDeductions Float @default(0)
+  netPay          Float @default(0)
+
+  // Timesheet snapshot - frozen at payroll generation time
+  // Stores complete hours/attendance data for audit trail
+  timesheetSnapshot Json? // {
+  //   totalHoursWorked: "39:20",
+  //   totalRegularHours: "39:20",
+  //   totalOvertimeHours: "0:00",
+  //   totalUndertimeHours: "0:40",
+  //   totalLateHours: "0:23",
+  //   totalEarlyOutHours: "0:17",
+  //   totalDays: 13,
+  //   daysPresent: 5,
+  //   daysAbsent: 4,
+  //   daysRestDay: 3,
+  //   daysLeave: 0,
+  //   metadata: {
+  //     totalMinutesWorked: 2360,
+  //     totalRegularMinutes: 2360,
+  //     totalOvertimeMinutes: 0,
+  //     totalUndertimeMinutes: 40,
+  //     totalLateMinutes: 23,
+  //     totalEarlyOutMinutes: 17
+  //   }
+  // }
+
+  // Payroll calculation metadata - stores rates and computation details
+  // For audit trail and transparency
+  metadata Json? // {
+  //   dailyRate: 3173.91,
+  //   hourlyRate: 396.74,
+  //   minuteRate: 6.61,
+  //   monthlyRate: 95000,
+  //   workingDays: 22,
+  //   workingHoursPerDay: 8,
+  //   payFrequency: "MONTHLY",
+  //   periodDays: 15,
+  //   expectedWorkingDays: 10,
+  //   actualWorkingDays: 5,
+  //   absentDays: 6,
+  //   restDays: 4,
+  //   overtimeRate: 595.11,
+  //   nightDiffRate: 79.19,
+  //   calculatedAt: "2026-01-19T01:34:33.245Z",
+  //   calculationMethod: "TIMESHEET_BASED"
+  // }
+
+  // Rate calculation breakdown - detailed formulas and step-by-step calculations
+  // Shows exactly how each rate was derived for full transparency
+  rateBreakdown Json? // {
+  //   dailyRate: {
+  //     formula: "Period Basic Salary Ã· Total Work Days",
+  //     calculation: "â‚±47,500.00 Ã· 15 days",
+  //     inputs: {
+  //       periodBasicSalary: 47500,
+  //       totalWorkDays: 15
+  //     },
+  //     result: 3173.91
+  //   },
+  //   hourlyRate: {
+  //     formula: "Daily Rate Ã· Working Hours Per Day",
+  //     calculation: "â‚±3,173.91 Ã· 8 hours",
+  //     inputs: {
+  //       dailyRate: 3173.91,
+  //       workingHoursPerDay: 8
+  //     },
+  //     result: 396.74
+  //   },
+  //   minuteRate: {
+  //     formula: "Hourly Rate Ã· 60 Minutes",
+  //     calculation: "â‚±396.74 Ã· 60 minutes",
+  //     inputs: {
+  //       hourlyRate: 396.74
+  //     },
+  //     result: 6.61
+  //   },
+  //   overtimeRate: {
+  //     formula: "Hourly Rate Ã— 1.5 (150% multiplier)",
+  //     calculation: "â‚±396.74 Ã— 1.5",
+  //     inputs: {
+  //       hourlyRate: 396.74,
+  //       multiplier: 1.5
+  //     },
+  //     result: 595.11
+  //   },
+  //   nightDiffRate: {
+  //     formula: "Hourly Rate Ã— 0.2 (20% night differential)",
+  //     calculation: "â‚±396.74 Ã— 0.2",
+  //     inputs: {
+  //       hourlyRate: 396.74,
+  //       multiplier: 0.2
+  //     },
+  //     result: 79.19
+  //   }
+  // }
+
+  // Daily breakdown - day-by-day attendance and earnings detail
+  // Complete audit trail showing status and pay for each day
+  // Note: Full attendance/schedule details available via timesheet relation
+  dailyBreakdown Json? // [
+  //   {
+  //     date: "2026-01-01",
+  //     dayOfWeek: "Wednesday",
+  //     dayType: "WORK_DAY", // WORK_DAY, REST_DAY, HOLIDAY
+  //     status: "PRESENT", // PRESENT, ABSENT, LEAVE, REST_DAY
+  //     earnings: {
+  //       regularPay: 396.74,
+  //       overtimePay: 0,
+  //       nightDiffPay: 0,
+  //       holidayPay: 0,
+  //       totalDayPay: 396.74
+  //     },
+  //     deductions: {
+  //       absentDeduction: 0,
+  //       latePenalty: 0,
+  //       earlyOutPenalty: 0,
+  //       shortfallPenalty: 0,
+  //       totalDayDeductions: 0
+  //     },
+  //     netDayPay: 396.74
+  //   }
+  // ]
+
+  // Status
+  isPaid          Boolean   @default(false)
+  paidAt          DateTime?
+  paymentMethod   String? // BANK_TRANSFER, CASH, CHECK
+  referenceNumber String?
+
+  notes     String?
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  soaLineItems SOALineItem[]
+
+  @@unique([employeeId, payrollPeriodId])
+  @@index([organizationId])
+  @@index([payrollPeriodId])
+  @@index([organizationId, employeeId, isDeleted])
+  @@map("employee_payrolls")
+}
+
+model EmployeeScheduleHistory {
+  id              String    @id @default(cuid())
+  organizationId  String
+  employeeId      String
+  action          String
+  effectiveAt     DateTime?
+  actorEmployeeId String?
+  reason          String?
+  beforeSchedule  Json?
+  afterSchedule   Json?
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+
+  employee Employee  @relation("EmployeeScheduleHistoryTarget", fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: Cascade)
+  actor    Employee? @relation("EmployeeScheduleHistoryActor", fields: [actorEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([organizationId, employeeId, createdAt])
+  @@index([organizationId, employeeId, effectiveAt, createdAt])
+  @@index([organizationId, action, createdAt])
+  @@index([actorEmployeeId])
+  @@map("employee_schedule_history")
+}
+
+model Guide {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  sections    Json // Stores entire sections array with pages and blocks
+  published   Boolean  @default(false)
+  author      String?
+  version     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isDeleted   Boolean  @default(false)
+
+  @@index([published])
+  @@index([author])
+  @@map("guides")
+}
+
+model Job {
+  id String @id @default(cuid())
+
+  organizationId     String
+  departmentId       String?
+  sourceRequestId    String?
+  headcountRequested Int     @default(1)
+
+  positionId String
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  levelId String
+  level   Level  @relation(fields: [levelId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  department    Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  sourceRequest Request?    @relation("JobSourceRequest", fields: [sourceRequestId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  tags String[]
+
+  type        String?
+  location    String?
+  description String?
+  isDeleted   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  applicants Applicant[]
+
+  @@index([organizationId])
+  @@index([departmentId])
+  @@index([sourceRequestId])
+}
+
+model LeavePolicyConfig {
+  id             String    @id @default(cuid())
+  organizationId String
+  leaveType      LeaveType
+
+  enabled                Boolean          @default(true)
+  isPaid                 Boolean          @default(true)
+  requiresApproval       Boolean          @default(true)
+  minAdvanceNoticeDays   Int              @default(0)
+  maxDaysPerRequest      Float            @default(5)
+  allowHalfDay           Boolean          @default(true)
+  requireAttachment      Boolean          @default(false)
+  allowedEmploymentTypes EmploymentType[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, leaveType])
+  @@index([organizationId])
+  @@map("leave_policy_configs")
+}
+
+model Level {
+  id             String  @id @default(cuid())
+  organizationId String
+  name           String
+  rank           Int? // Numeric rank for ordering (e.g., 1, 2, 3)
+  description    String?
+  isManager      Boolean @default(false)
+
+  isActive  Boolean  @default(true)
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  positionLevels               PositionLevel[]
+  employees                    Employee[]
+  jobs                         Job[]
+  workforceRecruitmentPolicies WorkforceRecruitmentPolicy[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([rank])
+  @@map("levels")
+}
+
+enum LoanCategory {
+  SALARY_LOAN
+  EMERGENCY_LOAN
+  HOUSING_LOAN
+  CALAMITY_LOAN
+  SSS_LOAN
+  PAGIBIG_LOAN
+  OTHER
+}
+
+model LoanType {
+  id             String       @id @default(cuid())
+  organizationId String // Multi-tenancy support
+  name           String
+  description    String?
+  category       LoanCategory @default(OTHER)
+
+  // Loan settings
+  maxAmount     Float?
+  minAmount     Float?
+  interestRate  Float  @default(0) // Annual interest rate
+  maxTermMonths Int    @default(12) // Maximum repayment period
+
+  // Eligibility
+  minServiceMonths Int? // Minimum months of service required
+
+  isActive  Boolean  @default(true)
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  employeeLoans EmployeeLoan[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("loan_types")
+}
+
+model Note {
+  id String @id @default(cuid())
+
+  organizationId String
+
+  processId String
+  process   BoardingProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  content    String
+  authorId   String
+  authorName String
+
+  metadata Json? // Flexible field for attachments, tags, etc.
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id             String @id @default(cuid())
+  organizationId String
+
+  // Source employee who triggered the notification (optional for system notifications)
+  sourceEmployeeId String?
+  sourceEmployee   Employee? @relation("NotificationSource", fields: [sourceEmployeeId], references: [id], onDelete: SetNull)
+
+  // Category for filtering (e.g., "BOARDING", "REQUEST", "APPROVAL", "SYSTEM", "ANNOUNCEMENT")
+  category String @default("SYSTEM")
+
+  title       String
+  description String // Renamed from message for consistency
+
+  type     NotificationType @default(INFO)
+  eventKey String?
+
+  // Multi-recipient support with read/unread tracking
+  recipients Json
+
+  metadata Json?
+
+  // Archive support for soft delete
+  archive Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, category])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, eventKey])
+  @@index([sourceEmployeeId])
+  @@map("notifications")
+}
+
+// Embedded type for tracking recipients
+// Embedded type for individual recipient tracking
+// Archive type for soft delete with metadata
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  ALERT
+  REMINDER
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  code        String   @unique
+  branding    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isDeleted   Boolean  @default(false)
+
+  users User[]
+
+  @@index([isDeleted])
+  @@map("organizations")
+}
+
+enum BusinessDayRule {
+  NONE
+  NEXT_BUSINESS_DAY
+}
+
+model PayrollCycleConfig {
+  id             String @id @default(cuid())
+  organizationId String
+
+  defaultPayFrequency               PayFrequency    @default(SEMI_MONTHLY)
+  payDateOffsetDays                 Int             @default(5)
+  businessDayRule                   BusinessDayRule @default(NEXT_BUSINESS_DAY)
+  includeHolidaysInBusinessDayCheck Boolean         @default(true)
+  cycleRules                        Json?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@map("payroll_cycle_configs")
+}
+
+enum PeriodStatus {
+  DRAFT
+  OPEN
+  PROCESSING
+  COMPLETED
+  CLOSED
+}
+
+model PayrollPeriod {
+  id             String        @id @default(cuid())
+  organizationId String // Multi-tenancy support
+  name           String // e.g., "January 2025 - 1st Half"
+  code           String? // Auto-generated code based on startDate and endDate (e.g., "PP-20260101-20260115")
+  payFrequency   PayFrequency? // Optional for now, to support legacy records
+  periodNumber   Int? // Period number within month (1st cutoff = 1, 2nd cutoff = 2, etc.)
+  startDate      DateTime      @db.Date
+  endDate        DateTime      @db.Date
+  payDate        DateTime      @db.Date
+
+  calculator   Calculator? @relation(fields: [calculatorId], references: [id])
+  calculatorId String?
+
+  status PeriodStatus @default(DRAFT)
+
+  // Cutoff settings
+  cutoffDay Int? // Day of month for cutoff
+
+  notes              String?
+  generationMetadata Json?
+  processedBy        String?
+  processedAt        DateTime?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  employeePayrolls      EmployeePayroll[]
+  timesheets            Timesheet[]
+  timesheetlines        Timesheetline[]
+  attendanceObligations AttendanceObligation[]
+
+  @@unique([organizationId, startDate, endDate])
+  @@index([organizationId])
+  @@index([status])
+  @@map("payroll_periods")
+}
+
+enum GenderType {
+  male
+  female
+  other
+  prefer_not_to_say
+  unknown
+  not_applicable
+}
+
+enum PhoneType {
+  mobile
+  home
+  work
+  emergency
+  fax
+  pager
+  main
+  other
+}
+
+enum IdentificationType {
+  passport
+  drivers_license
+  national_id
+  postal_id
+  voters_id
+  senior_citizen_id
+  company_id
+  school_id
+}
+
+model Person {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String? // Reference to User in different microservice
+  employeeId     String? // One-to-one: Single Employee ID that references this person
+  personalInfo   Json?
+  contactInfo    Json
+  identification Json?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  isDeleted      Boolean  @default(false)
+
+  // Relations
+  employee   Employee?
+  applicants Applicant[]
+  children   Child[]
+}
+
+model Child {
+  id             String      @id @default(cuid())
+  organizationId String?
+  parentId       String
+  parent         Person      @relation(fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  firstName      String
+  middleName     String?
+  lastName       String?
+  dateOfBirth    DateTime
+  gender         GenderType?
+  notes          String?
+  isDependent    Boolean?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  isDeleted      Boolean     @default(false)
+
+  @@index([organizationId])
+  @@index([parentId])
+  @@index([organizationId, isDeleted, dateOfBirth])
+}
+
+model Position {
+  id                           String                       @id @default(cuid())
+  organizationId               String
+  title                        String
+  code                         String
+  description                  String?
+  departmentId                 String?
+  minSalary                    Float?
+  maxSalary                    Float?
+  department                   Department?                  @relation(fields: [departmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isActive                     Boolean                      @default(true)
+  isDeleted                    Boolean                      @default(false)
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+  employees                    Employee[]
+  levels                       PositionLevel[]
+  applicants                   Applicant[]
+  jobs                         Job[]
+  workforceRecruitmentPolicies WorkforceRecruitmentPolicy[]
+  isOffer                      Boolean                      @default(false)
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("positions")
+}
+
+model PositionLevel {
+  id         String   @id @default(cuid())
+  positionId String
+  levelId    String
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  level      Level    @relation(fields: [levelId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([positionId, levelId])
+  @@index([positionId])
+  @@index([levelId])
+  @@map("position_levels")
+}
+
+enum RequestType {
+  LEAVE
+  TIMESHEET
+  ATTENDANCE_CORRECTION
+  EXPENSE_REIMBURSEMENT
+  DOCUMENT_REQUEST
+  RESIGNATION
+  TERMINATION
+  REGULARIZATION
+  PROMOTION
+  SALARY_CHANGE
+  TRANSFER
+  SCHEDULE_CHANGE
+  OTHER
+}
+
+model Request {
+  id             String  @id @default(cuid())
+  organizationId String // Multi-tenancy support
+  code           String? @unique // Human-readable request code (e.g., REQ-001)
+
+  type                    RequestType
+  currentWorkflowStateKey String      @default("OPEN")
+  startDate               DateTime?
+  endDate                 DateTime?
+  description             String
+  attachments             Json[]      @default([]) // Array of file URLs/paths (zdefaults to empty)
+
+  requester   Employee @relation("RequestRequester", fields: [requesterId], references: [id])
+  requesterId String
+
+  targetEmployeeId String?
+  targetEmployee   Employee? @relation("RequestTargetEmployee", fields: [targetEmployeeId], references: [id])
+
+  // Workflow runtime
+  workflowInstance   WorkflowInstance? @relation("RequestWorkflowInstance", fields: [workflowInstanceId], references: [id])
+  workflowInstanceId String?
+
+  // Workflow step executions (replaces departmentReviewers/employeeReviewers)
+  stepExecutions WorkflowStepExecution[]
+  transactions   RequestTransaction[]
+
+  // Timesheet edit-permission targets using this request
+  timesheetEditPermissionTargets Timesheet[] @relation("TimesheetEditPermissionRequest")
+  createdJobs                    Job[]       @relation("JobSourceRequest")
+
+  // Current step execution reference (many-to-one: multiple requests could theoretically point to same step, though unlikely)
+  // This avoids the @unique requirement that causes issues with nullable fields
+  currentStepExecution   WorkflowStepExecution? @relation("RequestCurrentWorkflowStep", fields: [currentStepExecutionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  currentStepExecutionId String?
+
+  // Last completed step execution reference (many-to-one)
+  lastCompletedStepExecution   WorkflowStepExecution? @relation("RequestLastCompletedWorkflowStep", fields: [lastCompletedStepExecutionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  lastCompletedStepExecutionId String?
+
+  notes String?
+
+  // Metadata structure:
+  // {
+  //   "employee_snapshot": {
+  //     "id": "...",
+  //     "employeeId": "EMP-001",
+  //     "firstName": "John",
+  //     "lastName": "Doe",
+  //     "position": "Software Engineer",
+  //     "department": "Engineering",
+  //     "level": "Senior",
+  //     "reportTo": { "id": "...", "name": "Jane Smith" }
+  //   },
+  //   "request_details": {
+  //     // Request-type specific data
+  //     // LEAVE: { leaveType, totalDays, etc. }
+  //     // OVERTIME: { overtimeHours, reason, etc. }
+  //     // PROMOTION: { newPosition, newLevel, effectiveDate, etc. }
+  //   }
+  // }
+  metadata Json?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([requesterId])
+  @@index([currentWorkflowStateKey])
+  @@index([workflowInstanceId])
+  @@index([organizationId, requesterId, type, isDeleted, createdAt])
+  @@map("requests")
+}
+
+enum RequestTransactionEventCategory {
+  LIFECYCLE
+  WORKFLOW
+  ASSIGNMENT
+  BUSINESS_CHANGE
+  ARTIFACT
+  SYSTEM
+}
+
+enum RequestTransactionEventKey {
+  REQUEST_CREATED
+  REQUEST_UPDATED
+  REQUEST_CANCELLED
+  WORKFLOW_STATE_CHANGED
+  STEP_ASSIGNED
+  STEP_APPROVED
+  STEP_REJECTED
+  STEP_COMPLETED
+  STEP_SKIPPED
+  STEP_DELEGATED
+  DOCUMENT_GENERATED
+}
+
+enum RequestTransactionActorType {
+  EMPLOYEE
+  MANAGER
+  HR
+  SYSTEM
+  UNKNOWN
+}
+
+enum RequestTransactionVisibility {
+  SHARED
+  INTERNAL
+}
+
+model RequestTransaction {
+  id                 String  @id @default(cuid())
+  organizationId     String
+  requestId          String
+  workflowInstanceId String?
+  stepExecutionId    String?
+  actorEmployeeId    String?
+
+  request          Request                @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  workflowInstance WorkflowInstance?      @relation(fields: [workflowInstanceId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  stepExecution    WorkflowStepExecution? @relation(fields: [stepExecutionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  actorEmployee    Employee?              @relation("RequestTransactionActor", fields: [actorEmployeeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  sequenceNumber    Int
+  eventCategory     RequestTransactionEventCategory
+  eventKey          RequestTransactionEventKey
+  eventSource       String?
+  actorType         RequestTransactionActorType     @default(UNKNOWN)
+  actorRole         String?
+  actorDisplayName  String?
+  title             String
+  description       String?
+  comments          String?
+  fromStateKey      String?
+  toStateKey        String?
+  fieldChanges      Json?
+  metadata          Json?
+  visibility        RequestTransactionVisibility    @default(SHARED)
+  isSystemGenerated Boolean                         @default(false)
+  occurredAt        DateTime                        @default(now())
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+
+  @@unique([requestId, sequenceNumber])
+  @@index([organizationId, requestId, occurredAt])
+  @@index([workflowInstanceId])
+  @@index([stepExecutionId])
+  @@index([actorEmployeeId])
+  @@index([requestId, eventCategory, occurredAt])
+  @@map("request_transactions")
+}
+
+enum RuleCategory {
+  ATTENDANCE
+  BEHAVIOR
+  PERFORMANCE
+  SAFETY
+  POLICY_VIOLATION
+  MISCONDUCT
+  HARASSMENT
+  DRESS_CODE
+  PUNCTUALITY
+  OTHER
+}
+
+enum SeverityLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Rule {
+  id             String        @id @default(cuid())
+  title          String
+  code           String?       @unique // Rule code (e.g., "ATT-001")
+  category       RuleCategory
+  severity       SeverityLevel
+  description    String
+  consequences   String? // Consequences for violation
+  isActive       Boolean       @default(true)
+  effectiveDate  DateTime      @default(now())
+  expiryDate     DateTime? // Optional expiry date
+  organizationId String
+  createdById    String? // User who created the rule
+  isDeleted      Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations - commented out until models are created
+  // organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // disciplinaryActions DisciplinaryAction[]
+  // ruleVersions        RuleVersion[]
+
+  @@index([organizationId])
+  @@index([category])
+  @@index([isActive])
+  @@map("rules")
+}
+
+// Scheduling models were split into:
+// - shiftType.prisma
+// - scheduleTemplate.prisma
+// - scheduleOverride.prisma
+// - departmentScheduleTemplate.prisma
+// Shared schedule types/enums live in scheduleTypes.prisma
+
+model ScheduleOverride {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  employeeId          String
+  date                DateTime
+  shiftTypeId         String
+  reason              String?
+  createdByEmployeeId String?
+  isDeleted           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  employee          Employee  @relation("EmployeeScheduleOverrides", fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  shiftType         ShiftType @relation(fields: [shiftTypeId], references: [id], onDelete: NoAction, onUpdate: Cascade)
+  createdByEmployee Employee? @relation("ScheduleOverridesCreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([organizationId, employeeId, date], map: "employee_schedule_override_unique")
+  @@index([organizationId, employeeId, isDeleted])
+  @@index([organizationId, employeeId, date, isDeleted])
+  @@index([organizationId, date, isDeleted])
+  @@map("schedule_overrides")
+}
+
+model ScheduleTemplate {
+  id                   String   @id @default(cuid())
+  organizationId       String
+  name                 String
+  code                 String
+  description          String?
+  cycleDays            Int
+  graceLateMinutes     Int      @default(0)
+  graceEarlyOutMinutes Int      @default(0)
+  pattern              Json
+  isActive             Boolean  @default(true)
+  isDeleted            Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  departmentScheduleTemplates DepartmentScheduleTemplate[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isDeleted])
+  @@map("schedule_templates")
+}
+
+enum DepartmentScheduleTemplateSource {
+  department_default
+  department_head_created
+  department_head_linked
+}
+
+model ShiftType {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  code           String
+  isOvernight    Boolean  @default(false)
+  isOff          Boolean  @default(false)
+  timeSlots      Json
+  isActive       Boolean  @default(true)
+  isDeleted      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  scheduleOverrides ScheduleOverride[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, isDeleted])
+  @@map("shift_types")
+}
+
+model SOALineItem {
+  id                   String             @id @default(cuid())
+  statementOfAccount   StatementOfAccount @relation(fields: [statementOfAccountId], references: [id], onDelete: Cascade)
+  statementOfAccountId String
+
+  category    String? // Remittance category (e.g., "TAX", "SSS", "LOAN", "BENEFIT")
+  description String?
+
+  // Employee relation
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employeeId String?
+
+  // Source references
+  employeePayroll   EmployeePayroll? @relation(fields: [employeePayrollId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employeePayrollId String?
+  employeeLoan      EmployeeLoan?    @relation(fields: [employeeLoanId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employeeLoanId    String?
+  employeeBenefit   EmployeeBenefit? @relation(fields: [employeeBenefitId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employeeBenefitId String?
+
+  // Amounts
+  taxableAmount Float @default(0) // Base amount used for tax calculation
+  taxAmount     Float @default(0) // Tax amount represented by this line item
+  employeeShare Float @default(0)
+  employerShare Float @default(0)
+  totalAmount   Float @default(0) // employee + employer
+
+  metadata Json? // {
+  //   employeeName: "Dela Cruz, Juan",
+  //   employeeNumber: "EMP-001",
+  //   externalReferenceNumber: "SSS-1234567890",
+  //   loanBalance: 45000,
+  //   installmentNumber: 3,
+  //   contributionBase: 25000,
+  //   rate: 0.05
+  // }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([statementOfAccountId])
+  @@index([employeeId])
+  @@index([employeePayrollId])
+  @@index([employeeLoanId])
+  @@index([employeeBenefitId])
+  @@map("soa_line_items")
+}
+
+enum RemittanceStatus {
+  PENDING
+  PROCESSING
+  REMITTED
+  CONFIRMED
+  FAILED
+  REVERSED
+}
+
+model SOARemittance {
+  id                   String             @id @default(cuid())
+  statementOfAccount   StatementOfAccount @relation(fields: [statementOfAccountId], references: [id], onDelete: Cascade)
+  statementOfAccountId String
+
+  // Payment details
+  amount          Float
+  paymentMethod   String? // BANK_TRANSFER, CHECK, ONLINE_PAYMENT, CASH, GCash
+  referenceNumber String? // Bank reference / check number / transaction ID
+  paymentDate     DateTime @db.Date
+
+  // Recipient / category
+  category String? // Which category this payment covers (e.g., "TAX", "SSS", "LOAN")
+
+  // Status
+  status RemittanceStatus @default(PENDING)
+
+  notes    String?
+  metadata Json? // {
+  //   remitteeName: "SSS",
+  //   remitteeAccount: "SSS-001-2345",
+  //   confirmedAt: "2026-01-20T00:00:00Z",
+  //   confirmedBy: "<employeeId>",
+  //   eppTransactionId: "EPP-TXN-123",
+  //   receiptUrl: "https://...",
+  //   receiptName: "sss-receipt-jan2026.pdf",
+  //   bankName: "BDO",
+  //   governmentReceiptNumber: "..."
+  // }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([statementOfAccountId])
+  @@index([status])
+  @@index([paymentDate])
+  @@map("soa_remittances")
+}
+
+enum SOAStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  PARTIALLY_REMITTED
+  REMITTED
+  RECONCILED
+  DISPUTED
+  CLOSED
+}
+
+model StatementOfAccount {
+  id             String @id @default(cuid())
+  organizationId String // Multi-tenancy support
+  soaNumber      String // Auto-generated (e.g., "SOA-202601-001")
+  name           String // e.g., "January 2026 1st Half - EPP Loan Remittance"
+
+  // Configurable period (independent of PayrollPeriod, differs per client)
+  startDate DateTime  @db.Date
+  endDate   DateTime  @db.Date
+  dueDate   DateTime? @db.Date // When remittance is due to external party
+
+  // Payroll period linkage (SOA may cover one or more payroll periods)
+  payrollPeriodIds String[]
+
+  // Summary totals
+  totalEmployeeShare Float @default(0)
+  totalEmployerShare Float @default(0)
+  totalTax           Float @default(0) // Flattened from SOA line item tax amounts
+  totalAmount        Float @default(0) // Grand total (employee + employer)
+  totalRemitted      Float @default(0)
+  totalOutstanding   Float @default(0) // totalAmount - totalRemitted
+
+  // EPP integration / reconciliation
+  eppReferenceId    String?
+  eppBillingId      String?
+  eppReconciled     Boolean   @default(false)
+  eppReconciledAt   DateTime?
+  eppReconciledBy   Employee? @relation("SOAReconciledBy", fields: [eppReconciledById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  eppReconciledById String?
+
+  // Remittee / recipient info (SSS, BIR, PhilHealth, Pag-IBIG, loan provider)
+  remitteeName    String?
+  remitteeAccount String?
+  remitteeDetails Json?
+
+  // Status & workflow
+  status SOAStatus @default(DRAFT)
+
+  notes       String?
+  description String?
+  metadata    Json?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  lineItems   SOALineItem[]
+  remittances SOARemittance[]
+
+  @@unique([organizationId, soaNumber])
+  @@index([organizationId])
+  @@index([organizationId, startDate, endDate])
+  @@index([status])
+  @@index([startDate, endDate])
+  @@index([dueDate])
+  @@map("statements_of_account")
+}
+
+model StatusIncident {
+  id          String    @id @default(cuid())
+  incidentKey String    @unique
+  moduleSlug  String
+  moduleName  String
+  status      String
+  message     String
+  startedAt   DateTime
+  resolvedAt  DateTime?
+  isResolved  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([moduleSlug, startedAt])
+  @@index([isResolved, startedAt])
+  @@map("status_incidents")
+}
+
+model StatusState {
+  id          String   @id @default(cuid())
+  stateKey    String   @unique
+  snapshots   Json
+  incidents   Json
+  runtimeData Json
+  httpEvents  Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("status_state")
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        String?
+  isDeleted   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TemplateItem {
+  id String @id @default(cuid())
+
+  organizationId String
+
+  templateId String
+  template   BoardingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  category    ChecklistCategory
+  dueOffset   Int // Days offset (positive for onboarding, negative for offboarding from target date)
+  priority    Priority          @default(MEDIUM)
+  order       Int // Display order
+
+  uiElement String? // CSS selector for tour
+
+  metadata Json? // Flexible field for custom data
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum TerminationType {
+  PERFORMANCE
+  MISCONDUCT
+  REDUNDANCY
+  END_OF_CONTRACT
+  FAILED_PROBATION
+}
+
+enum TerminationStatus {
+  DRAFT
+  PENDING_HR_DIRECTOR
+  PENDING_LEGAL
+  APPROVED
+  REJECTED
+  PROCESSING
+  COMPLETED
+}
+
+model Termination {
+  id                String @id @default(cuid())
+  terminationNumber String @unique // Auto: TRM-2025-0001
+  organizationId    String
+
+  // Employee being terminated
+  employee   Employee @relation("EmployeeTerminations", fields: [employeeId], references: [id])
+  employeeId String
+
+  // Who initiated the termination (HR/Manager)
+  initiatedBy   Employee @relation("TerminationInitiator", fields: [initiatedById], references: [id])
+  initiatedById String
+
+  // Termination details
+  terminationType  TerminationType
+  status           TerminationStatus @default(DRAFT)
+  terminationDate  DateTime
+  lastWorkingDay   DateTime
+  reason           String
+  severancePackage String?
+
+  // Supporting documents (warning letters, performance reviews, etc.)
+  supportingDocuments Json[] @default([])
+
+  // HR Director approval
+  hrDirectorApprovedAt DateTime?
+  hrDirectorApprovedBy Employee? @relation("HRDirectorApprovals", fields: [hrDirectorId], references: [id])
+  hrDirectorId         String?
+  hrDirectorComments   String?
+
+  // Legal review (optional, for certain termination types)
+  legalApprovalRequired Boolean   @default(false)
+  legalApprovedAt       DateTime?
+  legalApprovedBy       Employee? @relation("LegalApprovals", fields: [legalApproverId], references: [id])
+  legalApproverId       String?
+  legalComments         String?
+
+  // Processing tracking
+  processingStartedAt   DateTime?
+  processingCompletedAt DateTime?
+
+  // Final payroll and clearance
+  finalPayCalculated    Boolean @default(false)
+  clearanceCompleted    Boolean @default(false)
+  terminationLetterPath String?
+
+  // Soft delete & timestamps
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Audit logs
+  auditLogs TerminationAuditLog[]
+
+  @@index([organizationId])
+  @@index([employeeId])
+  @@index([status])
+  @@index([initiatedById])
+  @@map("terminations")
+}
+
+model TerminationAuditLog {
+  id            String      @id @default(cuid())
+  termination   Termination @relation(fields: [terminationId], references: [id], onDelete: Cascade)
+  terminationId String
+
+  action          String // CREATED, SUBMITTED, HR_APPROVED, LEGAL_APPROVED, REJECTED, COMPLETED, etc.
+  performedBy     String
+  performedByName String
+  fromStatus      String?
+  toStatus        String?
+  comments        String?
+  metadata        Json?
+  timestamp       DateTime @default(now())
+
+  @@index([terminationId])
+  @@map("termination_audit_logs")
+}
+
+// Timesheet Model
+// Allows employees to submit timesheets based on their attendance records
+
+enum TimesheetStatus {
+  DRAFT // Being prepared by employee
+  SUBMITTED // Submitted for approval
+  APPROVED // Approved by manager/HR
+  REJECTED // Rejected by approver
+  REVISED // Returned for revision
+}
+
+enum TimesheetEditPermissionStatus {
+  NONE
+  REQUESTED
+  APPROVED
+  REJECTED
+  CONSUMED
+  EXPIRED
+  REVOKED
+}
+
+enum TimesheetRejectBehavior {
+  REVISE
+  REJECT
+}
+
+// Timesheet Configuration Model
+// Organization-level settings for timesheet behavior
+model TimesheetConfig {
+  id             String @id @default(cuid())
+  organizationId String @unique // One config per organization
+
+  // Auto-approval settings
+  enableAutoApprove Boolean @default(false)
+
+  // Employee editing permissions
+  enableEditBeforeSubmission Boolean @default(true)
+
+  // Behavior when manager rejects submission review
+  rejectBehavior TimesheetRejectBehavior @default(REVISE)
+
+  // Minimum schedule-based overtime minutes required to set OVERTIME behavior flag
+  overtimeFlagThresholdMinutes Int @default(60)
+
+  // Metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("timesheet_configs")
+}
+
+model Timesheet {
+  id             String   @id @default(cuid())
+  code           String   @unique // Unique timesheet identifier (auto-generated: YYYYMMDDTTTTTTTTTTT - date + timestamp)
+  organizationId String // Multi-tenancy support
+  employee       Employee @relation(fields: [employeeId], references: [id])
+  employeeId     String
+
+  // Payroll period link (enables central period management)
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id])
+  payrollPeriodId String
+
+  // Attendance relation - attendances included in this timesheet
+  attendances Attendance[]
+
+  // Payroll relation - link to generated payroll (optional one-to-one)
+  employeePayroll EmployeePayroll?
+
+  // Materialized day-level source of truth for attendance reporting
+  timesheetlines        Timesheetline[]
+  attendanceObligations AttendanceObligation[]
+
+  // Summary fields (auto-calculated from attendance records)
+  totalDays           Int?
+  totalHoursWorked    String? // Formatted as "HH:MM" (e.g., "80:16")
+  totalRegularHours   String? // Formatted as "HH:MM"
+  totalOvertimeHours  String? // Formatted as "HH:MM"
+  totalUndertimeHours String? // Formatted as "HH:MM"
+  totalLateHours      String? // Formatted as "HH:MM"
+  totalEarlyOutHours  String? // Formatted as "HH:MM"
+  metadata            Json? // Stores minute values: totalMinutesWorked, totalRegularMinutes, etc.
+
+  // Workflow status
+  status TimesheetStatus @default(DRAFT)
+
+  // Submission tracking
+  submittedAt     DateTime?
+  submittedBy     String?
+  approvedBy      String?
+  approvalDate    DateTime?
+  rejectionReason String?
+
+  // Optional fields
+  notes String?
+
+  // Edit-permission workflow state
+  editPermissionStatus             TimesheetEditPermissionStatus @default(NONE)
+  editPermissionRequestId          String?
+  editPermissionRequest            Request?                      @relation("TimesheetEditPermissionRequest", fields: [editPermissionRequestId], references: [id])
+  editPermissionRequestedAt        DateTime?
+  editPermissionGrantedAt          DateTime?
+  editPermissionGrantedBy          String?
+  editPermissionGrantedByEmployee  Employee?                     @relation("TimesheetEditPermissionGrantedBy", fields: [editPermissionGrantedBy], references: [id])
+  editPermissionRejectedAt         DateTime?
+  editPermissionRejectedBy         String?
+  editPermissionRejectedByEmployee Employee?                     @relation("TimesheetEditPermissionRejectedBy", fields: [editPermissionRejectedBy], references: [id])
+  editPermissionRejectionReason    String?
+  editPermissionConsumedAt         DateTime?
+  editPermissionExpiresAt          DateTime?
+  editPermissionReason             String?
+
+  // Metadata
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  // Note: code field is unique via @unique attribute above - ensures each timesheet has unique code
+
+  // Unique constraints
+  @@unique([organizationId, employeeId, payrollPeriodId], name: "unique_timesheet_per_period") // One timesheet per employee per payroll period
+  // Indexes for query optimization
+  @@index([organizationId])
+  @@index([employeeId])
+  @@index([payrollPeriodId])
+  @@index([status])
+  @@index([editPermissionStatus])
+  @@index([editPermissionRequestId])
+  @@index([isDeleted]) // Index for filtering soft-deleted records
+  @@index([organizationId, employeeId, isDeleted]) // Composite index for employee timesheets query
+  @@index([organizationId, payrollPeriodId, status, isDeleted])
+  @@index([organizationId, employeeId, payrollPeriodId, editPermissionStatus])
+  @@index([organizationId, employeeId, payrollPeriodId, isDeleted])
+  @@map("timesheets")
+}
+
+model Timesheetline {
+  id String @id @default(cuid())
+
+  organizationId  String
+  employee        Employee      @relation(fields: [employeeId], references: [id])
+  employeeId      String
+  timesheet       Timesheet     @relation(fields: [timesheetId], references: [id])
+  timesheetId     String
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id])
+  payrollPeriodId String
+  attendance      Attendance?   @relation(fields: [attendanceId], references: [id])
+  attendanceId    String?
+
+  date DateTime @db.Date
+
+  timeIn        DateTime?
+  timeBreak     DateTime?
+  timeOut       DateTime?
+  status        String    @default("NOT_CLOCKED_IN")
+  behaviorFlags String[]  @default([])
+
+  scheduleSnapshot Json?
+  hoursWorked      String?
+  regularHours     String?
+  overtimeHours    String?
+  undertimeHours   String?
+  lateHours        String?
+  earlyOutHours    String?
+  breakMinutes     Int?
+
+  employeeNotes String?
+  approverNotes String?
+  notes         String?
+  metadata      Json?
+  primaryMarker String?
+  isManualEntry Boolean @default(false)
+  isVirtual     Boolean @default(false)
+
+  revisionNo       Int       @default(1)
+  isEffective      Boolean   @default(true)
+  ledgerType       String    @default("SNAPSHOT")
+  supersedesLineId String?
+  supersededById   String?
+  supersededAt     DateTime?
+  editedAt         DateTime?
+  editedBy         String?
+  editReason       String?
+
+  employeeCodeSnapshot    String?
+  employeeNameSnapshot    String?
+  departmentIdSnapshot    String?
+  departmentNameSnapshot  String?
+  reportToIdSnapshot      String?
+  workforceSourceSnapshot WorkforceSource?
+  agencyIdSnapshot        String?
+  attendanceObligations   AttendanceObligation[]
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, timesheetId, date, revisionNo])
+  @@index([organizationId, date, isDeleted])
+  @@index([organizationId, payrollPeriodId, date, isDeleted])
+  @@index([organizationId, employeeId, date, isDeleted])
+  @@index([organizationId, timesheetId, date, isEffective])
+  @@index([organizationId, employeeId, date, isEffective])
+  @@index([organizationId, status, date, isDeleted])
+  @@index([organizationId, departmentIdSnapshot, date, isDeleted])
+  @@index([organizationId, reportToIdSnapshot, date, isDeleted])
+  @@index([timesheetId])
+  @@index([attendanceId])
+  @@index([supersedesLineId])
+  @@index([supersededById])
+  @@map("timesheet_lines")
+}
+
+enum UserStatus {
+  active
+  inactive
+  suspended
+  archived
+}
+
+model User {
+  id          String     @id @default(cuid())
+  userName    String?    @unique
+  email       String     @unique
+  password    String?
+  role        String
+  status      UserStatus @default(active)
+  isDeleted   Boolean    @default(false)
+  lastLogin   DateTime?
+  loginMethod String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  metadata Json?
+
+  @@index([organizationId])
+  @@index([role])
+  @@index([status])
+  @@index([isDeleted])
+  @@map("users")
+}
+
+enum WorkflowDomain {
+  REQUEST
+  RECRUITMENT
+  PAYROLL
+}
+
+enum WorkflowStepType {
+  SUBMISSION
+  APPROVAL
+  TASK
+}
+
+enum WorkflowAssigneeType {
+  REQUESTER
+  SUPERVISOR
+  TARGET_DEPARTMENT_MANAGER
+  HR
+  SYSTEM
+}
+
+enum WorkflowStepStatus {
+  PENDING
+  IN_PROGRESS
+  APPROVED
+  REJECTED
+  COMPLETED
+  SKIPPED
+}
+
+model WorkflowInstance {
+  id             String @id @default(cuid())
+  organizationId String
+
+  domain         WorkflowDomain
+  domainRecordId String?
+  requestType    RequestType?
+
+  code        String?
+  name        String?
+  description String?
+
+  steps  Json
+  states Json?
+
+  currentStateKey String   @default("OPEN")
+  stateHistory    Json[]   @default([])
+  isDeleted       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  requests              Request[]               @relation("RequestWorkflowInstance")
+  applicants            Applicant[]             @relation("ApplicantWorkflowInstance")
+  stepExecutions        WorkflowStepExecution[]
+  requestTransactions   RequestTransaction[]
+  recruitmentActivities RecruitmentActivity[]   @relation("RecruitmentActivityWorkflowInstance")
+
+  @@index([organizationId, domain, isDeleted])
+  @@index([organizationId, domain, requestType, isDeleted])
+  @@index([domain, domainRecordId])
+  @@map("workflow_instances")
+}
+
+model WorkflowStepExecution {
+  id             String @id @default(cuid())
+  organizationId String
+
+  workflowInstance   WorkflowInstance @relation(fields: [workflowInstanceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  workflowInstanceId String
+
+  request     Request?   @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  requestId   String?
+  applicant   Applicant? @relation("ApplicantWorkflowStepExecutions", fields: [applicantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  applicantId String?
+
+  requestsAsCurrent         Request[]             @relation("RequestCurrentWorkflowStep")
+  requestsAsLastCompleted   Request[]             @relation("RequestLastCompletedWorkflowStep")
+  requestTransactions       RequestTransaction[]
+  applicantsAsCurrent       Applicant[]           @relation("ApplicantCurrentWorkflowStep")
+  applicantsAsLastCompleted Applicant[]           @relation("ApplicantLastCompletedWorkflowStep")
+  recruitmentActivities     RecruitmentActivity[] @relation("RecruitmentActivityStepExecution")
+
+  stepNumber Int
+  stepName   String
+  stepType   WorkflowStepType
+
+  assigneeType WorkflowAssigneeType
+  assigneeRole String?
+
+  assignee   Employee? @relation(fields: [assigneeId], references: [id])
+  assigneeId String?
+
+  status      WorkflowStepStatus @default(PENDING)
+  completedAt DateTime?
+  comments    String?
+  metadata    Json?
+
+  isRequired Boolean  @default(true)
+  isDeleted  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([workflowInstanceId])
+  @@index([requestId])
+  @@index([applicantId])
+  @@index([assigneeId])
+  @@index([status])
+  @@index([organizationId])
+  @@index([workflowInstanceId, isDeleted, status, stepNumber])
+  @@index([requestId, isDeleted, status, stepNumber])
+  @@index([applicantId, isDeleted, status, stepNumber])
+  @@map("workflow_step_executions")
+}
+
+enum WorkforceRecruitmentLimitBehavior {
+  WARN
+  BLOCK
+}
+
+model WorkforceRecruitmentSetting {
+  id             String @id @default(cuid())
+  organizationId String
+
+  isEnabled                     Boolean   @default(true)
+  enforceDepartmentManagerScope Boolean   @default(true)
+  defaultWorkflowCode           String    @default("WF-REQUEST-HIRING-REQUISITION-DEFAULT")
+  requestSubtype                String    @default("DEPARTMENT_JOB_REQUISITION")
+  autoCreateJobOnApproval       Boolean   @default(true)
+  seededAt                      DateTime?
+
+  policies  WorkforceRecruitmentPolicy[]
+  createdAt DateTime                     @default(now())
+  updatedAt DateTime                     @updatedAt
+
+  @@index([organizationId])
+  @@map("workforce_recruitment_settings")
+}
+
+model WorkforceRecruitmentPolicy {
+  id String @id @default(cuid())
+
+  settingId      String
+  organizationId String
+  departmentId   String?
+  positionId     String?
+  levelId        String?
+
+  targetHeadcount Int                               @default(0)
+  limitBehavior   WorkforceRecruitmentLimitBehavior @default(WARN)
+
+  defaultWorkflowCode     String?
+  autoCreateJobOnApproval Boolean  @default(true)
+  jobType                 String?
+  jobLocation             String?
+  jobTags                 String[]
+  jobDescriptionTemplate  String?
+  isActive                Boolean  @default(true)
+
+  setting    WorkforceRecruitmentSetting @relation(fields: [settingId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  department Department?                 @relation(fields: [departmentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  position   Position?                   @relation(fields: [positionId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  level      Level?                      @relation(fields: [levelId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  createdAt  DateTime                    @default(now())
+  updatedAt  DateTime                    @updatedAt
+
+  @@index([settingId])
+  @@index([organizationId])
+  @@index([organizationId, departmentId, positionId, levelId, isActive])
+  @@map("workforce_recruitment_policies")
+}

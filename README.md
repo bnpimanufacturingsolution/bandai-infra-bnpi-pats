@@ -41,6 +41,34 @@ terraform-hyperv-clean-plan
 
 `terraform-apply` requires `-Apply` on purpose. The default path does not delete existing VMs and does not run Packer.
 
+## VHDX Autopilot
+
+For a direct Hyper-V smoke test from an already-built `.vhdx`, use the VHDX autopilot command. It self-elevates through UAC, starts the Hyper-V management service, creates a fallback switch if needed, imports the VHDX, starts the VM, and prints guest IP/curl checks when an IP appears.
+
+```powershell
+.\scripts\project-truth.ps1 vhdx-autopilot -Mode Import -VhdxPath "C:\ProgramData\ProjectTruth\images\project-truth-devcurrent-hyperv.vhdx" -VmName "project-truth-devcurrent"
+```
+
+If the host cannot allocate the requested `4GB` startup RAM, the script automatically retries with lower startup RAM before failing.
+
+To prove the full scoped lifecycle in one loop, create/start/delete the Hyper-V VM without deleting the source VHDX:
+
+```powershell
+.\scripts\project-truth.ps1 vhdx-autopilot -Mode SelfTestHyperV -VhdxPath "C:\ProgramData\ProjectTruth\images\project-truth-devcurrent-hyperv.vhdx" -VmName "project-truth-devcurrent" -PollCount 6 -PollSeconds 5
+```
+
+Cleanup commands are scoped to Project Truth names by default:
+
+```powershell
+.\scripts\project-truth.ps1 vhdx-autopilot -Mode DeleteHyperV -VmName "project-truth-devcurrent"
+.\scripts\project-truth.ps1 vhdx-autopilot -Mode ResetHyperV
+.\scripts\project-truth.ps1 vhdx-autopilot -Mode ResetVirtualBox
+.\scripts\project-truth.ps1 vhdx-autopilot -Mode ResetImages
+.\scripts\project-truth.ps1 vhdx-autopilot -Mode ResetAll -VmName "project-truth-devcurrent"
+```
+
+Add `-DeleteVhdx` only when the Hyper-V `.vhdx`/`.vhd` image files should be removed from `C:\ProgramData\ProjectTruth\images`.
+
 ## Installer Flow
 
 ```powershell

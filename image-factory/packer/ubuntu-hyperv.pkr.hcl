@@ -60,7 +60,7 @@ source "hyperv-iso" "ubuntu" {
   boot_command = [
     "c<wait5>",
     "set gfxpayload=keep<enter><wait2>",
-    "linux /casper/vmlinuz autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<enter><wait5>",
+    "linux /casper/vmlinuz autoinstall ds='nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/' ---<enter><wait5>",
     "initrd /casper/initrd<enter><wait5>",
     "boot<enter><wait10>"
   ]
@@ -71,14 +71,33 @@ build {
   sources = ["source.hyperv-iso.ubuntu"]
 
   provisioner "file" {
-    source      = "${path.root}/../../gitops"
+    source      = "${path.root}/staging/gitops"
     destination = "/tmp/gitops"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/staging/appliance"
+    destination = "/tmp/appliance"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/staging/hris-api"
+    destination = "/tmp/hris-api"
+  }
+
+  provisioner "file" {
+    source      = "${path.root}/staging/hris-app"
+    destination = "/tmp/hris-app"
   }
 
   provisioner "shell" {
     inline = [
       "sudo mkdir -p /opt/project-truth",
       "sudo cp -R /tmp/gitops /opt/project-truth/gitops",
+      "sudo cp -R /tmp/appliance /opt/project-truth/appliance",
+      "sudo cp -R /tmp/hris-api /opt/project-truth/hris-api",
+      "sudo cp -R /tmp/hris-app /opt/project-truth/hris-app",
+      "sudo find /opt/project-truth -type f \\( -name '*.tmp' -o -name '.env' -o -name '.env.*' \\) -delete",
       "sudo chown -R infra:infra /opt/project-truth"
     ]
   }

@@ -1,0 +1,207 @@
+services:
+  loki:
+    image: grafana/loki:3.1.1
+    container_name: hris-loki
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "${LOKI_HOST_PORT:-3110}:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    restart: unless-stopped
+    networks:
+      - observability
+
+  promtail:
+    image: grafana/promtail:3.1.1
+    container_name: hris-promtail
+    command:
+      - -config.file=/etc/promtail/promtail-config.yml
+      - -config.expand-env=true
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+    restart: unless-stopped
+    networks:
+      - observability
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: hris-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+      - --web.enable-lifecycle
+      - --web.enable-admin-api
+    ports:
+      - "${PROMETHEUS_HOST_PORT:-9091}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - cadvisor
+      - node-exporter
+      - alertmanager
+      - blackbox-exporter
+    restart: unless-stopped
+    networks:
+      - observability
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: hris-alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - "${ALERTMANAGER_HOST_PORT:-9093}:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    restart: unless-stopped
+    networks:
+      - observability
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: hris-blackbox
+    command:
+      - --config.file=/etc/blackbox/blackbox.yml
+    ports:
+      - "${BLACKBOX_HOST_PORT:-9115}:9115"
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    restart: unless-stopped
+    networks:
+      - observability
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: hris-grafana
+    ports:
+      - "${GRAFANA_HOST_PORT:-53000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_DOMAIN=${GRAFANA_DOMAIN:-localhost}
+      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:53000}
+      - GF_LOG_MODE=console
+      - GF_LOG_LEVEL=info
+      - GF_SECURITY_ALLOW_EMBEDDING=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+      - loki
+      - alertmanager
+    restart: unless-stopped
+    networks:
+      - observability
+
+  backup:
+    image: alpine:3.20
+    container_name: hris-observability-backup
+    working_dir: /backup
+    command: ["sh", "/backup/loop.sh"]
+    environment:
+      - BACKUP_INTERVAL_SECONDS=${BACKUP_INTERVAL_SECONDS:-3600}
+      - BACKUP_KEEP_ROLLING=${BACKUP_KEEP_ROLLING:-48}
+      - BACKUP_KEEP_FULL=${BACKUP_KEEP_FULL:-30}
+      - FULL_FREQUENCY=${FULL_FREQUENCY:-daily}
+      - BACKUP_ROOT=/backups
+    volumes:
+      - ./backup:/backup:ro
+      - ./backups:/backups
+      - grafana_data:/data/grafana:ro
+      - prometheus_data:/data/prometheus:ro
+      - loki_data:/data/loki:ro
+      - alertmanager_data:/data/alertmanager:ro
+    depends_on:
+      - grafana
+      - prometheus
+      - loki
+      - alertmanager
+    restart: unless-stopped
+    networks:
+      - observability
+
+  backup-replicator:
+    image: rclone/rclone:1.68.2
+    container_name: hris-observability-replicator
+    entrypoint: ["/bin/sh", "-c"]
+    command: >-
+      while true; do
+        if [ "${REMOTE_REPLICATION_ENABLED:-false}" = "true" ]; then
+          rclone copy /backups "${RCLONE_REMOTE_PATH}" \
+            --config /config/rclone/rclone.conf \
+            --create-empty-src-dirs \
+            --fast-list \
+            --transfers "${RCLONE_TRANSFERS:-4}" \
+            --checkers "${RCLONE_CHECKERS:-8}" \
+            --log-level "${RCLONE_LOG_LEVEL:-INFO}" \
+            --stats 30s || true;
+        fi;
+        sleep "${REPLICATION_INTERVAL_SECONDS:-1800}";
+      done
+    environment:
+      - REMOTE_REPLICATION_ENABLED=${REMOTE_REPLICATION_ENABLED:-false}
+      - RCLONE_REMOTE_PATH=${RCLONE_REMOTE_PATH:-}
+      - REPLICATION_INTERVAL_SECONDS=${REPLICATION_INTERVAL_SECONDS:-1800}
+      - RCLONE_TRANSFERS=${RCLONE_TRANSFERS:-4}
+      - RCLONE_CHECKERS=${RCLONE_CHECKERS:-8}
+      - RCLONE_LOG_LEVEL=${RCLONE_LOG_LEVEL:-INFO}
+    volumes:
+      - ./backups:/backups:ro
+      - ./rclone:/config/rclone:ro
+    depends_on:
+      - backup
+    restart: unless-stopped
+    networks:
+      - observability
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: hris-node-exporter
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /:/host:ro
+    ports:
+      - "${NODE_EXPORTER_HOST_PORT:-9110}:9100"
+    restart: unless-stopped
+    networks:
+      - observability
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: hris-cadvisor
+    ports:
+      - "${CADVISOR_HOST_PORT:-8088}:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    restart: unless-stopped
+    networks:
+      - observability
+
+volumes:
+  loki_data:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+
+networks:
+  observability:
+    name: hris-observability

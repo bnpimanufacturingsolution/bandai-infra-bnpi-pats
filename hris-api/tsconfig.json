@@ -1,0 +1,28 @@
+{
+	"compilerOptions": {
+		"target": "ES6",
+		"strict": true,
+		"module": "Node16",
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"ignoreDeprecations": "5.0",
+		"outDir": "./dist",
+		"rootDir": ".",
+		"typeRoots": ["./node_modules/@types", "type"],
+		"types": ["node", "mocha"],
+		"moduleResolution": "node16",
+		"sourceMap": true,
+		"resolveJsonModule": true
+	},
+	"include": [
+		"app/**/*.ts",
+		"index.ts",
+		"middleware/**/*.ts",
+		"config/**/*.ts",
+		"helper/**/*.ts",
+		"utils/**/*.ts",
+		"zod/**/*.ts",
+		"lib/**/*.ts"
+	],
+	"exclude": ["node_modules"]
+}

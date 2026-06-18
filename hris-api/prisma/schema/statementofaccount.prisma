@@ -1,0 +1,69 @@
+enum SOAStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  PARTIALLY_REMITTED
+  REMITTED
+  RECONCILED
+  DISPUTED
+  CLOSED
+}
+
+model StatementOfAccount {
+  id             String @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String // Multi-tenancy support
+  soaNumber      String // Auto-generated (e.g., "SOA-202601-001")
+  name           String // e.g., "January 2026 1st Half - EPP Loan Remittance"
+
+  // Configurable period (independent of PayrollPeriod, differs per client)
+  startDate DateTime  @db.Date
+  endDate   DateTime  @db.Date
+  dueDate   DateTime? @db.Date // When remittance is due to external party
+
+  // Payroll period linkage (SOA may cover one or more payroll periods)
+  payrollPeriodIds String[] @db.ObjectId
+
+  // Summary totals
+  totalEmployeeShare Float @default(0)
+  totalEmployerShare Float @default(0)
+  totalTax           Float @default(0) // Flattened from SOA line item tax amounts
+  totalAmount        Float @default(0) // Grand total (employee + employer)
+  totalRemitted      Float @default(0)
+  totalOutstanding   Float @default(0) // totalAmount - totalRemitted
+
+  // EPP integration / reconciliation
+  eppReferenceId    String?
+  eppBillingId      String?
+  eppReconciled     Boolean   @default(false)
+  eppReconciledAt   DateTime?
+  eppReconciledBy   Employee? @relation("SOAReconciledBy", fields: [eppReconciledById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  eppReconciledById String?   @db.ObjectId
+
+  // Remittee / recipient info (SSS, BIR, PhilHealth, Pag-IBIG, loan provider)
+  remitteeName    String?
+  remitteeAccount String?
+  remitteeDetails Json?
+
+  // Status & workflow
+  status SOAStatus @default(DRAFT)
+
+  notes       String?
+  description String?
+  metadata    Json?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  lineItems   SOALineItem[]
+  remittances SOARemittance[]
+
+  @@unique([organizationId, soaNumber])
+  @@index([organizationId])
+  @@index([organizationId, startDate, endDate])
+  @@index([status])
+  @@index([startDate, endDate])
+  @@index([dueDate])
+  @@map("statements_of_account")
+}

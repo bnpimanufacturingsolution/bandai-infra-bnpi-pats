@@ -1,0 +1,22 @@
+model EmployeeScheduleHistory {
+  id              String    @id @default(cuid())
+  organizationId  String
+  employeeId      String
+  action          String
+  effectiveAt     DateTime?
+  actorEmployeeId String?
+  reason          String?
+  beforeSchedule  Json?
+  afterSchedule   Json?
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+
+  employee Employee  @relation("EmployeeScheduleHistoryTarget", fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: Cascade)
+  actor    Employee? @relation("EmployeeScheduleHistoryActor", fields: [actorEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([organizationId, employeeId, createdAt])
+  @@index([organizationId, employeeId, effectiveAt, createdAt])
+  @@index([organizationId, action, createdAt])
+  @@index([actorEmployeeId])
+  @@map("employee_schedule_history")
+}

@@ -1,0 +1,47 @@
+enum RemittanceStatus {
+  PENDING
+  PROCESSING
+  REMITTED
+  CONFIRMED
+  FAILED
+  REVERSED
+}
+
+model SOARemittance {
+  id                   String             @id @default(cuid())
+  statementOfAccount   StatementOfAccount @relation(fields: [statementOfAccountId], references: [id], onDelete: Cascade)
+  statementOfAccountId String
+
+  // Payment details
+  amount          Float
+  paymentMethod   String? // BANK_TRANSFER, CHECK, ONLINE_PAYMENT, CASH, GCash
+  referenceNumber String? // Bank reference / check number / transaction ID
+  paymentDate     DateTime @db.Date
+
+  // Recipient / category
+  category String? // Which category this payment covers (e.g., "TAX", "SSS", "LOAN")
+
+  // Status
+  status RemittanceStatus @default(PENDING)
+
+  notes    String?
+  metadata Json? // {
+  //   remitteeName: "SSS",
+  //   remitteeAccount: "SSS-001-2345",
+  //   confirmedAt: "2026-01-20T00:00:00Z",
+  //   confirmedBy: "<employeeId>",
+  //   eppTransactionId: "EPP-TXN-123",
+  //   receiptUrl: "https://...",
+  //   receiptName: "sss-receipt-jan2026.pdf",
+  //   bankName: "BDO",
+  //   governmentReceiptNumber: "..."
+  // }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([statementOfAccountId])
+  @@index([status])
+  @@index([paymentDate])
+  @@map("soa_remittances")
+}

@@ -21,6 +21,12 @@ Local maintainer command:
 .\scripts\project-truth.ps1 build-image -TargetPlatform virtualbox
 ```
 
+To create or repair a VirtualBox VM from the selected VDI with bridged networking:
+
+```powershell
+.\scripts\project-truth.ps1 configure-virtualbox -ImagePath C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vdi -VmName project-truth-node-01 -Start
+```
+
 To publish an already-built bootable image:
 
 ```powershell

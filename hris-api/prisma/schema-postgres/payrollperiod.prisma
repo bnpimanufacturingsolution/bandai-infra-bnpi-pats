@@ -1,0 +1,50 @@
+enum PeriodStatus {
+  DRAFT
+  OPEN
+  PROCESSING
+  COMPLETED
+  CLOSED
+}
+
+model PayrollPeriod {
+  id             String        @id @default(cuid())
+  organizationId String // Multi-tenancy support
+  name           String // e.g., "January 2025 - 1st Half"
+  code           String? // Auto-generated code based on startDate and endDate (e.g., "PP-20260101-20260115")
+  payFrequency   PayFrequency? // Optional for now, to support legacy records
+  periodNumber   Int? // Period number within month (1st cutoff = 1, 2nd cutoff = 2, etc.)
+  startDate      DateTime      @db.Date
+  endDate        DateTime      @db.Date
+  payDate        DateTime      @db.Date
+
+  calculator   Calculator? @relation(fields: [calculatorId], references: [id])
+  calculatorId String?
+
+  status PeriodStatus @default(DRAFT)
+
+  // Cutoff settings
+  cutoffDay Int? // Day of month for cutoff
+
+  notes               String?
+  generationMetadata  Json?
+  processedBy         String?
+  processedByEmployee Employee? @relation("PayrollPeriodProcessedBy", fields: [processedBy], references: [id])
+  processedAt         DateTime?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  employeePayrolls      EmployeePayroll[]
+  employeeBenefits      EmployeeBenefit[]
+  timesheets            Timesheet[]
+  timesheetlines        Timesheetline[]
+  attendanceObligations AttendanceObligation[]
+
+  @@unique([organizationId, startDate, endDate])
+  @@index([organizationId])
+  @@index([status])
+  @@index([processedBy])
+  @@map("payroll_periods")
+}

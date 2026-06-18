@@ -13,6 +13,7 @@ param(
   [string]$TerraformVarsPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'terraform-hyperv\terraform.tfvars'),
   [string]$VmName = 'project-truth-node-01',
   [string]$SwitchName = 'ProjectTruth-Internal',
+  [string]$BridgeAdapterName = '',
   [ValidateSet('External','Internal','Private')]
   [string]$SwitchType = 'Internal',
   [string[]]$NetAdapterNames = @(),
@@ -42,6 +43,13 @@ if (-not (Get-Command packer -ErrorAction SilentlyContinue)) {
 
 if ($PredownloadIso -and -not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
   throw 'curl.exe not found in PATH. It is required for explicit Ubuntu ISO predownload.'
+}
+
+if ($TargetPlatform -eq 'virtualbox' -and -not (Get-Command VBoxManage -ErrorAction SilentlyContinue)) {
+  $defaultVBoxManage = Join-Path $env:ProgramFiles 'Oracle\VirtualBox\VBoxManage.exe'
+  if (Test-Path -LiteralPath $defaultVBoxManage) {
+    $env:Path = "$(Split-Path -Parent $defaultVBoxManage);$env:Path"
+  }
 }
 
 if ($TargetPlatform -eq 'virtualbox' -and -not $SkipBuild -and -not (Get-Command VBoxManage -ErrorAction SilentlyContinue)) {
@@ -153,6 +161,53 @@ function Save-FileInChunks {
   }
 }
 
+function Sync-PackerStagingDirectory {
+  param(
+    [string]$Source,
+    [string]$Destination
+  )
+
+  if (-not (Test-Path -LiteralPath $Source)) {
+    throw "Staging source not found: $Source"
+  }
+
+  New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+
+  $excludedDirectories = @(
+    '.git',
+    '.github',
+    'node_modules',
+    'dist',
+    'build',
+    '.next',
+    '.react-router',
+    'coverage',
+    'test-results',
+    'playwright-report',
+    'output',
+    '.runtime',
+    'logs',
+    '.cache',
+    '.prisma'
+  )
+
+  $excludedFiles = @(
+    '.env',
+    '.env.*',
+    '*.tmp',
+    '*.log',
+    'npm-debug.log*',
+    'yarn-debug.log*',
+    'yarn-error.log*',
+    'pnpm-debug.log*'
+  )
+
+  & robocopy.exe $Source $Destination /MIR /NFL /NDL /NJH /NJS /NP /XD $excludedDirectories /XF $excludedFiles | Out-Host
+  if ($LASTEXITCODE -gt 7) {
+    throw "robocopy failed while staging $Source to $Destination with exit code $LASTEXITCODE"
+  }
+}
+
 if (-not $SkipBuild) {
   if ($PredownloadIso) {
     $isoDir = Split-Path -Parent $IsoCachePath
@@ -190,15 +245,30 @@ if (-not $SkipBuild) {
     throw "Packer template not found for ${TargetPlatform}: $packerTemplate"
   }
 
+  $repoRoot = Split-Path -Parent (Split-Path -Parent $PackerDir)
+  $stagingRoot = Join-Path $PackerDir 'staging'
+  New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'gitops') -Destination (Join-Path $stagingRoot 'gitops')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'appliance') -Destination (Join-Path $stagingRoot 'appliance')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-api') -Destination (Join-Path $stagingRoot 'hris-api')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-app') -Destination (Join-Path $stagingRoot 'hris-app')
+
   Push-Location $PackerDir
   try {
     packer init $packerTemplateName
     packer validate $packerTemplateName
+    $packerBuildArgs = @('build', '-force')
+    if ($TargetPlatform -eq 'virtualbox') {
+      $packerBuildArgs += '-on-error=abort'
+    }
     if ($PredownloadIso) {
       $resolvedIso = (Resolve-Path -LiteralPath $IsoCachePath).Path
-      packer build -force -var "iso_url=$resolvedIso" -var "iso_checksum=sha256:$IsoSha256" $packerTemplateName
+      $packerBuildArgs += @('-var', "iso_url=$resolvedIso", '-var', "iso_checksum=sha256:$IsoSha256")
+      $packerBuildArgs += $packerTemplateName
+      & packer @packerBuildArgs
     } else {
-      packer build -force $packerTemplateName
+      $packerBuildArgs += $packerTemplateName
+      & packer @packerBuildArgs
     }
   } finally {
     Pop-Location
@@ -254,6 +324,7 @@ if ($TargetPlatform -eq 'hyperv') {
   -TargetPlatform $TargetPlatform `
   -VmName $VmName `
   -SwitchName $SwitchName `
+  -BridgeAdapterName $BridgeAdapterName `
   -VmPath $VmPath `
   -CpuCount $CpuCount `
   -MemoryMb $MemoryMb
@@ -275,13 +346,22 @@ vm_path           = "$($VmPath -replace '\\', '\\')"
 memory_mb         = $MemoryMb
 cpu_count         = $CpuCount
 ssh_port          = 2222
-dev_port          = 3001
-uat_port          = 3002
-prod_port         = 3000
+api_port          = 3001
+app_port          = 3000
 guest_ip_hint     = ""
 "@ | Set-Content -LiteralPath $TerraformVarsPath -Encoding ASCII
   Write-Host "Terraform vars: $TerraformVarsPath"
 } else {
+  $configureVirtualBoxArgs = @(
+    '-ImagePath', $PublishedImagePath,
+    '-VmName', $VmName,
+    '-MemoryMb', $MemoryMb,
+    '-CpuCount', $CpuCount
+  )
+  if (-not [string]::IsNullOrWhiteSpace($BridgeAdapterName)) {
+    $configureVirtualBoxArgs += @('-BridgeAdapterName', $BridgeAdapterName)
+  }
+  & "$PSScriptRoot\configure-virtualbox.ps1" @configureVirtualBoxArgs
   Write-Host "Skipped Hyper-V Terraform vars because target platform is virtualbox."
 }
 

@@ -22,7 +22,7 @@ while ((Get-Date) -lt $deadline) {
   & "$PSScriptRoot\verify-host-health.ps1" -GuestIp $GuestIp *>&1 | Tee-Object -FilePath $log -Append
   if ($LASTEXITCODE -eq 0) {
     if ($GuestIp) {
-      ssh -o BatchMode=yes -o ConnectTimeout=5 "infra@$GuestIp" "hostname; ip -br addr; docker ps || true; sudo kubectl get nodes; sudo kubectl get pods -A; sudo kubectl get svc -A; sudo kubectl get applications -n argocd || true" *>&1 | Tee-Object -FilePath $log -Append
+      ssh -o BatchMode=yes -o ConnectTimeout=5 "infra@$GuestIp" "hostname; ip -br addr; docker ps --filter name=hris-api --filter name=hris-app; project-truth-hris-status || true; sudo kubectl get nodes; sudo kubectl get pods -A; sudo kubectl get svc -A; sudo kubectl get applications -n argocd || true" *>&1 | Tee-Object -FilePath $log -Append
     }
     Write-Host "SUCCESS: health checks passed. Log: $log"
     exit 0

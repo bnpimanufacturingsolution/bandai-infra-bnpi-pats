@@ -1,0 +1,85 @@
+model MigrationRun {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stage           String
+  workbookId      String
+  sourceFilename  String?
+  sourceFiles     Json?
+  idempotencyKey  String
+  dryRun          Boolean      @default(false)
+  status          String
+  phase           String?
+  startedByUserId String?
+  startedByUser   User?        @relation(fields: [startedByUserId], references: [id], onDelete: SetNull)
+  jobId           String?
+  progress        Json?
+  counts          Json?
+  summaryJson     Json?
+  proofJson       Json?
+  errorJson       Json?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  isDeleted       Boolean      @default(false)
+
+  steps  MigrationRunStep[]
+  events MigrationRunEvent[]
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, workbookId, status])
+  @@index([jobId])
+  @@index([createdAt])
+}
+
+model MigrationRunStep {
+  id             String       @id @default(cuid())
+  runId          String
+  run            MigrationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  sequence       Int
+  stage          String
+  stepCode       String
+  phase          String?
+  status         String
+  sourceWorkbook String?
+  sourceFile     String?
+  sourceSheet    String?
+  counts         Json?
+  summaryJson    Json?
+  proofJson      Json?
+  errorJson      Json?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([runId, stepCode])
+  @@index([runId, sequence])
+}
+
+model MigrationRunEvent {
+  id             String       @id @default(cuid())
+  runId          String
+  run            MigrationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  sequence       Int
+  stage          String
+  stepCode       String?
+  phase          String?
+  eventType      String
+  status         String
+  message        String
+  sourceWorkbook String?
+  sourceFile     String?
+  sourceSheet    String?
+  sourceRow      Int?
+  employeeId     String?
+  employeeName   String?
+  counts         Json?
+  metadata       Json?
+  timestamp      DateTime     @default(now())
+
+  @@unique([runId, sequence])
+  @@index([runId, timestamp])
+  @@index([stage, stepCode, eventType])
+}

@@ -1,0 +1,13 @@
+[Unit]
+Description=Project Truth HRIS Docker services
+Wants=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/project-truth/appliance
+ExecStart=/usr/local/bin/project-truth-hris-env-start all
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
