@@ -170,6 +170,57 @@ scripts\import-devcurrent-vdi-to-hyperv.ps1
 ```
 
 This script converts VDI to VHDX when needed, creates/reuses a Hyper-V Gen 2 VM, attaches it to `ProjectTruth-External` when available, starts the VM, discovers the LAN IP through Hyper-V integration or ARP/MAC fallback, and loops until PROD/DEV/UAT health checks pass.
+d
+## Google Compute Hyper-V VHDX Export
+
+To avoid local VDI-to-VHDX conversion and the temporary storage swell on small Windows hosts, Google Compute exported the postinstall image directly as a Hyper-V VHDX.
+
+```text
+Cloud Build:
+  8435ea44-d7aa-4cb2-9434-772f75da8ab8
+
+Cloud Build region:
+  asia-southeast1
+
+Source image:
+  project-truth-node-devcurrent-postinstall-20260618-020148
+
+Export format:
+  vhdx
+
+GCS object:
+  gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vhdx
+
+Public HTTPS:
+  https://storage.googleapis.com/project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vhdx
+
+VHDX size:
+  16,215,179,264 bytes
+  about 15.1 GiB
+```
+
+Public HTTP verification returned:
+
+```text
+HTTP/1.1 200 OK
+Content-Length: 16215179264
+```
+
+Evidence:
+
+```text
+.runtime\gcp-vhdx-export\20260618-devcurrent\gcp-exported-vhdx-stat.txt
+.runtime\gcp-vhdx-export\20260618-devcurrent\public-vhdx-curl-head.txt
+.runtime\gcp-vhdx-export\20260618-devcurrent\cloudbuild-8435ea44-d7aa-4cb2-9434-772f75da8ab8.json
+```
+
+Automation added:
+
+```text
+scripts\export-devcurrent-gcp-vhdx.ps1
+```
+
+This script starts/reuses the Google export target, polls Cloud Build, checks the GCS object, and verifies public HTTP access.
 
 ## Health Proof
 
