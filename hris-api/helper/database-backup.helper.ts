@@ -331,6 +331,39 @@ const runCommandToFile = async (
 	await new Promise<void>((resolve, reject) => {
 		const tempPath = `${outputPath}.tmp`;
 		const output = fs.createWriteStream(tempPath);
+		let childClosed = false;
+		let outputFinished = false;
+		let exitCode: number | null = null;
+		let settled = false;
+
+		const fail = (error: Error) => {
+			if (settled) return;
+			settled = true;
+			output.destroy();
+			fs.rmSync(tempPath, { force: true });
+			reject(error);
+		};
+
+		const maybeFinalize = () => {
+			if (settled || !childClosed || !outputFinished) return;
+			try {
+				if (exitCode !== 0) {
+					fail(new Error(`${command} exited with code ${exitCode}: ${stderr.trim()}`));
+					return;
+				}
+				const stat = fs.statSync(tempPath);
+				if (stat.size <= 0) {
+					fail(new Error(`${command} produced an empty backup artifact`));
+					return;
+				}
+				fs.renameSync(tempPath, outputPath);
+				settled = true;
+				resolve();
+			} catch (error) {
+				fail(error instanceof Error ? error : new Error(String(error)));
+			}
+		};
+
 		const child = spawn(command, args, {
 			env,
 			stdio: ["ignore", "pipe", "pipe"],
@@ -339,29 +372,23 @@ const runCommandToFile = async (
 		let stderr = "";
 
 		child.stdout.pipe(output);
+		output.on("finish", () => {
+			outputFinished = true;
+			maybeFinalize();
+		});
+		output.on("error", (error) => {
+			fail(error);
+		});
 		child.stderr.on("data", (chunk) => {
 			stderr += chunk.toString();
 		});
 		child.on("error", (error) => {
-			output.close();
-			fs.rmSync(tempPath, { force: true });
-			reject(error);
+			fail(error);
 		});
 		child.on("close", (code) => {
-			output.close();
-			if (code !== 0) {
-				fs.rmSync(tempPath, { force: true });
-				reject(new Error(`${command} exited with code ${code}: ${stderr.trim()}`));
-				return;
-			}
-			const stat = fs.statSync(tempPath);
-			if (stat.size <= 0) {
-				fs.rmSync(tempPath, { force: true });
-				reject(new Error(`${command} produced an empty backup artifact`));
-				return;
-			}
-			fs.renameSync(tempPath, outputPath);
-			resolve();
+			childClosed = true;
+			exitCode = code;
+			maybeFinalize();
 		});
 	});
 };

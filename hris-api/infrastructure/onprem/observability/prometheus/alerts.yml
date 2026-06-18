@@ -50,3 +50,53 @@ groups:
         annotations:
           summary: "HTTP health probe failed"
           description: "Blackbox probe failed for {{ $labels.instance }} for more than 2 minutes."
+
+      - alert: HrisApiHighErrorRate
+        expr: sum(rate(hris_api_http_requests_total{status_code=~"5.."}[5m])) by (instance) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "HRIS API elevated 5xx rate"
+          description: "HRIS API instance {{ $labels.instance }} is returning elevated 5xx responses."
+
+      - alert: HrisApiHighLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(hris_api_http_request_duration_seconds_bucket[5m])) by (le, instance)) > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "HRIS API p95 latency is high"
+          description: "HRIS API instance {{ $labels.instance }} p95 latency is above 2 seconds."
+
+      - alert: OTelCollectorNotReceivingSpans
+        expr: sum(rate(otelcol_receiver_accepted_spans[10m])) == 0
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "OpenTelemetry Collector is not receiving spans"
+          description: "No spans have been accepted by the collector for 15 minutes."
+
+      - alert: OTelCollectorDroppedTelemetry
+        expr: sum(rate(otelcol_processor_dropped_spans[5m])) + sum(rate(otelcol_exporter_send_failed_spans[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "OpenTelemetry Collector is dropping or failing spans"
+          description: "Collector dropped spans or failed span exports in the last 5 minutes."
+
+      - alert: HighHostDiskUsage
+        expr: 100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) > 85
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High host disk usage"
+          description: "Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is above 85%."

@@ -1,3 +1,4 @@
+import "./helper/telemetry-autostart";
 import express, { Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
@@ -13,8 +14,9 @@ import { authSecurityMiddleware } from "./middleware/security";
 import { networkInterfaces } from "os";
 import { getLogger } from "./helper/logger.helper";
 import { httpMetricsMiddleware, metricsHandler } from "./middleware/observability";
+import { apiActivityLoggingMiddleware } from "./middleware/apiActivityLogging";
 import { apiDebugLoggingMiddleware } from "./middleware/apiDebugLogging";
-import { initializeTelemetry, shutdownTelemetry } from "./helper/telemetry";
+import { shutdownTelemetry } from "./helper/telemetry";
 import { recordHttpOutcome, startStatusSampler } from "./app/status/status.service";
 
 process.setMaxListeners(50);
@@ -28,16 +30,6 @@ logger.info("startup.boot.begin", {
 	cloud_run_service: process.env.K_SERVICE || null,
 	cloud_run_revision: process.env.K_REVISION || null,
 	enable_startup_services: config.enableStartupServices,
-});
-
-void initializeTelemetry().catch((error) => {
-	logger.warn("telemetry.init.failed", {
-		event: "telemetry.init.failed",
-		error:
-			error instanceof Error
-				? { message: error.message, name: error.name, stack: error.stack }
-				: error,
-	});
 });
 
 declare global {
@@ -507,6 +499,7 @@ if (process.env.NODE_ENV !== "production") {
 
 // Apply authentication-specific security middleware
 app.use(`${config.baseApiPath}/auth`, authSecurityMiddleware);
+app.use(config.baseApiPath, apiActivityLoggingMiddleware);
 
 // Block login for employees who are already terminated/resigned (best effort).
 app.use(

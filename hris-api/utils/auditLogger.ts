@@ -80,6 +80,10 @@ export async function logAudit(
 	payload: AuditPayload,
 ) {
 	try {
+		if (process.env.AUDIT_LOGGING_ENABLED === "false") {
+			return;
+		}
+
 		if (shouldSkipAuditLog(req, payload)) {
 			return;
 		}

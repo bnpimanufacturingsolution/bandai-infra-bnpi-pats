@@ -3,6 +3,8 @@
 Production-style observability bundle for on-prem/hybrid workloads using:
 - Grafana (visualization)
 - Prometheus (metrics + alert rules)
+- Tempo (OpenTelemetry trace storage)
+- OpenTelemetry Collector (OTLP gateway for traces/logs/metrics)
 - Alertmanager (alert routing)
 - Loki + Promtail (centralized logs)
 - cAdvisor + node-exporter (container + host telemetry)
@@ -13,16 +15,44 @@ Production-style observability bundle for on-prem/hybrid workloads using:
 From repo root:
 
 ```bash
-cd infrastructure/onprem/observability
+cd hris-api/infrastructure/onprem/observability
 cp .env.example .env
 cp backup/.env.example backup/.env
+sudo mkdir -p /srv/hris/observability/{grafana,prometheus,loki,tempo,alertmanager,backups}
 docker compose up -d
 ```
+
+## VM Bootstrap
+For a fresh Ubuntu-based on-prem VM that already has this repo checkout, run from
+the repo root:
+
+```bash
+sudo bash scripts/bootstrap-onprem-vm.sh
+```
+
+The bootstrap script:
+- installs Docker and Docker Compose when missing
+- syncs the repo to `/opt/project-truth` unless `PROJECT_TRUTH_ROOT` is set
+- creates `/srv/hris/backups`
+- creates `/srv/hris/observability/{grafana,prometheus,loki,tempo,alertmanager,collector,backups}`
+- creates missing observability `.env` files from examples
+- installs `project-truth-hris-*` commands into `/usr/local/bin`
+- enables `project-truth-hris.service`
+- starts observability first, then Postgres, API, and app
+- verifies API, Grafana, Prometheus, Loki, Tempo, and Collector endpoints
+
+The boot service uses `project-truth-hris-env-start all`, which now starts the
+observability stack before app containers attach to the shared
+`hris-observability` Docker network.
 
 ## Endpoints
 - Grafana: `http://localhost:53000`
 - Prometheus: `http://localhost:9091`
 - Loki: `http://localhost:3110`
+- Tempo: `http://localhost:3200`
+- OpenTelemetry Collector OTLP gRPC: `localhost:4317`
+- OpenTelemetry Collector OTLP HTTP: `localhost:4318`
+- OpenTelemetry Collector metrics: `http://localhost:8889/metrics`
 - Alertmanager: `http://localhost:9093`
 - blackbox-exporter: `http://localhost:9115`
 - cAdvisor: `http://localhost:8088`
@@ -35,11 +65,62 @@ docker compose up -d
 ## Preloaded Dashboards
 - `HRIS Observability Overview`
 - `HRIS Container Logs`
+- `HRIS User Activity and Audit`
+
+## Application Wiring
+API and cron containers must share the `hris-observability` Docker network and send traces to the collector:
+
+```env
+OTEL_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment=onprem,service.namespace=hris
+API_ACTIVITY_LOGGING_ENABLED=true
+API_ACTIVITY_LOG_INCLUDE_READS=true
+API_ACTIVITY_LOG_EXCLUDED_PATHS=/health,/metrics
+```
+
+The appliance compose files already attach HRIS API/app containers to the external
+`hris-observability` network. Start this observability stack first so the external
+network exists.
+
+## User Activity and Trace Correlation
+The API writes request activity records to `ActivityLogging` for authenticated API
+requests and emits matching structured log events named `api.activity.request`.
+Each record/log includes route, method, status, duration, user context when
+available, and OpenTelemetry `trace_id`/`span_id`.
+
+Use Grafana:
+- Dashboard: `HRIS User Activity and Audit`
+- Logs: search Loki for `api.activity.request`
+- Trace drilldown: copy or click `trace_id` into Tempo
+
+Do not use Prometheus labels for raw user IDs, employee IDs, emails, session IDs,
+or exact entity IDs. Prometheus is for aggregate operational metrics; durable user
+accountability belongs in `ActivityLogging` and `AuditLogging`.
+
+## Verification
+```bash
+docker compose config
+docker compose up -d
+docker compose ps
+curl -f http://localhost:9091/-/ready
+curl -f http://localhost:53000/api/health
+curl -f http://localhost:3110/ready
+curl -f http://localhost:3200/ready
+curl -f http://localhost:8889/metrics
+```
+
+After the HRIS API is running, generate an authenticated API request and verify:
+- `/metrics` exposes `hris_api_http_requests_total`
+- Loki contains `api.activity.request`
+- Tempo contains traces for `hris-api`
+- Grafana datasources show Prometheus, Loki, Tempo, and Alertmanager as healthy
 
 ## Backups (Rolling + Full)
 Backups are written to host path:
-- `infrastructure/onprem/observability/backups/rolling`
-- `infrastructure/onprem/observability/backups/full`
+- `/srv/hris/observability/backups/rolling`
+- `/srv/hris/observability/backups/full`
 
 Behavior:
 - Rolling backup: created every interval (`BACKUP_INTERVAL_SECONDS`)
@@ -93,6 +174,9 @@ docker compose logs --tail 100 backup-replicator
 - Loki retention + ingestion/query limits
 - Promtail labels for container/service/project for better log filtering
 - Auto-provisioned Grafana datasources (Prometheus, Loki, Alertmanager)
+- Auto-provisioned Grafana datasource for Tempo
+- OTLP Collector for traces/logs/metrics routing
+- User activity/audit dashboard with trace/log correlation
 - Automated rolling and full backups with retention pruning
 
 ## Operations

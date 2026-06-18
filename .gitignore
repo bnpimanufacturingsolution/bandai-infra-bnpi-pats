@@ -6,6 +6,7 @@ logs/
 .runtime/
 dist/
 backup-test/
+appliance/backups/
 *.exe
 *.vhd
 *.vhdx

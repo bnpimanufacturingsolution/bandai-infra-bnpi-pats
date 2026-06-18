@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import { trace } from "@opentelemetry/api";
 import { getEligibilityCandidates } from "../../helper/eligibility.helper";
 import { prisma } from "../../config/database";
 import { redisClient } from "../../config/redis";
@@ -7,11 +8,13 @@ import { getLogger } from "../../helper/logger.helper";
 import { pruneOldBackupRuns, runDatabaseBackup } from "../../helper/database-backup.helper";
 
 const logger = getLogger();
+const tracer = trace.getTracer("hris-api-cron");
 
 export const initCronJobs = () => {
 	logger.info("cron.initializing");
 
 	cron.schedule("* * * * *", async () => {
+		await tracer.startActiveSpan("cron.eligibility", async (span) => {
 		logger.info("eligibility_cron.started");
 		try {
 			const employees = await prisma.employee.findMany({
@@ -36,32 +39,39 @@ export const initCronJobs = () => {
 						})),
 					});
 
-					try {
-						await redisClient.publish(
-							"events:eligibility-updated",
-							JSON.stringify({
-								organizationId: orgId,
-								count: candidates.length,
-								timestamp: new Date().toISOString(),
-							}),
-						);
-						logger.info("eligibility_cron.redis_published", { organizationId: orgId });
-					} catch (redisError) {
-						logger.error("eligibility_cron.redis_publish_failed", { error: redisError });
+					if (config.redis.enabled && redisClient.isClientConnected()) {
+						try {
+							await redisClient.publish(
+								"events:eligibility-updated",
+								JSON.stringify({
+									organizationId: orgId,
+									count: candidates.length,
+									timestamp: new Date().toISOString(),
+								}),
+							);
+							logger.info("eligibility_cron.redis_published", { organizationId: orgId });
+						} catch (redisError) {
+							logger.error("eligibility_cron.redis_publish_failed", { error: redisError });
+						}
 					}
 				} else {
 					logger.info("eligibility_cron.no_candidates", { organizationId: orgId });
 				}
 			}
 		} catch (error) {
+			span.recordException(error as Error);
 			logger.error("eligibility_cron.failed", { error });
+		} finally {
+			span.end();
 		}
+		});
 	});
 
 	if (config.backup.enabled) {
 		cron.schedule(
 			config.backup.cron,
 			async () => {
+				await tracer.startActiveSpan("cron.database_backup", async (span) => {
 				logger.info("database_backup.cron_triggered", {
 					cron: config.backup.cron,
 					timezone: config.backup.timezone,
@@ -103,13 +113,17 @@ export const initCronJobs = () => {
 						retentionDeletedCount: deleted.length,
 					});
 				} catch (error) {
+					span.recordException(error as Error);
 					logger.error("database_backup.cron_failed", {
 						error:
 							error instanceof Error
 								? { message: error.message, name: error.name, stack: error.stack }
-								: error,
+							: error,
 					});
+				} finally {
+					span.end();
 				}
+				});
 			},
 			{ timezone: config.backup.timezone },
 		);

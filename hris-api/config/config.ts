@@ -98,6 +98,22 @@ export const config = {
 		postgresUser: process.env.POSTGRES_USER || "",
 		postgresPassword: process.env.POSTGRES_PASSWORD || "",
 	},
+	apiActivityLogging: {
+		enabled: process.env.API_ACTIVITY_LOGGING_ENABLED !== "false",
+		includeReads: process.env.API_ACTIVITY_LOG_INCLUDE_READS !== "false",
+		sampleRate: Math.min(
+			1,
+			Math.max(0, Number.parseFloat(process.env.API_ACTIVITY_LOG_SAMPLE_RATE || "1") || 1),
+		),
+		excludedPaths: (process.env.API_ACTIVITY_LOG_EXCLUDED_PATHS || "/health,/metrics")
+			.split(",")
+			.map((path) => path.trim())
+			.filter(Boolean),
+		bodyMode: process.env.API_ACTIVITY_LOG_BODY_MODE || "metadata",
+	},
+	auditLogging: {
+		enabled: process.env.AUDIT_LOGGING_ENABLED !== "false",
+	},
 	betterStackEnabled:
 		process.env.NODE_ENV === "production"
 			? process.env.BETTER_STACK_ENABLED !== "false"

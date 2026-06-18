@@ -20,9 +20,11 @@ fi
 
 echo "Local App URL: http://127.0.0.1:3000"
 echo "Local API Health URL: http://127.0.0.1:3001/health"
+echo "Local Grafana URL: http://127.0.0.1:53000"
 
 echo "Docker services:"
 docker ps --filter "name=hris-" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+docker ps --filter "name=hris-grafana" --filter "name=hris-prometheus" --filter "name=hris-loki" --filter "name=hris-tempo" --filter "name=hris-otel-collector" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
 
 echo "Postgres:"
 if docker ps --format '{{.Names}}' | grep -qx 'hris-postgres'; then
@@ -51,6 +53,15 @@ curl -fsSI "http://127.0.0.1:3000/" | head -n 1
 if [ -n "$lan_ip" ]; then
   curl -fsSI "http://${lan_ip}:3000/" | head -n 1
 fi
+
+echo "Observability:"
+curl -fsS "http://127.0.0.1:53000/api/health"
+echo
+curl -fsS "http://127.0.0.1:9091/-/ready"
+curl -fsS "http://127.0.0.1:3110/ready"
+echo
+curl -fsS "http://127.0.0.1:3200/ready"
+echo
 
 if [ -n "$lan_ip" ]; then
   echo "CORS:"
