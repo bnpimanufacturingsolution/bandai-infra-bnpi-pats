@@ -127,19 +127,29 @@ export function apiActivityLoggingMiddleware(
 		const statusCode = res.statusCode;
 		const statusClass = `${Math.floor(statusCode / 100)}xx`;
 		const successful = statusCode < 400;
-		const authUserId = req.userId || null;
-		const employeeId = req.metadata?.employee?.id || null;
-		const organizationId = req.organizationId || null;
 		const ip = getClientIp(req);
 		const userAgent = req.get("User-Agent") || "unknown";
+
 		const activeSpanContext = trace.getSpan(context.active())?.spanContext();
 		const traceId = activeSpanContext?.traceId || traceIdAtEntry;
 		const spanId = activeSpanContext?.spanId || spanIdAtEntry;
 
+		// Enhanced user context extraction
+		const userId = req.userId || null;
+		const employeeId = req.metadata?.employee?.id || null;
+		const userName = req.userName || null;
+		const firstName = req.firstName || null;
+		const lastName = req.lastName || null;
+		const fullName = [firstName, lastName].filter(Boolean).join(" ") || userName || "Anonymous";
+
 		const payload = {
-			userId: authUserId,
+			userId,
 			employeeId,
-			organizationId,
+			userName,
+			firstName,
+			lastName,
+			fullName,
+			organizationId: req.organizationId || null,
 			route,
 			module,
 			statusCode,
@@ -154,9 +164,11 @@ export function apiActivityLoggingMiddleware(
 
 		logger.info("api.activity.request", {
 			event: "api.activity.request",
-			user_id: authUserId,
+			user_id: userId,
 			employee_id: employeeId,
-			organization_id: organizationId,
+			user_name: userName,
+			full_name: fullName,
+			organization_id: req.organizationId,
 			method: req.method,
 			path: req.originalUrl,
 			route,
