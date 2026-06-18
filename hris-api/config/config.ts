@@ -45,6 +45,11 @@ const isAllowedCorsOrigin = (origin?: string | null): boolean => {
 	return isLanCorsEnabled && PRIVATE_LAN_APP_ORIGIN.test(origin);
 };
 
+const parseInteger = (value: string | undefined, fallback: number): number => {
+	const parsed = Number.parseInt(value || "", 10);
+	return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 export const config = {
 	port: process.env.PORT || 3000,
 	host: process.env.HOST || "0.0.0.0",
@@ -59,8 +64,8 @@ export const config = {
 		process.env.AUTH_BASE_URL?.trim() ||
 		"https://adam-auth-431713067666.asia-southeast1.run.app",
 	enableRateLimit: process.env.ENABLE_RATE_LIMIT === "true",
-	prismaTransactionTimeoutMs: parseInt(process.env.PRISMA_TRANSACTION_TIMEOUT_MS || "30000", 10),
-	prismaTransactionMaxWaitMs: parseInt(process.env.PRISMA_TRANSACTION_MAX_WAIT_MS || "15000", 10),
+	prismaTransactionTimeoutMs: parseInteger(process.env.PRISMA_TRANSACTION_TIMEOUT_MS, 30000),
+	prismaTransactionMaxWaitMs: parseInteger(process.env.PRISMA_TRANSACTION_MAX_WAIT_MS, 15000),
 	writeDatabaseUrl:
 		process.env.WRITE_DATABASE_URL?.trim() ||
 		process.env.PG_DATABASE_URL?.trim() ||
@@ -75,13 +80,40 @@ export const config = {
 		String(process.env.ENABLE_READ_REPLICA || "").trim().toLowerCase() === "true" ||
 		Boolean(process.env.READ_DATABASE_URL?.trim()) ||
 		Boolean(process.env.READ_DATABASE_URLS?.trim()),
-	readReplicaLagThresholdSeconds: parseInt(process.env.READ_REPLICA_LAG_THRESHOLD_SECONDS || "5", 10),
-	readReplicaHealthcheckIntervalMs: parseInt(process.env.READ_REPLICA_HEALTHCHECK_INTERVAL_MS || "10000", 10),
-	slowRequestWarnMs: parseInt(process.env.SLOW_REQUEST_WARN_MS || "10000", 10),
-	defaultRequestTimeoutMs: parseInt(process.env.DEFAULT_REQUEST_TIMEOUT_MS || "120000", 10),
-	heavyRequestTimeoutMs: parseInt(process.env.HEAVY_REQUEST_TIMEOUT_MS || "300000", 10),
-	headersTimeoutMs: parseInt(process.env.HEADERS_TIMEOUT_MS || "310000", 10),
-	keepAliveTimeoutMs: parseInt(process.env.KEEP_ALIVE_TIMEOUT_MS || "65000", 10),
+	readReplicaLagThresholdSeconds: parseInteger(process.env.READ_REPLICA_LAG_THRESHOLD_SECONDS, 5),
+	readReplicaHealthcheckIntervalMs: parseInteger(process.env.READ_REPLICA_HEALTHCHECK_INTERVAL_MS, 10000),
+	slowRequestWarnMs: parseInteger(process.env.SLOW_REQUEST_WARN_MS, 10000),
+	defaultRequestTimeoutMs: parseInteger(process.env.DEFAULT_REQUEST_TIMEOUT_MS, 120000),
+	heavyRequestTimeoutMs: parseInteger(process.env.HEAVY_REQUEST_TIMEOUT_MS, 300000),
+	headersTimeoutMs: parseInteger(process.env.HEADERS_TIMEOUT_MS, 310000),
+	keepAliveTimeoutMs: parseInteger(process.env.KEEP_ALIVE_TIMEOUT_MS, 65000),
+	backup: {
+		enabled: process.env.BACKUP_ENABLED !== "false",
+		timezone: process.env.BACKUP_TIMEZONE || "Asia/Manila",
+		cron: process.env.BACKUP_CRON || "0 0 * * *",
+		outputDir: process.env.BACKUP_DIR || "/var/backups/hris",
+		retentionDays: parseInteger(process.env.BACKUP_RETENTION_DAYS, 0),
+		postgresContainerName: process.env.POSTGRES_CONTAINER_NAME || "",
+		postgresDatabase: process.env.POSTGRES_DB || "",
+		postgresUser: process.env.POSTGRES_USER || "",
+		postgresPassword: process.env.POSTGRES_PASSWORD || "",
+	},
+	apiActivityLogging: {
+		enabled: process.env.API_ACTIVITY_LOGGING_ENABLED !== "false",
+		includeReads: process.env.API_ACTIVITY_LOG_INCLUDE_READS !== "false",
+		sampleRate: Math.min(
+			1,
+			Math.max(0, Number.parseFloat(process.env.API_ACTIVITY_LOG_SAMPLE_RATE || "1") || 1),
+		),
+		excludedPaths: (process.env.API_ACTIVITY_LOG_EXCLUDED_PATHS || "/health,/metrics")
+			.split(",")
+			.map((path) => path.trim())
+			.filter(Boolean),
+		bodyMode: process.env.API_ACTIVITY_LOG_BODY_MODE || "metadata",
+	},
+	auditLogging: {
+		enabled: process.env.AUDIT_LOGGING_ENABLED !== "false",
+	},
 	betterStackEnabled:
 		process.env.NODE_ENV === "production"
 			? process.env.BETTER_STACK_ENABLED !== "false"
@@ -96,9 +128,9 @@ export const config = {
 	redis: {
 		url: process.env.REDIS_URL || "redis://localhost:6379",
 		host: process.env.REDIS_HOST || "localhost",
-		port: parseInt(process.env.REDIS_PORT || "6379"),
+		port: parseInteger(process.env.REDIS_PORT, 6379),
 		password: process.env.REDIS_PASSWORD || undefined,
-		db: parseInt(process.env.REDIS_DB || "0"),
+		db: parseInteger(process.env.REDIS_DB, 0),
 		enabled: process.env.REDIS_ENABLED !== "false", // Default to enabled
 	},
 };

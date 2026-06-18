@@ -29,6 +29,8 @@
 		"build": "webpack --config webpack.config.js",
 		"typecheck": "tsc --noEmit",
 		"prod": "node ./dist/server.js",
+		"backup:dry-run": "node dist/backup.js --dry-run",
+		"backup:run": "node dist/backup.js",
 		"export-docs": "ts-node scripts/generate-openapi.ts && ts-node scripts/export-openapi.ts && npx openapi-to-postmanv2 -s docs/generated/swagger.json -o docs/generated/postman.collection.json -p",
 		"prisma-docs": "npx prisma studio",
 		"prisma-migrate": "npx prisma migrate dev",
@@ -262,6 +264,7 @@
 		"webpack-cli": "^5.1.4",
 		"winston": "^3.17.0",
 		"xlsx": "^0.18.5",
+		"yaml": "^2.8.0",
 		"zod": "^3.25.67"
 	},
 	"devDependencies": {

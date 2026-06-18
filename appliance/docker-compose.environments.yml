@@ -56,9 +56,29 @@ services:
       PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
       WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+      BACKUP_ENABLED: "true"
+      BACKUP_TIMEZONE: Asia/Manila
+      BACKUP_CRON: "0 0 * * *"
+      BACKUP_DIR: /var/backups/hris
+      BACKUP_RETENTION_DAYS: "0"
+      OTEL_ENABLED: "true"
+      OTEL_SERVICE_NAME: hris-api-dev
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=dev,service.namespace=hris
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "1.0"
+      API_ACTIVITY_LOGGING_ENABLED: "true"
+      API_ACTIVITY_LOG_INCLUDE_READS: "true"
+      API_ACTIVITY_LOG_EXCLUDED_PATHS: /health,/metrics
+      LOG_FORMAT: json
     volumes:
       - apiuploads-dev:/app/uploads
       - ../hris-api/dist/server.js:/app/dist/server.js:ro
+      - ./backups/dev:/var/backups/hris
+    networks:
+      - default
+      - hris-observability
     ports:
       - "3101:3001"
     depends_on:
@@ -70,6 +90,46 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+
+  hris-api-cron-dev:
+    build:
+      context: ../hris-api
+      dockerfile: Dockerfile
+    image: hris-api-local:develop
+    container_name: hris-api-cron-dev
+    restart: unless-stopped
+    env_file:
+      - ./env/hris-api.env
+    environment:
+      NODE_ENV: development
+      APP_ENV: dev
+      PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+      DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+      BACKUP_ENABLED: "true"
+      BACKUP_TIMEZONE: Asia/Manila
+      BACKUP_CRON: "0 0 * * *"
+      BACKUP_DIR: /var/backups/hris
+      BACKUP_RETENTION_DAYS: "0"
+      OTEL_ENABLED: "true"
+      OTEL_SERVICE_NAME: hris-api-cron-dev
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=dev,service.namespace=hris
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "1.0"
+      LOG_FORMAT: json
+    command: ["node", "dist/cron.js"]
+    volumes:
+      - ./backups/dev:/var/backups/hris
+    networks:
+      - default
+      - hris-observability
+    depends_on:
+      hris-postgres-dev:
+        condition: service_healthy
+    healthcheck:
+      disable: true
 
   hris-app-dev:
     build:
@@ -92,6 +152,9 @@ services:
     depends_on:
       hris-api-dev:
         condition: service_started
+    networks:
+      - default
+      - hris-observability
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
       interval: 15s
@@ -169,8 +232,28 @@ services:
       PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
       WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+      BACKUP_ENABLED: "true"
+      BACKUP_TIMEZONE: Asia/Manila
+      BACKUP_CRON: "0 0 * * *"
+      BACKUP_DIR: /var/backups/hris
+      BACKUP_RETENTION_DAYS: "0"
+      OTEL_ENABLED: "true"
+      OTEL_SERVICE_NAME: hris-api-uat
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=uat,service.namespace=hris
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "1.0"
+      API_ACTIVITY_LOGGING_ENABLED: "true"
+      API_ACTIVITY_LOG_INCLUDE_READS: "true"
+      API_ACTIVITY_LOG_EXCLUDED_PATHS: /health,/metrics
+      LOG_FORMAT: json
     volumes:
       - apiuploads-uat:/app/uploads
+      - ./backups/uat:/var/backups/hris
+    networks:
+      - default
+      - hris-observability
     ports:
       - "3201:3001"
     depends_on:
@@ -182,6 +265,46 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+
+  hris-api-cron-uat:
+    build:
+      context: ../hris-api
+      dockerfile: Dockerfile
+    image: hris-api-local:develop
+    container_name: hris-api-cron-uat
+    restart: unless-stopped
+    env_file:
+      - ./env/hris-api.env
+    environment:
+      NODE_ENV: production
+      APP_ENV: uat
+      PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+      DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+      BACKUP_ENABLED: "true"
+      BACKUP_TIMEZONE: Asia/Manila
+      BACKUP_CRON: "0 0 * * *"
+      BACKUP_DIR: /var/backups/hris
+      BACKUP_RETENTION_DAYS: "0"
+      OTEL_ENABLED: "true"
+      OTEL_SERVICE_NAME: hris-api-cron-uat
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=uat,service.namespace=hris
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "1.0"
+      LOG_FORMAT: json
+    command: ["node", "dist/cron.js"]
+    volumes:
+      - ./backups/uat:/var/backups/hris
+    networks:
+      - default
+      - hris-observability
+    depends_on:
+      hris-postgres-uat:
+        condition: service_healthy
+    healthcheck:
+      disable: true
 
   hris-app-uat:
     build:
@@ -204,6 +327,9 @@ services:
     depends_on:
       hris-api-uat:
         condition: service_started
+    networks:
+      - default
+      - hris-observability
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
       interval: 15s
@@ -229,3 +355,8 @@ volumes:
   postgresdata-uat:
   apiuploads-dev:
   apiuploads-uat:
+
+networks:
+  hris-observability:
+    external: true
+    name: hris-observability

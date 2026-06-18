@@ -11,15 +11,24 @@ function isEnabled(value: string | undefined): boolean {
 		.toLowerCase() === "true";
 }
 
+function resolveTraceExporterUrl(): string {
+	const explicitTraceEndpoint = process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?.trim();
+	if (explicitTraceEndpoint) return explicitTraceEndpoint;
+
+	const genericEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim();
+	if (!genericEndpoint) return "http://localhost:4318/v1/traces";
+
+	return genericEndpoint.endsWith("/v1/traces")
+		? genericEndpoint
+		: `${genericEndpoint.replace(/\/+$/, "")}/v1/traces`;
+}
+
 export async function initializeTelemetry(): Promise<void> {
 	if (!isEnabled(process.env.OTEL_ENABLED)) return;
 	if (sdk) return;
 
 	const serviceName = process.env.OTEL_SERVICE_NAME || "hris-api";
-	const exporterUrl =
-		process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ||
-		process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
-		"http://localhost:4318/v1/traces";
+	const exporterUrl = resolveTraceExporterUrl();
 
 	if (isEnabled(process.env.OTEL_DEBUG)) {
 		diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);

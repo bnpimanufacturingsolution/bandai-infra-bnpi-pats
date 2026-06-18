@@ -1,75 +1,135 @@
 import cron from "node-cron";
+import { trace } from "@opentelemetry/api";
 import { getEligibilityCandidates } from "../../helper/eligibility.helper";
 import { prisma } from "../../config/database";
 import { redisClient } from "../../config/redis";
+import { config } from "../../config/config";
+import { getLogger } from "../../helper/logger.helper";
+import { pruneOldBackupRuns, runDatabaseBackup } from "../../helper/database-backup.helper";
+
+const logger = getLogger();
+const tracer = trace.getTracer("hris-api-cron");
 
 export const initCronJobs = () => {
-	console.log("⏰ Initializing Cron Jobs...");
+	logger.info("cron.initializing");
 
-	// 1. Eligibility Check (Runs every minute for testing)
 	cron.schedule("* * * * *", async () => {
-		console.log("🔍 [Cron] Checking Employee Eligibility...");
+		await tracer.startActiveSpan("cron.eligibility", async (span) => {
+		logger.info("eligibility_cron.started");
 		try {
-			// Fetch all organizations (assuming multi-tenant)
-			// If Organization model doesn't exist, we can group employees by organizationId
-			// For now, let's try to fetch distinct organizationIds from Employee table to be safe
 			const employees = await prisma.employee.findMany({
 				select: { organizationId: true },
 				distinct: ["organizationId"],
 			});
 
-			const orgIds = employees.map((e) => e.organizationId);
+			const orgIds = employees.map((employee) => employee.organizationId);
 
 			for (const orgId of orgIds) {
 				if (!orgId) continue;
-				console.log(`Checking Organization: ${orgId}`);
 				const candidates = await getEligibilityCandidates(prisma, orgId);
 
 				if (candidates.length > 0) {
-					console.log(
-						`✅ [Eligibility] Found ${candidates.length} candidates for Org ${orgId}`,
-					);
-					// Log details for debugging
-					candidates.forEach((c) => {
-						console.log(
-							`   - ${c.employeeName} (${c.eligibleFor}): ${c.eligibilityReason}`,
-						);
+					logger.info("eligibility_cron.candidates_found", {
+						organizationId: orgId,
+						count: candidates.length,
+						candidates: candidates.map((candidate) => ({
+							employeeName: candidate.employeeName,
+							eligibleFor: candidate.eligibleFor,
+							eligibilityReason: candidate.eligibilityReason,
+						})),
 					});
 
-					// Publish event to Redis for API to pick up and emit via Socket.IO
-					try {
-						await redisClient.publish(
-							"events:eligibility-updated",
-							JSON.stringify({
-								organizationId: orgId,
-								count: candidates.length,
-								timestamp: new Date().toISOString(),
-							}),
-						);
-						console.log(`📡 Published eligibility-updated event for Org ${orgId}`);
-					} catch (redisError) {
-						console.error("❌ Failed to publish Redis event:", redisError);
+					if (config.redis.enabled && redisClient.isClientConnected()) {
+						try {
+							await redisClient.publish(
+								"events:eligibility-updated",
+								JSON.stringify({
+									organizationId: orgId,
+									count: candidates.length,
+									timestamp: new Date().toISOString(),
+								}),
+							);
+							logger.info("eligibility_cron.redis_published", { organizationId: orgId });
+						} catch (redisError) {
+							logger.error("eligibility_cron.redis_publish_failed", { error: redisError });
+						}
 					}
 				} else {
-					console.log(`   No candidates found.`);
+					logger.info("eligibility_cron.no_candidates", { organizationId: orgId });
 				}
 			}
 		} catch (error) {
-			console.error("❌ [Cron] Error checking eligibility:", error);
+			span.recordException(error as Error);
+			logger.error("eligibility_cron.failed", { error });
+		} finally {
+			span.end();
 		}
+		});
 	});
 
-	// Daily midnight job example
-	cron.schedule("0 0 * * *", async () => {
-		console.log("🌙 Running daily midnight maintenance...");
-		try {
-			// Example: Clean up old logs or temp files
-			// await prisma.log.deleteMany({ ... })
-			console.log("✅ Daily maintenance completed.");
-		} catch (error) {
-			console.error("❌ Error in daily maintenance:", error);
-		}
-	});
+	if (config.backup.enabled) {
+		cron.schedule(
+			config.backup.cron,
+			async () => {
+				await tracer.startActiveSpan("cron.database_backup", async (span) => {
+				logger.info("database_backup.cron_triggered", {
+					cron: config.backup.cron,
+					timezone: config.backup.timezone,
+					outputDir: config.backup.outputDir,
+					postgresContainerName: config.backup.postgresContainerName || null,
+				});
 
-	console.log("✅ Cron Jobs initialized and scheduled.");
+				try {
+					const result = await runDatabaseBackup({
+						prisma,
+						outputDir: config.backup.outputDir,
+						timezone: config.backup.timezone,
+						appVersion: process.env.npm_package_version || null,
+						pgDump: {
+							enabled: true,
+							containerName: config.backup.postgresContainerName || undefined,
+							database: config.backup.postgresDatabase || undefined,
+							user: config.backup.postgresUser || undefined,
+							databaseUrl: config.writeDatabaseUrl || undefined,
+							env: config.backup.postgresPassword
+								? { PGPASSWORD: config.backup.postgresPassword }
+								: undefined,
+						},
+						logger,
+					});
+
+					const deleted = pruneOldBackupRuns(
+						config.backup.outputDir,
+						config.backup.retentionDays,
+						new Date(),
+						logger,
+					);
+
+					logger.info("database_backup.cron_completed", {
+						runId: result.runId,
+						runDir: result.runDir,
+						totalRows: result.manifest.totalRows,
+						artifactCount: result.manifest.artifacts.length,
+						retentionDeletedCount: deleted.length,
+					});
+				} catch (error) {
+					span.recordException(error as Error);
+					logger.error("database_backup.cron_failed", {
+						error:
+							error instanceof Error
+								? { message: error.message, name: error.name, stack: error.stack }
+							: error,
+					});
+				} finally {
+					span.end();
+				}
+				});
+			},
+			{ timezone: config.backup.timezone },
+		);
+	} else {
+		logger.info("database_backup.cron_disabled", { reason: "BACKUP_ENABLED=false" });
+	}
+
+	logger.info("cron.initialized");
 };

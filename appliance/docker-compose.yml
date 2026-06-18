@@ -45,6 +45,17 @@ services:
       STORAGE_PROVIDER: local
       LOCAL_UPLOAD_ROOT: /app/uploads
       LOCAL_UPLOAD_PUBLIC_BASE_URL: http://192.168.1.54:3001
+      OTEL_ENABLED: "true"
+      OTEL_SERVICE_NAME: hris-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=onprem,service.namespace=hris
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "1.0"
+      API_ACTIVITY_LOGGING_ENABLED: "true"
+      API_ACTIVITY_LOG_INCLUDE_READS: "true"
+      API_ACTIVITY_LOG_EXCLUDED_PATHS: /health,/metrics
+      LOG_FORMAT: json
     volumes:
       - apiuploads:/app/uploads
     ports:
@@ -52,6 +63,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - default
+      - hris-observability
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3001/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
       interval: 15s
@@ -74,6 +88,9 @@ services:
       HRIS_API_ORIGIN: "http://hris-api:3001"
     ports:
       - "3000:3000"
+    networks:
+      - default
+      - hris-observability
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
       interval: 15s
@@ -97,3 +114,8 @@ services:
 volumes:
   postgresdata:
   apiuploads:
+
+networks:
+  hris-observability:
+    external: true
+    name: hris-observability
