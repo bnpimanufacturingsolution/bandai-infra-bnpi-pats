@@ -50,9 +50,14 @@ services:
     environment:
       NODE_ENV: development
       APP_ENV: dev
+      STORAGE_PROVIDER: local
+      LOCAL_UPLOAD_ROOT: /app/uploads
+      LOCAL_UPLOAD_PUBLIC_BASE_URL: http://192.168.1.54:3101
       PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
       WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+    volumes:
+      - apiuploads-dev:/app/uploads
     ports:
       - "3101:3001"
     depends_on:
@@ -142,9 +147,14 @@ services:
     environment:
       NODE_ENV: production
       APP_ENV: uat
+      STORAGE_PROVIDER: local
+      LOCAL_UPLOAD_ROOT: /app/uploads
+      LOCAL_UPLOAD_PUBLIC_BASE_URL: http://192.168.1.54:3201
       PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
       WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+    volumes:
+      - apiuploads-uat:/app/uploads
     ports:
       - "3201:3001"
     depends_on:
@@ -186,3 +196,5 @@ services:
 volumes:
   postgresdata-dev:
   postgresdata-uat:
+  apiuploads-dev:
+  apiuploads-uat:

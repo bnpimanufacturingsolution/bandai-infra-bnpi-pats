@@ -20,6 +20,7 @@ const DEFAULT_LOGIN_MESSAGE = "Login successful";
 const DEFAULT_LOGOUT_MESSAGE = "Logout successful";
 const DEFAULT_PASSWORD_CHANGE_MESSAGE = "Password updated successfully";
 const DEFAULT_AVATAR_UPDATED_MESSAGE = "Avatar updated successfully";
+const DEFAULT_AVATAR_RETRIEVED_MESSAGE = "Avatar retrieved successfully";
 const REQUEST_TIMEOUT_MS = 8000;
 const bcrypt: {
 	compare(data: string, encrypted: string): Promise<boolean>;
@@ -173,11 +174,23 @@ const uploadUserAvatarFile = async (params: { file: Express.Multer.File; userId:
 		String(params.userId || "user")
 			.trim()
 			.replace(/[^a-zA-Z0-9_-]+/g, "_") || "user";
+	const extensionFromName = (params.file.originalname || "").match(/\.[a-zA-Z0-9]+$/)?.[0] || "";
+	const extensionFromMime =
+		params.file.mimetype === "image/png"
+			? ".png"
+			: params.file.mimetype === "image/webp"
+				? ".webp"
+				: params.file.mimetype === "image/gif"
+					? ".gif"
+					: params.file.mimetype === "image/jpeg"
+						? ".jpg"
+						: "";
+	const avatarExtension = (extensionFromMime || extensionFromName || ".jpg").toLowerCase();
 
 	return uploadToCloudinary(params.file.buffer, {
 		folder: `hris/users/${safeUserId}/avatar`,
 		resourceType: "image",
-		publicId: `avatar_${safeUserId}_${Date.now()}`,
+		publicId: `avatar_${safeUserId}_${Date.now()}${avatarExtension}`,
 		overwrite: true,
 		transformation: {
 			width: 512,
@@ -1443,6 +1456,53 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const getCurrentUserAvatar = async (
+		req: AuthRequest,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const userId = String(req.userId || "").trim();
+			if (!userId) {
+				res.status(401).json(buildErrorResponse("Unauthorized", 401));
+				return;
+			}
+
+			const user = await prisma.user.findFirst({
+				where: { id: userId, isDeleted: false },
+				select: {
+					id: true,
+					metadata: true,
+					updatedAt: true,
+				},
+			});
+
+			if (!user) {
+				res.status(404).json(buildErrorResponse("User not found", 404));
+				return;
+			}
+
+			const metadata = asRecord(user.metadata);
+			const avatar = typeof metadata.avatar === "string" ? metadata.avatar : null;
+
+			res.status(200).json(
+				buildSuccessResponse(
+					DEFAULT_AVATAR_RETRIEVED_MESSAGE,
+					{
+						userId: user.id,
+						avatar,
+						updatedAt: user.updatedAt,
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Failed to retrieve avatar", 500),
+			);
+		}
+	};
+
 	const getRoles = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		try {
 			const token = extractTokenFromRequest(req);
@@ -1766,6 +1826,7 @@ export const controller = (prisma: PrismaClient) => {
 		changePassword,
 		resetUserPassword,
 		getCurrentUser,
+		getCurrentUserAvatar,
 		updateCurrentUserAvatar,
 		getRoles,
 		getUsers,

@@ -1,13 +1,13 @@
 param(
   [string]$Workspace = "C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH",
-  [string]$TargetHost = "192.168.110.204",
+  [string]$TargetHost = "192.168.1.54",
   [switch]$StartCodex
 )
 
 $ErrorActionPreference = "Continue"
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$runRoot = Join-Path $Workspace ".runtime\overnight-hardcutover-minio-drift\$timestamp"
+$runRoot = Join-Path $Workspace ".runtime\overnight-docker-bridge-minio-truth\$timestamp"
 $promptPath = Join-Path $Workspace "docs\OVERNIGHT_HARDCUTOVER_MINIO_DRIFT_REPAIR_PROMPT.md"
 $promptUsed = Join-Path $runRoot "PROMPT_USED.md"
 $summaryPath = Join-Path $runRoot "START_HERE.md"
@@ -82,7 +82,7 @@ Save-Command "minio-console" "curl.exe -i --max-time 20 'http://${TargetHost}:90
 $startCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""$PSCommandPath"" -StartCodex"
 
 $summary = @(
-  "# Overnight Hard-Cutover MinIO Drift Run",
+  "# Overnight Docker Bridge MinIO Truth Run",
   "",
   "Run root:",
   "",

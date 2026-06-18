@@ -1,6 +1,31 @@
-# Project Truth Overnight Hard-Cutover + Drift Repair Prompt
+# CODEX OVERNIGHT GOAL: Project Truth HRIS Docker Bridge + MinIO Drift Cutover
 
 Date: 2026-06-18
+
+## Codex Autopilot Mode
+
+This is a Codex proof/self-repair run, not a PowerShell-script-driven run.
+
+Use Codex directly as the repair agent. The PowerShell files in `scripts/` are optional helpers for gathering evidence only; they are not the source of truth, and they must not replace live inspection, logs, code reading, rebuilds, browser proof, and API proof.
+
+Primary execution command:
+
+```powershell
+Get-Content -Raw .\docs\OVERNIGHT_HARDCUTOVER_MINIO_DRIFT_REPAIR_PROMPT.md | codex exec --cd "C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH" --dangerously-bypass-approvals-and-sandbox
+```
+
+If the run needs a transcript/final-message file:
+
+```powershell
+$runRoot = ".runtime\overnight-docker-bridge-minio-truth\$(Get-Date -Format yyyyMMdd-HHmmss)"
+New-Item -ItemType Directory -Force $runRoot | Out-Null
+Get-Content -Raw .\docs\OVERNIGHT_HARDCUTOVER_MINIO_DRIFT_REPAIR_PROMPT.md |
+  codex exec --cd "C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH" --dangerously-bypass-approvals-and-sandbox --output-last-message "$runRoot\codex-final-message.md" *> "$runRoot\codex-exec.log"
+```
+
+Codex must actively inspect the real system. Do not stop at static docs or launcher output. Watch logs, inspect running processes/containers/VM state, test live LAN URLs, repair the code/config/runtime, rebuild, restart, and verify again.
+
+If blocked by a real technical unknown, search the web for current best practices and official/primary documentation relevant to the exact blocker, then continue with the safest applicable fix. Record what was researched and why.
 
 Workspace:
 
@@ -8,97 +33,50 @@ Workspace:
 C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH
 ```
 
-Current live targets:
+Original HRIS source/reference:
+
+```text
+C:\Users\anoni\OneDrive\Desktop\HRIS-PROJECT
+```
+
+Current bridged LAN target:
 
 | Environment | App | API |
 | --- | --- | --- |
-| PROD | http://192.168.110.204:3000 | http://192.168.110.204:3001 |
-| DEV | http://192.168.110.204:3100 | http://192.168.110.204:3101 |
-| UAT | http://192.168.110.204:3200 | http://192.168.110.204:3201 |
+| PROD | http://192.168.1.54:3000 | http://192.168.1.54:3001 |
+| DEV | http://192.168.1.54:3100 | http://192.168.1.54:3101 |
+| UAT | http://192.168.1.54:3200 | http://192.168.1.54:3201 |
+
+Known working user/org truth:
+
+```text
+Organization: Bandai Namco
+Organization code: bnei
+Logo path expected by profile API: /app/assets/bandai_logo.png
+Known local source logo:
+C:\Users\anoni\OneDrive\Desktop\HRIS-PROJECT\hris-app\app\assets\bandai_logo.png
+```
 
 ## Main Goal
 
-Perform a Project Truth hard cutover so PROD, DEV, and UAT are consistent, drift-free, and using MinIO-backed local object storage for logos, avatars, and uploads. Do a self-repair loop until all environments pass browser and API proof.
+Make the HRIS project truthfully run inside the VM/Docker bridged LAN environment with no cloud dependency drift.
 
-## Bridge-LAN Acceptance Gate
+The final system must use local/LAN services only:
 
-The bridged LAN browser is the source of truth. Do not call the run done, passed, proven, or complete if the live browser at the bridged IP still fails.
+- Frontend served on bridged LAN.
+- Backend served on bridged LAN.
+- Docker bridge networking working correctly inside the VM.
+- MinIO used for avatars, logos, employee files, contracts, uploads, and object reads.
+- No Cloudinary dependency required for normal HRIS operation.
+- Bandai logo renders correctly.
+- Avatar upload/read contract works from browser and API.
+- FE and BE contracts match the live runtime, not just source files.
 
-Hard witness URL:
+Do not call the work done unless the live browser/API on `192.168.1.54` proves it.
 
-```text
-http://192.168.110.204:3100/settings
-```
+## Current Failure
 
-The DEV settings page must be verified through the bridged address above, not only through localhost, container DNS, or a local dev server. The Network tab/API evidence must show that repeated `avatar` requests no longer return:
-
-```json
-{
-  "status": "error",
-  "message": "Cloudinary is not configured",
-  "code": 500
-}
-```
-
-If the bridged browser still shows that Cloudinary avatar error, the final status must be `PARTIAL` or `BLOCKED`, never `PASS` or `PROVEN`.
-
-## Project Truth Architecture Truth Map
-
-Before making fixes, build and save an architecture truth map. The run must distinguish documented desired architecture, local repo source, built image contents, and the currently running bridged runtime.
-
-The live bridged runtime is the acceptance target. A repo edit, local build, localhost test, or Docker Compose file edit does not count unless the change is synced into the process/image/VM/container/pod that is actually serving `http://192.168.110.204:*`.
-
-Known Project Truth architecture sources to inspect:
-
-- `docs/ARCHITECTURE.md`
-- `docs/HEALTHCHECKS.md`
-- `docs/DEV_CURRENT_GCP_VDI_PROOF_RESULT.md`
-- `docs/USER_JOURNEY_PROOF.md`
-- `docs/GAPS_AND_NEXT_GOALS.md`
-- `appliance/docker-compose.yml`
-- `appliance/docker-compose.environments.yml`
-- `appliance/env/hris-api.env`
-- `scripts/project-truth.ps1`
-- `scripts/verify-lan-health.ps1`
-- `scripts/watch-until-healthy.ps1`
-- `terraform-hyperv/`
-- `gitops/`
-
-Current observed bridge runtime shape:
-
-```text
-Bridge IP: 192.168.110.204
-PROD app/API: 3000 / 3001
-DEV app/API:  3100 / 3101
-UAT app/API:  3200 / 3201
-```
-
-Important: do not confuse these app/API pairs with the older `docs/ARCHITECTURE.md` NodePort table that lists DEV/UAT/PROD health as `3001/3002/3000`. If the docs disagree with the bridge, record it as architecture drift and use the live bridged runtime as the acceptance target.
-
-For each environment, identify all four layers:
-
-1. Repo source files that would fix the issue.
-2. Build artifact/image/container/VM layer that is actually serving the bridge.
-3. Runtime environment variables actually loaded by the live API/app.
-4. Browser-visible behavior at the bridge IP.
-
-Do not claim a source fix is complete until the built/running bridge layer has been updated and browser proof passes. If you cannot access the actual Hyper-V/VM/container owner because admin rights, SSH, Docker, K3s, or Argo CD access is unavailable, record the exact blocker and final status must be `BLOCKED` or `PARTIAL`.
-
-Required runtime sync proof:
-
-- Name the actual bridge runtime owner for each environment, such as Docker Compose appliance, Hyper-V guest process, K3s service/pod, Argo CD app, systemd unit, PM2 process, or local Node process.
-- Name the exact command/path that pushes source/config changes into that owner.
-- Capture evidence that the owner restarted or reloaded the new build/config: container ID, image digest, pod restart time, process command line, service journal, asset hash, or equivalent.
-- If the runtime owner cannot be discovered or controlled, stop claiming hard cutover and write `BLOCKED` or `PARTIAL` with the missing access named plainly.
-- The bridge browser screenshots and network logs are the final judge. If `http://192.168.110.204:3100/settings` still shows Cloudinary avatar 500s or broken logo UI, the run is not passed.
-
-## Known Current Issue
-
-DEV avatar endpoint currently returns:
-
-```text
-GET http://192.168.110.204:3101/api/auth/me/avatar
-```
+The live bridged browser shows avatar upload/read failure:
 
 ```json
 {
@@ -108,283 +86,279 @@ GET http://192.168.110.204:3101/api/auth/me/avatar
 }
 ```
 
-This means at least one live runtime is still trying Cloudinary. Treat that as storage-provider drift. The desired final state is MinIO, not Cloudinary.
+Failing contract:
 
-## Hard Requirements
+```text
+PATCH http://192.168.1.54:3101/api/auth/me/avatar
+Content-Type: multipart/form-data
+field name: avatar
+```
 
-- Hard cutover all environments to MinIO unless a real blocker is proven.
-- Check PROD, DEV, and UAT, not only DEV.
-- Find drift between repo config, built images, running containers, env files, compose files, and live API behavior.
-- Do not assume `terraform.tfvars`, compose YAML, or docs equal runtime truth.
-- Do not mark success from health checks alone.
-- Browser proof is required.
-- Browser proof must use the bridged LAN URLs on `192.168.110.204`.
-- API proof is required.
-- Any fix made in repo/source must be rebuilt, restarted, and proven on the bridged running environment before it counts.
-- Preserve user work. Do not git reset or discard unrelated changes.
-- Save all evidence under `.runtime/overnight-hardcutover-minio-drift/<timestamp>/`.
-
-## Acceptance Definition
-
-PASS only if:
-
-- PROD/DEV/UAT app login pages load.
-- PROD/DEV/UAT API health endpoints return 200.
-- PROD/DEV/UAT no longer return `Cloudinary is not configured` for avatar/storage paths.
-- The bridged DEV settings page at `http://192.168.110.204:3100/settings` no longer has failed `avatar` network responses with `Cloudinary is not configured`.
-- Bandai/company logo renders without broken image UI.
-- Avatar display/upload/read path works or has a documented intentional fallback.
-- MinIO is running and reachable from API runtimes.
-- Bucket exists and object URLs or API-proxied file reads work from browser.
-- Screenshots and logs prove the result.
+The backend must not route this through Cloudinary. It must store/read through MinIO or a documented local fallback.
 
 ## Ordered Execution Plan
 
-### 1. Create Run Evidence Folder
+### 1. Create Evidence Folder
 
-```powershell
-$runRoot = ".runtime\overnight-hardcutover-minio-drift\$(Get-Date -Format yyyyMMdd-HHmmss)"
-New-Item -ItemType Directory -Force $runRoot | Out-Null
+Create:
+
+```text
+.runtime/overnight-docker-bridge-minio-truth/<timestamp>/
 ```
 
-### 2. Snapshot Repo State
+Save every command output, screenshot, browser proof, API proof, Docker state, and final report there.
 
-- `git status --short`
-- `git diff --stat`
-- Save current active file/doc context if useful.
-- Do not revert user changes.
-
-### 3. Snapshot Live HTTP State For All Environments
-
-For each env:
-
-- `curl -i <app>/auth/login`
-- `curl -i <api>/health`
-- `curl -i <api>/api/auth/me/avatar` without auth and with auth later
-- Save outputs.
-
-### 4. Discover Live Runtime Truth
-
-Determine whether current Project Truth is running through:
-
-- Hyper-V VM
-- Docker Compose
-- systemd
-- local node processes
-- other runtime
+### 2. Snapshot Repo And Runtime Truth
 
 Capture:
 
-- running containers/services
-- exposed ports
-- env vars
-- compose files actually used
-- image names/tags
-- mounted env files
-- Hyper-V VM identity, bridge adapter, and LAN IP when available
-- SSH/Kubernetes/Argo CD state when available
-- whether the live bridge is Docker Compose appliance, Hyper-V VM, K3s/Argo, or another runtime
-
-### 5. Build Drift Matrix
-
-Create a table for PROD/DEV/UAT with:
-
-- app port
-- api port
-- database
-- `STORAGE_PROVIDER`
-- `CLOUDINARY_*` present?
-- `MINIO_*` present?
-- MinIO endpoint from inside API runtime
-- public MinIO/base URL
-- bucket name
-- avatar endpoint behavior
-- logo behavior
-- build image/tag/source
-- runtime owner: compose container, K3s pod/service, Hyper-V VM process, local node, or unknown
-- whether repo source, built image, and bridge runtime match
-- exact rebuild/restart/sync command needed to propagate source changes to bridge
-
-Also create an architecture drift section listing contradictions between:
-
-- docs
-- appliance compose files
-- terraform/gitops manifests
-- live listening ports/processes
-- bridge browser behavior
-
-### 6. Locate All Storage Code Paths
-
-Search repo for:
-
-- `Cloudinary`
-- `cloudinary`
-- `STORAGE_PROVIDER`
-- `MINIO`
-- `avatar`
-- `logo`
-- `upload`
-- `object storage`
-- `bucket`
-
-Identify exact owner files for:
-
-- avatar upload
-- avatar read
-- organization logo upload/read
-- generic upload service
-- storage provider selection
-- env validation
-
-### 7. Hard Cutover Config To MinIO
-
-For PROD, DEV, and UAT runtime configuration, set:
-
-```text
-STORAGE_PROVIDER=minio
-MINIO_ENDPOINT=<runtime-valid endpoint>
-MINIO_PORT=9000
-MINIO_USE_SSL=false
-MINIO_ACCESS_KEY=<actual configured value>
-MINIO_SECRET_KEY=<actual configured value>
-MINIO_BUCKET=hris-images
-MINIO_PUBLIC_BASE_URL=http://192.168.110.204:9000
+```powershell
+git status --short
+git diff --stat
+docker ps
+docker compose ls
+netstat -ano | Select-String ':3000|:3001|:3100|:3101|:3200|:3201|:9000|:9001'
+Get-VM
 ```
 
-If each env needs separate buckets, use:
+Do not reset or discard user changes.
+
+### 3. Build The Truth Map Before Fixing
+
+For the live service at `192.168.1.54`, identify:
+
+- What VM owns the IP.
+- What Docker containers serve app/API/MinIO/Postgres.
+- Which compose file is actually running.
+- Which image/container is serving `3100`.
+- Which image/container is serving `3101`.
+- Which env vars are loaded inside the live API container.
+- Whether `STORAGE_PROVIDER=minio`.
+- Whether any `CLOUDINARY_*` variables or Cloudinary code paths are still active.
+- Whether MinIO is reachable from inside the API container.
+- Whether MinIO is reachable from the LAN if needed.
+
+Record source truth vs built image truth vs running container truth.
+
+The live bridged runtime is the acceptance target. A repo edit, local build, localhost test, or Docker Compose file edit does not count unless the change is synced into the process/image/VM/container/pod that is actually serving `http://192.168.1.54:*`.
+
+### 3A. Watch Real Logs And Runtime Behavior
+
+Codex must watch the live failure while repairing it.
+
+Collect and keep updating evidence from the actual runtime owner:
 
 ```text
-hris-images-prod
-hris-images-dev
-hris-images-uat
+docker logs / docker compose logs when Docker is available
+journalctl when systemd owns a service
+pm2 logs when PM2 owns a process
+container inspect/env output when containers own the runtime
+VM console/SSH logs when the service is inside the bridged VM
+browser Network/Console logs for the live LAN page
+API request/response logs around avatar upload/read
 ```
 
-Prefer one clear documented decision and apply consistently.
+Do not infer storage behavior from source alone. Prove the running API process either calls Cloudinary, calls MinIO, or fails before storage selection. Then repair the exact failing layer.
 
-### 8. Start Or Repair MinIO
+If host Docker is unavailable because Docker Desktop is stopped or the runtime is inside the VM, do not mark the run done. Discover the VM path, SSH/console path, or documented appliance commands and inspect from there. If access is impossible, final status must be `BLOCKED` with the missing access named exactly.
 
-Ensure MinIO is actually running.
+### 3B. Blocker Research Rule
 
-Verify:
+When stuck on a concrete blocker for more than one repair loop, Codex must research current best practice before continuing. Use web research only for the blocker being handled, and prefer official/primary sources.
 
-- Host health: `http://192.168.110.204:9000/minio/health/live`
-- Console if exposed: `http://192.168.110.204:9001`
-- Inside API runtime: `http://minio:9000/minio/health/live` or correct internal endpoint
-
-Ensure bucket exists.
-
-Ensure browser can retrieve uploaded image objects either through:
-
-- public bucket read, or
-- API proxy route.
-
-### 9. Patch Code If Config Alone Is Not Enough
-
-Requirements:
-
-- Avatar endpoint must use selected storage provider.
-- Cloudinary must not be called when `STORAGE_PROVIDER=minio`.
-- Missing Cloudinary config must not break MinIO mode.
-- Legacy logo values like `/app/assets/bandai_logo.png` must resolve to bundled/public Bandai logo.
-- Broken remote logo/avatar URLs must fail gracefully to local fallback.
-- Do not hide true upload failures behind fake success.
-
-### 10. Rebuild/Restart All Affected Services
-
-For each env:
-
-- rebuild API if backend storage code changed
-- rebuild app if logo/avatar frontend code changed
-- restart app/API/MinIO
-- wait for health
-- capture logs after restart
-- prove the bridge is serving the new build, not stale assets, by recording changed asset hash/image id/container id/pod restart time or equivalent evidence
-
-### 11. Authenticated API Proof
-
-Use known seeded credentials where valid:
+Examples:
 
 ```text
-admin@bandai.local / password123
-hr-manager@seed.local / Password123!
+MinIO S3-compatible upload/read configuration
+Express/Nest multipart upload handling to S3-compatible storage
+Docker Compose networking between API and MinIO
+LAN-safe object URL design behind a private VM
+React/browser image handling for relative API-proxied avatar URLs
 ```
 
-For PROD/DEV/UAT:
+After research, record:
 
-- `POST /api/auth/login`
-- `GET /api/auth/me`
-- `GET /api/auth/me/avatar`
-- perform avatar upload endpoint if available
-- fetch returned avatar URL
-- confirm no Cloudinary 500
+```text
+blocker
+sources checked
+decision taken
+why it applies to this runtime
+files/config changed
+proof after change
+```
 
-### 12. Browser Proof
+### 4. Copy/Sync Bandai Logo If Missing
 
-With Playwright, for PROD/DEV/UAT:
+Verify this source file exists:
 
-- open `/auth/login`
-- login
-- visit `/settings`
-- visit `/admin/dashboard` for admin account
-- inspect console errors
-- inspect failed network requests
-- verify logo image `naturalWidth > 0`
-- verify avatar image request is not Cloudinary 500
-- screenshot settings/dashboard
+```text
+C:\Users\anoni\OneDrive\Desktop\HRIS-PROJECT\hris-app\app\assets\bandai_logo.png
+```
 
-Required bridged witness proof:
+Ensure the running app/API image or mounted volume contains:
 
-- Open `http://192.168.110.204:3100/settings`.
-- Use the affected HR user/session when possible; otherwise use a valid seeded user and document the account.
-- Capture Network/API evidence for all `avatar` requests on the page.
-- The proof fails if any `avatar` request returns `Cloudinary is not configured`.
-- Save a screenshot showing the settings page and a text/JSON evidence file listing failed requests, response status, and response body snippets.
+```text
+/app/assets/bandai_logo.png
+```
 
-### 13. Drift Cleanup
+The admin profile response already expects:
 
-After proof, update docs/config so repo matches runtime:
+```json
+"logo": "/app/assets/bandai_logo.png"
+```
 
-- document MinIO as hard-cutover storage provider
-- remove stale Cloudinary default assumptions where misleading
-- update any env examples that would recreate the drift
-- ensure appliance compose/env files consistently include MinIO for PROD/DEV/UAT
+If the app serves static assets differently, fix the FE/BE contract so the browser can actually render the logo over LAN.
 
-### 14. Self-Repair Loop
+### 5. Locate All Storage Paths
 
-Repeat until PASS or real blocker:
+Search both repos for:
 
-- choose one failing env/check
-- inspect logs/code/env
-- patch or configure
-- rebuild/restart only what is needed
-- rerun API proof
-- rerun browser proof
+```text
+Cloudinary
+cloudinary
+STORAGE_PROVIDER
+MINIO
+S3
+avatar
+upload
+logo
+contract
+attachment
+```
 
-Maximum 10 loops before declaring BLOCKED.
+Fix the actual backend path used by:
 
-### 15. Final Report
+```text
+PATCH /api/auth/me/avatar
+GET /api/auth/me/avatar
+```
+
+Expected behavior:
+
+- Accept multipart field `avatar`.
+- Store object in MinIO.
+- Save stable reference in DB.
+- Return usable browser URL or API-proxied URL.
+- Read avatar without Cloudinary.
+- Never return `Cloudinary is not configured` when MinIO is configured.
+
+### 6. Verify MinIO Runtime
+
+Inside Docker/VM prove:
+
+```text
+MinIO container is running
+Bucket exists
+API container can reach MinIO endpoint
+API has correct access key/secret/bucket/endpoint
+Uploaded object exists after avatar PATCH
+Browser can read the object through approved URL/path
+```
+
+If MinIO console/API is exposed:
+
+```text
+http://192.168.1.54:9000
+http://192.168.1.54:9001
+```
+
+Verify it, but do not require public internet.
+
+### 7. Rebuild And Restart The Real Runtime
+
+After source/config fixes, rebuild the actual images used by the bridged VM.
+
+Do not stop after editing source.
+
+Prove rebuild/restart with:
+
+- Container IDs before/after.
+- Image IDs/digests before/after.
+- Restart timestamps.
+- Docker Compose command used.
+- Env vars inside the restarted API container.
+
+### 8. Browser And API Acceptance Tests
+
+From host/LAN, verify:
+
+```powershell
+curl.exe -i http://192.168.1.54:3100/auth/login
+curl.exe -i http://192.168.1.54:3101/health
+curl.exe -i http://192.168.1.54:3101/api/auth/me
+```
+
+With a fresh valid token, verify:
+
+```powershell
+curl.exe -i `
+  -X PATCH "http://192.168.1.54:3101/api/auth/me/avatar" `
+  -H "Authorization: Bearer <fresh-token>" `
+  -F "avatar=@C:\path\to\test-avatar.jpg"
+
+curl.exe -i `
+  "http://192.168.1.54:3101/api/auth/me/avatar" `
+  -H "Authorization: Bearer <fresh-token>"
+```
+
+Browser proof required:
+
+- Open `http://192.168.1.54:3100/settings`.
+- Upload avatar.
+- Save.
+- Refresh page.
+- Confirm avatar remains visible.
+- Confirm Network tab has no `Cloudinary is not configured`.
+- Confirm Bandai logo renders without broken image UI.
+
+### 9. FE/BE Contract Drift Check
+
+Confirm frontend uses the correct API base URL:
+
+```text
+http://192.168.1.54:3101
+```
+
+Confirm no frontend path assumes Cloudinary.
+
+Confirm avatar upload request uses:
+
+```text
+PATCH /api/auth/me/avatar
+multipart field: avatar
+```
+
+Confirm backend response shape is what frontend expects.
+
+If the backend returns a relative path, frontend must resolve it correctly over LAN.
+
+### 10. Final Report
 
 Write:
 
 ```text
-.runtime/overnight-hardcutover-minio-drift/<timestamp>/FINAL_REPORT.md
+.runtime/overnight-docker-bridge-minio-truth/<timestamp>/FINAL_REPORT.md
 ```
 
-Include:
+Final status must be one of:
 
-- PASS / PARTIAL / BLOCKED
-- drift matrix before/after
-- MinIO proof
-- storage provider proof per env
-- avatar endpoint proof per env
-- logo proof per env
-- screenshots list
-- changed files
-- commands run
-- remaining risks
+```text
+PASS
+PARTIAL
+BLOCKED
+FAIL
+```
 
-Final success sentence must be exactly one of:
+Only use `PASS` if all are true:
 
-- `PROVEN: Project Truth PROD/DEV/UAT are hard-cutover to MinIO, drift-free for avatar/logo storage, and browser/API proof passed.`
-- `PARTIAL: Project Truth hard-cutover is incomplete; see blockers.`
-- `BLOCKED: Project Truth hard-cutover could not proceed because <specific blocker>.`
+- Docker/VM bridge runtime identified.
+- App loads on `192.168.1.54:3100`.
+- API health passes on `192.168.1.54:3101`.
+- Bandai logo renders.
+- Avatar upload works.
+- Avatar read works after refresh.
+- MinIO stores the object.
+- No Cloudinary runtime error remains.
+- Source, built image, running container, and browser behavior are synced.
+
+If the browser still shows `Cloudinary is not configured`, final status must not be PASS.

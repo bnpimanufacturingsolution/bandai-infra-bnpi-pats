@@ -60,7 +60,7 @@ RUN apk add --no-cache libc6-compat openssl
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nodeuser
-RUN mkdir -p /app/logs && chown -R nodeuser:nodejs /app/logs
+RUN mkdir -p /app/logs /app/uploads && chown -R nodeuser:nodejs /app/logs /app/uploads
 
 # Copy built application with final ownership to avoid expensive recursive chown
 COPY --chown=nodeuser:nodejs --from=production-build /app/dist ./dist

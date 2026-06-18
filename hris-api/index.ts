@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from "express";
 import { createServer } from "http";
+import path from "path";
 import { Server } from "socket.io";
 import cookieParser from "cookie-parser";
 import cors from "cors";
@@ -397,6 +398,13 @@ const leaveType = require("./app/leaveType")(prisma);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.use(
+	"/uploads",
+	express.static(process.env.LOCAL_UPLOAD_ROOT || path.resolve(process.cwd(), "uploads"), {
+		fallthrough: false,
+		maxAge: "1h",
+	}),
+);
 app.use(apiDebugLoggingMiddleware);
 
 app.use((req: Request, res: Response, next: NextFunction) => {
