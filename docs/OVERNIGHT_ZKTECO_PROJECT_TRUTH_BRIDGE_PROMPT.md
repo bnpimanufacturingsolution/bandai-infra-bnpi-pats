@@ -1,193 +1,356 @@
 # Overnight ZKTeco Project Truth Bridge Prompt
 
-Use this as the ordered run prompt for bringing ZKTeco punches into Project Truth HRIS without creating a second attendance truth model.
+Use this prompt for an overnight agent run. Keep the work ZKTeco-only. Do not spend time on Hikvision runner scripts unless a ZKTeco file imports or depends on them.
 
-## Objective
+## Mission
 
-Bridge `ernestdodz/ZKTECO` into Project Truth so ZKTeco attendance events are ingested through `POST /api/zkteco/events`, stored in `DeviceEvent` with source `ZKTECO_EVENT`, and visible in the existing Admin > Devices > Device attendance saved-events journey.
+Prove the Project Truth ZKTeco path end to end:
 
-## Architecture Truth
+1. HRIS accepts ZKTeco attendance events at `POST /api/zkteco/events`.
+2. The contract helper normalizes bridge payloads in `hris-api/helper/zkteco-event-contract.helper.ts`.
+3. The controller stores matched device evidence in `device_events` with `source = ZKTECO_EVENT`.
+4. Employee matching uses `employees.deviceEmpId`.
+5. The saved event is visible in Admin > Devices > Device attendance at `/admin/devices/events?view=saved&source=ZKTECO_EVENT`.
+6. The real ZKTeco bridge code lives locally under `vendor/zkteco-sdk` so it syncs with this repo.
+7. Attendance, timesheets, and payroll are not mutated unless a separate explicit attendance-applicator change is built and tested.
 
-- Current verified Docker engine mode on this workstation is Linux Docker Desktop, so the Linux HRIS VM stack can build and run here.
-- The ZKTeco SDK depends on .NET Framework 4.8 and `zkemkeeper.dll`/COM. Treat it as a Windows bridge, not a Linux service.
-- Docker Desktop Linux containers run inside a lightweight Linux VM and published ports are proxied from the host into that VM. This is why `localhost:3001` reaches the Linux HRIS API from the Windows host.
-- Docker Desktop documents `host.docker.internal` as the special name containers can use to reach host services. That is why the optional Windows-container bridge points to `http://host.docker.internal:3001/api/zkteco/events`.
-- Microsoft documents that Linux containers on Windows require Docker to target the Linux daemon. The inverse is true for Windows containers: switch Docker Desktop to Windows containers before using the `zkteco` Windows-container profile.
+## Current Truth
 
-Source references:
-- https://docs.docker.com/desktop/features/networking/
-- https://docs.docker.com/desktop/features/networking/networking-how-tos/
-- https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/set-up-linux-containers
+- Repo root: `C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH`
+- HRIS API route: `hris-api/app/zkteco/zkteco.router.ts`
+- HRIS controller: `hris-api/app/zkteco/zkteco.controller.ts`
+- Contract helper: `hris-api/helper/zkteco-event-contract.helper.ts`
+- Contract test: `hris-api/tests/zkteco-event-contract.helper.spec.ts`
+- Verifier: `scripts/verify-zkteco-bridge.ps1`
+- Overnight doc: `docs/OVERNIGHT_ZKTECO_PROJECT_TRUTH_BRIDGE_PROMPT.md`
+- Real bridge folder expected by compose: `vendor/zkteco-sdk`
 
-## Verified Before Overnight
+ZKTeco callback support is bridge/listener based for Standalone SDK style devices. The agent should verify this during the run, but the working assumption is:
 
-These checks were already run successfully on this workstation:
-
-```powershell
-docker info --format '{{.OSType}} {{.OperatingSystem}}'
-# linux Docker Desktop
-
-docker compose -f .\appliance\docker-compose.yml config --quiet
-docker compose -f .\appliance\docker-compose.yml --profile zkteco config --quiet
-docker compose -f .\appliance\docker-compose.yml build hris-api
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-zkteco-bridge.ps1 -SmokePost -DeviceIp 10.184.38.10 -EnrollNumber 1
-```
-
-Result:
-- HRIS API image builds with the ZKTeco API module.
-- Compose default Linux stack is valid.
-- Compose `zkteco` profile is valid.
-- Windows ZKTeco image build is not attempted while Docker is in Linux mode.
-- `POST http://localhost:3001/api/zkteco/events` returns HTTP 200 without bearer auth after the rebuilt `hris-api` container is recreated.
-- Current smoke result is `device_not_found` for `10.184.38.10:4370`, which means the endpoint is bridged and the next required truth row is an HRIS `Device` matching that IP/port.
-
-Verified running containers:
+- A Windows process uses ZKTeco `zkemkeeper` / Standalone SDK.
+- The process connects to each device over TCP, usually port `4370`.
+- The process registers realtime events with SDK event registration such as `RegEvent`.
+- The attendance callback such as `OnAttTransactionEx` fires when a punch happens.
+- The bridge callback posts JSON to Project Truth:
 
 ```text
-hris-api   hris-api-local:develop   healthy   0.0.0.0:3001->3001
-hris-app   hris-app-local:develop   healthy   0.0.0.0:3000->3000
-postgres   postgres:16-alpine       healthy   0.0.0.0:15432->5432
+POST http://localhost:3001/api/zkteco/events
 ```
 
-## Ordered Overnight Run
+Research references to confirm before touching code:
 
-1. Start from a clean terminal at the repository root.
+- ZKTeco SDK page: https://www.zkteco.com/en/SDK
+- ZKTeco Standalone SDK GitHub page: https://github.com/ZKTeco/Standalone-SDK
+- ZKTeco Standalone SDK manual references `OnAttTransactionEx` and realtime attendance transactions.
+- Docker Desktop networking docs for `host.docker.internal`: https://docs.docker.com/desktop/features/networking/
+- Docker Desktop networking how-tos: https://docs.docker.com/desktop/features/networking/networking-how-tos/
+- Microsoft container mode reference: https://learn.microsoft.com/en-us/virtualization/windowscontainers/quick-start/run-your-first-container
+
+## Non-Negotiable Boundaries
+
+- Stay ZKTeco-only.
+- Do not copy a large proprietary SDK package into the repo.
+- Do commit/sync bridge source code, scripts, docs, and placeholders.
+- Do not commit `Interop.zkemkeeper.dll`, generated `.exe`, `.dll`, `bin`, or `obj` outputs unless explicitly approved.
+- Do not silently make ZKTeco punches payroll-effective.
+- If a punch is saved but not attendance-applied, that is currently correct.
+
+## Expected Local Bridge Code
+
+If `vendor/zkteco-sdk` is empty or incomplete, create the local scaffold:
+
+```text
+vendor/zkteco-sdk/
+  README.md
+  ProjectTruth.ZktecoBridge.csproj
+  Program.cs
+  Build-Project.ps1
+  Run-Monitor.ps1
+  Dockerfile.windows
+  lib/
+    README.md
+```
+
+`Program.cs` must show the actual source-side callback shape:
+
+```csharp
+device.OnAttTransactionEx += OnAttTransactionEx;
+
+private void OnAttTransactionEx(
+    string enrollNumber,
+    int isInvalid,
+    int attState,
+    int verifyMethod,
+    int year,
+    int month,
+    int day,
+    int hour,
+    int minute,
+    int second,
+    int workCode)
+{
+    // Build JSON with device.ip, device.port, attendance.enrollNumber,
+    // timestamp, verifyMethod, attState, isValid, workCode.
+    // POST it to ZKTECO_WEBHOOK_URL.
+}
+```
+
+The bridge should read these environment variables:
+
+```text
+ZKTECO_DEVICE_IPS=10.184.38.10,10.184.38.234,10.184.38.235,10.184.38.9
+ZKTECO_DEVICE_PORT=4370
+ZKTECO_WEBHOOK_URL=http://localhost:3001/api/zkteco/events
+ZKTECO_CONNECT_PASSWORD=0
+```
+
+Use `x86` as the default build platform unless the real installed SDK proves it is 64-bit. ZKTeco COM SDK deployments are commonly bitness-sensitive.
+
+## Ordered Work Plan
+
+1. Start with a visible status update.
+
+   Say what is being checked, then run:
 
    ```powershell
    cd C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH
    git status --short
+   rg -n "zkteco|ZKTECO|deviceEmpId|DeviceEvent|device_events" hris-api hris-app scripts docs
    ```
 
-2. Confirm the SDK bridge source exists.
+2. Research for no more than 20 minutes.
+
+   Confirm these points and cite links in the final handoff:
+
+   - ZKTeco Standalone SDK supports realtime attendance callbacks.
+   - The callback/event is bridge-side, not a native HTTP webhook from the device.
+   - `OnAttTransactionEx` or equivalent carries enroll number, timestamp parts, verify method, attendance state, validity, and work code.
+   - Docker Desktop host-to-container / container-to-host naming is understood for host process vs Windows container bridge.
+
+   If research is unclear after 20 minutes, proceed with the local bridge scaffold and mark the specific unknowns.
+
+3. Verify HRIS contract files.
+
+   Read:
+
+   ```text
+   hris-api/app/zkteco/zkteco.router.ts
+   hris-api/app/zkteco/zkteco.controller.ts
+   hris-api/helper/zkteco-event-contract.helper.ts
+   hris-api/tests/zkteco-event-contract.helper.spec.ts
+   hris-api/prisma/schema-postgres/device.prisma
+   hris-api/prisma/schema-postgres/employee.prisma
+   hris-app/app/routes/admin/devices/events.tsx
+   scripts/verify-zkteco-bridge.ps1
+   ```
+
+4. Create or repair local bridge source under `vendor/zkteco-sdk`.
+
+   Required behavior:
+
+   - Connect to each `ZKTECO_DEVICE_IPS` entry.
+   - Register realtime attendance events.
+   - On attendance callback, create the HRIS JSON payload.
+   - POST to `ZKTECO_WEBHOOK_URL`.
+   - Log success and failure lines with enough detail to prove progress.
+   - Keep retry behavior bounded and visible.
+
+5. Confirm the HRIS payload shape.
+
+   The bridge must post this shape:
+
+   ```json
+   {
+     "device": { "type": "ZKTeco", "ip": "10.184.38.10", "port": 4370 },
+     "attendance": {
+       "enrollNumber": "1",
+       "userName": "",
+       "timestamp": "2026-06-18T22:27:26",
+       "verifyMethod": 1,
+       "verifyMethodName": "Fingerprint",
+       "attState": 0,
+       "attStateName": "Check In",
+       "isValid": true,
+       "workCode": 0,
+       "serialNo": 0
+     },
+     "eventType": "AttendanceTransaction"
+   }
+   ```
+
+6. Run required tests.
+
+   These must pass before calling the run successful:
+
+   ```powershell
+   cd .\hris-api
+   npx tsx node_modules/mocha/bin/mocha --no-config tests/zkteco-event-contract.helper.spec.ts
+   npm run typecheck
+   cd ..
+   ```
+
+   Do not use `npm run test -- tests/zkteco-event-contract.helper.spec.ts`; this package script already expands `tests/**/*.spec.ts`, so appended args still run the broader suite.
+
+   If full `typecheck` fails on unrelated existing errors, capture the first 20 relevant lines and still run the targeted ZKTeco test. Do not hide the failure.
+
+7. Run static proof checks.
 
    ```powershell
    Test-Path .\vendor\zkteco-sdk\Program.cs
-   Test-Path .\vendor\zkteco-sdk\Interop.zkemkeeper.dll
+   Test-Path .\vendor\zkteco-sdk\ProjectTruth.ZktecoBridge.csproj
+   Test-Path .\vendor\zkteco-sdk\Build-Project.ps1
+   Test-Path .\vendor\zkteco-sdk\Run-Monitor.ps1
+   Test-Path .\vendor\zkteco-sdk\Dockerfile.windows
+   rg -n "OnAttTransactionEx|RegEvent|ZKTECO_WEBHOOK_URL|api/zkteco/events|HttpClient|PostAsync" .\vendor\zkteco-sdk
    ```
 
-3. Start Project Truth HRIS Linux services.
+8. Start or verify HRIS services.
 
    ```powershell
+   docker compose -f .\appliance\docker-compose.yml config --quiet
+   docker compose -f .\appliance\docker-compose.yml --profile zkteco config --quiet
    docker compose -f .\appliance\docker-compose.yml up -d --build postgres hris-api-db-init hris-api hris-app
-   ```
-
-4. Verify API and app health.
-
-   ```powershell
+   docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
    Invoke-RestMethod http://localhost:3001/health
    Invoke-RestMethod http://localhost:3000/health
    ```
 
-5. Push the Prisma enum/table shape before ingesting ZKTeco events.
+9. Run contract smoke.
 
    ```powershell
-   docker compose -f .\appliance\docker-compose.yml run --rm hris-api-db-init
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-zkteco-bridge.ps1 -ContractOnly -DeviceIp 10.184.38.10 -DevicePort 4370 -EnrollNumber 1
    ```
 
-6. Create or verify HRIS device records for each ZKTeco terminal in Admin > Configuration > Devices.
+   Interpret results:
 
-   Required fields:
-   - `address`: ZKTeco terminal IP, for example `10.184.38.10`
-   - `port`: `4370`
-   - `protocol`: `tcp`
-   - `access`: `{}` unless credentials are later needed
+   - `device_not_found`: API contract works; add/fix HRIS `Device` row.
+   - `employee_not_found`: device matched; fix `employees.deviceEmpId`.
+   - `matched = true`: device and employee truth rows align.
+   - `duplicate = true`: dedupe works.
 
-7. Verify employees have `deviceEmpId` values matching ZKTeco enroll numbers.
-
-   Use Admin > Devices > Enroll or the existing enrollment import so user metadata and `Employee.deviceEmpId` stay in sync.
-
-8. Run the ZKTeco bridge on the Windows host first.
+10. Inspect database truth.
 
    ```powershell
-   $env:ZKTECO_DEVICE_IPS="10.184.38.10,10.184.38.234,10.184.38.235,10.184.38.9"
+   @'
+   select id, name, address, port, protocol, "organizationId", "isDeleted"
+   from "Device"
+   order by "createdAt" desc;
+
+   select source, status, count(*)
+   from device_events
+   group by source,status
+   order by source,status;
+
+   select id, "employeeId", "deviceEmpId", "organizationId", "isDeleted"
+   from employees
+   where "deviceEmpId" is not null
+   order by "updatedAt" desc
+   limit 50;
+   '@ | docker exec -i hris-postgres psql -U postgres -d hris
+   ```
+
+11. Add the ZKTeco truth rows if missing.
+
+   Required device truth:
+
+   - `Device.address = 10.184.38.10`
+   - `Device.port = 4370`
+   - `Device.protocol = tcp`
+   - `Device.access = {}`
+   - `Device.config.vendor = ZKTeco`
+
+   Required employee truth:
+
+   - `employees.deviceEmpId` equals the ZKTeco enroll number from the terminal.
+
+   Prefer app/API flows when available. If using SQL for a local dry run, record exactly what was changed.
+
+12. Run the real host bridge if SDK DLL is available.
+
+   ```powershell
+   $env:ZKTECO_DEVICE_IPS="10.184.38.10"
+   $env:ZKTECO_DEVICE_PORT="4370"
    $env:ZKTECO_WEBHOOK_URL="http://localhost:3001/api/zkteco/events"
    .\vendor\zkteco-sdk\Build-Project.ps1 -Configuration Debug -Platform x86
    .\vendor\zkteco-sdk\Run-Monitor.ps1 -NoBuild
    ```
 
-9. Optional Windows Docker bridge mode.
+   If `Interop.zkemkeeper.dll` or the registered COM dependency is missing, stop real bridge execution and continue contract proof. Do not fake a successful SDK connection.
 
-   Only use this when Docker Desktop is switched to Windows containers. The current HRIS stack is Linux-based, so do not expect this to run at the same time as the Linux compose stack on a single Docker Desktop engine.
+13. Optional Windows container bridge.
+
+   Only do this if Docker Desktop is switched to Windows containers. The Linux HRIS stack and Windows bridge container generally cannot run on the same Docker Desktop daemon at the same time.
 
    ```powershell
-   $env:ZKTECO_DEVICE_IPS="10.184.38.10,10.184.38.234,10.184.38.235,10.184.38.9"
+   $env:ZKTECO_DEVICE_IPS="10.184.38.10"
    $env:ZKTECO_WEBHOOK_URL="http://host.docker.internal:3001/api/zkteco/events"
    docker compose -f .\appliance\docker-compose.yml --profile zkteco up -d --build zkteco-bridge
    ```
 
-10. Smoke test ingestion without waiting for a live punch.
+14. Verify UI truth.
 
-    Replace `deviceIP` and `enrollNumber` with a real configured device and employee enrollment number.
+   Open:
 
-    ```powershell
-    $body = @{
-      device = @{ type = "ZKTeco"; ip = "10.184.38.10"; port = 4370 }
-      attendance = @{
-        enrollNumber = "1"
-        userName = "Smoke Test"
-        timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss")
-        verifyMethod = 1
-        verifyMethodName = "Fingerprint"
-        attState = 0
-        attStateName = "Check In"
-        isValid = $true
-        workCode = 0
-      }
-      eventType = "AttendanceTransaction"
-    } | ConvertTo-Json -Depth 6
+   ```text
+   http://localhost:3000/admin/devices/events?view=saved&source=ZKTECO_EVENT
+   ```
 
-    Invoke-RestMethod -Method Post -Uri http://localhost:3001/api/zkteco/events -ContentType "application/json" -Body $body
-    ```
+   Acceptance:
 
-11. Verify the event appears in HRIS.
+   - Saved row appears.
+   - Source reads `ZKTeco bridge`.
+   - Unknown enroll numbers show unmatched / needs match.
+   - Known enroll numbers show matched employee.
+   - Duplicate posts do not create duplicate evidence rows.
 
-    Open:
+15. Watch and show progress.
 
-    ```text
-    http://localhost:3000/admin/devices/events?view=saved&source=ZKTECO_EVENT
-    ```
+   Keep at least two watcher panes open:
 
-12. Acceptance checks.
+   ```powershell
+   docker logs -f hris-api
+   ```
 
-    - A row appears under saved device attendance.
-    - Save path shows `ZKTeco bridge`.
-    - Matched employees show employee name/no.
-    - Unmatched enroll numbers show `Needs match`.
-    - Repeated webhook posts reuse the existing dedupe key instead of creating duplicate rows.
+   ```powershell
+   Get-Content .\vendor\zkteco-sdk\logs\*.log -Wait
+   ```
 
-13. Best finish state.
+   If there is no live punch for 15 minutes, send a progress note with:
 
-    Stop and call it finished when all of these are true:
+   - API health
+   - bridge process status
+   - latest bridge log line
+   - latest `ZKTECO_EVENT` count
+   - current blocker or next action
 
-    - Docker Desktop remains in Linux mode for HRIS API/app/Postgres.
-    - `hris-api` and `hris-app` health endpoints return healthy responses.
-    - The ZKTeco bridge runs as a Windows host process with `ZKTECO_WEBHOOK_URL=http://localhost:3001/api/zkteco/events`.
-    - At least one smoke event or real punch appears at `/admin/devices/events?view=saved&source=ZKTECO_EVENT`.
-    - A duplicate post of the same smoke event returns duplicate/reused status rather than creating a second row.
-    - If a real employee enroll number exists in `Employee.deviceEmpId`, the row becomes `Matched`.
-    - If an enroll number is unknown, the row becomes `Needs match`, proving the exception path is visible instead of silent.
+## Do Not Get Stuck Rules
 
-14. Stop early and fix before continuing if any of these happen:
+- If SDK research is unclear after 20 minutes, continue with contract scaffold and mark the source as unverified.
+- If Docker is unavailable, run helper tests and static bridge-code proof.
+- If API health is down, inspect `docker logs hris-api --tail 100` and `docker logs hris-postgres --tail 100`.
+- If `device_not_found`, stop debugging code and fix the `Device` row.
+- If `employee_not_found`, stop debugging code and fix `employees.deviceEmpId`.
+- If no real SDK DLL exists, do not block the entire proof; complete mock webhook proof and document that real device callback is pending DLL/COM availability.
+- If tests fail, fix ZKTeco-related failures first. For unrelated failures, capture them and continue only with clear risk notes.
 
-    - API health is down.
-    - `POST /api/zkteco/events` returns HTTP 500.
-    - The bridge log shows repeated `[Webhook] Failed`.
-    - No HRIS `Device` matches the ZKTeco `device.ip` and `port`.
-    - Docker Desktop has been switched to Windows containers while the Linux HRIS stack is expected to stay running.
+## Final Handoff Format
 
-15. Overnight watch.
+Return:
 
-    Keep these visible:
+1. Research proof with links.
+2. Files changed.
+3. Tests run and pass/fail result.
+4. Contract smoke result.
+5. DB truth result: device row, employee `deviceEmpId`, `ZKTECO_EVENT` counts.
+6. UI truth result.
+7. Real bridge result: connected, DLL missing, COM missing, or no device reachable.
+8. Attendance truth statement: whether any `Attendance`, timesheet, or payroll row was changed.
 
-    ```powershell
-    docker logs -f hris-api
-    Get-Content .\vendor\zkteco-sdk\bin\Debug\net48\logs\*.log -Wait
-    ```
+Best finish state:
 
-16. Morning handoff.
-
-    Capture:
-    - Count of `ZKTECO_EVENT` rows in Admin > Devices > Device attendance.
-    - List of unmatched enroll numbers.
-    - Any bridge log lines containing `[Webhook] Failed` or SDK connection errors.
-    - Confirm whether the bridge ran as host process or Windows Docker profile.
+- ZKTeco source exists under `vendor/zkteco-sdk`.
+- Targeted ZKTeco test passes.
+- Typecheck is either passing or unrelated failures are captured.
+- `/api/zkteco/events` accepts a smoke payload.
+- Saved event appears in `device_events` and UI when matching `Device` exists.
+- The team knows exactly which truth row to fix next: device, employee `deviceEmpId`, SDK DLL/COM, or attendance applicator.

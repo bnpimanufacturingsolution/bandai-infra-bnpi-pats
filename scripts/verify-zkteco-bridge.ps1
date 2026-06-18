@@ -2,6 +2,7 @@
 param(
     [switch]$BuildApi,
     [switch]$SmokePost,
+    [switch]$ContractOnly,
     [string]$ApiBaseUrl = "http://localhost:3001",
     [string]$DeviceIp = "10.184.38.10",
     [int]$DevicePort = 4370,
@@ -48,12 +49,20 @@ try {
         ".\vendor\zkteco-sdk\Interop.zkemkeeper.dll",
         ".\vendor\zkteco-sdk\Dockerfile.windows"
     )
+    $missingBridgeFiles = @()
     foreach ($file in $requiredFiles) {
         if (-not (Test-Path -LiteralPath $file)) {
-            throw "Missing required bridge file: $file"
+            $missingBridgeFiles += $file
         }
     }
-    Write-Pass "SDK bridge files exist."
+    if ($missingBridgeFiles.Count -gt 0) {
+        if (-not $ContractOnly) {
+            throw "Missing required bridge file: $($missingBridgeFiles -join ', '). Use -ContractOnly to dry-run only the HRIS webhook contract."
+        }
+        Write-WarnLine "Bridge files missing; continuing in contract-only mock mode: $($missingBridgeFiles -join ', ')"
+    } else {
+        Write-Pass "SDK bridge files exist."
+    }
 
     if ($BuildApi) {
         Write-Step "Build HRIS API image"
@@ -70,7 +79,7 @@ try {
         Write-WarnLine "API health did not respond at $ApiBaseUrl/health. Start the stack before live smoke: docker compose -f .\appliance\docker-compose.yml up -d postgres hris-api hris-app"
     }
 
-    if ($SmokePost) {
+    if ($SmokePost -or $ContractOnly) {
         Write-Step "Smoke post ZKTeco event"
         $body = @{
             device = @{
@@ -101,10 +110,19 @@ try {
 
         Write-Host ($response | ConvertTo-Json -Depth 8)
         Write-Pass "Smoke post reached the ZKTeco bridge endpoint."
+
+        if ($response.data.reason -eq "device_not_found") {
+            Write-WarnLine "Contract accepted the payload, but no HRIS Device matched $DeviceIp`:$DevicePort."
+        } elseif ($response.data.reason -eq "employee_not_found") {
+            Write-WarnLine "Device matched, but no Employee.deviceEmpId matched enroll number $EnrollNumber."
+        } elseif ($response.data.matched -eq $true) {
+            Write-Pass "Device and Employee.deviceEmpId matched. Current ZKTeco contract records DeviceEvent only; it does not create/update Attendance yet."
+        }
     }
 
     Write-Step "Best finish state"
-    Write-Host "Stop when API/app are healthy, the Windows bridge is posting to $ApiBaseUrl/api/zkteco/events, and saved events show under /admin/devices/events?view=saved&source=ZKTECO_EVENT."
+    Write-Host "Stop when API/app are healthy, ZKTeco mock or bridge posts reach $ApiBaseUrl/api/zkteco/events, and saved events show under /admin/devices/events?view=saved&source=ZKTECO_EVENT."
+    Write-Host "Attendance truth note: this endpoint currently saves/matches DeviceEvent rows only. A later change is required before ZKTeco punches create or update Attendance."
 } finally {
     Pop-Location
 }
