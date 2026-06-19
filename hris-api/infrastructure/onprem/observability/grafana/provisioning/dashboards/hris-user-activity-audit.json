@@ -3,98 +3,373 @@
   "title": "HRIS User Activity and Audit",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 6,
   "refresh": "10s",
-  "tags": ["hris", "activity", "audit", "onprem"],
+  "tags": [
+    "hris",
+    "activity",
+    "audit",
+    "security",
+    "onprem"
+  ],
+  "description": "Production-grade HRIS user activity, audit trail, and security monitoring dashboard. Shows parsed user context, top active users, module distribution, trace links to Tempo, and filters for authenticated users only.",
   "time": {
     "from": "now-6h",
     "to": "now"
   },
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "All",
+          "value": ""
+        },
+        "name": "environment",
+        "query": "label_values({job=~\"hris-api.*\"}, environment)",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        }
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": ""
+        },
+        "name": "module",
+        "query": "label_values({job=~\"hris-api.*\"}, module)",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        }
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": ""
+        },
+        "name": "user_name",
+        "query": "label_values({job=~\"hris-api.*\"}, user_name)",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        }
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
-      "type": "timeseries",
-      "title": "API Request Rate by Route",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "targets": [
-        {
-          "expr": "sum by (route, method) (rate(hris_api_http_requests_total[5m]))",
-          "legendFormat": "{{method}} {{route}}",
-          "refId": "A"
-        }
-      ]
+      "type": "row",
+      "title": "Overview & Activity",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
     },
     {
-      "id": 2,
-      "type": "timeseries",
-      "title": "API 4xx/5xx by Route",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 10,
+      "type": "barchart",
+      "title": "Top Active Users (Requests, Last 6h)",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
       "targets": [
         {
-          "expr": "sum by (route, status_code) (rate(hris_api_http_requests_total{status_code=~\"4..|5..\"}[5m]))",
-          "legendFormat": "{{status_code}} {{route}}",
+          "expr": "topk(10, sum by (full_name, user_name) (count_over_time({service=~\"hris-api.*\"} |= \"api.activity.request\" | json | authenticated=\"true\" [6h])))",
+          "legendFormat": "{{full_name}} ({{user_name}})",
+          "queryType": "instant",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0,
+          "min": 0,
+          "unit": "none"
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "showValue": "always",
+        "stacking": "none",
+        "groupWidth": 0.7,
+        "barWidth": 0.85,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "desc"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 100
+      }
+    },
+    {
+      "id": 11,
+      "type": "piechart",
+      "title": "Activity by Module",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "expr": "sum by (module) (count_over_time({service=~\"hris-api.*\"} |= \"api.activity.request\" | json | authenticated=\"true\" [6h]))",
+          "legendFormat": "{{module}}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "pieType": "pie",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "percent",
+            "value"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#E60012"
+          }
+        }
+      }
     },
     {
       "id": 3,
       "type": "logs",
-      "title": "User Activity Logs",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 8 },
+      "title": "User Activity Logs (Authenticated Only)",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
       "targets": [
         {
-          "expr": "{service=~\"hris-api.*\"} |= \"api.activity.request\"",
+          "expr": "{service=~\"hris-api.*\"} |= \"api.activity.request\" | json | authenticated=\"true\" | line_format \"{{.full_name}} ({{if .user_name}}{{.user_name}}{{else}}{{.user_id}}{{end}}) - {{.method}} {{.route}} [{{.status_code}}]{{if .action_type}} action={{.action_type}}{{end}}{{if .entity_id}} entity_id={{.entity_id}}{{end}}{{if .request_payload_summary}} payload={{.request_payload_summary}}{{end}}\"",
           "refId": "A"
         }
       ],
       "options": {
         "showTime": true,
         "showLabels": true,
-        "wrapLogMessage": false
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyJSON": true,
+        "enableLogDetails": true
+      },
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "trace_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "View Trace in Tempo",
+                    "url": "http://localhost:3200/explore?schema=tempo&query=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       }
     },
     {
       "id": 4,
       "type": "logs",
-      "title": "Failed, Forbidden, and Unauthorized API Activity",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 18 },
+      "title": "Failed / Unauthorized / High Privilege Actions",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
       "targets": [
         {
-          "expr": "{service=~\"hris-api.*\"} |= \"api.activity.request\" |~ \"status_code[=: ]+(4|5)|status_code\\\":(4|5)\"",
+          "expr": "{service=~\"hris-api.*\"} |= \"api.activity.request\" |~ \"status_code\\\":(4|5)|401|403|DELETE|PUT|POST.*(employee|payroll|admin)\" | json",
           "refId": "A"
         }
       ],
       "options": {
         "showTime": true,
         "showLabels": true,
-        "wrapLogMessage": false
+        "wrapLogMessage": true,
+        "prettifyJSON": true
       }
     },
     {
-      "id": 5,
-      "type": "timeseries",
-      "title": "Accepted Spans by Service",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "id": 12,
+      "type": "heatmap",
+      "title": "Activity Heatmap (by Hour of Day)",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
       "targets": [
         {
-          "expr": "sum by (service_name) (rate(otelcol_receiver_accepted_spans[5m]))",
-          "legendFormat": "{{service_name}}",
+          "expr": "sum(count_over_time({service=~\"hris-api.*\"} |= \"api.activity.request\" | json | authenticated=\"true\" [1h]))",
+          "legendFormat": "authenticated activity",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "calculate": true,
+        "cellSize": "small",
+        "yAxis": {
+          "axisPlacement": "left"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "API Error Rate (4xx/5xx)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "targets": [
+        {
+          "expr": "sum by (route) (rate(hris_api_http_requests_total{status_code=~\"4..|5..\"}[5m]))",
+          "legendFormat": "{{route}}",
           "refId": "A"
         }
       ]
     },
     {
+      "id": 13,
+      "type": "stat",
+      "title": "Failed Login Attempts (Last 24h)",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 42
+      },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({service=~\"hris-api.*\"} |= \"login\" |~ \"401|403|failed|auth.token.invalid|auth.token.missing\" [24h]))",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "displayName": "Failed logins",
+          "mappings": [],
+          "noValue": "0",
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#E60012",
+                "value": null
+              },
+              {
+                "color": "#FF8200",
+                "value": 5
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
       "id": 6,
       "type": "timeseries",
-      "title": "API p95 Latency",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "title": "p95 API Latency",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 42
+      },
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum by (le, route) (rate(hris_api_http_request_duration_seconds_bucket[5m])))",
@@ -105,8 +380,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s"
-        },
-        "overrides": []
+        }
       }
     }
   ]
