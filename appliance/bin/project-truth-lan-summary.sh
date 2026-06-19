@@ -31,18 +31,22 @@ write_summary() {
 
   {
     echo "Project Truth HRIS appliance"
-    echo "Generated: ${generated_at}"
     echo "Host: $(hostname)"
+    echo "Generated: ${generated_at}"
     echo
     if [ -n "$ip_addr" ]; then
-      echo "LAN IP: ${ip_addr}"
+      echo "LAN IP"
+      echo "  ${ip_addr}"
       echo
+      echo "Open these from your host browser"
       echo "PROD login: http://${ip_addr}:3000/auth/login"
       echo "PROD API:   http://${ip_addr}:3001/health"
       echo "DEV login:  http://${ip_addr}:3100/auth/login"
       echo "DEV API:    http://${ip_addr}:3101/health"
       echo "UAT login:  http://${ip_addr}:3200/auth/login"
       echo "UAT API:    http://${ip_addr}:3201/health"
+      echo
+      echo "Observability"
       echo "Grafana:    http://${ip_addr}:53000"
       echo "Prometheus: http://${ip_addr}:9091"
       echo "Loki:       http://${ip_addr}:3110"
@@ -54,7 +58,7 @@ write_summary() {
       echo "Repair command after login: project-truth-lan-dhcp"
     fi
     echo
-    echo "Useful commands:"
+    echo "Useful commands"
     echo "  project-truth-progress --watch"
     echo "  project-truth-hris-status"
     echo "  project-truth-lan-dhcp"

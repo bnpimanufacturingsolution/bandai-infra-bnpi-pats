@@ -7,11 +7,17 @@ fi
 echo
 echo "Project Truth HRIS appliance"
 if [ -n "$lan_ip" ]; then
-  echo "  App: http://${lan_ip}:3000"
-  echo "  Login: http://${lan_ip}:3000/auth/login"
-  echo "  API Health: http://${lan_ip}:3001/health"
-  echo "  Dev: http://${lan_ip}:3100/auth/login  API: http://${lan_ip}:3101/health"
-  echo "  UAT: http://${lan_ip}:3200/auth/login  API: http://${lan_ip}:3201/health"
+  echo "  LAN IP: ${lan_ip}"
+  echo
+  echo "  Open from host browser:"
+  echo "  PROD login: http://${lan_ip}:3000/auth/login"
+  echo "  PROD API:   http://${lan_ip}:3001/health"
+  echo "  DEV login:  http://${lan_ip}:3100/auth/login"
+  echo "  DEV API:    http://${lan_ip}:3101/health"
+  echo "  UAT login:  http://${lan_ip}:3200/auth/login"
+  echo "  UAT API:    http://${lan_ip}:3201/health"
+  echo
+  echo "  Observability:"
   echo "  Grafana: http://${lan_ip}:53000"
   echo "  Prometheus: http://${lan_ip}:9091"
   echo "  Loki: http://${lan_ip}:3110"
