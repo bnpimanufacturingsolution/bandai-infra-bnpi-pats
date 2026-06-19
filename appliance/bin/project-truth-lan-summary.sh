@@ -10,6 +10,11 @@ log_file="/var/log/project-truth-network-summary.log"
 issue_file="/etc/issue"
 motd_file="/etc/motd"
 summary_file="${state_dir}/network-summary.txt"
+quiet=false
+
+if [ "${1:-}" = "--quiet" ]; then
+  quiet=true
+fi
 
 lan_ip() {
   local route_ip
@@ -76,9 +81,24 @@ write_summary() {
 ip_addr="$(lan_ip || true)"
 write_summary "$ip_addr"
 
-cp "$summary_file" "$motd_file"
 {
-  cat "$summary_file"
+  echo "Project Truth HRIS appliance"
+  if [ -n "$ip_addr" ]; then
+    echo "LAN IP: ${ip_addr}"
+    echo "Open: http://${ip_addr}:3000/auth/login"
+  else
+    echo "LAN IP: NOT DETECTED"
+  fi
+  echo "Run: project-truth-lan-summary"
+} > "$motd_file"
+
+{
+  echo "Project Truth HRIS appliance"
+  if [ -n "$ip_addr" ]; then
+    echo "LAN IP: ${ip_addr}"
+  else
+    echo "LAN IP: NOT DETECTED"
+  fi
   echo
   echo "Login with infra / infra"
   echo
@@ -90,4 +110,6 @@ cp "$summary_file" "$motd_file"
   echo
 } >> "$log_file"
 
-cat "$summary_file"
+if [ "$quiet" != "true" ]; then
+  cat "$summary_file"
+fi

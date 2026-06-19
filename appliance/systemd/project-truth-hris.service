@@ -6,7 +6,10 @@ After=docker.service network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/project-truth/appliance
+Environment=PROJECT_TRUTH_QUIET_STARTUP=true
 ExecStart=/usr/local/bin/project-truth-hris-env-start all
+StandardOutput=journal
+StandardError=journal
 RemainAfterExit=yes
 
 [Install]

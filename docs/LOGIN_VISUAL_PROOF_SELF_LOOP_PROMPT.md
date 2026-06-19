@@ -19,7 +19,7 @@ Required command:
 If `-PatchLiveGuest` fails because VirtualBox guestcontrol is unavailable, do not claim success. Use one of these repair paths, then rerun the command above:
 
 1. Patch through SSH if the VM IP and credentials work.
-2. Patch through the console if SSH is unavailable.
+2. Patch through the console only as a last resort, and clear/reset the tty before capturing visual proof.
 3. Rebuild or republish the image from the corrected repo source.
 4. Restore/reset to the minimal known bootable VM state, apply the patch, then rerun proof.
 
@@ -36,10 +36,12 @@ Visual pass criteria:
   - Loki
   - Useful commands
 - FAIL if the screenshot shows literal `\n`, jammed URLs, missing observability URLs, or only post-login command/status output.
+- FAIL if the screenshot shows visible bootstrap/proof commands after the banner, including `mkdir -p ~/.ssh`, `authorized_keys`, `KEY_READY`, pasted SSH keys, `docker compose`, `kubectl`, `sudo`, or any other automation that should have run through guestcontrol, SSH, systemd, or logs.
 
 Loop policy:
 
 - If screenshot is post-login status output, reset or power-cycle to get back to the login/banner surface and capture again.
+- If screenshot contains visible typed automation commands, prefer VirtualBox guestcontrol or SSH for the repair path; do not use the console as the proof surface until it has been reset and is clean.
 - If the source is fixed but live VM is not, patch the live VM or rebuild the VM. Do not blur those two states.
 - If endpoints pass but visual proof fails, report `VISUAL_PROOF_FAILED_CURRENT_LIVE_VM`.
 - If the same blocker repeats for three consecutive loop attempts, stop and report the exact blocker with proof paths.
@@ -53,4 +55,3 @@ What passed:
 What failed:
 Next exact repair command:
 ```
-

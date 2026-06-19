@@ -3,9 +3,20 @@ set -euo pipefail
 
 cd /opt/project-truth/appliance
 
+if [ "${PROJECT_TRUTH_QUIET_STARTUP:-false}" = "true" ]; then
+  mkdir -p /var/log
+  exec >>/var/log/project-truth-hris-startup.log 2>&1
+fi
+
 observability_started=false
 
 start_observability() {
+  if [ "${PROJECT_TRUTH_OBSERVABILITY_ENABLED:-true}" = "false" ]; then
+    echo "Observability startup disabled by PROJECT_TRUTH_OBSERVABILITY_ENABLED=false"
+    observability_started=true
+    return 0
+  fi
+
   if [ "$observability_started" = "true" ]; then
     return 0
   fi
@@ -41,6 +52,17 @@ compose_env() {
   fi
 }
 
+container_running() {
+  docker ps --filter "name=^/${1}$" --filter "status=running" --format '{{.Names}}' | grep -qx "$1"
+}
+
+env_running() {
+  local env_name="$1"
+  container_running "hris-postgres-${env_name}" &&
+    container_running "hris-api-${env_name}" &&
+    container_running "hris-app-${env_name}"
+}
+
 start_env() {
   case "$1" in
     prod)
@@ -49,9 +71,24 @@ start_env() {
       ;;
     dev|uat)
       start_observability
-      compose_env up -d "hris-postgres-$1"
-      compose_env up -d --no-deps "hris-api-$1"
-      compose_env up -d --no-deps "hris-app-$1"
+      if ! compose_env up -d "hris-postgres-$1"; then
+        if ! container_running "hris-postgres-$1"; then
+          return 1
+        fi
+        echo "Compose returned nonzero, but hris-postgres-$1 is running; continuing" >&2
+      fi
+      if ! compose_env up -d --no-deps "hris-api-$1"; then
+        if ! container_running "hris-api-$1"; then
+          return 1
+        fi
+        echo "Compose returned nonzero, but hris-api-$1 is running; continuing" >&2
+      fi
+      if ! compose_env up -d --no-deps "hris-app-$1"; then
+        if ! container_running "hris-app-$1"; then
+          return 1
+        fi
+        echo "Compose returned nonzero, but hris-app-$1 is running; continuing" >&2
+      fi
       ;;
     all)
       start_env prod

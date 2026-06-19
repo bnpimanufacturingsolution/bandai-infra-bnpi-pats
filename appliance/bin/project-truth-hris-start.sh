@@ -3,7 +3,14 @@ set -euo pipefail
 
 cd /opt/project-truth/appliance
 
-if command -v project-truth-hris-observability-start >/dev/null 2>&1; then
+if [ "${PROJECT_TRUTH_QUIET_STARTUP:-false}" = "true" ]; then
+  mkdir -p /var/log
+  exec >>/var/log/project-truth-hris-startup.log 2>&1
+fi
+
+if [ "${PROJECT_TRUTH_OBSERVABILITY_ENABLED:-true}" = "false" ]; then
+  echo "Observability startup disabled by PROJECT_TRUTH_OBSERVABILITY_ENABLED=false"
+elif command -v project-truth-hris-observability-start >/dev/null 2>&1; then
   if ! project-truth-hris-observability-start; then
     echo "Observability startup failed; continuing with HRIS app startup" >&2
   fi

@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/project-truth-lan-summary
+ExecStart=/usr/local/bin/project-truth-lan-summary --quiet
 RemainAfterExit=yes
 
 [Install]
