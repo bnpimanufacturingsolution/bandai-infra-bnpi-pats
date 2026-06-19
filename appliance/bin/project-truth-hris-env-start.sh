@@ -63,6 +63,24 @@ env_running() {
     container_running "hris-app-${env_name}"
 }
 
+run_firstboot_seed() {
+  if [ "${PROJECT_TRUTH_FIRSTBOOT_SEED:-false}" != "true" ]; then
+    return 0
+  fi
+
+  local marker_dir="/var/lib/project-truth"
+  local marker="${marker_dir}/hris-env-seed.done"
+  mkdir -p "$marker_dir"
+  if [ -f "$marker" ]; then
+    echo "First boot HRIS seed already completed: $marker"
+    return 0
+  fi
+
+  echo "Running first boot HRIS database init/seed for prod/dev/uat"
+  project-truth-hris-env-seed all
+  date -u '+%Y-%m-%dT%H:%M:%SZ' > "$marker"
+}
+
 start_env() {
   case "$1" in
     prod)
@@ -102,4 +120,5 @@ start_env() {
   esac
 }
 
+run_firstboot_seed
 start_env "${1:-prod}"

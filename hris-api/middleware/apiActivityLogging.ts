@@ -141,6 +141,7 @@ export function apiActivityLoggingMiddleware(
 		const firstName = req.firstName || null;
 		const lastName = req.lastName || null;
 		const fullName = [firstName, lastName].filter(Boolean).join(" ") || userName || "Anonymous";
+		const organizationId = req.organizationId || null;
 
 		const payload = {
 			userId,
@@ -149,7 +150,7 @@ export function apiActivityLoggingMiddleware(
 			firstName,
 			lastName,
 			fullName,
-			organizationId: req.organizationId || null,
+			organizationId,
 			route,
 			module,
 			statusCode,
@@ -168,7 +169,7 @@ export function apiActivityLoggingMiddleware(
 			employee_id: employeeId,
 			user_name: userName,
 			full_name: fullName,
-			organization_id: req.organizationId,
+			organization_id: organizationId,
 			method: req.method,
 			path: req.originalUrl,
 			route,

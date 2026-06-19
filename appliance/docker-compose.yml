@@ -42,6 +42,9 @@ services:
     env_file:
       - ./env/hris-api.env
     environment:
+      PG_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hris
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hris
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hris
       STORAGE_PROVIDER: local
       LOCAL_UPLOAD_ROOT: /app/uploads
       LOCAL_UPLOAD_PUBLIC_BASE_URL: http://192.168.1.54:3001

@@ -20,20 +20,30 @@ http_status() {
   curl -fsS -o /dev/null -w '%{http_code}' --max-time 8 "$url" 2>/dev/null || printf 'DOWN'
 }
 
+docker_cmd() {
+  if docker ps >/dev/null 2>&1; then
+    docker "$@"
+  elif command -v sudo >/dev/null 2>&1 && sudo -n docker ps >/dev/null 2>&1; then
+    sudo docker "$@"
+  else
+    return 1
+  fi
+}
+
 container_state() {
   local name="$1"
-  if ! docker inspect "$name" >/dev/null 2>&1; then
+  if ! docker_cmd inspect "$name" >/dev/null 2>&1; then
     printf 'missing'
     return
   fi
-  docker inspect -f '{{.State.Status}}{{if .State.Health}}/{{.State.Health.Status}}{{end}}' "$name" 2>/dev/null
+  docker_cmd inspect -f '{{.State.Status}}{{if .State.Health}}/{{.State.Health.Status}}{{end}}' "$name" 2>/dev/null
 }
 
 print_container_row() {
   local name="$1"
   local label="$2"
   local ports
-  ports="$(docker port "$name" 2>/dev/null | paste -sd ', ' - || true)"
+  ports="$(docker_cmd port "$name" 2>/dev/null | paste -sd ', ' - || true)"
   printf '  %-12s %-18s %s\n' "$label" "$(container_state "$name")" "${ports:-no published ports}"
 }
 
@@ -111,12 +121,12 @@ print_env_row uat  3200 3201 15434 hris-app-uat hris-api-uat hris-postgres-uat
 echo
 
 echo "Database"
-if timeout 8 docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1; then
+if timeout 8 bash -c 'docker ps >/dev/null 2>&1 && docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1 || sudo -n docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1'; then
   echo "  postgres: accepting connections"
 else
   echo "  postgres: not ready"
 fi
-if timeout 8 docker exec hris-api printenv PG_DATABASE_URL >/dev/null 2>&1; then
+if timeout 8 bash -c 'docker ps >/dev/null 2>&1 && docker exec hris-api printenv PG_DATABASE_URL >/dev/null 2>&1 || sudo -n docker exec hris-api printenv PG_DATABASE_URL >/dev/null 2>&1'; then
   echo "  api env: PG_DATABASE_URL present"
 else
   echo "  api env: PG_DATABASE_URL missing"
@@ -148,8 +158,8 @@ echo "  project-truth-lan-dhcp"
 echo "  docker compose -f ${compose_file} ps"
 echo "  docker compose -f ${env_compose_file} ps"
 
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^node-health-'; then
+if docker_cmd ps --format '{{.Names}}' 2>/dev/null | grep -q '^node-health-'; then
   echo
   echo "Legacy node-health containers still present"
-  docker ps --filter 'name=node-health' --format '  {{.Names}} {{.Status}} {{.Ports}}'
+  docker_cmd ps --filter 'name=node-health' --format '  {{.Names}} {{.Status}} {{.Ports}}'
 fi
