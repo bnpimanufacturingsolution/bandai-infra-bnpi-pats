@@ -14,6 +14,7 @@ import { uploadToCloudinary } from "../../helper/cloudinary.helper";
 import { AuthRequest } from "../../middleware/verifyToken";
 import { logAudit } from "../../utils/auditLogger";
 import jwt from "jsonwebtoken";
+import { getLogger } from "../../helper/logger.helper";
 
 const DEFAULT_ME_MESSAGE = "User profile retrieved successfully";
 const DEFAULT_LOGIN_MESSAGE = "Login successful";
@@ -25,6 +26,7 @@ const bcrypt: {
 	compare(data: string, encrypted: string): Promise<boolean>;
 	hash(data: string, saltOrRounds: number): Promise<string>;
 } = require("bcryptjs");
+const logger = getLogger().child({ module: "auth" });
 
 type AnyRecord = Record<string, any>;
 type AuthRoleSource = "local" | "idp";
@@ -733,6 +735,56 @@ const normalizeLoginIdentifier = (value: unknown): string =>
 
 const isEmailIdentifier = (value: string): boolean => value.includes("@");
 
+const getClientIp = (req: AuthRequest): string => {
+	const forwardedFor = req.get?.("x-forwarded-for");
+	if (forwardedFor) return forwardedFor.split(",")[0].trim();
+	return req.ip || req.socket?.remoteAddress || "unknown";
+};
+
+const getRedactedLoginPayload = (req: AuthRequest): AnyRecord => {
+	const body = asRecord(req.body);
+	return {
+		identifier: normalizeLoginIdentifier(body.identifier),
+		email: normalizeLoginIdentifier(body.email),
+		employeeId: normalizeLoginIdentifier(body.employeeId),
+		has_password: Boolean(body.password),
+		password: body.password ? "[REDACTED]" : "",
+	};
+};
+
+const logLoginFailure = (
+	req: AuthRequest,
+	params: {
+		identifier: string;
+		reason: string;
+		statusCode: number;
+		userId?: string;
+	},
+) => {
+	const normalizedIdentifier = normalizeLoginIdentifier(params.identifier);
+	const requestPayload = getRedactedLoginPayload(req);
+	logger.warn("auth.login.failed", {
+		event: "auth.login.failed",
+		login_identifier: normalizedIdentifier,
+		login_identifier_type: normalizedIdentifier
+			? isEmailIdentifier(normalizedIdentifier)
+				? "email"
+				: "employee_id"
+			: "missing",
+		login_failure_reason: params.reason,
+		status_code: params.statusCode,
+		user_id: params.userId || "",
+		has_password: Boolean((req.body as AnyRecord)?.password),
+		request_payload_summary: `identifier=${normalizedIdentifier || "missing"} has_password=${requestPayload.has_password}`,
+		request_payload_redacted: JSON.stringify(requestPayload),
+		request_payload: requestPayload,
+		ip: getClientIp(req),
+		user_agent: req.get?.("User-Agent") || "unknown",
+		path: req.originalUrl || req.url,
+		method: req.method,
+	});
+};
+
 const selectLocalLoginUser = {
 	id: true,
 	email: true,
@@ -942,6 +994,11 @@ export const controller = (prisma: PrismaClient) => {
 			const password = String((req.body as AnyRecord)?.password || "");
 
 			if (!identifier || !password) {
+				logLoginFailure(req, {
+					identifier,
+					reason: !identifier ? "missing_identifier" : "missing_password",
+					statusCode: 400,
+				});
 				res.status(400).json(
 					buildErrorResponse("Employee ID or email and password are required", 400),
 				);
@@ -990,17 +1047,35 @@ export const controller = (prisma: PrismaClient) => {
 			const localUser = await resolveLocalLoginUserByIdentifier(prisma, identifier);
 
 			if (!localUser?.password) {
+				logLoginFailure(req, {
+					identifier,
+					reason: localUser ? "password_not_set" : "user_not_found",
+					statusCode: 401,
+					userId: localUser?.id,
+				});
 				res.status(401).json(buildErrorResponse("Invalid credentials", 401));
 				return;
 			}
 
 			const isValidPassword = await bcrypt.compare(password, localUser.password);
 			if (!isValidPassword) {
+				logLoginFailure(req, {
+					identifier,
+					reason: "invalid_password",
+					statusCode: 401,
+					userId: localUser.id,
+				});
 				res.status(401).json(buildErrorResponse("Invalid credentials", 401));
 				return;
 			}
 
 			if (String(localUser.status || "").toLowerCase() !== "active") {
+				logLoginFailure(req, {
+					identifier,
+					reason: "account_not_active",
+					statusCode: 403,
+					userId: localUser.id,
+				});
 				res.status(403).json(buildErrorResponse("Account is not active", 403));
 				return;
 			}
@@ -1025,6 +1100,12 @@ export const controller = (prisma: PrismaClient) => {
 
 			const jwtSecret = String(process.env.JWT_SECRET || "").trim();
 			if (!jwtSecret) {
+				logLoginFailure(req, {
+					identifier,
+					reason: "jwt_secret_missing",
+					statusCode: 500,
+					userId: localUser.id,
+				});
 				res.status(500).json(buildErrorResponse("JWT_SECRET is not configured", 500));
 				return;
 			}

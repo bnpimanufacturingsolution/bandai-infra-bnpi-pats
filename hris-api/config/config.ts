@@ -90,7 +90,7 @@ export const config = {
 	backup: {
 		enabled: process.env.BACKUP_ENABLED !== "false",
 		timezone: process.env.BACKUP_TIMEZONE || "Asia/Manila",
-		cron: process.env.BACKUP_CRON || "0 0 * * *",
+		cron: process.env.BACKUP_CRON || "0 12 * * *",
 		outputDir: process.env.BACKUP_DIR || "/var/backups/hris",
 		retentionDays: parseInteger(process.env.BACKUP_RETENTION_DAYS, 0),
 		postgresContainerName: process.env.POSTGRES_CONTAINER_NAME || "",

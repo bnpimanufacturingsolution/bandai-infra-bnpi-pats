@@ -55,7 +55,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
       BACKUP_ENABLED: "true"
       BACKUP_TIMEZONE: Asia/Manila
-      BACKUP_CRON: "0 0 * * *"
+      BACKUP_CRON: "0 12 * * *"
       BACKUP_DIR: /var/backups/hris
       BACKUP_RETENTION_DAYS: "0"
       OTEL_ENABLED: "true"
@@ -103,7 +103,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
       BACKUP_ENABLED: "true"
       BACKUP_TIMEZONE: Asia/Manila
-      BACKUP_CRON: "0 0 * * *"
+      BACKUP_CRON: "0 12 * * *"
       BACKUP_DIR: /var/backups/hris
       BACKUP_RETENTION_DAYS: "0"
       OTEL_ENABLED: "true"
@@ -211,7 +211,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
       BACKUP_ENABLED: "true"
       BACKUP_TIMEZONE: Asia/Manila
-      BACKUP_CRON: "0 0 * * *"
+      BACKUP_CRON: "0 12 * * *"
       BACKUP_DIR: /var/backups/hris
       BACKUP_RETENTION_DAYS: "0"
       OTEL_ENABLED: "true"
@@ -259,7 +259,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
       BACKUP_ENABLED: "true"
       BACKUP_TIMEZONE: Asia/Manila
-      BACKUP_CRON: "0 0 * * *"
+      BACKUP_CRON: "0 12 * * *"
       BACKUP_DIR: /var/backups/hris
       BACKUP_RETENTION_DAYS: "0"
       OTEL_ENABLED: "true"
