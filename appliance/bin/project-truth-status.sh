@@ -5,6 +5,12 @@ compose_file="/opt/project-truth/appliance/docker-compose.yml"
 env_compose_file="/opt/project-truth/appliance/docker-compose.environments.yml"
 
 lan_ip() {
+  local route_ip
+  route_ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{ for (i=1; i<=NF; i++) if ($i=="src") { print $(i+1); exit } }')"
+  if [ -n "$route_ip" ]; then
+    printf '%s\n' "$route_ip"
+    return
+  fi
   ip -4 -o addr show scope global up 2>/dev/null |
     awk '!/ docker| br-| veth| cni| flannel/ { split($4, a, "/"); print a[1]; exit }'
 }
