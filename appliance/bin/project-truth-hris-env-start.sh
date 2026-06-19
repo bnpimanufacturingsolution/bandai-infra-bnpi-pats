@@ -11,9 +11,13 @@ start_observability() {
   fi
 
   if command -v project-truth-hris-observability-start >/dev/null 2>&1; then
-    project-truth-hris-observability-start
+    if ! project-truth-hris-observability-start; then
+      echo "Observability startup failed; continuing with HRIS app startup" >&2
+    fi
   elif [ -f /opt/project-truth/appliance/bin/project-truth-hris-observability-start.sh ]; then
-    bash /opt/project-truth/appliance/bin/project-truth-hris-observability-start.sh
+    if ! bash /opt/project-truth/appliance/bin/project-truth-hris-observability-start.sh; then
+      echo "Observability startup failed; continuing with HRIS app startup" >&2
+    fi
   else
     echo "Observability starter not installed; continuing with HRIS app startup" >&2
   fi

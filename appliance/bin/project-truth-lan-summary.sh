@@ -46,6 +46,14 @@ write_summary() {
       echo "UAT login:  http://${ip_addr}:3200/auth/login"
       echo "UAT API:    http://${ip_addr}:3201/health"
       echo
+      echo "ZKTeco bridge targets"
+      echo "PROD webhook: http://${ip_addr}:3001/api/zkteco/events"
+      echo "DEV webhook:  http://${ip_addr}:3101/api/zkteco/events"
+      echo "UAT webhook:  http://${ip_addr}:3201/api/zkteco/events"
+      echo "Saved events: http://${ip_addr}:3000/admin/devices/events?view=saved&source=ZKTECO_EVENT"
+      echo "Bridge note: run the Windows ZKTeco SDK bridge on a Windows host/device LAN."
+      echo "Set ZKTECO_WEBHOOK_URL to one of the webhook URLs above."
+      echo
       echo "Observability"
       echo "Grafana:    http://${ip_addr}:53000"
       echo "Prometheus: http://${ip_addr}:9091"

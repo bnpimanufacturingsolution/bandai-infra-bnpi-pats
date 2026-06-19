@@ -17,6 +17,14 @@ if [ -n "$lan_ip" ]; then
   echo "  UAT login:  http://${lan_ip}:3200/auth/login"
   echo "  UAT API:    http://${lan_ip}:3201/health"
   echo
+  echo "  ZKTeco bridge targets:"
+  echo "  PROD webhook: http://${lan_ip}:3001/api/zkteco/events"
+  echo "  DEV webhook:  http://${lan_ip}:3101/api/zkteco/events"
+  echo "  UAT webhook:  http://${lan_ip}:3201/api/zkteco/events"
+  echo "  Saved events: http://${lan_ip}:3000/admin/devices/events?view=saved&source=ZKTECO_EVENT"
+  echo "  Bridge note: run the Windows ZKTeco SDK bridge on a Windows host/device LAN;"
+  echo "  set ZKTECO_WEBHOOK_URL to one of the webhook URLs above."
+  echo
   echo "  Observability:"
   echo "  Grafana: http://${lan_ip}:53000"
   echo "  Prometheus: http://${lan_ip}:9091"
