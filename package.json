@@ -1,0 +1,23 @@
+{
+  "name": "project_truth_hyperv_fresh",
+  "version": "1.0.0",
+  "description": "This branch is the clean Hyper-V/Terraform direction for Project Truth, with a\r separate maintainer image-factory track for VirtualBox client artifacts.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hrisworkforcesystem-coder/bandai-infra.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/hrisworkforcesystem-coder/bandai-infra/issues"
+  },
+  "homepage": "https://github.com/hrisworkforcesystem-coder/bandai-infra#readme"
+}

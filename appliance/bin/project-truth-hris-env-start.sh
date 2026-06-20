@@ -17,6 +17,8 @@ ensure_observability_network() {
 }
 
 start_observability() {
+  ensure_observability_network
+
   if [ "${PROJECT_TRUTH_OBSERVABILITY_ENABLED:-true}" = "false" ]; then
     echo "Observability startup disabled by PROJECT_TRUTH_OBSERVABILITY_ENABLED=false"
     observability_started=true
