@@ -28,6 +28,7 @@ import {
 import { useLayoutEffect, useRef, useState } from "react";
 import { useActionMetrics } from "~/lib/hooks/useMetrics";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
+import { resolveUploadUrl } from "~/lib/upload-url";
 
 interface NavItem {
 	id: string;
@@ -101,7 +102,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 	const position = user?.metadata?.employee?.position?.title || "";
 	const positionDisplay = level ? `${level} ${position}` : position;
 	const department = user?.metadata?.employee?.department?.name || "";
-	const avatarUrl = String(user?.avatar || "").trim();
+	const avatarUrl = resolveUploadUrl(user?.avatar);
 	const isDepartmentManager = !!user?.metadata?.employee?.isDepartmentManager;
 	const hrDocumentReviewCount = actionMetrics?.counts.documents.hrPendingApproval || 0;
 
