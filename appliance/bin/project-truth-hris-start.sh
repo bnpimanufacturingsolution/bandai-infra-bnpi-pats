@@ -22,6 +22,10 @@ else
   echo "Observability starter not installed; continuing with HRIS app startup" >&2
 fi
 
+if ! docker network inspect hris-observability >/dev/null 2>&1; then
+  docker network create hris-observability >/dev/null
+fi
+
 if ! docker image inspect hris-api-local:develop >/dev/null 2>&1 || ! docker image inspect hris-api-db-init:develop >/dev/null 2>&1 || ! docker image inspect hris-app-local:develop >/dev/null 2>&1; then
   if docker compose version >/dev/null 2>&1; then
     docker compose build

@@ -74,7 +74,6 @@ services:
       LOG_FORMAT: json
     volumes:
       - apiuploads-dev:/app/uploads
-      - ../hris-api/dist/server.js:/app/dist/server.js:ro
       - ./backups/dev:/var/backups/hris
     networks:
       - default

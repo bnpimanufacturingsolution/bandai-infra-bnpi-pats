@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','configure','select-image','download-image','build-image','configure-virtualbox','vhdx-autopilot','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state')]
+  [ValidateSet('doctor','configure','select-image','download-image','build-image','configure-virtualbox','vhdx-autopilot','repair-hyperv-boot','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -18,6 +18,7 @@ $scriptMap = @{
   'build-image'         = 'build-image.ps1'
   'configure-virtualbox' = 'configure-virtualbox.ps1'
   'vhdx-autopilot'      = 'vhdx-autopilot.ps1'
+  'repair-hyperv-boot'  = 'repair-hyperv-boot.ps1'
   'login-visual-proof-loop' = 'login-visual-proof-loop.ps1'
   'terraform-plan'      = 'terraform-plan.ps1'
   'terraform-apply'     = 'terraform-apply.ps1'

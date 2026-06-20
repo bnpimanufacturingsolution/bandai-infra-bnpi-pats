@@ -10,6 +10,12 @@ fi
 
 observability_started=false
 
+ensure_observability_network() {
+  if ! docker network inspect hris-observability >/dev/null 2>&1; then
+    docker network create hris-observability >/dev/null
+  fi
+}
+
 start_observability() {
   if [ "${PROJECT_TRUTH_OBSERVABILITY_ENABLED:-true}" = "false" ]; then
     echo "Observability startup disabled by PROJECT_TRUTH_OBSERVABILITY_ENABLED=false"
@@ -85,10 +91,12 @@ start_env() {
   case "$1" in
     prod)
       start_observability
+      ensure_observability_network
       project-truth-hris-start
       ;;
     dev|uat)
       start_observability
+      ensure_observability_network
       if ! compose_env up -d "hris-postgres-$1"; then
         if ! container_running "hris-postgres-$1"; then
           return 1
