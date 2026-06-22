@@ -19,13 +19,17 @@ param(
   [string[]]$NetAdapterNames = @(),
   [string]$VmPath = "$env:ProgramData\ProjectTruth\HyperV",
   [int]$MemoryMb = 4096,
-  [int]$CpuCount = 2,
+  [int]$CpuCount = 0,
   [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
 
 $publishedImagePathProvided = -not [string]::IsNullOrWhiteSpace($PublishedImagePath)
+
+if ($CpuCount -le 0) {
+  $CpuCount = if ($TargetPlatform -eq 'virtualbox') { 1 } else { 2 }
+}
 
 $artifactExtensions = @{
   hyperv     = @('.vhdx')
@@ -307,6 +311,7 @@ if (-not $publishedImagePathProvided -and [IO.Path]::GetExtension($PublishedImag
 }
 
 Copy-Item -LiteralPath $candidate.FullName -Destination $PublishedImagePath -Force
+& "$PSScriptRoot\normalize-image-acl.ps1" -ImagePath $PublishedImagePath
 
 $hash = Get-FileHash -LiteralPath $PublishedImagePath -Algorithm SHA256
 $shaPath = "$PublishedImagePath.sha256"

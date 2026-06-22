@@ -25,6 +25,10 @@ if ($extension -notin $allowedExtensions) {
   throw "Selected $TargetPlatform image must use one of these extensions: $($allowedExtensions -join ', '). Got: $resolved"
 }
 
+if ($extension -in @('.vdi', '.vmdk', '.vhdx')) {
+  & "$PSScriptRoot\normalize-image-acl.ps1" -ImagePath $resolved
+}
+
 $configDir = Split-Path -Parent $ConfigPath
 New-Item -ItemType Directory -Force -Path $configDir | Out-Null
 

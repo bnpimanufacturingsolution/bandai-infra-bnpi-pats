@@ -169,6 +169,12 @@ sudo systemctl enable project-truth-lan-dhcp.service
 sudo systemctl enable project-truth-lan-summary.service
 sudo systemctl enable project-truth-hris.service
 
+# This appliance is fully configured by systemd after image bake. Disable
+# cloud-init so exported VirtualBox/Hyper-V clients do not pause or print
+# datasource errors while looking for GCP metadata.
+sudo touch /etc/cloud/cloud-init.disabled || true
+sudo cloud-init clean --logs || true
+
 sudo systemctl enable ssh
 sudo systemctl restart ssh || sudo systemctl restart sshd || true
 
