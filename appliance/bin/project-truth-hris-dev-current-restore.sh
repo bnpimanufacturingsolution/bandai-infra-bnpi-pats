@@ -3,6 +3,10 @@ set -euo pipefail
 
 cd /opt/project-truth/appliance
 
+if ! docker network inspect hris-observability >/dev/null 2>&1; then
+  docker network create hris-observability >/dev/null
+fi
+
 dump_path="${PROJECT_TRUTH_DEV_CURRENT_DUMP:-/opt/project-truth/appliance/seeds/dev-current/dev-current.dump}"
 
 compose_env() {

@@ -38,6 +38,7 @@ mkdir -p \
   "${data_root}/tempo" \
   "${data_root}/alertmanager" \
   "${data_root}/collector" \
+  "${data_root}/postgres" \
   "${data_root}/backups"
 
 cd "$observability_dir"

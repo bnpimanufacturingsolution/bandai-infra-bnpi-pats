@@ -70,28 +70,8 @@ build {
   sources = ["source.googlecompute.ubuntu"]
 
   provisioner "file" {
-    source      = "${path.root}/staging/gitops"
-    destination = "/tmp"
-  }
-
-  provisioner "file" {
-    source      = "${path.root}/staging/appliance"
-    destination = "/tmp"
-  }
-
-  provisioner "file" {
-    source      = "${path.root}/staging/hris-api"
-    destination = "/tmp"
-  }
-
-  provisioner "file" {
-    source      = "${path.root}/staging/hris-app"
-    destination = "/tmp"
-  }
-
-  provisioner "file" {
-    source      = "${path.root}/staging/vendor"
-    destination = "/tmp"
+    source      = "${path.root}/staging/project-truth-staging.tar"
+    destination = "/tmp/project-truth-staging.tar"
   }
 
   provisioner "shell" {
@@ -99,13 +79,16 @@ build {
     inline_shebang  = "/bin/bash -e"
     inline = [
       "set -euo pipefail",
+      "rm -rf /tmp/project-truth-staging",
+      "mkdir -p /tmp/project-truth-staging",
+      "tar -xf /tmp/project-truth-staging.tar -C /tmp/project-truth-staging",
       "mkdir -p /opt/project-truth",
       "rm -rf /opt/project-truth/gitops /opt/project-truth/appliance /opt/project-truth/hris-api /opt/project-truth/hris-app /opt/project-truth/vendor",
-      "cp -R /tmp/gitops /opt/project-truth/gitops",
-      "cp -R /tmp/appliance /opt/project-truth/appliance",
-      "cp -R /tmp/hris-api /opt/project-truth/hris-api",
-      "cp -R /tmp/hris-app /opt/project-truth/hris-app",
-      "cp -R /tmp/vendor /opt/project-truth/vendor",
+      "cp -R /tmp/project-truth-staging/gitops /opt/project-truth/gitops",
+      "cp -R /tmp/project-truth-staging/appliance /opt/project-truth/appliance",
+      "cp -R /tmp/project-truth-staging/hris-api /opt/project-truth/hris-api",
+      "cp -R /tmp/project-truth-staging/hris-app /opt/project-truth/hris-app",
+      "cp -R /tmp/project-truth-staging/vendor /opt/project-truth/vendor",
       "find /opt/project-truth -type f \\( -name '*.tmp' -o -name '.env' -o -name '.env.*' \\) -delete",
       "chown -R infra:infra /opt/project-truth"
     ]

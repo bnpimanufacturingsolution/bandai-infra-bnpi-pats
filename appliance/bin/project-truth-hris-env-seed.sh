@@ -3,6 +3,10 @@ set -euo pipefail
 
 cd /opt/project-truth/appliance
 
+if ! docker network inspect hris-observability >/dev/null 2>&1; then
+  docker network create hris-observability >/dev/null
+fi
+
 compose_env() {
   if command -v docker compose >/dev/null 2>&1; then
     docker compose -f docker-compose.environments.yml "$@"

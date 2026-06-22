@@ -123,6 +123,27 @@ services:
     networks:
       - observability
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: hris-observability-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_GRAFANA_DB:-grafana}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_OBSERVABILITY_HOST_PORT:-15435}:5432"
+    volumes:
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/postgres:/var/lib/postgresql/data
+      - ./grafana/init-grafana-db.sh:/docker-entrypoint-initdb.d/init-grafana-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_GRAFANA_DB:-grafana}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - observability
+
   grafana:
     image: grafana/grafana:11.2.0
     container_name: hris-grafana

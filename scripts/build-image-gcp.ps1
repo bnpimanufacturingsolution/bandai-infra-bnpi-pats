@@ -112,18 +112,21 @@ function Remove-LeakedBuildResources {
   $diskRows = Invoke-Gcloud -Arguments @(
     'compute', 'disks', 'list',
     '--project', $ProjectId,
-    '--filter', 'name~^project-truth-node-gcp-build- AND -users:*',
-    '--format', 'csv[no-heading](name,zone.basename(),creationTimestamp)'
+    '--format', 'csv[no-heading](name,zone.basename(),creationTimestamp,users)'
   ) 2>$null
 
   foreach ($row in @($diskRows | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
     $parts = $row.Split(',')
-    if ($parts.Length -lt 3) {
+    if ($parts.Length -lt 4) {
       continue
     }
     $name = $parts[0].Trim()
     $diskZone = $parts[1].Trim()
     $createdAt = [datetime]::Parse($parts[2].Trim())
+    $users = $parts[3].Trim()
+    if ($name -notlike 'project-truth-node-gcp-build-*' -or -not [string]::IsNullOrWhiteSpace($users)) {
+      continue
+    }
     if ($createdAt -lt $RunStartedAt.AddMinutes(-5)) {
       continue
     }
@@ -225,6 +228,72 @@ function Sync-PackerStagingDirectory {
   }
 }
 
+function New-PackerStagingArchive {
+  param([string]$StagingRoot)
+
+  $tar = Get-Command tar.exe, tar -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $tar) {
+    throw 'tar was not found on PATH. It is required to create the single-file GCP staging archive.'
+  }
+
+  $archivePath = Join-Path $StagingRoot 'project-truth-staging.tar'
+  $manifestPath = Join-Path $StagingRoot 'project-truth-staging.manifest.json'
+
+  $requiredEntries = @('gitops', 'appliance', 'hris-api', 'hris-app', 'vendor')
+  foreach ($entry in $requiredEntries) {
+    $entryPath = Join-Path $StagingRoot $entry
+    if (-not (Test-Path -LiteralPath $entryPath)) {
+      throw "Required staging entry not found: $entryPath"
+    }
+  }
+
+  $stagingFullPath = [System.IO.Path]::GetFullPath($StagingRoot).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+  $manifestEntries = foreach ($entry in $requiredEntries) {
+    $entryPath = Join-Path $StagingRoot $entry
+    Get-ChildItem -LiteralPath $entryPath -Recurse -Force -File | ForEach-Object {
+      [pscustomobject]@{
+        path              = $_.FullName.Substring($stagingFullPath.Length).Replace('\', '/')
+        length            = $_.Length
+        lastWriteTimeUtc  = $_.LastWriteTimeUtc.Ticks
+      }
+    }
+  }
+
+  $manifest = [pscustomobject]@{
+    createdBy       = 'scripts/build-image-gcp.ps1'
+    requiredEntries = $requiredEntries
+    fileCount       = @($manifestEntries).Count
+    files           = @($manifestEntries | Sort-Object path)
+  } | ConvertTo-Json -Depth 5
+
+  if (Test-Path -LiteralPath $archivePath) {
+    $existingArchive = Get-Item -LiteralPath $archivePath
+    $existingManifest = if (Test-Path -LiteralPath $manifestPath) {
+      Get-Content -LiteralPath $manifestPath -Raw
+    } else {
+      $null
+    }
+
+    if ($existingArchive.Length -gt 0 -and $existingManifest -eq $manifest) {
+      Write-Host ("Reusing GCP staging archive: {0} ({1:n2} MiB)" -f $existingArchive.FullName, ($existingArchive.Length / 1MB))
+      return
+    }
+  }
+
+  Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
+
+  Write-Checkpoint -Name 'stage-archive' -IntendedAction 'Create a single tar payload for the GCP Packer upload.' -Command "tar -cf `"$archivePath`" -C `"$StagingRoot`" $($requiredEntries -join ' ')"
+  & $tar.Source -cf $archivePath -C $StagingRoot @requiredEntries
+  if ($LASTEXITCODE -ne 0) {
+    throw "tar failed while creating GCP staging archive with exit code $LASTEXITCODE"
+  }
+
+  $manifest | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+
+  $archive = Get-Item -LiteralPath $archivePath
+  Write-Host ("GCP staging archive: {0} ({1:n2} MiB, {2:n0} files)" -f $archive.FullName, ($archive.Length / 1MB), @($manifestEntries).Count)
+}
+
 if (-not (Get-Command packer -ErrorAction SilentlyContinue)) {
   throw 'packer not found in PATH. Install HashiCorp Packer before building the Project Truth image.'
 }
@@ -261,6 +330,8 @@ if (-not $SkipStage) {
     Sync-PackerStagingDirectory -Source $SourceInputsDir -Destination $sourceInputsDestination
   }
 }
+
+New-PackerStagingArchive -StagingRoot (Join-Path $PackerDir 'staging')
 
 Push-Location $PackerDir
 try {
