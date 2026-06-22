@@ -13,8 +13,8 @@
     "onprem"
   ],
   "description": "Production-grade HRIS user activity, audit trail, and security monitoring dashboard. Shows parsed user context, top active users, module distribution, trace links to Tempo, and filters for authenticated users only.",
-  "time": {
-    "from": "now-6h",
+    "time": {
+    "from": "now-7d",
     "to": "now"
   },
   "templating": {
@@ -76,7 +76,7 @@
     {
       "id": 10,
       "type": "barchart",
-      "title": "Top Active Users (Requests, Last 6h)",
+      "title": "Top Active Users (Requests, Selected Period)",
       "datasource": {
         "type": "loki",
         "uid": "loki"
