@@ -27,7 +27,7 @@ services:
     environment:
       - TEMPO_RETENTION=${TEMPO_RETENTION:-168h}
     ports:
-      - "${TEMPO_HOST_PORT:-3200}:3200"
+      - "${TEMPO_HOST_PORT:-3202}:3200"
     volumes:
       - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
       - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/tempo:/var/tempo
@@ -246,4 +246,5 @@ services:
 
 networks:
   observability:
+    external: true
     name: hris-observability
