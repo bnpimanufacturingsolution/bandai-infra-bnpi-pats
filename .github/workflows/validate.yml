@@ -5,7 +5,9 @@ on:
   push:
     branches:
       - main
-      - terraform-hyperv-clean-plan
+      - develop
+      - uat
+      - production
   workflow_dispatch:
 
 jobs:

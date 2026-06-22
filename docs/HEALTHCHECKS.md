@@ -17,13 +17,25 @@ Run the persistent loop:
 The verifier checks:
 
 ```text
+http://127.0.0.1:3000/auth/login
 http://127.0.0.1:3001/health
-http://127.0.0.1:3002/health
-http://127.0.0.1:3000/health
+http://127.0.0.1:3100/auth/login
+http://127.0.0.1:3101/health
+http://127.0.0.1:3200/auth/login
+http://127.0.0.1:3201/health
+http://<guest-lan-ip>:3000/auth/login
 http://<guest-lan-ip>:3001/health
-http://<guest-lan-ip>:3002/health
-http://<guest-lan-ip>:3000/health
+http://<guest-lan-ip>:3100/auth/login
+http://<guest-lan-ip>:3101/health
+http://<guest-lan-ip>:3200/auth/login
+http://<guest-lan-ip>:3201/health
 ssh infra@<guest-lan-ip> "hostname; ip -br addr; docker ps || true; sudo kubectl get nodes; sudo kubectl get pods -A; sudo kubectl get svc -A; sudo kubectl get applications -n argocd || true"
+```
+
+For host-only HRIS appliance checks without a VM guest IP:
+
+```powershell
+.\scripts\project-truth.ps1 verify-local-hris-runtime -Environment all
 ```
 
 Logs are written under `.runtime/` and are not committed.

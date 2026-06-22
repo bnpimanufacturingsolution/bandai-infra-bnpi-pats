@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','configure','select-image','download-image','build-image','configure-virtualbox','vhdx-autopilot','repair-hyperv-boot','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state')]
+  [ValidateSet('doctor','configure','select-image','download-image','build-image','configure-virtualbox','vhdx-autopilot','repair-hyperv-boot','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -27,6 +27,9 @@ $scriptMap = @{
   'repair-and-verify'   = 'repair-and-verify.ps1'
   'watch-github-run'    = 'watch-github-run.ps1'
   'verify-gitops-state' = 'verify-gitops-state.ps1'
+  'start-local-hris-runtime' = 'start-local-hris-runtime.ps1'
+  'verify-local-hris-runtime' = 'verify-local-hris-runtime.ps1'
+  'start-trycloudflare-tunnel' = 'start-trycloudflare-tunnel.ps1'
 }
 
 $target = Join-Path $scriptRoot $scriptMap[$Command]

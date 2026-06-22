@@ -5,11 +5,11 @@
 | Workflow | Purpose | Runner |
 |---|---|---|
 | `validate.yml` | Static validation for Node, PowerShell, Terraform, and GitOps overlays. | GitHub-hosted Windows runner |
-| `promote-gitops.yml` | Manual GitOps image tag promotion for DEV/UAT/PROD. | GitHub-hosted Ubuntu runner |
+| `promote-gitops.yml` | Manual GitOps release tag promotion for DEV/UAT/PROD environment ConfigMaps. | GitHub-hosted Ubuntu runner |
 
 ## Validate
 
-Runs on push, pull request, and manual dispatch.
+Runs on pull request, manual dispatch, and pushes to `main`, `develop`, `uat`, or `production`.
 
 Checks:
 
@@ -35,7 +35,7 @@ environment: dev | uat | prod
 image_tag: safe container tag
 ```
 
-The workflow updates only the selected overlay. Argo CD is expected to detect the Git change and sync it into the cluster.
+The workflow updates `release_tag` in `gitops/overlays/<env>/environment-patch.yaml`. Argo CD is expected to detect the Git change and sync the selected environment contract ConfigMap into the cluster.
 
 ## Image Factory
 
@@ -81,6 +81,8 @@ gh run list --limit 10
 gh run view <run-id> --log-failed
 ```
 
+For a full ordered watch loop, use [GitOps GitHub Watch Runbook](GITOPS_GH_WATCH_RUNBOOK.md).
+
 Latest local check on 2026-06-16:
 
 ```text
@@ -89,6 +91,8 @@ GitHub auth: PROVEN for ernestdodz.
 Recent validation runs: latest listed runs succeeded except the original repository creation run, which remains a historical failure.
 Open PR list: logged to gh-prs-open.txt.
 ```
+
+Current checkout note: this working tree is on `develop`; the older branch names in historical evidence are not the active source branch.
 
 ## Required Secrets And Variables
 

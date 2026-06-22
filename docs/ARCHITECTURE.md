@@ -24,11 +24,15 @@ Normal users do not run Packer. Packer lives in `image-factory/packer/` for main
 
 ## Ports
 
-| Environment | NodePort | Health |
-|---|---:|---|
-| DEV | 3001 | `/health` |
-| UAT | 3002 | `/health` |
-| PROD | 3000 | `/health` |
+The current HRIS appliance runtime exposes app/API pairs. The GitOps overlays record these same ports as environment contract data.
+
+| Environment | App | API Health | Postgres Host Port |
+|---|---:|---:|---:|
+| PROD | `3000` | `3001/health` | `15432` |
+| DEV | `3100` | `3101/health` | `15433` |
+| UAT | `3200` | `3201/health` | `15434` |
+
+The Kubernetes GitOps objects in this branch are environment contract ConfigMaps, not full HRIS Deployments. The appliance Docker stack runs the HRIS app/API containers.
 
 ## Legacy Boundary
 

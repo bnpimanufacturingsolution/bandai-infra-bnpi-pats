@@ -4,6 +4,7 @@ metadata:
   name: project-truth-environment
 data:
   environment: dev
+  release_tag: "dev"
   app_port: "3100"
   api_port: "3101"
   postgres_host_port: "15433"

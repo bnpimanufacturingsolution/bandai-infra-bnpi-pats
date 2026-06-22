@@ -6,8 +6,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/ernestdodz/INFRA.git
-    targetRevision: terraform-hyperv-clean-plan
+    repoURL: https://github.com/hrisworkforcesystem-coder/bandai-infra.git
+    targetRevision: develop
     path: gitops/overlays/uat
   destination:
     server: https://kubernetes.default.svc

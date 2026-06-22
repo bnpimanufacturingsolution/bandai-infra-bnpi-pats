@@ -17,7 +17,7 @@ Packer is not part of the normal install path. Packer belongs only to the option
 ## Current Working Branch
 
 ```text
-terraform-hyperv-clean-plan
+develop
 ```
 
 ## Main Documents
@@ -27,6 +27,8 @@ terraform-hyperv-clean-plan
 - [Operations](docs/OPERATIONS.md)
 - [Image Formats](docs/IMAGE_FORMATS.md)
 - [Health Checks](docs/HEALTHCHECKS.md)
+- [Cloudflare trycloudflare Tunnel Runbook](docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md)
+- [GitOps GitHub Watch Runbook](docs/GITOPS_GH_WATCH_RUNBOOK.md)
 - [Installer Test Report](docs/INSTALLER_TEST_REPORT.md)
 
 ## Normal CLI Flow
@@ -106,9 +108,9 @@ Hyper-V Ubuntu VM
 |
 `-- K3s + Argo CD
     |
-    |-- dev  -> NodePort 3001 -> /health
-    |-- uat  -> NodePort 3002 -> /health
-    `-- prod -> NodePort 3000 -> /health
+    |-- prod -> app 3000, API 3001 -> /health
+    |-- dev  -> app 3100, API 3101 -> /health
+    `-- uat  -> app 3200, API 3201 -> /health
 ```
 
 ## Target Repo Shape
@@ -149,14 +151,20 @@ The final verifier must prove:
 
 ```text
 Host-local health:
+  http://127.0.0.1:3000/auth/login
   http://127.0.0.1:3001/health
-  http://127.0.0.1:3002/health
-  http://127.0.0.1:3000/health
+  http://127.0.0.1:3100/auth/login
+  http://127.0.0.1:3101/health
+  http://127.0.0.1:3200/auth/login
+  http://127.0.0.1:3201/health
 
 LAN health:
+  http://<guest-lan-ip>:3000/auth/login
   http://<guest-lan-ip>:3001/health
-  http://<guest-lan-ip>:3002/health
-  http://<guest-lan-ip>:3000/health
+  http://<guest-lan-ip>:3100/auth/login
+  http://<guest-lan-ip>:3101/health
+  http://<guest-lan-ip>:3200/auth/login
+  http://<guest-lan-ip>:3201/health
 
 Inside VM:
   hostname
