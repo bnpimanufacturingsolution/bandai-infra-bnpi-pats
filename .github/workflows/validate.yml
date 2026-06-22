@@ -98,6 +98,7 @@ jobs:
             if ($LASTEXITCODE -gt 7) {
               throw "robocopy failed while staging $name to $destination with exit code $LASTEXITCODE"
             }
+            $global:LASTEXITCODE = 0
           }
 
       - name: Validate maintainer-only Packer template
