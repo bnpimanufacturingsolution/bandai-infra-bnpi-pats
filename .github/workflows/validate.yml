@@ -59,6 +59,47 @@ jobs:
           kubectl kustomize gitops/overlays/uat
           kubectl kustomize gitops/overlays/prod
 
+      - name: Prepare Packer staging inputs
+        shell: powershell
+        run: |
+          $staging = 'image-factory/packer/staging'
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+          $excludedDirectories = @(
+            '.git',
+            '.github',
+            'node_modules',
+            'dist',
+            'build',
+            '.next',
+            '.react-router',
+            'coverage',
+            'test-results',
+            'playwright-report',
+            'output',
+            '.runtime',
+            'logs',
+            '.cache',
+            '.prisma'
+          )
+          $excludedFiles = @(
+            '.env',
+            '.env.*',
+            '*.tmp',
+            '*.log',
+            'npm-debug.log*',
+            'yarn-debug.log*',
+            'yarn-error.log*',
+            'pnpm-debug.log*'
+          )
+          foreach ($name in @('gitops', 'appliance', 'hris-api', 'hris-app')) {
+            $destination = Join-Path $staging $name
+            New-Item -ItemType Directory -Force -Path $destination | Out-Null
+            & robocopy.exe $name $destination /MIR /NFL /NDL /NJH /NJS /NP /XD $excludedDirectories /XF $excludedFiles
+            if ($LASTEXITCODE -gt 7) {
+              throw "robocopy failed while staging $name to $destination with exit code $LASTEXITCODE"
+            }
+          }
+
       - name: Validate maintainer-only Packer template
         shell: powershell
         run: |
