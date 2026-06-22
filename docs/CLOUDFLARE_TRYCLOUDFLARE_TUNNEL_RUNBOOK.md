@@ -1,6 +1,14 @@
 # Cloudflare trycloudflare Tunnel Runbook
 
-This runbook exposes the local Project Truth HRIS app through a temporary Cloudflare quick tunnel. It does not configure a named tunnel, DNS record, account token, or persistent Cloudflare service.
+This runbook exposes the verified Project Truth HRIS app through a temporary Cloudflare quick tunnel. It does not configure a named tunnel, DNS record, account token, or persistent Cloudflare service.
+
+The preferred tunnel target is the Hyper-V VM's LAN-reachable PROD app:
+
+```powershell
+.\scripts\project-truth.ps1 start-trycloudflare-tunnel -LocalUrl http://<guest-lan-ip>:3000 -VerifyLocalFirst
+```
+
+Use `http://127.0.0.1:3000` only after the VM path is proven impossible or while running a host-local diagnostic.
 
 ## Prerequisites
 
@@ -10,15 +18,15 @@ Get-Command docker
 Get-Command cloudflared
 ```
 
-`cloudflared` must be installed and available in `PATH`. The current local HRIS appliance ports are:
+`cloudflared` must be installed and available in `PATH`. The current HRIS appliance ports are:
 
 | Environment | App | API |
 |---|---:|---:|
-| PROD | `http://127.0.0.1:3000` | `http://127.0.0.1:3001/health` |
-| DEV | `http://127.0.0.1:3100` | `http://127.0.0.1:3101/health` |
-| UAT | `http://127.0.0.1:3200` | `http://127.0.0.1:3201/health` |
+| PROD | `http://<guest-lan-ip>:3000` | `http://<guest-lan-ip>:3001/health` |
+| DEV | `http://<guest-lan-ip>:3100` | `http://<guest-lan-ip>:3101/health` |
+| UAT | `http://<guest-lan-ip>:3200` | `http://<guest-lan-ip>:3201/health` |
 
-## Start Local Runtime
+## Host-Local Diagnostic Runtime
 
 ```powershell
 .\scripts\project-truth.ps1 start-local-hris-runtime -Environment prod
@@ -30,13 +38,23 @@ For all local environments:
 .\scripts\project-truth.ps1 start-local-hris-runtime -Environment all
 ```
 
-## Verify Local Runtime
+## Verify Host-Local Diagnostic Runtime
 
 ```powershell
 .\scripts\project-truth.ps1 verify-local-hris-runtime -Environment all
 ```
 
-## Start Temporary Public Tunnel
+## Start Temporary Public Tunnel To The Verified VM
+
+PROD app:
+
+```powershell
+.\scripts\project-truth.ps1 start-trycloudflare-tunnel -LocalUrl http://<guest-lan-ip>:3000 -VerifyLocalFirst
+```
+
+## Diagnostic Fallback Tunnel
+
+Use these only when the Hyper-V VM path is proven impossible or while explicitly testing host-local Docker.
 
 PROD app:
 

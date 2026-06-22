@@ -77,8 +77,26 @@ $log = Join-Path $logsRoot ("start-local-hris-runtime-{0}.log" -f (Get-Date -For
 Push-Location $applianceRoot
 try {
   "docker $($composeArgs -join ' ')" | Tee-Object -FilePath $log
-  docker @composeArgs *>&1 | Tee-Object -FilePath $log -Append
+  $previousComposeIgnoreOrphans = $env:COMPOSE_IGNORE_ORPHANS
+  $env:COMPOSE_IGNORE_ORPHANS = 'true'
+  $stdoutLog = Join-Path $logsRoot ("docker-compose-stdout-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+  $stderrLog = Join-Path $logsRoot ("docker-compose-stderr-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+  $process = Start-Process -FilePath 'docker' -ArgumentList $composeArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
+  if (Test-Path -LiteralPath $stdoutLog) {
+    Get-Content -LiteralPath $stdoutLog | Tee-Object -FilePath $log -Append
+  }
+  if (Test-Path -LiteralPath $stderrLog) {
+    Get-Content -LiteralPath $stderrLog | Tee-Object -FilePath $log -Append
+  }
+  $composeExitCode = $process.ExitCode
+  $env:COMPOSE_IGNORE_ORPHANS = $previousComposeIgnoreOrphans
+  if ($composeExitCode -ne 0) {
+    throw "docker $($composeArgs -join ' ') failed with exit code $composeExitCode. Log: $log"
+  }
 } finally {
+  if (Get-Variable -Name previousComposeIgnoreOrphans -Scope Local -ErrorAction SilentlyContinue) {
+    $env:COMPOSE_IGNORE_ORPHANS = $previousComposeIgnoreOrphans
+  }
   Pop-Location
 }
 

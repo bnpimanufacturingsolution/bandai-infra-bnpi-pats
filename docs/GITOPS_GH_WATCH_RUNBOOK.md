@@ -53,7 +53,7 @@ gh run view <run-id> --log-failed
 
 ## Push Watch Loop
 
-Only push after operator approval:
+For owner-operator repair work on this repo, push `develop` after local validation passes and watch the resulting workflow to a terminal status:
 
 ```powershell
 git push origin develop
@@ -67,7 +67,7 @@ For `uat` or `production`, first verify those branches exist locally and remotel
 git branch -a
 ```
 
-Do not create, rename, or push production branches without explicit approval.
+Do not create, rename, or push production branches unless that is part of the current Project Truth operations goal.
 
 ## VM/Cluster Verification
 

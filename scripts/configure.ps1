@@ -11,7 +11,7 @@ param(
   [int]$CpuCount = 2,
   [int]$MemoryMb = 4096,
   [string]$GuestIpHint = '',
-  [string]$GitOpsRepoUrl = 'https://github.com/ernestdodz/project-truth-hyperv.git'
+  [string]$GitOpsRepoUrl = 'https://github.com/hrisworkforcesystem-coder/bandai-infra.git'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,13 +46,19 @@ $config = [ordered]@{
     guestIpHint = $GuestIpHint
   }
   ports = [ordered]@{
-    hrisApi = 3001
-    hrisApp = 3000
+    prodApp = 3000
+    prodApi = 3001
+    devApp = 3100
+    devApi = 3101
+    uatApp = 3200
+    uatApi = 3201
     ssh = 2222
   }
   gitops = [ordered]@{
     repoUrl = $GitOpsRepoUrl
-    applications = @('project-truth-hris-api', 'project-truth-hris-app')
+    branch = 'develop'
+    applications = @('project-truth-dev', 'project-truth-uat', 'project-truth-prod')
+    paths = @('gitops/overlays/dev', 'gitops/overlays/uat', 'gitops/overlays/prod')
   }
   updatedAt = (Get-Date).ToString('o')
 }
