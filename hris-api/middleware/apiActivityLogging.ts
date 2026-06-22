@@ -9,6 +9,7 @@ import type { AuthRequest } from "./verifyToken";
 const logger = getLogger().child({ module: "apiActivity" });
 
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 let activityLogCounter = 0;
 
 function normalizePath(path: string): string {
@@ -94,6 +95,102 @@ function getBodyMetadata(req: Request): Record<string, unknown> | null {
 	};
 }
 
+function isSensitiveField(fieldName: string): boolean {
+	const normalized = fieldName.toLowerCase();
+	return (
+		normalized.includes("password") ||
+		normalized.includes("token") ||
+		normalized.includes("secret") ||
+		normalized.includes("cookie") ||
+		normalized.includes("authorization")
+	);
+}
+
+function redactValue(value: unknown, depth = 0): unknown {
+	if (depth > 3) return "[MaxDepth]";
+	if (value === null || value === undefined) return value;
+	if (value instanceof Date) return value.toISOString();
+	if (["string", "number", "boolean"].includes(typeof value)) return value;
+	if (Array.isArray(value)) {
+		return value.slice(0, 10).map((item) => redactValue(item, depth + 1));
+	}
+	if (typeof value !== "object") return String(value);
+
+	const output: Record<string, unknown> = {};
+	for (const [key, childValue] of Object.entries(value as Record<string, unknown>).slice(0, 25)) {
+		output[key] = isSensitiveField(key) ? "[REDACTED]" : redactValue(childValue, depth + 1);
+	}
+	return output;
+}
+
+function summarizePayload(value: unknown): string {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+
+	return Object.entries(value as Record<string, unknown>)
+		.filter(([key]) => !isSensitiveField(key))
+		.slice(0, 8)
+		.map(([key, childValue]) => {
+			if (childValue === null || childValue === undefined) return `${key}=null`;
+			if (["string", "number", "boolean"].includes(typeof childValue)) {
+				const text = String(childValue);
+				return `${key}=${text.length > 60 ? `${text.slice(0, 57)}...` : text}`;
+			}
+			if (Array.isArray(childValue)) return `${key}=[${childValue.length}]`;
+			if (typeof childValue === "object") return `${key}={...}`;
+			return `${key}=${String(childValue)}`;
+		})
+		.join(",");
+}
+
+function getActionType(method: string): string {
+	switch (method.toUpperCase()) {
+		case "POST":
+			return "create";
+		case "PUT":
+		case "PATCH":
+			return "update";
+		case "DELETE":
+			return "delete";
+		default:
+			return "read";
+	}
+}
+
+function getRouteEntityId(req: Request): string {
+	const params = req.params || {};
+	const preferredParam =
+		params.id ||
+		params.userId ||
+		params.employeeId ||
+		params.documentId ||
+		params.requestId ||
+		params.payrollPeriodId;
+	if (preferredParam) return String(preferredParam);
+
+	const pathWithoutQuery = (req.originalUrl || req.path || "").split("?")[0];
+	const lastSegment = pathWithoutQuery.split("/").filter(Boolean).at(-1);
+	return lastSegment && lastSegment !== getModuleLabel(pathWithoutQuery) ? lastSegment : "";
+}
+
+function collectIds(value: unknown, ids: string[] = [], depth = 0): string[] {
+	if (!value || depth > 4 || ids.length >= 5) return ids;
+	if (Array.isArray(value)) {
+		for (const item of value.slice(0, 5)) collectIds(item, ids, depth + 1);
+		return ids;
+	}
+	if (typeof value !== "object") return ids;
+
+	const record = value as Record<string, unknown>;
+	const id = record.id;
+	if (typeof id === "string" && id && !ids.includes(id)) {
+		ids.push(id);
+	}
+	for (const key of ["user", "employee", "document", "agency", "payrollPeriod", "data"]) {
+		collectIds(record[key], ids, depth + 1);
+	}
+	return ids;
+}
+
 export function apiActivityLoggingMiddleware(
 	req: AuthRequest,
 	res: Response,
@@ -121,6 +218,12 @@ export function apiActivityLoggingMiddleware(
 	const traceIdAtEntry = spanContext?.traceId || null;
 	const spanIdAtEntry = spanContext?.spanId || null;
 	const requestBodyMetadata = getBodyMetadata(req);
+	let responseBody: unknown = null;
+	const originalJson = res.json.bind(res);
+	res.json = ((body: unknown) => {
+		responseBody = body;
+		return originalJson(body);
+	}) as Response["json"];
 
 	res.on("finish", () => {
 		const durationMs = Date.now() - startedAt;
@@ -135,13 +238,29 @@ export function apiActivityLoggingMiddleware(
 		const spanId = activeSpanContext?.spanId || spanIdAtEntry;
 
 		// Enhanced user context extraction
-		const userId = req.userId || null;
-		const employeeId = req.metadata?.employee?.id || null;
-		const userName = req.userName || null;
-		const firstName = req.firstName || null;
-		const lastName = req.lastName || null;
+		const userId = req.userId || req.metadata?.userId || null;
+		const employeeId = req.metadata?.employee?.id || req.metadata?.employeeId || null;
+		const userName = req.userName || req.metadata?.userName || null;
+		const employeePersonalInfo = req.metadata?.employee?.personalInfo;
+		const firstName = req.firstName || employeePersonalInfo?.firstName || req.metadata?.firstName || null;
+		const lastName = req.lastName || employeePersonalInfo?.lastName || req.metadata?.lastName || null;
 		const fullName = [firstName, lastName].filter(Boolean).join(" ") || userName || "Anonymous";
-		const organizationId = req.organizationId || null;
+		const logUserId = userId || "";
+		const logEmployeeId = employeeId || "";
+		const logUserName = userName || "";
+		const logFirstName = firstName || "";
+		const logLastName = lastName || "";
+		const logOrganizationId = req.organizationId || "";
+		const authenticated = Boolean(userId);
+		const method = req.method.toUpperCase();
+		const actionType = getActionType(method);
+		const requestPayload = WRITE_METHODS.has(method) ? redactValue(req.body || {}) : null;
+		const responsePayload = WRITE_METHODS.has(method) ? redactValue(responseBody) : null;
+		const responseIds = collectIds(responseBody);
+		const routeEntityId = getRouteEntityId(req);
+		const entityId = WRITE_METHODS.has(method) ? responseIds[0] || routeEntityId || "" : "";
+		const requestPayloadSummary = summarizePayload(requestPayload);
+		const responseEntitySummary = responseIds.length > 0 ? responseIds.join(",") : "";
 
 		const payload = {
 			userId,
@@ -150,7 +269,7 @@ export function apiActivityLoggingMiddleware(
 			firstName,
 			lastName,
 			fullName,
-			organizationId,
+			organizationId: logOrganizationId,
 			route,
 			module,
 			statusCode,
@@ -159,17 +278,31 @@ export function apiActivityLoggingMiddleware(
 			successful,
 			traceId,
 			spanId,
+			actionType,
+			entityId: entityId || null,
+			responseEntityIds: responseIds,
 			queryKeys: Object.keys(req.query || {}),
 			body: requestBodyMetadata,
+			requestPayload,
+			responsePayload,
 		};
 
 		logger.info("api.activity.request", {
 			event: "api.activity.request",
-			user_id: userId,
-			employee_id: employeeId,
-			user_name: userName,
+			authenticated,
+			action_type: actionType,
+			entity_id: entityId,
+			response_entity_ids: responseEntitySummary,
+			request_payload_summary: requestPayloadSummary,
+			request_payload: requestPayload,
+			response_payload: responsePayload,
+			user_id: logUserId,
+			employee_id: logEmployeeId,
+			user_name: logUserName,
+			first_name: logFirstName,
+			last_name: logLastName,
 			full_name: fullName,
-			organization_id: organizationId,
+			organization_id: logOrganizationId,
 			method: req.method,
 			path: req.originalUrl,
 			route,
@@ -195,7 +328,7 @@ export function apiActivityLoggingMiddleware(
 					method: req.method,
 					action: `${req.method.toUpperCase()} ${route}`,
 					description: `${req.method.toUpperCase()} ${route} completed with ${statusCode}`,
-					organizationId,
+					organizationId: req.organizationId || null,
 					entityType: module.toUpperCase(),
 					payload: payload as Prisma.InputJsonValue,
 				},

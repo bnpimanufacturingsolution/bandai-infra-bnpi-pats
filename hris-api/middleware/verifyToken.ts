@@ -16,12 +16,23 @@ export interface AuthRequest extends Request {
 	role?: string;
 	roleId?: string;
 	userId?: string;
+	userName?: string;
 	firstName?: string;
 	lastName?: string;
 	organizationId?: string;
 	metadata?: {
+		userId?: string;
+		userName?: string;
+		firstName?: string;
+		lastName?: string;
+		employeeId?: string;
 		employee?: {
 			id: string;
+			employeeId?: string;
+			personalInfo?: {
+				firstName?: string;
+				lastName?: string;
+			};
 		};
 	};
 }
@@ -34,8 +45,18 @@ interface JwtPayload {
 	firstName?: string;
 	lastName?: string;
 	metadata?: {
+		userId?: string;
+		userName?: string;
+		firstName?: string;
+		lastName?: string;
+		employeeId?: string;
 		employee?: {
 			id: string;
+			employeeId?: string;
+			personalInfo?: {
+				firstName?: string;
+				lastName?: string;
+			};
 		};
 	};
 	iat: number;
@@ -44,6 +65,9 @@ interface JwtPayload {
 
 type VerifyTokenDependencies = {
 	prisma: {
+		user?: {
+			findUnique: typeof prisma.user.findUnique;
+		};
 		employee: {
 			findFirst: typeof prisma.employee.findFirst;
 		};
@@ -92,6 +116,7 @@ const clearAuthContext = (req: AuthRequest) => {
 	delete req.role;
 	delete req.roleId;
 	delete req.userId;
+	delete req.userName;
 	delete req.firstName;
 	delete req.lastName;
 	delete req.organizationId;
@@ -105,7 +130,27 @@ const attachAuthContext = (req: AuthRequest, decoded: JwtPayload) => {
 	req.firstName = decoded.firstName;
 	req.lastName = decoded.lastName;
 	req.organizationId = decoded.organizationId;
-	req.metadata = decoded.metadata;
+	req.metadata = {
+		...(decoded.metadata || {}),
+		userId: decoded.metadata?.userId || decoded.userId,
+		firstName: decoded.metadata?.firstName || decoded.firstName,
+		lastName: decoded.metadata?.lastName || decoded.lastName,
+	};
+};
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+	value && typeof value === "object" && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: {};
+
+const jsonStringField = (value: unknown, key: string): string | undefined => {
+	const raw = asRecord(value)[key];
+	return typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
+};
+
+const nestedRecord = (value: unknown, key: string): Record<string, unknown> => {
+	const raw = asRecord(value)[key];
+	return asRecord(raw);
 };
 
 const isJwtVerificationError = (error: unknown) =>
@@ -229,14 +274,42 @@ const authenticateRequest = async (req: AuthRequest) => {
 	});
 
 	try {
-		const employeeIdFromToken = decoded.metadata?.employee?.id;
+		const localUser = await verifyTokenDependencies.prisma.user?.findUnique({
+			where: { id: decoded.userId },
+			select: {
+				id: true,
+				userName: true,
+				email: true,
+				metadata: true,
+			},
+		});
+		const metadataEmployee = nestedRecord(localUser?.metadata, "employee");
+		const metadataPersonalInfo = nestedRecord(metadataEmployee, "personalInfo");
+		const metadataFirstName = jsonStringField(metadataPersonalInfo, "firstName");
+		const metadataLastName = jsonStringField(metadataPersonalInfo, "lastName");
+		req.userName = localUser?.userName || localUser?.email || req.userName;
+		req.metadata = {
+			...(req.metadata || {}),
+			userName: req.userName,
+			firstName: req.firstName || metadataFirstName,
+			lastName: req.lastName || metadataLastName,
+		};
+
+		const employeeIdFromToken =
+			decoded.metadata?.employee?.id || jsonStringField(metadataEmployee, "id");
 		const employee = await verifyTokenDependencies.prisma.employee.findFirst({
 			where: employeeIdFromToken
 				? { id: employeeIdFromToken, isDeleted: false }
 				: { userId: decoded.userId, isDeleted: false },
 			select: {
 				id: true,
+				employeeId: true,
 				employmentStatus: true,
+				person: {
+					select: {
+						personalInfo: true,
+					},
+				},
 			},
 		});
 
@@ -254,6 +327,34 @@ const authenticateRequest = async (req: AuthRequest) => {
 					employmentStatus: actionBlock.status,
 				},
 			);
+		}
+
+		if (employee?.id) {
+			const firstName =
+				jsonStringField(employee.person?.personalInfo, "firstName") ||
+				metadataFirstName ||
+				req.firstName;
+			const lastName =
+				jsonStringField(employee.person?.personalInfo, "lastName") ||
+				metadataLastName ||
+				req.lastName;
+			req.firstName = firstName;
+			req.lastName = lastName;
+			req.metadata = {
+				...(req.metadata || {}),
+				firstName,
+				lastName,
+				employeeId: employee.id,
+				employee: {
+					...(req.metadata?.employee || {}),
+					id: employee.id,
+					employeeId: employee.employeeId || undefined,
+					personalInfo: {
+						firstName,
+						lastName,
+					},
+				},
+			};
 		}
 	} catch (error) {
 		if (error instanceof AuthMiddlewareError) {
@@ -299,6 +400,10 @@ export const __setVerifyTokenDependenciesForTests = (
 	verifyTokenDependencies = {
 		...verifyTokenDependencies,
 		...dependencies,
+		prisma: {
+			...verifyTokenDependencies.prisma,
+			...(dependencies.prisma || {}),
+		},
 	};
 };
 
