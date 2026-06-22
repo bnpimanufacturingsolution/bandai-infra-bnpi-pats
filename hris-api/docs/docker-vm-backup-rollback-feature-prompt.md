@@ -8,7 +8,7 @@ You are working in `c:\uzaro\bandai-infra`.
 Goal:
 Implement a Docker/VM-safe HRIS backup and rollback system.
 
-The app runs in Docker on a VM. The backup job must run daily at 12:00 midnight Philippine time. The system must create a real rollback backup using PostgreSQL-native dump format, plus Excel, JSON/NDJSON, XML, and YAML exports for audit/readable recovery evidence.
+The app runs in Docker on a VM. The backup job must run daily at 12:00 noon Philippine time. The system must create a real rollback backup using PostgreSQL-native dump format, plus Excel, JSON/NDJSON, XML, and YAML exports for audit/readable recovery evidence.
 
 Important:
 This is not Liquibase. Liquibase is for schema migrations. This feature is for database backup and restore.
@@ -51,7 +51,7 @@ Environment variables:
 ```env
 BACKUP_ENABLED=true
 BACKUP_TIMEZONE=Asia/Manila
-BACKUP_CRON=0 0 * * *
+BACKUP_CRON=0 12 * * *
 BACKUP_DIR=/var/backups/hris
 BACKUP_RETENTION_DAYS=0
 POSTGRES_CONTAINER_NAME=
@@ -192,7 +192,7 @@ Testing requirements:
 11. Run typecheck and focused tests.
 
 Acceptance criteria:
-- Daily backup runs at midnight Philippine time.
+- Daily backup runs at 12:00 noon Philippine time.
 - Manual backup command works.
 - Each run creates:
   - `hris-postgres.dump`

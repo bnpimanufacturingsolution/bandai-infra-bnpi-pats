@@ -16,11 +16,11 @@
         "name": "container",
         "type": "query",
         "datasource": "Loki",
-        "query": "label_values(container)",
+        "query": "label_values({stack=\"hris-observability\"}, container)",
         "refresh": 1,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*"
+        "allValue": ".+"
       }
     ]
   },
@@ -33,7 +33,7 @@
       "gridPos": { "h": 16, "w": 24, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "{container=~\"$container\"}",
+          "expr": "{stack=\"hris-observability\", container=~\"$container\"}",
           "refId": "A"
         }
       ],
