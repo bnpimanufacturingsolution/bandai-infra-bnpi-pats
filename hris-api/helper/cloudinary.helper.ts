@@ -1,18 +1,27 @@
 import { UploadApiResponse, UploadApiErrorResponse } from "cloudinary";
 import { Client as MinioClient } from "minio";
+import fs from "fs/promises";
+import path from "path";
 import { getLogger } from "./logger.helper";
 import { cloudinary, cloudinaryConfig } from "../config/cloudinary";
 
 const logger = getLogger();
 const cloudinaryLogger = logger.child({ module: "cloudinary" });
 const minioLogger = logger.child({ module: "minio" });
+const localStorageLogger = logger.child({ module: "local-storage" });
 
-type StorageProvider = "cloudinary" | "minio" | "gcp";
+type StorageProvider = "cloudinary" | "minio" | "gcp" | "local";
 
 function resolveStorageProvider(): StorageProvider {
-	const rawProvider = (process.env.STORAGE_PROVIDER || "cloudinary").toLowerCase().trim();
+	const rawProvider = (process.env.STORAGE_PROVIDER || "local").toLowerCase().trim();
 
 	switch (rawProvider) {
+		case "":
+		case "local":
+		case "file":
+		case "disk":
+		case "filesystem":
+			return "local";
 		case "minio":
 			return "minio";
 		case "gcp":
@@ -21,13 +30,12 @@ function resolveStorageProvider(): StorageProvider {
 		case "google-cloud-storage":
 			return "gcp";
 		case "cloudinary":
-		case "":
 			return "cloudinary";
 		default:
 			cloudinaryLogger.warn(
-				`Unknown STORAGE_PROVIDER="${rawProvider}". Falling back to cloudinary.`,
+				`Unknown STORAGE_PROVIDER="${rawProvider}". Falling back to local storage.`,
 			);
-			return "cloudinary";
+			return "local";
 	}
 }
 
@@ -128,6 +136,67 @@ function generateObjectKey(folder: string, publicId?: string): string {
 	return `${normalizedFolder}/${Date.now()}-${randomSuffix}`;
 }
 
+function getLocalUploadsRoot(): string {
+	return process.env.LOCAL_UPLOAD_ROOT || path.resolve(process.cwd(), "uploads");
+}
+
+function getLocalPublicBaseUrl(): string {
+	return (process.env.LOCAL_UPLOAD_PUBLIC_BASE_URL || process.env.API_PUBLIC_BASE_URL || "").replace(
+		/\/+$/,
+		"",
+	);
+}
+
+function normalizeLocalObjectKey(raw: string): string {
+	return normalizePublicId(raw)
+		.split("/")
+		.filter(Boolean)
+		.map((segment) => segment.replace(/[^a-zA-Z0-9._-]+/g, "_"))
+		.join("/");
+}
+
+function getLocalObjectUrl(objectKey: string): string {
+	const publicPath = `/uploads/${encodeObjectPath(objectKey)}`;
+	const base = getLocalPublicBaseUrl();
+	return base ? `${base}${publicPath}` : publicPath;
+}
+
+async function uploadToLocalStorage(
+	buffer: Buffer,
+	options: CloudinaryUploadOptions = {},
+): Promise<CloudinaryUploadResult> {
+	const { folder = "uploads", publicId } = options;
+	const objectKey = normalizeLocalObjectKey(generateObjectKey(folder, publicId));
+	if (!objectKey) {
+		return { success: false, error: "Invalid local upload object key" };
+	}
+
+	const uploadsRoot = getLocalUploadsRoot();
+	const targetPath = path.join(uploadsRoot, objectKey);
+
+	try {
+		await fs.mkdir(path.dirname(targetPath), { recursive: true });
+		await fs.writeFile(targetPath, buffer);
+
+		const objectUrl = getLocalObjectUrl(objectKey);
+		localStorageLogger.info(`File uploaded successfully: ${objectKey}`);
+
+		return {
+			success: true,
+			url: objectUrl,
+			secureUrl: objectUrl,
+			publicId: `local/${objectKey}`,
+			bytes: buffer.length,
+		};
+	} catch (error: any) {
+		localStorageLogger.error(`Local upload failed: ${error.message}`);
+		return {
+			success: false,
+			error: error.message,
+		};
+	}
+}
+
 async function uploadToMinio(
 	buffer: Buffer,
 	options: CloudinaryUploadOptions = {},
@@ -182,6 +251,8 @@ export async function uploadToCloudinary(
 	const provider = resolveStorageProvider();
 
 	switch (provider) {
+		case "local":
+			return uploadToLocalStorage(buffer, options);
 		case "minio":
 			return uploadToMinio(buffer, options);
 		case "gcp":
@@ -351,6 +422,23 @@ export async function deleteFromCloudinary(
 	const provider = resolveStorageProvider();
 
 	switch (provider) {
+		case "local": {
+			try {
+				const normalized = normalizePublicId(publicId).replace(/^local\//, "");
+				const objectKey = normalizeLocalObjectKey(normalized);
+				if (!objectKey) return false;
+				await fs.unlink(path.join(getLocalUploadsRoot(), objectKey));
+				localStorageLogger.info(`File deleted successfully: ${objectKey}`);
+				return true;
+			} catch (error: any) {
+				if (error?.code === "ENOENT") {
+					localStorageLogger.warn(`File deletion returned: not found for ${publicId}`);
+				} else {
+					localStorageLogger.error(`Failed to delete file ${publicId}: ${error.message}`);
+				}
+				return false;
+			}
+		}
 		case "minio": {
 			const config = getMinioConfig();
 			if (!isMinioConfigured(config)) {
@@ -449,6 +537,15 @@ export async function deleteMultipleFromCloudinary(publicIds: string[]): Promise
 export function extractPublicIdFromUrl(url: string): string | null {
 	const provider = resolveStorageProvider();
 	switch (provider) {
+		case "local":
+			try {
+				const parsed = new URL(url, "http://local.invalid");
+				const prefix = "/uploads/";
+				if (!parsed.pathname.startsWith(prefix)) return null;
+				return `local/${decodeURIComponent(parsed.pathname.slice(prefix.length))}`;
+			} catch {
+				return null;
+			}
 		case "minio":
 			try {
 				const parsed = new URL(url);
@@ -501,6 +598,10 @@ export function getCloudinaryUrl(
 ): string {
 	const provider = resolveStorageProvider();
 	switch (provider) {
+		case "local": {
+			const normalized = normalizePublicId(publicId).replace(/^local\//, "");
+			return getLocalObjectUrl(normalizeLocalObjectKey(normalized));
+		}
 		case "minio": {
 			const config = getMinioConfig();
 			const base = config.publicBaseUrl.replace(/\/+$/, "");

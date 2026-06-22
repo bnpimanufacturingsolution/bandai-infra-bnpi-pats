@@ -153,6 +153,11 @@ const readLegacyPolicyRows = async (prisma: PrismaClient, organizationId: string
 	try {
 		const queryRaw = (prisma as any).$queryRawUnsafe;
 		if (typeof queryRaw !== "function") return [];
+		const legacyTable = (await queryRaw.call(
+			prisma,
+			`SELECT to_regclass('public.leave_policy_configs') IS NOT NULL AS exists`,
+		)) as Array<{ exists?: boolean }>;
+		if (!legacyTable[0]?.exists) return [];
 		return (await queryRaw.call(
 			prisma,
 			`SELECT id, "organizationId", "leaveTypeId", "leaveTypeCodeSnapshot", "leaveTypeNameSnapshot", enabled, "isPaid", "requiresApproval", "minAdvanceNoticeDays", "maxDaysPerRequest", "allowHalfDay", "requireAttachment", "allowedEmploymentTypes", "updatedAt" FROM leave_policy_configs WHERE "organizationId" = $1`,

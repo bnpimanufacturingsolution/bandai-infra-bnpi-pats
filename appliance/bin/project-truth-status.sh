@@ -5,6 +5,12 @@ compose_file="/opt/project-truth/appliance/docker-compose.yml"
 env_compose_file="/opt/project-truth/appliance/docker-compose.environments.yml"
 
 lan_ip() {
+  local route_ip
+  route_ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{ for (i=1; i<=NF; i++) if ($i=="src") { print $(i+1); exit } }')"
+  if [ -n "$route_ip" ]; then
+    printf '%s\n' "$route_ip"
+    return
+  fi
   ip -4 -o addr show scope global up 2>/dev/null |
     awk '!/ docker| br-| veth| cni| flannel/ { split($4, a, "/"); print a[1]; exit }'
 }
@@ -14,20 +20,30 @@ http_status() {
   curl -fsS -o /dev/null -w '%{http_code}' --max-time 8 "$url" 2>/dev/null || printf 'DOWN'
 }
 
+docker_cmd() {
+  if docker ps >/dev/null 2>&1; then
+    docker "$@"
+  elif command -v sudo >/dev/null 2>&1 && sudo -n docker ps >/dev/null 2>&1; then
+    sudo docker "$@"
+  else
+    return 1
+  fi
+}
+
 container_state() {
   local name="$1"
-  if ! docker inspect "$name" >/dev/null 2>&1; then
+  if ! docker_cmd inspect "$name" >/dev/null 2>&1; then
     printf 'missing'
     return
   fi
-  docker inspect -f '{{.State.Status}}{{if .State.Health}}/{{.State.Health.Status}}{{end}}' "$name" 2>/dev/null
+  docker_cmd inspect -f '{{.State.Status}}{{if .State.Health}}/{{.State.Health.Status}}{{end}}' "$name" 2>/dev/null
 }
 
 print_container_row() {
   local name="$1"
   local label="$2"
   local ports
-  ports="$(docker port "$name" 2>/dev/null | paste -sd ', ' - || true)"
+  ports="$(docker_cmd port "$name" 2>/dev/null | paste -sd ', ' - || true)"
   printf '  %-12s %-18s %s\n' "$label" "$(container_state "$name")" "${ports:-no published ports}"
 }
 
@@ -105,12 +121,12 @@ print_env_row uat  3200 3201 15434 hris-app-uat hris-api-uat hris-postgres-uat
 echo
 
 echo "Database"
-if timeout 8 docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1; then
+if timeout 8 bash -c 'docker ps >/dev/null 2>&1 && docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1 || sudo -n docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1'; then
   echo "  postgres: accepting connections"
 else
   echo "  postgres: not ready"
 fi
-if timeout 8 docker exec hris-api printenv PG_DATABASE_URL >/dev/null 2>&1; then
+if timeout 8 bash -c 'docker ps >/dev/null 2>&1 && docker exec hris-api printenv PG_DATABASE_URL >/dev/null 2>&1 || sudo -n docker exec hris-api printenv PG_DATABASE_URL >/dev/null 2>&1'; then
   echo "  api env: PG_DATABASE_URL present"
 else
   echo "  api env: PG_DATABASE_URL missing"
@@ -133,6 +149,7 @@ echo "  employee@seed.local / Password123!"
 echo
 
 echo "Useful commands"
+echo "  project-truth-progress --watch"
 echo "  project-truth-monitor"
 echo "  project-truth-hris-status"
 echo "  project-truth-hris-env-start dev|uat|prod|all"
@@ -141,8 +158,8 @@ echo "  project-truth-lan-dhcp"
 echo "  docker compose -f ${compose_file} ps"
 echo "  docker compose -f ${env_compose_file} ps"
 
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^node-health-'; then
+if docker_cmd ps --format '{{.Names}}' 2>/dev/null | grep -q '^node-health-'; then
   echo
   echo "Legacy node-health containers still present"
-  docker ps --filter 'name=node-health' --format '  {{.Names}} {{.Status}} {{.Ports}}'
+  docker_cmd ps --filter 'name=node-health' --format '  {{.Names}} {{.Status}} {{.Ports}}'
 fi

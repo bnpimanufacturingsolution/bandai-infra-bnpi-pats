@@ -74,6 +74,7 @@ const sourceOptions: SelectOption[] = [
 	{ value: "all", label: "All save paths" },
 	{ value: "HIKVISION_CALLBACK", label: "Device callback" },
 	{ value: "EN_HCNETSDK_ALARM", label: "Alarm listener" },
+	{ value: "ZKTECO_EVENT", label: "ZKTeco bridge" },
 ];
 
 const getDateKey = (date: Date) => {
@@ -136,6 +137,7 @@ const formatBusinessStatus = (status: string) => {
 };
 
 const formatEventSource = (source?: string | null) => {
+	if (source === "ZKTECO_EVENT") return "ZKTeco bridge";
 	if (source === "EN_HCNETSDK_ALARM") return "Alarm listener";
 	if (source === "HIKVISION_CALLBACK") return "Device callback";
 	return source || "-";
@@ -206,6 +208,7 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 	const alert = payload.EventNotificationAlert || {};
 	const accessEvent = alert.AccessControllerEvent || payload.AccessControllerEvent || {};
 	const serialNo = getSerialNoFromPayload(payload);
+	const zktecoAttendance = payload.attendance || payload.event || {};
 	return {
 		id: event.id,
 		origin: "saved",
@@ -218,7 +221,13 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		employeeProfileId: event.employee?.id || event.employeeId || null,
 		employeeNo: event.employeeNo,
 		employeeName:
-			event.employee?.fullName || payload.name || accessEvent.name || accessEvent.employeeName || null,
+			event.employee?.fullName ||
+			payload.name ||
+			zktecoAttendance.userName ||
+			zktecoAttendance.name ||
+			accessEvent.name ||
+			accessEvent.employeeName ||
+			null,
 		status: event.status,
 		source: event.source,
 		businessStatus: formatBusinessStatus(event.status),

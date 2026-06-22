@@ -37,6 +37,13 @@ sudo ufw allow 3100/tcp
 sudo ufw allow 3101/tcp
 sudo ufw allow 3200/tcp
 sudo ufw allow 3201/tcp
+sudo ufw allow 53000/tcp
+sudo ufw allow 9091/tcp
+sudo ufw allow 3110/tcp
+sudo ufw allow 9093/tcp
+sudo ufw allow 9115/tcp
+sudo ufw allow 9110/tcp
+sudo ufw allow 8088/tcp
 sudo ufw --force enable
 sudo systemctl enable docker
 sudo systemctl start docker
@@ -127,6 +134,7 @@ WantedBy=multi-user.target
 CLEANUPSERVICE
 sudo systemctl enable project-truth-firstboot-k3s-cleanup.service
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-status.sh /usr/local/bin/project-truth-status
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-progress.sh /usr/local/bin/project-truth-progress
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-monitor.sh /usr/local/bin/project-truth-monitor
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-env-start.sh /usr/local/bin/project-truth-hris-env-start
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-env-seed.sh /usr/local/bin/project-truth-hris-env-seed
@@ -136,6 +144,7 @@ sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-status.
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-seed.sh /usr/local/bin/project-truth-hris-seed
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-observability-start.sh /usr/local/bin/project-truth-hris-observability-start
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-dhcp.sh /usr/local/bin/project-truth-lan-dhcp
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-summary.sh /usr/local/bin/project-truth-lan-summary
 sudo tee /etc/systemd/system/project-truth-lan-dhcp.service >/dev/null <<'LANDHCP'
 [Unit]
 Description=Project Truth first boot LAN DHCP
@@ -150,12 +159,14 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 LANDHCP
+sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-lan-summary.service /etc/systemd/system/project-truth-lan-summary.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-hris.service /etc/systemd/system/project-truth-hris.service
 sudo install -m 0644 /opt/project-truth/appliance/profile.d/project-truth-hris-help.sh /etc/profile.d/project-truth-hris-help.sh
 sudo chmod 0644 /etc/profile.d/project-truth-hris-help.sh
 sudo docker compose -f /opt/project-truth/appliance/docker-compose.yml build
 sudo systemctl daemon-reload
 sudo systemctl enable project-truth-lan-dhcp.service
+sudo systemctl enable project-truth-lan-summary.service
 sudo systemctl enable project-truth-hris.service
 
 sudo systemctl enable ssh

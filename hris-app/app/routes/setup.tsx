@@ -24,7 +24,7 @@ import {
 import CompanyIntroduction from "~/components/organisms/onboarding/company-introduction";
 import { Input } from "~/components/ui/input";
 import { StepRail, type SetupRailStep } from "~/components/setup/StepRail";
-import bandaiLogo from "~/assets/bandai_logo.png";
+import { bandaiLogo, resolveCompanyLogo } from "~/lib/company-logo";
 import { useAuth } from "~/lib/hooks/use-auth";
 import {
 	useBootstrapAdmin,
@@ -282,9 +282,7 @@ function buildTimezoneOptions(selectedTimezone?: string | null): SelectOption[] 
 }
 
 function resolveSetupLogo(value?: string | null) {
-	const logo = String(value || "").trim();
-	if (!logo || logo === "assets/images/bandai_logo.png") return bandaiLogo;
-	return logo;
+	return resolveCompanyLogo(value);
 }
 
 function createUtcDate(year: number, month: number, day: number) {

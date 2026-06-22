@@ -43,3 +43,7 @@ echo "Project Truth LAN DHCP repaired on $iface"
 echo "LAN IP: $lan_ip"
 echo "HRIS App URL: http://${lan_ip}:3000"
 echo "HRIS API Health URL: http://${lan_ip}:3001/health"
+
+if command -v project-truth-lan-summary >/dev/null 2>&1; then
+  project-truth-lan-summary || true
+fi

@@ -14,11 +14,11 @@ export interface DeviceDefinition {
 	name: string;
 	address: string;
 	port: number;
-	protocol: "http" | "https";
+	protocol: "http" | "https" | "tcp" | "udp";
 	config?: Record<string, any>;
-	access: {
-		username: string;
-		password: string;
+	access?: {
+		username?: string;
+		password?: string;
 	};
 }
 
@@ -33,6 +33,50 @@ export const DEVICE_DEFINITIONS: DeviceDefinition[] = [
 		access: {
 			username: "admin",
 			password: "20262027@",
+		},
+	},
+	{
+		name: "ZKTeco Device 10.184.38.10",
+		address: "10.184.38.10",
+		port: 4370,
+		protocol: "tcp",
+		config: {
+			vendor: "ZKTeco",
+			source: "vendor/zkteco-sdk",
+			webhookPath: "/api/zkteco/events",
+		},
+	},
+	{
+		name: "ZKTeco Device 10.184.38.234",
+		address: "10.184.38.234",
+		port: 4370,
+		protocol: "tcp",
+		config: {
+			vendor: "ZKTeco",
+			source: "vendor/zkteco-sdk",
+			webhookPath: "/api/zkteco/events",
+		},
+	},
+	{
+		name: "ZKTeco Device 10.184.38.235",
+		address: "10.184.38.235",
+		port: 4370,
+		protocol: "tcp",
+		config: {
+			vendor: "ZKTeco",
+			source: "vendor/zkteco-sdk",
+			webhookPath: "/api/zkteco/events",
+		},
+	},
+	{
+		name: "ZKTeco Device 10.184.38.9",
+		address: "10.184.38.9",
+		port: 4370,
+		protocol: "tcp",
+		config: {
+			vendor: "ZKTeco",
+			source: "vendor/zkteco-sdk",
+			webhookPath: "/api/zkteco/events",
 		},
 	},
 	// Add more devices as needed
@@ -74,10 +118,16 @@ export async function ensureDevices(
 					name: deviceDef.name,
 					protocol: deviceDef.protocol,
 					config: deviceDef.config || {},
-					access: {
-						username: deviceDef.access.username,
-						password: deviceDef.access.password,
-					},
+					access: deviceDef.access
+						? {
+								...(deviceDef.access.username
+									? { username: deviceDef.access.username }
+									: {}),
+								...(deviceDef.access.password
+									? { password: deviceDef.access.password }
+									: {}),
+							}
+						: {},
 				},
 				create: {
 					organizationId: resolvedOrganizationId,
@@ -86,10 +136,16 @@ export async function ensureDevices(
 					port: deviceDef.port,
 					protocol: deviceDef.protocol,
 					config: deviceDef.config || {},
-					access: {
-						username: deviceDef.access.username,
-						password: deviceDef.access.password,
-					},
+					access: deviceDef.access
+						? {
+								...(deviceDef.access.username
+									? { username: deviceDef.access.username }
+									: {}),
+								...(deviceDef.access.password
+									? { password: deviceDef.access.password }
+									: {}),
+							}
+						: {},
 				},
 			});
 

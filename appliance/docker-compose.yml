@@ -42,6 +42,12 @@ services:
     env_file:
       - ./env/hris-api.env
     environment:
+      PG_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hris
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hris
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hris
+      STORAGE_PROVIDER: local
+      LOCAL_UPLOAD_ROOT: /app/uploads
+      LOCAL_UPLOAD_PUBLIC_BASE_URL: http://192.168.1.54:3001
       OTEL_ENABLED: "true"
       OTEL_SERVICE_NAME: hris-api
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
@@ -53,8 +59,13 @@ services:
       API_ACTIVITY_LOG_INCLUDE_READS: "true"
       API_ACTIVITY_LOG_EXCLUDED_PATHS: /health,/metrics
       LOG_FORMAT: json
+    volumes:
+      - apiuploads:/app/uploads
     ports:
       - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - default
       - hris-observability
@@ -90,8 +101,22 @@ services:
       retries: 12
       start_period: 20s
 
+  zkteco-bridge:
+    profiles:
+      - zkteco
+    build:
+      context: ../vendor/zkteco-sdk
+      dockerfile: Dockerfile.windows
+    image: project-truth-zkteco-bridge:develop
+    container_name: project-truth-zkteco-bridge
+    restart: unless-stopped
+    environment:
+      ZKTECO_DEVICE_IPS: ${ZKTECO_DEVICE_IPS:-}
+      ZKTECO_WEBHOOK_URL: ${ZKTECO_WEBHOOK_URL:-http://host.docker.internal:3001/api/zkteco/events}
+
 volumes:
   postgresdata:
+  apiuploads:
 
 networks:
   hris-observability:

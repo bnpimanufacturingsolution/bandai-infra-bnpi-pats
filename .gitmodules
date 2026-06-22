@@ -1,0 +1,3 @@
+[submodule "vendor/zkteco-sdk"]
+	path = vendor/zkteco-sdk
+	url = https://github.com/ernestdodz/ZKTECO.git

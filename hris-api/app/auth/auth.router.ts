@@ -8,6 +8,7 @@ interface IAuthController {
 	changePassword(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 	resetUserPassword(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 	getCurrentUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
+	getCurrentUserAvatar(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 	updateCurrentUserAvatar(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 	getRoles(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 	getUsers(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
@@ -26,6 +27,7 @@ export const router = (route: Router, controller: IAuthController): Router => {
 	routes.patch("/change-password", verifyToken, controller.changePassword);
 	routes.patch("/update-password", verifyToken, controller.changePassword);
 	routes.get("/me", verifyToken, controller.getCurrentUser);
+	routes.get("/me/avatar", verifyToken, controller.getCurrentUserAvatar);
 	routes.patch("/me/avatar", verifyToken, uploadUserFiles, controller.updateCurrentUserAvatar);
 	routes.get("/roles", verifyToken, controller.getRoles);
 	routes.get("/users", verifyToken, controller.getUsers);

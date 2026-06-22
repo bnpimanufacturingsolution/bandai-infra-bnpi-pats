@@ -89,17 +89,23 @@ build {
     destination = "/tmp"
   }
 
+  provisioner "file" {
+    source      = "${path.root}/staging/vendor"
+    destination = "/tmp"
+  }
+
   provisioner "shell" {
     execute_command = "chmod +x {{ .Path }}; sudo -E bash -o pipefail -c '{{ .Vars }} {{ .Path }} 2>&1 | tee -a /var/log/project-truth-provision.log'"
     inline_shebang  = "/bin/bash -e"
     inline = [
       "set -euo pipefail",
       "mkdir -p /opt/project-truth",
-      "rm -rf /opt/project-truth/gitops /opt/project-truth/appliance /opt/project-truth/hris-api /opt/project-truth/hris-app",
+      "rm -rf /opt/project-truth/gitops /opt/project-truth/appliance /opt/project-truth/hris-api /opt/project-truth/hris-app /opt/project-truth/vendor",
       "cp -R /tmp/gitops /opt/project-truth/gitops",
       "cp -R /tmp/appliance /opt/project-truth/appliance",
       "cp -R /tmp/hris-api /opt/project-truth/hris-api",
       "cp -R /tmp/hris-app /opt/project-truth/hris-app",
+      "cp -R /tmp/vendor /opt/project-truth/vendor",
       "find /opt/project-truth -type f \\( -name '*.tmp' -o -name '.env' -o -name '.env.*' \\) -delete",
       "chown -R infra:infra /opt/project-truth"
     ]

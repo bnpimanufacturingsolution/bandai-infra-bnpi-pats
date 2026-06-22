@@ -69,10 +69,14 @@ install_commands_and_services() {
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-env-seed.sh" /usr/local/bin/project-truth-hris-env-seed
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-status.sh" /usr/local/bin/project-truth-hris-status
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-observability-start.sh" /usr/local/bin/project-truth-hris-observability-start
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-lan-dhcp.sh" /usr/local/bin/project-truth-lan-dhcp
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-lan-summary.sh" /usr/local/bin/project-truth-lan-summary
 
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-hris.service" /etc/systemd/system/project-truth-hris.service
+  as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-lan-summary.service" /etc/systemd/system/project-truth-lan-summary.service
   as_root systemctl daemon-reload
   as_root systemctl enable project-truth-hris.service
+  as_root systemctl enable project-truth-lan-summary.service
 }
 
 prepare_env_files() {
@@ -144,6 +148,4 @@ start_stacks
 verify_local_endpoints
 
 echo "On-prem VM bootstrap complete."
-echo "Grafana: http://<vm-ip>:53000"
-echo "HRIS app: http://<vm-ip>:3000"
-echo "HRIS API health: http://<vm-ip>:3001/health"
+project-truth-lan-summary || true

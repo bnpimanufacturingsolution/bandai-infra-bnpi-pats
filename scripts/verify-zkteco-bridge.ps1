@@ -1,0 +1,128 @@
+[CmdletBinding()]
+param(
+    [switch]$BuildApi,
+    [switch]$SmokePost,
+    [switch]$ContractOnly,
+    [string]$ApiBaseUrl = "http://localhost:3001",
+    [string]$DeviceIp = "10.184.38.10",
+    [int]$DevicePort = 4370,
+    [string]$EnrollNumber = "1"
+)
+
+$ErrorActionPreference = "Stop"
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host "`n==> $Message" -ForegroundColor Cyan
+}
+
+function Write-Pass {
+    param([string]$Message)
+    Write-Host "PASS $Message" -ForegroundColor Green
+}
+
+function Write-WarnLine {
+    param([string]$Message)
+    Write-Host "WARN $Message" -ForegroundColor Yellow
+}
+
+$root = Split-Path -Parent $PSScriptRoot
+Push-Location $root
+try {
+    Write-Step "Docker engine mode"
+    $dockerMode = docker info --format '{{.OSType}} {{.OperatingSystem}}'
+    Write-Host $dockerMode
+    if ($dockerMode -notmatch '^linux\b') {
+        Write-WarnLine "Docker is not in Linux mode. Run HRIS Linux services before using the Windows-container ZKTeco profile."
+    } else {
+        Write-Pass "Docker is in Linux mode for HRIS API/app/Postgres."
+    }
+
+    Write-Step "Compose config"
+    docker compose -f .\appliance\docker-compose.yml config --quiet
+    docker compose -f .\appliance\docker-compose.yml --profile zkteco config --quiet
+    Write-Pass "Default and zkteco profile compose files parse."
+
+    Write-Step "ZKTeco SDK bridge files"
+    $requiredFiles = @(
+        ".\vendor\zkteco-sdk\Program.cs",
+        ".\vendor\zkteco-sdk\Interop.zkemkeeper.dll",
+        ".\vendor\zkteco-sdk\Dockerfile.windows"
+    )
+    $missingBridgeFiles = @()
+    foreach ($file in $requiredFiles) {
+        if (-not (Test-Path -LiteralPath $file)) {
+            $missingBridgeFiles += $file
+        }
+    }
+    if ($missingBridgeFiles.Count -gt 0) {
+        if (-not $ContractOnly) {
+            throw "Missing required bridge file: $($missingBridgeFiles -join ', '). Use -ContractOnly to dry-run only the HRIS webhook contract."
+        }
+        Write-WarnLine "Bridge files missing; continuing in contract-only mock mode: $($missingBridgeFiles -join ', ')"
+    } else {
+        Write-Pass "SDK bridge files exist."
+    }
+
+    if ($BuildApi) {
+        Write-Step "Build HRIS API image"
+        docker compose -f .\appliance\docker-compose.yml build hris-api
+        Write-Pass "HRIS API image builds with ZKTeco route included."
+    }
+
+    Write-Step "API health"
+    try {
+        $health = Invoke-RestMethod -Uri "$ApiBaseUrl/health" -Method Get -TimeoutSec 10
+        Write-Host ($health | ConvertTo-Json -Depth 5)
+        Write-Pass "API health responded."
+    } catch {
+        Write-WarnLine "API health did not respond at $ApiBaseUrl/health. Start the stack before live smoke: docker compose -f .\appliance\docker-compose.yml up -d postgres hris-api hris-app"
+    }
+
+    if ($SmokePost -or $ContractOnly) {
+        Write-Step "Smoke post ZKTeco event"
+        $body = @{
+            device = @{
+                type = "ZKTeco"
+                ip = $DeviceIp
+                port = $DevicePort
+            }
+            attendance = @{
+                enrollNumber = $EnrollNumber
+                userName = "Project Truth Smoke"
+                timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss")
+                verifyMethod = 1
+                verifyMethodName = "Fingerprint"
+                attState = 0
+                attStateName = "Check In"
+                isValid = $true
+                workCode = 0
+            }
+            eventType = "AttendanceTransaction"
+        } | ConvertTo-Json -Depth 8
+
+        $response = Invoke-RestMethod `
+            -Method Post `
+            -Uri "$ApiBaseUrl/api/zkteco/events" `
+            -ContentType "application/json" `
+            -Body $body `
+            -TimeoutSec 20
+
+        Write-Host ($response | ConvertTo-Json -Depth 8)
+        Write-Pass "Smoke post reached the ZKTeco bridge endpoint."
+
+        if ($response.data.reason -eq "device_not_found") {
+            Write-WarnLine "Contract accepted the payload, but no HRIS Device matched $DeviceIp`:$DevicePort."
+        } elseif ($response.data.reason -eq "employee_not_found") {
+            Write-WarnLine "Device matched, but no Employee.deviceEmpId matched enroll number $EnrollNumber."
+        } elseif ($response.data.matched -eq $true) {
+            Write-Pass "Device and Employee.deviceEmpId matched. Current ZKTeco contract records DeviceEvent only; it does not create/update Attendance yet."
+        }
+    }
+
+    Write-Step "Best finish state"
+    Write-Host "Stop when API/app are healthy, ZKTeco mock or bridge posts reach $ApiBaseUrl/api/zkteco/events, and saved events show under /admin/devices/events?view=saved&source=ZKTECO_EVENT."
+    Write-Host "Attendance truth note: this endpoint currently saves/matches DeviceEvent rows only. A later change is required before ZKTeco punches create or update Attendance."
+} finally {
+    Pop-Location
+}

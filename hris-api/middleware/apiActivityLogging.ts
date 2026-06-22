@@ -202,8 +202,8 @@ export function apiActivityLoggingMiddleware(
 	}
 
 	if (!config.apiActivityLogging.includeReads && READ_METHODS.has(req.method.toUpperCase())) {
-		// Temporarily disabled to show all authenticated user activity in Grafana
-		// TODO: Re-enable this after dashboard is stable
+		next();
+		return;
 	}
 
 	if (!shouldSample()) {
@@ -269,7 +269,7 @@ export function apiActivityLoggingMiddleware(
 			firstName,
 			lastName,
 			fullName,
-			organizationId: req.organizationId || null,
+			organizationId: logOrganizationId,
 			route,
 			module,
 			statusCode,
