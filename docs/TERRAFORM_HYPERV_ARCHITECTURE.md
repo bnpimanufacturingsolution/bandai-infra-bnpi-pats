@@ -304,6 +304,28 @@ terraform-hyperv/
             `-- module outputs
 ```
 
+## Flexible Bridge Verification
+
+The external switch name is stable (`ProjectTruth-External`), but the physical
+adapter behind it is device-specific. On a laptop it may be Wi-Fi; on another
+host it may be Ethernet. Verify the current host bridge and VM attachment with:
+
+```powershell
+.\scripts\project-truth.ps1 verify-hyperv-bridge -VmName PROJECT-TRUTH-NODE -SwitchName ProjectTruth-External -RequireExternal -FixVmAdapter
+```
+
+For VHDX autopilot imports, use `-RequireExternalSwitch` to prevent accidental
+fallback to `Default Switch`, and pass `-BridgeAdapterName` when a device has
+more than one active physical LAN adapter:
+
+```powershell
+.\scripts\project-truth.ps1 vhdx-autopilot -Mode Import -VhdxPath <path-to-vhdx> -VmName PROJECT-TRUTH-NODE -PreferredSwitch ProjectTruth-External -RequireExternalSwitch -BridgeAdapterName "Wi-Fi" -Start
+```
+
+The guest IP is still assigned by the LAN DHCP service inside the VM. A correct
+bridge proves the VM NIC is attached to the LAN-facing switch; endpoint proof
+still requires the guest to acquire or report a usable LAN IP.
+
 ## Short Boss Explanation
 
 ```text
