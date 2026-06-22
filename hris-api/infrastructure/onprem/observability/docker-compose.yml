@@ -139,14 +139,28 @@ services:
       - GF_LOG_LEVEL=info
       - GF_SECURITY_ALLOW_EMBEDDING=false
       - GF_AUTH_ANONYMOUS_ENABLED=false
+      # Use dedicated PostgreSQL database instead of local SQLite
+      - GF_DATABASE_TYPE=postgres
+      - GF_DATABASE_HOST=postgres
+      - GF_DATABASE_NAME=${POSTGRES_GRAFANA_DB:-grafana}
+      - GF_DATABASE_USER=${POSTGRES_USER:-postgres}
+      - GF_DATABASE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - GF_DATABASE_SSL_MODE=disable
     volumes:
-      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/grafana:/var/lib/grafana
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      # Database is now PostgreSQL (grafana DB). No local SQLite file used for core data.
     depends_on:
-      - prometheus
-      - loki
-      - tempo
-      - alertmanager
+      postgres:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+      alertmanager:
+        condition: service_started
     restart: unless-stopped
     networks:
       - observability
@@ -165,7 +179,7 @@ services:
     volumes:
       - ./backup:/backup:ro
       - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/backups:/backups
-      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/grafana:/data/grafana:ro
+      # grafana data is now in PostgreSQL database, no longer using local volume
       - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/prometheus:/data/prometheus:ro
       - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/loki:/data/loki:ro
       - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/tempo:/data/tempo:ro
