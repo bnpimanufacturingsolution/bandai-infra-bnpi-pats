@@ -71,9 +71,11 @@ install_commands_and_services() {
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-observability-start.sh" /usr/local/bin/project-truth-hris-observability-start
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-lan-dhcp.sh" /usr/local/bin/project-truth-lan-dhcp
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-lan-summary.sh" /usr/local/bin/project-truth-lan-summary
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-trycloudflare-start.sh" /usr/local/bin/project-truth-trycloudflare-start
 
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-hris.service" /etc/systemd/system/project-truth-hris.service
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-lan-summary.service" /etc/systemd/system/project-truth-lan-summary.service
+  as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-trycloudflare.service" /etc/systemd/system/project-truth-trycloudflare.service
   as_root systemctl daemon-reload
   as_root systemctl enable project-truth-hris.service
   as_root systemctl enable project-truth-lan-summary.service

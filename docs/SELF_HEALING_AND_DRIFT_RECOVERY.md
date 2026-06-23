@@ -28,6 +28,7 @@ Windows host repo
 | HRIS runtime outage | `repair-appliance-online -Mode RestartRuntime` restarts Docker, K3s, and HRIS services. | No |
 | HRIS data safety net | `backup-appliance-data` captures Postgres and uploads; `restore-appliance-data -Force` restores them. | No |
 | LAN health proof | `watch-until-healthy` and `verify-lan-health` prove app/API URLs. | No |
+| Experimental TryCloudflare proof | `start-trycloudflare-suite` starts temporary public URLs only when `EXPERIMENTAL_TRY_CLOUDFLARE=true`; VM hook is installed but disabled by default. | No |
 
 ## What Does Not Fully Self-Heal Yet
 
@@ -37,7 +38,7 @@ Windows host repo
 | Postgres and uploads backup is manual, not scheduled | Container restart does not fix corrupted or deleted data volumes. | Schedule `backup-appliance-data` or move persistence to a managed backup target. |
 | K3s snapshots are not yet wired to external durable storage | Local K3s snapshots help cluster metadata recovery but do not protect against disk loss. | Configure K3s snapshot retention and S3-compatible off-host copy. |
 | VM disk corruption cannot be repaired by Argo or Compose | If the selected VHDX is unreadable, online repair cannot boot. | Restore from the stable VHDX artifact or a known-good archived copy. |
-| TryCloudflare is temporary | Quick tunnels produce random test URLs and are not a production SLA. | Use only after LAN target is verified; use a named tunnel for production sharing. |
+| TryCloudflare is temporary | Quick tunnels produce random test URLs and are not a production SLA. | Use only after LAN target is verified; use a named tunnel for production sharing. Raw database tunnels remain disabled by default. |
 
 ## No-Rebuild Repair Ladder
 
@@ -101,6 +102,16 @@ To return to Compose:
 .\scripts\project-truth.ps1 repair-appliance-online -GuestIp <vm-lan-ip>
 .\scripts\project-truth.ps1 watch-until-healthy -GuestIp <vm-lan-ip>
 ```
+
+6a. Run optional temporary public proof after LAN health passes:
+
+```powershell
+$env:EXPERIMENTAL_TRY_CLOUDFLARE = "true"
+.\scripts\project-truth.ps1 start-trycloudflare-suite -GuestIp <vm-lan-ip> -VerifyLocalFirst
+```
+
+The proof is written under `.runtime\trycloudflare\<timestamp>`. URLs are
+temporary and rotate whenever the cloudflared processes restart.
 
 7. Capture data before risky repairs:
 

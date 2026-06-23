@@ -63,6 +63,16 @@ write_summary() {
       echo "Grafana:    http://${ip_addr}:53000"
       echo "Prometheus: http://${ip_addr}:9091"
       echo "Loki:       http://${ip_addr}:3110"
+      if [ -s "${state_dir}/trycloudflare-public-urls.txt" ]; then
+        echo
+        echo "Experimental TryCloudflare public URLs"
+        echo "Temporary quick-tunnel URLs; rotate on every tunnel restart."
+        sed 's/^/  /' "${state_dir}/trycloudflare-public-urls.txt"
+      else
+        echo
+        echo "Experimental TryCloudflare"
+        echo "  Disabled by default. Set EXPERIMENTAL_TRY_CLOUDFLARE=true in /etc/project-truth/experimental.env and start project-truth-trycloudflare.service for temporary public test URLs."
+      fi
     else
       echo "LAN IP: NOT DETECTED"
       echo

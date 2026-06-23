@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','configure','select-image','download-image','build-image','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','apply-argocd-platform','configure-argocd-repo-creds','configure-argocd-webhook','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel')]
+  [ValidateSet('doctor','configure','select-image','download-image','build-image','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','apply-argocd-platform','configure-argocd-repo-creds','configure-argocd-webhook','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel','start-trycloudflare-suite')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -42,6 +42,7 @@ $scriptMap = @{
   'start-local-hris-runtime' = 'start-local-hris-runtime.ps1'
   'verify-local-hris-runtime' = 'verify-local-hris-runtime.ps1'
   'start-trycloudflare-tunnel' = 'start-trycloudflare-tunnel.ps1'
+  'start-trycloudflare-suite' = 'start-trycloudflare-suite.ps1'
 }
 
 $target = Join-Path $scriptRoot $scriptMap[$Command]

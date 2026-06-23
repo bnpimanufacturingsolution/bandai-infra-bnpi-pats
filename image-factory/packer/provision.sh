@@ -165,6 +165,7 @@ sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-observa
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-dhcp.sh /usr/local/bin/project-truth-lan-dhcp
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-summary.sh /usr/local/bin/project-truth-lan-summary
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-clean-console.sh /usr/local/bin/project-truth-clean-console
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-trycloudflare-start.sh /usr/local/bin/project-truth-trycloudflare-start
 sudo tee /etc/sysctl.d/99-project-truth-console.conf >/dev/null <<'SYSCTL'
 kernel.printk = 3 4 1 3
 SYSCTL
@@ -191,6 +192,7 @@ LANDHCP
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-lan-summary.service /etc/systemd/system/project-truth-lan-summary.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-clean-console.service /etc/systemd/system/project-truth-clean-console.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-hris.service /etc/systemd/system/project-truth-hris.service
+sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-trycloudflare.service /etc/systemd/system/project-truth-trycloudflare.service
 sudo install -m 0644 /opt/project-truth/appliance/profile.d/project-truth-hris-help.sh /etc/profile.d/project-truth-hris-help.sh
 sudo chmod 0644 /etc/profile.d/project-truth-hris-help.sh
 for service in hris-api-db-init hris-api hris-app; do

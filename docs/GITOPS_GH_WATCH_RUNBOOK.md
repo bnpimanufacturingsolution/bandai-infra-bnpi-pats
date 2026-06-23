@@ -30,6 +30,18 @@ The overlays render environment contract ConfigMaps. The selected release is rec
 gitops/overlays/<env>/environment-patch.yaml
 ```
 
+The base environment contract also records the temporary public-demo tunnel
+policy:
+
+```text
+experimental_trycloudflare_supported=true
+experimental_trycloudflare_default=false
+experimental_trycloudflare_flag=EXPERIMENTAL_TRY_CLOUDFLARE
+```
+
+This is documentation and drift visibility only. Quick-tunnel URLs are generated
+runtime evidence, not GitOps desired state.
+
 ## Dispatch Promotion
 
 ```powershell
