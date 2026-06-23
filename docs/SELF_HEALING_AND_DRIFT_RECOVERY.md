@@ -69,6 +69,12 @@ settings, K3s image pre-import, and K3s auto-deploy bootstrap.
 .\scripts\project-truth.ps1 repair-appliance-online -GuestIp <vm-lan-ip> -Mode GitOpsRefresh
 ```
 
+Quick Argo hard-refresh when the VM IP is saved in config, discoverable from Hyper-V, or set as `PROJECT_TRUTH_GUEST_IP`:
+
+```powershell
+.\scripts\project-truth.ps1 gitops-pull
+```
+
 4. Move HRIS into Kubernetes/Argo ownership when the VM should self-heal app/API/Postgres without Compose:
 
 ```powershell

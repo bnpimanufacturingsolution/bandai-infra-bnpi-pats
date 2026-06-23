@@ -112,6 +112,7 @@ foreach ($envName in $Environments) {
 $enableScript = Get-Content -Raw 'scripts/enable-k8s-runtime.ps1'
 $repairScript = Get-Content -Raw 'scripts/repair-appliance-online.ps1'
 $verifyScript = Get-Content -Raw 'scripts/verify-gitops-state.ps1'
+$gitopsPullScript = Get-Content -Raw 'scripts/gitops-pull.ps1'
 $promoteWorkflow = Get-Content -Raw '.github/workflows/promote-gitops.yml'
 $platformConfig = Get-Content -Raw 'gitops/argocd/platform/argocd-cm.yaml'
 $projectTruthScript = Get-Content -Raw 'scripts/project-truth.ps1'
@@ -133,6 +134,8 @@ $checks.Add((Assert-Text 'promote-gitops supports optional registry image flow' 
 $checks.Add((Assert-Text 'Argo platform declares reconciliation timeout' $platformConfig 'timeout\.reconciliation:\s*60s'))
 $checks.Add((Assert-Text 'Argo platform declares reconciliation jitter' $platformConfig 'timeout\.reconciliation\.jitter:\s*15s'))
 $checks.Add((Assert-Text 'project-truth exposes Argo platform command' $projectTruthScript 'apply-argocd-platform'))
+$checks.Add((Assert-Text 'project-truth exposes one-command GitOps pull' $projectTruthScript 'gitops-pull'))
+$checks.Add((Assert-Text 'gitops-pull hard-refreshes Argo apps' $gitopsPullScript 'argocd\.argoproj\.io/refresh=hard'))
 $checks.Add((Assert-Text 'project-truth exposes Argo repo credential command' $projectTruthScript 'configure-argocd-repo-creds'))
 $checks.Add((Assert-Text 'project-truth exposes Argo webhook command' $projectTruthScript 'configure-argocd-webhook'))
 $checks.Add((Assert-Text 'repo credential script creates Argo repo-creds secret' $repoCredsScript 'argocd\.argoproj\.io/secret-type:\s*repo-creds'))
