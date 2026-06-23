@@ -264,6 +264,8 @@ if (-not $SkipBuild) {
     $packerBuildArgs = @('build', '-force')
     if ($TargetPlatform -eq 'virtualbox') {
       $packerBuildArgs += '-on-error=abort'
+    } else {
+      $packerBuildArgs += @('-var', "switch_name=$SwitchName")
     }
     if ($PredownloadIso) {
       $resolvedIso = (Resolve-Path -LiteralPath $IsoCachePath).Path

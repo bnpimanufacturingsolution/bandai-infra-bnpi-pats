@@ -50,19 +50,24 @@ source "hyperv-iso" "ubuntu" {
   headless         = true
   switch_name      = var.switch_name
   http_directory   = "${path.root}/http"
+  cd_files         = ["${path.root}/http/user-data", "${path.root}/http/meta-data"]
+  cd_label         = "cidata"
   ssh_username     = var.ssh_username
   ssh_password     = var.ssh_password
   ssh_timeout      = "90m"
   shutdown_command = "echo '${var.ssh_password}' | sudo -S shutdown -P now"
   output_directory = "output/${var.vm_name}"
 
-  boot_wait = "5s"
+  boot_wait = "0s"
   boot_command = [
+    "<enter><wait2>",
+    "<esc><wait><esc><wait>",
     "c<wait5>",
-    "set gfxpayload=keep<enter><wait2>",
-    "linux /casper/vmlinuz autoinstall ds='nocloud-net;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/' ---<enter><wait5>",
-    "initrd /casper/initrd<enter><wait5>",
-    "boot<enter><wait10>"
+    "set gfxpayload=keep<enter><wait>",
+    "linux /casper/vmlinuz autoinstall ds='nocloud;s=/cdrom/' ---<enter><wait>",
+    "initrd /casper/initrd<enter><wait>",
+    "boot<enter><wait30>",
+    "yes<enter>"
   ]
 }
 
