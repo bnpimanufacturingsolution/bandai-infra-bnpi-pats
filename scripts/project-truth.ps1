@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','configure','select-image','download-image','build-image','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel')]
+  [ValidateSet('doctor','configure','select-image','download-image','build-image','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -25,6 +25,7 @@ $scriptMap = @{
   'restore-appliance-data' = 'restore-appliance-data.ps1'
   'enable-k8s-runtime' = 'enable-k8s-runtime.ps1'
   'disable-k8s-runtime' = 'disable-k8s-runtime.ps1'
+  'test-self-heal-contract' = 'test-self-heal-contract.ps1'
   'repair-hyperv-boot'  = 'repair-hyperv-boot.ps1'
   'verify-hyperv-bridge' = 'verify-hyperv-bridge.ps1'
   'login-visual-proof-loop' = 'login-visual-proof-loop.ps1'

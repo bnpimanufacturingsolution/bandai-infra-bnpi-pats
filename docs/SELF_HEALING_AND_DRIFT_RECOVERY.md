@@ -53,7 +53,13 @@ Get-FileHash C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx -
 
 ```powershell
 .\scripts\project-truth.ps1 verify-gitops-state
+.\scripts\project-truth.ps1 test-self-heal-contract
 ```
+
+`test-self-heal-contract` is also enforced in GitHub Actions. It verifies that
+the rendered runtime overlays contain the Kubernetes workload objects, probes,
+host ports, local image policy, hostPath persistence, Argo self-heal/retry
+settings, K3s image pre-import, and K3s auto-deploy bootstrap.
 
 3. Repair missing or drifted Argo Applications from a booted VM:
 

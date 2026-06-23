@@ -62,6 +62,10 @@ jobs:
           kubectl kustomize gitops/runtime-k8s/overlays/uat
           kubectl kustomize gitops/runtime-k8s/overlays/prod
 
+      - name: Validate self-heal contract
+        shell: powershell
+        run: .\scripts\project-truth.ps1 test-self-heal-contract
+
       - name: Prepare Packer staging inputs
         shell: powershell
         run: |
