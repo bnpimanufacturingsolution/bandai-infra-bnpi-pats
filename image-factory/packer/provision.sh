@@ -3,6 +3,7 @@ set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 PROJECT_TRUTH_IMAGE_TARGET="${PROJECT_TRUTH_IMAGE_TARGET:-appliance}"
+echo "$PROJECT_TRUTH_IMAGE_TARGET" | sudo tee /etc/project-truth-image-target >/dev/null
 
 retry() {
   local attempts="$1"
@@ -196,7 +197,9 @@ for service in hris-api-db-init hris-api hris-app; do
   sudo docker compose -f /opt/project-truth/appliance/docker-compose.yml build "$service"
 done
 sudo systemctl daemon-reload
-sudo systemctl enable project-truth-lan-dhcp.service
+if [ "$PROJECT_TRUTH_IMAGE_TARGET" != "googlecompute" ]; then
+  sudo systemctl enable project-truth-lan-dhcp.service
+fi
 sudo systemctl enable project-truth-lan-summary.service
 sudo systemctl enable project-truth-clean-console.service
 sudo systemctl enable project-truth-hris.service
@@ -215,6 +218,11 @@ sudo tee /usr/local/bin/project-truth-firstboot-identity >/dev/null <<'IDENTITY'
 #!/usr/bin/env bash
 set -euo pipefail
 
+image_target="appliance"
+if [ -r /etc/project-truth-image-target ]; then
+  image_target="$(cat /etc/project-truth-image-target)"
+fi
+
 if [ ! -s /etc/machine-id ]; then
   systemd-machine-id-setup >/dev/null 2>&1 || true
 fi
@@ -223,7 +231,7 @@ if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
   ssh-keygen -A >/dev/null 2>&1 || true
 fi
 
-if command -v project-truth-lan-dhcp >/dev/null 2>&1; then
+if [ "$image_target" != "googlecompute" ] && command -v project-truth-lan-dhcp >/dev/null 2>&1; then
   project-truth-lan-dhcp >/dev/null 2>&1 || true
 fi
 
