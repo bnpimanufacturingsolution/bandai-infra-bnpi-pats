@@ -1,6 +1,7 @@
 namespace: uat
 
 resources:
+  - namespace.yaml
   - runtime.yaml
 
 images:
