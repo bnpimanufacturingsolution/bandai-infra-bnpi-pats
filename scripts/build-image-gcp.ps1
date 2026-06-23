@@ -191,6 +191,9 @@ function Sync-PackerStagingDirectory {
     throw "Staging source not found: $Source"
   }
 
+  if (Test-Path -LiteralPath $Destination) {
+    Remove-Item -LiteralPath $Destination -Recurse -Force
+  }
   New-Item -ItemType Directory -Force -Path $Destination | Out-Null
 
   $excludedDirectories = @(
