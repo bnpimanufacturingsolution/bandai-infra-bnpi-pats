@@ -32,6 +32,11 @@ variable "ssh_username" {
   default = "infra"
 }
 
+variable "staging_archive_url" {
+  type    = string
+  default = ""
+}
+
 locals {
   build_label = "project-truth-node-gcp"
 }
@@ -69,16 +74,15 @@ build {
   name    = "project-truth-googlecompute-image"
   sources = ["source.googlecompute.ubuntu"]
 
-  provisioner "file" {
-    source      = "${path.root}/staging/project-truth-staging.tar"
-    destination = "/tmp/project-truth-staging.tar"
-  }
-
   provisioner "shell" {
     execute_command = "chmod +x {{ .Path }}; sudo -E bash -o pipefail -c '{{ .Vars }} {{ .Path }} 2>&1 | tee -a /var/log/project-truth-provision.log'"
     inline_shebang  = "/bin/bash -e"
     inline = [
       "set -euo pipefail",
+      "test -n '${var.staging_archive_url}'",
+      "TOKEN=\"$(curl -fsH 'Metadata-Flavor: Google' 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' | python3 -c 'import json,sys; print(json.load(sys.stdin)[\"access_token\"])')\"",
+      "curl -fL --retry 6 --retry-delay 10 --retry-all-errors -H \"Authorization: Bearer $${TOKEN}\" '${var.staging_archive_url}' -o /tmp/project-truth-staging.tar",
+      "test -s /tmp/project-truth-staging.tar",
       "rm -rf /tmp/project-truth-staging",
       "mkdir -p /tmp/project-truth-staging",
       "tar -xf /tmp/project-truth-staging.tar -C /tmp/project-truth-staging",

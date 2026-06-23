@@ -4,6 +4,8 @@ param(
   [string]$TemplateName = 'ubuntu-googlecompute.pkr.hcl',
   [string]$ProjectId = 'hris-492904',
   [string]$Zone = 'asia-southeast1-a',
+  [string]$StagingBucket = 'project-truth-image-export-hris-492904-161377059311',
+  [string]$StagingObjectPrefix = 'public/project-truth/gcp-image-build/staging',
   [string]$SourceInputsDir = 'C:\Users\anoni\OneDrive\Desktop\HRIS-PROJECT\source-inputs-organized',
   [switch]$IncludeSourceInputs,
   [switch]$ValidateOnly,
@@ -67,6 +69,17 @@ function Invoke-Gcloud {
   }
 
   & gcloud @Arguments
+}
+
+function Invoke-Gsutil {
+  param([string[]]$Arguments)
+
+  $gsutil = Get-Command gsutil.cmd, gsutil -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $gsutil) {
+    throw 'gsutil not found in PATH. Install Google Cloud SDK before building the Project Truth GCP image.'
+  }
+
+  & $gsutil.Source @Arguments
 }
 
 function Get-ProjectTruthBuildInstances {
@@ -297,6 +310,37 @@ function New-PackerStagingArchive {
   Write-Host ("GCP staging archive: {0} ({1:n2} MiB, {2:n0} files)" -f $archive.FullName, ($archive.Length / 1MB), @($manifestEntries).Count)
 }
 
+function Publish-PackerStagingArchive {
+  param(
+    [string]$ArchivePath,
+    [string]$Bucket,
+    [string]$ObjectPrefix
+  )
+
+  if (-not (Test-Path -LiteralPath $ArchivePath)) {
+    throw "Staging archive not found: $ArchivePath"
+  }
+
+  $archive = Get-Item -LiteralPath $ArchivePath
+  $objectName = ('{0}/{1:yyyyMMdd-HHmmss}-{2}' -f $ObjectPrefix.Trim('/'), (Get-Date), $archive.Name)
+  $destination = "gs://$Bucket/$objectName"
+  $authenticatedUrl = "https://storage.googleapis.com/$Bucket/$objectName"
+
+  Write-Checkpoint -Name 'stage-upload' -IntendedAction 'Publish the GCP staging archive to Cloud Storage so the build VM downloads it directly.' -Command "gsutil cp `"$ArchivePath`" $destination"
+  Invoke-Gsutil -Arguments @('-o', 'GSUtil:parallel_composite_upload_threshold=150M', '-h', 'Content-Type:application/x-tar', 'cp', $ArchivePath, $destination) | Out-Host
+
+  $statPath = Join-Path $RuntimeDir 'staging-archive-gcs-stat.txt'
+  Invoke-Gsutil -Arguments @('ls', '-l', $destination) 2>&1 | Tee-Object -FilePath $statPath | Out-Host
+  if ($LASTEXITCODE -ne 0) {
+    throw "Published staging archive was not readable with current GCP credentials at $destination"
+  }
+
+  "gcs_uri=$destination`nauthenticated_url=$authenticatedUrl`nbytes=$($archive.Length)" |
+    Set-Content -LiteralPath (Join-Path $RuntimeDir 'staging-archive-url.txt') -Encoding UTF8
+
+  return $authenticatedUrl
+}
+
 if (-not (Get-Command packer -ErrorAction SilentlyContinue)) {
   throw 'packer not found in PATH. Install HashiCorp Packer before building the Project Truth image.'
 }
@@ -334,7 +378,10 @@ if (-not $SkipStage) {
   }
 }
 
-New-PackerStagingArchive -StagingRoot (Join-Path $PackerDir 'staging')
+$stagingRoot = Join-Path $PackerDir 'staging'
+New-PackerStagingArchive -StagingRoot $stagingRoot
+$stagingArchivePath = Join-Path $stagingRoot 'project-truth-staging.tar'
+$stagingArchiveUrl = Publish-PackerStagingArchive -ArchivePath $stagingArchivePath -Bucket $StagingBucket -ObjectPrefix $StagingObjectPrefix
 
 Push-Location $PackerDir
 try {
@@ -343,8 +390,8 @@ try {
   Write-Checkpoint -Name 'packer-init' -IntendedAction 'Install or verify required Packer plugins.' -Command "packer init $TemplateName"
   Invoke-LoggedCommand -Name 'packer-init' -Command @('packer', 'init', $TemplateName)
 
-  Write-Checkpoint -Name 'packer-validate' -IntendedAction 'Validate the GCP Packer template without launching a VM.' -Command "packer validate -var project_id=$ProjectId -var zone=$Zone $TemplateName"
-  Invoke-LoggedCommand -Name 'packer-validate' -Command @('packer', 'validate', '-var', "project_id=$ProjectId", '-var', "zone=$Zone", $TemplateName)
+  Write-Checkpoint -Name 'packer-validate' -IntendedAction 'Validate the GCP Packer template without launching a VM.' -Command "packer validate -var project_id=$ProjectId -var zone=$Zone -var staging_archive_url=$stagingArchiveUrl $TemplateName"
+  Invoke-LoggedCommand -Name 'packer-validate' -Command @('packer', 'validate', '-var', "project_id=$ProjectId", '-var', "zone=$Zone", '-var', "staging_archive_url=$stagingArchiveUrl", $TemplateName)
 
   if ($ValidateOnly) {
     Write-Host 'ValidateOnly was set; skipping packer build.'
@@ -354,8 +401,8 @@ try {
   }
 
   $onError = if ($PreserveFailedBuildResources) { 'abort' } else { 'cleanup' }
-  Write-Checkpoint -Name 'packer-build' -IntendedAction 'Build a Project Truth custom image on Google Compute.' -Command "packer build -on-error=$onError -var project_id=$ProjectId -var zone=$Zone $TemplateName"
-  Invoke-LoggedCommand -Name 'packer-build' -Command @('packer', 'build', "-on-error=$onError", '-var', "project_id=$ProjectId", '-var', "zone=$Zone", $TemplateName)
+  Write-Checkpoint -Name 'packer-build' -IntendedAction 'Build a Project Truth custom image on Google Compute.' -Command "packer build -on-error=$onError -var project_id=$ProjectId -var zone=$Zone -var staging_archive_url=$stagingArchiveUrl $TemplateName"
+  Invoke-LoggedCommand -Name 'packer-build' -Command @('packer', 'build', "-on-error=$onError", '-var', "project_id=$ProjectId", '-var', "zone=$Zone", '-var', "staging_archive_url=$stagingArchiveUrl", $TemplateName)
   $BuildSucceeded = $true
   Write-Alert -Status 'SUCCEEDED' -Message 'Google Compute image build completed. Checking for leftover temporary build resources now.'
 } finally {
