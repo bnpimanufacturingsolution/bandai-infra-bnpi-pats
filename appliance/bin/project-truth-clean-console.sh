@@ -32,5 +32,7 @@ sleep 1
     echo "Login with infra / infra"
     echo
   fi
+  echo "After login run: project-truth-lan-summary --screen-overview"
+  echo
   printf '%s login: ' "$(hostname)"
 } > "$tty_path"

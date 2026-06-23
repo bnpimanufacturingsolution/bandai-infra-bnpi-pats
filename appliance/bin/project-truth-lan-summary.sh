@@ -11,10 +11,32 @@ issue_file="/etc/issue"
 motd_file="/etc/motd"
 summary_file="${state_dir}/network-summary.txt"
 quiet=false
+screen=false
+screen_page="overview"
 
-if [ "${1:-}" = "--quiet" ]; then
-  quiet=true
-fi
+for arg in "$@"; do
+  case "$arg" in
+    --quiet)
+      quiet=true
+      ;;
+    --screen)
+      screen=true
+      screen_page="overview"
+      ;;
+    --screen-overview)
+      screen=true
+      screen_page="overview"
+      ;;
+    --screen-tunnels)
+      screen=true
+      screen_page="tunnels"
+      ;;
+    --screen-db)
+      screen=true
+      screen_page="db"
+      ;;
+  esac
+done
 
 lan_ip() {
   local route_ip
@@ -88,14 +110,149 @@ write_summary() {
   } > "$summary_file"
 }
 
+emit_trycloudflare_screen() {
+  local file="${state_dir}/trycloudflare-public-urls.txt"
+  local rows=0
+
+  if [ ! -s "$file" ]; then
+    echo "TryCloudflare: disabled"
+    echo "  Enable only for demos: EXPERIMENTAL_TRY_CLOUDFLARE=true"
+    echo "  Quick tunnel URLs are temporary and rotate."
+    return
+  fi
+
+  echo "TryCloudflare demo URLs"
+  echo "  Temporary quick tunnels. Not production DNS."
+  while IFS='|' read -r _ target local_check public_check public_url _rest; do
+    target="$(printf '%s' "$target" | xargs 2>/dev/null || true)"
+    local_check="$(printf '%s' "$local_check" | xargs 2>/dev/null || true)"
+    public_check="$(printf '%s' "$public_check" | xargs 2>/dev/null || true)"
+    public_url="$(printf '%s' "$public_url" | xargs 2>/dev/null || true)"
+
+    case "$target" in
+      ""|"Target"|---*) continue ;;
+    esac
+    case "$public_url" in
+      https://*.trycloudflare.com*)
+        rows=$((rows + 1))
+        printf '  %-10s %s/%s\n' "$target" "$local_check" "$public_check"
+        printf '    %s\n' "$public_url"
+        ;;
+    esac
+  done < "$file"
+
+  if [ "$rows" -eq 0 ]; then
+    echo "  No public URL rows found in ${file}."
+  fi
+}
+
+emit_database_screen() {
+  local file="${state_dir}/trycloudflare-public-urls.txt"
+  local rows=0
+
+  echo "Database facts"
+  echo "  Raw DB tunnels: disabled by default."
+  if [ ! -s "$file" ]; then
+    echo "  DB topology file: not present."
+    return
+  fi
+
+  while IFS='|' read -r _ name internal_service host_port url_shape _rest; do
+    name="$(printf '%s' "$name" | xargs 2>/dev/null || true)"
+    internal_service="$(printf '%s' "$internal_service" | xargs 2>/dev/null || true)"
+    host_port="$(printf '%s' "$host_port" | xargs 2>/dev/null || true)"
+    url_shape="$(printf '%s' "$url_shape" | xargs 2>/dev/null || true)"
+
+    case "$name" in
+      ""|"Name"|---*) continue ;;
+    esac
+    case "$url_shape" in
+      postgresql://*)
+        rows=$((rows + 1))
+        printf '  %-13s host:%s\n' "$name" "$host_port"
+        printf '    svc %s\n' "$internal_service"
+        printf '    %s\n' "$url_shape"
+        ;;
+    esac
+  done < "$file"
+
+  if [ "$rows" -eq 0 ]; then
+    echo "  No redacted DB rows found in ${file}."
+  fi
+}
+
+emit_screen_summary() {
+  local ip_addr="$1"
+  local page="${2:-overview}"
+  local generated_at
+  generated_at="$(date '+%Y-%m-%d %H:%M:%S %Z')"
+
+  printf '\033c'
+  echo "PROJECT TRUTH CLIENT SUMMARY"
+  echo "Generated: ${generated_at}"
+  echo "Host: $(hostname)"
+  echo "Login: infra / infra"
+  echo
+
+  if [ -z "$ip_addr" ]; then
+    echo "LAN IP: NOT DETECTED"
+    echo "Repair: project-truth-lan-dhcp"
+    return
+  fi
+
+  echo "LAN IP: ${ip_addr}"
+  echo
+
+  if [ "$page" = "tunnels" ]; then
+    emit_trycloudflare_screen
+    echo
+    echo "Next: project-truth-lan-summary --screen-db"
+    return
+  fi
+
+  if [ "$page" = "db" ]; then
+    emit_database_screen
+    echo
+    echo "Raw DB public tunnels are intentionally not shown."
+    return
+  fi
+
+  echo "HRIS"
+  printf '  %-5s login  http://%s:%s/auth/login\n' "PROD" "$ip_addr" "3000"
+  printf '  %-5s api    http://%s:%s/health\n' "PROD" "$ip_addr" "3001"
+  printf '  %-5s login  http://%s:%s/auth/login\n' "DEV" "$ip_addr" "3100"
+  printf '  %-5s api    http://%s:%s/health\n' "DEV" "$ip_addr" "3101"
+  printf '  %-5s login  http://%s:%s/auth/login\n' "UAT" "$ip_addr" "3200"
+  printf '  %-5s api    http://%s:%s/health\n' "UAT" "$ip_addr" "3201"
+  echo
+  echo "Observability"
+  printf '  %-10s http://%s:%s\n' "Grafana" "$ip_addr" "53000"
+  printf '  %-10s http://%s:%s\n' "Prometheus" "$ip_addr" "9091"
+  printf '  %-10s http://%s:%s\n' "Loki" "$ip_addr" "3110"
+  echo
+  echo "TryCloudflare: project-truth-lan-summary --screen-tunnels"
+  echo "Database facts: project-truth-lan-summary --screen-db"
+  echo
+  echo "Useful commands"
+  echo "  project-truth-progress --watch"
+  echo "  project-truth-hris-status"
+  echo "  project-truth-lan-summary --screen-overview"
+}
+
 ip_addr="$(lan_ip || true)"
 write_summary "$ip_addr"
+
+if [ "$screen" = "true" ]; then
+  emit_screen_summary "$ip_addr" "$screen_page"
+  exit 0
+fi
 
 {
   echo "Project Truth HRIS appliance"
   if [ -n "$ip_addr" ]; then
     echo "LAN IP: ${ip_addr}"
     echo "Open: http://${ip_addr}:3000/auth/login"
+    echo "Client summary: project-truth-lan-summary --screen"
   else
     echo "LAN IP: NOT DETECTED"
   fi
