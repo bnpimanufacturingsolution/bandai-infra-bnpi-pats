@@ -29,6 +29,7 @@ develop
 - [Health Checks](docs/HEALTHCHECKS.md)
 - [Cloudflare trycloudflare Tunnel Runbook](docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md)
 - [GitOps GitHub Watch Runbook](docs/GITOPS_GH_WATCH_RUNBOOK.md)
+- [Self-Healing And Drift Recovery](docs/SELF_HEALING_AND_DRIFT_RECOVERY.md)
 - [Installer Test Report](docs/INSTALLER_TEST_REPORT.md)
 
 ## Normal CLI Flow

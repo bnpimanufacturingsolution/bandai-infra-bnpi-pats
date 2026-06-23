@@ -58,6 +58,9 @@ jobs:
           kubectl kustomize gitops/overlays/dev
           kubectl kustomize gitops/overlays/uat
           kubectl kustomize gitops/overlays/prod
+          kubectl kustomize gitops/runtime-k8s/overlays/dev
+          kubectl kustomize gitops/runtime-k8s/overlays/uat
+          kubectl kustomize gitops/runtime-k8s/overlays/prod
 
       - name: Prepare Packer staging inputs
         shell: powershell

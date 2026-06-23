@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','configure','select-image','download-image','build-image','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel')]
+  [ValidateSet('doctor','configure','select-image','download-image','build-image','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -19,6 +19,12 @@ $scriptMap = @{
   'verify-gcp-image-boot' = 'verify-gcp-image-boot.ps1'
   'configure-virtualbox' = 'configure-virtualbox.ps1'
   'vhdx-autopilot'      = 'vhdx-autopilot.ps1'
+  'finalize-local-vhdx' = 'finalize-local-vhdx.ps1'
+  'repair-appliance-online' = 'repair-appliance-online.ps1'
+  'backup-appliance-data' = 'backup-appliance-data.ps1'
+  'restore-appliance-data' = 'restore-appliance-data.ps1'
+  'enable-k8s-runtime' = 'enable-k8s-runtime.ps1'
+  'disable-k8s-runtime' = 'disable-k8s-runtime.ps1'
   'repair-hyperv-boot'  = 'repair-hyperv-boot.ps1'
   'verify-hyperv-bridge' = 'verify-hyperv-bridge.ps1'
   'login-visual-proof-loop' = 'login-visual-proof-loop.ps1'
