@@ -113,3 +113,11 @@ write_summary "$ip_addr"
 if [ "$quiet" != "true" ]; then
   cat "$summary_file"
 fi
+
+if [ -w /dev/tty1 ]; then
+  {
+    printf '\033c'
+    cat "$issue_file"
+    printf '%s login: ' "$(hostname)"
+  } > /dev/tty1 || true
+fi

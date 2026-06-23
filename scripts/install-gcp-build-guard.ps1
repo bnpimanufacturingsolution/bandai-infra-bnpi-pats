@@ -20,7 +20,8 @@ $arguments = @(
   '-File', "`"$watchScript`"",
   '-ProjectId', $ProjectId,
   '-MaxRunningMinutes', $MaxRunningMinutes,
-  '-StopLeakedBuildVms'
+  '-StopLeakedBuildVms',
+  '-SkipAlert'
 ) -join ' '
 
 $action = New-ScheduledTaskAction -Execute $powerShellPath -Argument $arguments
@@ -44,3 +45,4 @@ Register-ScheduledTask `
 Write-Host "Installed scheduled task: $TaskName"
 Write-Host "Runs every $IntervalMinutes minutes."
 Write-Host "Stops Project Truth build VMs older than $MaxRunningMinutes minutes in project $ProjectId."
+Write-Host "Runs log-only alerts so proof screenshots are not covered by modal popups."

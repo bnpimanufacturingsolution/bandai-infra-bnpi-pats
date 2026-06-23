@@ -62,8 +62,8 @@ if [ -f /etc/default/grub ]; then
 GRUB_TERMINAL=console
 GRUB_TERMINAL_INPUT=console
 GRUB_TERMINAL_OUTPUT=console
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
-GRUB_CMDLINE_LINUX=""
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 systemd.show_status=false rd.systemd.show_status=false udev.log_level=3"
+GRUB_CMDLINE_LINUX="loglevel=3 systemd.show_status=false rd.systemd.show_status=false udev.log_level=3"
 GRUBQUIET
   if command -v update-grub >/dev/null 2>&1; then
     sudo update-grub || true
@@ -145,6 +145,16 @@ sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-seed.sh
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-observability-start.sh /usr/local/bin/project-truth-hris-observability-start
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-dhcp.sh /usr/local/bin/project-truth-lan-dhcp
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-summary.sh /usr/local/bin/project-truth-lan-summary
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-clean-console.sh /usr/local/bin/project-truth-clean-console
+sudo tee /etc/sysctl.d/99-project-truth-console.conf >/dev/null <<'SYSCTL'
+kernel.printk = 3 4 1 3
+SYSCTL
+sudo install -d -m 0755 /etc/systemd/journald.conf.d
+sudo tee /etc/systemd/journald.conf.d/99-project-truth-console.conf >/dev/null <<'JOURNALD'
+[Journal]
+ForwardToConsole=no
+MaxLevelConsole=notice
+JOURNALD
 sudo tee /etc/systemd/system/project-truth-lan-dhcp.service >/dev/null <<'LANDHCP'
 [Unit]
 Description=Project Truth first boot LAN DHCP
@@ -160,6 +170,7 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 LANDHCP
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-lan-summary.service /etc/systemd/system/project-truth-lan-summary.service
+sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-clean-console.service /etc/systemd/system/project-truth-clean-console.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-hris.service /etc/systemd/system/project-truth-hris.service
 sudo install -m 0644 /opt/project-truth/appliance/profile.d/project-truth-hris-help.sh /etc/profile.d/project-truth-hris-help.sh
 sudo chmod 0644 /etc/profile.d/project-truth-hris-help.sh
@@ -167,6 +178,7 @@ sudo docker compose -f /opt/project-truth/appliance/docker-compose.yml build
 sudo systemctl daemon-reload
 sudo systemctl enable project-truth-lan-dhcp.service
 sudo systemctl enable project-truth-lan-summary.service
+sudo systemctl enable project-truth-clean-console.service
 sudo systemctl enable project-truth-hris.service
 
 # This appliance is fully configured by systemd after image bake. Disable
