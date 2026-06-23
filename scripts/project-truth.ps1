@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','configure','select-image','download-image','build-image','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel')]
+  [ValidateSet('doctor','configure','select-image','download-image','build-image','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','apply-argocd-platform','configure-argocd-repo-creds','configure-argocd-webhook','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -36,6 +36,9 @@ $scriptMap = @{
   'repair-and-verify'   = 'repair-and-verify.ps1'
   'watch-github-run'    = 'watch-github-run.ps1'
   'verify-gitops-state' = 'verify-gitops-state.ps1'
+  'apply-argocd-platform' = 'apply-argocd-platform.ps1'
+  'configure-argocd-repo-creds' = 'configure-argocd-repo-creds.ps1'
+  'configure-argocd-webhook' = 'configure-argocd-webhook.ps1'
   'start-local-hris-runtime' = 'start-local-hris-runtime.ps1'
   'verify-local-hris-runtime' = 'verify-local-hris-runtime.ps1'
   'start-trycloudflare-tunnel' = 'start-trycloudflare-tunnel.ps1'

@@ -21,6 +21,7 @@ Windows host repo
 | Hyper-V VM lifecycle | Terraform recreates the VM from the selected VHDX. | No, unless the VHDX itself is bad |
 | K3s control plane | `repair-appliance-online` restarts `k3s`. | No |
 | Argo CD Application drift | Argo Applications use automated sync, pruning, self-heal, and retry. | No |
+| Argo CD platform drift | `repair-appliance-online -Mode GitOpsRefresh` reapplies the explicit Argo reconciliation config. | No |
 | Missing Argo Applications | `repair-appliance-online` first applies in-image manifests, then uploads host repo manifests if they are absent. | No |
 | HRIS app/API containers | Docker Compose uses `restart: unless-stopped`; `project-truth-hris` starts the runtime on boot. | No |
 | HRIS Kubernetes runtime | `enable-k8s-runtime` moves PROD/DEV/UAT HRIS app/API/Postgres into K3s Deployments/StatefulSets managed by Argo CD. | No |
@@ -71,13 +72,16 @@ settings, K3s image pre-import, and K3s auto-deploy bootstrap.
 
 ```powershell
 .\scripts\project-truth.ps1 backup-appliance-data -GuestIp <vm-lan-ip>
-.\scripts\project-truth.ps1 enable-k8s-runtime -GuestIp <vm-lan-ip>
+.\scripts\project-truth.ps1 enable-k8s-runtime -GuestIp <vm-lan-ip> -ImageTag develop
 ```
 
-This stops the Compose runtime, imports the already-built local images into K3s
+This stops the Compose runtime, imports the selected local image tag into K3s
 containerd, stores the image archive under K3s's image pre-import directory,
 writes the Argo runtime Application manifests to K3s's auto-deploy directory,
-and applies the runtime Applications.
+and applies the runtime Applications. If a promoted tag is used, pass the same
+tag to `-ImageTag`; the script can retag the existing local `develop` images for
+offline appliance promotion, or fail early if the selected local images are not
+available.
 
 To return to Compose:
 
@@ -127,6 +131,11 @@ Each Application has:
 - `prune: true`
 - `selfHeal: true`
 - retry with exponential backoff
+
+Argo CD platform config is also declared:
+
+- `timeout.reconciliation: 60s`
+- `timeout.reconciliation.jitter: 15s`
 
 `verify-gitops-state -GuestIp <vm-lan-ip>` fails if any Application is missing.
 `repair-appliance-online -Mode GitOpsRefresh` recovers missing Applications from

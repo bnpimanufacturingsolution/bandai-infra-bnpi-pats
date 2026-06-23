@@ -2,6 +2,8 @@ param(
   [Parameter(Mandatory = $true)][string]$GuestIp,
   [string]$User = 'infra',
   [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot),
+  [ValidatePattern('^[A-Za-z0-9._-]+$')]
+  [string]$ImageTag = 'develop',
   [switch]$SkipComposeStop
 )
 
@@ -54,13 +56,21 @@ fi
 '@
 }
 
-Invoke-Guest @'
+$imageImportScript = @'
 set -e
-for image in postgres:16-alpine hris-api-local:develop hris-api-db-init:develop hris-app-local:develop; do
+image_tag='__IMAGE_TAG__'
+for image_name in hris-api-local hris-api-db-init hris-app-local; do
+  if ! docker image inspect "${image_name}:${image_tag}" >/dev/null 2>&1; then
+    if [ "${image_tag}" != "develop" ] && docker image inspect "${image_name}:develop" >/dev/null 2>&1; then
+      docker tag "${image_name}:develop" "${image_name}:${image_tag}"
+    fi
+  fi
+done
+for image in postgres:16-alpine "hris-api-local:${image_tag}" "hris-api-db-init:${image_tag}" "hris-app-local:${image_tag}"; do
   docker image inspect "$image" >/dev/null
 done
 sudo mkdir -p /var/lib/rancher/k3s/agent/images
-docker save -o /tmp/project-truth-k8s-runtime-images.tar postgres:16-alpine hris-api-local:develop hris-api-db-init:develop hris-app-local:develop
+docker save -o /tmp/project-truth-k8s-runtime-images.tar postgres:16-alpine "hris-api-local:${image_tag}" "hris-api-db-init:${image_tag}" "hris-app-local:${image_tag}"
 sudo cp /tmp/project-truth-k8s-runtime-images.tar /var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-images.tar
 sudo k3s ctr -n k8s.io images import /tmp/project-truth-k8s-runtime-images.tar
 sudo mkdir -p \
@@ -72,6 +82,8 @@ sudo cp /tmp/project-truth-runtime-applications/*.yaml /var/lib/rancher/k3s/serv
 sudo kubectl apply -n argocd -f /tmp/project-truth-runtime-applications
 sudo kubectl get applications -n argocd -o wide
 '@
+
+Invoke-Guest ($imageImportScript.Replace('__IMAGE_TAG__', $ImageTag))
 
 & "$PSScriptRoot\verify-gitops-state.ps1" -GuestIp $GuestIp -RequireRuntimeApplications
 & "$PSScriptRoot\watch-until-healthy.ps1" -GuestIp $GuestIp -MaxHours 1 -RetryIntervalSeconds 20

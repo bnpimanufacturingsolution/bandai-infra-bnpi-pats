@@ -58,7 +58,13 @@ $config = [ordered]@{
     repoUrl = $GitOpsRepoUrl
     branch = 'develop'
     applications = @('project-truth-dev', 'project-truth-uat', 'project-truth-prod')
+    runtimeApplications = @('project-truth-runtime-dev', 'project-truth-runtime-uat', 'project-truth-runtime-prod')
     paths = @('gitops/overlays/dev', 'gitops/overlays/uat', 'gitops/overlays/prod')
+    runtimePaths = @('gitops/runtime-k8s/overlays/dev', 'gitops/runtime-k8s/overlays/uat', 'gitops/runtime-k8s/overlays/prod')
+    reconciliation = [ordered]@{
+      timeout = '60s'
+      jitter = '15s'
+    }
   }
   updatedAt = (Get-Date).ToString('o')
 }

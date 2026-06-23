@@ -27,11 +27,41 @@ function Get-RenderedOverlay {
   ($rendered | Out-String)
 }
 
+function Get-KustomizeImageTag {
+  param(
+    [string]$KustomizationText,
+    [string]$ImageName
+  )
+
+  $pattern = "(?ms)^\s*-\s*name:\s*$([regex]::Escape($ImageName))\s*\r?\n\s*newTag:\s*([A-Za-z0-9._-]+)"
+  $match = [regex]::Match($KustomizationText, $pattern)
+  if (-not $match.Success) {
+    throw "Self-heal contract failed: missing kustomize image tag for ${ImageName}"
+  }
+  $match.Groups[1].Value
+}
+
+function Get-EnvironmentRuntimeImageTag {
+  param(
+    [string]$EnvironmentPatchText,
+    [string]$EnvName
+  )
+
+  $match = [regex]::Match($EnvironmentPatchText, '(?m)^\s*runtime_image_tag:\s*"?([A-Za-z0-9._-]+)"?\s*$')
+  if (-not $match.Success) {
+    throw "Self-heal contract failed: missing runtime_image_tag for ${EnvName}"
+  }
+  $match.Groups[1].Value
+}
+
 $checks = New-Object System.Collections.Generic.List[object]
 
 foreach ($envName in $Environments) {
   $runtimeOverlay = "gitops/runtime-k8s/overlays/$envName"
   $rendered = Get-RenderedOverlay -Path $runtimeOverlay
+  $runtimeKustomization = Get-Content -Raw "$runtimeOverlay/kustomization.yaml"
+  $environmentPatch = Get-Content -Raw "gitops/overlays/$envName/environment-patch.yaml"
+  $environmentRuntimeImageTag = Get-EnvironmentRuntimeImageTag -EnvironmentPatchText $environmentPatch -EnvName $envName
 
   $expectedAppPort = switch ($envName) {
     'prod' { 3000 }
@@ -58,6 +88,15 @@ foreach ($envName in $Environments) {
   $checks.Add((Assert-Text "runtime-$envName exposes api hostPort" $rendered "hostPort:\s*$expectedApiPort"))
   $checks.Add((Assert-Text "runtime-$envName exposes postgres hostPort" $rendered "hostPort:\s*$expectedPostgresPort"))
 
+  foreach ($imageName in @('hris-api-db-init', 'hris-api-local', 'hris-app-local')) {
+    $imageTag = Get-KustomizeImageTag -KustomizationText $runtimeKustomization -ImageName $imageName
+    if ($imageTag -ne $environmentRuntimeImageTag) {
+      throw "Self-heal contract failed: runtime_image_tag for ${envName} is ${environmentRuntimeImageTag}, but ${imageName} uses ${imageTag}"
+    }
+    $checks.Add((Assert-Text "runtime-$envName $imageName tag matches environment contract" "runtime_image_tag: $environmentRuntimeImageTag`nnewTag: $imageTag" '(?ms)runtime_image_tag:\s*([A-Za-z0-9._-]+).*newTag:\s*\1'))
+    $checks.Add((Assert-Text "runtime-$envName renders $imageName tag from kustomization" $rendered "image:\s*$([regex]::Escape($imageName)):$([regex]::Escape($imageTag))"))
+  }
+
   $runtimeApplication = Get-Content -Raw "gitops/argocd/runtime-applications/project-truth-runtime-$envName.yaml"
   $checks.Add((Assert-Text "runtime-$envName Argo app points at runtime overlay" $runtimeApplication "path:\s*gitops/runtime-k8s/overlays/$envName"))
   $checks.Add((Assert-Text "runtime-$envName Argo app auto-sync enabled" $runtimeApplication 'enabled:\s*true'))
@@ -73,12 +112,36 @@ foreach ($envName in $Environments) {
 $enableScript = Get-Content -Raw 'scripts/enable-k8s-runtime.ps1'
 $repairScript = Get-Content -Raw 'scripts/repair-appliance-online.ps1'
 $verifyScript = Get-Content -Raw 'scripts/verify-gitops-state.ps1'
+$promoteWorkflow = Get-Content -Raw '.github/workflows/promote-gitops.yml'
+$platformConfig = Get-Content -Raw 'gitops/argocd/platform/argocd-cm.yaml'
+$projectTruthScript = Get-Content -Raw 'scripts/project-truth.ps1'
+$repoCredsScript = Get-Content -Raw 'scripts/configure-argocd-repo-creds.ps1'
+$webhookScript = Get-Content -Raw 'scripts/configure-argocd-webhook.ps1'
+$clientScalingDoc = Get-Content -Raw 'docs/GITOPS_CLIENT_ENV_SCALING.md'
+$applicationSetTemplate = Get-Content -Raw 'gitops/argocd/applicationsets/project-truth-envs.example.yaml'
 
 $checks.Add((Assert-Text 'enable-k8s-runtime stores image archive for K3s pre-import' $enableScript '/var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-images\.tar'))
 $checks.Add((Assert-Text 'enable-k8s-runtime imports images into k8s.io namespace' $enableScript 'k3s ctr -n k8s\.io images import'))
+$checks.Add((Assert-Text 'enable-k8s-runtime accepts promoted runtime image tag' $enableScript '\$ImageTag'))
 $checks.Add((Assert-Text 'enable-k8s-runtime installs runtime apps into K3s auto-deploy dir' $enableScript '/var/lib/rancher/k3s/server/manifests'))
 $checks.Add((Assert-Text 'repair-appliance-online persists app manifests into K3s auto-deploy dir' $repairScript '/var/lib/rancher/k3s/server/manifests'))
+$checks.Add((Assert-Text 'repair-appliance-online reapplies Argo platform config' $repairScript 'project-truth-argocd-platform'))
 $checks.Add((Assert-Text 'verify-gitops-state can require runtime Applications' $verifyScript 'RequireRuntimeApplications'))
+$checks.Add((Assert-Text 'promote-gitops updates runtime image tag marker' $promoteWorkflow 'runtime_image_tag'))
+$checks.Add((Assert-Text 'promote-gitops updates runtime kustomize image tags' $promoteWorkflow 'gitops/runtime-k8s/overlays/\$env_name/kustomization\.yaml'))
+$checks.Add((Assert-Text 'promote-gitops supports optional registry image flow' $promoteWorkflow 'image_registry'))
+$checks.Add((Assert-Text 'Argo platform declares reconciliation timeout' $platformConfig 'timeout\.reconciliation:\s*60s'))
+$checks.Add((Assert-Text 'Argo platform declares reconciliation jitter' $platformConfig 'timeout\.reconciliation\.jitter:\s*15s'))
+$checks.Add((Assert-Text 'project-truth exposes Argo platform command' $projectTruthScript 'apply-argocd-platform'))
+$checks.Add((Assert-Text 'project-truth exposes Argo repo credential command' $projectTruthScript 'configure-argocd-repo-creds'))
+$checks.Add((Assert-Text 'project-truth exposes Argo webhook command' $projectTruthScript 'configure-argocd-webhook'))
+$checks.Add((Assert-Text 'repo credential script creates Argo repo-creds secret' $repoCredsScript 'argocd\.argoproj\.io/secret-type:\s*repo-creds'))
+$checks.Add((Assert-Text 'webhook script configures GitHub webhook secret key' $webhookScript 'webhook\.github\.secret'))
+$checks.Add((Assert-Text 'client scaling doc preserves dev uat prod shape' $clientScalingDoc 'gitops/clients/<client>/overlays/dev'))
+$checks.Add((Assert-Text 'ApplicationSet template generates contract apps' $applicationSetTemplate 'name:\s*project-truth-env-contracts'))
+$checks.Add((Assert-Text 'ApplicationSet template generates runtime apps' $applicationSetTemplate 'name:\s*project-truth-env-runtimes'))
+$checks.Add((Assert-Text 'ApplicationSet template keeps contract overlay paths' $applicationSetTemplate 'contractPath:\s*gitops/overlays/dev'))
+$checks.Add((Assert-Text 'ApplicationSet template keeps runtime overlay paths' $applicationSetTemplate 'runtimePath:\s*gitops/runtime-k8s/overlays/dev'))
 
 $checks | Format-Table -AutoSize
 Write-Host "Self-heal contract checks passed: $($checks.Count)"

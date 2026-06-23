@@ -5,6 +5,7 @@ metadata:
 data:
   environment: prod
   release_tag: "prod"
+  runtime_image_tag: "develop"
   app_port: "3000"
   api_port: "3001"
   postgres_host_port: "15432"

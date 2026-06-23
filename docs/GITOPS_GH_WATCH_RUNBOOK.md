@@ -51,6 +51,15 @@ gh run view <run-id> --json status,conclusion,name,url,updatedAt
 gh run view <run-id> --log-failed
 ```
 
+The promotion updates both the environment contract marker and the selected
+runtime image tag for the matching Kubernetes runtime overlay. On local/offline
+VMs, make sure the same tag is imported into K3s before expecting the rollout to
+start:
+
+```powershell
+.\scripts\project-truth.ps1 enable-k8s-runtime -GuestIp <guest-lan-ip> -ImageTag <tag>
+```
+
 ## Push Watch Loop
 
 For owner-operator repair work on this repo, push `develop` after local validation passes and watch the resulting workflow to a terminal status:
@@ -78,3 +87,9 @@ When a guest VM IP is known:
 ```
 
 Without a guest IP, verification is limited to local overlay rendering and GitHub Actions status.
+
+## Client Scaling
+
+Keep DEV/UAT/PROD as separate namespaces and separate Argo Applications for a
+single client. For many clients, use the same shape per client and consider the
+template in [GitOps Client And Environment Scaling](GITOPS_CLIENT_ENV_SCALING.md).

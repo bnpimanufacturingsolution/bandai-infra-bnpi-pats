@@ -33,6 +33,26 @@ function Copy-HostGitOpsApplications {
   Invoke-Guest 'sudo mkdir -p /var/lib/rancher/k3s/server/manifests && sudo cp /tmp/project-truth-argocd-applications/*.yaml /var/lib/rancher/k3s/server/manifests/ && sudo kubectl apply -n argocd -f /tmp/project-truth-argocd-applications'
 }
 
+function Copy-HostArgocdPlatform {
+  $platformDir = Join-Path $RepoRoot 'gitops\argocd\platform'
+  if (-not (Test-Path -LiteralPath $platformDir)) {
+    throw "Host Argo CD platform directory not found: $platformDir"
+  }
+
+  Invoke-Guest 'rm -rf /tmp/project-truth-argocd-platform && mkdir -p /tmp/project-truth-argocd-platform'
+  $manifests = Get-ChildItem -LiteralPath $platformDir -Filter '*.yaml' -File
+  if ($manifests.Count -eq 0) {
+    throw "No Argo CD platform manifests found in: $platformDir"
+  }
+  foreach ($manifest in $manifests) {
+    scp -o BatchMode=yes -o ConnectTimeout=10 $manifest.FullName "${User}@${GuestIp}:/tmp/project-truth-argocd-platform/"
+    if ($LASTEXITCODE -ne 0) {
+      throw "Failed to upload Argo CD platform manifest: $($manifest.FullName)"
+    }
+  }
+  Invoke-Guest 'sudo kubectl apply -k /tmp/project-truth-argocd-platform'
+}
+
 $status = @'
 set -e
 echo "===== host ====="
@@ -77,6 +97,7 @@ sudo kubectl get applications -n argocd -o wide
 '@
 
 function Repair-GitOpsApplications {
+  Copy-HostArgocdPlatform
   Invoke-Guest $gitopsRefresh
   Invoke-Guest $verifyApplications
   $verifyExit = $LASTEXITCODE

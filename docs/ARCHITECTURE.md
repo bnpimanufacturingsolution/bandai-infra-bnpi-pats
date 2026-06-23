@@ -32,7 +32,10 @@ The current HRIS appliance runtime exposes app/API pairs. The GitOps overlays re
 | DEV | `3100` | `3101/health` | `15433` |
 | UAT | `3200` | `3201/health` | `15434` |
 
-The Kubernetes GitOps objects in this branch are environment contract ConfigMaps, not full HRIS Deployments. The appliance Docker stack runs the HRIS app/API containers.
+The default appliance runtime still uses the Docker stack. The Kubernetes GitOps
+contract now includes both environment ConfigMaps and opt-in runtime overlays
+for HRIS app/API/Postgres Deployments/StatefulSets when `enable-k8s-runtime` is
+used.
 
 ## Legacy Boundary
 

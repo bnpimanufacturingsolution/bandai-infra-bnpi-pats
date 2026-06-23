@@ -55,6 +55,7 @@ jobs:
       - name: Render GitOps overlays
         shell: powershell
         run: |
+          kubectl kustomize gitops/argocd/platform
           kubectl kustomize gitops/overlays/dev
           kubectl kustomize gitops/overlays/uat
           kubectl kustomize gitops/overlays/prod

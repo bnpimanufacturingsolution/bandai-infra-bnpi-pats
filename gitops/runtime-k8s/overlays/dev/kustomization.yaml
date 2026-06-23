@@ -3,3 +3,11 @@ namespace: dev
 resources:
   - namespace.yaml
   - runtime.yaml
+
+images:
+  - name: hris-api-db-init
+    newTag: develop
+  - name: hris-api-local
+    newTag: develop
+  - name: hris-app-local
+    newTag: develop
