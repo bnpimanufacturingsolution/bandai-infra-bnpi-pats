@@ -37,6 +37,31 @@ variable "staging_archive_url" {
   default = ""
 }
 
+variable "machine_type" {
+  type    = string
+  default = "e2-standard-4"
+}
+
+variable "disk_size" {
+  type    = number
+  default = 60
+}
+
+variable "disk_type" {
+  type    = string
+  default = "pd-balanced"
+}
+
+variable "max_run_duration_seconds" {
+  type    = number
+  default = 7200
+}
+
+variable "preemptible" {
+  type    = bool
+  default = false
+}
+
 locals {
   build_label = "project-truth-node-gcp"
 }
@@ -52,9 +77,10 @@ source "googlecompute" "ubuntu" {
   image_family      = "project-truth-node"
 
   instance_name = "${local.build_label}-build-{{timestamp}}"
-  machine_type  = "e2-standard-8"
-  disk_size     = 80
-  disk_type     = "pd-ssd"
+  machine_type  = var.machine_type
+  disk_size     = var.disk_size
+  disk_type     = var.disk_type
+  preemptible   = var.preemptible
 
   ssh_username = var.ssh_username
   ssh_timeout  = "30m"
@@ -100,6 +126,9 @@ build {
 
   provisioner "shell" {
     execute_command = "chmod +x {{ .Path }}; sudo -E bash -o pipefail -c '{{ .Vars }} {{ .Path }} 2>&1 | tee -a /var/log/project-truth-provision.log'"
+    environment_vars = [
+      "PROJECT_TRUTH_IMAGE_TARGET=googlecompute"
+    ]
     script          = "${path.root}/provision.sh"
   }
 }

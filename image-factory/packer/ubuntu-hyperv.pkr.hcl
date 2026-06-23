@@ -95,6 +95,11 @@ build {
     destination = "/tmp/hris-app"
   }
 
+  provisioner "file" {
+    source      = "${path.root}/staging/vendor"
+    destination = "/tmp/vendor"
+  }
+
   provisioner "shell" {
     inline = [
       "sudo mkdir -p /opt/project-truth",
@@ -102,12 +107,16 @@ build {
       "sudo cp -R /tmp/appliance /opt/project-truth/appliance",
       "sudo cp -R /tmp/hris-api /opt/project-truth/hris-api",
       "sudo cp -R /tmp/hris-app /opt/project-truth/hris-app",
+      "sudo cp -R /tmp/vendor /opt/project-truth/vendor",
       "sudo find /opt/project-truth -type f \\( -name '*.tmp' -o -name '.env' -o -name '.env.*' \\) -delete",
       "sudo chown -R infra:infra /opt/project-truth"
     ]
   }
 
   provisioner "shell" {
+    environment_vars = [
+      "PROJECT_TRUTH_IMAGE_TARGET=hyperv"
+    ]
     script = "${path.root}/provision.sh"
   }
 }
