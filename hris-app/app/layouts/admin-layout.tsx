@@ -108,7 +108,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 											event.currentTarget.src = bandaiLogo;
 										}
 									}}
-									className="block h-10 w-40 object-contain object-left"
+									className="block h-9 w-44 max-w-full object-contain object-left"
 								/>
 								<button
 									onClick={() => setSidebarOpen(false)}
