@@ -122,6 +122,7 @@ $lanSummaryScript = Get-Content -Raw 'appliance/bin/project-truth-lan-summary.sh
 $promoteWorkflow = Get-Content -Raw '.github/workflows/promote-gitops.yml'
 $platformConfig = Get-Content -Raw 'gitops/argocd/platform/argocd-cm.yaml'
 $projectTruthScript = Get-Content -Raw 'scripts/project-truth.ps1'
+$hypervVisualProofScript = Get-Content -Raw 'scripts/hyperv-visual-proof-loop.ps1'
 $repoCredsScript = Get-Content -Raw 'scripts/configure-argocd-repo-creds.ps1'
 $webhookScript = Get-Content -Raw 'scripts/configure-argocd-webhook.ps1'
 $clientScalingDoc = Get-Content -Raw 'docs/GITOPS_CLIENT_ENV_SCALING.md'
@@ -157,6 +158,8 @@ $checks.Add((Assert-Text 'LAN summary reports last OS sync commit' $lanSummarySc
 $checks.Add((Assert-Text 'OS sync timer reconciles repeatedly' $osSyncTimer 'OnUnitActiveSec=5min'))
 $checks.Add((Assert-Text 'project-truth exposes Argo repo credential command' $projectTruthScript 'configure-argocd-repo-creds'))
 $checks.Add((Assert-Text 'project-truth exposes Argo webhook command' $projectTruthScript 'configure-argocd-webhook'))
+$checks.Add((Assert-Text 'Hyper-V visual proof supports pinned SSH host key' $hypervVisualProofScript '\[string\]\$HostKey'))
+$checks.Add((Assert-Text 'Hyper-V visual proof passes host key to PuTTY tools' $hypervVisualProofScript "'-hostkey'"))
 $checks.Add((Assert-Text 'repo credential script creates Argo repo-creds secret' $repoCredsScript 'argocd\.argoproj\.io/secret-type:\s*repo-creds'))
 $checks.Add((Assert-Text 'webhook script configures GitHub webhook secret key' $webhookScript 'webhook\.github\.secret'))
 $checks.Add((Assert-Text 'client scaling doc preserves dev uat prod shape' $clientScalingDoc 'gitops/clients/<client>/overlays/dev'))

@@ -4,6 +4,7 @@ param(
   [string]$GuestIp = '',
   [string]$Username = 'infra',
   [string]$Password = 'infra',
+  [string]$HostKey = '',
   [int]$MaxPasses = 3,
   [int]$WaitSeconds = 3,
   [switch]$PatchLiveGuest,
@@ -60,7 +61,13 @@ function Resolve-GuestIp {
 function Invoke-Plink {
   param([string]$Command)
 
-  & $script:Plink -ssh -batch -pw $Password "$Username@$script:GuestAddress" $Command
+  $args = @('-ssh', '-batch')
+  if ($HostKey) {
+    $args += @('-hostkey', $HostKey)
+  }
+  $args += @('-pw', $Password, "$Username@$script:GuestAddress", $Command)
+
+  & $script:Plink @args
   if ($LASTEXITCODE -ne 0) {
     throw "plink failed with exit code $LASTEXITCODE for: $Command"
   }
@@ -72,7 +79,13 @@ function Copy-ToGuest {
     [string]$Target
   )
 
-  & $script:Pscp -batch -pw $Password $Source "$Username@$script:GuestAddress`:$Target"
+  $args = @('-batch')
+  if ($HostKey) {
+    $args += @('-hostkey', $HostKey)
+  }
+  $args += @('-pw', $Password, $Source, "$Username@$script:GuestAddress`:$Target")
+
+  & $script:Pscp @args
   if ($LASTEXITCODE -ne 0) {
     throw "pscp failed with exit code $LASTEXITCODE for: $Source -> $Target"
   }
@@ -80,7 +93,8 @@ function Copy-ToGuest {
 
 function Ensure-VMConnect {
   $process = Get-Process vmconnect -ErrorAction SilentlyContinue |
-    Where-Object { $_.MainWindowTitle -like "*$VmName*" } |
+    Where-Object { $_.MainWindowTitle -like "*$VmName*" -and $_.MainWindowHandle -ne 0 } |
+    Sort-Object StartTime -Descending |
     Select-Object -First 1
 
   if (-not $process) {
@@ -88,7 +102,8 @@ function Ensure-VMConnect {
     Start-Process vmconnect.exe -ArgumentList @('localhost', $VmName) -WindowStyle Normal | Out-Null
     Start-Sleep -Seconds 3
     $process = Get-Process vmconnect -ErrorAction SilentlyContinue |
-      Where-Object { $_.MainWindowTitle -like "*$VmName*" } |
+      Where-Object { $_.MainWindowTitle -like "*$VmName*" -and $_.MainWindowHandle -ne 0 } |
+      Sort-Object StartTime -Descending |
       Select-Object -First 1
   }
 
@@ -118,6 +133,9 @@ namespace ProjectTruth {
 
     [DllImport("user32.dll")]
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
   }
 
   [StructLayout(LayoutKind.Sequential)]
@@ -138,9 +156,16 @@ function Save-WindowScreenshot {
   )
 
   Add-User32
+  $hwndTopMost = [IntPtr]::new(-1)
+  $hwndNoTopMost = [IntPtr]::new(-2)
+  $swpNoMoveNoSize = 0x0001 -bor 0x0002
+
   [ProjectTruth.User32]::ShowWindow($Process.MainWindowHandle, 9) | Out-Null
+  [ProjectTruth.User32]::SetWindowPos($Process.MainWindowHandle, $hwndTopMost, 0, 0, 0, 0, $swpNoMoveNoSize) | Out-Null
   [ProjectTruth.User32]::SetForegroundWindow($Process.MainWindowHandle) | Out-Null
-  Start-Sleep -Milliseconds 500
+  $shell = New-Object -ComObject WScript.Shell
+  $shell.AppActivate($Process.Id) | Out-Null
+  Start-Sleep -Milliseconds 1000
 
   $rect = New-Object ProjectTruth.RECT
   if (-not [ProjectTruth.User32]::GetWindowRect($Process.MainWindowHandle, [ref]$rect)) {
@@ -160,6 +185,7 @@ function Save-WindowScreenshot {
     $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
     $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
   } finally {
+    [ProjectTruth.User32]::SetWindowPos($Process.MainWindowHandle, $hwndNoTopMost, 0, 0, 0, 0, $swpNoMoveNoSize) | Out-Null
     $graphics.Dispose()
     $bitmap.Dispose()
   }
