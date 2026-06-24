@@ -35,7 +35,9 @@ sleep 1
     echo "Do not type infra again after the shell prompt appears."
     echo
   fi
-  echo "After login run: project-truth-lan-summary --screen-overview"
+  echo "After login run:"
+  echo "  project-truth-lan-summary --screen-overview"
+  echo "  project-truth-lan-summary --screen-tunnels"
   echo
   printf '%s login: ' "$(hostname)"
 } > "$tty_path"

@@ -117,7 +117,8 @@ write_summary() {
       else
         echo
         echo "Experimental TryCloudflare"
-        echo "  Disabled by default. Set EXPERIMENTAL_TRY_CLOUDFLARE=true in /etc/project-truth/experimental.env and start project-truth-trycloudflare.service for temporary public test URLs."
+        echo "  Enabled by Project Truth when cloudflared is installed."
+        echo "  Quick tunnel URLs are temporary and rotate."
       fi
     else
       echo "LAN IP: NOT DETECTED"
@@ -137,10 +138,13 @@ write_summary() {
 emit_trycloudflare_screen() {
   local file="${state_dir}/trycloudflare-public-urls.txt"
   local rows=0
+  local host_ip
+
+  host_ip="$(lan_ip || true)"
 
   if [ ! -s "$file" ]; then
     echo "TryCloudflare: disabled"
-    echo "  Enable only for demos: EXPERIMENTAL_TRY_CLOUDFLARE=true"
+    echo "  Service is enabled by Project Truth when cloudflared is installed."
     echo "  Quick tunnel URLs are temporary and rotate."
     return
   fi
@@ -152,15 +156,25 @@ emit_trycloudflare_screen() {
     local_check="$(printf '%s' "$local_check" | xargs 2>/dev/null || true)"
     public_check="$(printf '%s' "$public_check" | xargs 2>/dev/null || true)"
     public_url="$(printf '%s' "$public_url" | xargs 2>/dev/null || true)"
+    local_path="$local_check"
+    if [ -n "$host_ip" ]; then
+      local_path="${local_check#http://${host_ip}:}"
+      if [ "$local_path" = "$local_check" ]; then
+        local_path="${local_check#https://${host_ip}:}"
+      fi
+      if [ "$local_path" != "$local_check" ]; then
+        local_path=":${local_path}"
+      fi
+    fi
 
     case "$target" in
-      ""|"Target"|---*) continue ;;
+      ""|"Target"|---*|prod-db|dev-db|uat-db) continue ;;
     esac
     case "$public_url" in
       https://*.trycloudflare.com*)
         rows=$((rows + 1))
-        printf '  %-10s %s/%s\n' "$target" "$local_check" "$public_check"
-        printf '    %s\n' "$public_url"
+        printf '  %-10s local  %s\n' "$target" "$local_path"
+        printf '  %-10s public %s\n' "" "$public_check"
         ;;
     esac
   done < "$file"
@@ -306,7 +320,9 @@ fi
   echo "  username: infra"
   echo "  password: infra (hidden while typing)"
   echo "Do not type infra again after the shell prompt appears."
-  echo "After login run: project-truth-lan-summary --screen-overview"
+  echo "After login run:"
+  echo "  project-truth-lan-summary --screen-overview"
+  echo "  project-truth-lan-summary --screen-tunnels"
   echo
 } > "$issue_file"
 

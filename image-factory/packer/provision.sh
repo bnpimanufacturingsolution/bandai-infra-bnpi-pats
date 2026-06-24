@@ -25,6 +25,39 @@ retry() {
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl git gnupg lsb-release unzip ufw open-iscsi docker.io docker-compose-v2
 
+install_cloudflared() {
+  if command -v cloudflared >/dev/null 2>&1; then
+    return 0
+  fi
+
+  arch="$(dpkg --print-architecture 2>/dev/null || true)"
+  case "$arch" in
+    amd64)
+      package_url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb"
+      ;;
+    arm64)
+      package_url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb"
+      ;;
+    *)
+      echo "cloudflared automatic install skipped for architecture: ${arch:-unknown}" >&2
+      return 0
+      ;;
+  esac
+
+  tmp_deb="/tmp/cloudflared-${arch}.deb"
+  if curl -fsSL --retry 3 --retry-delay 5 "$package_url" -o "$tmp_deb"; then
+    sudo dpkg -i "$tmp_deb" >/dev/null 2>&1 || sudo apt-get install -f -y
+    sudo rm -f "$tmp_deb" >/dev/null 2>&1 || true
+  else
+    echo "cloudflared download failed; project-truth-os-sync will retry on the VM" >&2
+  fi
+}
+
+install_cloudflared
+sudo install -d -m 0755 /etc/project-truth
+printf 'EXPERIMENTAL_TRY_CLOUDFLARE=true\n' | sudo tee /etc/project-truth/experimental.env >/dev/null
+sudo chmod 0644 /etc/project-truth/experimental.env
+
 echo "infra:infra" | sudo chpasswd
 sudo passwd -u infra || true
 sudo install -d -m 0755 /etc/ssh/sshd_config.d
@@ -208,6 +241,7 @@ fi
 sudo systemctl enable project-truth-lan-summary.service
 sudo systemctl enable project-truth-clean-console.service
 sudo systemctl enable project-truth-hris.service
+sudo systemctl enable project-truth-trycloudflare.service
 sudo systemctl enable project-truth-os-sync.timer
 
 if [ "$PROJECT_TRUTH_IMAGE_TARGET" = "googlecompute" ]; then

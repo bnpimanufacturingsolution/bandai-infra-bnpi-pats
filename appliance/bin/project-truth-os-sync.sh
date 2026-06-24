@@ -21,7 +21,7 @@ as_root() {
 
 ensure_dependencies() {
   local missing=()
-  for command_name in git rsync flock; do
+  for command_name in git rsync flock curl; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
       missing+=("$command_name")
     fi
@@ -33,12 +33,53 @@ ensure_dependencies() {
 
   if command -v apt-get >/dev/null 2>&1; then
     as_root apt-get update
-    as_root apt-get install -y git rsync util-linux
+    as_root apt-get install -y git rsync util-linux curl
     return 0
   fi
 
   echo "Missing dependencies: ${missing[*]}" >&2
   return 1
+}
+
+ensure_cloudflared() {
+  if command -v cloudflared >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! command -v dpkg >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+    echo "cloudflared unavailable and automatic install prerequisites are missing" >&2
+    return 0
+  fi
+
+  local arch package_url tmp_deb
+  arch="$(dpkg --print-architecture 2>/dev/null || true)"
+  case "$arch" in
+    amd64)
+      package_url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb"
+      ;;
+    arm64)
+      package_url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb"
+      ;;
+    *)
+      echo "cloudflared automatic install skipped for architecture: ${arch:-unknown}" >&2
+      return 0
+      ;;
+  esac
+
+  tmp_deb="/tmp/cloudflared-${arch}.deb"
+  if curl -fsSL --retry 3 --retry-delay 5 "$package_url" -o "$tmp_deb"; then
+    as_root dpkg -i "$tmp_deb" >/dev/null 2>&1 || as_root apt-get install -f -y
+    as_root rm -f "$tmp_deb" >/dev/null 2>&1 || true
+  else
+    echo "cloudflared download failed; TryCloudflare service will retry on the next OS sync" >&2
+  fi
+}
+
+enable_trycloudflare() {
+  as_root install -d -m 0755 /etc/project-truth
+  printf 'EXPERIMENTAL_TRY_CLOUDFLARE=true\n' |
+    as_root tee /etc/project-truth/experimental.env >/dev/null
+  as_root chmod 0644 /etc/project-truth/experimental.env
 }
 
 cleanup_git_credentials() {
@@ -186,6 +227,7 @@ install_commands_and_services() {
   as_root systemctl enable project-truth-hris.service
   as_root systemctl enable project-truth-lan-summary.service
   as_root systemctl enable project-truth-clean-console.service
+  as_root systemctl enable project-truth-trycloudflare.service
   as_root systemctl enable project-truth-os-sync.timer
 }
 
@@ -225,6 +267,12 @@ refresh_lan_summary() {
   fi
 }
 
+start_trycloudflare() {
+  if command -v systemctl >/dev/null 2>&1; then
+    as_root systemctl start --no-block project-truth-trycloudflare.service >/dev/null 2>&1 || true
+  fi
+}
+
 main() {
   case "${1:-}" in
     --status|status)
@@ -234,6 +282,8 @@ main() {
   esac
 
   ensure_dependencies
+  ensure_cloudflared
+  enable_trycloudflare
   trap cleanup_git_credentials EXIT
   exec 9>"$lock_file"
   if ! flock -n 9; then
@@ -246,6 +296,7 @@ main() {
   install_commands_and_services
   refresh_argocd
   record_state
+  start_trycloudflare
   refresh_lan_summary
 }
 

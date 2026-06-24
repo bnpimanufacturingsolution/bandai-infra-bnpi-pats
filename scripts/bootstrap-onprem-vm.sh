@@ -44,6 +44,42 @@ install_docker() {
   as_root systemctl start docker
 }
 
+ensure_cloudflared() {
+  if command -v cloudflared >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local arch package_url tmp_deb
+  arch="$(dpkg --print-architecture 2>/dev/null || true)"
+  case "$arch" in
+    amd64)
+      package_url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb"
+      ;;
+    arm64)
+      package_url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb"
+      ;;
+    *)
+      echo "cloudflared automatic install skipped for architecture: ${arch:-unknown}" >&2
+      return 0
+      ;;
+  esac
+
+  tmp_deb="/tmp/cloudflared-${arch}.deb"
+  if curl -fsSL --retry 3 --retry-delay 5 "$package_url" -o "$tmp_deb"; then
+    as_root dpkg -i "$tmp_deb" >/dev/null 2>&1 || as_root apt-get install -f -y
+    as_root rm -f "$tmp_deb" >/dev/null 2>&1 || true
+  else
+    echo "cloudflared download failed; TryCloudflare service can retry after bootstrap" >&2
+  fi
+}
+
+enable_trycloudflare() {
+  as_root install -d -m 0755 /etc/project-truth
+  printf 'EXPERIMENTAL_TRY_CLOUDFLARE=true\n' |
+    as_root tee /etc/project-truth/experimental.env >/dev/null
+  as_root chmod 0644 /etc/project-truth/experimental.env
+}
+
 sync_repo_to_install_root() {
   if [ "$repo_root" = "$install_root" ]; then
     return 0
@@ -87,6 +123,7 @@ install_commands_and_services() {
   as_root systemctl enable project-truth-hris.service
   as_root systemctl enable project-truth-lan-summary.service
   as_root systemctl enable project-truth-clean-console.service
+  as_root systemctl enable project-truth-trycloudflare.service
   as_root systemctl enable project-truth-os-sync.timer
 }
 
@@ -150,13 +187,20 @@ verify_local_endpoints() {
   done
 }
 
+start_trycloudflare() {
+  as_root systemctl start --no-block project-truth-trycloudflare.service >/dev/null 2>&1 || true
+}
+
 install_docker
+ensure_cloudflared
+enable_trycloudflare
 sync_repo_to_install_root
 prepare_persistent_dirs
 prepare_env_files
 install_commands_and_services
 start_stacks
 verify_local_endpoints
+start_trycloudflare
 
 echo "On-prem VM bootstrap complete."
 project-truth-lan-summary || true

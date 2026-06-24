@@ -35,7 +35,7 @@ policy:
 
 ```text
 experimental_trycloudflare_supported=true
-experimental_trycloudflare_default=false
+experimental_trycloudflare_default=true
 experimental_trycloudflare_flag=EXPERIMENTAL_TRY_CLOUDFLARE
 ```
 

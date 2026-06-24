@@ -7,49 +7,46 @@ fi
 
 echo
 echo "Project Truth HRIS appliance"
-echo "You are logged in as $(id -un). Do not type the password again at this shell prompt."
-if [ -n "$lan_ip" ]; then
-  echo "  LAN IP: ${lan_ip}"
-  echo
-  echo "  Open from host browser:"
-  echo "  PROD login: http://${lan_ip}:3000/auth/login"
-  echo "  PROD API:   http://${lan_ip}:3001/health"
-  echo "  DEV login:  http://${lan_ip}:3100/auth/login"
-  echo "  DEV API:    http://${lan_ip}:3101/health"
-  echo "  UAT login:  http://${lan_ip}:3200/auth/login"
-  echo "  UAT API:    http://${lan_ip}:3201/health"
-  echo
-  echo "  ZKTeco bridge targets:"
-  echo "  PROD webhook: http://${lan_ip}:3001/api/zkteco/events"
-  echo "  DEV webhook:  http://${lan_ip}:3101/api/zkteco/events"
-  echo "  UAT webhook:  http://${lan_ip}:3201/api/zkteco/events"
-  echo "  Saved events: http://${lan_ip}:3000/admin/devices/events?view=saved&source=ZKTECO_EVENT"
-  echo "  Bridge note: run the Windows ZKTeco SDK bridge on a Windows host/device LAN;"
-  echo "  set ZKTECO_WEBHOOK_URL to one of the webhook URLs above."
-  echo
-  echo "  Observability:"
-  echo "  Grafana: http://${lan_ip}:53000"
-  echo "  Prometheus: http://${lan_ip}:9091"
-  echo "  Loki: http://${lan_ip}:3110"
-else
-  echo "  LAN IP: NOT DETECTED"
-  echo "  Repair: project-truth-lan-dhcp"
-fi
+echo "Logged in as $(id -un). Use the URLs below from the Windows host browser."
 echo
-echo "Run:"
-echo "  project-truth-progress --watch"
-echo "  project-truth-status"
-echo "  project-truth-monitor"
-echo "  project-truth-hris-status"
-echo "  project-truth-os-sync --status"
-echo "  project-truth-lan-summary"
+
+if [ -n "$lan_ip" ]; then
+  echo "LAN IP: ${lan_ip}"
+  echo
+  echo "HRIS"
+  printf '  %-5s login  http://%s:%s/auth/login\n' "PROD" "$lan_ip" "3000"
+  printf '  %-5s api    http://%s:%s/health\n' "PROD" "$lan_ip" "3001"
+  printf '  %-5s login  http://%s:%s/auth/login\n' "DEV" "$lan_ip" "3100"
+  printf '  %-5s api    http://%s:%s/health\n' "DEV" "$lan_ip" "3101"
+  printf '  %-5s login  http://%s:%s/auth/login\n' "UAT" "$lan_ip" "3200"
+  printf '  %-5s api    http://%s:%s/health\n' "UAT" "$lan_ip" "3201"
+  echo
+  echo "Observability"
+  printf '  %-10s http://%s:%s\n' "Grafana" "$lan_ip" "53000"
+  printf '  %-10s http://%s:%s\n' "Prometheus" "$lan_ip" "9091"
+  printf '  %-10s http://%s:%s\n' "Loki" "$lan_ip" "3110"
+else
+  echo "LAN IP: NOT DETECTED"
+  echo "Repair: project-truth-lan-dhcp"
+fi
+
+if [ -s /run/project-truth/trycloudflare-public-urls.txt ]; then
+  echo
+  echo "TryCloudflare"
+  awk -F'|' '
+    $2 ~ /prod-app|prod-api|dev-app|dev-api|uat-app|uat-api|grafana|prometheus|loki/ {
+      gsub(/^ +| +$/, "", $2)
+      gsub(/^ +| +$/, "", $4)
+      if ($4 ~ /^https:\/\/.*trycloudflare\.com/) {
+        printf "  %-10s %s\n", $2, $4
+      }
+    }
+  ' /run/project-truth/trycloudflare-public-urls.txt
+fi
+
+echo
+echo "Client screens"
 echo "  project-truth-lan-summary --screen-overview"
 echo "  project-truth-lan-summary --screen-tunnels"
 echo "  project-truth-lan-summary --screen-db"
-echo "  project-truth-hris-env-start dev|uat|prod|all"
-echo "  project-truth-hris-env-seed dev|uat|prod|all"
-echo "  project-truth-lan-dhcp"
-echo
-echo "Startup URL log:"
-echo "  /var/log/project-truth-network-summary.log"
 echo

@@ -211,6 +211,7 @@ $script:Pscp = Resolve-Tool -Name 'pscp.exe' -Candidates @(
   "${env:ProgramFiles(x86)}\PuTTY\pscp.exe"
 )
 $script:GuestAddress = Resolve-GuestIp
+$script:GuestPassword = $Password
 
 $resolvedProofRoot = Join-Path (Resolve-Path '.').Path $ProofRoot
 New-Item -ItemType Directory -Force -Path $resolvedProofRoot | Out-Null
@@ -222,8 +223,18 @@ Set-Content -LiteralPath (Join-Path $resolvedProofRoot 'LATEST.txt') -Value $run
 Write-Step "Hyper-V visual proof root: $runRoot"
 Write-Step "VM=$VmName GuestIp=$script:GuestAddress PatchLiveGuest=$($PatchLiveGuest.IsPresent)"
 
-$vm = Get-VM -Name $VmName -ErrorAction Stop
-if ($vm.State -ne 'Running') {
+$vm = $null
+try {
+  $vm = Get-VM -Name $VmName -ErrorAction Stop
+} catch {
+  if (-not $GuestIp) {
+    throw
+  }
+
+  Write-Step "Skipping Hyper-V state query because Get-VM is unavailable in this shell; continuing with GuestIp=$GuestIp."
+}
+
+if ($vm -and $vm.State -ne 'Running') {
   Write-Step "Starting Hyper-V VM $VmName from $($vm.State)"
   Start-VM -Name $VmName
   Start-Sleep -Seconds 10
@@ -260,7 +271,7 @@ for ($pass = 1; $pass -le $MaxPasses; $pass++) {
     New-Item -ItemType Directory -Force -Path $pageRoot | Out-Null
 
     Write-Step "Rendering client summary page '$page' on tty1, pass $pass"
-    Invoke-Plink "sudo project-truth-lan-summary $flag | sudo tee /tmp/project-truth-client-summary.txt >/dev/null && sudo sh -c 'printf ""\033c"" > /dev/tty1; cat /tmp/project-truth-client-summary.txt > /dev/tty1; printf ""\ninfra@project-truth-node:~$ "" > /dev/tty1'"
+    Invoke-Plink "printf '%s\n' '$script:GuestPassword' | sudo -S -p '' sh -c 'project-truth-lan-summary $flag > /tmp/project-truth-client-summary.txt && printf ""\033c"" > /dev/tty1 && cat /tmp/project-truth-client-summary.txt > /dev/tty1 && printf ""\ninfra@project-truth-node:~$ "" > /dev/tty1'"
     Start-Sleep -Seconds $WaitSeconds
 
     Invoke-Plink "cat /tmp/project-truth-client-summary.txt" |

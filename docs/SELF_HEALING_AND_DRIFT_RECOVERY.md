@@ -29,7 +29,7 @@ Windows host repo
 | HRIS runtime outage | `repair-appliance-online -Mode RestartRuntime` restarts Docker, K3s, and HRIS services. | No |
 | HRIS data safety net | `backup-appliance-data` captures Postgres and uploads; `restore-appliance-data -Force` restores them. | No |
 | LAN health proof | `watch-until-healthy` and `verify-lan-health` prove app/API URLs. | No |
-| Experimental TryCloudflare proof | `start-trycloudflare-suite` starts temporary public URLs only when `EXPERIMENTAL_TRY_CLOUDFLARE=true`; VM hook is installed but disabled by default. | No |
+| Experimental TryCloudflare proof | `start-trycloudflare-suite` starts temporary public URLs when `EXPERIMENTAL_TRY_CLOUDFLARE=true`; appliance bootstrap and OS sync keep the VM hook enabled for demo proof and write client-facing URL evidence. | No |
 
 ## What Does Not Fully Self-Heal Yet
 
