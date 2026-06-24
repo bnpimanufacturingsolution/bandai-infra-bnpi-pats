@@ -13,7 +13,7 @@ New-Item -ItemType Directory -Force -Path $localDir | Out-Null
 
 function Invoke-Guest {
   param([string]$Command)
-  ssh -o BatchMode=yes -o ConnectTimeout=10 "$User@$GuestIp" $Command
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$GuestIp" $Command
   if ($LASTEXITCODE -ne 0) {
     throw "Guest command failed with exit code ${LASTEXITCODE}: $Command"
   }
@@ -34,7 +34,7 @@ sha256sum "__REMOTE_DIR__/hris.dump" "__REMOTE_DIR__/apiuploads.tgz" > "__REMOTE
 '@
 Invoke-Guest ($backupCommand.Replace('__REMOTE_DIR__', $remoteDir))
 
-scp -o BatchMode=yes -o ConnectTimeout=10 -r "${User}@${GuestIp}:${remoteDir}/*" $localDir
+scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -r "${User}@${GuestIp}:${remoteDir}/*" $localDir
 if ($LASTEXITCODE -ne 0) {
   throw "Failed to download backup from ${GuestIp}:${remoteDir}"
 }

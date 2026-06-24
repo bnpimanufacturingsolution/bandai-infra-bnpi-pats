@@ -58,7 +58,7 @@ function Copy-RequiredFile {
     [string]$RemotePath
   )
 
-  scp -o BatchMode=yes -o ConnectTimeout=10 $Source "${User}@${targetIp}:${RemotePath}"
+  scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $Source "${User}@${targetIp}:${RemotePath}"
   if ($LASTEXITCODE -ne 0) {
     throw "Failed to upload $Source to ${targetIp}:${RemotePath}"
   }
@@ -81,11 +81,11 @@ echo
 journalctl -u project-truth-os-sync.service -n 40 --no-pager || true
 '@
 
-  ssh -o BatchMode=yes -o ConnectTimeout=10 "$User@$targetIp" $remoteStatus
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" $remoteStatus
   exit $LASTEXITCODE
 }
 
-ssh -o BatchMode=yes -o ConnectTimeout=10 "$User@$targetIp" 'mkdir -p /tmp/project-truth-os-sync/appliance/bin /tmp/project-truth-os-sync/appliance/systemd'
+ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" 'mkdir -p /tmp/project-truth-os-sync/appliance/bin /tmp/project-truth-os-sync/appliance/systemd'
 if ($LASTEXITCODE -ne 0) {
   throw "Could not prepare VM staging directory on ${targetIp}."
 }
@@ -105,7 +105,7 @@ sudo PROJECT_TRUTH_BRANCH=develop project-truth-os-sync
 sudo systemctl status project-truth-os-sync.timer --no-pager
 '@
 
-ssh -o BatchMode=yes -o ConnectTimeout=10 "$User@$targetIp" $remote
+ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" $remote
 if ($LASTEXITCODE -ne 0) {
   throw "VM pull failed against ${targetIp}."
 }

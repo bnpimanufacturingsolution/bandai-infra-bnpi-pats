@@ -55,7 +55,7 @@ for app in project-truth-runtime-dev project-truth-runtime-uat project-truth-run
 done
 '@
   }
-  ssh -o BatchMode=yes -o ConnectTimeout=10 "$User@$GuestIp" ($remoteScript.Replace('__RUNTIME_CHECK__', $runtimeCheck))
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$GuestIp" ($remoteScript.Replace('__RUNTIME_CHECK__', $runtimeCheck))
   if ($LASTEXITCODE -ne 0) {
     Write-Error "GitOps verification failed: one or more Argo CD Applications are missing or Kubernetes is unavailable."
     exit $LASTEXITCODE

@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 
 function Invoke-Guest {
   param([string]$Command)
-  ssh -o BatchMode=yes -o ConnectTimeout=10 "$User@$GuestIp" $Command
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$GuestIp" $Command
   if ($LASTEXITCODE -ne 0) {
     throw "Guest command failed with exit code ${LASTEXITCODE}: $Command"
   }
@@ -31,7 +31,7 @@ function Copy-DirectoryFiles {
     throw "No files found in: $SourceDir"
   }
   foreach ($file in $files) {
-    scp -o BatchMode=yes -o ConnectTimeout=10 $file.FullName "${User}@${GuestIp}:${RemoteDir}/"
+    scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $file.FullName "${User}@${GuestIp}:${RemoteDir}/"
     if ($LASTEXITCODE -ne 0) {
       throw "Failed to upload: $($file.FullName)"
     }

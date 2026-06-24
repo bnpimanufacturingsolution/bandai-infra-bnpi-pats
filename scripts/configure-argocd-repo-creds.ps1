@@ -36,7 +36,7 @@ data:
 
 $manifest64 = To-Base64 $manifest
 $remote = "echo '$manifest64' | base64 -d | sudo kubectl apply -f - && sudo kubectl get secret project-truth-repo-creds -n argocd"
-ssh -o BatchMode=yes -o ConnectTimeout=10 "$User@$GuestIp" $remote
+ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$GuestIp" $remote
 if ($LASTEXITCODE -ne 0) {
   throw "Failed to configure Argo CD repository credentials."
 }

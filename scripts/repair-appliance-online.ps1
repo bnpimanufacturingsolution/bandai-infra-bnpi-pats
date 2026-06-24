@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 
 function Invoke-Guest {
   param([string]$Command)
-  ssh -o BatchMode=yes -o ConnectTimeout=10 "$User@$GuestIp" $Command
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$GuestIp" $Command
 }
 
 function Copy-HostGitOpsApplications {
@@ -25,7 +25,7 @@ function Copy-HostGitOpsApplications {
     throw "No Argo CD Application manifests found in: $appsDir"
   }
   foreach ($manifest in $manifests) {
-    scp -o BatchMode=yes -o ConnectTimeout=10 $manifest.FullName "${User}@${GuestIp}:/tmp/project-truth-argocd-applications/"
+    scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $manifest.FullName "${User}@${GuestIp}:/tmp/project-truth-argocd-applications/"
     if ($LASTEXITCODE -ne 0) {
       throw "Failed to upload Argo CD Application manifest: $($manifest.FullName)"
     }
@@ -45,7 +45,7 @@ function Copy-HostArgocdPlatform {
     throw "No Argo CD platform manifests found in: $platformDir"
   }
   foreach ($manifest in $manifests) {
-    scp -o BatchMode=yes -o ConnectTimeout=10 $manifest.FullName "${User}@${GuestIp}:/tmp/project-truth-argocd-platform/"
+    scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $manifest.FullName "${User}@${GuestIp}:/tmp/project-truth-argocd-platform/"
     if ($LASTEXITCODE -ne 0) {
       throw "Failed to upload Argo CD platform manifest: $($manifest.FullName)"
     }

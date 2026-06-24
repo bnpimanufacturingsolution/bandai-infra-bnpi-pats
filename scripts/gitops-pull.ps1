@@ -103,7 +103,7 @@ echo
 sudo kubectl get applications -n argocd -o wide
 "@
 
-ssh -o BatchMode=yes -o ConnectTimeout=10 "$User@$targetIp" $remote
+ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" $remote
 if ($LASTEXITCODE -ne 0) {
   throw "GitOps pull failed against ${targetIp}."
 }

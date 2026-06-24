@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 function Invoke-Guest {
   param([string]$Command)
-  ssh -o BatchMode=yes -o ConnectTimeout=10 "$User@$GuestIp" $Command
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$GuestIp" $Command
   if ($LASTEXITCODE -ne 0) {
     throw "Guest command failed with exit code ${LASTEXITCODE}: $Command"
   }
@@ -22,7 +22,7 @@ if (-not (Test-Path -LiteralPath $platformDir)) {
 Invoke-Guest 'rm -rf /tmp/project-truth-argocd-platform && mkdir -p /tmp/project-truth-argocd-platform'
 $files = Get-ChildItem -LiteralPath $platformDir -Filter '*.yaml' -File
 foreach ($file in $files) {
-  scp -o BatchMode=yes -o ConnectTimeout=10 $file.FullName "${User}@${GuestIp}:/tmp/project-truth-argocd-platform/"
+  scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $file.FullName "${User}@${GuestIp}:/tmp/project-truth-argocd-platform/"
   if ($LASTEXITCODE -ne 0) {
     throw "Failed to upload Argo CD platform manifest: $($file.FullName)"
   }

@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 function Invoke-Guest {
   param([string]$Command)
-  ssh -o BatchMode=yes -o ConnectTimeout=10 "$User@$GuestIp" $Command
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$GuestIp" $Command
   if ($LASTEXITCODE -ne 0) {
     throw "Guest command failed with exit code ${LASTEXITCODE}: $Command"
   }
