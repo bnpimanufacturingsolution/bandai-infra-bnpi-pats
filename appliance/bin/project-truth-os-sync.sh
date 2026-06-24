@@ -80,7 +80,8 @@ prepare_git_credentials() {
     return 0
   fi
 
-  git_askpass="/run/project-truth-git-askpass.$$"
+  as_root install -d -m 0755 "$state_dir"
+  git_askpass="${state_dir}/git-askpass.$$"
   as_root tee "$git_askpass" >/dev/null <<ASKPASS
 #!/usr/bin/env bash
 case "\$1" in
