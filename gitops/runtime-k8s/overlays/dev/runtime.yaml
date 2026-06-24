@@ -165,6 +165,8 @@ metadata:
     app.kubernetes.io/part-of: project-truth
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: hris-api
@@ -183,6 +185,8 @@ spec:
               value: development
             - name: APP_ENV
               value: dev
+            - name: JWT_SECRET
+              value: project-truth-local-appliance-jwt-secret-change-me
             - name: PORT
               value: "3001"
             - name: STORAGE_PROVIDER
