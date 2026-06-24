@@ -1,13 +1,13 @@
 # Project Truth Terraform Hyper-V Architecture
 
-This is the clean architecture direction for the `terraform-hyperv-clean-plan` branch.
+This is the clean architecture direction for the current `develop` branch.
 
 The important decision:
 
 ```text
 Normal users consume a prebuilt Hyper-V image.
 Terraform creates and manages the Hyper-V VM.
-Kubernetes + Argo CD own DEV/UAT/PROD app deployment.
+Kubernetes + Argo CD own DEV/UAT/PROD environment contract sync.
 Packer is only for the optional maintainer image-factory flow.
 ```
 
@@ -78,33 +78,27 @@ Physical Server / Laptop
             |
             |-- Namespace: dev
             |   |
-            |   `-- DEV Application
+            |   `-- DEV Environment Contract
             |       |
-            |       |-- Kubernetes Deployment
-            |       |   `-- Container: HR App / Node.js App
-            |       |
-            |       `-- Kubernetes Service
-            |           `-- NodePort 3001
+            |       `-- ConfigMap: project-truth-environment
+            |           |-- app_port: 3100
+            |           `-- api_port: 3101
             |
             |-- Namespace: uat
             |   |
-            |   `-- UAT Application
+            |   `-- UAT Environment Contract
             |       |
-            |       |-- Kubernetes Deployment
-            |       |   `-- Container: HR App / Node.js App
-            |       |
-            |       `-- Kubernetes Service
-            |           `-- NodePort 3002
+            |       `-- ConfigMap: project-truth-environment
+            |           |-- app_port: 3200
+            |           `-- api_port: 3201
             |
             `-- Namespace: prod
                 |
-                `-- PROD Application
+                `-- PROD Environment Contract
                     |
-                    |-- Kubernetes Deployment
-                    |   `-- Container: HR App / Node.js App
-                    |
-                    `-- Kubernetes Service
-                        `-- NodePort 3000
+                    `-- ConfigMap: project-truth-environment
+                        |-- app_port: 3000
+                        `-- api_port: 3001
 ```
 
 ## Optional Image Factory
@@ -242,7 +236,7 @@ Developer
         |-- runs tests
         |-- builds app image
         |-- pushes image to registry
-        `-- updates GitOps overlay image tag
+        `-- updates GitOps overlay release tag
             |
             |-- gitops/overlays/dev
             |-- gitops/overlays/uat
@@ -250,10 +244,10 @@ Developer
                 |
                 `-- Argo CD sees Git change
                     |
-                    `-- Kubernetes reconciles workload
-                        |-- DEV  -> :3001
-                        |-- UAT  -> :3002
-                        `-- PROD -> :3000
+                    `-- Kubernetes reconciles environment contracts
+                        |-- PROD app/API -> :3000 / :3001
+                        |-- DEV app/API  -> :3100 / :3101
+                        `-- UAT app/API  -> :3200 / :3201
 ```
 
 ## Terraform Host Layer Shape
@@ -309,6 +303,28 @@ terraform-hyperv/
         `-- outputs.tf
             `-- module outputs
 ```
+
+## Flexible Bridge Verification
+
+The external switch name is stable (`ProjectTruth-External`), but the physical
+adapter behind it is device-specific. On a laptop it may be Wi-Fi; on another
+host it may be Ethernet. Verify the current host bridge and VM attachment with:
+
+```powershell
+.\scripts\project-truth.ps1 verify-hyperv-bridge -VmName PROJECT-TRUTH-NODE -SwitchName ProjectTruth-External -RequireExternal -FixVmAdapter
+```
+
+For VHDX autopilot imports, use `-RequireExternalSwitch` to prevent accidental
+fallback to `Default Switch`, and pass `-BridgeAdapterName` when a device has
+more than one active physical LAN adapter:
+
+```powershell
+.\scripts\project-truth.ps1 vhdx-autopilot -Mode Import -VhdxPath <path-to-vhdx> -VmName PROJECT-TRUTH-NODE -PreferredSwitch ProjectTruth-External -RequireExternalSwitch -BridgeAdapterName "Wi-Fi" -Start
+```
+
+The guest IP is still assigned by the LAN DHCP service inside the VM. A correct
+bridge proves the VM NIC is attached to the LAN-facing switch; endpoint proof
+still requires the guest to acquire or report a usable LAN IP.
 
 ## Short Boss Explanation
 

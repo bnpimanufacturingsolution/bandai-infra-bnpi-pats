@@ -49,7 +49,7 @@ observability stack before app containers attach to the shared
 - Grafana: `http://localhost:53000`
 - Prometheus: `http://localhost:9091`
 - Loki: `http://localhost:3110`
-- Tempo: `http://localhost:3200`
+- Tempo: `http://localhost:3202`
 - OpenTelemetry Collector OTLP gRPC: `localhost:4317`
 - OpenTelemetry Collector OTLP HTTP: `localhost:4318`
 - OpenTelemetry Collector metrics: `http://localhost:8889/metrics`
@@ -107,7 +107,7 @@ docker compose ps
 curl -f http://localhost:9091/-/ready
 curl -f http://localhost:53000/api/health
 curl -f http://localhost:3110/ready
-curl -f http://localhost:3200/ready
+curl -f http://localhost:3202/ready
 curl -f http://localhost:8889/metrics
 ```
 

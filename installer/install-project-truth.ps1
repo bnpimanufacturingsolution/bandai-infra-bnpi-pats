@@ -30,25 +30,48 @@ $launcher = Join-Path $InstallDir 'ProjectTruth.cmd'
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\project-truth.ps1" %*
 '@ | Set-Content -LiteralPath $launcher -Encoding ASCII
 
-if (-not (Test-Path -LiteralPath $configPath)) {
-  & (Join-Path $InstallDir 'scripts\configure.ps1') -ConfigPath $configPath | Tee-Object -FilePath $logPath -Append
+function Test-ProjectTruthConfigCurrent {
+  param([string]$Path)
+
+  if (-not (Test-Path -LiteralPath $Path)) {
+    return $false
+  }
+
+  try {
+    $config = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json
+  } catch {
+    return $false
+  }
+
+  return (
+    $config.gitops.repoUrl -eq 'https://github.com/hrisworkforcesystem-coder/bandai-infra.git' -and
+    $config.gitops.branch -eq 'develop' -and
+    $config.ports.prodApp -eq 3000 -and
+    $config.ports.prodApi -eq 3001 -and
+    $config.ports.devApp -eq 3100 -and
+    $config.ports.devApi -eq 3101 -and
+    $config.ports.uatApp -eq 3200 -and
+    $config.ports.uatApi -eq 3201
+  )
+}
+
+if (Test-ProjectTruthConfigCurrent -Path $configPath) {
+  "Preserving current config: $configPath" | Tee-Object -FilePath $logPath -Append
 } else {
-  "Preserving existing config: $configPath" | Tee-Object -FilePath $logPath -Append
+  "Writing current Project Truth config: $configPath" | Tee-Object -FilePath $logPath -Append
+  & (Join-Path $InstallDir 'scripts\configure.ps1') -ConfigPath $configPath | Tee-Object -FilePath $logPath -Append
 }
 
 $shell = New-Object -ComObject WScript.Shell
 $commonStartMenuDir = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Project Truth'
 $userStartMenuDir = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs\Project Truth'
-foreach ($cleanupDir in @($commonStartMenuDir, $userStartMenuDir)) {
-  if (Test-Path -LiteralPath $cleanupDir) {
-    Get-ChildItem -LiteralPath $cleanupDir -Filter *.lnk -ErrorAction SilentlyContinue | Remove-Item -Force
-  }
-}
-try {
+
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if ($isAdmin) {
   New-Item -ItemType Directory -Force -Path $commonStartMenuDir -ErrorAction Stop | Out-Null
   $startMenuDir = $commonStartMenuDir
-} catch {
-  "Common Start Menu unavailable, using current user Start Menu: $($_.Exception.Message)" | Tee-Object -FilePath $logPath -Append
+} else {
+  "Not elevated, using current user Start Menu." | Tee-Object -FilePath $logPath -Append
   New-Item -ItemType Directory -Force -Path $userStartMenuDir | Out-Null
   $startMenuDir = $userStartMenuDir
 }

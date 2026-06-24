@@ -6,8 +6,12 @@ param(
 $ErrorActionPreference = 'Continue'
 
 foreach ($item in @(
-  @{ Name = 'lan-hris-api'; Port = 3001; Path = '/health'; Expected = 'json' },
-  @{ Name = 'lan-hris-app'; Port = 3000; Path = '/'; Expected = 'html' }
+  @{ Name = 'lan-prod-app'; Port = 3000; Path = '/auth/login'; Expected = 'html' },
+  @{ Name = 'lan-prod-api'; Port = 3001; Path = '/health'; Expected = 'json' },
+  @{ Name = 'lan-dev-app'; Port = 3100; Path = '/auth/login'; Expected = 'html' },
+  @{ Name = 'lan-dev-api'; Port = 3101; Path = '/health'; Expected = 'json' },
+  @{ Name = 'lan-uat-app'; Port = 3200; Path = '/auth/login'; Expected = 'html' },
+  @{ Name = 'lan-uat-api'; Port = 3201; Path = '/health'; Expected = 'json' }
 )) {
   $url = "http://${GuestIp}:$($item.Port)$($item.Path)"
   try {

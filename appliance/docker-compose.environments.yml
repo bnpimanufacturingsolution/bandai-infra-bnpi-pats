@@ -55,7 +55,6 @@ services:
       APP_ENV: dev
       STORAGE_PROVIDER: local
       LOCAL_UPLOAD_ROOT: /app/uploads
-      LOCAL_UPLOAD_PUBLIC_BASE_URL: http://192.168.1.54:3101
       PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
       WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
@@ -138,7 +137,7 @@ services:
       context: ../hris-app
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: ""
+        VITE_API_BASE_URL: /api
     image: hris-app-local:develop
     container_name: hris-app-dev
     restart: unless-stopped
@@ -233,7 +232,6 @@ services:
       APP_ENV: uat
       STORAGE_PROVIDER: local
       LOCAL_UPLOAD_ROOT: /app/uploads
-      LOCAL_UPLOAD_PUBLIC_BASE_URL: http://192.168.1.54:3201
       PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
       WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
@@ -316,7 +314,7 @@ services:
       context: ../hris-app
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: ""
+        VITE_API_BASE_URL: /api
     image: hris-app-local:develop
     container_name: hris-app-uat
     restart: unless-stopped

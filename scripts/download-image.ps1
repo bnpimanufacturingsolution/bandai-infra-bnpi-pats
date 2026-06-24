@@ -22,6 +22,8 @@ $target = Join-Path $ImagesDir $fileName
 
 Invoke-WebRequest -Uri $ImageUrl -OutFile $target
 
+& "$PSScriptRoot\normalize-image-acl.ps1" -ImagePath $target
+
 if ($ExpectedSha256) {
   $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $ExpectedSha256.ToLowerInvariant()) {

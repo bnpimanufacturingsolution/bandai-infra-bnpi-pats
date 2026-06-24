@@ -29,6 +29,7 @@ import { EmployeeDocumentsCard } from "~/components/organisms/EmployeeDocumentsC
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import userService from "~/services/user.service";
 import { userKeys } from "~/lib/hooks/useUsers";
+import { resolveUploadUrl } from "~/lib/upload-url";
 
 const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const AVATAR_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -97,7 +98,7 @@ export function MyProfile() {
 		`${firstName} ${lastName}`.trim() || user?.userName || user?.email || "User";
 	const profileInitials = getInitials(firstName, lastName, user?.email);
 	const currentAvatarUrl = String(user?.avatar || "").trim();
-	const visibleAvatarUrl = avatarPreviewUrl || currentAvatarUrl;
+	const visibleAvatarUrl = avatarPreviewUrl || resolveUploadUrl(currentAvatarUrl);
 
 	// Resignation Flow State
 	const [isResignationModalOpen, setIsResignationModalOpen] = useState(false);

@@ -5,11 +5,11 @@
 | Workflow | Purpose | Runner |
 |---|---|---|
 | `validate.yml` | Static validation for Node, PowerShell, Terraform, and GitOps overlays. | GitHub-hosted Windows runner |
-| `promote-gitops.yml` | Manual GitOps image tag promotion for DEV/UAT/PROD. | GitHub-hosted Ubuntu runner |
+| `promote-gitops.yml` | Manual GitOps release tag and runtime image tag promotion for DEV/UAT/PROD. | GitHub-hosted Ubuntu runner |
 
 ## Validate
 
-Runs on push, pull request, and manual dispatch.
+Runs on pull request, manual dispatch, and pushes to `main`, `develop`, `uat`, or `production`.
 
 Checks:
 
@@ -35,7 +35,83 @@ environment: dev | uat | prod
 image_tag: safe container tag
 ```
 
-The workflow updates only the selected overlay. Argo CD is expected to detect the Git change and sync it into the cluster.
+The workflow updates:
+
+```text
+gitops/overlays/<env>/environment-patch.yaml
+gitops/runtime-k8s/overlays/<env>/kustomization.yaml
+```
+
+`release_tag` and `runtime_image_tag` record the selected release in the
+environment contract ConfigMap. The runtime kustomization selects the same tag
+for `hris-api-db-init`, `hris-api-local`, and `hris-app-local`.
+
+Argo CD is expected to detect the Git change and sync the selected environment.
+For the local/offline appliance image path, the selected runtime image tag must
+also exist in K3s containerd. Seed or refresh it with:
+
+```powershell
+.\scripts\project-truth.ps1 enable-k8s-runtime -GuestIp <vm-lan-ip> -ImageTag <tag>
+```
+
+For a registry-backed client path, publish the same tag to the registry and
+configure the runtime manifests/imagePullSecrets accordingly before promotion.
+
+Optional registry-backed promotion:
+
+```powershell
+gh workflow run promote-gitops.yml `
+  -f environment=dev `
+  -f image_tag=<tag> `
+  -f image_registry=ghcr.io/<org>/<project>
+```
+
+## Argo CD Platform
+
+Project Truth pins Argo CD reconciliation instead of relying on the upstream
+default:
+
+```text
+timeout.reconciliation: 60s
+timeout.reconciliation.jitter: 15s
+```
+
+Apply or repair that platform setting with:
+
+```powershell
+.\scripts\project-truth.ps1 apply-argocd-platform -GuestIp <vm-lan-ip>
+```
+
+`repair-appliance-online -Mode GitOpsRefresh` also reapplies the platform
+manifests.
+
+For private GitHub repos, configure Argo CD repo credentials on the VM. The
+token is applied to the cluster and is not committed:
+
+```powershell
+.\scripts\project-truth.ps1 configure-argocd-repo-creds `
+  -GuestIp <vm-lan-ip> `
+  -GitUsername <github-user> `
+  -GitToken <github-token>
+```
+
+For optional push-triggered refresh, expose Argo CD only through an approved
+ingress/tunnel and set the GitHub webhook secret on the VM:
+
+```powershell
+.\scripts\project-truth.ps1 configure-argocd-webhook `
+  -GuestIp <vm-lan-ip> `
+  -WebhookSecret <shared-secret>
+```
+
+Then configure the GitHub webhook payload URL as:
+
+```text
+https://<argocd-public-url>/api/webhook
+```
+
+Polling remains the default for client appliances that do not expose inbound
+ports.
 
 ## Image Factory
 
@@ -81,6 +157,8 @@ gh run list --limit 10
 gh run view <run-id> --log-failed
 ```
 
+For a full ordered watch loop, use [GitOps GitHub Watch Runbook](GITOPS_GH_WATCH_RUNBOOK.md).
+
 Latest local check on 2026-06-16:
 
 ```text
@@ -89,6 +167,8 @@ GitHub auth: PROVEN for ernestdodz.
 Recent validation runs: latest listed runs succeeded except the original repository creation run, which remains a historical failure.
 Open PR list: logged to gh-prs-open.txt.
 ```
+
+Current checkout note: this working tree is on `develop`; the older branch names in historical evidence are not the active source branch.
 
 ## Required Secrets And Variables
 

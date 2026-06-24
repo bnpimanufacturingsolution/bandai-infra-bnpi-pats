@@ -27,7 +27,7 @@ services:
     environment:
       - TEMPO_RETENTION=${TEMPO_RETENTION:-168h}
     ports:
-      - "${TEMPO_HOST_PORT:-3200}:3200"
+      - "${TEMPO_HOST_PORT:-3202}:3200"
     volumes:
       - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
       - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/tempo:/var/tempo
@@ -119,6 +119,27 @@ services:
       - "${BLACKBOX_HOST_PORT:-9115}:9115"
     volumes:
       - ./blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    restart: unless-stopped
+    networks:
+      - observability
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: hris-observability-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_GRAFANA_DB:-grafana}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_OBSERVABILITY_HOST_PORT:-15435}:5432"
+    volumes:
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/postgres:/var/lib/postgresql/data
+      - ./grafana/init-grafana-db.sh:/docker-entrypoint-initdb.d/init-grafana-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_GRAFANA_DB:-grafana}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
     networks:
       - observability
@@ -260,4 +281,5 @@ services:
 
 networks:
   observability:
+    external: true
     name: hris-observability

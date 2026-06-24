@@ -12,6 +12,8 @@ param(
     [string]$PreferredSwitch = "ProjectTruth-External",
     [string]$FallbackSwitch = "Default Switch",
     [string]$AutoCreateSwitchName = "ProjectTruth-Auto",
+    [string]$BridgeAdapterName = "",
+    [switch]$RequireExternalSwitch,
     [int]$CpuCount = 2,
     [int]$StartupMemoryGB = 4,
     [int]$MinimumMemoryGB = 2,
@@ -165,8 +167,18 @@ function Get-UsableSwitchName {
     Ensure-ServiceRunning -Name "vmms"
 
     $switch = Get-VMSwitch -Name $PreferredSwitch -ErrorAction SilentlyContinue
-    if (-not $switch) {
-        $switch = Get-VMSwitch -Name $FallbackSwitch -ErrorAction SilentlyContinue
+    if (-not $switch -and $BridgeAdapterName) {
+        $adapter = Get-NetAdapter -Name $BridgeAdapterName -ErrorAction SilentlyContinue
+        if (-not $adapter) {
+            $adapter = Get-NetAdapter -ErrorAction SilentlyContinue |
+                Where-Object { $_.InterfaceDescription -eq $BridgeAdapterName } |
+                Select-Object -First 1
+        }
+        if (-not $adapter) {
+            Stop-Blocker "Bridge adapter not found: $BridgeAdapterName"
+        }
+        Write-Step "Creating external switch $PreferredSwitch on adapter $($adapter.Name)"
+        $switch = New-VMSwitch -Name $PreferredSwitch -NetAdapterName $adapter.Name -AllowManagementOS $true
     }
     if (-not $switch) {
         $switch = @(Get-VMSwitch -ErrorAction SilentlyContinue) |
@@ -174,11 +186,38 @@ function Get-UsableSwitchName {
             Select-Object -First 1
     }
     if (-not $switch) {
+        if ($RequireExternalSwitch) {
+            $upAdapters = @(Get-NetAdapter -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.Status -eq "Up" -and
+                    $_.InterfaceDescription -notmatch "Hyper-V|VirtualBox|Loopback|VPN|TAP|TUN|WSL"
+                } |
+                Sort-Object LinkSpeed -Descending)
+            if ($upAdapters.Count -eq 1) {
+                Write-Step "Creating external switch $PreferredSwitch on detected adapter $($upAdapters[0].Name)"
+                $switch = New-VMSwitch -Name $PreferredSwitch -NetAdapterName $upAdapters[0].Name -AllowManagementOS $true
+            }
+            elseif ($upAdapters.Count -gt 1) {
+                $detail = ($upAdapters | ForEach-Object { "$($_.Name) [$($_.InterfaceDescription)]" }) -join "; "
+                Stop-Blocker "Multiple active physical adapters found. Re-run with -BridgeAdapterName. Candidates: $detail"
+            }
+            else {
+                Stop-Blocker "No external Hyper-V switch found and no active physical adapter is available."
+            }
+        }
+    }
+    if (-not $switch -and -not $RequireExternalSwitch) {
+        $switch = Get-VMSwitch -Name $FallbackSwitch -ErrorAction SilentlyContinue
+    }
+    if (-not $switch) {
         $switch = @(Get-VMSwitch -ErrorAction SilentlyContinue) | Select-Object -First 1
     }
     if (-not $switch) {
         Write-Step "No Hyper-V switch found. Creating internal switch $AutoCreateSwitchName"
         $switch = New-VMSwitch -Name $AutoCreateSwitchName -SwitchType Internal
+    }
+    if ($RequireExternalSwitch -and $switch.SwitchType -ne "External") {
+        Stop-Blocker "Selected switch is not External: $($switch.Name) [$($switch.SwitchType)]"
     }
     return $switch.Name
 }
@@ -430,6 +469,7 @@ function Import-VhdxVm {
     Set-VMProcessor -VMName $VmName -Count $CpuCount
     Set-ProjectTruthVmMemory -Name $VmName -StartupGB $StartupMemoryGB -MinimumGB $MinimumMemoryGB -MaximumGB $MaximumMemoryGB
     Set-VMFirmware -VMName $VmName -EnableSecureBoot Off
+    Set-VMNetworkAdapter -VMName $VmName -DeviceNaming On -DhcpGuard Off -RouterGuard Off -MacAddressSpoofing Off
 
     if ((-not $NoStart) -and ($Start -or $Mode -in @("Import", "Both"))) {
         $vm = Get-VM -Name $VmName

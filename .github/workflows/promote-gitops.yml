@@ -1,4 +1,4 @@
-name: Promote GitOps Image Tag
+name: Promote GitOps Release Tag
 
 on:
   workflow_dispatch:
@@ -12,8 +12,12 @@ on:
           - uat
           - prod
       image_tag:
-        description: Container image tag to write into the overlay
+        description: Release/image tag to record and select for the selected environment
         required: true
+        type: string
+      image_registry:
+        description: Optional registry/repository prefix, for example ghcr.io/org/project-truth
+        required: false
         type: string
 
 permissions:
@@ -31,14 +35,87 @@ jobs:
           set -euo pipefail
           env_name="${{ inputs.environment }}"
           tag="${{ inputs.image_tag }}"
+          registry="${{ inputs.image_registry }}"
           case "$env_name" in
             dev|uat|prod) ;;
             *) echo "Unsupported environment: $env_name" >&2; exit 1 ;;
           esac
           [[ "$tag" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid image tag" >&2; exit 1; }
-          file="gitops/overlays/$env_name/deployment-patch.yaml"
-          sed -i -E "s#image: project-truth-health:[A-Za-z0-9._-]+#image: project-truth-health:$tag#g" "$file"
-          sed -i -E "s#value: (dev|uat|prod|local|[A-Za-z0-9._-]+)#value: $tag#2" "$file"
+          if [ -n "$registry" ]; then
+            [[ "$registry" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "Invalid image registry" >&2; exit 1; }
+            registry="${registry%/}"
+          fi
+          file="gitops/overlays/$env_name/environment-patch.yaml"
+          runtime_file="gitops/runtime-k8s/overlays/$env_name/kustomization.yaml"
+          test -f "$file" || { echo "Overlay patch not found: $file" >&2; exit 1; }
+          test -f "$runtime_file" || { echo "Runtime overlay not found: $runtime_file" >&2; exit 1; }
+
+          update_data_key() {
+            local key="$1"
+            if grep -qE "^  ${key}:" "$file"; then
+              sed -i -E "s#^  ${key}: .*\$#  ${key}: \"$tag\"#" "$file"
+            else
+              awk -v key="$key" -v tag="$tag" '
+                { print }
+                /^data:/ && !done { print "  " key ": \"" tag "\""; done=1 }
+              ' "$file" > "$file.tmp"
+              mv "$file.tmp" "$file"
+            fi
+          }
+
+          update_data_key release_tag
+          update_data_key runtime_image_tag
+
+          for image in hris-api-db-init hris-api-local hris-app-local; do
+            new_name="$image"
+            if [ -n "$registry" ]; then
+              new_name="$registry/$image"
+            fi
+            if grep -qE "^[[:space:]]*-[[:space:]]*name:[[:space:]]*$image$" "$runtime_file"; then
+              awk -v image="$image" -v tag="$tag" '
+                $0 ~ "^[[:space:]]*-[[:space:]]*name:[[:space:]]*" image "$" { in_image=1; print; next }
+                in_image && $0 ~ "^[[:space:]]*newTag:" { sub(/newTag:.*/, "newTag: " tag); in_image=0; print; next }
+                in_image && $0 ~ "^[[:space:]]*-[[:space:]]*name:" { print "    newTag: " tag; in_image=0 }
+                { print }
+                END { if (in_image) print "    newTag: " tag }
+              ' "$runtime_file" > "$runtime_file.tmp"
+              mv "$runtime_file.tmp" "$runtime_file"
+            else
+              {
+                if ! grep -qE '^images:' "$runtime_file"; then
+                  printf '\nimages:\n'
+                fi
+                printf '  - name: %s\n    newTag: %s\n' "$image" "$tag"
+              } >> "$runtime_file"
+            fi
+            if [ -n "$registry" ]; then
+              awk -v image="$image" -v new_name="$new_name" '
+                $0 ~ "^[[:space:]]*-[[:space:]]*name:[[:space:]]*" image "$" { in_image=1; saw_new_name=0; print; next }
+                in_image && $0 ~ "^[[:space:]]*newName:" { sub(/newName:.*/, "newName: " new_name); saw_new_name=1; print; next }
+                in_image && $0 ~ "^[[:space:]]*newTag:" && !saw_new_name { print "    newName: " new_name; saw_new_name=1; print; in_image=0; next }
+                in_image && $0 ~ "^[[:space:]]*newTag:" { in_image=0; print; next }
+                in_image && $0 ~ "^[[:space:]]*-[[:space:]]*name:" && !saw_new_name { print "    newName: " new_name; in_image=0 }
+                { print }
+                END { if (in_image && !saw_new_name) print "    newName: " new_name }
+              ' "$runtime_file" > "$runtime_file.tmp"
+              mv "$runtime_file.tmp" "$runtime_file"
+            else
+              awk -v image="$image" '
+                $0 ~ "^[[:space:]]*-[[:space:]]*name:[[:space:]]*" image "$" { in_image=1; print; next }
+                in_image && $0 ~ "^[[:space:]]*newName:" { next }
+                in_image && $0 ~ "^[[:space:]]*newTag:" { in_image=0; print; next }
+                in_image && $0 ~ "^[[:space:]]*-[[:space:]]*name:" { in_image=0 }
+                { print }
+              ' "$runtime_file" > "$runtime_file.tmp"
+              mv "$runtime_file.tmp" "$runtime_file"
+            fi
+          done
+
+          expected_count="$(grep -c "newTag: $tag" "$runtime_file")"
+          if [ "$expected_count" -lt 3 ]; then
+            echo "Runtime image tag update failed for $runtime_file" >&2
+            exit 1
+          fi
 
       - name: Commit change
         shell: bash
@@ -46,7 +123,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add gitops/overlays/${{ inputs.environment }}/deployment-patch.yaml
+          git add gitops/overlays/${{ inputs.environment }}/environment-patch.yaml gitops/runtime-k8s/overlays/${{ inputs.environment }}/kustomization.yaml
           git diff --cached --quiet && exit 0
           git commit -m "gitops: promote ${{ inputs.environment }} ${{ inputs.image_tag }}"
           git push

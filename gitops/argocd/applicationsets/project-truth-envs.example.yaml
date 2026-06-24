@@ -1,0 +1,87 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: project-truth-env-contracts
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - env: dev
+            namespace: dev
+            contractPath: gitops/overlays/dev
+          - env: uat
+            namespace: uat
+            contractPath: gitops/overlays/uat
+          - env: prod
+            namespace: prod
+            contractPath: gitops/overlays/prod
+  template:
+    metadata:
+      name: project-truth-{{env}}
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/hrisworkforcesystem-coder/bandai-infra.git
+        targetRevision: develop
+        path: '{{contractPath}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{namespace}}'
+      syncPolicy:
+        automated:
+          enabled: true
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: project-truth-env-runtimes
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - env: dev
+            namespace: dev
+            runtimePath: gitops/runtime-k8s/overlays/dev
+          - env: uat
+            namespace: uat
+            runtimePath: gitops/runtime-k8s/overlays/uat
+          - env: prod
+            namespace: prod
+            runtimePath: gitops/runtime-k8s/overlays/prod
+  template:
+    metadata:
+      name: project-truth-runtime-{{env}}
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/hrisworkforcesystem-coder/bandai-infra.git
+        targetRevision: develop
+        path: '{{runtimePath}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{namespace}}'
+      syncPolicy:
+        automated:
+          enabled: true
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m

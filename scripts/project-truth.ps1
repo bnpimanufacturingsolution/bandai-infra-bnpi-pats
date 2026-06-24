@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','configure','select-image','download-image','build-image','configure-virtualbox','vhdx-autopilot','repair-hyperv-boot','login-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state')]
+  [ValidateSet('doctor','configure','select-image','download-image','build-image','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','hyperv-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','gitops-pull','vm-pull','apply-argocd-platform','configure-argocd-repo-creds','configure-argocd-webhook','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel','start-trycloudflare-suite')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -16,10 +16,20 @@ $scriptMap = @{
   'select-image'        = 'select-image.ps1'
   'download-image'      = 'download-image.ps1'
   'build-image'         = 'build-image.ps1'
+  'verify-gcp-image-boot' = 'verify-gcp-image-boot.ps1'
   'configure-virtualbox' = 'configure-virtualbox.ps1'
   'vhdx-autopilot'      = 'vhdx-autopilot.ps1'
+  'finalize-local-vhdx' = 'finalize-local-vhdx.ps1'
+  'repair-appliance-online' = 'repair-appliance-online.ps1'
+  'backup-appliance-data' = 'backup-appliance-data.ps1'
+  'restore-appliance-data' = 'restore-appliance-data.ps1'
+  'enable-k8s-runtime' = 'enable-k8s-runtime.ps1'
+  'disable-k8s-runtime' = 'disable-k8s-runtime.ps1'
+  'test-self-heal-contract' = 'test-self-heal-contract.ps1'
   'repair-hyperv-boot'  = 'repair-hyperv-boot.ps1'
+  'verify-hyperv-bridge' = 'verify-hyperv-bridge.ps1'
   'login-visual-proof-loop' = 'login-visual-proof-loop.ps1'
+  'hyperv-visual-proof-loop' = 'hyperv-visual-proof-loop.ps1'
   'terraform-plan'      = 'terraform-plan.ps1'
   'terraform-apply'     = 'terraform-apply.ps1'
   'verify'              = 'verify-host-health.ps1'
@@ -27,6 +37,15 @@ $scriptMap = @{
   'repair-and-verify'   = 'repair-and-verify.ps1'
   'watch-github-run'    = 'watch-github-run.ps1'
   'verify-gitops-state' = 'verify-gitops-state.ps1'
+  'gitops-pull'         = 'gitops-pull.ps1'
+  'vm-pull'             = 'vm-pull.ps1'
+  'apply-argocd-platform' = 'apply-argocd-platform.ps1'
+  'configure-argocd-repo-creds' = 'configure-argocd-repo-creds.ps1'
+  'configure-argocd-webhook' = 'configure-argocd-webhook.ps1'
+  'start-local-hris-runtime' = 'start-local-hris-runtime.ps1'
+  'verify-local-hris-runtime' = 'verify-local-hris-runtime.ps1'
+  'start-trycloudflare-tunnel' = 'start-trycloudflare-tunnel.ps1'
+  'start-trycloudflare-suite' = 'start-trycloudflare-suite.ps1'
 }
 
 $target = Join-Path $scriptRoot $scriptMap[$Command]

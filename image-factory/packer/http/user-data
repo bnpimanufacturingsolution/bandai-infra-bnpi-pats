@@ -20,10 +20,14 @@ autoinstall:
     - ca-certificates
     - gnupg
     - lsb-release
+    - linux-virtual
+    - linux-cloud-tools-virtual
+    - linux-tools-virtual
   late-commands:
     - mkdir -p /target/etc/ssh/sshd_config.d
     - printf 'PasswordAuthentication yes\nKbdInteractiveAuthentication yes\n' > /target/etc/ssh/sshd_config.d/90-packer-password-auth.conf
     - curtin in-target --target=/target -- systemctl enable ssh
+    - curtin in-target --target=/target -- systemctl enable hv-kvp-daemon hv-vss-daemon hv-fcopy-daemon
     - curtin in-target --target=/target -- usermod -aG sudo infra
     - echo 'infra ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/90-infra
     - chmod 440 /target/etc/sudoers.d/90-infra

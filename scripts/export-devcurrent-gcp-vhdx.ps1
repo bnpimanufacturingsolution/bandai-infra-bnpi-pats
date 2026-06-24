@@ -41,8 +41,16 @@ $statFile = Join-Path $RunRoot "gcp-exported-vhdx-stat.txt"
 "destination=$destination`npublic_url=$publicUrl" | Set-Content (Join-Path $RunRoot "export-vars.txt")
 
 Write-Step "Checking destination $destination"
-$existing = & gsutil ls -l $destination 2>$null
-if ($LASTEXITCODE -eq 0 -and $existing) {
+$existing = $null
+$existingExitCode = 1
+try {
+    $existing = & gsutil ls -l $destination 2>$null
+    $existingExitCode = $LASTEXITCODE
+} catch {
+    $existing = $null
+    $existingExitCode = 1
+}
+if ($existingExitCode -eq 0 -and $existing) {
     $existing | Tee-Object -FilePath $statFile
     Write-Step "Destination already exists"
     curl.exe -I --max-time 30 $publicUrl | Tee-Object -FilePath (Join-Path $RunRoot "public-vhdx-curl-head.txt")
@@ -87,7 +95,12 @@ if (-not $buildId) {
 
 for ($i = 1; $i -le $PollCount; $i++) {
     $status = & gcloud builds describe $buildId --project $Project --region $Region --format "value(status)"
-    $objectStat = & gsutil ls -l $destination 2>$null
+    $objectStat = $null
+    try {
+        $objectStat = & gsutil ls -l $destination 2>$null
+    } catch {
+        $objectStat = $null
+    }
     Write-Step "[$i/$PollCount] build=$status object=$($objectStat -replace '\s+', ' ')"
     if ($status -match "SUCCESS|FAILURE|CANCELLED|TIMEOUT|EXPIRED") {
         break

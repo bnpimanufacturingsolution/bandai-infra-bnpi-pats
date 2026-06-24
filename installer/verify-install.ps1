@@ -10,7 +10,7 @@ $required = @(
   (Join-Path $InstallDir 'scripts\configure.ps1'),
   (Join-Path $InstallDir 'installer\build-installer.ps1'),
   (Join-Path $InstallDir 'terraform-hyperv\providers.tf'),
-  (Join-Path $InstallDir 'gitops\base\deployment.yaml'),
+  (Join-Path $InstallDir 'gitops\base\environment-config.yaml'),
   (Join-Path $InstallDir 'docs\ARCHITECTURE.md')
 )
 
@@ -23,7 +23,8 @@ foreach ($path in $required) {
 $shell = New-Object -ComObject WScript.Shell
 $commonDir = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Project Truth'
 $userDir = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs\Project Truth'
-$shortcutDir = if (Test-Path -LiteralPath $commonDir) { $commonDir } else { $userDir }
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$shortcutDir = if ($isAdmin -and (Test-Path -LiteralPath $commonDir)) { $commonDir } else { $userDir }
 
 if (-not (Test-Path -LiteralPath $shortcutDir)) {
   throw "Shortcut folder missing: $shortcutDir"

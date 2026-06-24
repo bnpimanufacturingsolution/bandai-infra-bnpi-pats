@@ -1,4 +1,5 @@
 import bandaiLogo from "~/assets/bandai_logo.png";
+import { resolveUploadUrl } from "./upload-url";
 
 const LEGACY_BANDAI_LOGO_VALUES = new Set([
 	"assets/images/bandai_logo.png",
@@ -13,7 +14,7 @@ export function resolveCompanyLogo(value?: string | null) {
 	if (!logo || LEGACY_BANDAI_LOGO_VALUES.has(logo)) {
 		return bandaiLogo;
 	}
-	return logo;
+	return resolveUploadUrl(logo);
 }
 
 export { bandaiLogo };

@@ -50,7 +50,7 @@ const mime = {
 
 http
   .createServer((req, res) => {
-    if ((req.url || "/").startsWith("/api/")) {
+    if ((req.url || "/").startsWith("/api/") || (req.url || "/").startsWith("/uploads/")) {
       const target = new URL(req.url || "/", apiOrigin);
       const proxyReq = http.request(
         target,

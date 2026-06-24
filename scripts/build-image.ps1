@@ -19,13 +19,17 @@ param(
   [string[]]$NetAdapterNames = @(),
   [string]$VmPath = "$env:ProgramData\ProjectTruth\HyperV",
   [int]$MemoryMb = 4096,
-  [int]$CpuCount = 2,
+  [int]$CpuCount = 0,
   [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
 
 $publishedImagePathProvided = -not [string]::IsNullOrWhiteSpace($PublishedImagePath)
+
+if ($CpuCount -le 0) {
+  $CpuCount = if ($TargetPlatform -eq 'virtualbox') { 1 } else { 2 }
+}
 
 $artifactExtensions = @{
   hyperv     = @('.vhdx')
@@ -252,6 +256,7 @@ if (-not $SkipBuild) {
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'appliance') -Destination (Join-Path $stagingRoot 'appliance')
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-api') -Destination (Join-Path $stagingRoot 'hris-api')
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-app') -Destination (Join-Path $stagingRoot 'hris-app')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'vendor\zkteco-sdk') -Destination (Join-Path $stagingRoot 'vendor\zkteco-sdk')
 
   Push-Location $PackerDir
   try {
@@ -260,6 +265,8 @@ if (-not $SkipBuild) {
     $packerBuildArgs = @('build', '-force')
     if ($TargetPlatform -eq 'virtualbox') {
       $packerBuildArgs += '-on-error=abort'
+    } else {
+      $packerBuildArgs += @('-var', "switch_name=$SwitchName")
     }
     if ($PredownloadIso) {
       $resolvedIso = (Resolve-Path -LiteralPath $IsoCachePath).Path
@@ -307,6 +314,7 @@ if (-not $publishedImagePathProvided -and [IO.Path]::GetExtension($PublishedImag
 }
 
 Copy-Item -LiteralPath $candidate.FullName -Destination $PublishedImagePath -Force
+& "$PSScriptRoot\normalize-image-acl.ps1" -ImagePath $PublishedImagePath
 
 $hash = Get-FileHash -LiteralPath $PublishedImagePath -Algorithm SHA256
 $shaPath = "$PublishedImagePath.sha256"

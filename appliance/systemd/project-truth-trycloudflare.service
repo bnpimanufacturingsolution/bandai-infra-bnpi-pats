@@ -1,0 +1,15 @@
+[Unit]
+Description=Project Truth experimental TryCloudflare quick tunnels
+After=network-online.target project-truth-hris.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/project-truth/experimental.env
+ExecStart=/usr/local/bin/project-truth-trycloudflare-start
+StandardOutput=journal
+StandardError=journal
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

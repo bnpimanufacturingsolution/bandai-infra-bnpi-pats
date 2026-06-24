@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "~/lib/utils";
+import { resolveUploadUrl } from "~/lib/upload-url";
 
 export interface AvatarProps extends React.ComponentProps<"div"> {
 	src?: string;
@@ -10,6 +11,7 @@ export interface AvatarProps extends React.ComponentProps<"div"> {
 
 const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
 	({ className, src, alt, name, size = "md", ...props }, ref) => {
+		const resolvedSrc = resolveUploadUrl(src);
 		const getInitials = (name: string) => {
 			return name
 				.split(" ")
@@ -35,9 +37,9 @@ const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
 					className,
 				)}
 				{...props}>
-				{src ? (
+				{resolvedSrc ? (
 					<img
-						src={src}
+						src={resolvedSrc}
 						alt={alt || name || "Avatar"}
 						className="h-full w-full rounded-full object-cover"
 					/>

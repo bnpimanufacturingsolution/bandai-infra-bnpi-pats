@@ -102,6 +102,9 @@ build {
   }
 
   provisioner "shell" {
+    environment_vars = [
+      "PROJECT_TRUTH_IMAGE_TARGET=virtualbox"
+    ]
     script = "${path.root}/provision.sh"
   }
 }

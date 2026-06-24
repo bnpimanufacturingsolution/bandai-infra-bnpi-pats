@@ -2,6 +2,8 @@
 set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
+PROJECT_TRUTH_IMAGE_TARGET="${PROJECT_TRUTH_IMAGE_TARGET:-appliance}"
+echo "$PROJECT_TRUTH_IMAGE_TARGET" | sudo tee /etc/project-truth-image-target >/dev/null
 
 retry() {
   local attempts="$1"
@@ -21,7 +23,7 @@ retry() {
 }
 
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl gnupg lsb-release unzip ufw open-iscsi docker.io docker-compose-v2
+sudo apt-get install -y ca-certificates curl git gnupg lsb-release unzip ufw open-iscsi docker.io docker-compose-v2
 
 echo "infra:infra" | sudo chpasswd
 sudo passwd -u infra || true
@@ -50,21 +52,38 @@ sudo systemctl start docker
 
 if [ -f /etc/default/grub ]; then
   sudo cp /etc/default/grub /etc/default/grub.project-truth-before-quiet-boot
-  sudo sed -i \
-    -e 's/^GRUB_TERMINAL=.*/GRUB_TERMINAL=gfxterm/' \
-    -e 's/^GRUB_TERMINAL_INPUT=.*/GRUB_TERMINAL_INPUT=console/' \
-    -e 's/^GRUB_TERMINAL_OUTPUT=.*/GRUB_TERMINAL_OUTPUT=gfxterm/' \
-    -e 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' \
-    -e 's/ console=ttyS[0-9],[0-9]\+n[0-9]//g' \
-    -e 's/ console=ttyS[0-9]//g' \
-    /etc/default/grub
-  sudo tee /etc/default/grub.d/99-project-truth-quiet-boot.cfg >/dev/null <<'GRUBQUIET'
+  if [ "$PROJECT_TRUTH_IMAGE_TARGET" = "googlecompute" ]; then
+    sudo sed -i \
+      -e 's/^GRUB_TERMINAL=.*/GRUB_TERMINAL=console/' \
+      -e 's/^GRUB_TERMINAL_INPUT=.*/GRUB_TERMINAL_INPUT=console/' \
+      -e 's/^GRUB_TERMINAL_OUTPUT=.*/GRUB_TERMINAL_OUTPUT=console/' \
+      -e 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=""/' \
+      -e 's/^GRUB_CMDLINE_LINUX=.*/GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,38400n8"/' \
+      /etc/default/grub
+    sudo tee /etc/default/grub.d/99-project-truth-gcp-visible-boot.cfg >/dev/null <<'GRUBGCP'
 GRUB_TERMINAL=console
 GRUB_TERMINAL_INPUT=console
 GRUB_TERMINAL_OUTPUT=console
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
-GRUB_CMDLINE_LINUX=""
+GRUB_CMDLINE_LINUX_DEFAULT=""
+GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,38400n8"
+GRUBGCP
+  else
+    sudo sed -i \
+      -e 's/^GRUB_TERMINAL=.*/GRUB_TERMINAL=gfxterm/' \
+      -e 's/^GRUB_TERMINAL_INPUT=.*/GRUB_TERMINAL_INPUT=console/' \
+      -e 's/^GRUB_TERMINAL_OUTPUT=.*/GRUB_TERMINAL_OUTPUT=gfxterm/' \
+      -e 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' \
+      -e 's/ console=ttyS[0-9],[0-9]\+n[0-9]//g' \
+      -e 's/ console=ttyS[0-9]//g' \
+      /etc/default/grub
+    sudo tee /etc/default/grub.d/99-project-truth-quiet-boot.cfg >/dev/null <<'GRUBQUIET'
+GRUB_TERMINAL=console
+GRUB_TERMINAL_INPUT=console
+GRUB_TERMINAL_OUTPUT=console
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3 systemd.show_status=false rd.systemd.show_status=false udev.log_level=3"
+GRUB_CMDLINE_LINUX="loglevel=3 systemd.show_status=false rd.systemd.show_status=false udev.log_level=3"
 GRUBQUIET
+  fi
   if command -v update-grub >/dev/null 2>&1; then
     sudo update-grub || true
   fi
@@ -145,6 +164,18 @@ sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-seed.sh
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-observability-start.sh /usr/local/bin/project-truth-hris-observability-start
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-dhcp.sh /usr/local/bin/project-truth-lan-dhcp
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-summary.sh /usr/local/bin/project-truth-lan-summary
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-clean-console.sh /usr/local/bin/project-truth-clean-console
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-trycloudflare-start.sh /usr/local/bin/project-truth-trycloudflare-start
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-os-sync.sh /usr/local/bin/project-truth-os-sync
+sudo tee /etc/sysctl.d/99-project-truth-console.conf >/dev/null <<'SYSCTL'
+kernel.printk = 3 4 1 3
+SYSCTL
+sudo install -d -m 0755 /etc/systemd/journald.conf.d
+sudo tee /etc/systemd/journald.conf.d/99-project-truth-console.conf >/dev/null <<'JOURNALD'
+[Journal]
+ForwardToConsole=no
+MaxLevelConsole=notice
+JOURNALD
 sudo tee /etc/systemd/system/project-truth-lan-dhcp.service >/dev/null <<'LANDHCP'
 [Unit]
 Description=Project Truth first boot LAN DHCP
@@ -160,18 +191,112 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 LANDHCP
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-lan-summary.service /etc/systemd/system/project-truth-lan-summary.service
+sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-clean-console.service /etc/systemd/system/project-truth-clean-console.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-hris.service /etc/systemd/system/project-truth-hris.service
+sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-trycloudflare.service /etc/systemd/system/project-truth-trycloudflare.service
+sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-os-sync.service /etc/systemd/system/project-truth-os-sync.service
+sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-os-sync.timer /etc/systemd/system/project-truth-os-sync.timer
 sudo install -m 0644 /opt/project-truth/appliance/profile.d/project-truth-hris-help.sh /etc/profile.d/project-truth-hris-help.sh
 sudo chmod 0644 /etc/profile.d/project-truth-hris-help.sh
-sudo docker compose -f /opt/project-truth/appliance/docker-compose.yml build
+for service in hris-api-db-init hris-api hris-app; do
+  sudo docker compose -f /opt/project-truth/appliance/docker-compose.yml build "$service"
+done
 sudo systemctl daemon-reload
-sudo systemctl enable project-truth-lan-dhcp.service
+if [ "$PROJECT_TRUTH_IMAGE_TARGET" != "googlecompute" ]; then
+  sudo systemctl enable project-truth-lan-dhcp.service
+fi
 sudo systemctl enable project-truth-lan-summary.service
+sudo systemctl enable project-truth-clean-console.service
 sudo systemctl enable project-truth-hris.service
+sudo systemctl enable project-truth-os-sync.timer
+
+if [ "$PROJECT_TRUTH_IMAGE_TARGET" = "googlecompute" ]; then
+  sudo rm -f /etc/cloud/cloud-init.disabled || true
+  sudo cloud-init clean --logs || true
+else
+  # Exported VirtualBox/Hyper-V clients do not need cloud metadata and should
+  # not pause or print datasource errors while booting on a LAN appliance host.
+  sudo touch /etc/cloud/cloud-init.disabled || true
+  sudo cloud-init clean --logs || true
+fi
+
+sudo tee /usr/local/bin/project-truth-firstboot-identity >/dev/null <<'IDENTITY'
+#!/usr/bin/env bash
+set -euo pipefail
+
+image_target="appliance"
+if [ -r /etc/project-truth-image-target ]; then
+  image_target="$(cat /etc/project-truth-image-target)"
+fi
+
+if [ ! -s /etc/machine-id ]; then
+  systemd-machine-id-setup >/dev/null 2>&1 || true
+fi
+
+if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
+  ssh-keygen -A >/dev/null 2>&1 || true
+fi
+
+if [ "$image_target" != "googlecompute" ] && command -v project-truth-lan-dhcp >/dev/null 2>&1; then
+  project-truth-lan-dhcp >/dev/null 2>&1 || true
+fi
+
+if command -v project-truth-lan-summary >/dev/null 2>&1; then
+  project-truth-lan-summary --quiet >/dev/null 2>&1 || true
+fi
+IDENTITY
+sudo chmod 0755 /usr/local/bin/project-truth-firstboot-identity
+sudo tee /etc/systemd/system/project-truth-firstboot-identity.service >/dev/null <<'IDENTITYSERVICE'
+[Unit]
+Description=Project Truth first boot identity and LAN refresh
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target ssh.service sshd.service project-truth-lan-dhcp.service project-truth-lan-summary.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/project-truth-firstboot-identity
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
+IDENTITYSERVICE
+sudo systemctl enable project-truth-firstboot-identity.service
+
+sudo tee /usr/local/bin/project-truth-generalize-image >/dev/null <<'GENERALIZE'
+#!/usr/bin/env bash
+set -euo pipefail
+
+rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
+truncate -s 0 /etc/machine-id
+rm -f /var/lib/dbus/machine-id
+ln -s /etc/machine-id /var/lib/dbus/machine-id
+
+if [ "${PROJECT_TRUTH_IMAGE_TARGET:-appliance}" = "googlecompute" ]; then
+  rm -f /etc/cloud/cloud-init.disabled
+  cloud-init clean --logs || true
+else
+  rm -rf /var/lib/cloud/instances /var/lib/cloud/instance /var/lib/cloud/data
+  rm -f /var/log/cloud-init.log /var/log/cloud-init-output.log
+  rm -f /etc/netplan/50-cloud-init.yaml
+fi
+
+rm -f /etc/issue /etc/motd
+rm -rf /run/project-truth
+rm -f /var/log/project-truth-network-summary.log
+rm -f /var/lib/project-truth/firstboot-k3s-cleanup.done
+
+journalctl --rotate >/dev/null 2>&1 || true
+journalctl --vacuum-time=1s >/dev/null 2>&1 || true
+find /var/log -type f -name '*.log' -exec truncate -s 0 {} + 2>/dev/null || true
+GENERALIZE
+sudo chmod 0755 /usr/local/bin/project-truth-generalize-image
 
 sudo systemctl enable ssh
 sudo systemctl restart ssh || sudo systemctl restart sshd || true
 
 sudo kubectl get nodes
 sudo kubectl get pods -A
+sudo PROJECT_TRUTH_IMAGE_TARGET="$PROJECT_TRUTH_IMAGE_TARGET" project-truth-generalize-image
 echo "Project Truth base image bootstrap complete. Argo CD will reconcile apps from GitOps after repo credentials/applications are configured."
