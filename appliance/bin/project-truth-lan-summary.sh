@@ -215,7 +215,9 @@ emit_screen_summary() {
   echo "PROJECT TRUTH CLIENT SUMMARY"
   echo "Generated: ${generated_at}"
   echo "Host: $(hostname)"
-  echo "Login: infra / infra"
+  echo "Console login"
+  echo "  username: infra"
+  echo "  password: infra (hidden while typing)"
   echo
 
   if [ -z "$ip_addr" ]; then
@@ -259,7 +261,7 @@ emit_screen_summary() {
   echo "TryCloudflare: project-truth-lan-summary --screen-tunnels"
   echo "Database facts: project-truth-lan-summary --screen-db"
   echo
-  echo "Useful commands"
+  echo "Useful commands after login"
   echo "  project-truth-progress --watch"
   echo "  project-truth-hris-status"
   echo "  project-truth-lan-summary --screen-overview"
@@ -289,7 +291,7 @@ fi
   else
     echo "LAN IP: NOT DETECTED"
   fi
-  echo "Run: project-truth-lan-summary"
+  echo "Run after login: project-truth-lan-summary"
 } > "$motd_file"
 
 {
@@ -300,7 +302,11 @@ fi
     echo "LAN IP: NOT DETECTED"
   fi
   echo
-  echo "Login with infra / infra"
+  echo "Console login:"
+  echo "  username: infra"
+  echo "  password: infra (hidden while typing)"
+  echo "Do not type infra again after the shell prompt appears."
+  echo "After login run: project-truth-lan-summary --screen-overview"
   echo
 } > "$issue_file"
 

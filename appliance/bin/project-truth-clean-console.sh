@@ -29,7 +29,10 @@ sleep 1
     echo "Project Truth HRIS appliance"
     echo "LAN IP: NOT DETECTED"
     echo
-    echo "Login with infra / infra"
+    echo "Console login:"
+    echo "  username: infra"
+    echo "  password: infra (hidden while typing)"
+    echo "Do not type infra again after the shell prompt appears."
     echo
   fi
   echo "After login run: project-truth-lan-summary --screen-overview"

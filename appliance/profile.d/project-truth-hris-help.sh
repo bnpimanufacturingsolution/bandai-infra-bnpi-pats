@@ -7,6 +7,7 @@ fi
 
 echo
 echo "Project Truth HRIS appliance"
+echo "You are logged in as $(id -un). Do not type the password again at this shell prompt."
 if [ -n "$lan_ip" ]; then
   echo "  LAN IP: ${lan_ip}"
   echo
