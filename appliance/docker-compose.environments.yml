@@ -14,6 +14,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - default
+      - hris-observability
 
   hris-api-db-init-dev:
     build:
@@ -189,6 +192,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - default
+      - hris-observability
 
   hris-api-db-init-uat:
     build:
@@ -335,6 +341,70 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+
+  hris-grafana-uat:
+    image: grafana/grafana:11.2.0
+    container_name: hris-grafana-uat
+    user: "0"
+    ports:
+      - "53001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_DOMAIN=localhost
+      - GF_SERVER_ROOT_URL=http://localhost:53001
+      - GF_LOG_MODE=console
+      - GF_LOG_LEVEL=info
+      - GF_SECURITY_ALLOW_EMBEDDING=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_DATABASE_TYPE=postgres
+      - GF_DATABASE_HOST=hris-postgres-uat
+      - GF_DATABASE_NAME=grafana_uat
+      - GF_DATABASE_USER=postgres
+      - GF_DATABASE_PASSWORD=postgres
+      - GF_DATABASE_SSL_MODE=disable
+    volumes:
+      - ../hris-api/infrastructure/onprem/observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ../hris-api/infrastructure/onprem/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      hris-postgres-uat:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - hris-observability
+
+  hris-grafana-dev:
+    image: grafana/grafana:11.2.0
+    container_name: hris-grafana-dev
+    user: "0"
+    ports:
+      - "53002:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_DOMAIN=localhost
+      - GF_SERVER_ROOT_URL=http://localhost:53002
+      - GF_LOG_MODE=console
+      - GF_LOG_LEVEL=info
+      - GF_SECURITY_ALLOW_EMBEDDING=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_DATABASE_TYPE=postgres
+      - GF_DATABASE_HOST=hris-postgres-dev
+      - GF_DATABASE_NAME=grafana_dev
+      - GF_DATABASE_USER=postgres
+      - GF_DATABASE_PASSWORD=postgres
+      - GF_DATABASE_SSL_MODE=disable
+    volumes:
+      - ../hris-api/infrastructure/onprem/observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ../hris-api/infrastructure/onprem/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      hris-postgres-dev:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - hris-observability
 
   zkteco-bridge-uat:
     profiles:
