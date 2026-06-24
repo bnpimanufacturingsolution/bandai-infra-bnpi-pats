@@ -314,10 +314,8 @@ fi
   echo "Project Truth HRIS appliance"
   if [ -n "$ip_addr" ]; then
     echo "LAN IP: ${ip_addr}"
-    echo "Current IPv4: \\4"
   else
     echo "LAN IP: NOT DETECTED"
-    echo "Current IPv4: \\4"
   fi
   echo
   echo "Console login:"

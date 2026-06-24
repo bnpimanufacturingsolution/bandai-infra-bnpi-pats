@@ -38,10 +38,6 @@ fi
     printf '%s@%s:~$ ' "$tty_user" "$(hostname)"
   elif [ -f /etc/issue ]; then
     cat /etc/issue
-    echo "After login run:"
-    echo "  project-truth-lan-summary --screen-overview"
-    echo "  project-truth-lan-summary --screen-tunnels"
-    echo
     printf '%s login: ' "$(hostname)"
   else
     echo "Project Truth HRIS appliance"
