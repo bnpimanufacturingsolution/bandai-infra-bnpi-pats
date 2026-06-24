@@ -8,6 +8,11 @@ fi
 tty_path="/dev/tty1"
 tty_user="$(who 2>/dev/null | awk '$2 == "tty1" { print $1; exit }')"
 
+lan_ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{ for (i=1; i<=NF; i++) if ($i=="src") { print $(i+1); exit } }')"
+if [ -z "$lan_ip" ]; then
+  lan_ip="$(ip -4 -o addr show scope global up 2>/dev/null | awk '!/ docker| br-| veth| cni| flannel/ { split($4, a, "/"); print a[1]; exit }')"
+fi
+
 if [ ! -w "$tty_path" ]; then
   exit 0
 fi
@@ -28,6 +33,7 @@ fi
   printf '\033c'
   if [ -n "$tty_user" ]; then
     echo "Project Truth HRIS appliance"
+    echo "LAN IP: ${lan_ip:-NOT DETECTED}"
     echo "Console is already logged in as ${tty_user}."
     echo "Do not type infra at this shell prompt."
     echo
