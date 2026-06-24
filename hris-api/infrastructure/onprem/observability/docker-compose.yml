@@ -169,7 +169,7 @@ services:
       - GF_DATABASE_SSL_MODE=disable
     volumes:
       - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/provisioning-prod:/etc/grafana/provisioning:ro
       # Database is now PostgreSQL (grafana DB). No local SQLite file used for core data.
     depends_on:
       postgres:
