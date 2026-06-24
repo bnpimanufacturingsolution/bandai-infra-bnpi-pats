@@ -6,6 +6,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 state_dir="/run/project-truth"
+sync_state_file="/var/lib/project-truth/os-sync-state"
 log_file="/var/log/project-truth-network-summary.log"
 issue_file="/etc/issue"
 motd_file="/etc/motd"
@@ -49,6 +50,27 @@ lan_ip() {
     awk '!/ docker| br-| veth| cni| flannel/ { split($4, a, "/"); print a[1]; exit }'
 }
 
+emit_os_sync_summary() {
+  echo "OS/Git sync"
+  if [ -r "$sync_state_file" ]; then
+    awk -F= '
+      $1 == "branch" { branch=$2 }
+      $1 == "commit" { commit=$2 }
+      $1 == "synced_at" { synced_at=$2 }
+      END {
+        if (commit != "") {
+          printf "  %s@%s\n", branch, substr(commit, 1, 12)
+          printf "  synced: %s\n", synced_at
+        } else {
+          print "  state file present but commit missing"
+        }
+      }
+    ' "$sync_state_file"
+  else
+    echo "  waiting for first project-truth-os-sync run"
+  fi
+}
+
 write_summary() {
   local ip_addr="$1"
   local generated_at
@@ -85,6 +107,8 @@ write_summary() {
       echo "Grafana:    http://${ip_addr}:53000"
       echo "Prometheus: http://${ip_addr}:9091"
       echo "Loki:       http://${ip_addr}:3110"
+      echo
+      emit_os_sync_summary
       if [ -s "${state_dir}/trycloudflare-public-urls.txt" ]; then
         echo
         echo "Experimental TryCloudflare public URLs"
@@ -230,6 +254,8 @@ emit_screen_summary() {
   printf '  %-10s http://%s:%s\n' "Prometheus" "$ip_addr" "9091"
   printf '  %-10s http://%s:%s\n' "Loki" "$ip_addr" "3110"
   echo
+  emit_os_sync_summary
+  echo
   echo "TryCloudflare: project-truth-lan-summary --screen-tunnels"
   echo "Database facts: project-truth-lan-summary --screen-db"
   echo
@@ -253,6 +279,13 @@ fi
     echo "LAN IP: ${ip_addr}"
     echo "Open: http://${ip_addr}:3000/auth/login"
     echo "Client summary: project-truth-lan-summary --screen"
+    if [ -r "$sync_state_file" ]; then
+      commit="$(awk -F= '$1 == "commit" { print substr($2, 1, 12) }' "$sync_state_file")"
+      branch="$(awk -F= '$1 == "branch" { print $2 }' "$sync_state_file")"
+      if [ -n "$commit" ]; then
+        echo "OS sync: ${branch}@${commit}"
+      fi
+    fi
   else
     echo "LAN IP: NOT DETECTED"
   fi

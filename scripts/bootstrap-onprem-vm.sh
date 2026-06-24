@@ -34,7 +34,7 @@ install_docker() {
 
   if command -v apt-get >/dev/null 2>&1; then
     as_root apt-get update
-    as_root apt-get install -y ca-certificates curl gnupg lsb-release rsync docker.io docker-compose-v2
+    as_root apt-get install -y ca-certificates curl git gnupg lsb-release rsync docker.io docker-compose-v2
   else
     echo "Unsupported package manager. Install Docker and Docker Compose, then rerun this script." >&2
     exit 1
@@ -73,17 +73,21 @@ install_commands_and_services() {
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-lan-summary.sh" /usr/local/bin/project-truth-lan-summary
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-clean-console.sh" /usr/local/bin/project-truth-clean-console
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-trycloudflare-start.sh" /usr/local/bin/project-truth-trycloudflare-start
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-os-sync.sh" /usr/local/bin/project-truth-os-sync
 
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-hris.service" /etc/systemd/system/project-truth-hris.service
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-lan-summary.service" /etc/systemd/system/project-truth-lan-summary.service
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-clean-console.service" /etc/systemd/system/project-truth-clean-console.service
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-trycloudflare.service" /etc/systemd/system/project-truth-trycloudflare.service
+  as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-os-sync.service" /etc/systemd/system/project-truth-os-sync.service
+  as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-os-sync.timer" /etc/systemd/system/project-truth-os-sync.timer
   as_root install -m 0644 "${install_root}/appliance/profile.d/project-truth-hris-help.sh" /etc/profile.d/project-truth-hris-help.sh
   as_root chmod 0644 /etc/profile.d/project-truth-hris-help.sh
   as_root systemctl daemon-reload
   as_root systemctl enable project-truth-hris.service
   as_root systemctl enable project-truth-lan-summary.service
   as_root systemctl enable project-truth-clean-console.service
+  as_root systemctl enable project-truth-os-sync.timer
 }
 
 prepare_env_files() {

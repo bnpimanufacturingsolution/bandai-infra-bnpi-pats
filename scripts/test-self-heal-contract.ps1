@@ -113,6 +113,10 @@ $enableScript = Get-Content -Raw 'scripts/enable-k8s-runtime.ps1'
 $repairScript = Get-Content -Raw 'scripts/repair-appliance-online.ps1'
 $verifyScript = Get-Content -Raw 'scripts/verify-gitops-state.ps1'
 $gitopsPullScript = Get-Content -Raw 'scripts/gitops-pull.ps1'
+$vmPullScript = Get-Content -Raw 'scripts/vm-pull.ps1'
+$osSyncScript = Get-Content -Raw 'appliance/bin/project-truth-os-sync.sh'
+$osSyncTimer = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.timer'
+$lanSummaryScript = Get-Content -Raw 'appliance/bin/project-truth-lan-summary.sh'
 $promoteWorkflow = Get-Content -Raw '.github/workflows/promote-gitops.yml'
 $platformConfig = Get-Content -Raw 'gitops/argocd/platform/argocd-cm.yaml'
 $projectTruthScript = Get-Content -Raw 'scripts/project-truth.ps1'
@@ -136,6 +140,14 @@ $checks.Add((Assert-Text 'Argo platform declares reconciliation jitter' $platfor
 $checks.Add((Assert-Text 'project-truth exposes Argo platform command' $projectTruthScript 'apply-argocd-platform'))
 $checks.Add((Assert-Text 'project-truth exposes one-command GitOps pull' $projectTruthScript 'gitops-pull'))
 $checks.Add((Assert-Text 'gitops-pull hard-refreshes Argo apps' $gitopsPullScript 'argocd\.argoproj\.io/refresh=hard'))
+$checks.Add((Assert-Text 'project-truth exposes one-command VM pull' $projectTruthScript 'vm-pull'))
+$checks.Add((Assert-Text 'vm-pull installs VM-side OS sync' $vmPullScript 'project-truth-os-sync'))
+$checks.Add((Assert-Text 'vm-pull can query VM-side OS sync status' $vmPullScript '\[switch\]\$Status'))
+$checks.Add((Assert-Text 'OS sync pulls develop from repo' $osSyncScript 'PROJECT_TRUTH_BRANCH:-develop'))
+$checks.Add((Assert-Text 'OS sync refreshes Argo apps after host sync' $osSyncScript 'argocd\.argoproj\.io/refresh=hard'))
+$checks.Add((Assert-Text 'OS sync exposes status command' $osSyncScript '--status\|status'))
+$checks.Add((Assert-Text 'LAN summary reports last OS sync commit' $lanSummaryScript 'OS/Git sync'))
+$checks.Add((Assert-Text 'OS sync timer reconciles repeatedly' $osSyncTimer 'OnUnitActiveSec=5min'))
 $checks.Add((Assert-Text 'project-truth exposes Argo repo credential command' $projectTruthScript 'configure-argocd-repo-creds'))
 $checks.Add((Assert-Text 'project-truth exposes Argo webhook command' $projectTruthScript 'configure-argocd-webhook'))
 $checks.Add((Assert-Text 'repo credential script creates Argo repo-creds secret' $repoCredsScript 'argocd\.argoproj\.io/secret-type:\s*repo-creds'))

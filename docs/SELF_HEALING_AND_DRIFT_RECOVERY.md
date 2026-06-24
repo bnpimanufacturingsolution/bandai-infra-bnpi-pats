@@ -23,6 +23,7 @@ Windows host repo
 | Argo CD Application drift | Argo Applications use automated sync, pruning, self-heal, and retry. | No |
 | Argo CD platform drift | `repair-appliance-online -Mode GitOpsRefresh` reapplies the explicit Argo reconciliation config. | No |
 | Missing Argo Applications | `repair-appliance-online` first applies in-image manifests, then uploads host repo manifests if they are absent. | No |
+| VM OS/script drift | `project-truth-os-sync.timer` pulls `develop`, updates `/opt/project-truth`, reinstalls appliance commands/systemd units, and refreshes Argo CD. | No, unless the repo is unreachable |
 | HRIS app/API containers | Docker Compose uses `restart: unless-stopped`; `project-truth-hris` starts the runtime on boot. | No |
 | HRIS Kubernetes runtime | `enable-k8s-runtime` moves PROD/DEV/UAT HRIS app/API/Postgres into K3s Deployments/StatefulSets managed by Argo CD. | No |
 | HRIS runtime outage | `repair-appliance-online -Mode RestartRuntime` restarts Docker, K3s, and HRIS services. | No |
@@ -73,6 +74,28 @@ Quick Argo hard-refresh when the VM IP is saved in config, discoverable from Hyp
 
 ```powershell
 .\scripts\project-truth.ps1 gitops-pull
+```
+
+Deep VM/OS sync when you also want the appliance scripts and systemd units inside the VM to pull from `develop` without rebuilding the image:
+
+```powershell
+.\scripts\project-truth.ps1 vm-pull
+```
+
+After the first `vm-pull`, the VM enables `project-truth-os-sync.timer`, which repeats the same pull/reinstall/Argo-refresh cycle every few minutes. Argo CD remains the owner of Kubernetes resources; the OS sync owns VM-level files such as `/opt/project-truth`, `/usr/local/bin/project-truth-*`, and Project Truth systemd units.
+
+Check what the VM has already pulled:
+
+```powershell
+.\scripts\project-truth.ps1 vm-pull -Status
+```
+
+Inside the VM, the equivalent evidence command is:
+
+```bash
+project-truth-os-sync --status
+systemctl list-timers project-truth-os-sync.timer --no-pager
+journalctl -u project-truth-os-sync.service -n 80 --no-pager
 ```
 
 4. Move HRIS into Kubernetes/Argo ownership when the VM should self-heal app/API/Postgres without Compose:
