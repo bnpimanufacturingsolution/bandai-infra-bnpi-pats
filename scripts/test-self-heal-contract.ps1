@@ -115,6 +115,7 @@ $verifyScript = Get-Content -Raw 'scripts/verify-gitops-state.ps1'
 $gitopsPullScript = Get-Content -Raw 'scripts/gitops-pull.ps1'
 $vmPullScript = Get-Content -Raw 'scripts/vm-pull.ps1'
 $osSyncScript = Get-Content -Raw 'appliance/bin/project-truth-os-sync.sh'
+$osSyncService = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.service'
 $osSyncTimer = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.timer'
 $lanSummaryScript = Get-Content -Raw 'appliance/bin/project-truth-lan-summary.sh'
 $promoteWorkflow = Get-Content -Raw '.github/workflows/promote-gitops.yml'
@@ -146,6 +147,8 @@ $checks.Add((Assert-Text 'vm-pull can query VM-side OS sync status' $vmPullScrip
 $checks.Add((Assert-Text 'OS sync pulls develop from repo' $osSyncScript 'PROJECT_TRUTH_BRANCH:-develop'))
 $checks.Add((Assert-Text 'OS sync refreshes Argo apps after host sync' $osSyncScript 'argocd\.argoproj\.io/refresh=hard'))
 $checks.Add((Assert-Text 'OS sync exposes status command' $osSyncScript '--status\|status'))
+$checks.Add((Assert-Text 'OS sync can reuse Argo repo credentials' $osSyncScript 'project-truth-repo-creds'))
+$checks.Add((Assert-Text 'OS sync supports root-only credential env file' $osSyncService 'EnvironmentFile=-/etc/project-truth/os-sync\.env'))
 $checks.Add((Assert-Text 'LAN summary reports last OS sync commit' $lanSummaryScript 'OS/Git sync'))
 $checks.Add((Assert-Text 'OS sync timer reconciles repeatedly' $osSyncTimer 'OnUnitActiveSec=5min'))
 $checks.Add((Assert-Text 'project-truth exposes Argo repo credential command' $projectTruthScript 'configure-argocd-repo-creds'))

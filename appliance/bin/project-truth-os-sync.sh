@@ -7,6 +7,9 @@ install_root="${PROJECT_TRUTH_ROOT:-/opt/project-truth}"
 source_root="${PROJECT_TRUTH_SOURCE_ROOT:-/var/lib/project-truth/source}"
 state_dir="/var/lib/project-truth"
 lock_file="/run/project-truth-os-sync.lock"
+git_askpass=""
+git_username=""
+git_password=""
 
 as_root() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -38,6 +41,65 @@ ensure_dependencies() {
   return 1
 }
 
+cleanup_git_credentials() {
+  if [ -n "$git_askpass" ]; then
+    as_root rm -f "$git_askpass" >/dev/null 2>&1 || true
+  fi
+}
+
+prepare_git_credentials() {
+  local secret_name="${PROJECT_TRUTH_ARGOCD_REPO_CREDS_SECRET:-project-truth-repo-creds}"
+  local secret_namespace="${PROJECT_TRUTH_ARGOCD_NAMESPACE:-argocd}"
+  local secret_url=""
+
+  if [ -n "${PROJECT_TRUTH_GIT_USERNAME:-}" ] && [ -n "${PROJECT_TRUTH_GIT_PASSWORD:-}" ]; then
+    git_username="$PROJECT_TRUTH_GIT_USERNAME"
+    git_password="$PROJECT_TRUTH_GIT_PASSWORD"
+  elif [ -n "${PROJECT_TRUTH_GITHUB_TOKEN:-}" ]; then
+    git_username="x-access-token"
+    git_password="$PROJECT_TRUTH_GITHUB_TOKEN"
+  elif command -v kubectl >/dev/null 2>&1 &&
+    as_root kubectl get secret -n "$secret_namespace" "$secret_name" >/dev/null 2>&1; then
+    secret_url="$(
+      as_root kubectl get secret -n "$secret_namespace" "$secret_name" \
+        -o jsonpath='{.data.url}' 2>/dev/null | base64 -d 2>/dev/null || true
+    )"
+    if [ -z "$secret_url" ] || [ "${repo_url#"$secret_url"}" != "$repo_url" ]; then
+      git_username="$(
+        as_root kubectl get secret -n "$secret_namespace" "$secret_name" \
+          -o jsonpath='{.data.username}' 2>/dev/null | base64 -d 2>/dev/null || true
+      )"
+      git_password="$(
+        as_root kubectl get secret -n "$secret_namespace" "$secret_name" \
+          -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null || true
+      )"
+    fi
+  fi
+
+  if [ -z "$git_username" ] || [ -z "$git_password" ]; then
+    return 0
+  fi
+
+  git_askpass="/run/project-truth-git-askpass.$$"
+  as_root tee "$git_askpass" >/dev/null <<ASKPASS
+#!/usr/bin/env bash
+case "\$1" in
+  *Username*) printf '%s\n' '$git_username' ;;
+  *Password*) printf '%s\n' '$git_password' ;;
+  *) printf '%s\n' '$git_password' ;;
+esac
+ASKPASS
+  as_root chmod 0700 "$git_askpass"
+}
+
+git_remote() {
+  if [ -n "$git_askpass" ]; then
+    as_root env GIT_ASKPASS="$git_askpass" GIT_TERMINAL_PROMPT=0 "$@"
+  else
+    as_root env GIT_TERMINAL_PROMPT=0 "$@"
+  fi
+}
+
 show_status() {
   echo "Project Truth OS sync"
   if [ -r "${state_dir}/os-sync-state" ]; then
@@ -59,18 +121,19 @@ show_status() {
 
 sync_source_repo() {
   as_root install -d -m 0755 "$state_dir"
+  prepare_git_credentials
 
   if [ -d "${source_root}/.git" ]; then
-    as_root git -C "$source_root" remote set-url origin "$repo_url"
-    as_root git -C "$source_root" fetch --prune origin "$branch"
+    git_remote git -C "$source_root" remote set-url origin "$repo_url"
+    git_remote git -C "$source_root" fetch --prune origin "$branch"
   else
     as_root rm -rf "$source_root"
-    as_root git clone --branch "$branch" --single-branch "$repo_url" "$source_root"
+    git_remote git clone --branch "$branch" --single-branch "$repo_url" "$source_root"
     return 0
   fi
 
-  as_root git -C "$source_root" reset --hard "origin/$branch"
-  as_root git -C "$source_root" clean -fdx
+  git_remote git -C "$source_root" reset --hard "origin/$branch"
+  git_remote git -C "$source_root" clean -fdx
 }
 
 sync_install_root() {
@@ -170,6 +233,7 @@ main() {
   esac
 
   ensure_dependencies
+  trap cleanup_git_credentials EXIT
   exec 9>"$lock_file"
   if ! flock -n 9; then
     echo "Project Truth OS sync already running."

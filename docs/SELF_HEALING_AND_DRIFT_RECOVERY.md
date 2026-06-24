@@ -84,6 +84,15 @@ Deep VM/OS sync when you also want the appliance scripts and systemd units insid
 
 After the first `vm-pull`, the VM enables `project-truth-os-sync.timer`, which repeats the same pull/reinstall/Argo-refresh cycle every few minutes. Argo CD remains the owner of Kubernetes resources; the OS sync owns VM-level files such as `/opt/project-truth`, `/usr/local/bin/project-truth-*`, and Project Truth systemd units.
 
+For private GitHub repos, `project-truth-os-sync` first honors a root-only
+`/etc/project-truth/os-sync.env` file, then falls back to the existing Argo CD
+repo credential secret `project-truth-repo-creds`. The optional env file shape is:
+
+```bash
+PROJECT_TRUTH_GIT_USERNAME=x-access-token
+PROJECT_TRUTH_GIT_PASSWORD=<github-token-or-deploy-token>
+```
+
 Check what the VM has already pulled:
 
 ```powershell
