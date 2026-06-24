@@ -232,6 +232,8 @@ emit_screen_summary() {
   echo "Console login"
   echo "  username: infra"
   echo "  password: infra (hidden while typing)"
+  echo "  type username only when the prompt ends with login:"
+  echo "  if the prompt ends with $, you are already logged in"
   echo
 
   if [ -z "$ip_addr" ]; then
@@ -312,14 +314,17 @@ fi
   echo "Project Truth HRIS appliance"
   if [ -n "$ip_addr" ]; then
     echo "LAN IP: ${ip_addr}"
+    echo "Current IPv4: \\4"
   else
     echo "LAN IP: NOT DETECTED"
+    echo "Current IPv4: \\4"
   fi
   echo
   echo "Console login:"
   echo "  username: infra"
   echo "  password: infra (hidden while typing)"
-  echo "Do not type infra again after the shell prompt appears."
+  echo "Only type infra when the line ends with login:"
+  echo "If the prompt ends with $, you are already logged in."
   echo "After login run:"
   echo "  project-truth-lan-summary --screen-overview"
   echo "  project-truth-lan-summary --screen-tunnels"
@@ -336,10 +341,25 @@ if [ "$quiet" != "true" ]; then
   cat "$summary_file"
 fi
 
-if [ -w /dev/tty1 ]; then
+if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
+  tty_user="$(who 2>/dev/null | awk '$2 == "tty1" { print $1; exit }')"
   {
     printf '\033c'
-    cat "$issue_file"
-    printf '%s login: ' "$(hostname)"
+    if [ -n "$tty_user" ]; then
+      echo "Project Truth HRIS appliance"
+      echo "LAN IP: ${ip_addr:-NOT DETECTED}"
+      echo
+      echo "Console is already logged in as ${tty_user}."
+      echo "Do not type infra at this shell prompt."
+      echo
+      echo "Run:"
+      echo "  project-truth-lan-summary --screen-overview"
+      echo "  project-truth-lan-summary --screen-tunnels"
+      echo
+      printf '%s@%s:~$ ' "$tty_user" "$(hostname)"
+    else
+      cat "$issue_file"
+      printf '%s login: ' "$(hostname)"
+    fi
   } > /dev/tty1 || true
 fi

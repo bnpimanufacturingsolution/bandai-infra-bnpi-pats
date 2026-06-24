@@ -198,6 +198,7 @@ sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-observa
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-dhcp.sh /usr/local/bin/project-truth-lan-dhcp
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-summary.sh /usr/local/bin/project-truth-lan-summary
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-clean-console.sh /usr/local/bin/project-truth-clean-console
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-console-session-hook.sh /usr/local/bin/project-truth-console-session-hook
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-trycloudflare-start.sh /usr/local/bin/project-truth-trycloudflare-start
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-os-sync.sh /usr/local/bin/project-truth-os-sync
 sudo tee /etc/sysctl.d/99-project-truth-console.conf >/dev/null <<'SYSCTL'
@@ -231,6 +232,14 @@ sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-os-sync.
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-os-sync.timer /etc/systemd/system/project-truth-os-sync.timer
 sudo install -m 0644 /opt/project-truth/appliance/profile.d/project-truth-hris-help.sh /etc/profile.d/project-truth-hris-help.sh
 sudo chmod 0644 /etc/profile.d/project-truth-hris-help.sh
+pam_line='session optional pam_exec.so quiet /usr/local/bin/project-truth-console-session-hook'
+if [ -f /etc/pam.d/login ] && ! grep -Fq "$pam_line" /etc/pam.d/login; then
+  {
+    echo
+    echo '# Refresh Project Truth console LAN summary on tty1 login/logout.'
+    echo "$pam_line"
+  } | sudo tee -a /etc/pam.d/login >/dev/null
+fi
 for service in hris-api-db-init hris-api hris-app; do
   sudo docker compose -f /opt/project-truth/appliance/docker-compose.yml build "$service"
 done

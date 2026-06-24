@@ -8,6 +8,7 @@ fi
 echo
 echo "Project Truth HRIS appliance"
 echo "Logged in as $(id -un). Use the URLs below from the Windows host browser."
+echo "You are already logged in when the prompt ends with $. Do not type infra here."
 echo
 
 if [ -n "$lan_ip" ]; then
@@ -50,3 +51,23 @@ echo "  project-truth-lan-summary --screen-overview"
 echo "  project-truth-lan-summary --screen-tunnels"
 echo "  project-truth-lan-summary --screen-db"
 echo
+
+project_truth_command_not_found() {
+  if [ "${1:-}" = "infra" ]; then
+    echo "You are already logged in as infra."
+    echo "At this shell prompt, run: project-truth-lan-summary --screen-overview"
+    return 127
+  fi
+
+  if command -v command-not-found >/dev/null 2>&1; then
+    command-not-found "$1"
+    return $?
+  fi
+
+  echo "$1: command not found" >&2
+  return 127
+}
+
+command_not_found_handle() {
+  project_truth_command_not_found "$@"
+}
