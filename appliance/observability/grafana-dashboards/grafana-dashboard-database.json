@@ -1,0 +1,70 @@
+{
+  "title": "Database Dashboard",
+  "uid": "database",
+  "tags": ["database", "performance"],
+  "panels": [
+    {
+      "title": "Query Count by Service",
+      "targets": [
+        {
+          "expr": "sum(rate(db_query_total[5m])) by (service, operation)"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "type": "timeseries"
+    },
+    {
+      "title": "Query Duration",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket[5m])) by (le, operation))"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "type": "timeseries"
+    },
+    {
+      "title": "Slow Queries (>1s)",
+      "targets": [
+        {
+          "expr": "sum(rate(db_slow_query_total[5m])) by (table)"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "type": "timeseries"
+    },
+    {
+      "title": "Connection Pool Usage",
+      "targets": [
+        {
+          "expr": "db_connection_pool_size - db_connection_pool_available"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "type": "gauge"
+    },
+    {
+      "title": "Transaction Duration",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(db_transaction_duration_seconds_bucket[5m])) by (le))"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "type": "timeseries"
+    },
+    {
+      "title": "Query Errors",
+      "targets": [
+        {
+          "expr": "sum(rate(db_query_error_total[5m])) by (error_type)"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 37,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" }
+}

@@ -210,6 +210,14 @@ export function RequestListCard({ type, employeeId }: RequestListCardProps) {
 							<div
 								key={item.id}
 								onClick={() => openRequest(item.id)}
+								onKeyDown={(event) => {
+									if (event.key === "Enter" || event.key === " ") {
+										event.preventDefault();
+										openRequest(item.id);
+									}
+								}}
+								role="button"
+								tabIndex={0}
 								className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
 								<div className="flex items-center gap-3 flex-1 min-w-0">
 									<FileText className="w-5 h-5 text-gray-400 flex-shrink-0" />

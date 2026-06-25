@@ -89,7 +89,7 @@
                                    },
                        "targets":  [
                                        {
-                                           "expr":  "topk(10, sum by (full_name, user_name) (count_over_time({service=~\"hris-api.*\", environment=~\"$environment\"} |= \"api.activity.request\" | json | authenticated=\"true\" [6h])))",
+                                           "expr":  "topk(10, sum by (full_name, user_name) (count_over_time({service=~\"hris-api.*\", environment=~\"$environment\"} |= \"api.activity.request\" | json | authenticated=\"true\" [$__range])))",
                                            "legendFormat":  "{{full_name}} ({{user_name}})",
                                            "queryType":  "instant",
                                            "refId":  "A"
@@ -140,7 +140,7 @@
                                    },
                        "targets":  [
                                        {
-                                           "expr":  "sum by (module) (count_over_time({service=~\"hris-api.*\", environment=~\"$environment\"} |= \"api.activity.request\" | json | authenticated=\"true\" [6h]))",
+                                           "expr":  "sum by (module) (count_over_time({service=~\"hris-api.*\", environment=~\"$environment\"} |= \"api.activity.request\" | json | authenticated=\"true\" [$__range]))",
                                            "legendFormat":  "{{module}}",
                                            "refId":  "A"
                                        }

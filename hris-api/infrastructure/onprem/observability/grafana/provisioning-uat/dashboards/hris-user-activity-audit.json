@@ -89,7 +89,7 @@
                                    },
                        "targets":  [
                                        {
-                                           "expr":  "topk(10, sum by (full_name, user_name) (count_over_time({service=~\"hris-api.*\", environment=~\"$environment\"} |= \"api.activity.request\" | json | authenticated=\"true\" [6h])))",
+                                           "expr":  "topk(10, sum by (full_name, user_name) (count_over_time({service=~\"hris-api.*\", environment=~\"$environment\"} |= \"api.activity.request\" | json | authenticated=\"true\" [$__range])))",
                                            "legendFormat":  "{{full_name}} ({{user_name}})",
                                            "queryType":  "instant",
                                            "refId":  "A"
@@ -140,7 +140,7 @@
                                    },
                        "targets":  [
                                        {
-                                           "expr":  "sum by (module) (count_over_time({service=~\"hris-api.*\", environment=~\"$environment\"} |= \"api.activity.request\" | json | authenticated=\"true\" [6h]))",
+                                           "expr":  "sum by (module) (count_over_time({service=~\"hris-api.*\", environment=~\"$environment\"} |= \"api.activity.request\" | json | authenticated=\"true\" [$__range]))",
                                            "legendFormat":  "{{module}}",
                                            "refId":  "A"
                                        }
@@ -413,6 +413,56 @@
                                        "prettifyJSON":  true,
                                        "enableLogDetails":  true
                                    }
+                   },
+                   {
+                       "id":  15,
+                       "type":  "logs",
+                       "title":  "Mutating Requests (POST/PUT/PATCH/DELETE)",
+                       "datasource":  {
+                                          "type":  "loki",
+                                          "uid":  "loki"
+                                      },
+                       "gridPos":  {
+                                       "h":  9,
+                                       "w":  24,
+                                       "x":  0,
+                                       "y":  77
+                                   },
+                       "targets":  [
+                                       {
+                                           "expr":  "{service=~\"hris-api.*\", environment=~\"$environment\"} |= \"api.activity.request\" | json | authenticated=\"true\" | method=~\"POST|PUT|PATCH|DELETE\" | line_format \"{{.full_name}} ({{if .user_name}}{{.user_name}}{{else}}{{.user_id}}{{end}}) - {{.method}} {{.route}} [{{.status_code}}]{{if .action_type}} action={{.action_type}}{{end}}{{if .entity_id}} entity_id={{.entity_id}}{{end}}{{if .request_payload_summary}} payload={{.request_payload_summary}}{{end}}\"",
+                                           "refId":  "A"
+                                       }
+                                   ],
+                       "options":  {
+                                       "showTime":  true,
+                                       "showLabels":  true,
+                                       "showCommonLabels":  false,
+                                       "wrapLogMessage":  true,
+                                       "prettifyJSON":  true,
+                                       "enableLogDetails":  true
+                                   },
+                       "fieldConfig":  {
+                                           "overrides":  [
+                                                             {
+                                                                 "matcher":  {
+                                                                                 "id":  "byName",
+                                                                                 "options":  "trace_id"
+                                                                             },
+                                                                 "properties":  [
+                                                                                    {
+                                                                                        "id":  "links",
+                                                                                        "value":  [
+                                                                                                      {
+                                                                                                          "title":  "View Trace in Tempo",
+                                                                                                          "url":  "http://localhost:3200/explore?schema=tempo\u0026query=${__value.raw}"
+                                                                                                      }
+                                                                                                  ]
+                                                                                    }
+                                                                                ]
+                                                             }
+                                                         ]
+                                       }
                    }
                ]
 }

@@ -1,7 +1,6 @@
 import {
 	isRouteErrorResponse,
 	Links,
-	Meta,
 	Outlet,
 	Scripts,
 	ScrollRestoration,
@@ -53,6 +52,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
 	const location = useLocation();
 	const isPublicStatusPage = location.pathname === "/status";
+	const devtools = import.meta.env.DEV ? <ReactQueryDevtools initialIsOpen={false} /> : null;
 
 	return (
 		<QueryClientProvider client={queryClient}>
@@ -68,7 +68,7 @@ export default function App() {
 						closeButton
 						swipeDirections={["top", "right", "bottom", "left"]}
 					/>
-					{import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+					{devtools}
 				</ToastProvider>
 			</AuthProvider>
 		</QueryClientProvider>

@@ -24,7 +24,7 @@ export function ChangePasswordModal({
 	isOpen,
 	onClose,
 	onPasswordChanged,
-	userEmail,
+	userEmail: _userEmail,
 	enforceLock = false,
 }: ChangePasswordModalProps) {
 	const [showNewPassword, setShowNewPassword] = useState(false);
@@ -68,9 +68,9 @@ export function ChangePasswordModal({
 			reset();
 			onClose();
 			onPasswordChanged();
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("Password change error:", err);
-			setError(err.message || "Failed to change password. Please try again.");
+			setError(err instanceof Error ? err.message : "Failed to change password. Please try again.");
 		} finally {
 			setIsSubmitting(false);
 		}
@@ -120,10 +120,13 @@ export function ChangePasswordModal({
 			<form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
 				{/* New Password */}
 				<div className="space-y-2">
-					<label className="text-sm font-medium text-gray-700">New Password *</label>
+					<label htmlFor="new-password" className="text-sm font-medium text-gray-700">
+						New Password *
+					</label>
 					<div className="relative">
 						<Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
 						<Input
+							id="new-password"
 							type={showNewPassword ? "text" : "password"}
 							className="pl-10 pr-10 h-12"
 							placeholder="Enter new password"
@@ -167,10 +170,15 @@ export function ChangePasswordModal({
 
 				{/* Confirm Password */}
 				<div className="space-y-2">
-					<label className="text-sm font-medium text-gray-700">Confirm Password *</label>
+					<label
+						htmlFor="confirm-password"
+						className="text-sm font-medium text-gray-700">
+						Confirm Password *
+					</label>
 					<div className="relative">
 						<Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
 						<Input
+							id="confirm-password"
 							type={showConfirmPassword ? "text" : "password"}
 							className="pl-10 pr-10 h-12"
 							placeholder="Confirm new password"

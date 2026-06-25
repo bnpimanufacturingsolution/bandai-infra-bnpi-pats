@@ -1,5 +1,5 @@
 import { RoleDashboardShell } from "~/components/dashboards/shared/role-dashboard-shell";
 
 export function HrUserDashboard() {
-	return <RoleDashboardShell role="hr-user" />;
+	return <RoleDashboardShell dashboardRole="hr-user" />;
 }

@@ -298,11 +298,19 @@ export function ActionNeededCard({ role }: ActionNeededCardProps) {
 		);
 		const metaLabel = metaParts.join(" • ");
 
-		return (
-			<div
-				key={item.id}
-				onClick={() => openItem(item)}
-				className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 px-3 py-2.5 transition-colors hover:bg-gray-50">
+	return (
+		<div
+			key={item.id}
+			onClick={() => openItem(item)}
+			onKeyDown={(event) => {
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault();
+					openItem(item);
+				}
+			}}
+			role="button"
+			tabIndex={0}
+			className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 px-3 py-2.5 transition-colors hover:bg-gray-50">
 				<div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-orange-100 bg-orange-50">
 					<ItemIcon className="h-4 w-4 text-orange-500" />
 				</div>

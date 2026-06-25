@@ -66,6 +66,13 @@ observability stack before app containers attach to the shared
 - `HRIS Observability Overview`
 - `HRIS Container Logs`
 - `HRIS User Activity and Audit`
+- `API Health Dashboard`
+- `Business Dashboard`
+- `Database Dashboard`
+- `Error Dashboard`
+- `HRIS Function Tracing & Debug`
+- `Infrastructure Dashboard`
+- `Trace Dashboard`
 
 ## Application Wiring
 API and cron containers must share the `hris-observability` Docker network and send traces to the collector:
