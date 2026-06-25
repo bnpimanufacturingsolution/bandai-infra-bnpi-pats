@@ -153,6 +153,7 @@ $checks.Add((Assert-Text 'OS sync pulls develop from repo' $osSyncScript 'PROJEC
 $checks.Add((Assert-Text 'OS sync preflights Git network before fetch' $osSyncScript 'repair_network_for_git'))
 $checks.Add((Assert-Text 'OS sync repairs resolver drift before fetch' $osSyncScript 'systemd-resolved\.service'))
 $checks.Add((Assert-Text 'OS sync repairs DHCP drift before fetch' $osSyncScript 'project-truth-lan-dhcp'))
+$checks.Add((Assert-Text 'OS sync restarts its timer after unit updates' $osSyncScript 'systemctl restart project-truth-os-sync\.timer'))
 $checks.Add((Assert-Text 'OS sync refreshes Argo apps after host sync' $osSyncScript 'argocd\.argoproj\.io/refresh=hard'))
 $checks.Add((Assert-Text 'OS sync exposes status command' $osSyncScript '--status\|status'))
 $checks.Add((Assert-Text 'OS sync can reuse Argo repo credentials' $osSyncScript 'project-truth-repo-creds'))
