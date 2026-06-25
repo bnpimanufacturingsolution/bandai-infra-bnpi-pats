@@ -159,6 +159,7 @@ $checks.Add((Assert-Text 'OS sync exposes status command' $osSyncScript '--statu
 $checks.Add((Assert-Text 'OS sync can reuse Argo repo credentials' $osSyncScript 'project-truth-repo-creds'))
 $checks.Add((Assert-Text 'OS sync supports root-only credential env file' $osSyncService 'EnvironmentFile=-/etc/project-truth/os-sync\.env'))
 $checks.Add((Assert-Text 'LAN summary reports last OS sync commit' $lanSummaryScript 'OS/Git sync'))
+$checks.Add((Assert-Text 'OS sync timer has wall-clock fallback schedule' $osSyncTimer 'OnCalendar=\*:0/5'))
 $checks.Add((Assert-Text 'OS sync timer reconciles repeatedly' $osSyncTimer 'OnUnitActiveSec=5min'))
 $checks.Add((Assert-Text 'OS sync timer re-arms after failures' $osSyncTimer 'OnUnitInactiveSec=5min'))
 $checks.Add((Assert-Text 'project-truth exposes Argo repo credential command' $projectTruthScript 'configure-argocd-repo-creds'))
