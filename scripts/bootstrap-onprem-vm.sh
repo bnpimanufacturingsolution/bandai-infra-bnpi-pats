@@ -126,7 +126,8 @@ install_commands_and_services() {
   as_root systemctl enable project-truth-lan-summary.service
   as_root systemctl enable project-truth-clean-console.service
   as_root systemctl enable project-truth-trycloudflare.service
-  as_root systemctl enable project-truth-os-sync.timer
+  as_root systemctl enable --now project-truth-os-sync.timer
+  as_root systemctl restart project-truth-os-sync.timer
 }
 
 configure_console_session_hook() {

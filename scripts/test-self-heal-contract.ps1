@@ -115,6 +115,7 @@ $verifyScript = Get-Content -Raw 'scripts/verify-gitops-state.ps1'
 $gitopsPullScript = Get-Content -Raw 'scripts/gitops-pull.ps1'
 $vmPullScript = Get-Content -Raw 'scripts/vm-pull.ps1'
 $vmGitCredsScript = Get-Content -Raw 'scripts/configure-vm-git-creds.ps1'
+$bootstrapOnpremScript = Get-Content -Raw 'scripts/bootstrap-onprem-vm.sh'
 $osSyncScript = Get-Content -Raw 'appliance/bin/project-truth-os-sync.sh'
 $osSyncService = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.service'
 $osSyncTimer = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.timer'
@@ -146,6 +147,8 @@ $checks.Add((Assert-Text 'gitops-pull hard-refreshes Argo apps' $gitopsPullScrip
 $checks.Add((Assert-Text 'project-truth exposes one-command VM pull' $projectTruthScript 'vm-pull'))
 $checks.Add((Assert-Text 'vm-pull installs VM-side OS sync' $vmPullScript 'project-truth-os-sync'))
 $checks.Add((Assert-Text 'vm-pull can query VM-side OS sync status' $vmPullScript '\[switch\]\$Status'))
+$checks.Add((Assert-Text 'live bootstrap starts VM OS sync timer immediately' $bootstrapOnpremScript 'systemctl enable --now project-truth-os-sync\.timer'))
+$checks.Add((Assert-Text 'live bootstrap re-arms VM OS sync timer immediately' $bootstrapOnpremScript 'systemctl restart project-truth-os-sync\.timer'))
 $checks.Add((Assert-Text 'project-truth exposes VM Git credential command' $projectTruthScript 'configure-vm-git-creds'))
 $checks.Add((Assert-Text 'VM Git credential command writes OS sync env file' $vmGitCredsScript '/etc/project-truth/os-sync\.env'))
 $checks.Add((Assert-Text 'VM Git credential command supports password fallback' $vmGitCredsScript 'PROJECT_TRUTH_SSH_PASSWORD'))
