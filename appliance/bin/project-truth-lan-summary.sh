@@ -182,8 +182,9 @@ emit_trycloudflare_screen() {
     case "$public_url" in
       https://*.trycloudflare.com*)
         rows=$((rows + 1))
-        printf '  %-10s local  %s\n' "$target" "$local_path"
-        printf '  %-10s public %s\n' "" "$public_check"
+        printf '%s\n' "$target"
+        printf '  local  %s\n' "$local_path"
+        printf '  public %s\n' "$public_check"
         ;;
     esac
   done < "$file"
@@ -216,9 +217,10 @@ emit_database_screen() {
     case "$url_shape" in
       postgresql://*)
         rows=$((rows + 1))
-        printf '  %-13s host:%s\n' "$name" "$host_port"
-        printf '    svc %s\n' "$internal_service"
-        printf '    %s\n' "$url_shape"
+        printf '%s\n' "$name"
+        printf '  host %s\n' "$host_port"
+        printf '  svc  %s\n' "$internal_service"
+        printf '  url  %s\n' "$url_shape"
         ;;
     esac
   done < "$file"
@@ -234,16 +236,12 @@ emit_screen_summary() {
   local generated_at
   generated_at="$(date '+%Y-%m-%d %H:%M:%S %Z')"
 
-  printf '\033c'
+  if [ "${PROJECT_TRUTH_SCREEN_NO_CLEAR:-}" != "1" ]; then
+    printf '\033c\033[3J\033[H\033[2J'
+  fi
   echo "PROJECT TRUTH CLIENT SUMMARY"
   echo "Generated: ${generated_at}"
   echo "Host: $(hostname)"
-  echo "Console login"
-  echo "  username: infra"
-  echo "  password: infra (hidden while typing)"
-  echo "  type username only when the prompt ends with login:"
-  echo "  if the prompt ends with $, you are already logged in"
-  echo
 
   if [ -z "$ip_addr" ]; then
     echo "LAN IP: NOT DETECTED"
@@ -253,6 +251,15 @@ emit_screen_summary() {
 
   echo "LAN IP: ${ip_addr}"
   echo
+
+  if [ "$page" = "overview" ]; then
+    echo "Console login"
+    echo "  username: infra"
+    echo "  password: infra (hidden while typing)"
+    echo "  type username only when the prompt ends with login:"
+    echo "  if the prompt ends with $, you are already logged in"
+    echo
+  fi
 
   if [ "$page" = "tunnels" ]; then
     emit_trycloudflare_screen
@@ -286,19 +293,16 @@ emit_screen_summary() {
   echo "TryCloudflare: project-truth-lan-summary --screen-tunnels"
   echo "Database facts: project-truth-lan-summary --screen-db"
   echo
-  echo "Useful commands after login"
-  echo "  project-truth-progress --watch"
-  echo "  project-truth-hris-status"
-  echo "  sudo project-truth-os-sync"
-  echo "  project-truth-os-sync --status"
-  echo "  project-truth-lan-summary --screen-overview"
+  echo "Useful: progress --watch | hris-status | sudo os-sync"
 }
 
 ip_addr="$(lan_ip || true)"
 write_summary "$ip_addr"
 
 if [ "$screen" = "true" ]; then
-  emit_screen_summary "$ip_addr" "$screen_page"
+  printf '\033c\033[3J\033[H\033[2J'
+  PROJECT_TRUTH_SCREEN_NO_CLEAR=1 emit_screen_summary "$ip_addr" "$screen_page" |
+    sed 's/^/  /'
   exit 0
 fi
 
