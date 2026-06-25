@@ -100,6 +100,12 @@ describe("zkteco event contract helper", () => {
 				isValid: false,
 			}),
 		).to.equal(false);
+		expect(
+			isZktecoAttendancePunchEvent({
+				eventType: "AttendanceTransaction",
+				isValid: "false" as any,
+			}),
+		).to.equal(false);
 		expect(isZktecoAttendancePunchEvent({ eventType: "UserSync" })).to.equal(false);
 	});
 

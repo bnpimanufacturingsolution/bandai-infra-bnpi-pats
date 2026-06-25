@@ -71,7 +71,8 @@ export const isZktecoAttendancePunchEvent = (
 	event: Pick<NormalizedZktecoEvent, "eventType" | "isValid">,
 ) => {
 	const eventType = String(event.eventType || "").trim().toUpperCase();
-	return event.isValid !== false && (!eventType || eventType === "ATTENDANCETRANSACTION");
+	const isExplicitlyInvalid = String(event.isValid).trim().toLowerCase() === "false";
+	return !isExplicitlyInvalid && (!eventType || eventType === "ATTENDANCETRANSACTION");
 };
 
 export const isZktecoAttendancePunchPayload = (payload: Record<string, any>) =>

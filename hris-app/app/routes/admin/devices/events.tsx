@@ -63,8 +63,10 @@ const PH_TIME_ZONE = "Asia/Manila";
 
 const savedStatusOptions: SelectOption[] = [
 	{ value: "all", label: "All HRIS results" },
-	{ value: "ATTENDANCE_CREATED", label: "Saved" },
-	{ value: "ATTENDANCE_UPDATED", label: "Updated" },
+	{ value: "MATCHED", label: "Matched" },
+	{ value: "RECEIVED", label: "Received" },
+	{ value: "ATTENDANCE_CREATED", label: "Attendance created" },
+	{ value: "ATTENDANCE_UPDATED", label: "Attendance updated" },
 	{ value: "UNMATCHED", label: "Needs match" },
 	{ value: "IGNORED", label: "Recorded" },
 	{ value: "FAILED", label: "Review" },
@@ -122,13 +124,13 @@ const getDateRangeForWindow = (window: TimeWindow) => {
 const getAcsEventPayload = (data: any) => data?.data?.AcsEvent || data?.AcsEvent || null;
 
 const formatBusinessStatus = (status: string) => {
-	if (status === "ATTENDANCE_CREATED") return "Saved";
-	if (status === "ATTENDANCE_UPDATED") return "Updated";
+	if (status === "ATTENDANCE_CREATED") return "Attendance created";
+	if (status === "ATTENDANCE_UPDATED") return "Attendance updated";
 	if (status === "UNMATCHED") return "Needs match";
 	if (status === "IGNORED") return "Recorded";
 	if (status === "FAILED") return "Review";
 	if (status === "RECEIVED") return "Received";
-	if (status === "MATCHED") return "Matched";
+	if (status === "MATCHED") return "Matched to employee";
 	return status
 		.toLowerCase()
 		.split("_")
@@ -144,7 +146,13 @@ const formatEventSource = (source?: string | null) => {
 };
 
 const statusVariant = (status: string) => {
-	if (status === "ATTENDANCE_CREATED" || status === "ATTENDANCE_UPDATED") return "success-soft";
+	if (
+		status === "MATCHED" ||
+		status === "ATTENDANCE_CREATED" ||
+		status === "ATTENDANCE_UPDATED"
+	) {
+		return "success-soft";
+	}
 	if (status === "UNMATCHED" || status === "NOT_SAVED") return "warning-soft";
 	if (status === "FAILED") return "destructive";
 	if (status === "IGNORED") return "secondary";
@@ -487,7 +495,13 @@ export default function DeviceEventsPage() {
 	const isEventLoading = viewMode === "live" ? isLoadingLive : isLoadingSaved;
 	const activeError = viewMode === "live" ? liveError || savedError : savedError;
 
-	const savedToAttendanceCount = rows.filter(
+	const matchedCount = rows.filter(
+		(event: UnifiedDeviceEventRow) =>
+			event.status === "MATCHED" ||
+			event.status === "ATTENDANCE_CREATED" ||
+			event.status === "ATTENDANCE_UPDATED",
+	).length;
+	const attendanceWrittenCount = rows.filter(
 		(event: UnifiedDeviceEventRow) =>
 			event.status === "ATTENDANCE_CREATED" || event.status === "ATTENDANCE_UPDATED",
 	).length;
@@ -496,9 +510,6 @@ export default function DeviceEventsPage() {
 	).length;
 	const notSavedCount = rows.filter(
 		(event: UnifiedDeviceEventRow) => event.status === "NOT_SAVED",
-	).length;
-	const alreadyRecordedCount = rows.filter(
-		(event: UnifiedDeviceEventRow) => event.status === "IGNORED",
 	).length;
 
 	const columns: Column<UnifiedDeviceEventRow>[] = [
@@ -583,7 +594,7 @@ export default function DeviceEventsPage() {
 		},
 		{
 			key: "attendanceId",
-			label: "Attendance",
+			label: "Attendance write",
 			sortable: false,
 			width: "180px",
 			render: (value, item) =>
@@ -778,11 +789,11 @@ export default function DeviceEventsPage() {
 								label: viewMode === "live" ? "Device punches" : "Saved events",
 								value: viewMode === "live" ? liveEvents.length : data?.summary?.total || 0,
 							},
-							{ label: "Saved", value: savedToAttendanceCount },
+							{ label: "Matched", value: matchedCount },
 							{ label: "Needs match", value: needsEmployeeMatchCount },
 							{
-								label: viewMode === "live" ? "Pending" : "Recorded",
-								value: viewMode === "live" ? notSavedCount : alreadyRecordedCount,
+								label: viewMode === "live" ? "Pending" : "Attendance writes",
+								value: viewMode === "live" ? notSavedCount : attendanceWrittenCount,
 							},
 						].map((item) => (
 							<div key={item.label} className="min-w-0 px-3 py-2">
@@ -825,7 +836,7 @@ export default function DeviceEventsPage() {
 							{viewMode === "live" ? "Live punches" : "Saved punches"}
 						</h2>
 						<p className="truncate text-xs text-slate-500">
-							{viewMode === "live" ? "Device read" : "HRIS stored events"}
+							{viewMode === "live" ? "Device read" : "HRIS stored event ledger"}
 							{lastRealtimeEvent?.emittedAt
 								? ` · Latest ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
 								: ""}

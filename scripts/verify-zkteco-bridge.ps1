@@ -119,14 +119,14 @@ try {
             if ($response.data.attendanceId) {
                 Write-Pass "Device and Employee.deviceEmpId matched. ZKTeco punch projected into Attendance $($response.data.attendanceId) with action $($response.data.attendanceAction)."
             } else {
-                Write-Pass "Device and Employee.deviceEmpId matched. Event was recorded with attendance action $($response.data.attendanceAction)."
+                Write-Pass "Device and Employee.deviceEmpId matched. Event was recorded without Attendance mutation."
             }
         }
     }
 
     Write-Step "Best finish state"
     Write-Host "Stop when API/app are healthy, ZKTeco mock or bridge posts reach $ApiBaseUrl/api/zkteco/events, and saved events show under /admin/devices/events?view=saved&source=ZKTECO_EVENT."
-    Write-Host "Attendance truth note: matched ZKTeco attendance punches now save DeviceEvent rows and create/update Attendance, AttendanceObligation, and editable timesheet truth."
+    Write-Host "Attendance truth note: ZKTeco ingestion records DeviceEvent evidence only. It must not create/update Attendance, AttendanceObligation, timesheets, or payroll unless a separate tested applicator is deliberately enabled."
 } finally {
     Pop-Location
 }
