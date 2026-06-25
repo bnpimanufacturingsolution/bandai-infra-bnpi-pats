@@ -60,6 +60,7 @@ if [ -n "$lan_ip" ]; then
   echo "Grafana:    http://${lan_ip}:53000"
   echo "Prometheus: http://${lan_ip}:9091"
   echo "Loki:       http://${lan_ip}:3110"
+  echo "Gateway:    http://${lan_ip}:38080"
 else
   echo "LAN IP: NOT DETECTED"
   echo "Reason: no active non-loopback IPv4 address found"
@@ -72,6 +73,7 @@ echo "Local API Health URL: http://127.0.0.1:3001/health"
 echo "Local Grafana URL: http://127.0.0.1:53000"
 echo "Local Prometheus URL: http://127.0.0.1:9091"
 echo "Local Loki URL: http://127.0.0.1:3110"
+echo "Local Gateway URL: http://127.0.0.1:38080"
 echo "Startup URL log: /var/log/project-truth-network-summary.log"
 
 echo "Docker services:"
@@ -112,10 +114,12 @@ echo "Observability:"
 check_url "local grafana" "http://127.0.0.1:53000/api/health"
 check_url "local prometheus" "http://127.0.0.1:9091/-/ready"
 check_url "local loki" "http://127.0.0.1:3110/ready"
+check_url "local gateway" "http://127.0.0.1:38080/healthz"
 if [ -n "$lan_ip" ]; then
   check_url "lan grafana" "http://${lan_ip}:53000/api/health"
   check_url "lan prometheus" "http://${lan_ip}:9091/-/ready"
   check_url "lan loki" "http://${lan_ip}:3110/ready"
+  check_url "lan gateway" "http://${lan_ip}:38080/healthz"
 fi
 
 if [ -n "$lan_ip" ]; then

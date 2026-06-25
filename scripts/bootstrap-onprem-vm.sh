@@ -110,6 +110,7 @@ install_commands_and_services() {
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-clean-console.sh" /usr/local/bin/project-truth-clean-console
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-console-session-hook.sh" /usr/local/bin/project-truth-console-session-hook
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-trycloudflare-start.sh" /usr/local/bin/project-truth-trycloudflare-start
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-tunnel-gateway.py" /usr/local/bin/project-truth-tunnel-gateway
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-os-sync.sh" /usr/local/bin/project-truth-os-sync
 
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-hris.service" /etc/systemd/system/project-truth-hris.service

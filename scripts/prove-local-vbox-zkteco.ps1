@@ -1,7 +1,7 @@
 param(
   [string]$VmName = 'project-truth-final-vbox-proof',
   [string]$RuntimeDir = (Join-Path (Split-Path -Parent $PSScriptRoot) '.runtime\overnight-truth-proof'),
-  [int[]]$Ports = @(22, 3000, 3001, 3100, 3101, 3200, 3201, 53000, 9091, 3110),
+  [int[]]$Ports = @(22, 3000, 3001, 3100, 3101, 3200, 3201, 38080, 53000, 9091, 3110),
   [switch]$StartVm,
   [switch]$StopVm
 )

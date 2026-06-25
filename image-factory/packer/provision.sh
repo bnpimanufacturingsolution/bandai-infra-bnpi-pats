@@ -72,6 +72,7 @@ sudo ufw allow 3100/tcp
 sudo ufw allow 3101/tcp
 sudo ufw allow 3200/tcp
 sudo ufw allow 3201/tcp
+sudo ufw allow 38080/tcp
 sudo ufw allow 53000/tcp
 sudo ufw allow 9091/tcp
 sudo ufw allow 3110/tcp

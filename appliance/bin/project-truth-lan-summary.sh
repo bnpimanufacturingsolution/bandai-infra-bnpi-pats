@@ -114,6 +114,7 @@ write_summary() {
       echo "Grafana:    http://${ip_addr}:53000"
       echo "Prometheus: http://${ip_addr}:9091"
       echo "Loki:       http://${ip_addr}:3110"
+      echo "Gateway:    http://${ip_addr}:38080"
       echo
       emit_os_sync_summary
       if [ -s "${state_dir}/trycloudflare-public-urls.txt" ]; then
@@ -287,6 +288,7 @@ emit_screen_summary() {
   printf '  %-10s http://%s:%s\n' "Grafana" "$ip_addr" "53000"
   printf '  %-10s http://%s:%s\n' "Prometheus" "$ip_addr" "9091"
   printf '  %-10s http://%s:%s\n' "Loki" "$ip_addr" "3110"
+  printf '  %-10s http://%s:%s\n' "Gateway" "$ip_addr" "38080"
   echo
   emit_os_sync_summary
   echo

@@ -26,6 +26,7 @@ if [ -n "$lan_ip" ]; then
   printf '  %-10s http://%s:%s\n' "Grafana" "$lan_ip" "53000"
   printf '  %-10s http://%s:%s\n' "Prometheus" "$lan_ip" "9091"
   printf '  %-10s http://%s:%s\n' "Loki" "$lan_ip" "3110"
+  printf '  %-10s http://%s:%s\n' "Gateway" "$lan_ip" "38080"
 else
   echo "LAN IP: NOT DETECTED"
   echo "Repair: project-truth-lan-dhcp"
@@ -35,7 +36,7 @@ if [ -s /run/project-truth/trycloudflare-public-urls.txt ]; then
   echo
   echo "TryCloudflare"
   awk -F'|' '
-    $2 ~ /prod-app|prod-api|dev-app|dev-api|uat-app|uat-api|grafana|prometheus|loki/ {
+    $2 ~ /gateway|prod-app|prod-api|dev-app|dev-api|uat-app|uat-api|grafana|prometheus|loki/ {
       gsub(/^ +| +$/, "", $2)
       gsub(/^ +| +$/, "", $4)
       if ($4 ~ /^https:\/\/.*trycloudflare\.com/) {
