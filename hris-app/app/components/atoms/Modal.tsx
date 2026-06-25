@@ -63,8 +63,10 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 				{trigger}
 				<div className="fixed inset-0 z-50 flex items-center justify-center">
 					{/* Backdrop */}
-					<div
+					<button
+						type="button"
 						className="fixed inset-0 bg-black/50"
+						aria-label="Close modal backdrop"
 						onClick={() => {
 							if (closeOnBackdropClick) onOpenChange?.(false);
 						}}

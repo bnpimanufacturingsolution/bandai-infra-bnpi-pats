@@ -1,0 +1,171 @@
+version: "3.9"
+
+services:
+  # ============================================
+  # LGTM Stack Services
+  # ============================================
+
+  # Loki - Log Aggregation
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki-config.yml:/etc/loki/local-config.yaml
+      - loki-storage:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Tempo - Trace Backend
+  tempo:
+    image: grafana/tempo:latest
+    ports:
+      - "3200:3200"
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    volumes:
+      - ./observability/tempo-config.yml:/etc/tempo.yml
+      - tempo-storage:/var/tempo
+    command: -config.file=/etc/tempo.yml
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3200/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Mimir - Metrics Backend
+  mimir:
+    image: grafana/mimir:latest
+    ports:
+      - "9009:9009"
+    volumes:
+      - ./observability/mimir-config.yml:/etc/mimir.yml
+      - mimir-storage:/mimir
+    command: -config.file=/etc/mimir.yml
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9009/status/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Prometheus - Metrics Scraper & Alerting
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus-config.yml:/etc/prometheus/prometheus.yml
+      - prometheus-storage:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # OpenTelemetry Collector - Pipeline
+  otel-collector:
+    image: otel/opentelemetry-collector-k8s:latest
+    ports:
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
+      - "8888:8888" # Prometheus metrics exposed by collector
+      - "8889:8889" # Prometheus exporter
+      - "13133:13133" # Health check extension
+    volumes:
+      - ./observability/otel-collector-config.yml:/etc/otel-collector-config.yml
+    command: ["--config=/etc/otel-collector-config.yml"]
+    depends_on:
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+      mimir:
+        condition: service_healthy
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:13133"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Grafana - Visualization & Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - loki
+      - tempo
+      - mimir
+      - prometheus
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Optional: Alertmanager for Alert Management
+  # ============================================
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./observability/alertmanager-config.yml:/etc/alertmanager/config.yml
+      - alertmanager-storage:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/config.yml"
+      - "--storage.path=/alertmanager"
+    networks:
+      - observability
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9093/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  loki-storage:
+    driver: local
+  tempo-storage:
+    driver: local
+  mimir-storage:
+    driver: local
+  prometheus-storage:
+    driver: local
+  grafana-storage:
+    driver: local
+  alertmanager-storage:
+    driver: local
+
+networks:
+  observability:
+    driver: bridge

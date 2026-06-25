@@ -116,6 +116,18 @@ export const controller = (prisma: PrismaClient) => {
 		if (!validation.success) {
 			const formattedErrors = formatZodErrors(validation.error.format());
 			positionLogger.error(`Validation failed: ${JSON.stringify(formattedErrors)}`);
+			positionLogger.warn("position.create.validation_failed", {
+				event: "position.create.validation_failed",
+				method: req.method,
+				path: req.originalUrl,
+				organization_id: (req as any).organizationId || null,
+				user_id: (req as any).user?.id || (req as any).userId || "unknown",
+				errors: formattedErrors,
+				request_payload_keys:
+					requestData && typeof requestData === "object" && !Array.isArray(requestData)
+						? Object.keys(requestData as Record<string, unknown>)
+						: [],
+			});
 			const errorResponse = buildErrorResponse("Validation failed", 400, formattedErrors);
 			res.status(400).json(errorResponse);
 			return;

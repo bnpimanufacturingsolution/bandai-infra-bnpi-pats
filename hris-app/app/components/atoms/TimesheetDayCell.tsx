@@ -1,4 +1,4 @@
-import { forwardRef, type HTMLAttributes } from "react";
+import { forwardRef, type HTMLAttributes, type KeyboardEvent } from "react";
 
 type TimesheetDayCellKind =
 	| "hours"
@@ -73,20 +73,29 @@ export const TimesheetDayCell = forwardRef<HTMLDivElement, TimesheetDayCellProps
 		},
 		ref,
 	) => {
-	const interactive = Boolean(onClick);
-	const cellBgClass =
-		kind === "pending"
-			? pendingTone === "today"
-				? "bg-orange-50/70"
-				: kindToBgClass.pending
-			: kind === "hours" && (!hoursLabel || hoursLabel === "0:00")
-				? "bg-white"
-				: kindToBgClass[kind];
+		const interactive = Boolean(onClick);
+		const cellBgClass =
+			kind === "pending"
+				? pendingTone === "today"
+					? "bg-orange-50/70"
+					: kindToBgClass.pending
+				: kind === "hours" && (!hoursLabel || hoursLabel === "0:00")
+					? "bg-white"
+					: kindToBgClass[kind];
+
+		const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+			if (!interactive) return;
+			if (event.key === "Enter" || event.key === " ") {
+				event.preventDefault();
+				event.currentTarget.click();
+			}
+		};
 
 	return (
 		<div
 			ref={ref}
 			onClick={onClick}
+			onKeyDown={handleKeyDown}
 			role={interactive ? "button" : props.role}
 			tabIndex={interactive ? 0 : props.tabIndex}
 			className={`${baseCellClass} ${cellBgClass} ${

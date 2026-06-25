@@ -38,5 +38,5 @@ export interface RoleDashboardConfig {
 }
 
 export interface RoleDashboardShellProps {
-	role: DashboardRole;
+	dashboardRole: DashboardRole;
 }

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useId, useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronUp, Check } from "lucide-react";
 
@@ -46,6 +46,7 @@ export const Select: React.FC<SelectProps> = ({
 	const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition | null>(null);
 	const selectRef = useRef<HTMLDivElement>(null);
 	const listRef = useRef<HTMLDivElement>(null);
+	const listboxId = useId();
 
 	const updateDropdownPosition = useCallback(() => {
 		if (!selectRef.current || typeof window === "undefined") return;
@@ -244,6 +245,7 @@ export const Select: React.FC<SelectProps> = ({
 						ref={listRef}
 						className={dropdownClasses}
 						role="listbox"
+						id={listboxId}
 						style={{
 							left: dropdownPosition.left,
 							top: dropdownPosition.top,
@@ -258,7 +260,16 @@ export const Select: React.FC<SelectProps> = ({
 									className={optionClasses(option, isSelected)}
 									onClick={() => handleSelect(option)}
 									role="option"
-									aria-selected={isSelected}>
+									tabIndex={option.disabled ? -1 : 0}
+									aria-selected={isSelected}
+									aria-disabled={option.disabled || undefined}
+									onKeyDown={(event) => {
+										if (option.disabled) return;
+										if (event.key === "Enter" || event.key === " ") {
+											event.preventDefault();
+											handleSelect(option);
+										}
+									}}>
 									<span className="truncate">{option.label}</span>
 									{isSelected && (
 										<Check className="h-4 w-4 text-blue-600 flex-shrink-0" />
@@ -288,6 +299,7 @@ export const Select: React.FC<SelectProps> = ({
 				}}
 				tabIndex={disabled ? -1 : 0}
 				role="combobox"
+				aria-controls={listboxId}
 				aria-expanded={isOpen}
 				aria-haspopup="listbox"
 				aria-required={required}

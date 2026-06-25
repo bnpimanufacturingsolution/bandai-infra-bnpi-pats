@@ -99,6 +99,15 @@ export function TimeOffCard({ role, employeeId }: TimeOffCardProps) {
 											if (!canNavigateToLeaveBalance) return;
 											navigate(leaveBalancePath);
 										}}
+										onKeyDown={(event) => {
+											if (event.key === "Enter" || event.key === " ") {
+												event.preventDefault();
+												if (!canNavigateToLeaveBalance) return;
+												navigate(leaveBalancePath);
+											}
+										}}
+										role="button"
+										tabIndex={canNavigateToLeaveBalance ? 0 : -1}
 										className={`flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5 transition-colors ${
 											canNavigateToLeaveBalance
 												? "hover:bg-gray-50 cursor-pointer"

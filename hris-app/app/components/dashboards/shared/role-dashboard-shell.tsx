@@ -11,10 +11,10 @@ import { EmployeeCalendarCard } from "./cards/employee-calendar-card";
 import type { DashboardCardKey } from "./role-dashboard.types";
 import { RegularizationCelebrationModal } from "./regularization-celebration-modal";
 
-export function RoleDashboardShell({ role }: RoleDashboardShellProps) {
+export function RoleDashboardShell({ dashboardRole }: RoleDashboardShellProps) {
 	const { user } = useAuth();
 	const employeeId = user?.metadata?.employee?.id || "";
-	const config = roleDashboardConfigs[role];
+	const config = roleDashboardConfigs[dashboardRole];
 
 	const renderCard = (cardKey: DashboardCardKey) => {
 		if (cardKey === "time_off") {
@@ -64,7 +64,8 @@ export function RoleDashboardShell({ role }: RoleDashboardShellProps) {
 			<RegularizationCelebrationModal
 				employeeId={employeeId}
 				enabled={
-					(role === "employee" || role === "employee-manager") && Boolean(employeeId)
+					(dashboardRole === "employee" || dashboardRole === "employee-manager") &&
+					Boolean(employeeId)
 				}
 			/>
 

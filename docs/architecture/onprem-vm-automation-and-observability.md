@@ -56,7 +56,7 @@ It is **not technical debt** — it is a pragmatic, senior-level architecture ch
 5. **Grafana Provisioning Excellence**  
    Grafana’s native file-based provisioning (datasources + dashboards mounted as volumes) works perfectly with Docker Compose. The current setup auto-provisions:
    - Prometheus, Loki, Tempo, Alertmanager datasources
-   - Preloaded dashboards (`HRIS Observability Overview`, `HRIS User Activity and Audit`)
+   - Preloaded dashboards for observability overview, container logs, user activity/audit, API health, business metrics, database, errors, function tracing, infrastructure, and traces
 
 6. **Design Philosophy ("Senior Setup")**  
    The `observability/` folder is explicitly positioned as a **production-style observability bundle** for on-prem and hybrid workloads. It includes advanced features such as:
