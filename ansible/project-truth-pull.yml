@@ -43,17 +43,6 @@
       - project-truth-lan-summary.service
       - project-truth-clean-console.service
       - project-truth-trycloudflare.service
-    project_truth_argocd_paths:
-      - args:
-          chdir: "{{ project_truth_install_root }}"
-        cmd: kubectl apply -k gitops/argocd/platform
-      - args:
-          chdir: "{{ project_truth_install_root }}"
-        cmd: kubectl apply -n argocd -f gitops/argocd/applications
-      - args:
-          chdir: "{{ project_truth_install_root }}"
-        cmd: kubectl apply -n argocd -f gitops/argocd/runtime-applications
-
   tasks:
     - name: Ensure Project Truth state directory exists
       ansible.builtin.file:
@@ -157,14 +146,29 @@
         state: stopped
       failed_when: false
 
-    - name: Reapply Argo CD platform and application manifests
-      ansible.builtin.command: "{{ item.cmd }}"
-      args: "{{ item.args }}"
-      loop: "{{ project_truth_argocd_paths }}"
-      register: project_truth_argocd_apply
+    - name: Reapply Argo CD platform config
+      ansible.builtin.command: kubectl apply -k gitops/argocd/platform
+      args:
+        chdir: "{{ project_truth_install_root }}"
       changed_when: false
       failed_when: false
-      when: item.args.chdir is directory
+      when: (project_truth_install_root + '/gitops/argocd/platform') is directory
+
+    - name: Reapply Argo CD contract applications
+      ansible.builtin.command: kubectl apply -n argocd -f gitops/argocd/applications
+      args:
+        chdir: "{{ project_truth_install_root }}"
+      changed_when: false
+      failed_when: false
+      when: (project_truth_install_root + '/gitops/argocd/applications') is directory
+
+    - name: Reapply Argo CD runtime applications
+      ansible.builtin.command: kubectl apply -n argocd -f gitops/argocd/runtime-applications
+      args:
+        chdir: "{{ project_truth_install_root }}"
+      changed_when: false
+      failed_when: false
+      when: (project_truth_install_root + '/gitops/argocd/runtime-applications') is directory
 
     - name: Hard refresh Argo CD applications
       ansible.builtin.shell: |
