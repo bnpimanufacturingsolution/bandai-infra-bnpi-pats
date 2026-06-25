@@ -150,9 +150,9 @@ write_summary() {
       emit_os_sync_summary
       if [ -s "${state_dir}/trycloudflare-public-urls.txt" ]; then
         echo
-        echo "Experimental TryCloudflare public URLs"
-        echo "Temporary quick-tunnel URLs; rotate on every tunnel restart."
-        sed 's/^/  /' "${state_dir}/trycloudflare-public-urls.txt"
+        emit_trycloudflare_screen
+        echo
+        emit_database_screen
       else
         echo
         echo "Experimental TryCloudflare"
@@ -259,10 +259,10 @@ emit_database_screen() {
     case "$url_shape" in
       postgresql://*)
         rows=$((rows + 1))
-        printf '%s\n' "$name"
-        printf '  host %s\n' "$host_port"
-        printf '  svc  %s\n' "$internal_service"
-        printf '  url  %s\n' "$url_shape"
+        printf '  %s\n' "$name"
+        printf '    host %s\n' "$host_port"
+        printf '    svc  %s\n' "$internal_service"
+        printf '    url  %s\n' "$url_shape"
         ;;
     esac
   done < "$file"
