@@ -102,24 +102,11 @@ function DeviceHealthPanel({ deviceId }: { deviceId?: string }) {
 				<div className="grid gap-2 sm:grid-cols-2">
 					<HealthCheckRow label="HRIS API" ok value="Online" />
 					<HealthCheckRow
-						label="AlarmDemo"
-						ok={Boolean(checks?.alarmDemo?.ok)}
-						value={checks?.alarmDemo?.status?.replace("_", " ") || "-"}
-					/>
-					<HealthCheckRow
 						label="Device port"
 						ok={Boolean(checks?.network?.ok)}
 						value={checks?.network?.status || "-"}
 					/>
-					<HealthCheckRow
-						label="Device API"
-						ok={Boolean(checks?.deviceApi?.ok)}
-						value={checks?.deviceApi?.status || "-"}
-					/>
 				</div>
-			)}
-			{checks?.deviceApi?.error && (
-				<p className="mt-2 truncate text-xs text-red-700">{checks.deviceApi.error}</p>
 			)}
 		</div>
 	);

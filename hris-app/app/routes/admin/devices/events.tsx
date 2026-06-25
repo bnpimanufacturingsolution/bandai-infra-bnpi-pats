@@ -324,6 +324,11 @@ export default function DeviceEventsPage() {
 		from,
 		to,
 	};
+	const savedTotalQueryParams: ApiQueryParams = {
+		page: 1,
+		limit: 1,
+		deviceId: deviceId === "all" ? undefined : deviceId,
+	};
 
 	const {
 		data,
@@ -331,6 +336,7 @@ export default function DeviceEventsPage() {
 		error: savedError,
 		refetch,
 	} = useDeviceEvents(savedQueryParams);
+	const { data: savedTotalData } = useDeviceEvents(savedTotalQueryParams);
 
 	const {
 		data: liveData,
@@ -492,6 +498,8 @@ export default function DeviceEventsPage() {
 			: rows;
 	const liveTotal = Number(acsEventPayload?.totalMatches || liveEvents.length || 0);
 	const totalItems = viewMode === "live" ? liveTotal : data?.pagination?.total || data?.summary?.total || 0;
+	const savedAllTimeTotal =
+		savedTotalData?.pagination?.total || savedTotalData?.summary?.total || 0;
 	const isEventLoading = viewMode === "live" ? isLoadingLive : isLoadingSaved;
 	const activeError = viewMode === "live" ? liveError || savedError : savedError;
 
@@ -518,6 +526,7 @@ export default function DeviceEventsPage() {
 			label: "Punch time",
 			sortable: viewMode === "saved",
 			width: "190px",
+			required: true,
 			render: (value) => (
 				<span className="whitespace-nowrap text-sm font-medium text-slate-950">
 					{formatPunchTime(value)}
@@ -529,6 +538,7 @@ export default function DeviceEventsPage() {
 			label: "Employee",
 			sortable: viewMode === "saved",
 			width: "220px",
+			required: true,
 			render: (value, item) => (
 				<div className="min-w-0">
 					{item.employeeProfileId ? (
@@ -551,6 +561,7 @@ export default function DeviceEventsPage() {
 			label: "Terminal",
 			sortable: viewMode === "saved",
 			width: "210px",
+			required: true,
 			render: (_value, item) => (
 				<div className="min-w-0">
 					{item.deviceId ? (
@@ -573,6 +584,7 @@ export default function DeviceEventsPage() {
 			label: "Result",
 			sortable: viewMode === "saved",
 			width: "190px",
+			required: true,
 			render: (_value, item) => (
 				<Badge
 					variant={statusVariant(item.status) as any}
@@ -586,6 +598,7 @@ export default function DeviceEventsPage() {
 			label: "Save path",
 			sortable: viewMode === "saved",
 			width: "150px",
+			required: true,
 			render: (value) => (
 				<span className="block max-w-[140px] truncate text-sm text-slate-700">
 					{formatEventSource(value)}
@@ -597,6 +610,7 @@ export default function DeviceEventsPage() {
 			label: "Attendance write",
 			sortable: false,
 			width: "180px",
+			required: true,
 			render: (value, item) =>
 				value && item.employeeProfileId ? (
 					<Link
@@ -615,6 +629,7 @@ export default function DeviceEventsPage() {
 			label: "Door",
 			sortable: viewMode === "saved",
 			width: "120px",
+			required: true,
 			render: (value) => <span className="text-sm text-slate-700">{value ? `Door ${value}` : "-"}</span>,
 		},
 	];
@@ -718,7 +733,7 @@ export default function DeviceEventsPage() {
 					)}
 				</div>
 
-				<div className="grid gap-0 divide-y divide-slate-200 md:grid-cols-[minmax(220px,1.3fr)_minmax(360px,2fr)_minmax(260px,1.4fr)] md:divide-x md:divide-y-0">
+				<div className="grid gap-0 divide-y divide-slate-200 md:grid-cols-[minmax(220px,1.2fr)_minmax(260px,1fr)_minmax(360px,1.7fr)] md:divide-x md:divide-y-0">
 					<div className="flex min-w-0 items-center justify-between gap-3 p-3">
 						<div className="min-w-0">
 							<p className="truncate text-sm font-medium text-slate-950">
@@ -743,21 +758,10 @@ export default function DeviceEventsPage() {
 						</Button>
 					</div>
 
-					<div className="grid grid-cols-2 gap-x-3 gap-y-2 p-3 lg:grid-cols-4">
+					<div className="grid grid-cols-2 gap-x-3 gap-y-2 p-3">
 						<div className="min-w-0">
 							<p className="text-xs text-slate-500">HRIS API</p>
 							<p className="truncate text-sm font-medium text-emerald-700">Online</p>
-						</div>
-						<div className="min-w-0">
-							<p className="text-xs text-slate-500">AlarmDemo</p>
-							<p
-								className={
-									deviceHealth?.checks?.alarmDemo?.ok
-										? "truncate text-sm font-medium text-emerald-700"
-										: "truncate text-sm font-medium text-amber-700"
-								}>
-								{deviceHealth?.checks?.alarmDemo?.status?.replace("_", " ") || "-"}
-							</p>
 						</div>
 						<div className="min-w-0">
 							<p className="text-xs text-slate-500">Device port</p>
@@ -770,24 +774,13 @@ export default function DeviceEventsPage() {
 								{deviceHealth?.checks?.network?.status || "-"}
 							</p>
 						</div>
-						<div className="min-w-0">
-							<p className="text-xs text-slate-500">Device API</p>
-							<p
-								className={
-									deviceHealth?.checks?.deviceApi?.ok
-										? "truncate text-sm font-medium text-emerald-700"
-										: "truncate text-sm font-medium text-amber-700"
-								}>
-								{deviceHealth?.checks?.deviceApi?.status || "-"}
-							</p>
-						</div>
 					</div>
 
 					<div className="grid grid-cols-4 gap-0 divide-x divide-slate-200 p-0">
 						{[
 							{
-								label: viewMode === "live" ? "Device punches" : "Saved events",
-								value: viewMode === "live" ? liveEvents.length : data?.summary?.total || 0,
+								label: viewMode === "live" ? "Device punches" : "Total events",
+								value: viewMode === "live" ? liveEvents.length : savedAllTimeTotal,
 							},
 							{ label: "Matched", value: matchedCount },
 							{ label: "Needs match", value: needsEmployeeMatchCount },
@@ -819,7 +812,7 @@ export default function DeviceEventsPage() {
 
 			{viewMode === "live" && liveDeviceId && !canReadLiveEvents && !isLoadingHealth && (
 				<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-					Live reads are paused until the selected device port and device API respond.
+					Live reads are paused until the selected device connection responds.
 				</div>
 			)}
 
@@ -865,10 +858,12 @@ export default function DeviceEventsPage() {
 					emptyMessage={viewMode === "live" ? "No device punches found" : "No saved events found"}
 					emptyDescription=""
 					showSearch
+					showFilters={false}
 					showPagination
 					showExport={false}
 					noCard
-					searchPlaceholder="Search punches..."
+					searchPlaceholder="Search employee, device, result..."
+					searchWidth="w-full sm:w-80"
 					searchValue={query}
 					onSearch={(value) => setFilter("query", value)}
 					onSort={(key, direction) => {
