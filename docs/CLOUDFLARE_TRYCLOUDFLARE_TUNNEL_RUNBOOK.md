@@ -15,7 +15,7 @@ Research constraints from Cloudflare docs:
 - Cloudflare Tunnel creates outbound-only connections, so no inbound router port forward is required.
 - Stable multi-service routing belongs to named tunnels with config/DNS, not quick tunnels.
 - Quick tunnels can be blocked when a `.cloudflared/config.yaml` exists; move it only when that is safe and reversible.
-- Raw Postgres/database tunnels are disabled by default. Record redacted DB topology facts instead.
+- Raw Postgres/database access is not exposed through trycloudflare HTTP quick tunnels. Use Cloudflare Access arbitrary TCP with named hostnames and client-side `cloudflared access tcp`.
 
 The preferred tunnel target is the Hyper-V VM's LAN-reachable PROD app:
 
@@ -40,6 +40,20 @@ Get-Command cloudflared
 | PROD | `http://<guest-lan-ip>:3000` | `http://<guest-lan-ip>:3001/health` |
 | DEV | `http://<guest-lan-ip>:3100` | `http://<guest-lan-ip>:3101/health` |
 | UAT | `http://<guest-lan-ip>:3200` | `http://<guest-lan-ip>:3201/health` |
+
+Database LAN URLs are published by the VM on the bridged LAN:
+
+| Environment | Postgres URL |
+|---|---|
+| PROD | `postgresql://postgres:postgres@<guest-lan-ip>:15432/hris` |
+| DEV | `postgresql://postgres:postgres@<guest-lan-ip>:15433/hris` |
+| UAT | `postgresql://postgres:postgres@<guest-lan-ip>:15434/hris` |
+
+To inspect local DB access from the VM:
+
+```bash
+project-truth-db-access
+```
 
 ## Host-Local Diagnostic Runtime
 
@@ -131,6 +145,35 @@ UAT app:
 ```
 
 Cloudflare prints a temporary `https://*.trycloudflare.com` URL. That URL changes every time the tunnel restarts.
+
+## Public Postgres Via Cloudflare Access TCP
+
+Do not use trycloudflare quick tunnels for Postgres. Use named Cloudflare Tunnel hostnames protected by Cloudflare Access. Cloudflare's arbitrary TCP flow requires `cloudflared` on the host side and on every client machine.
+
+Server-side helper:
+
+```powershell
+$env:PROJECT_TRUTH_CF_PROD_DB_HOSTNAME = "prod-db.example.com"
+$env:PROJECT_TRUTH_CF_DEV_DB_HOSTNAME = "dev-db.example.com"
+$env:PROJECT_TRUTH_CF_UAT_DB_HOSTNAME = "uat-db.example.com"
+.\scripts\project-truth.ps1 start-cloudflare-db-tcp -GuestIp <guest-lan-ip>
+```
+
+Client-side commands:
+
+```powershell
+cloudflared access tcp --hostname prod-db.example.com --url localhost:15432
+cloudflared access tcp --hostname dev-db.example.com --url localhost:15433
+cloudflared access tcp --hostname uat-db.example.com --url localhost:15434
+```
+
+Then point the DB client at:
+
+```text
+postgresql://postgres:postgres@localhost:15432/hris
+postgresql://postgres:postgres@localhost:15433/hris
+postgresql://postgres:postgres@localhost:15434/hris
+```
 
 ## VM Boot Test Hook
 

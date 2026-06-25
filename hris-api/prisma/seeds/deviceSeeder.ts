@@ -100,6 +100,10 @@ export async function ensureDevices(
 	console.log("\n=== Creating Devices ===");
 	const resolvedOrganizationId = organizationId ?? (await resolveDefaultSeedOrganizationId());
 	const deviceMap = new Map<string, string>();
+	const activeDeviceKeys = DEVICE_DEFINITIONS.map((deviceDef) => ({
+		address: deviceDef.address,
+		port: deviceDef.port,
+	}));
 
 	for (const deviceDef of DEVICE_DEFINITIONS) {
 		// Create unique identifier using address and port
@@ -157,6 +161,22 @@ export async function ensureDevices(
 			console.error(`   Failed creating device ${deviceDef.name}:`, error);
 			throw error;
 		}
+	}
+
+	const staleDeviceCleanup = await prismaClient.device.updateMany({
+		where: {
+			organizationId: resolvedOrganizationId,
+			isDeleted: false,
+			NOT: {
+				OR: activeDeviceKeys,
+			},
+		},
+		data: {
+			isDeleted: true,
+		},
+	});
+	if (staleDeviceCleanup.count > 0) {
+		console.log(`   Soft-deleted stale development device rows: ${staleDeviceCleanup.count}`);
 	}
 
 	return deviceMap;

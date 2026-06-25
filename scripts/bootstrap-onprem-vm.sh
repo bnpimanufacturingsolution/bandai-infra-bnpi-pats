@@ -105,6 +105,7 @@ install_commands_and_services() {
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-env-seed.sh" /usr/local/bin/project-truth-hris-env-seed
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-status.sh" /usr/local/bin/project-truth-hris-status
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-observability-start.sh" /usr/local/bin/project-truth-hris-observability-start
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-db-access.sh" /usr/local/bin/project-truth-db-access
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-lan-dhcp.sh" /usr/local/bin/project-truth-lan-dhcp
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-lan-summary.sh" /usr/local/bin/project-truth-lan-summary
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-clean-console.sh" /usr/local/bin/project-truth-clean-console

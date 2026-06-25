@@ -196,6 +196,7 @@ sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-start.s
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-status.sh /usr/local/bin/project-truth-hris-status
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-seed.sh /usr/local/bin/project-truth-hris-seed
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-observability-start.sh /usr/local/bin/project-truth-hris-observability-start
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-db-access.sh /usr/local/bin/project-truth-db-access
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-dhcp.sh /usr/local/bin/project-truth-lan-dhcp
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-summary.sh /usr/local/bin/project-truth-lan-summary
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-clean-console.sh /usr/local/bin/project-truth-clean-console

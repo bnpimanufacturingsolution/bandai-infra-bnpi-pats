@@ -271,9 +271,9 @@ foreach ($target in $targets) {
 }
 
 $dbFacts = @(
-  [pscustomobject]@{ Name = 'prod-postgres'; InternalService = 'postgres:5432'; HostPort = '15432'; DatabaseUrlShape = 'postgresql://postgres:<redacted>@postgres:5432/hris'; PublicTunnel = 'disabled-by-default' },
-  [pscustomobject]@{ Name = 'dev-postgres'; InternalService = 'hris-postgres-dev:5432'; HostPort = '15433'; DatabaseUrlShape = 'postgresql://postgres:<redacted>@hris-postgres-dev:5432/hris'; PublicTunnel = 'disabled-by-default' },
-  [pscustomobject]@{ Name = 'uat-postgres'; InternalService = 'hris-postgres-uat:5432'; HostPort = '15434'; DatabaseUrlShape = 'postgresql://postgres:<redacted>@hris-postgres-uat:5432/hris'; PublicTunnel = 'disabled-by-default' }
+  [pscustomobject]@{ Name = 'prod-postgres'; InternalService = 'postgres:5432'; HostPort = '15432'; DatabaseUrlShape = "postgresql://postgres:<redacted>@${hostName}:15432/hris"; PublicTunnel = 'Cloudflare Access TCP only' },
+  [pscustomobject]@{ Name = 'dev-postgres'; InternalService = 'hris-postgres-dev:5432'; HostPort = '15433'; DatabaseUrlShape = "postgresql://postgres:<redacted>@${hostName}:15433/hris"; PublicTunnel = 'Cloudflare Access TCP only' },
+  [pscustomobject]@{ Name = 'uat-postgres'; InternalService = 'hris-postgres-uat:5432'; HostPort = '15434'; DatabaseUrlShape = "postgresql://postgres:<redacted>@${hostName}:15434/hris"; PublicTunnel = 'Cloudflare Access TCP only' }
 )
 
 $summary = [pscustomobject]@{
@@ -307,13 +307,21 @@ foreach ($result in $results) {
 $md += ''
 $md += '## Database Facts'
 $md += ''
-$md += 'Raw database tunnels are disabled by default. Connection strings below are redacted and recorded only as topology facts.'
+$md += 'Raw database access is not served through trycloudflare HTTP quick tunnels. LAN URLs below are redacted topology facts; public DB access must use Cloudflare Access arbitrary TCP.'
 $md += ''
-$md += '| Name | Internal service | Host port | URL shape |'
-$md += '|---|---|---:|---|'
+$md += '| Name | Internal service | Host port | URL shape | Public DB path |'
+$md += '|---|---|---:|---|---|'
 foreach ($db in $dbFacts) {
-  $md += "| $($db.Name) | $($db.InternalService) | $($db.HostPort) | $($db.DatabaseUrlShape) |"
+  $md += "| $($db.Name) | $($db.InternalService) | $($db.HostPort) | $($db.DatabaseUrlShape) | $($db.PublicTunnel) |"
 }
+$md += ''
+$md += 'Client-side TCP examples after named Cloudflare hostnames and Access policies exist:'
+$md += ''
+$md += '```powershell'
+$md += 'cloudflared access tcp --hostname <prod-db-hostname> --url localhost:15432'
+$md += 'cloudflared access tcp --hostname <dev-db-hostname> --url localhost:15433'
+$md += 'cloudflared access tcp --hostname <uat-db-hostname> --url localhost:15434'
+$md += '```'
 $md | Set-Content -LiteralPath $mdPath -Encoding utf8
 
 Write-Host "Wrote $mdPath"

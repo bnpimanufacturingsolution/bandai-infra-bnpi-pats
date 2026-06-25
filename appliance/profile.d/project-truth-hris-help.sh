@@ -22,6 +22,11 @@ if [ -n "$lan_ip" ]; then
   printf '  %-5s login  http://%s:%s/auth/login\n' "UAT" "$lan_ip" "3200"
   printf '  %-5s api    http://%s:%s/health\n' "UAT" "$lan_ip" "3201"
   echo
+  echo "Postgres"
+  printf '  %-5s %s\n' "PROD" "postgresql://postgres:postgres@${lan_ip}:15432/hris"
+  printf '  %-5s %s\n' "DEV" "postgresql://postgres:postgres@${lan_ip}:15433/hris"
+  printf '  %-5s %s\n' "UAT" "postgresql://postgre  s:postgres@${lan_ip}:15434/hris"
+  echo
   echo "Observability"
   printf '  %-10s http://%s:%s\n' "Grafana" "$lan_ip" "53000"
   printf '  %-10s http://%s:%s\n' "Prometheus" "$lan_ip" "9091"
@@ -70,6 +75,7 @@ echo "Client screens"
 echo "  project-truth-lan-summary --screen-overview"
 echo "  project-truth-lan-summary --screen-tunnels"
 echo "  project-truth-lan-summary --screen-db"
+echo "  project-truth-db-access"
 echo
 
 project_truth_command_not_found() {

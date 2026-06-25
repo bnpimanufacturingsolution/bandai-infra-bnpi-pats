@@ -96,6 +96,22 @@ emit_observability_rows() {
   printf '  %-10s http://%s:%s\n' "Gateway" "$ip_addr" "38080"
 }
 
+emit_database_lan_rows() {
+  local ip_addr="$1"
+  printf '  %-5s %s\n' "PROD" "postgresql://postgres:postgres@${ip_addr}:15432/hris"
+  printf '  %-5s %s\n' "DEV" "postgresql://postgres:postgres@${ip_addr}:15433/hris"
+  printf '  %-5s %s\n' "UAT" "postgresql://postgres:postgres@${ip_addr}:15434/hris"
+}
+
+emit_cloudflare_tcp_db_instructions() {
+  echo "Cloudflare DB TCP"
+  echo "  Use named Cloudflare Tunnel + Access, not trycloudflare HTTP quick tunnels."
+  echo "  Client commands after Access/DNS are configured:"
+  echo "    cloudflared access tcp --hostname <prod-db-hostname> --url localhost:15432"
+  echo "    cloudflared access tcp --hostname <dev-db-hostname>  --url localhost:15433"
+  echo "    cloudflared access tcp --hostname <uat-db-hostname>  --url localhost:15434"
+}
+
 emit_screen_os_sync_line() {
   if [ -r "$sync_state_file" ]; then
     awk -F= '
@@ -133,6 +149,9 @@ write_summary() {
       echo "Open these from your host browser"
       emit_hris_rows "$ip_addr"
       echo
+      echo "Postgres LAN URLs"
+      emit_database_lan_rows "$ip_addr"
+      echo
       echo "ZKTeco bridge targets"
       printf '  %-5s webhook http://%s:%s/api/zkteco/events\n' "PROD" "$ip_addr" "3001"
       printf '  %-5s webhook http://%s:%s/api/zkteco/events\n' "DEV" "$ip_addr" "3101"
@@ -167,10 +186,11 @@ write_summary() {
       echo "Repair command after login: project-truth-lan-dhcp"
     fi
     echo
-    echo "Useful commands"
-    echo "  project-truth-progress --watch"
-    echo "  project-truth-hris-status"
-    echo "  project-truth-lan-dhcp"
+      echo "Useful commands"
+      echo "  project-truth-progress --watch"
+      echo "  project-truth-hris-status"
+      echo "  project-truth-db-access"
+      echo "  project-truth-lan-dhcp"
     echo "  sudo project-truth-os-sync"
     echo "  project-truth-os-sync --status"
   } > "$summary_file"
@@ -239,9 +259,21 @@ emit_trycloudflare_screen() {
 emit_database_screen() {
   local file="${state_dir}/trycloudflare-public-urls.txt"
   local rows=0
+  local ip_addr
+
+  ip_addr="$(lan_ip || true)"
 
   echo "Database facts"
-  echo "  Raw DB tunnels: disabled by default."
+  if [ -n "$ip_addr" ]; then
+    echo "  LAN URLs"
+    emit_database_lan_rows "$ip_addr"
+  else
+    echo "  LAN IP: NOT DETECTED"
+  fi
+  echo
+  emit_cloudflare_tcp_db_instructions
+  echo
+  echo "  trycloudflare HTTP quick tunnels: disabled for raw DB."
   if [ ! -s "$file" ]; then
     echo "  DB topology file: not present."
     return
@@ -310,19 +342,22 @@ emit_screen_summary() {
     echo
     emit_database_screen
     echo
-    echo "Raw DB public tunnels are intentionally not shown."
+    echo "Run: project-truth-db-access"
     return
   fi
 
   echo
   echo "HRIS"
   emit_hris_rows "$ip_addr"
+  echo "Postgres"
+  emit_database_lan_rows "$ip_addr"
   echo "Observability"
   emit_observability_rows "$ip_addr"
   emit_screen_os_sync_line
   echo "More: project-truth-lan-summary --screen-tunnels | --screen-db"
   echo "Commands: project-truth-progress --watch"
   echo "        project-truth-hris-status"
+  echo "        project-truth-db-access"
   echo "        sudo project-truth-os-sync"
 }
 
@@ -371,6 +406,7 @@ fi
   echo "After login run:"
   echo "  project-truth-lan-summary --screen-overview"
   echo "  project-truth-lan-summary --screen-tunnels"
+  echo "  project-truth-db-access"
   echo "  sudo project-truth-os-sync"
   echo
 } > "$issue_file"
@@ -401,6 +437,7 @@ if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
       echo "Run:"
       echo "  project-truth-lan-summary --screen-overview"
       echo "  project-truth-lan-summary --screen-tunnels"
+      echo "  project-truth-db-access"
       echo "  sudo project-truth-os-sync"
       echo
       printf '%s@%s:~$ ' "$tty_user" "$(hostname)"

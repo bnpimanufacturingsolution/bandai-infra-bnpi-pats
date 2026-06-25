@@ -20,6 +20,15 @@ http_status() {
   curl -fsS -o /dev/null -w '%{http_code}' --max-time 8 "$url" 2>/dev/null || printf 'DOWN'
 }
 
+port_state() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | awk '{ print $4 }' | grep -Eq "(:|\\])${port}$"; then
+    printf 'listening'
+    return
+  fi
+  printf 'not-listening'
+}
+
 docker_cmd() {
   if docker ps >/dev/null 2>&1; then
     docker "$@"
@@ -92,6 +101,9 @@ if [ -n "$ip_addr" ]; then
   echo "  HRIS app: http://${ip_addr}:3000/"
   echo "  HRIS login: http://${ip_addr}:3000/auth/login"
   echo "  HRIS API health: http://${ip_addr}:3001/health"
+  echo "  PROD DB: postgresql://postgres:postgres@${ip_addr}:15432/hris"
+  echo "  DEV DB:  postgresql://postgres:postgres@${ip_addr}:15433/hris"
+  echo "  UAT DB:  postgresql://postgres:postgres@${ip_addr}:15434/hris"
 else
   echo "  LAN IP: not detected"
   echo "  Repair: project-truth-lan-dhcp"
@@ -121,6 +133,9 @@ print_env_row uat  3200 3201 15434 hris-app-uat hris-api-uat hris-postgres-uat
 echo
 
 echo "Database"
+printf '  %-5s %-13s %s\n' "PROD" "$(port_state 15432)" "postgresql://postgres:postgres@${ip_addr:-<lan-ip>}:15432/hris"
+printf '  %-5s %-13s %s\n' "DEV" "$(port_state 15433)" "postgresql://postgres:postgres@${ip_addr:-<lan-ip>}:15433/hris"
+printf '  %-5s %-13s %s\n' "UAT" "$(port_state 15434)" "postgresql://postgres:postgres@${ip_addr:-<lan-ip>}:15434/hris"
 if timeout 8 bash -c 'docker ps >/dev/null 2>&1 && docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1 || sudo -n docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1'; then
   echo "  postgres: accepting connections"
 else
@@ -152,6 +167,7 @@ echo "Useful commands"
 echo "  project-truth-progress --watch"
 echo "  project-truth-monitor"
 echo "  project-truth-hris-status"
+echo "  project-truth-db-access"
 echo "  project-truth-hris-env-start dev|uat|prod|all"
 echo "  project-truth-hris-env-seed dev|uat|prod|all"
 echo "  project-truth-lan-dhcp"

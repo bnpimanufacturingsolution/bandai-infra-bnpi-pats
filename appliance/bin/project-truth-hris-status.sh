@@ -53,6 +53,9 @@ if [ -n "$lan_ip" ]; then
   echo "DEV API:    http://${lan_ip}:3101/health"
   echo "UAT login:  http://${lan_ip}:3200/auth/login"
   echo "UAT API:    http://${lan_ip}:3201/health"
+  echo "PROD DB:    postgresql://postgres:postgres@${lan_ip}:15432/hris"
+  echo "DEV DB:     postgresql://postgres:postgres@${lan_ip}:15433/hris"
+  echo "UAT DB:     postgresql://postgres:postgres@${lan_ip}:15434/hris"
   echo "ZKTeco PROD webhook: http://${lan_ip}:3001/api/zkteco/events"
   echo "ZKTeco DEV webhook:  http://${lan_ip}:3101/api/zkteco/events"
   echo "ZKTeco UAT webhook:  http://${lan_ip}:3201/api/zkteco/events"
@@ -84,8 +87,12 @@ echo "Postgres:"
 if docker_cmd ps --format '{{.Names}}' | grep -qx 'hris-postgres'; then
   docker_cmd exec hris-postgres pg_isready -U postgres -d hris
   echo "Host Postgres bridge: 127.0.0.1:15432 -> hris-postgres:5432/hris"
+  [ -n "$lan_ip" ] && echo "LAN Postgres URL: postgresql://postgres:postgres@${lan_ip}:15432/hris"
 else
   echo "hris-postgres is not running"
+fi
+if command -v project-truth-db-access >/dev/null 2>&1; then
+  project-truth-db-access || true
 fi
 
 if docker_cmd ps --format '{{.Names}}' | grep -Eiq '(^|[-_])health($|[-_])'; then

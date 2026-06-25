@@ -40,6 +40,7 @@ fi
     echo "Run:"
     echo "  project-truth-lan-summary --screen-overview"
     echo "  project-truth-lan-summary --screen-tunnels"
+    echo "  project-truth-db-access"
     echo
     printf '%s@%s:~$ ' "$tty_user" "$(hostname)"
   elif [ -f /etc/issue ]; then
@@ -58,6 +59,7 @@ fi
     echo "After login run:"
     echo "  project-truth-lan-summary --screen-overview"
     echo "  project-truth-lan-summary --screen-tunnels"
+    echo "  project-truth-db-access"
     echo
     printf '%s login: ' "$(hostname)"
   fi
