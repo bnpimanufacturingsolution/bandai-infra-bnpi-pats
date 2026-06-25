@@ -153,6 +153,7 @@ $checks.Add((Assert-Text 'gitops-pull hard-refreshes Argo apps' $gitopsPullScrip
 $checks.Add((Assert-Text 'project-truth exposes one-command VM pull' $projectTruthScript 'vm-pull'))
 $checks.Add((Assert-Text 'vm-pull installs VM-side ansible-pull' $vmPullScript 'project-truth-ansible-pull'))
 $checks.Add((Assert-Text 'vm-pull can query VM-side OS sync status' $vmPullScript '\[switch\]\$Status'))
+$checks.Add((Assert-Text 'vm-pull supports password fallback' $vmPullScript 'PROJECT_TRUTH_SSH_PASSWORD'))
 $checks.Add((Assert-Text 'image build installs VM-side ansible-pull' $imageProvisionScript 'project-truth-ansible-pull\.sh'))
 $checks.Add((Assert-Text 'image build installs ansible-pull timer' $imageProvisionScript 'project-truth-ansible-pull\.timer'))
 $checks.Add((Assert-Text 'live bootstrap starts VM ansible-pull timer immediately' $bootstrapOnpremScript 'systemctl enable --now project-truth-ansible-pull\.timer'))

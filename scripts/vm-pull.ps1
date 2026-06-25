@@ -1,6 +1,8 @@
 param(
   [string]$GuestIp = '',
   [string]$User = 'infra',
+  [string]$Password = $env:PROJECT_TRUTH_SSH_PASSWORD,
+  [string]$SshHostKey = $env:PROJECT_TRUTH_SSH_HOSTKEY,
   [string]$ConfigPath = "$env:ProgramData\ProjectTruth\config\project-truth.json",
   [switch]$Status
 )
@@ -52,13 +54,58 @@ function Resolve-GuestIp {
   throw "Could not resolve VM IP. Re-run with -GuestIp <vm-lan-ip>, set PROJECT_TRUTH_GUEST_IP, or save guestIpHint with configure."
 }
 
+function Get-PuttyCommand {
+  param([string]$Name)
+
+  $command = Get-Command $Name -ErrorAction SilentlyContinue
+  if ($command) {
+    return $command.Source
+  }
+
+  $defaultPath = "C:\Program Files\PuTTY\$Name.exe"
+  $command = Get-Command $defaultPath -ErrorAction SilentlyContinue
+  if ($command) {
+    return $command.Source
+  }
+
+  throw "$Name.exe is required when -Password or PROJECT_TRUTH_SSH_PASSWORD is used."
+}
+
+function Invoke-Remote {
+  param([string]$Command)
+
+  if (-not [string]::IsNullOrWhiteSpace($Password)) {
+    $plink = Get-PuttyCommand -Name 'plink'
+    $plinkArgs = @('-ssh', '-batch', '-pw', $Password)
+    if (-not [string]::IsNullOrWhiteSpace($SshHostKey)) {
+      $plinkArgs += @('-hostkey', $SshHostKey)
+    }
+    $plinkArgs += @("${User}@${targetIp}", $Command)
+    & $plink @plinkArgs
+    return
+  }
+
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" $Command
+}
+
 function Copy-RequiredFile {
   param(
     [string]$Source,
     [string]$RemotePath
   )
 
-  scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $Source "${User}@${targetIp}:${RemotePath}"
+  if (-not [string]::IsNullOrWhiteSpace($Password)) {
+    $pscp = Get-PuttyCommand -Name 'pscp'
+    $pscpArgs = @('-batch', '-pw', $Password)
+    if (-not [string]::IsNullOrWhiteSpace($SshHostKey)) {
+      $pscpArgs += @('-hostkey', $SshHostKey)
+    }
+    $pscpArgs += @($Source, "${User}@${targetIp}:${RemotePath}")
+    & $pscp @pscpArgs
+  } else {
+    scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $Source "${User}@${targetIp}:${RemotePath}"
+  }
+
   if ($LASTEXITCODE -ne 0) {
     throw "Failed to upload $Source to ${targetIp}:${RemotePath}"
   }
@@ -91,11 +138,11 @@ echo
 journalctl -u project-truth-os-sync.service -n 40 --no-pager || true
 '@
 
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" $remoteStatus
+  Invoke-Remote $remoteStatus
   exit $LASTEXITCODE
 }
 
-ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" 'mkdir -p /tmp/project-truth-os-sync/appliance/bin /tmp/project-truth-os-sync/appliance/systemd /tmp/project-truth-os-sync/ansible'
+Invoke-Remote 'mkdir -p /tmp/project-truth-os-sync/appliance/bin /tmp/project-truth-os-sync/appliance/systemd /tmp/project-truth-os-sync/ansible'
 if ($LASTEXITCODE -ne 0) {
   throw "Could not prepare VM staging directory on ${targetIp}."
 }
@@ -123,7 +170,7 @@ sudo PROJECT_TRUTH_BRANCH=develop project-truth-ansible-pull
 sudo systemctl status project-truth-ansible-pull.timer --no-pager
 '@
 
-ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" $remote
+Invoke-Remote $remote
 if ($LASTEXITCODE -ne 0) {
   throw "VM pull failed against ${targetIp}."
 }
