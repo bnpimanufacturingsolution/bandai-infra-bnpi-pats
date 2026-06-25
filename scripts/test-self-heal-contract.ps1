@@ -123,6 +123,7 @@ $ansiblePullTimer = Get-Content -Raw 'appliance/systemd/project-truth-ansible-pu
 $osSyncScript = Get-Content -Raw 'appliance/bin/project-truth-os-sync.sh'
 $osSyncService = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.service'
 $osSyncTimer = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.timer'
+$lanDhcpScript = Get-Content -Raw 'appliance/bin/project-truth-lan-dhcp.sh'
 $lanSummaryScript = Get-Content -Raw 'appliance/bin/project-truth-lan-summary.sh'
 $profileHelpScript = Get-Content -Raw 'appliance/profile.d/project-truth-hris-help.sh'
 $imageProvisionScript = Get-Content -Raw 'image-factory/packer/provision.sh'
@@ -172,6 +173,10 @@ $checks.Add((Assert-Text 'ansible-pull playbook refreshes Argo apps after host s
 $checks.Add((Assert-Text 'ansible-pull playbook repairs CoreDNS upstreams' $ansiblePullPlaybook 'forward \. 1\.1\.1\.1 8\.8\.8\.8'))
 $checks.Add((Assert-Text 'ansible-pull playbook releases stale retained runtime PV claim refs' $ansiblePullPlaybook 'kubectl patch pv "\$volume_name" --type=merge'))
 $checks.Add((Assert-Text 'ansible-pull wrapper limits playbook to localhost inventory' $ansiblePullScript '-l localhost'))
+$checks.Add((Assert-Text 'ansible-pull playbook reconciles LAN config' $ansiblePullPlaybook 'project-truth-lan-dhcp'))
+$checks.Add((Assert-Text 'LAN reconciler persists static config' $lanDhcpScript '/etc/project-truth/lan\.env'))
+$checks.Add((Assert-Text 'LAN reconciler supports static mode' $lanDhcpScript '--static'))
+$checks.Add((Assert-Text 'LAN reconciler writes static netplan addresses' $lanDhcpScript 'addresses:'))
 $checks.Add((Assert-Text 'ansible-pull wrapper exposes status command' $ansiblePullScript '--status\|status'))
 $checks.Add((Assert-Text 'ansible-pull wrapper can reuse Argo repo credentials' $ansiblePullScript 'project-truth-repo-creds'))
 $checks.Add((Assert-Text 'ansible-pull supports root-only credential env file' $ansiblePullService 'EnvironmentFile=-/etc/project-truth/os-sync\.env'))

@@ -146,6 +146,15 @@
         state: stopped
       failed_when: false
 
+    - name: Reconcile Project Truth LAN config
+      ansible.builtin.command:
+        argv:
+          - project-truth-lan-dhcp
+      environment:
+        PROJECT_TRUTH_SKIP_TTY1_WRITE: "1"
+      changed_when: false
+      failed_when: false
+
     - name: Repair CoreDNS upstream resolvers for Argo Git access
       ansible.builtin.shell: |
         set -euo pipefail
