@@ -158,6 +158,23 @@
       changed_when: false
       failed_when: false
 
+    - name: Release stale retained runtime PV claim refs
+      ansible.builtin.shell: |
+        set -euo pipefail
+        for env_name in dev uat prod; do
+          for volume_name in "hris-postgres-${env_name}" "hris-uploads-${env_name}"; do
+            phase="$(kubectl get pv "$volume_name" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+            claim_uid="$(kubectl get pv "$volume_name" -o jsonpath='{.spec.claimRef.uid}' 2>/dev/null || true)"
+            if [ "$phase" = "Released" ] && [ -n "$claim_uid" ]; then
+              kubectl patch pv "$volume_name" --type=merge -p '{"spec":{"claimRef":null}}'
+            fi
+          done
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
     - name: Reapply Argo CD platform config
       ansible.builtin.command: kubectl apply -k gitops/argocd/platform
       args:

@@ -193,6 +193,7 @@ run_ansible_pull() {
     -C "$branch" \
     -d "$checkout_root" \
     -i localhost, \
+    -l localhost \
     --clean \
     "$playbook"
 }
