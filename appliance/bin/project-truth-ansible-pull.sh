@@ -32,12 +32,44 @@ ensure_dependencies() {
   fi
 
   if command -v apt-get >/dev/null 2>&1; then
+    wait_for_apt_locks
     as_root apt-get update
     as_root apt-get install -y "${packages[@]}"
     return 0
   fi
 
   echo "Missing dependencies: ${missing[*]}" >&2
+  return 1
+}
+
+wait_for_apt_locks() {
+  local attempt
+  local locks=(
+    /var/lib/apt/lists/lock
+    /var/lib/dpkg/lock
+    /var/lib/dpkg/lock-frontend
+    /var/cache/apt/archives/lock
+  )
+
+  for attempt in $(seq 1 60); do
+    local locked=0
+    for lock_path in "${locks[@]}"; do
+      if command -v fuser >/dev/null 2>&1 &&
+        as_root fuser "$lock_path" >/dev/null 2>&1; then
+        locked=1
+        break
+      fi
+    done
+
+    if [ "$locked" -eq 0 ]; then
+      return 0
+    fi
+
+    echo "Waiting for apt/dpkg lock to clear (${attempt}/60)..." >&2
+    sleep 5
+  done
+
+  echo "Timed out waiting for apt/dpkg locks." >&2
   return 1
 }
 
