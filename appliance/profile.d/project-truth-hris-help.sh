@@ -53,7 +53,7 @@ fi
 
 echo
 echo "OS pull"
-if [ -r /var/lib/project-truth/os-sync-state ]; then
+if [ -r /var/lib/project-truth/ansible-pull-state ]; then
   awk -F= '
     $1 == "branch" { branch=$2 }
     $1 == "commit" { commit=$2 }
@@ -64,12 +64,12 @@ if [ -r /var/lib/project-truth/os-sync-state ]; then
         printf "  synced: %s\n", synced_at
       }
     }
-  ' /var/lib/project-truth/os-sync-state
+  ' /var/lib/project-truth/ansible-pull-state
 else
-  echo "  waiting for first project-truth-os-sync run"
+  echo "  waiting for first project-truth-ansible-pull run"
 fi
-echo "  sync now: sudo project-truth-os-sync"
-echo "  status: project-truth-os-sync --status"
+echo "  sync now: sudo project-truth-ansible-pull"
+echo "  status: project-truth-ansible-pull --status"
 echo
 echo "Client screens"
 echo "  project-truth-lan-summary --screen-overview"

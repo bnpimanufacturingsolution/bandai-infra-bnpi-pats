@@ -23,7 +23,7 @@ retry() {
 }
 
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl git gnupg lsb-release unzip ufw open-iscsi docker.io docker-compose-v2
+sudo apt-get install -y ca-certificates curl git gnupg lsb-release unzip ufw open-iscsi rsync ansible docker.io docker-compose-v2
 
 install_cloudflared() {
   if command -v cloudflared >/dev/null 2>&1; then
@@ -202,6 +202,7 @@ sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-summary.
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-clean-console.sh /usr/local/bin/project-truth-clean-console
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-console-session-hook.sh /usr/local/bin/project-truth-console-session-hook
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-trycloudflare-start.sh /usr/local/bin/project-truth-trycloudflare-start
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-ansible-pull.sh /usr/local/bin/project-truth-ansible-pull
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-os-sync.sh /usr/local/bin/project-truth-os-sync
 sudo tee /etc/sysctl.d/99-project-truth-console.conf >/dev/null <<'SYSCTL'
 kernel.printk = 3 4 1 3
@@ -230,6 +231,8 @@ sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-lan-summ
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-clean-console.service /etc/systemd/system/project-truth-clean-console.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-hris.service /etc/systemd/system/project-truth-hris.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-trycloudflare.service /etc/systemd/system/project-truth-trycloudflare.service
+sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-ansible-pull.service /etc/systemd/system/project-truth-ansible-pull.service
+sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-ansible-pull.timer /etc/systemd/system/project-truth-ansible-pull.timer
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-os-sync.service /etc/systemd/system/project-truth-os-sync.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-os-sync.timer /etc/systemd/system/project-truth-os-sync.timer
 sudo install -m 0644 /opt/project-truth/appliance/profile.d/project-truth-hris-help.sh /etc/profile.d/project-truth-hris-help.sh
@@ -253,7 +256,7 @@ sudo systemctl enable project-truth-lan-summary.service
 sudo systemctl enable project-truth-clean-console.service
 sudo systemctl enable project-truth-hris.service
 sudo systemctl enable project-truth-trycloudflare.service
-sudo systemctl enable project-truth-os-sync.timer
+sudo systemctl enable project-truth-ansible-pull.timer
 
 if [ "$PROJECT_TRUTH_IMAGE_TARGET" = "googlecompute" ]; then
   sudo rm -f /etc/cloud/cloud-init.disabled || true

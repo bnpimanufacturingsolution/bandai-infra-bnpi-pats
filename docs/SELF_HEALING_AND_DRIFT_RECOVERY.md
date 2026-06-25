@@ -23,7 +23,7 @@ Windows host repo
 | Argo CD Application drift | Argo Applications use automated sync, pruning, self-heal, and retry. | No |
 | Argo CD platform drift | `repair-appliance-online -Mode GitOpsRefresh` reapplies the explicit Argo reconciliation config. | No |
 | Missing Argo Applications | `repair-appliance-online` first applies in-image manifests, then uploads host repo manifests if they are absent. | No |
-| VM OS/script drift | `project-truth-os-sync.timer` pulls `develop`, updates `/opt/project-truth`, reinstalls appliance commands/systemd units, repairs resolver/DHCP drift before Git fetch, and refreshes Argo CD. | No, unless the repo is unreachable |
+| VM OS/script drift | `project-truth-ansible-pull.timer` runs `ansible-pull` inside the VM, pulls `develop`, updates `/opt/project-truth`, reinstalls appliance commands/systemd units, repairs resolver/DHCP drift before Git fetch, and refreshes Argo CD. | No, unless the repo is unreachable |
 | HRIS app/API containers | Docker Compose uses `restart: unless-stopped`; `project-truth-hris` starts the runtime on boot. | No |
 | HRIS Kubernetes runtime | `enable-k8s-runtime` moves PROD/DEV/UAT HRIS app/API/Postgres into K3s Deployments/StatefulSets managed by Argo CD. | No |
 | HRIS runtime outage | `repair-appliance-online -Mode RestartRuntime` restarts Docker, K3s, and HRIS services. | No |
@@ -82,34 +82,42 @@ Deep VM/OS sync when you also want the appliance scripts and systemd units insid
 .\scripts\project-truth.ps1 vm-pull
 ```
 
-After the first `vm-pull`, the VM enables `project-truth-os-sync.timer`, which repeats the same pull/reinstall/Argo-refresh cycle every few minutes. The timer uses a wall-clock five-minute schedule plus unit-active/unit-inactive re-arm settings so a failed or manually started sync still schedules the next pull. Argo CD remains the owner of Kubernetes resources; the OS sync owns VM-level files such as `/opt/project-truth`, `/usr/local/bin/project-truth-*`, Project Truth systemd units, and the console login/session hooks.
+After the first `vm-pull`, the VM enables `project-truth-ansible-pull.timer`,
+which repeats the same pull/reinstall/Argo-refresh cycle every few minutes. The
+timer uses a wall-clock five-minute schedule plus unit-active/unit-inactive
+re-arm settings so a failed or manually started sync still schedules the next
+pull. Argo CD remains the owner of Kubernetes resources; the Ansible pull
+playbook owns VM-level files such as `/opt/project-truth`,
+`/usr/local/bin/project-truth-*`, Project Truth systemd units, and the console
+login/session hooks.
 
-This is Project Truth's lightweight equivalent of `ansible-pull`: each VM pulls
-the repo and applies local host configuration from inside the VM. `ansible-pull`
-would be a good next step only if the OS layer grows into a broad playbook/role
-catalog. For the current appliance, keeping the small purpose-built pull agent is
-simpler and has fewer moving parts: no Ansible runtime dependency, explicit
-script/unit ownership, systemd timer locking through `flock`, and direct Argo CD
-refresh after the host files land.
+This is now Project Truth's standard VM drift model. It follows Ansible's
+documented pull architecture: the managed node checks out a Git repository and
+runs a local playbook with the local connection. Project Truth wraps
+`ansible-pull` with systemd, `flock`, repo credential discovery, and LAN/DNS
+repair so it still behaves like an appliance. The older
+`project-truth-os-sync` shell agent remains installed as a manual compatibility
+repair tool for stale images, but it is not the standard recurring timer once
+`project-truth-ansible-pull.timer` exists.
 
 Common operator expectation:
 
 ```text
 commit + push develop
 -> GitHub Actions validates the repo
--> each booted VM's project-truth-os-sync.timer pulls develop
+-> each booted VM's project-truth-ansible-pull.timer pulls develop
 -> /opt/project-truth and /usr/local/bin/project-truth-* update
 -> systemd units and console hooks update
 -> Argo CD apps are hard-refreshed
 ```
 
-Fresh Hyper-V/VirtualBox/GCP images also receive this same pull agent during
-image provisioning. `scripts/bootstrap-onprem-vm.sh` starts/re-arms the timer
-immediately for live bootstrap runs; image-factory provisioning enables it for
-the next customer boot so the image build itself is not mutated by a background
-pull during Packer provisioning.
+Fresh Hyper-V/VirtualBox/GCP images also receive this same Ansible pull agent
+during image provisioning. `scripts/bootstrap-onprem-vm.sh` starts/re-arms the
+timer immediately for live bootstrap runs; image-factory provisioning enables it
+for the next customer boot so the image build itself is not mutated by a
+background pull during Packer provisioning.
 
-For private GitHub repos, `project-truth-os-sync` first honors a root-only
+For private GitHub repos, `project-truth-ansible-pull` first honors a root-only
 `/etc/project-truth/os-sync.env` file, then falls back to the existing Argo CD
 repo credential secret `project-truth-repo-creds`. The optional env file shape is:
 
@@ -127,9 +135,9 @@ Check what the VM has already pulled:
 Inside the VM, the equivalent evidence command is:
 
 ```bash
-project-truth-os-sync --status
-systemctl list-timers project-truth-os-sync.timer --no-pager
-journalctl -u project-truth-os-sync.service -n 80 --no-pager
+project-truth-ansible-pull --status
+systemctl list-timers project-truth-ansible-pull.timer --no-pager
+journalctl -u project-truth-ansible-pull.service -n 80 --no-pager
 ```
 
 4. Move HRIS into Kubernetes/Argo ownership when the VM should self-heal app/API/Postgres without Compose:
@@ -252,3 +260,4 @@ screenshots.
 - K3s snapshots and restore: https://docs.k3s.io/cli/etcd-snapshot
 - K3s image pre-import: https://docs.k3s.io/add-ons/import-images
 - TryCloudflare quick tunnels: https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/
+- Ansible pull mode: https://docs.ansible.com/projects/ansible/latest/cli/ansible-pull.html

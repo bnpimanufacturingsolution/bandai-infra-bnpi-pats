@@ -34,7 +34,7 @@ install_docker() {
 
   if command -v apt-get >/dev/null 2>&1; then
     as_root apt-get update
-    as_root apt-get install -y ca-certificates curl git gnupg lsb-release rsync docker.io docker-compose-v2
+    as_root apt-get install -y ca-certificates curl git gnupg lsb-release rsync ansible docker.io docker-compose-v2
   else
     echo "Unsupported package manager. Install Docker and Docker Compose, then rerun this script." >&2
     exit 1
@@ -112,12 +112,15 @@ install_commands_and_services() {
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-console-session-hook.sh" /usr/local/bin/project-truth-console-session-hook
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-trycloudflare-start.sh" /usr/local/bin/project-truth-trycloudflare-start
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-tunnel-gateway.py" /usr/local/bin/project-truth-tunnel-gateway
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-ansible-pull.sh" /usr/local/bin/project-truth-ansible-pull
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-os-sync.sh" /usr/local/bin/project-truth-os-sync
 
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-hris.service" /etc/systemd/system/project-truth-hris.service
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-lan-summary.service" /etc/systemd/system/project-truth-lan-summary.service
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-clean-console.service" /etc/systemd/system/project-truth-clean-console.service
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-trycloudflare.service" /etc/systemd/system/project-truth-trycloudflare.service
+  as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-ansible-pull.service" /etc/systemd/system/project-truth-ansible-pull.service
+  as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-ansible-pull.timer" /etc/systemd/system/project-truth-ansible-pull.timer
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-os-sync.service" /etc/systemd/system/project-truth-os-sync.service
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-os-sync.timer" /etc/systemd/system/project-truth-os-sync.timer
   as_root install -m 0644 "${install_root}/appliance/profile.d/project-truth-hris-help.sh" /etc/profile.d/project-truth-hris-help.sh
@@ -128,8 +131,9 @@ install_commands_and_services() {
   as_root systemctl enable project-truth-lan-summary.service
   as_root systemctl enable project-truth-clean-console.service
   as_root systemctl enable project-truth-trycloudflare.service
-  as_root systemctl enable --now project-truth-os-sync.timer
-  as_root systemctl restart project-truth-os-sync.timer
+  as_root systemctl enable --now project-truth-ansible-pull.timer
+  as_root systemctl restart project-truth-ansible-pull.timer
+  as_root systemctl disable --now project-truth-os-sync.timer >/dev/null 2>&1 || true
 }
 
 configure_console_session_hook() {

@@ -245,12 +245,21 @@ install_commands_and_services() {
   as_root install -m 0755 "${bin_dir}/project-truth-console-session-hook.sh" /usr/local/bin/project-truth-console-session-hook
   as_root install -m 0755 "${bin_dir}/project-truth-trycloudflare-start.sh" /usr/local/bin/project-truth-trycloudflare-start
   as_root install -m 0755 "${bin_dir}/project-truth-tunnel-gateway.py" /usr/local/bin/project-truth-tunnel-gateway
+  if [ -f "${bin_dir}/project-truth-ansible-pull.sh" ]; then
+    as_root install -m 0755 "${bin_dir}/project-truth-ansible-pull.sh" /usr/local/bin/project-truth-ansible-pull
+  fi
   as_root install -m 0755 "${bin_dir}/project-truth-os-sync.sh" /usr/local/bin/project-truth-os-sync
 
   as_root install -m 0644 "${systemd_dir}/project-truth-hris.service" /etc/systemd/system/project-truth-hris.service
   as_root install -m 0644 "${systemd_dir}/project-truth-lan-summary.service" /etc/systemd/system/project-truth-lan-summary.service
   as_root install -m 0644 "${systemd_dir}/project-truth-clean-console.service" /etc/systemd/system/project-truth-clean-console.service
   as_root install -m 0644 "${systemd_dir}/project-truth-trycloudflare.service" /etc/systemd/system/project-truth-trycloudflare.service
+  if [ -f "${systemd_dir}/project-truth-ansible-pull.service" ]; then
+    as_root install -m 0644 "${systemd_dir}/project-truth-ansible-pull.service" /etc/systemd/system/project-truth-ansible-pull.service
+  fi
+  if [ -f "${systemd_dir}/project-truth-ansible-pull.timer" ]; then
+    as_root install -m 0644 "${systemd_dir}/project-truth-ansible-pull.timer" /etc/systemd/system/project-truth-ansible-pull.timer
+  fi
   as_root install -m 0644 "${systemd_dir}/project-truth-os-sync.service" /etc/systemd/system/project-truth-os-sync.service
   as_root install -m 0644 "${systemd_dir}/project-truth-os-sync.timer" /etc/systemd/system/project-truth-os-sync.timer
   as_root install -m 0644 "${profile_dir}/project-truth-hris-help.sh" /etc/profile.d/project-truth-hris-help.sh
@@ -262,8 +271,14 @@ install_commands_and_services() {
   as_root systemctl enable project-truth-lan-summary.service
   as_root systemctl enable project-truth-clean-console.service
   as_root systemctl enable project-truth-trycloudflare.service
-  as_root systemctl enable project-truth-os-sync.timer
-  as_root systemctl restart project-truth-os-sync.timer
+  if [ -f /etc/systemd/system/project-truth-ansible-pull.timer ]; then
+    as_root systemctl enable project-truth-ansible-pull.timer
+    as_root systemctl restart project-truth-ansible-pull.timer
+    as_root systemctl disable --now project-truth-os-sync.timer >/dev/null 2>&1 || true
+  else
+    as_root systemctl enable project-truth-os-sync.timer
+    as_root systemctl restart project-truth-os-sync.timer
+  fi
 }
 
 configure_console_session_hook() {

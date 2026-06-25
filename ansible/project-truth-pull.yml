@@ -1,0 +1,216 @@
+---
+- name: Project Truth VM pull reconciliation
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: true
+
+  vars:
+    project_truth_repo_root: "{{ playbook_dir | dirname }}"
+    project_truth_install_root: "{{ lookup('env', 'PROJECT_TRUTH_ROOT') | default('/opt/project-truth', true) }}"
+    project_truth_state_dir: /var/lib/project-truth
+    project_truth_command_files:
+      - project-truth-status
+      - project-truth-progress
+      - project-truth-monitor
+      - project-truth-hris-env-start
+      - project-truth-hris-env-seed
+      - project-truth-hris-dev-current-restore
+      - project-truth-hris-start
+      - project-truth-hris-status
+      - project-truth-hris-seed
+      - project-truth-hris-observability-start
+      - project-truth-db-access
+      - project-truth-lan-dhcp
+      - project-truth-lan-summary
+      - project-truth-clean-console
+      - project-truth-console-session-hook
+      - project-truth-trycloudflare-start
+      - project-truth-tunnel-gateway
+      - project-truth-ansible-pull
+      - project-truth-os-sync
+    project_truth_systemd_units:
+      - project-truth-hris.service
+      - project-truth-lan-summary.service
+      - project-truth-clean-console.service
+      - project-truth-trycloudflare.service
+      - project-truth-ansible-pull.service
+      - project-truth-ansible-pull.timer
+      - project-truth-os-sync.service
+      - project-truth-os-sync.timer
+    project_truth_enabled_services:
+      - project-truth-hris.service
+      - project-truth-lan-summary.service
+      - project-truth-clean-console.service
+      - project-truth-trycloudflare.service
+    project_truth_argocd_paths:
+      - args:
+          chdir: "{{ project_truth_install_root }}"
+        cmd: kubectl apply -k gitops/argocd/platform
+      - args:
+          chdir: "{{ project_truth_install_root }}"
+        cmd: kubectl apply -n argocd -f gitops/argocd/applications
+      - args:
+          chdir: "{{ project_truth_install_root }}"
+        cmd: kubectl apply -n argocd -f gitops/argocd/runtime-applications
+
+  tasks:
+    - name: Ensure Project Truth state directory exists
+      ansible.builtin.file:
+        path: "{{ project_truth_state_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Ensure install root exists
+      ansible.builtin.file:
+        path: "{{ project_truth_install_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: Sync checked-out repository into install root
+      ansible.builtin.command:
+        argv:
+          - rsync
+          - -a
+          - --delete
+          - --exclude
+          - .git
+          - --exclude
+          - .env
+          - --exclude
+          - .env.*
+          - --exclude
+          - node_modules
+          - --exclude
+          - "*/node_modules"
+          - --exclude
+          - logs
+          - --exclude
+          - .runtime
+          - --exclude
+          - hris-api/infrastructure/onprem/observability/.env
+          - --exclude
+          - hris-api/infrastructure/onprem/observability/backup/.env
+          - "{{ project_truth_repo_root }}/"
+          - "{{ project_truth_install_root }}/"
+      changed_when: true
+
+    - name: Install Project Truth commands
+      ansible.builtin.copy:
+        src: "{{ project_truth_install_root }}/appliance/bin/{{ item }}.sh"
+        dest: "/usr/local/bin/{{ item }}"
+        remote_src: true
+        mode: "0755"
+      loop: "{{ project_truth_command_files }}"
+      when: item != 'project-truth-tunnel-gateway'
+
+    - name: Install Project Truth tunnel gateway command
+      ansible.builtin.copy:
+        src: "{{ project_truth_install_root }}/appliance/bin/project-truth-tunnel-gateway.py"
+        dest: /usr/local/bin/project-truth-tunnel-gateway
+        remote_src: true
+        mode: "0755"
+
+    - name: Install Project Truth systemd units
+      ansible.builtin.copy:
+        src: "{{ project_truth_install_root }}/appliance/systemd/{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        remote_src: true
+        mode: "0644"
+      loop: "{{ project_truth_systemd_units }}"
+
+    - name: Install login profile helper
+      ansible.builtin.copy:
+        src: "{{ project_truth_install_root }}/appliance/profile.d/project-truth-hris-help.sh"
+        dest: /etc/profile.d/project-truth-hris-help.sh
+        remote_src: true
+        mode: "0644"
+
+    - name: Keep console session hook in PAM login
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/login
+        line: session optional pam_exec.so quiet /usr/local/bin/project-truth-console-session-hook
+        insertafter: EOF
+        create: false
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Enable Project Truth services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+      loop: "{{ project_truth_enabled_services }}"
+
+    - name: Use ansible-pull as the standard VM pull timer
+      ansible.builtin.systemd:
+        name: project-truth-ansible-pull.timer
+        enabled: true
+        state: started
+
+    - name: Keep legacy OS sync timer disabled unless explicitly started
+      ansible.builtin.systemd:
+        name: project-truth-os-sync.timer
+        enabled: false
+        state: stopped
+      failed_when: false
+
+    - name: Reapply Argo CD platform and application manifests
+      ansible.builtin.command: "{{ item.cmd }}"
+      args: "{{ item.args }}"
+      loop: "{{ project_truth_argocd_paths }}"
+      register: project_truth_argocd_apply
+      changed_when: false
+      failed_when: false
+      when: item.args.chdir is directory
+
+    - name: Hard refresh Argo CD applications
+      ansible.builtin.shell: |
+        set -o pipefail
+        kubectl get applications -n argocd -o name 2>/dev/null |
+          while read -r app_name; do
+            kubectl -n argocd annotate "$app_name" argocd.argoproj.io/refresh=hard --overwrite >/dev/null 2>&1 || true
+          done
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
+    - name: Read pulled commit
+      ansible.builtin.command:
+        argv:
+          - git
+          - -C
+          - "{{ project_truth_repo_root }}"
+          - rev-parse
+          - HEAD
+      register: project_truth_commit
+      changed_when: false
+
+    - name: Record ansible-pull state
+      ansible.builtin.copy:
+        dest: "{{ project_truth_state_dir }}/ansible-pull-state"
+        mode: "0644"
+        content: |
+          repo_url={{ lookup('env', 'PROJECT_TRUTH_REPO_URL') | default('https://github.com/hrisworkforcesystem-coder/bandai-infra.git', true) }}
+          branch={{ lookup('env', 'PROJECT_TRUTH_BRANCH') | default('develop', true) }}
+          commit={{ project_truth_commit.stdout }}
+          synced_at={{ ansible_date_time.iso8601 }}
+          apply_engine=ansible-pull
+
+    - name: Start TryCloudflare hook in background
+      ansible.builtin.systemd:
+        name: project-truth-trycloudflare.service
+        state: started
+        no_block: true
+      failed_when: false
+
+    - name: Refresh LAN summary
+      ansible.builtin.command:
+        argv:
+          - project-truth-lan-summary
+          - --quiet
+      changed_when: false
+      failed_when: false

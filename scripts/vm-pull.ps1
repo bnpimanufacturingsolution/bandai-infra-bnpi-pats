@@ -70,13 +70,23 @@ $targetIp = Resolve-GuestIp -Config $config
 if ($Status) {
   $remoteStatus = @'
 set -e
+if command -v project-truth-ansible-pull >/dev/null 2>&1; then
+  project-truth-ansible-pull --status
+else
+  echo "project-truth-ansible-pull is not installed."
+fi
+echo
 if command -v project-truth-os-sync >/dev/null 2>&1; then
   project-truth-os-sync --status
 else
   echo "project-truth-os-sync is not installed."
 fi
 echo
+systemctl list-timers project-truth-ansible-pull.timer --no-pager || true
+echo
 systemctl list-timers project-truth-os-sync.timer --no-pager || true
+echo
+journalctl -u project-truth-ansible-pull.service -n 40 --no-pager || true
 echo
 journalctl -u project-truth-os-sync.service -n 40 --no-pager || true
 '@
@@ -85,24 +95,32 @@ journalctl -u project-truth-os-sync.service -n 40 --no-pager || true
   exit $LASTEXITCODE
 }
 
-ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" 'mkdir -p /tmp/project-truth-os-sync/appliance/bin /tmp/project-truth-os-sync/appliance/systemd'
+ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" 'mkdir -p /tmp/project-truth-os-sync/appliance/bin /tmp/project-truth-os-sync/appliance/systemd /tmp/project-truth-os-sync/ansible'
 if ($LASTEXITCODE -ne 0) {
   throw "Could not prepare VM staging directory on ${targetIp}."
 }
 
+Copy-RequiredFile -Source (Join-Path $repoRoot 'appliance\bin\project-truth-ansible-pull.sh') -RemotePath '/tmp/project-truth-os-sync/appliance/bin/project-truth-ansible-pull.sh'
 Copy-RequiredFile -Source (Join-Path $repoRoot 'appliance\bin\project-truth-os-sync.sh') -RemotePath '/tmp/project-truth-os-sync/appliance/bin/project-truth-os-sync.sh'
+Copy-RequiredFile -Source (Join-Path $repoRoot 'appliance\systemd\project-truth-ansible-pull.service') -RemotePath '/tmp/project-truth-os-sync/appliance/systemd/project-truth-ansible-pull.service'
+Copy-RequiredFile -Source (Join-Path $repoRoot 'appliance\systemd\project-truth-ansible-pull.timer') -RemotePath '/tmp/project-truth-os-sync/appliance/systemd/project-truth-ansible-pull.timer'
 Copy-RequiredFile -Source (Join-Path $repoRoot 'appliance\systemd\project-truth-os-sync.service') -RemotePath '/tmp/project-truth-os-sync/appliance/systemd/project-truth-os-sync.service'
 Copy-RequiredFile -Source (Join-Path $repoRoot 'appliance\systemd\project-truth-os-sync.timer') -RemotePath '/tmp/project-truth-os-sync/appliance/systemd/project-truth-os-sync.timer'
+Copy-RequiredFile -Source (Join-Path $repoRoot 'ansible\project-truth-pull.yml') -RemotePath '/tmp/project-truth-os-sync/ansible/project-truth-pull.yml'
 
 $remote = @'
 set -e
+sudo install -m 0755 /tmp/project-truth-os-sync/appliance/bin/project-truth-ansible-pull.sh /usr/local/bin/project-truth-ansible-pull
 sudo install -m 0755 /tmp/project-truth-os-sync/appliance/bin/project-truth-os-sync.sh /usr/local/bin/project-truth-os-sync
+sudo install -m 0644 /tmp/project-truth-os-sync/appliance/systemd/project-truth-ansible-pull.service /etc/systemd/system/project-truth-ansible-pull.service
+sudo install -m 0644 /tmp/project-truth-os-sync/appliance/systemd/project-truth-ansible-pull.timer /etc/systemd/system/project-truth-ansible-pull.timer
 sudo install -m 0644 /tmp/project-truth-os-sync/appliance/systemd/project-truth-os-sync.service /etc/systemd/system/project-truth-os-sync.service
 sudo install -m 0644 /tmp/project-truth-os-sync/appliance/systemd/project-truth-os-sync.timer /etc/systemd/system/project-truth-os-sync.timer
 sudo systemctl daemon-reload
-sudo systemctl enable --now project-truth-os-sync.timer
-sudo PROJECT_TRUTH_BRANCH=develop project-truth-os-sync
-sudo systemctl status project-truth-os-sync.timer --no-pager
+sudo systemctl enable --now project-truth-ansible-pull.timer
+sudo systemctl disable --now project-truth-os-sync.timer >/dev/null 2>&1 || true
+sudo PROJECT_TRUTH_BRANCH=develop project-truth-ansible-pull
+sudo systemctl status project-truth-ansible-pull.timer --no-pager
 '@
 
 ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" $remote

@@ -76,9 +76,16 @@ sudo install -d -m 0700 /etc/project-truth
 echo '$envFile64' | base64 -d | sudo tee /etc/project-truth/os-sync.env >/dev/null
 sudo chmod 0600 /etc/project-truth/os-sync.env
 sudo systemctl daemon-reload
-sudo systemctl restart project-truth-os-sync.service
-sudo systemctl enable --now project-truth-os-sync.timer
-sudo cat /var/lib/project-truth/os-sync-state 2>/dev/null || true
+if systemctl list-unit-files project-truth-ansible-pull.service >/dev/null 2>&1; then
+  sudo systemctl enable --now project-truth-ansible-pull.timer
+  sudo systemctl restart project-truth-ansible-pull.service
+  sudo systemctl disable --now project-truth-os-sync.timer >/dev/null 2>&1 || true
+  sudo cat /var/lib/project-truth/ansible-pull-state 2>/dev/null || true
+else
+  sudo systemctl restart project-truth-os-sync.service
+  sudo systemctl enable --now project-truth-os-sync.timer
+  sudo cat /var/lib/project-truth/os-sync-state 2>/dev/null || true
+fi
 "@
 
 if (-not [string]::IsNullOrWhiteSpace($Password)) {

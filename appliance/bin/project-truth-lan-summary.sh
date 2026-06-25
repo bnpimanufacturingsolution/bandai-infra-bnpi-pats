@@ -6,7 +6,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 state_dir="/run/project-truth"
-sync_state_file="/var/lib/project-truth/os-sync-state"
+sync_state_file="/var/lib/project-truth/ansible-pull-state"
 log_file="/var/log/project-truth-network-summary.log"
 issue_file="/etc/issue"
 motd_file="/etc/motd"
@@ -67,15 +67,15 @@ emit_os_sync_summary() {
       }
     ' "$sync_state_file"
   else
-    echo "  waiting for first project-truth-os-sync run"
+    echo "  waiting for first project-truth-ansible-pull run"
   fi
   if command -v systemctl >/dev/null 2>&1 &&
-    systemctl list-timers project-truth-os-sync.timer --no-pager >/dev/null 2>&1; then
-    systemctl list-timers project-truth-os-sync.timer --no-pager 2>/dev/null |
+    systemctl list-timers project-truth-ansible-pull.timer --no-pager >/dev/null 2>&1; then
+    systemctl list-timers project-truth-ansible-pull.timer --no-pager 2>/dev/null |
       awk 'NR == 2 && $1 != "-" { printf "  next: %s %s %s\n", $1, $2, $3 }'
   fi
-  echo "  sync now: sudo project-truth-os-sync"
-  echo "  status: project-truth-os-sync --status"
+  echo "  sync now: sudo project-truth-ansible-pull"
+  echo "  status: project-truth-ansible-pull --status"
 }
 
 emit_hris_rows() {
@@ -119,14 +119,14 @@ emit_screen_os_sync_line() {
       $1 == "commit" { commit=$2 }
       END {
         if (commit != "") {
-          printf "OS sync: %s@%s\n", branch, substr(commit, 1, 12)
+          printf "Ansible pull: %s@%s\n", branch, substr(commit, 1, 12)
         } else {
-          print "OS sync: state file present, commit missing"
+          print "Ansible pull: state file present, commit missing"
         }
       }
     ' "$sync_state_file"
   else
-    echo "OS sync: waiting for first sudo project-truth-os-sync"
+    echo "Ansible pull: waiting for first sudo project-truth-ansible-pull"
   fi
 }
 
@@ -191,8 +191,8 @@ write_summary() {
       echo "  project-truth-hris-status"
       echo "  project-truth-db-access"
       echo "  project-truth-lan-dhcp"
-    echo "  sudo project-truth-os-sync"
-    echo "  project-truth-os-sync --status"
+    echo "  sudo project-truth-ansible-pull"
+    echo "  project-truth-ansible-pull --status"
   } > "$summary_file"
 }
 
@@ -358,7 +358,7 @@ emit_screen_summary() {
   echo "Commands: project-truth-progress --watch"
   echo "        project-truth-hris-status"
   echo "        project-truth-db-access"
-  echo "        sudo project-truth-os-sync"
+  echo "        sudo project-truth-ansible-pull"
 }
 
 ip_addr="$(lan_ip || true)"
@@ -380,14 +380,14 @@ fi
       commit="$(awk -F= '$1 == "commit" { print substr($2, 1, 12) }' "$sync_state_file")"
       branch="$(awk -F= '$1 == "branch" { print $2 }' "$sync_state_file")"
       if [ -n "$commit" ]; then
-        echo "OS sync: ${branch}@${commit}"
+        echo "Ansible pull: ${branch}@${commit}"
       fi
     fi
   else
     echo "LAN IP: NOT DETECTED"
   fi
   echo "Run after login: project-truth-lan-summary"
-  echo "OS pull: sudo project-truth-os-sync"
+  echo "OS pull: sudo project-truth-ansible-pull"
 } > "$motd_file"
 
 {
@@ -407,7 +407,7 @@ fi
   echo "  project-truth-lan-summary --screen-overview"
   echo "  project-truth-lan-summary --screen-tunnels"
   echo "  project-truth-db-access"
-  echo "  sudo project-truth-os-sync"
+  echo "  sudo project-truth-ansible-pull"
   echo
 } > "$issue_file"
 
@@ -438,7 +438,7 @@ if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
       echo "  project-truth-lan-summary --screen-overview"
       echo "  project-truth-lan-summary --screen-tunnels"
       echo "  project-truth-db-access"
-      echo "  sudo project-truth-os-sync"
+      echo "  sudo project-truth-ansible-pull"
       echo
       printf '%s@%s:~$ ' "$tty_user" "$(hostname)"
     else
