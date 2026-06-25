@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','configure','select-image','download-image','build-image','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','hyperv-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','gitops-pull','vm-pull','configure-vm-git-creds','apply-argocd-platform','configure-argocd-repo-creds','configure-argocd-webhook','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel','start-trycloudflare-suite')]
+  [ValidateSet('doctor','configure','select-image','download-image','build-image','build-image-gcp','watch-gcp-image-build-progress','watch-gcp-build-resources','export-devcurrent-gcp-vhdx','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','hyperv-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','gitops-pull','vm-pull','configure-vm-git-creds','apply-argocd-platform','configure-argocd-repo-creds','configure-argocd-webhook','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel','start-trycloudflare-suite')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -16,6 +16,10 @@ $scriptMap = @{
   'select-image'        = 'select-image.ps1'
   'download-image'      = 'download-image.ps1'
   'build-image'         = 'build-image.ps1'
+  'build-image-gcp'     = 'build-image-gcp.ps1'
+  'watch-gcp-image-build-progress' = 'watch-gcp-image-build-progress.ps1'
+  'watch-gcp-build-resources' = 'watch-gcp-build-resources.ps1'
+  'export-devcurrent-gcp-vhdx' = 'export-devcurrent-gcp-vhdx.ps1'
   'verify-gcp-image-boot' = 'verify-gcp-image-boot.ps1'
   'configure-virtualbox' = 'configure-virtualbox.ps1'
   'vhdx-autopilot'      = 'vhdx-autopilot.ps1'

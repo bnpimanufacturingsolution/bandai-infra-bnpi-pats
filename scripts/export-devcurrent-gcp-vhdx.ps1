@@ -6,7 +6,7 @@ param(
     [string]$Image = "project-truth-node-devcurrent-postinstall-20260618-020148",
     [string]$Bucket = "project-truth-image-export-hris-492904-161377059311",
     [string]$ObjectPrefix = "public/project-truth/hyperv/dev-current/latest",
-    [string]$RunRoot = ".runtime\gcp-vhdx-export\20260618-devcurrent",
+    [string]$RunRoot = "",
     [int]$PollSeconds = 30,
     [int]$PollCount = 180
 )
@@ -30,6 +30,13 @@ function Find-Gcloud {
     throw "gcloud was not found on PATH."
 }
 
+if ([string]::IsNullOrWhiteSpace($RunRoot)) {
+    $RunRoot = Join-Path ".runtime\gcp-vhdx-export" ("{0}-{1}" -f (Get-Date -Format "yyyyMMdd-HHmmss"), $Image)
+}
+if (-not [System.IO.Path]::IsPathRooted($RunRoot)) {
+    $RunRoot = Join-Path (Get-Location).Path $RunRoot
+}
+$RunRoot = [System.IO.Path]::GetFullPath($RunRoot)
 New-Item -ItemType Directory -Force -Path $RunRoot | Out-Null
 
 $object = "$ObjectPrefix/$Image.vhdx"
