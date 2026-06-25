@@ -146,6 +146,18 @@
         state: stopped
       failed_when: false
 
+    - name: Repair CoreDNS upstream resolvers for Argo Git access
+      ansible.builtin.shell: |
+        set -euo pipefail
+        kubectl -n kube-system get configmap coredns -o yaml |
+          sed 's#forward \. /etc/resolv.conf#forward . 1.1.1.1 8.8.8.8#g' |
+          kubectl apply -f -
+        kubectl -n kube-system rollout restart deploy/coredns
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
     - name: Reapply Argo CD platform config
       ansible.builtin.command: kubectl apply -k gitops/argocd/platform
       args:

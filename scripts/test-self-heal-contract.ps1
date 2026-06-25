@@ -169,6 +169,7 @@ $checks.Add((Assert-Text 'ansible-pull wrapper repairs resolver drift before fet
 $checks.Add((Assert-Text 'ansible-pull wrapper repairs DHCP drift before fetch' $ansiblePullScript 'project-truth-lan-dhcp'))
 $checks.Add((Assert-Text 'ansible-pull playbook updates install root' $ansiblePullPlaybook '/opt/project-truth'))
 $checks.Add((Assert-Text 'ansible-pull playbook refreshes Argo apps after host sync' $ansiblePullPlaybook 'argocd\.argoproj\.io/refresh=hard'))
+$checks.Add((Assert-Text 'ansible-pull playbook repairs CoreDNS upstreams' $ansiblePullPlaybook 'forward \. 1\.1\.1\.1 8\.8\.8\.8'))
 $checks.Add((Assert-Text 'ansible-pull wrapper exposes status command' $ansiblePullScript '--status\|status'))
 $checks.Add((Assert-Text 'ansible-pull wrapper can reuse Argo repo credentials' $ansiblePullScript 'project-truth-repo-creds'))
 $checks.Add((Assert-Text 'ansible-pull supports root-only credential env file' $ansiblePullService 'EnvironmentFile=-/etc/project-truth/os-sync\.env'))
