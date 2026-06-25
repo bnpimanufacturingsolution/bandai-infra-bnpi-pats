@@ -116,13 +116,17 @@ try {
         } elseif ($response.data.reason -eq "employee_not_found") {
             Write-WarnLine "Device matched, but no Employee.deviceEmpId matched enroll number $EnrollNumber."
         } elseif ($response.data.matched -eq $true) {
-            Write-Pass "Device and Employee.deviceEmpId matched. Current ZKTeco contract records DeviceEvent only; it does not create/update Attendance yet."
+            if ($response.data.attendanceId) {
+                Write-Pass "Device and Employee.deviceEmpId matched. ZKTeco punch projected into Attendance $($response.data.attendanceId) with action $($response.data.attendanceAction)."
+            } else {
+                Write-Pass "Device and Employee.deviceEmpId matched. Event was recorded with attendance action $($response.data.attendanceAction)."
+            }
         }
     }
 
     Write-Step "Best finish state"
     Write-Host "Stop when API/app are healthy, ZKTeco mock or bridge posts reach $ApiBaseUrl/api/zkteco/events, and saved events show under /admin/devices/events?view=saved&source=ZKTECO_EVENT."
-    Write-Host "Attendance truth note: this endpoint currently saves/matches DeviceEvent rows only. A later change is required before ZKTeco punches create or update Attendance."
+    Write-Host "Attendance truth note: matched ZKTeco attendance punches now save DeviceEvent rows and create/update Attendance, AttendanceObligation, and editable timesheet truth."
 } finally {
     Pop-Location
 }

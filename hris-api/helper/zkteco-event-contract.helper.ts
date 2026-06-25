@@ -19,6 +19,8 @@ export type NormalizedZktecoEvent = {
 	isValid?: boolean;
 };
 
+export const DEFAULT_ZKTECO_MIN_PUNCH_PAIR_GAP_MINUTES = 0;
+
 const pickFirst = (candidates: any[], keys: string[]) => {
 	for (const candidate of candidates) {
 		if (!candidate || typeof candidate !== "object") continue;
@@ -64,6 +66,51 @@ export const normalizeZktecoPayload = (payload: Record<string, any>): Normalized
 };
 
 export const parseZktecoEventTime = (rawTime: unknown) => parseHikvisionEventTime(rawTime);
+
+export const isZktecoAttendancePunchEvent = (
+	event: Pick<NormalizedZktecoEvent, "eventType" | "isValid">,
+) => {
+	const eventType = String(event.eventType || "").trim().toUpperCase();
+	return event.isValid !== false && (!eventType || eventType === "ATTENDANCETRANSACTION");
+};
+
+export const isZktecoAttendancePunchPayload = (payload: Record<string, any>) =>
+	isZktecoAttendancePunchEvent(normalizeZktecoPayload(payload));
+
+export const selectZktecoPunchPair = (
+	rows: Array<{ eventTime: Date | string; payload?: any }>,
+	options?: { minPairGapMinutes?: number },
+) => {
+	const rawGapMinutes = Number(options?.minPairGapMinutes);
+	const minPairGapMs =
+		Number.isFinite(rawGapMinutes) && rawGapMinutes > 0
+			? rawGapMinutes * 60 * 1000
+			: 0;
+	const punchTimes = rows
+		.filter((row) =>
+			row.payload && typeof row.payload === "object"
+				? isZktecoAttendancePunchPayload(row.payload)
+				: true,
+		)
+		.map((row) => (row.eventTime instanceof Date ? row.eventTime : new Date(row.eventTime)))
+		.filter((date) => !Number.isNaN(date.getTime()))
+		.sort((left, right) => left.getTime() - right.getTime());
+
+	const timeIn = punchTimes[0] || null;
+	const eligibleTimeOuts = timeIn
+		? punchTimes.filter(
+				(punchTime) => punchTime.getTime() - timeIn.getTime() >= minPairGapMs,
+			)
+		: [];
+	const latest = eligibleTimeOuts[eligibleTimeOuts.length - 1] || null;
+	const timeOut = timeIn && latest && latest.getTime() > timeIn.getTime() ? latest : null;
+
+	return {
+		timeIn,
+		timeOut,
+		count: punchTimes.length,
+	};
+};
 
 export const buildZktecoDeviceEventDedupeKey = (input: {
 	deviceId: string;

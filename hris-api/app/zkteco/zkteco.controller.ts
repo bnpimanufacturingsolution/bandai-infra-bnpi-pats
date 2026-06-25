@@ -2,18 +2,59 @@ import { Request, Response, NextFunction } from "express";
 import { PrismaClient } from "../../generated/prisma";
 import { buildSuccessResponse } from "../../helper/success-handler.helper";
 import { buildErrorResponse } from "../../helper/error-handler";
+import {
+	buildAttendanceDateQuery,
+	buildAttendanceTimekeepingFields,
+	fetchAttendanceEmployeeSnapshotFields,
+} from "../../helper/attendance.helper";
+import { applyAttendanceToObligation } from "../../helper/attendance-obligation.helper";
+import { emitAttendanceRealtimeEvent } from "../../helper/attendance-realtime.helper";
+import {
+	normalizeEmployeeScheduleSnapshot,
+	resolveEffectiveShift,
+	resolveEmployeeActiveSchedule,
+} from "../../helper/employee-schedule.helper";
+import { refreshTimesheetForAttendanceDate } from "../../helper/timesheet.helper";
+import {
+	calculateTimekeeping,
+	determineAttendanceStatus,
+	deriveBehaviorFlags,
+} from "../../helper/timekeeping.helper";
 import { invalidateCache } from "../../middleware/cache";
 import { emitDeviceEventSaved } from "../../helper/device-event-realtime.helper";
 import {
 	buildZktecoDeviceEventDedupeKey,
+	DEFAULT_ZKTECO_MIN_PUNCH_PAIR_GAP_MINUTES,
+	isZktecoAttendancePunchEvent,
 	normalizeZktecoPayload,
 	parseZktecoEventTime,
+	selectZktecoPunchPair,
 	ZKTECO_DEVICE_EVENT_SOURCE,
 } from "../../helper/zkteco-event-contract.helper";
 
 export const controller = (prisma: PrismaClient) => {
 	const publishDeviceEventSaved = (req: Request, eventRecord: any) =>
 		emitDeviceEventSaved((req as any).io, eventRecord);
+
+	const getOvertimeFlagThresholdMinutes = async (organizationId: string): Promise<number> => {
+		try {
+			const timesheetConfig = await prisma.timesheetConfig.findUnique({
+				where: { organizationId },
+				select: { overtimeFlagThresholdMinutes: true } as any,
+			});
+			const threshold = (timesheetConfig as any)?.overtimeFlagThresholdMinutes;
+			return typeof threshold === "number" ? threshold : 60;
+		} catch {
+			return 60;
+		}
+	};
+
+	const getMinimumPunchPairGapMinutes = (device: any) =>
+		Number((device?.config as any)?.zktecoMinPunchPairGapMinutes) ||
+		DEFAULT_ZKTECO_MIN_PUNCH_PAIR_GAP_MINUTES;
+
+	const canPairPunchesAsClockOut = (device: any) =>
+		(device?.config as any)?.zktecoPairPunchesAsClockOut !== false;
 
 	const resolveDevice = async (req: Request, event: ReturnType<typeof normalizeZktecoPayload>) => {
 		const requestedDeviceId =
@@ -174,6 +215,29 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			if (!isZktecoAttendancePunchEvent(event)) {
+				await updateEventStatus(req, eventRecord.id, {
+					status: "IGNORED",
+					errorMessage: "non_attendance_device_event",
+				});
+				res.status(200).json(
+					buildSuccessResponse(
+						"ZKTeco event received but event is not an attendance punch",
+						{
+							received: true,
+							matched: false,
+							employeeNo,
+							reason: "non_attendance_device_event",
+							eventId: eventRecord.id,
+							dedupeKey,
+							event,
+						},
+						200,
+					),
+				);
+				return;
+			}
+
 			if (!employeeNo) {
 				await updateEventStatus(req, eventRecord.id, {
 					status: "IGNORED",
@@ -230,11 +294,202 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			await updateEventStatus(req, eventRecord.id, {
-				status: "MATCHED",
-				employeeId: employee.id,
-				errorMessage: null,
+			const { where: attendanceQuery, startOfDay: normalizedStartOfDay } =
+				buildAttendanceDateQuery(employee.id, eventTime, employee.organizationId);
+			const existingAttendance = await prisma.attendance.findFirst({
+				where: attendanceQuery,
+				orderBy: { createdAt: "desc" },
 			});
+
+			let attendanceAction = "ignored";
+			let attendanceId: string | null = null;
+			const resolvedSchedule = await resolveEffectiveShift(prisma, {
+				organizationId: employee.organizationId,
+				employeeId: employee.id,
+				date: eventTime,
+			});
+			const activeSchedule = resolvedSchedule || resolveEmployeeActiveSchedule(employee);
+			const sameDayDeviceEvents = await (prisma as any).deviceEvent.findMany({
+				where: {
+					organizationId: employee.organizationId,
+					employeeNo,
+					source: ZKTECO_DEVICE_EVENT_SOURCE,
+					eventTime: {
+						gte: normalizedStartOfDay,
+						lte: (attendanceQuery as any).date.lte,
+					},
+					status: {
+						notIn: ["FAILED", "UNMATCHED"],
+					},
+				},
+				select: {
+					id: true,
+					eventTime: true,
+					payload: true,
+				},
+				orderBy: {
+					eventTime: "asc",
+				},
+			});
+			const minimumPunchPairGapMinutes = getMinimumPunchPairGapMinutes(device);
+			const pairPunchesAsClockOut = canPairPunchesAsClockOut(device);
+			const punchPair = selectZktecoPunchPair(sameDayDeviceEvents, {
+				minPairGapMinutes: minimumPunchPairGapMinutes,
+			});
+			const existingTimeIn = existingAttendance?.timeIn
+				? new Date(existingAttendance.timeIn)
+				: null;
+			const existingTimeOut = existingAttendance?.timeOut
+				? new Date(existingAttendance.timeOut)
+				: null;
+			const punchTimeIn = existingTimeIn || punchPair.timeIn || eventTime;
+			const isNewerClockOutPunch =
+				Boolean(existingTimeIn) &&
+				eventTime.getTime() > (existingTimeIn as Date).getTime() &&
+				(!existingTimeOut || eventTime.getTime() > (existingTimeOut as Date).getTime());
+			const pairedTimeOut =
+				pairPunchesAsClockOut &&
+				isNewerClockOutPunch &&
+				eventTime.getTime() - (existingTimeIn as Date).getTime() >=
+					minimumPunchPairGapMinutes * 60 * 1000
+					? eventTime
+					: null;
+			const punchTimeOut = pairedTimeOut || punchPair.timeOut || existingTimeOut || null;
+			const isRepeatPunchWithinGap =
+				Boolean(existingAttendance) &&
+				Boolean(existingTimeIn) &&
+				!existingTimeOut &&
+				!pairedTimeOut &&
+				eventTime.getTime() > (existingTimeIn as Date).getTime();
+			const isOutOfOrderOrAlreadyCovered =
+				Boolean(existingAttendance) &&
+				((existingTimeIn && eventTime.getTime() <= existingTimeIn.getTime()) ||
+					(existingTimeOut && eventTime.getTime() <= (existingTimeOut as Date).getTime()));
+			const persistedSchedule = normalizeEmployeeScheduleSnapshot(
+				existingAttendance?.scheduleSnapshot || null,
+			);
+			const scheduleForCalculation = persistedSchedule || activeSchedule;
+			const timekeepingCalc = calculateTimekeeping(
+				punchTimeIn,
+				punchTimeOut,
+				scheduleForCalculation,
+				punchTimeIn,
+			);
+			const overtimeFlagThresholdMinutes = await getOvertimeFlagThresholdMinutes(
+				employee.organizationId,
+			);
+			const finalStatus = determineAttendanceStatus(timekeepingCalc, Boolean(punchTimeOut));
+			const attendanceTimekeepingData = {
+				timeIn: punchTimeIn,
+				timeOut: punchTimeOut,
+				status: finalStatus,
+				deviceInfo: {
+					source: ZKTECO_DEVICE_EVENT_SOURCE,
+					deviceId: device.id,
+					deviceName: device.name,
+					eventId: eventRecord.id,
+					dedupeKey,
+					punchEventCount: punchPair.count,
+					minimumPunchPairGapMinutes,
+					pairPunchesAsClockOut,
+				},
+				behaviorFlags:
+					finalStatus === "LEAVE"
+						? []
+						: deriveBehaviorFlags({
+								timeIn: punchTimeIn,
+								timeOut: punchTimeOut,
+								schedule: scheduleForCalculation,
+								date: punchTimeIn,
+								overtimeThresholdMinutes: overtimeFlagThresholdMinutes,
+							}),
+				...(await fetchAttendanceEmployeeSnapshotFields(prisma, employee.id)),
+				...buildAttendanceTimekeepingFields(timekeepingCalc),
+			};
+
+			if (isRepeatPunchWithinGap || isOutOfOrderOrAlreadyCovered) {
+				attendanceAction = isRepeatPunchWithinGap
+					? "repeat_punch_ignored"
+					: "duplicate_or_out_of_order_ignored";
+				attendanceId = existingAttendance?.id || null;
+			} else if (!existingAttendance) {
+				const created = await prisma.attendance.create({
+					data: {
+						organizationId: employee.organizationId,
+						employeeId: employee.id,
+						date: normalizedStartOfDay,
+						isManualEntry: false,
+						scheduleSnapshot: activeSchedule,
+						...attendanceTimekeepingData,
+					},
+				});
+				attendanceAction = "clock_in_created";
+				attendanceId = created.id;
+			} else {
+				const updated = await prisma.attendance.update({
+					where: { id: existingAttendance.id },
+					data: {
+						...attendanceTimekeepingData,
+						scheduleSnapshot: existingAttendance.scheduleSnapshot || activeSchedule,
+					},
+				});
+				attendanceAction = punchTimeOut ? "clock_out_updated" : "clock_in_created";
+				attendanceId = updated.id;
+			}
+
+			if (
+				attendanceId &&
+				(attendanceAction === "clock_in_created" ||
+					attendanceAction === "clock_out_updated")
+			) {
+				const obligation = await applyAttendanceToObligation(prisma, {
+					organizationId: employee.organizationId,
+					employeeId: employee.id,
+					attendanceId,
+				});
+				emitAttendanceRealtimeEvent((req as any).io, {
+					attendanceId,
+					obligation,
+					organizationId: employee.organizationId,
+					employeeId: employee.id,
+					action:
+						attendanceAction === "clock_out_updated"
+							? "clock_out_updated"
+							: "clock_in_created",
+					source: ZKTECO_DEVICE_EVENT_SOURCE,
+				});
+				const refreshedTimesheet = await refreshTimesheetForAttendanceDate(prisma, {
+					organizationId: employee.organizationId,
+					employeeId: employee.id,
+					date: punchTimeIn,
+				});
+				if (refreshedTimesheet) {
+					await invalidateCache.byPattern("cache:timesheet:*");
+				}
+			}
+
+			if (attendanceAction === "clock_in_created") {
+				await updateEventStatus(req, eventRecord.id, {
+					status: "ATTENDANCE_CREATED",
+					employeeId: employee.id,
+					attendanceId,
+					errorMessage: null,
+				});
+			} else if (attendanceAction === "clock_out_updated") {
+				await updateEventStatus(req, eventRecord.id, {
+					status: "ATTENDANCE_UPDATED",
+					employeeId: employee.id,
+					attendanceId,
+					errorMessage: null,
+				});
+			} else {
+				await updateEventStatus(req, eventRecord.id, {
+					status: "MATCHED",
+					employeeId: employee.id,
+					attendanceId,
+					errorMessage: attendanceAction === "ignored" ? null : attendanceAction,
+				});
+			}
 
 			res.status(200).json(
 				buildSuccessResponse(
@@ -247,6 +502,8 @@ export const controller = (prisma: PrismaClient) => {
 						dedupeKey,
 						employeeNo,
 						employeeId: employee.id,
+						attendanceAction,
+						attendanceId,
 						event,
 					},
 					200,

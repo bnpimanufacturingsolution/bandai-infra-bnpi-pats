@@ -1,8 +1,11 @@
 import { expect } from "chai";
 import {
 	buildZktecoDeviceEventDedupeKey,
+	DEFAULT_ZKTECO_MIN_PUNCH_PAIR_GAP_MINUTES,
+	isZktecoAttendancePunchEvent,
 	normalizeZktecoPayload,
 	parseZktecoEventTime,
+	selectZktecoPunchPair,
 	ZKTECO_DEVICE_EVENT_SOURCE,
 } from "../helper/zkteco-event-contract.helper";
 
@@ -82,5 +85,88 @@ describe("zkteco event contract helper", () => {
 
 	it("keeps the ZKTeco source distinct from other device event save paths", () => {
 		expect(ZKTECO_DEVICE_EVENT_SOURCE).to.equal("ZKTECO_EVENT");
+	});
+
+	it("treats valid attendance transactions as attendance punches", () => {
+		expect(
+			isZktecoAttendancePunchEvent({
+				eventType: "AttendanceTransaction",
+				isValid: true,
+			}),
+		).to.equal(true);
+		expect(
+			isZktecoAttendancePunchEvent({
+				eventType: "AttendanceTransaction",
+				isValid: false,
+			}),
+		).to.equal(false);
+		expect(isZktecoAttendancePunchEvent({ eventType: "UserSync" })).to.equal(false);
+	});
+
+	it("selects earliest valid ZKTeco punch as time in and latest as time out", () => {
+		const pair = selectZktecoPunchPair([
+			{
+				eventTime: new Date("2026-06-18T10:00:00.000Z"),
+				payload: {
+					eventType: "UserSync",
+					attendance: { timestamp: "2026-06-18T18:00:00+08:00" },
+				},
+			},
+			{
+				eventTime: new Date("2026-06-18T09:00:00.000Z"),
+				payload: {
+					eventType: "AttendanceTransaction",
+					attendance: { timestamp: "2026-06-18T17:00:00+08:00", isValid: true },
+				},
+			},
+			{
+				eventTime: new Date("2026-06-18T00:00:00.000Z"),
+				payload: {
+					eventType: "AttendanceTransaction",
+					attendance: { timestamp: "2026-06-18T08:00:00+08:00", isValid: true },
+				},
+			},
+		]);
+
+		expect(pair.count).to.equal(2);
+		expect(pair.timeIn?.toISOString()).to.equal("2026-06-18T00:00:00.000Z");
+		expect(pair.timeOut?.toISOString()).to.equal("2026-06-18T09:00:00.000Z");
+	});
+
+	it("uses no default minute gap for ZKTeco punch pairing", () => {
+		expect(DEFAULT_ZKTECO_MIN_PUNCH_PAIR_GAP_MINUTES).to.equal(0);
+
+		const pair = selectZktecoPunchPair([
+			{
+				eventTime: new Date("2026-06-18T00:00:00.000Z"),
+				payload: { eventType: "AttendanceTransaction" },
+			},
+			{
+				eventTime: new Date("2026-06-18T00:00:10.000Z"),
+				payload: { eventType: "AttendanceTransaction" },
+			},
+		]);
+
+		expect(pair.count).to.equal(2);
+		expect(pair.timeOut?.toISOString()).to.equal("2026-06-18T00:00:10.000Z");
+	});
+
+	it("can ignore rapid repeat punches when a minimum ZKTeco pair gap is configured", () => {
+		const pair = selectZktecoPunchPair(
+			[
+				{
+					eventTime: new Date("2026-06-18T00:00:00.000Z"),
+					payload: { eventType: "AttendanceTransaction" },
+				},
+				{
+					eventTime: new Date("2026-06-18T00:00:10.000Z"),
+					payload: { eventType: "AttendanceTransaction" },
+				},
+			],
+			{ minPairGapMinutes: 30 },
+		);
+
+		expect(pair.count).to.equal(2);
+		expect(pair.timeOut).to.equal(null);
 	});
 });
