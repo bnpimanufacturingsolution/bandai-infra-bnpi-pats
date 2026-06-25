@@ -94,12 +94,27 @@ function Invoke-ProofSsh {
     [string]$Command
   )
 
+  $localScript = Join-Path $RuntimeDir "$Name.remote.sh"
+  $remoteScript = "/tmp/project-truth-$Name.sh"
+  $Command -replace "`r`n", "`n" |
+    Set-Content -LiteralPath $localScript -Encoding ASCII -NoNewline
+
+  Save-GcloudOutput -Name "$Name-scp" -Arguments @(
+    'compute', 'scp', $localScript, "$SshUser@$InstanceName`:$remoteScript",
+    '--project', $ProjectId,
+    '--zone', $Zone,
+    '--quiet'
+  ) | Out-Null
+  if ($script:LastGcloudExitCode -ne 0) {
+    throw "gcloud compute scp failed with exit code $($script:LastGcloudExitCode). Log: $(Join-Path $RuntimeDir "$Name-scp.log")"
+  }
+
   $sshArgs = @(
     'compute', 'ssh', "$SshUser@$InstanceName",
     '--project', $ProjectId,
     '--zone', $Zone,
     '--quiet',
-    '--command', $Command
+    '--command', "bash $remoteScript; rc=`$?; rm -f $remoteScript; exit `$rc"
   )
   $output = Save-GcloudOutput -Name $Name -Arguments $sshArgs
   if ($script:LastGcloudExitCode -ne 0) {
@@ -159,6 +174,19 @@ Delete on successful proof: $DeleteOnSuccess
 $created = $false
 $proofSucceeded = $false
 try {
+  $existingStatus = ''
+  if (-not [string]::IsNullOrWhiteSpace($InstanceName)) {
+    $describeOutput = Save-GcloudOutput -Name 'describe-existing-proof-instance' -Arguments @(
+      'compute', 'instances', 'describe', $InstanceName,
+      '--project', $ProjectId,
+      '--zone', $Zone,
+      '--format', 'value(status)'
+    )
+    if ($script:LastGcloudExitCode -eq 0) {
+      $existingStatus = ($describeOutput | Select-Object -First 1).Trim()
+    }
+  }
+
   $createArgs = @(
     'compute', 'instances', 'create', $InstanceName,
     '--project', $ProjectId,
@@ -176,10 +204,15 @@ try {
     $createArgs += '--enable-display-device'
   }
 
-  Invoke-GcloudChecked -Name 'create-proof-instance' -Arguments @(
-    $createArgs
-  )
-  $created = $true
+  if ([string]::IsNullOrWhiteSpace($existingStatus)) {
+    Invoke-GcloudChecked -Name 'create-proof-instance' -Arguments @(
+      $createArgs
+    )
+    $created = $true
+  } else {
+    Write-Host "Reusing existing proof instance: $InstanceName status=$existingStatus"
+    $created = $true
+  }
 
   Write-Host "Waiting ${BootWaitSeconds}s for first boot services..."
   Start-Sleep -Seconds $BootWaitSeconds
