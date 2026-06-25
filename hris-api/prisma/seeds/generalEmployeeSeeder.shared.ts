@@ -3900,6 +3900,11 @@ const ensureScheduleResources = async (organizationId: string, departmentIds: st
 	return { template };
 };
 
+const normalizeZktecoDeviceEmpId = (employeeCode: string) => {
+	if (!/^\d+$/.test(employeeCode)) return employeeCode;
+	return employeeCode.replace(/^0+/, "") || "0";
+};
+
 const ensureEmployee = async (params: {
 	organizationId: string;
 	authOrganizationId: string;
@@ -3953,6 +3958,7 @@ const ensureEmployee = async (params: {
 		},
 	});
 	const employeeAction: "created" | "updated" = existingEmployee ? "updated" : "created";
+	const deviceEmpId = normalizeZktecoDeviceEmpId(employeeCode);
 
 	let person = existingEmployee?.person || null;
 	const seedPhone = buildSeedPhoneNumber(employeeCode);
@@ -4113,6 +4119,7 @@ const ensureEmployee = async (params: {
 				workforceSource: (existingEmployee as any).workforceSource || "DIRECT",
 				employer:
 					(existingEmployee as any).employer || (buildSeedEmployer(sourceLabel) as any),
+				deviceEmpId,
 				leaveBalances: leaveBalancePayload.leaveBalances as any,
 				leaveBalancesLastUpdated: hasLeaveBalances
 					? ((existingEmployee as any).leaveBalancesLastUpdated ?? null)
@@ -4163,6 +4170,7 @@ const ensureEmployee = async (params: {
 		data: {
 			organizationId,
 			employeeId: employeeCode,
+			deviceEmpId,
 			personId: person.id,
 			userId: seedUser.userId,
 			role,
@@ -5764,6 +5772,29 @@ async function seedEmployeePopulation(options?: SeedScenarioOptions) {
 				data: { managerId: employee.id },
 			});
 		}
+
+		const syncedDeviceEmpIds = await prisma.$executeRaw`
+			update employees
+			set "deviceEmpId" = case
+					when "employeeId" ~ '^[0-9]+$'
+						then coalesce(nullif(regexp_replace("employeeId", '^0+', ''), ''), '0')
+					else "employeeId"
+				end,
+				"updatedAt" = now()
+			where "organizationId" = ${organizationId}
+				and "isDeleted" = false
+				and (
+					"deviceEmpId" is null
+					or "deviceEmpId" <> case
+						when "employeeId" ~ '^[0-9]+$'
+							then coalesce(nullif(regexp_replace("employeeId", '^0+', ''), ''), '0')
+						else "employeeId"
+					end
+				)
+		`;
+		logSeedStep(
+			`ZKTeco employee device IDs verified: ${syncedDeviceEmpIds} live employee row(s) now use ZKTeco enroll IDs as deviceEmpId. Real ZKTeco events remain device-originated only.`,
+		);
 
 		if (scenario.seedConfig.generateDemoRequests) {
 			await executeRequestCreationSequentially(() =>

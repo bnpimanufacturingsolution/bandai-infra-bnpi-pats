@@ -103,6 +103,8 @@
 		"repair:hikvision-device-events": "tsx scripts/audit-hikvision-device-events.ts --apply",
 		"watch:hikvision-device-events": "tsx scripts/audit-hikvision-device-events.ts --apply --watch --until-clean",
 		"check:hikvision-device-clock": "tsx scripts/check-hikvision-device-clock.ts",
+		"repair:zkteco-truth": "tsx scripts/repair-zkteco-truth.ts",
+		"import:zkteco-device-events": "tsx scripts/import-zkteco-device-events.ts",
 		"check:attendance-status": "ts-node scripts/check-attendance-status.ts",
 		"check:postgres-prisma-compat": "npx tsx scripts/check-postgres-prisma-compat.ts",
 		"repair:schedule-change-hr-approval": "npx tsx scripts/repair-schedule-change-hr-approval.ts",
