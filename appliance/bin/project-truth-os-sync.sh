@@ -41,6 +41,35 @@ ensure_dependencies() {
   return 1
 }
 
+repair_network_for_git() {
+  local host="${PROJECT_TRUTH_GIT_HOST:-github.com}"
+  local attempt
+
+  for attempt in 1 2 3; do
+    if getent hosts "$host" >/dev/null 2>&1 &&
+      curl -fsSI --max-time 8 "https://${host}" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    echo "Git network check failed for ${host}; repair attempt ${attempt}/3" >&2
+
+    if command -v resolvectl >/dev/null 2>&1; then
+      as_root resolvectl flush-caches >/dev/null 2>&1 || true
+    fi
+    if command -v systemctl >/dev/null 2>&1; then
+      as_root systemctl restart systemd-resolved.service >/dev/null 2>&1 || true
+    fi
+    if command -v project-truth-lan-dhcp >/dev/null 2>&1; then
+      PROJECT_TRUTH_SKIP_TTY1_WRITE=1 as_root project-truth-lan-dhcp >/dev/null 2>&1 || true
+    fi
+
+    sleep 5
+  done
+
+  getent hosts "$host" >/dev/null 2>&1 &&
+    curl -fsSI --max-time 8 "https://${host}" >/dev/null 2>&1
+}
+
 ensure_cloudflared() {
   if command -v cloudflared >/dev/null 2>&1; then
     return 0
@@ -164,6 +193,7 @@ show_status() {
 sync_source_repo() {
   as_root install -d -m 0755 "$state_dir"
   prepare_git_credentials
+  repair_network_for_git
 
   if [ -d "${source_root}/.git" ]; then
     git_remote git -C "$source_root" remote set-url origin "$repo_url"

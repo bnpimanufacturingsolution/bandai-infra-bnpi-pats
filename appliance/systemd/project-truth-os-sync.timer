@@ -4,6 +4,7 @@ Description=Project Truth OS-level Git sync timer
 [Timer]
 OnBootSec=2min
 OnUnitActiveSec=5min
+OnUnitInactiveSec=5min
 RandomizedDelaySec=60s
 Persistent=true
 
