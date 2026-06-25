@@ -61,4 +61,4 @@ fi
     echo
     printf '%s login: ' "$(hostname)"
   fi
-} > "$tty_path"
+} | sed 's/$/\r/' > "$tty_path"

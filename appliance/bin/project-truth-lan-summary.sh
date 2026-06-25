@@ -382,7 +382,9 @@ fi
 } >> "$log_file"
 
 if [ "$quiet" != "true" ]; then
-  cat "$summary_file"
+  PROJECT_TRUTH_SCREEN_NO_CLEAR=1 emit_screen_summary "$ip_addr" "overview"
+  echo
+  echo "Full saved summary: ${summary_file}"
 fi
 
 if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
@@ -406,5 +408,5 @@ if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
       cat "$issue_file"
       printf '%s login: ' "$(hostname)"
     fi
-  } > /dev/tty1 || true
+  } | sed 's/$/\r/' > /dev/tty1 || true
 fi
