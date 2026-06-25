@@ -120,6 +120,8 @@ $osSyncScript = Get-Content -Raw 'appliance/bin/project-truth-os-sync.sh'
 $osSyncService = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.service'
 $osSyncTimer = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.timer'
 $lanSummaryScript = Get-Content -Raw 'appliance/bin/project-truth-lan-summary.sh'
+$profileHelpScript = Get-Content -Raw 'appliance/profile.d/project-truth-hris-help.sh'
+$imageProvisionScript = Get-Content -Raw 'image-factory/packer/provision.sh'
 $promoteWorkflow = Get-Content -Raw '.github/workflows/promote-gitops.yml'
 $platformConfig = Get-Content -Raw 'gitops/argocd/platform/argocd-cm.yaml'
 $projectTruthScript = Get-Content -Raw 'scripts/project-truth.ps1'
@@ -147,6 +149,8 @@ $checks.Add((Assert-Text 'gitops-pull hard-refreshes Argo apps' $gitopsPullScrip
 $checks.Add((Assert-Text 'project-truth exposes one-command VM pull' $projectTruthScript 'vm-pull'))
 $checks.Add((Assert-Text 'vm-pull installs VM-side OS sync' $vmPullScript 'project-truth-os-sync'))
 $checks.Add((Assert-Text 'vm-pull can query VM-side OS sync status' $vmPullScript '\[switch\]\$Status'))
+$checks.Add((Assert-Text 'image build installs VM-side OS sync' $imageProvisionScript 'project-truth-os-sync\.sh'))
+$checks.Add((Assert-Text 'image build installs OS sync timer' $imageProvisionScript 'project-truth-os-sync\.timer'))
 $checks.Add((Assert-Text 'live bootstrap starts VM OS sync timer immediately' $bootstrapOnpremScript 'systemctl enable --now project-truth-os-sync\.timer'))
 $checks.Add((Assert-Text 'live bootstrap re-arms VM OS sync timer immediately' $bootstrapOnpremScript 'systemctl restart project-truth-os-sync\.timer'))
 $checks.Add((Assert-Text 'project-truth exposes VM Git credential command' $projectTruthScript 'configure-vm-git-creds'))
@@ -162,6 +166,10 @@ $checks.Add((Assert-Text 'OS sync exposes status command' $osSyncScript '--statu
 $checks.Add((Assert-Text 'OS sync can reuse Argo repo credentials' $osSyncScript 'project-truth-repo-creds'))
 $checks.Add((Assert-Text 'OS sync supports root-only credential env file' $osSyncService 'EnvironmentFile=-/etc/project-truth/os-sync\.env'))
 $checks.Add((Assert-Text 'LAN summary reports last OS sync commit' $lanSummaryScript 'OS/Git sync'))
+$checks.Add((Assert-Text 'LAN summary exposes OS sync command' $lanSummaryScript 'sudo project-truth-os-sync'))
+$checks.Add((Assert-Text 'LAN summary exposes OS sync status command' $lanSummaryScript 'project-truth-os-sync --status'))
+$checks.Add((Assert-Text 'login profile exposes OS sync command' $profileHelpScript 'sudo project-truth-os-sync'))
+$checks.Add((Assert-Text 'login profile exposes OS sync status command' $profileHelpScript 'project-truth-os-sync --status'))
 $checks.Add((Assert-Text 'OS sync timer has wall-clock fallback schedule' $osSyncTimer 'OnCalendar=\*:0/5'))
 $checks.Add((Assert-Text 'OS sync timer reconciles repeatedly' $osSyncTimer 'OnUnitActiveSec=5min'))
 $checks.Add((Assert-Text 'OS sync timer re-arms after failures' $osSyncTimer 'OnUnitInactiveSec=5min'))

@@ -46,6 +46,25 @@ if [ -s /run/project-truth/trycloudflare-public-urls.txt ]; then
 fi
 
 echo
+echo "OS pull"
+if [ -r /var/lib/project-truth/os-sync-state ]; then
+  awk -F= '
+    $1 == "branch" { branch=$2 }
+    $1 == "commit" { commit=$2 }
+    $1 == "synced_at" { synced_at=$2 }
+    END {
+      if (commit != "") {
+        printf "  last: %s@%s\n", branch, substr(commit, 1, 12)
+        printf "  synced: %s\n", synced_at
+      }
+    }
+  ' /var/lib/project-truth/os-sync-state
+else
+  echo "  waiting for first project-truth-os-sync run"
+fi
+echo "  sync now: sudo project-truth-os-sync"
+echo "  status: project-truth-os-sync --status"
+echo
 echo "Client screens"
 echo "  project-truth-lan-summary --screen-overview"
 echo "  project-truth-lan-summary --screen-tunnels"

@@ -69,6 +69,13 @@ emit_os_sync_summary() {
   else
     echo "  waiting for first project-truth-os-sync run"
   fi
+  if command -v systemctl >/dev/null 2>&1 &&
+    systemctl list-timers project-truth-os-sync.timer --no-pager >/dev/null 2>&1; then
+    systemctl list-timers project-truth-os-sync.timer --no-pager 2>/dev/null |
+      awk 'NR == 2 && $1 != "-" { printf "  next: %s %s %s\n", $1, $2, $3 }'
+  fi
+  echo "  sync now: sudo project-truth-os-sync"
+  echo "  status: project-truth-os-sync --status"
 }
 
 write_summary() {
@@ -132,6 +139,8 @@ write_summary() {
     echo "  project-truth-progress --watch"
     echo "  project-truth-hris-status"
     echo "  project-truth-lan-dhcp"
+    echo "  sudo project-truth-os-sync"
+    echo "  project-truth-os-sync --status"
   } > "$summary_file"
 }
 
@@ -280,6 +289,8 @@ emit_screen_summary() {
   echo "Useful commands after login"
   echo "  project-truth-progress --watch"
   echo "  project-truth-hris-status"
+  echo "  sudo project-truth-os-sync"
+  echo "  project-truth-os-sync --status"
   echo "  project-truth-lan-summary --screen-overview"
 }
 
@@ -308,6 +319,7 @@ fi
     echo "LAN IP: NOT DETECTED"
   fi
   echo "Run after login: project-truth-lan-summary"
+  echo "OS pull: sudo project-truth-os-sync"
 } > "$motd_file"
 
 {
@@ -326,6 +338,7 @@ fi
   echo "After login run:"
   echo "  project-truth-lan-summary --screen-overview"
   echo "  project-truth-lan-summary --screen-tunnels"
+  echo "  sudo project-truth-os-sync"
   echo
 } > "$issue_file"
 
@@ -353,6 +366,7 @@ if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
       echo "Run:"
       echo "  project-truth-lan-summary --screen-overview"
       echo "  project-truth-lan-summary --screen-tunnels"
+      echo "  sudo project-truth-os-sync"
       echo
       printf '%s@%s:~$ ' "$tty_user" "$(hostname)"
     else
