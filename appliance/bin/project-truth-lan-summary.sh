@@ -78,6 +78,42 @@ emit_os_sync_summary() {
   echo "  status: project-truth-os-sync --status"
 }
 
+emit_hris_rows() {
+  local ip_addr="$1"
+  printf '  %-5s %-5s http://%s:%s/auth/login\n' "PROD" "login" "$ip_addr" "3000"
+  printf '  %-5s %-5s http://%s:%s/health\n' "PROD" "api" "$ip_addr" "3001"
+  printf '  %-5s %-5s http://%s:%s/auth/login\n' "DEV" "login" "$ip_addr" "3100"
+  printf '  %-5s %-5s http://%s:%s/health\n' "DEV" "api" "$ip_addr" "3101"
+  printf '  %-5s %-5s http://%s:%s/auth/login\n' "UAT" "login" "$ip_addr" "3200"
+  printf '  %-5s %-5s http://%s:%s/health\n' "UAT" "api" "$ip_addr" "3201"
+}
+
+emit_observability_rows() {
+  local ip_addr="$1"
+  printf '  %-10s http://%s:%s\n' "Grafana" "$ip_addr" "53000"
+  printf '  %-10s http://%s:%s\n' "Prometheus" "$ip_addr" "9091"
+  printf '  %-10s http://%s:%s\n' "Loki" "$ip_addr" "3110"
+  printf '  %-10s http://%s:%s\n' "Gateway" "$ip_addr" "38080"
+}
+
+emit_screen_os_sync_line() {
+  if [ -r "$sync_state_file" ]; then
+    awk -F= '
+      $1 == "branch" { branch=$2 }
+      $1 == "commit" { commit=$2 }
+      END {
+        if (commit != "") {
+          printf "OS sync: %s@%s\n", branch, substr(commit, 1, 12)
+        } else {
+          print "OS sync: state file present, commit missing"
+        }
+      }
+    ' "$sync_state_file"
+  else
+    echo "OS sync: waiting for first sudo project-truth-os-sync"
+  fi
+}
+
 write_summary() {
   local ip_addr="$1"
   local generated_at
@@ -95,26 +131,21 @@ write_summary() {
       echo "  ${ip_addr}"
       echo
       echo "Open these from your host browser"
-      echo "PROD login: http://${ip_addr}:3000/auth/login"
-      echo "PROD API:   http://${ip_addr}:3001/health"
-      echo "DEV login:  http://${ip_addr}:3100/auth/login"
-      echo "DEV API:    http://${ip_addr}:3101/health"
-      echo "UAT login:  http://${ip_addr}:3200/auth/login"
-      echo "UAT API:    http://${ip_addr}:3201/health"
+      emit_hris_rows "$ip_addr"
       echo
       echo "ZKTeco bridge targets"
-      echo "PROD webhook: http://${ip_addr}:3001/api/zkteco/events"
-      echo "DEV webhook:  http://${ip_addr}:3101/api/zkteco/events"
-      echo "UAT webhook:  http://${ip_addr}:3201/api/zkteco/events"
-      echo "Saved events: http://${ip_addr}:3000/admin/devices/events?view=saved&source=ZKTECO_EVENT"
-      echo "Bridge note: run the Windows ZKTeco SDK bridge on a Windows host/device LAN."
-      echo "Set ZKTECO_WEBHOOK_URL to one of the webhook URLs above."
+      printf '  %-5s webhook http://%s:%s/api/zkteco/events\n' "PROD" "$ip_addr" "3001"
+      printf '  %-5s webhook http://%s:%s/api/zkteco/events\n' "DEV" "$ip_addr" "3101"
+      printf '  %-5s webhook http://%s:%s/api/zkteco/events\n' "UAT" "$ip_addr" "3201"
+      echo "  Saved events:"
+      echo "    http://${ip_addr}:3000/admin/devices/events"
+      echo "    ?view=saved&source=ZKTECO_EVENT"
+      echo "  Bridge note:"
+      echo "    Run the Windows ZKTeco SDK bridge on a Windows host/device LAN."
+      echo "    Set ZKTECO_WEBHOOK_URL to one webhook URL above."
       echo
       echo "Observability"
-      echo "Grafana:    http://${ip_addr}:53000"
-      echo "Prometheus: http://${ip_addr}:9091"
-      echo "Loki:       http://${ip_addr}:3110"
-      echo "Gateway:    http://${ip_addr}:38080"
+      emit_observability_rows "$ip_addr"
       echo
       emit_os_sync_summary
       if [ -s "${state_dir}/trycloudflare-public-urls.txt" ]; then
@@ -149,6 +180,7 @@ emit_trycloudflare_screen() {
   local file="${state_dir}/trycloudflare-public-urls.txt"
   local rows=0
   local host_ip
+  local current_public_base=""
 
   host_ip="$(lan_ip || true)"
 
@@ -176,6 +208,13 @@ emit_trycloudflare_screen() {
         local_path=":${local_path}"
       fi
     fi
+    public_path="$public_check"
+    if [ -n "$public_url" ] && [ "$public_path" != "${public_path#"$public_url"}" ]; then
+      public_path="${public_path#"$public_url"}"
+    fi
+    if [ -z "$public_path" ]; then
+      public_path="/"
+    fi
 
     case "$target" in
       ""|"Target"|---*|prod-db|dev-db|uat-db) continue ;;
@@ -183,9 +222,11 @@ emit_trycloudflare_screen() {
     case "$public_url" in
       https://*.trycloudflare.com*)
         rows=$((rows + 1))
-        printf '%s\n' "$target"
-        printf '  local  %s\n' "$local_path"
-        printf '  public %s\n' "$public_check"
+        if [ "$public_url" != "$current_public_base" ]; then
+          current_public_base="$public_url"
+          printf '  base   %s\n' "$current_public_base"
+        fi
+        printf '  %-10s local %-26s public %s\n' "$target" "$local_path" "$public_path"
         ;;
     esac
   done < "$file"
@@ -241,8 +282,7 @@ emit_screen_summary() {
     printf '\033c\033[3J\033[H\033[2J'
   fi
   echo "PROJECT TRUTH CLIENT SUMMARY"
-  echo "Generated: ${generated_at}"
-  echo "Host: $(hostname)"
+  echo "Host: $(hostname) | Generated: ${generated_at}"
 
   if [ -z "$ip_addr" ]; then
     echo "LAN IP: NOT DETECTED"
@@ -251,18 +291,15 @@ emit_screen_summary() {
   fi
 
   echo "LAN IP: ${ip_addr}"
-  echo
 
   if [ "$page" = "overview" ]; then
-    echo "Console login"
-    echo "  username: infra"
-    echo "  password: infra (hidden while typing)"
-    echo "  type username only when the prompt ends with login:"
-    echo "  if the prompt ends with $, you are already logged in"
     echo
+    echo "Login: infra / infra  (password is hidden while typing)"
+    echo "If prompt ends with $, you are already logged in."
   fi
 
   if [ "$page" = "tunnels" ]; then
+    echo
     emit_trycloudflare_screen
     echo
     echo "Next: project-truth-lan-summary --screen-db"
@@ -270,32 +307,23 @@ emit_screen_summary() {
   fi
 
   if [ "$page" = "db" ]; then
+    echo
     emit_database_screen
     echo
     echo "Raw DB public tunnels are intentionally not shown."
     return
   fi
 
+  echo
   echo "HRIS"
-  printf '  %-5s login  http://%s:%s/auth/login\n' "PROD" "$ip_addr" "3000"
-  printf '  %-5s api    http://%s:%s/health\n' "PROD" "$ip_addr" "3001"
-  printf '  %-5s login  http://%s:%s/auth/login\n' "DEV" "$ip_addr" "3100"
-  printf '  %-5s api    http://%s:%s/health\n' "DEV" "$ip_addr" "3101"
-  printf '  %-5s login  http://%s:%s/auth/login\n' "UAT" "$ip_addr" "3200"
-  printf '  %-5s api    http://%s:%s/health\n' "UAT" "$ip_addr" "3201"
-  echo
+  emit_hris_rows "$ip_addr"
   echo "Observability"
-  printf '  %-10s http://%s:%s\n' "Grafana" "$ip_addr" "53000"
-  printf '  %-10s http://%s:%s\n' "Prometheus" "$ip_addr" "9091"
-  printf '  %-10s http://%s:%s\n' "Loki" "$ip_addr" "3110"
-  printf '  %-10s http://%s:%s\n' "Gateway" "$ip_addr" "38080"
-  echo
-  emit_os_sync_summary
-  echo
-  echo "TryCloudflare: project-truth-lan-summary --screen-tunnels"
-  echo "Database facts: project-truth-lan-summary --screen-db"
-  echo
-  echo "Useful: progress --watch | hris-status | sudo os-sync"
+  emit_observability_rows "$ip_addr"
+  emit_screen_os_sync_line
+  echo "More: project-truth-lan-summary --screen-tunnels | --screen-db"
+  echo "Commands: project-truth-progress --watch"
+  echo "        project-truth-hris-status"
+  echo "        sudo project-truth-os-sync"
 }
 
 ip_addr="$(lan_ip || true)"
@@ -303,8 +331,7 @@ write_summary "$ip_addr"
 
 if [ "$screen" = "true" ]; then
   printf '\033c\033[3J\033[H\033[2J'
-  PROJECT_TRUTH_SCREEN_NO_CLEAR=1 emit_screen_summary "$ip_addr" "$screen_page" |
-    sed 's/^/  /'
+  PROJECT_TRUTH_SCREEN_NO_CLEAR=1 emit_screen_summary "$ip_addr" "$screen_page"
   exit 0
 fi
 
