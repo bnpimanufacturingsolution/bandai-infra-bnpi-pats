@@ -2,8 +2,8 @@
 
 This runbook exposes the verified Project Truth HRIS app through a temporary Cloudflare quick tunnel. It does not configure a named tunnel, DNS record, account token, or persistent Cloudflare service.
 
-Cloudflare quick tunnels are an experimental Project Truth test path. They are
-off by default and require:
+Cloudflare quick tunnels are an experimental Project Truth test path. Current
+appliance builds opt in by default for demo proof by writing:
 
 ```powershell
 EXPERIMENTAL_TRY_CLOUDFLARE=true
@@ -134,7 +134,7 @@ Cloudflare prints a temporary `https://*.trycloudflare.com` URL. That URL change
 
 ## VM Boot Test Hook
 
-The VM image includes an installed but disabled boot hook:
+The VM image includes an enabled boot hook. Reapply it manually after drift with:
 
 ```bash
 sudo install -d -m 0755 /etc/project-truth
@@ -150,7 +150,8 @@ temporary public URLs to:
 /run/project-truth/trycloudflare-public-urls.txt
 ```
 
-Disable and remove the driftable test state with:
+Disable and remove the driftable test state only when public demo URLs are not
+wanted:
 
 ```bash
 sudo systemctl disable --now project-truth-trycloudflare.service || true

@@ -114,12 +114,18 @@ $repairScript = Get-Content -Raw 'scripts/repair-appliance-online.ps1'
 $verifyScript = Get-Content -Raw 'scripts/verify-gitops-state.ps1'
 $gitopsPullScript = Get-Content -Raw 'scripts/gitops-pull.ps1'
 $vmPullScript = Get-Content -Raw 'scripts/vm-pull.ps1'
+$vmGitCredsScript = Get-Content -Raw 'scripts/configure-vm-git-creds.ps1'
+$bootstrapOnpremScript = Get-Content -Raw 'scripts/bootstrap-onprem-vm.sh'
 $osSyncScript = Get-Content -Raw 'appliance/bin/project-truth-os-sync.sh'
+$osSyncService = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.service'
 $osSyncTimer = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.timer'
 $lanSummaryScript = Get-Content -Raw 'appliance/bin/project-truth-lan-summary.sh'
+$profileHelpScript = Get-Content -Raw 'appliance/profile.d/project-truth-hris-help.sh'
+$imageProvisionScript = Get-Content -Raw 'image-factory/packer/provision.sh'
 $promoteWorkflow = Get-Content -Raw '.github/workflows/promote-gitops.yml'
 $platformConfig = Get-Content -Raw 'gitops/argocd/platform/argocd-cm.yaml'
 $projectTruthScript = Get-Content -Raw 'scripts/project-truth.ps1'
+$hypervVisualProofScript = Get-Content -Raw 'scripts/hyperv-visual-proof-loop.ps1'
 $repoCredsScript = Get-Content -Raw 'scripts/configure-argocd-repo-creds.ps1'
 $webhookScript = Get-Content -Raw 'scripts/configure-argocd-webhook.ps1'
 $clientScalingDoc = Get-Content -Raw 'docs/GITOPS_CLIENT_ENV_SCALING.md'
@@ -143,13 +149,34 @@ $checks.Add((Assert-Text 'gitops-pull hard-refreshes Argo apps' $gitopsPullScrip
 $checks.Add((Assert-Text 'project-truth exposes one-command VM pull' $projectTruthScript 'vm-pull'))
 $checks.Add((Assert-Text 'vm-pull installs VM-side OS sync' $vmPullScript 'project-truth-os-sync'))
 $checks.Add((Assert-Text 'vm-pull can query VM-side OS sync status' $vmPullScript '\[switch\]\$Status'))
+$checks.Add((Assert-Text 'image build installs VM-side OS sync' $imageProvisionScript 'project-truth-os-sync\.sh'))
+$checks.Add((Assert-Text 'image build installs OS sync timer' $imageProvisionScript 'project-truth-os-sync\.timer'))
+$checks.Add((Assert-Text 'live bootstrap starts VM OS sync timer immediately' $bootstrapOnpremScript 'systemctl enable --now project-truth-os-sync\.timer'))
+$checks.Add((Assert-Text 'live bootstrap re-arms VM OS sync timer immediately' $bootstrapOnpremScript 'systemctl restart project-truth-os-sync\.timer'))
+$checks.Add((Assert-Text 'project-truth exposes VM Git credential command' $projectTruthScript 'configure-vm-git-creds'))
+$checks.Add((Assert-Text 'VM Git credential command writes OS sync env file' $vmGitCredsScript '/etc/project-truth/os-sync\.env'))
+$checks.Add((Assert-Text 'VM Git credential command supports password fallback' $vmGitCredsScript 'PROJECT_TRUTH_SSH_PASSWORD'))
 $checks.Add((Assert-Text 'OS sync pulls develop from repo' $osSyncScript 'PROJECT_TRUTH_BRANCH:-develop'))
+$checks.Add((Assert-Text 'OS sync preflights Git network before fetch' $osSyncScript 'repair_network_for_git'))
+$checks.Add((Assert-Text 'OS sync repairs resolver drift before fetch' $osSyncScript 'systemd-resolved\.service'))
+$checks.Add((Assert-Text 'OS sync repairs DHCP drift before fetch' $osSyncScript 'project-truth-lan-dhcp'))
+$checks.Add((Assert-Text 'OS sync restarts its timer after unit updates' $osSyncScript 'systemctl restart project-truth-os-sync\.timer'))
 $checks.Add((Assert-Text 'OS sync refreshes Argo apps after host sync' $osSyncScript 'argocd\.argoproj\.io/refresh=hard'))
 $checks.Add((Assert-Text 'OS sync exposes status command' $osSyncScript '--status\|status'))
+$checks.Add((Assert-Text 'OS sync can reuse Argo repo credentials' $osSyncScript 'project-truth-repo-creds'))
+$checks.Add((Assert-Text 'OS sync supports root-only credential env file' $osSyncService 'EnvironmentFile=-/etc/project-truth/os-sync\.env'))
 $checks.Add((Assert-Text 'LAN summary reports last OS sync commit' $lanSummaryScript 'OS/Git sync'))
+$checks.Add((Assert-Text 'LAN summary exposes OS sync command' $lanSummaryScript 'sudo project-truth-os-sync'))
+$checks.Add((Assert-Text 'LAN summary exposes OS sync status command' $lanSummaryScript 'project-truth-os-sync --status'))
+$checks.Add((Assert-Text 'login profile exposes OS sync command' $profileHelpScript 'sudo project-truth-os-sync'))
+$checks.Add((Assert-Text 'login profile exposes OS sync status command' $profileHelpScript 'project-truth-os-sync --status'))
+$checks.Add((Assert-Text 'OS sync timer has wall-clock fallback schedule' $osSyncTimer 'OnCalendar=\*:0/5'))
 $checks.Add((Assert-Text 'OS sync timer reconciles repeatedly' $osSyncTimer 'OnUnitActiveSec=5min'))
+$checks.Add((Assert-Text 'OS sync timer re-arms after failures' $osSyncTimer 'OnUnitInactiveSec=5min'))
 $checks.Add((Assert-Text 'project-truth exposes Argo repo credential command' $projectTruthScript 'configure-argocd-repo-creds'))
 $checks.Add((Assert-Text 'project-truth exposes Argo webhook command' $projectTruthScript 'configure-argocd-webhook'))
+$checks.Add((Assert-Text 'Hyper-V visual proof supports pinned SSH host key' $hypervVisualProofScript '\[string\]\$HostKey'))
+$checks.Add((Assert-Text 'Hyper-V visual proof passes host key to PuTTY tools' $hypervVisualProofScript "'-hostkey'"))
 $checks.Add((Assert-Text 'repo credential script creates Argo repo-creds secret' $repoCredsScript 'argocd\.argoproj\.io/secret-type:\s*repo-creds'))
 $checks.Add((Assert-Text 'webhook script configures GitHub webhook secret key' $webhookScript 'webhook\.github\.secret'))
 $checks.Add((Assert-Text 'client scaling doc preserves dev uat prod shape' $clientScalingDoc 'gitops/clients/<client>/overlays/dev'))

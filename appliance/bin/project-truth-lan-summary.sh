@@ -69,6 +69,13 @@ emit_os_sync_summary() {
   else
     echo "  waiting for first project-truth-os-sync run"
   fi
+  if command -v systemctl >/dev/null 2>&1 &&
+    systemctl list-timers project-truth-os-sync.timer --no-pager >/dev/null 2>&1; then
+    systemctl list-timers project-truth-os-sync.timer --no-pager 2>/dev/null |
+      awk 'NR == 2 && $1 != "-" { printf "  next: %s %s %s\n", $1, $2, $3 }'
+  fi
+  echo "  sync now: sudo project-truth-os-sync"
+  echo "  status: project-truth-os-sync --status"
 }
 
 write_summary() {
@@ -117,7 +124,8 @@ write_summary() {
       else
         echo
         echo "Experimental TryCloudflare"
-        echo "  Disabled by default. Set EXPERIMENTAL_TRY_CLOUDFLARE=true in /etc/project-truth/experimental.env and start project-truth-trycloudflare.service for temporary public test URLs."
+        echo "  Enabled by Project Truth when cloudflared is installed."
+        echo "  Quick tunnel URLs are temporary and rotate."
       fi
     else
       echo "LAN IP: NOT DETECTED"
@@ -131,16 +139,21 @@ write_summary() {
     echo "  project-truth-progress --watch"
     echo "  project-truth-hris-status"
     echo "  project-truth-lan-dhcp"
+    echo "  sudo project-truth-os-sync"
+    echo "  project-truth-os-sync --status"
   } > "$summary_file"
 }
 
 emit_trycloudflare_screen() {
   local file="${state_dir}/trycloudflare-public-urls.txt"
   local rows=0
+  local host_ip
+
+  host_ip="$(lan_ip || true)"
 
   if [ ! -s "$file" ]; then
     echo "TryCloudflare: disabled"
-    echo "  Enable only for demos: EXPERIMENTAL_TRY_CLOUDFLARE=true"
+    echo "  Service is enabled by Project Truth when cloudflared is installed."
     echo "  Quick tunnel URLs are temporary and rotate."
     return
   fi
@@ -152,15 +165,25 @@ emit_trycloudflare_screen() {
     local_check="$(printf '%s' "$local_check" | xargs 2>/dev/null || true)"
     public_check="$(printf '%s' "$public_check" | xargs 2>/dev/null || true)"
     public_url="$(printf '%s' "$public_url" | xargs 2>/dev/null || true)"
+    local_path="$local_check"
+    if [ -n "$host_ip" ]; then
+      local_path="${local_check#http://${host_ip}:}"
+      if [ "$local_path" = "$local_check" ]; then
+        local_path="${local_check#https://${host_ip}:}"
+      fi
+      if [ "$local_path" != "$local_check" ]; then
+        local_path=":${local_path}"
+      fi
+    fi
 
     case "$target" in
-      ""|"Target"|---*) continue ;;
+      ""|"Target"|---*|prod-db|dev-db|uat-db) continue ;;
     esac
     case "$public_url" in
       https://*.trycloudflare.com*)
         rows=$((rows + 1))
-        printf '  %-10s %s/%s\n' "$target" "$local_check" "$public_check"
-        printf '    %s\n' "$public_url"
+        printf '  %-10s local  %s\n' "$target" "$local_path"
+        printf '  %-10s public %s\n' "" "$public_check"
         ;;
     esac
   done < "$file"
@@ -215,7 +238,11 @@ emit_screen_summary() {
   echo "PROJECT TRUTH CLIENT SUMMARY"
   echo "Generated: ${generated_at}"
   echo "Host: $(hostname)"
-  echo "Login: infra / infra"
+  echo "Console login"
+  echo "  username: infra"
+  echo "  password: infra (hidden while typing)"
+  echo "  type username only when the prompt ends with login:"
+  echo "  if the prompt ends with $, you are already logged in"
   echo
 
   if [ -z "$ip_addr" ]; then
@@ -259,9 +286,11 @@ emit_screen_summary() {
   echo "TryCloudflare: project-truth-lan-summary --screen-tunnels"
   echo "Database facts: project-truth-lan-summary --screen-db"
   echo
-  echo "Useful commands"
+  echo "Useful commands after login"
   echo "  project-truth-progress --watch"
   echo "  project-truth-hris-status"
+  echo "  sudo project-truth-os-sync"
+  echo "  project-truth-os-sync --status"
   echo "  project-truth-lan-summary --screen-overview"
 }
 
@@ -289,7 +318,8 @@ fi
   else
     echo "LAN IP: NOT DETECTED"
   fi
-  echo "Run: project-truth-lan-summary"
+  echo "Run after login: project-truth-lan-summary"
+  echo "OS pull: sudo project-truth-os-sync"
 } > "$motd_file"
 
 {
@@ -300,7 +330,15 @@ fi
     echo "LAN IP: NOT DETECTED"
   fi
   echo
-  echo "Login with infra / infra"
+  echo "Console login:"
+  echo "  username: infra"
+  echo "  password: infra (hidden while typing)"
+  echo "Only type infra when the line ends with login:"
+  echo "If the prompt ends with $, you are already logged in."
+  echo "After login run:"
+  echo "  project-truth-lan-summary --screen-overview"
+  echo "  project-truth-lan-summary --screen-tunnels"
+  echo "  sudo project-truth-os-sync"
   echo
 } > "$issue_file"
 
@@ -314,10 +352,26 @@ if [ "$quiet" != "true" ]; then
   cat "$summary_file"
 fi
 
-if [ -w /dev/tty1 ]; then
+if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
+  tty_user="$(who 2>/dev/null | awk '$2 == "tty1" { print $1; exit }')"
   {
     printf '\033c'
-    cat "$issue_file"
-    printf '%s login: ' "$(hostname)"
+    if [ -n "$tty_user" ]; then
+      echo "Project Truth HRIS appliance"
+      echo "LAN IP: ${ip_addr:-NOT DETECTED}"
+      echo
+      echo "Console is already logged in as ${tty_user}."
+      echo "Do not type infra at this shell prompt."
+      echo
+      echo "Run:"
+      echo "  project-truth-lan-summary --screen-overview"
+      echo "  project-truth-lan-summary --screen-tunnels"
+      echo "  sudo project-truth-os-sync"
+      echo
+      printf '%s@%s:~$ ' "$tty_user" "$(hostname)"
+    else
+      cat "$issue_file"
+      printf '%s login: ' "$(hostname)"
+    fi
   } > /dev/tty1 || true
 fi

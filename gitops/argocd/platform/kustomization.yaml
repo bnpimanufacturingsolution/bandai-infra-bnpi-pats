@@ -1,4 +1,4 @@
-cinamespace: argocd
+namespace: argocd
 
 resources:
   - argocd-cm.yaml

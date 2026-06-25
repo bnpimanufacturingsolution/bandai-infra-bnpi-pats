@@ -4,6 +4,7 @@ param(
   [string]$GuestIp = '',
   [string]$Username = 'infra',
   [string]$Password = 'infra',
+  [string]$HostKey = '',
   [int]$MaxPasses = 3,
   [int]$WaitSeconds = 3,
   [switch]$PatchLiveGuest,
@@ -60,7 +61,13 @@ function Resolve-GuestIp {
 function Invoke-Plink {
   param([string]$Command)
 
-  & $script:Plink -ssh -batch -pw $Password "$Username@$script:GuestAddress" $Command
+  $args = @('-ssh', '-batch')
+  if ($HostKey) {
+    $args += @('-hostkey', $HostKey)
+  }
+  $args += @('-pw', $Password, "$Username@$script:GuestAddress", $Command)
+
+  & $script:Plink @args
   if ($LASTEXITCODE -ne 0) {
     throw "plink failed with exit code $LASTEXITCODE for: $Command"
   }
@@ -72,7 +79,13 @@ function Copy-ToGuest {
     [string]$Target
   )
 
-  & $script:Pscp -batch -pw $Password $Source "$Username@$script:GuestAddress`:$Target"
+  $args = @('-batch')
+  if ($HostKey) {
+    $args += @('-hostkey', $HostKey)
+  }
+  $args += @('-pw', $Password, $Source, "$Username@$script:GuestAddress`:$Target")
+
+  & $script:Pscp @args
   if ($LASTEXITCODE -ne 0) {
     throw "pscp failed with exit code $LASTEXITCODE for: $Source -> $Target"
   }
@@ -80,7 +93,8 @@ function Copy-ToGuest {
 
 function Ensure-VMConnect {
   $process = Get-Process vmconnect -ErrorAction SilentlyContinue |
-    Where-Object { $_.MainWindowTitle -like "*$VmName*" } |
+    Where-Object { $_.MainWindowTitle -like "*$VmName*" -and $_.MainWindowHandle -ne 0 } |
+    Sort-Object StartTime -Descending |
     Select-Object -First 1
 
   if (-not $process) {
@@ -88,7 +102,8 @@ function Ensure-VMConnect {
     Start-Process vmconnect.exe -ArgumentList @('localhost', $VmName) -WindowStyle Normal | Out-Null
     Start-Sleep -Seconds 3
     $process = Get-Process vmconnect -ErrorAction SilentlyContinue |
-      Where-Object { $_.MainWindowTitle -like "*$VmName*" } |
+      Where-Object { $_.MainWindowTitle -like "*$VmName*" -and $_.MainWindowHandle -ne 0 } |
+      Sort-Object StartTime -Descending |
       Select-Object -First 1
   }
 
@@ -118,6 +133,9 @@ namespace ProjectTruth {
 
     [DllImport("user32.dll")]
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
   }
 
   [StructLayout(LayoutKind.Sequential)]
@@ -138,9 +156,16 @@ function Save-WindowScreenshot {
   )
 
   Add-User32
+  $hwndTopMost = [IntPtr]::new(-1)
+  $hwndNoTopMost = [IntPtr]::new(-2)
+  $swpNoMoveNoSize = 0x0001 -bor 0x0002
+
   [ProjectTruth.User32]::ShowWindow($Process.MainWindowHandle, 9) | Out-Null
+  [ProjectTruth.User32]::SetWindowPos($Process.MainWindowHandle, $hwndTopMost, 0, 0, 0, 0, $swpNoMoveNoSize) | Out-Null
   [ProjectTruth.User32]::SetForegroundWindow($Process.MainWindowHandle) | Out-Null
-  Start-Sleep -Milliseconds 500
+  $shell = New-Object -ComObject WScript.Shell
+  $shell.AppActivate($Process.Id) | Out-Null
+  Start-Sleep -Milliseconds 1000
 
   $rect = New-Object ProjectTruth.RECT
   if (-not [ProjectTruth.User32]::GetWindowRect($Process.MainWindowHandle, [ref]$rect)) {
@@ -160,6 +185,7 @@ function Save-WindowScreenshot {
     $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
     $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
   } finally {
+    [ProjectTruth.User32]::SetWindowPos($Process.MainWindowHandle, $hwndNoTopMost, 0, 0, 0, 0, $swpNoMoveNoSize) | Out-Null
     $graphics.Dispose()
     $bitmap.Dispose()
   }
@@ -185,6 +211,7 @@ $script:Pscp = Resolve-Tool -Name 'pscp.exe' -Candidates @(
   "${env:ProgramFiles(x86)}\PuTTY\pscp.exe"
 )
 $script:GuestAddress = Resolve-GuestIp
+$script:GuestPassword = $Password
 
 $resolvedProofRoot = Join-Path (Resolve-Path '.').Path $ProofRoot
 New-Item -ItemType Directory -Force -Path $resolvedProofRoot | Out-Null
@@ -196,8 +223,18 @@ Set-Content -LiteralPath (Join-Path $resolvedProofRoot 'LATEST.txt') -Value $run
 Write-Step "Hyper-V visual proof root: $runRoot"
 Write-Step "VM=$VmName GuestIp=$script:GuestAddress PatchLiveGuest=$($PatchLiveGuest.IsPresent)"
 
-$vm = Get-VM -Name $VmName -ErrorAction Stop
-if ($vm.State -ne 'Running') {
+$vm = $null
+try {
+  $vm = Get-VM -Name $VmName -ErrorAction Stop
+} catch {
+  if (-not $GuestIp) {
+    throw
+  }
+
+  Write-Step "Skipping Hyper-V state query because Get-VM is unavailable in this shell; continuing with GuestIp=$GuestIp."
+}
+
+if ($vm -and $vm.State -ne 'Running') {
   Write-Step "Starting Hyper-V VM $VmName from $($vm.State)"
   Start-VM -Name $VmName
   Start-Sleep -Seconds 10
@@ -234,7 +271,7 @@ for ($pass = 1; $pass -le $MaxPasses; $pass++) {
     New-Item -ItemType Directory -Force -Path $pageRoot | Out-Null
 
     Write-Step "Rendering client summary page '$page' on tty1, pass $pass"
-    Invoke-Plink "sudo project-truth-lan-summary $flag | sudo tee /tmp/project-truth-client-summary.txt >/dev/null && sudo sh -c 'printf ""\033c"" > /dev/tty1; cat /tmp/project-truth-client-summary.txt > /dev/tty1; printf ""\ninfra@project-truth-node:~$ "" > /dev/tty1'"
+    Invoke-Plink "printf '%s\n' '$script:GuestPassword' | sudo -S -p '' sh -c 'project-truth-lan-summary $flag > /tmp/project-truth-client-summary.txt && printf ""\033c"" > /dev/tty1 && cat /tmp/project-truth-client-summary.txt > /dev/tty1 && printf ""\ninfra@project-truth-node:~$ "" > /dev/tty1'"
     Start-Sleep -Seconds $WaitSeconds
 
     Invoke-Plink "cat /tmp/project-truth-client-summary.txt" |

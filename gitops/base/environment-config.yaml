@@ -10,6 +10,6 @@ data:
   runtime: docker-compose
   note: "HRIS runtime services run on the appliance Docker stack; this GitOps object records the environment contract."
   experimental_trycloudflare_supported: "true"
-  experimental_trycloudflare_default: "false"
+  experimental_trycloudflare_default: "true"
   experimental_trycloudflare_flag: "EXPERIMENTAL_TRY_CLOUDFLARE"
   experimental_trycloudflare_scope: "temporary public demo URLs for verified HTTP targets only; raw database tunnels disabled by default"
