@@ -10,7 +10,7 @@ import {
 } from "../helper/zkteco-event-contract.helper";
 
 describe("zkteco event contract helper", () => {
-	it("normalizes the Windows bridge attendance payload accepted by /api/zkteco/events", () => {
+	it("normalizes the VM-native bridge attendance payload accepted by /api/zkteco/events", () => {
 		const event = normalizeZktecoPayload({
 			device: { type: "ZKTeco", ip: "10.184.38.10", port: 4370 },
 			attendance: {

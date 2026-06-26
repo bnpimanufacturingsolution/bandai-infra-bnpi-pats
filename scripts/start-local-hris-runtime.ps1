@@ -70,7 +70,7 @@ if ($Environment -eq 'prod') {
 }
 
 if ($IncludeZkteco) {
-  $composeArgs = @('compose', '--profile', 'zkteco') + $composeArgs[1..($composeArgs.Count - 1)]
+  Write-Host "ZKTeco bridge is part of the default Linux appliance stack; -IncludeZkteco is retained for compatibility."
 }
 
 $log = Join-Path $logsRoot ("start-local-hris-runtime-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))

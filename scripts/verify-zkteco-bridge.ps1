@@ -40,14 +40,13 @@ try {
 
     Write-Step "Compose config"
     docker compose -f .\appliance\docker-compose.yml config --quiet
-    docker compose -f .\appliance\docker-compose.yml --profile zkteco config --quiet
-    Write-Pass "Default and zkteco profile compose files parse."
+    Write-Pass "Default compose file parses with configured ZKTeco bridge support."
 
-    Write-Step "ZKTeco SDK bridge files"
+    Write-Step "Linux ZKTeco bridge files"
     $requiredFiles = @(
-        ".\vendor\zkteco-sdk\Program.cs",
-        ".\vendor\zkteco-sdk\Interop.zkemkeeper.dll",
-        ".\vendor\zkteco-sdk\Dockerfile.windows"
+        ".\appliance\zkteco-bridge\Dockerfile",
+        ".\appliance\zkteco-bridge\package.json",
+        ".\appliance\zkteco-bridge\src\index.js"
     )
     $missingBridgeFiles = @()
     foreach ($file in $requiredFiles) {
@@ -57,11 +56,11 @@ try {
     }
     if ($missingBridgeFiles.Count -gt 0) {
         if (-not $ContractOnly) {
-            throw "Missing required bridge file: $($missingBridgeFiles -join ', '). Use -ContractOnly to dry-run only the HRIS webhook contract."
+            throw "Missing required Linux bridge file: $($missingBridgeFiles -join ', ')."
         }
         Write-WarnLine "Bridge files missing; continuing in contract-only mock mode: $($missingBridgeFiles -join ', ')"
     } else {
-        Write-Pass "SDK bridge files exist."
+        Write-Pass "Linux bridge files exist."
     }
 
     if ($BuildApi) {

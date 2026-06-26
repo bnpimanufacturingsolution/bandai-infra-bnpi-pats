@@ -10,7 +10,11 @@ import { useDeviceEvents, useDeviceHealth, useDevices, queryKeys } from "~/lib/h
 import { useAcsEvents } from "~/lib/hooks/use-hikvision";
 import { useAuth } from "~/lib/hooks/use-auth";
 import { useSocket } from "~/contexts/socket-context";
-import type { DeviceEvent, DeviceEventStatus } from "~/services/devices.service";
+import type {
+	DeviceEvent,
+	DeviceEventStatus,
+	DeviceHealthResponse,
+} from "~/services/devices.service";
 import type { ApiQueryParams } from "~/services/api-service";
 import type { AcsEventInfo } from "~/types/hikvision";
 
@@ -159,6 +163,36 @@ const statusVariant = (status: string) => {
 	return "outline";
 };
 
+const isZktecoDevice = (device: any, health?: DeviceHealthResponse) => {
+	const vendor = String(device?.config?.vendor || device?.config?.type || "").toLowerCase();
+	const name = String(device?.name || "").toLowerCase();
+	return (
+		health?.device?.vendor === "ZKTeco" ||
+		Boolean(health?.checks?.zktecoBridge) ||
+		vendor.includes("zkteco") ||
+		name.includes("zkteco") ||
+		(String(device?.protocol || "").toLowerCase() === "tcp" && Number(device?.port) === 4370)
+	);
+};
+
+const healthValueClass = (ok?: boolean) =>
+	ok ? "truncate text-sm font-medium text-emerald-700" : "truncate text-sm font-medium text-amber-700";
+
+const HealthMetric = ({
+	label,
+	value,
+	ok,
+}: {
+	label: string;
+	value: string | number;
+	ok?: boolean;
+}) => (
+	<div className="min-w-0">
+		<p className="text-xs text-slate-500">{label}</p>
+		<p className={healthValueClass(ok)}>{value}</p>
+	</div>
+);
+
 const getSerialNoFromPayload = (payload: any) =>
 	payload?.AcsEventInfo?.serialNo ||
 	payload?.EventNotificationAlert?.AccessControllerEvent?.serialNo ||
@@ -304,8 +338,12 @@ export default function DeviceEventsPage() {
 		isFetching: isFetchingHealth,
 		refetch: refetchHealth,
 	} = useDeviceHealth(liveDeviceId, Boolean(liveDeviceId));
+	const isZktecoHealth = isZktecoDevice(liveDevice, deviceHealth);
+	const zktecoBridge = deviceHealth?.checks?.zktecoBridge;
+	const bridgeDevice = zktecoBridge?.device;
 	const canReadLiveEvents = Boolean(
 		liveDeviceId &&
+			!isZktecoHealth &&
 			deviceHealth?.checks?.network?.ok &&
 			deviceHealth?.checks?.deviceApi?.ok,
 	);
@@ -502,6 +540,14 @@ export default function DeviceEventsPage() {
 		savedTotalData?.pagination?.total || savedTotalData?.summary?.total || 0;
 	const isEventLoading = viewMode === "live" ? isLoadingLive : isLoadingSaved;
 	const activeError = viewMode === "live" ? liveError || savedError : savedError;
+	const deviceSubtitle = liveDevice
+		? isZktecoHealth
+			? `${liveDevice.name || "Selected device"} - ZKTeco TCP ${liveDevice.port} - ZKTeco bridge`
+			: `${liveDevice.name || "Selected device"} - Hikvision ISAPI ${
+					deviceHealth?.device?.baseUrl ||
+					`${liveDevice.protocol || "http"}://${liveDevice.address}:${liveDevice.port}`
+				}`
+		: "All devices - No device selected";
 
 	const matchedCount = rows.filter(
 		(event: UnifiedDeviceEventRow) =>
@@ -650,14 +696,7 @@ export default function DeviceEventsPage() {
 						<h1 className="truncate text-lg font-semibold text-slate-950">
 							Device attendance
 						</h1>
-						<p className="truncate text-xs text-slate-500">
-							{liveDevice?.name || "All devices"}
-							{liveDevice ? ` · SDK ${liveDevice.port}` : ""} · ISAPI{" "}
-							{deviceHealth?.device?.baseUrl ||
-								(liveDevice
-									? `${liveDevice.protocol || "http"}://${liveDevice.address}:${liveDevice.port}`
-									: "No device selected")}
-						</p>
+						<p className="truncate text-xs text-slate-500">{deviceSubtitle}</p>
 					</div>
 				</div>
 				<div className="flex items-center gap-2">
@@ -759,21 +798,39 @@ export default function DeviceEventsPage() {
 					</div>
 
 					<div className="grid grid-cols-2 gap-x-3 gap-y-2 p-3">
-						<div className="min-w-0">
-							<p className="text-xs text-slate-500">HRIS API</p>
-							<p className="truncate text-sm font-medium text-emerald-700">Online</p>
-						</div>
-						<div className="min-w-0">
-							<p className="text-xs text-slate-500">Device port</p>
-							<p
-								className={
-									deviceHealth?.checks?.network?.ok
-										? "truncate text-sm font-medium text-emerald-700"
-										: "truncate text-sm font-medium text-amber-700"
-								}>
-								{deviceHealth?.checks?.network?.status || "-"}
-							</p>
-						</div>
+						<HealthMetric label="HRIS API" value="Online" ok />
+						<HealthMetric
+							label="Device port"
+							value={deviceHealth?.checks?.network?.status || "-"}
+							ok={Boolean(deviceHealth?.checks?.network?.ok)}
+						/>
+						{isZktecoHealth ? (
+							<>
+								<HealthMetric
+									label="ZKTeco bridge"
+									value={zktecoBridge?.status || "-"}
+									ok={Boolean(zktecoBridge?.ok)}
+								/>
+								<HealthMetric
+									label="Bridge device"
+									value={bridgeDevice?.connected ? "connected" : "offline"}
+									ok={Boolean(bridgeDevice?.connected)}
+								/>
+							</>
+						) : (
+							<>
+								<HealthMetric
+									label="Hikvision listener"
+									value={deviceHealth?.checks?.hikvisionListener?.status || "-"}
+									ok={Boolean(deviceHealth?.checks?.hikvisionListener?.ok)}
+								/>
+								<HealthMetric
+									label="Device API"
+									value={deviceHealth?.checks?.deviceApi?.status || "-"}
+									ok={Boolean(deviceHealth?.checks?.deviceApi?.ok)}
+								/>
+							</>
+						)}
 					</div>
 
 					<div className="grid grid-cols-4 gap-0 divide-x divide-slate-200 p-0">
@@ -812,7 +869,9 @@ export default function DeviceEventsPage() {
 
 			{viewMode === "live" && liveDeviceId && !canReadLiveEvents && !isLoadingHealth && (
 				<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-					Live reads are paused until the selected device connection responds.
+					{isZktecoHealth
+						? "ZKTeco punches are received through the configured bridge and shown after they are saved in HRIS."
+						: "Live reads are paused until the selected device connection responds."}
 				</div>
 			)}
 

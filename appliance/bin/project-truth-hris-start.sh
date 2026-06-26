@@ -38,8 +38,10 @@ if docker compose version >/dev/null 2>&1; then
   docker compose up -d postgres
   docker compose up -d --no-deps hris-api
   docker compose up -d --no-deps hris-app
+  docker compose up -d --no-deps zkteco-bridge
 else
   docker-compose up -d postgres
   docker-compose up -d --no-deps hris-api
   docker-compose up -d --no-deps hris-app
+  docker-compose up -d --no-deps zkteco-bridge
 fi

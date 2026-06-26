@@ -1,0 +1,32 @@
+# escape=`
+
+FROM mcr.microsoft.com/dotnet/framework/sdk:4.8-windowsservercore-ltsc2022 AS build
+WORKDIR /src
+
+COPY ZKTecoStandalone.csproj ./
+COPY Interop.zkemkeeper.dll ./
+RUN dotnet restore .\ZKTecoStandalone.csproj -p:Platform=x86
+
+COPY . ./
+RUN dotnet build .\ZKTecoStandalone.csproj --no-restore -p:Configuration=Release -p:Platform=x86 -v:minimal
+
+FROM mcr.microsoft.com/dotnet/framework/runtime:4.8-windowsservercore-ltsc2022
+WORKDIR /app
+
+ENV ZKTECO_DEVICE_IPS="10.184.38.10,10.184.38.234,10.184.38.235,10.184.38.9"
+ENV ZKTECO_DEVICE_PORT="4370"
+ENV ZKTECO_WEBHOOK_URL="http://host.docker.internal:3001/api/zkteco/events"
+ENV ZKTECO_CONNECT_PASSWORD="0"
+ENV ZKTECO_MACHINE_NUMBER="1"
+ENV ZKTECO_STATUS_PORT="4371"
+ENV ZKTECO_SYNC_FINGERPRINT_TEMPLATES="false"
+ENV ZKTECO_BACKFILL_ATTENDANCE_LOGS="true"
+ENV ZKTECO_BACKFILL_MAX_EVENTS="100000"
+
+COPY --from=build /src/bin/x86/Release/net48/ ./
+COPY sdk/ C:/zkteco-sdk/
+RUN copy C:\zkteco-sdk\*.dll C:\Windows\SysWOW64\ && C:\Windows\SysWOW64\regsvr32.exe /s C:\Windows\SysWOW64\zkemkeeper.dll
+
+EXPOSE 4371
+
+ENTRYPOINT ["ZKTecoStandalone.exe"]

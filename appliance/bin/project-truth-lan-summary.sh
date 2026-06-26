@@ -103,6 +103,32 @@ emit_database_lan_rows() {
   printf '  %-5s %s\n' "UAT" "postgresql://postgres:postgres@${ip_addr}:15434/hris"
 }
 
+emit_zkteco_runtime_rows() {
+  local ip_addr="$1"
+  local bridge_status_url="http://${ip_addr}:4371/status"
+  echo "ZKTeco runtime"
+  printf '  %-18s %s\n' "VM webhook" "http://${ip_addr}:3001/api/zkteco/events"
+  printf '  %-18s %s\n' "bridge status" "$bridge_status_url"
+  if curl -fsS "http://${ip_addr}:3001/health" >/dev/null 2>&1; then
+    printf '  %-18s %s\n' "VM contract" "ready: HRIS API is reachable"
+  else
+    printf '  %-18s %s\n' "VM contract" "not ready: HRIS API health is down"
+  fi
+  if command -v docker >/dev/null 2>&1 &&
+    docker ps --format '{{.Names}}\t{{.Status}}' 2>/dev/null | grep -q '^project-truth-zkteco-bridge[[:space:]]'; then
+    docker ps --filter "name=project-truth-zkteco-bridge" --format '  bridge container  {{.Status}}'
+  else
+    printf '  %-18s %s\n' "VM bridge" "DOWN or not selected"
+  fi
+  if curl -fsS "$bridge_status_url" >/tmp/project-truth-zkteco-status.json 2>/dev/null; then
+    node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync('/tmp/project-truth-zkteco-status.json','utf8')); console.log('  bridge devices    '+(s.connectedDevices||0)+'/'+(s.configuredDevices||0)+' connected'); console.log('  bridge latest     '+(s.lastEventAt||'no events yet'));" 2>/dev/null || true
+  else
+    printf '  %-18s %s\n' "bridge endpoint" "DOWN: /status did not respond"
+  fi
+  printf '  %-18s %s\n' "SDK sidecar" "optional: appliance/zkteco-standalone-sdk on Windows runtime"
+  printf '  %-18s %s\n' "device check" "Admin > Devices shows TCP port and configured bridge truth"
+}
+
 emit_cloudflare_tcp_db_instructions() {
   echo "Cloudflare DB TCP"
   echo "  Use named Cloudflare Tunnel + Access, not trycloudflare HTTP quick tunnels."
@@ -159,9 +185,8 @@ write_summary() {
       echo "  Saved events:"
       echo "    http://${ip_addr}:3000/admin/devices/events"
       echo "    ?view=saved&source=ZKTECO_EVENT"
-      echo "  Bridge note:"
-      echo "    Run the Windows ZKTeco SDK bridge on a Windows host/device LAN."
-      echo "    Set ZKTECO_WEBHOOK_URL to one webhook URL above."
+      echo
+      emit_zkteco_runtime_rows "$ip_addr"
       echo
       echo "Observability"
       emit_observability_rows "$ip_addr"
@@ -351,6 +376,8 @@ emit_screen_summary() {
   emit_hris_rows "$ip_addr"
   echo "Postgres"
   emit_database_lan_rows "$ip_addr"
+  echo "ZKTeco"
+  emit_zkteco_runtime_rows "$ip_addr"
   echo "Observability"
   emit_observability_rows "$ip_addr"
   emit_screen_os_sync_line

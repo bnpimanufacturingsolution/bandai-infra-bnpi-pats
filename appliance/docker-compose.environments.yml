@@ -74,6 +74,7 @@ services:
       API_ACTIVITY_LOG_INCLUDE_READS: "true"
       API_ACTIVITY_LOG_EXCLUDED_PATHS: /health,/metrics
       LOG_FORMAT: json
+      ZKTECO_BRIDGE_STATUS_URL: ${ZKTECO_BRIDGE_STATUS_URL_DEV:-${ZKTECO_BRIDGE_STATUS_URL:-http://zkteco-bridge-dev:4371/status}}
     volumes:
       - apiuploads-dev:/app/uploads
       - ./backups/dev:/var/backups/hris
@@ -164,17 +165,32 @@ services:
       start_period: 20s
 
   zkteco-bridge-dev:
-    profiles:
-      - zkteco
     build:
-      context: ../vendor/zkteco-sdk
-      dockerfile: Dockerfile.windows
+      context: ./zkteco-bridge
+      dockerfile: Dockerfile
     image: project-truth-zkteco-bridge:develop
     container_name: project-truth-zkteco-bridge-dev
     restart: unless-stopped
     environment:
-      ZKTECO_DEVICE_IPS: ${ZKTECO_DEVICE_IPS:-}
-      ZKTECO_WEBHOOK_URL: ${ZKTECO_WEBHOOK_URL:-http://host.docker.internal:3101/api/zkteco/events}
+      ZKTECO_DEVICE_IPS: ${ZKTECO_DEVICE_IPS:-10.184.38.10,10.184.38.234,10.184.38.235,10.184.38.9}
+      ZKTECO_DEVICE_PORT: ${ZKTECO_DEVICE_PORT:-4370}
+      ZKTECO_WEBHOOK_URL: ${ZKTECO_WEBHOOK_URL:-http://hris-api-dev:3001/api/zkteco/events}
+      ZKTECO_STATUS_PORT: ${ZKTECO_STATUS_PORT:-4371}
+      ZKTECO_POLL_INTERVAL_SECONDS: ${ZKTECO_POLL_INTERVAL_SECONDS:-60}
+    ports:
+      - "4372:4371"
+    depends_on:
+      hris-api-dev:
+        condition: service_healthy
+    networks:
+      - default
+      - hris-observability
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:4371/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   hris-postgres-uat:
     image: postgres:16-alpine
@@ -251,6 +267,7 @@ services:
       API_ACTIVITY_LOG_INCLUDE_READS: "true"
       API_ACTIVITY_LOG_EXCLUDED_PATHS: /health,/metrics
       LOG_FORMAT: json
+      ZKTECO_BRIDGE_STATUS_URL: ${ZKTECO_BRIDGE_STATUS_URL_UAT:-${ZKTECO_BRIDGE_STATUS_URL:-http://zkteco-bridge-uat:4371/status}}
     volumes:
       - apiuploads-uat:/app/uploads
       - ./backups/uat:/var/backups/hris
@@ -405,17 +422,32 @@ services:
       - hris-observability
 
   zkteco-bridge-uat:
-    profiles:
-      - zkteco
     build:
-      context: ../vendor/zkteco-sdk
-      dockerfile: Dockerfile.windows
+      context: ./zkteco-bridge
+      dockerfile: Dockerfile
     image: project-truth-zkteco-bridge:develop
     container_name: project-truth-zkteco-bridge-uat
     restart: unless-stopped
     environment:
-      ZKTECO_DEVICE_IPS: ${ZKTECO_DEVICE_IPS:-}
-      ZKTECO_WEBHOOK_URL: ${ZKTECO_WEBHOOK_URL:-http://host.docker.internal:3201/api/zkteco/events}
+      ZKTECO_DEVICE_IPS: ${ZKTECO_DEVICE_IPS:-10.184.38.10,10.184.38.234,10.184.38.235,10.184.38.9}
+      ZKTECO_DEVICE_PORT: ${ZKTECO_DEVICE_PORT:-4370}
+      ZKTECO_WEBHOOK_URL: ${ZKTECO_WEBHOOK_URL:-http://hris-api-uat:3001/api/zkteco/events}
+      ZKTECO_STATUS_PORT: ${ZKTECO_STATUS_PORT:-4371}
+      ZKTECO_POLL_INTERVAL_SECONDS: ${ZKTECO_POLL_INTERVAL_SECONDS:-60}
+    ports:
+      - "4373:4371"
+    depends_on:
+      hris-api-uat:
+        condition: service_healthy
+    networks:
+      - default
+      - hris-observability
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:4371/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
 volumes:
   postgresdata-dev:

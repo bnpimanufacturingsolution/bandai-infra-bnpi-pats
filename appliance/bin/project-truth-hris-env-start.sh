@@ -68,7 +68,8 @@ env_running() {
   local env_name="$1"
   container_running "hris-postgres-${env_name}" &&
     container_running "hris-api-${env_name}" &&
-    container_running "hris-app-${env_name}"
+    container_running "hris-app-${env_name}" &&
+    container_running "project-truth-zkteco-bridge-${env_name}"
 }
 
 run_firstboot_seed() {
@@ -116,6 +117,12 @@ start_env() {
           return 1
         fi
         echo "Compose returned nonzero, but hris-app-$1 is running; continuing" >&2
+      fi
+      if ! compose_env up -d --no-deps "zkteco-bridge-$1"; then
+        if ! container_running "project-truth-zkteco-bridge-$1"; then
+          return 1
+        fi
+        echo "Compose returned nonzero, but project-truth-zkteco-bridge-$1 is running; continuing" >&2
       fi
       ;;
     all)

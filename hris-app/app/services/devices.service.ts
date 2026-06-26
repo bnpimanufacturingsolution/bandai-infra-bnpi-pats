@@ -74,7 +74,8 @@ export interface DeviceEventsResponse {
 
 export interface DeviceHealthResponse {
 	device: Pick<Device, "id" | "name" | "address" | "port" | "protocol"> & {
-		baseUrl: string;
+		baseUrl?: string;
+		vendor?: string;
 	};
 	summary: {
 		status: "online" | "degraded" | "offline";
@@ -83,12 +84,46 @@ export interface DeviceHealthResponse {
 	};
 	checks: {
 		hrisApi: { ok: boolean; status: string };
-		alarmDemo: {
+		hikvisionListener?: {
 			ok: boolean;
 			status: "running" | "not_running" | "unknown";
 			pid?: number;
 			error?: string;
 		};
+		zktecoWebhook?: {
+			ok: boolean;
+			status: "ready" | "disabled" | string;
+			path: string;
+		};
+		zktecoBridge?: {
+			ok: boolean;
+			status: "online" | "degraded" | "offline" | string;
+			statusUrl?: string;
+			latencyMs?: number | null;
+			configuredDevices?: number | null;
+			connectedDevices?: number | null;
+			lastEventAt?: string | null;
+			device?: {
+				ip: string;
+				port: number;
+				connected: boolean;
+				streaming?: boolean;
+				lastConnectedAt?: string | null;
+				lastEventAt?: string | null;
+				lastPostedAt?: string | null;
+				lastError?: string | null;
+			} | null;
+			error?: string;
+			runtime?: string;
+		};
+		lastZktecoEvent?: {
+			id: string;
+			status: DeviceEventStatus | string;
+			eventTime: string;
+			receivedAt: string;
+			employeeNo?: string | null;
+			errorMessage?: string | null;
+		} | null;
 		network: {
 			ok: boolean;
 			status: "reachable" | "unreachable";
@@ -97,7 +132,7 @@ export interface DeviceHealthResponse {
 			latencyMs: number | null;
 			error?: string;
 		};
-		deviceApi: {
+		deviceApi?: {
 			ok: boolean;
 			status: "online" | "offline";
 			latencyMs: number | null;

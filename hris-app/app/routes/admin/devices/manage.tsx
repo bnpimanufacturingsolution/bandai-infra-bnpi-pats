@@ -53,11 +53,24 @@ const protocolOptions: SelectOption[] = [
 
 const healthToneClass = (ok: boolean) => (ok ? "text-green-700" : "text-amber-700");
 
-function HealthCheckRow({ label, ok, value }: { label: string; ok: boolean; value: string }) {
+function HealthCheckRow({
+	label,
+	ok,
+	value,
+	detail,
+}: {
+	label: string;
+	ok: boolean;
+	value: string;
+	detail?: string;
+}) {
 	return (
-		<div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm">
-			<span className="text-slate-600">{label}</span>
-			<span className={`font-medium ${healthToneClass(ok)}`}>{value}</span>
+		<div className="flex min-h-11 items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 text-sm">
+			<span className="min-w-0">
+				<span className="block text-slate-600">{label}</span>
+				{detail ? <span className="block truncate text-xs text-slate-500">{detail}</span> : null}
+			</span>
+			<span className={`shrink-0 font-medium ${healthToneClass(ok)}`}>{value}</span>
 		</div>
 	);
 }
@@ -74,6 +87,9 @@ function DeviceHealthPanel({ deviceId }: { deviceId?: string }) {
 
 	const checks = health?.checks;
 	const summary = health?.summary;
+	const isZkteco = health?.device?.vendor === "ZKTeco" || Boolean(checks?.zktecoWebhook);
+	const zktecoBridge = checks?.zktecoBridge;
+	const latestZktecoEvent = checks?.lastZktecoEvent;
 
 	return (
 		<div className="rounded-md border border-slate-200 bg-white p-3">
@@ -101,13 +117,75 @@ function DeviceHealthPanel({ deviceId }: { deviceId?: string }) {
 			) : (
 				<div className="grid gap-2 sm:grid-cols-2">
 					<HealthCheckRow label="HRIS API" ok value="Online" />
+					{isZkteco && checks?.zktecoWebhook ? (
+						<HealthCheckRow
+							label="ZKTeco webhook"
+							ok={Boolean(checks.zktecoWebhook.ok)}
+							value={checks.zktecoWebhook.status || "-"}
+							detail={checks.zktecoWebhook.path}
+						/>
+					) : null}
 					<HealthCheckRow
 						label="Device port"
 						ok={Boolean(checks?.network?.ok)}
 						value={checks?.network?.status || "-"}
+						detail={
+							checks?.network
+								? `${checks.network.host}:${checks.network.port}`
+								: undefined
+						}
 					/>
+					{isZkteco && checks?.zktecoBridge ? (
+						<HealthCheckRow
+							label="ZKTeco bridge"
+							ok={Boolean(zktecoBridge?.ok)}
+							value={zktecoBridge?.status || "-"}
+							detail={
+								zktecoBridge
+									? `${zktecoBridge.connectedDevices ?? 0}/${zktecoBridge.configuredDevices ?? 0} devices connected`
+									: undefined
+							}
+						/>
+					) : null}
+					{isZkteco && zktecoBridge?.device ? (
+						<HealthCheckRow
+							label="Bridge device"
+							ok={Boolean(zktecoBridge.device.connected)}
+							value={zktecoBridge.device.connected ? "connected" : "offline"}
+							detail={
+								zktecoBridge.device.lastEventAt
+									? `Last event ${new Date(zktecoBridge.device.lastEventAt).toLocaleTimeString()}`
+									: zktecoBridge.device.lastError || `${zktecoBridge.device.ip}:${zktecoBridge.device.port}`
+							}
+						/>
+					) : null}
+					{isZkteco && latestZktecoEvent ? (
+						<HealthCheckRow
+							label="Latest saved event"
+							ok={latestZktecoEvent.status !== "FAILED"}
+							value={latestZktecoEvent.status || "-"}
+							detail={`${latestZktecoEvent.employeeNo || "No employee"} - ${new Date(latestZktecoEvent.eventTime).toLocaleString()}`}
+						/>
+					) : null}
+					{!isZkteco && checks?.hikvisionListener ? (
+						<HealthCheckRow
+							label="Hikvision listener"
+							ok={Boolean(checks.hikvisionListener.ok)}
+							value={checks.hikvisionListener.status || "-"}
+						/>
+					) : null}
+					{!isZkteco && checks?.deviceApi ? (
+						<HealthCheckRow
+							label="Device API"
+							ok={Boolean(checks.deviceApi.ok)}
+							value={checks.deviceApi.status || "-"}
+						/>
+					) : null}
 				</div>
 			)}
+			{checks?.network?.error ? (
+				<p className="mt-2 text-xs text-red-600">{checks.network.error}</p>
+			) : null}
 		</div>
 	);
 }
@@ -652,7 +730,7 @@ export default function DevicesManagePage() {
 										Password
 									</label>
 									<div className="p-3 bg-gray-50 rounded-md border">
-										{activeDevice.access.password ? "••••••••" : "-"}
+										{activeDevice.access.password ? "********" : "-"}
 									</div>
 								</div>
 							</div>

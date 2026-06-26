@@ -111,7 +111,9 @@ export const controller = (prisma: PrismaClient) => {
 			socket.connect(port, host);
 		});
 
-	const checkAlarmDemoProcess = (): Promise<{
+	const checkWindowsProcess = (
+		processName: string,
+	): Promise<{
 		ok: boolean;
 		status: "running" | "not_running" | "unknown";
 		pid?: number;
@@ -124,7 +126,7 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			execFile(
 				"tasklist",
-				["/FI", "IMAGENAME eq AlarmDemo.exe", "/FO", "CSV", "/NH"],
+				["/FI", `IMAGENAME eq ${processName}`, "/FO", "CSV", "/NH"],
 				{ timeout: 2500 },
 				(error, stdout) => {
 					if (error) {
@@ -135,7 +137,7 @@ export const controller = (prisma: PrismaClient) => {
 						.split(/\r?\n/)
 						.map((item) => item.trim())
 						.find((item) => item && !item.includes("INFO:"));
-					const pid = line?.match(/"AlarmDemo\.exe","(\d+)"/i)?.[1];
+					const pid = line?.match(/^"[^"]+","(\d+)"/i)?.[1];
 					resolve(
 						pid
 							? { ok: true, status: "running", pid: Number(pid) }
@@ -145,11 +147,64 @@ export const controller = (prisma: PrismaClient) => {
 			);
 		});
 
+	const isZktecoDevice = (device: {
+		name?: string | null;
+		protocol?: string | null;
+		port?: number | null;
+		config?: Prisma.JsonValue | null;
+	}) => {
+		const configValue = device.config as any;
+		const vendor = String(configValue?.vendor || configValue?.type || "").toLowerCase();
+		const name = String(device.name || "").toLowerCase();
+		return (
+			vendor.includes("zkteco") ||
+			name.includes("zkteco") ||
+			(String(device.protocol || "").toLowerCase() === "tcp" && Number(device.port) === 4370)
+		);
+	};
+
 	const getHealthStatus = (checks: Array<{ ok: boolean }>) => {
 		const onlineCount = checks.filter((check) => check.ok).length;
 		if (onlineCount === checks.length) return "online";
 		if (onlineCount > 1) return "degraded";
 		return "offline";
+	};
+
+	const getZktecoBridgeStatus = async () => {
+		const statusUrl =
+			process.env.ZKTECO_BRIDGE_STATUS_URL || "http://zkteco-bridge:4371/status";
+		const startedAt = Date.now();
+		try {
+			const response = await fetch(statusUrl, {
+				method: "GET",
+				signal: AbortSignal.timeout(3000),
+			});
+			const data = await response.json().catch(() => null);
+			return {
+				ok: response.ok,
+				status: response.ok ? data?.status || "online" : "offline",
+				statusUrl,
+				latencyMs: Date.now() - startedAt,
+				data,
+				...(response.ok ? {} : { error: `HTTP ${response.status}` }),
+			};
+		} catch (error: any) {
+			return {
+				ok: false,
+				status: "offline",
+				statusUrl,
+				latencyMs: null,
+				data: null,
+				error: error?.message || "ZKTeco bridge status did not respond",
+			};
+		}
+	};
+
+	const getBridgeDeviceStatus = (bridgeStatus: any, address: string) => {
+		const devices = Array.isArray(bridgeStatus?.data?.devices)
+			? bridgeStatus.data.devices
+			: [];
+		return devices.find((item: any) => String(item?.ip || "").trim() === address) || null;
 	};
 
 	const getDeviceHealth = async (req: Request, res: Response, _next: NextFunction) => {
@@ -187,13 +242,32 @@ export const controller = (prisma: PrismaClient) => {
 			const parsedAddress = /^https?:\/\//i.test(device.address)
 				? new URL(device.address).hostname
 				: device.address;
-			const httpPort = getHikvisionDeviceHttpPort(device);
-			const baseUrl = buildHikvisionDeviceBaseUrl(device);
+			const isZkteco = isZktecoDevice(device);
+			const healthPort = isZkteco ? Number(device.port || 4370) : getHikvisionDeviceHttpPort(device);
+			const baseUrl = isZkteco ? null : buildHikvisionDeviceBaseUrl(device);
 			const startedAt = Date.now();
 
-			const [alarmDemo, network] = await Promise.all([
-				checkAlarmDemoProcess(),
-				checkTcpReachability(parsedAddress, httpPort),
+			const [listener, network, zktecoBridge, lastZktecoEvent] = await Promise.all([
+				isZkteco ? Promise.resolve(null) : checkWindowsProcess("AlarmDemo.exe"),
+				checkTcpReachability(parsedAddress, healthPort),
+				isZkteco ? getZktecoBridgeStatus() : Promise.resolve(null),
+				isZkteco
+					? (prisma as any).deviceEvent.findFirst({
+							where: {
+								deviceId: device.id,
+								source: "ZKTECO_EVENT",
+							},
+							orderBy: [{ receivedAt: "desc" }, { createdAt: "desc" }],
+							select: {
+								id: true,
+								status: true,
+								eventTime: true,
+								receivedAt: true,
+								employeeNo: true,
+								errorMessage: true,
+							},
+						})
+					: Promise.resolve(null),
 			]);
 
 			let deviceApi: {
@@ -202,46 +276,106 @@ export const controller = (prisma: PrismaClient) => {
 				latencyMs: number | null;
 				error?: string;
 				time?: unknown;
-			};
-			const apiStartedAt = Date.now();
-			try {
-				const time = await hikvisionFetch(hikvisionEndpoint.system.time, {
-					method: "GET",
-					deviceId: id,
-					prisma,
-					request: req,
-					timeoutMs: 3500,
-				});
-				deviceApi = {
-					ok: true,
-					status: "online",
-					latencyMs: Date.now() - apiStartedAt,
-					time,
-				};
-			} catch (error: any) {
-				deviceApi = {
-					ok: false,
-					status: "offline",
-					latencyMs: null,
-					error:
-						error?.data?.errorCode ||
-						error?.data?.errorCause ||
-						error?.message ||
-						"Device API did not respond",
-				};
+			} | null = null;
+			if (!isZkteco) {
+				const apiStartedAt = Date.now();
+				try {
+					const time = await hikvisionFetch(hikvisionEndpoint.system.time, {
+						method: "GET",
+						deviceId: id,
+						prisma,
+						request: req,
+						timeoutMs: 3500,
+					});
+					deviceApi = {
+						ok: true,
+						status: "online",
+						latencyMs: Date.now() - apiStartedAt,
+						time,
+					};
+				} catch (error: any) {
+					deviceApi = {
+						ok: false,
+						status: "offline",
+						latencyMs: null,
+						error:
+							error?.data?.errorCode ||
+							error?.data?.errorCause ||
+							error?.message ||
+							"Device API did not respond",
+					};
+				}
 			}
 
-			const checks = [
-				{ ok: true },
-				{ ok: alarmDemo.ok },
-				{ ok: network.ok },
-				{ ok: deviceApi.ok },
-			];
+			const zktecoWebhook = isZkteco
+				? {
+						ok: appConfig.enableDeviceServices,
+						status: appConfig.enableDeviceServices ? "ready" : "disabled",
+						path: `${appConfig.baseApiPath || "/api"}/zkteco/events`,
+					}
+				: undefined;
+			const bridgeDevice = isZkteco ? getBridgeDeviceStatus(zktecoBridge, parsedAddress) : null;
+			const zktecoDeviceConnected =
+				!isZkteco || (bridgeDevice ? Boolean(bridgeDevice.connected) : false);
+
+			const checks = isZkteco
+				? [
+						{ ok: true },
+						{ ok: Boolean(zktecoWebhook?.ok) },
+						{ ok: Boolean(zktecoBridge?.ok) },
+						{ ok: zktecoDeviceConnected },
+						{ ok: network.ok },
+					]
+				: [
+						{ ok: true },
+						{ ok: Boolean(listener?.ok) },
+						{ ok: network.ok },
+						{ ok: Boolean(deviceApi?.ok) },
+					];
 			const summary = {
 				status: getHealthStatus(checks),
 				checkedAt: new Date().toISOString(),
 				durationMs: Date.now() - startedAt,
 			};
+
+			const responseChecks: Record<string, unknown> = {
+				hrisApi: { ok: true, status: "online" },
+				network: {
+					ok: network.ok,
+					status: network.ok ? "reachable" : "unreachable",
+					host: parsedAddress,
+					port: healthPort,
+					latencyMs: network.latencyMs,
+					...(network.error ? { error: network.error } : {}),
+				},
+			};
+
+			if (isZkteco) {
+				responseChecks.zktecoWebhook = zktecoWebhook;
+				responseChecks.zktecoBridge = {
+					ok: Boolean(zktecoBridge?.ok),
+					status: zktecoBridge?.status || "offline",
+					runtime:
+						zktecoBridge?.data?.runtime ||
+						zktecoBridge?.data?.service ||
+						"Project Truth ZKTeco bridge",
+					statusUrl: zktecoBridge?.statusUrl,
+					latencyMs: zktecoBridge?.latencyMs,
+					configuredDevices: zktecoBridge?.data?.configuredDevices ?? null,
+					connectedDevices: zktecoBridge?.data?.connectedDevices ?? null,
+					lastEventAt: zktecoBridge?.data?.lastEventAt || null,
+					device: bridgeDevice,
+					...(zktecoBridge?.error ? { error: zktecoBridge.error } : {}),
+				};
+				responseChecks.lastZktecoEvent = lastZktecoEvent;
+			} else {
+				responseChecks.hikvisionListener = listener || {
+					ok: false,
+					status: "unknown",
+					error: "Listener status unavailable",
+				};
+				responseChecks.deviceApi = deviceApi;
+			}
 
 			res.status(200).json(
 				buildSuccessResponse(
@@ -253,22 +387,11 @@ export const controller = (prisma: PrismaClient) => {
 							address: device.address,
 							port: device.port,
 							protocol: device.protocol,
-							baseUrl,
+							vendor: isZkteco ? "ZKTeco" : "Hikvision",
+							...(baseUrl ? { baseUrl } : {}),
 						},
 						summary,
-						checks: {
-							hrisApi: { ok: true, status: "online" },
-							alarmDemo,
-							network: {
-								ok: network.ok,
-								status: network.ok ? "reachable" : "unreachable",
-								host: parsedAddress,
-								port: httpPort,
-								latencyMs: network.latencyMs,
-								...(network.error ? { error: network.error } : {}),
-							},
-							deviceApi,
-						},
+						checks: responseChecks,
 					},
 					200,
 				),
