@@ -19,7 +19,7 @@ import type { ApiQueryParams } from "~/services/api-service";
 import type { AcsEventInfo } from "~/types/hikvision";
 
 type EventViewMode = "live" | "saved";
-type TimeWindow = "today" | "yesterday" | "last2" | "last7";
+type TimeWindow = "today" | "yesterday" | "last2" | "last7" | "all";
 
 type UnifiedDeviceEventRow = {
 	id: string;
@@ -61,6 +61,7 @@ const timeWindowOptions: SelectOption[] = [
 	{ value: "yesterday", label: "Yesterday" },
 	{ value: "last2", label: "Last 2 days" },
 	{ value: "last7", label: "Last 7 days" },
+	{ value: "all", label: "All time" },
 ];
 
 const PH_TIME_ZONE = "Asia/Manila";
@@ -115,6 +116,7 @@ const formatPunchTime = (value: string | Date | null | undefined) => {
 };
 
 const getDateRangeForWindow = (window: TimeWindow) => {
+	if (window === "all") return { from: undefined, to: undefined };
 	const today = new Date();
 	if (window === "yesterday") {
 		const yesterday = subtractDays(today, 1);
