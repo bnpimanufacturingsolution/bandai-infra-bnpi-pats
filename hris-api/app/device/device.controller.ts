@@ -33,6 +33,20 @@ import { execFile } from "child_process";
 
 const logger = getLogger();
 const deviceLogger = logger.child({ module: "device" });
+const DEVICE_EVENT_STATUSES = new Set([
+	"RECEIVED",
+	"MATCHED",
+	"ATTENDANCE_CREATED",
+	"ATTENDANCE_UPDATED",
+	"IGNORED",
+	"UNMATCHED",
+	"FAILED",
+]);
+const DEVICE_EVENT_SOURCES = new Set([
+	"HIKVISION_CALLBACK",
+	"EN_HCNETSDK_ALARM",
+	"ZKTECO_EVENT",
+]);
 
 export const controller = (prisma: PrismaClient) => {
 	// Initialize employee helpers for auth service communication
@@ -507,11 +521,11 @@ export const controller = (prisma: PrismaClient) => {
 			];
 
 			if (deviceId) whereConditions.push(Prisma.sql`de."deviceId" = ${deviceId}`);
-			if (status && status !== "all") {
-				whereConditions.push(Prisma.sql`de."status"::text = ${status}`);
+			if (status && status !== "all" && DEVICE_EVENT_STATUSES.has(status)) {
+				whereConditions.push(Prisma.sql`de."status" = ${status}::"DeviceEventStatus"`);
 			}
-			if (source && source !== "all") {
-				whereConditions.push(Prisma.sql`de."source"::text = ${source}`);
+			if (source && source !== "all" && DEVICE_EVENT_SOURCES.has(source)) {
+				whereConditions.push(Prisma.sql`de."source" = ${source}::"DeviceEventSource"`);
 			}
 
 			if (from || to) {
@@ -525,7 +539,8 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 
-			if (query) {
+			const hasQuery = Boolean(query);
+			if (hasQuery) {
 				const queryLike = `%${query}%`;
 				const strippedNumericQuery = /^\d+$/.test(query)
 					? query.replace(/^0+/, "") || "0"
@@ -560,6 +575,13 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const whereSql = Prisma.sql`WHERE ${Prisma.join(whereConditions, " AND ")}`;
+			const eventFromSql = Prisma.sql`
+				FROM device_events de
+			`;
+			const baseFromSql = Prisma.sql`
+				FROM device_events de
+				INNER JOIN "Device" d ON d.id = de."deviceId"
+			`;
 			const employeeJoinSql = Prisma.sql`
 				LEFT JOIN LATERAL (
 					SELECT emp.id, emp."employeeId", emp."deviceEmpId", emp."personId"
@@ -604,10 +626,15 @@ export const controller = (prisma: PrismaClient) => {
 				)
 			`;
 			const fromSql = Prisma.sql`
-				FROM device_events de
-				INNER JOIN "Device" d ON d.id = de."deviceId"
+				${baseFromSql}
 				${employeeJoinSql}
 			`;
+			const pageFromSql = hasQuery
+				? fromSql
+				: sort === "deviceName"
+					? baseFromSql
+					: eventFromSql;
+			const aggregateFromSql = hasQuery ? fromSql : eventFromSql;
 			const orderColumnSql =
 				sort === "deviceName"
 					? Prisma.sql`d."name"`
@@ -626,6 +653,14 @@ export const controller = (prisma: PrismaClient) => {
 											: Prisma.sql`de."receivedAt"`;
 			const orderDirectionSql = Prisma.raw(order === "asc" ? "ASC" : "DESC");
 			const eventsSql = Prisma.sql`
+				WITH page_events AS (
+					SELECT de.id
+					${pageFromSql}
+					${whereSql}
+					ORDER BY ${orderColumnSql} ${orderDirectionSql}, de."receivedAt" DESC, de."createdAt" DESC
+					OFFSET ${skip}
+					LIMIT ${limit}
+				)
 				SELECT
 					de.id,
 					de."organizationId",
@@ -677,25 +712,23 @@ export const controller = (prisma: PrismaClient) => {
 						)
 					END AS employee
 				${fromSql}
-				${whereSql}
+				INNER JOIN page_events page_event ON page_event.id = de.id
 				ORDER BY ${orderColumnSql} ${orderDirectionSql}, de."receivedAt" DESC, de."createdAt" DESC
-				OFFSET ${skip}
-				LIMIT ${limit}
 			`;
 			const countSql = Prisma.sql`
 				SELECT COUNT(*)::bigint AS total
-				${fromSql}
+				${aggregateFromSql}
 				${whereSql}
 			`;
 			const statusGroupsSql = Prisma.sql`
 				SELECT de.status::text AS status, COUNT(*)::bigint AS count
-				${fromSql}
+				${aggregateFromSql}
 				${whereSql}
 				GROUP BY de.status
 			`;
 			const sourceGroupsSql = Prisma.sql`
 				SELECT de.source::text AS source, COUNT(*)::bigint AS count
-				${fromSql}
+				${aggregateFromSql}
 				${whereSql}
 				GROUP BY de.source
 			`;

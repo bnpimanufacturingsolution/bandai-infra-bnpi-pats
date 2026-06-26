@@ -73,6 +73,8 @@ model DeviceEvent {
   @@index([organizationId, deviceId, receivedAt])
   @@index([organizationId, status, receivedAt])
   @@index([organizationId, source, receivedAt])
+  @@index([organizationId, source, status])
+  @@index([organizationId, source, receivedAt(sort: Desc), createdAt(sort: Desc)])
   @@index([organizationId, employeeNo, receivedAt])
   @@map("device_events")
 }
