@@ -118,10 +118,28 @@
           project-truth-zkteco-bridge:develop
         cp /tmp/project-truth-k8s-runtime-images.tar /var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-images.tar
         k3s ctr -n k8s.io images import /tmp/project-truth-k8s-runtime-images.tar
+        for env_name in dev uat prod; do
+          kubectl -n "$env_name" rollout restart deployment/hris-api deployment/hris-app deployment/zkteco-bridge >/dev/null 2>&1 || true
+          kubectl -n "$env_name" rollout status deployment/hris-api --timeout=180s >/dev/null 2>&1 || true
+          kubectl -n "$env_name" rollout status deployment/hris-app --timeout=180s >/dev/null 2>&1 || true
+          kubectl -n "$env_name" rollout status deployment/zkteco-bridge --timeout=180s >/dev/null 2>&1 || true
+        done
         printf 'commit=%s\nsynced_at=%s\n' "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$state_file"
       args:
         executable: /bin/bash
       changed_when: true
+
+    - name: Keep legacy Docker Compose app/API containers off the K3s LAN ports
+      ansible.builtin.shell: |
+        set -euo pipefail
+        for container_name in hris-app hris-api hris-app-dev hris-api-dev hris-app-uat hris-api-uat; do
+          if docker ps -a --format '{{"{{.Names}}"}}' | grep -qx "$container_name"; then
+            docker stop "$container_name" >/dev/null 2>&1 || true
+          fi
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
 
     - name: Install Project Truth commands
       ansible.builtin.copy:

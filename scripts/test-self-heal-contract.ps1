@@ -171,6 +171,8 @@ $checks.Add((Assert-Text 'ansible-pull wrapper repairs resolver drift before fet
 $checks.Add((Assert-Text 'ansible-pull wrapper repairs DHCP drift before fetch' $ansiblePullScript 'project-truth-lan-dhcp'))
 $checks.Add((Assert-Text 'ansible-pull playbook updates install root' $ansiblePullPlaybook '/opt/project-truth'))
 $checks.Add((Assert-Text 'ansible-pull playbook imports ZKTeco bridge image into K3s' $ansiblePullPlaybook 'project-truth-zkteco-bridge:develop'))
+$checks.Add((Assert-Text 'ansible-pull playbook restarts K3s deployments after local image import' $ansiblePullPlaybook 'rollout restart deployment/hris-api deployment/hris-app deployment/zkteco-bridge'))
+$checks.Add((Assert-Text 'ansible-pull playbook keeps legacy Compose app/API containers off K3s LAN ports' $ansiblePullPlaybook 'hris-app hris-api hris-app-dev hris-api-dev hris-app-uat hris-api-uat'))
 $checks.Add((Assert-Text 'ansible-pull playbook refreshes Argo apps after host sync' $ansiblePullPlaybook 'argocd\.argoproj\.io/refresh=hard'))
 $checks.Add((Assert-Text 'ansible-pull playbook repairs CoreDNS upstreams' $ansiblePullPlaybook 'forward \. 1\.1\.1\.1 8\.8\.8\.8'))
 $checks.Add((Assert-Text 'ansible-pull playbook releases stale retained runtime PV claim refs' $ansiblePullPlaybook 'kubectl patch pv "\$volume_name" --type=merge'))
