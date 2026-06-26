@@ -502,136 +502,219 @@ export const controller = (prisma: PrismaClient) => {
 			const sort = String(req.query.sort || "receivedAt").trim();
 			const order = String(req.query.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
 
-			const where: any = {
-				organizationId: String(organizationId),
-			};
+			const whereConditions: Prisma.Sql[] = [
+				Prisma.sql`de."organizationId" = ${String(organizationId)}`,
+			];
 
-			if (deviceId) where.deviceId = deviceId;
-			if (status && status !== "all") where.status = status;
-			if (source && source !== "all") where.source = source;
+			if (deviceId) whereConditions.push(Prisma.sql`de."deviceId" = ${deviceId}`);
+			if (status && status !== "all") {
+				whereConditions.push(Prisma.sql`de."status"::text = ${status}`);
+			}
+			if (source && source !== "all") {
+				whereConditions.push(Prisma.sql`de."source"::text = ${source}`);
+			}
 
 			if (from || to) {
-				where.eventTime = {};
 				if (from) {
 					const fromDate = parseHikvisionBusinessDateBound(from);
-					if (fromDate) where.eventTime.gte = fromDate;
+					if (fromDate) whereConditions.push(Prisma.sql`de."eventTime" >= ${fromDate}`);
 				}
 				if (to) {
 					const toDate = parseHikvisionBusinessDateBound(to, true);
-					if (toDate) where.eventTime.lte = toDate;
+					if (toDate) whereConditions.push(Prisma.sql`de."eventTime" <= ${toDate}`);
 				}
-				if (!Object.keys(where.eventTime).length) delete where.eventTime;
 			}
 
 			if (query) {
-				where.OR = [
-					{ employeeNo: { contains: query, mode: "insensitive" } },
-					{ eventType: { contains: query, mode: "insensitive" } },
-					{ doorNo: { contains: query, mode: "insensitive" } },
-					{ device: { name: { contains: query, mode: "insensitive" } } },
-					{ device: { address: { contains: query, mode: "insensitive" } } },
-				];
+				const queryLike = `%${query}%`;
+				const strippedNumericQuery = /^\d+$/.test(query)
+					? query.replace(/^0+/, "") || "0"
+					: "";
+				const paddedEmployeeCode = strippedNumericQuery
+					? strippedNumericQuery.padStart(5, "0")
+					: "";
+				whereConditions.push(Prisma.sql`(
+					de."employeeNo" ILIKE ${queryLike}
+					OR de."eventType" ILIKE ${queryLike}
+					OR de."doorNo" ILIKE ${queryLike}
+					OR d."name" ILIKE ${queryLike}
+					OR d."address" ILIKE ${queryLike}
+					OR COALESCE(employee_by_id."employeeId", employee_by_device."employeeId", employee_by_code."employeeId") ILIKE ${queryLike}
+					OR COALESCE(employee_by_id."deviceEmpId", employee_by_device."deviceEmpId", employee_by_code."deviceEmpId") ILIKE ${queryLike}
+					OR NULLIF(
+						BTRIM(
+							CONCAT_WS(
+								' ',
+								matched_person."personalInfo"->>'firstName',
+								matched_person."personalInfo"->>'middleName',
+								matched_person."personalInfo"->>'lastName'
+							)
+						),
+						''
+					) ILIKE ${queryLike}
+					OR (
+						${paddedEmployeeCode} <> ''
+						AND COALESCE(employee_by_id."employeeId", employee_by_device."employeeId", employee_by_code."employeeId") = ${paddedEmployeeCode}
+					)
+				)`);
 			}
 
-			const eventClient = (prisma as any).deviceEvent;
-			const orderBy =
+			const whereSql = Prisma.sql`WHERE ${Prisma.join(whereConditions, " AND ")}`;
+			const employeeJoinSql = Prisma.sql`
+				LEFT JOIN LATERAL (
+					SELECT emp.id, emp."employeeId", emp."deviceEmpId", emp."personId"
+					FROM employees emp
+					WHERE emp."organizationId" = de."organizationId"
+						AND emp."isDeleted" = false
+						AND de."employeeId" IS NOT NULL
+						AND emp.id = de."employeeId"
+					LIMIT 1
+				) employee_by_id ON true
+				LEFT JOIN LATERAL (
+					SELECT emp.id, emp."employeeId", emp."deviceEmpId", emp."personId"
+					FROM employees emp
+					WHERE employee_by_id.id IS NULL
+						AND emp."organizationId" = de."organizationId"
+						AND emp."isDeleted" = false
+						AND de."employeeNo" IS NOT NULL
+						AND BTRIM(de."employeeNo") <> ''
+						AND emp."deviceEmpId" = BTRIM(de."employeeNo")
+					LIMIT 1
+				) employee_by_device ON true
+				LEFT JOIN LATERAL (
+					SELECT emp.id, emp."employeeId", emp."deviceEmpId", emp."personId"
+					FROM employees emp
+					WHERE employee_by_id.id IS NULL
+						AND employee_by_device.id IS NULL
+						AND emp."organizationId" = de."organizationId"
+						AND emp."isDeleted" = false
+						AND de."employeeNo" IS NOT NULL
+						AND BTRIM(de."employeeNo") ~ '^[0-9]+$'
+						AND emp."employeeId" = LPAD(
+							COALESCE(NULLIF(REGEXP_REPLACE(BTRIM(de."employeeNo"), '^0+', ''), ''), '0'),
+							5,
+							'0'
+						)
+					LIMIT 1
+				) employee_by_code ON true
+				LEFT JOIN "Person" matched_person ON matched_person.id = COALESCE(
+					employee_by_id."personId",
+					employee_by_device."personId",
+					employee_by_code."personId"
+				)
+			`;
+			const fromSql = Prisma.sql`
+				FROM device_events de
+				INNER JOIN "Device" d ON d.id = de."deviceId"
+				${employeeJoinSql}
+			`;
+			const orderColumnSql =
 				sort === "deviceName"
-					? [{ device: { name: order } }, { receivedAt: "desc" }]
-					: sort === "receivedAt"
-						? [{ receivedAt: order }, { createdAt: "desc" }]
-					: sort === "eventTime" ||
-						  sort === "updatedAt" ||
-						  sort === "status" ||
-						  sort === "source" ||
-						  sort === "employeeNo" ||
-						  sort === "doorNo"
-						? [{ [sort]: order }, { receivedAt: "desc" }]
-						: [{ receivedAt: "desc" }, { createdAt: "desc" }];
-			const [events, total, statusGroups, sourceGroups] = await Promise.all([
-				eventClient.findMany({
-					where,
-					skip,
-					take: limit,
-					orderBy,
-					include: {
-						device: {
-							select: { id: true, name: true, address: true, port: true, protocol: true },
-						},
-					},
-				}),
-				eventClient.count({ where }),
-				eventClient.groupBy({
-					by: ["status"],
-					where,
-					_count: { _all: true },
-				}),
-				eventClient.groupBy({
-					by: ["source"],
-					where,
-					_count: { _all: true },
-				}),
-			]);
+					? Prisma.sql`d."name"`
+					: sort === "eventTime"
+						? Prisma.sql`de."eventTime"`
+						: sort === "updatedAt"
+							? Prisma.sql`de."updatedAt"`
+							: sort === "status"
+								? Prisma.sql`de."status"`
+								: sort === "source"
+									? Prisma.sql`de."source"`
+									: sort === "employeeNo"
+										? Prisma.sql`de."employeeNo"`
+										: sort === "doorNo"
+											? Prisma.sql`de."doorNo"`
+											: Prisma.sql`de."receivedAt"`;
+			const orderDirectionSql = Prisma.raw(order === "asc" ? "ASC" : "DESC");
+			const eventsSql = Prisma.sql`
+				SELECT
+					de.id,
+					de."organizationId",
+					de."deviceId",
+					de."employeeId",
+					de."attendanceId",
+					de."eventTime",
+					de."receivedAt",
+					de."employeeNo",
+					de.source::text AS source,
+					de.status::text AS status,
+					de."eventType",
+					de.major,
+					de.minor,
+					de."doorNo",
+					de."verifyMode",
+					de."dedupeKey",
+					de.payload,
+					de."errorMessage",
+					de."createdAt",
+					de."updatedAt",
+					JSON_BUILD_OBJECT(
+						'id', d.id,
+						'name', d.name,
+						'address', d.address,
+						'port', d.port,
+						'protocol', d.protocol::text
+					) AS device,
+					CASE
+						WHEN COALESCE(employee_by_id.id, employee_by_device.id, employee_by_code.id) IS NULL THEN NULL
+						ELSE JSON_BUILD_OBJECT(
+							'id', COALESCE(employee_by_id.id, employee_by_device.id, employee_by_code.id),
+							'employeeId', COALESCE(employee_by_id."employeeId", employee_by_device."employeeId", employee_by_code."employeeId"),
+							'deviceEmpId', COALESCE(employee_by_id."deviceEmpId", employee_by_device."deviceEmpId", employee_by_code."deviceEmpId"),
+							'fullName', COALESCE(
+								NULLIF(
+									BTRIM(
+										CONCAT_WS(
+											' ',
+											matched_person."personalInfo"->>'firstName',
+											matched_person."personalInfo"->>'middleName',
+											matched_person."personalInfo"->>'lastName'
+										)
+									),
+									''
+								),
+								COALESCE(employee_by_id."employeeId", employee_by_device."employeeId", employee_by_code."employeeId")
+							)
+						)
+					END AS employee
+				${fromSql}
+				${whereSql}
+				ORDER BY ${orderColumnSql} ${orderDirectionSql}, de."receivedAt" DESC, de."createdAt" DESC
+				OFFSET ${skip}
+				LIMIT ${limit}
+			`;
+			const countSql = Prisma.sql`
+				SELECT COUNT(*)::bigint AS total
+				${fromSql}
+				${whereSql}
+			`;
+			const statusGroupsSql = Prisma.sql`
+				SELECT de.status::text AS status, COUNT(*)::bigint AS count
+				${fromSql}
+				${whereSql}
+				GROUP BY de.status
+			`;
+			const sourceGroupsSql = Prisma.sql`
+				SELECT de.source::text AS source, COUNT(*)::bigint AS count
+				${fromSql}
+				${whereSql}
+				GROUP BY de.source
+			`;
 
-			const employeeIds = Array.from(
-				new Set(
-					events
-						.map((event: any) => event.employeeId)
-						.filter((value: unknown) => typeof value === "string" && value),
-				),
-			) as string[];
-			const employeeNos = Array.from(
-				new Set(
-					events
-						.map((event: any) => event.employeeNo)
-						.filter((value: unknown) => typeof value === "string" && value),
-				),
-			) as string[];
-			const matchedEmployees =
-				employeeIds.length || employeeNos.length
-					? await prisma.employee.findMany({
-							where: {
-								organizationId: String(organizationId),
-								isDeleted: false,
-								OR: [
-									...(employeeIds.length ? [{ id: { in: employeeIds } }] : []),
-									...(employeeNos.length
-										? [{ deviceEmpId: { in: employeeNos } }]
-										: []),
-								],
-							},
-							select: {
-								id: true,
-								employeeId: true,
-								deviceEmpId: true,
-								person: { select: { personalInfo: true } },
-							},
-						})
-					: [];
-			const employeeById = new Map(
-				matchedEmployees.map((employee) => [employee.id, employee]),
-			);
-			const employeeByDeviceEmpId = new Map(
-				matchedEmployees
-					.filter((employee) => employee.deviceEmpId)
-					.map((employee) => [String(employee.deviceEmpId), employee]),
-			);
-			const enrichedEvents = events.map((event: any) => {
-				const employee =
-					(event.employeeId ? employeeById.get(event.employeeId) : null) ||
-					(event.employeeNo ? employeeByDeviceEmpId.get(String(event.employeeNo)) : null);
-				return {
-					...event,
-					employee: employee ? buildEventEmployeeSnapshot(employee) : null,
-				};
-			});
+			const [events, totalRows, statusGroups, sourceGroups] = await Promise.all([
+				prisma.$queryRaw<any[]>(eventsSql),
+				prisma.$queryRaw<Array<{ total: bigint | number }>>(countSql),
+				prisma.$queryRaw<Array<{ status: string; count: bigint | number }>>(statusGroupsSql),
+				prisma.$queryRaw<Array<{ source: string; count: bigint | number }>>(sourceGroupsSql),
+			]);
+			const total = Number(totalRows[0]?.total || 0);
 
 			const summary = {
 				total,
 				byStatus: Object.fromEntries(
-					statusGroups.map((item: any) => [item.status, item._count?._all || 0]),
+					statusGroups.map((item: any) => [item.status, Number(item.count || 0)]),
 				),
 				bySource: Object.fromEntries(
-					sourceGroups.map((item: any) => [item.source, item._count?._all || 0]),
+					sourceGroups.map((item: any) => [item.source, Number(item.count || 0)]),
 				),
 			};
 
@@ -639,7 +722,7 @@ export const controller = (prisma: PrismaClient) => {
 				buildSuccessResponse(
 					"Device events retrieved successfully",
 					{
-						events: enrichedEvents,
+						events,
 						summary,
 						pagination: buildPagination(total, page, limit),
 					},

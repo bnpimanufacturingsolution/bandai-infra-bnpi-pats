@@ -1980,6 +1980,9 @@ CREATE INDEX "employees_organizationId_isDeleted_employmentStatus_payFreq_idx" O
 CREATE INDEX "employees_organizationId_agencyId_idx" ON "employees"("organizationId", "agencyId");
 
 -- CreateIndex
+CREATE INDEX "employees_organizationId_deviceEmpId_isDeleted_idx" ON "employees"("organizationId", "deviceEmpId", "isDeleted");
+
+-- CreateIndex
 CREATE INDEX "employees_organizationId_employeeId_isDeleted_idx" ON "employees"("organizationId", "employeeId", "isDeleted");
 
 -- CreateIndex
