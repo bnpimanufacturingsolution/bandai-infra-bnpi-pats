@@ -84,6 +84,45 @@
           - "{{ project_truth_install_root }}/"
       changed_when: true
 
+    - name: Build and import K3s runtime images when the pulled commit changes
+      ansible.builtin.shell: |
+        set -euo pipefail
+        commit="$(git -C "{{ project_truth_repo_root }}" rev-parse HEAD)"
+        state_file="{{ project_truth_state_dir }}/k8s-runtime-image-state"
+        if [ -f "$state_file" ] && grep -qx "commit=${commit}" "$state_file"; then
+          exit 0
+        fi
+
+        cd "{{ project_truth_install_root }}/appliance"
+        if docker compose version >/dev/null 2>&1; then
+          docker compose build hris-api hris-api-db-init hris-app zkteco-bridge
+        else
+          docker-compose build hris-api hris-api-db-init hris-app zkteco-bridge
+        fi
+
+        docker image inspect postgres:16-alpine >/dev/null
+        for image in \
+          hris-api-local:develop \
+          hris-api-db-init:develop \
+          hris-app-local:develop \
+          project-truth-zkteco-bridge:develop; do
+          docker image inspect "$image" >/dev/null
+        done
+
+        mkdir -p /var/lib/rancher/k3s/agent/images
+        docker save -o /tmp/project-truth-k8s-runtime-images.tar \
+          postgres:16-alpine \
+          hris-api-local:develop \
+          hris-api-db-init:develop \
+          hris-app-local:develop \
+          project-truth-zkteco-bridge:develop
+        cp /tmp/project-truth-k8s-runtime-images.tar /var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-images.tar
+        k3s ctr -n k8s.io images import /tmp/project-truth-k8s-runtime-images.tar
+        printf 'commit=%s\nsynced_at=%s\n' "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$state_file"
+      args:
+        executable: /bin/bash
+      changed_when: true
+
     - name: Install Project Truth commands
       ansible.builtin.copy:
         src: "{{ project_truth_install_root }}/appliance/bin/{{ item }}.sh"

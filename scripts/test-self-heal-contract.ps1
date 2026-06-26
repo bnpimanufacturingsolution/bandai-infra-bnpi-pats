@@ -88,7 +88,7 @@ foreach ($envName in $Environments) {
   $checks.Add((Assert-Text "runtime-$envName exposes api hostPort" $rendered "hostPort:\s*$expectedApiPort"))
   $checks.Add((Assert-Text "runtime-$envName exposes postgres hostPort" $rendered "hostPort:\s*$expectedPostgresPort"))
 
-  foreach ($imageName in @('hris-api-db-init', 'hris-api-local', 'hris-app-local')) {
+  foreach ($imageName in @('hris-api-db-init', 'hris-api-local', 'hris-app-local', 'project-truth-zkteco-bridge')) {
     $imageTag = Get-KustomizeImageTag -KustomizationText $runtimeKustomization -ImageName $imageName
     if ($imageTag -ne $environmentRuntimeImageTag) {
       throw "Self-heal contract failed: runtime_image_tag for ${envName} is ${environmentRuntimeImageTag}, but ${imageName} uses ${imageTag}"
@@ -139,6 +139,7 @@ $applicationSetTemplate = Get-Content -Raw 'gitops/argocd/applicationsets/projec
 $checks.Add((Assert-Text 'enable-k8s-runtime stores image archive for K3s pre-import' $enableScript '/var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-images\.tar'))
 $checks.Add((Assert-Text 'enable-k8s-runtime imports images into k8s.io namespace' $enableScript 'k3s ctr -n k8s\.io images import'))
 $checks.Add((Assert-Text 'enable-k8s-runtime accepts promoted runtime image tag' $enableScript '\$ImageTag'))
+$checks.Add((Assert-Text 'enable-k8s-runtime imports ZKTeco bridge image' $enableScript 'project-truth-zkteco-bridge'))
 $checks.Add((Assert-Text 'enable-k8s-runtime installs runtime apps into K3s auto-deploy dir' $enableScript '/var/lib/rancher/k3s/server/manifests'))
 $checks.Add((Assert-Text 'repair-appliance-online persists app manifests into K3s auto-deploy dir' $repairScript '/var/lib/rancher/k3s/server/manifests'))
 $checks.Add((Assert-Text 'repair-appliance-online reapplies Argo platform config' $repairScript 'project-truth-argocd-platform'))
@@ -169,6 +170,7 @@ $checks.Add((Assert-Text 'ansible-pull wrapper preflights Git network before fet
 $checks.Add((Assert-Text 'ansible-pull wrapper repairs resolver drift before fetch' $ansiblePullScript 'systemd-resolved\.service'))
 $checks.Add((Assert-Text 'ansible-pull wrapper repairs DHCP drift before fetch' $ansiblePullScript 'project-truth-lan-dhcp'))
 $checks.Add((Assert-Text 'ansible-pull playbook updates install root' $ansiblePullPlaybook '/opt/project-truth'))
+$checks.Add((Assert-Text 'ansible-pull playbook imports ZKTeco bridge image into K3s' $ansiblePullPlaybook 'project-truth-zkteco-bridge:develop'))
 $checks.Add((Assert-Text 'ansible-pull playbook refreshes Argo apps after host sync' $ansiblePullPlaybook 'argocd\.argoproj\.io/refresh=hard'))
 $checks.Add((Assert-Text 'ansible-pull playbook repairs CoreDNS upstreams' $ansiblePullPlaybook 'forward \. 1\.1\.1\.1 8\.8\.8\.8'))
 $checks.Add((Assert-Text 'ansible-pull playbook releases stale retained runtime PV claim refs' $ansiblePullPlaybook 'kubectl patch pv "\$volume_name" --type=merge'))

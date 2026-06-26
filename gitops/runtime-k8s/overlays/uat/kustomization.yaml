@@ -10,3 +10,5 @@ images:
     newTag: develop
   - name: hris-app-local
     newTag: develop
+  - name: project-truth-zkteco-bridge
+    newTag: develop

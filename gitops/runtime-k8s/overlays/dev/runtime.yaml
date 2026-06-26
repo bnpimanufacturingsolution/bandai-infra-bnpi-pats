@@ -209,6 +209,8 @@ spec:
               value: /health,/metrics
             - name: LOG_FORMAT
               value: json
+            - name: ZKTECO_BRIDGE_STATUS_URL
+              value: http://zkteco-bridge:4371/status
           ports:
             - name: http
               containerPort: 3001
@@ -246,6 +248,68 @@ spec:
     - name: http
       port: 3001
       targetPort: 3001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zkteco-bridge
+  labels:
+    app.kubernetes.io/name: zkteco-bridge
+    app.kubernetes.io/part-of: project-truth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zkteco-bridge
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: zkteco-bridge
+        app.kubernetes.io/part-of: project-truth
+    spec:
+      containers:
+        - name: bridge
+          image: project-truth-zkteco-bridge:develop
+          imagePullPolicy: Never
+          env:
+            - name: ZKTECO_DEVICE_IP
+              value: 10.184.38.9
+            - name: ZKTECO_DEVICE_PORT
+              value: "4370"
+            - name: ZKTECO_WEBHOOK_URL
+              value: http://hris-api:3001/api/zkteco/events
+            - name: ZKTECO_STATUS_PORT
+              value: "4371"
+          ports:
+            - name: status
+              containerPort: 4371
+              hostPort: 4372
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4371
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4371
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zkteco-bridge
+spec:
+  selector:
+    app.kubernetes.io/name: zkteco-bridge
+  ports:
+    - name: status
+      port: 4371
+      targetPort: 4371
 ---
 apiVersion: apps/v1
 kind: Deployment
