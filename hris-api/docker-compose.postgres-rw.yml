@@ -11,7 +11,7 @@ services:
       - POSTGRESQL_REPLICATION_USER=repl_user
       - POSTGRESQL_REPLICATION_PASSWORD=repl_pass
     ports:
-      - "55432:5432"
+      - "${POSTGRES_HOST_PORT:-55432}:5432"
     volumes:
       - pg_primary_data:/bitnami/postgresql
 
