@@ -43,4 +43,10 @@ describe("runtime API base resolver", () => {
 			),
 		).toBe("https://api.example.test");
 	});
+
+	it("ignores relative configured bases for LAN browser sessions", () => {
+		expect(resolveRuntimeApiBase(locationFor("http://10.184.38.61:3000"), "/api")).toBe(
+			"http://10.184.38.61:3001",
+		);
+	});
 });

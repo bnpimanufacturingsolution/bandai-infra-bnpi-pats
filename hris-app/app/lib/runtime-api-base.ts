@@ -23,6 +23,7 @@ export const resolveRuntimeApiBase = (
 	envBase?: string,
 ): string => {
 	const configuredBase = (envBase || "").trim();
+	const isAbsoluteConfiguredBase = /^https?:\/\//i.test(configuredBase);
 
 	if (!location) {
 		return configuredBase || DEV_API_BASE;
@@ -32,13 +33,13 @@ export const resolveRuntimeApiBase = (
 	const apiPort = APP_TO_API_PORT[location.port] || DEFAULT_API_PORT;
 
 	if (host === "localhost" || host === "127.0.0.1") {
-		if (configuredBase && configuredBase !== LOCAL_API_BASE) {
+		if (isAbsoluteConfiguredBase && configuredBase !== LOCAL_API_BASE) {
 			return configuredBase;
 		}
 		return `${location.protocol}//${location.hostname}:${apiPort}`;
 	}
 
-	if (configuredBase && configuredBase !== LOCAL_API_BASE) {
+	if (isAbsoluteConfiguredBase && configuredBase !== LOCAL_API_BASE) {
 		return configuredBase;
 	}
 
