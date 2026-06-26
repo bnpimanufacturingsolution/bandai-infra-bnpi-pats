@@ -166,12 +166,18 @@ const statusVariant = (status: string) => {
 const isZktecoDevice = (device: any, health?: DeviceHealthResponse) => {
 	const vendor = String(device?.config?.vendor || device?.config?.type || "").toLowerCase();
 	const name = String(device?.name || "").toLowerCase();
+	const protocol = String(device?.protocol || "").toLowerCase();
+	const port = Number(device?.port);
 	return (
 		health?.device?.vendor === "ZKTeco" ||
 		Boolean(health?.checks?.zktecoBridge) ||
+		Boolean(health?.checks?.zktecoWebhook) ||
 		vendor.includes("zkteco") ||
+		vendor.includes("zk") ||
 		name.includes("zkteco") ||
-		(String(device?.protocol || "").toLowerCase() === "tcp" && Number(device?.port) === 4370)
+		name.includes("zk") ||
+		port === 4370 ||
+		protocol === "sdk"
 	);
 };
 

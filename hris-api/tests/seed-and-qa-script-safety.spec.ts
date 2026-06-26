@@ -4,7 +4,10 @@ import {
 	isSeedDryRunRequested,
 	SEED_WRITE_SCRIPT_NAMES,
 } from "../prisma/seeds/seedDryRunGuard";
-import { getGeneralEmployeeSeedPreview } from "../prisma/seeds/generalEmployeeSeeder.shared";
+import {
+	ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED,
+	getGeneralEmployeeSeedPreview,
+} from "../prisma/seeds/generalEmployeeSeeder.shared";
 import { MIGRATION_SCRIPT_SAFETY_REGISTRY } from "../scripts/migration/script-safety";
 
 const packageJson = require("../package.json") as { scripts: Record<string, string> };
@@ -40,6 +43,10 @@ describe("seed script dry-run safety guard", () => {
 		expect(SEED_WRITE_SCRIPT_NAMES).to.include("seed:reset-demo-requests");
 		expect(SEED_WRITE_SCRIPT_NAMES).to.include("seed:soa");
 		expect(packageJson.scripts["prisma-seed"]).to.equal("npx prisma db seed");
+	});
+
+	it("keeps prisma-seed aligned with the local admin bootstrap contract", () => {
+		expect(ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED).to.equal(true);
 	});
 });
 

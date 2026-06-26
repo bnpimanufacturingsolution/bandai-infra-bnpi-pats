@@ -173,11 +173,12 @@ export const controller = (prisma: PrismaClient) => {
 	const getZktecoBridgeStatus = async () => {
 		const statusUrl =
 			process.env.ZKTECO_BRIDGE_STATUS_URL || "http://zkteco-bridge:4371/status";
+		const timeoutMs = Number(process.env.ZKTECO_BRIDGE_STATUS_TIMEOUT_MS || 10000);
 		const startedAt = Date.now();
 		try {
 			const response = await fetch(statusUrl, {
 				method: "GET",
-				signal: AbortSignal.timeout(3000),
+				signal: AbortSignal.timeout(timeoutMs),
 			});
 			const data = await response.json().catch(() => null);
 			return {

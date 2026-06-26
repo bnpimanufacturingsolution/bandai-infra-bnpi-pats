@@ -929,6 +929,7 @@ const createDateAtPhilippineMinutes = (base: Date, philippineTotalMinutes: numbe
 };
 
 const DEFAULT_SEED_PASSWORD = "Password123!";
+export const ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED = true;
 const DEFAULT_GENERAL_SEED_TIMESHEETS_PER_EMPLOYEE = 2;
 const GOVERNMENT_DOCUMENT_TYPES = ["TIN", "SSS", "PHILHEALTH", "PAGIBIG"] as const;
 const SEEDED_EMPLOYEE_DOCUMENT_TYPES = [
@@ -1575,7 +1576,7 @@ const resolveExistingProjectDefaultsForResume = async (
 	if (mode === "idp") {
 		return seedProjectDefaults(prisma, {
 			organizationId: options?.organizationId,
-			ensureAdminUsers: false,
+			ensureAdminUsers: ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED,
 		});
 	}
 
@@ -1596,7 +1597,7 @@ const resolveExistingProjectDefaultsForResume = async (
 	if (!organization) {
 		return seedProjectDefaults(prisma, {
 			organizationId: options?.organizationId,
-			ensureAdminUsers: false,
+			ensureAdminUsers: ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED,
 		});
 	}
 
@@ -5023,7 +5024,7 @@ async function seedEmployeePopulation(options?: SeedScenarioOptions) {
 			  })
 			: await seedProjectDefaults(prisma, {
 					organizationId: options?.organizationId,
-					ensureAdminUsers: false,
+					ensureAdminUsers: ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED,
 			  }));
 	const organizationId = projectDefaults.organizationId;
 	logSeedStep(
