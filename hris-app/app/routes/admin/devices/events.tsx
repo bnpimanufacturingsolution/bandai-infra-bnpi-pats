@@ -115,6 +115,14 @@ const formatPunchTime = (value: string | Date | null | undefined) => {
 	}).format(date);
 };
 
+const formatDateWindowLabel = (from?: string, to?: string) => {
+	if (!from && !to) return "All punch dates";
+	if (from && to && from === to) return `Punch date ${from}`;
+	if (from && to) return `Punch dates ${from} to ${to}`;
+	if (from) return `Punches from ${from}`;
+	return `Punches through ${to}`;
+};
+
 const getDateRangeForWindow = (window: TimeWindow) => {
 	if (window === "all") return { from: undefined, to: undefined };
 	const today = new Date();
@@ -332,13 +340,16 @@ export default function DeviceEventsPage() {
 	const source = searchParams.get("source") || "all";
 	const sort = searchParams.get("sort") || "receivedAt";
 	const order = searchParams.get("order") === "asc" ? "asc" : "desc";
-	const timeWindow = (searchParams.get("window") || "today") as TimeWindow;
+	const timeWindow = (searchParams.get("window") ||
+		(viewMode === "saved" ? "all" : "today")) as TimeWindow;
 	const { from, to } = getDateRangeForWindow(timeWindow);
+	const liveTimeWindow = timeWindow === "all" ? "today" : timeWindow;
+	const { from: liveFrom, to: liveTo } = getDateRangeForWindow(liveTimeWindow);
 
 	const { data: devicesData } = useDevices({ limit: 100, document: true });
 	const devices = useMemo(() => (devicesData as any)?.devices || [], [devicesData]);
-	const selectedDevice = devices.find((device: any) => device.id === deviceId);
-	const liveDevice = selectedDevice || devices[0];
+	const selectedDevice = deviceId === "all" ? undefined : devices.find((device: any) => device.id === deviceId);
+	const liveDevice = selectedDevice;
 	const liveDeviceId = liveDevice?.id;
 	const {
 		data: deviceHealth,
@@ -361,7 +372,7 @@ export default function DeviceEventsPage() {
 	const savedQueryParams: ApiQueryParams = {
 		page: pageParam,
 		limit: limitParam,
-		query,
+		query: viewMode === "saved" ? query : undefined,
 		deviceId: deviceId === "all" ? undefined : deviceId,
 		status: viewMode === "saved" && status !== "all" ? status : undefined,
 		source: viewMode === "saved" && source !== "all" ? source : undefined,
@@ -370,19 +381,12 @@ export default function DeviceEventsPage() {
 		from,
 		to,
 	};
-	const savedTotalQueryParams: ApiQueryParams = {
-		page: 1,
-		limit: 1,
-		deviceId: deviceId === "all" ? undefined : deviceId,
-	};
-
 	const {
 		data,
 		isLoading: isLoadingSaved,
 		error: savedError,
 		refetch,
 	} = useDeviceEvents(savedQueryParams);
-	const { data: savedTotalData } = useDeviceEvents(savedTotalQueryParams);
 
 	const {
 		data: liveData,
@@ -395,8 +399,8 @@ export default function DeviceEventsPage() {
 			searchID: pageParam === 1 ? "0" : String(pageParam - 1),
 			searchResultPosition: (pageParam - 1) * limitParam,
 			maxResults: limitParam,
-			startTime: `${from}T00:00:00+08:00`,
-			endTime: `${to}T23:59:59+08:00`,
+			startTime: `${liveFrom}T00:00:00+08:00`,
+			endTime: `${liveTo}T23:59:59+08:00`,
 			major: 0,
 			minor: 0,
 			timeReverseOrder: true,
@@ -525,27 +529,10 @@ export default function DeviceEventsPage() {
 	});
 
 	const rows: UnifiedDeviceEventRow[] = viewMode === "live" ? liveRows : savedEvents;
-	const visibleEvents: UnifiedDeviceEventRow[] =
-		viewMode === "live" && query
-			? rows.filter((event: UnifiedDeviceEventRow) => {
-					const needle = query.toLowerCase();
-					return [
-						event.deviceName,
-						event.deviceAddress,
-						event.employeeNo,
-						event.employeeName,
-						event.businessStatus,
-						event.source,
-						event.doorNo,
-					]
-						.filter((value) => value !== undefined && value !== null)
-						.some((value) => String(value).toLowerCase().includes(needle));
-				})
-			: rows;
+	const savedSummary = data?.summary || { total: 0, byStatus: {}, bySource: {} };
+	const savedStatusCounts = savedSummary.byStatus || {};
 	const liveTotal = Number(acsEventPayload?.totalMatches || liveEvents.length || 0);
-	const totalItems = viewMode === "live" ? liveTotal : data?.pagination?.total || data?.summary?.total || 0;
-	const savedAllTimeTotal =
-		savedTotalData?.pagination?.total || savedTotalData?.summary?.total || 0;
+	const totalItems = viewMode === "live" ? liveTotal : data?.pagination?.total || savedSummary.total || 0;
 	const isEventLoading = viewMode === "live" ? isLoadingLive : isLoadingSaved;
 	const activeError = viewMode === "live" ? liveError || savedError : savedError;
 	const deviceSubtitle = liveDevice
@@ -555,21 +542,38 @@ export default function DeviceEventsPage() {
 					deviceHealth?.device?.baseUrl ||
 					`${liveDevice.protocol || "http"}://${liveDevice.address}:${liveDevice.port}`
 				}`
-		: "All devices - No device selected";
+		: viewMode === "live"
+			? "Select a device for live reads"
+			: "All devices - HRIS stored event ledger";
 
-	const matchedCount = rows.filter(
+	const countSavedStatus = (...statuses: string[]) =>
+		statuses.reduce((total, currentStatus) => {
+			const value = savedStatusCounts[currentStatus as keyof typeof savedStatusCounts];
+			return total + Number(value || 0);
+		}, 0);
+	const visibleMatchedCount = rows.filter(
 		(event: UnifiedDeviceEventRow) =>
 			event.status === "MATCHED" ||
 			event.status === "ATTENDANCE_CREATED" ||
 			event.status === "ATTENDANCE_UPDATED",
 	).length;
-	const attendanceWrittenCount = rows.filter(
+	const visibleAttendanceWrittenCount = rows.filter(
 		(event: UnifiedDeviceEventRow) =>
 			event.status === "ATTENDANCE_CREATED" || event.status === "ATTENDANCE_UPDATED",
 	).length;
-	const needsEmployeeMatchCount = rows.filter(
+	const visibleNeedsEmployeeMatchCount = rows.filter(
 		(event: UnifiedDeviceEventRow) => event.status === "UNMATCHED",
 	).length;
+	const matchedCount =
+		viewMode === "saved"
+			? countSavedStatus("MATCHED", "ATTENDANCE_CREATED", "ATTENDANCE_UPDATED")
+			: visibleMatchedCount;
+	const attendanceWrittenCount =
+		viewMode === "saved"
+			? countSavedStatus("ATTENDANCE_CREATED", "ATTENDANCE_UPDATED")
+			: visibleAttendanceWrittenCount;
+	const needsEmployeeMatchCount =
+		viewMode === "saved" ? countSavedStatus("UNMATCHED") : visibleNeedsEmployeeMatchCount;
 	const notSavedCount = rows.filter(
 		(event: UnifiedDeviceEventRow) => event.status === "NOT_SAVED",
 	).length;
@@ -745,6 +749,7 @@ export default function DeviceEventsPage() {
 								if (value === "live") {
 									next.delete("status");
 									next.delete("source");
+									next.delete("query");
 								}
 							})
 						}
@@ -784,7 +789,7 @@ export default function DeviceEventsPage() {
 					<div className="flex min-w-0 items-center justify-between gap-3 p-3">
 						<div className="min-w-0">
 							<p className="truncate text-sm font-medium text-slate-950">
-								{liveDevice?.name || "Selected device"}
+								{liveDevice?.name || "All devices"}
 							</p>
 							<p className="truncate text-xs text-slate-500">
 								{isLoadingHealth
@@ -845,7 +850,7 @@ export default function DeviceEventsPage() {
 						{[
 							{
 								label: viewMode === "live" ? "Device punches" : "Total events",
-								value: viewMode === "live" ? liveEvents.length : savedAllTimeTotal,
+								value: viewMode === "live" ? liveEvents.length : totalItems,
 							},
 							{ label: "Matched", value: matchedCount },
 							{ label: "Needs match", value: needsEmployeeMatchCount },
@@ -897,8 +902,9 @@ export default function DeviceEventsPage() {
 						</h2>
 						<p className="truncate text-xs text-slate-500">
 							{viewMode === "live" ? "Device read" : "HRIS stored event ledger"}
+							{viewMode === "saved" ? ` - ${formatDateWindowLabel(from, to)}` : ""}
 							{lastRealtimeEvent?.emittedAt
-								? ` · Latest ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
+								? ` - Latest save ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
 								: ""}
 						</p>
 					</div>
@@ -919,19 +925,19 @@ export default function DeviceEventsPage() {
 				<DataTable<UnifiedDeviceEventRow>
 					title={viewMode === "live" ? "Punches" : "Saved punches"}
 					description=""
-					data={visibleEvents}
+					data={rows}
 					columns={columns}
 					isLoading={isEventLoading}
 					emptyMessage={viewMode === "live" ? "No device punches found" : "No saved events found"}
 					emptyDescription=""
-					showSearch
+					showSearch={viewMode === "saved"}
 					showFilters={false}
 					showPagination
 					showExport={false}
 					noCard
 					searchPlaceholder="Search employee, device, result..."
 					searchWidth="w-full sm:w-80"
-					searchValue={query}
+					searchValue={viewMode === "saved" ? query : ""}
 					onSearch={(value) => setFilter("query", value)}
 					onSort={(key, direction) => {
 						updateSearchParams((next) => {

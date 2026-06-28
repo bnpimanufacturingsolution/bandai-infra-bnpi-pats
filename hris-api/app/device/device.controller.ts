@@ -569,18 +569,19 @@ export const controller = (prisma: PrismaClient) => {
 					) ILIKE ${queryLike}
 					OR (
 						${paddedEmployeeCode} <> ''
-						AND COALESCE(employee_by_id."employeeId", employee_by_device."employeeId", employee_by_code."employeeId") = ${paddedEmployeeCode}
+						AND COALESCE(employee_by_id."employeeId", employee_by_device."employeeId", employee_by_code."employeeId") IN (
+							${query},
+							${strippedNumericQuery},
+							${paddedEmployeeCode}
+						)
 					)
 				)`);
 			}
 
 			const whereSql = Prisma.sql`WHERE ${Prisma.join(whereConditions, " AND ")}`;
-			const eventFromSql = Prisma.sql`
-				FROM device_events de
-			`;
 			const baseFromSql = Prisma.sql`
 				FROM device_events de
-				INNER JOIN "Device" d ON d.id = de."deviceId"
+				LEFT JOIN "Device" d ON d.id = de."deviceId"
 			`;
 			const employeeJoinSql = Prisma.sql`
 				LEFT JOIN LATERAL (
@@ -611,11 +612,23 @@ export const controller = (prisma: PrismaClient) => {
 						AND emp."organizationId" = de."organizationId"
 						AND emp."isDeleted" = false
 						AND de."employeeNo" IS NOT NULL
-						AND BTRIM(de."employeeNo") ~ '^[0-9]+$'
-						AND emp."employeeId" = LPAD(
-							COALESCE(NULLIF(REGEXP_REPLACE(BTRIM(de."employeeNo"), '^0+', ''), ''), '0'),
-							5,
-							'0'
+						AND BTRIM(de."employeeNo") <> ''
+						AND emp."employeeId" IN (
+							BTRIM(de."employeeNo"),
+							CASE
+								WHEN BTRIM(de."employeeNo") ~ '^[0-9]+$'
+								THEN COALESCE(NULLIF(REGEXP_REPLACE(BTRIM(de."employeeNo"), '^0+', ''), ''), '0')
+								ELSE BTRIM(de."employeeNo")
+							END,
+							CASE
+								WHEN BTRIM(de."employeeNo") ~ '^[0-9]+$'
+								THEN LPAD(
+									COALESCE(NULLIF(REGEXP_REPLACE(BTRIM(de."employeeNo"), '^0+', ''), ''), '0'),
+									5,
+									'0'
+								)
+								ELSE BTRIM(de."employeeNo")
+							END
 						)
 					LIMIT 1
 				) employee_by_code ON true
@@ -629,12 +642,8 @@ export const controller = (prisma: PrismaClient) => {
 				${baseFromSql}
 				${employeeJoinSql}
 			`;
-			const pageFromSql = hasQuery
-				? fromSql
-				: sort === "deviceName"
-					? baseFromSql
-					: eventFromSql;
-			const aggregateFromSql = hasQuery ? fromSql : eventFromSql;
+			const pageFromSql = hasQuery ? fromSql : baseFromSql;
+			const aggregateFromSql = hasQuery ? fromSql : baseFromSql;
 			const orderColumnSql =
 				sort === "deviceName"
 					? Prisma.sql`d."name"`
@@ -682,13 +691,16 @@ export const controller = (prisma: PrismaClient) => {
 					de."errorMessage",
 					de."createdAt",
 					de."updatedAt",
-					JSON_BUILD_OBJECT(
-						'id', d.id,
-						'name', d.name,
-						'address', d.address,
-						'port', d.port,
-						'protocol', d.protocol::text
-					) AS device,
+					CASE
+						WHEN d.id IS NULL THEN NULL
+						ELSE JSON_BUILD_OBJECT(
+							'id', d.id,
+							'name', d.name,
+							'address', d.address,
+							'port', d.port,
+							'protocol', d.protocol::text
+						)
+					END AS device,
 					CASE
 						WHEN COALESCE(employee_by_id.id, employee_by_device.id, employee_by_code.id) IS NULL THEN NULL
 						ELSE JSON_BUILD_OBJECT(

@@ -18,10 +18,36 @@ Do not stop just because:
 - A service is warming up.
 - A workflow has not started yet.
 - A tunnel needs to be opened to a verified target.
+- `agent-browser` is missing from PATH.
 - Code needs to be committed or pushed to `develop`.
 - Dependencies or generated files need a normal repo-documented install/build/regenerate step.
 
 Research, recover, retry, and capture evidence before calling anything blocked.
+
+## Browser Verification Tool
+
+When browser verification is requested, prefer `agent-browser`.
+
+On this Windows host the npm global prefix is:
+
+```text
+C:\home\izu\.npm-global
+```
+
+If `agent-browser` is not found, repair it instead of stopping:
+
+```powershell
+npm install -g agent-browser@latest
+$npmGlobal = (npm config get prefix).Trim()
+if (($env:Path -split ';') -notcontains $npmGlobal) {
+  $env:Path = "$npmGlobal;$env:Path"
+  $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+  if (($userPath -split ';') -notcontains $npmGlobal) {
+    [Environment]::SetEnvironmentVariable('Path', "$npmGlobal;$userPath", 'User')
+  }
+}
+agent-browser --version
+```
 
 ## Real Stop Conditions
 

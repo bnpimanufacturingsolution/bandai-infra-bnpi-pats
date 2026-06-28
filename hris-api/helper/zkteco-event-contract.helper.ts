@@ -67,6 +67,20 @@ export const normalizeZktecoPayload = (payload: Record<string, any>): Normalized
 
 export const parseZktecoEventTime = (rawTime: unknown) => parseHikvisionEventTime(rawTime);
 
+export const buildZktecoEmployeeNoCandidates = (employeeNo: unknown) => {
+	const raw = String(employeeNo || "").trim();
+	if (!raw) return [];
+
+	const candidates = new Set<string>([raw]);
+	if (/^\d+$/.test(raw)) {
+		const stripped = raw.replace(/^0+/, "") || "0";
+		candidates.add(stripped);
+		candidates.add(stripped.padStart(5, "0"));
+	}
+
+	return [...candidates];
+};
+
 export const isZktecoAttendancePunchEvent = (
 	event: Pick<NormalizedZktecoEvent, "eventType" | "isValid">,
 ) => {

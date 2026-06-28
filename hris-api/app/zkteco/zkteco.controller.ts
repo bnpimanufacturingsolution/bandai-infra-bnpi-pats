@@ -5,6 +5,7 @@ import { buildErrorResponse } from "../../helper/error-handler";
 import { invalidateCache } from "../../middleware/cache";
 import { emitDeviceEventSaved } from "../../helper/device-event-realtime.helper";
 import {
+	buildZktecoEmployeeNoCandidates,
 	buildZktecoDeviceEventDedupeKey,
 	isZktecoAttendancePunchEvent,
 	normalizeZktecoPayload,
@@ -223,7 +224,10 @@ export const controller = (prisma: PrismaClient) => {
 				where: {
 					isDeleted: false,
 					organizationId: device.organizationId,
-					deviceEmpId: employeeNo,
+					OR: [
+						{ deviceEmpId: employeeNo },
+						{ employeeId: { in: buildZktecoEmployeeNoCandidates(employeeNo) } },
+					],
 				},
 				select: {
 					id: true,
@@ -239,7 +243,7 @@ export const controller = (prisma: PrismaClient) => {
 				});
 				res.status(200).json(
 					buildSuccessResponse(
-						"ZKTeco event received but no employee matched by deviceEmpId",
+						"ZKTeco event received but no employee matched by deviceEmpId or employeeId",
 						{
 							received: true,
 							matched: false,

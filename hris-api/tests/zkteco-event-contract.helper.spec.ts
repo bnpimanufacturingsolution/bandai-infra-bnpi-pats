@@ -1,6 +1,7 @@
 import { expect } from "chai";
 import {
 	buildZktecoDeviceEventDedupeKey,
+	buildZktecoEmployeeNoCandidates,
 	DEFAULT_ZKTECO_MIN_PUNCH_PAIR_GAP_MINUTES,
 	isZktecoAttendancePunchEvent,
 	normalizeZktecoPayload,
@@ -85,6 +86,13 @@ describe("zkteco event contract helper", () => {
 
 	it("keeps the ZKTeco source distinct from other device event save paths", () => {
 		expect(ZKTECO_DEVICE_EVENT_SOURCE).to.equal("ZKTECO_EVENT");
+	});
+
+	it("builds employee-number candidates for raw deviceEmpId and padded employeeId matching", () => {
+		expect(buildZktecoEmployeeNoCandidates("326")).to.deep.equal(["326", "00326"]);
+		expect(buildZktecoEmployeeNoCandidates("00326")).to.deep.equal(["00326", "326"]);
+		expect(buildZktecoEmployeeNoCandidates("EMP-326")).to.deep.equal(["EMP-326"]);
+		expect(buildZktecoEmployeeNoCandidates(" ")).to.deep.equal([]);
 	});
 
 	it("treats valid attendance transactions as attendance punches", () => {
