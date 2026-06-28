@@ -1,0 +1,9 @@
+tunnel: 1c8ee2c4-c9c5-4840-be39-639e4b5f605b
+credentials-file: C:\Users\anoni\.cloudflared\1c8ee2c4-c9c5-4840-be39-639e4b5f605b.json
+
+ingress:
+  - hostname: app.bnpi-hris.dedyn.io
+    service: http://192.168.254.148:3000
+  - hostname: bnpi-hris.uzaro.net
+    service: http://192.168.254.148:3000
+  - service: http_status:404
