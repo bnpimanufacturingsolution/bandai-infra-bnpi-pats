@@ -136,6 +136,9 @@ namespace ProjectTruth {
 
     [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    public static extern bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, uint nFlags);
   }
 
   [StructLayout(LayoutKind.Sequential)]
@@ -182,7 +185,15 @@ function Save-WindowScreenshot {
   $bitmap = New-Object System.Drawing.Bitmap($width, $height)
   $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
   try {
-    $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+    $hdc = $graphics.GetHdc()
+    try {
+      $printed = [ProjectTruth.User32]::PrintWindow($Process.MainWindowHandle, $hdc, 2)
+    } finally {
+      $graphics.ReleaseHdc($hdc)
+    }
+    if (-not $printed) {
+      $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+    }
     $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
   } finally {
     [ProjectTruth.User32]::SetWindowPos($Process.MainWindowHandle, $hwndNoTopMost, 0, 0, 0, 0, $swpNoMoveNoSize) | Out-Null

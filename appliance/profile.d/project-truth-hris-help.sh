@@ -22,6 +22,13 @@ if [ -n "$lan_ip" ]; then
   printf '  %-5s login  http://%s:%s/auth/login\n' "UAT" "$lan_ip" "3200"
   printf '  %-5s api    http://%s:%s/health\n' "UAT" "$lan_ip" "3201"
   echo
+  echo "Cloudflare named tunnel"
+  echo "  mode: host-managed on Windows"
+  echo "  name: bnpi-hris"
+  echo "  public: https://bnpi-hris.tech/auth/login"
+  echo "  origin: http://${lan_ip}:3000"
+  echo "  host repair: start-bnpi-cloudflare-tunnel"
+  echo
   echo "Postgres"
   printf '  %-5s %s\n' "PROD" "postgresql://postgres:postgres@${lan_ip}:15432/hris"
   printf '  %-5s %s\n' "DEV" "postgresql://postgres:postgres@${lan_ip}:15433/hris"

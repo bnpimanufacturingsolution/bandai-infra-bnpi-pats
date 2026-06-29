@@ -8,8 +8,7 @@ ingress:
     service: http://10.184.38.91:3000
   - hostname: app.bnpi-hris.tech
     service: http://10.184.38.91:3000
-  - hostname: app.bnpi-hris.dedyn.io
-    service: http://10.184.38.91:3000
   - hostname: bnpi-hris.uzaro.net
     service: http://10.184.38.91:3000
   - service: http_status:404
+

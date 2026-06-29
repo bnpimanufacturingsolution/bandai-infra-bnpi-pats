@@ -64,6 +64,21 @@ com.cloudflare.api.account.zone.create
 - HTTPS checks to `www.bnpi-hris.tech` and `app.bnpi-hris.tech` reached Cloudflare proxy IPs but reset during TLS handshake.
 - Current interpretation: Cloudflare zone activation, DNS cache propagation, or Universal SSL issuance is still settling. The VM origin itself is healthy.
 
+## Update After Tunnel Restart
+
+- The scheduled named tunnel task was restarted and is running:
+  - `ProjectTruth-BNPI-HRIS-Cloudflared`
+- `cloudflared tunnel info bnpi-hris` reports an active connector.
+- Cloudflare public resolver still resolves all three hostnames to Cloudflare proxy IPs.
+- Explicit HTTP checks to Cloudflare edge IPs for all three hostnames returned:
+
+```text
+HTTP/1.1 530
+Server: cloudflare
+```
+
+- Current interpretation: DNS records and tunnel connector are correct, but the Cloudflare zone is still not fully active at the edge. Cloudflare dashboard must show the zone as `Active`, and Universal SSL should become active, before the public hostname is expected to work.
+
 ## Remaining Cutover Steps
 
 1. In Cloudflare, add a new site/zone:

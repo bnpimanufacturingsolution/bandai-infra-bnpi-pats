@@ -103,6 +103,16 @@ emit_database_lan_rows() {
   printf '  %-5s %s\n' "UAT" "postgresql://postgres:postgres@${ip_addr}:15434/hris"
 }
 
+emit_named_cloudflare_rows() {
+  local ip_addr="$1"
+  echo "Cloudflare named tunnel"
+  echo "  mode: host-managed on Windows"
+  echo "  name: bnpi-hris"
+  echo "  public: https://bnpi-hris.tech/auth/login"
+  echo "  origin: http://${ip_addr}:3000"
+  echo "  host repair: start-bnpi-cloudflare-tunnel"
+}
+
 emit_zkteco_runtime_rows() {
   local ip_addr="$1"
   echo "ZKTeco runtime"
@@ -167,6 +177,8 @@ write_summary() {
       echo
       echo "Open these from your host browser"
       emit_hris_rows "$ip_addr"
+      echo
+      emit_named_cloudflare_rows "$ip_addr"
       echo
       echo "Postgres LAN URLs"
       emit_database_lan_rows "$ip_addr"
@@ -355,6 +367,10 @@ emit_screen_summary() {
 
   if [ "$page" = "tunnels" ]; then
     echo
+    emit_named_cloudflare_rows "$ip_addr"
+    echo
+    echo "If public URL fails: wait for Cloudflare zone/SSL."
+    echo
     emit_trycloudflare_screen
     echo
     echo "Next: project-truth-lan-summary --screen-db"
@@ -372,6 +388,10 @@ emit_screen_summary() {
   echo
   echo "HRIS"
   emit_hris_rows "$ip_addr"
+  echo "Cloudflare"
+  echo "  public: https://bnpi-hris.tech/auth/login"
+  echo "  origin: http://${ip_addr}:3000"
+  echo "  mode: host-managed tunnel bnpi-hris"
   echo "Postgres"
   emit_database_lan_rows "$ip_addr"
   echo "ZKTeco"
@@ -400,6 +420,8 @@ fi
   if [ -n "$ip_addr" ]; then
     echo "LAN IP: ${ip_addr}"
     echo "Open: http://${ip_addr}:3000/auth/login"
+    echo "Cloudflare: https://bnpi-hris.tech/auth/login"
+    echo "Tunnel: host-managed bnpi-hris -> http://${ip_addr}:3000"
     echo "Client summary: project-truth-lan-summary --screen"
     if [ -r "$sync_state_file" ]; then
       commit="$(awk -F= '$1 == "commit" { print substr($2, 1, 12) }' "$sync_state_file")"
@@ -422,6 +444,9 @@ fi
   else
     echo "LAN IP: NOT DETECTED"
   fi
+  echo "Cloudflare:"
+  echo "  https://bnpi-hris.tech/auth/login"
+  echo "  host-managed tunnel bnpi-hris"
   echo
   echo "Console login:"
   echo "  username: infra"
@@ -453,9 +478,10 @@ if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
   {
     printf '\033c'
     if [ -n "$tty_user" ]; then
-      echo "Project Truth HRIS appliance"
-      echo "LAN IP: ${ip_addr:-NOT DETECTED}"
-      echo
+    echo "Project Truth HRIS appliance"
+    echo "LAN IP: ${ip_addr:-NOT DETECTED}"
+    echo "Cloudflare: https://bnpi-hris.tech/auth/login"
+    echo
       echo "Console is already logged in as ${tty_user}."
       echo "Do not type infra at this shell prompt."
       echo
