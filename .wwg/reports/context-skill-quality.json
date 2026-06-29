@@ -1026,7 +1026,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 543,
+      "line": 542,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1036,7 +1036,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 547,
+      "line": 546,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -2536,7 +2536,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 543,
+      "line": 542,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -2546,7 +2546,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 547,
+      "line": 546,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3433,7 +3433,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 543,
+      "line": 542,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3443,7 +3443,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 547,
+      "line": 546,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
