@@ -46,7 +46,7 @@ namespace ZKTecoStandalone
         private static readonly string LogFilePath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory,
             "logs",
-            "zkteco-monitor-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".log");
+            "zkteco-monitor-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff") + "-" + Process.GetCurrentProcess().Id + ".log");
 
         private static void Main(string[] args)
         {
@@ -244,7 +244,17 @@ namespace ZKTecoStandalone
                 var device = new DeviceConnection(ip, Port);
                 try
                 {
-                    device.ConnectAndRegister();
+                    for (int attempt = 1; attempt <= 3 && !device.IsConnected; attempt++)
+                    {
+                        if (attempt > 1)
+                        {
+                            Log($"[{ip}] Summary connect retry {attempt}/3 after SDK connection failure.");
+                            Thread.Sleep(3000);
+                        }
+
+                        device.ConnectAndRegister();
+                    }
+
                     if (!device.IsConnected)
                     {
                         Log($"{ip},false,0,0,0,,");
