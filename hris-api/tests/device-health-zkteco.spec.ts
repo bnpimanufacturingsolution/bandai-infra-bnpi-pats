@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { controller } from "../app/device/device.controller";
 
-describe("device health ZKTeco VM bridge", () => {
+describe("device health ZKTeco SDK sidecar", () => {
 	const originalFetch = global.fetch;
 	const originalBridgeStatusUrl = process.env.ZKTECO_BRIDGE_STATUS_URL;
 
@@ -14,8 +14,8 @@ describe("device health ZKTeco VM bridge", () => {
 		}
 	});
 
-	it("uses the VM-native ZKTeco bridge status and never returns Hikvision listener state for ZKTeco devices", async () => {
-		process.env.ZKTECO_BRIDGE_STATUS_URL = "http://zkteco-bridge:4371/status";
+	it("uses the configured ZKTeco SDK sidecar status and never returns Hikvision listener state for ZKTeco devices", async () => {
+		process.env.ZKTECO_BRIDGE_STATUS_URL = "http://127.0.0.1:4371/status";
 		global.fetch = (async () =>
 			({
 				ok: true,
@@ -93,7 +93,7 @@ describe("device health ZKTeco VM bridge", () => {
 	});
 
 	it("does not report a ZKTeco device online when the VM bridge is up but that device is disconnected", async () => {
-		process.env.ZKTECO_BRIDGE_STATUS_URL = "http://zkteco-bridge:4371/status";
+		process.env.ZKTECO_BRIDGE_STATUS_URL = "http://127.0.0.1:4371/status";
 		global.fetch = (async () =>
 			({
 				ok: true,

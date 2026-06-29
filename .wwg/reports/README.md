@@ -18,6 +18,7 @@ Reports are point-in-time evidence. Canonical project truth lives in `.wwg/wiki/
 - `wwg-maintenance-review.*`
 - `wwg-doctor-report.*`
 - `skill-cleanup-review.*`
+- `zkteco-node-bridge-retirement-20260629.md`
 
 ## Routine Generated Reports
 
@@ -40,4 +41,3 @@ Reports are point-in-time evidence. Canonical project truth lives in `.wwg/wiki/
 - `.wwg/reports/backups/**`
 
 Backups and routine generated reports are not canonical truth by themselves. Promote durable evidence through a purpose-named report or by updating canonical WWG truth surfaces.
-

@@ -85,6 +85,9 @@ Accepted or observed architecture:
 - Item: source folders: app
   - Status: INFERRED
   - Evidence: source/config (folders and package metadata)
+- Item: ZKTeco runtime uses the Windows Standalone SDK sidecar under `appliance/zkteco-standalone-sdk`; the Node.js bridge under `appliance/zkteco-bridge` is retired from active Docker, K3s, and GitOps runtime paths.
+  - Status: CONFIRMED
+  - Evidence: docs/ZKTECO_RUNTIME_TRUTH.md; .wwg/reports/zkteco-node-bridge-retirement-20260629.md
 
 Do not introduce without approval:
 
