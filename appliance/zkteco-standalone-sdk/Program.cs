@@ -22,7 +22,7 @@ namespace ZKTecoStandalone
         internal static readonly int ConnectPassword = GetIntEnv("ZKTECO_CONNECT_PASSWORD", 0);
         internal const int AllEventsMask = 65535;
         internal static readonly bool SyncFingerprintTemplates = GetBoolEnv("ZKTECO_SYNC_FINGERPRINT_TEMPLATES", false);
-        internal static readonly bool BackfillAttendanceLogs = GetBoolEnv("ZKTECO_BACKFILL_ATTENDANCE_LOGS", true);
+        internal static readonly bool BackfillAttendanceLogs = GetBoolEnv("ZKTECO_BACKFILL_ATTENDANCE_LOGS", false);
         internal static readonly int BackfillMaxEvents = GetIntEnv("ZKTECO_BACKFILL_MAX_EVENTS", 100000);
         internal static readonly bool DryRunWebhooks = GetBoolEnv("ZKTECO_DRY_RUN_WEBHOOKS", false);
         internal static readonly int StatusPort = GetIntEnv("ZKTECO_STATUS_PORT", 4371);
@@ -43,6 +43,13 @@ namespace ZKTecoStandalone
         private static readonly ConcurrentQueue<EnrollmentRequest> EnrollmentQueue = new ConcurrentQueue<EnrollmentRequest>();
         private static readonly Dictionary<string, DateTime> RecentEnrollmentRequests = new Dictionary<string, DateTime>();
         private static readonly object LogLock = new object();
+        private static readonly object AttendanceSyncLock = new object();
+        private static bool AttendanceSyncRunning = false;
+        private static DateTime? LastAttendanceSyncStartedAtUtc = null;
+        private static DateTime? LastAttendanceSyncFinishedAtUtc = null;
+        private static int LastAttendanceSyncPosted = 0;
+        private static int LastAttendanceSyncFailed = 0;
+        private static string LastAttendanceSyncStatus = "never_run";
         private static readonly string LogFilePath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory,
             "logs",
@@ -79,6 +86,8 @@ namespace ZKTecoStandalone
 
             Log("\nConnecting and registering real-time events...\n");
 
+            StartStatusServer();
+
             foreach (string ip in DeviceIps)
             {
                 var device = new DeviceConnection(ip, Port);
@@ -88,10 +97,15 @@ namespace ZKTecoStandalone
                 device.ConnectAndRegister();
             }
 
-            StartStatusServer();
-
             ReconcileExistingUsers();
-            BackfillRealAttendanceLogs();
+            if (BackfillAttendanceLogs)
+            {
+                StartManualAttendanceSync("startup", null);
+            }
+            else
+            {
+                Log("[Backfill] Startup attendance log backfill disabled. Use POST /sync for an explicit HRIS sync.");
+            }
 
             Log("\n==========================================");
             Log("Monitoring attendance + enrollment events");
@@ -786,6 +800,7 @@ namespace ZKTecoStandalone
                             string body;
                             int statusCode;
 
+                            string method = ParseMethod(requestLine);
                             if (path == "/health")
                             {
                                 statusCode = 200;
@@ -795,6 +810,26 @@ namespace ZKTecoStandalone
                             {
                                 statusCode = 200;
                                 body = JsonSerializer.Serialize(BuildStatus());
+                            }
+                            else if (path.StartsWith("/sync", StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (!string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    statusCode = 405;
+                                    body = "{\"error\":\"method_not_allowed\"}";
+                                }
+                                else
+                                {
+                                    string deviceIp = GetQueryParameter(path, "deviceIp");
+                                    bool started = StartManualAttendanceSync("manual-http", deviceIp);
+                                    statusCode = started ? 202 : 409;
+                                    body = JsonSerializer.Serialize(new
+                                    {
+                                        accepted = started,
+                                        status = started ? "started" : "already_running",
+                                        deviceIp = string.IsNullOrWhiteSpace(deviceIp) ? "all" : deviceIp
+                                    });
+                                }
                             }
                             else
                             {
@@ -841,6 +876,119 @@ namespace ZKTecoStandalone
             return parts.Length >= 2 ? parts[1] : "/";
         }
 
+        private static string ParseMethod(string requestLine)
+        {
+            string[] parts = (requestLine ?? "").Split(' ');
+            return parts.Length >= 1 ? parts[0] : "GET";
+        }
+
+        private static string GetQueryParameter(string path, string key)
+        {
+            int queryIndex = (path ?? "").IndexOf('?');
+            if (queryIndex < 0) return "";
+
+            string query = path.Substring(queryIndex + 1);
+            foreach (string pair in query.Split('&'))
+            {
+                string[] parts = pair.Split(new[] { '=' }, 2);
+                string name = WebUtility.UrlDecode(parts[0] ?? "");
+                if (!string.Equals(name, key, StringComparison.OrdinalIgnoreCase)) continue;
+                return parts.Length > 1 ? WebUtility.UrlDecode(parts[1] ?? "") : "";
+            }
+
+            return "";
+        }
+
+        private static bool StartManualAttendanceSync(string trigger, string deviceIp)
+        {
+            lock (AttendanceSyncLock)
+            {
+                if (AttendanceSyncRunning) return false;
+                AttendanceSyncRunning = true;
+                LastAttendanceSyncStartedAtUtc = DateTime.UtcNow;
+                LastAttendanceSyncFinishedAtUtc = null;
+                LastAttendanceSyncPosted = 0;
+                LastAttendanceSyncFailed = 0;
+                LastAttendanceSyncStatus = "running";
+            }
+
+            Task.Run(() => RunManualAttendanceSync(trigger, deviceIp));
+            return true;
+        }
+
+        private static void RunManualAttendanceSync(string trigger, string deviceIp)
+        {
+            int totalPosted = 0;
+            int totalFailed = 0;
+            try
+            {
+                Log("\n==========================================");
+                Log($"Manual attendance sync ({trigger})");
+                Log("==========================================");
+
+                IEnumerable<DeviceConnection> targets = Devices;
+                if (!string.IsNullOrWhiteSpace(deviceIp))
+                {
+                    targets = targets.Where(device => string.Equals(device.Ip, deviceIp, StringComparison.OrdinalIgnoreCase));
+                }
+
+                foreach (DeviceConnection device in targets)
+                {
+                    if (!device.IsConnected)
+                    {
+                        Log($"[Manual Attendance Sync] {device.Ip}: skipped, not connected.");
+                        continue;
+                    }
+
+                    int posted = 0;
+                    int failed = 0;
+                    foreach (AttendanceEvent attendance in device.ReadAttendanceLogs(BackfillMaxEvents))
+                    {
+                        string userName = UserNames.ContainsKey(attendance.EnrollNumber)
+                            ? UserNames[attendance.EnrollNumber]
+                            : "Unknown";
+                        if (SendAttendanceWebhook(device, attendance, userName))
+                        {
+                            posted++;
+                        }
+                        else
+                        {
+                            failed++;
+                        }
+                    }
+
+                    totalPosted += posted;
+                    totalFailed += failed;
+                    Log(DryRunWebhooks
+                        ? $"[Manual Attendance Sync] {device.Ip}: dry-run counted {posted} stored attendance transaction(s); no HRIS POST."
+                        : $"[Manual Attendance Sync] {device.Ip}: webhook success={posted}, failure={failed}.");
+                }
+
+                lock (AttendanceSyncLock)
+                {
+                    LastAttendanceSyncStatus = totalFailed > 0 ? "completed_with_errors" : "completed";
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[Manual Attendance Sync] Error: {ex.Message}");
+                lock (AttendanceSyncLock)
+                {
+                    LastAttendanceSyncStatus = "failed";
+                }
+            }
+            finally
+            {
+                lock (AttendanceSyncLock)
+                {
+                    LastAttendanceSyncPosted = totalPosted;
+                    LastAttendanceSyncFailed = totalFailed;
+                    LastAttendanceSyncFinishedAtUtc = DateTime.UtcNow;
+                    AttendanceSyncRunning = false;
+                }
+            }
+        }
+
         private static object BuildStatus()
         {
             DeviceConnection[] snapshot = Devices.ToArray();
@@ -860,6 +1008,16 @@ namespace ZKTecoStandalone
                 startedAt = StartedAt.ToString("o"),
                 uptimeSeconds = (int)Math.Max(0, DateTime.UtcNow.Subtract(StartedAt).TotalSeconds),
                 webhookUrl = WebhookUrl,
+                startupBackfillEnabled = BackfillAttendanceLogs,
+                attendanceSync = new
+                {
+                    running = AttendanceSyncRunning,
+                    status = LastAttendanceSyncStatus,
+                    startedAt = LastAttendanceSyncStartedAtUtc.HasValue ? LastAttendanceSyncStartedAtUtc.Value.ToString("o") : null,
+                    finishedAt = LastAttendanceSyncFinishedAtUtc.HasValue ? LastAttendanceSyncFinishedAtUtc.Value.ToString("o") : null,
+                    posted = LastAttendanceSyncPosted,
+                    failed = LastAttendanceSyncFailed
+                },
                 devicePort = Port,
                 configuredDevices = snapshot.Length,
                 connectedDevices = connected,

@@ -6,6 +6,7 @@ import devicesService, {
 	type Device,
 	type CreateDeviceRequest,
 	type UpdateDeviceRequest,
+	type ZktecoAttendanceSyncRequest,
 } from "../../services/devices.service";
 import { toast as sonnerToast } from "sonner";
 import type { ApiQueryParams } from "~/services/api-service";
@@ -80,6 +81,23 @@ export const useDeviceHealth = (deviceId?: string, enabled = true) => {
 		staleTime: 10 * 1000,
 		refetchInterval: enabled && deviceId ? 30 * 1000 : false,
 		retry: 1,
+	});
+};
+
+export const useTriggerZktecoAttendanceSync = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (payload: ZktecoAttendanceSyncRequest = {}) => {
+			return await devicesService.triggerZktecoAttendanceSync(payload);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			sonnerToast.success("ZKTeco sync started");
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to start ZKTeco sync");
+		},
 	});
 };
 

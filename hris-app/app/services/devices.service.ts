@@ -180,6 +180,11 @@ export interface ImportDeviceResponse {
 	};
 }
 
+export interface ZktecoAttendanceSyncRequest {
+	deviceId?: string;
+	deviceIp?: string;
+}
+
 export interface EnrollDeviceUserRequest {
 	userId: string;
 	deviceId: string;
@@ -435,6 +440,22 @@ class DevicesService extends APIService {
 			);
 		}
 	}
+
+	async triggerZktecoAttendanceSync(payload: ZktecoAttendanceSyncRequest = {}): Promise<any> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/zkteco/sync", payload);
+			if (!response.data) {
+				throw new Error("Failed to start ZKTeco sync");
+			}
+			return response.data;
+		} catch (error: any) {
+			console.error("Error starting ZKTeco sync:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error starting ZKTeco sync",
+			);
+		}
+	}
+
 	/**
 	 * Import device enrollment data from a file
 	 * @param file File to import (CSV/XLSX)

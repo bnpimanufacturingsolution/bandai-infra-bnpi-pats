@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Database, Radio, RefreshCw } from "lucide-react";
+import { ArrowLeft, Database, Radio, RefreshCw, UploadCloud } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "~/components/atoms/Badge";
 import { Button } from "~/components/atoms/Button";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
 import { Select, type SelectOption } from "~/components/atoms/Select";
-import { useDeviceEvents, useDeviceHealth, useDevices, queryKeys } from "~/lib/hooks/useDevices";
+import {
+	useDeviceEvents,
+	useDeviceHealth,
+	useDevices,
+	useTriggerZktecoAttendanceSync,
+	queryKeys,
+} from "~/lib/hooks/useDevices";
 import { useAcsEvents } from "~/lib/hooks/use-hikvision";
 import { useAuth } from "~/lib/hooks/use-auth";
 import { useSocket } from "~/contexts/socket-context";
@@ -333,6 +339,7 @@ export default function DeviceEventsPage() {
 	const queryClient = useQueryClient();
 	const { socket, isConnected } = useSocket();
 	const { user } = useAuth();
+	const zktecoSync = useTriggerZktecoAttendanceSync();
 	const [lastRealtimeEvent, setLastRealtimeEvent] =
 		useState<DeviceEventSavedPayload | null>(null);
 
@@ -343,7 +350,7 @@ export default function DeviceEventsPage() {
 	const viewMode = (searchParams.get("view") || "saved") as EventViewMode;
 	const status = searchParams.get("status") || "all";
 	const source = searchParams.get("source") || "all";
-	const sort = searchParams.get("sort") || "receivedAt";
+	const sort = searchParams.get("sort") || "eventTime";
 	const order = searchParams.get("order") === "asc" ? "asc" : "desc";
 	const timeWindow = (searchParams.get("window") ||
 		(viewMode === "saved" ? "all" : "today")) as TimeWindow;
@@ -383,7 +390,7 @@ export default function DeviceEventsPage() {
 		source: viewMode === "saved" && source !== "all" ? source : undefined,
 		sort: viewMode === "saved" ? sort : undefined,
 		order: viewMode === "saved" ? order : undefined,
-		dateField: viewMode === "saved" ? "receivedAt" : undefined,
+		dateField: viewMode === "saved" ? "eventTime" : undefined,
 		from,
 		to,
 	};
@@ -724,6 +731,25 @@ export default function DeviceEventsPage() {
 						className="rounded-md px-2 py-1">
 						{isConnected ? "Realtime on" : "Realtime off"}
 					</Badge>
+					<Button
+						type="button"
+						variant="outline"
+						className="h-9 px-3"
+						disabled={zktecoSync.isPending}
+						onClick={() =>
+							zktecoSync.mutate(
+								deviceId !== "all" ? { deviceId } : {},
+								{
+									onSuccess: () => {
+										void refetch();
+										void refetchHealth();
+									},
+								},
+							)
+						}>
+						<UploadCloud className="mr-2 h-4 w-4" />
+						{zktecoSync.isPending ? "Starting" : "Sync logs"}
+					</Button>
 					<Button
 						type="button"
 						variant="outline"

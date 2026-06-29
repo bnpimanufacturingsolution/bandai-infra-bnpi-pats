@@ -39,7 +39,7 @@ The bridge is configurable without code edits:
     ZKTECO_MACHINE_NUMBER=1
     ZKTECO_STATUS_PORT=4371
     ZKTECO_SYNC_FINGERPRINT_TEMPLATES=false
-    ZKTECO_BACKFILL_ATTENDANCE_LOGS=true
+    ZKTECO_BACKFILL_ATTENDANCE_LOGS=false
     ZKTECO_BACKFILL_MAX_EVENTS=100000
     ZKTECO_DRY_RUN_WEBHOOKS=false
     ZKTECO_EXPORT_DEVICE_EVENTS_FILE=
@@ -83,10 +83,15 @@ WHAT IT DOES:
 1. Connects to each configured ZKTeco device over TCP, usually port 4370
 2. Registers SDK realtime events with RegEvent
 3. Handles OnAttTransactionEx attendance callbacks
-4. Pulls stored attendance logs with ReadGeneralLogData/SSR_GetGeneralLogData on startup when backfill is enabled
+4. Watches realtime attendance callbacks by default without startup backfill
 5. Posts Project Truth JSON to /api/zkteco/events
-6. Serves /health and /status on ZKTECO_STATUS_PORT for the HRIS device health contract
+6. Serves /health, /status, and explicit POST /sync on ZKTECO_STATUS_PORT for the HRIS device health/sync contract
 7. Logs webhook success/failure and keeps reconnecting boundedly
+
+Startup must not bulk-post stored device logs unless ZKTECO_BACKFILL_ATTENDANCE_LOGS=true
+is explicitly set. Use the HRIS admin Device attendance "Sync logs" action, or
+POST /sync on the bridge status port, when a deliberate historical attendance
+sync is needed.
 
 Set ZKTECO_DRY_RUN_WEBHOOKS=true to read/reconcile devices and count realtime or
 backfilled attendance rows without posting anything to HRIS.

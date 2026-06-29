@@ -81,13 +81,24 @@ Result captured on 2026-06-29:
 
 All four known Project Truth ZKTeco devices connected through the Windows Standalone SDK for this summary run. Earlier `10.184.38.234` and `10.184.38.235` SDK error `-2` evidence is now stale for count reporting, but remains useful as proof that SDK connectivity can be transient.
 
-The live sidecar process listening at `http://127.0.0.1:4371/status` was separately configured for one device during this run:
+The live sidecar process listening at `http://127.0.0.1:5471/status` was separately configured for one device during this run:
 
 | Sidecar device | Connected | Streaming | Events seen since sidecar start | Events posted since sidecar start |
 |---|---:|---:|---:|---:|
 | `10.184.38.9:4370` | yes | yes | 0 | 0 |
 
 Do not confuse the read-only SDK summary event counts with sidecar realtime counters. The summary counts are stored device log rows read directly from each terminal. The sidecar counters are only events seen or posted since the current sidecar process started.
+
+## 2026-06-29 ZKTeco Sync Mode Truth
+
+The Windows SDK sidecar must default to watch mode. Starting the sidecar should connect to configured devices, register realtime events, and serve health/status without bulk-posting stored device logs to HRIS.
+
+Historical/stored attendance sync is an explicit admin action:
+
+- HRIS admin UI: `/admin/configuration/devices/events`, `Sync logs`
+- Sidecar status API: `POST /sync`
+
+`ZKTECO_BACKFILL_ATTENDANCE_LOGS=true` is an override for controlled maintenance only. Do not use it as the normal watch process default because it can import historical terminal punches into HRIS as if they were newly saved today.
 
 ## 2026-06-29 Admin Device Events Filter Truth
 

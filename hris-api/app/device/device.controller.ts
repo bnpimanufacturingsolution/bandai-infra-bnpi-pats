@@ -224,11 +224,90 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const postZktecoBridgeSync = async (deviceIp?: string | null) => {
+		const statusUrl = String(process.env.ZKTECO_BRIDGE_STATUS_URL || "").trim();
+		if (!statusUrl) {
+			return {
+				ok: false,
+				status: "not_configured",
+				statusUrl: null,
+				data: null,
+				error: "ZKTECO_BRIDGE_STATUS_URL is not configured",
+			};
+		}
+
+		const syncUrl = new URL(statusUrl);
+		syncUrl.pathname = syncUrl.pathname.replace(/\/status\/?$/, "/sync");
+		if (deviceIp) syncUrl.searchParams.set("deviceIp", deviceIp);
+
+		const timeoutMs = Number(process.env.ZKTECO_BRIDGE_SYNC_TIMEOUT_MS || 10000);
+		try {
+			const response = await fetch(syncUrl.toString(), {
+				method: "POST",
+				signal: AbortSignal.timeout(timeoutMs),
+			});
+			const data = await response.json().catch(() => null);
+			return {
+				ok: response.ok,
+				status: response.ok ? data?.status || "started" : "failed",
+				statusUrl: syncUrl.toString(),
+				data,
+				...(response.ok ? {} : { error: `HTTP ${response.status}` }),
+			};
+		} catch (error: any) {
+			return {
+				ok: false,
+				status: "offline",
+				statusUrl: syncUrl.toString(),
+				data: null,
+				error: error?.message || "ZKTeco SDK sidecar sync did not respond",
+			};
+		}
+	};
+
 	const getBridgeDeviceStatus = (bridgeStatus: any, address: string) => {
 		const devices = Array.isArray(bridgeStatus?.data?.devices)
 			? bridgeStatus.data.devices
 			: [];
 		return devices.find((item: any) => String(item?.ip || "").trim() === address) || null;
+	};
+
+	const triggerZktecoAttendanceSync = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const deviceId = String((req.body as any)?.deviceId || (req.query as any)?.deviceId || "").trim();
+			let deviceIp = String((req.body as any)?.deviceIp || (req.query as any)?.deviceIp || "").trim();
+
+			if (deviceId && !deviceIp) {
+				const device = await (prisma as any).device.findFirst({
+					where: { id: deviceId, isDeleted: false },
+					select: { address: true },
+				});
+				deviceIp = String(device?.address || "").trim();
+			}
+
+			const result = await postZktecoBridgeSync(deviceIp || null);
+			if (!result.ok) {
+				res.status(result.status === "failed" ? 409 : 502).json(
+					buildErrorResponse(result.error || "Failed to start ZKTeco sync", 502),
+				);
+				return;
+			}
+
+			res.status(202).json(
+				buildSuccessResponse(
+					"ZKTeco attendance sync started",
+					{
+						sync: result.data,
+						statusUrl: result.statusUrl,
+					},
+					202,
+				),
+			);
+		} catch (error: any) {
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Failed to start ZKTeco sync", 500),
+			);
+		}
 	};
 
 	const getDeviceHealth = async (req: Request, res: Response, _next: NextFunction) => {
@@ -1485,6 +1564,7 @@ export const controller = (prisma: PrismaClient) => {
 		getAll,
 		getEvents,
 		getDeviceHealth,
+		triggerZktecoAttendanceSync,
 		getById,
 		update,
 		remove,

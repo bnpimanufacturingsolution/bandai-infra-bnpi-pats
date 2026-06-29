@@ -31,6 +31,7 @@ const path = require("path");
 const root = path.join(__dirname, "build", "client");
 const port = Number(process.env.PORT || 3000);
 const apiOrigin = process.env.HRIS_API_ORIGIN || "http://hris-api:3001";
+const proxyPrefixes = ["/api/", "/uploads/", "/socket.io/"];
 
 const mime = {
   ".html": "text/html; charset=utf-8",
@@ -48,31 +49,73 @@ const mime = {
   ".pdf": "application/pdf",
 };
 
-http
+const shouldProxy = (url = "/") => proxyPrefixes.some((prefix) => url.startsWith(prefix));
+
+const proxyHttpRequest = (req, res) => {
+  const target = new URL(req.url || "/", apiOrigin);
+  const proxyReq = http.request(
+    target,
+    {
+      method: req.method,
+      headers: {
+        ...req.headers,
+        host: target.host,
+      },
+    },
+    (proxyRes) => {
+      res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+      proxyRes.pipe(res);
+    },
+  );
+
+  proxyReq.on("error", (error) => {
+    res.writeHead(502, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ status: "error", message: error.message }));
+  });
+
+  req.pipe(proxyReq);
+};
+
+const proxyWebSocketUpgrade = (req, socket, head) => {
+  if (!shouldProxy(req.url || "/")) {
+    socket.destroy();
+    return;
+  }
+
+  const target = new URL(req.url || "/", apiOrigin);
+  const proxyReq = http.request({
+    host: target.hostname,
+    port: target.port || 80,
+    path: `${target.pathname}${target.search}`,
+    method: req.method,
+    headers: {
+      ...req.headers,
+      host: target.host,
+    },
+  });
+
+  proxyReq.on("upgrade", (proxyRes, proxySocket, proxyHead) => {
+    const headers = Object.entries(proxyRes.headers)
+      .flatMap(([key, value]) => {
+        if (Array.isArray(value)) return value.map((item) => `${key}: ${item}`);
+        return value === undefined ? [] : [`${key}: ${value}`];
+      })
+      .join("\r\n");
+    socket.write(`HTTP/1.1 ${proxyRes.statusCode} ${proxyRes.statusMessage}\r\n${headers}\r\n\r\n`);
+    if (proxyHead.length) socket.write(proxyHead);
+    if (head.length) proxySocket.write(head);
+    proxySocket.pipe(socket);
+    socket.pipe(proxySocket);
+  });
+
+  proxyReq.on("error", () => socket.destroy());
+  proxyReq.end();
+};
+
+const server = http
   .createServer((req, res) => {
-    if ((req.url || "/").startsWith("/api/") || (req.url || "/").startsWith("/uploads/")) {
-      const target = new URL(req.url || "/", apiOrigin);
-      const proxyReq = http.request(
-        target,
-        {
-          method: req.method,
-          headers: {
-            ...req.headers,
-            host: target.host,
-          },
-        },
-        (proxyRes) => {
-          res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
-          proxyRes.pipe(res);
-        },
-      );
-
-      proxyReq.on("error", (error) => {
-        res.writeHead(502, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ status: "error", message: error.message }));
-      });
-
-      req.pipe(proxyReq);
+    if (shouldProxy(req.url || "/")) {
+      proxyHttpRequest(req, res);
       return;
     }
 
@@ -125,6 +168,8 @@ http
   .listen(port, "0.0.0.0", () => {
     console.log(`Static app server listening on http://0.0.0.0:${port}`);
   });
+
+server.on("upgrade", proxyWebSocketUpgrade);
 EOF
 EXPOSE 3000
 CMD ["node", "server.cjs"]
