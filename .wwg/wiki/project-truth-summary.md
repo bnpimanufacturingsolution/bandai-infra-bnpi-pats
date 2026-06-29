@@ -9,25 +9,27 @@ Last updated: 2026-06-29
 - The VM is attached to the `ProjectTruth-External` switch.
 - The VM boots from `C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx`.
 - The VM initially failed to start with 4 GB startup memory, then started after reducing dynamic memory to 1536 MB startup, 1024 MB minimum, and 3072 MB maximum.
-- The current VM LAN IP after boot is `10.184.38.91`.
-- SSH is exposed on `10.184.38.91:22`.
+- The current VM LAN IP after the 2026-06-29 21:23 PHT Cloudflare repair pass is `192.168.254.148`.
+- SSH is exposed on the current VM LAN address at `192.168.254.148:22`.
 - SSH server banner evidence: `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.16`.
-- SSH password login is proven with the repo-documented appliance credential `infra / infra` through pinned-host-key `plink`.
-- SSH key login is proven with Windows OpenSSH using `%USERPROFILE%\.ssh\node-health-appliance_ed25519`.
-- OpenSSH proof returned hostname `project-truth-node`, user `infra`, `eth0 10.184.38.91/24`, and active SSH service.
-- Plain OpenSSH `ssh infra@10.184.38.91` also works after loading `%USERPROFILE%\.ssh\node-health-appliance_ed25519` into Windows `ssh-agent`.
-- Visual proof screenshot: `.runtime\hyperv-visual-proof\20260629-120737\pass-01\overview\vmconnect-client-summary.png`.
-- The screenshot visibly shows `PROJECT TRUTH CLIENT SUMMARY`, `LAN IP: 10.184.38.91`, `LAN target: 10.184.38.91:22`, `OpenSSH: ssh infra@10.184.38.91`, and `Login: infra / infra`.
-- Visual proof line-width check: `MaxLineLength=66`; the previous literal `r` line-ending artifact was fixed in `scripts/hyperv-visual-proof-loop.ps1` and `appliance/bin/project-truth-lan-summary.sh`.
-- After warmup, HRIS LAN checks passed on `10.184.38.91` for PROD app/API (`3000`, `3001`), DEV app/API (`3100`, `3101`), and UAT app/API (`3200`, `3201`).
+- SSH password login is proven on `192.168.254.148` with the repo-documented appliance credential `infra / infra` through pinned-host-key `plink`; current host key fingerprint is `SHA256:+Xxejdej6SPlSKBEvEO/++Hh3j+QvoFSetx6DZXxiok`.
+- SSH key login is proven on `192.168.254.148` with Windows OpenSSH using `%USERPROFILE%\.ssh\node-health-appliance_ed25519`.
+- OpenSSH proof returned hostname `project-truth-node`, user `infra`, `eth0 192.168.254.148/24`, and active SSH service.
+- Current LAN SSH command: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@192.168.254.148`.
+- Public Cloudflare SSH is not enabled; use LAN SSH unless a Cloudflare Access TCP/SSH policy is intentionally configured.
+- VM summary script was updated and live-installed so `project-truth-lan-summary --screen-overview`, `/etc/issue`, `/etc/motd`, and `/run/project-truth/network-summary.txt` show `LAN IP: 192.168.254.148`, `OpenSSH: ssh infra@192.168.254.148`, the key path, and public Cloudflare app/API/Grafana URLs.
+- Current generated overview line-width check: `MaxLineLength=66`; stale `10.184.38.91` was not present in `/etc/issue`, `/run/project-truth/network-summary.txt`, or the generated overview.
+- After the Cloudflare repair pass, HRIS LAN checks passed on `192.168.254.148` for PROD app/API (`3000`, `3001`), DEV app/API (`3100`, `3101`), UAT app/API (`3200`, `3201`), and Grafana (`53000`).
+- The `bnpi-hris.tech` Cloudflare 1033 issue was repaired by logging into the Cloudflare account that owns `bnpi-hris.tech`, creating named tunnel `e3486f00-f974-46d3-9e11-911266749d00`, and routing app/API/dev/uat/Grafana hostnames to it.
+- Public checks passed for `bnpi-hris.tech`, `www.bnpi-hris.tech`, `app.bnpi-hris.tech`, `api.bnpi-hris.tech`, `dev.bnpi-hris.tech`, `dev-api.bnpi-hris.tech`, `uat.bnpi-hris.tech`, `uat-api.bnpi-hris.tech`, and `grafana.bnpi-hris.tech`.
 - Host-local PROD and DEV checks passed during validation, but host-local UAT ports `3200` and `3201` failed while LAN UAT passed.
-- `%ProgramData%\ProjectTruth\config\project-truth.json` was backed up to `C:\ProgramData\ProjectTruth\config\project-truth.json.bak-20260629-114047` and updated to use VM `project-truth-local-vhdx-proof`, guest IP `10.184.38.91`, memory `1536`, and SSH port `22`.
+- `%ProgramData%\ProjectTruth\config\project-truth.json` was backed up and updated to use VM `project-truth-local-vhdx-proof`, guest IP hint `192.168.254.148`, memory `1536`, and SSH port `22`.
 
 ## Current Drift
 
 - `terraform-hyperv/terraform.tfvars` still lists SSH port `2222`, but the running VM exposes SSH on LAN port `22`.
-- Previous LAN HRIS proof at `192.168.254.148` is stale for the current host session; it passed on 2026-06-28 but was not reachable on 2026-06-29.
-- `verify-gitops-state -GuestIp 10.184.38.91` now reaches the VM over SSH, but the current Argo CD Application state needs follow-up: app sync statuses reported `Unknown`, runtime app health included `Degraded` and `Progressing`, and one Kubernetes API read returned `127.0.0.1:6443` connection refused.
+- Earlier `10.184.38.91` runtime proof is stale for the current Cloudflare/SSH repair session; probes to that address timed out on 2026-06-29 at about 21:23 PHT, while `192.168.254.148` passed.
+- `verify-gitops-state -GuestIp 10.184.38.91` previously reached the VM over SSH, but that IP is stale for the current session. Argo CD Application state still needs follow-up on `192.168.254.148`: previous app sync statuses reported `Unknown`, runtime app health included `Degraded` and `Progressing`, and one Kubernetes API read returned `127.0.0.1:6443` connection refused.
 
 ## Operating Notes
 

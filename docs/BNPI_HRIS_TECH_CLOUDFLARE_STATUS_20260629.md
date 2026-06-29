@@ -131,3 +131,68 @@ curl.exe -I https://app.bnpi-hris.tech/auth/login
 - This is not blocked by the tunnel or VM after the VM was restarted.
 - The remaining blocker is Cloudflare zone creation permission or one manual Cloudflare dashboard add-site step.
 - Do not expose raw database ports through public HTTP tunnels.
+
+## Update After 2026-06-29 21:23 PHT Repair Pass
+
+- The host-managed scheduled task `ProjectTruth-BNPI-HRIS-Cloudflared` was started.
+- The wrapper rediscovered the current VM LAN IP as `192.168.254.148` and rewrote `cloudflared-bnpi-hris.yml` to use `http://192.168.254.148:3000`.
+- VM LAN checks passed:
+  - `http://192.168.254.148:3000/auth/login` HTTP 200, title `HR Management System`
+  - `http://192.168.254.148:3001/health` HTTP 200
+  - `http://192.168.254.148:3100/auth/login` HTTP 200
+  - `http://192.168.254.148:3101/health` HTTP 200
+  - `http://192.168.254.148:3200/auth/login` HTTP 200
+  - `http://192.168.254.148:3201/health` HTTP 200
+  - `http://192.168.254.148:53000/api/health` HTTP 200
+- `cloudflared tunnel info bnpi-hris` showed an active connector.
+- Public `.tech` checks still returned HTTP 530 / Cloudflare error 1033.
+- The local `cloudflared` certificate/token can see `uzaro.net` only, not `bnpi-hris.tech`; attempting `cloudflared tunnel route dns bnpi-hris bnpi-hris.tech` created `bnpi-hris.tech.uzaro.net`, proving the local CLI identity is scoped to the wrong zone for the purchased `.tech` domain.
+- Those accidental wrong-zone records were deleted. The intended `bnpi-hris.uzaro.net` record remains.
+
+Current interpretation: VM, app/API, Grafana, and the named tunnel connector are healthy. The remaining `.tech` blocker is Cloudflare account/zone routing mismatch: `bnpi-hris.tech` must be managed in the same Cloudflare account as the named tunnel, or a new named tunnel must be created in the account that owns `bnpi-hris.tech`.
+
+## Update After Correct Cloudflare Account Login
+
+- Logged in with `cloudflared tunnel login` to the Cloudflare account that owns `bnpi-hris.tech`.
+- New account context:
+  - Account: `933c5547e32839d664d155ce8a7424d5`
+  - Zone: `bnpi-hris.tech`
+  - Zone status: `active`
+- Created new named tunnel:
+  - Name: `bnpi-hris`
+  - Tunnel ID: `e3486f00-f974-46d3-9e11-911266749d00`
+- Updated `cloudflared-bnpi-hris.yml` and `scripts/start-bnpi-cloudflare-tunnel.ps1` to use the new tunnel credentials.
+- Routed public hostnames to the new tunnel:
+  - `bnpi-hris.tech`
+  - `www.bnpi-hris.tech`
+  - `app.bnpi-hris.tech`
+  - `api.bnpi-hris.tech`
+  - `dev.bnpi-hris.tech`
+  - `dev-api.bnpi-hris.tech`
+  - `uat.bnpi-hris.tech`
+  - `uat-api.bnpi-hris.tech`
+  - `grafana.bnpi-hris.tech`
+- The Project Truth wrapper now regenerates ingress from the live VM IP and starts the new tunnel.
+
+Public verification passed:
+
+```text
+https://bnpi-hris.tech/auth/login         200 HR Management System
+https://www.bnpi-hris.tech/auth/login     200 HR Management System
+https://app.bnpi-hris.tech/auth/login     200 HR Management System
+https://api.bnpi-hris.tech/health         200
+https://dev.bnpi-hris.tech/auth/login     200 HR Management System
+https://dev-api.bnpi-hris.tech/health     200
+https://uat.bnpi-hris.tech/auth/login     200 HR Management System
+https://uat-api.bnpi-hris.tech/health     200
+https://grafana.bnpi-hris.tech/api/health 200
+```
+
+Public API/CORS/auth verification:
+
+```text
+https://api.bnpi-hris.tech/health                 200
+OPTIONS /api/auth/login from https://bnpi-hris.tech 204
+POST /api/auth/login with wrong password          401
+POST https://bnpi-hris.tech/api/auth/login wrong password 401
+```

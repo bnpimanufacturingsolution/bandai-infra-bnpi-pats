@@ -108,7 +108,13 @@ emit_named_cloudflare_rows() {
   echo "Cloudflare named tunnel"
   echo "  mode: host-managed on Windows"
   echo "  name: bnpi-hris"
-  echo "  public: https://bnpi-hris.tech/auth/login"
+  echo "  public app: https://bnpi-hris.tech/auth/login"
+  echo "  public api: https://api.bnpi-hris.tech/health"
+  echo "  dev app: https://dev.bnpi-hris.tech/auth/login"
+  echo "  dev api: https://dev-api.bnpi-hris.tech/health"
+  echo "  uat app: https://uat.bnpi-hris.tech/auth/login"
+  echo "  uat api: https://uat-api.bnpi-hris.tech/health"
+  echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
   echo "  origin: http://${ip_addr}:3000"
   echo "  host repair: start-bnpi-cloudflare-tunnel"
 }
@@ -362,6 +368,7 @@ emit_screen_summary() {
     echo "SSH"
     echo "  LAN target: ${ip_addr}:22"
     echo "  OpenSSH: ssh infra@${ip_addr}"
+    echo "  Key: ~/.ssh/node-health-appliance_ed25519"
     echo "  Password: infra"
   fi
 
@@ -390,6 +397,8 @@ emit_screen_summary() {
   emit_hris_rows "$ip_addr"
   echo "Cloudflare"
   echo "  public: https://bnpi-hris.tech/auth/login"
+  echo "  api: https://api.bnpi-hris.tech/health"
+  echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
   echo "  origin: http://${ip_addr}:3000"
   echo "  mode: host-managed tunnel bnpi-hris"
   echo "Postgres"
@@ -422,6 +431,7 @@ fi
     echo "Open: http://${ip_addr}:3000/auth/login"
     echo "Cloudflare: https://bnpi-hris.tech/auth/login"
     echo "Tunnel: host-managed bnpi-hris -> http://${ip_addr}:3000"
+    echo "SSH: ssh infra@${ip_addr}"
     echo "Client summary: project-truth-lan-summary --screen"
     if [ -r "$sync_state_file" ]; then
       commit="$(awk -F= '$1 == "commit" { print substr($2, 1, 12) }' "$sync_state_file")"
@@ -441,15 +451,22 @@ fi
   echo "Project Truth HRIS appliance"
   if [ -n "$ip_addr" ]; then
     echo "LAN IP: ${ip_addr}"
-    echo "SSH:"
-    echo "  OpenSSH: ssh infra@${ip_addr}"
-    echo "  port: 22"
   else
     echo "LAN IP: NOT DETECTED"
   fi
   echo "Cloudflare:"
   echo "  https://bnpi-hris.tech/auth/login"
-  echo "  host-managed tunnel bnpi-hris"
+  echo "  https://api.bnpi-hris.tech/health"
+  echo "SSH:"
+  if [ -n "$ip_addr" ]; then
+    echo "  OpenSSH: ssh infra@${ip_addr}"
+    echo "  port: 22"
+    echo "  key: ~/.ssh/node-health-appliance_ed25519"
+  else
+    echo "  waiting for LAN IP"
+  fi
+  echo "Tunnel:"
+  echo "  host-managed bnpi-hris"
   echo
   echo "Console login:"
   echo "  username: infra"

@@ -63,8 +63,8 @@ type DeviceEventSavedPayload = {
 };
 
 const viewOptions: SelectOption[] = [
-	{ value: "saved", label: "Saved in HRIS" },
-	{ value: "live", label: "Live from device" },
+	{ value: "saved", label: "Saved" },
+	{ value: "live", label: "Live" },
 ];
 
 const timeWindowOptions: SelectOption[] = [
@@ -78,7 +78,7 @@ const timeWindowOptions: SelectOption[] = [
 const PH_TIME_ZONE = "Asia/Manila";
 
 const savedStatusOptions: SelectOption[] = [
-	{ value: "all", label: "All HRIS results" },
+	{ value: "all", label: "All statuses" },
 	{ value: "MATCHED", label: "Matched" },
 	{ value: "RECEIVED", label: "Received" },
 	{ value: "ATTENDANCE_CREATED", label: "Attendance created" },
@@ -89,11 +89,14 @@ const savedStatusOptions: SelectOption[] = [
 ];
 
 const sourceOptions: SelectOption[] = [
-	{ value: "all", label: "All save paths" },
+	{ value: "all", label: "All paths" },
 	{ value: "HIKVISION_CALLBACK", label: "Device callback" },
 	{ value: "EN_HCNETSDK_ALARM", label: "Alarm listener" },
-	{ value: "ZKTECO_EVENT", label: "ZKTeco SDK sidecar" },
+	{ value: "ZKTECO_EVENT", label: "ZKTeco sidecar" },
 ];
+
+const compactSelectClassName = "h-7 text-xs";
+const compactSelectDropdownClassName = "rounded-md shadow-md";
 
 const getDateKey = (date: Date) => {
 	const parts = new Intl.DateTimeFormat("en-CA", {
@@ -160,20 +163,6 @@ const formatEventSource = (source?: string | null) => {
 	if (source === "EN_HCNETSDK_ALARM") return "Alarm listener";
 	if (source === "HIKVISION_CALLBACK") return "Device callback";
 	return source || "-";
-};
-
-const statusVariant = (status: string) => {
-	if (
-		status === "MATCHED" ||
-		status === "ATTENDANCE_CREATED" ||
-		status === "ATTENDANCE_UPDATED"
-	) {
-		return "success-soft";
-	}
-	if (status === "UNMATCHED" || status === "NOT_SAVED") return "warning-soft";
-	if (status === "FAILED") return "destructive";
-	if (status === "IGNORED") return "secondary";
-	return "outline";
 };
 
 const isZktecoDevice = (device: any, health?: DeviceHealthResponse) => {
@@ -635,20 +624,6 @@ export default function DeviceEventsPage() {
 			),
 		},
 		{
-			key: "status",
-			label: "Result",
-			sortable: viewMode === "saved",
-			width: "190px",
-			required: true,
-			render: (_value, item) => (
-				<Badge
-					variant={statusVariant(item.status) as any}
-					className="max-w-[180px] justify-center font-semibold">
-					<span className="truncate">{item.businessStatus}</span>
-				</Badge>
-			),
-		},
-		{
 			key: "source",
 			label: "Save path",
 			sortable: viewMode === "saved",
@@ -741,8 +716,8 @@ export default function DeviceEventsPage() {
 				<div
 					className={
 						viewMode === "live"
-							? "grid gap-2 border-b border-slate-200 p-3 md:grid-cols-[minmax(140px,0.7fr)_minmax(220px,1fr)_minmax(140px,0.7fr)]"
-							: "grid gap-2 border-b border-slate-200 p-3 md:grid-cols-[minmax(140px,0.7fr)_minmax(180px,1fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)_minmax(140px,0.65fr)]"
+							? "grid gap-2 border-b border-slate-200 p-2 md:grid-cols-[minmax(96px,0.55fr)_minmax(180px,1fr)_minmax(110px,0.55fr)]"
+							: "grid gap-2 border-b border-slate-200 p-2 md:grid-cols-[minmax(96px,0.55fr)_minmax(170px,1fr)_minmax(110px,0.55fr)_minmax(120px,0.6fr)_minmax(120px,0.6fr)]"
 					}>
 					<Select
 						options={viewOptions}
@@ -758,19 +733,25 @@ export default function DeviceEventsPage() {
 								}
 							})
 						}
-						placeholder="Saved in HRIS"
+						placeholder="Saved"
+						className={compactSelectClassName}
+						dropdownClassName={compactSelectDropdownClassName}
 					/>
 					<Select
 						options={deviceOptions}
 						value={deviceId}
 						onChange={(value) => setFilter("deviceId", value)}
 						placeholder="All devices"
+						className={compactSelectClassName}
+						dropdownClassName={compactSelectDropdownClassName}
 					/>
 					<Select
 						options={timeWindowOptions}
 						value={timeWindow}
 						onChange={(value) => setFilter("window", value)}
 						placeholder="Today"
+						className={compactSelectClassName}
+						dropdownClassName={compactSelectDropdownClassName}
 					/>
 					{viewMode === "saved" && (
 						<>
@@ -778,13 +759,17 @@ export default function DeviceEventsPage() {
 								options={savedStatusOptions}
 								value={status}
 								onChange={(value) => setFilter("status", value)}
-								placeholder="All HRIS results"
+								placeholder="All statuses"
+								className={compactSelectClassName}
+								dropdownClassName={compactSelectDropdownClassName}
 							/>
 							<Select
 								options={sourceOptions}
 								value={source}
 								onChange={(value) => setFilter("source", value)}
-								placeholder="All save paths"
+								placeholder="All paths"
+								className={compactSelectClassName}
+								dropdownClassName={compactSelectDropdownClassName}
 							/>
 						</>
 					)}
@@ -939,8 +924,8 @@ export default function DeviceEventsPage() {
 				</div>
 			)}
 
-			<div className="rounded-md border border-slate-200 bg-white p-3">
-				<div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+			<div className="rounded-md border border-slate-200 bg-white p-2.5">
+				<div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
 					<div className="min-w-0">
 						<h2 className="truncate text-sm font-semibold text-slate-950">
 							{viewMode === "live" ? "Live punches" : "Saved punches"}
@@ -961,7 +946,7 @@ export default function DeviceEventsPage() {
 					showExport={false}
 					noCard
 					searchPlaceholder="Search employee or device..."
-					searchWidth="w-full sm:w-80"
+					searchWidth="w-full sm:w-72"
 					searchValue={viewMode === "saved" ? query : ""}
 					onSearch={(value) => setFilter("query", value)}
 					onSort={(key, direction) => {

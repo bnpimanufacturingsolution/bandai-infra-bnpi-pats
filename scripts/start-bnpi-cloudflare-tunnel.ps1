@@ -3,10 +3,10 @@ param(
   [string]$VmName = 'project-truth-local-vhdx-proof',
   [string]$TaskName = 'ProjectTruth-BNPI-HRIS-Cloudflared',
   [string]$TunnelName = 'bnpi-hris',
-  [string]$TunnelId = '1c8ee2c4-c9c5-4840-be39-639e4b5f605b',
+  [string]$TunnelId = 'e3486f00-f974-46d3-9e11-911266749d00',
   [string]$ConfigPath = '',
   [string]$CredentialsFile = '',
-  [string[]]$Hostnames = @('bnpi-hris.tech', 'www.bnpi-hris.tech', 'app.bnpi-hris.tech', 'bnpi-hris.uzaro.net'),
+  [string[]]$Hostnames = @('bnpi-hris.tech', 'www.bnpi-hris.tech', 'app.bnpi-hris.tech'),
   [int]$OriginPort = 3000,
   [int]$OriginWarmupSeconds = 180,
   [int]$ConnectorWarmupSeconds = 60,
@@ -103,6 +103,17 @@ function Write-TunnelConfig {
   param([string]$GuestIp)
 
   $origin = "http://${GuestIp}:${OriginPort}"
+  $targets = @()
+  foreach ($hostname in $Hostnames) {
+    $targets += [pscustomobject]@{ Hostname = $hostname; Service = $origin }
+  }
+  $targets += [pscustomobject]@{ Hostname = 'api.bnpi-hris.tech'; Service = "http://${GuestIp}:3001" }
+  $targets += [pscustomobject]@{ Hostname = 'dev.bnpi-hris.tech'; Service = "http://${GuestIp}:3100" }
+  $targets += [pscustomobject]@{ Hostname = 'dev-api.bnpi-hris.tech'; Service = "http://${GuestIp}:3101" }
+  $targets += [pscustomobject]@{ Hostname = 'uat.bnpi-hris.tech'; Service = "http://${GuestIp}:3200" }
+  $targets += [pscustomobject]@{ Hostname = 'uat-api.bnpi-hris.tech'; Service = "http://${GuestIp}:3201" }
+  $targets += [pscustomobject]@{ Hostname = 'grafana.bnpi-hris.tech'; Service = "http://${GuestIp}:53000" }
+
   $lines = @(
     "tunnel: $TunnelId",
     "credentials-file: $CredentialsFile",
@@ -112,7 +123,13 @@ function Write-TunnelConfig {
 
   foreach ($hostname in $Hostnames) {
     $lines += "  - hostname: $hostname"
-    $lines += "    service: $origin"
+    $lines += '    path: /api/.*'
+    $lines += "    service: http://${GuestIp}:3001"
+  }
+
+  foreach ($target in $targets) {
+    $lines += "  - hostname: $($target.Hostname)"
+    $lines += "    service: $($target.Service)"
   }
   $lines += '  - service: http_status:404'
   $lines += ''
@@ -185,18 +202,30 @@ function Register-HostManagedTask {
 
 function Invoke-PublicChecks {
   $results = @()
-  foreach ($hostname in $Hostnames | Where-Object { $_ -like '*.tech' -or $_ -eq 'bnpi-hris.tech' }) {
-    $url = "https://${hostname}/auth/login"
+  $checks = @(
+    @{ Name = 'prod-app'; Url = 'https://bnpi-hris.tech/auth/login' },
+    @{ Name = 'www-app'; Url = 'https://www.bnpi-hris.tech/auth/login' },
+    @{ Name = 'app-app'; Url = 'https://app.bnpi-hris.tech/auth/login' },
+    @{ Name = 'prod-api'; Url = 'https://api.bnpi-hris.tech/health' },
+    @{ Name = 'dev-app'; Url = 'https://dev.bnpi-hris.tech/auth/login' },
+    @{ Name = 'dev-api'; Url = 'https://dev-api.bnpi-hris.tech/health' },
+    @{ Name = 'uat-app'; Url = 'https://uat.bnpi-hris.tech/auth/login' },
+    @{ Name = 'uat-api'; Url = 'https://uat-api.bnpi-hris.tech/health' },
+    @{ Name = 'grafana'; Url = 'https://grafana.bnpi-hris.tech/api/health' }
+  )
+
+  foreach ($check in $checks) {
+    $url = $check.Url
     try {
       $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 20
       $title = ''
       $match = [regex]::Match($response.Content, '<title>(.*?)</title>')
       if ($match.Success) { $title = $match.Groups[1].Value }
-      $results += [pscustomobject]@{ Url = $url; Status = 'PASS'; Code = $response.StatusCode; Detail = $title }
+      $results += [pscustomobject]@{ Name = $check.Name; Url = $url; Status = 'PASS'; Code = $response.StatusCode; Detail = $title }
     } catch {
       $response = $_.Exception.Response
       $code = if ($response) { [int]$response.StatusCode } else { 'ERR' }
-      $results += [pscustomobject]@{ Url = $url; Status = 'WARN'; Code = $code; Detail = $_.Exception.Message }
+      $results += [pscustomobject]@{ Name = $check.Name; Url = $url; Status = 'WARN'; Code = $code; Detail = $_.Exception.Message }
     }
   }
   return $results
