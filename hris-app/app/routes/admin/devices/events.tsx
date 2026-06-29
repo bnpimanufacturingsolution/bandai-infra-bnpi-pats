@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, RefreshCw, UploadCloud } from "lucide-react";
+import { ArrowLeft, RefreshCw, UploadCloud, Wifi, WifiOff } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "~/components/atoms/Badge";
 import { Button } from "~/components/atoms/Button";
@@ -16,6 +16,10 @@ import {
 import { useAcsEvents } from "~/lib/hooks/use-hikvision";
 import { useAuth } from "~/lib/hooks/use-auth";
 import { useSocket } from "~/contexts/socket-context";
+import {
+	getDeviceEventsRealtimeStatus,
+	getSavedDeviceEventRealtimeBadge,
+} from "~/lib/device-events-realtime-ui";
 import type {
 	DeviceEvent,
 	DeviceEventStatus,
@@ -557,6 +561,19 @@ export default function DeviceEventsPage() {
 		latestSavedAgeMs !== null && latestSavedAgeMs >= 0 && latestSavedAgeMs <= 2 * 60 * 1000;
 	const latestRealtimeEventId = lastRealtimeEvent?.eventId || null;
 	const highlightedSavedEventId = latestRealtimeEventId || (isLatestSavedFresh ? latestSavedEvent?.id : null);
+	const realtimeStatus = getDeviceEventsRealtimeStatus({
+		isConnected,
+		organizationId,
+		liveDeviceId,
+		deviceId,
+		selectedDeviceName: selectedDevice?.name,
+		liveDeviceName: liveDevice?.name,
+	});
+	const realtimeStatusDetail = lastRealtimeEvent
+		? `Last socket event ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
+		: latestSavedEvent
+			? `Latest saved punch ${formatPunchTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
+			: "Waiting for the next saved punch";
 
 	const columns: Column<UnifiedDeviceEventRow>[] = [
 		{
@@ -637,11 +654,28 @@ export default function DeviceEventsPage() {
 			sortable: viewMode === "saved",
 			width: "150px",
 			required: true,
-			render: (value) => (
-				<span className="block max-w-[140px] truncate text-sm text-slate-700">
-					{formatEventSource(value)}
-				</span>
-			),
+			render: (value, item) => {
+				const realtimeBadge = getSavedDeviceEventRealtimeBadge({
+					viewMode,
+					itemId: item.id,
+					latestRealtimeEventId,
+					highlightedSavedEventId,
+				});
+				return (
+					<div className="min-w-0 space-y-1">
+						<span className="block max-w-[140px] truncate text-sm text-slate-700">
+							{formatEventSource(value)}
+						</span>
+						{realtimeBadge ? (
+							<Badge
+								variant={realtimeBadge === "Live socket" ? "success-soft" : "warning-soft"}
+								className="max-w-[140px] px-1.5 py-0 text-[11px] font-semibold">
+								<span className="truncate">{realtimeBadge}</span>
+							</Badge>
+						) : null}
+					</div>
+				);
+			},
 		},
 	];
 
@@ -757,6 +791,53 @@ export default function DeviceEventsPage() {
 				</div>
 
 				<div className="grid grid-cols-3 gap-0 divide-x divide-slate-200">
+					<div
+						className={
+							realtimeStatus.isListening
+								? "col-span-3 border-b border-emerald-200 bg-emerald-50 px-3 py-2"
+								: "col-span-3 border-b border-amber-200 bg-amber-50 px-3 py-2"
+						}>
+						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+							<div className="flex min-w-0 items-center gap-2">
+								<span
+									className={
+										realtimeStatus.isListening
+											? "flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-100 text-emerald-700"
+											: "flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700"
+									}
+									aria-hidden="true">
+									{realtimeStatus.isListening ? (
+										<Wifi className="h-4 w-4" />
+									) : (
+										<WifiOff className="h-4 w-4" />
+									)}
+								</span>
+								<div className="min-w-0">
+									<p
+										className={
+											realtimeStatus.isListening
+												? "truncate text-sm font-semibold text-emerald-950"
+												: "truncate text-sm font-semibold text-amber-950"
+										}>
+										{realtimeStatus.statusLabel}
+									</p>
+									<p
+										className={
+											realtimeStatus.isListening
+												? "truncate text-xs text-emerald-800"
+												: "truncate text-xs text-amber-800"
+										}>
+										{realtimeStatus.scopeLabel} - {realtimeStatusDetail}
+									</p>
+								</div>
+							</div>
+							<Badge
+								variant={realtimeStatus.isListening ? "success-soft" : "warning-soft"}
+								className="w-fit rounded-md px-2 py-1 font-semibold">
+								{realtimeStatus.rowUpdateLabel}
+							</Badge>
+						</div>
+					</div>
 						{[
 							{
 								label:
