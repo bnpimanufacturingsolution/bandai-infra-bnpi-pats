@@ -137,7 +137,7 @@ function DeviceHealthPanel({ deviceId }: { deviceId?: string }) {
 					/>
 					{isZkteco && checks?.zktecoBridge ? (
 						<HealthCheckRow
-							label="ZKTeco bridge"
+							label="SDK sidecar"
 							ok={Boolean(zktecoBridge?.ok)}
 							value={zktecoBridge?.status || "-"}
 							detail={
@@ -149,7 +149,7 @@ function DeviceHealthPanel({ deviceId }: { deviceId?: string }) {
 					) : null}
 					{isZkteco && zktecoBridge?.device ? (
 						<HealthCheckRow
-							label="Bridge device"
+							label="Device session"
 							ok={Boolean(zktecoBridge.device.connected)}
 							value={zktecoBridge.device.connected ? "connected" : "offline"}
 							detail={

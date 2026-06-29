@@ -81,7 +81,7 @@ const sourceOptions: SelectOption[] = [
 	{ value: "all", label: "All save paths" },
 	{ value: "HIKVISION_CALLBACK", label: "Device callback" },
 	{ value: "EN_HCNETSDK_ALARM", label: "Alarm listener" },
-	{ value: "ZKTECO_EVENT", label: "ZKTeco bridge" },
+	{ value: "ZKTECO_EVENT", label: "ZKTeco SDK sidecar" },
 ];
 
 const getDateKey = (date: Date) => {
@@ -153,7 +153,7 @@ const formatBusinessStatus = (status: string) => {
 };
 
 const formatEventSource = (source?: string | null) => {
-	if (source === "ZKTECO_EVENT") return "ZKTeco bridge";
+	if (source === "ZKTECO_EVENT") return "ZKTeco SDK sidecar";
 	if (source === "EN_HCNETSDK_ALARM") return "Alarm listener";
 	if (source === "HIKVISION_CALLBACK") return "Device callback";
 	return source || "-";
@@ -378,6 +378,7 @@ export default function DeviceEventsPage() {
 		source: viewMode === "saved" && source !== "all" ? source : undefined,
 		sort: viewMode === "saved" ? sort : undefined,
 		order: viewMode === "saved" ? order : undefined,
+		dateField: viewMode === "saved" ? "receivedAt" : undefined,
 		from,
 		to,
 	};
@@ -537,7 +538,7 @@ export default function DeviceEventsPage() {
 	const activeError = viewMode === "live" ? liveError || savedError : savedError;
 	const deviceSubtitle = liveDevice
 		? isZktecoHealth
-			? `${liveDevice.name || "Selected device"} - ZKTeco TCP ${liveDevice.port} - ZKTeco bridge`
+			? `${liveDevice.name || "Selected device"} - ZKTeco TCP ${liveDevice.port} - SDK sidecar`
 			: `${liveDevice.name || "Selected device"} - Hikvision ISAPI ${
 					deviceHealth?.device?.baseUrl ||
 					`${liveDevice.protocol || "http"}://${liveDevice.address}:${liveDevice.port}`
@@ -820,12 +821,12 @@ export default function DeviceEventsPage() {
 						{isZktecoHealth ? (
 							<>
 								<HealthMetric
-									label="ZKTeco bridge"
+									label="SDK sidecar"
 									value={zktecoBridge?.status || "-"}
 									ok={Boolean(zktecoBridge?.ok)}
 								/>
 								<HealthMetric
-									label="Bridge device"
+									label="Device session"
 									value={bridgeDevice?.connected ? "connected" : "offline"}
 									ok={Boolean(bridgeDevice?.connected)}
 								/>
@@ -883,7 +884,7 @@ export default function DeviceEventsPage() {
 			{viewMode === "live" && liveDeviceId && !canReadLiveEvents && !isLoadingHealth && (
 				<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
 					{isZktecoHealth
-						? "ZKTeco punches are received through the configured bridge and shown after they are saved in HRIS."
+						? "ZKTeco punches are received through the configured SDK sidecar and shown after they are saved in HRIS."
 						: "Live reads are paused until the selected device connection responds."}
 				</div>
 			)}
@@ -902,7 +903,7 @@ export default function DeviceEventsPage() {
 						</h2>
 						<p className="truncate text-xs text-slate-500">
 							{viewMode === "live" ? "Device read" : "HRIS stored event ledger"}
-							{viewMode === "saved" ? ` - ${formatDateWindowLabel(from, to)}` : ""}
+							{viewMode === "saved" ? ` - saved ${formatDateWindowLabel(from, to).toLowerCase()}` : ""}
 							{lastRealtimeEvent?.emittedAt
 								? ` - Latest save ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
 								: ""}

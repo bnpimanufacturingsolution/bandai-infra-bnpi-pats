@@ -33,9 +33,17 @@ Project Truth must not be silently overwritten. Requirement evolution is allowed
 
 ## Primary Users and Roles
 
-- Role: user, owner, guest
-  - Status: INFERRED
-  - Evidence: README/source (role-like terms detected)
+- Role: admin / hris-admin
+  - Status: CONFIRMED
+  - Evidence: User correction 2026-06-29; admin device/configuration routes under `hris-app/app/routes/admin`; ZKTeco device work occurs under `/admin/configuration/devices`.
+  - Rule: Device management, device event review, runtime health checks, and ZKTeco repair/operations are admin-role work. Do not infer `hris-hr-manager` for `/admin` device or configuration tasks.
+- Role: hris-hr-manager
+  - Status: CONFIRMED_WITH_BOUNDARY
+  - Evidence: Existing HRIS role tests and HR route code.
+  - Rule: HR manager is valid for HR workflows where the code/docs explicitly require it, but it is not the default actor for admin configuration, device operations, GitOps, VM, or ZKTeco runtime drift work.
+- Role: hris-hr-user, hris-employee-manager, hris-employee
+  - Status: OBSERVED
+  - Evidence: Existing HRIS role tests and app role types.
 
 ## Canonical Scope
 
@@ -143,9 +151,9 @@ Avoid drifting into:
 - Question: Confirm product category.
   - Why it matters: Category affects profile selection, architecture defaults, and governance gates.
   - Evidence / uncertainty: INFERRED: Web application
-- Question: Confirm primary users and role names.
+- Question: Confirm remaining non-admin role boundaries.
   - Why it matters: Roles affect permissions, UX, terminology, and task routing.
-  - Evidence / uncertainty: INFERRED: user, owner, guest
+  - Evidence / uncertainty: Admin device/configuration ownership is confirmed; remaining HR/employee sub-role boundaries remain code-observed unless separately reviewed.
 
 ## Update Rules
 

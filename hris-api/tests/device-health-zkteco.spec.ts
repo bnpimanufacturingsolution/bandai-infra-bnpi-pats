@@ -88,11 +88,13 @@ describe("device health ZKTeco SDK sidecar", () => {
 		expect(body.data.checks.zktecoBridge.runtime).to.equal(".NET Framework 4.8 + zkemkeeper COM");
 		expect(body.data.checks.zktecoBridge.connectedDevices).to.equal(1);
 		expect(body.data.checks.lastZktecoEvent.status).to.equal("MATCHED");
+		const retiredRuntimeLabel = `Project Truth ZKTeco ${"br" + "idge"}`;
+		expect(JSON.stringify(body)).to.not.include(retiredRuntimeLabel);
 		expect(body.data.checks).to.not.have.property("alarmDemo");
 		expect(body.data.checks).to.not.have.property("hikvisionListener");
 	});
 
-	it("does not report a ZKTeco device online when the VM bridge is up but that device is disconnected", async () => {
+	it("does not report a ZKTeco device online when the SDK sidecar is up but that device is disconnected", async () => {
 		process.env.ZKTECO_BRIDGE_STATUS_URL = "http://127.0.0.1:4371/status";
 		global.fetch = (async () =>
 			({
@@ -157,5 +159,45 @@ describe("device health ZKTeco SDK sidecar", () => {
 		expect(body.data.checks.zktecoBridge.device.connected).to.equal(false);
 		expect(body.data.checks).to.not.have.property("alarmDemo");
 		expect(body.data.checks).to.not.have.property("deviceApi");
+	});
+
+	it("filters saved device events by receivedAt when requested by the admin events page", async () => {
+		const queries: string[] = [];
+		const prisma = {
+			$queryRaw: async (query: any) => {
+				queries.push(Array.isArray(query?.strings) ? query.strings.join("") : String(query));
+				if (queries.length === 1) return [];
+				if (queries.length === 2) return [{ total: 0 }];
+				return [];
+			},
+			device: { findFirst: async () => null },
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			organizationId: "org-1",
+			query: {
+				from: "2026-06-29",
+				to: "2026-06-29",
+				dateField: "receivedAt",
+				source: "ZKTECO_EVENT",
+			},
+		};
+		let statusCode = 0;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json() {
+				return this;
+			},
+		};
+
+		await deviceController.getEvents(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(200);
+		expect(queries.join("\n")).to.include('de."receivedAt"');
+		expect(queries.join("\n")).to.not.include('de."eventTime" >=');
 	});
 });

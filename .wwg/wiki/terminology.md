@@ -17,6 +17,8 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | autopilot | README heading | Observed project term; confirm canonical meaning before broad use. | NEEDS_CONFIRMATION |
 | branch | README heading | Observed project term; confirm canonical meaning before broad use. | NEEDS_CONFIRMATION |
 | cli | README heading | Observed project term; confirm canonical meaning before broad use. | NEEDS_CONFIRMATION |
+| admin / hris-admin | User correction; admin route folders | Canonical role for admin configuration, device management, ZKTeco device events, runtime health, and repair/operations work. Do not substitute HR manager for admin surfaces. | CONFIRMED |
+| hris-hr-manager | Existing role tests and HR route code | HR workflow role only where code/docs explicitly require it; not the default actor for `/admin` device/configuration work. | CONFIRMED_WITH_BOUNDARY |
 | current | README heading | Observed project term; confirm canonical meaning before broad use. | NEEDS_CONFIRMATION |
 | dockerfile | app/Dockerfile | Observed project term; confirm canonical meaning before broad use. | NEEDS_CONFIRMATION |
 | documents | README heading | Observed project term; confirm canonical meaning before broad use. | NEEDS_CONFIRMATION |
@@ -37,12 +39,14 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | autopilot | Autopilot | None detected | MEDIUM | README heading |
 | branch | Branch | None detected | MEDIUM | README heading |
 | cli | Cli | None detected | MEDIUM | README heading |
+| admin role | admin / hris-admin | administrator, admin user | HIGH | User correction 2026-06-29; `hris-app/app/routes/admin` |
+| HR manager role | hris-hr-manager | HR Manager, hr-manager route legacy | HIGH | Existing HRIS role tests and HR workflow code |
 
 ## Terminology Conflicts
 
 | Conflict | Evidence | Recommendation |
 |---|---|---|
-| None confirmed | No direct conflict detected by lightweight audit | Confirm inferred terms before large renames |
+| Admin device/configuration work was previously left as inferred generic roles | `.wwg/wiki/project-truth.md` previously listed `user, owner, guest`; user correction 2026-06-29 says this is clearly admin role | Use admin / `hris-admin` for `/admin` device, runtime, GitOps, VM, and ZKTeco drift work; use `hris-hr-manager` only for explicit HR workflows |
 
 ## Rules
 

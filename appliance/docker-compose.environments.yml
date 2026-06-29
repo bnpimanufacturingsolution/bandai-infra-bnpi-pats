@@ -74,7 +74,7 @@ services:
       API_ACTIVITY_LOG_INCLUDE_READS: "true"
       API_ACTIVITY_LOG_EXCLUDED_PATHS: /health,/metrics
       LOG_FORMAT: json
-      ZKTECO_BRIDGE_STATUS_URL: ${ZKTECO_BRIDGE_STATUS_URL_DEV:-${ZKTECO_BRIDGE_STATUS_URL:-}}
+      ZKTECO_BRIDGE_STATUS_URL: ${ZKTECO_BRIDGE_STATUS_URL_DEV:-${ZKTECO_BRIDGE_STATUS_URL:-http://host.docker.internal:4371/status}}
     volumes:
       - apiuploads-dev:/app/uploads
       - ./backups/dev:/var/backups/hris

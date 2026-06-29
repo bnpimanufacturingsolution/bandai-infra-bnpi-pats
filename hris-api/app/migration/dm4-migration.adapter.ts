@@ -5,7 +5,11 @@ import * as path from "path";
 import { PrismaClient } from "../../generated/prisma";
 import { MigrationEventService } from "./migration-event.service";
 import { MigrationRunAdapterResult, MigrationRunRequest } from "./migration-run.types";
-import { resolveMigrationDm4SourceFiles } from "./migration-dry-run.service";
+import {
+	getMigrationApiRoot,
+	resolveMigrationApiPath,
+	resolveMigrationDm4SourceFiles,
+} from "./migration-dry-run.service";
 
 const activeDm4ProofScripts = new Map<string, ReturnType<typeof spawn>>();
 const APPROVED_OT_WORKBOOK_PATTERN = /2026\s+rptOvertimeDetails\.xlsx$/i;
@@ -37,7 +41,7 @@ export class Dm4MigrationAdapter {
 		const resolution = resolveMigrationDm4SourceFiles(rawSourceFiles);
 		const sourceConfig = String(request.options?.sourceConfig || "").trim();
 		const approveHistoricalTimesheets = request.options?.approveHistoricalTimesheets === true;
-		const scriptPath = path.resolve(process.cwd(), "scripts", "bnpi-demo-attendance-proof.cjs");
+		const scriptPath = resolveMigrationApiPath("scripts", "bnpi-demo-attendance-proof.cjs");
 
 		await this.events.append({
 			runId,
@@ -333,7 +337,7 @@ export class Dm4MigrationAdapter {
 		workbookPath: string;
 		periodCode: string;
 	}) {
-		const scriptPath = path.resolve(process.cwd(), "scripts", "repair-bandai-payroll-source-timesheet-lines.ts");
+		const scriptPath = resolveMigrationApiPath("scripts", "repair-bandai-payroll-source-timesheet-lines.ts");
 		if (!fs.existsSync(scriptPath)) {
 			await this.events.append({
 				runId: input.runId,
@@ -360,7 +364,8 @@ export class Dm4MigrationAdapter {
 		const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
 			let stdout = "";
 			let stderr = "";
-			const tsxCliPath = path.resolve(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
+			const apiRoot = getMigrationApiRoot();
+			const tsxCliPath = resolveMigrationApiPath("node_modules", "tsx", "dist", "cli.mjs");
 			const child = spawn(
 				process.execPath,
 				[
@@ -371,7 +376,7 @@ export class Dm4MigrationAdapter {
 					`--overtime-workbook=${input.workbookPath}`,
 				],
 				{
-					cwd: process.cwd(),
+					cwd: apiRoot,
 					windowsHide: true,
 					stdio: ["ignore", "pipe", "pipe"],
 				},
@@ -461,7 +466,8 @@ export class Dm4MigrationAdapter {
 		const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
 			let stdout = "";
 			let stderr = "";
-			const tsxCliPath = path.resolve(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
+			const apiRoot = getMigrationApiRoot();
+			const tsxCliPath = resolveMigrationApiPath("node_modules", "tsx", "dist", "cli.mjs");
 			const child = spawn(
 				process.execPath,
 				[
@@ -471,7 +477,7 @@ export class Dm4MigrationAdapter {
 					`--overtime-workbook=${input.workbookPath}`,
 				],
 				{
-					cwd: process.cwd(),
+					cwd: apiRoot,
 					windowsHide: true,
 					stdio: ["ignore", "pipe", "pipe"],
 				},
@@ -549,7 +555,7 @@ export class Dm4MigrationAdapter {
 
 		return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
 			const child = spawn(process.execPath, input.args, {
-				cwd: process.cwd(),
+				cwd: getMigrationApiRoot(),
 				windowsHide: true,
 				stdio: ["ignore", "pipe", "pipe"],
 			});

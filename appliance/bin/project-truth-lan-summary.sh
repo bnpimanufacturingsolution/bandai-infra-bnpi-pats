@@ -119,7 +119,7 @@ emit_zkteco_runtime_rows() {
   else
     printf '  %-18s %s\n' "bridge status" "not configured in VM; set ZKTECO_BRIDGE_STATUS_URL to the Windows SDK sidecar"
   fi
-  printf '  %-18s %s\n' "device check" "Admin > Devices shows TCP port and configured bridge truth"
+  printf '  %-18s %s\n' "device check" "Admin > Devices shows TCP port and configured SDK sidecar truth"
 }
 
 emit_cloudflare_tcp_db_instructions() {

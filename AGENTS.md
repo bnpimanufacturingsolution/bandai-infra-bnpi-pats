@@ -93,6 +93,10 @@ Windows host repo
 
 Do not declare the architecture complete from host-local Docker alone unless the VM path is proven impossible with evidence.
 
+## Canonical Role Guard
+
+Admin device/configuration work is admin-role work. For `/admin/configuration/devices`, ZKTeco device events, runtime health, VM/GitOps drift, and repair operations, use admin / `hris-admin` as the actor and mental model. Do not default to `hris-hr-manager` for these surfaces unless the task explicitly targets an HR workflow or the relevant code/docs require the HR manager role.
+
 <!-- WWG_GENERATED:EXISTING_PROJECT_ADOPTION_RULE:START -->
 ## Existing Project Adoption Rule
 

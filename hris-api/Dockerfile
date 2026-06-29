@@ -73,6 +73,7 @@ COPY --chown=nodeuser:nodejs --from=production-build /app/assets ./assets
 COPY --chown=nodeuser:nodejs --from=production-build /app/app ./app
 COPY --chown=nodeuser:nodejs --from=production-build /app/lib ./lib
 COPY --chown=nodeuser:nodejs --from=production-build /app/docs ./docs
+COPY --chown=nodeuser:nodejs --from=production-build /app/scripts ./scripts
 
 USER nodeuser
 

@@ -90,6 +90,56 @@ async function main() {
 			and ("deviceEmpId" is null or "deviceEmpId" <> ${normalizedDeviceEmpIdSql})
 	`;
 
+	const rematchedZktecoEvents = await prisma.$executeRaw`
+		with candidates as (
+			select distinct on (de.id)
+				de.id as "eventId",
+				emp.id as "employeeId"
+			from device_events de
+			join employees emp
+				on emp."organizationId" = de."organizationId"
+				and emp."isDeleted" = false
+				and de."employeeNo" is not null
+				and btrim(de."employeeNo") <> ''
+				and (
+					emp."deviceEmpId" = btrim(de."employeeNo")
+					or emp."employeeId" in (
+						btrim(de."employeeNo"),
+						case
+							when btrim(de."employeeNo") ~ '^[0-9]+$'
+							then coalesce(nullif(regexp_replace(btrim(de."employeeNo"), '^0+', ''), ''), '0')
+							else btrim(de."employeeNo")
+						end,
+						case
+							when btrim(de."employeeNo") ~ '^[0-9]+$'
+							then lpad(
+								coalesce(nullif(regexp_replace(btrim(de."employeeNo"), '^0+', ''), ''), '0'),
+								5,
+								'0'
+							)
+							else btrim(de."employeeNo")
+						end
+					)
+				)
+			where de.source = 'ZKTECO_EVENT'::"DeviceEventSource"
+				and de.status = 'UNMATCHED'::"DeviceEventStatus"
+				and de."attendanceId" is null
+				and de."employeeId" is null
+			order by
+				de.id,
+				case when emp."deviceEmpId" = btrim(de."employeeNo") then 0 else 1 end,
+				emp."employeeId"
+		)
+		update device_events de
+		set
+			"employeeId" = candidates."employeeId",
+			status = 'MATCHED'::"DeviceEventStatus",
+			"errorMessage" = null,
+			"updatedAt" = now()
+		from candidates
+		where de.id = candidates."eventId"
+	`;
+
 	const [deviceCount, employeeDeviceIdCount, eventCounts] = await Promise.all([
 		prisma.device.count({
 			where: {
@@ -119,6 +169,7 @@ async function main() {
 	console.log("[zkteco-truth] live ZKTeco device rows:", deviceCount);
 	console.log("[zkteco-truth] employee deviceEmpId rows:", employeeDeviceIdCount);
 	console.log("[zkteco-truth] employee deviceEmpId repaired:", syncedDeviceEmpIds);
+	console.log("[zkteco-truth] existing ZKTeco event rows rematched:", rematchedZktecoEvents);
 	console.log("[zkteco-truth] real ZKTeco event counts:");
 	for (const row of eventCounts) {
 		console.log(`  ${row.source}/${row.status}: ${row._count._all}`);

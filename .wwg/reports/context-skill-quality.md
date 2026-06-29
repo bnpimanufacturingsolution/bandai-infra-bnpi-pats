@@ -4,7 +4,7 @@
 
 Validation status: WARN.
 
-Checked 56 Markdown file(s), with 0 error(s), 56 warning(s), and 60 suggestion(s).
+Checked 57 Markdown file(s), with 0 error(s), 57 warning(s), and 60 suggestion(s).
 
 ## Overall Status
 
@@ -40,6 +40,7 @@ Checked 56 Markdown file(s), with 0 error(s), 56 warning(s), and 60 suggestion(s
 - .wwg/reports/wwg-upgrade-report.md
 - .wwg/reports/wwg-validate-report.md
 - .wwg/reports/zkteco-node-bridge-retirement-20260629.md
+- .wwg/reports/zkteco-sdk-device-counts-20260629.md
 - .wwg/wiki/principles/README.md
 - .wwg/wiki/principles/adopted-principles.md
 - .wwg/wiki/project-truth.md
@@ -79,7 +80,7 @@ Checked 56 Markdown file(s), with 0 error(s), 56 warning(s), and 60 suggestion(s
 | context | 4 |
 | skill | 0 |
 | governance | 5 |
-| report | 20 |
+| report | 21 |
 | public_doc | 21 |
 | agent_instruction | 1 |
 | changelog_governance | 0 |
@@ -124,6 +125,7 @@ Checked 56 Markdown file(s), with 0 error(s), 56 warning(s), and 60 suggestion(s
 - WARNING report-contract-missing-sections (.wwg/reports/wwg-upgrade-report.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/wwg-validate-report.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/zkteco-node-bridge-retirement-20260629.md) [Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
+- WARNING report-contract-missing-sections (.wwg/reports/zkteco-sdk-device-counts-20260629.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING context-contract-missing-sections (.wwg/wiki/principles/README.md) [Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References]: Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References. Recommendation: Add the missing context section or mark it explicitly not applicable.
 - WARNING context-contract-missing-sections (.wwg/wiki/principles/adopted-principles.md) [Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References]: Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References. Recommendation: Add the missing context section or mark it explicitly not applicable.
 - WARNING context-contract-missing-sections (.wwg/wiki/project-truth.md) [Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References]: Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References. Recommendation: Add the missing context section or mark it explicitly not applicable.
@@ -184,7 +186,7 @@ Checked 56 Markdown file(s), with 0 error(s), 56 warning(s), and 60 suggestion(s
 - SUGGESTION markdown-todo-without-owner-or-reason (.wwg/reports/wwg-handoff-to-codex.md:220): TODO/TBD appears without an owner, reason, or open-question context. Recommendation: Add the owner, reason, or decision needed before resolving the placeholder.
 - SUGGESTION markdown-possible-vague-pronouns (.wwg/reports/wwg-maintenance-review.md): File has many pronouns that may be ambiguous for agents. Recommendation: Replace ambiguous pronouns with explicit nouns where references may be unclear.
 - SUGGESTION markdown-possible-vague-pronouns (AGENTS.md): File has many pronouns that may be ambiguous for agents. Recommendation: Replace ambiguous pronouns with explicit nouns where references may be unclear.
-- SUGGESTION markdown-possible-stale-current-language (AGENTS.md:116): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
+- SUGGESTION markdown-possible-stale-current-language (AGENTS.md:120): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
 - SUGGESTION markdown-possible-vague-pronouns (Agent-Meta-Prompt-Template.md): File has many pronouns that may be ambiguous for agents. Recommendation: Replace ambiguous pronouns with explicit nouns where references may be unclear.
 - SUGGESTION markdown-possible-stale-current-language (Agent-Meta-Prompt-Template.md:104): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
 - SUGGESTION markdown-possible-stale-current-language (Agent-Meta-Prompt-Template.md:158): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
@@ -290,6 +292,7 @@ Checked 56 Markdown file(s), with 0 error(s), 56 warning(s), and 60 suggestion(s
 - WARNING report-contract-missing-sections (.wwg/reports/wwg-upgrade-report.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/wwg-validate-report.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/zkteco-node-bridge-retirement-20260629.md) [Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
+- WARNING report-contract-missing-sections (.wwg/reports/zkteco-sdk-device-counts-20260629.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 
 ## Public-Doc Findings
 
@@ -341,7 +344,7 @@ Checked 56 Markdown file(s), with 0 error(s), 56 warning(s), and 60 suggestion(s
 
 - WARNING agent-instruction-contract-missing-sections (AGENTS.md) [Purpose, Required Reading, Operating Rules, Safety Gates, Handoff / Reporting Rules, References]: Agent Instruction is missing contract section(s): Purpose, Required Reading, Operating Rules, Safety Gates, Handoff / Reporting Rules, References. Recommendation: Add the missing active instruction section or link to the canonical source.
 - SUGGESTION markdown-possible-vague-pronouns (AGENTS.md): File has many pronouns that may be ambiguous for agents. Recommendation: Replace ambiguous pronouns with explicit nouns where references may be unclear.
-- SUGGESTION markdown-possible-stale-current-language (AGENTS.md:116): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
+- SUGGESTION markdown-possible-stale-current-language (AGENTS.md:120): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
 
 ## Changelog-Governance Findings
 

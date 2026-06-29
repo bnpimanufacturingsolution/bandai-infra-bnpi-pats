@@ -219,7 +219,7 @@ export const controller = (prisma: PrismaClient) => {
 				statusUrl,
 				latencyMs: null,
 				data: null,
-				error: error?.message || "ZKTeco bridge status did not respond",
+				error: error?.message || "ZKTeco SDK sidecar status did not respond",
 			};
 		}
 	};
@@ -382,7 +382,7 @@ export const controller = (prisma: PrismaClient) => {
 					runtime:
 						zktecoBridge?.data?.runtime ||
 						zktecoBridge?.data?.service ||
-						"Project Truth ZKTeco bridge",
+						"Project Truth ZKTeco SDK sidecar",
 					statusUrl: zktecoBridge?.statusUrl,
 					latencyMs: zktecoBridge?.latencyMs,
 					configuredDevices: zktecoBridge?.data?.configuredDevices ?? null,
@@ -522,8 +522,11 @@ export const controller = (prisma: PrismaClient) => {
 			const query = String(req.query.query || req.query.search || "").trim();
 			const from = String(req.query.from || "").trim();
 			const to = String(req.query.to || "").trim();
+			const dateField = String(req.query.dateField || "eventTime").trim();
 			const sort = String(req.query.sort || "receivedAt").trim();
 			const order = String(req.query.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+			const dateColumnSql =
+				dateField === "receivedAt" ? Prisma.sql`de."receivedAt"` : Prisma.sql`de."eventTime"`;
 
 			const whereConditions: Prisma.Sql[] = [
 				Prisma.sql`de."organizationId" = ${String(organizationId)}`,
@@ -540,11 +543,11 @@ export const controller = (prisma: PrismaClient) => {
 			if (from || to) {
 				if (from) {
 					const fromDate = parseHikvisionBusinessDateBound(from);
-					if (fromDate) whereConditions.push(Prisma.sql`de."eventTime" >= ${fromDate}`);
+					if (fromDate) whereConditions.push(Prisma.sql`${dateColumnSql} >= ${fromDate}`);
 				}
 				if (to) {
 					const toDate = parseHikvisionBusinessDateBound(to, true);
-					if (toDate) whereConditions.push(Prisma.sql`de."eventTime" <= ${toDate}`);
+					if (toDate) whereConditions.push(Prisma.sql`${dateColumnSql} <= ${toDate}`);
 				}
 			}
 

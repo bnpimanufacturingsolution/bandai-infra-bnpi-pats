@@ -56,6 +56,13 @@ A principle update is not appropriate for:
 
 If uncertain, add a candidate principle or record the issue in the handoff/report.
 
+## Role Drift Guard
+
+- Admin device/configuration surfaces, including `/admin/configuration/devices`, ZKTeco device events, runtime health checks, VM/GitOps runtime drift, and repair operations, are admin / `hris-admin` work.
+- Do not infer `hris-hr-manager` for admin device/configuration tasks just because HRIS contains HR manager routes, tests, or seed credentials.
+- `hris-hr-manager` remains valid only where the task explicitly targets HR workflows or existing code/docs require that role.
+- If a role is unclear, prefer the route/workflow owner in Project Truth and mark the uncertainty instead of substituting a convenient seeded login.
+
 ## Test Enforcement
 
 - Meaningful feature behavior requires meaningful tests.

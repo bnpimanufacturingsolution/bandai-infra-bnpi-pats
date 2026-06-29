@@ -27,6 +27,20 @@ It must run on a Windows host or Windows container runtime. It cannot run as a n
 
 The older `appliance/zkteco-bridge` Node socket bridge is retired from the active VM/K3s/Docker path because it can hold stale sessions and drift from the Windows SDK runtime truth.
 
+## Employee Mapping Truth
+
+ZKTeco enroll numbers are the device-side biometric IDs. In HRIS they belong in `employees.deviceEmpId` without display padding. If the HR employee code is `00021`, the ZKTeco `deviceEmpId` should be `21`.
+
+The HRIS API also matches incoming ZKTeco punches against padded employee codes as a fallback, so a device event with enroll number `21` can still resolve employee `00021`. For local DEV repair, run:
+
+```powershell
+cd .\hris-api
+$env:DATABASE_URL="postgresql://postgres:postgres@localhost:15433/hris"
+npm run repair:zkteco-truth
+```
+
+That repair keeps the event ledger, normalizes numeric `deviceEmpId` values, and rematches existing `UNMATCHED` ZKTeco device events to employees when possible. It does not create Attendance, timesheet, or payroll writes.
+
 When using the Windows SDK bridge with the current DEV VM:
 
 ```text
@@ -44,8 +58,33 @@ ZKTECO_BRIDGE_STATUS_URL=http://<windows-sidecar-ip>:4371/status
 
 If `http://10.184.38.61:3100/admin/configuration/devices/events?...` still shows `AlarmDemo`, `Device API`, or `ISAPI` for `ZKTeco Device 10.184.38.9`, the VM is serving an old app/API build or is still pointed at the old health contract.
 
-The fix is to deploy the updated app/API and configure a reachable bridge status URL. Host-local Docker health alone is not the Project Truth finish line.
+The fix is to deploy the updated app/API and configure a reachable SDK sidecar status URL. Host-local Docker health alone is not the Project Truth finish line.
 
-## 2026-06-29 Device Probe Truth
+## 2026-06-29 SDK Device Count Truth
 
-For `10.184.38.234:4370` and `10.184.38.235:4370`, TCP was reachable during the current run, but the Windows SDK connect failed after three attempts with SDK error `-2`. Treat those devices as `TCP reachable, SDK not connected right now`; do not infer event counts from that state.
+Read-only SDK summary command:
+
+```powershell
+$env:ZKTECO_DEVICE_IPS="10.184.38.10,10.184.38.234,10.184.38.235,10.184.38.9"
+$env:ZKTECO_BACKFILL_MAX_EVENTS="100000"
+.\appliance\zkteco-standalone-sdk\bin\Debug\net48\ZKTecoStandalone.exe --summary
+```
+
+Result captured on 2026-06-29:
+
+| Device IP | SDK connected | User count | Event count | Unique event users | First event | Last event |
+|---|---:|---:|---:|---:|---|---|
+| `10.184.38.10` | yes | 907 | 41,586 | 838 | 2022-12-31 05:47:24 | 2026-06-29 08:27:27 |
+| `10.184.38.234` | yes | 905 | 31,391 | 785 | 2022-12-31 05:36:18 | 2026-06-29 08:11:17 |
+| `10.184.38.235` | yes | 905 | 21,160 | 813 | 2026-04-01 05:03:55 | 2026-06-29 10:09:10 |
+| `10.184.38.9` | yes | 905 | 12,581 | 747 | 2022-12-31 17:39:06 | 2026-06-29 06:15:12 |
+
+All four known Project Truth ZKTeco devices connected through the Windows Standalone SDK for this summary run. Earlier `10.184.38.234` and `10.184.38.235` SDK error `-2` evidence is now stale for count reporting, but remains useful as proof that SDK connectivity can be transient.
+
+The live sidecar process listening at `http://127.0.0.1:4371/status` was separately configured for one device during this run:
+
+| Sidecar device | Connected | Streaming | Events seen since sidecar start | Events posted since sidecar start |
+|---|---:|---:|---:|---:|
+| `10.184.38.9:4370` | yes | yes | 0 | 0 |
+
+Do not confuse the read-only SDK summary event counts with sidecar realtime counters. The summary counts are stored device log rows read directly from each terminal. The sidecar counters are only events seen or posted since the current sidecar process started.
