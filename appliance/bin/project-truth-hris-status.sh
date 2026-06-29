@@ -115,19 +115,16 @@ if [ -n "$lan_ip" ]; then
     echo "VM ZKTeco contract status: DOWN (API health did not respond at ${lan_ip}:3001)"
   fi
 fi
-echo "Bridge runtime: configured ZKTeco bridge (/status), VM Linux bridge or Windows SDK sidecar."
-if docker_cmd ps --filter "name=project-truth-zkteco-bridge" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}" | grep -q 'project-truth-zkteco-bridge'; then
- docker_cmd ps --filter "name=project-truth-zkteco-bridge" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
-else
-  echo "VM Linux bridge container: DOWN or not selected"
-fi
-if [ -n "$lan_ip" ]; then
-  echo "Bridge status: http://${lan_ip}:4371/status"
-  if curl -fsS "http://${lan_ip}:4371/status" >/tmp/project-truth-zkteco-status.json 2>/dev/null; then
+echo "Bridge runtime: Windows Standalone SDK sidecar at appliance/zkteco-standalone-sdk."
+if [ -n "${ZKTECO_BRIDGE_STATUS_URL:-}" ]; then
+  echo "Bridge status: ${ZKTECO_BRIDGE_STATUS_URL}"
+  if curl -fsS "$ZKTECO_BRIDGE_STATUS_URL" >/tmp/project-truth-zkteco-status.json 2>/dev/null; then
     node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync('/tmp/project-truth-zkteco-status.json','utf8')); console.log(JSON.stringify({status:s.status,configuredDevices:s.configuredDevices,connectedDevices:s.connectedDevices,lastEventAt:s.lastEventAt,webhookUrl:s.webhookUrl}, null, 2));" 2>/dev/null || cat /tmp/project-truth-zkteco-status.json
   else
     echo "Bridge status endpoint: DOWN"
   fi
+else
+  echo "Bridge status endpoint: not configured. Set ZKTECO_BRIDGE_STATUS_URL to the Windows SDK sidecar /status URL."
 fi
 
 echo "APP:"

@@ -12,8 +12,8 @@ IMPORTANT RUNTIME TRUTH:
 ------------------------
 This bridge uses .NET Framework 4.8, x86, Interop.zkemkeeper.dll, and the
 ZKTeco zkemkeeper.dll COM component. It is a Windows SDK bridge. It cannot run
-as a normal Linux Docker container inside the Ubuntu Project Truth VM. Use one
-of these supported topologies:
+as a normal Linux Docker container inside the Ubuntu Project Truth VM. Use this
+supported topology:
 
 1. Windows container/Windows host sidecar:
    - Build with Dockerfile.windows or docker-compose.windows.yml.
@@ -21,10 +21,6 @@ of these supported topologies:
    - Set ZKTECO_WEBHOOK_URL to the VM API, for example:
      http://10.184.38.61:3101/api/zkteco/events
    - Set HRIS API ZKTECO_BRIDGE_STATUS_URL to the sidecar status URL.
-
-2. Linux VM bridge:
-   - Use the appliance/zkteco-bridge Node socket bridge.
-   - Do not label it AlarmDemo or Device API in the UI.
 
 SETUP:
 ------

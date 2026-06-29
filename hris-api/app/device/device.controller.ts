@@ -185,8 +185,17 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const getZktecoBridgeStatus = async () => {
-		const statusUrl =
-			process.env.ZKTECO_BRIDGE_STATUS_URL || "http://zkteco-bridge:4371/status";
+		const statusUrl = String(process.env.ZKTECO_BRIDGE_STATUS_URL || "").trim();
+		if (!statusUrl) {
+			return {
+				ok: false,
+				status: "not_configured",
+				statusUrl: null,
+				latencyMs: null,
+				data: null,
+				error: "ZKTECO_BRIDGE_STATUS_URL is not configured",
+			};
+		}
 		const timeoutMs = Number(process.env.ZKTECO_BRIDGE_STATUS_TIMEOUT_MS || 10000);
 		const startedAt = Date.now();
 		try {

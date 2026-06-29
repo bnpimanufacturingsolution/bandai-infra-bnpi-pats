@@ -40,13 +40,13 @@ try {
 
     Write-Step "Compose config"
     docker compose -f .\appliance\docker-compose.yml config --quiet
-    Write-Pass "Default compose file parses with configured ZKTeco bridge support."
+    Write-Pass "Default compose file parses without the retired Node ZKTeco bridge service."
 
-    Write-Step "Linux ZKTeco bridge files"
+    Write-Step "Windows SDK ZKTeco sidecar files"
     $requiredFiles = @(
-        ".\appliance\zkteco-bridge\Dockerfile",
-        ".\appliance\zkteco-bridge\package.json",
-        ".\appliance\zkteco-bridge\src\index.js"
+        ".\appliance\zkteco-standalone-sdk\Program.cs",
+        ".\appliance\zkteco-standalone-sdk\README.txt",
+        ".\appliance\zkteco-standalone-sdk\ZKTecoStandalone.csproj"
     )
     $missingBridgeFiles = @()
     foreach ($file in $requiredFiles) {
@@ -56,11 +56,11 @@ try {
     }
     if ($missingBridgeFiles.Count -gt 0) {
         if (-not $ContractOnly) {
-            throw "Missing required Linux bridge file: $($missingBridgeFiles -join ', ')."
+            throw "Missing required Windows SDK sidecar file: $($missingBridgeFiles -join ', ')."
         }
-        Write-WarnLine "Bridge files missing; continuing in contract-only mock mode: $($missingBridgeFiles -join ', ')"
+        Write-WarnLine "Sidecar files missing; continuing in contract-only mock mode: $($missingBridgeFiles -join ', ')"
     } else {
-        Write-Pass "Linux bridge files exist."
+        Write-Pass "Windows SDK sidecar files exist."
     }
 
     if ($BuildApi) {
@@ -108,7 +108,7 @@ try {
             -TimeoutSec 20
 
         Write-Host ($response | ConvertTo-Json -Depth 8)
-        Write-Pass "Smoke post reached the ZKTeco bridge endpoint."
+        Write-Pass "Smoke post reached the HRIS ZKTeco webhook endpoint."
 
         if ($response.data.reason -eq "device_not_found") {
             Write-WarnLine "Contract accepted the payload, but no HRIS Device matched $DeviceIp`:$DevicePort."
@@ -124,7 +124,7 @@ try {
     }
 
     Write-Step "Best finish state"
-    Write-Host "Stop when API/app are healthy, ZKTeco mock or bridge posts reach $ApiBaseUrl/api/zkteco/events, and saved events show under /admin/devices/events?view=saved&source=ZKTECO_EVENT."
+    Write-Host "Stop when API/app are healthy, Windows SDK sidecar or mock posts reach $ApiBaseUrl/api/zkteco/events, and saved events show under /admin/devices/events?view=saved&source=ZKTECO_EVENT."
     Write-Host "Attendance truth note: ZKTeco ingestion records DeviceEvent evidence only. It must not create/update Attendance, AttendanceObligation, timesheets, or payroll unless a separate tested applicator is deliberately enabled."
 } finally {
     Pop-Location

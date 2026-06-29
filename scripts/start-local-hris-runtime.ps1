@@ -70,7 +70,7 @@ if ($Environment -eq 'prod') {
 }
 
 if ($IncludeZkteco) {
-  Write-Host "ZKTeco bridge is part of the default Linux appliance stack; -IncludeZkteco is retained for compatibility."
+  Write-Host "The Node ZKTeco bridge is retired. Start appliance/zkteco-standalone-sdk separately and set ZKTECO_BRIDGE_STATUS_URL if live device status is needed."
 }
 
 $log = Join-Path $logsRoot ("start-local-hris-runtime-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))

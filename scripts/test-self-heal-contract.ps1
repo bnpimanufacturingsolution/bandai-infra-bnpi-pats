@@ -17,6 +17,19 @@ function Assert-Text {
   [pscustomobject]@{ Check = $Name; Status = 'PASS' }
 }
 
+function Assert-NoText {
+  param(
+    [string]$Name,
+    [string]$Text,
+    [string]$Pattern
+  )
+
+  if ($Text -match $Pattern) {
+    throw "Self-heal contract failed: ${Name} unexpectedly matched pattern: ${Pattern}"
+  }
+  [pscustomobject]@{ Check = $Name; Status = 'PASS' }
+}
+
 function Get-RenderedOverlay {
   param([string]$Path)
 
@@ -88,7 +101,10 @@ foreach ($envName in $Environments) {
   $checks.Add((Assert-Text "runtime-$envName exposes api hostPort" $rendered "hostPort:\s*$expectedApiPort"))
   $checks.Add((Assert-Text "runtime-$envName exposes postgres hostPort" $rendered "hostPort:\s*$expectedPostgresPort"))
 
-  foreach ($imageName in @('hris-api-db-init', 'hris-api-local', 'hris-app-local', 'project-truth-zkteco-bridge')) {
+  $checks.Add((Assert-NoText "runtime-$envName does not deploy retired Node ZKTeco bridge" $rendered 'name:\s*zkteco-bridge'))
+  $checks.Add((Assert-NoText "runtime-$envName does not reference retired Node ZKTeco bridge image" $rendered 'project-truth-zkteco-bridge'))
+
+  foreach ($imageName in @('hris-api-db-init', 'hris-api-local', 'hris-app-local')) {
     $imageTag = Get-KustomizeImageTag -KustomizationText $runtimeKustomization -ImageName $imageName
     if ($imageTag -ne $environmentRuntimeImageTag) {
       throw "Self-heal contract failed: runtime_image_tag for ${envName} is ${environmentRuntimeImageTag}, but ${imageName} uses ${imageTag}"
@@ -139,7 +155,7 @@ $applicationSetTemplate = Get-Content -Raw 'gitops/argocd/applicationsets/projec
 $checks.Add((Assert-Text 'enable-k8s-runtime stores image archive for K3s pre-import' $enableScript '/var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-images\.tar'))
 $checks.Add((Assert-Text 'enable-k8s-runtime imports images into k8s.io namespace' $enableScript 'k3s ctr -n k8s\.io images import'))
 $checks.Add((Assert-Text 'enable-k8s-runtime accepts promoted runtime image tag' $enableScript '\$ImageTag'))
-$checks.Add((Assert-Text 'enable-k8s-runtime imports ZKTeco bridge image' $enableScript 'project-truth-zkteco-bridge'))
+$checks.Add((Assert-NoText 'enable-k8s-runtime does not import retired Node ZKTeco bridge image' $enableScript 'project-truth-zkteco-bridge'))
 $checks.Add((Assert-Text 'enable-k8s-runtime installs runtime apps into K3s auto-deploy dir' $enableScript '/var/lib/rancher/k3s/server/manifests'))
 $checks.Add((Assert-Text 'repair-appliance-online persists app manifests into K3s auto-deploy dir' $repairScript '/var/lib/rancher/k3s/server/manifests'))
 $checks.Add((Assert-Text 'repair-appliance-online reapplies Argo platform config' $repairScript 'project-truth-argocd-platform'))
@@ -170,8 +186,8 @@ $checks.Add((Assert-Text 'ansible-pull wrapper preflights Git network before fet
 $checks.Add((Assert-Text 'ansible-pull wrapper repairs resolver drift before fetch' $ansiblePullScript 'systemd-resolved\.service'))
 $checks.Add((Assert-Text 'ansible-pull wrapper repairs DHCP drift before fetch' $ansiblePullScript 'project-truth-lan-dhcp'))
 $checks.Add((Assert-Text 'ansible-pull playbook updates install root' $ansiblePullPlaybook '/opt/project-truth'))
-$checks.Add((Assert-Text 'ansible-pull playbook imports ZKTeco bridge image into K3s' $ansiblePullPlaybook 'project-truth-zkteco-bridge:develop'))
-$checks.Add((Assert-Text 'ansible-pull playbook restarts K3s deployments after local image import' $ansiblePullPlaybook 'rollout restart deployment/hris-api deployment/hris-app deployment/zkteco-bridge'))
+$checks.Add((Assert-NoText 'ansible-pull playbook does not import retired Node ZKTeco bridge image into K3s' $ansiblePullPlaybook 'project-truth-zkteco-bridge:develop'))
+$checks.Add((Assert-Text 'ansible-pull playbook restarts K3s app/API deployments after local image import' $ansiblePullPlaybook 'rollout restart deployment/hris-api deployment/hris-app'))
 $checks.Add((Assert-Text 'ansible-pull playbook keeps legacy Compose app/API containers off K3s LAN ports' $ansiblePullPlaybook 'hris-app hris-api hris-app-dev hris-api-dev hris-app-uat hris-api-uat'))
 $checks.Add((Assert-Text 'ansible-pull playbook refreshes Argo apps after host sync' $ansiblePullPlaybook 'argocd\.argoproj\.io/refresh=hard'))
 $checks.Add((Assert-Text 'ansible-pull playbook repairs CoreDNS upstreams' $ansiblePullPlaybook 'forward \. 1\.1\.1\.1 8\.8\.8\.8'))

@@ -59,18 +59,18 @@ fi
 $imageImportScript = @'
 set -e
 image_tag='__IMAGE_TAG__'
-for image_name in hris-api-local hris-api-db-init hris-app-local project-truth-zkteco-bridge; do
+for image_name in hris-api-local hris-api-db-init hris-app-local; do
   if ! docker image inspect "${image_name}:${image_tag}" >/dev/null 2>&1; then
     if [ "${image_tag}" != "develop" ] && docker image inspect "${image_name}:develop" >/dev/null 2>&1; then
       docker tag "${image_name}:develop" "${image_name}:${image_tag}"
     fi
   fi
 done
-for image in postgres:16-alpine "hris-api-local:${image_tag}" "hris-api-db-init:${image_tag}" "hris-app-local:${image_tag}" "project-truth-zkteco-bridge:${image_tag}"; do
+for image in postgres:16-alpine "hris-api-local:${image_tag}" "hris-api-db-init:${image_tag}" "hris-app-local:${image_tag}"; do
   docker image inspect "$image" >/dev/null
 done
 sudo mkdir -p /var/lib/rancher/k3s/agent/images
-docker save -o /tmp/project-truth-k8s-runtime-images.tar postgres:16-alpine "hris-api-local:${image_tag}" "hris-api-db-init:${image_tag}" "hris-app-local:${image_tag}" "project-truth-zkteco-bridge:${image_tag}"
+docker save -o /tmp/project-truth-k8s-runtime-images.tar postgres:16-alpine "hris-api-local:${image_tag}" "hris-api-db-init:${image_tag}" "hris-app-local:${image_tag}"
 sudo cp /tmp/project-truth-k8s-runtime-images.tar /var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-images.tar
 sudo k3s ctr -n k8s.io images import /tmp/project-truth-k8s-runtime-images.tar
 sudo mkdir -p \

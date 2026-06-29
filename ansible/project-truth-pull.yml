@@ -95,17 +95,16 @@
 
         cd "{{ project_truth_install_root }}/appliance"
         if docker compose version >/dev/null 2>&1; then
-          docker compose build hris-api hris-api-db-init hris-app zkteco-bridge
+          docker compose build hris-api hris-api-db-init hris-app
         else
-          docker-compose build hris-api hris-api-db-init hris-app zkteco-bridge
+          docker-compose build hris-api hris-api-db-init hris-app
         fi
 
         docker image inspect postgres:16-alpine >/dev/null
         for image in \
           hris-api-local:develop \
           hris-api-db-init:develop \
-          hris-app-local:develop \
-          project-truth-zkteco-bridge:develop; do
+          hris-app-local:develop; do
           docker image inspect "$image" >/dev/null
         done
 
@@ -114,15 +113,13 @@
           postgres:16-alpine \
           hris-api-local:develop \
           hris-api-db-init:develop \
-          hris-app-local:develop \
-          project-truth-zkteco-bridge:develop
+          hris-app-local:develop
         cp /tmp/project-truth-k8s-runtime-images.tar /var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-images.tar
         k3s ctr -n k8s.io images import /tmp/project-truth-k8s-runtime-images.tar
         for env_name in dev uat prod; do
-          kubectl -n "$env_name" rollout restart deployment/hris-api deployment/hris-app deployment/zkteco-bridge >/dev/null 2>&1 || true
+          kubectl -n "$env_name" rollout restart deployment/hris-api deployment/hris-app >/dev/null 2>&1 || true
           kubectl -n "$env_name" rollout status deployment/hris-api --timeout=180s >/dev/null 2>&1 || true
           kubectl -n "$env_name" rollout status deployment/hris-app --timeout=180s >/dev/null 2>&1 || true
-          kubectl -n "$env_name" rollout status deployment/zkteco-bridge --timeout=180s >/dev/null 2>&1 || true
         done
         printf 'commit=%s\nsynced_at=%s\n' "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$state_file"
       args:
