@@ -34,7 +34,7 @@ if [ -n "$lan_ip" ]; then
   echo "  uat api: https://uat-api.bnpi-hris.tech/health"
   echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
   echo "  origin: http://${lan_ip}:3000"
-  echo "  host repair: project-truth start-bnpi-cloudflare-tunnel -ProvisionDns -VerifyPublic"
+  echo "  host repair: project-truth ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic -VerifySsh"
   echo "  SSH easy: ssh project-truth-hris"
   echo "  SSH host: ssh.bnpi-hris.tech"
   echo "  SSH full: ssh -i %USERPROFILE%\\.ssh\\node-health-appliance_ed25519 -o ProxyCommand=\"cloudflared access ssh --hostname %h\" infra@ssh.bnpi-hris.tech"

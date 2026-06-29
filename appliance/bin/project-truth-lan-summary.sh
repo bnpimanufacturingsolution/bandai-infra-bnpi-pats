@@ -117,7 +117,7 @@ emit_named_cloudflare_rows() {
   echo "  uat api: https://uat-api.bnpi-hris.tech/health"
   echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
   echo "  origin: http://${ip_addr}:3000"
-  echo "  host repair: project-truth start-bnpi-cloudflare-tunnel -ProvisionDns -VerifyPublic"
+  echo "  host repair: project-truth ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic -VerifySsh"
 }
 
 emit_cloudflare_ssh_rows() {

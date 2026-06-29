@@ -24,6 +24,8 @@ Assert-Contains -Path 'scripts/start-bnpi-cloudflare-tunnel.ps1' -Pattern '\$Ssh
 Assert-Contains -Path 'scripts/start-bnpi-cloudflare-tunnel.ps1' -Pattern 'ssh://\$\{GuestIp\}:22' -Message 'Tunnel wrapper must generate SSH origin from discovered VM IP'
 Assert-Contains -Path 'scripts/start-bnpi-cloudflare-tunnel.ps1' -Pattern 'ProvisionDns' -Message 'Tunnel wrapper must keep DNS provisioning switch'
 Assert-Contains -Path 'scripts/ensure-bnpi-cloudflare-host.ps1' -Pattern 'ssh\.bnpi-hris\.tech' -Message 'Host readiness helper must provision SSH DNS route'
+Assert-Contains -Path 'scripts/ensure-bnpi-cloudflare-host.ps1' -Pattern 'project-truth-hris' -Message 'Host readiness helper must repair the easy public SSH alias'
+Assert-Contains -Path 'scripts/ensure-bnpi-cloudflare-host.ps1' -Pattern 'VerifySsh' -Message 'Host readiness helper must support public SSH verification'
 Assert-Contains -Path 'scripts/project-truth.ps1' -Pattern 'ensure-bnpi-cloudflare-host' -Message 'Main CLI must expose host readiness helper'
 Assert-Contains -Path 'appliance/bin/project-truth-lan-summary.sh' -Pattern 'ssh project-truth-hris' -Message 'VM summary must show the easy public SSH alias'
 Assert-Contains -Path 'appliance/bin/project-truth-lan-summary.sh' -Pattern 'cloudflared access ssh --hostname %h' -Message 'VM summary must show the verified Cloudflare Access SSH proxy command'
