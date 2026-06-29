@@ -13,6 +13,7 @@ const ALWAYS_ALLOWED_ORIGINS = [
 	"http://localhost:3001",
 	"http://localhost:4173",
 	"http://localhost:5175",
+	"http://127.0.0.1:5175",
 	"https://hris-emp-app-dev.web.app",
 	"https://hris-emp-app-dev.firebaseapp.com",
 	"https://hris-emp-app-uat.web.app",
