@@ -146,6 +146,7 @@ $imageProvisionScript = Get-Content -Raw 'image-factory/packer/provision.sh'
 $promoteWorkflow = Get-Content -Raw '.github/workflows/promote-gitops.yml'
 $platformConfig = Get-Content -Raw 'gitops/argocd/platform/argocd-cm.yaml'
 $projectTruthScript = Get-Content -Raw 'scripts/project-truth.ps1'
+$applyArgocdPlatformScript = Get-Content -Raw 'scripts/apply-argocd-platform.ps1'
 $hypervVisualProofScript = Get-Content -Raw 'scripts/hyperv-visual-proof-loop.ps1'
 $repoCredsScript = Get-Content -Raw 'scripts/configure-argocd-repo-creds.ps1'
 $webhookScript = Get-Content -Raw 'scripts/configure-argocd-webhook.ps1'
@@ -166,6 +167,7 @@ $checks.Add((Assert-Text 'promote-gitops supports optional registry image flow' 
 $checks.Add((Assert-Text 'Argo platform declares reconciliation timeout' $platformConfig 'timeout\.reconciliation:\s*60s'))
 $checks.Add((Assert-Text 'Argo platform declares reconciliation jitter' $platformConfig 'timeout\.reconciliation\.jitter:\s*15s'))
 $checks.Add((Assert-Text 'project-truth exposes Argo platform command' $projectTruthScript 'apply-argocd-platform'))
+$checks.Add((Assert-Text 'Argo platform apply disables repo-server submodule checkout' $applyArgocdPlatformScript 'ARGOCD_GIT_MODULES_ENABLED=false'))
 $checks.Add((Assert-Text 'project-truth exposes one-command GitOps pull' $projectTruthScript 'gitops-pull'))
 $checks.Add((Assert-Text 'gitops-pull hard-refreshes Argo apps' $gitopsPullScript 'argocd\.argoproj\.io/refresh=hard'))
 $checks.Add((Assert-Text 'project-truth exposes one-command VM pull' $projectTruthScript 'vm-pull'))
