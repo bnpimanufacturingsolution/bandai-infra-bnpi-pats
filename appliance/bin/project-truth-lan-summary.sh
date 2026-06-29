@@ -117,19 +117,19 @@ emit_named_cloudflare_rows() {
   echo "  uat api: https://uat-api.bnpi-hris.tech/health"
   echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
   echo "  origin: http://${ip_addr}:3000"
-  echo "  host repair: project-truth start-bnpi-cloudflare-tunnel"
+  echo "  host repair: project-truth start-bnpi-cloudflare-tunnel -ProvisionDns -VerifyPublic"
 }
 
 emit_cloudflare_ssh_rows() {
   local ip_addr="$1"
   echo "Cloudflare SSH"
-  echo "  status: not enabled"
-  echo "  LAN SSH: ssh infra@${ip_addr}"
+  echo "  status: tunnel DNS/ingress target is ssh.bnpi-hris.tech"
+  echo "  LAN fallback: ssh infra@${ip_addr}"
   echo "  Access host: ssh.bnpi-hris.tech"
-  echo "  origin if enabled: ssh://${ip_addr}:22"
-  echo "  client: cloudflared access ssh --hostname ssh.bnpi-hris.tech"
+  echo "  origin: ssh://${ip_addr}:22"
   echo "  TCP: cloudflared access tcp --hostname ssh.bnpi-hris.tech --url localhost:2222"
   echo "  then: ssh -p 2222 infra@localhost"
+  echo "  Access policy must allow your Cloudflare user."
 }
 
 emit_zkteco_runtime_rows() {
@@ -423,7 +423,7 @@ emit_screen_summary() {
   echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
   echo "  origin: http://${ip_addr}:3000"
   echo "  mode: host-managed tunnel bnpi-hris"
-  echo "  ssh domain: not enabled; use LAN SSH"
+  echo "  ssh: ssh.bnpi-hris.tech via cloudflared access tcp"
   echo "Postgres"
   emit_database_lan_rows "$ip_addr"
   echo "ZKTeco"
@@ -455,7 +455,7 @@ fi
     echo "Cloudflare: https://bnpi-hris.tech/auth/login"
     echo "Tunnel: host-managed bnpi-hris -> http://${ip_addr}:3000"
     echo "SSH: ssh infra@${ip_addr}"
-    echo "Cloudflare SSH: not enabled; use LAN SSH"
+    echo "Cloudflare SSH: ssh.bnpi-hris.tech via cloudflared access tcp"
     echo "Client summary: project-truth-lan-summary --screen"
     if [ -r "$sync_state_file" ]; then
       commit="$(awk -F= '$1 == "commit" { print substr($2, 1, 12) }' "$sync_state_file")"
@@ -492,7 +492,8 @@ fi
   echo "Tunnel:"
   echo "  host-managed bnpi-hris"
   echo "Cloudflare SSH:"
-  echo "  not enabled; use LAN SSH"
+  echo "  ssh.bnpi-hris.tech via cloudflared access tcp"
+  echo "  LAN fallback remains ssh infra@${ip_addr:-<lan-ip>}"
   echo
   echo "Console login:"
   echo "  username: infra"
@@ -527,7 +528,7 @@ if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
     echo "Project Truth HRIS appliance"
     echo "LAN IP: ${ip_addr:-NOT DETECTED}"
     echo "Cloudflare: https://bnpi-hris.tech/auth/login"
-    echo "Cloudflare SSH: not enabled; use LAN SSH"
+    echo "Cloudflare SSH: ssh.bnpi-hris.tech via cloudflared access tcp"
     echo
       echo "Console is already logged in as ${tty_user}."
       echo "Do not type infra at this shell prompt."

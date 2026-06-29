@@ -177,7 +177,7 @@ To return to Compose:
 6a. Repair or verify named Cloudflare public access after LAN health passes:
 
 ```powershell
-.\scripts\project-truth.ps1 start-bnpi-cloudflare-tunnel -RepairScheduledTask -VerifyPublic
+.\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic
 ```
 
 The proof is written under `.runtime\cloudflare-named-tunnel\<timestamp>`.

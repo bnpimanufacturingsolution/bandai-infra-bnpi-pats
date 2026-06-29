@@ -29,5 +29,7 @@ ingress:
     service: http://192.168.254.148:3201
   - hostname: grafana.bnpi-hris.tech
     service: http://192.168.254.148:53000
+  - hostname: ssh.bnpi-hris.tech
+    service: ssh://192.168.254.148:22
   - service: http_status:404
 

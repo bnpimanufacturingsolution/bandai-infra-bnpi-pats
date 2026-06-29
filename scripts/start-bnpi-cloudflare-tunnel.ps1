@@ -6,12 +6,14 @@ param(
   [string]$TunnelId = 'e3486f00-f974-46d3-9e11-911266749d00',
   [string]$ConfigPath = '',
   [string]$CredentialsFile = '',
+  [string]$SshHostname = 'ssh.bnpi-hris.tech',
   [string[]]$Hostnames = @('bnpi-hris.tech', 'www.bnpi-hris.tech', 'app.bnpi-hris.tech'),
   [int]$OriginPort = 3000,
   [int]$OriginWarmupSeconds = 180,
   [int]$ConnectorWarmupSeconds = 60,
   [switch]$NoStartVm,
   [switch]$RepairScheduledTask,
+  [switch]$ProvisionDns,
   [switch]$NoStartTunnel,
   [switch]$VerifyPublic
 )
@@ -48,6 +50,21 @@ function Get-CloudflaredPath {
   }
 
   throw 'cloudflared not found in PATH or the usual Program Files locations.'
+}
+
+function Assert-TunnelCredentials {
+  if (-not (Test-Path -LiteralPath $CredentialsFile)) {
+    throw @"
+Named tunnel credentials were not found:
+  $CredentialsFile
+
+This host must be provisioned before it can run the bnpi-hris tunnel.
+Run:
+  .\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host -Login
+
+Or securely import the tunnel credential JSON for tunnel $TunnelId into the operator .cloudflared profile.
+"@
+  }
 }
 
 function Get-CurrentGuestIp {
@@ -113,6 +130,7 @@ function Write-TunnelConfig {
   $targets += [pscustomobject]@{ Hostname = 'uat.bnpi-hris.tech'; Service = "http://${GuestIp}:3200" }
   $targets += [pscustomobject]@{ Hostname = 'uat-api.bnpi-hris.tech'; Service = "http://${GuestIp}:3201" }
   $targets += [pscustomobject]@{ Hostname = 'grafana.bnpi-hris.tech'; Service = "http://${GuestIp}:53000" }
+  $targets += [pscustomobject]@{ Hostname = $SshHostname; Service = "ssh://${GuestIp}:22" }
 
   $lines = @(
     "tunnel: $TunnelId",
@@ -200,6 +218,38 @@ function Register-HostManagedTask {
   Write-Step "Repaired scheduled task $TaskName to run the Project Truth wrapper."
 }
 
+function Invoke-DnsProvisioning {
+  $dnsNames = @(
+    'bnpi-hris.tech',
+    'www.bnpi-hris.tech',
+    'app.bnpi-hris.tech',
+    'api.bnpi-hris.tech',
+    'dev.bnpi-hris.tech',
+    'dev-api.bnpi-hris.tech',
+    'uat.bnpi-hris.tech',
+    'uat-api.bnpi-hris.tech',
+    'grafana.bnpi-hris.tech',
+    $SshHostname
+  ) | Select-Object -Unique
+
+  $results = @()
+  foreach ($dnsName in $dnsNames) {
+    $output = (& cmd.exe /c "cloudflared tunnel route dns --overwrite-dns $TunnelName $dnsName 2>&1" | Out-String).Trim()
+    $exit = $LASTEXITCODE
+    $results += [pscustomobject]@{
+      Hostname = $dnsName
+      ExitCode = $exit
+      Detail = $output
+    }
+    if ($exit -ne 0) {
+      Write-Warning "DNS route failed for ${dnsName}: $output"
+    } else {
+      Write-Step "DNS route ready: $dnsName -> $TunnelName"
+    }
+  }
+  return $results
+}
+
 function Invoke-PublicChecks {
   $results = @()
   $checks = @(
@@ -234,6 +284,7 @@ function Invoke-PublicChecks {
 New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
 
 $cloudflaredPath = Get-CloudflaredPath
+Assert-TunnelCredentials
 if ($RepairScheduledTask) {
   Register-HostManagedTask -CloudflaredPath $cloudflaredPath
 }
@@ -255,6 +306,11 @@ Write-Step "Origin check passed: $($originCheck.Url) HTTP $($originCheck.StatusC
 
 $origin = Write-TunnelConfig -GuestIp $guestIp
 Write-Step "Wrote $ConfigPath -> $origin"
+
+$dnsProvisioning = @()
+if ($ProvisionDns) {
+  $dnsProvisioning = @(Invoke-DnsProvisioning)
+}
 
 $tunnelProcess = $null
 $connector = [pscustomobject]@{ Status = 'SKIPPED'; Detail = 'NoStartTunnel was set.' }
@@ -286,6 +342,9 @@ $evidence = [pscustomobject]@{
   TaskRepaired = $RepairScheduledTask.IsPresent
   TunnelName = $TunnelName
   TunnelId = $TunnelId
+  SshHostname = $SshHostname
+  SshOrigin = "ssh://${guestIp}:22"
+  DnsProvisioning = $dnsProvisioning
   TunnelProcess = $tunnelProcess
   Connector = $connector
   PublicChecks = $publicChecks

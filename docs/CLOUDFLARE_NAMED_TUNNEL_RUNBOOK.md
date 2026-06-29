@@ -27,10 +27,10 @@ connector, and writes evidence under `.runtime/cloudflare-named-tunnel`.
 
 ## Host-Managed Startup
 
-Use this after a fresh VM import, reboot, DHCP change, or public access drift:
+Use this after a fresh VM import, reboot, DHCP change, DNS drift, or public access drift:
 
 ```powershell
-.\scripts\project-truth.ps1 start-bnpi-cloudflare-tunnel -RepairScheduledTask -VerifyPublic
+.\scripts\project-truth.ps1 start-bnpi-cloudflare-tunnel -RepairScheduledTask -ProvisionDns -VerifyPublic
 ```
 
 The wrapper:
@@ -39,9 +39,22 @@ The wrapper:
 - discovers the VM LAN IP,
 - verifies the production app origin,
 - rewrites `cloudflared-bnpi-hris.yml`,
+- optionally provisions the public DNS routes, including `ssh.bnpi-hris.tech`,
 - stops conflicting `cloudflared` named tunnel processes,
 - starts the `bnpi-hris` tunnel,
 - optionally verifies public URLs.
+
+To check a Windows host before running or exporting the appliance setup:
+
+```powershell
+.\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host
+```
+
+To repair DNS routes and start the tunnel from one command:
+
+```powershell
+.\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic
+```
 
 ## Public URLs
 
@@ -73,7 +86,7 @@ host-managed setup is:
 3. From the Windows host, run:
 
 ```powershell
-.\scripts\project-truth.ps1 start-bnpi-cloudflare-tunnel -RepairScheduledTask -VerifyPublic
+.\scripts\project-truth.ps1 start-bnpi-cloudflare-tunnel -RepairScheduledTask -ProvisionDns -VerifyPublic
 ```
 
 This model works on another Windows host only after that host has:
@@ -83,6 +96,16 @@ This model works on another Windows host only after that host has:
 - the named tunnel credentials installed under the operator's `.cloudflared`
   profile, or a deliberate credential import step,
 - network reachability to the VM LAN IP.
+
+If the target host does not yet have Cloudflare account trust, run:
+
+```powershell
+.\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host -Login
+```
+
+This starts the browser login for the Cloudflare tunnel-management certificate.
+The named tunnel credential JSON is still secret material and must be imported
+securely or recreated out-of-band. Do not put it in the repo or appliance image.
 
 ## VM-Managed Option
 
@@ -116,7 +139,7 @@ Preferred hostname:
 ssh.bnpi-hris.tech
 ```
 
-Host-managed origin if enabled:
+Current host-managed origin:
 
 ```text
 ssh://192.168.254.148:22
@@ -128,21 +151,18 @@ VM-managed origin if enabled:
 ssh://localhost:22
 ```
 
-Client examples after Access app, policy, DNS, and tunnel ingress are configured:
-
-```powershell
-cloudflared access ssh --hostname ssh.bnpi-hris.tech
-```
-
-or:
+Client command:
 
 ```powershell
 cloudflared access tcp --hostname ssh.bnpi-hris.tech --url localhost:2222
 ssh -p 2222 infra@localhost
 ```
 
-Current status: not enabled. Use LAN SSH until `ssh.bnpi-hris.tech` is configured
-and verified.
+Current status: DNS route and tunnel ingress are configured for
+`ssh.bnpi-hris.tech`, and LAN SSH is healthy at the VM. Full public SSH login is
+not accepted until the Cloudflare Access application/policy allows the current
+operator and an SSH command succeeds through the local `cloudflared access tcp`
+listener.
 
 ## TryCloudflare Boundary
 
@@ -150,4 +170,3 @@ TryCloudflare quick tunnels are deprecated for the normal Project Truth path.
 They may remain as a manual, temporary proof tool only. They must not appear as
 the default VM/SSH visual proof path, and random `*.trycloudflare.com` URLs must
 not be treated as durable project truth.
-

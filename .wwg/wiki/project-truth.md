@@ -119,16 +119,16 @@ Accepted or observed architecture:
   - Evidence: 2026-06-29 repair pass verified HTTP 200 for `bnpi-hris.tech`, `www.bnpi-hris.tech`, `app.bnpi-hris.tech`, `api.bnpi-hris.tech`, `dev.bnpi-hris.tech`, `dev-api.bnpi-hris.tech`, `uat.bnpi-hris.tech`, `uat-api.bnpi-hris.tech`, and `grafana.bnpi-hris.tech`; public CORS preflight returned HTTP 204 and wrong-password auth returned HTTP 401 through both `api.bnpi-hris.tech` and same-host `bnpi-hris.tech/api/*`.
 - Item: Current named Cloudflare Tunnel ownership is host-managed on the Windows host.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: `cloudflared tunnel info bnpi-hris` on 2026-06-29 showed active connector architecture `windows_amd64`; `scripts/start-bnpi-cloudflare-tunnel.ps1` discovers the live VM IP, rewrites `cloudflared-bnpi-hris.yml`, and starts the named connector; scheduled task `ProjectTruth-BNPI-HRIS-Cloudflared` owns host startup.
+  - Evidence: `cloudflared tunnel info bnpi-hris` on 2026-06-29 showed active connector architecture `windows_amd64`; `scripts/start-bnpi-cloudflare-tunnel.ps1` discovers the live VM IP, rewrites `cloudflared-bnpi-hris.yml`, can provision DNS routes, and starts the named connector; `scripts/ensure-bnpi-cloudflare-host.ps1` checks host credential/readiness state; scheduled task `ProjectTruth-BNPI-HRIS-Cloudflared` owns host startup.
 - Item: Fresh/final Project Truth images must not bake Cloudflare tunnel credentials.
   - Status: CONFIRMED
-  - Evidence: Current named tunnel credentials live under the Windows operator profile, outside the repo. The active repeatable setup is to boot/import the fresh VM, let it obtain a LAN IP, then run `.\scripts\project-truth.ps1 start-bnpi-cloudflare-tunnel -RepairScheduledTask -VerifyPublic` from a configured Windows host.
+  - Evidence: Current named tunnel credentials live under the Windows operator profile, outside the repo. The active repeatable setup is to boot/import the fresh VM, let it obtain a LAN IP, then run `.\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic` from a configured Windows host.
 - Item: VM-managed Cloudflare Tunnel is not current runtime truth.
   - Status: NEEDS_CONFIRMATION
   - Evidence: It is a plausible future portability model, but it requires a secure credential import/install flow and explicit Access/DNS/ingress validation before becoming accepted truth.
-- Item: Public SSH through `ssh.bnpi-hris.tech` is possible only through Cloudflare Access TCP/SSH and is not enabled.
-  - Status: CONFIRMED
-  - Evidence: Current VM LAN SSH works at `192.168.254.148:22`; no verified Cloudflare Access app, `ssh.bnpi-hris.tech` DNS route, tunnel SSH ingress, or client proof exists yet.
+- Item: Public SSH through `ssh.bnpi-hris.tech` is partially configured through Cloudflare Tunnel and still requires Cloudflare Access authorization proof before it is accepted as working login.
+  - Status: NEEDS_CONFIRMATION
+  - Evidence: 2026-06-29 provisioning evidence `.runtime/cloudflare-named-tunnel/20260629-223910/bnpi-cloudflare-tunnel.json` recorded `ssh.bnpi-hris.tech` DNS route success and `SshOrigin` `ssh://192.168.254.148:22`; `cloudflared-bnpi-hris.yml` contains `ssh.bnpi-hris.tech -> ssh://192.168.254.148:22`; `Resolve-DnsName ssh.bnpi-hris.tech -Type A` returned Cloudflare edge IPs; LAN SSH to `192.168.254.148:22` passed; `cloudflared access tcp --hostname ssh.bnpi-hris.tech --url localhost:2223` opened a local listener, but an SSH probe through it returned connection refused, so Access app/policy/user authorization remains unproven.
 - Item: Current host-local UAT ports are not healthy while VM LAN UAT is healthy.
   - Status: NEEDS_CONFIRMATION
   - Evidence: `.\scripts\project-truth.ps1 verify -GuestIp 10.184.38.91` on 2026-06-29 showed host-local PROD/DEV PASS, host-local UAT ports `3200` and `3201` FAIL, and LAN UAT PASS through `10.184.38.91`.

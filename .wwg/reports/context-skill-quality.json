@@ -1026,7 +1026,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 523,
+      "line": 543,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1036,7 +1036,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 527,
+      "line": 547,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1421,7 +1421,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 101,
+      "line": 117,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2536,7 +2536,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 523,
+      "line": 543,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -2546,7 +2546,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 527,
+      "line": 547,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -2998,7 +2998,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 101,
+      "line": 117,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3433,7 +3433,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 523,
+      "line": 543,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3443,7 +3443,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 527,
+      "line": 547,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3828,7 +3828,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 101,
+      "line": 117,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {

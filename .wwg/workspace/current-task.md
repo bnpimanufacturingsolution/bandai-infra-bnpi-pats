@@ -21,12 +21,12 @@ Status: READY FOR REVIEW
 - Canonical startup/repair command:
 
 ```powershell
-.\scripts\project-truth.ps1 start-bnpi-cloudflare-tunnel -RepairScheduledTask -VerifyPublic
+.\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic
 ```
 
 - Fresh/final images must not contain Cloudflare tunnel credentials.
 - TryCloudflare is disabled by default and remains only a deprecated manual proof tool.
-- Public SSH through `ssh.bnpi-hris.tech` is not enabled. It requires Cloudflare Access TCP/SSH configuration and verification.
+- Public SSH through `ssh.bnpi-hris.tech` now has DNS and tunnel ingress configured, but full login still requires Cloudflare Access policy/user authorization proof.
 
 ## Evidence
 
@@ -38,6 +38,8 @@ Status: READY FOR REVIEW
 - Public verification artifact: `.runtime/cloudflare-drift-proof/20260629-220610/public-verification-final.json`
 - VM text proof: `.runtime/cloudflare-drift-proof/20260629-220610/screen-overview.txt`, `.runtime/cloudflare-drift-proof/20260629-220610/screen-tunnels.txt`, `.runtime/cloudflare-drift-proof/20260629-220610/vm-text-surfaces.txt`
 - Named tunnel wrapper evidence: `.runtime/cloudflare-named-tunnel/20260629-220627/bnpi-cloudflare-tunnel.json`
+- Latest host readiness/provision evidence: `.runtime/cloudflare-host-readiness/20260629-223648/bnpi-cloudflare-host-readiness.json`
+- Latest SSH DNS/ingress evidence: `.runtime/cloudflare-named-tunnel/20260629-223910/bnpi-cloudflare-tunnel.json`
 
 ## Validation Notes
 
@@ -45,6 +47,7 @@ Status: READY FOR REVIEW
 - Public app/API/dev/uat/Grafana checks passed after connector warmup.
 - CORS preflight returned HTTP 204.
 - Wrong-password auth probe returned HTTP 401.
+- `ssh.bnpi-hris.tech` DNS route and tunnel ingress were provisioned; LAN SSH passed; `cloudflared access tcp` started a local listener, but the SSH handshake through it returned connection refused, so Access authorization remains unverified.
 - `git diff --check` passed.
 - `wwg test-check --format plain` passed.
 - `wwg validate` still fails on generated report truth-sync fields outside this Cloudflare task.
