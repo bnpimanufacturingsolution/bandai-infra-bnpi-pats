@@ -26,7 +26,7 @@ Status: READY FOR REVIEW
 
 - Fresh/final images must not contain Cloudflare tunnel credentials.
 - TryCloudflare is disabled by default and remains only a deprecated manual proof tool.
-- Public SSH through `ssh.bnpi-hris.tech` now has DNS and tunnel ingress configured, but full login still requires Cloudflare Access policy/user authorization proof.
+- Public SSH through `ssh.bnpi-hris.tech` is verified through Cloudflare Access and the host-managed named tunnel.
 
 ## Evidence
 
@@ -47,7 +47,7 @@ Status: READY FOR REVIEW
 - Public app/API/dev/uat/Grafana checks passed after connector warmup.
 - CORS preflight returned HTTP 204.
 - Wrong-password auth probe returned HTTP 401.
-- `ssh.bnpi-hris.tech` DNS route and tunnel ingress were provisioned; LAN SSH passed; `cloudflared access tcp` started a local listener, but the SSH handshake through it returned connection refused, so Access authorization remains unverified.
+- `ssh.bnpi-hris.tech` DNS route and tunnel ingress were provisioned; LAN SSH passed; after Cloudflare Access policy allowed `1bis.solutions.tech@gmail.com`, SSH through `cloudflared access ssh --hostname %h` returned `SSH_ACCESS_OK`.
 - `git diff --check` passed.
 - `wwg test-check --format plain` passed.
 - `wwg validate` still fails on generated report truth-sync fields outside this Cloudflare task.
@@ -55,5 +55,5 @@ Status: READY FOR REVIEW
 ## Follow-Up Needed
 
 - Review and decide whether to implement VM-managed Cloudflare Tunnel as a future portability improvement.
-- Review and decide whether to configure Cloudflare Access SSH for `ssh.bnpi-hris.tech`.
+- Keep Cloudflare Access SSH policy in the `933c5547e32839d664d155ce8a7424d5` Zero Trust account aligned with the allowed operator email.
 - Resolve existing WWG generated-report validation findings before release/commit claims that require a fully green WWG gate.

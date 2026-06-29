@@ -151,18 +151,23 @@ VM-managed origin if enabled:
 ssh://localhost:22
 ```
 
-Client command:
+Verified client command:
 
 ```powershell
-cloudflared access tcp --hostname ssh.bnpi-hris.tech --url localhost:2222
-ssh -p 2222 infra@localhost
+ssh -i $env:USERPROFILE\.ssh\node-health-appliance_ed25519 `
+  -o ProxyCommand="cloudflared access ssh --hostname %h" `
+  infra@ssh.bnpi-hris.tech
 ```
 
-Current status: DNS route and tunnel ingress are configured for
-`ssh.bnpi-hris.tech`, and LAN SSH is healthy at the VM. Full public SSH login is
-not accepted until the Cloudflare Access application/policy allows the current
-operator and an SSH command succeeds through the local `cloudflared access tcp`
-listener.
+The Windows SSH alias is also configured on the current host:
+
+```powershell
+ssh project-truth-hris
+```
+
+Current status: DNS route, tunnel ingress, Cloudflare Access policy, public SSH,
+and alias login are verified. The Access policy currently allows
+`1bis.solutions.tech@gmail.com`.
 
 ## TryCloudflare Boundary
 

@@ -126,9 +126,9 @@ Accepted or observed architecture:
 - Item: VM-managed Cloudflare Tunnel is not current runtime truth.
   - Status: NEEDS_CONFIRMATION
   - Evidence: It is a plausible future portability model, but it requires a secure credential import/install flow and explicit Access/DNS/ingress validation before becoming accepted truth.
-- Item: Public SSH through `ssh.bnpi-hris.tech` is partially configured through Cloudflare Tunnel and still requires Cloudflare Access authorization proof before it is accepted as working login.
-  - Status: NEEDS_CONFIRMATION
-  - Evidence: 2026-06-29 provisioning evidence `.runtime/cloudflare-named-tunnel/20260629-223910/bnpi-cloudflare-tunnel.json` recorded `ssh.bnpi-hris.tech` DNS route success and `SshOrigin` `ssh://192.168.254.148:22`; `cloudflared-bnpi-hris.yml` contains `ssh.bnpi-hris.tech -> ssh://192.168.254.148:22`; `Resolve-DnsName ssh.bnpi-hris.tech -Type A` returned Cloudflare edge IPs; LAN SSH to `192.168.254.148:22` passed; `cloudflared access tcp --hostname ssh.bnpi-hris.tech --url localhost:2223` opened a local listener, but an SSH probe through it returned connection refused, so Access app/policy/user authorization remains unproven.
+- Item: Public SSH through `ssh.bnpi-hris.tech` is verified through Cloudflare Access and the host-managed named tunnel.
+  - Status: CONFIRMED_RUNTIME_EVIDENCE
+  - Evidence: 2026-06-29 provisioning evidence `.runtime/cloudflare-named-tunnel/20260629-223910/bnpi-cloudflare-tunnel.json` recorded `ssh.bnpi-hris.tech` DNS route success and `SshOrigin` `ssh://192.168.254.148:22`; `cloudflared-bnpi-hris.yml` contains `ssh.bnpi-hris.tech -> ssh://192.168.254.148:22`; `Resolve-DnsName ssh.bnpi-hris.tech -Type A` returned Cloudflare edge IPs; LAN SSH to `192.168.254.148:22` passed; after Cloudflare Access app policy allowed `1bis.solutions.tech@gmail.com`, Windows OpenSSH with `-o ProxyCommand="cloudflared access ssh --hostname %h"` returned `SSH_ACCESS_OK`, hostname `project-truth-node`, user `infra`, and `eth0 192.168.254.148/24`; Windows SSH alias `project-truth-hris` also returned `SSH_ALIAS_OK`.
 - Item: Current host-local UAT ports are not healthy while VM LAN UAT is healthy.
   - Status: NEEDS_CONFIRMATION
   - Evidence: `.\scripts\project-truth.ps1 verify -GuestIp 10.184.38.91` on 2026-06-29 showed host-local PROD/DEV PASS, host-local UAT ports `3200` and `3201` FAIL, and LAN UAT PASS through `10.184.38.91`.

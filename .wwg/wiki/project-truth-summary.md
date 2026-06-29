@@ -16,8 +16,9 @@ Last updated: 2026-06-29
 - SSH key login is proven on `192.168.254.148` with Windows OpenSSH using `%USERPROFILE%\.ssh\node-health-appliance_ed25519`.
 - OpenSSH proof returned hostname `project-truth-node`, user `infra`, `eth0 192.168.254.148/24`, and active SSH service.
 - Current LAN SSH command: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@192.168.254.148`.
-- Public Cloudflare SSH is partially configured: `ssh.bnpi-hris.tech` now has a named tunnel DNS route and `cloudflared-bnpi-hris.yml` maps it to `ssh://192.168.254.148:22`.
-- Full public SSH login through `ssh.bnpi-hris.tech` still requires a Cloudflare Access application/policy that allows the operator; the latest SSH-through-cloudflared probe reached the client listener but returned connection refused, while LAN SSH remained healthy.
+- Public Cloudflare SSH is now verified through `ssh.bnpi-hris.tech` using Cloudflare Access and the host-managed named tunnel.
+- Verified public SSH command: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 -o ProxyCommand="cloudflared access ssh --hostname %h" infra@ssh.bnpi-hris.tech`.
+- Windows OpenSSH alias `project-truth-hris` was added to `%USERPROFILE%\.ssh\config`; `ssh project-truth-hris` returned `SSH_ALIAS_OK`, hostname `project-truth-node`, and user `infra`.
 - VM summary script was updated and live-installed so `project-truth-lan-summary --screen-overview`, `/etc/issue`, `/etc/motd`, and `/run/project-truth/network-summary.txt` show `LAN IP: 192.168.254.148`, `OpenSSH: ssh infra@192.168.254.148`, the key path, and public Cloudflare app/API/Grafana URLs.
 - Current generated overview line-width check: `MaxLineLength=66`; stale `10.184.38.91` was not present in `/etc/issue`, `/run/project-truth/network-summary.txt`, or the generated overview.
 - After the Cloudflare repair pass, HRIS LAN checks passed on `192.168.254.148` for PROD app/API (`3000`, `3001`), DEV app/API (`3100`, `3101`), UAT app/API (`3200`, `3201`), and Grafana (`53000`).
