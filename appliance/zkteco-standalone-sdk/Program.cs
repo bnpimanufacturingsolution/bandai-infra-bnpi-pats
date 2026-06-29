@@ -209,6 +209,12 @@ namespace ZKTecoStandalone
                 return;
             }
 
+            if (args.Any(arg => string.Equals(arg, "--summary", StringComparison.OrdinalIgnoreCase)))
+            {
+                RunSummaryCommand();
+                return;
+            }
+
             if (args.Any(arg => string.Equals(arg, "--copy-fingerprint-user", StringComparison.OrdinalIgnoreCase)))
             {
                 Environment.ExitCode = RunFingerprintCopyWorker(args) ? 0 : 2;
@@ -217,9 +223,55 @@ namespace ZKTecoStandalone
 
             Log("Unknown command.");
             Log("Usage:");
+            Log("  ZKTecoStandalone.exe --summary");
             Log("  ZKTecoStandalone.exe --sync --source=10.184.38.235 --target=all");
             Log("  ZKTecoStandalone.exe --sync --source=10.184.38.235 --target=10.184.38.10 --user=1");
             Log("  ZKTecoStandalone.exe --copy-fingerprint-user --source=10.184.38.235 --target=10.184.38.10 --user=1");
+        }
+
+        private static void RunSummaryCommand()
+        {
+            Log("ZKTeco device truth summary");
+            Log("===========================");
+            Log($"Machine number: {MachineNumber}");
+            Log($"Device port: {Port}");
+            Log($"Connect password: {(ConnectPassword == 0 ? "not set" : "configured")}");
+            Log("");
+            Log("ip,connected,user_count,event_count,unique_event_users,first_event,last_event");
+
+            foreach (string ip in DeviceIps)
+            {
+                var device = new DeviceConnection(ip, Port);
+                try
+                {
+                    device.ConnectAndRegister();
+                    if (!device.IsConnected)
+                    {
+                        Log($"{ip},false,0,0,0,,");
+                        continue;
+                    }
+
+                    List<UserRecord> users = device.ReadUsers();
+                    List<AttendanceEvent> events = device.ReadAttendanceLogs(BackfillMaxEvents);
+                    int uniqueEventUsers = events
+                        .Select(item => item.EnrollNumber)
+                        .Where(item => !string.IsNullOrWhiteSpace(item))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Count();
+                    string firstEvent = events.Count == 0
+                        ? ""
+                        : events.Min(item => item.Timestamp).ToString("yyyy-MM-dd HH:mm:ss");
+                    string lastEvent = events.Count == 0
+                        ? ""
+                        : events.Max(item => item.Timestamp).ToString("yyyy-MM-dd HH:mm:ss");
+
+                    Log($"{ip},true,{users.Count},{events.Count},{uniqueEventUsers},{firstEvent},{lastEvent}");
+                }
+                finally
+                {
+                    device.Disconnect();
+                }
+            }
         }
 
         private static void RunSyncCommand(string[] args)

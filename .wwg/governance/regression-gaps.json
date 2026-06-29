@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "kind": "wwg.governance.regressionGaps",
+  "generatedAt": "2026-06-29T01:42:24.111Z",
+  "sourceBaselineReportPath": ".wwg/reports/adoption-regression-report.md",
+  "gaps": [
+    {
+      "id": "gap-uncovered-behavior-payment-behavior",
+      "title": "Uncovered behavior: Payment behavior",
+      "source": "baseline",
+      "severity": "critical",
+      "blockingClassification": "adoption-nonblocking-readiness-blocking",
+      "confidence": "medium",
+      "affectedBehaviorOrWorkflow": "Payment behavior",
+      "expectedVerificationPath": "Pair technical test commands with process and approval checklist review.",
+      "recommendedAction": "Map this behavior to a report-first candidate before generating or editing executable tests.",
+      "status": "open",
+      "waiver": null,
+      "note": "Detected tests do not obviously map to this behavior by path/name.",
+      "relatedCandidateIds": [
+        "candidate-payment-failure-path-test",
+        "candidate-payment-behavior-regression"
+      ],
+      "relatedTraceabilityIds": [
+        "trace-payment-behavior"
+      ]
+    },
+    {
+      "id": "gap-uncovered-behavior-deployment-runtime-readiness",
+      "title": "Uncovered behavior: Deployment/runtime readiness",
+      "source": "baseline",
+      "severity": "medium",
+      "blockingClassification": "adoption-nonblocking-advisory",
+      "confidence": "medium",
+      "affectedBehaviorOrWorkflow": "Deployment/runtime readiness",
+      "expectedVerificationPath": "Pair technical test commands with process and approval checklist review.",
+      "recommendedAction": "Map this behavior to a report-first candidate before generating or editing executable tests.",
+      "status": "open",
+      "waiver": null,
+      "note": "Detected tests do not obviously map to this behavior by path/name.",
+      "relatedCandidateIds": [
+        "candidate-deployment-runtime-readiness-regression"
+      ],
+      "relatedTraceabilityIds": [
+        "trace-deployment-runtime-readiness"
+      ]
+    }
+  ]
+}

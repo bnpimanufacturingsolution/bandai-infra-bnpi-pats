@@ -1,0 +1,380 @@
+{
+  "projectPath": "C:\\Users\\anoni\\OneDrive\\Desktop\\PROJECT_TRUTH_HYPERV_FRESH",
+  "detectedWwgVersion": "0.6.6",
+  "generatedTemplateVersion": "0.6.6",
+  "checkedFiles": [
+    ".wwg/governance/drift-guard.md",
+    ".wwg/wiki/project-truth.md",
+    ".wwg/wiki/terminology.md",
+    "AGENTS.md",
+    "README.md"
+  ],
+  "missingFiles": [
+    ".wwg/wiki/project-truth-summary.md",
+    ".wwg/wiki/terminology-summary.md"
+  ],
+  "safeAdds": [
+    {
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "reason": "Compact active surface is missing.",
+      "recommendation": "Add a compact summary surface in a future approved action. The full canonical file must remain authoritative.",
+      "riskLevel": "low"
+    },
+    {
+      "file": ".wwg/wiki/terminology-summary.md",
+      "reason": "Compact active surface is missing.",
+      "recommendation": "Add a compact summary surface in a future approved action. The full canonical file must remain authoritative.",
+      "riskLevel": "low"
+    }
+  ],
+  "safeUpdates": [
+    {
+      "file": "AGENTS.md",
+      "reason": "File contains valid WWG_GENERATED markers.",
+      "recommendation": "Only generated sections may be candidates for safe update. Preserve all human content outside markers.",
+      "riskLevel": "low"
+    }
+  ],
+  "mergeRequired": [
+    {
+      "file": ".wwg/governance/drift-guard.md",
+      "reason": "File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings.",
+      "recommendation": "Review and merge manually. Do not apply an automatic overwrite.",
+      "riskLevel": "medium"
+    },
+    {
+      "file": ".wwg/wiki/project-truth.md",
+      "reason": "File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings.",
+      "recommendation": "Review and merge manually. Do not apply an automatic overwrite.",
+      "riskLevel": "high"
+    },
+    {
+      "file": ".wwg/wiki/terminology.md",
+      "reason": "File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings.",
+      "recommendation": "Review and merge manually. Do not apply an automatic overwrite.",
+      "riskLevel": "high"
+    },
+    {
+      "file": "AGENTS.md",
+      "reason": "File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings.",
+      "recommendation": "Review and merge manually. Do not apply an automatic overwrite.",
+      "riskLevel": "medium"
+    },
+    {
+      "file": "README.md",
+      "reason": "File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings.",
+      "recommendation": "Review and merge manually. Do not apply an automatic overwrite.",
+      "riskLevel": "medium"
+    }
+  ],
+  "neverOverwrite": [
+    {
+      "file": ".wwg/wiki/project-truth.md",
+      "reason": "Project Truth is project-specific canonical truth.",
+      "recommendation": "Review and merge manually. Never replace the canonical truth body wholesale.",
+      "riskLevel": "high"
+    },
+    {
+      "file": ".wwg/wiki/terminology.md",
+      "reason": "Terminology contains accepted project vocabulary.",
+      "recommendation": "Review and merge manually. Never replace accepted terminology wholesale.",
+      "riskLevel": "high"
+    },
+    {
+      "file": "CHANGELOG.md",
+      "reason": "Changelog history is project evidence.",
+      "recommendation": "Append only when appropriate. Never overwrite release history.",
+      "riskLevel": "high"
+    },
+    {
+      "file": ".wwg/reports/**",
+      "reason": "Reports preserve evidence and historical decisions.",
+      "recommendation": "Keep reports as evidence. Do not rewrite historical reports during upgrades.",
+      "riskLevel": "high"
+    },
+    {
+      "file": "custom governance rules",
+      "reason": "Local governance may encode approvals, compliance, or safety rules.",
+      "recommendation": "Merge carefully and preserve stricter local rules.",
+      "riskLevel": "high"
+    },
+    {
+      "file": "custom skills",
+      "reason": "Team-modified skills may contain local operating contracts.",
+      "recommendation": "Review skill changes before adopting newer defaults.",
+      "riskLevel": "medium"
+    },
+    {
+      "file": "user-written docs",
+      "reason": "Project documentation may be customer-facing or team-specific.",
+      "recommendation": "Treat human-authored docs as merge/review required.",
+      "riskLevel": "medium"
+    },
+    {
+      "file": "secrets/config files",
+      "reason": "Secrets and deployment config can change security posture.",
+      "recommendation": "Do not overwrite secrets, environment files, credentials, or deployment config.",
+      "riskLevel": "high"
+    },
+    {
+      "file": "files outside generated markers",
+      "reason": "Unmarked content has no reliable generated-section boundary.",
+      "recommendation": "Require merge/review unless the user explicitly approves the edit.",
+      "riskLevel": "medium"
+    }
+  ],
+  "staleTemplateReferences": [],
+  "missingCompactSurfaces": [
+    {
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "reason": "Compact active surface is missing.",
+      "recommendation": "Add a compact summary surface in a future approved action. The full canonical file must remain authoritative.",
+      "riskLevel": "low"
+    },
+    {
+      "file": ".wwg/wiki/terminology-summary.md",
+      "reason": "Compact active surface is missing.",
+      "recommendation": "Add a compact summary surface in a future approved action. The full canonical file must remain authoritative.",
+      "riskLevel": "low"
+    }
+  ],
+  "activeContractFindings": [
+    {
+      "severity": "medium",
+      "code": "agent-instruction-missing-purpose",
+      "file": "AGENTS.md",
+      "message": "Agent Instruction file is missing 'Purpose'.",
+      "recommendation": "Add 'Purpose' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "agent-instruction-missing-required-reading",
+      "file": "AGENTS.md",
+      "message": "Agent Instruction file is missing 'Required Reading'.",
+      "recommendation": "Add 'Required Reading' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "agent-instruction-missing-operating-rules",
+      "file": "AGENTS.md",
+      "message": "Agent Instruction file is missing 'Operating Rules'.",
+      "recommendation": "Add 'Operating Rules' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "agent-instruction-missing-safety-gates",
+      "file": "AGENTS.md",
+      "message": "Agent Instruction file is missing 'Safety Gates'.",
+      "recommendation": "Add 'Safety Gates' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "agent-instruction-missing-handoff-reporting-rules",
+      "file": "AGENTS.md",
+      "message": "Agent Instruction file is missing 'Handoff / Reporting Rules'.",
+      "recommendation": "Add 'Handoff / Reporting Rules' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "agent-instruction-missing-references",
+      "file": "AGENTS.md",
+      "message": "Agent Instruction file is missing 'References'.",
+      "recommendation": "Add 'References' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-purpose",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Purpose'.",
+      "recommendation": "Add 'Purpose' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-applies-to",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Applies To'.",
+      "recommendation": "Add 'Applies To' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-rules",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Rules'.",
+      "recommendation": "Add 'Rules' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-enforcement",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Enforcement'.",
+      "recommendation": "Add 'Enforcement' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-reports-artifacts",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Reports / Artifacts'.",
+      "recommendation": "Add 'Reports / Artifacts' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-references",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'References'.",
+      "recommendation": "Add 'References' during a reviewed merge. Do not overwrite project-specific content."
+    }
+  ],
+  "contextFindings": [],
+  "skillFindings": [],
+  "governanceFindings": [
+    {
+      "severity": "medium",
+      "code": "governance-missing-purpose",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Purpose'.",
+      "recommendation": "Add 'Purpose' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-applies-to",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Applies To'.",
+      "recommendation": "Add 'Applies To' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-rules",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Rules'.",
+      "recommendation": "Add 'Rules' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-enforcement",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Enforcement'.",
+      "recommendation": "Add 'Enforcement' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-reports-artifacts",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Reports / Artifacts'.",
+      "recommendation": "Add 'Reports / Artifacts' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-references",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'References'.",
+      "recommendation": "Add 'References' during a reviewed merge. Do not overwrite project-specific content."
+    }
+  ],
+  "agentInstructionFindings": [
+    {
+      "severity": "medium",
+      "code": "agent-instruction-missing-purpose",
+      "file": "AGENTS.md",
+      "message": "Agent Instruction file is missing 'Purpose'.",
+      "recommendation": "Add 'Purpose' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "agent-instruction-missing-required-reading",
+      "file": "AGENTS.md",
+      "message": "Agent Instruction file is missing 'Required Reading'.",
+      "recommendation": "Add 'Required Reading' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "agent-instruction-missing-operating-rules",
+      "file": "AGENTS.md",
+      "message": "Agent Instruction file is missing 'Operating Rules'.",
+      "recommendation": "Add 'Operating Rules' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "agent-instruction-missing-safety-gates",
+      "file": "AGENTS.md",
+      "message": "Agent Instruction file is missing 'Safety Gates'.",
+      "recommendation": "Add 'Safety Gates' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "agent-instruction-missing-handoff-reporting-rules",
+      "file": "AGENTS.md",
+      "message": "Agent Instruction file is missing 'Handoff / Reporting Rules'.",
+      "recommendation": "Add 'Handoff / Reporting Rules' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "agent-instruction-missing-references",
+      "file": "AGENTS.md",
+      "message": "Agent Instruction file is missing 'References'.",
+      "recommendation": "Add 'References' during a reviewed merge. Do not overwrite project-specific content."
+    }
+  ],
+  "driftGuardFindings": [
+    {
+      "severity": "medium",
+      "code": "governance-missing-purpose",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Purpose'.",
+      "recommendation": "Add 'Purpose' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-applies-to",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Applies To'.",
+      "recommendation": "Add 'Applies To' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-rules",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Rules'.",
+      "recommendation": "Add 'Rules' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-enforcement",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Enforcement'.",
+      "recommendation": "Add 'Enforcement' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-reports-artifacts",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'Reports / Artifacts'.",
+      "recommendation": "Add 'Reports / Artifacts' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "governance-missing-references",
+      "file": ".wwg/governance/drift-guard.md",
+      "message": "Governance file is missing 'References'.",
+      "recommendation": "Add 'References' during a reviewed merge. Do not overwrite project-specific content."
+    }
+  ],
+  "vorterBoundaryFindings": [],
+  "generatedMarkerFindings": [],
+  "riskLevel": "medium",
+  "recommendedActions": [
+    "Plan an approved safe-add step for missing compact Project Truth and Terminology surfaces.",
+    "Limit safe updates to valid WWG_GENERATED sections and preserve all content outside markers.",
+    "Prepare merge guidance for files requiring review; do not overwrite project-specific truth.",
+    "Run validation after any future approved upgrade action."
+  ],
+  "validationResults": [
+    "Generated-project upgrade readiness review completed in read-only mode.",
+    "No project truth, context, governance, skill, AGENTS, or compact-surface files were changed."
+  ],
+  "readOnly": true,
+  "nextRecommendedStep": "Review safe additions and merge/review items before requesting an approved upgrade action.",
+  "reportPaths": {
+    "markdown": ".wwg/reports/generated-project-upgrade-review.md",
+    "json": ".wwg/reports/generated-project-upgrade-review.json"
+  }
+}

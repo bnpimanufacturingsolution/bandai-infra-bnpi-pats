@@ -1,0 +1,1622 @@
+{
+  "summary": {
+    "reportType": "adoption-report",
+    "mode": "infer",
+    "dryRun": false,
+    "registryWritten": true,
+    "registryResult": {
+      "status": "created",
+      "path": ".wwg/config/wwg.project.yaml",
+      "message": "Created WWG project registry."
+    }
+  },
+  "findings": [
+    {
+      "severity": "info",
+      "code": "root-agents-detected",
+      "message": "Root agent instructions were detected.",
+      "path": "AGENTS.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Map this file as canonical_artifacts.root_agents.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-root_agents",
+      "message": "Detected candidate for root_agents.",
+      "path": "AGENTS.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register AGENTS.md as root_agents; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-project_master_context",
+      "message": "Detected candidate for project_master_context.",
+      "path": "hris-api/.wwg/workspace/context/project-context.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register hris-api/.wwg/workspace/context/project-context.md as project_master_context; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-maintenance_matrix",
+      "message": "Detected candidate for maintenance_matrix.",
+      "path": "hris-api/.wwg/workspace/context/context-maintenance-matrix.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register hris-api/.wwg/workspace/context/context-maintenance-matrix.md as maintenance_matrix; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-architecture_context",
+      "message": "Detected candidate for architecture_context.",
+      "path": "docs/ARCHITECTURE.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register docs/ARCHITECTURE.md as architecture_context; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-runtime_context",
+      "message": "Detected candidate for runtime_context.",
+      "path": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md as runtime_context; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-public_discovery_context",
+      "message": "Detected candidate for public_discovery_context.",
+      "path": "hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md as public_discovery_context; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "mapping-domain_context",
+      "message": "Detected candidate for domain_context.",
+      "path": "hris-api/.wwg/workspace/context/domain-context.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Register hris-api/.wwg/workspace/context/domain-context.md as domain_context; do not duplicate it.",
+      "risk": "low"
+    },
+    {
+      "severity": "low",
+      "code": "recommended-project_registry",
+      "message": "Recommended artifact is not currently mapped or detected.",
+      "path": "wwg.project.yaml",
+      "evidence_level": "likely",
+      "recommendation": "Create via conservative adopt apply.",
+      "risk": "low"
+    },
+    {
+      "severity": "medium",
+      "code": "recommended-changelog",
+      "message": "Recommended artifact is not currently mapped or detected.",
+      "path": "CHANGELOG.md",
+      "evidence_level": "likely",
+      "recommendation": "Create only in a later explicit adoption/init phase.",
+      "risk": "medium"
+    },
+    {
+      "severity": "medium",
+      "code": "recommended-evidence_standards",
+      "message": "Recommended artifact is not currently mapped or detected.",
+      "path": "governance/evidence-standards.md",
+      "evidence_level": "likely",
+      "recommendation": "Create only in a later explicit adoption/init phase.",
+      "risk": "medium"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-api/.wwg/changelog/config.yml",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-api/.wwg/changelog/state.json",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-api/.wwg/reports/changelog-bump-recommendation.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-api/.wwg/reports/changelog-preview.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-api/.wwg/reports/wwg-changelog-handoff.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-api/CHANGELOG.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-api/scripts/generate-bnpi-dm3-supporting-imports.cjs",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-api/scripts/update-hikvision-metadata.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-api/tests/support/db-fault-invariants.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-api/tests/support/isolated-db-fault.guard.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-api/tests/support/isolated-prisma-client.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/.react-router/types/app/routes/legal/+types/privacy-policy.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/.react-router/types/app/routes/legal/+types/terms-of-use.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/.react-router/types/app/routes/support/+types/faq.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/.react-router/types/app/routes/support/+types/help-desk.ts",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/.wwg/changelog/config.yml",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/.wwg/changelog/state.json",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/.wwg/reports/changelog-bump-recommendation.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/.wwg/reports/changelog-preview.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/.wwg/reports/wwg-changelog-handoff.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/app/routes/legal/privacy-policy.tsx",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/app/routes/legal/terms-of-use.tsx",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/app/routes/support/faq.tsx",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/app/routes/support/help-desk.tsx",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/build/client/assets/privacy-policy-DKziWBt5.js",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "hris-app/build/client/assets/terms-of-use-BXeUTGd2.js",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "terraform-hyperv/.terraform/providers/registry.terraform.io/taliesins/hyperv/1.2.1/windows_amd64/CHANGELOG.md",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "vendor/zkteco-sdk/obj/Debug/net48/ZKTecoStandalone.exe.withSupportedRuntime.config",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-artifact",
+      "message": "Public surface or discovery artifact detected.",
+      "path": "vendor/zkteco-sdk/obj/x86/Debug/net48/ZKTecoStandalone.exe.withSupportedRuntime.config",
+      "evidence_level": "confirmed",
+      "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
+      "risk": "approval-gated"
+    },
+    {
+      "severity": "info",
+      "code": "public-surface-detected",
+      "message": "Detected 29 public surface/public discovery artifact(s).",
+      "evidence_level": "confirmed",
+      "recommendation": "Map existing public discovery sources before proposing new ones.",
+      "risk": "low"
+    },
+    {
+      "severity": "info",
+      "code": "governance-detected",
+      "message": "Detected 65 governance artifact(s).",
+      "evidence_level": "confirmed",
+      "recommendation": "Reuse and register existing governance artifacts.",
+      "risk": "low"
+    }
+  ],
+  "detectedArtifacts": {
+    "agentInstructions": [
+      {
+        "path": "AGENTS.md",
+        "kind": "root agent policy",
+        "suggestedRole": "root_agents",
+        "confidence": "high",
+        "category": "agentInstructions"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/AGENTS.md",
+        "kind": "unknown scoped agent policy",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "agentInstructions"
+      },
+      {
+        "path": "hris-api/AGENTS.md",
+        "kind": "unknown scoped agent policy",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "agentInstructions"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/AGENTS.md",
+        "kind": "unknown scoped agent policy",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "agentInstructions"
+      },
+      {
+        "path": "hris-app/AGENTS.md",
+        "kind": "unknown scoped agent policy",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "agentInstructions"
+      }
+    ],
+    "canonicalContext": [
+      {
+        "path": "docs/ARCHITECTURE.md",
+        "kind": "architecture source",
+        "suggestedRole": "architecture_context",
+        "confidence": "high",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/.wwg/governance/context-drift-detection.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/.wwg/reports/context-skill-quality.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/.wwg/reports/cross-repo-context-reconciliation.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/.wwg/reports/wwg-refresh-context-report.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/context/architecture-context.md",
+        "kind": "architecture source",
+        "suggestedRole": "architecture_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/context/context-maintenance-matrix.md",
+        "kind": "maintenance matrix",
+        "suggestedRole": "maintenance_matrix",
+        "confidence": "high",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/context/domain-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "domain_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/context/governance-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/context/project-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/context/ux-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/wiki-template/base/09-agent-context/canonical-context-policy.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/wiki-template/base/12-maintenance/context-maintenance-matrix.md",
+        "kind": "maintenance matrix",
+        "suggestedRole": "maintenance_matrix",
+        "confidence": "high",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-api/workspace-template/base/context/context-maintenance-matrix.md",
+        "kind": "maintenance matrix",
+        "suggestedRole": "maintenance_matrix",
+        "confidence": "high",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/governance/context-drift-detection.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/reports/context-skill-quality.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/reports/cross-repo-context-reconciliation.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/reports/wwg-refresh-context-report.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/wiki/11-synthesis/context-completeness-review.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/wiki/12-maintenance/context-maintenance-matrix.md",
+        "kind": "maintenance matrix",
+        "suggestedRole": "maintenance_matrix",
+        "confidence": "high",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/context/architecture-context.md",
+        "kind": "architecture source",
+        "suggestedRole": "architecture_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/context/chain-state-template.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/context/context-maintenance-matrix.md",
+        "kind": "maintenance matrix",
+        "suggestedRole": "maintenance_matrix",
+        "confidence": "high",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/context/domain-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "domain_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/context/governance-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/context/project-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/context/task-context-index.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/context/ux-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/test-results/smoke-project-truth-devcur-30dbc-s-on-imported-VirtualBox-VM/error-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/test-results/smoke-project-truth-devcur-479f7-s-on-imported-VirtualBox-VM/error-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      },
+      {
+        "path": "hris-app/test-results/smoke-project-truth-devcur-d5969-s-on-imported-VirtualBox-VM/error-context.md",
+        "kind": "canonical context",
+        "suggestedRole": "project_master_context",
+        "confidence": "medium",
+        "category": "canonicalContext"
+      }
+    ],
+    "skillsPrompts": [
+      {
+        "path": "hris-api/.wwg/workspace/prompts/bug-fix.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/prompts/feature-implementation.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/prompts/production-monitoring.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/prompts/public-surface-update.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/prompts/runtime-infrastructure.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/prompts/task-router.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/skills/change-classifier.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/skills/context-skill-maintenance.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/skills/drift-detector.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/skills/task-router.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/prompts/bug-fix.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/prompts/chain-pass-template.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/prompts/feature-implementation.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/prompts/production-monitoring.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/prompts/public-discovery-maintenance.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/prompts/public-surface-update.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/prompts/runtime-infrastructure.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/prompts/task-router.md",
+        "kind": "prompt",
+        "suggestedRole": "workspace_prompts",
+        "confidence": "medium",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/skills/change-classifier.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/skills/context-skill-maintenance.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/skills/drift-detector.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/skills/task-router.skill.md",
+        "kind": "skill",
+        "suggestedRole": "specialized_agent_workflows",
+        "confidence": "high",
+        "category": "skillsPrompts"
+      }
+    ],
+    "governance": [
+      {
+        "path": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
+        "kind": "governance artifact",
+        "suggestedRole": "operational_readiness",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "docs/DEVOPS_RUNBOOK.md",
+        "kind": "governance artifact",
+        "suggestedRole": "operational_readiness",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "docs/GITOPS_GH_WATCH_RUNBOOK.md",
+        "kind": "governance artifact",
+        "suggestedRole": "operational_readiness",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "docs/OPERATIONS.md",
+        "kind": "governance artifact",
+        "suggestedRole": "operational_readiness",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/governance/audit-log.md",
+        "kind": "governance artifact",
+        "suggestedRole": "audit_log",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/governance/quality-gates.md",
+        "kind": "governance artifact",
+        "suggestedRole": "quality_gates",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/governance/regression-gaps.json",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/governance/regression-gaps.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/governance/regression-guardrail-catalog.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/governance/regression-manifest.json",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/governance/regression-manifest.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/governance/release-checklist.md",
+        "kind": "governance artifact",
+        "suggestedRole": "release_checklist",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/governance/security-review.md",
+        "kind": "governance artifact",
+        "suggestedRole": "quality_gates",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/governance/test-plan.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/reports/adoption-regression-report.json",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/reports/adoption-regression-report.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/reports/api-testing-implementation.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/reports/regression-quality-report.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/reports/wwg-regression-handoff.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/testing/manual-verification-checklist.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/testing/manual-verification-evidence.json",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/testing/non-technical-regression-checklist.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/testing/proposed-executable-tests.json",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/testing/proposed-executable-tests.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/testing/regression-candidate-review.json",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/.wwg/workspace/testing/regression-candidate-review.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/docs/MIGRATION_CSV_UPLOAD_TESTING.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/docs/testing-maturity-audit.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/docs/testing-strategy.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/prisma/schema-postgres/statusIncident.prisma",
+        "kind": "governance artifact",
+        "suggestedRole": "reference_history",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/prisma/schema/statusIncident.prisma",
+        "kind": "governance artifact",
+        "suggestedRole": "reference_history",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/tests/wwg-regression-coverage.spec.ts",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-api/wiki-template/base/08-operations/monitoring.md",
+        "kind": "governance artifact",
+        "suggestedRole": "operational_readiness",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.react-router/types/app/routes/admin/+types/audit-logs.ts",
+        "kind": "governance artifact",
+        "suggestedRole": "audit_log",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/governance/audit-log.md",
+        "kind": "governance artifact",
+        "suggestedRole": "audit_log",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/governance/quality-gates.md",
+        "kind": "governance artifact",
+        "suggestedRole": "quality_gates",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/governance/regression-gaps.json",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/governance/regression-gaps.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/governance/regression-guardrail-catalog.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/governance/regression-manifest.json",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/governance/regression-manifest.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/governance/release-checklist.md",
+        "kind": "governance artifact",
+        "suggestedRole": "release_checklist",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/governance/security-review.md",
+        "kind": "governance artifact",
+        "suggestedRole": "quality_gates",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/governance/test-plan.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/reports/adoption-regression-report.json",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/reports/adoption-regression-report.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/reports/regression-priority-review.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/reports/testing-program-implementation.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/reports/wwg-regression-handoff.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/testing/manual-verification-checklist.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/testing/manual-verification-evidence.json",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/testing/non-technical-regression-checklist.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/testing/proposed-executable-tests.json",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/testing/proposed-executable-tests.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/testing/regression-candidate-review.json",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/.wwg/workspace/testing/regression-candidate-review.md",
+        "kind": "governance artifact",
+        "suggestedRole": "regression_guardrails",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/app/lib/ci-cd-quality-gates.test.ts",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/app/routes/admin/audit-logs.tsx",
+        "kind": "governance artifact",
+        "suggestedRole": "audit_log",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/app/services/audit-logs.service.ts",
+        "kind": "governance artifact",
+        "suggestedRole": "audit_log",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/build/client/assets/audit-logs-BXkiI1U5.js",
+        "kind": "governance artifact",
+        "suggestedRole": "audit_log",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/docs/testing-coverage-matrix.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/docs/testing-maturity-audit.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      },
+      {
+        "path": "hris-app/docs/testing-strategy.md",
+        "kind": "governance artifact",
+        "suggestedRole": "test_plan",
+        "confidence": "medium",
+        "category": "governance"
+      }
+    ],
+    "publicSurface": [
+      {
+        "path": "hris-api/.wwg/changelog/config.yml",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-api/.wwg/changelog/state.json",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-api/.wwg/reports/changelog-bump-recommendation.md",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-api/.wwg/reports/changelog-preview.md",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-api/.wwg/reports/wwg-changelog-handoff.md",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-api/CHANGELOG.md",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-api/scripts/generate-bnpi-dm3-supporting-imports.cjs",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-api/scripts/update-hikvision-metadata.ts",
+        "kind": "public surface",
+        "suggestedRole": "public_discovery_context",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-api/tests/support/db-fault-invariants.ts",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-api/tests/support/isolated-db-fault.guard.ts",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-api/tests/support/isolated-prisma-client.ts",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/.react-router/types/app/routes/legal/+types/privacy-policy.ts",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/.react-router/types/app/routes/legal/+types/terms-of-use.ts",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/.react-router/types/app/routes/support/+types/faq.ts",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/.react-router/types/app/routes/support/+types/help-desk.ts",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/.wwg/changelog/config.yml",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/.wwg/changelog/state.json",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/.wwg/reports/changelog-bump-recommendation.md",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/.wwg/reports/changelog-preview.md",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/.wwg/reports/wwg-changelog-handoff.md",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/app/routes/legal/privacy-policy.tsx",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/app/routes/legal/terms-of-use.tsx",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/app/routes/support/faq.tsx",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/app/routes/support/help-desk.tsx",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/build/client/assets/privacy-policy-DKziWBt5.js",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "hris-app/build/client/assets/terms-of-use-BXeUTGd2.js",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "terraform-hyperv/.terraform/providers/registry.terraform.io/taliesins/hyperv/1.2.1/windows_amd64/CHANGELOG.md",
+        "kind": "public surface",
+        "suggestedRole": "public_surface_updates",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "vendor/zkteco-sdk/obj/Debug/net48/ZKTecoStandalone.exe.withSupportedRuntime.config",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      },
+      {
+        "path": "vendor/zkteco-sdk/obj/x86/Debug/net48/ZKTecoStandalone.exe.withSupportedRuntime.config",
+        "kind": "public surface",
+        "suggestedRole": "approval_gated_public_messaging",
+        "confidence": "medium",
+        "category": "publicSurface"
+      }
+    ],
+    "projectStructure": [
+      {
+        "path": ".github/workflows",
+        "kind": "project structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": ".github/workflows",
+        "kind": "project structure",
+        "suggestedRole": "impact_zone",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": "app/Dockerfile",
+        "kind": "runtime structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": "appliance/docker-compose.yml",
+        "kind": "runtime structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": "appliance/zkteco-bridge/Dockerfile",
+        "kind": "runtime structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": "hris-api/docker-compose.yml",
+        "kind": "runtime structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": "hris-api/Dockerfile",
+        "kind": "runtime structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": "hris-api/infrastructure/onprem/observability/docker-compose.yml",
+        "kind": "runtime structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      },
+      {
+        "path": "hris-app/Dockerfile",
+        "kind": "runtime structure",
+        "suggestedRole": "runtime_context",
+        "confidence": "medium",
+        "category": "projectStructure"
+      }
+    ]
+  },
+  "suggestedMappings": {
+    "root_agents": "AGENTS.md",
+    "project_master_context": "hris-api/.wwg/workspace/context/project-context.md",
+    "maintenance_matrix": "hris-api/.wwg/workspace/context/context-maintenance-matrix.md",
+    "architecture_context": "docs/ARCHITECTURE.md",
+    "runtime_context": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
+    "public_discovery_context": "hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md",
+    "domain_context": "hris-api/.wwg/workspace/context/domain-context.md"
+  },
+  "recommendedArtifacts": {
+    "project_registry": "wwg.project.yaml",
+    "changelog": "CHANGELOG.md",
+    "evidence_standards": "governance/evidence-standards.md"
+  },
+  "scopedAgents": {
+    "recommended": [],
+    "notRecommended": [
+      {
+        "path": "auth",
+        "recommendation": "not-recommended",
+        "reason": "Authentication is usually cross-cutting; keep policy in canonical context unless ownership is isolated."
+      },
+      {
+        "path": "billing",
+        "recommendation": "not-recommended",
+        "reason": "Billing is approval-sensitive and cross-cutting; use governance and canonical context first."
+      },
+      {
+        "path": "shared",
+        "recommendation": "not-recommended",
+        "reason": "Shared code affects multiple owners; scoped instructions can conflict with broader truth."
+      },
+      {
+        "path": "features/*",
+        "recommendation": "not-recommended",
+        "reason": "Feature folders are often too narrow; prefer the maintenance matrix for routing."
+      }
+    ]
+  },
+  "risks": [
+    {
+      "level": "low",
+      "path": "wwg.project.yaml",
+      "message": "Create or safe-merge a WWG-owned project registry.",
+      "recommendation": "Allowed in conservative apply."
+    },
+    {
+      "level": "low",
+      "path": "reports",
+      "message": "Create audit, adoption plan, adoption report, JSON reports, and registry backups.",
+      "recommendation": "Allowed in conservative apply."
+    },
+    {
+      "level": "medium",
+      "message": "Add missing WWG index or generated context files.",
+      "recommendation": "Defer until a later explicit init or adoption expansion phase."
+    },
+    {
+      "level": "high",
+      "message": "Move docs, rewrite AGENTS.md, or reorganize context structure.",
+      "recommendation": "Do not perform in Phase 2B conservative apply."
+    },
+    {
+      "level": "approval-gated",
+      "message": "Change production config, compliance-sensitive docs, public customer notices, permissions, security, data deletion, or migrations.",
+      "recommendation": "Require explicit approval and evidence-backed plan."
+    }
+  ],
+  "recommendedNextCommand": "wwg adopt --mode conservative --dry-run"
+}

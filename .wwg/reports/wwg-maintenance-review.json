@@ -1,0 +1,1361 @@
+{
+  "targetDisplay": ".",
+  "generatedAt": "2026-06-29T01:44:07.621Z",
+  "command": "wwg maintain --target C:\\Users\\anoni\\OneDrive\\Desktop\\PROJECT_TRUTH_HYPERV_FRESH --json",
+  "dryRun": true,
+  "alignmentStatus": "red",
+  "truthAlignment": {
+    "level": "red",
+    "label": "Critical Alignment Break",
+    "recommendedDecision": "Regression / Quality Repair",
+    "driftScore": 8,
+    "maxDriftScore": 10,
+    "reasons": [
+      "A high-severity finding touches tests, regression, or a high-risk product area.",
+      "Recent docs use customer terminology not fully reflected in canonical terminology.",
+      "Recent reports suggest documentation lag or stale context that may need Project Truth synchronization.",
+      "Low-severity findings are present; review alongside Truth Alignment Status instead of treating them as harmful drift by default."
+    ],
+    "categoryFindings": {
+      "requirementEvolution": [],
+      "undocumentedRequirementChange": [],
+      "documentationLag": [
+        "Recent reports suggest documentation lag or stale context that may need Project Truth synchronization.",
+        "Low-severity findings are present; review alongside Truth Alignment Status instead of treating them as harmful drift by default."
+      ],
+      "implementationDrift": [],
+      "regressionQualityDrift": [
+        "A high-severity finding touches tests, regression, or a high-risk product area."
+      ],
+      "terminologyDrift": [
+        "Recent docs use customer terminology not fully reflected in canonical terminology."
+      ]
+    },
+    "recommendedNaturalPrompt": "Treat this as a regression or quality gap. Add or update meaningful tests, document the issue, and repair the implementation.",
+    "backupCliCommands": [
+      "wwg regression-check"
+    ],
+    "interpretation": "Drift Score 8/10 indicates a critical conflict, regression, missing verification, or high-risk change that needs planning/reconciliation before more implementation.",
+    "executionGate": {
+      "level": "stop",
+      "label": "Stop",
+      "reasons": [
+        "A high-severity finding touches tests, regression, or a high-risk product area.",
+        "Recent docs use customer terminology not fully reflected in canonical terminology.",
+        "Recent reports suggest documentation lag or stale context that may need Project Truth synchronization.",
+        "Low-severity findings are present; review alongside Truth Alignment Status instead of treating them as harmful drift by default."
+      ],
+      "recommendedNaturalPrompt": "Stop implementation and resolve the Project Truth conflict or regression first.",
+      "backupCliCommands": [
+        "wwg regression-check",
+        "wwg reconcile",
+        "wwg plan"
+      ]
+    }
+  },
+  "summary": {
+    "total": 46,
+    "critical": 1,
+    "high": 1,
+    "medium": 2,
+    "low": 6,
+    "info": 36,
+    "safeToApplyRecommendations": 0,
+    "requiresUserConfirmation": 40,
+    "archiveCandidates": 0,
+    "mergeCandidates": 0,
+    "renameCandidates": 32,
+    "staleContextCandidates": 4
+  },
+  "findings": [
+    {
+      "id": "regression-governance-open-high-gaps",
+      "title": "Critical or high regression governance gaps remain open",
+      "description": "Adoption regression gaps include critical or high open items that should be reviewed before strict CI enforcement.",
+      "category": "regression-governance",
+      "severity": "critical",
+      "path": ".wwg/governance/regression-gaps.md",
+      "recommendedAction": "review",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Review `.wwg/governance/regression-gaps.md` and convert safe report-first candidates into real tests or checklists as part of normal implementation work."
+    },
+    {
+      "id": "regression-candidate-confirmation-needed",
+      "title": "Regression candidates need confirmation evidence",
+      "description": "Safe report-first candidates exist, but some remain proposed or candidate-only and are not coverage.",
+      "category": "regression-governance",
+      "severity": "high",
+      "path": ".wwg/workspace/testing/regression-candidate-review.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Review `.wwg/workspace/testing/regression-candidate-review.md` and record explicit manual/process, executable, or waiver evidence in `.wwg/workspace/testing/manual-verification-evidence.json`."
+    },
+    {
+      "id": "regression-governance-traceability-incomplete",
+      "title": "Regression traceability remains uncovered or unknown",
+      "description": "Adopted-project behavior traceability exists but still contains uncovered or unknown records.",
+      "category": "regression-governance",
+      "severity": "medium",
+      "path": ".wwg/governance/rule-traceability.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Review `.wwg/governance/rule-traceability.md` and map uncovered behavior to confirmed evidence."
+    },
+    {
+      "id": "regression-executable-test-proposals-missing",
+      "title": "Executable test proposals are missing for high-priority technical candidates",
+      "description": "Critical or high adopted-project regression gaps remain open and technical candidates exist, but no proposed executable test artifact is present.",
+      "category": "regression-governance",
+      "severity": "medium",
+      "path": ".wwg/workspace/testing/proposed-executable-tests.md",
+      "recommendedAction": "create",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Run `wwg maintain propose-tests --target .` to create reviewable draft proposals. Proposals are not coverage and are not applied automatically."
+    },
+    {
+      "id": "context-artifact-missing",
+      "title": "Expected context or readiness artifact is missing",
+      "description": "A key Workspace, Governance, or handoff artifact is missing.",
+      "category": "generated-artifact-freshness",
+      "severity": "low",
+      "path": ".wwg/governance/quality-gates.md",
+      "recommendedAction": "refresh",
+      "risk": "low",
+      "requiresUserConfirmation": false,
+      "canApplySafely": false,
+      "reason": "This pass reports missing artifacts only; generation or handoff refresh should be explicit."
+    },
+    {
+      "id": "context-artifact-missing",
+      "title": "Expected context or readiness artifact is missing",
+      "description": "A key Workspace, Governance, or handoff artifact is missing.",
+      "category": "generated-artifact-freshness",
+      "severity": "low",
+      "path": ".wwg/workspace/context/project-context.md",
+      "recommendedAction": "refresh",
+      "risk": "low",
+      "requiresUserConfirmation": false,
+      "canApplySafely": false,
+      "reason": "This pass reports missing artifacts only; generation or handoff refresh should be explicit."
+    },
+    {
+      "id": "context-artifact-missing",
+      "title": "Expected context or readiness artifact is missing",
+      "description": "A key Workspace, Governance, or handoff artifact is missing.",
+      "category": "generated-artifact-freshness",
+      "severity": "low",
+      "path": ".wwg/workspace/skills/skill-index.md",
+      "recommendedAction": "refresh",
+      "risk": "low",
+      "requiresUserConfirmation": false,
+      "canApplySafely": false,
+      "reason": "This pass reports missing artifacts only; generation or handoff refresh should be explicit."
+    },
+    {
+      "id": "gitignore-native-report-backups-missing",
+      "title": "Report policy drift",
+      "description": "Report policy expects `.wwg/reports/backups/` to be ignored.",
+      "category": "gitignore-policy-drift",
+      "severity": "low",
+      "path": ".gitignore",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Add a narrow ignore rule for `.wwg/reports/backups/` or `.wwg/.gitignore` `reports/backups/`."
+    },
+    {
+      "id": "changelog-missing",
+      "title": "Changelog project memory is missing",
+      "description": "CHANGELOG.md is not present, so meaningful project history is not yet governed as WWG product memory.",
+      "category": "truth-loop-drift",
+      "severity": "low",
+      "path": "CHANGELOG.md",
+      "recommendedAction": "create",
+      "risk": "low",
+      "requiresUserConfirmation": false,
+      "canApplySafely": false,
+      "reason": "Run `wwg changelog generate --target . --from-git --weekly --dry-run` before creating or applying changelog history."
+    },
+    {
+      "id": "readme-governance-review-needed",
+      "title": "README front door needs governance review",
+      "description": "README.md has bloat, phase/pass wording, missing routing, or missing front-door structure.",
+      "category": "truth-loop-drift",
+      "severity": "low",
+      "path": "README.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": false,
+      "canApplySafely": false,
+      "reason": "Run `wwg readme preview --target .` and `wwg readme route-docs --target . --dry-run`."
+    },
+    {
+      "id": "skill-manifest-not-generated",
+      "title": "Skill Manifest is not generated",
+      "description": "The project has no project-local Skill Manifest yet. This is backward compatible, but refresh-skills can now create one.",
+      "category": "generated-artifact-freshness",
+      "severity": "info",
+      "path": ".wwg/config/skill-manifest.yaml",
+      "recommendedAction": "refresh",
+      "risk": "low",
+      "requiresUserConfirmation": false,
+      "canApplySafely": false,
+      "reason": "Run `wwg refresh-skills --target .` when governed project skill state should be refreshed."
+    },
+    {
+      "id": "ambiguous-report-name",
+      "title": "Report filename has unclear purpose suffix",
+      "description": "A report-like Markdown file does not clearly signal report, handoff, review, plan, index, or historical purpose.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": ".wwg/reports/adoption-audit.md",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Ambiguous report names should be indexed or renamed only through a deliberate report policy pass."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/ARCHITECTURE.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/DEV_CURRENT_GCP_VDI_PROOF_RESULT.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/DEVOPS_RUNBOOK.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/GAPS_AND_NEXT_GOALS.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/GITOPS_CLIENT_ENV_SCALING.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/GITOPS_GH_WATCH_RUNBOOK.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/HEALTHCHECKS.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/HYPERV_LAN_PROOF_20260622.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/IMAGE_FORMATS.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/INSTALLER_TEST_REPORT.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/LOGIN_VISUAL_PROOF_SELF_LOOP_PROMPT.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/OBSERVABILITY_PROOF_20260622.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/OPERATIONS.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/OVERNIGHT_DEV_CURRENT_GCP_VDI_PROOF_PROMPT.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/OVERNIGHT_DEVICE_EVENT_BRIDGE_DRY_RUN_PROMPT.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/OVERNIGHT_HARDCUTOVER_MINIO_DRIFT_REPAIR_PROMPT.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/OVERNIGHT_HYPERV_HEALTH_PROOF_PROMPT.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/OVERNIGHT_SOURCE_INPUTS_GCP_IMAGE_DRY_RUN_PROMPT.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/OVERNIGHT_TERRAFORM_HYPERV_FRESH_REPO_PROMPT.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/OVERNIGHT_VIRTUALBOX_GCP_APPLIANCE_PROOF_PROMPT.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/OVERNIGHT_ZKTECO_PROJECT_TRUTH_BRIDGE_PROMPT.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/OVERNIGHT_ZKTECO_RUNTIME_TRUTH_PROMPT.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/SHORTCUTS.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/TERRAFORM_HYPERV_ARCHITECTURE.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/USER_JOURNEY_PROOF.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/UZARO_CLOUDFLARE_CUTOVER_20260629.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/V3_GCP_HYPERV_STORAGE_PROOF_20260625.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "wwg-owned-file-naming-drift",
+      "title": "WWG-owned file is not lowercase kebab-case",
+      "description": "A WWG-owned Markdown/YAML/JSON file does not use lowercase kebab-case or an allowed conventional name.",
+      "category": "naming-drift",
+      "severity": "info",
+      "path": "docs/ZKTECO_RUNTIME_TRUTH.md",
+      "recommendedAction": "rename-candidate",
+      "risk": "medium",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Naming changes should be reviewed for links, registry references, generated markers, and historical context."
+    },
+    {
+      "id": "ambiguous-report-classification",
+      "title": "Report policy drift",
+      "description": "Some report-like files need human classification.",
+      "category": "report-policy-drift",
+      "severity": "info",
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "Run `wwg reports --target .` and review the Ambiguous / Needs Review section."
+    },
+    {
+      "id": "ambiguous-json-report-review",
+      "title": "Ambiguous JSON reports need classification",
+      "description": "Machine-readable reports are present outside temporary report folders without an index or recognized routine/compatibility role.",
+      "category": "report-policy-drift",
+      "severity": "info",
+      "paths": [
+        ".wwg/reports/adoption-regression-report.json"
+      ],
+      "recommendedAction": "review",
+      "risk": "low",
+      "requiresUserConfirmation": true,
+      "canApplySafely": false,
+      "reason": "JSON reports are not promoted by default; classify as compatibility JSON, promoted JSON, routine generated JSON, transient JSON, or ambiguous JSON before committing policy decisions."
+    }
+  ],
+  "markdownReportPath": ".wwg/reports/wwg-maintenance-review.md",
+  "jsonReportPath": ".wwg/reports/wwg-maintenance-review.json",
+  "regressionGovernance": {
+    "present": true,
+    "adoptedProject": true,
+    "manifestPresent": true,
+    "gapsPresent": true,
+    "traceabilityPresent": true,
+    "fallbackBaselinePresent": true,
+    "source": {
+      "manifest": ".wwg/governance/regression-manifest.json",
+      "gaps": ".wwg/governance/regression-gaps.json",
+      "traceability": ".wwg/governance/rule-traceability.json",
+      "fallbackBaseline": ".wwg/reports/adoption-regression-report.json"
+    },
+    "projectClassification": {
+      "type": "mixed",
+      "confidence": "high"
+    },
+    "ciReadiness": {
+      "status": "partial",
+      "reasons": [
+        "Some test/check evidence exists, but readiness gaps remain.",
+        "14 report-first candidate(s) still have no confirmed evidence.",
+        "2 open regression gap(s) remain.",
+        "2651 executable evidence record(s) were found.",
+        "Some behavior traceability remains uncovered or unknown."
+      ],
+      "strictBlockingReasons": [
+        "1 high/critical behavior(s) are not mapped to detected tests.",
+        "1 critical open regression gap(s) remain.",
+        "14 report-first candidate(s) remain candidate-only and do not count as coverage.",
+        "1 behavior traceability record(s) are unknown."
+      ]
+    },
+    "gapSummary": {
+      "total": 2,
+      "open": 2,
+      "critical": 1,
+      "high": 0,
+      "medium": 1,
+      "low": 0,
+      "info": 0
+    },
+    "traceabilitySummary": {
+      "total": 10,
+      "covered": 0,
+      "partial": 6,
+      "uncovered": 0,
+      "unknown": 1,
+      "candidate-only": 4,
+      "manual-partial": 0,
+      "manual-covered": 0,
+      "executable-partial": 5,
+      "executable-covered": 0,
+      "waived": 0
+    },
+    "candidateSummary": {
+      "total": 14,
+      "technical": 0,
+      "nonTechnical": 0,
+      "mixed": 14
+    },
+    "evidenceSummary": {
+      "manualChecklistPresent": true,
+      "manualEvidencePresent": true,
+      "nonTechnicalChecklistPresent": true,
+      "candidateReviewMarkdownPresent": true,
+      "candidateReviewJsonPresent": true,
+      "total": 14,
+      "proposed": 14,
+      "reviewed": 0,
+      "confirmed": 0,
+      "implemented": 0,
+      "waived": 0,
+      "rejected": 0,
+      "manualConfirmed": 0,
+      "executableDetected": 2651,
+      "candidateOnly": 14,
+      "manualPartial": 0,
+      "manualCovered": 0,
+      "executablePartial": 0,
+      "executableCovered": 0,
+      "uncovered": 14,
+      "unknown": 8,
+      "unconfirmedCandidates": 14,
+      "missingChecklist": false
+    },
+    "proposedExecutableTests": {
+      "markdownPresent": false,
+      "jsonPresent": false,
+      "total": 0,
+      "eligibleToApply": 0,
+      "proposalOnly": 0,
+      "safeToDraft": 0,
+      "unsafeNeedsHuman": 0,
+      "blocked": 0,
+      "stale": false
+    },
+    "warnings": [
+      "2 open regression gap(s) remain.",
+      "Some behavior traceability remains uncovered or unknown."
+    ],
+    "recommendedNextAction": "Run `wwg maintain propose-tests --target .` to create reviewable executable test proposals for safe technical candidates; proposals are drafts, not coverage."
+  },
+  "recommendationGovernance": {
+    "registryPath": ".wwg/governance/recommendation-registry.md",
+    "policyPath": ".wwg/governance/recommendation-policy.md",
+    "registryFound": false,
+    "policyFound": false,
+    "registryReview": {
+      "recommendations": [],
+      "warnings": [],
+      "summary": {
+        "runDate": "2026-06-29",
+        "total": 0,
+        "byStatus": {},
+        "byImpact": {},
+        "byType": {},
+        "itemsNeedingReview": [],
+        "highImpactOpenRecommendations": [],
+        "staleReviewByItems": []
+      }
+    }
+  },
+  "skillManifest": {
+    "present": false,
+    "path": ".wwg/config/skill-manifest.yaml",
+    "valid": true,
+    "recommended": 0,
+    "recommendedReferenceOnlySkillIds": [],
+    "recommendedCreativeBusinessReferenceOnlySkillIds": [],
+    "enabledCore": 0,
+    "local": 0,
+    "disabled": 0,
+    "materialization": {
+      "none": 0,
+      "reference": 0,
+      "copied": 0,
+      "local": 0
+    },
+    "policyViolations": [],
+    "detectedDomains": [],
+    "selectedProfiles": [],
+    "skillIds": [],
+    "warnings": [],
+    "legacyCopied": {
+      "detected": 0,
+      "compatibilityCore": 0,
+      "compatibilityDomain": 0,
+      "copiedDomain": 0,
+      "disabledCopied": [],
+      "missingManifestEntries": [],
+      "missingCompatibilityMetadata": [],
+      "localConflicts": []
+    }
+  },
+  "skillCleanupReview": {
+    "markdownReportPath": ".wwg/reports/skill-cleanup-review.md",
+    "jsonReportPath": ".wwg/reports/skill-cleanup-review.json",
+    "mode": "review",
+    "summary": {
+      "total": 11,
+      "review_candidate": 0,
+      "preserve_required": 0,
+      "not_applicable": 5,
+      "already_reference_only": 6,
+      "needs_manual_review": 0
+    },
+    "applySummary": {
+      "total": 11,
+      "review_candidate": 0,
+      "cleanup_applied": 0,
+      "preserved_protected": 0,
+      "reference_only": 6,
+      "already_clean": 5,
+      "manual_review_required": 0
+    },
+    "reviewCandidates": [],
+    "cleanupApplied": [],
+    "preservedProtected": [],
+    "referenceOnly": [
+      {
+        "skillId": "software.bug-fix",
+        "name": "Bug Fix",
+        "currentMaterialization": "none",
+        "futureMaterialization": "reference",
+        "manifestState": "manifest_missing",
+        "path": null,
+        "status": "already_reference_only",
+        "reasons": [
+          "Skill is not physically copied in the workspace."
+        ],
+        "recommendedAction": "Keep as reference-only unless future evidence changes the recommendation.",
+        "applyStatus": "reference_only"
+      },
+      {
+        "skillId": "software.feature-implementation",
+        "name": "Feature Implementation",
+        "currentMaterialization": "none",
+        "futureMaterialization": "reference",
+        "manifestState": "manifest_missing",
+        "path": null,
+        "status": "already_reference_only",
+        "reasons": [
+          "Skill is not physically copied in the workspace."
+        ],
+        "recommendedAction": "Keep as reference-only unless future evidence changes the recommendation.",
+        "applyStatus": "reference_only"
+      },
+      {
+        "skillId": "software.production-monitoring",
+        "name": "Production Monitoring",
+        "currentMaterialization": "none",
+        "futureMaterialization": "reference",
+        "manifestState": "manifest_missing",
+        "path": null,
+        "status": "already_reference_only",
+        "reasons": [
+          "Skill is not physically copied in the workspace."
+        ],
+        "recommendedAction": "Keep as reference-only unless future evidence changes the recommendation.",
+        "applyStatus": "reference_only"
+      },
+      {
+        "skillId": "public.public-discovery-maintenance",
+        "name": "Public Discovery Maintenance",
+        "currentMaterialization": "none",
+        "futureMaterialization": "reference",
+        "manifestState": "manifest_missing",
+        "path": null,
+        "status": "already_reference_only",
+        "reasons": [
+          "Skill is not physically copied in the workspace."
+        ],
+        "recommendedAction": "Keep as reference-only unless future evidence changes the recommendation.",
+        "applyStatus": "reference_only"
+      },
+      {
+        "skillId": "public.public-surface-update",
+        "name": "Public Surface Update",
+        "currentMaterialization": "none",
+        "futureMaterialization": "reference",
+        "manifestState": "manifest_missing",
+        "path": null,
+        "status": "already_reference_only",
+        "reasons": [
+          "Skill is not physically copied in the workspace."
+        ],
+        "recommendedAction": "Keep as reference-only unless future evidence changes the recommendation.",
+        "applyStatus": "reference_only"
+      },
+      {
+        "skillId": "software.runtime-infrastructure",
+        "name": "Runtime Infrastructure",
+        "currentMaterialization": "none",
+        "futureMaterialization": "reference",
+        "manifestState": "manifest_missing",
+        "path": null,
+        "status": "already_reference_only",
+        "reasons": [
+          "Skill is not physically copied in the workspace."
+        ],
+        "recommendedAction": "Keep as reference-only unless future evidence changes the recommendation.",
+        "applyStatus": "reference_only"
+      }
+    ],
+    "alreadyClean": [
+      {
+        "skillId": "core.change-classifier",
+        "name": "Change Classifier",
+        "currentMaterialization": "none",
+        "futureMaterialization": "copied",
+        "manifestState": "manifest_missing",
+        "path": null,
+        "status": "not_applicable",
+        "reasons": [
+          "No legacy copied skill file is physically present."
+        ],
+        "recommendedAction": "No cleanup action is available.",
+        "applyStatus": "already_clean"
+      },
+      {
+        "skillId": "core.context-skill-maintenance",
+        "name": "Context Skill Maintenance",
+        "currentMaterialization": "none",
+        "futureMaterialization": "copied",
+        "manifestState": "manifest_missing",
+        "path": null,
+        "status": "not_applicable",
+        "reasons": [
+          "No legacy copied skill file is physically present."
+        ],
+        "recommendedAction": "No cleanup action is available.",
+        "applyStatus": "already_clean"
+      },
+      {
+        "skillId": "core.drift-detector",
+        "name": "Drift Detector",
+        "currentMaterialization": "none",
+        "futureMaterialization": "copied",
+        "manifestState": "manifest_missing",
+        "path": null,
+        "status": "not_applicable",
+        "reasons": [
+          "No legacy copied skill file is physically present."
+        ],
+        "recommendedAction": "No cleanup action is available.",
+        "applyStatus": "already_clean"
+      },
+      {
+        "skillId": "core.regression-guardrail-maintenance",
+        "name": "Regression Guardrail Maintenance",
+        "currentMaterialization": "none",
+        "futureMaterialization": "copied",
+        "manifestState": "manifest_missing",
+        "path": null,
+        "status": "not_applicable",
+        "reasons": [
+          "No legacy copied skill file is physically present."
+        ],
+        "recommendedAction": "No cleanup action is available.",
+        "applyStatus": "already_clean"
+      },
+      {
+        "skillId": "core.task-router",
+        "name": "Task Router",
+        "currentMaterialization": "none",
+        "futureMaterialization": "copied",
+        "manifestState": "manifest_missing",
+        "path": null,
+        "status": "not_applicable",
+        "reasons": [
+          "No legacy copied skill file is physically present."
+        ],
+        "recommendedAction": "No cleanup action is available.",
+        "applyStatus": "already_clean"
+      }
+    ],
+    "manualReviewRequired": [],
+    "preserveRequired": [],
+    "manualReview": [],
+    "noFilesRemoved": true,
+    "filesRemoved": [],
+    "manifestUpdated": false
+  },
+  "readiness": {
+    "target": "C:\\Users\\anoni\\OneDrive\\Desktop\\PROJECT_TRUTH_HYPERV_FRESH",
+    "targetDisplay": ".",
+    "context": "maintain",
+    "mustHave": [
+      {
+        "id": "wwg-workspace",
+        "label": "WWG workspace present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg"
+        ]
+      },
+      {
+        "id": "project-config",
+        "label": "Project config present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/config/wwg.project.yaml"
+        ]
+      },
+      {
+        "id": "project-truth",
+        "label": "Project Truth present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/wiki/project-truth.md"
+        ]
+      },
+      {
+        "id": "terminology",
+        "label": "Terminology present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/wiki/terminology.md"
+        ]
+      },
+      {
+        "id": "principles-readme",
+        "label": "Principles README present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/wiki/principles/README.md"
+        ]
+      },
+      {
+        "id": "workspace-current-task",
+        "label": "Workspace current task present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/workspace/current-task.md"
+        ]
+      },
+      {
+        "id": "governance-drift-guard",
+        "label": "Governance drift guard present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/drift-guard.md"
+        ]
+      },
+      {
+        "id": "recommendation-registry",
+        "label": "Recommendation Registry present",
+        "category": "must-have",
+        "status": "missing",
+        "severity": "error",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/recommendation-registry.md"
+        ],
+        "cliAction": "wwg generate-governance",
+        "agentAction": "Complete the missing WWG-owned structure before relying on the project as agent-ready."
+      },
+      {
+        "id": "reports-directory",
+        "label": "Reports directory present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/reports"
+        ]
+      },
+      {
+        "id": "root-agents",
+        "label": "Root AGENTS.md present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          "AGENTS.md"
+        ]
+      },
+      {
+        "id": "test-enforcement",
+        "label": "Test enforcement governance present",
+        "category": "must-have",
+        "status": "missing",
+        "severity": "error",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/test-enforcement.md"
+        ],
+        "cliAction": "wwg generate-governance",
+        "agentAction": "Complete the missing WWG-owned structure before relying on the project as agent-ready."
+      },
+      {
+        "id": "regression-guardrail",
+        "label": "Regression guardrail governance present",
+        "category": "must-have",
+        "status": "missing",
+        "severity": "error",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/regression-guardrail-catalog.md"
+        ],
+        "cliAction": "wwg generate-governance",
+        "agentAction": "Complete the missing WWG-owned structure before relying on the project as agent-ready."
+      },
+      {
+        "id": "validation-readiness",
+        "label": "Validation report present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/reports/wwg-validate-report.md"
+        ]
+      },
+      {
+        "id": "audit-readiness",
+        "label": "Audit report present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/reports/wwg-audit-report.md"
+        ]
+      },
+      {
+        "id": "agent-handoff",
+        "label": "Agent handoff present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/reports/wwg-agent-handoff.md",
+          ".wwg/reports/wwg-handoff-to-codex.md"
+        ]
+      },
+      {
+        "id": "adoption-regression-baseline",
+        "label": "Adoption regression baseline present",
+        "category": "must-have",
+        "status": "present",
+        "severity": "success",
+        "show": true,
+        "evidence": [
+          ".wwg/governance/regression-manifest.md",
+          ".wwg/governance/regression-manifest.json"
+        ]
+      }
+    ],
+    "otherFeatures": [
+      {
+        "id": "readme-support",
+        "label": "README missing",
+        "category": "other-feature",
+        "status": "present",
+        "severity": "success",
+        "show": false,
+        "reason": "The project front door is not present.",
+        "evidence": [
+          "README.md"
+        ],
+        "cliAction": "wwg readme generate --dry-run",
+        "agentAction": "Prepare a README handoff or reviewed scaffold; do not invent final README prose."
+      },
+      {
+        "id": "changelog-support",
+        "label": "Changelog missing",
+        "category": "other-feature",
+        "status": "missing",
+        "severity": "warning",
+        "show": true,
+        "reason": "Package, product, or git history signals make release memory relevant.",
+        "evidence": [
+          "CHANGELOG.md"
+        ],
+        "cliAction": "wwg changelog generate --from-git --weekly --dry-run",
+        "agentAction": "Prepare or review release narrative before treating changelog wording as final."
+      },
+      {
+        "id": "source-index-support",
+        "label": "Source index missing",
+        "category": "other-feature",
+        "status": "missing",
+        "severity": "warning",
+        "show": false,
+        "reason": "Source references exist, but no generated source index was detected.",
+        "evidence": [
+          ".wwg/wiki/01-sources/source-index.md",
+          ".wwg/wiki/01-sources/source-index.json",
+          "wiki/01-sources/source-index.md",
+          "wiki/01-sources/source-index.json"
+        ],
+        "cliAction": "wwg sources index",
+        "agentAction": "Review the source registry/index before relying on external truth."
+      },
+      {
+        "id": "infra-readiness",
+        "label": "Infrastructure readiness not checked",
+        "category": "other-feature",
+        "status": "available",
+        "severity": "warning",
+        "show": true,
+        "reason": "Build, deploy, env, or infrastructure indicators were detected.",
+        "evidence": [
+          ".env.example",
+          ".github/workflows"
+        ],
+        "cliAction": "wwg infra check",
+        "agentAction": "Inspect infrastructure readiness before deployment-related work."
+      },
+      {
+        "id": "github-publish-readiness",
+        "label": "GitHub publishing readiness not checked",
+        "category": "other-feature",
+        "status": "available",
+        "severity": "info",
+        "show": true,
+        "reason": "Git or GitHub context exists.",
+        "evidence": [
+          ".git",
+          ".github",
+          "package.json repository"
+        ],
+        "cliAction": "wwg publish github --dry-run",
+        "agentAction": "Do not publish without explicit approval; review readiness and secret safety first."
+      },
+      {
+        "id": "doctor-self-heal",
+        "label": "Doctor/self-heal available for repairable issues",
+        "category": "other-feature",
+        "status": "not_applicable",
+        "severity": "info",
+        "show": false,
+        "reason": "Repairable WWG-owned issues were detected by the current command.",
+        "evidence": [],
+        "cliAction": "wwg doctor --apply",
+        "agentAction": "Use doctor for deterministic WWG-owned repair; keep semantic truth review-only."
+      },
+      {
+        "id": "upgrade-migration",
+        "label": "Current version, optional candidate review",
+        "category": "other-feature",
+        "status": "available",
+        "severity": "info",
+        "show": true,
+        "reason": "Workspace is current. Optional semantic/candidate review artifacts exist; run only if adopting candidate surfaces.",
+        "evidence": [
+          ".wwg/reports/generated-project-upgrade-review.md"
+        ],
+        "cliAction": "wwg audit --upgrade-candidates",
+        "agentAction": "Treat candidate/review artifacts as optional review surfaces unless the user asks to promote them."
+      },
+      {
+        "id": "wizard-onboarding",
+        "label": "Wizard onboarding available",
+        "category": "other-feature",
+        "status": "not_applicable",
+        "severity": "info",
+        "show": false,
+        "reason": "Wizard is shown only for onboarding, init, or adoption contexts.",
+        "evidence": [],
+        "cliAction": "wwg wizard",
+        "agentAction": "Use the Wizard only when the user wants guided setup."
+      }
+    ],
+    "recommendedNext": [
+      {
+        "id": "complete-must-have",
+        "label": "Complete Must Have readiness first",
+        "category": "recommended-next",
+        "status": "available",
+        "severity": "warning",
+        "show": true,
+        "reason": "3 Must Have item(s) are missing.",
+        "cliAction": "wwg maintain",
+        "agentAction": "Do not treat Other Features as blockers until Must Have readiness is clear."
+      }
+    ],
+    "developerDetail": [
+      {
+        "id": "developer-validate",
+        "label": "Run structural validation",
+        "category": "developer-detail",
+        "status": "available",
+        "severity": "warning",
+        "show": true,
+        "cliAction": "wwg validate"
+      },
+      {
+        "id": "developer-audit",
+        "label": "Run lower-level audit",
+        "category": "developer-detail",
+        "status": "available",
+        "severity": "info",
+        "show": true,
+        "cliAction": "wwg audit"
+      }
+    ]
+  },
+  "allowlistedReferences": {
+    "agentBrandDrift": [],
+    "stableDocPhasePollution": []
+  }
+}
