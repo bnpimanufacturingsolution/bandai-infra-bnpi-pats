@@ -47,7 +47,6 @@ import {
 	AdminConfigPrimaryCell,
 	AdminConfigRoleText,
 } from "~/lib/ui/admin-configuration-table";
-import { resolveUploadUrl } from "~/lib/upload-url";
 
 interface UserFormData {
 	email: string;
@@ -273,9 +272,9 @@ export default function UsersPage() {
 			render: (value, item: UserListItem) => (
 				<div className="flex items-center gap-3">
 					<div className="h-8 w-8 rounded-md bg-gray-200 flex items-center justify-center">
-						{resolveUploadUrl(item.avatar) ? (
+						{item.avatar ? (
 							<img
-								src={resolveUploadUrl(item.avatar)}
+								src={item.avatar}
 								alt={getEmployeeName(item)}
 								className="h-8 w-8 rounded-md object-cover"
 							/>
@@ -847,9 +846,9 @@ export default function UsersPage() {
 								<>
 									<div className="flex items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
 										<div className="h-16 w-16 rounded-md bg-gray-200 flex items-center justify-center">
-											{resolveUploadUrl(user.avatar) ? (
+											{user.avatar ? (
 												<img
-													src={resolveUploadUrl(user.avatar)}
+													src={user.avatar}
 													alt={getEmployeeName(user)}
 													className="h-16 w-16 rounded-md object-cover"
 												/>

@@ -11,7 +11,7 @@ import {
 	useUpdateProvisioningHrSettings,
 } from "~/lib/hooks/useSystemProvisioning";
 import systemProvisioningService from "~/services/system-provisioning.service";
-import { bandaiLogo, resolveCompanyLogo } from "~/lib/company-logo";
+import bandaiLogo from "~/assets/bandai_logo.png";
 
 const TIMEZONE_OPTIONS: SelectOption[] = [
 	{ value: "Asia/Manila", label: "Asia/Manila (Philippines)" },
@@ -33,6 +33,12 @@ function buildTimezoneOptions(selectedTimezone: string): SelectOption[] {
 	}
 
 	return [{ value: selectedTimezone, label: selectedTimezone }, ...TIMEZONE_OPTIONS];
+}
+
+function resolveCompanyLogo(value?: string | null) {
+	const logo = String(value || "").trim();
+	if (!logo || logo === "assets/images/bandai_logo.png") return bandaiLogo;
+	return logo;
 }
 
 function FieldLabel(props: { children: ReactNode }) {

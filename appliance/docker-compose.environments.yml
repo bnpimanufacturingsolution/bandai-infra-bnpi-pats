@@ -78,6 +78,9 @@ services:
     volumes:
       - apiuploads-dev:/app/uploads
       - ./backups/dev:/var/backups/hris
+      - ../data/import:/data/import:ro
+      - ../source-inputs-organized:/source-inputs-organized:ro
+      - ../docs:/docs:ro
     networks:
       - default
       - hris-observability
@@ -271,6 +274,9 @@ services:
     volumes:
       - apiuploads-uat:/app/uploads
       - ./backups/uat:/var/backups/hris
+      - ../data/import:/data/import:ro
+      - ../source-inputs-organized:/source-inputs-organized:ro
+      - ../docs:/docs:ro
     networks:
       - default
       - hris-observability

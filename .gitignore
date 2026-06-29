@@ -20,3 +20,17 @@ image-factory/packer/staging/
 .terraform/
 terraform.tfstate
 terraform.tfstate.backup
+
+# Local DM migration workbook/source payloads.
+# These are copied from HRIS-PROJECT for local/VM operations and may contain
+# client payroll, attendance, biometric, agency, or employee data.
+data/import/
+hris-api/data/
+docs/2026-20260527T124252Z-3-001/
+docs/AGENCY/
+docs/Bandai Payroll/
+docs/BNPI_MASTERLIST.xlsx
+docs/Breaktime Schedule.xlsx
+docs/FY2025_BNPI Organization Chart - as of March 31, 2026.xlsx
+docs/HRIS Payroll Computation April 26 - May 10, 2026.xlsx
+docs/rptLeaveBalance as of June 4, 2026.xlsx

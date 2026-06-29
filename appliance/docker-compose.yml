@@ -61,6 +61,9 @@ services:
       ZKTECO_BRIDGE_STATUS_URL: ${ZKTECO_BRIDGE_STATUS_URL:-http://zkteco-bridge:4371/status}
     volumes:
       - apiuploads:/app/uploads
+      - ../data/import:/data/import:ro
+      - ../source-inputs-organized:/source-inputs-organized:ro
+      - ../docs:/docs:ro
     ports:
       - "3001:3001"
     depends_on:
