@@ -35,9 +35,10 @@ if [ -n "$lan_ip" ]; then
   echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
   echo "  origin: http://${lan_ip}:3000"
   echo "  host repair: project-truth start-bnpi-cloudflare-tunnel -ProvisionDns -VerifyPublic"
-  echo "  SSH domain: ssh.bnpi-hris.tech"
-  echo "  SSH client: cloudflared access tcp --hostname ssh.bnpi-hris.tech --url localhost:2222"
-  echo "  then: ssh -p 2222 infra@localhost"
+  echo "  SSH easy: ssh project-truth-hris"
+  echo "  SSH host: ssh.bnpi-hris.tech"
+  echo "  SSH full: ssh -i %USERPROFILE%\\.ssh\\node-health-appliance_ed25519 -o ProxyCommand=\"cloudflared access ssh --hostname %h\" infra@ssh.bnpi-hris.tech"
+  echo "  SSH LAN fallback: ssh infra@${lan_ip}"
   echo
   echo "Postgres"
   printf '  %-5s %s\n' "PROD" "postgresql://postgres:postgres@${lan_ip}:15432/hris"

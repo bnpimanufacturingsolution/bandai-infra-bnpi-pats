@@ -5,10 +5,14 @@ param(
   [string]$ConfigPath = '',
   [string]$CredentialsFile = '',
   [string]$TaskName = 'ProjectTruth-BNPI-HRIS-Cloudflared',
+  [string]$SshHostname = 'ssh.bnpi-hris.tech',
+  [string]$SshAlias = 'project-truth-hris',
+  [string]$SshKeyPath = '',
   [switch]$Login,
   [switch]$ProvisionDns,
   [switch]$StartTunnel,
-  [switch]$VerifyPublic
+  [switch]$VerifyPublic,
+  [switch]$VerifySsh
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,6 +23,9 @@ if (-not $ConfigPath) {
 }
 if (-not $CredentialsFile) {
   $CredentialsFile = Join-Path $env:USERPROFILE ".cloudflared\$TunnelId.json"
+}
+if (-not $SshKeyPath) {
+  $SshKeyPath = Join-Path $env:USERPROFILE '.ssh\node-health-appliance_ed25519'
 }
 
 $runtimeRoot = Join-Path $repoRoot '.runtime\cloudflare-host-readiness'
@@ -65,6 +72,77 @@ function Invoke-Cloudflared {
   }
 }
 
+function Set-ProjectTruthSshConfig {
+  param(
+    [string]$CloudflaredPath
+  )
+
+  $sshDir = Join-Path $env:USERPROFILE '.ssh'
+  $configPath = Join-Path $sshDir 'config'
+  New-Item -ItemType Directory -Force -Path $sshDir | Out-Null
+
+  $cloudflaredConfigPath = $CloudflaredPath
+  $identityConfigPath = $SshKeyPath
+  if ($identityConfigPath.StartsWith($env:USERPROFILE, [System.StringComparison]::OrdinalIgnoreCase)) {
+    $identityConfigPath = '~' + $identityConfigPath.Substring($env:USERPROFILE.Length)
+  }
+
+  $aliasBlock = @"
+Host $SshAlias
+    HostName $SshHostname
+    User infra
+    IdentityFile $identityConfigPath
+    IdentitiesOnly yes
+    ProxyCommand "$cloudflaredConfigPath" access ssh --hostname %h
+    StrictHostKeyChecking accept-new
+"@
+
+  $hostBlock = @"
+Host $SshHostname
+    HostName $SshHostname
+    User infra
+    IdentityFile $identityConfigPath
+    IdentitiesOnly yes
+    ProxyCommand "$cloudflaredConfigPath" access ssh --hostname %h
+    StrictHostKeyChecking accept-new
+"@
+
+  $existing = if (Test-Path -LiteralPath $configPath) { Get-Content -Raw -LiteralPath $configPath } else { '' }
+  $updated = $existing
+  $changed = $false
+
+  if ($updated -notmatch "(?m)^Host\s+$([regex]::Escape($SshAlias))\s*$") {
+    $updated = ($updated.TrimEnd() + "`r`n`r`n" + $aliasBlock.Trim() + "`r`n")
+    $changed = $true
+  }
+
+  if ($updated -notmatch "(?m)^Host\s+$([regex]::Escape($SshHostname))\s*$") {
+    $updated = ($updated.TrimEnd() + "`r`n`r`n" + $hostBlock.Trim() + "`r`n")
+    $changed = $true
+  }
+
+  if ($changed) {
+    Set-Content -LiteralPath $configPath -Value $updated -Encoding ASCII
+  }
+
+  [pscustomobject]@{
+    Path = $configPath
+    Alias = $SshAlias
+    Hostname = $SshHostname
+    KeyPath = $SshKeyPath
+    Changed = $changed
+  }
+}
+
+function Test-ProjectTruthSshAlias {
+  $output = (& cmd.exe /c "ssh -o BatchMode=yes -o ConnectTimeout=45 $SshAlias `"echo SSH_ALIAS_OK; hostname; whoami`" 2>&1" | Out-String).Trim()
+  [pscustomobject]@{
+    Command = "ssh $SshAlias"
+    ExitCode = $LASTEXITCODE
+    Output = $output
+  }
+}
+
 $cloudflaredPath = Get-CloudflaredPath
 $certPath = Join-Path $env:USERPROFILE '.cloudflared\cert.pem'
 
@@ -80,8 +158,10 @@ if ($Login -and -not (Test-Path -LiteralPath $certPath)) {
 $cloudflaredVersion = (& cloudflared --version 2>&1 | Out-String).Trim()
 $certExists = Test-Path -LiteralPath $certPath
 $credentialExists = Test-Path -LiteralPath $CredentialsFile
+$sshKeyExists = Test-Path -LiteralPath $SshKeyPath
 $configExists = Test-Path -LiteralPath $ConfigPath
 $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+$sshConfig = Set-ProjectTruthSshConfig -CloudflaredPath $cloudflaredPath
 
 $tunnelInfo = $null
 if ($certExists -or $credentialExists) {
@@ -134,6 +214,12 @@ if ($StartTunnel) {
   }
 }
 
+$sshVerification = $null
+if ($VerifySsh) {
+  Write-Step "Verifying public SSH alias $SshAlias"
+  $sshVerification = Test-ProjectTruthSshAlias
+}
+
 $result = [pscustomobject]@{
   GeneratedAt = (Get-Date).ToString('o')
   CloudflaredPath = $cloudflaredPath
@@ -145,6 +231,14 @@ $result = [pscustomobject]@{
   TunnelCredential = [pscustomobject]@{
     Path = $CredentialsFile
     Exists = $credentialExists
+  }
+  SshClient = [pscustomobject]@{
+    Alias = $SshAlias
+    Hostname = $SshHostname
+    KeyPath = $SshKeyPath
+    KeyExists = $sshKeyExists
+    Config = $sshConfig
+    Verification = $sshVerification
   }
   Config = [pscustomobject]@{
     Path = $ConfigPath
@@ -161,6 +255,7 @@ $result = [pscustomobject]@{
   Missing = @(
     if (-not $certExists) { 'Cloudflare origin cert; run this command with -Login.' }
     if (-not $credentialExists) { 'Named tunnel credential JSON; securely import it or recreate the tunnel credential for this host.' }
+    if (-not $sshKeyExists) { "SSH key missing: $SshKeyPath." }
     if (-not $configExists) { 'cloudflared-bnpi-hris.yml; run start-bnpi-cloudflare-tunnel after VM import.' }
     if (-not $task) { 'Scheduled task; run start-bnpi-cloudflare-tunnel -RepairScheduledTask.' }
   )
@@ -175,6 +270,7 @@ Write-Host "Evidence: $jsonPath"
 $result | Select-Object CloudflaredPath, CloudflaredVersion | Format-List
 $result.OriginCert | Format-List
 $result.TunnelCredential | Format-List
+$result.SshClient | Format-List
 $result.ScheduledTask | Format-List
 
 if ($result.Missing.Count -gt 0) {

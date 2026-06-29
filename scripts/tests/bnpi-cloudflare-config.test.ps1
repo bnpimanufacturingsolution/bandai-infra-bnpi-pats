@@ -25,7 +25,9 @@ Assert-Contains -Path 'scripts/start-bnpi-cloudflare-tunnel.ps1' -Pattern 'ssh:/
 Assert-Contains -Path 'scripts/start-bnpi-cloudflare-tunnel.ps1' -Pattern 'ProvisionDns' -Message 'Tunnel wrapper must keep DNS provisioning switch'
 Assert-Contains -Path 'scripts/ensure-bnpi-cloudflare-host.ps1' -Pattern 'ssh\.bnpi-hris\.tech' -Message 'Host readiness helper must provision SSH DNS route'
 Assert-Contains -Path 'scripts/project-truth.ps1' -Pattern 'ensure-bnpi-cloudflare-host' -Message 'Main CLI must expose host readiness helper'
-Assert-Contains -Path 'appliance/bin/project-truth-lan-summary.sh' -Pattern 'ssh\.bnpi-hris\.tech via cloudflared access tcp' -Message 'VM summary must show SSH domain flow'
+Assert-Contains -Path 'appliance/bin/project-truth-lan-summary.sh' -Pattern 'ssh project-truth-hris' -Message 'VM summary must show the easy public SSH alias'
+Assert-Contains -Path 'appliance/bin/project-truth-lan-summary.sh' -Pattern 'cloudflared access ssh --hostname %h' -Message 'VM summary must show the verified Cloudflare Access SSH proxy command'
+Assert-Contains -Path 'appliance/profile.d/project-truth-hris-help.sh' -Pattern 'ssh project-truth-hris' -Message 'Login helper must show the easy public SSH alias'
 Assert-Contains -Path 'appliance/profile.d/project-truth-hris-help.sh' -Pattern 'dev-api\.bnpi-hris\.tech/health' -Message 'Login helper must show full public URL list'
 Assert-Contains -Path 'docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md' -Pattern 'ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic' -Message 'Runbook must document exportable host provisioning command'
 
