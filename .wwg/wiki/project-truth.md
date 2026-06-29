@@ -96,6 +96,33 @@ Accepted or observed architecture:
 - Item: ZKTeco runtime uses the Windows Standalone SDK sidecar under `appliance/zkteco-standalone-sdk`; the Node.js bridge under `appliance/zkteco-bridge` is retired from active Docker, K3s, and GitOps runtime paths.
   - Status: CONFIRMED
   - Evidence: docs/ZKTECO_RUNTIME_TRUTH.md; .wwg/reports/zkteco-node-bridge-retirement-20260629.md
+- Item: Current Hyper-V proof VM exists as `project-truth-local-vhdx-proof` on the `ProjectTruth-External` switch.
+  - Status: CONFIRMED_RUNTIME_EVIDENCE
+  - Evidence: `Get-VM` and `Get-VMNetworkAdapter` on 2026-06-29 showed VM `project-truth-local-vhdx-proof`, Generation 2, attached to switch `ProjectTruth-External`.
+- Item: Current Hyper-V proof VM LAN address is `10.184.38.91` after boot on 2026-06-29.
+  - Status: CONFIRMED_RUNTIME_EVIDENCE
+  - Evidence: `Get-VMNetworkAdapter -VMName project-truth-local-vhdx-proof` returned IPv4 `10.184.38.91` after starting the VM.
+- Item: SSH is installed and exposed on the current Hyper-V proof VM LAN address at `10.184.38.91:22`.
+  - Status: CONFIRMED_RUNTIME_EVIDENCE
+  - Evidence: TCP probe to `10.184.38.91:22` passed; `ssh-keyscan -p 22 10.184.38.91` reported `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.16`.
+- Item: SSH login as `infra@10.184.38.91` is proven from this Windows host.
+  - Status: CONFIRMED_RUNTIME_EVIDENCE
+  - Evidence: On 2026-06-29, repo-documented password login `infra / infra` worked through pinned-host-key `plink`; the existing host key `%USERPROFILE%\.ssh\node-health-appliance_ed25519.pub` was installed for `infra`; Windows OpenSSH then succeeded with `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.38.91`, returning hostname `project-truth-node`, user `infra`, `eth0 10.184.38.91/24`, and active SSH service.
+- Item: Hyper-V VMConnect visual proof shows the LAN IP and SSH/login summary on the VM console.
+  - Status: CONFIRMED_RUNTIME_EVIDENCE
+  - Evidence: `.runtime/hyperv-visual-proof/20260629-120737/pass-01/overview/vmconnect-client-summary.png` shows `PROJECT TRUTH CLIENT SUMMARY`, `LAN IP: 10.184.38.91`, `LAN target: 10.184.38.91:22`, `OpenSSH: ssh infra@10.184.38.91`, and `Login: infra / infra`.
+- Item: Current Hyper-V proof VM exposes HRIS app/API on LAN after warmup at `10.184.38.91`.
+  - Status: CONFIRMED_RUNTIME_EVIDENCE
+  - Evidence: `.\scripts\project-truth.ps1 verify -GuestIp 10.184.38.91` on 2026-06-29 showed LAN PASS for app/API ports `3000`, `3001`, `3100`, `3101`, `3200`, and `3201`.
+- Item: Current host-local UAT ports are not healthy while VM LAN UAT is healthy.
+  - Status: NEEDS_CONFIRMATION
+  - Evidence: `.\scripts\project-truth.ps1 verify -GuestIp 10.184.38.91` on 2026-06-29 showed host-local PROD/DEV PASS, host-local UAT ports `3200` and `3201` FAIL, and LAN UAT PASS through `10.184.38.91`.
+- Item: Previous LAN HRIS proof target `192.168.254.148` is historical evidence, not current reachable state from this host.
+  - Status: STALE
+  - Evidence: `.runtime/health/20260628-213414/watch.log` showed LAN app/API PASS at `192.168.254.148` on 2026-06-28; ping and TCP probes from this host on 2026-06-29 did not reach `192.168.254.148`.
+- Item: Terraform SSH port config currently differs from the live VM.
+  - Status: CONFLICTING
+  - Evidence: `terraform-hyperv/terraform.tfvars` lists SSH port `2222`, but the current VM exposed SSH on LAN port `22` and not `2222`. `%ProgramData%\ProjectTruth\config\project-truth.json` was backed up and updated on 2026-06-29 to point current CLI operations at VM `project-truth-local-vhdx-proof`, guest IP `10.184.38.91`, and SSH port `22`.
 
 Do not introduce without approval:
 

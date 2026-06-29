@@ -271,7 +271,7 @@ for ($pass = 1; $pass -le $MaxPasses; $pass++) {
     New-Item -ItemType Directory -Force -Path $pageRoot | Out-Null
 
     Write-Step "Rendering client summary page '$page' on tty1, pass $pass"
-    Invoke-Plink "printf '%s\n' '$script:GuestPassword' | sudo -S -p '' sh -c 'project-truth-lan-summary $flag > /tmp/project-truth-client-summary.txt && printf ""\033c"" > /dev/tty1 && sed ""s/$/\r/"" /tmp/project-truth-client-summary.txt > /dev/tty1 && printf ""\r\ninfra@project-truth-node:~$ "" > /dev/tty1'"
+    Invoke-Plink "printf '%s\n' '$script:GuestPassword' | sudo -S -p '' sh -c 'project-truth-lan-summary $flag > /tmp/project-truth-client-summary.txt && printf ""\033c"" > /dev/tty1 && cat /tmp/project-truth-client-summary.txt > /dev/tty1 && printf ""\ninfra@project-truth-node:~$ "" > /dev/tty1'"
     Start-Sleep -Seconds $WaitSeconds
 
     Invoke-Plink "cat /tmp/project-truth-client-summary.txt" |

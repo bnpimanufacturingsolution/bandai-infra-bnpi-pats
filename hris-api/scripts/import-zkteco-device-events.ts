@@ -36,6 +36,10 @@ type PreparedDeviceEvent = {
 	errorMessage: string | null;
 };
 
+export function normalizeJsonlLine(rawLine: string) {
+	return rawLine.replace(/^\uFEFF/, "").trim();
+}
+
 const zktecoDeviceAddresses = [
 	"10.184.38.10",
 	"10.184.38.234",
@@ -91,7 +95,7 @@ async function readJsonl(filePath: string) {
 
 	for await (const rawLine of lines) {
 		lineNo += 1;
-		const line = rawLine.trim();
+		const line = normalizeJsonlLine(rawLine);
 		if (!line) continue;
 		try {
 			rows.push(JSON.parse(line));
@@ -385,11 +389,13 @@ async function main() {
 	}
 }
 
-main()
-	.catch((error) => {
-		console.error("[zkteco-device-events] failed:", error);
-		process.exitCode = 1;
-	})
-	.finally(async () => {
-		await prisma?.$disconnect();
-	});
+if (require.main === module) {
+	main()
+		.catch((error) => {
+			console.error("[zkteco-device-events] failed:", error);
+			process.exitCode = 1;
+		})
+		.finally(async () => {
+			await prisma?.$disconnect();
+		});
+}

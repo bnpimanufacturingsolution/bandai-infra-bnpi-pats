@@ -117,9 +117,9 @@ emit_zkteco_runtime_rows() {
     printf '  %-18s %s\n' "bridge status" "$ZKTECO_BRIDGE_STATUS_URL"
     node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync('/tmp/project-truth-zkteco-status.json','utf8')); console.log('  bridge devices    '+(s.connectedDevices||0)+'/'+(s.configuredDevices||0)+' connected'); console.log('  bridge latest     '+(s.lastEventAt||'no events yet'));" 2>/dev/null || true
   else
-    printf '  %-18s %s\n' "bridge status" "not configured in VM; set ZKTECO_BRIDGE_STATUS_URL to the Windows SDK sidecar"
+    printf '  %-18s %s\n' "bridge status" "not set in VM; use Windows SDK sidecar"
   fi
-  printf '  %-18s %s\n' "device check" "Admin > Devices shows TCP port and configured SDK sidecar truth"
+  printf '  %-18s %s\n' "device check" "Admin > Devices shows SDK truth"
 }
 
 emit_cloudflare_tcp_db_instructions() {
@@ -346,6 +346,11 @@ emit_screen_summary() {
     echo
     echo "Login: infra / infra  (password is hidden while typing)"
     echo "If prompt ends with $, you are already logged in."
+    echo
+    echo "SSH"
+    echo "  LAN target: ${ip_addr}:22"
+    echo "  OpenSSH: ssh infra@${ip_addr}"
+    echo "  Password: infra"
   fi
 
   if [ "$page" = "tunnels" ]; then
@@ -465,5 +470,5 @@ if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
       cat "$issue_file"
       printf '%s login: ' "$(hostname)"
     fi
-  } | sed 's/$/\r/' > /dev/tty1 || true
+  } > /dev/tty1 || true
 fi

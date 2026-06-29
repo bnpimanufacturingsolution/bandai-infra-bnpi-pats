@@ -209,6 +209,11 @@ const HealthMetric = ({
 	</div>
 );
 
+const formatCount = (value?: number | string | null) => {
+	const numeric = Number(value || 0);
+	return Number.isFinite(numeric) ? numeric.toLocaleString() : "-";
+};
+
 const getSerialNoFromPayload = (payload: any) =>
 	payload?.AcsEventInfo?.serialNo ||
 	payload?.EventNotificationAlert?.AccessControllerEvent?.serialNo ||
@@ -532,6 +537,7 @@ export default function DeviceEventsPage() {
 	const rows: UnifiedDeviceEventRow[] = viewMode === "live" ? liveRows : savedEvents;
 	const savedSummary = data?.summary || { total: 0, byStatus: {}, bySource: {} };
 	const savedStatusCounts = savedSummary.byStatus || {};
+	const sdkSummary = (selectedDevice as any)?.config?.zktecoSdkSummary || null;
 	const liveTotal = Number(acsEventPayload?.totalMatches || liveEvents.length || 0);
 	const totalItems = viewMode === "live" ? liveTotal : data?.pagination?.total || savedSummary.total || 0;
 	const isEventLoading = viewMode === "live" ? isLoadingLive : isLoadingSaved;
@@ -850,14 +856,46 @@ export default function DeviceEventsPage() {
 					<div className="grid grid-cols-4 gap-0 divide-x divide-slate-200 p-0">
 						{[
 							{
-								label: viewMode === "live" ? "Device punches" : "Total events",
-								value: viewMode === "live" ? liveEvents.length : totalItems,
+								label:
+									viewMode === "saved" && sdkSummary
+										? "SDK events"
+										: viewMode === "live"
+											? "Device punches"
+											: "Total events",
+								value:
+									viewMode === "saved" && sdkSummary
+										? formatCount(sdkSummary.eventCount)
+										: viewMode === "live"
+											? formatCount(liveEvents.length)
+											: formatCount(totalItems),
 							},
-							{ label: "Matched", value: matchedCount },
-							{ label: "Needs match", value: needsEmployeeMatchCount },
 							{
-								label: viewMode === "live" ? "Pending" : "Attendance writes",
-								value: viewMode === "live" ? notSavedCount : attendanceWrittenCount,
+								label: viewMode === "saved" && sdkSummary ? "SDK users" : "Matched",
+								value:
+									viewMode === "saved" && sdkSummary
+										? formatCount(sdkSummary.userCount)
+										: formatCount(matchedCount),
+							},
+							{
+								label: viewMode === "saved" && sdkSummary ? "Event users" : "Needs match",
+								value:
+									viewMode === "saved" && sdkSummary
+										? formatCount(sdkSummary.uniqueEventUsers)
+										: formatCount(needsEmployeeMatchCount),
+							},
+							{
+								label:
+									viewMode === "saved" && sdkSummary
+										? "HRIS saved"
+										: viewMode === "live"
+											? "Pending"
+											: "Attendance writes",
+								value:
+									viewMode === "saved" && sdkSummary
+										? formatCount(totalItems)
+										: viewMode === "live"
+											? formatCount(notSavedCount)
+											: formatCount(attendanceWrittenCount),
 							},
 						].map((item) => (
 							<div key={item.label} className="min-w-0 px-3 py-2">

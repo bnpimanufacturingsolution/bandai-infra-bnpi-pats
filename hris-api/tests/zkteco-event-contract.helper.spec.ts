@@ -9,6 +9,7 @@ import {
 	selectZktecoPunchPair,
 	ZKTECO_DEVICE_EVENT_SOURCE,
 } from "../helper/zkteco-event-contract.helper";
+import { normalizeJsonlLine } from "../scripts/import-zkteco-device-events";
 
 describe("zkteco event contract helper", () => {
 	it("normalizes the VM-native bridge attendance payload accepted by /api/zkteco/events", () => {
@@ -86,6 +87,17 @@ describe("zkteco event contract helper", () => {
 
 	it("keeps the ZKTeco source distinct from other device event save paths", () => {
 		expect(ZKTECO_DEVICE_EVENT_SOURCE).to.equal("ZKTECO_EVENT");
+	});
+
+	it("accepts SDK-exported JSONL when the first line starts with a UTF-8 BOM", () => {
+		const line = normalizeJsonlLine(
+			'\uFEFF{"device":{"type":"ZKTeco","ip":"10.184.38.10","port":4370},"attendance":{"enrollNumber":"9017","timestamp":"2022-12-31T05:47:24"},"eventType":"AttendanceTransaction"}',
+		);
+		const event = normalizeZktecoPayload(JSON.parse(line));
+
+		expect(event.deviceIP).to.equal("10.184.38.10");
+		expect(event.employeeNo).to.equal("9017");
+		expect(event.time).to.equal("2022-12-31T05:47:24");
 	});
 
 	it("builds employee-number candidates for raw deviceEmpId and padded employeeId matching", () => {
