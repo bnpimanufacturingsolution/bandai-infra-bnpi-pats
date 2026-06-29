@@ -1,6 +1,12 @@
 import { Prisma, PrismaClient } from "../generated/prisma";
 import { parseHikvisionBusinessDateBound } from "../helper/hikvision-event-contract.helper";
 
+const explicitDatabaseUrl =
+	process.env.DEVICE_EVENTS_DATABASE_URL || process.env.PG_DATABASE_URL || process.env.DATABASE_URL;
+if (explicitDatabaseUrl) {
+	process.env.PG_DATABASE_URL = explicitDatabaseUrl;
+}
+
 const prisma = new PrismaClient();
 const PH_TIME_ZONE = "Asia/Manila";
 const ZKTECO_ADDRESSES = ["10.184.38.10", "10.184.38.234", "10.184.38.235", "10.184.38.9"];
@@ -53,6 +59,18 @@ const buildWindows = () => {
 		last7: { from: getDateKey(subtractDays(today, 6)), to: todayKey },
 		all: {},
 	} satisfies Record<WindowKey, { from?: string; to?: string }>;
+};
+
+const redactDatabaseUrl = (value: string | undefined) => {
+	if (!value) return "not-set";
+	try {
+		const url = new URL(value);
+		if (url.password) url.password = "****";
+		if (url.username) url.username = "****";
+		return url.toString();
+	} catch {
+		return value.replace(/:\/\/([^:]+):([^@]+)@/, "://****:****@");
+	}
 };
 
 const columnForDateField = (dateField: DateField) =>
@@ -167,6 +185,7 @@ const main = async () => {
 			{
 				report: "device-events-filter-truth",
 				timeZone: PH_TIME_ZONE,
+				dataSource: redactDatabaseUrl(process.env.PG_DATABASE_URL),
 				windows,
 				organizationId: organizationId || "multiple-or-unknown",
 				zktecoDevices: devices,

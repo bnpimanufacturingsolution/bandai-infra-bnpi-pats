@@ -88,3 +88,57 @@ The live sidecar process listening at `http://127.0.0.1:4371/status` was separat
 | `10.184.38.9:4370` | yes | yes | 0 | 0 |
 
 Do not confuse the read-only SDK summary event counts with sidecar realtime counters. The summary counts are stored device log rows read directly from each terminal. The sidecar counters are only events seen or posted since the current sidecar process started.
+
+## 2026-06-29 Admin Device Events Filter Truth
+
+The admin events screen is an `hris-admin` surface:
+
+```text
+http://127.0.0.1:3100/admin/configuration/devices/events
+```
+
+Do not test this screen with `hris-hr-manager` unless a task explicitly asks for an HR workflow. The verified local dev admin identity is `hris-admin` in organization `cmqq3ho1g0000ti3dn4u5w8u3`.
+
+The page has two different date meanings:
+
+- `Saved in HRIS` uses the event ledger saved/received date, `device_events.receivedAt`.
+- Punch time shown in the table is the terminal punch time, `device_events.eventTime`.
+
+For the live dev stack on `127.0.0.1:3100` / `127.0.0.1:3101`, Prisma uses `PG_DATABASE_URL`, so diagnostics must target `hris-postgres-dev` explicitly:
+
+```powershell
+cd .\hris-api
+$env:DEVICE_EVENTS_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:15433/hris?schema=public"
+npx tsx scripts/dry-run-device-events-filter-truth.ts
+```
+
+Historical saved-event counts verified earlier on 2026-06-29, before the dev
+hard-cutover purge:
+
+| Filter window | Date field | Expected total | Matched | Needs match | Source |
+|---|---|---:|---:|---:|---|
+| Today, `2026-06-29` | `receivedAt` | 9,983 | 9,777 | 206 | `ZKTECO_EVENT` |
+| Yesterday, `2026-06-28` | `receivedAt` | 0 | 0 | 0 | none |
+| Last 7 days | `receivedAt` | 34,284 | 32,974 | 1,307 | `ZKTECO_EVENT` |
+| All | `receivedAt` / `eventTime` | 34,284 | 32,974 | 1,307 | `ZKTECO_EVENT` |
+
+Per-device saved ledger counts:
+
+| Device IP | Today saved rows | All saved rows |
+|---|---:|---:|
+| `10.184.38.10` | 7,564 | 12,581 |
+| `10.184.38.234` | 0 | 5,023 |
+| `10.184.38.235` | 512 | 7,365 |
+| `10.184.38.9` | 1,907 | 9,315 |
+
+On 2026-06-29 at 11:13 Asia/Manila, the local dev database behind
+`hris-api-dev` / `hris-postgres-dev` was hard-cutover purged for
+`device_events`. The purge deleted 34,284 dev `ZKTECO_EVENT` ledger rows after
+exporting a rollback backup to `.runtime/backups/`. Verification immediately
+after the purge showed zero saved `device_events` for all windows and all four
+known ZKTeco device IPs.
+
+Therefore, a clean dev saved-ledger screen is expected until the Windows SDK
+sidecar exports/posts fresh rows again. The SDK terminal event counts above are
+still device-side terminal truth; the HRIS saved ledger now starts from zero for
+this dev hard-cutover.

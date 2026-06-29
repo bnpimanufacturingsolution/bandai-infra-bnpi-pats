@@ -24,6 +24,7 @@
     ".wwg/reports/wwg-upgrade-history.md",
     ".wwg/reports/wwg-upgrade-report.md",
     ".wwg/reports/wwg-validate-report.md",
+    ".wwg/reports/zkteco-device-events-filter-truth-20260629.md",
     ".wwg/reports/zkteco-node-bridge-retirement-20260629.md",
     ".wwg/reports/zkteco-sdk-device-counts-20260629.md",
     ".wwg/wiki/principles/README.md",
@@ -176,6 +177,11 @@
     },
     {
       "path": ".wwg/reports/wwg-validate-report.md",
+      "fileType": "report",
+      "reason": "Report directory path."
+    },
+    {
+      "path": ".wwg/reports/zkteco-device-events-filter-truth-20260629.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
@@ -610,6 +616,15 @@
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/wwg-validate-report.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/zkteco-device-events-filter-truth-20260629.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -1671,6 +1686,15 @@
     {
       "severity": "warning",
       "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/zkteco-device-events-filter-truth-20260629.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/zkteco-node-bridge-retirement-20260629.md",
       "fileType": "report",
@@ -2491,6 +2515,15 @@
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/wwg-validate-report.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/zkteco-device-events-filter-truth-20260629.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -3552,16 +3585,16 @@
   ],
   "metadataPolicyApplied": "Option C: Skill Registry metadata is canonical; skill files may include lightweight metadata when beneficial, and package-side skills do not require frontmatter.",
   "summary": {
-    "checkedFileCount": 57,
+    "checkedFileCount": 58,
     "skippedFileCount": 1,
     "errorCount": 0,
-    "warningCount": 57,
+    "warningCount": 58,
     "suggestionCount": 60,
     "classificationCounts": {
       "context": 4,
       "skill": 0,
       "governance": 5,
-      "report": 21,
+      "report": 22,
       "public_doc": 21,
       "agent_instruction": 1,
       "changelog_governance": 0,

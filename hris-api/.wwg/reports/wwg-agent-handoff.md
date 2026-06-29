@@ -83,7 +83,7 @@ Agents should follow Must Have items first. Missing Other Features are not block
 
 ## Target Folder
 
-C:\Users\User\Desktop\DEVS PROJECTS\BANDAI\hris-api
+C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH\hris-api
 
 ## GitHub Repository
 
@@ -358,6 +358,6 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 
 - Open VSCode.
 - File -> Open Folder.
-- Select: C:\Users\User\Desktop\DEVS PROJECTS\BANDAI\hris-api.
+- Select: C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH\hris-api.
 - Start your chosen coding agent.
 - Use the recommended first prompt above.

@@ -4,7 +4,7 @@
 
 Validation status: WARN.
 
-Checked 57 Markdown file(s), with 0 error(s), 57 warning(s), and 60 suggestion(s).
+Checked 58 Markdown file(s), with 0 error(s), 58 warning(s), and 60 suggestion(s).
 
 ## Overall Status
 
@@ -39,6 +39,7 @@ Checked 57 Markdown file(s), with 0 error(s), 57 warning(s), and 60 suggestion(s
 - .wwg/reports/wwg-upgrade-history.md
 - .wwg/reports/wwg-upgrade-report.md
 - .wwg/reports/wwg-validate-report.md
+- .wwg/reports/zkteco-device-events-filter-truth-20260629.md
 - .wwg/reports/zkteco-node-bridge-retirement-20260629.md
 - .wwg/reports/zkteco-sdk-device-counts-20260629.md
 - .wwg/wiki/principles/README.md
@@ -80,7 +81,7 @@ Checked 57 Markdown file(s), with 0 error(s), 57 warning(s), and 60 suggestion(s
 | context | 4 |
 | skill | 0 |
 | governance | 5 |
-| report | 21 |
+| report | 22 |
 | public_doc | 21 |
 | agent_instruction | 1 |
 | changelog_governance | 0 |
@@ -124,6 +125,7 @@ Checked 57 Markdown file(s), with 0 error(s), 57 warning(s), and 60 suggestion(s
 - WARNING report-contract-missing-sections (.wwg/reports/wwg-upgrade-history.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/wwg-upgrade-report.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/wwg-validate-report.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
+- WARNING report-contract-missing-sections (.wwg/reports/zkteco-device-events-filter-truth-20260629.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/zkteco-node-bridge-retirement-20260629.md) [Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/zkteco-sdk-device-counts-20260629.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING context-contract-missing-sections (.wwg/wiki/principles/README.md) [Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References]: Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References. Recommendation: Add the missing context section or mark it explicitly not applicable.
@@ -291,6 +293,7 @@ Checked 57 Markdown file(s), with 0 error(s), 57 warning(s), and 60 suggestion(s
 - WARNING report-contract-missing-sections (.wwg/reports/wwg-upgrade-history.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/wwg-upgrade-report.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/wwg-validate-report.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
+- WARNING report-contract-missing-sections (.wwg/reports/zkteco-device-events-filter-truth-20260629.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/zkteco-node-bridge-retirement-20260629.md) [Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/zkteco-sdk-device-counts-20260629.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 
