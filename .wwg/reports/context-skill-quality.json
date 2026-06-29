@@ -1,6 +1,7 @@
 {
   "checkedFiles": [
     ".wwg/governance/drift-guard.md",
+    ".wwg/governance/recommendation-registry.md",
     ".wwg/governance/regression-gaps.md",
     ".wwg/governance/regression-manifest.md",
     ".wwg/governance/rule-traceability.md",
@@ -8,9 +9,11 @@
     ".wwg/reports/README.md",
     ".wwg/reports/adoption-audit.md",
     ".wwg/reports/adoption-regression-report.md",
+    ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
     ".wwg/reports/generated-project-upgrade-review.md",
     ".wwg/reports/readme-validation.md",
     ".wwg/reports/skill-cleanup-review.md",
+    ".wwg/reports/test-alignment-report.md",
     ".wwg/reports/wwg-adoption-plan.md",
     ".wwg/reports/wwg-adoption-report.md",
     ".wwg/reports/wwg-adoption-truth-handoff.md",
@@ -29,6 +32,7 @@
     ".wwg/reports/zkteco-sdk-device-counts-20260629.md",
     ".wwg/wiki/principles/README.md",
     ".wwg/wiki/principles/adopted-principles.md",
+    ".wwg/wiki/project-truth-summary.md",
     ".wwg/wiki/project-truth.md",
     ".wwg/wiki/terminology.md",
     ".wwg/workspace/current-task.md",
@@ -40,6 +44,8 @@
     "README.md",
     "docs/ARCHITECTURE.md",
     "docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md",
+    "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+    "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
     "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
     "docs/DEVOPS_RUNBOOK.md",
     "docs/DEV_CURRENT_GCP_VDI_PROOF_RESULT.md",
@@ -62,6 +68,11 @@
   "classifiedFiles": [
     {
       "path": ".wwg/governance/drift-guard.md",
+      "fileType": "governance",
+      "reason": "Governance directory path."
+    },
+    {
+      "path": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
       "reason": "Governance directory path."
     },
@@ -101,6 +112,11 @@
       "reason": "Report directory path."
     },
     {
+      "path": ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+      "fileType": "report",
+      "reason": "Report directory path."
+    },
+    {
       "path": ".wwg/reports/generated-project-upgrade-review.md",
       "fileType": "report",
       "reason": "Report directory path."
@@ -112,6 +128,11 @@
     },
     {
       "path": ".wwg/reports/skill-cleanup-review.md",
+      "fileType": "report",
+      "reason": "Report directory path."
+    },
+    {
+      "path": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
@@ -206,6 +227,11 @@
       "reason": "Wiki truth file treated as context for contract review."
     },
     {
+      "path": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "reason": "Canonical truth or compact truth surface path."
+    },
+    {
       "path": ".wwg/wiki/project-truth.md",
       "fileType": "context",
       "reason": "Canonical truth or compact truth surface path."
@@ -257,6 +283,16 @@
     },
     {
       "path": "docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -381,6 +417,24 @@
       "severity": "warning",
       "code": "governance-contract-missing-sections",
       "message": "Governance is missing contract section(s): Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References.",
+      "affectedFile": ".wwg/governance/recommendation-registry.md",
+      "fileType": "governance",
+      "affectedSection": "Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References",
+      "recommendedFix": "Add the missing governance section or mark it explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "governance-rules-missing-structure",
+      "message": "Governance file is missing rule structure section(s): Must, Must Not, Prefer, Avoid.",
+      "affectedFile": ".wwg/governance/recommendation-registry.md",
+      "fileType": "governance",
+      "affectedSection": "Must, Must Not, Prefer, Avoid",
+      "recommendedFix": "Use Must / Must Not / Prefer / Avoid for enforceable governance rules."
+    },
+    {
+      "severity": "warning",
+      "code": "governance-contract-missing-sections",
+      "message": "Governance is missing contract section(s): Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References.",
       "affectedFile": ".wwg/governance/regression-gaps.md",
       "fileType": "governance",
       "affectedSection": "Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References",
@@ -479,6 +533,15 @@
     {
       "severity": "warning",
       "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/generated-project-upgrade-review.md",
       "fileType": "report",
@@ -501,6 +564,15 @@
       "affectedFile": ".wwg/reports/skill-cleanup-review.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/test-alignment-report.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
     },
     {
@@ -669,6 +741,15 @@
       "severity": "warning",
       "code": "context-contract-missing-sections",
       "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
+      "recommendedFix": "Add the missing context section or mark it explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "context-contract-missing-sections",
+      "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
       "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
@@ -715,6 +796,24 @@
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -919,6 +1018,26 @@
       "affectedFile": ".wwg/reports/adoption-regression-report.md",
       "fileType": "report",
       "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-repeated-heading",
+      "message": "Heading 'Recommended Next Step' repeats at the same level.",
+      "affectedFile": ".wwg/reports/test-alignment-report.md",
+      "fileType": "report",
+      "affectedSection": "Recommended Next Step",
+      "line": 523,
+      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-repeated-heading",
+      "message": "Heading 'Backup CLI' repeats at the same level.",
+      "affectedFile": ".wwg/reports/test-alignment-report.md",
+      "fileType": "report",
+      "affectedSection": "Backup CLI",
+      "line": 527,
+      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
       "severity": "suggestion",
@@ -1156,6 +1275,60 @@
     },
     {
       "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 12,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 107,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 110,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 119,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 134,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 137,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
       "code": "markdown-possible-vague-pronouns",
       "message": "File has many pronouns that may be ambiguous for agents.",
       "affectedFile": "AGENTS.md",
@@ -1237,9 +1410,18 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
+      "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 3,
+      "line": 13,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
+      "fileType": "public_doc",
+      "line": 101,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1248,7 +1430,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 60,
+      "line": 7,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1257,7 +1439,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 115,
+      "line": 66,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1266,7 +1448,25 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 140,
+      "line": 121,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
+      "fileType": "public_doc",
+      "line": 142,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
+      "fileType": "public_doc",
+      "line": 147,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1302,24 +1502,6 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
       "fileType": "public_doc",
-      "line": 24,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
-      "fileType": "public_doc",
-      "line": 34,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
-      "fileType": "public_doc",
       "line": 114,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
@@ -1329,7 +1511,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
       "fileType": "public_doc",
-      "line": 131,
+      "line": 137,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1338,7 +1520,16 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
       "fileType": "public_doc",
-      "line": 136,
+      "line": 143,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
+      "fileType": "public_doc",
+      "line": 200,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1367,6 +1558,14 @@
       "fileType": "public_doc",
       "line": 42,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": "docs/ZKTECO_RUNTIME_TRUTH.md",
+      "fileType": "public_doc",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
     },
     {
       "severity": "suggestion",
@@ -1436,6 +1635,24 @@
       "code": "governance-rules-missing-structure",
       "message": "Governance file is missing rule structure section(s): Must, Must Not, Prefer, Avoid.",
       "affectedFile": ".wwg/governance/drift-guard.md",
+      "fileType": "governance",
+      "affectedSection": "Must, Must Not, Prefer, Avoid",
+      "recommendedFix": "Use Must / Must Not / Prefer / Avoid for enforceable governance rules."
+    },
+    {
+      "severity": "warning",
+      "code": "governance-contract-missing-sections",
+      "message": "Governance is missing contract section(s): Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References.",
+      "affectedFile": ".wwg/governance/recommendation-registry.md",
+      "fileType": "governance",
+      "affectedSection": "Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References",
+      "recommendedFix": "Add the missing governance section or mark it explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "governance-rules-missing-structure",
+      "message": "Governance file is missing rule structure section(s): Must, Must Not, Prefer, Avoid.",
+      "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
       "affectedSection": "Must, Must Not, Prefer, Avoid",
       "recommendedFix": "Use Must / Must Not / Prefer / Avoid for enforceable governance rules."
@@ -1542,6 +1759,15 @@
     {
       "severity": "warning",
       "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/generated-project-upgrade-review.md",
       "fileType": "report",
@@ -1564,6 +1790,15 @@
       "affectedFile": ".wwg/reports/skill-cleanup-review.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/test-alignment-report.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
     },
     {
@@ -1732,6 +1967,15 @@
       "severity": "warning",
       "code": "context-contract-missing-sections",
       "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
+      "recommendedFix": "Add the missing context section or mark it explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "context-contract-missing-sections",
+      "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
       "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
@@ -1778,6 +2022,24 @@
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -1969,10 +2231,73 @@
       "severity": "warning",
       "code": "context-contract-missing-sections",
       "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
+      "recommendedFix": "Add the missing context section or mark it explicitly not applicable."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 12,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "warning",
+      "code": "context-contract-missing-sections",
+      "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
       "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
       "recommendedFix": "Add the missing context section or mark it explicitly not applicable."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 107,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 110,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 119,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 134,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 137,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
       "severity": "warning",
@@ -2011,6 +2336,24 @@
       "fileType": "governance",
       "line": 51,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "warning",
+      "code": "governance-contract-missing-sections",
+      "message": "Governance is missing contract section(s): Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References.",
+      "affectedFile": ".wwg/governance/recommendation-registry.md",
+      "fileType": "governance",
+      "affectedSection": "Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References",
+      "recommendedFix": "Add the missing governance section or mark it explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "governance-rules-missing-structure",
+      "message": "Governance file is missing rule structure section(s): Must, Must Not, Prefer, Avoid.",
+      "affectedFile": ".wwg/governance/recommendation-registry.md",
+      "fileType": "governance",
+      "affectedSection": "Must, Must Not, Prefer, Avoid",
+      "recommendedFix": "Use Must / Must Not / Prefer / Avoid for enforceable governance rules."
     },
     {
       "severity": "warning",
@@ -2144,6 +2487,15 @@
     {
       "severity": "warning",
       "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/generated-project-upgrade-review.md",
       "fileType": "report",
@@ -2167,6 +2519,35 @@
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/test-alignment-report.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-repeated-heading",
+      "message": "Heading 'Recommended Next Step' repeats at the same level.",
+      "affectedFile": ".wwg/reports/test-alignment-report.md",
+      "fileType": "report",
+      "affectedSection": "Recommended Next Step",
+      "line": 523,
+      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-repeated-heading",
+      "message": "Heading 'Backup CLI' repeats at the same level.",
+      "affectedFile": ".wwg/reports/test-alignment-report.md",
+      "fileType": "report",
+      "affectedSection": "Backup CLI",
+      "line": 527,
+      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
       "severity": "warning",
@@ -2588,6 +2969,42 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
+      "fileType": "public_doc",
+      "line": 13,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
+      "fileType": "public_doc",
+      "line": 101,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -2599,7 +3016,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 3,
+      "line": 7,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2608,7 +3025,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 60,
+      "line": 66,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2617,7 +3034,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 115,
+      "line": 121,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2626,7 +3043,16 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 140,
+      "line": 142,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
+      "fileType": "public_doc",
+      "line": 147,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2743,24 +3169,6 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
       "fileType": "public_doc",
-      "line": 24,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
-      "fileType": "public_doc",
-      "line": 34,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
-      "fileType": "public_doc",
       "line": 114,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
@@ -2770,7 +3178,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
       "fileType": "public_doc",
-      "line": 131,
+      "line": 137,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2779,7 +3187,16 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
       "fileType": "public_doc",
-      "line": 136,
+      "line": 143,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
+      "fileType": "public_doc",
+      "line": 200,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2862,6 +3279,14 @@
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": "docs/ZKTECO_RUNTIME_TRUTH.md",
+      "fileType": "public_doc",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
     },
     {
       "severity": "warning",
@@ -3000,6 +3425,26 @@
       "affectedFile": ".wwg/reports/adoption-regression-report.md",
       "fileType": "report",
       "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-repeated-heading",
+      "message": "Heading 'Recommended Next Step' repeats at the same level.",
+      "affectedFile": ".wwg/reports/test-alignment-report.md",
+      "fileType": "report",
+      "affectedSection": "Recommended Next Step",
+      "line": 523,
+      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-repeated-heading",
+      "message": "Heading 'Backup CLI' repeats at the same level.",
+      "affectedFile": ".wwg/reports/test-alignment-report.md",
+      "fileType": "report",
+      "affectedSection": "Backup CLI",
+      "line": 527,
+      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
       "severity": "suggestion",
@@ -3237,6 +3682,60 @@
     },
     {
       "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 12,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 107,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 110,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 119,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 134,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 137,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
       "code": "markdown-possible-vague-pronouns",
       "message": "File has many pronouns that may be ambiguous for agents.",
       "affectedFile": "AGENTS.md",
@@ -3318,9 +3817,18 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
+      "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 3,
+      "line": 13,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
+      "fileType": "public_doc",
+      "line": 101,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3329,7 +3837,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 60,
+      "line": 7,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3338,7 +3846,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 115,
+      "line": 66,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3347,7 +3855,25 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 140,
+      "line": 121,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
+      "fileType": "public_doc",
+      "line": 142,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
+      "fileType": "public_doc",
+      "line": 147,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3383,24 +3909,6 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
       "fileType": "public_doc",
-      "line": 24,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
-      "fileType": "public_doc",
-      "line": 34,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
-      "fileType": "public_doc",
       "line": 114,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
@@ -3410,7 +3918,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
       "fileType": "public_doc",
-      "line": 131,
+      "line": 137,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3419,7 +3927,16 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
       "fileType": "public_doc",
-      "line": 136,
+      "line": 143,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
+      "fileType": "public_doc",
+      "line": 200,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3448,6 +3965,14 @@
       "fileType": "public_doc",
       "line": 42,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": "docs/ZKTECO_RUNTIME_TRUTH.md",
+      "fileType": "public_doc",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
     },
     {
       "severity": "suggestion",
@@ -3585,17 +4110,17 @@
   ],
   "metadataPolicyApplied": "Option C: Skill Registry metadata is canonical; skill files may include lightweight metadata when beneficial, and package-side skills do not require frontmatter.",
   "summary": {
-    "checkedFileCount": 58,
+    "checkedFileCount": 64,
     "skippedFileCount": 1,
     "errorCount": 0,
-    "warningCount": 58,
-    "suggestionCount": 60,
+    "warningCount": 65,
+    "suggestionCount": 71,
     "classificationCounts": {
-      "context": 4,
+      "context": 5,
       "skill": 0,
-      "governance": 5,
-      "report": 22,
-      "public_doc": 21,
+      "governance": 6,
+      "report": 24,
+      "public_doc": 23,
       "agent_instruction": 1,
       "changelog_governance": 0,
       "changelog_or_release_note": 0,

@@ -52,8 +52,8 @@ variable "cpu_count" {
 
 variable "ssh_port" {
   type        = number
-  description = "Documented host-local SSH port."
-  default     = 2222
+  description = "Documented guest LAN SSH port."
+  default     = 22
 }
 
 variable "api_port" {

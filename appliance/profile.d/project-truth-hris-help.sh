@@ -25,9 +25,11 @@ if [ -n "$lan_ip" ]; then
   echo "Cloudflare named tunnel"
   echo "  mode: host-managed on Windows"
   echo "  name: bnpi-hris"
+  echo "  domain: bnpi-hris.tech"
   echo "  public: https://bnpi-hris.tech/auth/login"
   echo "  origin: http://${lan_ip}:3000"
-  echo "  host repair: start-bnpi-cloudflare-tunnel"
+  echo "  host repair: project-truth start-bnpi-cloudflare-tunnel"
+  echo "  Cloudflare SSH: not enabled; use LAN SSH"
   echo
   echo "Postgres"
   printf '  %-5s %s\n' "PROD" "postgresql://postgres:postgres@${lan_ip}:15432/hris"
@@ -46,7 +48,8 @@ fi
 
 if [ -s /run/project-truth/trycloudflare-public-urls.txt ]; then
   echo
-  echo "TryCloudflare"
+  echo "Deprecated TryCloudflare proof"
+  echo "  Named tunnel is the normal public path."
   awk -F'|' '
     $2 ~ /gateway|prod-app|prod-api|dev-app|dev-api|uat-app|uat-api|grafana|prometheus|loki/ {
       gsub(/^ +| +$/, "", $2)

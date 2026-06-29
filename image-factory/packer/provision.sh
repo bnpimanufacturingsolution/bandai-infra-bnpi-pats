@@ -55,7 +55,7 @@ install_cloudflared() {
 
 install_cloudflared
 sudo install -d -m 0755 /etc/project-truth
-printf 'EXPERIMENTAL_TRY_CLOUDFLARE=true\n' | sudo tee /etc/project-truth/experimental.env >/dev/null
+printf 'EXPERIMENTAL_TRY_CLOUDFLARE=false\n' | sudo tee /etc/project-truth/experimental.env >/dev/null
 sudo chmod 0644 /etc/project-truth/experimental.env
 
 echo "infra:infra" | sudo chpasswd
@@ -255,7 +255,7 @@ fi
 sudo systemctl enable project-truth-lan-summary.service
 sudo systemctl enable project-truth-clean-console.service
 sudo systemctl enable project-truth-hris.service
-sudo systemctl enable project-truth-trycloudflare.service
+sudo systemctl disable --now project-truth-trycloudflare.service >/dev/null 2>&1 || true
 sudo systemctl enable project-truth-ansible-pull.timer
 
 if [ "$PROJECT_TRUTH_IMAGE_TARGET" = "googlecompute" ]; then

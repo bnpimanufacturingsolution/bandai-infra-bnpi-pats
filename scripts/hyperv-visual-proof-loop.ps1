@@ -307,9 +307,11 @@ Guest IP: $script:GuestAddress
 Pass rules:
 - Open pass-*/*/vmconnect-client-summary.png.
 - PASS only if the screenshot is the VMConnect console and the summary is readable.
-- PASS only if the overview page shows PROD/DEV/UAT and Grafana/Prometheus/Loki,
-  the tunnels page shows all TryCloudflare URLs, and the db page shows redacted
-  DB facts without ugly table wrapping.
+- PASS only if the overview page shows PROD/DEV/UAT, Cloudflare named tunnel,
+  LAN SSH, and Cloudflare SSH as not enabled unless Access has been proven.
+- PASS only if the tunnels page shows bnpi-hris.tech named tunnel ownership and
+  treats TryCloudflare as deprecated/manual fallback, not the normal path.
+- PASS only if the db page shows redacted DB facts without ugly table wrapping.
 - FAIL if the screenshot shows cramped table rows, cropped URLs, command spam,
   or a host browser instead of VMConnect.
 "@ | Set-Content -LiteralPath (Join-Path $runRoot 'VERDICT_RULES.txt')

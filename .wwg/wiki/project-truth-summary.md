@@ -17,19 +17,23 @@ Last updated: 2026-06-29
 - OpenSSH proof returned hostname `project-truth-node`, user `infra`, `eth0 192.168.254.148/24`, and active SSH service.
 - Current LAN SSH command: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@192.168.254.148`.
 - Public Cloudflare SSH is not enabled; use LAN SSH unless a Cloudflare Access TCP/SSH policy is intentionally configured.
+- Public SSH through `ssh.bnpi-hris.tech` is possible only with Cloudflare Access TCP/SSH. It is not enabled as current truth.
 - VM summary script was updated and live-installed so `project-truth-lan-summary --screen-overview`, `/etc/issue`, `/etc/motd`, and `/run/project-truth/network-summary.txt` show `LAN IP: 192.168.254.148`, `OpenSSH: ssh infra@192.168.254.148`, the key path, and public Cloudflare app/API/Grafana URLs.
 - Current generated overview line-width check: `MaxLineLength=66`; stale `10.184.38.91` was not present in `/etc/issue`, `/run/project-truth/network-summary.txt`, or the generated overview.
 - After the Cloudflare repair pass, HRIS LAN checks passed on `192.168.254.148` for PROD app/API (`3000`, `3001`), DEV app/API (`3100`, `3101`), UAT app/API (`3200`, `3201`), and Grafana (`53000`).
 - The `bnpi-hris.tech` Cloudflare 1033 issue was repaired by logging into the Cloudflare account that owns `bnpi-hris.tech`, creating named tunnel `e3486f00-f974-46d3-9e11-911266749d00`, and routing app/API/dev/uat/Grafana hostnames to it.
 - Public checks passed for `bnpi-hris.tech`, `www.bnpi-hris.tech`, `app.bnpi-hris.tech`, `api.bnpi-hris.tech`, `dev.bnpi-hris.tech`, `dev-api.bnpi-hris.tech`, `uat.bnpi-hris.tech`, `uat-api.bnpi-hris.tech`, and `grafana.bnpi-hris.tech`.
+- Current named tunnel ownership is host-managed on the Windows host through `scripts/start-bnpi-cloudflare-tunnel.ps1`, scheduled task `ProjectTruth-BNPI-HRIS-Cloudflared`, and `cloudflared-bnpi-hris.yml`.
+- Fresh/final images must not bake Cloudflare tunnel credentials. The repeatable setup is to boot/import the VM, discover its LAN IP, then run `.\scripts\project-truth.ps1 start-bnpi-cloudflare-tunnel -RepairScheduledTask -VerifyPublic` from a Windows host that has `cloudflared` and the named tunnel credentials.
+- VM-managed Cloudflare Tunnel is a future option only after a secure credential import flow exists. It is not current runtime truth.
 - Host-local PROD and DEV checks passed during validation, but host-local UAT ports `3200` and `3201` failed while LAN UAT passed.
 - `%ProgramData%\ProjectTruth\config\project-truth.json` was backed up and updated to use VM `project-truth-local-vhdx-proof`, guest IP hint `192.168.254.148`, memory `1536`, and SSH port `22`.
 
 ## Current Drift
 
-- `terraform-hyperv/terraform.tfvars` still lists SSH port `2222`, but the running VM exposes SSH on LAN port `22`.
 - Earlier `10.184.38.91` runtime proof is stale for the current Cloudflare/SSH repair session; probes to that address timed out on 2026-06-29 at about 21:23 PHT, while `192.168.254.148` passed.
 - `verify-gitops-state -GuestIp 10.184.38.91` previously reached the VM over SSH, but that IP is stale for the current session. Argo CD Application state still needs follow-up on `192.168.254.148`: previous app sync statuses reported `Unknown`, runtime app health included `Degraded` and `Progressing`, and one Kubernetes API read returned `127.0.0.1:6443` connection refused.
+- Runtime quick tunnels are deprecated for normal public access. Historical TryCloudflare evidence may remain in old reports, but active VM boot/sync paths keep the TryCloudflare service disabled by default.
 
 ## Operating Notes
 

@@ -88,7 +88,7 @@ Windows host repo
 -> Argo CD inside the bridged Hyper-V VM
 -> K3s/appliance runtime inside the VM
 -> LAN-reachable HRIS app/API
--> optional trycloudflare tunnel to a verified target
+-> named Cloudflare Tunnel for verified public `bnpi-hris.tech` targets
 ```
 
 Do not declare the architecture complete from host-local Docker alone unless the VM path is proven impossible with evidence.

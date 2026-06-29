@@ -1,12 +1,18 @@
-# Cloudflare trycloudflare Tunnel Runbook
+# Deprecated TryCloudflare Tunnel Runbook
 
-This runbook exposes the verified Project Truth HRIS app through a temporary Cloudflare quick tunnel. It does not configure a named tunnel, DNS record, account token, or persistent Cloudflare service.
+This is a legacy/manual proof runbook. The normal Project Truth public path is
+the named Cloudflare Tunnel in
+[Cloudflare Named Tunnel Runbook](CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md).
+
+This runbook exposes the verified Project Truth HRIS app through a temporary
+Cloudflare quick tunnel. It does not configure a named tunnel, DNS record,
+account token, or persistent Cloudflare service.
 
 Cloudflare quick tunnels are an experimental Project Truth test path. Current
-appliance builds opt in by default for demo proof by writing:
+appliance builds keep them disabled by default:
 
 ```powershell
-EXPERIMENTAL_TRY_CLOUDFLARE=true
+EXPERIMENTAL_TRY_CLOUDFLARE=false
 ```
 
 Research constraints from Cloudflare docs:
@@ -177,7 +183,8 @@ postgresql://postgres:postgres@localhost:15434/hris
 
 ## VM Boot Test Hook
 
-The VM image includes an enabled boot hook. Reapply it manually after drift with:
+The VM image includes the legacy hook command, but the service is disabled by
+default. Reapply it manually only for a temporary proof:
 
 ```bash
 sudo install -d -m 0755 /etc/project-truth

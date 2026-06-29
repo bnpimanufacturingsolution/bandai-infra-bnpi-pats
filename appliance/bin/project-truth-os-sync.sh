@@ -100,13 +100,13 @@ ensure_cloudflared() {
     as_root dpkg -i "$tmp_deb" >/dev/null 2>&1 || as_root apt-get install -f -y
     as_root rm -f "$tmp_deb" >/dev/null 2>&1 || true
   else
-    echo "cloudflared download failed; TryCloudflare service will retry on the next OS sync" >&2
+    echo "cloudflared download failed; named tunnel setup can be retried later" >&2
   fi
 }
 
-enable_trycloudflare() {
+disable_trycloudflare() {
   as_root install -d -m 0755 /etc/project-truth
-  printf 'EXPERIMENTAL_TRY_CLOUDFLARE=true\n' |
+  printf 'EXPERIMENTAL_TRY_CLOUDFLARE=false\n' |
     as_root tee /etc/project-truth/experimental.env >/dev/null
   as_root chmod 0644 /etc/project-truth/experimental.env
 }
@@ -270,7 +270,7 @@ install_commands_and_services() {
   as_root systemctl enable project-truth-hris.service
   as_root systemctl enable project-truth-lan-summary.service
   as_root systemctl enable project-truth-clean-console.service
-  as_root systemctl enable project-truth-trycloudflare.service
+  as_root systemctl disable --now project-truth-trycloudflare.service >/dev/null 2>&1 || true
   if [ -f /etc/systemd/system/project-truth-ansible-pull.timer ]; then
     as_root systemctl enable project-truth-ansible-pull.timer
     as_root systemctl restart project-truth-ansible-pull.timer
@@ -327,12 +327,6 @@ refresh_lan_summary() {
   fi
 }
 
-start_trycloudflare() {
-  if command -v systemctl >/dev/null 2>&1; then
-    as_root systemctl start --no-block project-truth-trycloudflare.service >/dev/null 2>&1 || true
-  fi
-}
-
 main() {
   case "${1:-}" in
     --status|status)
@@ -343,7 +337,7 @@ main() {
 
   ensure_dependencies
   ensure_cloudflared
-  enable_trycloudflare
+  disable_trycloudflare
   trap cleanup_git_credentials EXIT
   exec 9>"$lock_file"
   if ! flock -n 9; then
@@ -356,7 +350,6 @@ main() {
   install_commands_and_services
   refresh_argocd
   record_state
-  start_trycloudflare
   refresh_lan_summary
 }
 

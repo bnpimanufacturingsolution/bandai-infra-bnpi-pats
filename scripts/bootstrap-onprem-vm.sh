@@ -69,13 +69,13 @@ ensure_cloudflared() {
     as_root dpkg -i "$tmp_deb" >/dev/null 2>&1 || as_root apt-get install -f -y
     as_root rm -f "$tmp_deb" >/dev/null 2>&1 || true
   else
-    echo "cloudflared download failed; TryCloudflare service can retry after bootstrap" >&2
+    echo "cloudflared download failed; named tunnel setup can be retried after bootstrap" >&2
   fi
 }
 
-enable_trycloudflare() {
+disable_trycloudflare() {
   as_root install -d -m 0755 /etc/project-truth
-  printf 'EXPERIMENTAL_TRY_CLOUDFLARE=true\n' |
+  printf 'EXPERIMENTAL_TRY_CLOUDFLARE=false\n' |
     as_root tee /etc/project-truth/experimental.env >/dev/null
   as_root chmod 0644 /etc/project-truth/experimental.env
 }
@@ -130,7 +130,7 @@ install_commands_and_services() {
   as_root systemctl enable project-truth-hris.service
   as_root systemctl enable project-truth-lan-summary.service
   as_root systemctl enable project-truth-clean-console.service
-  as_root systemctl enable project-truth-trycloudflare.service
+  as_root systemctl disable --now project-truth-trycloudflare.service >/dev/null 2>&1 || true
   as_root systemctl enable --now project-truth-ansible-pull.timer
   as_root systemctl restart project-truth-ansible-pull.timer
   as_root systemctl disable --now project-truth-os-sync.timer >/dev/null 2>&1 || true
@@ -206,20 +206,15 @@ verify_local_endpoints() {
   done
 }
 
-start_trycloudflare() {
-  as_root systemctl start --no-block project-truth-trycloudflare.service >/dev/null 2>&1 || true
-}
-
 install_docker
 ensure_cloudflared
-enable_trycloudflare
+disable_trycloudflare
 sync_repo_to_install_root
 prepare_persistent_dirs
 prepare_env_files
 install_commands_and_services
 start_stacks
 verify_local_endpoints
-start_trycloudflare
 
 echo "On-prem VM bootstrap complete."
 project-truth-lan-summary || true

@@ -10,7 +10,7 @@ Windows host repo
 -> K3s + Argo CD control plane
 -> appliance Docker runtime
 -> LAN HRIS app/API
--> optional trycloudflare tunnel
+-> named Cloudflare Tunnel for `bnpi-hris.tech`
 ```
 
 ## What Self-Heals Today
@@ -29,7 +29,7 @@ Windows host repo
 | HRIS runtime outage | `repair-appliance-online -Mode RestartRuntime` restarts Docker, K3s, and HRIS services. | No |
 | HRIS data safety net | `backup-appliance-data` captures Postgres and uploads; `restore-appliance-data -Force` restores them. | No |
 | LAN health proof | `watch-until-healthy` and `verify-lan-health` prove app/API URLs. | No |
-| Experimental TryCloudflare proof | `start-trycloudflare-suite` starts temporary public URLs when `EXPERIMENTAL_TRY_CLOUDFLARE=true`; appliance bootstrap and OS sync keep the VM hook enabled for demo proof and write client-facing URL evidence. | No |
+| Named Cloudflare public access | `start-bnpi-cloudflare-tunnel` discovers the VM LAN IP, rewrites `cloudflared-bnpi-hris.yml`, starts the host-managed named tunnel, and verifies public endpoints. | No |
 
 ## What Does Not Fully Self-Heal Yet
 
@@ -39,7 +39,7 @@ Windows host repo
 | Postgres and uploads backup is manual, not scheduled | Container restart does not fix corrupted or deleted data volumes. | Schedule `backup-appliance-data` or move persistence to a managed backup target. |
 | K3s snapshots are not yet wired to external durable storage | Local K3s snapshots help cluster metadata recovery but do not protect against disk loss. | Configure K3s snapshot retention and S3-compatible off-host copy. |
 | VM disk corruption cannot be repaired by Argo or Compose | If the selected VHDX is unreadable, online repair cannot boot. | Restore from the stable VHDX artifact or a known-good archived copy. |
-| TryCloudflare is temporary | Quick tunnels produce random test URLs and are not a production SLA. | Use only after LAN target is verified; use a named tunnel for production sharing. Raw database tunnels remain disabled by default. |
+| VM-managed Cloudflare is not configured | The current proven tunnel owner is the Windows host. Fresh images do not carry tunnel credentials. | Keep host-managed as canonical; add VM-managed only after a secure credential import flow exists. |
 
 ## No-Rebuild Repair Ladder
 
@@ -174,7 +174,16 @@ To return to Compose:
 .\scripts\project-truth.ps1 watch-until-healthy -GuestIp <vm-lan-ip>
 ```
 
-6a. Run optional temporary public proof after LAN health passes:
+6a. Repair or verify named Cloudflare public access after LAN health passes:
+
+```powershell
+.\scripts\project-truth.ps1 start-bnpi-cloudflare-tunnel -RepairScheduledTask -VerifyPublic
+```
+
+The proof is written under `.runtime\cloudflare-named-tunnel\<timestamp>`.
+
+6b. Run deprecated manual TryCloudflare proof only when random temporary URLs
+are explicitly needed:
 
 ```powershell
 $env:EXPERIMENTAL_TRY_CLOUDFLARE = "true"
@@ -182,7 +191,8 @@ $env:EXPERIMENTAL_TRY_CLOUDFLARE = "true"
 ```
 
 The proof is written under `.runtime\trycloudflare\<timestamp>`. URLs are
-temporary and rotate whenever the cloudflared processes restart.
+temporary, rotate whenever cloudflared restarts, and are not Project Truth's
+normal public path.
 
 7. Capture data before risky repairs:
 
@@ -259,5 +269,7 @@ screenshots.
 - Argo CD automated sync and self-heal: https://argo-cd.readthedocs.io/en/latest/user-guide/auto_sync/
 - K3s snapshots and restore: https://docs.k3s.io/cli/etcd-snapshot
 - K3s image pre-import: https://docs.k3s.io/add-ons/import-images
+- Cloudflare Tunnel: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+- Cloudflare Access SSH: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/use-cases/ssh/
 - TryCloudflare quick tunnels: https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/
 - Ansible pull mode: https://docs.ansible.com/projects/ansible/latest/cli/ansible-pull.html

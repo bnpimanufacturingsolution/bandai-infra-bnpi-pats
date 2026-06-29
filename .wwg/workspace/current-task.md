@@ -1,59 +1,56 @@
 # Current Task
 
-Status: Inferred adoption closeout. Review Project Truth and Terminology before treating adoption output as accepted truth.
+Status: READY FOR REVIEW
 
 ## Task Summary
 
-- Status: DONE
-- Task mode: Existing Project Adoption
+- Task mode: Mixed docs/config/runtime drift repair after Existing Project Adoption
+- Existing Project Adoption context:
+  - This repo was adopted into WWG from existing code/docs/config.
+  - Code/docs/config remain evidence of operational reality.
+  - Inferred or stale adoption truth must stay labeled and reconciled instead of silently overwritten.
 - User request:
-  - Adopt this existing project into WWG using evidence from the current repository.
+  - Make the `bnpi-hris.tech` named Cloudflare Tunnel the first-class public path.
+  - Remove normal TryCloudflare usage from Project Truth, VM login, SSH login, visual proof, image/bootstrap, and WWG truth surfaces.
+  - Clarify whether SSH can be accessed through the domain.
+  - Clarify how fresh/final images work on another device.
 
-## Adoption Goal
+## Current Decision
 
-Convert existing project reality into WWG canonical context without changing application source code unless explicitly requested.
+- Current tunnel ownership: host-managed on the Windows host.
+- Canonical startup/repair command:
 
-## Evidence Sources Reviewed
+```powershell
+.\scripts\project-truth.ps1 start-bnpi-cloudflare-tunnel -RepairScheduledTask -VerifyPublic
+```
 
-- README/docs: README.md, client-handover/node-health-appliance/README.md, data/import/README.md, docs/ARCHITECTURE.md, docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md, docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md, docs/DEVOPS_RUNBOOK.md, docs/DEV_CURRENT_GCP_VDI_PROOF_RESULT.md, docs/GAPS_AND_NEXT_GOALS.md, docs/GITOPS_CLIENT_ENV_SCALING.md, docs/GITOPS_GH_WATCH_RUNBOOK.md, docs/HEALTHCHECKS.md, docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md, docs/HYPERV_LAN_PROOF_20260622.md, docs/IMAGE_FORMATS.md, docs/INSTALLER_TEST_REPORT.md, docs/LOGIN_VISUAL_PROOF_SELF_LOOP_PROMPT.md, docs/OBSERVABILITY_PROOF_20260622.md, docs/OPERATIONS.md, docs/OVERNIGHT_DEVICE_EVENT_BRIDGE_DRY_RUN_PROMPT.md, docs/OVERNIGHT_DEV_CURRENT_GCP_VDI_PROOF_PROMPT.md, docs/OVERNIGHT_HARDCUTOVER_MINIO_DRIFT_REPAIR_PROMPT.md, docs/OVERNIGHT_HYPERV_HEALTH_PROOF_PROMPT.md, docs/OVERNIGHT_SOURCE_INPUTS_GCP_IMAGE_DRY_RUN_PROMPT.md, docs/OVERNIGHT_TERRAFORM_HYPERV_FRESH_REPO_PROMPT.md, docs/OVERNIGHT_VIRTUALBOX_GCP_APPLIANCE_PROOF_PROMPT.md, docs/OVERNIGHT_ZKTECO_PROJECT_TRUTH_BRIDGE_PROMPT.md, docs/OVERNIGHT_ZKTECO_RUNTIME_TRUTH_PROMPT.md, docs/SELF_HEALING_AND_DRIFT_RECOVERY.md, docs/SHORTCUTS.md, docs/TERRAFORM_HYPERV_ARCHITECTURE.md, docs/USER_JOURNEY_PROOF.md, docs/UZARO_CLOUDFLARE_CUTOVER_20260629.md, docs/V3_GCP_HYPERV_STORAGE_PROOF_20260625.md, docs/ZKTECO_RUNTIME_TRUTH.md, docs/architecture/onprem-vm-automation-and-observability.md, docs/dm-migration-workflow.md, hris-api/.wwg/governance/README.md, hris-api/.wwg/reports/README.md, hris-api/.wwg/wiki/principles/README.md
-- Package/config: app/package.json, appliance/zkteco-bridge/package.json, hris-api/generated/prisma-postgres/package.json, hris-api/generated/prisma/package.json, hris-api/package.json, hris-app/package.json, package.json
-- Source folders: app
-- Tests: hris-api/tests/attendance-action.helper.spec.ts, hris-api/tests/attendance-obligation.helper.spec.ts, hris-api/tests/attendance-realtime.helper.spec.ts, hris-api/tests/attendance-status-migration.spec.ts, hris-api/tests/auditLogger.spec.ts, hris-api/tests/auth-login-identifier.spec.ts, hris-api/tests/bulk-password.helper.spec.ts, hris-api/tests/database-backup.helper.spec.ts, hris-api/tests/db/isolated-db-fault.guard.spec.ts, hris-api/tests/db/isolated-db-faults.spec.ts, hris-api/tests/db/isolated-db.smoke.ts, hris-api/tests/db/isolated-prisma.integration.spec.ts, hris-api/tests/db/prepare-isolated-db.ts, hris-api/tests/db/schema-source-truth.contract.spec.ts, hris-api/tests/device-event-realtime.helper.spec.ts, hris-api/tests/device-health-zkteco.spec.ts, hris-api/tests/dm3-attendance-obligation-repair.helper.spec.ts, hris-api/tests/dm4-biometric-proof.spec.ts, hris-api/tests/document-field-validation.helper.spec.ts, hris-api/tests/employee-action-block.helper.spec.ts, hris-api/tests/employee-helper-credentials.spec.ts, hris-api/tests/employee-import.helper.spec.ts, hris-api/tests/employee-organization-reporting-query.contract.spec.ts, hris-api/tests/employee-schedule.helper.spec.ts, hris-api/tests/employeepayroll.snapshot-lock.contract.spec.ts, hris-api/tests/enterprise-csv-loader.spec.ts, hris-api/tests/enterprise-csv-sample-pack.spec.ts, hris-api/tests/enterprise-migration-dm-masterlist.spec.ts, hris-api/tests/enterprise-migration-dm-report.spec.ts, hris-api/tests/enterprise-migration-runner-env.spec.ts
-- Deployment/config: .github/workflows/promote-gitops.yml, .github/workflows/validate.yml, app/Dockerfile, appliance/docker-compose.yml, appliance/zkteco-bridge/Dockerfile, hris-api/Dockerfile, hris-api/docker-compose.yml, hris-api/infrastructure/onprem/observability/docker-compose.yml, hris-app/Dockerfile, hris-app/firebase.json
-- Existing agent/context files: AGENTS.md, hris-api/.wwg/workspace/AGENTS.md, hris-api/AGENTS.md, hris-app/.wwg/workspace/AGENTS.md, hris-app/AGENTS.md
+- Fresh/final images must not contain Cloudflare tunnel credentials.
+- TryCloudflare is disabled by default and remains only a deprecated manual proof tool.
+- Public SSH through `ssh.bnpi-hris.tech` is not enabled. It requires Cloudflare Access TCP/SSH configuration and verification.
 
-## Truth Captured
+## Evidence
 
-- Product identity: project_truth_hyperv_fresh (INFERRED)
-- Tech stack: NEEDS_CONFIRMATION (NEEDS_CONFIRMATION)
-- Architecture: source folders: app (INFERRED)
-- Terminology: flow, package, target, truth, architecture, autopilot, branch, cli, current, dockerfile, documents, format, fresh, goal, hyper
-- Safety boundaries: mock/demo files detected (INFERRED)
-- Open questions: 2
+- Runtime VM: `project-truth-local-vhdx-proof`
+- Current VM LAN IP: `192.168.254.148`
+- LAN SSH: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@192.168.254.148`
+- Named tunnel: `bnpi-hris`
+- Named tunnel ID: `e3486f00-f974-46d3-9e11-911266749d00`
+- Public verification artifact: `.runtime/cloudflare-drift-proof/20260629-220610/public-verification-final.json`
+- VM text proof: `.runtime/cloudflare-drift-proof/20260629-220610/screen-overview.txt`, `.runtime/cloudflare-drift-proof/20260629-220610/screen-tunnels.txt`, `.runtime/cloudflare-drift-proof/20260629-220610/vm-text-surfaces.txt`
+- Named tunnel wrapper evidence: `.runtime/cloudflare-named-tunnel/20260629-220627/bnpi-cloudflare-tunnel.json`
 
-## Files Created or Updated
+## Validation Notes
 
-- `.wwg/wiki/project-truth.md`
-- `.wwg/wiki/terminology.md`
-- `.wwg/wiki/principles/README.md`
-- `.wwg/governance/truth-capture.md`
-- `.wwg/governance/drift-guard.md`
-- `.wwg/reports/adoption-audit.md`
-- `AGENTS.md`
+- LAN SSH and LAN HRIS endpoints passed.
+- Public app/API/dev/uat/Grafana checks passed after connector warmup.
+- CORS preflight returned HTTP 204.
+- Wrong-password auth probe returned HTTP 401.
+- `git diff --check` passed.
+- `wwg test-check --format plain` passed.
+- `wwg validate` still fails on generated report truth-sync fields outside this Cloudflare task.
 
 ## Follow-Up Needed
 
-- Confirm inferred product identity/category
-- Confirm canonical role names
-- Resolve terminology conflicts
-- Confirm production vs demo boundaries
-- Add missing tests/checks if needed
-
-## Close-Out Notes
-
-- Truth Alignment Status: YELLOW
-- Execution Gate: warn
-- Test / verification plan: Adoption did not change app behavior; manual evidence review required.
-- Drift status: LOW
-- Adoption confidence: HIGH
-- Remaining issues: Open questions require owner confirmation.
+- Review and decide whether to implement VM-managed Cloudflare Tunnel as a future portability improvement.
+- Review and decide whether to configure Cloudflare Access SSH for `ssh.bnpi-hris.tech`.
+- Resolve existing WWG generated-report validation findings before release/commit claims that require a fully green WWG gate.

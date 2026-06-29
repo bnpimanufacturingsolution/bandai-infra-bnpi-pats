@@ -108,6 +108,7 @@ emit_named_cloudflare_rows() {
   echo "Cloudflare named tunnel"
   echo "  mode: host-managed on Windows"
   echo "  name: bnpi-hris"
+  echo "  domain: bnpi-hris.tech"
   echo "  public app: https://bnpi-hris.tech/auth/login"
   echo "  public api: https://api.bnpi-hris.tech/health"
   echo "  dev app: https://dev.bnpi-hris.tech/auth/login"
@@ -116,7 +117,19 @@ emit_named_cloudflare_rows() {
   echo "  uat api: https://uat-api.bnpi-hris.tech/health"
   echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
   echo "  origin: http://${ip_addr}:3000"
-  echo "  host repair: start-bnpi-cloudflare-tunnel"
+  echo "  host repair: project-truth start-bnpi-cloudflare-tunnel"
+}
+
+emit_cloudflare_ssh_rows() {
+  local ip_addr="$1"
+  echo "Cloudflare SSH"
+  echo "  status: not enabled"
+  echo "  LAN SSH: ssh infra@${ip_addr}"
+  echo "  Access host: ssh.bnpi-hris.tech"
+  echo "  origin if enabled: ssh://${ip_addr}:22"
+  echo "  client: cloudflared access ssh --hostname ssh.bnpi-hris.tech"
+  echo "  TCP: cloudflared access tcp --hostname ssh.bnpi-hris.tech --url localhost:2222"
+  echo "  then: ssh -p 2222 infra@localhost"
 }
 
 emit_zkteco_runtime_rows() {
@@ -186,6 +199,8 @@ write_summary() {
       echo
       emit_named_cloudflare_rows "$ip_addr"
       echo
+      emit_cloudflare_ssh_rows "$ip_addr"
+      echo
       echo "Postgres LAN URLs"
       emit_database_lan_rows "$ip_addr"
       echo
@@ -203,17 +218,10 @@ write_summary() {
       emit_observability_rows "$ip_addr"
       echo
       emit_os_sync_summary
-      if [ -s "${state_dir}/trycloudflare-public-urls.txt" ]; then
-        echo
-        emit_trycloudflare_screen
-        echo
-        emit_database_screen
-      else
-        echo
-        echo "Experimental TryCloudflare"
-        echo "  Enabled by Project Truth when cloudflared is installed."
-        echo "  Quick tunnel URLs are temporary and rotate."
-      fi
+      echo
+      echo "Experimental TryCloudflare"
+      echo "  disabled by default; use named tunnel for public access"
+      echo "  manual legacy proof only: start-trycloudflare-suite -Force"
     else
       echo "LAN IP: NOT DETECTED"
       echo
@@ -234,21 +242,30 @@ write_summary() {
 
 emit_trycloudflare_screen() {
   local file="${state_dir}/trycloudflare-public-urls.txt"
+  local experimental_env="/etc/project-truth/experimental.env"
   local rows=0
   local host_ip
   local current_public_base=""
 
   host_ip="$(lan_ip || true)"
 
-  if [ ! -s "$file" ]; then
+  if [ ! -r "$experimental_env" ] ||
+    ! grep -Eq '^EXPERIMENTAL_TRY_CLOUDFLARE=true$' "$experimental_env"; then
     echo "TryCloudflare: disabled"
-    echo "  Service is enabled by Project Truth when cloudflared is installed."
-    echo "  Quick tunnel URLs are temporary and rotate."
+    echo "  Named tunnel is the normal public path."
+    echo "  Ignoring stale quick-tunnel files unless explicitly enabled."
     return
   fi
 
-  echo "TryCloudflare demo URLs"
-  echo "  Temporary quick tunnels. Not production DNS."
+  if [ ! -s "$file" ]; then
+    echo "TryCloudflare: disabled"
+    echo "  Named tunnel is the normal public path."
+    echo "  Manual legacy proof only: start-trycloudflare-suite -Force."
+    return
+  fi
+
+  echo "Deprecated TryCloudflare demo URLs"
+  echo "  Temporary quick tunnels. Not normal public access."
   while IFS='|' read -r _ target local_check public_check public_url _rest; do
     target="$(printf '%s' "$target" | xargs 2>/dev/null || true)"
     local_check="$(printf '%s' "$local_check" | xargs 2>/dev/null || true)"
@@ -376,8 +393,11 @@ emit_screen_summary() {
     echo
     emit_named_cloudflare_rows "$ip_addr"
     echo
-    echo "If public URL fails: wait for Cloudflare zone/SSL."
+    emit_cloudflare_ssh_rows "$ip_addr"
     echo
+    echo "If public URL fails: run host repair from Windows."
+    echo
+    echo "Deprecated fallback"
     emit_trycloudflare_screen
     echo
     echo "Next: project-truth-lan-summary --screen-db"
@@ -398,9 +418,12 @@ emit_screen_summary() {
   echo "Cloudflare"
   echo "  public: https://bnpi-hris.tech/auth/login"
   echo "  api: https://api.bnpi-hris.tech/health"
+  echo "  dev: https://dev.bnpi-hris.tech/auth/login"
+  echo "  uat: https://uat.bnpi-hris.tech/auth/login"
   echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
   echo "  origin: http://${ip_addr}:3000"
   echo "  mode: host-managed tunnel bnpi-hris"
+  echo "  ssh domain: not enabled; use LAN SSH"
   echo "Postgres"
   emit_database_lan_rows "$ip_addr"
   echo "ZKTeco"
@@ -432,6 +455,7 @@ fi
     echo "Cloudflare: https://bnpi-hris.tech/auth/login"
     echo "Tunnel: host-managed bnpi-hris -> http://${ip_addr}:3000"
     echo "SSH: ssh infra@${ip_addr}"
+    echo "Cloudflare SSH: not enabled; use LAN SSH"
     echo "Client summary: project-truth-lan-summary --screen"
     if [ -r "$sync_state_file" ]; then
       commit="$(awk -F= '$1 == "commit" { print substr($2, 1, 12) }' "$sync_state_file")"
@@ -467,6 +491,8 @@ fi
   fi
   echo "Tunnel:"
   echo "  host-managed bnpi-hris"
+  echo "Cloudflare SSH:"
+  echo "  not enabled; use LAN SSH"
   echo
   echo "Console login:"
   echo "  username: infra"
@@ -501,6 +527,7 @@ if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
     echo "Project Truth HRIS appliance"
     echo "LAN IP: ${ip_addr:-NOT DETECTED}"
     echo "Cloudflare: https://bnpi-hris.tech/auth/login"
+    echo "Cloudflare SSH: not enabled; use LAN SSH"
     echo
       echo "Console is already logged in as ${tty_user}."
       echo "Do not type infra at this shell prompt."

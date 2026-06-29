@@ -27,7 +27,7 @@ develop
 - [Operations](docs/OPERATIONS.md)
 - [Image Formats](docs/IMAGE_FORMATS.md)
 - [Health Checks](docs/HEALTHCHECKS.md)
-- [Cloudflare trycloudflare Tunnel Runbook](docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md)
+- [Cloudflare Named Tunnel Runbook](docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md)
 - [GitOps GitHub Watch Runbook](docs/GITOPS_GH_WATCH_RUNBOOK.md)
 - [Self-Healing And Drift Recovery](docs/SELF_HEALING_AND_DRIFT_RECOVERY.md)
 - [Installer Test Report](docs/INSTALLER_TEST_REPORT.md)
@@ -175,6 +175,13 @@ Inside VM:
   Kubernetes pods
   Kubernetes services
   Argo CD applications
+
+Public Cloudflare:
+  https://bnpi-hris.tech/auth/login
+  https://api.bnpi-hris.tech/health
+  https://dev.bnpi-hris.tech/auth/login
+  https://uat.bnpi-hris.tech/auth/login
+  https://grafana.bnpi-hris.tech/api/health
 ```
 
 ## Legacy Note

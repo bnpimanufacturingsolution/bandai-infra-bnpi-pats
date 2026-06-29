@@ -42,7 +42,6 @@
       - project-truth-hris.service
       - project-truth-lan-summary.service
       - project-truth-clean-console.service
-      - project-truth-trycloudflare.service
   tasks:
     - name: Ensure Project Truth state directory exists
       ansible.builtin.file:
@@ -296,11 +295,11 @@
           synced_at={{ ansible_date_time.iso8601 }}
           apply_engine=ansible-pull
 
-    - name: Start TryCloudflare hook in background
+    - name: Keep experimental TryCloudflare disabled by default
       ansible.builtin.systemd:
         name: project-truth-trycloudflare.service
-        state: started
-        no_block: true
+        enabled: false
+        state: stopped
       failed_when: false
 
     - name: Refresh LAN summary

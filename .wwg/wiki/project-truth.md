@@ -102,15 +102,9 @@ Accepted or observed architecture:
 - Item: Current Hyper-V proof VM LAN address is `192.168.254.148` after the 2026-06-29 21:23 PHT Cloudflare repair pass.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: `scripts/start-bnpi-cloudflare-tunnel.ps1` wrapper evidence `.runtime/cloudflare-named-tunnel/20260629-212301/bnpi-cloudflare-tunnel.json` reported `GuestIp` `192.168.254.148`; LAN app/API/Grafana probes to `192.168.254.148` returned HTTP 200.
-- Item: SSH is installed and exposed on the current Hyper-V proof VM LAN address at `10.184.38.91:22`.
-  - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: TCP probe to `10.184.38.91:22` passed; `ssh-keyscan -p 22 10.184.38.91` reported `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.16`.
-- Item: SSH login as `infra@10.184.38.91` is proven from this Windows host.
-  - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: On 2026-06-29, repo-documented password login `infra / infra` worked through pinned-host-key `plink`; the existing host key `%USERPROFILE%\.ssh\node-health-appliance_ed25519.pub` was installed for `infra`; Windows OpenSSH then succeeded with `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.38.91`, returning hostname `project-truth-node`, user `infra`, `eth0 10.184.38.91/24`, and active SSH service.
-- Item: Hyper-V VMConnect visual proof shows the LAN IP and SSH/login summary on the VM console.
-  - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: `.runtime/hyperv-visual-proof/20260629-120737/pass-01/overview/vmconnect-client-summary.png` shows `PROJECT TRUTH CLIENT SUMMARY`, `LAN IP: 10.184.38.91`, `LAN target: 10.184.38.91:22`, `OpenSSH: ssh infra@10.184.38.91`, and `Login: infra / infra`.
+- Item: Earlier SSH proof at `10.184.38.91:22` is historical evidence only.
+  - Status: STALE
+  - Evidence: Earlier 2026-06-29 TCP, password, key, and VMConnect proofs used `10.184.38.91`, but the current Cloudflare/SSH repair pass proved `192.168.254.148` and probes to `10.184.38.91` later timed out.
 - Item: Current Hyper-V proof VM exposes HRIS app/API/Grafana on LAN after warmup at `192.168.254.148`.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: 2026-06-29 Cloudflare repair pass showed HTTP 200 for `http://192.168.254.148:3000/auth/login`, `3001/health`, `3100/auth/login`, `3101/health`, `3200/auth/login`, `3201/health`, and `53000/api/health`.
@@ -123,6 +117,18 @@ Accepted or observed architecture:
 - Item: `bnpi-hris.tech` public Cloudflare Tunnel access is repaired through named tunnel `e3486f00-f974-46d3-9e11-911266749d00` in the Cloudflare account that owns the `bnpi-hris.tech` zone.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: 2026-06-29 repair pass verified HTTP 200 for `bnpi-hris.tech`, `www.bnpi-hris.tech`, `app.bnpi-hris.tech`, `api.bnpi-hris.tech`, `dev.bnpi-hris.tech`, `dev-api.bnpi-hris.tech`, `uat.bnpi-hris.tech`, `uat-api.bnpi-hris.tech`, and `grafana.bnpi-hris.tech`; public CORS preflight returned HTTP 204 and wrong-password auth returned HTTP 401 through both `api.bnpi-hris.tech` and same-host `bnpi-hris.tech/api/*`.
+- Item: Current named Cloudflare Tunnel ownership is host-managed on the Windows host.
+  - Status: CONFIRMED_RUNTIME_EVIDENCE
+  - Evidence: `cloudflared tunnel info bnpi-hris` on 2026-06-29 showed active connector architecture `windows_amd64`; `scripts/start-bnpi-cloudflare-tunnel.ps1` discovers the live VM IP, rewrites `cloudflared-bnpi-hris.yml`, and starts the named connector; scheduled task `ProjectTruth-BNPI-HRIS-Cloudflared` owns host startup.
+- Item: Fresh/final Project Truth images must not bake Cloudflare tunnel credentials.
+  - Status: CONFIRMED
+  - Evidence: Current named tunnel credentials live under the Windows operator profile, outside the repo. The active repeatable setup is to boot/import the fresh VM, let it obtain a LAN IP, then run `.\scripts\project-truth.ps1 start-bnpi-cloudflare-tunnel -RepairScheduledTask -VerifyPublic` from a configured Windows host.
+- Item: VM-managed Cloudflare Tunnel is not current runtime truth.
+  - Status: NEEDS_CONFIRMATION
+  - Evidence: It is a plausible future portability model, but it requires a secure credential import/install flow and explicit Access/DNS/ingress validation before becoming accepted truth.
+- Item: Public SSH through `ssh.bnpi-hris.tech` is possible only through Cloudflare Access TCP/SSH and is not enabled.
+  - Status: CONFIRMED
+  - Evidence: Current VM LAN SSH works at `192.168.254.148:22`; no verified Cloudflare Access app, `ssh.bnpi-hris.tech` DNS route, tunnel SSH ingress, or client proof exists yet.
 - Item: Current host-local UAT ports are not healthy while VM LAN UAT is healthy.
   - Status: NEEDS_CONFIRMATION
   - Evidence: `.\scripts\project-truth.ps1 verify -GuestIp 10.184.38.91` on 2026-06-29 showed host-local PROD/DEV PASS, host-local UAT ports `3200` and `3201` FAIL, and LAN UAT PASS through `10.184.38.91`.
@@ -130,8 +136,8 @@ Accepted or observed architecture:
   - Status: STALE
   - Evidence: Earlier 2026-06-29 proofs showed LAN app/API PASS at `10.184.38.91`; during the 2026-06-29 21:23 PHT Cloudflare repair pass, probes to `10.184.38.91` timed out while `192.168.254.148` passed.
 - Item: Terraform SSH port config currently differs from the live VM.
-  - Status: CONFLICTING
-  - Evidence: `terraform-hyperv/terraform.tfvars` lists SSH port `2222`, but the current VM exposed SSH on LAN port `22` and not `2222`. `%ProgramData%\ProjectTruth\config\project-truth.json` was backed up and updated on 2026-06-29 to point current CLI operations at VM `project-truth-local-vhdx-proof`, guest IP `10.184.38.91`, and SSH port `22`.
+  - Status: RESOLVED
+  - Evidence: `terraform-hyperv/terraform.tfvars`, `terraform-hyperv/terraform.tfvars.example`, `terraform-hyperv/variables.tf`, `scripts/configure.ps1`, and `scripts/build-image.ps1` now document LAN SSH port `22`, matching the live bridged VM.
 
 Do not introduce without approval:
 

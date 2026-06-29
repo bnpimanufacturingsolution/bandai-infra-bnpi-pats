@@ -52,7 +52,7 @@ $config = [ordered]@{
     devApi = 3101
     uatApp = 3200
     uatApi = 3201
-    ssh = 2222
+    ssh = 22
   }
   gitops = [ordered]@{
     repoUrl = $GitOpsRepoUrl
