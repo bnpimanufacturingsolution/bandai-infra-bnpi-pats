@@ -640,29 +640,12 @@ namespace ZKTecoStandalone
 
         private static void LogEnrolledUsers(DeviceConnection device, List<UserRecord> users)
         {
-            Log("");
-            Log($"[Users] Fetching enrolled users from {device.Ip}:");
-            Log("==========================================");
-            int count = 0;
-            foreach (UserRecord user in users.OrderBy(user => ToSortableUserId(user.EnrollNumber)))
-            {
-                count++;
-                Log($"{count}. User ID: {user.EnrollNumber}");
-                Log($"   Device: {device.Ip}");
-                Log($"   Name: {user.Name}");
-                Log($"   Privilege: {user.Privilege} (0=User, 14=Admin)");
-                Log($"   Enabled: {user.Enabled}");
-                Log("");
-            }
-
-            if (count == 0)
-            {
-                Log($"No users found on {device.Ip}.");
-            }
-            else
-            {
-                Log($"Total users fetched from {device.Ip}: {count}");
-            }
+            int count = users.Count;
+            int enabledCount = users.Count(user => user.Enabled);
+            int adminCount = users.Count(user => user.Privilege == 14);
+            Log(count == 0
+                ? $"[Users] {device.Ip}: no enrolled users found."
+                : $"[Users] {device.Ip}: {count} enrolled users ({enabledCount} enabled, {adminCount} admin).");
         }
 
         private static void BackfillRealAttendanceLogs()

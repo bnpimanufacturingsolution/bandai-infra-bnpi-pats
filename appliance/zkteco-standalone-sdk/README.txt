@@ -59,6 +59,44 @@ STEP 2: Build the project
 STEP 3: Run the project
    dotnet run
 
+VISIBLE LOCAL DEV WATCH:
+------------------------
+Use this when you want to see the ZKTeco bridge terminal on the Windows host.
+This opens a normal PowerShell window and keeps it open so you can read what is
+happening.
+
+    cd C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH
+    dotnet build .\appliance\zkteco-standalone-sdk\ZKTecoStandalone.csproj -c Debug
+    $env:ZKTECO_DEVICE_IPS="10.184.38.10,10.184.38.234,10.184.38.235,10.184.38.9"
+    $env:ZKTECO_DEVICE_PORT="4370"
+    $env:ZKTECO_WEBHOOK_URL="http://127.0.0.1:3101/api/zkteco/events"
+    $env:ZKTECO_STATUS_PORT="5471"
+    $env:ZKTECO_BACKFILL_ATTENDANCE_LOGS="false"
+    $env:ZKTECO_DRY_RUN_WEBHOOKS="false"
+    .\appliance\zkteco-standalone-sdk\bin\Debug\net48\ZKTecoStandalone.exe
+
+What the visible terminal is waiting for:
+
+1. Startup connects to each configured terminal on TCP 4370.
+2. The bridge registers realtime attendance callbacks.
+3. The bridge serves status at http://127.0.0.1:5471/status.
+4. Nothing may appear after startup until a person clicks/punches on a device.
+5. When a punch arrives, the bridge logs it, posts it to
+   http://127.0.0.1:3101/api/zkteco/events, and HRIS should show it on
+   http://127.0.0.1:3100/admin/configuration/devices/events?view=saved&source=ZKTECO_EVENT
+
+Note: On some Windows/Hyper-V hosts, port 4371 can be inside an excluded TCP
+range. If the terminal says "access to a socket forbidden", use 5471 for the
+visible local dev sidecar and point HRIS API at:
+
+    ZKTECO_BRIDGE_STATUS_URL=http://host.docker.internal:5471/status
+
+Quick checks from another terminal:
+
+    curl http://127.0.0.1:3101/health
+    curl http://127.0.0.1:3100/health
+    curl http://127.0.0.1:5471/status
+
 CHANGE DEVICE IP:
 ----------------
 Set ZKTECO_DEVICE_IPS to a comma-separated list:

@@ -20,6 +20,10 @@ export const resolveSocketBaseUrl = (
 	if (!value) return fallbackOrigin;
 
 	const normalized = value.replace(/\/+$/, "");
+	if (normalized.startsWith("/") && normalized.toLowerCase().endsWith("/api")) {
+		return fallbackOrigin;
+	}
+
 	if (normalized.toLowerCase().endsWith("/api")) {
 		return normalized.slice(0, -4);
 	}

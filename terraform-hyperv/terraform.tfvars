@@ -1,4 +1,4 @@
-vm_name           = "project-truth-hyperv-lan-proof"
+﻿vm_name           = "project-truth-hyperv-lan-proof"
 switch_name       = "ProjectTruth-External"
 switch_type       = "External"
 net_adapter_names = []
@@ -10,3 +10,5 @@ ssh_port          = 2222
 api_port          = 3001
 app_port          = 3000
 guest_ip_hint     = ""
+
+

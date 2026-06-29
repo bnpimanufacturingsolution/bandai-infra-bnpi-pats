@@ -441,6 +441,9 @@ fi
   echo "Project Truth HRIS appliance"
   if [ -n "$ip_addr" ]; then
     echo "LAN IP: ${ip_addr}"
+    echo "SSH:"
+    echo "  OpenSSH: ssh infra@${ip_addr}"
+    echo "  port: 22"
   else
     echo "LAN IP: NOT DETECTED"
   fi

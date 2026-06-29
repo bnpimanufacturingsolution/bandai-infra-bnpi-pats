@@ -27,6 +27,9 @@ describe("api-url helper", () => {
 		expect(resolveSocketBaseUrl("https://example.test/api", "http://fallback")).toBe(
 			"https://example.test",
 		);
+		expect(resolveSocketBaseUrl("/api", "http://127.0.0.1:3100")).toBe(
+			"http://127.0.0.1:3100",
+		);
 		expect(resolveSocketBaseUrl("", "http://fallback")).toBe("http://fallback");
 	});
 

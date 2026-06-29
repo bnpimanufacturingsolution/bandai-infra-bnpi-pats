@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Database, Radio, RefreshCw, UploadCloud } from "lucide-react";
+import { ArrowLeft, RefreshCw, UploadCloud } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "~/components/atoms/Badge";
 import { Button } from "~/components/atoms/Button";
@@ -42,6 +42,7 @@ type UnifiedDeviceEventRow = {
 	businessStatus: string;
 	status: string;
 	source?: string | null;
+	receivedAt?: string | null;
 	attendanceId?: string | null;
 	doorNo?: string | number | null;
 	serialNo?: string | number | null;
@@ -121,14 +122,6 @@ const formatPunchTime = (value: string | Date | null | undefined) => {
 	}).format(date);
 };
 
-const formatDateWindowLabel = (from?: string, to?: string) => {
-	if (!from && !to) return "All punch dates";
-	if (from && to && from === to) return `Punch date ${from}`;
-	if (from && to) return `Punch dates ${from} to ${to}`;
-	if (from) return `Punches from ${from}`;
-	return `Punches through ${to}`;
-};
-
 const getDateRangeForWindow = (window: TimeWindow) => {
 	if (window === "all") return { from: undefined, to: undefined };
 	const today = new Date();
@@ -196,24 +189,6 @@ const isZktecoDevice = (device: any, health?: DeviceHealthResponse) => {
 		protocol === "sdk"
 	);
 };
-
-const healthValueClass = (ok?: boolean) =>
-	ok ? "truncate text-sm font-medium text-emerald-700" : "truncate text-sm font-medium text-amber-700";
-
-const HealthMetric = ({
-	label,
-	value,
-	ok,
-}: {
-	label: string;
-	value: string | number;
-	ok?: boolean;
-}) => (
-	<div className="min-w-0">
-		<p className="text-xs text-slate-500">{label}</p>
-		<p className={healthValueClass(ok)}>{value}</p>
-	</div>
-);
 
 const formatCount = (value?: number | string | null) => {
 	const numeric = Number(value || 0);
@@ -299,6 +274,7 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 			null,
 		status: event.status,
 		source: event.source,
+		receivedAt: event.receivedAt,
 		businessStatus: formatBusinessStatus(event.status),
 		attendanceId: event.attendanceId,
 		doorNo: event.doorNo,
@@ -366,15 +342,12 @@ export default function DeviceEventsPage() {
 	const {
 		data: deviceHealth,
 		isLoading: isLoadingHealth,
-		isFetching: isFetchingHealth,
 		refetch: refetchHealth,
 	} = useDeviceHealth(liveDeviceId, Boolean(liveDeviceId));
 	const isZktecoHealth = isZktecoDevice(liveDevice, deviceHealth);
-	const zktecoBridge = deviceHealth?.checks?.zktecoBridge;
-	const bridgeDevice = zktecoBridge?.device;
 	const canReadLiveEvents = Boolean(
 		liveDeviceId &&
-			!isZktecoHealth &&
+		!isZktecoHealth &&
 			deviceHealth?.checks?.network?.ok &&
 			deviceHealth?.checks?.deviceApi?.ok,
 	);
@@ -549,17 +522,6 @@ export default function DeviceEventsPage() {
 	const totalItems = viewMode === "live" ? liveTotal : data?.pagination?.total || savedSummary.total || 0;
 	const isEventLoading = viewMode === "live" ? isLoadingLive : isLoadingSaved;
 	const activeError = viewMode === "live" ? liveError || savedError : savedError;
-	const deviceSubtitle = liveDevice
-		? isZktecoHealth
-			? `${liveDevice.name || "Selected device"} - ZKTeco TCP ${liveDevice.port} - SDK sidecar`
-			: `${liveDevice.name || "Selected device"} - Hikvision ISAPI ${
-					deviceHealth?.device?.baseUrl ||
-					`${liveDevice.protocol || "http"}://${liveDevice.address}:${liveDevice.port}`
-				}`
-		: viewMode === "live"
-			? "Select a device for live reads"
-			: "All devices - HRIS stored event ledger";
-
 	const countSavedStatus = (...statuses: string[]) =>
 		statuses.reduce((total, currentStatus) => {
 			const value = savedStatusCounts[currentStatus as keyof typeof savedStatusCounts];
@@ -571,10 +533,6 @@ export default function DeviceEventsPage() {
 			event.status === "ATTENDANCE_CREATED" ||
 			event.status === "ATTENDANCE_UPDATED",
 	).length;
-	const visibleAttendanceWrittenCount = rows.filter(
-		(event: UnifiedDeviceEventRow) =>
-			event.status === "ATTENDANCE_CREATED" || event.status === "ATTENDANCE_UPDATED",
-	).length;
 	const visibleNeedsEmployeeMatchCount = rows.filter(
 		(event: UnifiedDeviceEventRow) => event.status === "UNMATCHED",
 	).length;
@@ -582,15 +540,23 @@ export default function DeviceEventsPage() {
 		viewMode === "saved"
 			? countSavedStatus("MATCHED", "ATTENDANCE_CREATED", "ATTENDANCE_UPDATED")
 			: visibleMatchedCount;
-	const attendanceWrittenCount =
-		viewMode === "saved"
-			? countSavedStatus("ATTENDANCE_CREATED", "ATTENDANCE_UPDATED")
-			: visibleAttendanceWrittenCount;
 	const needsEmployeeMatchCount =
 		viewMode === "saved" ? countSavedStatus("UNMATCHED") : visibleNeedsEmployeeMatchCount;
 	const notSavedCount = rows.filter(
 		(event: UnifiedDeviceEventRow) => event.status === "NOT_SAVED",
 	).length;
+	const latestSavedEvent = viewMode === "saved" ? savedEvents[0] : undefined;
+	const latestSavedReceivedAt = latestSavedEvent?.receivedAt
+		? new Date(latestSavedEvent.receivedAt)
+		: null;
+	const latestSavedAgeMs =
+		latestSavedReceivedAt && !Number.isNaN(latestSavedReceivedAt.getTime())
+			? Date.now() - latestSavedReceivedAt.getTime()
+			: null;
+	const isLatestSavedFresh =
+		latestSavedAgeMs !== null && latestSavedAgeMs >= 0 && latestSavedAgeMs <= 2 * 60 * 1000;
+	const latestRealtimeEventId = lastRealtimeEvent?.eventId || null;
+	const highlightedSavedEventId = latestRealtimeEventId || (isLatestSavedFresh ? latestSavedEvent?.id : null);
 
 	const columns: Column<UnifiedDeviceEventRow>[] = [
 		{
@@ -677,33 +643,6 @@ export default function DeviceEventsPage() {
 				</span>
 			),
 		},
-		{
-			key: "attendanceId",
-			label: "Attendance write",
-			sortable: false,
-			width: "180px",
-			required: true,
-			render: (value, item) =>
-				value && item.employeeProfileId ? (
-					<Link
-						to={`/employee/${item.employeeProfileId}/attendance?from=device-events&attendanceId=${encodeURIComponent(
-							String(value),
-						)}`}
-						className="block max-w-[170px] truncate text-sm text-slate-700 hover:text-slate-950 hover:underline">
-						Open record
-					</Link>
-				) : (
-					<span className="block max-w-[170px] truncate text-sm text-slate-500">-</span>
-				),
-		},
-		{
-			key: "doorNo",
-			label: "Door",
-			sortable: viewMode === "saved",
-			width: "120px",
-			required: true,
-			render: (value) => <span className="text-sm text-slate-700">{value ? `Door ${value}` : "-"}</span>,
-		},
 	];
 
 	return (
@@ -722,14 +661,13 @@ export default function DeviceEventsPage() {
 						<h1 className="truncate text-lg font-semibold text-slate-950">
 							Device attendance
 						</h1>
-						<p className="truncate text-xs text-slate-500">{deviceSubtitle}</p>
 					</div>
 				</div>
 				<div className="flex items-center gap-2">
 					<Badge
-						variant={isConnected ? "success-soft" : "secondary"}
+						variant={isConnected ? "success-soft" : isLatestSavedFresh ? "warning-soft" : "secondary"}
 						className="rounded-md px-2 py-1">
-						{isConnected ? "Realtime on" : "Realtime off"}
+						{isConnected ? "Realtime on" : isLatestSavedFresh ? "New saved" : "Realtime off"}
 					</Badge>
 					<Button
 						type="button"
@@ -818,68 +756,7 @@ export default function DeviceEventsPage() {
 					)}
 				</div>
 
-				<div className="grid gap-0 divide-y divide-slate-200 md:grid-cols-[minmax(220px,1.2fr)_minmax(260px,1fr)_minmax(360px,1.7fr)] md:divide-x md:divide-y-0">
-					<div className="flex min-w-0 items-center justify-between gap-3 p-3">
-						<div className="min-w-0">
-							<p className="truncate text-sm font-medium text-slate-950">
-								{liveDevice?.name || "All devices"}
-							</p>
-							<p className="truncate text-xs text-slate-500">
-								{isLoadingHealth
-									? "Checking..."
-									: deviceHealth?.summary?.checkedAt
-										? `Checked ${new Date(deviceHealth.summary.checkedAt).toLocaleTimeString()}`
-										: "Not checked"}
-							</p>
-						</div>
-						<Button
-							type="button"
-							variant="outline"
-							className="h-8 px-2 text-xs"
-							onClick={() => refetchHealth()}
-							disabled={isFetchingHealth || !liveDeviceId}>
-							<RefreshCw className="mr-2 h-3.5 w-3.5" />
-							Check
-						</Button>
-					</div>
-
-					<div className="grid grid-cols-2 gap-x-3 gap-y-2 p-3">
-						<HealthMetric label="HRIS API" value="Online" ok />
-						<HealthMetric
-							label="Device port"
-							value={deviceHealth?.checks?.network?.status || "-"}
-							ok={Boolean(deviceHealth?.checks?.network?.ok)}
-						/>
-						{isZktecoHealth ? (
-							<>
-								<HealthMetric
-									label="SDK sidecar"
-									value={zktecoBridge?.status || "-"}
-									ok={Boolean(zktecoBridge?.ok)}
-								/>
-								<HealthMetric
-									label="Device session"
-									value={bridgeDevice?.connected ? "connected" : "offline"}
-									ok={Boolean(bridgeDevice?.connected)}
-								/>
-							</>
-						) : (
-							<>
-								<HealthMetric
-									label="Hikvision listener"
-									value={deviceHealth?.checks?.hikvisionListener?.status || "-"}
-									ok={Boolean(deviceHealth?.checks?.hikvisionListener?.ok)}
-								/>
-								<HealthMetric
-									label="Device API"
-									value={deviceHealth?.checks?.deviceApi?.status || "-"}
-									ok={Boolean(deviceHealth?.checks?.deviceApi?.ok)}
-								/>
-							</>
-						)}
-					</div>
-
-					<div className="grid grid-cols-4 gap-0 divide-x divide-slate-200 p-0">
+				<div className="grid grid-cols-3 gap-0 divide-x divide-slate-200">
 						{[
 							{
 								label:
@@ -909,27 +786,12 @@ export default function DeviceEventsPage() {
 										? formatCount(sdkSummary.uniqueEventUsers)
 										: formatCount(needsEmployeeMatchCount),
 							},
-							{
-								label:
-									viewMode === "saved" && sdkSummary
-										? "HRIS saved"
-										: viewMode === "live"
-											? "Pending"
-											: "Attendance writes",
-								value:
-									viewMode === "saved" && sdkSummary
-										? formatCount(totalItems)
-										: viewMode === "live"
-											? formatCount(notSavedCount)
-											: formatCount(attendanceWrittenCount),
-							},
 						].map((item) => (
 							<div key={item.label} className="min-w-0 px-3 py-2">
 								<p className="truncate text-xs text-slate-500">{item.label}</p>
 								<p className="text-base font-semibold text-slate-950">{item.value}</p>
 							</div>
 						))}
-					</div>
 				</div>
 			</div>
 
@@ -959,32 +821,49 @@ export default function DeviceEventsPage() {
 				</div>
 			)}
 
+			{viewMode === "saved" && latestSavedEvent && (
+				<div
+					className={
+						isLatestSavedFresh
+							? "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+							: "rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+					}>
+					<div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+						<div className="flex min-w-0 items-center gap-2">
+							<span
+								className={
+									isLatestSavedFresh
+										? "h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.14)]"
+										: "h-2.5 w-2.5 shrink-0 rounded-full bg-slate-300"
+								}
+							/>
+							<span className="truncate font-medium">
+								{isLatestSavedFresh ? "New punch saved to HRIS" : "Latest saved punch"}
+							</span>
+							<span className="truncate text-xs opacity-80">
+								{latestSavedEvent.employeeName || `No. ${latestSavedEvent.employeeNo || "-"}`}
+							</span>
+						</div>
+						<div className="flex min-w-0 items-center gap-2 text-xs">
+							<span className="truncate">{formatPunchTime(latestSavedEvent.receivedAt)}</span>
+							<span className="text-slate-400">/</span>
+							<span className="truncate">{formatEventSource(latestSavedEvent.source)}</span>
+							{lastRealtimeEvent?.emittedAt && latestRealtimeEventId === latestSavedEvent.id && (
+								<Badge variant="success-soft" className="px-2 py-0.5">
+									Socket received
+								</Badge>
+							)}
+						</div>
+					</div>
+				</div>
+			)}
+
 			<div className="rounded-md border border-slate-200 bg-white p-3">
 				<div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
 					<div className="min-w-0">
 						<h2 className="truncate text-sm font-semibold text-slate-950">
 							{viewMode === "live" ? "Live punches" : "Saved punches"}
 						</h2>
-						<p className="truncate text-xs text-slate-500">
-							{viewMode === "live" ? "Device read" : "HRIS stored event ledger"}
-							{viewMode === "saved" ? ` - saved ${formatDateWindowLabel(from, to).toLowerCase()}` : ""}
-							{lastRealtimeEvent?.emittedAt
-								? ` - Latest save ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
-								: ""}
-						</p>
-					</div>
-					<div className="flex items-center gap-2 text-xs text-slate-500">
-						{viewMode === "live" ? (
-							<>
-								<Radio className="h-4 w-4" />
-								<span>Live</span>
-							</>
-						) : (
-							<>
-								<Database className="h-4 w-4" />
-								<span>Saved</span>
-							</>
-						)}
 					</div>
 				</div>
 				<DataTable<UnifiedDeviceEventRow>
@@ -1000,7 +879,7 @@ export default function DeviceEventsPage() {
 					showPagination
 					showExport={false}
 					noCard
-					searchPlaceholder="Search employee, device, result..."
+					searchPlaceholder="Search employee or device..."
 					searchWidth="w-full sm:w-80"
 					searchValue={viewMode === "saved" ? query : ""}
 					onSearch={(value) => setFilter("query", value)}
@@ -1019,6 +898,11 @@ export default function DeviceEventsPage() {
 							next.set("page", String(page));
 						});
 					}}
+					rowClassName={(item) =>
+						viewMode === "saved" && item.id === highlightedSavedEventId
+							? "bg-emerald-50/80 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-50"
+							: ""
+					}
 				/>
 			</div>
 		</div>
