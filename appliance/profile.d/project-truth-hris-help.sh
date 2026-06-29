@@ -11,6 +11,23 @@ echo "Logged in as $(id -un). Use the URLs below from the Windows host browser."
 echo "You are already logged in when the prompt ends with $. Do not type infra here."
 echo
 
+cloudflare_tunnel_mode() {
+  if command -v systemctl >/dev/null 2>&1 &&
+    systemctl is-active --quiet cloudflared-bnpi-hris.service 2>/dev/null; then
+    echo "VM-managed active"
+  else
+    echo "host-managed on Windows"
+  fi
+}
+
+cloudflare_http_origin() {
+  if [ "$(cloudflare_tunnel_mode)" = "VM-managed active" ]; then
+    echo "http://localhost:3000"
+  else
+    echo "http://${lan_ip}:3000"
+  fi
+}
+
 if [ -n "$lan_ip" ]; then
   echo "LAN IP: ${lan_ip}"
   echo
@@ -23,7 +40,7 @@ if [ -n "$lan_ip" ]; then
   printf '  %-5s api    http://%s:%s/health\n' "UAT" "$lan_ip" "3201"
   echo
   echo "Cloudflare named tunnel"
-  echo "  mode: host-managed on Windows"
+  echo "  mode: $(cloudflare_tunnel_mode)"
   echo "  name: bnpi-hris"
   echo "  domain: bnpi-hris.tech"
   echo "  public app: https://bnpi-hris.tech/auth/login"
@@ -33,7 +50,8 @@ if [ -n "$lan_ip" ]; then
   echo "  uat app: https://uat.bnpi-hris.tech/auth/login"
   echo "  uat api: https://uat-api.bnpi-hris.tech/health"
   echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
-  echo "  origin: http://${lan_ip}:3000"
+  echo "  origin: $(cloudflare_http_origin)"
+  echo "  VM setup: sudo project-truth-cloudflare-vm-tunnel <credential.json>"
   echo "  host repair: project-truth ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic -VerifySsh"
   echo "  SSH easy: ssh project-truth-hris"
   echo "  SSH host: ssh.bnpi-hris.tech"

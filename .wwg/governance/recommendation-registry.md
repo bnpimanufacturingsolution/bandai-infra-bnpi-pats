@@ -1,9 +1,26 @@
 # Recommendation Registry
 
-Recommendations are candidate work only. They are not accepted project truth, active Workspace tasks, or commitments until reviewed and promoted.
+Recommendations are candidate work only. They are not accepted project truth,
+active Workspace tasks, or commitments until reviewed and promoted.
 
-| ID | Date | Status | Recommendation | Evidence |
-|---|---|---|---|---|
-| REC-20260629-CF-TECH-TUNNEL-ACCOUNT | 2026-06-29 | Implemented | Put the `bnpi-hris.tech` Cloudflare zone and the `bnpi-hris` named tunnel in the same Cloudflare account, or create a new named tunnel inside the account that owns the `bnpi-hris.tech` zone. | Implemented by logging into the Cloudflare account that owns `bnpi-hris.tech`, creating tunnel `e3486f00-f974-46d3-9e11-911266749d00`, routing the `.tech` hostnames to it, and verifying public HTTP 200 checks. |
-| REC-20260629-CF-VM-MANAGED-TUNNEL | 2026-06-29 | Proposed | Add an optional VM-managed Cloudflare Tunnel install/import flow for portable final images, with credentials supplied out-of-band and never baked into the repo or public image. | Current proven tunnel ownership is host-managed on Windows. VM-managed mode would improve portability but needs a secure credential import, systemd service, localhost ingress, and rollback plan. |
-| REC-20260629-CF-ACCESS-SSH | 2026-06-29 | Implemented | Finish Cloudflare Access SSH for `ssh.bnpi-hris.tech` by creating or confirming the Access app/policy for the operator and proving a successful SSH login. | Implemented after Access policy allowed `1bis.solutions.tech@gmail.com`; DNS route and tunnel ingress are configured for `ssh.bnpi-hris.tech`; LAN SSH is verified on `192.168.254.148:22`; SSH through `cloudflared access ssh --hostname %h` returned `SSH_ACCESS_OK`; alias `ssh project-truth-hris` returned `SSH_ALIAS_OK`. |
+## Proposed
+
+### REC-20260629-001: Decide Canonical Cloudflare Connector Ownership
+
+- Status: Proposed
+- Evidence: The proof VM now has an active VM-side `cloudflared-bnpi-hris.service`
+  connector with localhost ingress and verified public SSH through
+  `ssh.bnpi-hris.tech`; the Windows host connector remains active and remains
+  the fresh-import bootstrap path.
+- Recommendation: Decide whether VM-managed Cloudflare should become the
+  canonical post-import path, and document a secure credential handoff process
+  that never bakes tunnel credentials into images.
+
+### REC-20260629-002: Upgrade Windows Host Cloudflared
+
+- Status: Proposed
+- Evidence: `cloudflared tunnel info bnpi-hris` reported Windows connector
+  version `2025.6.0` and recommended `2026.6.1`; the VM-side connector is
+  already `linux_amd64` version `2026.6.1`.
+- Recommendation: Upgrade the Windows host `cloudflared` binary during a
+  maintenance pass and reverify `bnpi-hris.tech` public HTTP and SSH routes.

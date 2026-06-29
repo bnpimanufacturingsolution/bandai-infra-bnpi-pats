@@ -103,10 +103,37 @@ emit_database_lan_rows() {
   printf '  %-5s %s\n' "UAT" "postgresql://postgres:postgres@${ip_addr}:15434/hris"
 }
 
+cloudflare_tunnel_mode() {
+  if command -v systemctl >/dev/null 2>&1 &&
+    systemctl is-active --quiet cloudflared-bnpi-hris.service 2>/dev/null; then
+    echo "VM-managed active"
+  else
+    echo "host-managed on Windows"
+  fi
+}
+
+cloudflare_http_origin() {
+  local ip_addr="$1"
+  if [ "$(cloudflare_tunnel_mode)" = "VM-managed active" ]; then
+    echo "http://localhost:3000"
+  else
+    echo "http://${ip_addr}:3000"
+  fi
+}
+
+cloudflare_ssh_origin() {
+  local ip_addr="$1"
+  if [ "$(cloudflare_tunnel_mode)" = "VM-managed active" ]; then
+    echo "ssh://localhost:22"
+  else
+    echo "ssh://${ip_addr}:22"
+  fi
+}
+
 emit_named_cloudflare_rows() {
   local ip_addr="$1"
   echo "Cloudflare named tunnel"
-  echo "  mode: host-managed on Windows"
+  echo "  mode: $(cloudflare_tunnel_mode)"
   echo "  name: bnpi-hris"
   echo "  domain: bnpi-hris.tech"
   echo "  public app: https://bnpi-hris.tech/auth/login"
@@ -116,7 +143,8 @@ emit_named_cloudflare_rows() {
   echo "  uat app: https://uat.bnpi-hris.tech/auth/login"
   echo "  uat api: https://uat-api.bnpi-hris.tech/health"
   echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
-  echo "  origin: http://${ip_addr}:3000"
+  echo "  origin: $(cloudflare_http_origin "$ip_addr")"
+  echo "  VM setup: sudo project-truth-cloudflare-vm-tunnel <credential.json>"
   echo "  host repair: project-truth ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic -VerifySsh"
 }
 
@@ -126,7 +154,7 @@ emit_cloudflare_ssh_rows() {
   echo "  status: verified through Cloudflare Access"
   echo "  easy: ssh project-truth-hris"
   echo "  Access host: ssh.bnpi-hris.tech"
-  echo "  origin: ssh://${ip_addr}:22"
+  echo "  origin: $(cloudflare_ssh_origin "$ip_addr")"
   echo "  full: ssh -i %USERPROFILE%\\.ssh\\node-health-appliance_ed25519 \\"
   echo "        -o ProxyCommand=\"cloudflared access ssh --hostname %h\" \\"
   echo "        infra@ssh.bnpi-hris.tech"
@@ -422,8 +450,8 @@ emit_screen_summary() {
   echo "  dev: https://dev.bnpi-hris.tech/auth/login"
   echo "  uat: https://uat.bnpi-hris.tech/auth/login"
   echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
-  echo "  origin: http://${ip_addr}:3000"
-  echo "  mode: host-managed tunnel bnpi-hris"
+  echo "  origin: $(cloudflare_http_origin "$ip_addr")"
+  echo "  mode: $(cloudflare_tunnel_mode) tunnel bnpi-hris"
   echo "  ssh: ssh project-truth-hris"
   echo "Postgres"
   emit_database_lan_rows "$ip_addr"
@@ -454,7 +482,7 @@ fi
     echo "LAN IP: ${ip_addr}"
     echo "Open: http://${ip_addr}:3000/auth/login"
     echo "Cloudflare: https://bnpi-hris.tech/auth/login"
-    echo "Tunnel: host-managed bnpi-hris -> http://${ip_addr}:3000"
+    echo "Tunnel: $(cloudflare_tunnel_mode) bnpi-hris -> http://${ip_addr}:3000"
     echo "SSH: ssh infra@${ip_addr}"
     echo "Cloudflare SSH: ssh project-truth-hris"
     echo "Client summary: project-truth-lan-summary --screen"
@@ -491,7 +519,7 @@ fi
     echo "  waiting for LAN IP"
   fi
   echo "Tunnel:"
-  echo "  host-managed bnpi-hris"
+  echo "  $(cloudflare_tunnel_mode) bnpi-hris"
   echo "Cloudflare SSH:"
   echo "  easy: ssh project-truth-hris"
   echo "  host: ssh.bnpi-hris.tech"

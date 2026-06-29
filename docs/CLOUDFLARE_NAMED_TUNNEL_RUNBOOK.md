@@ -18,12 +18,17 @@ Current tunnel:
 Name: bnpi-hris
 ID: e3486f00-f974-46d3-9e11-911266749d00
 Config: cloudflared-bnpi-hris.yml
-Owner: Windows host scheduled task ProjectTruth-BNPI-HRIS-Cloudflared
+Current connectors: Windows host scheduled task and optional VM-side systemd
 ```
 
-The Windows host is the canonical owner for now. The wrapper discovers the
+The Windows host remains the canonical bootstrap owner for fresh imports. The wrapper discovers the
 running VM LAN IP, rewrites `cloudflared-bnpi-hris.yml`, starts one named tunnel
 connector, and writes evidence under `.runtime/cloudflare-named-tunnel`.
+
+The current proof VM can also run the same named tunnel inside Linux after the
+credential is imported as root-only runtime state. That VM-side connector targets
+`localhost` services, including `ssh://localhost:22`, and does not require
+router port forwarding, Windows hosts-file changes, or Windows network changes.
 
 ## Host-Managed Startup
 
@@ -107,10 +112,10 @@ This starts the browser login for the Cloudflare tunnel-management certificate.
 The named tunnel credential JSON is still secret material and must be imported
 securely or recreated out-of-band. Do not put it in the repo or appliance image.
 
-## VM-Managed Option
+## VM-Managed Runtime Connector
 
 A VM-managed tunnel can be cleaner for appliance portability because cloudflared
-would run inside the VM and target localhost services:
+runs inside the VM and targets localhost services:
 
 ```yaml
 ingress:
@@ -125,8 +130,25 @@ ingress:
     service: http://localhost:53000
 ```
 
-Do not enable VM-managed mode until a secure credential install/import process
-exists. Do not bake tunnel credentials into the repo or public image.
+To install it on a running VM, copy the named tunnel credential JSON to a
+temporary VM path, then run:
+
+```bash
+sudo project-truth-cloudflare-vm-tunnel /tmp/e3486f00-f974-46d3-9e11-911266749d00.json
+rm -f /tmp/e3486f00-f974-46d3-9e11-911266749d00.json
+```
+
+The script writes:
+
+```text
+/etc/cloudflared/e3486f00-f974-46d3-9e11-911266749d00.json
+/etc/cloudflared/config.yml
+/etc/systemd/system/cloudflared-bnpi-hris.service
+```
+
+Do not run this during image baking. Fresh/final images must still avoid baked
+tunnel credentials. Import the credential only as a deliberate runtime setup
+step on the target VM.
 
 ## SSH Through Domain
 
@@ -166,8 +188,8 @@ ssh project-truth-hris
 ```
 
 Current status: DNS route, tunnel ingress, Cloudflare Access policy, public SSH,
-and alias login are verified. The Access policy currently allows
-`1bis.solutions.tech@gmail.com`.
+alias login, and a VM-side Linux connector with `ssh://localhost:22` ingress are
+verified. The Access policy currently allows `1bis.solutions.tech@gmail.com`.
 
 ## TryCloudflare Boundary
 

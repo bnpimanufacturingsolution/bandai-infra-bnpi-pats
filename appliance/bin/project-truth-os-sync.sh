@@ -239,6 +239,7 @@ install_commands_and_services() {
   as_root install -m 0755 "${bin_dir}/project-truth-hris-seed.sh" /usr/local/bin/project-truth-hris-seed
   as_root install -m 0755 "${bin_dir}/project-truth-hris-observability-start.sh" /usr/local/bin/project-truth-hris-observability-start
   as_root install -m 0755 "${bin_dir}/project-truth-db-access.sh" /usr/local/bin/project-truth-db-access
+  as_root install -m 0755 "${bin_dir}/project-truth-cloudflare-vm-tunnel.sh" /usr/local/bin/project-truth-cloudflare-vm-tunnel
   as_root install -m 0755 "${bin_dir}/project-truth-lan-dhcp.sh" /usr/local/bin/project-truth-lan-dhcp
   as_root install -m 0755 "${bin_dir}/project-truth-lan-summary.sh" /usr/local/bin/project-truth-lan-summary
   as_root install -m 0755 "${bin_dir}/project-truth-clean-console.sh" /usr/local/bin/project-truth-clean-console
