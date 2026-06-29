@@ -24,3 +24,12 @@ active Workspace tasks, or commitments until reviewed and promoted.
   already `linux_amd64` version `2026.6.1`.
 - Recommendation: Upgrade the Windows host `cloudflared` binary during a
   maintenance pass and reverify `bnpi-hris.tech` public HTTP and SSH routes.
+
+### REC-20260630-003: Script Repeatable V5 Artifact Publishing
+
+- Status: Proposed
+- Evidence: The V5 publish pass required manual VM quiescing, offline VHDX
+  hashing, stale gcloud tracker cleanup, sidecar metadata refresh, BOM-free JSON
+  manifest repair, large-object upload monitoring, and public URL verification.
+- Recommendation: Add a dedicated V5 publish script that performs those steps
+  repeatably without baking Cloudflare credentials into the image.

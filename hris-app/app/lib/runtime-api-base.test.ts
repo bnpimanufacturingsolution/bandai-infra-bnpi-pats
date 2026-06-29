@@ -49,4 +49,25 @@ describe("runtime API base resolver", () => {
 			"http://10.184.38.61:3001",
 		);
 	});
+
+	it("uses same-host API routing for production bnpi Cloudflare tunnel hosts", () => {
+		expect(resolveRuntimeApiBase(locationFor("https://bnpi-hris.tech/auth/login"))).toBe(
+			"/api",
+		);
+		expect(resolveRuntimeApiBase(locationFor("https://www.bnpi-hris.tech/auth/login"))).toBe(
+			"/api",
+		);
+		expect(resolveRuntimeApiBase(locationFor("https://app.bnpi-hris.tech/auth/login"))).toBe(
+			"/api",
+		);
+	});
+
+	it("uses paired API tunnel hosts for dev and UAT public app hosts", () => {
+		expect(resolveRuntimeApiBase(locationFor("https://dev.bnpi-hris.tech/auth/login"))).toBe(
+			"https://dev-api.bnpi-hris.tech",
+		);
+		expect(resolveRuntimeApiBase(locationFor("https://uat.bnpi-hris.tech/auth/login"))).toBe(
+			"https://uat-api.bnpi-hris.tech",
+		);
+	});
 });
