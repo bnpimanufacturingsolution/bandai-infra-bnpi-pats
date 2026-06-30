@@ -46,6 +46,12 @@ Status: READY FOR REVIEW
   the latest scripts, Cloudflare VM connector setup, and public checks run after
   import. The live proof VM disk was not published because it has contained
   root-only Cloudflare runtime credentials.
+- Client/local VHDX retention is intentional: the host/client live VHDX may
+  differ from the reusable public image and must not be overwritten or promoted
+  by default. If a host-side or in-VM retained copy is needed, create it as a
+  separate retained artifact with hash/manifest evidence, while keeping the
+  clean public V7 package lane separate from any credential-bearing or
+  client-specific disk.
 - Current V6 proof serves public/LAN HRIS through healthy Docker Compose
   containers and VM-side Cloudflare. K3s/Argo still needs follow-up because many
   pods remain Pending/Evicted under memory pressure even when Argo Applications
@@ -110,6 +116,9 @@ Status: READY FOR REVIEW
 ## Follow-Up Needed
 
 - Decide whether VM-managed Cloudflare should become the canonical fresh-import path; this requires an explicit secure credential handoff procedure and must not bake credentials into images.
+- Define the retained-client-VHDX artifact flow: host export/copy remains the
+  reliable Hyper-V artifact, and any in-VM copy should be secondary evidence or
+  staging only unless proven bootable/importable from Windows Hyper-V.
 - Keep Cloudflare Access SSH policy in the `933c5547e32839d664d155ce8a7424d5` Zero Trust account aligned with the allowed operator email.
 - Enable and verify browser-rendered SSH for `https://ssh.bnpi-hris.tech` so
   remote admins can access the VM from unprepared browsers without configuring
