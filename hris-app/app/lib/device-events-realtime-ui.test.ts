@@ -4,6 +4,7 @@ import {
 	getHighlightedSavedDeviceEventId,
 	getSavedDeviceEventRealtimeBadge,
 	prependRealtimeSavedRow,
+	prependRealtimeSavedRows,
 } from "./device-events-realtime-ui";
 
 describe("device events realtime UI", () => {
@@ -104,6 +105,59 @@ describe("device events realtime UI", () => {
 		expect(merged.map((row) => row.id)).to.deep.equal([
 			"latest-socket-event",
 			"employee-1-old",
+		]);
+	});
+
+	it("stacks multiple realtime saved rows ahead of the server page", () => {
+		const rows = [{ id: "employee-1-old" }, { id: "employee-2-old" }];
+		const merged = prependRealtimeSavedRows({
+			rows,
+			realtimeRows: [
+				{ id: "tap-3" },
+				{ id: "tap-2" },
+				{ id: "tap-1" },
+			],
+		});
+
+		expect(merged.map((row) => row.id)).to.deep.equal([
+			"tap-3",
+			"tap-2",
+			"tap-1",
+			"employee-1-old",
+			"employee-2-old",
+		]);
+	});
+
+	it("dedupes realtime rows against the server page while preserving socket order", () => {
+		const rows = [{ id: "tap-2" }, { id: "employee-1-old" }];
+		const merged = prependRealtimeSavedRows({
+			rows,
+			realtimeRows: [{ id: "tap-3" }, { id: "tap-2" }],
+		});
+
+		expect(merged.map((row) => row.id)).to.deep.equal([
+			"tap-3",
+			"tap-2",
+			"employee-1-old",
+		]);
+	});
+
+	it("keeps the realtime overlay bounded to the requested size", () => {
+		const merged = prependRealtimeSavedRows({
+			rows: [{ id: "server-row" }],
+			realtimeRows: [
+				{ id: "tap-4" },
+				{ id: "tap-3" },
+				{ id: "tap-2" },
+				{ id: "tap-1" },
+			],
+			maxRealtimeRows: 2,
+		});
+
+		expect(merged.map((row) => row.id)).to.deep.equal([
+			"tap-4",
+			"tap-3",
+			"server-row",
 		]);
 	});
 });

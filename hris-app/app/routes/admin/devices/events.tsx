@@ -20,7 +20,7 @@ import {
 	getDeviceEventsRealtimeStatus,
 	getHighlightedSavedDeviceEventId,
 	getSavedDeviceEventRealtimeBadge,
-	prependRealtimeSavedRow,
+	prependRealtimeSavedRows,
 } from "~/lib/device-events-realtime-ui";
 import type {
 	DeviceEvent,
@@ -314,8 +314,7 @@ export default function DeviceEventsPage() {
 	const zktecoSync = useTriggerZktecoAttendanceSync();
 	const [lastRealtimeEvent, setLastRealtimeEvent] =
 		useState<DeviceEventSavedPayload | null>(null);
-	const [lastRealtimeSavedEvent, setLastRealtimeSavedEvent] =
-		useState<DeviceEvent | null>(null);
+	const [realtimeSavedEvents, setRealtimeSavedEvents] = useState<DeviceEvent[]>([]);
 
 	const pageParam = Number(searchParams.get("page")) || 1;
 	const limitParam = Number(searchParams.get("limit")) || 10;
@@ -425,7 +424,10 @@ export default function DeviceEventsPage() {
 			if (!matchesCurrentScope(payload)) return;
 			setLastRealtimeEvent(payload);
 			if (payload.event?.id) {
-				setLastRealtimeSavedEvent(payload.event);
+				setRealtimeSavedEvents((current) => [
+					payload.event as DeviceEvent,
+					...current.filter((event) => event.id !== payload.event?.id),
+				].slice(0, limitParam));
 			}
 			void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
 			void refetch();
@@ -445,6 +447,7 @@ export default function DeviceEventsPage() {
 		deviceId,
 		isConnected,
 		liveDeviceId,
+		limitParam,
 		organizationId,
 		queryClient,
 		refetch,
@@ -483,12 +486,33 @@ export default function DeviceEventsPage() {
 	);
 
 	const savedEvents = useMemo(() => (data?.events || []).map(normalizeSavedEvent), [data?.events]);
-	const realtimeSavedEvent = useMemo(() => {
-		if (!lastRealtimeEvent?.eventId || lastRealtimeSavedEvent?.id !== lastRealtimeEvent.eventId) {
-			return null;
-		}
-		return normalizeSavedEvent(lastRealtimeSavedEvent);
-	}, [lastRealtimeEvent?.eventId, lastRealtimeSavedEvent]);
+	const realtimeSavedRows = useMemo(() => {
+		const queryText = query.trim().toLowerCase();
+		const fromMs = from ? new Date(`${from}T00:00:00+08:00`).getTime() : null;
+		const toMs = to ? new Date(`${to}T23:59:59+08:00`).getTime() : null;
+
+		return realtimeSavedEvents.map(normalizeSavedEvent).filter((event) => {
+			if (deviceId !== "all" && event.deviceId !== deviceId) return false;
+			if (status !== "all" && event.status !== status) return false;
+			if (source !== "all" && event.source !== source) return false;
+
+			const eventTimeMs = getEventTimeMs(event.eventTime);
+			if (fromMs && eventTimeMs !== null && eventTimeMs < fromMs) return false;
+			if (toMs && eventTimeMs !== null && eventTimeMs > toMs) return false;
+
+			if (!queryText) return true;
+			return [
+				event.employeeName,
+				event.employeeNo,
+				event.deviceName,
+				event.deviceAddress,
+				event.source,
+				event.status,
+			]
+				.filter(Boolean)
+				.some((value) => String(value).toLowerCase().includes(queryText));
+		});
+	}, [deviceId, from, query, realtimeSavedEvents, source, status, to]);
 	const savedByLiveKey = useMemo(() => {
 		const map = new Map<string, UnifiedDeviceEventRow>();
 		savedEvents.forEach((event) => {
@@ -531,9 +555,10 @@ export default function DeviceEventsPage() {
 	const rows: UnifiedDeviceEventRow[] =
 		viewMode === "live"
 			? liveRows
-			: prependRealtimeSavedRow({
+			: prependRealtimeSavedRows({
 					rows: savedEvents,
-					realtimeRow: realtimeSavedEvent,
+					realtimeRows: realtimeSavedRows,
+					maxRealtimeRows: limitParam,
 				});
 	const savedSummary = data?.summary || { total: 0, byStatus: {}, bySource: {} };
 	const savedStatusCounts = savedSummary.byStatus || {};

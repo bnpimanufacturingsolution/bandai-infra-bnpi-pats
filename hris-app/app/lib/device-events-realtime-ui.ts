@@ -65,13 +65,31 @@ export const getHighlightedSavedDeviceEventId = ({
 	return latestRealtimeEventId || latestSavedEventId || null;
 };
 
+export const prependRealtimeSavedRows = <T extends { id: string }>({
+	rows,
+	realtimeRows,
+	maxRealtimeRows = 5,
+}: {
+	rows: T[];
+	realtimeRows?: T[] | null;
+	maxRealtimeRows?: number;
+}) => {
+	const recentRows = (realtimeRows || []).filter(Boolean).slice(0, maxRealtimeRows);
+	if (!recentRows.length) return rows;
+
+	const realtimeIds = new Set(recentRows.map((row) => row.id));
+	return [...recentRows, ...rows.filter((row) => !realtimeIds.has(row.id))];
+};
+
 export const prependRealtimeSavedRow = <T extends { id: string }>({
 	rows,
 	realtimeRow,
 }: {
 	rows: T[];
 	realtimeRow?: T | null;
-}) => {
-	if (!realtimeRow) return rows;
-	return [realtimeRow, ...rows.filter((row) => row.id !== realtimeRow.id)];
-};
+}) =>
+	prependRealtimeSavedRows({
+		rows,
+		realtimeRows: realtimeRow ? [realtimeRow] : [],
+		maxRealtimeRows: 1,
+	});
