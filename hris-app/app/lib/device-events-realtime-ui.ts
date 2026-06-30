@@ -64,3 +64,14 @@ export const getHighlightedSavedDeviceEventId = ({
 	if (isLatestSavedFresh && latestSavedEventId) return latestSavedEventId;
 	return latestRealtimeEventId || latestSavedEventId || null;
 };
+
+export const prependRealtimeSavedRow = <T extends { id: string }>({
+	rows,
+	realtimeRow,
+}: {
+	rows: T[];
+	realtimeRow?: T | null;
+}) => {
+	if (!realtimeRow) return rows;
+	return [realtimeRow, ...rows.filter((row) => row.id !== realtimeRow.id)];
+};

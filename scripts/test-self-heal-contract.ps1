@@ -104,6 +104,15 @@ foreach ($envName in $Environments) {
   $checks.Add((Assert-NoText "runtime-$envName does not deploy retired Node ZKTeco bridge" $rendered 'name:\s*zkteco-bridge'))
   $checks.Add((Assert-NoText "runtime-$envName does not reference retired Node ZKTeco bridge image" $rendered 'project-truth-zkteco-bridge'))
 
+  if ($envName -eq 'dev') {
+    $checks.Add((Assert-Text "runtime-dev deploys Hikvision watcher" $rendered '(?ms)^kind:\s*Deployment.*?name:\s*hris-hikvision-watcher'))
+    $checks.Add((Assert-Text "runtime-dev Hikvision watcher uses DB init tools image" $rendered 'image:\s*hris-api-db-init:develop'))
+    $checks.Add((Assert-Text "runtime-dev Hikvision watcher targets Main Entrance Device" $rendered 'HIKVISION_DEVICE_ID\s*\r?\n\s*value:\s*cmqquro2g002em73cdp74rx0q'))
+    $checks.Add((Assert-Text "runtime-dev Hikvision watcher runs apply loop" $rendered 'audit-hikvision-device-events\.ts[\s\S]*--apply[\s\S]*--watch'))
+  } else {
+    $checks.Add((Assert-NoText "runtime-$envName does not deploy DEV-only Hikvision watcher" $rendered 'name:\s*hris-hikvision-watcher'))
+  }
+
   foreach ($imageName in @('hris-api-db-init', 'hris-api-local', 'hris-app-local')) {
     $imageTag = Get-KustomizeImageTag -KustomizationText $runtimeKustomization -ImageName $imageName
     if ($imageTag -ne $environmentRuntimeImageTag) {

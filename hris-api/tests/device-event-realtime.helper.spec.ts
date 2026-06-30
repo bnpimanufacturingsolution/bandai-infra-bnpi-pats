@@ -1,6 +1,7 @@
 import { expect } from "chai";
 import {
 	buildDeviceEventRealtimePayload,
+	buildRealtimeDeviceEventRow,
 	emitDeviceEventSaved,
 } from "../helper/device-event-realtime.helper";
 
@@ -24,7 +25,53 @@ describe("device event realtime helper", () => {
 			status: "ATTENDANCE_CREATED",
 			source: "EN_HCNETSDK_ALARM",
 		});
+		expect(payload?.event).to.deep.include({
+			id: "event-1",
+			organizationId: "org-1",
+			deviceId: "device-1",
+			status: "ATTENDANCE_CREATED",
+			source: "EN_HCNETSDK_ALARM",
+		});
 		expect(payload?.emittedAt).to.be.a("string");
+	});
+
+	it("includes the table-safe saved-event row without device access credentials", () => {
+		const event = buildRealtimeDeviceEventRow({
+			id: "event-1",
+			organizationId: "org-1",
+			deviceId: "device-1",
+			device: {
+				id: "device-1",
+				name: "Main Entrance Device",
+				address: "192.168.254.181",
+				port: 80,
+				protocol: "http",
+				access: { username: "admin", password: "secret" },
+			},
+			employee: {
+				id: "employee-1",
+				employeeId: "BNPI-001",
+				deviceEmpId: "1",
+				fullName: "Codex Hikvision Probe",
+			},
+			employeeNo: "1",
+			payload: { AcsEventInfo: { serialNo: 997 } },
+		});
+
+		expect(event?.device).to.deep.equal({
+			id: "device-1",
+			name: "Main Entrance Device",
+			address: "192.168.254.181",
+			port: 80,
+			protocol: "http",
+		});
+		expect(event?.employee).to.deep.equal({
+			id: "employee-1",
+			employeeId: "BNPI-001",
+			deviceEmpId: "1",
+			fullName: "Codex Hikvision Probe",
+		});
+		expect((event?.device as any)?.access).to.equal(undefined);
 	});
 
 	it("emits saved events to the organization/device room union", () => {

@@ -37,8 +37,102 @@ import { emitAttendanceRealtimeEvent } from "../../../helper/attendance-realtime
 import { refreshTimesheetForAttendanceDate } from "../../../helper/timesheet.helper";
 
 export const controller = (prisma: PrismaClient) => {
-	const publishDeviceEventSaved = (req: Request, eventRecord: any) =>
-		emitDeviceEventSaved((req as any).io, eventRecord);
+	const getEmployeeDisplayNameFromSnapshot = (employee: any) => {
+		const personalInfo = employee?.person?.personalInfo || {};
+		return [
+			personalInfo.firstName,
+			personalInfo.middleName,
+			personalInfo.lastName,
+		]
+			.map((part) => String(part || "").trim())
+			.filter(Boolean)
+			.join(" ")
+			.trim();
+	};
+
+	const getRealtimeDeviceEventRecord = async (eventRecord: any) => {
+		const event = eventRecord?.id
+			? await (prisma as any).deviceEvent.findUnique({
+					where: { id: eventRecord.id },
+					select: {
+						id: true,
+						organizationId: true,
+						deviceId: true,
+						employeeId: true,
+						attendanceId: true,
+						eventTime: true,
+						receivedAt: true,
+						employeeNo: true,
+						source: true,
+						status: true,
+						eventType: true,
+						major: true,
+						minor: true,
+						doorNo: true,
+						verifyMode: true,
+						dedupeKey: true,
+						payload: true,
+						errorMessage: true,
+						createdAt: true,
+						updatedAt: true,
+					},
+				})
+			: null;
+		const hydratedEvent = event || eventRecord;
+		if (!hydratedEvent?.id) return eventRecord;
+
+		const [device, employee] = await Promise.all([
+			hydratedEvent.deviceId
+				? (prisma as any).device.findFirst({
+						where: {
+							id: hydratedEvent.deviceId,
+							isDeleted: false,
+						},
+						select: {
+							id: true,
+							name: true,
+							address: true,
+							port: true,
+							protocol: true,
+						},
+					})
+				: null,
+			hydratedEvent.employeeId
+				? (prisma as any).employee.findFirst({
+						where: {
+							id: hydratedEvent.employeeId,
+							isDeleted: false,
+						},
+						select: {
+							id: true,
+							employeeId: true,
+							deviceEmpId: true,
+							person: {
+								select: {
+									personalInfo: true,
+								},
+							},
+						},
+					})
+				: null,
+		]);
+
+		return {
+			...hydratedEvent,
+			device,
+			employee: employee
+				? {
+						id: employee.id,
+						employeeId: employee.employeeId,
+						deviceEmpId: employee.deviceEmpId,
+						fullName: getEmployeeDisplayNameFromSnapshot(employee) || employee.employeeId,
+					}
+				: null,
+		};
+	};
+
+	const publishDeviceEventSaved = async (req: Request, eventRecord: any) =>
+		emitDeviceEventSaved((req as any).io, await getRealtimeDeviceEventRecord(eventRecord));
 
 	const getOvertimeFlagThresholdMinutes = async (organizationId: string): Promise<number> => {
 		try {
@@ -208,7 +302,7 @@ export const controller = (prisma: PrismaClient) => {
 		} catch {
 			// Event cache expiry is short; callback processing should not fail on cache cleanup.
 		}
-		publishDeviceEventSaved(req, updated);
+		await publishDeviceEventSaved(req, updated);
 		return updated;
 	};
 
@@ -299,7 +393,7 @@ export const controller = (prisma: PrismaClient) => {
 				savedEventId = eventRecord.id;
 
 				if (isDuplicate) {
-					publishDeviceEventSaved(req, eventRecord);
+					await publishDeviceEventSaved(req, eventRecord);
 					const successResponse = buildSuccessResponse(
 						"Duplicate callback received; existing event reused",
 						{

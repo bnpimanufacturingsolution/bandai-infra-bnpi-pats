@@ -3,6 +3,7 @@ import {
 	getDeviceEventsRealtimeStatus,
 	getHighlightedSavedDeviceEventId,
 	getSavedDeviceEventRealtimeBadge,
+	prependRealtimeSavedRow,
 } from "./device-events-realtime-ui";
 
 describe("device events realtime UI", () => {
@@ -77,5 +78,32 @@ describe("device events realtime UI", () => {
 				highlightedSavedEventId: "event-1",
 			}),
 		).to.equal(null);
+	});
+
+	it("prepends a realtime saved row even when the current sorted page did not include it", () => {
+		const rows = [{ id: "employee-1-old" }, { id: "employee-2-old" }];
+		const merged = prependRealtimeSavedRow({
+			rows,
+			realtimeRow: { id: "latest-socket-event" },
+		});
+
+		expect(merged.map((row) => row.id)).to.deep.equal([
+			"latest-socket-event",
+			"employee-1-old",
+			"employee-2-old",
+		]);
+	});
+
+	it("dedupes a realtime saved row that is already in the current page", () => {
+		const rows = [{ id: "latest-socket-event" }, { id: "employee-1-old" }];
+		const merged = prependRealtimeSavedRow({
+			rows,
+			realtimeRow: { id: "latest-socket-event" },
+		});
+
+		expect(merged.map((row) => row.id)).to.deep.equal([
+			"latest-socket-event",
+			"employee-1-old",
+		]);
 	});
 });

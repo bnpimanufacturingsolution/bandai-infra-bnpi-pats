@@ -20,6 +20,7 @@ import {
 	getDeviceEventsRealtimeStatus,
 	getHighlightedSavedDeviceEventId,
 	getSavedDeviceEventRealtimeBadge,
+	prependRealtimeSavedRow,
 } from "~/lib/device-events-realtime-ui";
 import type {
 	DeviceEvent,
@@ -61,6 +62,7 @@ type DeviceEventSavedPayload = {
 	status?: DeviceEventStatus | string;
 	source?: string | null;
 	emittedAt?: string;
+	event?: DeviceEvent;
 };
 
 const viewOptions: SelectOption[] = [
@@ -312,6 +314,8 @@ export default function DeviceEventsPage() {
 	const zktecoSync = useTriggerZktecoAttendanceSync();
 	const [lastRealtimeEvent, setLastRealtimeEvent] =
 		useState<DeviceEventSavedPayload | null>(null);
+	const [lastRealtimeSavedEvent, setLastRealtimeSavedEvent] =
+		useState<DeviceEvent | null>(null);
 
 	const pageParam = Number(searchParams.get("page")) || 1;
 	const limitParam = Number(searchParams.get("limit")) || 10;
@@ -367,7 +371,6 @@ export default function DeviceEventsPage() {
 		error: savedError,
 		refetch,
 	} = useDeviceEvents(savedQueryParams);
-
 	const {
 		data: liveData,
 		isLoading: isLoadingLive,
@@ -409,12 +412,21 @@ export default function DeviceEventsPage() {
 			if (deviceId !== "all" && payload.deviceId && payload.deviceId !== deviceId) {
 				return false;
 			}
+			if (status !== "all" && payload.status && payload.status !== status) {
+				return false;
+			}
+			if (source !== "all" && payload.source && payload.source !== source) {
+				return false;
+			}
 			return true;
 		};
 
 		const handleDeviceEventSaved = (payload: DeviceEventSavedPayload) => {
 			if (!matchesCurrentScope(payload)) return;
 			setLastRealtimeEvent(payload);
+			if (payload.event?.id) {
+				setLastRealtimeSavedEvent(payload.event);
+			}
 			void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
 			void refetch();
 			if (viewMode === "live") {
@@ -437,7 +449,9 @@ export default function DeviceEventsPage() {
 		queryClient,
 		refetch,
 		refetchLive,
+		source,
 		socket,
+		status,
 		viewMode,
 	]);
 
@@ -469,6 +483,12 @@ export default function DeviceEventsPage() {
 	);
 
 	const savedEvents = useMemo(() => (data?.events || []).map(normalizeSavedEvent), [data?.events]);
+	const realtimeSavedEvent = useMemo(() => {
+		if (!lastRealtimeEvent?.eventId || lastRealtimeSavedEvent?.id !== lastRealtimeEvent.eventId) {
+			return null;
+		}
+		return normalizeSavedEvent(lastRealtimeSavedEvent);
+	}, [lastRealtimeEvent?.eventId, lastRealtimeSavedEvent]);
 	const savedByLiveKey = useMemo(() => {
 		const map = new Map<string, UnifiedDeviceEventRow>();
 		savedEvents.forEach((event) => {
@@ -508,7 +528,13 @@ export default function DeviceEventsPage() {
 		return normalizeLiveEvent(event, index, liveDevice, savedMatch);
 	});
 
-	const rows: UnifiedDeviceEventRow[] = viewMode === "live" ? liveRows : savedEvents;
+	const rows: UnifiedDeviceEventRow[] =
+		viewMode === "live"
+			? liveRows
+			: prependRealtimeSavedRow({
+					rows: savedEvents,
+					realtimeRow: realtimeSavedEvent,
+				});
 	const savedSummary = data?.summary || { total: 0, byStatus: {}, bySource: {} };
 	const savedStatusCounts = savedSummary.byStatus || {};
 	const sdkSummary = (selectedDevice as any)?.config?.zktecoSdkSummary || null;
@@ -539,7 +565,7 @@ export default function DeviceEventsPage() {
 	const notSavedCount = rows.filter(
 		(event: UnifiedDeviceEventRow) => event.status === "NOT_SAVED",
 	).length;
-	const latestSavedEvent = viewMode === "saved" ? savedEvents[0] : undefined;
+	const latestSavedEvent = viewMode === "saved" ? rows[0] : undefined;
 	const latestSavedReceivedAt = latestSavedEvent?.receivedAt
 		? new Date(latestSavedEvent.receivedAt)
 		: null;
