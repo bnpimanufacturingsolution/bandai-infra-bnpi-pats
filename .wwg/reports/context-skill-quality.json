@@ -10,6 +10,7 @@
     ".wwg/reports/adoption-audit.md",
     ".wwg/reports/adoption-regression-report.md",
     ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+    ".wwg/reports/cloudflare-public-e2e-20260630.md",
     ".wwg/reports/generated-project-upgrade-review.md",
     ".wwg/reports/readme-validation.md",
     ".wwg/reports/skill-cleanup-review.md",
@@ -113,6 +114,11 @@
     },
     {
       "path": ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+      "fileType": "report",
+      "reason": "Report directory path."
+    },
+    {
+      "path": ".wwg/reports/cloudflare-public-e2e-20260630.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
@@ -535,6 +541,15 @@
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/cloudflare-public-e2e-20260630.md",
       "fileType": "report",
       "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -997,7 +1012,16 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 26,
+      "line": 30,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/governance/recommendation-registry.md",
+      "fileType": "governance",
+      "line": 35,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1350,7 +1374,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 120,
+      "line": 148,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1770,6 +1794,15 @@
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/cloudflare-public-e2e-20260630.md",
       "fileType": "report",
       "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -2370,7 +2403,16 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 26,
+      "line": 30,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/governance/recommendation-registry.md",
+      "fileType": "governance",
+      "line": 35,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2507,6 +2549,15 @@
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/cloudflare-public-e2e-20260630.md",
       "fileType": "report",
       "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -3401,7 +3452,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 120,
+      "line": 148,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     }
   ],
@@ -3422,7 +3473,16 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 26,
+      "line": 30,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/governance/recommendation-registry.md",
+      "fileType": "governance",
+      "line": 35,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3775,7 +3835,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 120,
+      "line": 148,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4137,16 +4197,16 @@
   ],
   "metadataPolicyApplied": "Option C: Skill Registry metadata is canonical; skill files may include lightweight metadata when beneficial, and package-side skills do not require frontmatter.",
   "summary": {
-    "checkedFileCount": 64,
+    "checkedFileCount": 65,
     "skippedFileCount": 1,
     "errorCount": 0,
-    "warningCount": 65,
-    "suggestionCount": 72,
+    "warningCount": 66,
+    "suggestionCount": 73,
     "classificationCounts": {
       "context": 5,
       "skill": 0,
       "governance": 6,
-      "report": 24,
+      "report": 25,
       "public_doc": 23,
       "agent_instruction": 1,
       "changelog_governance": 0,

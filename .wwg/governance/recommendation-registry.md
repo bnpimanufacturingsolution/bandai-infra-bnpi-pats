@@ -46,3 +46,13 @@ active Workspace tasks, or commitments until reviewed and promoted.
   module MIME errors until a fresh asset namespace was deployed.
 - Recommendation: Keep asset misses as non-cacheable 404 responses and add a
   regression check that public JS/CSS asset URLs never return HTML.
+
+### REC-20260630-005: Add Public Environment Browser/CORS Smoke
+
+- Status: Proposed
+- Evidence: PROD public login worked while DEV/UAT initially failed in-browser
+  because `/api/system-provisioning/status` did not emit CORS headers for the
+  paired public app origins, even though API health and auth probes returned 200.
+- Recommendation: Add a repeatable public smoke that checks PROD/DEV/UAT
+  runtime API-base selection, CORS headers for pre-login provisioning endpoints,
+  login, `/auth/me`, and dashboard overview responses.

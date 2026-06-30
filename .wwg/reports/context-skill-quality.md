@@ -4,7 +4,7 @@
 
 Validation status: WARN.
 
-Checked 64 Markdown file(s), with 0 error(s), 65 warning(s), and 72 suggestion(s).
+Checked 65 Markdown file(s), with 0 error(s), 66 warning(s), and 73 suggestion(s).
 
 ## Overall Status
 
@@ -25,6 +25,7 @@ Checked 64 Markdown file(s), with 0 error(s), 65 warning(s), and 72 suggestion(s
 - .wwg/reports/adoption-audit.md
 - .wwg/reports/adoption-regression-report.md
 - .wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md
+- .wwg/reports/cloudflare-public-e2e-20260630.md
 - .wwg/reports/generated-project-upgrade-review.md
 - .wwg/reports/readme-validation.md
 - .wwg/reports/skill-cleanup-review.md
@@ -87,7 +88,7 @@ Checked 64 Markdown file(s), with 0 error(s), 65 warning(s), and 72 suggestion(s
 | context | 5 |
 | skill | 0 |
 | governance | 6 |
-| report | 24 |
+| report | 25 |
 | public_doc | 23 |
 | agent_instruction | 1 |
 | changelog_governance | 0 |
@@ -118,6 +119,7 @@ Checked 64 Markdown file(s), with 0 error(s), 65 warning(s), and 72 suggestion(s
 - WARNING report-contract-missing-sections (.wwg/reports/adoption-audit.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/adoption-regression-report.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md) [Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
+- WARNING report-contract-missing-sections (.wwg/reports/cloudflare-public-e2e-20260630.md) [Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/generated-project-upgrade-review.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/readme-validation.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/skill-cleanup-review.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
@@ -171,7 +173,8 @@ Checked 64 Markdown file(s), with 0 error(s), 65 warning(s), and 72 suggestion(s
 ## Suggestions
 
 - SUGGESTION markdown-possible-stale-current-language (.wwg/governance/drift-guard.md:51): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
-- SUGGESTION markdown-possible-stale-current-language (.wwg/governance/recommendation-registry.md:26): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
+- SUGGESTION markdown-possible-stale-current-language (.wwg/governance/recommendation-registry.md:30): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
+- SUGGESTION markdown-possible-stale-current-language (.wwg/governance/recommendation-registry.md:35): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
 - SUGGESTION markdown-repeated-heading (.wwg/reports/adoption-audit.md:72) [Inferred Truth]: Heading 'Inferred Truth' repeats at the same level. Recommendation: Rename repeated headings or add a qualifier when repeated sections could confuse agents.
 - SUGGESTION markdown-repeated-heading (.wwg/reports/adoption-audit.md:80) [Open Questions]: Heading 'Open Questions' repeats at the same level. Recommendation: Rename repeated headings or add a qualifier when repeated sections could confuse agents.
 - SUGGESTION markdown-possible-vague-pronouns (.wwg/reports/adoption-regression-report.md): File has many pronouns that may be ambiguous for agents. Recommendation: Replace ambiguous pronouns with explicit nouns where references may be unclear.
@@ -210,7 +213,7 @@ Checked 64 Markdown file(s), with 0 error(s), 65 warning(s), and 72 suggestion(s
 - SUGGESTION markdown-possible-stale-current-language (.wwg/wiki/project-truth.md:137): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
 - SUGGESTION markdown-possible-stale-current-language (.wwg/wiki/project-truth.md:140): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
 - SUGGESTION markdown-possible-vague-pronouns (AGENTS.md): File has many pronouns that may be ambiguous for agents. Recommendation: Replace ambiguous pronouns with explicit nouns where references may be unclear.
-- SUGGESTION markdown-possible-stale-current-language (AGENTS.md:120): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
+- SUGGESTION markdown-possible-stale-current-language (AGENTS.md:148): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
 - SUGGESTION markdown-possible-vague-pronouns (Agent-Meta-Prompt-Template.md): File has many pronouns that may be ambiguous for agents. Recommendation: Replace ambiguous pronouns with explicit nouns where references may be unclear.
 - SUGGESTION markdown-possible-stale-current-language (Agent-Meta-Prompt-Template.md:104): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
 - SUGGESTION markdown-possible-stale-current-language (Agent-Meta-Prompt-Template.md:158): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
@@ -268,7 +271,8 @@ Checked 64 Markdown file(s), with 0 error(s), 65 warning(s), and 72 suggestion(s
 - SUGGESTION markdown-possible-stale-current-language (.wwg/governance/drift-guard.md:51): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
 - WARNING governance-contract-missing-sections (.wwg/governance/recommendation-registry.md) [Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References]: Governance is missing contract section(s): Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References. Recommendation: Add the missing governance section or mark it explicitly not applicable.
 - WARNING governance-rules-missing-structure (.wwg/governance/recommendation-registry.md) [Must, Must Not, Prefer, Avoid]: Governance file is missing rule structure section(s): Must, Must Not, Prefer, Avoid. Recommendation: Use Must / Must Not / Prefer / Avoid for enforceable governance rules.
-- SUGGESTION markdown-possible-stale-current-language (.wwg/governance/recommendation-registry.md:26): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
+- SUGGESTION markdown-possible-stale-current-language (.wwg/governance/recommendation-registry.md:30): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
+- SUGGESTION markdown-possible-stale-current-language (.wwg/governance/recommendation-registry.md:35): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
 - WARNING governance-contract-missing-sections (.wwg/governance/regression-gaps.md) [Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References]: Governance is missing contract section(s): Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References. Recommendation: Add the missing governance section or mark it explicitly not applicable.
 - WARNING governance-rules-missing-structure (.wwg/governance/regression-gaps.md) [Must, Must Not, Prefer, Avoid]: Governance file is missing rule structure section(s): Must, Must Not, Prefer, Avoid. Recommendation: Use Must / Must Not / Prefer / Avoid for enforceable governance rules.
 - WARNING governance-contract-missing-sections (.wwg/governance/regression-manifest.md) [Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References]: Governance is missing contract section(s): Purpose, Applies To, Rules, Enforcement, Reports / Artifacts, References. Recommendation: Add the missing governance section or mark it explicitly not applicable.
@@ -287,6 +291,7 @@ Checked 64 Markdown file(s), with 0 error(s), 65 warning(s), and 72 suggestion(s
 - WARNING report-contract-missing-sections (.wwg/reports/adoption-regression-report.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - SUGGESTION markdown-possible-vague-pronouns (.wwg/reports/adoption-regression-report.md): File has many pronouns that may be ambiguous for agents. Recommendation: Replace ambiguous pronouns with explicit nouns where references may be unclear.
 - WARNING report-contract-missing-sections (.wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md) [Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
+- WARNING report-contract-missing-sections (.wwg/reports/cloudflare-public-e2e-20260630.md) [Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/generated-project-upgrade-review.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/readme-validation.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/skill-cleanup-review.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
@@ -391,7 +396,7 @@ Checked 64 Markdown file(s), with 0 error(s), 65 warning(s), and 72 suggestion(s
 
 - WARNING agent-instruction-contract-missing-sections (AGENTS.md) [Purpose, Required Reading, Operating Rules, Safety Gates, Handoff / Reporting Rules, References]: Agent Instruction is missing contract section(s): Purpose, Required Reading, Operating Rules, Safety Gates, Handoff / Reporting Rules, References. Recommendation: Add the missing active instruction section or link to the canonical source.
 - SUGGESTION markdown-possible-vague-pronouns (AGENTS.md): File has many pronouns that may be ambiguous for agents. Recommendation: Replace ambiguous pronouns with explicit nouns where references may be unclear.
-- SUGGESTION markdown-possible-stale-current-language (AGENTS.md:120): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
+- SUGGESTION markdown-possible-stale-current-language (AGENTS.md:148): Stable or active file contains phase/pass/temporary language. Recommendation: Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical.
 
 ## Changelog-Governance Findings
 
