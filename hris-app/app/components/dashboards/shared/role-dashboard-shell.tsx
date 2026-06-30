@@ -15,6 +15,7 @@ export function RoleDashboardShell({ dashboardRole }: RoleDashboardShellProps) {
 	const { user } = useAuth();
 	const employeeId = user?.metadata?.employee?.id || "";
 	const config = roleDashboardConfigs[dashboardRole];
+	const role = config.role;
 
 	const renderCard = (cardKey: DashboardCardKey) => {
 		if (cardKey === "time_off") {
