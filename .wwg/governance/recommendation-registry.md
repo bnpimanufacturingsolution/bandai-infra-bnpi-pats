@@ -112,8 +112,13 @@ active Workspace tasks, or commitments until reviewed and promoted.
   and attendance creation for employee no. `1`, and rendered the UAT saved
   event in the admin UI; however, the UAT API pod could not reach
   `192.168.254.181:80` directly and returned `EHOSTUNREACH`, so UAT physical
-  ACS pull remains a network-routing gap.
-- Recommendation: Decide whether AlarmDemo remains a Windows-host sidecar like
-  ZKTeco or becomes a managed VM/host service, then add a repeatable startup,
-  health, log, browser/socket verification, and K3s pod-to-device network proof
-  path without committing HCNetSDK proprietary binaries or device credentials.
+  ACS pull remains a network-routing gap. Later DEV work added GitOps-managed
+  `hris-hikvision-watcher` in K3s, proved it starts in namespace `dev`, pulls
+  physical ACS events, saves employee-bearing `HIKVISION_CALLBACK` rows, and
+  renders them in the public DEV admin saved-events UI.
+- Recommendation: Decide whether the ACS-pull watcher is the canonical
+  Hikvision runtime or whether Windows `AlarmDemo` remains required as a
+  ZKTeco-like sidecar, then add a repeatable startup, health, log,
+  browser/socket verification, and K3s pod-to-device network proof path across
+  the intended environments without committing HCNetSDK proprietary binaries or
+  device credentials.

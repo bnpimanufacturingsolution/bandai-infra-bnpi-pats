@@ -44,6 +44,32 @@ This still does not prove spontaneous device HTTP-host push, AlarmDemo as a
 managed runtime service, employee matching, attendance write success, or
 PROD/UAT/public parity.
 
+Follow-up DEV VM/K3s watcher proof on 2026-06-30:
+
+- DEV K3s now has a GitOps-managed `hris-hikvision-watcher` Deployment in
+  `gitops/runtime-k8s/overlays/dev/runtime.yaml`.
+- The watcher runs the existing `audit-hikvision-device-events.ts --apply`
+  ACS-pull loop from the `hris-api-db-init:develop` image against device
+  `cmqquro2g002em73cdp74rx0q`.
+- VM proof showed `hris-hikvision-watcher-86d6549-nmm8m` running in namespace
+  `dev` with `READY 1/1`.
+- The watcher reported `live.total=10`, `live.withEmployeeNo=5`,
+  `saved.matchingAfterApply=5`, and `gap.missingWithEmployeeNo=0`.
+- Public DEV API returned newly saved `HIKVISION_CALLBACK` rows for employee
+  no. `1`, received at `2026-06-30T13:48:29Z`, including event times
+  `2026-06-30T13:37:05Z`, `2026-06-30T13:37:30Z`, and
+  `2026-06-30T13:39:29Z`.
+- Headless browser verification on
+  `https://dev.bnpi-hris.tech/admin/configuration/devices/events?view=saved&deviceId=cmqquro2g002em73cdp74rx0q&source=HIKVISION_CALLBACK&sort=receivedAt&order=desc`
+  rendered fresh saved punches for `Main Entrance Device` and screenshot
+  `.runtime/browser-evidence/screenshots/hikvision-dev-watcher-auth-boundary.png`.
+
+Boundary: this proves DEV VM/K3s-managed ACS-pull watcher startup and saved
+event ingestion for employee-bearing Hikvision ACS events. It still does not
+prove spontaneous device HTTP-host push, Windows HCNetSDK AlarmDemo as a
+managed service, employee matching for employee no. `1`, attendance creation in
+DEV, or PROD/UAT parity.
+
 ## UAT Temporary Seed Proof
 
 On 2026-06-30, UAT K3s runtime was temporarily seeded to verify employee
@@ -189,7 +215,7 @@ and runtime credentials supplied through environment or the Device access field.
 | Surface | ZKTeco | Hikvision |
 |---|---|---|
 | Vendor source | `appliance/zkteco-standalone-sdk`, `vendor/zkteco-sdk` | `vendor/hikvision-bio` submodule plus local HCNetSDK folder |
-| Runtime listener | Windows .NET Framework SDK sidecar | Windows HCNetSDK AlarmDemo listener |
+| Runtime listener | Windows .NET Framework SDK sidecar | DEV K3s ACS-pull watcher plus optional Windows HCNetSDK AlarmDemo listener |
 | API ingress | `/api/zkteco/events` | `/api/hikvision/callback` |
 | Stored source | `ZKTECO_EVENT` | `HIKVISION_CALLBACK` or `EN_HCNETSDK_ALARM` |
 | Raw payload preservation | `device_events.payload` | `device_events.payload` |
@@ -206,9 +232,11 @@ and runtime credentials supplied through environment or the Device access field.
 - First-party scripts previously assumed the SDK folder existed at the repo
   root. The actual verified local folder is outside the repo under
   `C:\Users\anoni\OneDrive\Desktop\HRIS-PROJECT`.
-- GitOps and VM manifests do not currently start AlarmDemo or manage a
-  Hikvision listener sidecar. Hikvision listener runtime is Windows-host/local
-  unless a later approved runtime design adds a managed service.
+- DEV GitOps now manages `hris-hikvision-watcher`, a K3s ACS-pull watcher that
+  starts with the DEV runtime and saves employee-bearing Hikvision ACS events
+  through the normal callback controller. GitOps and VM manifests still do not
+  start Windows `AlarmDemo.exe`; AlarmDemo remains Windows-host/local unless a
+  later approved runtime design adds a managed Windows/Wine/Linux-SDK service.
 - Physical-device proof requires a reachable Hikvision device and credentials.
   Do not mark physical-device testing complete from schema/tests alone.
 - A chat-provided SADP screenshot on 2026-06-30 shows one active Hikvision
@@ -219,6 +247,11 @@ and runtime credentials supplied through environment or the Device access field.
   `192.168.254.181:80`, pull ACS events, save a `HIKVISION_CALLBACK` event,
   and render it in the admin saved-events UI. Attendance matching remains
   pending because the observed device employee no. `1` was `UNMATCHED`.
+- DEV VM/K3s watcher proof on 2026-06-30 shows `hris-hikvision-watcher` running
+  in namespace `dev`, pulling physical ACS events, saving five employee-bearing
+  live events, and rendering fresh saved punches in the public DEV admin UI.
+  Attendance matching remains pending because employee no. `1` is still
+  `UNMATCHED`.
 - UAT temporary seed proof on 2026-06-30 shows employee no. `1` can match
   `UAT-HIK-001` and create attendance through the callback path, with admin
   browser evidence on the saved-events page. This remains temporary seed proof,
@@ -259,7 +292,8 @@ When a Hikvision punch creates or updates attendance, the API also emits
 
 A complete Hikvision proof requires:
 
-1. AlarmDemo or direct device callback reaches `/api/hikvision/callback`.
+1. AlarmDemo, direct device callback, or the VM/K3s ACS-pull watcher reaches
+   the normal Hikvision callback ingestion path.
 2. A row is stored in `device_events` with source `HIKVISION_CALLBACK` or
    `EN_HCNETSDK_ALARM`.
 3. The row preserves raw payload and dedupe key.

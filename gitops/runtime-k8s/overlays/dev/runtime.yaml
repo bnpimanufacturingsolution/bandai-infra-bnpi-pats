@@ -250,6 +250,71 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: hris-hikvision-watcher
+  labels:
+    app.kubernetes.io/name: hris-hikvision-watcher
+    app.kubernetes.io/part-of: project-truth
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hris-hikvision-watcher
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hris-hikvision-watcher
+        app.kubernetes.io/part-of: project-truth
+    spec:
+      containers:
+        - name: watcher
+          image: hris-api-db-init:develop
+          imagePullPolicy: Never
+          command:
+            - /bin/sh
+            - -lc
+          args:
+            - |
+              set -eu
+              export PATH=/usr/local/bin:/usr/bin:/bin:/app/node_modules/.bin
+              while true; do
+                /app/node_modules/.bin/tsx scripts/audit-hikvision-device-events.ts \
+                  --deviceId="${HIKVISION_DEVICE_ID}" \
+                  --from="$(date +%F)" \
+                  --to="$(date +%F)" \
+                  --limit="${HIKVISION_EVENT_LIMIT:-50}" \
+                  --apply \
+                  --watch \
+                  --interval="${HIKVISION_WATCH_INTERVAL_SECONDS:-10}" \
+                  --loops="${HIKVISION_WATCH_LOOPS:-6}" || true
+                sleep "${HIKVISION_WATCH_RETRY_SECONDS:-15}"
+              done
+          env:
+            - name: NODE_ENV
+              value: development
+            - name: APP_ENV
+              value: dev
+            - name: HIKVISION_DEVICE_ID
+              value: cmqquro2g002em73cdp74rx0q
+            - name: HIKVISION_EVENT_LIMIT
+              value: "50"
+            - name: HIKVISION_WATCH_INTERVAL_SECONDS
+              value: "10"
+            - name: HIKVISION_WATCH_LOOPS
+              value: "6"
+            - name: HIKVISION_WATCH_RETRY_SECONDS
+              value: "15"
+            - name: PG_DATABASE_URL
+              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+            - name: WRITE_DATABASE_URL
+              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+            - name: DATABASE_URL
+              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: hris-app
   labels:
     app.kubernetes.io/name: hris-app
