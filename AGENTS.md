@@ -49,6 +49,38 @@ if (($env:Path -split ';') -notcontains $npmGlobal) {
 agent-browser --version
 ```
 
+For Project Truth browser verification, use headless browser evidence by
+default. Do not require a visible browser window unless the user explicitly asks
+for one.
+
+Before using `agent-browser` on this Windows host, set stable Chrome launch
+flags for the whole command chain/session:
+
+```powershell
+$env:AGENT_BROWSER_ARGS='--no-sandbox,--disable-gpu,--disable-dev-shm-usage'
+$env:AGENT_BROWSER_SCREENSHOT_DIR=(Join-Path (Get-Location) '.runtime\browser-evidence\screenshots')
+New-Item -ItemType Directory -Force -Path $env:AGENT_BROWSER_SCREENSHOT_DIR | Out-Null
+```
+
+If `agent-browser doctor` reports `DevToolsActivePort` or Chrome exits early,
+do not switch away from browser verification. First retry with the
+`AGENT_BROWSER_ARGS` above, then run `agent-browser doctor --fix`, then
+`agent-browser install`, documenting each attempt.
+
+For login, CORS, Cloudflare, and gateway checks, collect evidence in this order:
+
+1. Network/API proof: health URL, auth login POST, CORS preflight, and failed
+   browser requests from `agent-browser network requests` or equivalent HTTP
+   probes.
+2. Browser proof: headless `agent-browser` navigation, login form interaction,
+   post-login URL/text extraction, console errors, and screenshots.
+3. Runtime proof: VM state, LAN app/API ports, Cloudflare tunnel process/config,
+   and public host checks.
+
+Screenshots alone are not enough for CORS/proxy claims. Network evidence must
+show whether the app used same-host `/api`, a paired `*-api.bnpi-hris.tech`
+host, or direct LAN app-to-API port mapping.
+
 ## Real Stop Conditions
 
 Stop only when continuing is technically impossible or risks irreversible loss without a known recovery path:

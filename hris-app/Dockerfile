@@ -3,7 +3,7 @@ FROM node:20-alpine AS build-env
 WORKDIR /app
 COPY ./package.json ./package-lock.json ./
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-RUN --mount=type=cache,target=/root/.npm set -eux; \
+RUN set -eux; \
     npm_config_fetch_retries=5 \
     npm_config_fetch_retry_factor=2 \
     npm_config_fetch_retry_mintimeout=20000 \
@@ -11,16 +11,14 @@ RUN --mount=type=cache,target=/root/.npm set -eux; \
     npm_config_fetch_timeout=600000 \
     sh -c 'npm ci --prefer-offline --no-audit --no-fund --network-timeout=300000 || npm ci --prefer-offline --no-audit --no-fund --network-timeout=300000'
 COPY . /app/
-ARG VITE_API_BASE_URL=/api
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN npm run build
 RUN mkdir -p /app/build/client/app/assets \
     && cp /app/app/assets/bandai_logo.png /app/build/client/app/assets/bandai_logo.png
-RUN npm prune --omit=dev --no-audit --no-fund
 
 FROM node:20-alpine
 COPY ./package.json package-lock.json /app/
-COPY --from=build-env /app/node_modules /app/node_modules
 COPY --from=build-env /app/build /app/build
 WORKDIR /app
 RUN <<'EOF' cat > /app/server.cjs
@@ -147,6 +145,15 @@ const server = http
 
       fs.readFile(filePath, (readErr, data) => {
         if (readErr) {
+          if (normalized.startsWith("/assets/") || normalized.startsWith("assets/")) {
+            res.writeHead(404, {
+              "Content-Type": "text/plain; charset=utf-8",
+              "Cache-Control": "no-store",
+            });
+            res.end("Asset not found");
+            return;
+          }
+
           fs.readFile(path.join(root, "index.html"), (indexErr, indexData) => {
             if (indexErr) {
               res.writeHead(500);

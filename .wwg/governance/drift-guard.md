@@ -70,6 +70,25 @@ If uncertain, add a candidate principle or record the issue in the handoff/repor
 - Tests should verify behavior, not only file existence, static structure, or build smoke.
 - Non-software work may use decision logs, manual verification, approval checklists, or Project Truth updates when software tests are not the right evidence.
 
+## Browser Verification Guard
+
+- Browser verification should prefer headless `agent-browser` with screenshots,
+  console checks, and network request evidence.
+- On this Windows host, agents must carry stable Chrome flags through the whole
+  browser session before declaring `agent-browser` broken:
+  `AGENT_BROWSER_ARGS=--no-sandbox,--disable-gpu,--disable-dev-shm-usage`.
+- `DevToolsActivePort`, early Chrome exit, missing screenshots, or a stale
+  browser daemon are recoverable browser-tool issues. Retry with stable launch
+  flags, `agent-browser doctor --fix`, and `agent-browser install` before
+  treating browser verification as blocked.
+- For CORS, proxy, Cloudflare, and login drift, screenshots are supporting
+  evidence only. Required evidence is network/API behavior: health checks, auth
+  POST result, CORS preflight result, browser network failures, and the resolved
+  API base path or host.
+- For Project Truth public HRIS checks, record whether the browser used
+  same-host `/api`, a paired public API hostname such as
+  `dev-api.bnpi-hris.tech`, or LAN app-to-API port mapping.
+
 ## Output Guidance
 
 - Natural-language next steps should appear before CLI backup commands.
