@@ -3,6 +3,77 @@
 Project Truth has a real Hikvision integration surface, but it is not yet at
 the same runtime-proven level as the ZKTeco Windows SDK sidecar.
 
+## Latest Physical Device Observation
+
+The current chat-provided SADP screenshot shows one active Hikvision device on
+the LAN:
+
+| Field | Observed value |
+|---|---|
+| SADP online count | `1` |
+| Device ID | `001` |
+| Device type/model | `DS-K1T201AEF` |
+| Status | `Active` |
+| IPv4 address | `192.168.254.181` |
+| Port | `8000` |
+| Enhanced SDK service | `N/A` |
+| Software version | `V1.3.45 build 2...` visible prefix, full build truncated |
+
+This is physical-device discovery evidence only. It does not by itself prove
+that AlarmDemo, direct callback, HRIS device-event persistence, attendance
+creation, socket updates, VM LAN, or public Cloudflare paths are working.
+Recorded source note:
+`.wwg/wiki/01-sources/raw/hikvision-sadp-device-screenshot-20260630.md`.
+
+Follow-up DEV proof on 2026-06-30 advanced this from discovery-only to a
+physical-device DEV saved-event proof:
+
+- The DEV `Main Entrance Device` row `cmqquro2g002em73cdp74rx0q` was corrected
+  to `192.168.254.181:80` / `http`.
+- HRIS device health reached the physical device from the DEV API/VM path and
+  read ISAPI system time successfully.
+- HRIS pulled ACS events from the physical device and saved event
+  `cmr0e1jk2002lm601rul855z2` with source `HIKVISION_CALLBACK`, status
+  `UNMATCHED`, employee no. `1`, major `5`, minor `38`, serial no. `997`, and
+  terminal address `192.168.254.181`.
+- The admin saved-events page rendered the physical-device event under
+  `/admin/configuration/devices/events?view=saved` with save path
+  `Device callback`.
+
+This still does not prove spontaneous device HTTP-host push, AlarmDemo as a
+managed runtime service, employee matching, attendance write success, or
+PROD/UAT/public parity.
+
+## UAT Temporary Seed Proof
+
+On 2026-06-30, UAT K3s runtime was temporarily seeded to verify employee
+matching and attendance creation for Hikvision employee numbers `1` through
+`5`.
+
+- The UAT `Main Entrance Device` row `cmqqv5x45002ele3dqt3a233i` was corrected
+  to `192.168.254.181:80` / `http` in the UAT K3s Postgres pod.
+- Temporary UAT employees `UAT-HIK-001` through `UAT-HIK-005` were created with
+  `deviceEmpId` values `1` through `5` and `deviceId`
+  `cmqqv5x45002ele3dqt3a233i`.
+- A callback-shaped Hikvision punch for employee no. `1`, `major=5`,
+  `minor=38`, device IP `192.168.254.181`, and event time
+  `2026-06-30T16:17:07+08:00` was posted to the UAT callback endpoint.
+- UAT saved device event `cmr0hh22y0025nq011uukvetx` with source
+  `HIKVISION_CALLBACK`, status `ATTENDANCE_CREATED`, employee
+  `uat-temp-hikvision-employee-1`, attendance `cmr0hh27a0027nq01elxja5k7`,
+  employee no. `1`, and terminal `Main Entrance Device` at `192.168.254.181`.
+- Playwright headless browser verification rendered the UAT admin saved-events
+  page showing `UAT Hikvision Temp Test 1`, no. `1`, `Main Entrance Device`,
+  `192.168.254.181`, and save path `Device callback`.
+
+Evidence:
+`.runtime/browser-evidence/screenshots/hikvision-uat-device-events-temp-seed.png`.
+
+Boundary: this is a temporary UAT seed and callback-shaped ingestion proof. It
+does not prove that the UAT K3s pod network can reach the physical Hikvision
+device directly; the UAT API health check showed `EHOSTUNREACH` for
+`192.168.254.181:80` from inside the UAT API pod.
+
 ## Current Integration
 
 Hikvision is implemented through two paths:
@@ -140,6 +211,18 @@ and runtime credentials supplied through environment or the Device access field.
   unless a later approved runtime design adds a managed service.
 - Physical-device proof requires a reachable Hikvision device and credentials.
   Do not mark physical-device testing complete from schema/tests alone.
+- A chat-provided SADP screenshot on 2026-06-30 shows one active Hikvision
+  `DS-K1T201AEF` device at `192.168.254.181:8000`, ID `001`, but callback,
+  AlarmDemo, admin browser/socket, attendance, VM LAN, and public Cloudflare
+  proof are still pending.
+- DEV physical-device proof on 2026-06-30 shows HRIS can reach
+  `192.168.254.181:80`, pull ACS events, save a `HIKVISION_CALLBACK` event,
+  and render it in the admin saved-events UI. Attendance matching remains
+  pending because the observed device employee no. `1` was `UNMATCHED`.
+- UAT temporary seed proof on 2026-06-30 shows employee no. `1` can match
+  `UAT-HIK-001` and create attendance through the callback path, with admin
+  browser evidence on the saved-events page. This remains temporary seed proof,
+  not a permanent enrollment or physical-pull proof.
 - Existing ZKTeco runtime truth is broader across environments. Docker DEV has
   stored Hikvision rows for `HIKVISION_CALLBACK` and `EN_HCNETSDK_ALARM`,
   including attendance-linked rows, but Docker PROD/UAT and public DEV did not

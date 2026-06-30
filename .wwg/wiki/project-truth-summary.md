@@ -1,6 +1,6 @@
 # Project Truth Summary
 
-Last updated: 2026-06-29
+Last updated: 2026-06-30
 
 ## Current Runtime Truth
 
@@ -31,9 +31,13 @@ Last updated: 2026-06-29
 - VM-managed Cloudflare Tunnel is now current runtime proof for the proof VM only after deliberate credential import. Fresh/final images still must not bake Cloudflare credentials.
 - The V2 one-click reference under `.runtime/gcp-v2-format` is the accepted packaging shape for V6: ship a small extracted zip with a double-click `.cmd`, download the large VHDX and sidecars from the public storage bucket at install time, verify SHA-256, import/start Hyper-V, keep the console window open, and then run V6 runtime proof steps. V6 must add credential preflight/import from `C:\ProgramData\ProjectTruth\secrets\cloudflared\...json`; it must not place the credential in the zip, bucket image, repo, or baked VM.
 - V6 one-shot proof on 2026-06-30 passed SSH, ansible-pull, VM-side Cloudflare credential import, LAN health, public `bnpi-hris.tech` health, public CORS, and CLI SSH through `ssh.bnpi-hris.tech`; the serving app/API runtime was healthy Docker Compose containers while K3s pods remained resource-constrained.
+- V7 is published under `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v7/latest/` as a V2/V6-style one-click public lane. It promotes the known clean V5 base VHDX to `project-truth-node-local-hyperv-v7-current-state.vhdx` and ships a small V7 installer zip that runs the latest V6 runtime proof/import path after Hyper-V import. The live proof VM disk was not uploaded because it has contained root-only Cloudflare runtime credentials.
 - Host-local PROD and DEV checks passed during validation, but host-local UAT ports `3200` and `3201` failed while LAN UAT passed.
 - `%ProgramData%\ProjectTruth\config\project-truth.json` was backed up and updated to use VM `project-truth-local-vhdx-proof`, guest IP hint `192.168.254.148`, memory `1536`, and SSH port `22`.
 - Hikvision integration exists in code through `/api/hikvision/callback`, ISAPI helpers, event persistence, admin device-event filters, and realtime `device-event:saved`; editable source is now referenced by `vendor/hikvision-bio`, while proprietary HCNetSDK binaries remain local-only runtime inputs.
+- A 2026-06-30 chat-provided SADP screenshot shows one active Hikvision `DS-K1T201AEF` device, ID `001`, at `192.168.254.181:8000`; this is physical discovery evidence only, not end-to-end HRIS callback or attendance proof.
+- DEV Hikvision physical-device proof on 2026-06-30 passed after correcting `Main Entrance Device` to `192.168.254.181:80` / `http`: HRIS device health reached ISAPI time, ACS event pull returned a physical event (`major=5`, `minor=38`, employee no. `1`, serial `997`), DEV `device_events` saved row `cmr0e1jk2002lm601rul855z2` as `HIKVISION_CALLBACK` / `UNMATCHED`, and the admin saved-events UI rendered it with address `192.168.254.181` and save path `Device callback`.
+- UAT temporary Hikvision seed proof on 2026-06-30 passed after correcting the K3s UAT `Main Entrance Device` row `cmqqv5x45002ele3dqt3a233i` to `192.168.254.181:80` / `http` and adding temporary employee mappings `UAT-HIK-001` through `UAT-HIK-005` for device employee numbers `1` through `5`. A callback-shaped event for no. `1` saved device event `cmr0hh22y0025nq011uukvetx` with status `ATTENDANCE_CREATED`, matched `uat-temp-hikvision-employee-1`, created attendance `cmr0hh27a0027nq01elxja5k7`, and rendered in the UAT admin saved-events UI with terminal `Main Entrance Device`, address `192.168.254.181`, and save path `Device callback`.
 
 ## Current Drift
 
@@ -41,7 +45,9 @@ Last updated: 2026-06-29
 - `verify-gitops-state -GuestIp 10.184.38.91` previously reached the VM over SSH, but that IP is stale for the current session. Argo CD Application state still needs follow-up on `192.168.254.148`: previous app sync statuses reported `Unknown`, runtime app health included `Degraded` and `Progressing`, and one Kubernetes API read returned `127.0.0.1:6443` connection refused.
 - V6 runtime proof shows a split serving reality: public/LAN HRIS is green through Docker Compose and VM-side Cloudflare, while many K3s pods are `Pending`, `Evicted`, or `ContainerStatusUnknown` under memory pressure despite Argo Applications reporting `Synced/Healthy`.
 - Runtime quick tunnels are deprecated for normal public access. Historical TryCloudflare evidence may remain in old reports, but active VM boot/sync paths keep the TryCloudflare service disabled by default.
-- Hikvision has Docker DEV DB evidence for `HIKVISION_CALLBACK` and `EN_HCNETSDK_ALARM`, including attendance-linked rows, but is not yet proven at ZKTeco's physical-device and cross-environment evidence level. Docker PROD/UAT and public DEV did not show equivalent Hikvision event evidence in the 2026-06-30 pass. Remaining proof includes repeatable physical AlarmDemo/device callback evidence, admin browser/socket evidence on the device-events page, attendance journey proof, and LAN/public production path evidence.
+- Hikvision has Docker DEV DB evidence for `HIKVISION_CALLBACK` and `EN_HCNETSDK_ALARM`, DEV physical ACS-pull saved-event proof, and UAT temporary callback/attendance seed proof. It is still not proven at ZKTeco's physical-device and cross-environment evidence level because UAT physical pull from the K3s API pod returned `EHOSTUNREACH`, PROD parity is not proven, and AlarmDemo/direct spontaneous device push remains open.
+- Hikvision physical discovery has advanced from no reachable-device observation to SADP seeing `DS-K1T201AEF` at `192.168.254.181:8000`; runtime ingestion and cross-environment proof remain open.
+- Hikvision DEV runtime ingestion is now proven for physical-device ACS pull into saved device events, and UAT callback-shaped ingestion is proven for employee matching plus attendance creation using temporary employees `1` through `5`. Spontaneous device push callback, AlarmDemo managed runtime, UAT pod-to-device routing, and PROD parity remain open.
 
 ## Operating Notes
 

@@ -1,0 +1,5 @@
+{
+  "headed": false,
+  "args": "--no-sandbox,--disable-gpu,--disable-dev-shm-usage",
+  "screenshotDir": ".runtime/browser-evidence/screenshots"
+}

@@ -41,6 +41,11 @@ Status: READY FOR REVIEW
   verification, Hyper-V import/start, visible log window, and then V6 runtime
   proof. The Cloudflare tunnel credential must come from ProgramData at runtime,
   not from the zip, bucket image, repo, or baked VM.
+- V7 is the current public package lane. It promotes the known clean V5 base
+  image into `hyperv/v7/latest`, then keeps the V6 runtime proof/import path so
+  the latest scripts, Cloudflare VM connector setup, and public checks run after
+  import. The live proof VM disk was not published because it has contained
+  root-only Cloudflare runtime credentials.
 - Current V6 proof serves public/LAN HRIS through healthy Docker Compose
   containers and VM-side Cloudflare. K3s/Argo still needs follow-up because many
   pods remain Pending/Evicted under memory pressure even when Argo Applications
@@ -67,6 +72,12 @@ Status: READY FOR REVIEW
   `C:\ProgramData\ProjectTruth\exports\hyperv-v6\20260630-115040\project-truth-hyperv-one-click-installer-v6.zip`
 - Published V6 tiny package path:
   `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v6/latest/project-truth-hyperv-one-click-installer-v6.zip`
+- V7 one-click zip artifact:
+  `C:\ProgramData\ProjectTruth\exports\hyperv-v7\20260630-161359\project-truth-hyperv-one-click-installer-v7.zip`
+- Published V7 package path:
+  `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v7/latest/project-truth-hyperv-one-click-installer-v7.zip`
+- Published V7 VHDX path:
+  `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v7/latest/project-truth-node-local-hyperv-v7-current-state.vhdx`
 
 ## Validation Notes
 
@@ -83,8 +94,17 @@ Status: READY FOR REVIEW
   tiny package under `hyperv/v6/latest`; public URL checks returned HTTP 200 for
   the zip, installer script, README, and manifest. The package contains no VHDX
   and no Cloudflare credential.
+- On 2026-06-30, V7 was published under `hyperv/v7/latest`: GCS metadata showed
+  the VHDX at `75635884032` bytes, all V7 sidecar and installer URLs returned
+  HTTP 200, the downloaded public V7 zip matched SHA-256
+  `4534136199EEBA85FFAFBF08C8EAFEEDA1BBC784D9F4D3A269F30D9F95D75088`, and a
+  V7 installer dry run targeted the V7 VHDX/manifest paths while preserving the
+  runtime-only Cloudflare credential import.
 - `git diff --check` passed.
-- `wwg test-check --format plain` passed.
+- `wwg test-check --format plain` now fails because the WWG heuristic sees
+  behavior-sensitive truth words and no changed test files. No application code
+  changed in this V7 publish pass; verification evidence is GCS metadata, public
+  HTTP 200 checks, public ZIP round-trip/hash, and installer dry-run output.
 - `wwg validate` still fails on generated report truth-sync fields outside this Cloudflare task.
 
 ## Follow-Up Needed
@@ -94,10 +114,6 @@ Status: READY FOR REVIEW
 - Enable and verify browser-rendered SSH for `https://ssh.bnpi-hris.tech` so
   remote admins can access the VM from unprepared browsers without configuring
   BNPI Windows host SSH or per-PC `.ssh/config`.
-- Package V6 as a V2-style one-click zip after final artifact sidecars are
-  selected: keep the VHDX in the storage bucket, include only the installer
-  scripts/readme in the zip, and import the Cloudflare credential from
-  ProgramData at runtime.
 - Reconcile whether Docker Compose is the intended serving runtime for this V6
   appliance profile or tune K3s memory/capacity until Argo/K3s health matches
   the actually served HRIS app/API.

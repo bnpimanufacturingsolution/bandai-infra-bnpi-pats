@@ -34,6 +34,7 @@
     ".wwg/reports/zkteco-device-events-filter-truth-20260629.md",
     ".wwg/reports/zkteco-node-bridge-retirement-20260629.md",
     ".wwg/reports/zkteco-sdk-device-counts-20260629.md",
+    ".wwg/wiki/01-sources/raw/hikvision-sadp-device-screenshot-20260630.md",
     ".wwg/wiki/principles/README.md",
     ".wwg/wiki/principles/adopted-principles.md",
     ".wwg/wiki/project-truth-summary.md",
@@ -240,6 +241,11 @@
       "path": ".wwg/reports/zkteco-sdk-device-counts-20260629.md",
       "fileType": "report",
       "reason": "Report directory path."
+    },
+    {
+      "path": ".wwg/wiki/01-sources/raw/hikvision-sadp-device-screenshot-20260630.md",
+      "fileType": "context",
+      "reason": "Wiki truth file treated as context for contract review."
     },
     {
       "path": ".wwg/wiki/principles/README.md",
@@ -789,6 +795,15 @@
       "severity": "warning",
       "code": "context-contract-missing-sections",
       "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
+      "affectedFile": ".wwg/wiki/01-sources/raw/hikvision-sadp-device-screenshot-20260630.md",
+      "fileType": "context",
+      "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
+      "recommendedFix": "Add the missing context section or mark it explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "context-contract-missing-sections",
+      "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
       "affectedFile": ".wwg/wiki/principles/README.md",
       "fileType": "context",
       "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
@@ -1119,7 +1134,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 552,
+      "line": 547,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1129,7 +1144,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 556,
+      "line": 551,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1381,7 +1396,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 113,
+      "line": 119,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1390,7 +1405,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 116,
+      "line": 122,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1399,7 +1414,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 125,
+      "line": 131,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1408,7 +1423,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 152,
+      "line": 161,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1417,7 +1432,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 155,
+      "line": 164,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2113,6 +2128,15 @@
       "severity": "warning",
       "code": "context-contract-missing-sections",
       "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
+      "affectedFile": ".wwg/wiki/01-sources/raw/hikvision-sadp-device-screenshot-20260630.md",
+      "fileType": "context",
+      "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
+      "recommendedFix": "Add the missing context section or mark it explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "context-contract-missing-sections",
+      "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
       "affectedFile": ".wwg/wiki/principles/README.md",
       "fileType": "context",
       "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
@@ -2386,6 +2410,15 @@
       "severity": "warning",
       "code": "context-contract-missing-sections",
       "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
+      "affectedFile": ".wwg/wiki/01-sources/raw/hikvision-sadp-device-screenshot-20260630.md",
+      "fileType": "context",
+      "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
+      "recommendedFix": "Add the missing context section or mark it explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "context-contract-missing-sections",
+      "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
       "affectedFile": ".wwg/wiki/principles/README.md",
       "fileType": "context",
       "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
@@ -2433,7 +2466,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 113,
+      "line": 119,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2442,7 +2475,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 116,
+      "line": 122,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2451,7 +2484,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 125,
+      "line": 131,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2460,7 +2493,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 152,
+      "line": 161,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2469,7 +2502,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 155,
+      "line": 164,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2745,7 +2778,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 552,
+      "line": 547,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -2755,7 +2788,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 556,
+      "line": 551,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3722,7 +3755,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 552,
+      "line": 547,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3732,7 +3765,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 556,
+      "line": 551,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3984,7 +4017,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 113,
+      "line": 119,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3993,7 +4026,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 116,
+      "line": 122,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4002,7 +4035,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 125,
+      "line": 131,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4011,7 +4044,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 152,
+      "line": 161,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4020,7 +4053,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 155,
+      "line": 164,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4434,13 +4467,13 @@
   ],
   "metadataPolicyApplied": "Option C: Skill Registry metadata is canonical; skill files may include lightweight metadata when beneficial, and package-side skills do not require frontmatter.",
   "summary": {
-    "checkedFileCount": 69,
+    "checkedFileCount": 70,
     "skippedFileCount": 1,
     "errorCount": 0,
-    "warningCount": 70,
+    "warningCount": 71,
     "suggestionCount": 77,
     "classificationCounts": {
-      "context": 5,
+      "context": 6,
       "skill": 0,
       "governance": 6,
       "report": 28,

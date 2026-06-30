@@ -100,8 +100,20 @@ active Workspace tasks, or commitments until reviewed and promoted.
 - Evidence: Hikvision API, DB, UI, and socket contracts exist, and
   `vendor/hikvision-bio` now provides editable AlarmDemo source, but current
   GitOps/VM manifests do not manage AlarmDemo as a service and physical-device
-  runtime proof is still pending.
+  runtime proof is still pending. A 2026-06-30 SADP screenshot now shows one
+  active `DS-K1T201AEF` device at `192.168.254.181:8000`, which advances
+  discovery evidence but not HRIS callback, browser/socket, attendance, or
+  public/VM path proof. Later 2026-06-30 DEV testing corrected the DEV device
+  row to `192.168.254.181:80`, proved HRIS device health and ACS pull against
+  the physical device, saved a `HIKVISION_CALLBACK` event, and rendered it in
+  the admin saved-events UI; AlarmDemo/service ownership and attendance
+  matching remained unresolved. Later UAT testing seeded temporary employees
+  `UAT-HIK-001` through `UAT-HIK-005`, proved callback-shaped employee matching
+  and attendance creation for employee no. `1`, and rendered the UAT saved
+  event in the admin UI; however, the UAT API pod could not reach
+  `192.168.254.181:80` directly and returned `EHOSTUNREACH`, so UAT physical
+  ACS pull remains a network-routing gap.
 - Recommendation: Decide whether AlarmDemo remains a Windows-host sidecar like
   ZKTeco or becomes a managed VM/host service, then add a repeatable startup,
-  health, log, and browser/socket verification path without committing HCNetSDK
-  proprietary binaries or device credentials.
+  health, log, browser/socket verification, and K3s pod-to-device network proof
+  path without committing HCNetSDK proprietary binaries or device credentials.
