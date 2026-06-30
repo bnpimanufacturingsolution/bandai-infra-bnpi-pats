@@ -37,6 +37,8 @@ if ($failedLocalChecks.Count -gt 0) {
 }
 
 if ($GuestIp) {
+  $runRoot = Join-Path (Join-Path (Split-Path -Parent $PSScriptRoot) '.runtime\verify-gitops-state') (Get-Date -Format 'yyyyMMdd-HHmmss')
+  New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
   $remoteScript = @'
 set -e
 sudo kubectl get applications -n argocd
@@ -55,7 +57,18 @@ for app in project-truth-runtime-dev project-truth-runtime-uat project-truth-run
 done
 '@
   }
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$GuestIp" ($remoteScript.Replace('__RUNTIME_CHECK__', $runtimeCheck))
+  $remote = $remoteScript.Replace('__RUNTIME_CHECK__', $runtimeCheck)
+  $localScript = Join-Path $runRoot 'verify-gitops-state.sh'
+  $remotePath = "/tmp/project-truth-verify-gitops-$([System.Diagnostics.Process]::GetCurrentProcess().Id).sh"
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  $normalizedRemote = ($remote -replace "`r`n", "`n") -replace "`r", "`n"
+  [System.IO.File]::WriteAllText($localScript, ($normalizedRemote.TrimEnd() + "`n"), $utf8NoBom)
+  scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $localScript "${User}@${GuestIp}:${remotePath}" | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Error "GitOps verification failed: could not stage remote script on ${GuestIp}."
+    exit $LASTEXITCODE
+  }
+  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$GuestIp" "chmod 700 '$remotePath' && bash '$remotePath'; rc=`$?; rm -f '$remotePath'; exit `$rc"
   if ($LASTEXITCODE -ne 0) {
     Write-Error "GitOps verification failed: one or more Argo CD Applications are missing or Kubernetes is unavailable."
     exit $LASTEXITCODE

@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','configure','select-image','download-image','build-image','build-image-gcp','watch-gcp-image-build-progress','watch-gcp-build-resources','export-devcurrent-gcp-vhdx','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','hyperv-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','gitops-pull','vm-pull','configure-vm-git-creds','apply-argocd-platform','configure-argocd-repo-creds','configure-argocd-webhook','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel','start-trycloudflare-suite','start-cloudflare-db-tcp','ensure-bnpi-cloudflare-host','start-bnpi-cloudflare-tunnel')]
+  [ValidateSet('doctor','configure','select-image','download-image','build-image','build-image-gcp','watch-gcp-image-build-progress','watch-gcp-build-resources','export-devcurrent-gcp-vhdx','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','hyperv-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','gitops-pull','vm-pull','v6-one-shot','configure-vm-git-creds','apply-argocd-platform','configure-argocd-repo-creds','configure-argocd-webhook','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel','start-trycloudflare-suite','start-cloudflare-db-tcp','ensure-bnpi-cloudflare-host','start-bnpi-cloudflare-tunnel')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -43,6 +43,7 @@ $scriptMap = @{
   'verify-gitops-state' = 'verify-gitops-state.ps1'
   'gitops-pull'         = 'gitops-pull.ps1'
   'vm-pull'             = 'vm-pull.ps1'
+  'v6-one-shot'          = 'project-truth-v6-one-shot.ps1'
   'configure-vm-git-creds' = 'configure-vm-git-creds.ps1'
   'apply-argocd-platform' = 'apply-argocd-platform.ps1'
   'configure-argocd-repo-creds' = 'configure-argocd-repo-creds.ps1'

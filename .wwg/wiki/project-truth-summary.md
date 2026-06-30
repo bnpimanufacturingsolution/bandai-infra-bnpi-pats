@@ -19,6 +19,7 @@ Last updated: 2026-06-29
 - Public Cloudflare SSH is now verified through `ssh.bnpi-hris.tech` using Cloudflare Access and the host-managed named tunnel.
 - Verified public SSH command: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 -o ProxyCommand="cloudflared access ssh --hostname %h" infra@ssh.bnpi-hris.tech`.
 - Windows OpenSSH alias `project-truth-hris` was added to `%USERPROFILE%\.ssh\config`; `ssh project-truth-hris` returned `SSH_ALIAS_OK`, hostname `project-truth-node`, and user `infra`.
+- Preferred clean remote-admin journey is browser-rendered SSH at `https://ssh.bnpi-hris.tech` through the VM-managed Cloudflare Tunnel, with the BNPI Windows Server kept Hyper-V-only and not used for inbound SSH or Windows SSH configuration.
 - VM summary script was updated and live-installed so `project-truth-lan-summary --screen-overview`, `/etc/issue`, `/etc/motd`, and `/run/project-truth/network-summary.txt` show `LAN IP: 192.168.254.148`, `OpenSSH: ssh infra@192.168.254.148`, the key path, and public Cloudflare app/API/Grafana URLs.
 - Current generated overview line-width check: `MaxLineLength=66`; stale `10.184.38.91` was not present in `/etc/issue`, `/run/project-truth/network-summary.txt`, or the generated overview.
 - After the Cloudflare repair pass, HRIS LAN checks passed on `192.168.254.148` for PROD app/API (`3000`, `3001`), DEV app/API (`3100`, `3101`), UAT app/API (`3200`, `3201`), and Grafana (`53000`).
@@ -28,6 +29,8 @@ Last updated: 2026-06-29
 - Current proof VM also has a VM-side Cloudflare named tunnel connector active through `cloudflared-bnpi-hris.service`, using root-only runtime credentials under `/etc/cloudflared` and localhost ingress, including `ssh.bnpi-hris.tech -> ssh://localhost:22`.
 - Fresh/final images must not bake Cloudflare tunnel credentials. The repeatable setup is to boot/import the VM, discover its LAN IP, then run `.\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic` from a Windows host that has `cloudflared` and the named tunnel credentials.
 - VM-managed Cloudflare Tunnel is now current runtime proof for the proof VM only after deliberate credential import. Fresh/final images still must not bake Cloudflare credentials.
+- The V2 one-click reference under `.runtime/gcp-v2-format` is the accepted packaging shape for V6: ship a small extracted zip with a double-click `.cmd`, download the large VHDX and sidecars from the public storage bucket at install time, verify SHA-256, import/start Hyper-V, keep the console window open, and then run V6 runtime proof steps. V6 must add credential preflight/import from `C:\ProgramData\ProjectTruth\secrets\cloudflared\...json`; it must not place the credential in the zip, bucket image, repo, or baked VM.
+- V6 one-shot proof on 2026-06-30 passed SSH, ansible-pull, VM-side Cloudflare credential import, LAN health, public `bnpi-hris.tech` health, public CORS, and CLI SSH through `ssh.bnpi-hris.tech`; the serving app/API runtime was healthy Docker Compose containers while K3s pods remained resource-constrained.
 - Host-local PROD and DEV checks passed during validation, but host-local UAT ports `3200` and `3201` failed while LAN UAT passed.
 - `%ProgramData%\ProjectTruth\config\project-truth.json` was backed up and updated to use VM `project-truth-local-vhdx-proof`, guest IP hint `192.168.254.148`, memory `1536`, and SSH port `22`.
 
@@ -35,6 +38,7 @@ Last updated: 2026-06-29
 
 - Earlier `10.184.38.91` runtime proof is stale for the current Cloudflare/SSH repair session; probes to that address timed out on 2026-06-29 at about 21:23 PHT, while `192.168.254.148` passed.
 - `verify-gitops-state -GuestIp 10.184.38.91` previously reached the VM over SSH, but that IP is stale for the current session. Argo CD Application state still needs follow-up on `192.168.254.148`: previous app sync statuses reported `Unknown`, runtime app health included `Degraded` and `Progressing`, and one Kubernetes API read returned `127.0.0.1:6443` connection refused.
+- V6 runtime proof shows a split serving reality: public/LAN HRIS is green through Docker Compose and VM-side Cloudflare, while many K3s pods are `Pending`, `Evicted`, or `ContainerStatusUnknown` under memory pressure despite Argo Applications reporting `Synced/Healthy`.
 - Runtime quick tunnels are deprecated for normal public access. Historical TryCloudflare evidence may remain in old reports, but active VM boot/sync paths keep the TryCloudflare service disabled by default.
 
 ## Operating Notes

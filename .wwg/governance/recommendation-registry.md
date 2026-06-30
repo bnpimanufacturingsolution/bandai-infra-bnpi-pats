@@ -56,3 +56,40 @@ active Workspace tasks, or commitments until reviewed and promoted.
 - Recommendation: Add a repeatable public smoke that checks PROD/DEV/UAT
   runtime API-base selection, CORS headers for pre-login provisioning endpoints,
   login, `/auth/me`, and dashboard overview responses.
+
+### REC-20260630-006: Enable Browser-Rendered SSH for Remote Admins
+
+- Status: Proposed
+- Evidence: The accepted clean BNPI access journey keeps the Windows Server as
+  Hyper-V-only, runs the Cloudflare connector inside the Linux VM, and expects
+  remote admins to open `https://ssh.bnpi-hris.tech` from unprepared browsers.
+  VM-side `ssh://localhost:22` ingress and CLI SSH are already proven, but
+  browser-rendered SSH still needs Cloudflare Access application proof.
+- Recommendation: Enable browser-based SSH sessions for `ssh.bnpi-hris.tech` in
+  Cloudflare Zero Trust, verify Access policy/user mapping, and capture browser
+  terminal evidence after the next V6 one-shot run.
+
+### REC-20260630-007: Reconcile K3s Runtime Health With Serving Runtime
+
+- Status: Proposed
+- Evidence: During V6 one-shot proof on `192.168.254.148`, Argo CD Applications
+  reported `Synced/Healthy` while many K3s pods were `Pending`, `Evicted`, or
+  `ContainerStatusUnknown`; LAN/public HRIS traffic was restored by recreating
+  Compose app/API containers from existing local images.
+- Recommendation: Decide whether Compose remains the serving runtime for the V6
+  appliance profile or increase/tune K3s capacity so Argo runtime Application
+  health reflects actual app/API serving health.
+
+### REC-20260630-008: Package V6 As V2-Style One-Click Zip
+
+- Status: Proposed
+- Evidence: The V2 reference under `.runtime/gcp-v2-format` provides the desired
+  client journey: extract a tiny zip, double-click a `.cmd`, self-elevate,
+  download the VHDX and sidecars from the public storage bucket, verify SHA-256,
+  import/start Hyper-V, and leave the window open. The V6 runtime proof now
+  requires an added credential preflight/import phase from ProgramData and must
+  not bake Cloudflare credentials into the image or zip.
+- Recommendation: Build the V6 installer zip by preserving the V2 click flow and
+  adding the V6 one-shot runtime phase after import/start. Include only scripts
+  and instructions in the zip; keep the VHDX in the bucket and keep the
+  Cloudflare credential as host-side runtime state.

@@ -88,22 +88,33 @@ $config = Get-Config
 $targetIp = Resolve-GuestIp -Config $config
 $apps = @(Get-ConfiguredApps -Config $config)
 $appList = ($apps -join ' ')
+$runRoot = Join-Path (Join-Path (Split-Path -Parent $PSScriptRoot) '.runtime\gitops-pull') (Get-Date -Format 'yyyyMMdd-HHmmss')
+New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
 
 $remote = @"
 set -e
 echo "Project Truth GitOps pull: hard-refreshing Argo CD applications."
 for app in $appList; do
-  if sudo kubectl get application -n argocd "\$app" >/dev/null 2>&1; then
-    sudo kubectl -n argocd annotate application "\$app" argocd.argoproj.io/refresh=hard --overwrite
+  if sudo kubectl get application -n argocd "`$app" >/dev/null 2>&1; then
+    sudo kubectl -n argocd annotate application "`$app" argocd.argoproj.io/refresh=hard --overwrite
   else
-    echo "missing: \$app"
+    echo "missing: `$app"
   fi
 done
 echo
 sudo kubectl get applications -n argocd -o wide
 "@
 
-ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" $remote
+$localScript = Join-Path $runRoot 'gitops-pull.sh'
+$remoteScript = "/tmp/project-truth-gitops-pull-$([System.Diagnostics.Process]::GetCurrentProcess().Id).sh"
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$normalizedRemote = ($remote -replace "`r`n", "`n") -replace "`r", "`n"
+[System.IO.File]::WriteAllText($localScript, ($normalizedRemote.TrimEnd() + "`n"), $utf8NoBom)
+scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $localScript "${User}@${targetIp}:${remoteScript}" | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  throw "GitOps pull failed: could not stage remote script on ${targetIp}."
+}
+ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "$User@$targetIp" "chmod 700 '$remoteScript' && bash '$remoteScript'; rc=`$?; rm -f '$remoteScript'; exit `$rc"
 if ($LASTEXITCODE -ne 0) {
   throw "GitOps pull failed against ${targetIp}."
 }

@@ -1,15 +1,21 @@
 # Cloudflare Named Tunnel Runbook
 
-## Current Canonical Path
+## Current Public Access Model
 
 Project Truth public access uses the named Cloudflare Tunnel `bnpi-hris`.
 
 ```text
-Windows host cloudflared
--> cloudflared-bnpi-hris.yml
--> Hyper-V VM LAN IP
--> HRIS app/API/dev/uat/Grafana ports
--> bnpi-hris.tech public hostnames
+Bootstrap or repair:
+  Windows host cloudflared
+  -> cloudflared-bnpi-hris.yml
+  -> Hyper-V VM LAN IP
+  -> HRIS app/API/dev/uat/Grafana ports
+  -> bnpi-hris.tech public hostnames
+
+Preferred BNPI runtime:
+  Linux VM cloudflared
+  -> localhost app/API/dev/uat/Grafana/SSH services
+  -> bnpi-hris.tech public hostnames
 ```
 
 Current tunnel:
@@ -115,7 +121,8 @@ securely or recreated out-of-band. Do not put it in the repo or appliance image.
 ## VM-Managed Runtime Connector
 
 A VM-managed tunnel can be cleaner for appliance portability because cloudflared
-runs inside the VM and targets localhost services:
+runs inside the VM, opens only outbound Cloudflare Tunnel connections, and
+targets localhost services:
 
 ```yaml
 ingress:
@@ -150,6 +157,155 @@ Do not run this during image baking. Fresh/final images must still avoid baked
 tunnel credentials. Import the credential only as a deliberate runtime setup
 step on the target VM.
 
+## Clean Remote Admin Journey
+
+The preferred BNPI deployment shape is:
+
+```text
+BNPI Windows Server:
+  no inbound ports
+  no SSH setup
+  no .ssh/config
+  Hyper-V host only
+
+BNPI Linux VM:
+  runs cloudflared-bnpi-hris.service on boot
+  exposes localhost:22 through ssh.bnpi-hris.tech
+
+Remote admin:
+  opens https://ssh.bnpi-hris.tech
+  signs in with Cloudflare Access
+  uses the browser-rendered SSH terminal
+```
+
+This keeps the client Windows Server out of the public SSH path. The only
+required outbound dependency is that the Linux VM can reach Cloudflare to keep
+the named tunnel connected.
+
+## Browser SSH Access
+
+Browser SSH is the default remote-admin journey for unprepared or temporary
+computers. It avoids installing `cloudflared`, editing `.ssh/config`, or copying
+the Project Truth SSH key to every machine an admin might use.
+
+Required state:
+
+1. `ssh.bnpi-hris.tech` is a published SSH application route on tunnel
+   `bnpi-hris`.
+2. The route service is `localhost:22` when the connector runs inside the VM.
+3. A Cloudflare Access self-hosted application protects
+   `ssh.bnpi-hris.tech`.
+4. Browser rendering is enabled for the SSH application.
+5. The Access policy allows only approved admin identities.
+6. The Linux VM has an SSH username compatible with the Access identity mapping
+   required by Cloudflare browser-rendered SSH.
+
+Cloudflare dashboard path:
+
+```text
+Zero Trust -> Networks -> Tunnels -> bnpi-hris -> Routes
+  Add/confirm published application: ssh.bnpi-hris.tech
+  Service: SSH / localhost:22
+
+Zero Trust -> Access controls -> Applications
+  Configure ssh.bnpi-hris.tech
+  Enable browser-based SSH sessions
+  Keep only Allow/Block policies for this browser-rendered app
+```
+
+Validation from any browser:
+
+```text
+https://ssh.bnpi-hris.tech
+```
+
+Expected result: Cloudflare Access login appears, then Cloudflare renders an
+SSH terminal connected to the Project Truth VM.
+
+CLI SSH remains available for prepared admin workstations, but it is not the
+clean journey for random office PCs:
+
+```powershell
+ssh -i $env:USERPROFILE\.ssh\node-health-appliance_ed25519 `
+  -o ProxyCommand="cloudflared access ssh --hostname %h" `
+  infra@ssh.bnpi-hris.tech
+```
+
+## V6 One-Shot Fresh VM Proof
+
+For a fresh or alternate VM that should pull latest `develop`, import the stable
+host-side credential at runtime, start the VM-side connector, and verify LAN and
+public network proof, use:
+
+```powershell
+.\project-truth-v6-one-shot.cmd -GuestIp <vm-lan-ip>
+```
+
+or the equivalent CLI subcommand:
+
+```powershell
+.\scripts\project-truth.ps1 v6-one-shot -GuestIp <vm-lan-ip>
+```
+
+If `-GuestIp` is omitted, the command checks `PROJECT_TRUTH_GUEST_IP`,
+`C:\ProgramData\ProjectTruth\config\project-truth.json`, then Hyper-V adapter
+discovery. The default credential source is:
+
+```text
+C:\ProgramData\ProjectTruth\secrets\cloudflared\e3486f00-f974-46d3-9e11-911266749d00.json
+```
+
+The command validates that the JSON has the expected tunnel fields without
+printing secret contents, copies it to the VM only as temporary runtime input,
+installs it root-only under `/etc/cloudflared`, validates ingress, restarts
+`cloudflared-bnpi-hris.service`, and writes evidence under
+`.runtime\v6-one-shot`.
+
+## V6 One-Click Zip Contract
+
+Use the V2 reference shape for V6 packaging:
+
+```text
+Extract small zip
+  -> double-click ProjectTruth-Install-HyperV-v6.cmd
+  -> self-elevate if needed
+  -> download VHDX and sidecars from the public storage bucket
+  -> resume interrupted downloads
+  -> verify SHA-256
+  -> import/start Hyper-V VM
+  -> discover or accept VM LAN IP
+  -> run the V6 one-shot runtime proof
+```
+
+The V2 reference lives under `.runtime/gcp-v2-format` and intentionally keeps
+the large VHDX out of the zip. V6 should preserve that model. The zip should
+include only installer scripts and human-readable instructions; the bucket
+should hold the VHDX, SHA-256, import helper, manifest, and readme sidecars.
+
+Do not include the Cloudflare tunnel credential in any zip, VHDX, public bucket
+object, repo file, or baked image. The installer may require the host-side
+handoff credential to exist before it runs the V6 runtime phase:
+
+```text
+C:\ProgramData\ProjectTruth\secrets\cloudflared\e3486f00-f974-46d3-9e11-911266749d00.json
+```
+
+The V6 runtime phase should pass or fail with evidence, not silently skip
+Cloudflare. Minimum proof after the VM imports:
+
+- LAN SSH to the VM.
+- `project-truth-ansible-pull` sync from `develop`.
+- VM-side `cloudflared-bnpi-hris.service` enabled and active.
+- LAN PROD/DEV/UAT app/API health.
+- Public PROD/DEV/UAT app/API/Grafana health.
+- Public CORS for pre-login provisioning endpoints.
+- CLI SSH through `ssh.bnpi-hris.tech`.
+
+Current V6 proof warning: public/LAN HRIS is served by healthy Docker Compose
+containers while K3s pods remain resource-constrained. Do not treat Argo
+Application `Synced/Healthy` summaries alone as proof that K3s is the serving
+runtime.
+
 ## SSH Through Domain
 
 Public SSH through the domain is possible with Cloudflare Access TCP/SSH, not
@@ -173,6 +329,12 @@ VM-managed origin if enabled:
 ssh://localhost:22
 ```
 
+Preferred access for unprepared computers:
+
+```text
+https://ssh.bnpi-hris.tech
+```
+
 Verified client command:
 
 ```powershell
@@ -187,9 +349,12 @@ The Windows SSH alias is also configured on the current host:
 ssh project-truth-hris
 ```
 
-Current status: DNS route, tunnel ingress, Cloudflare Access policy, public SSH,
-alias login, and a VM-side Linux connector with `ssh://localhost:22` ingress are
-verified. The Access policy currently allows `1bis.solutions.tech@gmail.com`.
+Current status: DNS route, tunnel ingress, Cloudflare Access policy, public CLI
+SSH, alias login, and a VM-side Linux connector with `ssh://localhost:22`
+ingress are verified. Browser-rendered SSH is the preferred target journey for
+unprepared machines, but still needs Cloudflare Access browser rendering enabled
+and browser proof captured. The Access policy currently allows
+`1bis.solutions.tech@gmail.com`.
 
 ## TryCloudflare Boundary
 

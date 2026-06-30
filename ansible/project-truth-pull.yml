@@ -27,6 +27,7 @@
       - project-truth-console-session-hook
       - project-truth-trycloudflare-start
       - project-truth-tunnel-gateway
+      - project-truth-cloudflare-vm-tunnel
       - project-truth-ansible-pull
       - project-truth-os-sync
     project_truth_systemd_units:
