@@ -140,8 +140,6 @@ services:
     build:
       context: ../hris-app
       dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: /api
     image: hris-app-local:develop
     container_name: hris-app-dev
     restart: unless-stopped
@@ -308,8 +306,6 @@ services:
     build:
       context: ../hris-app
       dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: /api
     image: hris-app-local:develop
     container_name: hris-app-uat
     restart: unless-stopped

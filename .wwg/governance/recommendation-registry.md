@@ -15,6 +15,10 @@ active Workspace tasks, or commitments until reviewed and promoted.
 - Recommendation: Decide whether VM-managed Cloudflare should become the
   canonical post-import path, and document a secure credential handoff process
   that never bakes tunnel credentials into images.
+- 2026-06-30 evidence: Public `bnpi-hris.tech` alternated between stale and
+  repaired HRIS frontend bundles until the Windows host connector was stopped;
+  public traffic stabilized after VM-managed ingress was routed to the verified
+  VM LAN origin.
 
 ### REC-20260629-002: Upgrade Windows Host Cloudflared
 
@@ -33,3 +37,12 @@ active Workspace tasks, or commitments until reviewed and promoted.
   manifest repair, large-object upload monitoring, and public URL verification.
 - Recommendation: Add a dedicated V5 publish script that performs those steps
   repeatably without baking Cloudflare credentials into the image.
+
+### REC-20260630-004: Harden HRIS Static Asset Serving
+
+- Status: Proposed
+- Evidence: During public dashboard verification, missing `/assets/...` paths
+  were served as SPA `index.html` with HTTP 200 and cached by Cloudflare, causing
+  module MIME errors until a fresh asset namespace was deployed.
+- Recommendation: Keep asset misses as non-cacheable 404 responses and add a
+  regression check that public JS/CSS asset URLs never return HTML.
