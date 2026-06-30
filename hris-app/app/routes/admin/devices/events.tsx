@@ -18,6 +18,7 @@ import { useAuth } from "~/lib/hooks/use-auth";
 import { useSocket } from "~/contexts/socket-context";
 import {
 	getDeviceEventsRealtimeStatus,
+	getHighlightedSavedDeviceEventId,
 	getSavedDeviceEventRealtimeBadge,
 } from "~/lib/device-events-realtime-ui";
 import type {
@@ -549,7 +550,25 @@ export default function DeviceEventsPage() {
 	const isLatestSavedFresh =
 		latestSavedAgeMs !== null && latestSavedAgeMs >= 0 && latestSavedAgeMs <= 2 * 60 * 1000;
 	const latestRealtimeEventId = lastRealtimeEvent?.eventId || null;
-	const highlightedSavedEventId = latestRealtimeEventId || (isLatestSavedFresh ? latestSavedEvent?.id : null);
+	const highlightedSavedEventId = getHighlightedSavedDeviceEventId({
+		latestSavedEventId: latestSavedEvent?.id,
+		latestRealtimeEventId,
+		isLatestSavedFresh,
+	});
+	const focusLatestSavedEvent = () => {
+		if (!latestSavedEvent) return;
+		updateSearchParams((next) => {
+			next.set("view", "saved");
+			next.set("page", "1");
+			next.set("window", "all");
+			if (latestSavedEvent.deviceId) next.set("deviceId", latestSavedEvent.deviceId);
+			if (latestSavedEvent.source) next.set("source", latestSavedEvent.source);
+			next.delete("status");
+			next.delete("query");
+			next.set("sort", "receivedAt");
+			next.set("order", "desc");
+		});
+	};
 	const realtimeStatus = getDeviceEventsRealtimeStatus({
 		isConnected,
 		organizationId,
@@ -730,6 +749,13 @@ export default function DeviceEventsPage() {
 									next.delete("status");
 									next.delete("source");
 									next.delete("query");
+									next.set("window", "today");
+									if (
+										(next.get("deviceId") || "all") === "all" &&
+										latestSavedEvent?.deviceId
+									) {
+										next.set("deviceId", latestSavedEvent.deviceId);
+									}
 								}
 							})
 						}
@@ -888,11 +914,14 @@ export default function DeviceEventsPage() {
 			)}
 
 			{viewMode === "saved" && latestSavedEvent && (
-				<div
+				<button
+					type="button"
+					onClick={focusLatestSavedEvent}
+					aria-label="Show latest saved punch row"
 					className={
 						isLatestSavedFresh
-							? "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
-							: "rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+							? "w-full rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-sm text-emerald-900 transition hover:border-emerald-300 hover:bg-emerald-100"
+							: "w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
 					}>
 					<div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
 						<div className="flex min-w-0 items-center gap-2">
@@ -921,7 +950,7 @@ export default function DeviceEventsPage() {
 							)}
 						</div>
 					</div>
-				</div>
+				</button>
 			)}
 
 			<div className="rounded-md border border-slate-200 bg-white p-2.5">

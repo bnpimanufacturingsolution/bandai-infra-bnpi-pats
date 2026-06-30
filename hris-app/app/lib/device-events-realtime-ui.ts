@@ -47,7 +47,20 @@ export const getSavedDeviceEventRealtimeBadge = ({
 	highlightedSavedEventId?: string | null;
 }) => {
 	if (viewMode !== "saved") return null;
-	if (itemId === latestRealtimeEventId) return "Live socket";
+	if (itemId === latestRealtimeEventId && itemId === highlightedSavedEventId) return "Live socket";
 	if (itemId === highlightedSavedEventId) return "Newest saved";
 	return null;
+};
+
+export const getHighlightedSavedDeviceEventId = ({
+	latestSavedEventId,
+	latestRealtimeEventId,
+	isLatestSavedFresh,
+}: {
+	latestSavedEventId?: string | null;
+	latestRealtimeEventId?: string | null;
+	isLatestSavedFresh: boolean;
+}) => {
+	if (isLatestSavedFresh && latestSavedEventId) return latestSavedEventId;
+	return latestRealtimeEventId || latestSavedEventId || null;
 };

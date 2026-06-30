@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	getDeviceEventsRealtimeStatus,
+	getHighlightedSavedDeviceEventId,
 	getSavedDeviceEventRealtimeBadge,
 } from "./device-events-realtime-ui";
 
@@ -43,9 +44,28 @@ describe("device events realtime UI", () => {
 				viewMode: "saved",
 				itemId: "event-1",
 				latestRealtimeEventId: "event-1",
-				highlightedSavedEventId: "event-2",
+				highlightedSavedEventId: "event-1",
 			}),
 		).to.equal("Live socket");
+	});
+
+	it("keeps the newest saved punch highlighted when a socket event points at an older deduped row", () => {
+		expect(
+			getHighlightedSavedDeviceEventId({
+				latestSavedEventId: "new-event",
+				latestRealtimeEventId: "older-deduped-event",
+				isLatestSavedFresh: true,
+			}),
+		).to.equal("new-event");
+
+		expect(
+			getSavedDeviceEventRealtimeBadge({
+				viewMode: "saved",
+				itemId: "older-deduped-event",
+				latestRealtimeEventId: "older-deduped-event",
+				highlightedSavedEventId: "new-event",
+			}),
+		).to.equal(null);
 	});
 
 	it("does not add realtime row badges in live device-read mode", () => {
