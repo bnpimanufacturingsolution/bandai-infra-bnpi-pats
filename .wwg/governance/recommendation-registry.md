@@ -93,3 +93,15 @@ active Workspace tasks, or commitments until reviewed and promoted.
   adding the V6 one-shot runtime phase after import/start. Include only scripts
   and instructions in the zip; keep the VHDX in the bucket and keep the
   Cloudflare credential as host-side runtime state.
+
+### REC-20260630-009: Make Hikvision Listener Runtime First-Class
+
+- Status: Proposed
+- Evidence: Hikvision API, DB, UI, and socket contracts exist, and
+  `vendor/hikvision-bio` now provides editable AlarmDemo source, but current
+  GitOps/VM manifests do not manage AlarmDemo as a service and physical-device
+  runtime proof is still pending.
+- Recommendation: Decide whether AlarmDemo remains a Windows-host sidecar like
+  ZKTeco or becomes a managed VM/host service, then add a repeatable startup,
+  health, log, and browser/socket verification path without committing HCNetSDK
+  proprietary binaries or device credentials.

@@ -14,6 +14,9 @@ appliance/backups/
 *.iso
 *.sha256
 *.log
+EN-HCNetSDKV6.1.9.4_build20220412_win64/
+vendor/hikvision-sdk/
+vendor/hikvision-sdk-local/
 packer/packer.auto.pkrvars.hcl
 image-factory/packer/packer.auto.pkrvars.hcl
 image-factory/packer/staging/

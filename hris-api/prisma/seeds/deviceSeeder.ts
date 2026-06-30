@@ -22,17 +22,30 @@ export interface DeviceDefinition {
 	};
 }
 
+const optionalEnv = (name: string) => {
+	const value = process.env[name];
+	return value && value.trim() ? value.trim() : undefined;
+};
+
 // Customize these devices according to your organization's biometric devices
 export const DEVICE_DEFINITIONS: DeviceDefinition[] = [
 	{
 		name: "Main Entrance Device",
-		address: "192.168.110.24",
-		port: 80,
+		address: optionalEnv("HIKVISION_SEED_ADDRESS") || "192.168.110.24",
+		port: Number(optionalEnv("HIKVISION_SEED_PORT") || 80),
 		protocol: "https",
-		config: {},
+		config: {
+			vendor: "Hikvision",
+			source: "vendor/hikvision-bio",
+			webhookPath: "/api/hikvision/callback",
+		},
 		access: {
-			username: "admin",
-			password: "20262027@",
+			...(optionalEnv("HIKVISION_SEED_USERNAME")
+				? { username: optionalEnv("HIKVISION_SEED_USERNAME") }
+				: {}),
+			...(optionalEnv("HIKVISION_SEED_PASSWORD")
+				? { password: optionalEnv("HIKVISION_SEED_PASSWORD") }
+				: {}),
 		},
 	},
 	{
@@ -85,11 +98,8 @@ export const DEVICE_DEFINITIONS: DeviceDefinition[] = [
 	//   address: "192.168.110.25",
 	//   port: 80,
 	//   protocol: "https",
-	//   config: {},
-	//   access: {
-	//     username: "admin",
-	//     password: "Admin123",
-	//   },
+	//   config: { vendor: "Hikvision" },
+	//   access: {},
 	// },
 ];
 

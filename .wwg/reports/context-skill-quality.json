@@ -57,6 +57,7 @@
     "docs/GITOPS_CLIENT_ENV_SCALING.md",
     "docs/GITOPS_GH_WATCH_RUNBOOK.md",
     "docs/HEALTHCHECKS.md",
+    "docs/HIKVISION_RUNTIME_TRUTH.md",
     "docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md",
     "docs/OPERATIONS.md",
     "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
@@ -352,6 +353,11 @@
     },
     {
       "path": "docs/HEALTHCHECKS.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/HIKVISION_RUNTIME_TRUTH.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -945,6 +951,15 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/HIKVISION_RUNTIME_TRUTH.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -1104,7 +1119,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 550,
+      "line": 552,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1114,7 +1129,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 554,
+      "line": 556,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1366,7 +1381,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 107,
+      "line": 113,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1375,7 +1390,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 110,
+      "line": 116,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1384,7 +1399,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 119,
+      "line": 125,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1393,7 +1408,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 146,
+      "line": 152,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1402,7 +1417,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 149,
+      "line": 155,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2260,6 +2275,15 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/HIKVISION_RUNTIME_TRUTH.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -2409,7 +2433,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 107,
+      "line": 113,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2418,7 +2442,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 110,
+      "line": 116,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2427,7 +2451,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 119,
+      "line": 125,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2436,7 +2460,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 146,
+      "line": 152,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2445,7 +2469,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 149,
+      "line": 155,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2721,7 +2745,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 550,
+      "line": 552,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -2731,7 +2755,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 554,
+      "line": 556,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3378,6 +3402,15 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/HIKVISION_RUNTIME_TRUTH.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -3689,7 +3722,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 550,
+      "line": 552,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3699,7 +3732,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 554,
+      "line": 556,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3951,7 +3984,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 107,
+      "line": 113,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3960,7 +3993,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 110,
+      "line": 116,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3969,7 +4002,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 119,
+      "line": 125,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3978,7 +4011,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 146,
+      "line": 152,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3987,7 +4020,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 149,
+      "line": 155,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4401,17 +4434,17 @@
   ],
   "metadataPolicyApplied": "Option C: Skill Registry metadata is canonical; skill files may include lightweight metadata when beneficial, and package-side skills do not require frontmatter.",
   "summary": {
-    "checkedFileCount": 68,
+    "checkedFileCount": 69,
     "skippedFileCount": 1,
     "errorCount": 0,
-    "warningCount": 69,
+    "warningCount": 70,
     "suggestionCount": 77,
     "classificationCounts": {
       "context": 5,
       "skill": 0,
       "governance": 6,
       "report": 28,
-      "public_doc": 23,
+      "public_doc": 24,
       "agent_instruction": 1,
       "changelog_governance": 0,
       "changelog_or_release_note": 0,
