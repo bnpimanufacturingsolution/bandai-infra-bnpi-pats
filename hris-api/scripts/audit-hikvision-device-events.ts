@@ -36,8 +36,17 @@ const parseArgs = () => {
 			options[normalizedKey] = value;
 		}
 	}
-	if (!options.deviceId && process.env.DEVICE_ID) {
-		options.deviceId = process.env.DEVICE_ID;
+	const envOptionMap: Record<string, string> = {
+		DEVICE_ID: "deviceId",
+		HIKVISION_DEVICE_ID: "deviceId",
+		HIKVISION_DEVICE_NAME: "deviceName",
+		HIKVISION_DEVICE_ADDRESS: "deviceAddress",
+		HIKVISION_DEVICE_PORT: "devicePort",
+	};
+	for (const [envName, optionName] of Object.entries(envOptionMap)) {
+		if (!options[optionName] && process.env[envName]) {
+			options[optionName] = String(process.env[envName]);
+		}
 	}
 	return options;
 };
@@ -122,20 +131,62 @@ const callCallback = async (payload: Record<string, any>) => {
 	return { statusCode, body: jsonBody };
 };
 
-const runAudit = async (options: Record<string, string | boolean>) => {
+const resolveAuditDevice = async (options: Record<string, string | boolean>) => {
 	const deviceId = String(options.deviceId || "").trim();
-	if (!deviceId) {
-		throw new Error("Missing --deviceId=<id>");
+	const deviceName = String(options.deviceName || options["device-name"] || "").trim();
+	const deviceAddress = String(
+		options.deviceAddress || options["device-address"] || "",
+	).trim();
+	const devicePort = Number(options.devicePort || options["device-port"] || 0);
+
+	const select = {
+		id: true,
+		organizationId: true,
+		name: true,
+		address: true,
+		port: true,
+		protocol: true,
+		config: true,
+	};
+	const candidates = [
+		deviceId ? { id: deviceId, isDeleted: false } : null,
+		deviceName && deviceAddress && devicePort
+			? { name: deviceName, address: deviceAddress, port: devicePort, isDeleted: false }
+			: null,
+		deviceName && deviceAddress
+			? { name: deviceName, address: deviceAddress, isDeleted: false }
+			: null,
+		deviceAddress && devicePort
+			? { address: deviceAddress, port: devicePort, isDeleted: false }
+			: null,
+		deviceName ? { name: deviceName, isDeleted: false } : null,
+	].filter(Boolean) as any[];
+
+	if (candidates.length === 0) {
+		throw new Error(
+			"Missing device selector: provide --deviceId=<id>, --deviceName=<name>, or --deviceAddress=<address>",
+		);
 	}
 
-	const apply = options.apply === true;
-	const device = await prisma.device.findFirst({
-		where: { id: deviceId, isDeleted: false },
-		select: { id: true, organizationId: true, name: true, address: true, port: true, config: true },
-	});
-	if (!device) {
-		throw new Error(`Device not found: ${deviceId}`);
+	for (const where of candidates) {
+		const device = await prisma.device.findFirst({ where, select });
+		if (device) return device;
 	}
+
+	throw new Error(
+		`Device not found for selector: ${JSON.stringify({
+			deviceId: deviceId || undefined,
+			deviceName: deviceName || undefined,
+			deviceAddress: deviceAddress || undefined,
+			devicePort: devicePort || undefined,
+		})}`,
+	);
+};
+
+const runAudit = async (options: Record<string, string | boolean>) => {
+	const apply = options.apply === true;
+	const device = await resolveAuditDevice(options);
+	const deviceId = device.id;
 
 	if (!options.organizationId) {
 		options.organizationId = device.organizationId;
@@ -298,6 +349,7 @@ const runAudit = async (options: Record<string, string | boolean>) => {
 			name: device.name,
 			address: device.address,
 			port: device.port,
+			protocol: device.protocol,
 			hikvisionClockSkewSeconds: Number(
 				((device as any).config as any)?.hikvisionClockSkewSeconds || 0,
 			),

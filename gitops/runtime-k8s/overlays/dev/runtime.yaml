@@ -280,7 +280,9 @@ spec:
               export PATH=/usr/local/bin:/usr/bin:/bin:/app/node_modules/.bin
               while true; do
                 /app/node_modules/.bin/tsx scripts/audit-hikvision-device-events.ts \
-                  --deviceId="${HIKVISION_DEVICE_ID}" \
+                  --deviceName="${HIKVISION_DEVICE_NAME}" \
+                  --deviceAddress="${HIKVISION_DEVICE_ADDRESS}" \
+                  --devicePort="${HIKVISION_DEVICE_PORT:-80}" \
                   --from="$(date +%F)" \
                   --to="$(date +%F)" \
                   --limit="${HIKVISION_EVENT_LIMIT:-50}" \
@@ -295,8 +297,12 @@ spec:
               value: development
             - name: APP_ENV
               value: dev
-            - name: HIKVISION_DEVICE_ID
-              value: cmqquro2g002em73cdp74rx0q
+            - name: HIKVISION_DEVICE_NAME
+              value: Main Entrance Device
+            - name: HIKVISION_DEVICE_ADDRESS
+              value: 192.168.254.181
+            - name: HIKVISION_DEVICE_PORT
+              value: "80"
             - name: HIKVISION_EVENT_LIMIT
               value: "50"
             - name: HIKVISION_WATCH_INTERVAL_SECONDS

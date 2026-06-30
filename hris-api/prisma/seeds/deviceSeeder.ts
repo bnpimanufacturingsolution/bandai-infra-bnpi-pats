@@ -27,13 +27,22 @@ const optionalEnv = (name: string) => {
 	return value && value.trim() ? value.trim() : undefined;
 };
 
+const optionalProtocol = (
+	value: string | undefined,
+): DeviceDefinition["protocol"] | undefined => {
+	if (value === "http" || value === "https" || value === "tcp" || value === "udp") {
+		return value;
+	}
+	return undefined;
+};
+
 // Customize these devices according to your organization's biometric devices
 export const DEVICE_DEFINITIONS: DeviceDefinition[] = [
 	{
 		name: "Main Entrance Device",
-		address: optionalEnv("HIKVISION_SEED_ADDRESS") || "192.168.110.24",
+		address: optionalEnv("HIKVISION_SEED_ADDRESS") || "192.168.254.181",
 		port: Number(optionalEnv("HIKVISION_SEED_PORT") || 80),
-		protocol: "https",
+		protocol: optionalProtocol(optionalEnv("HIKVISION_SEED_PROTOCOL")) || "http",
 		config: {
 			vendor: "Hikvision",
 			source: "vendor/hikvision-bio",

@@ -1,10 +1,14 @@
-type HikvisionConfigEnv = Pick<
-	NodeJS.ProcessEnv,
-	"HIKVISION_BASE_URL" | "HIKVISION_USERNAME" | "HIKVISION_PASSWORD" | "HIKVISION_PROTOCOL"
->;
+type HikvisionConfigEnv = {
+	HIKVISION_BASE_URL?: string;
+	HIKVISION_USERNAME?: string;
+	HIKVISION_PASSWORD?: string;
+	HIKVISION_PROTOCOL?: string;
+};
 
 // Hikvision API Configuration
-export const buildHikvisionConfig = (env: HikvisionConfigEnv = process.env) => ({
+export const buildHikvisionConfig = (
+	env: HikvisionConfigEnv = process.env as HikvisionConfigEnv,
+) => ({
 	baseUrl: env.HIKVISION_BASE_URL || "",
 	username: env.HIKVISION_USERNAME || "",
 	password: env.HIKVISION_PASSWORD || "",
