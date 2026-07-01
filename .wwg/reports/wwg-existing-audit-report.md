@@ -449,3 +449,18 @@ conservative
 ## Recommended Next Command
 
 `wwg adopt --mode conservative --dry-run`
+
+## WWG Truth Synchronization
+
+- Task mode: generated existing-project audit report.
+- New truth detected: no; this report records audit findings and adoption recommendations only.
+- Wiki updated: no.
+- Workspace updated: no.
+- Governance review completed: yes; report contract reviewed during 2026-07-01 validation repair.
+- Drift status: low; historical generated report needed required truth-sync fields.
+- Canonical files changed:
+  - `.wwg/reports/wwg-existing-audit-report.md`
+- Implementation discoveries synced:
+  - None; no implementation changes were made by this report.
+- Remaining stale context:
+  - This report remains adoption-era evidence. Current runtime truth is governed by `.wwg/wiki/project-truth.md`, `.wwg/wiki/project-truth-summary.md`, `.wwg/workspace/current-task.md`, and newer runtime reports.

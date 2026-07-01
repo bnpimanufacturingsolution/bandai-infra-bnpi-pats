@@ -45,7 +45,7 @@ export const DEVICE_DEFINITIONS: DeviceDefinition[] = [
 		protocol: optionalProtocol(optionalEnv("HIKVISION_SEED_PROTOCOL")) || "http",
 		config: {
 			vendor: "Hikvision",
-			source: "vendor/hikvision-bio",
+			source: "vendor/hikvision-linux",
 			webhookPath: "/api/hikvision/callback",
 		},
 		access: {
@@ -64,7 +64,7 @@ export const DEVICE_DEFINITIONS: DeviceDefinition[] = [
 		protocol: "tcp",
 		config: {
 			vendor: "ZKTeco",
-			source: "vendor/zkteco-sdk",
+			source: "vendor/zkteco-linux",
 			webhookPath: "/api/zkteco/events",
 		},
 	},
@@ -75,7 +75,7 @@ export const DEVICE_DEFINITIONS: DeviceDefinition[] = [
 		protocol: "tcp",
 		config: {
 			vendor: "ZKTeco",
-			source: "vendor/zkteco-sdk",
+			source: "vendor/zkteco-linux",
 			webhookPath: "/api/zkteco/events",
 		},
 	},
@@ -86,7 +86,7 @@ export const DEVICE_DEFINITIONS: DeviceDefinition[] = [
 		protocol: "tcp",
 		config: {
 			vendor: "ZKTeco",
-			source: "vendor/zkteco-sdk",
+			source: "vendor/zkteco-linux",
 			webhookPath: "/api/zkteco/events",
 		},
 	},
@@ -97,7 +97,7 @@ export const DEVICE_DEFINITIONS: DeviceDefinition[] = [
 		protocol: "tcp",
 		config: {
 			vendor: "ZKTeco",
-			source: "vendor/zkteco-sdk",
+			source: "vendor/zkteco-linux",
 			webhookPath: "/api/zkteco/events",
 		},
 	},

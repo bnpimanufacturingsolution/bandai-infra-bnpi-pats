@@ -44,4 +44,13 @@ Mixed regression repair and runtime/GitOps drift investigation.
 - Workspace updated: no.
 - Governance review completed: yes; recommendation registry updated.
 - Drift status: medium.
+- Canonical files changed:
+  - `gitops/runtime-k8s/overlays/dev/runtime.yaml`
+  - `gitops/runtime-k8s/overlays/prod/runtime.yaml`
+  - `gitops/runtime-k8s/overlays/uat/runtime.yaml`
+  - `scripts/test-self-heal-contract.ps1`
+  - `.wwg/governance/recommendation-registry.md`
+- Implementation discoveries synced:
+  - DEV LAN CORS requires explicit credentialed CORS env vars in K3s API runtime manifests.
+  - DEV Docker and K3s databases differed during the incident and need a governed promotion path.
 - Remaining stale context: Project Truth still contains older `192.168.254.148` runtime evidence as previous proof. Treat runtime IPs as snapshots unless persisted.

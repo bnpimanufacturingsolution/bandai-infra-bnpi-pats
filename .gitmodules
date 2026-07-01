@@ -1,6 +1,0 @@
-[submodule "vendor/zkteco-sdk"]
-	path = vendor/zkteco-sdk
-	url = https://github.com/ernestdodz/ZKTECO.git
-[submodule "vendor/hikvision-bio"]
-	path = vendor/hikvision-bio
-	url = https://github.com/hrisworkforcesystem-coder/HikVision_Bio.git

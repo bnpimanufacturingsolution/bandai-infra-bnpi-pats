@@ -443,3 +443,18 @@ reports:
 ## Next Steps
 
 - wwg adopt --mode conservative --dry-run
+
+## WWG Truth Synchronization
+
+- Task mode: generated adoption planning report.
+- New truth detected: no; this report records adoption-plan findings and recommended actions only.
+- Wiki updated: no.
+- Workspace updated: no.
+- Governance review completed: yes; report contract reviewed during 2026-07-01 validation repair.
+- Drift status: low; historical generated report needed required truth-sync fields.
+- Canonical files changed:
+  - `.wwg/reports/wwg-adoption-plan.md`
+- Implementation discoveries synced:
+  - None; no implementation changes were made by this report.
+- Remaining stale context:
+  - This report remains adoption-era evidence. Current runtime truth is governed by `.wwg/wiki/project-truth.md`, `.wwg/wiki/project-truth-summary.md`, `.wwg/workspace/current-task.md`, and newer runtime reports.

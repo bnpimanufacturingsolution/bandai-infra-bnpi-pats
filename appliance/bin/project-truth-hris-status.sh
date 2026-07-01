@@ -115,7 +115,7 @@ if [ -n "$lan_ip" ]; then
     echo "VM ZKTeco contract status: DOWN (API health did not respond at ${lan_ip}:3001)"
   fi
 fi
-echo "Bridge runtime: Windows Standalone SDK sidecar at appliance/zkteco-standalone-sdk."
+echo "Bridge runtime: ZKTeco Linux PyZK bridge at vendor/zkteco-linux."
 if [ -n "${ZKTECO_BRIDGE_STATUS_URL:-}" ]; then
   echo "Bridge status: ${ZKTECO_BRIDGE_STATUS_URL}"
   if curl -fsS "$ZKTECO_BRIDGE_STATUS_URL" >/tmp/project-truth-zkteco-status.json 2>/dev/null; then

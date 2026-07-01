@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { controller } from "../app/device/device.controller";
 
-describe("device health ZKTeco SDK sidecar", () => {
+describe("device health ZKTeco Linux bridge", () => {
 	const originalFetch = global.fetch;
 	const originalBridgeStatusUrl = process.env.ZKTECO_BRIDGE_STATUS_URL;
 
@@ -14,15 +14,15 @@ describe("device health ZKTeco SDK sidecar", () => {
 		}
 	});
 
-	it("uses the configured ZKTeco SDK sidecar status and never returns Hikvision listener state for ZKTeco devices", async () => {
+	it("uses the configured ZKTeco Linux bridge status and never returns Hikvision listener state for ZKTeco devices", async () => {
 		process.env.ZKTECO_BRIDGE_STATUS_URL = "http://127.0.0.1:4371/status";
 		global.fetch = (async () =>
 			({
 				ok: true,
 				status: 200,
 				json: async () => ({
-					service: "project-truth-zkteco-standalone-sdk-bridge",
-					runtime: ".NET Framework 4.8 + zkemkeeper COM",
+					service: "project-truth-zkteco-linux-pyzk-bridge",
+					runtime: "project-truth-zkteco-linux-pyzk",
 					status: "online",
 					configuredDevices: 1,
 				 connectedDevices: 1,
@@ -85,7 +85,7 @@ describe("device health ZKTeco SDK sidecar", () => {
 
 		expect(statusCode).to.equal(200);
 		expect(body.data.checks).to.have.property("zktecoBridge");
-		expect(body.data.checks.zktecoBridge.runtime).to.equal(".NET Framework 4.8 + zkemkeeper COM");
+		expect(body.data.checks.zktecoBridge.runtime).to.equal("project-truth-zkteco-linux-pyzk");
 		expect(body.data.checks.zktecoBridge.connectedDevices).to.equal(1);
 		expect(body.data.checks.lastZktecoEvent.status).to.equal("MATCHED");
 		const retiredRuntimeLabel = `Project Truth ZKTeco ${"br" + "idge"}`;
@@ -94,7 +94,7 @@ describe("device health ZKTeco SDK sidecar", () => {
 		expect(body.data.checks).to.not.have.property("hikvisionListener");
 	});
 
-	it("does not report a ZKTeco device online when the SDK sidecar is up but that device is disconnected", async () => {
+	it("does not report a ZKTeco device online when the Linux bridge is up but that device is disconnected", async () => {
 		process.env.ZKTECO_BRIDGE_STATUS_URL = "http://127.0.0.1:4371/status";
 		global.fetch = (async () =>
 			({

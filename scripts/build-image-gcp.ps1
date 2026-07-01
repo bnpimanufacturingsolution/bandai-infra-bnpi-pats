@@ -480,7 +480,7 @@ if (-not $SkipStage) {
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'appliance') -Destination (Join-Path $stagingRoot 'appliance')
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-api') -Destination (Join-Path $stagingRoot 'hris-api')
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-app') -Destination (Join-Path $stagingRoot 'hris-app')
-  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'vendor\zkteco-sdk') -Destination (Join-Path $stagingRoot 'vendor\zkteco-sdk')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'vendor\zkteco-linux') -Destination (Join-Path $stagingRoot 'vendor\zkteco-linux')
 
   if ($IncludeSourceInputs) {
     $sourceInputsDestination = Join-Path $stagingRoot 'appliance\source-inputs-organized'

@@ -4,9 +4,8 @@
 	"main": "dist/lib-entry.js",
 	"scripts": {
 		"predev": "node scripts/cleanup-emitted-js.cjs && node scripts/ensure-prisma-client.cjs && node scripts/ensure-dev-port-ownership.cjs && node scripts/ensure-local-dev-services.cjs",
-		"dev": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-dev-with-hikvision.ps1",
+		"dev": "dotenv tsx watch index.ts",
 		"dev:api-only": "dotenv tsx watch index.ts",
-		"dev:alarmdemo": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\run-hikvision-alarmdemo.ps1",
 		"prestart": "node scripts/cleanup-emitted-js.cjs && node scripts/ensure-prisma-client.cjs",
 		"start": "dotenv nodemon --exec \"ts-node --prefer-ts-exts\" index.ts",
 		"lint": "eslint \"app/**/*.ts\" \"config/**/*.ts\" \"helper/**/*.ts\" \"lib/**/*.ts\" \"middleware/**/*.ts\" \"utils/**/*.ts\" \"zod/**/*.ts\" index.ts cron-entry.ts",

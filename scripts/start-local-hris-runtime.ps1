@@ -70,7 +70,7 @@ if ($Environment -eq 'prod') {
 }
 
 if ($IncludeZkteco) {
-  Write-Host "The Node ZKTeco bridge is retired. Start appliance/zkteco-standalone-sdk separately and set ZKTECO_BRIDGE_STATUS_URL if live device status is needed."
+  Write-Host "The Windows and Node ZKTeco bridges are retired. Use vendor/zkteco-linux and set ZKTECO_BRIDGE_STATUS_URL if live device status is needed."
 }
 
 $log = Join-Path $logsRoot ("start-local-hris-runtime-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))

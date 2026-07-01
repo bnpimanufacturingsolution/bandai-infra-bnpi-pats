@@ -33,35 +33,26 @@ try {
     $dockerMode = docker info --format '{{.OSType}} {{.OperatingSystem}}'
     Write-Host $dockerMode
     if ($dockerMode -notmatch '^linux\b') {
-        Write-WarnLine "Docker is not in Linux mode. Run HRIS Linux services before using the Windows-container ZKTeco profile."
-    } else {
-        Write-Pass "Docker is in Linux mode for HRIS API/app/Postgres."
+        throw "Docker must be in Linux mode for the Project Truth ZKTeco Linux bridge."
     }
+    Write-Pass "Docker is in Linux mode for HRIS API/app/Postgres and the ZKTeco Linux bridge."
 
     Write-Step "Compose config"
     docker compose -f .\appliance\docker-compose.yml config --quiet
-    Write-Pass "Default compose file parses without the retired Node ZKTeco bridge service."
+    Write-Pass "Default compose file parses with the ZKTeco Linux bridge service."
 
-    Write-Step "Windows SDK ZKTeco sidecar files"
+    Write-Step "ZKTeco Linux bridge files"
     $requiredFiles = @(
-        ".\appliance\zkteco-standalone-sdk\Program.cs",
-        ".\appliance\zkteco-standalone-sdk\README.txt",
-        ".\appliance\zkteco-standalone-sdk\ZKTecoStandalone.csproj"
+        ".\vendor\zkteco-linux\Dockerfile",
+        ".\vendor\zkteco-linux\zkteco_linux_probe\__main__.py",
+        ".\vendor\zkteco-linux\requirements.txt"
     )
-    $missingBridgeFiles = @()
     foreach ($file in $requiredFiles) {
         if (-not (Test-Path -LiteralPath $file)) {
-            $missingBridgeFiles += $file
+            throw "Missing required ZKTeco Linux bridge file: $file."
         }
     }
-    if ($missingBridgeFiles.Count -gt 0) {
-        if (-not $ContractOnly) {
-            throw "Missing required Windows SDK sidecar file: $($missingBridgeFiles -join ', ')."
-        }
-        Write-WarnLine "Sidecar files missing; continuing in contract-only mock mode: $($missingBridgeFiles -join ', ')"
-    } else {
-        Write-Pass "Windows SDK sidecar files exist."
-    }
+    Write-Pass "ZKTeco Linux bridge files exist."
 
     if ($BuildApi) {
         Write-Step "Build HRIS API image"
@@ -124,7 +115,7 @@ try {
     }
 
     Write-Step "Best finish state"
-    Write-Host "Stop when API/app are healthy, Windows SDK sidecar or mock posts reach $ApiBaseUrl/api/zkteco/events, and saved events show under /admin/devices/events?view=saved&source=ZKTECO_EVENT."
+    Write-Host "Stop when API/app are healthy, the ZKTeco Linux bridge or mock posts reach $ApiBaseUrl/api/zkteco/events, and saved events show under /admin/devices/events?view=saved&source=ZKTECO_EVENT."
     Write-Host "Attendance truth note: ZKTeco ingestion records DeviceEvent evidence only. It must not create/update Attendance, AttendanceObligation, timesheets, or payroll unless a separate tested applicator is deliberately enabled."
 } finally {
     Pop-Location

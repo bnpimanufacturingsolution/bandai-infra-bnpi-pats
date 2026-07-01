@@ -14,7 +14,7 @@ describe("Hikvision device seed defaults", () => {
 		});
 		expect(mainEntranceDevice?.config).to.deep.include({
 			vendor: "Hikvision",
-			source: "vendor/hikvision-bio",
+			source: "vendor/hikvision-linux",
 			webhookPath: "/api/hikvision/callback",
 		});
 	});

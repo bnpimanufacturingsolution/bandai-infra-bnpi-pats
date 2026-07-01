@@ -204,7 +204,7 @@ $checks.Add((Assert-Text 'VM Git credential command restarts ansible-pull' $vmGi
 $checks.Add((Assert-Text 'VM Git credential command supports password fallback' $vmGitCredsScript 'PROJECT_TRUTH_SSH_PASSWORD'))
 $checks.Add((Assert-Text 'ansible-pull wrapper pulls develop from repo' $ansiblePullScript 'PROJECT_TRUTH_BRANCH:-develop'))
 $checks.Add((Assert-Text 'ansible-pull wrapper invokes ansible-pull' $ansiblePullScript 'ansible-pull'))
-$checks.Add((Assert-Text 'ansible-pull wrapper skips retired ZKTeco SDK submodule' $ansiblePullScript 'submodule\.vendor/zkteco-sdk\.update'))
+$checks.Add((Assert-NoText 'ansible-pull wrapper does not reference retired ZKTeco SDK submodule' $ansiblePullScript 'submodule\.vendor/zkteco-sdk\.update'))
 $checks.Add((Assert-Text 'ansible-pull wrapper preflights Git network before fetch' $ansiblePullScript 'repair_network_for_git'))
 $checks.Add((Assert-Text 'ansible-pull wrapper repairs resolver drift before fetch' $ansiblePullScript 'systemd-resolved\.service'))
 $checks.Add((Assert-Text 'ansible-pull wrapper repairs DHCP drift before fetch' $ansiblePullScript 'project-truth-lan-dhcp'))

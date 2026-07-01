@@ -350,8 +350,7 @@ export const controller = (prisma: PrismaClient) => {
 			const baseUrl = isZkteco ? null : buildHikvisionDeviceBaseUrl(device);
 			const startedAt = Date.now();
 
-			const [listener, network, zktecoBridge, lastZktecoEvent] = await Promise.all([
-				isZkteco ? Promise.resolve(null) : checkWindowsProcess("AlarmDemo.exe"),
+			const [network, zktecoBridge, lastZktecoEvent] = await Promise.all([
 				checkTcpReachability(parsedAddress, healthPort),
 				isZkteco ? getZktecoBridgeStatus() : Promise.resolve(null),
 				isZkteco
@@ -431,7 +430,6 @@ export const controller = (prisma: PrismaClient) => {
 					]
 				: [
 						{ ok: true },
-						{ ok: Boolean(listener?.ok) },
 						{ ok: network.ok },
 						{ ok: Boolean(deviceApi?.ok) },
 					];
@@ -461,7 +459,7 @@ export const controller = (prisma: PrismaClient) => {
 					runtime:
 						zktecoBridge?.data?.runtime ||
 						zktecoBridge?.data?.service ||
-						"Project Truth ZKTeco SDK sidecar",
+						"project-truth-zkteco-linux-pyzk",
 					statusUrl: zktecoBridge?.statusUrl,
 					latencyMs: zktecoBridge?.latencyMs,
 					configuredDevices: zktecoBridge?.data?.configuredDevices ?? null,
@@ -472,11 +470,6 @@ export const controller = (prisma: PrismaClient) => {
 				};
 				responseChecks.lastZktecoEvent = lastZktecoEvent;
 			} else {
-				responseChecks.hikvisionListener = listener || {
-					ok: false,
-					status: "unknown",
-					error: "Listener status unavailable",
-				};
 				responseChecks.deviceApi = deviceApi;
 			}
 

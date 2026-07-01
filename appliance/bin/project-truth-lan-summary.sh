@@ -166,7 +166,7 @@ emit_zkteco_runtime_rows() {
   local ip_addr="$1"
   echo "ZKTeco runtime"
   printf '  %-18s %s\n' "VM webhook" "http://${ip_addr}:3001/api/zkteco/events"
-  printf '  %-18s %s\n' "SDK sidecar" "Windows host: appliance/zkteco-standalone-sdk"
+  printf '  %-18s %s\n' "Linux bridge" "vendor/zkteco-linux"
   if curl -fsS "http://${ip_addr}:3001/health" >/dev/null 2>&1; then
     printf '  %-18s %s\n' "VM contract" "ready: HRIS API is reachable"
   else

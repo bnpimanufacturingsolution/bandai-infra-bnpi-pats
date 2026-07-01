@@ -74,7 +74,7 @@ services:
       API_ACTIVITY_LOG_INCLUDE_READS: "true"
       API_ACTIVITY_LOG_EXCLUDED_PATHS: /health,/metrics
       LOG_FORMAT: json
-      ZKTECO_BRIDGE_STATUS_URL: ${ZKTECO_BRIDGE_STATUS_URL_DEV:-${ZKTECO_BRIDGE_STATUS_URL:-http://host.docker.internal:4371/status}}
+      ZKTECO_BRIDGE_STATUS_URL: ${ZKTECO_BRIDGE_STATUS_URL_DEV:-${ZKTECO_BRIDGE_STATUS_URL:-http://zkteco-linux-bridge-dev:4371/status}}
     volumes:
       - apiuploads-dev:/app/uploads
       - ./backups/dev:/var/backups/hris
@@ -165,6 +165,38 @@ services:
       retries: 12
       start_period: 20s
 
+  zkteco-linux-bridge-dev:
+    image: project-truth-zkteco-linux:develop
+    container_name: project-truth-zkteco-linux-bridge-dev
+    restart: unless-stopped
+    command:
+      - --mode
+      - bridge
+      - --latest
+      - "${ZKTECO_SYNC_LATEST_DEV:-${ZKTECO_SYNC_LATEST:-1}}"
+      - --poll-seconds
+      - "${ZKTECO_POLL_SECONDS_DEV:-${ZKTECO_POLL_SECONDS:-60}}"
+      - --webhook-url
+      - http://hris-api-dev:3001/api/zkteco/events
+    environment:
+      ZKTECO_STATUS_HOST: 0.0.0.0
+      ZKTECO_STATUS_PORT: 4371
+      ZKTECO_WEBHOOK_TIMEOUT: ${ZKTECO_WEBHOOK_TIMEOUT:-15}
+    ports:
+      - "4372:4371"
+    depends_on:
+      hris-api-dev:
+        condition: service_healthy
+    networks:
+      - default
+      - hris-observability
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:4371/health', timeout=5).read()\nPY"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
   hris-postgres-uat:
     image: postgres:16-alpine
     container_name: hris-postgres-uat
@@ -240,7 +272,7 @@ services:
       API_ACTIVITY_LOG_INCLUDE_READS: "true"
       API_ACTIVITY_LOG_EXCLUDED_PATHS: /health,/metrics
       LOG_FORMAT: json
-      ZKTECO_BRIDGE_STATUS_URL: ${ZKTECO_BRIDGE_STATUS_URL_UAT:-${ZKTECO_BRIDGE_STATUS_URL:-}}
+      ZKTECO_BRIDGE_STATUS_URL: ${ZKTECO_BRIDGE_STATUS_URL_UAT:-${ZKTECO_BRIDGE_STATUS_URL:-http://zkteco-linux-bridge-uat:4371/status}}
     volumes:
       - apiuploads-uat:/app/uploads
       - ./backups/uat:/var/backups/hris
@@ -330,6 +362,38 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+
+  zkteco-linux-bridge-uat:
+    image: project-truth-zkteco-linux:develop
+    container_name: project-truth-zkteco-linux-bridge-uat
+    restart: unless-stopped
+    command:
+      - --mode
+      - bridge
+      - --latest
+      - "${ZKTECO_SYNC_LATEST_UAT:-${ZKTECO_SYNC_LATEST:-1}}"
+      - --poll-seconds
+      - "${ZKTECO_POLL_SECONDS_UAT:-${ZKTECO_POLL_SECONDS:-60}}"
+      - --webhook-url
+      - http://hris-api-uat:3001/api/zkteco/events
+    environment:
+      ZKTECO_STATUS_HOST: 0.0.0.0
+      ZKTECO_STATUS_PORT: 4371
+      ZKTECO_WEBHOOK_TIMEOUT: ${ZKTECO_WEBHOOK_TIMEOUT:-15}
+    ports:
+      - "4373:4371"
+    depends_on:
+      hris-api-uat:
+        condition: service_healthy
+    networks:
+      - default
+      - hris-observability
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:4371/health', timeout=5).read()\nPY"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   hris-grafana-uat:
     image: grafana/grafana:11.2.0

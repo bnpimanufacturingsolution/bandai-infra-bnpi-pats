@@ -47,7 +47,7 @@ async function main() {
 					access: {},
 					config: {
 						vendor: "ZKTeco",
-						source: "vendor/zkteco-sdk",
+						source: "vendor/zkteco-linux",
 						webhookPath: "/api/zkteco/events",
 					},
 					isDeleted: false,
@@ -61,7 +61,7 @@ async function main() {
 					access: {},
 					config: {
 						vendor: "ZKTeco",
-						source: "vendor/zkteco-sdk",
+						source: "vendor/zkteco-linux",
 						webhookPath: "/api/zkteco/events",
 					},
 				},

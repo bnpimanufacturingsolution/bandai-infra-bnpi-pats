@@ -183,9 +183,6 @@ run_ansible_pull() {
     PROJECT_TRUTH_BRANCH="$branch"
     ANSIBLE_FORCE_COLOR=false
     GIT_TERMINAL_PROMPT=0
-    GIT_CONFIG_COUNT=1
-    GIT_CONFIG_KEY_0=submodule.vendor/zkteco-sdk.update
-    GIT_CONFIG_VALUE_0=none
   )
   if [ -n "$git_askpass" ]; then
     env_args+=(GIT_ASKPASS="$git_askpass")

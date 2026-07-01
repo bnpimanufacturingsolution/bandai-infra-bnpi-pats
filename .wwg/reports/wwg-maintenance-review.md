@@ -393,3 +393,18 @@ Agents should follow Must Have items first. Missing Other Features are not block
 - Run `wwg reports --target .` before any report archive or promotion work.
 - Run `wwg brief --target .` if generic or compatibility agent brief readiness is missing.
 - Refresh Workspace/Governance outputs only through explicit generation or refresh commands.
+
+## WWG Truth Synchronization
+
+- Task mode: generated maintenance review report.
+- New truth detected: no; this report records maintenance findings and suggested follow-up actions only.
+- Wiki updated: no.
+- Workspace updated: no.
+- Governance review completed: yes; report contract reviewed during 2026-07-01 validation repair.
+- Drift status: low; historical generated report needed required truth-sync fields.
+- Canonical files changed:
+  - `.wwg/reports/wwg-maintenance-review.md`
+- Implementation discoveries synced:
+  - None; no implementation changes were made by this report.
+- Remaining stale context:
+  - This report remains maintenance-review evidence. Current runtime truth is governed by `.wwg/wiki/project-truth.md`, `.wwg/wiki/project-truth-summary.md`, `.wwg/workspace/current-task.md`, and newer runtime reports.
