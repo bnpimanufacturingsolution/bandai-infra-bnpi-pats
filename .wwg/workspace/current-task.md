@@ -71,8 +71,8 @@ Status: READY FOR REVIEW
 ## Evidence
 
 - Runtime VM: `project-truth-local-vhdx-proof`
-- Current VM LAN IP: `192.168.254.148`
-- LAN SSH: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@192.168.254.148`
+- Current operator/LAN IP: `10.184.38.144`
+- LAN SSH: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.38.144`
 - Named tunnel: `bnpi-hris`
 - Named tunnel ID: `e3486f00-f974-46d3-9e11-911266749d00`
 - Public verification artifact: `.runtime/cloudflare-drift-proof/20260629-220610/public-verification-final.json`

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { TimesheetDayCell } from "./TimesheetDayCell";
 
 describe("TimesheetDayCell", () => {
-	it("renders clock-in evidence and missing clock-out text directly in the cell", () => {
+	it("keeps punch details out of the compact day cell", () => {
 		render(
 			<TimesheetDayCell
 				dayNumber={8}
@@ -14,9 +14,11 @@ describe("TimesheetDayCell", () => {
 			/>,
 		);
 
-		expect(screen.getByText("In")).toBeInTheDocument();
-		expect(screen.getByText("3:50 PM")).toBeInTheDocument();
-		expect(screen.getByText("Out")).toBeInTheDocument();
-		expect(screen.getByText("Not clocked out")).toBeInTheDocument();
+		expect(screen.getByText("8")).toBeInTheDocument();
+		expect(screen.getByText("0:00")).toBeInTheDocument();
+		expect(screen.queryByText("In")).not.toBeInTheDocument();
+		expect(screen.queryByText("3:50 PM")).not.toBeInTheDocument();
+		expect(screen.queryByText("Out")).not.toBeInTheDocument();
+		expect(screen.queryByText("Not clocked out")).not.toBeInTheDocument();
 	});
 });

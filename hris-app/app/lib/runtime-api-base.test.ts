@@ -62,12 +62,12 @@ describe("runtime API base resolver", () => {
 		);
 	});
 
-	it("uses paired API tunnel hosts for dev and UAT public app hosts", () => {
+	it("uses same-host API routing for dev and UAT public app hosts", () => {
 		expect(resolveRuntimeApiBase(locationFor("https://dev.bnpi-hris.tech/auth/login"))).toBe(
-			"https://dev-api.bnpi-hris.tech",
+			"/api",
 		);
 		expect(resolveRuntimeApiBase(locationFor("https://uat.bnpi-hris.tech/auth/login"))).toBe(
-			"https://uat-api.bnpi-hris.tech",
+			"/api",
 		);
 	});
 });

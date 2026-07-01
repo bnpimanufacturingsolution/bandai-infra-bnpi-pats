@@ -159,16 +159,6 @@ export const TimesheetDayCell = forwardRef<HTMLDivElement, TimesheetDayCellProps
 							{hoursLabel || "0:00"}
 						</span>
 					)}
-					{kind === "hours" && (timeInLabel || timeOutLabel) && (
-						<div className="mt-0.5 grid w-full grid-cols-[auto_1fr] gap-x-1 px-1 text-[8px] leading-tight">
-							<span className="font-semibold text-slate-400">In</span>
-							<span className="truncate text-slate-600">{timeInLabel || "-"}</span>
-							<span className="font-semibold text-slate-400">Out</span>
-							<span className="truncate text-slate-600">
-								{timeOutLabel || "Not clocked out"}
-							</span>
-						</div>
-					)}
 				</>
 			)}
 

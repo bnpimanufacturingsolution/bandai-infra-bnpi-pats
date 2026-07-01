@@ -143,7 +143,17 @@ function Write-TunnelConfig {
     $lines += "  - hostname: $hostname"
     $lines += '    path: /api/.*'
     $lines += "    service: http://${GuestIp}:3001"
+    $lines += "  - hostname: $hostname"
+    $lines += '    path: /socket.io/.*'
+    $lines += "    service: http://${GuestIp}:3001"
   }
+
+  $lines += '  - hostname: dev.bnpi-hris.tech'
+  $lines += '    path: /socket.io/.*'
+  $lines += "    service: http://${GuestIp}:3101"
+  $lines += '  - hostname: uat.bnpi-hris.tech'
+  $lines += '    path: /socket.io/.*'
+  $lines += "    service: http://${GuestIp}:3201"
 
   foreach ($target in $targets) {
     $lines += "  - hostname: $($target.Hostname)"

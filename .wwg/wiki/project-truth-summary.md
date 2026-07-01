@@ -9,20 +9,20 @@ Last updated: 2026-07-01
 - The VM is attached to the `ProjectTruth-External` switch.
 - The VM boots from `C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx`.
 - The VM initially failed to start with 4 GB startup memory, then started after reducing dynamic memory to 1536 MB startup, 1024 MB minimum, and 3072 MB maximum.
-- The current VM LAN IP after the 2026-06-29 21:23 PHT Cloudflare repair pass is `192.168.254.148`.
-- SSH is exposed on the current VM LAN address at `192.168.254.148:22`.
+- The current operator/LAN target from 2026-07-01 SSH/banner evidence is `10.184.38.144`.
+- SSH is exposed on the current operator/LAN address at `10.184.38.144:22`.
 - SSH server banner evidence: `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.16`.
-- SSH password login is proven on `192.168.254.148` with the repo-documented appliance credential `infra / infra` through pinned-host-key `plink`; current host key fingerprint is `SHA256:+Xxejdej6SPlSKBEvEO/++Hh3j+QvoFSetx6DZXxiok`.
-- SSH key login is proven on `192.168.254.148` with Windows OpenSSH using `%USERPROFILE%\.ssh\node-health-appliance_ed25519`.
-- OpenSSH proof returned hostname `project-truth-node`, user `infra`, `eth0 192.168.254.148/24`, and active SSH service.
-- Current LAN SSH command: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@192.168.254.148`.
+- SSH password login was previously proven on `192.168.254.148` with the repo-documented appliance credential `infra / infra` through pinned-host-key `plink`; current host key fingerprint is `SHA256:+Xxejdej6SPlSKBEvEO/++Hh3j+QvoFSetx6DZXxiok`.
+- SSH key login is proven on `10.184.38.144` with Windows OpenSSH using `%USERPROFILE%\.ssh\node-health-appliance_ed25519`.
+- OpenSSH proof returned hostname `project-truth-node`, user `infra`, VM `eth0 192.168.254.148/24`, and active SSH service while the appliance banner reports `LAN IP: 10.184.38.144`.
+- Current LAN SSH command: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.38.144`.
 - Public Cloudflare SSH is now verified through `ssh.bnpi-hris.tech` using Cloudflare Access and the host-managed named tunnel.
 - Verified public SSH command: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 -o ProxyCommand="cloudflared access ssh --hostname %h" infra@ssh.bnpi-hris.tech`.
 - Windows OpenSSH alias `project-truth-hris` was added to `%USERPROFILE%\.ssh\config`; `ssh project-truth-hris` returned `SSH_ALIAS_OK`, hostname `project-truth-node`, and user `infra`.
 - Preferred clean remote-admin journey is browser-rendered SSH at `https://ssh.bnpi-hris.tech` through the VM-managed Cloudflare Tunnel, with the BNPI Windows Server kept Hyper-V-only and not used for inbound SSH or Windows SSH configuration.
-- VM summary script was updated and live-installed so `project-truth-lan-summary --screen-overview`, `/etc/issue`, `/etc/motd`, and `/run/project-truth/network-summary.txt` show `LAN IP: 192.168.254.148`, `OpenSSH: ssh infra@192.168.254.148`, the key path, and public Cloudflare app/API/Grafana URLs.
+- VM login/banner summary currently reports `LAN IP: 10.184.38.144`, `SSH: ssh infra@10.184.38.144`, app/API ports for PROD/DEV/UAT, and VM-managed Cloudflare public targets.
 - Current generated overview line-width check: `MaxLineLength=66`; stale `10.184.38.91` was not present in `/etc/issue`, `/run/project-truth/network-summary.txt`, or the generated overview.
-- After the Cloudflare repair pass, HRIS LAN checks passed on `192.168.254.148` for PROD app/API (`3000`, `3001`), DEV app/API (`3100`, `3101`), UAT app/API (`3200`, `3201`), and Grafana (`53000`).
+- On 2026-07-01, DEV LAN checks passed on `10.184.38.144` for app/API (`3100`, `3101`) and SSH (`22`); earlier 2026-06-29 checks passed on `192.168.254.148` for PROD/DEV/UAT app/API and Grafana.
 - The `bnpi-hris.tech` Cloudflare 1033 issue was repaired by logging into the Cloudflare account that owns `bnpi-hris.tech`, creating named tunnel `e3486f00-f974-46d3-9e11-911266749d00`, and routing app/API/dev/uat/Grafana hostnames to it.
 - Public checks passed for `bnpi-hris.tech`, `www.bnpi-hris.tech`, `app.bnpi-hris.tech`, `api.bnpi-hris.tech`, `dev.bnpi-hris.tech`, `dev-api.bnpi-hris.tech`, `uat.bnpi-hris.tech`, `uat-api.bnpi-hris.tech`, and `grafana.bnpi-hris.tech`.
 - Current named tunnel bootstrap ownership remains host-managed on the Windows host through `scripts/start-bnpi-cloudflare-tunnel.ps1`, scheduled task `ProjectTruth-BNPI-HRIS-Cloudflared`, `scripts/ensure-bnpi-cloudflare-host.ps1`, and `cloudflared-bnpi-hris.yml`.
@@ -33,7 +33,7 @@ Last updated: 2026-07-01
 - V6 one-shot proof on 2026-06-30 passed SSH, ansible-pull, VM-side Cloudflare credential import, LAN health, public `bnpi-hris.tech` health, public CORS, and CLI SSH through `ssh.bnpi-hris.tech`; the serving app/API runtime was healthy Docker Compose containers while K3s pods remained resource-constrained.
 - V7 is published under `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v7/latest/` as a V2/V6-style one-click public lane. It promotes the known clean V5 base VHDX to `project-truth-node-local-hyperv-v7-current-state.vhdx` and ships a small V7 installer zip that runs the latest V6 runtime proof/import path after Hyper-V import. The live proof VM disk was not uploaded because it has contained root-only Cloudflare runtime credentials.
 - Host-local PROD and DEV checks passed during validation, but host-local UAT ports `3200` and `3201` failed while LAN UAT passed.
-- `%ProgramData%\ProjectTruth\config\project-truth.json` was backed up and updated to use VM `project-truth-local-vhdx-proof`, guest IP hint `192.168.254.148`, memory `1536`, and SSH port `22`.
+- `%ProgramData%\ProjectTruth\config\project-truth.json` was previously backed up and updated to use VM `project-truth-local-vhdx-proof`, guest IP hint `192.168.254.148`, memory `1536`, and SSH port `22`; current operator/LAN evidence now points to `10.184.38.144`.
 - Hikvision integration exists in code through `/api/hikvision/callback`, ISAPI helpers, event persistence, admin device-event filters, and realtime `device-event:saved`; editable source is now `vendor/hikvision-linux`, while proprietary Linux HCNetSDK binaries remain local-only runtime inputs.
 - ZKTeco is now Linux-first through `vendor/zkteco-linux`. On 2026-07-01 the VM root filesystem was expanded to 491 GB with about 394 GB free, local and VM Linux bridge tests passed, and all four known terminals at `10.184.38.9`, `10.184.38.235`, `10.184.38.234`, and `10.184.38.10` passed TCP from the VM. Docker Compose now defines `zkteco-linux-bridge`, `zkteco-linux-bridge-dev`, and `zkteco-linux-bridge-uat`; the old Windows SDK submodule and Windows sidecar implementation were removed from the repo. PyZK history counts remain lower than the historical Windows SDK baseline, so exact count parity and GitOps/K3s runtime are still open.
 - Hikvision can partially run inside Linux/VM through ISAPI ACS polling and the DEV VM/K3s watcher. An experimental `vendor/hikvision-linux` read-only TCP/ISAPI probe, ACS event watch mode, Docker image scaffold, VM discovery wrapper, and C++ HCNetSDK alarm probe now exist. Vendor-only TCP proof from the Linux VM passed for current Bandai Hikvision candidate `10.184.38.215:80` and `10.184.38.215:8000`; credentialed ISAPI with username `admin` read device time and ACS history including employee no. `1` / `ernest`. Official Linux HCNetSDK `V6.1.9.48` was downloaded, extracted, compiled against, and initialized on the VM, but SDK login/alarm callback is not yet proven because SDK login returned `NET_DVR_PASSWORD_ERROR (1)`.
@@ -44,8 +44,8 @@ Last updated: 2026-07-01
 
 ## Current Drift
 
-- Earlier `10.184.38.91` runtime proof is stale for the current Cloudflare/SSH repair session; probes to that address timed out on 2026-06-29 at about 21:23 PHT, while `192.168.254.148` passed.
-- `verify-gitops-state -GuestIp 10.184.38.91` previously reached the VM over SSH, but that IP is stale for the current session. Argo CD Application state still needs follow-up on `192.168.254.148`: previous app sync statuses reported `Unknown`, runtime app health included `Degraded` and `Progressing`, and one Kubernetes API read returned `127.0.0.1:6443` connection refused.
+- Earlier `10.184.38.91` runtime proof is stale; the 2026-06-29 repair pass used `192.168.254.148`, and 2026-07-01 operator/LAN proof now uses `10.184.38.144`.
+- `verify-gitops-state -GuestIp 10.184.38.91` previously reached the VM over SSH, but that IP is stale for the current session. Argo CD/Application state should be checked against current operator/LAN target `10.184.38.144`; previous app sync statuses reported `Unknown`, runtime app health included `Degraded` and `Progressing`, and one Kubernetes API read returned `127.0.0.1:6443` connection refused.
 - V6 runtime proof shows a split serving reality: public/LAN HRIS is green through Docker Compose and VM-side Cloudflare, while many K3s pods are `Pending`, `Evicted`, or `ContainerStatusUnknown` under memory pressure despite Argo Applications reporting `Synced/Healthy`.
 - Runtime quick tunnels are deprecated for normal public access. Historical TryCloudflare evidence may remain in old reports, but active VM boot/sync paths keep the TryCloudflare service disabled by default.
 - Hikvision has Docker DEV DB evidence for `HIKVISION_CALLBACK` and `EN_HCNETSDK_ALARM`, DEV physical ACS-pull saved-event proof, DEV VM/K3s watcher proof, and UAT temporary callback/attendance seed proof. It still needs Linux HCNetSDK login/alarm callback proof, direct spontaneous device push proof, UAT physical pull routing, and PROD parity.

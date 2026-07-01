@@ -2,9 +2,6 @@ const DEV_API_BASE = "https://hris-api-dev-161377059311.asia-southeast1.run.app"
 const UAT_API_BASE = "https://hris-api-uat-161377059311.asia-southeast1.run.app";
 const LOCAL_API_BASE = "http://localhost:3001";
 const PROD_PUBLIC_API_BASE = "/api";
-const DEV_PUBLIC_API_BASE = "https://dev-api.bnpi-hris.tech";
-const UAT_PUBLIC_API_BASE = "https://uat-api.bnpi-hris.tech";
-
 const DEV_FE_HOSTS = new Set([
 	"hris-workforce-dev-20260416-app.web.app",
 	"hris-workforce-dev-20260416-app.firebaseapp.com",
@@ -71,11 +68,11 @@ export const resolveRuntimeApiBase = (
 	}
 
 	if (host === "dev.bnpi-hris.tech") {
-		return DEV_PUBLIC_API_BASE;
+		return PROD_PUBLIC_API_BASE;
 	}
 
 	if (host === "uat.bnpi-hris.tech") {
-		return UAT_PUBLIC_API_BASE;
+		return PROD_PUBLIC_API_BASE;
 	}
 
 	if (UAT_FE_HOSTS.has(host)) {

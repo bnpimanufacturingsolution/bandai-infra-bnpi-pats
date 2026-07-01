@@ -5,12 +5,27 @@ ingress:
   - hostname: bnpi-hris.tech
     path: /api/.*
     service: http://10.184.38.144:3001
+  - hostname: bnpi-hris.tech
+    path: /socket.io/.*
+    service: http://10.184.38.144:3001
   - hostname: www.bnpi-hris.tech
     path: /api/.*
+    service: http://10.184.38.144:3001
+  - hostname: www.bnpi-hris.tech
+    path: /socket.io/.*
     service: http://10.184.38.144:3001
   - hostname: app.bnpi-hris.tech
     path: /api/.*
     service: http://10.184.38.144:3001
+  - hostname: app.bnpi-hris.tech
+    path: /socket.io/.*
+    service: http://10.184.38.144:3001
+  - hostname: dev.bnpi-hris.tech
+    path: /socket.io/.*
+    service: http://10.184.38.144:3101
+  - hostname: uat.bnpi-hris.tech
+    path: /socket.io/.*
+    service: http://10.184.38.144:3201
   - hostname: bnpi-hris.tech
     service: http://10.184.38.144:3000
   - hostname: www.bnpi-hris.tech
