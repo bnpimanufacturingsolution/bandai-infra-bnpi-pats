@@ -15,7 +15,9 @@ export const getDeviceEventsRealtimeStatus = ({
 	selectedDeviceName,
 	liveDeviceName,
 }: DeviceEventsRealtimeStatusInput) => {
-	const isListening = Boolean(isConnected && (organizationId || liveDeviceId));
+	const selectedDeviceId = deviceId !== "all" ? deviceId : "";
+	const isScoped = Boolean(organizationId || selectedDeviceId || liveDeviceId);
+	const isListening = Boolean(isConnected && isScoped);
 	const scopeLabel =
 		deviceId !== "all"
 			? selectedDeviceName || liveDeviceName || "Selected device"
@@ -25,6 +27,7 @@ export const getDeviceEventsRealtimeStatus = ({
 
 	return {
 		isListening,
+		isScoped,
 		scopeLabel,
 		statusLabel: isListening
 			? "Realtime listening"

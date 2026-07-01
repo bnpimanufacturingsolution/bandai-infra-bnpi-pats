@@ -66,6 +66,7 @@ type UnifiedDeviceEventRow = {
 	receivedAt?: string | null;
 	attendanceId?: string | null;
 	doorNo?: string | number | null;
+	verifyMode?: string | null;
 	serialNo?: string | number | null;
 	savedEventId?: string | null;
 };
@@ -234,6 +235,17 @@ const getSerialNoFromPayload = (payload: any) =>
 	payload?.AccessControllerEvent?.serialNo ||
 	null;
 
+const getVerifyModeFromPayload = (payload: any) =>
+	payload?.currentVerifyMode ||
+	payload?.verifyMode ||
+	payload?.AcsEventInfo?.currentVerifyMode ||
+	payload?.AcsEventInfo?.verifyMode ||
+	payload?.EventNotificationAlert?.AccessControllerEvent?.currentVerifyMode ||
+	payload?.EventNotificationAlert?.AccessControllerEvent?.verifyMode ||
+	payload?.AccessControllerEvent?.currentVerifyMode ||
+	payload?.AccessControllerEvent?.verifyMode ||
+	null;
+
 const normalizeAddressForCompare = (value?: string | null) => {
 	const text = String(value || "").trim();
 	if (!text) return "";
@@ -347,6 +359,7 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		businessStatus: formatBusinessStatus(event.status),
 		attendanceId: event.attendanceId,
 		doorNo: event.doorNo,
+		verifyMode: event.verifyMode || getVerifyModeFromPayload(payload),
 		serialNo,
 		savedEventId: event.id,
 	};
@@ -376,6 +389,7 @@ const normalizeLiveEvent = (
 	businessStatus: savedMatch?.businessStatus || "Pending",
 	attendanceId: savedMatch?.attendanceId || null,
 	doorNo: event.doorNo,
+	verifyMode: event.currentVerifyMode || savedMatch?.verifyMode || null,
 	serialNo: event.serialNo,
 	savedEventId: savedMatch?.savedEventId || null,
 });
@@ -390,6 +404,8 @@ export default function DeviceEventsPage() {
 	const [lastRealtimeEvent, setLastRealtimeEvent] =
 		useState<DeviceEventSavedPayload | null>(null);
 	const [realtimeSavedEvents, setRealtimeSavedEvents] = useState<DeviceEvent[]>([]);
+	const [lastRoomJoinedAt, setLastRoomJoinedAt] = useState<string | null>(null);
+	const [lastRecoveryRefreshAt, setLastRecoveryRefreshAt] = useState<string | null>(null);
 
 	const pageParam = Number(searchParams.get("page")) || 1;
 	const limitParam = Number(searchParams.get("limit")) || 10;
@@ -413,6 +429,7 @@ export default function DeviceEventsPage() {
 	const selectedDevice = deviceId === "all" ? undefined : devices.find((device: any) => device.id === deviceId);
 	const liveDevice = selectedDevice;
 	const liveDeviceId = liveDevice?.id;
+	const selectedDeviceRoomId = deviceId !== "all" ? deviceId : liveDeviceId || "";
 	const {
 		data: deviceHealth,
 		isLoading: isLoadingHealth,
@@ -474,11 +491,11 @@ export default function DeviceEventsPage() {
 	}, [liveData, refetch, viewMode]);
 
 	useEffect(() => {
-		if (!socket || !isConnected || (!organizationId && !liveDeviceId)) return;
+		if (!socket || !isConnected || (!organizationId && !selectedDeviceRoomId)) return;
 
 		const roomPayload = {
 			organizationId: organizationId || undefined,
-			deviceId: deviceId !== "all" ? deviceId : undefined,
+			deviceId: selectedDeviceRoomId || undefined,
 		};
 
 		const matchesCurrentScope = (payload: DeviceEventSavedPayload) => {
@@ -514,6 +531,7 @@ export default function DeviceEventsPage() {
 		};
 
 		socket.emit("join:device-events", roomPayload);
+		setLastRoomJoinedAt(new Date().toISOString());
 		socket.on("device-event:saved", handleDeviceEventSaved);
 
 		return () => {
@@ -523,15 +541,53 @@ export default function DeviceEventsPage() {
 	}, [
 		deviceId,
 		isConnected,
-		liveDeviceId,
 		limitParam,
 		organizationId,
 		queryClient,
 		refetch,
 		refetchLive,
+		selectedDeviceRoomId,
 		source,
 		socket,
 		status,
+		viewMode,
+	]);
+
+	useEffect(() => {
+		if (viewMode !== "saved") return;
+		if (typeof window === "undefined") return;
+
+		const hasRealtimeScope = Boolean(organizationId || selectedDeviceRoomId);
+		const intervalMs = isConnected && hasRealtimeScope ? 30000 : 10000;
+		const refreshFromRecovery = () => {
+			setLastRecoveryRefreshAt(new Date().toISOString());
+			void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
+			void refetch();
+		};
+		const handleVisibilityOrFocus = () => {
+			if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+			refreshFromRecovery();
+		};
+
+		const intervalId = window.setInterval(refreshFromRecovery, intervalMs);
+		window.addEventListener("focus", handleVisibilityOrFocus);
+		if (typeof document !== "undefined") {
+			document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+		}
+
+		return () => {
+			window.clearInterval(intervalId);
+			window.removeEventListener("focus", handleVisibilityOrFocus);
+			if (typeof document !== "undefined") {
+				document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+			}
+		};
+	}, [
+		isConnected,
+		organizationId,
+		queryClient,
+		refetch,
+		selectedDeviceRoomId,
 		viewMode,
 	]);
 
@@ -718,11 +774,25 @@ export default function DeviceEventsPage() {
 		selectedDeviceName: selectedDevice?.name,
 		liveDeviceName: liveDevice?.name,
 	});
+	const socketTransport =
+		socket && isConnected
+			? String((socket as any).io?.engine?.transport?.name || "connected")
+			: "offline";
 	const realtimeStatusDetail = lastRealtimeEvent
 		? `Last socket event ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
 		: latestSavedEvent
 			? `Latest saved punch ${formatPunchTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
 			: "Waiting for the next saved punch";
+	const roomStatusLabel = realtimeStatus.isScoped
+		? !isConnected
+			? "Room waiting"
+			: lastRoomJoinedAt
+			? `Room joined ${formatPunchTime(lastRoomJoinedAt)}`
+			: "Room pending"
+		: "No realtime room";
+	const recoveryStatusLabel = lastRecoveryRefreshAt
+		? `Recovery refresh ${formatPunchTime(lastRecoveryRefreshAt)}`
+		: "Recovery refresh armed";
 
 	const columns: Column<UnifiedDeviceEventRow>[] = [
 		{
@@ -826,8 +896,13 @@ export default function DeviceEventsPage() {
 							{formatEventSource(value)}
 						</span>
 						<span className="block max-w-[170px] truncate text-xs text-slate-500">
-							{formatBusinessStatus(item.status)}
+							{item.verifyMode || formatBusinessStatus(item.status)}
 						</span>
+						{item.verifyMode ? (
+							<span className="block max-w-[170px] truncate text-[11px] text-slate-500">
+								{formatBusinessStatus(item.status)}
+							</span>
+						) : null}
 						{realtimeBadge ? (
 							<Badge
 								variant={realtimeBadge === "Live socket" ? "success-soft" : "warning-soft"}
@@ -1010,11 +1085,28 @@ export default function DeviceEventsPage() {
 									</p>
 								</div>
 							</div>
-							<Badge
-								variant={realtimeStatus.isListening ? "success-soft" : "warning-soft"}
-								className="w-fit rounded-md px-2 py-1 font-semibold">
-								{realtimeStatus.rowUpdateLabel}
-							</Badge>
+							<div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
+								<Badge
+									variant={realtimeStatus.isListening ? "success-soft" : "warning-soft"}
+									className="w-fit rounded-md px-2 py-1 font-semibold">
+									{realtimeStatus.rowUpdateLabel}
+								</Badge>
+								<Badge
+									variant={isConnected ? "success-soft" : "warning-soft"}
+									className="w-fit rounded-md px-2 py-1 font-semibold">
+									Socket {socketTransport}
+								</Badge>
+								<Badge
+									variant={realtimeStatus.isScoped ? "success-soft" : "warning-soft"}
+									className="w-fit rounded-md px-2 py-1 font-semibold">
+									{roomStatusLabel}
+								</Badge>
+								<Badge
+									variant="primary-soft"
+									className="w-fit rounded-md px-2 py-1 font-semibold">
+									{recoveryStatusLabel}
+								</Badge>
+							</div>
 						</div>
 					</div>
 						{[
@@ -1312,6 +1404,7 @@ export default function DeviceEventsPage() {
 								<div className="grid grid-cols-2 gap-2">
 									{[
 										["Door", activeEvent.doorNo || "-"],
+										["Verify", activeEvent.verifyMode || "-"],
 										["Serial", activeEvent.serialNo || "-"],
 										["HRIS event", activeEvent.savedEventId || activeEvent.id],
 										["Employee profile", activeEvent.employeeProfileId || "-"],

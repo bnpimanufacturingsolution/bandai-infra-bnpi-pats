@@ -349,6 +349,8 @@ export const controller = (prisma: PrismaClient) => {
 				const knownSkewSeconds = Number(
 					(device.config as any)?.hikvisionClockSkewSeconds || 0,
 				);
+				const allowClockSkewCorrection =
+					(device.config as any)?.hikvisionAllowClockSkewCorrection === true;
 				const eventWasAlreadyAdjusted = Boolean((event as any).timeAdjusted);
 				const normalizedTime = eventWasAlreadyAdjusted
 					? {
@@ -361,9 +363,13 @@ export const controller = (prisma: PrismaClient) => {
 							event.time,
 							receivedAt,
 							knownSkewSeconds,
+							{
+								allowStoredSkew: allowClockSkewCorrection,
+								allowAutoAdjust: allowClockSkewCorrection,
+							},
 						);
 				const eventTime = normalizedTime.eventTime;
-				if (normalizedTime.adjusted) {
+				if (allowClockSkewCorrection && normalizedTime.adjusted) {
 					(event as any).deviceTime = event.time;
 					(event as any).time = eventTime.toISOString();
 					(event as any).timeAdjusted = true;

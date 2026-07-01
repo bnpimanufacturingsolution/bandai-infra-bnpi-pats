@@ -129,13 +129,30 @@ describe("hikvision event contract helper", () => {
 		);
 	});
 
-	it("adjusts live ACS lists when the device clock is ahead of the server", () => {
+	it("preserves live ACS vendor timestamps by default", () => {
 		const adjusted = normalizeHikvisionAcsEventListTimes(
 			[
 				{ time: "2026-06-05T14:42:20+08:00", serialNo: 954 },
 				{ time: "2026-06-05T14:28:49+08:00", serialNo: 950 },
 			],
 			new Date("2026-06-05T06:40:20.000Z"),
+		);
+
+		expect(adjusted[0].time).to.equal("2026-06-05T14:42:20+08:00");
+		expect(adjusted[0].deviceTime).to.equal(undefined);
+		expect(adjusted[0].timeAdjusted).to.equal(undefined);
+		expect(adjusted[1].time).to.equal("2026-06-05T14:28:49+08:00");
+	});
+
+	it("adjusts live ACS lists only when clock-skew correction is explicitly enabled", () => {
+		const adjusted = normalizeHikvisionAcsEventListTimes(
+			[
+				{ time: "2026-06-05T14:42:20+08:00", serialNo: 954 },
+				{ time: "2026-06-05T14:28:49+08:00", serialNo: 950 },
+			],
+			new Date("2026-06-05T06:40:20.000Z"),
+			undefined,
+			{ allowAutoAdjust: true },
 		);
 
 		expect(adjusted[0].time).to.equal("2026-06-05T14:40:20+08:00");
@@ -149,6 +166,7 @@ describe("hikvision event contract helper", () => {
 			[{ time: "2026-06-05T14:42:20+08:00", serialNo: 954 }],
 			new Date("2026-06-05T06:49:20.000Z"),
 			120,
+			{ allowStoredSkew: true, allowAutoAdjust: true },
 		);
 
 		expect(getHikvisionObservedClockSkewSeconds(adjusted)).to.equal(0);
@@ -161,11 +179,13 @@ describe("hikvision event contract helper", () => {
 			"2026-06-08T23:38:22+08:00",
 			new Date("2026-06-08T15:38:27.860Z"),
 			180,
+			{ allowStoredSkew: true, allowAutoAdjust: true },
 		);
 		const list = normalizeHikvisionAcsEventListTimes(
 			[{ time: "2026-06-08T23:38:22+08:00", serialNo: 662 }],
 			new Date("2026-06-08T15:38:27.860Z"),
 			180,
+			{ allowStoredSkew: true, allowAutoAdjust: true },
 		);
 
 		expect(normalized.adjusted).to.equal(false);
@@ -225,6 +245,29 @@ describe("hikvision event contract helper", () => {
 				minor: 75,
 			}),
 		).to.equal(true);
+		expect(
+			isHikvisionAttendancePunchEvent({
+				major: 5,
+				employeeNo: "1",
+				verifyMode: "faceOrFpOrCardOrPw",
+			}),
+		).to.equal(true);
+		expect(
+			isHikvisionAttendancePunchEvent({
+				actionCode: "MINOR_FACE_COMPARE_PASS",
+			}),
+		).to.equal(true);
+	});
+
+	it("does not shift callback event time from stale stored skew unless explicitly enabled", () => {
+		const normalized = normalizeHikvisionFutureSkewedEventTime(
+			"2026-07-01T17:42:00+08:00",
+			new Date("2026-07-01T09:43:00.000Z"),
+			480,
+		);
+
+		expect(normalized.adjusted).to.equal(false);
+		expect(normalized.eventTime.toISOString()).to.equal("2026-07-01T09:42:00.000Z");
 	});
 
 	it("selects earliest biometric punch as time in and latest as time out", () => {

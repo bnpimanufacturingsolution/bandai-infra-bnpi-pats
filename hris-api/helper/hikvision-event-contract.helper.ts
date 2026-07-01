@@ -154,15 +154,29 @@ export const hikvisionEventMatchesConfiguredDevice = (
 };
 
 export const isHikvisionAttendancePunchEvent = (
-	event: Pick<NormalizedHikvisionEvent, "major" | "minor" | "actionCode">,
+	event: Pick<NormalizedHikvisionEvent, "major" | "minor" | "actionCode" | "employeeNo" | "verifyMode">,
 ) => {
 	const major = String(event.major ?? "").trim();
 	const minor = String(event.minor ?? "").trim();
 	const actionCode = String(event.actionCode || "").trim().toUpperCase();
+	const verifyMode = String(event.verifyMode || "").trim().toLowerCase();
 
 	if (major === "5" && minor === "38") return true;
 	if (major === "5" && minor === "75") return true;
-	return actionCode === "MINOR_FINGERPRINT_COMPARE_PASS";
+	if (major === "5" && event.employeeNo && verifyMode) {
+		return (
+			verifyMode.includes("face") ||
+			verifyMode.includes("fp") ||
+			verifyMode.includes("finger") ||
+			verifyMode.includes("card")
+		);
+	}
+	return [
+		"MINOR_FINGERPRINT_COMPARE_PASS",
+		"MINOR_FACE_COMPARE_PASS",
+		"MINOR_FACE_RECOGNITION_PASS",
+		"MINOR_CARD_PASS",
+	].includes(actionCode);
 };
 
 export const isHikvisionAttendancePunchPayload = (payload: Record<string, any>) =>
@@ -235,9 +249,13 @@ export const normalizeHikvisionFutureSkewedEventTime = (
 	rawTime: unknown,
 	referenceDate = new Date(),
 	knownSkewSeconds?: number | null,
+	options?: { allowStoredSkew?: boolean; allowAutoAdjust?: boolean },
 ) => {
 	const parsed = parseHikvisionEventTime(rawTime);
+	const allowStoredSkew = options?.allowStoredSkew === true;
+	const allowAutoAdjust = options?.allowAutoAdjust === true;
 	const knownSkewMs =
+		allowStoredSkew &&
 		typeof knownSkewSeconds === "number" &&
 		knownSkewSeconds > 0 &&
 		knownSkewSeconds * 1000 <= MAX_AUTO_ADJUST_SKEW_MS
@@ -255,7 +273,11 @@ export const normalizeHikvisionFutureSkewedEventTime = (
 		}
 	}
 	const skewMs = parsed.getTime() - referenceDate.getTime();
-	if (skewMs > FUTURE_SKEW_TOLERANCE_MS && skewMs <= MAX_AUTO_ADJUST_SKEW_MS) {
+	if (
+		allowAutoAdjust &&
+		skewMs > FUTURE_SKEW_TOLERANCE_MS &&
+		skewMs <= MAX_AUTO_ADJUST_SKEW_MS
+	) {
 		const normalizedSkewMs = normalizeClockSkewSeconds(Math.round(skewMs / 1000)) * 1000;
 		return {
 			eventTime: new Date(parsed.getTime() - normalizedSkewMs),
@@ -291,16 +313,20 @@ export const normalizeHikvisionAcsEventListTimes = (
 	events: any[],
 	referenceDate = new Date(),
 	knownSkewSeconds?: number | null,
+	options?: { allowStoredSkew?: boolean; allowAutoAdjust?: boolean },
 ) => {
 	if (!Array.isArray(events) || events.length === 0) return events;
 	const observedSkewSeconds = getHikvisionObservedClockSkewSeconds(events, referenceDate);
 	const knownSkewIsCurrentlyVisible =
+		options?.allowStoredSkew === true &&
 		typeof knownSkewSeconds === "number" &&
 		knownSkewSeconds > 0 &&
 		observedSkewSeconds > 0;
 	const skewSeconds = knownSkewIsCurrentlyVisible
 		? normalizeClockSkewSeconds(knownSkewSeconds)
-		: normalizeClockSkewSeconds(observedSkewSeconds);
+		: options?.allowAutoAdjust === true
+			? normalizeClockSkewSeconds(observedSkewSeconds)
+			: 0;
 	const skewMs = skewSeconds * 1000;
 
 	if (skewMs <= 0 || skewMs > MAX_AUTO_ADJUST_SKEW_MS) {

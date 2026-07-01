@@ -34,9 +34,26 @@ describe("device events realtime UI", () => {
 
 		expect(status).to.include({
 			isListening: false,
+			isScoped: false,
 			scopeLabel: "All devices",
 			statusLabel: "Socket connected",
 			rowUpdateLabel: "Rows update after refresh",
+		});
+	});
+
+	it("treats a URL-selected device id as a scoped realtime room before devices finish loading", () => {
+		const status = getDeviceEventsRealtimeStatus({
+			isConnected: true,
+			organizationId: null,
+			liveDeviceId: null,
+			deviceId: "device-from-url",
+		});
+
+		expect(status).to.include({
+			isListening: true,
+			isScoped: true,
+			scopeLabel: "Selected device",
+			statusLabel: "Realtime listening",
 		});
 	});
 

@@ -137,6 +137,8 @@ export const controller = (prisma: PrismaClient) => {
 				})
 			: null;
 		const knownSkewSeconds = Number((device?.config as any)?.hikvisionClockSkewSeconds || 0);
+		const allowClockSkewCorrection =
+			(device?.config as any)?.hikvisionAllowClockSkewCorrection === true;
 		let deviceClockSkewSeconds = 0;
 		try {
 			const timePayload = await fetchFromDevice(req, hikvisionEndpoint.system.time, {
@@ -151,8 +153,10 @@ export const controller = (prisma: PrismaClient) => {
 			deviceClockSkewSeconds = 0;
 		}
 		const observedSkewSeconds = getHikvisionObservedClockSkewSeconds(events, referenceDate);
-		const skewSeconds = deviceClockSkewSeconds || knownSkewSeconds || observedSkewSeconds;
-		if (device?.id && skewSeconds > 0 && skewSeconds !== knownSkewSeconds) {
+		const skewSeconds = allowClockSkewCorrection
+			? deviceClockSkewSeconds || knownSkewSeconds || observedSkewSeconds
+			: 0;
+		if (allowClockSkewCorrection && device?.id && skewSeconds > 0 && skewSeconds !== knownSkewSeconds) {
 			await (prisma as any).device.update({
 				where: { id: device.id },
 				data: {
@@ -172,6 +176,10 @@ export const controller = (prisma: PrismaClient) => {
 					events,
 					referenceDate,
 					skewSeconds,
+					{
+						allowStoredSkew: allowClockSkewCorrection,
+						allowAutoAdjust: allowClockSkewCorrection,
+					},
 				),
 			},
 		};

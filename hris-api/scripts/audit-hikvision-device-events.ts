@@ -229,6 +229,8 @@ const runAudit = async (options: Record<string, string | boolean>) => {
 	const livePayload = await loadLivePayload(options, deviceId);
 	const rawLiveEvents = getAcsEvents(livePayload);
 	const knownSkewSeconds = Number((device.config as any)?.hikvisionClockSkewSeconds || 0);
+	const allowClockSkewCorrection =
+		(device.config as any)?.hikvisionAllowClockSkewCorrection === true;
 	let deviceClockSkewSeconds = 0;
 	try {
 		const timePayload = await hikvisionFetch(hikvisionEndpoint.system.time, {
@@ -242,8 +244,10 @@ const runAudit = async (options: Record<string, string | boolean>) => {
 		deviceClockSkewSeconds = 0;
 	}
 	const observedSkewSeconds = getHikvisionObservedClockSkewSeconds(rawLiveEvents);
-	const skewSeconds = deviceClockSkewSeconds || knownSkewSeconds || observedSkewSeconds;
-	if (skewSeconds > 0 && skewSeconds !== knownSkewSeconds) {
+	const skewSeconds = allowClockSkewCorrection
+		? deviceClockSkewSeconds || knownSkewSeconds || observedSkewSeconds
+		: 0;
+	if (allowClockSkewCorrection && skewSeconds > 0 && skewSeconds !== knownSkewSeconds) {
 		await (prisma as any).device.update({
 			where: { id: device.id },
 			data: {
@@ -263,6 +267,10 @@ const runAudit = async (options: Record<string, string | boolean>) => {
 		rawLiveEvents,
 		new Date(),
 		skewSeconds,
+		{
+			allowStoredSkew: allowClockSkewCorrection,
+			allowAutoAdjust: allowClockSkewCorrection,
+		},
 	);
 	const normalized = liveEvents.map((item: any) => {
 		const payload = parseHikvisionBodyPayload({
