@@ -56,6 +56,17 @@ Status: READY FOR REVIEW
   containers and VM-side Cloudflare. K3s/Argo still needs follow-up because many
   pods remain Pending/Evicted under memory pressure even when Argo Applications
   summarize as Synced/Healthy.
+- 2026-07-01 incident correction: the current public HRIS path for PROD, UAT,
+  and DEV is Docker Compose app/API containers behind the `bnpi-hris` named
+  Cloudflare Tunnel. Do not treat K3s HRIS pods as the active public serving
+  path until K3s/Argo is deliberately re-enabled and proven end-to-end.
+- 2026-07-01 incident correction: K3s HRIS deployments/statefulsets are paused
+  at zero replicas for DEV/UAT/PROD to avoid runtime contention while Docker
+  Compose serves public HRIS. PVCs and data were not deleted.
+- 2026-07-01 incident correction: public browser traffic must not call
+  `https://*.bnpi-hris.tech:3001`. The working public pattern is same-origin
+  `/api` through the app proxy/tunnel for app hostnames, with API hostnames
+  available for direct health and API checks.
 
 ## Evidence
 
@@ -84,6 +95,13 @@ Status: READY FOR REVIEW
   `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v7/latest/project-truth-hyperv-one-click-installer-v7.zip`
 - Published V7 VHDX path:
   `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v7/latest/project-truth-node-local-hyperv-v7-current-state.vhdx`
+- 2026-07-01 public app restore evidence:
+  `/var/lib/project-truth/backups/public-app-session-restore-20260701-061721`
+- 2026-07-01 DEV public origin restore evidence:
+  `/var/lib/project-truth/backups/dev-public-origin-restore-20260701-062006`
+- Browser evidence screenshots:
+  `.runtime/browser-evidence/screenshots/bnpi-public-after-restore.png`
+  and `.runtime/browser-evidence/screenshots/dev-public-after-restore.png`
 
 ## Validation Notes
 
@@ -106,6 +124,20 @@ Status: READY FOR REVIEW
   `4534136199EEBA85FFAFBF08C8EAFEEDA1BBC784D9F4D3A269F30D9F95D75088`, and a
   V7 installer dry run targeted the V7 VHDX/manifest paths while preserving the
   runtime-only Cloudflare credential import.
+- On 2026-07-01, PROD and UAT app containers were recreated from
+  `hris-app-local:develop` image
+  `sha256:fa41efd235cbb372b7b9c2cd631081d8f7a6738af464b7ca67a0dcf47cdd83c5`.
+  Browser verification for `https://bnpi-hris.tech/` loaded the HR login screen,
+  requested `https://bnpi-hris.tech/api/system-provisioning/status` with HTTP
+  200, and showed no public `:3001` browser request.
+- On 2026-07-01, DEV Docker Compose API/app containers were restored without
+  rebuilding or touching the DEV Postgres volume. VM origin checks passed:
+  `http://localhost:3100/auth/login` HTTP 200,
+  `http://localhost:3100/api/auth/me` HTTP 401, and
+  `http://localhost:3101/health` HTTP 200. Browser verification for
+  `https://dev.bnpi-hris.tech/` loaded the HR login screen, requested
+  `https://dev.bnpi-hris.tech/api/system-provisioning/status` with HTTP 200,
+  and showed no public `:3001` browser request.
 - `git diff --check` passed.
 - `wwg test-check --format plain` now fails because the WWG heuristic sees
   behavior-sensitive truth words and no changed test files. No application code
