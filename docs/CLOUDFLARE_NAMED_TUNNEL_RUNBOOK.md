@@ -231,6 +231,124 @@ ssh -i $env:USERPROFILE\.ssh\node-health-appliance_ed25519 `
   infra@ssh.bnpi-hris.tech
 ```
 
+## Prepared Workstation CLI Key
+
+For a remote admin workstation that should use native SSH instead of the
+browser-rendered terminal, generate one local key and install only its public
+half into the VM's `infra` account.
+
+Current Windows workstation key:
+
+```text
+%USERPROFILE%\.ssh\bnpi_hris_cloudflare_ed25519
+```
+
+Current Windows SSH alias:
+
+```powershell
+ssh bnpi-hris-client-vm
+```
+
+If the public key is not installed yet, open the browser SSH terminal at:
+
+```text
+https://ssh.bnpi-hris.tech
+```
+
+Then run this inside the browser terminal as `infra`:
+
+```bash
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+grep -qxF 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICIQuU6GwMOippbn5Hdwk6ExcbqcbQyI4aHVmN2j9IAS bnpi-hris-cloudflare-cli' ~/.ssh/authorized_keys 2>/dev/null || echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICIQuU6GwMOippbn5Hdwk6ExcbqcbQyI4aHVmN2j9IAS bnpi-hris-cloudflare-cli' >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+After the key is installed, this native SSH command should authenticate through
+Cloudflare Access:
+
+```powershell
+ssh -i $env:USERPROFILE\.ssh\bnpi_hris_cloudflare_ed25519 `
+  -o ProxyCommand="cloudflared access ssh --hostname %h" `
+  infra@ssh.bnpi-hris.tech
+```
+
+The equivalent durable alias is:
+
+```powershell
+ssh bnpi-hris-client-vm
+```
+
+## Remote CLI SSH Through WARP Private Routing
+
+When browser SSH works but native `cloudflared access ssh` is reset before SSH
+authentication, use Cloudflare One/WARP private routing instead of the
+browser-rendered SSH hostname.
+
+Current VM LAN SSH target:
+
+```text
+10.184.38.144
+```
+
+Current private route published to Cloudflare Tunnel:
+
+```text
+10.184.38.144/32 -> bnpi-hris
+```
+
+Current VM connector requirement:
+
+```yaml
+warp-routing:
+  enabled: true
+```
+
+The Windows workstation key is already authorized on the VM:
+
+```text
+%USERPROFILE%\.ssh\bnpi_hris_cloudflare_ed25519
+```
+
+After the workstation is enrolled into the correct Cloudflare Zero Trust WARP
+organization, the remote CLI command is plain SSH to the private VM address:
+
+```powershell
+ssh -i $env:USERPROFILE\.ssh\bnpi_hris_cloudflare_ed25519 infra@10.184.38.144
+```
+
+Proof with WARP connected and the same key:
+
+```text
+FINAL_REMOTE_WARP_SSH_OK
+project-truth-node
+infra
+Route: 10.184.38.144/32 via CloudflareWARP, source 100.96.0.1
+OpenSSH: Authenticated using publickey, exit status 0
+```
+
+Current verified Zero Trust organization:
+
+```text
+tight-thunder-c664
+```
+
+Current device-profile requirement:
+
+```text
+Split tunnel mode: Include
+Included destination: 10.184.38.144/32
+Gateway firewall policy: allow TCP destination 10.184.38.144 port 22
+```
+
+Expected WARP setup on another admin workstation:
+
+```powershell
+winget install --id Cloudflare.Warp
+& "C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe" --accept-tos registration new tight-thunder-c664
+& "C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe" connect
+ssh -i $env:USERPROFILE\.ssh\bnpi_hris_cloudflare_ed25519 infra@10.184.38.144
+```
+
 ## V6 One-Shot Fresh VM Proof
 
 For a fresh or alternate VM that should pull latest `develop`, import the stable

@@ -4,32 +4,32 @@ credentials-file: C:\Users\anoni\.cloudflared\e3486f00-f974-46d3-9e11-911266749d
 ingress:
   - hostname: bnpi-hris.tech
     path: /api/.*
-    service: http://192.168.254.148:3001
+    service: http://10.184.38.144:3001
   - hostname: www.bnpi-hris.tech
     path: /api/.*
-    service: http://192.168.254.148:3001
+    service: http://10.184.38.144:3001
   - hostname: app.bnpi-hris.tech
     path: /api/.*
-    service: http://192.168.254.148:3001
+    service: http://10.184.38.144:3001
   - hostname: bnpi-hris.tech
-    service: http://192.168.254.148:3000
+    service: http://10.184.38.144:3000
   - hostname: www.bnpi-hris.tech
-    service: http://192.168.254.148:3000
+    service: http://10.184.38.144:3000
   - hostname: app.bnpi-hris.tech
-    service: http://192.168.254.148:3000
+    service: http://10.184.38.144:3000
   - hostname: api.bnpi-hris.tech
-    service: http://192.168.254.148:3001
+    service: http://10.184.38.144:3001
   - hostname: dev.bnpi-hris.tech
-    service: http://192.168.254.148:3100
+    service: http://10.184.38.144:3100
   - hostname: dev-api.bnpi-hris.tech
-    service: http://192.168.254.148:3101
+    service: http://10.184.38.144:3101
   - hostname: uat.bnpi-hris.tech
-    service: http://192.168.254.148:3200
+    service: http://10.184.38.144:3200
   - hostname: uat-api.bnpi-hris.tech
-    service: http://192.168.254.148:3201
+    service: http://10.184.38.144:3201
   - hostname: grafana.bnpi-hris.tech
-    service: http://192.168.254.148:53000
+    service: http://10.184.38.144:53000
   - hostname: ssh.bnpi-hris.tech
-    service: ssh://192.168.254.148:22
+    service: ssh://10.184.38.144:22
   - service: http_status:404
 
