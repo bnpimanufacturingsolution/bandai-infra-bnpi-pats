@@ -236,10 +236,31 @@ spec:
           volumeMounts:
             - name: uploads
               mountPath: /app/uploads
+            - name: dm-import-data
+              mountPath: /data/import
+              readOnly: true
+            - name: dm-source-inputs
+              mountPath: /source-inputs-organized
+              readOnly: true
+            - name: dm-docs
+              mountPath: /docs
+              readOnly: true
       volumes:
         - name: uploads
           persistentVolumeClaim:
             claimName: hris-uploads
+        - name: dm-import-data
+          hostPath:
+            path: /var/lib/project-truth/dm-workflow/data/import
+            type: DirectoryOrCreate
+        - name: dm-source-inputs
+          hostPath:
+            path: /var/lib/project-truth/dm-workflow/source-inputs-organized
+            type: DirectoryOrCreate
+        - name: dm-docs
+          hostPath:
+            path: /var/lib/project-truth/dm-workflow/docs
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
