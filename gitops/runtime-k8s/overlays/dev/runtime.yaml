@@ -304,9 +304,9 @@ spec:
             - name: APP_ENV
               value: dev
             - name: HIKVISION_DEVICE_NAME
-              value: HIKVISION-TEST001
+              value: Main Entrance Device
             - name: HIKVISION_DEVICE_ADDRESS
-              value: 10.184.38.215
+              value: 192.168.254.181
             - name: HIKVISION_DEVICE_PORT
               value: "80"
             - name: HIKVISION_EVENT_LIMIT
