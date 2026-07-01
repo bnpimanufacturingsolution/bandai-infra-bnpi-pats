@@ -23,7 +23,7 @@ Mixed regression repair and runtime/GitOps drift investigation.
 ## Changes
 
 - Added explicit `ALLOW_LAN_CORS=true`, `CORS_CREDENTIALS=true`, and `CORS_ORIGINS=...` to K3s API deployments in DEV/UAT/PROD runtime manifests.
-- Corrected DEV Hikvision watcher manifest drift to `Main Entrance Device` at `192.168.254.181`.
+- Corrected DEV Hikvision watcher manifest back to the client DEV target `HIKVISION-TEST001` at `10.184.38.215` after the operator clarified that this is the active client device endpoint.
 - Extended `scripts/test-self-heal-contract.ps1` so CI checks the K3s runtime CORS contract.
 - Added proposed follow-up `REC-20260701-DEV-K3S-DATA-SPLIT` for the Docker DEV to K3s DEV employee data split.
 
@@ -45,4 +45,3 @@ Mixed regression repair and runtime/GitOps drift investigation.
 - Governance review completed: yes; recommendation registry updated.
 - Drift status: medium.
 - Remaining stale context: Project Truth still contains older `192.168.254.148` runtime evidence as previous proof. Treat runtime IPs as snapshots unless persisted.
-
