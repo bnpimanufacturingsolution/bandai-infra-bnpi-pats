@@ -33,6 +33,12 @@ current Bandai Hikvision candidate:
 
 Credentialed ISAPI with username `admin` read device time and ACS history from
 `10.184.38.215:80`. Recent ACS history included employee no. `1` / `ernest`.
+On 2026-07-01, a runtime-only development credential was supplied to capture
+raw and normalized ISAPI ACS samples on the VM under
+`/tmp/project-truth-hikvision-isapi-samples/`. The widened snapshot captured
+7 raw ACS events and 2 likely fingerprint/attendance candidates. The observed
+candidate shape used `major=5`, `minor=75`, `employeeNoString=1`,
+`currentVerifyMode=faceOrFpOrCardOrPw`, `doorNo=1`, and `serialNo`.
 
 Official Hikvision Linux HCNetSDK `V6.1.9.48` was downloaded, extracted, copied
 to the Linux VM, compiled against, and initialized. `NET_DVR_Init()` and SDK
@@ -78,6 +84,8 @@ Still not claimed:
 - managed Linux Hikvision container/service in Docker Compose or GitOps;
 - PROD/UAT parity from direct physical ACS pull;
 - full attendance journey proof from the Linux SDK path.
+- authoritative Hikvision minor-code mapping for every ACS event variant beyond
+  the observed ISAPI polling sample.
 
 Linux ISAPI/ACS polling is the safe current path. Linux HCNetSDK alarm listening
 must remain experimental until SDK login and callback receipt are proven with

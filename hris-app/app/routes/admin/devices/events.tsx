@@ -1,10 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, RefreshCw, UploadCloud, Wifi, WifiOff } from "lucide-react";
+import {
+	ArrowLeft,
+	BadgeCheck,
+	Clock,
+	Eye,
+	MapPin,
+	RefreshCw,
+	Server,
+	UploadCloud,
+	UserRound,
+	Wifi,
+	WifiOff,
+} from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "~/components/atoms/Badge";
 import { Button } from "~/components/atoms/Button";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
+import { Modal } from "~/components/atoms/Modal";
 import { Select, type SelectOption } from "~/components/atoms/Select";
 import {
 	useDeviceEvents,
@@ -40,6 +53,8 @@ type UnifiedDeviceEventRow = {
 	deviceName?: string | null;
 	deviceAddress?: string | null;
 	devicePort?: number | null;
+	observedDeviceAddress?: string | null;
+	hasDeviceAddressDrift?: boolean;
 	eventTime: string;
 	employeeId?: string | null;
 	employeeProfileId?: string | null;
@@ -92,9 +107,9 @@ const savedStatusOptions: SelectOption[] = [
 ];
 
 const sourceOptions: SelectOption[] = [
-	{ value: "all", label: "All paths" },
-	{ value: "HIKVISION_CALLBACK", label: "Device callback" },
-	{ value: "EN_HCNETSDK_ALARM", label: "Alarm listener" },
+	{ value: "all", label: "All sources" },
+	{ value: "HIKVISION_CALLBACK", label: "Hikvision watcher" },
+	{ value: "EN_HCNETSDK_ALARM", label: "SDK alarm listener" },
 	{ value: "ZKTECO_EVENT", label: "ZKTeco sidecar" },
 ];
 
@@ -162,10 +177,32 @@ const formatBusinessStatus = (status: string) => {
 };
 
 const formatEventSource = (source?: string | null) => {
-	if (source === "ZKTECO_EVENT") return "ZKTeco SDK sidecar";
-	if (source === "EN_HCNETSDK_ALARM") return "Alarm listener";
-	if (source === "HIKVISION_CALLBACK") return "Device callback";
+	if (source === "ZKTECO_EVENT") return "ZKTeco sidecar";
+	if (source === "EN_HCNETSDK_ALARM") return "SDK alarm listener";
+	if (source === "HIKVISION_CALLBACK") return "Hikvision watcher";
 	return source || "-";
+};
+
+const formatEventSourceDetail = (source?: string | null) => {
+	if (source === "ZKTECO_EVENT") return "Saved from the ZKTeco SDK sidecar.";
+	if (source === "EN_HCNETSDK_ALARM") return "Saved from the HCNetSDK alarm listener.";
+	if (source === "HIKVISION_CALLBACK") return "Saved from the Hikvision callback watcher.";
+	return "Saved by HRIS device event processing.";
+};
+
+const getEmployeeRecordUrl = (employeeProfileId?: string | null) =>
+	employeeProfileId
+		? `/admin/configuration/employees?action=view&id=${encodeURIComponent(employeeProfileId)}`
+		: "";
+
+const getEmployeeDisplayName = (item: UnifiedDeviceEventRow) =>
+	item.employeeName || (item.employeeNo ? "Employee not matched" : "Unknown employee");
+
+const getEmployeeInitials = (item: UnifiedDeviceEventRow) => {
+	const name = item.employeeName || item.employeeId || item.employeeNo || "?";
+	const parts = String(name).trim().split(/\s+/).filter(Boolean);
+	if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+	return String(parts[0] || "?").slice(0, 2).toUpperCase();
 };
 
 const isZktecoDevice = (device: any, health?: DeviceHealthResponse) => {
@@ -196,6 +233,35 @@ const getSerialNoFromPayload = (payload: any) =>
 	payload?.EventNotificationAlert?.AccessControllerEvent?.serialNo ||
 	payload?.AccessControllerEvent?.serialNo ||
 	null;
+
+const normalizeAddressForCompare = (value?: string | null) => {
+	const text = String(value || "").trim();
+	if (!text) return "";
+	try {
+		return new URL(text).hostname.toLowerCase();
+	} catch {
+		return text
+			.replace(/^https?:\/\//i, "")
+			.split("/")[0]
+			.split(":")[0]
+			.trim()
+			.toLowerCase();
+	}
+};
+
+const getObservedDeviceAddress = (payload: any) =>
+	String(
+		payload?.deviceIP ||
+			payload?.deviceIp ||
+			payload?.rawAlarm?.deviceIp ||
+			payload?.rawAlarm?.deviceIP ||
+			payload?.socketCandidate?.deviceIP ||
+			payload?.socketCandidate?.deviceIp ||
+			payload?.EventNotificationAlert?.ipAddress ||
+			payload?.EventNotificationAlert?.AccessControllerEvent?.ipAddress ||
+			payload?.AccessControllerEvent?.ipAddress ||
+			"",
+	).trim() || null;
 
 const getSavedMatchKey = (input: {
 	employeeNo?: string | null;
@@ -249,6 +315,11 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 	const accessEvent = alert.AccessControllerEvent || payload.AccessControllerEvent || {};
 	const serialNo = getSerialNoFromPayload(payload);
 	const zktecoAttendance = payload.attendance || payload.event || {};
+	const observedDeviceAddress = getObservedDeviceAddress(payload);
+	const hasDeviceAddressDrift =
+		Boolean(observedDeviceAddress) &&
+		normalizeAddressForCompare(observedDeviceAddress) !==
+			normalizeAddressForCompare(event.device?.address);
 	return {
 		id: event.id,
 		origin: "saved",
@@ -256,6 +327,8 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		deviceName: event.device?.name,
 		deviceAddress: event.device?.address,
 		devicePort: event.device?.port,
+		observedDeviceAddress,
+		hasDeviceAddressDrift,
 		eventTime: event.eventTime,
 		employeeId: event.employee?.employeeId || null,
 		employeeProfileId: event.employee?.id || event.employeeId || null,
@@ -291,6 +364,8 @@ const normalizeLiveEvent = (
 	deviceName: device?.name,
 	deviceAddress: device?.address,
 	devicePort: device?.port,
+	observedDeviceAddress: null,
+	hasDeviceAddressDrift: false,
 	eventTime: event.time,
 	employeeId: event.hrisEmployee?.employeeId || savedMatch?.employeeId || null,
 	employeeProfileId: event.hrisEmployee?.id || savedMatch?.employeeProfileId || null,
@@ -325,6 +400,8 @@ export default function DeviceEventsPage() {
 	const source = searchParams.get("source") || "all";
 	const sort = searchParams.get("sort") || "eventTime";
 	const order = searchParams.get("order") === "asc" ? "asc" : "desc";
+	const action = searchParams.get("action");
+	const activeEventId = searchParams.get("id");
 	const timeWindow = (searchParams.get("window") ||
 		(viewMode === "saved" ? "all" : "today")) as TimeWindow;
 	const { from, to } = getDateRangeForWindow(timeWindow);
@@ -560,6 +637,7 @@ export default function DeviceEventsPage() {
 					realtimeRows: realtimeSavedRows,
 					maxRealtimeRows: limitParam,
 				});
+	const activeEvent = action === "view-event" ? rows.find((row) => row.id === activeEventId) : null;
 	const savedSummary = data?.summary || { total: 0, byStatus: {}, bySource: {} };
 	const savedStatusCounts = savedSummary.byStatus || {};
 	const sdkSummary = (selectedDevice as any)?.config?.zktecoSdkSummary || null;
@@ -620,6 +698,18 @@ export default function DeviceEventsPage() {
 			next.set("order", "desc");
 		});
 	};
+	const openEventDetails = (item: UnifiedDeviceEventRow) => {
+		updateSearchParams((next) => {
+			next.set("action", "view-event");
+			next.set("id", item.id);
+		});
+	};
+	const closeEventDetails = () => {
+		updateSearchParams((next) => {
+			next.delete("action");
+			next.delete("id");
+		});
+	};
 	const realtimeStatus = getDeviceEventsRealtimeStatus({
 		isConnected,
 		organizationId,
@@ -651,22 +741,39 @@ export default function DeviceEventsPage() {
 			key: "employeeNo",
 			label: "Employee",
 			sortable: viewMode === "saved",
-			width: "220px",
+			width: "290px",
 			required: true,
 			render: (value, item) => (
-				<div className="min-w-0">
-					{item.employeeProfileId ? (
-						<Link
-							to={`/employee/${item.employeeProfileId}`}
-							className="block truncate text-sm font-medium text-slate-950 hover:text-slate-700 hover:underline">
-							{item.employeeName || value || item.employeeId || item.employeeProfileId}
-						</Link>
-					) : (
-						<p className="truncate text-sm font-medium text-slate-800">
-							{item.employeeName || "Employee not matched"}
-						</p>
-					)}
-					<p className="truncate text-xs text-slate-500">No. {value || "-"}</p>
+				<div className="flex min-w-0 items-center gap-3">
+					<div
+						className={
+							item.employeeProfileId
+								? "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-700"
+								: "flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-500"
+						}>
+						{getEmployeeInitials(item)}
+					</div>
+					<div className="min-w-0">
+						{item.employeeProfileId ? (
+							<Link
+								to={getEmployeeRecordUrl(item.employeeProfileId)}
+								className="block truncate text-sm font-semibold text-slate-950 hover:text-slate-700 hover:underline">
+								{getEmployeeDisplayName(item)}
+							</Link>
+						) : (
+							<p className="truncate text-sm font-semibold text-slate-800">
+								{getEmployeeDisplayName(item)}
+							</p>
+						)}
+						<div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+							<span className="truncate text-xs text-slate-500">No. {value || "-"}</span>
+							<Badge
+								variant={item.employeeProfileId ? "success-soft" : "warning-soft"}
+								className="px-1.5 py-0 text-[11px] font-semibold">
+								{item.employeeProfileId ? "Matched" : "Needs match"}
+							</Badge>
+						</div>
+					</div>
 				</div>
 			),
 		},
@@ -688,16 +795,23 @@ export default function DeviceEventsPage() {
 						<p className="truncate text-sm font-medium text-slate-950">-</p>
 					)}
 					<p className="truncate text-xs text-slate-500">
-						{item.deviceAddress ? item.deviceAddress : item.deviceId}
+						{item.hasDeviceAddressDrift
+							? `Observed ${item.observedDeviceAddress}`
+							: item.deviceAddress ? item.deviceAddress : item.deviceId}
 					</p>
+					{item.hasDeviceAddressDrift ? (
+						<p className="truncate text-[11px] font-medium text-amber-700">
+							Configured {item.deviceAddress || "-"}
+						</p>
+					) : null}
 				</div>
 			),
 		},
 		{
 			key: "source",
-			label: "Save path",
+			label: "Source",
 			sortable: viewMode === "saved",
-			width: "150px",
+			width: "190px",
 			required: true,
 			render: (value, item) => {
 				const realtimeBadge = getSavedDeviceEventRealtimeBadge({
@@ -708,13 +822,16 @@ export default function DeviceEventsPage() {
 				});
 				return (
 					<div className="min-w-0 space-y-1">
-						<span className="block max-w-[140px] truncate text-sm text-slate-700">
+						<span className="block max-w-[170px] truncate text-sm font-medium text-slate-800">
 							{formatEventSource(value)}
+						</span>
+						<span className="block max-w-[170px] truncate text-xs text-slate-500">
+							{formatBusinessStatus(item.status)}
 						</span>
 						{realtimeBadge ? (
 							<Badge
 								variant={realtimeBadge === "Live socket" ? "success-soft" : "warning-soft"}
-								className="max-w-[140px] px-1.5 py-0 text-[11px] font-semibold">
+								className="max-w-[170px] px-1.5 py-0 text-[11px] font-semibold">
 								<span className="truncate">{realtimeBadge}</span>
 							</Badge>
 						) : null}
@@ -844,7 +961,7 @@ export default function DeviceEventsPage() {
 								options={sourceOptions}
 								value={source}
 								onChange={(value) => setFilter("source", value)}
-								placeholder="All paths"
+								placeholder="All sources"
 								className={compactSelectClassName}
 								dropdownClassName={compactSelectDropdownClassName}
 							/>
@@ -1044,6 +1161,17 @@ export default function DeviceEventsPage() {
 							next.set("page", String(page));
 						});
 					}}
+					renderActions={(item) => (
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="h-8 px-2.5 text-xs"
+							onClick={() => openEventDetails(item)}>
+							<Eye className="h-3.5 w-3.5" />
+							View
+						</Button>
+					)}
 					rowClassName={(item) =>
 						viewMode === "saved" && item.id === highlightedSavedEventId
 							? "bg-emerald-50/80 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-50"
@@ -1051,6 +1179,158 @@ export default function DeviceEventsPage() {
 					}
 				/>
 			</div>
+
+			<Modal
+				open={action === "view-event"}
+				onOpenChange={(open) => {
+					if (!open) closeEventDetails();
+				}}
+				title="Punch details"
+				className="max-w-4xl">
+				{activeEvent ? (
+					<div className="space-y-5">
+						<div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-start sm:justify-between">
+							<div className="flex min-w-0 items-center gap-3">
+								<div
+									className={
+										activeEvent.employeeProfileId
+											? "flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-orange-100 text-sm font-bold text-orange-700"
+											: "flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-600"
+									}>
+									{getEmployeeInitials(activeEvent)}
+								</div>
+								<div className="min-w-0">
+									<p className="truncate text-base font-semibold text-slate-950">
+										{getEmployeeDisplayName(activeEvent)}
+									</p>
+									<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+										<span>No. {activeEvent.employeeNo || "-"}</span>
+										<Badge
+											variant={activeEvent.employeeProfileId ? "success-soft" : "warning-soft"}
+											className="px-2 py-0.5">
+											{activeEvent.employeeProfileId ? "Matched employee" : "Needs employee match"}
+										</Badge>
+									</div>
+								</div>
+							</div>
+							<div className="flex flex-wrap items-center gap-2 sm:justify-end">
+								{activeEvent.employeeProfileId ? (
+									<Button asChild variant="outline" size="sm" className="h-8 px-3 text-xs">
+										<Link to={getEmployeeRecordUrl(activeEvent.employeeProfileId)}>
+											<UserRound className="h-3.5 w-3.5" />
+											Employee record
+										</Link>
+									</Button>
+								) : null}
+								{activeEvent.deviceId ? (
+									<Button asChild variant="outline" size="sm" className="h-8 px-3 text-xs">
+										<Link to={`/admin/devices/manage/${activeEvent.deviceId}`}>
+											<Server className="h-3.5 w-3.5" />
+											Terminal
+										</Link>
+									</Button>
+								) : null}
+							</div>
+						</div>
+
+						<div className="grid gap-3 md:grid-cols-3">
+							<div className="rounded-lg border border-slate-200 bg-white p-3">
+								<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+									<Clock className="h-3.5 w-3.5" />
+									Punch time
+								</div>
+								<p className="mt-2 text-sm font-semibold text-slate-950">
+									{formatPunchTime(activeEvent.eventTime)}
+								</p>
+								<p className="mt-1 text-xs text-slate-500">
+									Received {formatPunchTime(activeEvent.receivedAt || activeEvent.eventTime)}
+								</p>
+							</div>
+							<div className="rounded-lg border border-slate-200 bg-white p-3">
+								<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+									<BadgeCheck className="h-3.5 w-3.5" />
+									Status
+								</div>
+								<p className="mt-2 text-sm font-semibold text-slate-950">
+									{formatBusinessStatus(activeEvent.status)}
+								</p>
+								<p className="mt-1 text-xs text-slate-500">
+									Attendance {activeEvent.attendanceId ? activeEvent.attendanceId : "not created yet"}
+								</p>
+							</div>
+							<div className="rounded-lg border border-slate-200 bg-white p-3">
+								<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+									<Wifi className="h-3.5 w-3.5" />
+									Source
+								</div>
+								<p className="mt-2 text-sm font-semibold text-slate-950">
+									{formatEventSource(activeEvent.source)}
+								</p>
+								<p className="mt-1 text-xs text-slate-500">
+									{formatEventSourceDetail(activeEvent.source)}
+								</p>
+							</div>
+						</div>
+
+						<div className="grid gap-4 md:grid-cols-2">
+							<div className="space-y-3">
+								<h3 className="text-sm font-semibold text-slate-950">Terminal</h3>
+								<div className="rounded-lg border border-slate-200 bg-white">
+									<div className="flex items-start gap-3 border-b border-slate-100 p-3">
+										<Server className="mt-0.5 h-4 w-4 text-slate-400" />
+										<div className="min-w-0">
+											<p className="truncate text-sm font-semibold text-slate-950">
+												{activeEvent.deviceName || activeEvent.deviceId || "-"}
+											</p>
+											<p className="truncate text-xs text-slate-500">
+												Configured {activeEvent.deviceAddress || "-"}
+											</p>
+										</div>
+									</div>
+									<div className="flex items-start gap-3 p-3">
+										<MapPin className="mt-0.5 h-4 w-4 text-slate-400" />
+										<div className="min-w-0">
+											<p className="truncate text-sm font-medium text-slate-800">
+												Observed {activeEvent.observedDeviceAddress || activeEvent.deviceAddress || "-"}
+											</p>
+											{activeEvent.hasDeviceAddressDrift ? (
+												<p className="mt-1 text-xs font-medium text-amber-700">
+													Observed address does not match the configured terminal address.
+												</p>
+											) : (
+												<p className="mt-1 text-xs text-slate-500">
+													Observed terminal address matches this device record.
+												</p>
+											)}
+										</div>
+									</div>
+								</div>
+							</div>
+
+							<div className="space-y-3">
+								<h3 className="text-sm font-semibold text-slate-950">Device payload</h3>
+								<div className="grid grid-cols-2 gap-2">
+									{[
+										["Door", activeEvent.doorNo || "-"],
+										["Serial", activeEvent.serialNo || "-"],
+										["HRIS event", activeEvent.savedEventId || activeEvent.id],
+										["Employee profile", activeEvent.employeeProfileId || "-"],
+									].map(([label, value]) => (
+										<div key={label} className="rounded-lg border border-slate-200 bg-white p-3">
+											<p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
+											<p className="mt-1 truncate text-sm font-medium text-slate-900">{value}</p>
+										</div>
+									))}
+								</div>
+							</div>
+						</div>
+					</div>
+				) : (
+					<div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+						This punch is not in the current table page. Refresh the saved view or open it from the row again.
+					</div>
+				)}
+			</Modal>
 		</div>
 	);
 }

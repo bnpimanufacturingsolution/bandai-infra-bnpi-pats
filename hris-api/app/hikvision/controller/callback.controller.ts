@@ -24,6 +24,7 @@ import {
 	buildHikvisionDeviceEventDedupeKey,
 	DEFAULT_HIKVISION_MIN_PUNCH_PAIR_GAP_MINUTES,
 	extractHikvisionEventData,
+	hikvisionEventMatchesConfiguredDevice,
 	isHikvisionAttendancePunchEvent,
 	normalizeHikvisionDeviceEventSource,
 	normalizeHikvisionFutureSkewedEventTime,
@@ -162,7 +163,7 @@ export const controller = (prisma: PrismaClient) => {
 		const deviceIP = String(event.deviceIP || "").trim();
 
 		if (requestedDeviceId) {
-			return (prisma as any).device.findFirst({
+			const device = await (prisma as any).device.findFirst({
 				where: {
 					id: requestedDeviceId,
 					isDeleted: false,
@@ -177,6 +178,13 @@ export const controller = (prisma: PrismaClient) => {
 					config: true,
 				},
 			});
+			if (device && !hikvisionEventMatchesConfiguredDevice(event, device)) {
+				console.warn(
+					`[HIKVISION_CALLBACK][CTRL] ignored deviceId ${requestedDeviceId} because observed deviceIP ${deviceIP} does not match configured address ${device.address}`,
+				);
+				return null;
+			}
+			return device;
 		}
 
 		if (deviceIP) {

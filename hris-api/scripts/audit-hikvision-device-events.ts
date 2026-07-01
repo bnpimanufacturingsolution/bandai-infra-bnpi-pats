@@ -107,6 +107,19 @@ const getSerialNoFromPayload = (payload: any) =>
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const resolveCallbackUrl = (options: Record<string, string | boolean>) => {
+	const configured = String(
+		options["callback-url"] ||
+			process.env.HIKVISION_CALLBACK_URL ||
+			"",
+	).trim();
+	if (configured) return configured;
+	if (process.env.KUBERNETES_SERVICE_HOST) {
+		return "http://hris-api:3001/api/hikvision/callback";
+	}
+	return "";
+};
+
 const callCallback = async (payload: Record<string, any>) => {
 	const ctrl = callbackController(prisma);
 	let statusCode = 200;
@@ -129,6 +142,27 @@ const callCallback = async (payload: Record<string, any>) => {
 
 	await ctrl.handleCallback(req, res, (() => undefined) as any);
 	return { statusCode, body: jsonBody };
+};
+
+const postCallback = async (
+	payload: Record<string, any>,
+	options: Record<string, string | boolean>,
+) => {
+	const callbackUrl = resolveCallbackUrl(options);
+	if (!callbackUrl) return callCallback(payload);
+
+	const response = await fetch(callbackUrl, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(payload),
+	});
+	let body: any = null;
+	try {
+		body = await response.json();
+	} catch {
+		body = await response.text();
+	}
+	return { statusCode: response.status, body };
 };
 
 const resolveAuditDevice = async (options: Record<string, string | boolean>) => {
@@ -231,7 +265,11 @@ const runAudit = async (options: Record<string, string | boolean>) => {
 		skewSeconds,
 	);
 	const normalized = liveEvents.map((item: any) => {
-		const payload = parseHikvisionBodyPayload({ deviceId, AcsEventInfo: item });
+		const payload = parseHikvisionBodyPayload({
+			deviceId,
+			deviceIP: device.address,
+			AcsEventInfo: item,
+		});
 		const event = extractHikvisionEventData(payload);
 		const employeeNo = String(event.employeeNo || "").trim();
 		const eventTime = parseHikvisionEventTime(event.time);
@@ -331,7 +369,7 @@ const runAudit = async (options: Record<string, string | boolean>) => {
 				employeeNo: item.employeeNo,
 				eventTime: item.eventTime.toISOString(),
 				reason: missingWithEmployeeNo.includes(item) ? "missing" : "clock_normalization",
-				result: await callCallback(item.payload),
+				result: await postCallback(item.payload, options),
 			});
 		}
 	}

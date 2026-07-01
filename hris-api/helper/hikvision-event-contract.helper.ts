@@ -116,6 +116,43 @@ export const extractHikvisionEventData = (
 	};
 };
 
+export const normalizeHikvisionAddress = (value: unknown): string => {
+	const text = String(value || "").trim();
+	if (!text) return "";
+	try {
+		return new URL(text).hostname.toLowerCase();
+	} catch {
+		return text
+			.replace(/^https?:\/\//i, "")
+			.split("/")[0]
+			.split(":")[0]
+			.trim()
+			.toLowerCase();
+	}
+};
+
+export const getHikvisionObservedDeviceIp = (payload: Record<string, any>): string => {
+	const event = extractHikvisionEventData(payload);
+	const rawAlarm = payload?.rawAlarm || {};
+	return String(
+		event.deviceIP ||
+			rawAlarm.deviceIp ||
+			rawAlarm.deviceIP ||
+			payload?.socketCandidate?.deviceIP ||
+			payload?.socketCandidate?.deviceIp ||
+			"",
+	).trim();
+};
+
+export const hikvisionEventMatchesConfiguredDevice = (
+	event: Pick<NormalizedHikvisionEvent, "deviceIP">,
+	device: { address?: string | null },
+) => {
+	const observedAddress = normalizeHikvisionAddress(event.deviceIP);
+	if (!observedAddress) return true;
+	return observedAddress === normalizeHikvisionAddress(device.address);
+};
+
 export const isHikvisionAttendancePunchEvent = (
 	event: Pick<NormalizedHikvisionEvent, "major" | "minor" | "actionCode">,
 ) => {
@@ -124,6 +161,7 @@ export const isHikvisionAttendancePunchEvent = (
 	const actionCode = String(event.actionCode || "").trim().toUpperCase();
 
 	if (major === "5" && minor === "38") return true;
+	if (major === "5" && minor === "75") return true;
 	return actionCode === "MINOR_FINGERPRINT_COMPARE_PASS";
 };
 

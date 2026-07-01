@@ -4,10 +4,13 @@ import {
 	DEFAULT_HIKVISION_MIN_PUNCH_PAIR_GAP_MINUTES,
 	extractHikvisionSystemLocalTime,
 	extractHikvisionEventData,
+	getHikvisionObservedDeviceIp,
 	getHikvisionClockSkewSecondsFromSystemTime,
 	getHikvisionObservedClockSkewSeconds,
+	hikvisionEventMatchesConfiguredDevice,
 	isHikvisionAttendancePunchEvent,
 	normalizeHikvisionAcsEventListTimes,
+	normalizeHikvisionAddress,
 	normalizeHikvisionDeviceEventSource,
 	normalizeHikvisionFutureSkewedEventTime,
 	parseHikvisionBusinessDateBound,
@@ -59,6 +62,36 @@ describe("hikvision event contract helper", () => {
 		expect(normalizeHikvisionDeviceEventSource("anything_else")).to.equal(
 			"HIKVISION_CALLBACK",
 		);
+	});
+
+	it("requires Hikvision observed IP to match the configured device address when present", () => {
+		expect(normalizeHikvisionAddress("http://10.184.38.215:80/path")).to.equal(
+			"10.184.38.215",
+		);
+		expect(
+			hikvisionEventMatchesConfiguredDevice(
+				{ deviceIP: "10.184.38.215" },
+				{ address: "10.184.38.215" },
+			),
+		).to.equal(true);
+		expect(
+			hikvisionEventMatchesConfiguredDevice(
+				{ deviceIP: "10.184.38.215" },
+				{ address: "192.168.1.40" },
+			),
+		).to.equal(false);
+		expect(
+			hikvisionEventMatchesConfiguredDevice({ deviceIP: undefined }, { address: "192.168.1.40" }),
+		).to.equal(true);
+	});
+
+	it("extracts observed Hikvision alarm IP from raw alarm payloads", () => {
+		expect(
+			getHikvisionObservedDeviceIp({
+				rawAlarm: { deviceIp: "10.184.38.215" },
+				socketCandidate: { deviceIP: "192.168.1.40" },
+			}),
+		).to.equal("10.184.38.215");
 	});
 
 	it("uses serial number in dedupe keys so same-second device events do not collapse", () => {
@@ -184,6 +217,12 @@ describe("hikvision event contract helper", () => {
 				major: 5,
 				minor: 38,
 				actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+			}),
+		).to.equal(true);
+		expect(
+			isHikvisionAttendancePunchEvent({
+				major: 5,
+				minor: 75,
 			}),
 		).to.equal(true);
 	});

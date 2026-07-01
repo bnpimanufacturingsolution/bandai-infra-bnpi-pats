@@ -94,6 +94,113 @@ Watch mode was run for three loops with a 5-minute lookback. It successfully
 queried the device each loop but observed no fresh tap event during that short
 window.
 
+## Live ISAPI ACS Sample - Raw and Normalized
+
+On 2026-07-01, a development credential was supplied at runtime for username
+`admin` and the VM queried the SADP-visible device at `10.184.38.215:80`.
+The password was intentionally not written into tracked repo files.
+
+The first live watch pass ran 12 loops at 5-second intervals and wrote evidence
+under:
+
+```text
+/tmp/project-truth-hikvision-isapi-samples/20260701T082034Z-raw-acs.jsonl
+/tmp/project-truth-hikvision-isapi-samples/20260701T082034Z-normalized-acs.jsonl
+/tmp/project-truth-hikvision-isapi-samples/20260701T082034Z-summary.json
+```
+
+That watch pass had no new tap during the exact 60-second window:
+
+```text
+uniqueEvents=0
+likelyFingerprintPunches=0
+errors=[]
+```
+
+A widened 180-minute snapshot then captured current raw ACS history:
+
+```text
+/tmp/project-truth-hikvision-isapi-samples/20260701T082201Z-raw-acs-snapshot.jsonl
+/tmp/project-truth-hikvision-isapi-samples/20260701T082201Z-normalized-acs-snapshot.jsonl
+/tmp/project-truth-hikvision-isapi-samples/20260701T082201Z-summary-snapshot.json
+```
+
+Snapshot result:
+
+```text
+eventCount=7
+likelyFingerprintPunches=2
+statusCode=200
+```
+
+The latest raw event in that snapshot was a device access-control event:
+
+```json
+{
+  "cardReaderNo": 1,
+  "cardType": 1,
+  "currentVerifyMode": "faceOrFpOrCardOrPw",
+  "doorNo": 1,
+  "major": 5,
+  "mask": "unknown",
+  "minor": 39,
+  "serialNo": 169,
+  "time": "2026-07-01T16:22:52+08:00"
+}
+```
+
+One likely fingerprint/attendance raw event shape was:
+
+```json
+{
+  "FaceRect": {
+    "height": 0.118,
+    "width": 0.211,
+    "x": 0.009,
+    "y": 0.835
+  },
+  "cardReaderNo": 1,
+  "cardType": 1,
+  "currentVerifyMode": "faceOrFpOrCardOrPw",
+  "doorNo": 1,
+  "employeeNoString": "1",
+  "major": 5,
+  "mask": "no",
+  "minor": 75,
+  "name": "ernest",
+  "serialNo": 166,
+  "time": "2026-07-01T15:49:46+08:00",
+  "userType": "normal"
+}
+```
+
+The normalized/socket-candidate shape used for the sample was:
+
+```json
+{
+  "type": "device.hikvision.acs_event",
+  "source": "HIKVISION_CALLBACK",
+  "deviceId": "HIKVISION-TEST001",
+  "employeeNo": "1",
+  "eventTime": "2026-07-01T15:49:46+08:00",
+  "verifyMode": "faceOrFpOrCardOrPw",
+  "major": 5,
+  "minor": 75,
+  "serialNo": 166,
+  "doorNo": 1,
+  "raw": {
+    "employeeNoString": "1",
+    "major": 5,
+    "minor": 75,
+    "name": "ernest"
+  }
+}
+```
+
+For ISAPI ACS polling, Project Truth should treat `major=5`, `minor=75`,
+and a present `employeeNoString` as a likely attendance/fingerprint-success
+candidate until a wider device-code mapping is confirmed.
+
 ## Linux HCNetSDK Pass
 
 Official SDK source used:

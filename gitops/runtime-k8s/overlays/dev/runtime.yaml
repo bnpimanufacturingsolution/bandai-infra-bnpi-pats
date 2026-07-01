@@ -330,6 +330,8 @@ spec:
               value: 10.184.38.215
             - name: HIKVISION_DEVICE_PORT
               value: "80"
+            - name: HIKVISION_CALLBACK_URL
+              value: http://hris-api:3001/api/hikvision/callback
             - name: HIKVISION_EVENT_LIMIT
               value: "50"
             - name: HIKVISION_WATCH_INTERVAL_SECONDS
