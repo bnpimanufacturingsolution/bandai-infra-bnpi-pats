@@ -103,6 +103,12 @@ foreach ($envName in $Environments) {
   $checks.Add((Assert-Text "runtime-$envName API allows LAN CORS" $rendered '(?ms)name:\s*ALLOW_LAN_CORS\s*\r?\n\s*value:\s*"true"'))
   $checks.Add((Assert-Text "runtime-$envName API allows credentialed CORS" $rendered '(?ms)name:\s*CORS_CREDENTIALS\s*\r?\n\s*value:\s*"true"'))
   $checks.Add((Assert-Text "runtime-$envName API includes public app origins" $rendered 'https://bnpi-hris\.tech,https://www\.bnpi-hris\.tech,https://app\.bnpi-hris\.tech,https://dev\.bnpi-hris\.tech,https://uat\.bnpi-hris\.tech'))
+  $checks.Add((Assert-Text "runtime-$envName API mounts DM import data read-only" $rendered '(?ms)mountPath:\s*/data/import\s*\r?\n\s*name:\s*dm-import-data\s*\r?\n\s*readOnly:\s*true'))
+  $checks.Add((Assert-Text "runtime-$envName API mounts DM source inputs read-only" $rendered '(?ms)mountPath:\s*/source-inputs-organized\s*\r?\n\s*name:\s*dm-source-inputs\s*\r?\n\s*readOnly:\s*true'))
+  $checks.Add((Assert-Text "runtime-$envName API mounts DM docs read-only" $rendered '(?ms)mountPath:\s*/docs\s*\r?\n\s*name:\s*dm-docs\s*\r?\n\s*readOnly:\s*true'))
+  $checks.Add((Assert-Text "runtime-$envName API uses VM DM import hostPath" $rendered 'path:\s*/var/lib/project-truth/dm-workflow/data/import'))
+  $checks.Add((Assert-Text "runtime-$envName API uses VM DM source inputs hostPath" $rendered 'path:\s*/var/lib/project-truth/dm-workflow/source-inputs-organized'))
+  $checks.Add((Assert-Text "runtime-$envName API uses VM DM docs hostPath" $rendered 'path:\s*/var/lib/project-truth/dm-workflow/docs'))
 
   $checks.Add((Assert-NoText "runtime-$envName does not deploy retired Node ZKTeco bridge" $rendered 'name:\s*zkteco-bridge'))
   $checks.Add((Assert-NoText "runtime-$envName does not reference retired Node ZKTeco bridge image" $rendered 'project-truth-zkteco-bridge'))
