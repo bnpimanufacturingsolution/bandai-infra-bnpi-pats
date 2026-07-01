@@ -209,6 +209,12 @@ spec:
               value: /health,/metrics
             - name: LOG_FORMAT
               value: json
+            - name: ALLOW_LAN_CORS
+              value: "true"
+            - name: CORS_CREDENTIALS
+              value: "true"
+            - name: CORS_ORIGINS
+              value: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3100,http://127.0.0.1:3100,http://localhost:3200,http://127.0.0.1:3200,http://localhost:5175,http://127.0.0.1:5175,https://bnpi-hris.tech,https://www.bnpi-hris.tech,https://app.bnpi-hris.tech,https://dev.bnpi-hris.tech,https://uat.bnpi-hris.tech
           ports:
             - name: http
               containerPort: 3001

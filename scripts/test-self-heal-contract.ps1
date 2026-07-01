@@ -100,6 +100,9 @@ foreach ($envName in $Environments) {
   $checks.Add((Assert-Text "runtime-$envName exposes app hostPort" $rendered "hostPort:\s*$expectedAppPort"))
   $checks.Add((Assert-Text "runtime-$envName exposes api hostPort" $rendered "hostPort:\s*$expectedApiPort"))
   $checks.Add((Assert-Text "runtime-$envName exposes postgres hostPort" $rendered "hostPort:\s*$expectedPostgresPort"))
+  $checks.Add((Assert-Text "runtime-$envName API allows LAN CORS" $rendered '(?ms)name:\s*ALLOW_LAN_CORS\s*\r?\n\s*value:\s*"true"'))
+  $checks.Add((Assert-Text "runtime-$envName API allows credentialed CORS" $rendered '(?ms)name:\s*CORS_CREDENTIALS\s*\r?\n\s*value:\s*"true"'))
+  $checks.Add((Assert-Text "runtime-$envName API includes public app origins" $rendered 'https://bnpi-hris\.tech,https://www\.bnpi-hris\.tech,https://app\.bnpi-hris\.tech,https://dev\.bnpi-hris\.tech,https://uat\.bnpi-hris\.tech'))
 
   $checks.Add((Assert-NoText "runtime-$envName does not deploy retired Node ZKTeco bridge" $rendered 'name:\s*zkteco-bridge'))
   $checks.Add((Assert-NoText "runtime-$envName does not reference retired Node ZKTeco bridge image" $rendered 'project-truth-zkteco-bridge'))
