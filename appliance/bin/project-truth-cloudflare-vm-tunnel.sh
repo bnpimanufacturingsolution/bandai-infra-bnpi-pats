@@ -67,6 +67,8 @@ ingress:
     service: http://localhost:3001
   - hostname: dev.bnpi-hris.tech
     service: http://localhost:3100
+    originRequest:
+      httpHostHeader: localhost:3100
   - hostname: dev-api.bnpi-hris.tech
     service: http://localhost:3101
   - hostname: uat.bnpi-hris.tech

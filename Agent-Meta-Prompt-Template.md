@@ -9,7 +9,7 @@ Do not claim success until evidence proves the goal was met.
 ---
 
 # 1. GOAL
-
+ 
 ## Phase / Task Name
 
 [REPLACE WITH PHASE NAME OR TASK TITLE]
