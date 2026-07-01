@@ -96,9 +96,15 @@ Accepted or observed architecture:
 - Item: ZKTeco runtime uses the Windows Standalone SDK sidecar under `appliance/zkteco-standalone-sdk`; the Node.js bridge under `appliance/zkteco-bridge` is retired from active Docker, K3s, and GitOps runtime paths.
   - Status: CONFIRMED
   - Evidence: docs/ZKTECO_RUNTIME_TRUTH.md; .wwg/reports/zkteco-node-bridge-retirement-20260629.md
+- Item: ZKTeco attendance-terminal realtime is not currently proven inside the Ubuntu VM or Linux Docker.
+  - Status: CONFIRMED_CURRENT_BOUNDARY
+  - Evidence: docs/ZKTECO_RUNTIME_TRUTH.md records that the active Project Truth sidecar targets `.NET Framework 4.8`, x86, and Windows COM (`Interop.zkemkeeper.dll` / `zkemkeeper.dll`), while current external SDK research found official ZKTeco Linux SDK material for fingerprint scanners rather than a proved Linux attendance-terminal Standalone/Pull runtime.
 - Item: Hikvision integration exists through HRIS API `/api/hikvision/callback`, ISAPI client helpers, device event persistence, admin device event UI filters, and realtime `device-event:saved`; editable vendor source is tracked as `vendor/hikvision-bio`, while proprietary HCNetSDK binaries remain local-only runtime inputs.
   - Status: CONFIRMED_CODE_EVIDENCE
   - Evidence: docs/HIKVISION_RUNTIME_TRUTH.md; hris-api/app/hikvision; hris-api/helper/hikvision-event-contract.helper.ts; hris-api/tests/hikvision-event-contract.helper.spec.ts; hris-app/app/routes/admin/devices/events.tsx; vendor/hikvision-bio submodule.
+- Item: Hikvision can partially run inside Linux/VM through ISAPI ACS polling, but Linux HCNetSDK/AlarmDemo is not yet implemented or proven in Project Truth.
+  - Status: CONFIRMED_CURRENT_BOUNDARY
+  - Evidence: docs/HIKVISION_RUNTIME_TRUTH.md records DEV VM/K3s `hris-hikvision-watcher` ACS-pull proof and current SDK research showing Hikvision publishes a Linux 64-bit Device Network SDK; the repo has no committed/proved Linux HCNetSDK listener service.
 - Item: Hikvision runtime has Docker DEV database evidence but is not yet proven at the same physical-device and cross-environment evidence level as ZKTeco.
   - Status: NEEDS_RUNTIME_EVIDENCE
   - Evidence: docs/HIKVISION_RUNTIME_TRUTH.md records Docker DEV `HIKVISION_CALLBACK` and `EN_HCNETSDK_ALARM` rows, while Docker PROD/UAT and public DEV did not show equivalent Hikvision event evidence during the 2026-06-30 verification pass; physical-device, browser/socket, LAN/public, and attendance journey proof remain required for the intended production path.

@@ -4,7 +4,7 @@
 
 Overall status: FAIL
 
-critical: 0, high: 3, medium: 0, low: 0, info: 11
+critical: 0, high: 4, medium: 0, low: 0, info: 11
 
 ## Command
 
@@ -22,7 +22,7 @@ wwg-native-project
 - PASS Skill Registry and Skill Manifest validate when present - 0 finding(s)
 - PASS Profile skill recommendation metadata validates when present - 1 finding(s)
 - PASS Required WWG directories exist - 1 finding(s)
-- FAIL WWG operating loop files are present and actionable - 3 finding(s)
+- FAIL WWG operating loop files are present and actionable - 4 finding(s)
 - PASS Principles folder and Principle Brief frontmatter are valid - 1 finding(s)
 - PASS UI/UX principle pack expectations are profile-aware - 0 finding(s)
 - PASS Generated marker pairs are balanced - 1 finding(s)
@@ -32,6 +32,7 @@ wwg-native-project
 
 ## Findings
 
+- HIGH wwg-report-truth-sync-fields-missing (reports/cors-k3s-runtime-repair-20260701.md): evidence=confirmed Report claims readiness or completion without required WWG truth synchronization fields. Recommendation: Add WWG Truth Synchronization, task mode, truth/update/governance/drift fields, and remaining stale context before claiming completion.
 - HIGH wwg-report-truth-sync-fields-missing (reports/wwg-adoption-plan.md): evidence=confirmed Report claims readiness or completion without required WWG truth synchronization fields. Recommendation: Add WWG Truth Synchronization, task mode, truth/update/governance/drift fields, and remaining stale context before claiming completion.
 - HIGH wwg-report-truth-sync-fields-missing (reports/wwg-existing-audit-report.md): evidence=confirmed Report claims readiness or completion without required WWG truth synchronization fields. Recommendation: Add WWG Truth Synchronization, task mode, truth/update/governance/drift fields, and remaining stale context before claiming completion.
 - HIGH wwg-report-truth-sync-fields-missing (reports/wwg-maintenance-review.md): evidence=confirmed Report claims readiness or completion without required WWG truth synchronization fields. Recommendation: Add WWG Truth Synchronization, task mode, truth/update/governance/drift fields, and remaining stale context before claiming completion.
@@ -39,7 +40,7 @@ wwg-native-project
 - INFO generated-markers-balanced: Generated marker pairs are balanced where present.
 - INFO gitignore-native-report-backups-missing (.gitignore): evidence=confirmed risk=low Report policy expects `.wwg/reports/backups/` to be ignored. Recommendation: Add a narrow ignore rule for `.wwg/reports/backups/` or `.wwg/.gitignore` `reports/backups/`.
 - INFO json-schemas-parse: Parsed and compiled 0 JSON schema file(s).
-- INFO markdown-contract-quality-report-generated (reports/context-skill-quality.md): evidence=confirmed Markdown contract quality report completed with 71 warning(s) and 77 suggestion(s). Advisory Markdown quality findings are recorded in the quality report and do not change validate status by default. Recommendation: Review `.wwg/reports/context-skill-quality.md` during focused documentation remediation.
+- INFO markdown-contract-quality-report-generated (reports/context-skill-quality.md): evidence=confirmed Markdown contract quality report completed with 77 warning(s) and 89 suggestion(s). Advisory Markdown quality findings are recorded in the quality report and do not change validate status by default. Recommendation: Review `.wwg/reports/context-skill-quality.md` during focused documentation remediation.
 - INFO markdown-readable: Markdown files are non-empty and readable.
 - INFO profile-skill-recommendations-valid: evidence=confirmed Validated skill recommendation metadata for 0 profile file(s). Recommendation: Keep profile skill recommendations advisory until manifest generation and runtime activation are implemented.
 - INFO project-registry-valid (.wwg/config/wwg.project.yaml): WWG project registry parses and matches the registry schema.
@@ -52,6 +53,7 @@ wwg-native-project
 ### Review Required
 These findings touch project meaning, governance, principles, or selected profile expectations.
 Next command: `wwg audit --upgrade-candidates`
+- HIGH wwg-report-truth-sync-fields-missing (reports/cors-k3s-runtime-repair-20260701.md): Report claims readiness or completion without required WWG truth synchronization fields.
 - HIGH wwg-report-truth-sync-fields-missing (reports/wwg-adoption-plan.md): Report claims readiness or completion without required WWG truth synchronization fields.
 - HIGH wwg-report-truth-sync-fields-missing (reports/wwg-existing-audit-report.md): Report claims readiness or completion without required WWG truth synchronization fields.
 - HIGH wwg-report-truth-sync-fields-missing (reports/wwg-maintenance-review.md): Report claims readiness or completion without required WWG truth synchronization fields.
@@ -69,7 +71,7 @@ Next: No command required.
 - INFO markdown-readable: Markdown files are non-empty and readable.
 - INFO ambiguous-report-classification: Some report-like files need human classification.
 - INFO gitignore-native-report-backups-missing (.gitignore): Report policy expects `.wwg/reports/backups/` to be ignored.
-- INFO markdown-contract-quality-report-generated (reports/context-skill-quality.md): Markdown contract quality report completed with 71 warning(s) and 77 suggestion(s).
+- INFO markdown-contract-quality-report-generated (reports/context-skill-quality.md): Markdown contract quality report completed with 77 warning(s) and 89 suggestion(s).
 
 ## Validation Results
 
@@ -105,4 +107,4 @@ FAIL: 1
 
 ## Recommended Next Steps
 
-- Review Required: 3 -> wwg audit --upgrade-candidates
+- Review Required: 4 -> wwg audit --upgrade-candidates

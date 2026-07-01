@@ -27,6 +27,40 @@ It must run on a Windows host or Windows container runtime. It cannot run as a n
 
 The older `appliance/zkteco-bridge` Node socket bridge is retired from the active VM/K3s/Docker path because it can hold stale sessions and drift from the Windows SDK runtime truth.
 
+## Linux VM / Docker Feasibility Truth
+
+As of 2026-07-01, Project Truth has not proven a ZKTeco attendance-terminal
+runtime inside the Ubuntu VM or a Linux Docker container.
+
+The currently proven ZKTeco runtime remains the Windows Standalone SDK sidecar.
+Installing a Linux SDK in the VM would be new runtime work, not a continuation
+of the existing `appliance/zkteco-standalone-sdk` path, because the repo bridge
+depends on Windows COM components.
+
+Current SDK source research:
+
+- Official ZKTeco Download Center lists `ZKFinger SDK Linux`, but that SDK is
+  for fingerprint scanners, not the attendance-terminal Standalone SDK path
+  used by Project Truth.
+- Official ZKTeco `ZKFinger SDK for Linux` product text lists supported scanner
+  devices such as `SLK20R`, `ZK9500`, `ZK6500`, and `ZK8500R`; it describes
+  image/template capture, not TCP attendance-log sidecar operation.
+- The public `ZKTeco/Standalone-SDK` repository is still the visible
+  Standalone SDK source, and its open Linux request from 2024-12-24 asks ZKTeco
+  to release a Linux-compatible version.
+
+Therefore, do not mark ZKTeco realtime as VM/Docker-proven until one of these
+is installed, licensed if needed, implemented, and verified end to end:
+
+1. A vendor-supported Linux attendance-terminal Standalone/Pull/Push SDK that
+   can connect to the known Project Truth terminals and post to
+   `/api/zkteco/events`.
+2. A documented Linux protocol implementation that proves device connection,
+   event read/watch behavior, dedupe, HRIS event persistence, UI rendering, and
+   sidecar health/status.
+3. A deliberate external Windows sidecar architecture where the Windows SDK
+   remains outside the VM but is documented as the canonical device runtime.
+
 ## Employee Mapping Truth
 
 ZKTeco enroll numbers are the device-side biometric IDs. In HRIS they belong in `employees.deviceEmpId` without display padding. If the HR employee code is `00021`, the ZKTeco `deviceEmpId` should be `21`.

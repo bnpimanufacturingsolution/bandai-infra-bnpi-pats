@@ -61,3 +61,32 @@ Drift guard note:
   before touching data. As of this entry, public HRIS is Docker Compose behind
   the named Cloudflare Tunnel.
 
+## 2026-07-01 Device Linux SDK Truth Documentation
+
+Task mode: Mixed docs/truth synchronization with external SDK research.
+
+Current-state finding:
+- ZKTeco realtime attendance-terminal ingestion is not currently proven inside
+  the Ubuntu VM or Linux Docker. Project Truth's proven sidecar path is still
+  `appliance/zkteco-standalone-sdk`, which targets Windows COM / .NET Framework
+  4.8.
+- Hikvision has a proven DEV VM/K3s ACS-pull watcher through the existing ISAPI
+  flow, but Project Truth does not yet have a Linux HCNetSDK/AlarmDemo listener
+  or SDK container.
+
+Actions taken:
+- Updated `docs/ZKTECO_RUNTIME_TRUTH.md` with Linux VM/Docker feasibility
+  boundaries and SDK-source findings.
+- Updated `docs/HIKVISION_RUNTIME_TRUTH.md` with Linux VM/Docker feasibility
+  boundaries and SDK-source findings.
+- Synced the same boundaries into `.wwg/wiki/project-truth.md` and
+  `.wwg/wiki/project-truth-summary.md`.
+- Added proposed follow-up `REC-20260701-DEVICE-LINUX-SDK-PROOF` to
+  `.wwg/governance/recommendation-registry.md`.
+
+External source findings:
+- Official ZKTeco Linux SDK material found during this pass is `ZKFinger SDK
+  Linux`, which is scanner/template focused, not confirmed as the
+  attendance-terminal Standalone/Pull runtime Project Truth needs.
+- Hikvision publishes a Linux 64-bit Device Network SDK, so a Linux HCNetSDK
+  runtime is plausible but remains unimplemented and unproven here.

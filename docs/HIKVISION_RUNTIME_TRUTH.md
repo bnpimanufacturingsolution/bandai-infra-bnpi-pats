@@ -123,6 +123,37 @@ The accepted `DeviceEventSource` values are:
 Do not use `AlarmDemo`, `Device API`, `ISAPI`, or `SDK 4370` as stored
 `DeviceEventSource` values. Those are runtime labels only.
 
+## Linux VM / Docker Feasibility Truth
+
+As of 2026-07-01, Hikvision has a partially proven Linux/VM path through
+ISAPI/ACS polling, but the HCNetSDK AlarmDemo path in this repo remains
+Windows/local unless a Linux SDK runtime is added and verified.
+
+Current SDK source research:
+
+- Hikvision publishes `Device Network SDK (for Linux 64-bit)` in its SDK
+  download pages. Search-result metadata from Hikvision lists version `V6.1.9`
+  and includes SDK functions such as remote connection/configuration and
+  arm/disarm.
+- Hikvision also publishes an ISAPI/OTAP developer-guide portal. The portal
+  requires model search and a Materials License Agreement before guide
+  downloads, so the exact device-specific guide should be captured as a local
+  source only after the agreement flow is completed.
+- Third-party wrappers exist for HCNetSDK on Linux, but they are not Project
+  Truth runtime evidence and should not be treated as canonical vendor support.
+
+What is currently true in Project Truth:
+
+- DEV VM/K3s has a GitOps-managed ACS-pull watcher that uses the existing HRIS
+  TypeScript ISAPI flow and saves `HIKVISION_CALLBACK` rows.
+- The repo does not yet contain a Linux HCNetSDK AlarmDemo equivalent, Linux
+  SDK libraries, or a proved Linux SDK container/service.
+
+To promote Hikvision HCNetSDK to a VM/Docker runtime, install the official
+Linux Device Network SDK outside committed source, build a minimal Linux alarm
+listener or wrapper, and prove device login, alarm/event receipt, callback
+ingestion, saved ledger rows, browser rendering, and LAN/public evidence.
+
 ## Vendor Source
 
 Editable Hikvision reference source is tracked as a submodule:

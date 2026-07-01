@@ -1,6 +1,6 @@
 # Project Truth Summary
 
-Last updated: 2026-06-30
+Last updated: 2026-07-01
 
 ## Current Runtime Truth
 
@@ -35,6 +35,8 @@ Last updated: 2026-06-30
 - Host-local PROD and DEV checks passed during validation, but host-local UAT ports `3200` and `3201` failed while LAN UAT passed.
 - `%ProgramData%\ProjectTruth\config\project-truth.json` was backed up and updated to use VM `project-truth-local-vhdx-proof`, guest IP hint `192.168.254.148`, memory `1536`, and SSH port `22`.
 - Hikvision integration exists in code through `/api/hikvision/callback`, ISAPI helpers, event persistence, admin device-event filters, and realtime `device-event:saved`; editable source is now referenced by `vendor/hikvision-bio`, while proprietary HCNetSDK binaries remain local-only runtime inputs.
+- ZKTeco attendance-terminal realtime is not currently proven inside the Ubuntu VM or Linux Docker. The current proven Project Truth path is the Windows Standalone SDK sidecar under `appliance/zkteco-standalone-sdk`; the retired Node bridge may post rows but is not canonical realtime proof.
+- Hikvision can partially run inside Linux/VM through ISAPI ACS polling and the DEV VM/K3s watcher, but Linux HCNetSDK/AlarmDemo is not yet implemented or proven in Project Truth.
 - A 2026-06-30 chat-provided SADP screenshot shows one active Hikvision `DS-K1T201AEF` device, ID `001`, at `192.168.254.181:8000`; this is physical discovery evidence only, not end-to-end HRIS callback or attendance proof.
 - DEV Hikvision physical-device proof on 2026-06-30 passed after correcting `Main Entrance Device` to `192.168.254.181:80` / `http`: HRIS device health reached ISAPI time, ACS event pull returned a physical event (`major=5`, `minor=38`, employee no. `1`, serial `997`), DEV `device_events` saved row `cmr0e1jk2002lm601rul855z2` as `HIKVISION_CALLBACK` / `UNMATCHED`, and the admin saved-events UI rendered it with address `192.168.254.181` and save path `Device callback`.
 - DEV Hikvision VM/K3s watcher proof on 2026-06-30 added GitOps-managed Deployment `hris-hikvision-watcher` in namespace `dev`; it runs the existing ACS-pull apply loop against `cmqquro2g002em73cdp74rx0q`, reached `READY 1/1`, reported `live.withEmployeeNo=5`, `saved.matchingAfterApply=5`, and `gap.missingWithEmployeeNo=0`, saved fresh `HIKVISION_CALLBACK` rows received at `2026-06-30T13:48:29Z`, and browser-rendered the public DEV saved-events page for `Main Entrance Device`.
@@ -47,6 +49,7 @@ Last updated: 2026-06-30
 - V6 runtime proof shows a split serving reality: public/LAN HRIS is green through Docker Compose and VM-side Cloudflare, while many K3s pods are `Pending`, `Evicted`, or `ContainerStatusUnknown` under memory pressure despite Argo Applications reporting `Synced/Healthy`.
 - Runtime quick tunnels are deprecated for normal public access. Historical TryCloudflare evidence may remain in old reports, but active VM boot/sync paths keep the TryCloudflare service disabled by default.
 - Hikvision has Docker DEV DB evidence for `HIKVISION_CALLBACK` and `EN_HCNETSDK_ALARM`, DEV physical ACS-pull saved-event proof, DEV VM/K3s watcher proof, and UAT temporary callback/attendance seed proof. It is still not proven at ZKTeco's physical-device and cross-environment evidence level because UAT physical pull from the K3s API pod returned `EHOSTUNREACH`, PROD parity is not proven, and Windows AlarmDemo/direct spontaneous device push remains open.
+- Device SDK runtime drift: ZKTeco Linux attendance-terminal SDK support remains unproven from official sources reviewed on 2026-07-01; Hikvision publishes a Linux 64-bit Device Network SDK, but Project Truth has not yet converted it into a VM/Docker HCNetSDK listener.
 - Hikvision physical discovery has advanced from no reachable-device observation to SADP seeing `DS-K1T201AEF` at `192.168.254.181:8000`; runtime ingestion and cross-environment proof remain open.
 - Hikvision DEV runtime ingestion is now proven for physical-device ACS pull into saved device events, including a DEV K3s watcher that starts with the runtime, and UAT callback-shaped ingestion is proven for employee matching plus attendance creation using temporary employees `1` through `5`. Spontaneous device push callback, Windows AlarmDemo managed runtime, UAT pod-to-device routing, DEV attendance matching for employee no. `1`, and PROD parity remain open.
 
