@@ -158,10 +158,10 @@ export const useDeleteDevice = () => {
 		mutationFn: (id: string) => devicesService.deleteDevice(id),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
-			sonnerToast.success("Device deleted successfully");
+			sonnerToast.success("Device removed successfully");
 		},
 		onError: (error: any) => {
-			sonnerToast.error(error?.message || "Failed to delete device");
+			sonnerToast.error(error?.message || "Failed to remove device");
 		},
 	});
 };

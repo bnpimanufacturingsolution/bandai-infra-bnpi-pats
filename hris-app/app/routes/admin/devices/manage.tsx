@@ -772,7 +772,7 @@ export default function DevicesManagePage() {
 				<DeviceEnrollmentPanel embedded />
 			</Modal>
 
-			{/* Delete Confirmation Modal */}
+			{/* Remove Confirmation Modal */}
 			<Modal
 				open={action === "delete"}
 				onOpenChange={(open) => {
@@ -783,7 +783,7 @@ export default function DevicesManagePage() {
 						});
 					}
 				}}
-				title="Delete Device"
+				title="Remove Device"
 				className={HR_MODAL_STANDARD_CLASS}>
 				{isDeepLinkLoading && action === "delete" ? (
 					<div className="py-8 text-center text-gray-500">Loading device...</div>
@@ -791,9 +791,9 @@ export default function DevicesManagePage() {
 					<div className="space-y-4">
 						<div className="p-4 bg-red-50 border border-red-200 rounded-md">
 							<p className="text-sm text-red-800">
-								This action cannot be undone. This will permanently delete the
-								device <strong>{activeDevice.name}</strong> ({activeDevice.address}:
-								{activeDevice.port}).
+								Remove <strong>{activeDevice.name}</strong> ({activeDevice.address}:
+								{activeDevice.port}) from active configuration. Historical events
+								stay available for attendance audit.
 							</p>
 						</div>
 						<div className="flex justify-end gap-3">
@@ -813,7 +813,7 @@ export default function DevicesManagePage() {
 								variant="destructive"
 								onClick={confirmDelete}
 								disabled={deleteDeviceMutation.isPending}>
-								{deleteDeviceMutation.isPending ? "Deleting..." : "Delete Device"}
+								{deleteDeviceMutation.isPending ? "Removing..." : "Remove Device"}
 							</Button>
 						</div>
 					</div>
