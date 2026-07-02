@@ -536,10 +536,12 @@ export const controller = (prisma: PrismaClient) => {
 					(device.vendor === "ZKTeco" && zktecoPreview && !sourcePreview
 						? zktecoPreview.error || "ZKTeco SDK preview did not return this device"
 						: null);
+				const sourceErrorMessage =
+					sourceError === null || sourceError === undefined ? null : String(sourceError);
 				const canStartSync =
 					device.vendor === "ZKTeco" &&
 					Boolean(zktecoPreview?.ok) &&
-					!sourceError &&
+					!sourceErrorMessage &&
 					Number.isFinite(Number(needsSyncEvents)) &&
 					Number(needsSyncEvents) > 0;
 				return {
@@ -559,7 +561,7 @@ export const controller = (prisma: PrismaClient) => {
 					canStartSync,
 					syncAction: canStartSync ? "zkteco-bridge-sync" : null,
 					status:
-						sourceError
+						sourceErrorMessage
 							? "source_unavailable"
 							: totalEvents === null
 							? "source_total_unavailable"
@@ -568,7 +570,7 @@ export const controller = (prisma: PrismaClient) => {
 								: "synced",
 					lastSourceEventAt:
 						device.vendor === "ZKTeco" ? sourcePreview?.lastSelectedAt || null : null,
-					...(sourceError ? { error: sourceError } : {}),
+					...(sourceErrorMessage ? { error: sourceErrorMessage } : {}),
 				};
 			});
 

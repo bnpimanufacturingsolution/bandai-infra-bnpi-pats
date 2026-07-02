@@ -816,11 +816,18 @@ export default function DeviceEventsPage() {
 		(total, row) => total + Number(row.hrisSavedCount ?? row.syncedEvents ?? 0),
 		0,
 	);
+	const syncHasUnknownMissingCount = syncPreviewRows.some(
+		(row) =>
+			(row.missingEventCount ?? row.needsSyncEvents) === null ||
+			(row.missingEventCount ?? row.needsSyncEvents) === undefined,
+	);
 	const syncDryRunEstimate = syncPreviewRows.length
-		? syncPreviewRows.reduce(
-				(total, row) => total + Number(row.missingEventCount ?? row.needsSyncEvents ?? 0),
-				0,
-			)
+		? syncHasUnknownMissingCount
+			? null
+			: syncPreviewRows.reduce(
+					(total, row) => total + Number(row.missingEventCount ?? row.needsSyncEvents ?? 0),
+					0,
+				)
 		: (
 				syncBridge?.estimatedRowsToSync ??
 				syncBridge?.missingRows ??
