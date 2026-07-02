@@ -12,6 +12,28 @@ export const normalizeApiBase = (raw: string, fallback: string): string => {
 	return normalized;
 };
 
+const PUBLIC_APP_SOCKET_HOSTS: Record<string, Set<string>> = {
+	"bnpi-hris.tech": new Set(["api.bnpi-hris.tech"]),
+	"www.bnpi-hris.tech": new Set(["api.bnpi-hris.tech"]),
+	"app.bnpi-hris.tech": new Set(["api.bnpi-hris.tech"]),
+	"dev.bnpi-hris.tech": new Set(["dev-api.bnpi-hris.tech"]),
+	"uat.bnpi-hris.tech": new Set(["uat-api.bnpi-hris.tech"]),
+};
+
+const shouldUseFallbackSocketOrigin = (normalizedBase: string, fallbackOrigin: string): boolean => {
+	if (!fallbackOrigin) return false;
+
+	try {
+		const base = new URL(normalizedBase);
+		const fallback = new URL(fallbackOrigin);
+		const pairedApiHosts = PUBLIC_APP_SOCKET_HOSTS[fallback.hostname.toLowerCase()];
+
+		return Boolean(pairedApiHosts?.has(base.hostname.toLowerCase()));
+	} catch {
+		return false;
+	}
+};
+
 export const resolveSocketBaseUrl = (
 	rawBase: string | undefined,
 	fallbackOrigin: string,
@@ -21,6 +43,10 @@ export const resolveSocketBaseUrl = (
 
 	const normalized = value.replace(/\/+$/, "");
 	if (normalized.startsWith("/") && normalized.toLowerCase().endsWith("/api")) {
+		return fallbackOrigin;
+	}
+
+	if (shouldUseFallbackSocketOrigin(normalized, fallbackOrigin)) {
 		return fallbackOrigin;
 	}
 

@@ -51,31 +51,29 @@ export function AttendanceStatusCard({ employeeId }: AttendanceStatusCardProps) 
 	};
 
 	return (
-		<Card id="dashboard-team-attendance">
-			<CardHeader>
+		<Card id="dashboard-team-attendance" className="gap-4 py-4">
+			<CardHeader className="pb-2">
 				<div className="flex items-center justify-between">
-					<CardTitle className="flex items-center gap-2">
-						<Users className="w-5 h-5 text-orange-500" />
-						Team Attendance Snapshot
+					<CardTitle className="flex items-center gap-2 text-base font-semibold">
+						<Users className="h-4 w-4 text-gray-400" />
+						Team Attendance
 					</CardTitle>
 					<button
 						onClick={() => navigate("/employee/team")}
-						className="text-gray-600 text-sm hover:text-gray-800">
-						View All &gt;
+						className="text-xs text-gray-400 hover:text-gray-600">
+						View all →
 					</button>
 				</div>
 			</CardHeader>
-			<CardContent>
+			<CardContent className="pt-0">
 				{isLoading ? (
-					<div className="flex items-center justify-center h-32">
-						<div className="text-gray-600 text-sm">Loading...</div>
-					</div>
+					<div className="flex h-16 items-center justify-center text-sm text-gray-500">Loading...</div>
 				) : employeeAttendance.length === 0 ? (
-					<div className="flex items-center justify-center h-32">
-						<div className="text-gray-600 text-sm">No direct reports found</div>
+					<div className="flex h-16 items-center justify-center text-sm text-gray-500">
+						No direct reports
 					</div>
 				) : (
-					<div className="space-y-3 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
+					<div className="max-h-[210px] divide-y divide-gray-100 overflow-y-auto pr-1">
 						{employeeAttendance.map((employee: any) => (
 							<div
 								key={employee.employeeId}
@@ -88,28 +86,25 @@ export function AttendanceStatusCard({ employeeId }: AttendanceStatusCardProps) 
 										handleEmployeeRowClick(employee.employeeId);
 									}
 								}}
-								className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-orange-200 cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
-								<div className="flex items-center gap-3">
-									<div className="w-10 h-10 rounded-full bg-orange-100 border border-orange-200 flex items-center justify-center flex-shrink-0">
-										<Users className="w-5 h-5 text-orange-600" />
-									</div>
-									<div className="flex-1 min-w-0">
-										<p className="text-sm font-medium text-gray-900 truncate">
-											{employee.employeeName}
-										</p>
-										<span
-											className={`inline-flex items-center gap-1 px-2 py-0.5 mt-1 text-xs rounded-full ${
-												employee.status === "PRESENT"
-													? "bg-green-100 text-green-800"
-													: employee.status === "LEAVE"
-														? "bg-yellow-100 text-yellow-800"
-														: "bg-red-100 text-red-800"
-											}`}>
-											<CheckCircle className="w-3 h-3" />
-											{employee.status}
-										</span>
-									</div>
+								className="flex cursor-pointer items-center gap-2 py-1.5 hover:bg-gray-50 -mx-1 px-1 rounded focus:outline-none focus-visible:ring-1 focus-visible:ring-gray-300">
+								<div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-gray-100 text-gray-500">
+									<Users className="h-3.5 w-3.5" />
 								</div>
+								<div className="min-w-0 flex-1">
+									<p className="truncate text-sm font-medium text-gray-800">
+										{employee.employeeName}
+									</p>
+								</div>
+								<span
+									className={`inline-flex shrink-0 items-center rounded px-1.5 py-px text-[10px] font-medium ${
+										employee.status === "PRESENT"
+											? "bg-green-100 text-green-700"
+											: employee.status === "LEAVE"
+												? "bg-yellow-100 text-yellow-700"
+												: "bg-red-100 text-red-700"
+									}`}>
+									{employee.status}
+								</span>
 							</div>
 						))}
 					</div>

@@ -1,4 +1,4 @@
-import { forwardRef, type HTMLAttributes, type KeyboardEvent } from "react";
+import { forwardRef, type HTMLAttributes } from "react";
 
 type TimesheetDayCellKind =
 	| "hours"
@@ -24,32 +24,32 @@ interface TimesheetDayCellProps extends HTMLAttributes<HTMLDivElement> {
 	markerLabel?: string;
 	pendingLabel?: string;
 	pendingTone?: "today" | "upcoming";
-	timeInLabel?: string;
-	timeOutLabel?: string;
+
 	modified?: boolean;
 	selected?: boolean;
 	badges?: TimesheetDayCellBadge[];
 }
 
 const toneClassMap: Record<TimesheetDayCellBadgeTone, string> = {
-	ot: "bg-green-100 text-green-700",
-	late: "bg-amber-100 text-amber-700",
-	eo: "bg-orange-100 text-orange-700",
-	meta: "bg-slate-100 text-slate-700",
-	night: "bg-indigo-100 text-indigo-700",
+	ot: "text-green-700",
+	late: "text-amber-700",
+	eo: "text-orange-700",
+	meta: "text-slate-600",
+	night: "text-indigo-700",
 };
 
 const baseCellClass =
-	"relative border-r border-gray-100 p-1 min-h-[52px] flex flex-col items-center justify-center gap-0.5 transition-all hover:brightness-95";
+	"relative border-r border-gray-200/70 bg-white p-2 h-[80px] flex flex-col items-center justify-center gap-1 transition-colors hover:bg-gray-50/60 overflow-hidden";
 
-const kindToBgClass: Record<TimesheetDayCellKind, string> = {
-	hours: "bg-orange-50/70",
-	absent: "bg-red-50",
-	rest: "bg-gray-100",
-	leave: "bg-purple-50",
-	marker: "bg-blue-50",
-	pending: "bg-slate-50",
-	scheduleError: "bg-amber-50",
+// Minimal fills: neutral surfaces + subtle left accent for semantic kinds only
+const kindToAccentClass: Record<TimesheetDayCellKind, string> = {
+	hours: "",
+	absent: "border-l-2 border-red-500",
+	rest: "border-l-2 border-gray-300",
+	leave: "border-l-2 border-purple-400",
+	marker: "",
+	pending: "",
+	scheduleError: "border-l-2 border-amber-500",
 };
 
 export const TimesheetDayCell = forwardRef<HTMLDivElement, TimesheetDayCellProps>(
@@ -62,8 +62,7 @@ export const TimesheetDayCell = forwardRef<HTMLDivElement, TimesheetDayCellProps
 			markerLabel = "M",
 			pendingLabel = "Not Clocked In Yet",
 			pendingTone = "upcoming",
-			timeInLabel,
-			timeOutLabel,
+
 			modified = false,
 			selected = false,
 			badges = [],
@@ -73,65 +72,48 @@ export const TimesheetDayCell = forwardRef<HTMLDivElement, TimesheetDayCellProps
 		},
 		ref,
 	) => {
-		const interactive = Boolean(onClick);
-		const cellBgClass =
-			kind === "pending"
-				? pendingTone === "today"
-					? "bg-orange-50/70"
-					: kindToBgClass.pending
-				: kind === "hours" && (!hoursLabel || hoursLabel === "0:00")
-					? "bg-white"
-					: kindToBgClass[kind];
-
-		const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-			if (!interactive) return;
-			if (event.key === "Enter" || event.key === " ") {
-				event.preventDefault();
-				event.currentTarget.click();
-			}
-		};
+	const interactive = Boolean(onClick);
+	const accentClass = kindToAccentClass[kind] || "";
+	const isEmptyHours = !hoursLabel || hoursLabel === "0:00";
 
 	return (
 		<div
 			ref={ref}
 			onClick={onClick}
-			onKeyDown={handleKeyDown}
 			role={interactive ? "button" : props.role}
 			tabIndex={interactive ? 0 : props.tabIndex}
-			className={`${baseCellClass} ${cellBgClass} ${
+			className={`${baseCellClass} ${accentClass} ${
 				interactive
-					? "cursor-pointer hover:ring-2 hover:ring-orange-200 z-10"
+					? "cursor-pointer"
 					: "cursor-help"
-			} ${selected ? "ring-1 ring-orange-300" : ""} ${className}`}
+			} ${selected ? "ring-1 ring-inset ring-orange-400/70" : ""} ${className}`}
 			{...props}>
 			{modified && (
-				<span className="absolute top-0.5 left-0.5 rounded bg-amber-100 px-1 py-[1px] text-[7px] font-bold uppercase text-amber-700">
-					M
-				</span>
+				<span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
 			)}
-			<span className="text-[9px] font-medium text-gray-400">{dayNumber}</span>
+			<span className="text-sm font-medium text-gray-500 tabular-nums">{dayNumber}</span>
 
 			{kind === "absent" && (
-				<span className="text-[8px] font-bold text-red-600">ABSENT</span>
+				<span className="text-xs font-semibold text-red-600 tracking-tight">ABS</span>
 			)}
 
-			{kind === "rest" && <span className="text-[9px] font-medium text-gray-400">OFF</span>}
+			{kind === "rest" && <span className="text-xs font-medium text-gray-400">OFF</span>}
 
 			{kind === "scheduleError" && (
-				<span className="text-[8px] font-bold text-amber-700 text-center leading-tight">
+				<span className="text-[8px] font-semibold text-amber-700 text-center leading-tight">
 					NO SCH
 				</span>
 			)}
 
 			{kind === "leave" && (
-				<span className="text-[8px] font-bold text-purple-600 text-center leading-tight">
-					{leaveLabel || "LEAVE"}
+				<span className="text-[9px] font-semibold text-purple-700 text-center leading-tight">
+					{leaveLabel || "LVE"}
 				</span>
 			)}
 
 			{kind === "marker" && (
 				<span
-					className={`text-[9px] font-bold ${
+					className={`text-[10px] font-bold ${
 						markerLabel === "H" ? "text-blue-600" : "text-indigo-600"
 					}`}>
 					{markerLabel}
@@ -147,27 +129,21 @@ export const TimesheetDayCell = forwardRef<HTMLDivElement, TimesheetDayCellProps
 				</span>
 			)}
 
-			{(kind === "hours" || kind === "pending") && (
-				<>
-					{kind === "hours" && (
-						<span
-							className={`text-xs font-bold leading-tight ${
-								hoursLabel && hoursLabel !== "0:00"
-									? "text-gray-900"
-									: "text-gray-300"
-							}`}>
-							{hoursLabel || "0:00"}
-						</span>
-					)}
-				</>
+			{kind === "hours" && (
+				<span
+					className={`text-base font-semibold tabular-nums leading-none ${
+						!isEmptyHours ? "text-gray-900" : "text-gray-300"
+					}`}>
+					{hoursLabel || "0:00"}
+				</span>
 			)}
 
 			{badges.length > 0 && (
-				<div className="flex flex-wrap gap-0.5 justify-center">
+				<div className="flex flex-wrap gap-px justify-center mt-0.5">
 					{badges.map((badge, index) => (
 						<span
 							key={`${badge.tone}-${index}`}
-							className={`text-[7px] px-0.5 rounded font-bold ${toneClassMap[badge.tone]}`}>
+							className={`text-[8px] px-1 font-medium tabular-nums ${toneClassMap[badge.tone]}`}>
 							{badge.label}
 						</span>
 					))}

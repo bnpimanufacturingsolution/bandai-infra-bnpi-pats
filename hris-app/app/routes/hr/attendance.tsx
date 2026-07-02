@@ -3,7 +3,7 @@ import { AttendanceManagement } from "~/components/templates/common/attendance-m
 export default function HRUserAttendancePage() {
 	return (
 		<AttendanceManagement
-			title="Attendance Management"
+			title="Attendance Overview"
 			description="View, manage and import attendance records"
 		/>
 	);

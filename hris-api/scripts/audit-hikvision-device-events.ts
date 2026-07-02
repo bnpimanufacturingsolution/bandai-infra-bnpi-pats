@@ -7,6 +7,7 @@ import {
 	extractHikvisionEventData,
 	getHikvisionClockSkewSecondsFromSystemTime,
 	getHikvisionObservedClockSkewSeconds,
+	isHikvisionBiometricVerificationEvent,
 	normalizeHikvisionAcsEventListTimes,
 	normalizeHikvisionDeviceEventSource,
 	parseHikvisionBodyPayload,
@@ -367,16 +368,30 @@ const runAudit = async (options: Record<string, string | boolean>) => {
 		return serialMatch && serialMatch.dedupeKey !== item.dedupeKey;
 	});
 	const missingWithEmployeeNo = missing.filter((item) => item.employeeNo);
-	const missingEmployeeNo = missing.filter((item) => !item.employeeNo);
+	const missingVisibleBiometric = missing.filter(
+		(item) => !item.employeeNo && isHikvisionBiometricVerificationEvent(item.event),
+	);
+	const missingEmployeeNo = missing.filter(
+		(item) => !item.employeeNo && !isHikvisionBiometricVerificationEvent(item.event),
+	);
 
 	const applied: any[] = [];
 	if (apply) {
-		for (const item of [...missingWithEmployeeNo, ...needsClockNormalization]) {
+		for (const item of [
+			...missingWithEmployeeNo,
+			...missingVisibleBiometric,
+			...needsClockNormalization,
+		]) {
+			const reason = missingWithEmployeeNo.includes(item)
+				? "missing"
+				: missingVisibleBiometric.includes(item)
+					? "visible_biometric_missing_employee_no"
+					: "clock_normalization";
 			applied.push({
 				dedupeKey: item.dedupeKey,
 				employeeNo: item.employeeNo,
 				eventTime: item.eventTime.toISOString(),
-				reason: missingWithEmployeeNo.includes(item) ? "missing" : "clock_normalization",
+				reason,
 				result: await postCallback(item.payload, options),
 			});
 		}
@@ -412,6 +427,7 @@ const runAudit = async (options: Record<string, string | boolean>) => {
 		gap: {
 			missing: missing.length,
 			missingWithEmployeeNo: missingWithEmployeeNo.length,
+			missingVisibleBiometric: missingVisibleBiometric.length,
 			missingEmployeeNo: missingEmployeeNo.length,
 			needsClockNormalization: needsClockNormalization.length,
 			sample: missing.slice(0, 10).map((item) => ({

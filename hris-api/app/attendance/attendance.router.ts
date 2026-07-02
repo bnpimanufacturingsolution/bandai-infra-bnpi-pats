@@ -9,6 +9,7 @@ interface IController {
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	createCorrection(req: Request, res: Response, next: NextFunction): Promise<void>;
+	createBackfill(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importFromXLSX(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -317,6 +318,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
 	routes.post("/", controller.create);
+	routes.post("/backfill", controller.createBackfill);
 	routes.post("/corrections", controller.createCorrection);
 
 	/**

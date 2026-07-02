@@ -32,6 +32,30 @@ export interface TimesheetHolidayEntry {
 	tags?: string[];
 }
 
+export interface TimesheetCompensatoryLeaveCreditDay {
+	date: string;
+	overtimeHours: string;
+	overtimeMinutes: number;
+	workdayHours: number;
+	approvalReason: string | null;
+	employeeReason: string | null;
+}
+
+export interface TimesheetCompensatoryLeaveCredit {
+	source: "APPROVED_OVERTIME_TIMESHEETLINES";
+	leaveType: "COMPENSATORY";
+	totalMinutes: number;
+	totalDays: number;
+	deltaMinutes: number;
+	deltaDays: number;
+	lineCount: number;
+	creditedAt: string;
+	creditedByEmployeeId: string | null;
+	approvedOvertimeDays: TimesheetCompensatoryLeaveCreditDay[];
+	creditApplied?: boolean;
+	skipReason?: "NO_COMPENSATORY_LEAVE_POLICY";
+}
+
 export interface TimesheetBreakdown {
 	approvalStatus: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "REVISED";
 	date: string;
@@ -101,6 +125,9 @@ export interface TimesheetEmployee {
 	id: string;
 	employeeCode?: string;
 	employeeId?: string;
+	user?: {
+		avatar?: string | null;
+	};
 	embeddedSchedule?: unknown;
 	schedule?: {
 		scheduleCode?: string;
@@ -178,12 +205,14 @@ export interface Timesheet {
 	totalLateHours?: string;
 	totalEarlyOutHours?: string;
 	metadata?: {
-		totalMinutesWorked: number;
-		totalRegularMinutes: number;
-		totalOvertimeMinutes: number;
-		totalUndertimeMinutes: number;
-		totalLateMinutes: number;
-		totalEarlyOutMinutes: number;
+		totalMinutesWorked?: number;
+		totalRegularMinutes?: number;
+		totalOvertimeMinutes?: number;
+		totalUndertimeMinutes?: number;
+		totalLateMinutes?: number;
+		totalEarlyOutMinutes?: number;
+		compensatoryLeaveCredit?: TimesheetCompensatoryLeaveCredit;
+		[key: string]: unknown;
 	};
 	status: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "REVISED";
 	submittedAt?: string | null;
@@ -300,6 +329,7 @@ export interface ApprovedEditedDaySummaryItem {
 		leaveEntries?: TimesheetLeaveEntry[];
 		holidayEntries?: TimesheetHolidayEntry[];
 		primaryMarker?: TimesheetPrimaryMarker;
+		approvalStatus?: string | null;
 		employeeNotes: string | null;
 		approverNotes: string | null;
 		metadata?: {
@@ -544,7 +574,10 @@ export interface SendTimesheetReminderResponse {
 	kind: TimesheetReminderKind;
 }
 
-function normalizeTimesheetLineBreakdown(line: Timesheetline): TimesheetBreakdown {
+function normalizeTimesheetLineBreakdown(
+	line: Timesheetline,
+	approvalStatus: Timesheet["status"] = "DRAFT",
+): TimesheetBreakdown {
 	const metadata =
 		line.metadata && typeof line.metadata === "object" && !Array.isArray(line.metadata)
 			? line.metadata
@@ -559,7 +592,7 @@ function normalizeTimesheetLineBreakdown(line: Timesheetline): TimesheetBreakdow
 		typeof (metadata as any).leaveType === "string" ? ((metadata as any).leaveType as string) : null;
 
 	return {
-		approvalStatus: "DRAFT",
+		approvalStatus,
 		date: line.date,
 		timeIn: line.timeIn ?? null,
 		timeOut: line.timeOut ?? null,
@@ -583,7 +616,10 @@ function normalizeTimesheetLineBreakdown(line: Timesheetline): TimesheetBreakdow
 	};
 }
 
-function normalizeAttendanceBreakdown(attendance: Attendance): TimesheetBreakdown {
+function normalizeAttendanceBreakdown(
+	attendance: Attendance,
+	approvalStatus: Timesheet["status"] = "DRAFT",
+): TimesheetBreakdown {
 	const metadata =
 		(attendance as any).metadata && typeof (attendance as any).metadata === "object"
 			? ((attendance as any).metadata as Record<string, any>)
@@ -605,7 +641,7 @@ function normalizeAttendanceBreakdown(attendance: Attendance): TimesheetBreakdow
 						: "HOURS");
 
 	return {
-		approvalStatus: "DRAFT",
+		approvalStatus,
 		date: attendance.date,
 		timeIn: attendance.timeIn ?? null,
 		timeOut: attendance.timeOut ?? null,
@@ -639,7 +675,7 @@ function normalizeTimesheetContract(timesheet: Timesheet): Timesheet {
 				.filter((line) => !line.isDeleted)
 				.slice()
 				.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-				.map(normalizeTimesheetLineBreakdown),
+				.map((line) => normalizeTimesheetLineBreakdown(line, timesheet.status)),
 		};
 	}
 
@@ -650,7 +686,7 @@ function normalizeTimesheetContract(timesheet: Timesheet): Timesheet {
 				.filter((attendance) => !attendance.isDeleted)
 				.slice()
 				.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-				.map(normalizeAttendanceBreakdown),
+				.map((attendance) => normalizeAttendanceBreakdown(attendance, timesheet.status)),
 		};
 	}
 

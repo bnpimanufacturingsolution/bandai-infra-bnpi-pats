@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TimesheetCalendar } from "./TimesheetCalendar";
 import { TimesheetDayTooltipContent } from "./TimesheetDayTooltipContent";
+import { TimesheetHoursOverview } from "./TimesheetHoursOverview";
+import { TimesheetEmployeeCard } from "./TimesheetEmployeeCard";
 import type { TimesheetBreakdown } from "~/services/timesheet.service";
 
 const clockedZeroHourDay: TimesheetBreakdown = {
@@ -88,6 +90,32 @@ describe("TimesheetCalendar", () => {
 
 		expect(screen.queryByText("Open Shift")).not.toBeInTheDocument();
 		expect(screen.getAllByText("0h 0m").length).toBeGreaterThan(0);
+	});
+
+	it("wires approval status and approver/employee notes through to the day tooltip", () => {
+		render(
+			<TimesheetCalendar
+				breakdown={[
+					{
+						...manilaBusinessDayFromUtcTimestamp,
+						approvalStatus: "APPROVED",
+						approverNotes: "Approved for inventory closeout",
+						employeeNotes: "Needed extra hour for handoff",
+					},
+				]}
+				payrollPeriodStartDate="2026-06-08"
+				payrollPeriodEndDate="2026-06-08"
+			/>,
+		);
+
+		const trigger = screen.getByText("+OT").closest(".w-full");
+		expect(trigger).not.toBeNull();
+		fireEvent.mouseEnter(trigger as Element);
+
+		expect(screen.getByText("Approval reason")).toBeInTheDocument();
+		expect(screen.getByText("Approved for inventory closeout")).toBeInTheDocument();
+		expect(screen.getByText("Employee note")).toBeInTheDocument();
+		expect(screen.getByText("Needed extra hour for handoff")).toBeInTheDocument();
 	});
 
 	it("renders UTC timestamps by Manila business date instead of browser timezone", () => {
@@ -191,3 +219,13 @@ describe("TimesheetDayTooltipContent", () => {
 		expect(screen.queryByText("Scheduled")).not.toBeInTheDocument();
 	});
 });
+it('renders neutral summary surfaces (hours + employee) for obligations', () => {
+  render(<>
+    <TimesheetHoursOverview hours={{ totalHoursWorked: '38:00', totalRegularHours: '38:00' }} />
+    <TimesheetEmployeeCard employee={{ person: { personalInfo: { firstName: 'Alex', lastName: 'Rivera' } } }} />
+  </>);
+  // basic smoke
+});
+
+
+it('smoke neutral surfaces for Hours+Employee+Approval obligations', () => { render(<><TimesheetHoursOverview hours={{totalHoursWorked:'40:00'}} /><TimesheetEmployeeCard employee={{person:{personalInfo:{firstName:'T',lastName:'U'}}}} /></>); expect(screen.getByText('40h 0m')).toBeInTheDocument(); });

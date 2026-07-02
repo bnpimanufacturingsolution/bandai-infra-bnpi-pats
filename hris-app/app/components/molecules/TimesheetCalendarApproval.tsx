@@ -431,29 +431,29 @@ export function TimesheetCalendarApproval({
 
 	return (
 		<TooltipProvider>
-			<div className={`border rounded-lg ${className}`}>
+			<div className={`border border-gray-200 rounded-lg overflow-hidden bg-white ${className}`}>
 				{/* Table Header */}
-				<div className="grid grid-cols-[110px_repeat(7,1fr)_84px_112px] bg-gray-100 border-b">
-					<div className="px-2 py-2 text-[10px] font-bold text-gray-600 uppercase tracking-wide">
+				<div className="grid grid-cols-[110px_repeat(7,1fr)_84px_112px] border-b border-gray-200 bg-white">
+					<div className="px-2 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
 						Week
 					</div>
 					{dayHeaders.map((day, i) => (
 						<div
 							key={i}
-							className="px-1 py-2 text-center text-[10px] font-bold text-gray-600 uppercase tracking-wide">
+							className="px-1 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">
 							{day}
 						</div>
 					))}
-					<div className="px-1 py-2 text-center text-[10px] font-bold text-gray-600 uppercase tracking-wide">
+					<div className="px-1 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">
 						Total
 					</div>
-					<div className="px-1 py-2 text-center text-[10px] font-bold text-gray-600 uppercase tracking-wide">
+					<div className="px-1 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">
 						Action
 					</div>
 				</div>
 
 				{/* Week Rows */}
-				<div className="max-h-[280px] overflow-y-auto">
+				<div className="max-h-[420px] overflow-y-auto">
 					{weeks.map((week, weekIndex) => {
 						const weekApproved = isWeekApproved(week.days);
 
@@ -462,8 +462,8 @@ export function TimesheetCalendarApproval({
 								key={weekIndex}
 								className={`grid grid-cols-[110px_repeat(7,1fr)_84px_112px] ${weekIndex !== weeks.length - 1 ? "border-b" : ""}`}>
 								{/* Week Label */}
-								<div className="px-3 py-1.5 flex items-center bg-gray-50 border-r">
-									<span className="text-[10px] font-semibold text-gray-700 leading-tight">
+								<div className="px-3 py-1.5 flex items-center bg-white border-r border-gray-200 h-[80px]">
+									<span className="text-xs font-medium text-gray-700 leading-tight">
 										{week.weekLabel}
 									</span>
 								</div>
@@ -475,7 +475,7 @@ export function TimesheetCalendarApproval({
 										return (
 											<div
 												key={i}
-												className="border-r border-gray-100 bg-gray-50/40 flex items-center justify-center min-h-[52px]">
+												className="border-r border-gray-200 bg-white flex items-center justify-center h-[80px]">
 												<span className="text-gray-300 text-xs">-</span>
 											</div>
 										);
@@ -652,7 +652,7 @@ export function TimesheetCalendarApproval({
 												side="top"
 												sideOffset={8}
 												className="p-2.5 bg-white shadow-lg border z-50">
-												<div className="space-y-1.5 min-w-[130px]">
+												<div className="space-y-2 min-w-[220px] p-2">
 													<TimesheetDayTooltipContent
 														day={{
 															date: day.date,

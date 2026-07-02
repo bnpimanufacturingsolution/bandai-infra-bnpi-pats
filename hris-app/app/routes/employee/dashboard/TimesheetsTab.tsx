@@ -143,18 +143,19 @@ export default function TimesheetsTab({
 	};
 
 	const getStatusBadgeColor = (status: string) => {
+		// Single primary badge treatment per design-system categorical guidance
 		switch (status) {
 			case "APPROVED":
-				return "bg-green-100 text-green-800 border-green-200";
+				return "bg-emerald-100 text-emerald-800 border-emerald-200";
 			case "SUBMITTED":
-				return "bg-blue-100 text-blue-800 border-blue-200";
+				return "bg-sky-100 text-sky-800 border-sky-200";
 			case "REJECTED":
-				return "bg-red-100 text-red-800 border-red-200";
+				return "bg-rose-100 text-rose-800 border-rose-200";
 			case "REVISED":
-				return "bg-yellow-100 text-yellow-800 border-yellow-200";
+				return "bg-amber-100 text-amber-800 border-amber-200";
 			case "DRAFT":
 			default:
-				return "bg-gray-100 text-gray-800 border-gray-200";
+				return "bg-gray-100 text-gray-700 border-gray-200";
 		}
 	};
 

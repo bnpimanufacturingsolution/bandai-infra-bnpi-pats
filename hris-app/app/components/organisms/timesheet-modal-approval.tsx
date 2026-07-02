@@ -995,7 +995,7 @@ export function TimesheetModal({
 																						Overtime
 																					</span>
 																					<span
-																						className={`${day.overtimeHours && day.overtimeHours !== "0:00" ? "text-green-600 font-bold" : "text-gray-400"}`}>
+																						className={`${day.overtimeHours && day.overtimeHours !== "0:00" ? "font-semibold text-gray-800" : "text-gray-400"}`}>
 																						{day.overtimeHours ||
 																							"0:00"}
 																					</span>
@@ -1006,7 +1006,7 @@ export function TimesheetModal({
 																					</span>
 																					{day.metadata
 																						?.withinGrace ? (
-																						<span className="text-amber-700 font-bold">
+																						<span className="font-semibold text-gray-800">
 																							{formatWithinGraceLabel(
 																								day
 																									.metadata
@@ -1015,7 +1015,7 @@ export function TimesheetModal({
 																						</span>
 																					) : (
 																						<span
-																							className={`${day.lateHours && day.lateHours !== "0:00" ? "text-red-600 font-bold" : "text-gray-400"}`}>
+																							className={`${day.lateHours && day.lateHours !== "0:00" ? "font-semibold text-gray-800" : "text-gray-400"}`}>
 																							{day.lateHours ||
 																								"0:00"}
 																						</span>
@@ -1026,7 +1026,7 @@ export function TimesheetModal({
 																						Early Out
 																					</span>
 																					<span
-																						className={`${day.earlyOutHours && day.earlyOutHours !== "0:00" ? "text-red-600 font-bold" : "text-gray-400"}`}>
+																						className={`${day.earlyOutHours && day.earlyOutHours !== "0:00" ? "font-semibold text-gray-800" : "text-gray-400"}`}>
 																						{day.earlyOutHours ||
 																							"0:00"}
 																					</span>
@@ -1036,7 +1036,7 @@ export function TimesheetModal({
 
 																	<div className="text-sm pt-1">
 																		{isAbsent ? (
-																			<span className="text-red-600 font-medium">
+																			<span className="text-gray-700 font-medium">
 																				Absent
 																			</span>
 																		) : isRestDay ? (
@@ -1044,7 +1044,7 @@ export function TimesheetModal({
 																				Rest Day
 																			</span>
 																		) : hasLeave ? (
-																			<span className="text-purple-600 font-medium">
+																			<span className="text-gray-700 font-medium">
 																				Leave:{" "}
 																				{day.leaveType}
 																			</span>

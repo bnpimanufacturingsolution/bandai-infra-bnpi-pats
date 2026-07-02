@@ -182,6 +182,26 @@ export const isHikvisionAttendancePunchEvent = (
 export const isHikvisionAttendancePunchPayload = (payload: Record<string, any>) =>
 	isHikvisionAttendancePunchEvent(extractHikvisionEventData(payload));
 
+export const isHikvisionBiometricVerificationEvent = (
+	event: Pick<NormalizedHikvisionEvent, "major" | "minor" | "verifyMode">,
+) => {
+	const major = String(event.major ?? "").trim();
+	const minor = String(event.minor ?? "").trim();
+	const verifyMode = String(event.verifyMode || "").trim().toLowerCase();
+
+	if (major !== "5" || !verifyMode) return false;
+	if (
+		!verifyMode.includes("face") &&
+		!verifyMode.includes("fp") &&
+		!verifyMode.includes("finger") &&
+		!verifyMode.includes("card")
+	) {
+		return false;
+	}
+
+	return minor === "38" || minor === "39" || minor === "75";
+};
+
 export const selectHikvisionPunchPair = (
 	rows: Array<{ eventTime: Date | string; payload?: any }>,
 	options?: { minPairGapMinutes?: number },

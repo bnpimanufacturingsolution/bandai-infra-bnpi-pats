@@ -33,6 +33,27 @@ describe("api-url helper", () => {
 		expect(resolveSocketBaseUrl("", "http://fallback")).toBe("http://fallback");
 	});
 
+	it("keeps public tunnel socket connections on the app host", () => {
+		expect(
+			resolveSocketBaseUrl(
+				"https://dev-api.bnpi-hris.tech/api",
+				"https://dev.bnpi-hris.tech",
+			),
+		).toBe("https://dev.bnpi-hris.tech");
+		expect(
+			resolveSocketBaseUrl(
+				"https://uat-api.bnpi-hris.tech/api",
+				"https://uat.bnpi-hris.tech",
+			),
+		).toBe("https://uat.bnpi-hris.tech");
+		expect(
+			resolveSocketBaseUrl(
+				"https://api.bnpi-hris.tech/api",
+				"https://bnpi-hris.tech",
+			),
+		).toBe("https://bnpi-hris.tech");
+	});
+
 	it("normalizes endpoints to avoid duplicate /api/api paths", () => {
 		expect(normalizeEndpointForBase("http://localhost:3001/api", "/api/metrics")).toBe(
 			"/metrics",

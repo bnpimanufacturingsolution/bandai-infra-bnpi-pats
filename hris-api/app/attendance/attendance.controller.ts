@@ -16,9 +16,15 @@ import { groupDataByField } from "../../helper/dataGrouping";
 import { buildErrorResponse, formatZodErrors } from "../../helper/error-handler";
 import {
 	CreateAttendanceCorrectionSchema,
+	CreateAttendanceBackfillSchema,
 	CreateAttendanceSchema,
 	UpdateAttendanceSchema,
 } from "../../zod/attendance.zod";
+import {
+	applyAttendanceCorrection,
+	AttendanceCorrectionError,
+} from "./attendance-correction.service";
+import { applyAttendanceBackfill } from "./attendance-backfill.service";
 import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/constant";
@@ -206,209 +212,153 @@ export const controller = (prisma: PrismaClient) => {
 				res.status(401).json(buildErrorResponse("Unauthorized", 401));
 				return;
 			}
-
-			const {
-				attendanceId,
-				employeeId,
-				correctionDate,
-				status,
-				timeIn,
-				timeOut,
-				reasonCategory,
-				notes,
-			} = validation.data;
-
-			const startOfDay = normalizeToStartOfDay(new Date(correctionDate));
-			const endOfDay = normalizeToEndOfDay(new Date(correctionDate));
-			if (Number.isNaN(startOfDay.getTime())) {
-				res.status(400).json(buildErrorResponse("Invalid correction date", 400));
-				return;
-			}
-
-			const sameDayAttendances = await prisma.attendance.findMany({
-				where: {
-					organizationId,
-					employeeId,
-					isDeleted: false,
-					date: { gte: startOfDay, lte: endOfDay },
-				},
-				include: {
-					employee: {
-						select: {
-							id: true,
-							employeeId: true,
-							person: { select: { personalInfo: true } },
-							position: { select: { title: true } },
-							department: { select: { name: true } },
-						},
-					},
-					appliedByEmployee: {
-						select: {
-							id: true,
-							employeeId: true,
-							person: { select: { personalInfo: true } },
-							position: { select: { title: true } },
-							department: { select: { name: true } },
-						},
-					},
-				},
-				orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-			});
-
-			if (!sameDayAttendances.length) {
-				res.status(400).json(
-					buildErrorResponse(
-						"Attendance correction requires an existing attendance record for the selected date.",
-						400,
-					),
-				);
-				return;
-			}
-
-			const targetAttendance = sameDayAttendances.find((attendance) => attendance.id === attendanceId);
-			if (!targetAttendance) {
-				res.status(404).json(buildErrorResponse("Attendance not found for selected day", 404));
-				return;
-			}
-
-			const ledgerSummary = buildAttendanceLedgerSummary(sameDayAttendances as any[]);
-			const rawAttendance =
-				ledgerSummary.rawAttendance ||
-				sameDayAttendances.find((attendance) => String((attendance as any).ledgerType || "RAW") === "RAW") ||
-				sameDayAttendances[0];
-			const effectiveAttendance = ledgerSummary.effectiveAttendance || targetAttendance;
-			const isNonWorkedCorrection = NON_WORK_ATTENDANCE_STATUSES.has(String(status || "").toUpperCase());
-			const correctedTimeIn = isNonWorkedCorrection ? null : parseCorrectionDateTime(correctionDate, timeIn);
-			const correctedTimeOut = isNonWorkedCorrection ? null : parseCorrectionDateTime(correctionDate, timeOut);
-			const timekeepingCalc = calculateTimekeeping(
-				correctedTimeIn,
-				correctedTimeOut,
-				(effectiveAttendance as any)?.scheduleSnapshot || (rawAttendance as any)?.scheduleSnapshot || null,
-				startOfDay,
-			);
-			const normalizedStatus = String(status).toUpperCase() as PrismaAttendanceStatus;
-			const behaviorFlags = isNonWorkedCorrection
-				? []
-				: deriveBehaviorFlags({
-						timeIn: correctedTimeIn,
-						timeOut: correctedTimeOut,
-						schedule:
-							(effectiveAttendance as any)?.scheduleSnapshot ||
-							(rawAttendance as any)?.scheduleSnapshot ||
-							null,
-						date: startOfDay,
-				  });
-
-			const now = new Date();
-			const createdCorrection = await prisma.$transaction(async (tx) => {
-				const employeeSnapshotFields = await fetchAttendanceEmployeeSnapshotFields(
-					tx as any,
-					employeeId,
-				);
-				const timekeepingFields = buildAttendanceTimekeepingFields(timekeepingCalc, {
-					isNonWorked: isNonWorkedCorrection,
-				});
-				await tx.attendance.updateMany({
-					where: {
-						organizationId,
-						employeeId,
-						isDeleted: false,
-						date: { gte: startOfDay, lte: endOfDay },
-						isEffective: true,
-					},
-					data: { isEffective: false },
-				});
-
-				return tx.attendance.create({
-					data: {
-						organizationId,
-						employeeId,
-						date: startOfDay,
-						timeIn: correctedTimeIn,
-						timeOut: correctedTimeOut,
-						status: normalizedStatus,
-						notes: String(notes || "").trim() || null,
-						scheduleSnapshot:
-							(effectiveAttendance as any)?.scheduleSnapshot ||
-							(rawAttendance as any)?.scheduleSnapshot ||
-							null,
-						isManualEntry: true,
-						approvedBy: appliedByEmployeeId,
-						ledgerType: "CORRECTION",
-						sourceRequestId: null,
-						supersedesAttendanceId: effectiveAttendance?.id || rawAttendance?.id || null,
-						appliedAt: now,
-						appliedBy: appliedByEmployeeId,
-						isEffective: true,
-						behaviorFlags,
-						...employeeSnapshotFields,
-						...timekeepingFields,
-						timeInLocation: isNonWorkedCorrection ? null : (effectiveAttendance as any)?.timeInLocation || null,
-						timeOutLocation: isNonWorkedCorrection ? null : (effectiveAttendance as any)?.timeOutLocation || null,
-						deviceInfo: {
-							source: "HR_DIRECT_CORRECTION",
-							attendanceId,
-							reasonCategory,
-						},
-					},
-					include: {
-						employee: {
-							select: {
-								id: true,
-								employeeId: true,
-								person: { select: { personalInfo: true } },
-								position: { select: { title: true } },
-								department: { select: { name: true } },
-							},
-						},
-						appliedByEmployee: {
-							select: {
-								id: true,
-								employeeId: true,
-								person: { select: { personalInfo: true } },
-								position: { select: { title: true } },
-								department: { select: { name: true } },
-							},
-						},
-					},
-				});
-			});
-
-			await refreshTimesheetForAttendanceDate(prisma, {
+			const correctionResult = await applyAttendanceCorrection({
+				prisma,
 				organizationId,
-				employeeId,
-				date: startOfDay,
+				rawInput: validation.data,
+				source: "HR_DIRECT_CORRECTION",
+				actorEmployeeId: appliedByEmployeeId,
+				requireAttendanceId: true,
 			});
-			const obligation = await applyAttendanceToObligation(prisma, {
-				organizationId,
-				employeeId,
-				attendanceId: createdCorrection.id,
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.ATTENDANCE,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.ATTENDANCE,
+				entityId: correctionResult.createdAttendance.id,
+				changesBefore: {
+					attendanceId: correctionResult.effectiveAttendance?.id || null,
+					status: correctionResult.effectiveAttendance?.status || null,
+					timeIn: correctionResult.effectiveAttendance?.timeIn || null,
+					timeOut: correctionResult.effectiveAttendance?.timeOut || null,
+					isEffective: correctionResult.effectiveAttendance?.isEffective ?? null,
+				},
+				changesAfter: {
+					attendanceId: correctionResult.createdAttendance.id,
+					status: correctionResult.createdAttendance.status,
+					timeIn: correctionResult.createdAttendance.timeIn,
+					timeOut: correctionResult.createdAttendance.timeOut,
+					isEffective: correctionResult.createdAttendance.isEffective,
+					source: correctionResult.normalized.source,
+					reasonCategory: correctionResult.normalized.reasonCategory,
+					notes: correctionResult.normalized.notes,
+				},
+				description: `Attendance correction applied: ${correctionResult.createdAttendance.id}`,
 			});
+
 			emitAttendanceRealtimeEvent((req as any).io, {
-				attendance: createdCorrection,
-				obligation,
+				attendance: correctionResult.createdAttendance,
+				obligation: correctionResult.obligation,
 				action: "attendance_correction_applied",
 				source: "HR_DIRECT_CORRECTION",
 			});
 
-			try {
-				await invalidateCache.byPattern("cache:attendance:list:*");
-				await invalidateCache.byPattern(`cache:attendance:byId:${attendanceId}:*`);
-				await invalidateCache.byPattern(`cache:attendance:byId:${createdCorrection.id}:*`);
-			} catch (cacheError) {
-				attendanceLogger.warn("Failed to invalidate attendance caches after correction:", cacheError);
-			}
-
-			const correctionHistory = [createdCorrection, ...sameDayAttendances];
+			const correctionHistory = correctionResult.attendanceHistory;
 			res.status(201).json(
 				buildSuccessResponse(
 					"Attendance correction applied successfully",
-					{ attendance: normalizeAttendanceCorrectionRecord({ ...createdCorrection, attendanceHistory: correctionHistory }) },
+					{
+						attendance: normalizeAttendanceCorrectionRecord({
+							...correctionResult.createdAttendance,
+							attendanceHistory: correctionHistory,
+						}),
+					},
 					201,
 				),
 			);
 		} catch (error) {
+			if (error instanceof AttendanceCorrectionError) {
+				res
+					.status(error.statusCode)
+					.json(buildErrorResponse(error.message, error.statusCode, error.issues || []));
+				return;
+			}
 			attendanceLogger.error(`Failed to create attendance correction: ${error}`);
+			res.status(500).json(buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500));
+		}
+	};
+
+	const createBackfill = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		const validation = CreateAttendanceBackfillSchema.safeParse(req.body);
+		if (!validation.success) {
+			const formattedErrors = formatZodErrors(validation.error.format());
+			res.status(400).json(buildErrorResponse("Validation failed", 400, formattedErrors));
+			return;
+		}
+
+		try {
+			const organizationId = req.organizationId;
+			const appliedByEmployeeId = req.metadata?.employee?.id || null;
+			if (!organizationId || !appliedByEmployeeId) {
+				res.status(401).json(buildErrorResponse("Unauthorized", 401));
+				return;
+			}
+
+			const backfillResult = await applyAttendanceBackfill({
+				prisma,
+				organizationId,
+				rawInput: validation.data,
+				source: "HR_DIRECT_BACKFILL",
+				actorEmployeeId: appliedByEmployeeId,
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.CREATE,
+				resource: config.AUDIT_LOG.RESOURCES.ATTENDANCE,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.ATTENDANCE,
+				entityId: backfillResult.createdAttendance.id,
+				changesBefore: null,
+				changesAfter: {
+					attendanceId: backfillResult.createdAttendance.id,
+					status: backfillResult.createdAttendance.status,
+					timeIn: backfillResult.createdAttendance.timeIn,
+					timeOut: backfillResult.createdAttendance.timeOut,
+					isEffective: backfillResult.createdAttendance.isEffective,
+					source: backfillResult.normalized.source,
+					reasonCategory: backfillResult.normalized.reasonCategory,
+					notes: backfillResult.normalized.notes,
+				},
+				description: `Attendance backfill created: ${backfillResult.createdAttendance.id}`,
+			});
+
+			emitAttendanceRealtimeEvent((req as any).io, {
+				attendance: backfillResult.createdAttendance,
+				obligation: backfillResult.obligation,
+				action: "attendance_backfill_created",
+				source: "HR_DIRECT_BACKFILL",
+			});
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.ATTENDANCE.ACTIONS.CREATE_ATTENDANCE,
+				description: `${config.ACTIVITY_LOG.ATTENDANCE.DESCRIPTIONS.ATTENDANCE_CREATED}: ${backfillResult.createdAttendance.id} (backfill)`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.ATTENDANCE.PAGES.ATTENDANCE_CREATION,
+				},
+			});
+
+			res.status(201).json(
+				buildSuccessResponse(
+					"Attendance backfill created successfully",
+					{
+						attendance: backfillResult.createdAttendance,
+					},
+					201,
+				),
+			);
+		} catch (error) {
+			if (error instanceof AttendanceCorrectionError) {
+				res
+					.status(error.statusCode)
+					.json(buildErrorResponse(error.message, error.statusCode, error.issues || []));
+				return;
+			}
+			attendanceLogger.error(`Failed to create attendance backfill: ${error}`);
 			res.status(500).json(buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500));
 		}
 	};
@@ -2120,6 +2070,7 @@ export const controller = (prisma: PrismaClient) => {
 	return {
 		create,
 		createCorrection,
+		createBackfill,
 		getAll,
 		getById,
 		update,

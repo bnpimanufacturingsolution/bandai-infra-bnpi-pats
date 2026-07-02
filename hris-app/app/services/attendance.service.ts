@@ -2,6 +2,16 @@ import { apiClient, hrisApiClient } from "../lib/api-client";
 import { APIService } from "./api-service";
 import type { ApiQueryParams } from "./api-service";
 
+export const ATTENDANCE_CORRECTION_REASON_CATEGORY_OPTIONS = [
+	"MISSED_PUNCH",
+	"WRONG_STATUS",
+	"MANUAL_REVIEW",
+	"DEVICE_SYNC",
+] as const;
+
+export type AttendanceCorrectionReasonCategory =
+	(typeof ATTENDANCE_CORRECTION_REASON_CATEGORY_OPTIONS)[number];
+
 export interface Attendance {
 	id: string;
 	organizationId: string;
@@ -86,8 +96,18 @@ export interface CreateAttendanceCorrectionPayload {
 	status: "PRESENT" | "LEAVE" | "INCOMPLETE" | "ABSENT" | "REST_DAY";
 	timeIn?: string;
 	timeOut?: string;
-	reasonCategory: string;
-	notes?: string;
+	reasonCategory: AttendanceCorrectionReasonCategory;
+	notes: string;
+}
+
+export interface CreateAttendanceBackfillPayload {
+	employeeId: string;
+	correctionDate: string;
+	status: "PRESENT" | "LEAVE" | "INCOMPLETE" | "ABSENT" | "REST_DAY";
+	timeIn?: string;
+	timeOut?: string;
+	reasonCategory: AttendanceCorrectionReasonCategory;
+	notes: string;
 }
 
 export interface AttendanceRecord {
@@ -246,6 +266,33 @@ class AttendanceService extends APIService {
 					error.data?.errors?.[0]?.message ||
 					error.message ||
 					"Error applying attendance correction",
+			};
+		}
+	}
+
+	async createAttendanceBackfill(payload: CreateAttendanceBackfillPayload): Promise<Attendance> {
+		try {
+			const response = await hrisApiClient.post<{ data: { attendance: Attendance } }>(
+				"/api/attendance/backfill",
+				payload,
+			);
+
+			const attendanceData = response.data?.data?.attendance || (response.data as any)?.attendance;
+			if (!attendanceData) {
+				throw new Error("Failed to create attendance backfill");
+			}
+
+			return attendanceData as Attendance;
+		} catch (error: any) {
+			console.error("Error creating attendance backfill:", error);
+			if (error && typeof error === "object" && ("status" in error || "errors" in error)) {
+				throw error;
+			}
+			throw {
+				message:
+					error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error creating attendance backfill",
 			};
 		}
 	}

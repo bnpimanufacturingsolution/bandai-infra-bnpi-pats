@@ -69,6 +69,9 @@ describe("metricsService HR attendance metrics", () => {
 			"",
 			"LATE",
 			"dept-1",
+			"section-1",
+			"position-1",
+			"level-1",
 			"manager-1",
 			"emp-1",
 			"DAY",
@@ -84,6 +87,9 @@ describe("metricsService HR attendance metrics", () => {
 				page: 1,
 				status: "LATE",
 				departmentId: "dept-1",
+				sectionId: "section-1",
+				positionId: "position-1",
+				levelId: "level-1",
 				reportToId: "manager-1",
 				employeeId: "emp-1",
 				shiftType: "DAY",
@@ -110,6 +116,9 @@ describe("metricsService HR attendance metrics", () => {
 			"2026-05-25",
 			"Ada",
 			"dept-1",
+			"section-1",
+			"position-1",
+			"level-1",
 			"manager-1",
 			"emp-1",
 			"NIGHT",
@@ -123,6 +132,9 @@ describe("metricsService HR attendance metrics", () => {
 				dateTo: "2026-05-25",
 				search: "Ada",
 				departmentId: "dept-1",
+				sectionId: "section-1",
+				positionId: "position-1",
+				levelId: "level-1",
 				reportToId: "manager-1",
 				employeeId: "emp-1",
 				shiftType: "NIGHT",
@@ -149,6 +161,9 @@ describe("metricsService HR attendance metrics", () => {
 			"Ada",
 			"PRESENT",
 			"dept-1",
+			"section-1",
+			"position-1",
+			"level-1",
 			"manager-1",
 			"emp-1",
 			"DAY",
@@ -160,6 +175,53 @@ describe("metricsService HR attendance metrics", () => {
 			filter: {
 				dateFrom: "2026-05-01",
 				dateTo: "2026-05-15",
+				search: "Ada",
+				status: "PRESENT",
+				departmentId: "dept-1",
+				sectionId: "section-1",
+				positionId: "position-1",
+				levelId: "level-1",
+				reportToId: "manager-1",
+				employeeId: "emp-1",
+				shiftType: "DAY",
+			},
+		});
+	});
+
+	it("requests attendance daily trend metrics from the attendance trend endpoint", async () => {
+		const { default: metricsService } = await import("./metrics.service");
+		postMock.mockResolvedValueOnce({
+			data: {
+				metrics: {
+					attendanceDailyTrendByDepartment: {
+						startDate: "2026-06-01T00:00:00.000Z",
+						endDate: "2026-06-03T23:59:59.999Z",
+						totalDays: 3,
+						totalRecords: 8,
+						departments: [],
+						series: [],
+					},
+				},
+			},
+		});
+
+		await metricsService.getAttendanceDailyTrendByDepartment(
+			"2026-06-01",
+			"2026-06-03",
+			"Ada",
+			"PRESENT",
+			"dept-1",
+			"manager-1",
+			"emp-1",
+			"DAY",
+		);
+
+		expect(postMock).toHaveBeenCalledWith("/api/metrics", {
+			model: "Attendance",
+			data: ["attendanceDailyTrendByDepartment"],
+			filter: {
+				dateFrom: "2026-06-01",
+				dateTo: "2026-06-03",
 				search: "Ada",
 				status: "PRESENT",
 				departmentId: "dept-1",
@@ -302,6 +364,39 @@ describe("metricsService HR attendance metrics", () => {
 			filter: {
 				payrollPeriodId: "period-1",
 				reportToId: "manager-1",
+			},
+		});
+	});
+
+	it("requests turnover and attrition through Employee metrics with the supplied report grouping", async () => {
+		const { default: metricsService } = await import("./metrics.service");
+		postMock.mockResolvedValueOnce({
+			data: {
+				metrics: {
+					turnoverAttritionReport: {
+						summary: {
+							averageHeadcount: 12,
+							totalSeparations: 2,
+							voluntarySeparations: 1,
+							involuntarySeparations: 1,
+							turnoverRate: 0.1667,
+							attritionRate: 0.0833,
+						},
+						buckets: [],
+					},
+				},
+			},
+		});
+
+		await metricsService.getTurnoverAttritionReport("2026-06-01", "2026-06-30", "week");
+
+		expect(postMock).toHaveBeenCalledWith("/api/metrics", {
+			model: "Employee",
+			data: ["turnoverAttritionReport"],
+			filter: {
+				dateFrom: "2026-06-01",
+				dateTo: "2026-06-30",
+				groupBy: "week",
 			},
 		});
 	});

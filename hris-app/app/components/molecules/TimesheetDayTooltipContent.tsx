@@ -33,6 +33,9 @@ export interface TimesheetTooltipDayData {
 		tags?: string[];
 	}>;
 	primaryMarker?: "HOLIDAY" | "LEAVE" | "REST_DAY" | "ABSENT" | "HOURS";
+	approvalStatus?: string | null;
+	employeeNotes?: string | null;
+	approverNotes?: string | null;
 	metadata?: {
 		businessDate?: string | null;
 		breakMinutes?: number | null;
@@ -217,11 +220,19 @@ export function TimesheetDayTooltipContent({
 	const hasLateDetail = rawLateMinutes > 0;
 	const hasEarlyOutDetail = rawEarlyOutMinutes > 0;
 	const hasExceptionDetail = hasLateDetail || hasEarlyOutDetail;
+	const approverNote = String(day.approverNotes || "").trim();
+	const employeeNote = String(day.employeeNotes || "").trim();
+	const hasApproverNote = approverNote.length > 0;
+	const hasEmployeeNote = employeeNote.length > 0;
+	const approvalReasonLabel =
+		day.approvalStatus === "APPROVED" && parseDurationToMinutes(day.overtimeHours || "0:00") > 0
+			? "Approval reason"
+			: "Approver note";
 
 	return (
-		<div className="min-w-[210px] max-w-[240px] space-y-2">
-			<div className="flex items-center justify-between border-b pb-1 mb-1 gap-2">
-				<p className="font-semibold text-xs">
+		<div className="min-w-[260px] max-w-[320px] space-y-3">
+			<div className="flex items-center justify-between border-b pb-2 mb-2 gap-2">
+				<p className="font-semibold text-base">
 					{calendarDate.toLocaleDateString("en-US", {
 						weekday: "short",
 						month: "short",
@@ -234,32 +245,32 @@ export function TimesheetDayTooltipContent({
 							e.stopPropagation();
 							onEdit();
 						}}
-						className="text-gray-400 hover:text-blue-600 transition-colors p-0.5 rounded-sm hover:bg-blue-50">
+						className="text-gray-400 hover:text-gray-600 transition-colors p-0.5 rounded-sm hover:bg-gray-100">
 						<Edit className="w-3 h-3" />
 					</button>
 				)}
 			</div>
 			{hasScheduleError ? (
-				<p className="text-amber-700 font-medium text-xs">
+				<p className="text-gray-700 font-medium text-sm">
 					Employee has no schedule for this date
 				</p>
 			) : null}
-			{isAbsent ? <p className="text-red-600 font-medium text-xs">Absent</p> : null}
-			{isRestDay ? <p className="text-gray-500 font-medium text-xs">Off day</p> : null}
+			{isAbsent ? <p className="text-gray-700 font-medium text-sm">Absent</p> : null}
+			{isRestDay ? <p className="text-gray-500 font-medium text-sm">Off day</p> : null}
 			{isOpenShift ? (
-				<p className="text-slate-600 font-medium text-xs">
+				<p className="text-slate-600 font-medium text-sm">
 					Open Shift
 				</p>
 			) : null}
 			{hasHoliday ? (
 				<div className="space-y-0.5">
-					<p className="text-[10px] uppercase tracking-wide text-blue-700 font-semibold">
+					<p className="text-xs uppercase tracking-wide text-gray-600 font-semibold">
 						Holiday
 					</p>
 					{holidayEntries.map((holiday) => (
 						<p
 							key={holiday.calendarItemId}
-							className="text-xs text-blue-700 font-medium">
+							className="text-sm text-gray-700 font-medium">
 							{holiday.title}
 						</p>
 					))}
@@ -267,14 +278,14 @@ export function TimesheetDayTooltipContent({
 			) : null}
 			{hasLeave ? (
 				<div className="space-y-0.5">
-					<p className="text-[10px] uppercase tracking-wide text-purple-700 font-semibold">
+					<p className="text-xs uppercase tracking-wide text-gray-600 font-semibold">
 						Leave
 					</p>
 					{leaveEntries.length
 						? leaveEntries.map((entry, idx) => (
 								<p
 									key={`${entry.requestId || "leave"}-${idx}`}
-									className="text-xs text-purple-700 font-medium">
+									className="text-sm text-gray-700 font-medium">
 									{entry.label}
 									{entry.halfDaySession ? ` (${entry.halfDaySession})` : ""}
 								</p>
@@ -282,28 +293,28 @@ export function TimesheetDayTooltipContent({
 						: [
 								<p
 									key="legacy-leave"
-									className="text-xs text-purple-700 font-medium">
+									className="text-sm text-gray-700 font-medium">
 									{day.leaveType}
 								</p>,
 							]}
 				</div>
 			) : null}
 			{hasRecordedTime ? (
-				<div className="space-y-2 text-xs">
+				<div className="space-y-2 text-sm">
 					{nightShift?.isNightShiftDay ? (
-						<div className="rounded-md border border-indigo-100 bg-indigo-50 px-2 py-1.5">
+						<div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
 							<div className="flex items-start justify-between gap-3">
 								<div>
-									<p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
+									<p className="text-sm font-semibold uppercase tracking-wide text-gray-700">
 										Night Shift
 									</p>
-									<p className="mt-0.5 text-[11px] text-indigo-700/80">
+									<p className="mt-0.5 text-sm text-gray-600">
 										{nightWindowLabel || "-"}
 									</p>
 								</div>
 								<div className="text-right">
-									<p className="text-[10px] text-indigo-700/70">Actual</p>
-									<p className="font-semibold text-indigo-700">
+									<p className="text-sm text-gray-600">Actual</p>
+									<p className="font-semibold text-gray-800">
 										{formatDuration(nightShift.actualNightHours || "0:00")}
 									</p>
 								</div>
@@ -311,39 +322,30 @@ export function TimesheetDayTooltipContent({
 						</div>
 					) : null}
 					<div className="grid grid-cols-2 gap-2">
-						<div className="rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5">
-							<p className="text-[10px] text-gray-500">Regular</p>
+						<div className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
+							<p className="text-xs text-gray-500">Regular</p>
 							<p className="font-semibold text-gray-900">
 								{formatDuration(day.regularHours || "0:00")}
 							</p>
 						</div>
-						<div className="rounded-md border border-gray-100 bg-gray-50 px-2 py-1.5">
-							<p className="text-[10px] text-gray-500">Overtime</p>
+						<div className="rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
+							<p className="text-xs text-gray-500">Overtime</p>
 							<p
-								className={
-									day.overtimeHours && day.overtimeHours !== "0:00"
-										? "font-semibold text-green-700"
-										: "font-semibold text-gray-900"
-								}>
+								className="font-semibold text-gray-800">
 								{formatDuration(day.overtimeHours || "0:00")}
 							</p>
 						</div>
 					</div>
 					{hasExceptionDetail ? (
 						<div className="border-t border-dashed pt-1.5">
-							<p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+							<p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
 								Exceptions
 							</p>
 							<div className="space-y-1">
 								{hasLateDetail ? (
-									<div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-[10px]">
+									<div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-sm">
 										<span className="text-gray-500">Late</span>
-										<span
-											className={
-												day.metadata?.withinGrace
-													? "font-semibold text-amber-600"
-													: "font-semibold text-red-600"
-											}>
+										<span className="font-semibold text-gray-800">
 											{formatMinutesLabel(rawLateMinutes)}
 										</span>
 										<span className="text-gray-500">Grace used</span>
@@ -357,9 +359,9 @@ export function TimesheetDayTooltipContent({
 									</div>
 								) : null}
 								{hasEarlyOutDetail ? (
-									<div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-[10px]">
+									<div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-sm">
 										<span className="text-gray-500">Early out</span>
-										<span className="font-semibold text-orange-600">
+										<span className="font-semibold text-gray-800">
 											{formatMinutesLabel(rawEarlyOutMinutes)}
 										</span>
 										<span className="text-gray-500">Grace used</span>
@@ -377,13 +379,13 @@ export function TimesheetDayTooltipContent({
 					) : null}
 					{(day.timeIn || day.timeOut) && (
 						<div className="border-t pt-1.5 space-y-1">
-							<div className="flex justify-between gap-3 text-[10px]">
+							<div className="flex justify-between gap-3 text-sm">
 								<span className="text-gray-500">Time In</span>
 								<span className="text-gray-700 font-medium">
 									{day.timeIn ? format12HourTime(day.timeIn) : "Not clocked in"}
 								</span>
 							</div>
-							<div className="grid grid-cols-[auto_1fr] gap-3 text-[10px]">
+							<div className="grid grid-cols-[auto_1fr] gap-3 text-sm">
 								<span className="text-gray-500">Break</span>
 								<span
 									className="text-right font-medium leading-snug text-gray-700"
@@ -391,7 +393,7 @@ export function TimesheetDayTooltipContent({
 									{formatBreakValue(day)}
 								</span>
 							</div>
-							<div className="flex justify-between gap-3 text-[10px]">
+							<div className="flex justify-between gap-3 text-sm">
 								<span className="text-gray-500">Time Out</span>
 								<span className="text-gray-700 font-medium">
 									{day.timeOut ? timeOutLabel : "Not clocked out"}
@@ -399,23 +401,47 @@ export function TimesheetDayTooltipContent({
 							</div>
 						</div>
 					)}
+					{(hasApproverNote || hasEmployeeNote) && (
+						<div className="border-t pt-1.5 space-y-1.5">
+							{hasApproverNote ? (
+								<div className="space-y-0.5">
+									<p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+										{approvalReasonLabel}
+									</p>
+									<p className="whitespace-pre-wrap text-sm text-gray-700">
+										{approverNote}
+									</p>
+								</div>
+							) : null}
+							{hasEmployeeNote ? (
+								<div className="space-y-0.5">
+									<p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+										Employee note
+									</p>
+									<p className="whitespace-pre-wrap text-sm text-gray-700">
+										{employeeNote}
+									</p>
+								</div>
+							) : null}
+						</div>
+					)}
 				</div>
 			) : null}
 			{!hasRecordedTime && nightShift?.isNightShiftDay ? (
-				<div className="rounded border border-indigo-100 bg-indigo-50 px-1.5 py-1 text-xs">
-					<p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
+				<div className="rounded border border-gray-200 bg-gray-50 px-1.5 py-1 text-sm">
+					<p className="text-sm font-semibold uppercase tracking-wide text-gray-700">
 						Night Shift
 					</p>
 					<div className="mt-0.5 space-y-0.5">
-						<div className="flex justify-between text-[10px]">
-							<span className="text-indigo-700/80">Scheduled</span>
-							<span className="font-medium text-indigo-700">
+						<div className="flex justify-between text-sm">
+							<span className="text-gray-600">Scheduled</span>
+							<span className="font-medium text-gray-800">
 								{nightWindowLabel || "-"}
 							</span>
 						</div>
-						<div className="flex justify-between text-[10px]">
-							<span className="text-indigo-700/80">Actual Night</span>
-							<span className="font-semibold text-indigo-700">
+						<div className="flex justify-between text-sm">
+							<span className="text-gray-600">Actual Night</span>
+							<span className="font-semibold text-gray-800">
 								{formatDuration(nightShift.actualNightHours || "0:00")}
 							</span>
 						</div>
@@ -423,7 +449,7 @@ export function TimesheetDayTooltipContent({
 				</div>
 			) : null}
 			{modified && (
-				<p className="text-[10px] font-semibold text-amber-700 border-t pt-1 mt-1">
+				<p className="text-sm font-semibold text-gray-700 border-t pt-2 mt-2">
 					Modified (not submitted)
 				</p>
 			)}

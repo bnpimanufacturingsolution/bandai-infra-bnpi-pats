@@ -16,6 +16,7 @@ import { useDepartments } from "~/lib/hooks/useDepartments";
 import { useEmployees } from "~/lib/hooks/useEmployees";
 import { buildReportFileName, exportRowsToCsv, exportRowsToPdf } from "~/lib/utils/report-export";
 import { ReportExportDialog } from "../components/ReportExportDialog";
+import { ReportEmployeeCell } from "../components/ReportEmployeeCell";
 import { ReportScopeDateFilters } from "../components/ReportScopeDateFilters";
 import { useReportScopeFilters } from "../useReportScopeFilters";
 import { toast } from "sonner";
@@ -369,9 +370,15 @@ export function PerfectAttendanceTab() {
 								<tbody>
 									{filteredPerfectEmployees.length > 0 ? (
 										filteredPerfectEmployees.map((emp) => (
-											<tr key={emp.id} className="border-t">
+										<tr key={emp.id} className="border-t">
 												<td className="px-6 py-3">{emp.employeeId}</td>
-												<td className="px-6 py-3">{emp.name}</td>
+												<td className="px-6 py-3">
+													<ReportEmployeeCell
+														rosterEmployees={allEmployees}
+														employeeId={emp.employeeId}
+														fullName={emp.name}
+													/>
+												</td>
 												<td className="px-6 py-3">{emp.department}</td>
 												<td className="px-6 py-3">
 													{(() => {

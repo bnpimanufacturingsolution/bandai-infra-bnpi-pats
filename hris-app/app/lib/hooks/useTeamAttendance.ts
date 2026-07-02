@@ -10,12 +10,12 @@ export function useTeamAttendance(
 	return useQuery({
 		queryKey: ["team-attendance", managerId, weekStartDate, weekEndDate],
 		queryFn: async () => {
-			const response = await attendanceService.getTeamWeeklyAttendance({
+			const weeklyAttendance = await attendanceService.getTeamWeeklyAttendance({
 				managerId,
 				weekStartDate,
 				weekEndDate,
 			});
-			return response as WeeklyAttendanceApproval[];
+			return weeklyAttendance as WeeklyAttendanceApproval[];
 		},
 		enabled: !!managerId,
 	});
@@ -36,13 +36,12 @@ export function useApproveWeeklyAttendance() {
 			weekEndDate: string;
 			notes?: string;
 		}) => {
-			const response = await attendanceService.approveWeeklyAttendance(
+			return attendanceService.approveWeeklyAttendance(
 				employeeId,
 				weekStartDate,
 				weekEndDate,
 				notes,
 			);
-			return response;
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["team-attendance"] });
@@ -65,13 +64,12 @@ export function useRejectWeeklyAttendance() {
 			weekEndDate: string;
 			reason: string;
 		}) => {
-			const response = await attendanceService.rejectWeeklyAttendance(
+			return attendanceService.rejectWeeklyAttendance(
 				employeeId,
 				weekStartDate,
 				weekEndDate,
 				reason,
 			);
-			return response;
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["team-attendance"] });
@@ -84,8 +82,7 @@ export function useApproveAttendanceRecord() {
 
 	return useMutation({
 		mutationFn: async ({ recordId, notes }: { recordId: string; notes?: string }) => {
-			const response = await attendanceService.approveAttendanceRecord(recordId, notes);
-			return response;
+			return attendanceService.approveAttendanceRecord(recordId, notes);
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["team-attendance"] });
@@ -99,8 +96,7 @@ export function useRejectAttendanceRecord() {
 
 	return useMutation({
 		mutationFn: async ({ recordId, reason }: { recordId: string; reason: string }) => {
-			const response = await attendanceService.rejectAttendanceRecord(recordId, reason);
-			return response;
+			return attendanceService.rejectAttendanceRecord(recordId, reason);
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["team-attendance"] });

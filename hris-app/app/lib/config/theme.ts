@@ -39,6 +39,52 @@ export interface ThemeConfig {
 	};
 }
 
+export interface BrandThemeColors {
+	primary: string;
+	primaryBorder: string;
+	accent: string;
+	subheading: string;
+	inputBackground: string;
+	inputBorder: string;
+	selectBorder: string;
+	selectText: string;
+	textPrimary: string;
+	textOnPrimary: string;
+}
+
+export interface BrandThemeTypography {
+	fontFamilyBase: string;
+	fontFamilyHeading: string;
+	h1Size: string;
+	h1Weight: number;
+	h1LetterSpacing: string;
+	buttonSize: string;
+	buttonPrimaryWeight: number;
+	buttonSubmitWeight: number;
+	buttonLetterSpacing: string;
+	inputSize: string;
+	inputWeight: number;
+}
+
+export interface BrandThemeGeometry {
+	inputRadius: string;
+	inputPadding: string;
+	inputFieldGap: string;
+	selectRadius: string;
+	selectPadding: string;
+	selectShadow: string;
+	buttonPrimaryRadius: string;
+	buttonPrimaryPadding: string;
+	buttonSubmitRadius: string;
+	buttonSubmitPadding: string;
+}
+
+export interface BrandThemeTokens {
+	colors: BrandThemeColors;
+	typography: BrandThemeTypography;
+	geometry: BrandThemeGeometry;
+}
+
 /**
  * Default Theme Configuration
  *
@@ -59,8 +105,8 @@ export const defaultTheme: ThemeConfig = {
 		yellowLight: "rgba(247, 190, 51, 0.15)",
 	},
 	cssVariables: {
-		red: "#e60012",
-		orange: "#f97907", // Golden Tainoi 500
+		red: "rgb(226, 6, 19)",
+		orange: "rgb(255, 173, 0)",
 		yellow: "#ffd200",
 		// Golden Tainoi scale
 		gt50: "#fff8eb",
@@ -74,6 +120,46 @@ export const defaultTheme: ThemeConfig = {
 		gt800: "#942a0c",
 		gt900: "#7a230d",
 		gt950: "#460f02",
+	},
+};
+
+export const bandaiEuropeB2BThemeTokens: BrandThemeTokens = {
+	colors: {
+		primary: "rgb(226, 6, 19)",
+		primaryBorder: "rgb(226, 6, 19)",
+		accent: "rgb(255, 173, 0)",
+		subheading: "rgb(30, 36, 77)",
+		inputBackground: "rgb(255, 255, 255)",
+		inputBorder: "rgb(0, 0, 0)",
+		selectBorder: "rgb(204, 204, 204)",
+		selectText: "rgb(85, 85, 85)",
+		textPrimary: "rgb(0, 0, 0)",
+		textOnPrimary: "rgb(255, 255, 255)",
+	},
+	typography: {
+		fontFamilyBase: 'Metropolis, Gotham, "Helvetica Neue", Arial, sans-serif',
+		fontFamilyHeading: 'Metropolis, Gotham, "Helvetica Neue", Arial, sans-serif',
+		h1Size: "54px",
+		h1Weight: 900,
+		h1LetterSpacing: "-0.48px",
+		buttonSize: "14px",
+		buttonPrimaryWeight: 600,
+		buttonSubmitWeight: 400,
+		buttonLetterSpacing: "1.12px",
+		inputSize: "20px",
+		inputWeight: 500,
+	},
+	geometry: {
+		inputRadius: "12px",
+		inputPadding: "22px 22px 19px",
+		inputFieldGap: "30px",
+		selectRadius: "4px",
+		selectPadding: "6px 28px 6px 12px",
+		selectShadow: "inset 0 1px 2px rgba(0, 0, 0, 0.08)",
+		buttonPrimaryRadius: "12px",
+		buttonPrimaryPadding: "26px 30px 25px",
+		buttonSubmitRadius: "3px",
+		buttonSubmitPadding: "12px 15px",
 	},
 };
 
@@ -96,6 +182,10 @@ export function getThemeColors(): ThemeColors {
  */
 export function getThemeCSSVariables() {
 	return defaultTheme.cssVariables;
+}
+
+export function getBandaiEuropeB2BThemeTokens(): BrandThemeTokens {
+	return bandaiEuropeB2BThemeTokens;
 }
 
 // Export the default theme colors for convenience

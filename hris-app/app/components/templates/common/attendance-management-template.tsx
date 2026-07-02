@@ -13,14 +13,23 @@ import {
 	ChevronRight,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { DatePickerWithRange } from "~/components/ui/date-picker-range";
 import type { DateRange } from "react-day-picker";
+import {
+	AttendanceDateFilterPopover,
+	type AttendanceDatePresetOption,
+} from "~/components/molecules/AttendanceDateFilterPopover";
+import { AttendanceScopeFilterPopover } from "~/components/molecules/AttendanceScopeFilterPopover";
 import { usePayrollPeriods } from "~/lib/hooks/usePayrollPeriods";
+import { useSections } from "~/lib/hooks/useSections";
+import { usePositions } from "~/lib/hooks/usePositions";
+import { useLevels } from "~/lib/hooks/useLevels";
 import { formatDate } from "~/lib/utils/text-utils";
 import { formatDuration, formatDurationCompact, formatMinutesDuration } from "~/lib/utils";
+import { filterAttendanceRecordsByPresentDayThreshold } from "~/lib/utils/attendance-threshold";
 
 import { toast } from "sonner";
 import { GenericImportModal } from "~/components/organisms/shared/GenericImportModal";
+import { AttendanceFixModal } from "~/components/organisms/hr/AttendanceFixModal";
 
 const IMPORT_FIELDS = {
 	required: [
@@ -58,6 +67,9 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "~/components/ui/select";
+import {
+	AttendanceDailyTrendSection,
+} from "./AttendanceDailyTrendSection";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -190,11 +202,13 @@ export function AttendanceManagement({
 	const { user } = useAuth();
 	const { socket, isConnected } = useSocket();
 	const organizationId = user?.organizationId || user?.person?.organizationId || null;
+	const showAttendanceTrend = user?.role === "hris-hr-manager";
 
 	// Progress tracking state
 	const [importJobId, setImportJobId] = useState<string | null>(null);
 	const [selectedRecord, setSelectedRecord] = useState<AttendanceRecord | null>(null);
-	const [enablePeopleFilterData, setEnablePeopleFilterData] = useState(false);
+	const [fixAttendanceRecord, setFixAttendanceRecord] = useState<AttendanceRecord | null>(null);
+	const [enablePeopleFilterData, setEnablePeopleFilterData] = useState(true);
 	const [enablePeriodOptions, setEnablePeriodOptions] = useState(false);
 	const [collapsedOverviewDepartments, setCollapsedOverviewDepartments] = useState<Set<string>>(
 		() => new Set(),
@@ -324,6 +338,18 @@ export function AttendanceManagement({
 	const [debouncedSearch, setDebouncedSearch] = useState(searchParam);
 	// Get filters from URL
 	const selectedDepartment = searchParams.get("department") || "all";
+	const selectedSection = searchParams.get("section") || "all";
+	const selectedPosition = searchParams.get("position") || "all";
+	const selectedLevel = searchParams.get("level") || "all";
+	const presentGt10Days = searchParams.get("presentGt10Days") === "1";
+
+	const setPresentGt10Days = (enabled: boolean) => {
+		updateSearchParams((next) => {
+			if (enabled) next.set("presentGt10Days", "1");
+			else next.delete("presentGt10Days");
+			next.delete("page");
+		});
+	};
 	const selectedManager = searchParams.get("manager") || "all";
 	const selectedEmployee = searchParams.get("employee") || "all";
 	const selectedShiftType = searchParams.get("shiftType") || "all";
@@ -337,6 +363,9 @@ export function AttendanceManagement({
 		Boolean(statusFilter) ||
 		Boolean(searchParam) ||
 		selectedDepartment !== "all" ||
+		selectedSection !== "all" ||
+		selectedPosition !== "all" ||
+		selectedLevel !== "all" ||
 		selectedManager !== "all" ||
 		selectedEmployee !== "all" ||
 		selectedShiftType !== "all";
@@ -344,14 +373,26 @@ export function AttendanceManagement({
 
 	useEffect(() => {
 		if (
+			viewMode === "overview" ||
 			viewMode === "list" ||
 			selectedDepartment !== "all" ||
+			selectedSection !== "all" ||
+			selectedPosition !== "all" ||
+			selectedLevel !== "all" ||
 			selectedManager !== "all" ||
 			selectedEmployee !== "all"
 		) {
 			setEnablePeopleFilterData(true);
 		}
-	}, [selectedDepartment, selectedManager, selectedEmployee, viewMode]);
+	}, [
+		selectedDepartment,
+		selectedSection,
+		selectedPosition,
+		selectedLevel,
+		selectedManager,
+		selectedEmployee,
+		viewMode,
+	]);
 
 	useEffect(() => {
 		if (selectedPeriodFromUrl !== "today" && selectedPeriodFromUrl !== "active") {
@@ -362,14 +403,41 @@ export function AttendanceManagement({
 	// Fetch departments for filter
 	const { data: departmentsData } = useDepartments(
 		{ limit: 1000 },
-		{ enabled: enablePeopleFilterData },
+		{ enabled: enablePeopleFilterData || viewMode === "overview" },
 	);
 	const departments = departmentsData?.departments || [];
+
+	const { data: sectionsData } = useSections(
+		{ page: 1, limit: 1000, sort: "name", order: "asc" },
+		{ enabled: enablePeopleFilterData || viewMode === "overview" },
+	);
+	const sections = useMemo(
+		() => ((sectionsData as any)?.sections || (sectionsData as any)?.data?.sections || []) as any[],
+		[sectionsData],
+	);
+
+	const { data: positionsData } = usePositions(
+		{ page: 1, limit: 1000, sort: "title", order: "asc" },
+		{ enabled: enablePeopleFilterData || viewMode === "overview" },
+	);
+	const positions = useMemo(
+		() => ((positionsData as any)?.positions || (positionsData as any)?.data?.positions || []) as any[],
+		[positionsData],
+	);
+
+	const { data: levelsData } = useLevels(
+		{ page: 1, limit: 1000, sort: "rank", order: "asc" },
+		{ enabled: enablePeopleFilterData || viewMode === "overview" },
+	);
+	const levels = useMemo(
+		() => ((levelsData as any)?.levels || (levelsData as any)?.data?.levels || []) as any[],
+		[levelsData],
+	);
 
 	// Fetch all employees for filters (used for both Manager and Employee dropdowns)
 	const { data: employeesData } = useEmployees(
 		{ limit: 1000 },
-		{ enabled: enablePeopleFilterData },
+		{ enabled: enablePeopleFilterData || viewMode === "overview" },
 	);
 	const allEmployees = Array.isArray(employeesData?.data)
 		? employeesData?.data
@@ -381,7 +449,7 @@ export function AttendanceManagement({
 	// Match timesheets: manager dropdown is sourced from employees with direct reports.
 	const { data: managersData } = useEmployees(
 		{ page: 1, limit: 100, filter: "directReports:exists" },
-		{ enabled: enablePeopleFilterData },
+		{ enabled: enablePeopleFilterData || viewMode === "overview" },
 	);
 	const managerEmployees = Array.isArray((managersData as any)?.data)
 		? (managersData as any)?.data
@@ -533,6 +601,69 @@ export function AttendanceManagement({
 		selectedPayrollPeriod,
 		selectedPeriod,
 	]);
+	// The daily trend chart needs multiple days to plot a line; widen a single-day
+	// selection to a trailing 7-day window instead of changing the page-wide range.
+	const trendDateRange = useMemo(() => {
+		if (metricsDateRange.from !== metricsDateRange.to) {
+			return metricsDateRange;
+		}
+
+		const to = parseDateOnly(metricsDateRange.to);
+		const from = new Date(to);
+		from.setDate(from.getDate() - 6);
+
+		return { from: toDateOnlyKey(from), to: metricsDateRange.to };
+	}, [metricsDateRange]);
+
+	const trendPeriodLabel = useMemo(() => {
+		if (selectedPeriod === "today") return "Today";
+		if (selectedPeriod === "active") return "Active Timesheet";
+		if (selectedPeriod === "custom") return "Custom Range";
+		return selectedPayrollPeriod?.name || selectedPayrollPeriod?.code || "Selected Period";
+	}, [selectedPayrollPeriod, selectedPeriod]);
+
+	const isTrendWindowWidened = metricsDateRange.from === metricsDateRange.to && trendDateRange.from !== trendDateRange.to;
+	const trendTitle = isTrendWindowWidened
+		? "Last 7 Days Trend by Department"
+		: `${trendPeriodLabel} Trend by Department`;
+	const trendDescription = `${formatDate(trendDateRange.from, "short")} to ${formatDate(trendDateRange.to, "short")}`;
+
+	const dateFilterTriggerLabel = useMemo(() => {
+		const fromLabel = formatDate(selectedDateRange.from, "short");
+		const toLabel = formatDate(selectedDateRange.to, "short");
+		const rangeLabel = fromLabel === toLabel ? fromLabel : `${fromLabel} - ${toLabel}`;
+		return `${trendPeriodLabel} · ${rangeLabel}`;
+	}, [trendPeriodLabel, selectedDateRange.from, selectedDateRange.to]);
+
+	const datePresetOptions = useMemo(() => {
+		const options: AttendanceDatePresetOption[] = [
+			{ value: "today", label: "Today" },
+			{
+				value: "active",
+				label: `Active Timesheet${
+					currentPeriod
+						? ` (${formatDate(currentPeriod.startDate, "short")} - ${formatDate(currentPeriod.endDate, "short")})`
+						: ""
+				}`,
+			},
+		];
+		payrollPeriodOptions
+			.filter(
+				(period: any) =>
+					period.id === selectedPayrollPeriod?.id ||
+					period.code === selectedPeriodCodeFromUrl ||
+					(period.id !== currentPeriod?.id && period.code !== currentPeriod?.code),
+			)
+			.forEach((period: any) => {
+				options.push({ value: period.id, label: formatPayrollPeriodOption(period) });
+			});
+		return options;
+	}, [
+		currentPeriod,
+		payrollPeriodOptions,
+		selectedPayrollPeriod,
+		selectedPeriodCodeFromUrl,
+	]);
 
 	// Keep local period state in sync with URL deep-linking
 	useEffect(() => {
@@ -674,6 +805,109 @@ export function AttendanceManagement({
 		return managerEmployees.filter((emp: any) => emp.department?.id === selectedDepartment);
 	}, [managerEmployees, selectedDepartment]);
 
+	const filteredSections = useMemo(() => {
+		const scopedSections = sections.filter((section: any) => {
+			if (selectedDepartment === "all") return true;
+			return section.departmentId === selectedDepartment;
+		});
+
+		if (
+			selectedSection !== "all" &&
+			!scopedSections.some((section: any) => section.id === selectedSection)
+		) {
+			const selectedSectionRecord = sections.find((section: any) => section.id === selectedSection);
+			if (selectedSectionRecord) scopedSections.unshift(selectedSectionRecord);
+		}
+
+		return scopedSections;
+	}, [sections, selectedDepartment, selectedSection]);
+
+	const filteredPositions = useMemo(() => {
+		const scopedPositions = positions.filter((position: any) => {
+			const positionSectionId = String(position.sectionId || position.section?.id || "");
+			const positionDepartmentId = String(
+				position.section?.departmentId || position.section?.department?.id || "",
+			);
+			if (selectedSection !== "all") {
+				return positionSectionId === selectedSection;
+			}
+			if (selectedDepartment !== "all") {
+				return positionDepartmentId === selectedDepartment;
+			}
+			return true;
+		});
+
+		if (
+			selectedPosition !== "all" &&
+			!scopedPositions.some((position: any) => position.id === selectedPosition)
+		) {
+			const selectedPositionRecord = positions.find(
+				(position: any) => position.id === selectedPosition,
+			);
+			if (selectedPositionRecord) scopedPositions.unshift(selectedPositionRecord);
+		}
+
+		return scopedPositions;
+	}, [positions, selectedDepartment, selectedPosition, selectedSection]);
+
+	const selectedPositionRecord = useMemo(
+		() => positions.find((position: any) => position.id === selectedPosition) || null,
+		[positions, selectedPosition],
+	);
+	const selectedLevelRecord = useMemo(
+		() => levels.find((level: any) => level.id === selectedLevel) || null,
+		[levels, selectedLevel],
+	);
+
+	const filteredLevels = useMemo(() => {
+		const levelById = new Map<string, any>();
+		const scopedPositions =
+			selectedPosition !== "all"
+				? selectedPositionRecord
+					? [selectedPositionRecord]
+					: []
+				: filteredPositions;
+
+		scopedPositions.forEach((position: any) => {
+			(Array.isArray(position.levels) ? position.levels : []).forEach((entry: any) => {
+				const levelId = String(entry?.level?.id || entry?.levelId || entry?.id || "").trim();
+				if (!levelId || levelById.has(levelId)) return;
+				const levelRecord =
+					levels.find((level: any) => level.id === levelId) ||
+					entry?.level ||
+					(entry?.id ? entry : null);
+				if (levelRecord) {
+					levelById.set(levelId, levelRecord);
+				}
+			});
+		});
+
+		const scopedLevels = Array.from(levelById.values()).sort((left, right) => {
+			const leftRank = Number(left.rank ?? left.level?.rank ?? 0);
+			const rightRank = Number(right.rank ?? right.level?.rank ?? 0);
+			if (leftRank !== rightRank) return leftRank - rightRank;
+			const leftName = String(left.name || left.level?.name || "");
+			const rightName = String(right.name || right.level?.name || "");
+			return leftName.localeCompare(rightName);
+		});
+
+		if (
+			selectedLevel !== "all" &&
+			!scopedLevels.some((level: any) => level.id === selectedLevel)
+		) {
+			if (selectedLevelRecord) scopedLevels.unshift(selectedLevelRecord);
+		}
+
+		return scopedLevels;
+	}, [
+		filteredPositions,
+		levels,
+		selectedLevel,
+		selectedLevelRecord,
+		selectedPosition,
+		selectedPositionRecord,
+	]);
+
 	// Filtered employees based on selected department and manager
 	const filteredEmployees = useMemo(() => {
 		let result = allEmployees;
@@ -734,6 +968,58 @@ export function AttendanceManagement({
 		});
 	};
 
+	const handleDepartmentFilterChange = (value: string) => {
+		updateSearchParams((params) => {
+			if (value === "all") {
+				params.delete("department");
+			} else {
+				params.set("department", value);
+			}
+			params.delete("manager");
+			params.delete("employee");
+			params.delete("section");
+			params.delete("position");
+			params.delete("level");
+			params.set("page", "1");
+		});
+	};
+
+	const handleSectionFilterChange = (value: string) => {
+		updateSearchParams((params) => {
+			if (value === "all") {
+				params.delete("section");
+			} else {
+				params.set("section", value);
+			}
+			params.delete("position");
+			params.delete("level");
+			params.set("page", "1");
+		});
+	};
+
+	const handlePositionFilterChange = (value: string) => {
+		updateSearchParams((params) => {
+			if (value === "all") {
+				params.delete("position");
+			} else {
+				params.set("position", value);
+			}
+			params.delete("level");
+			params.set("page", "1");
+		});
+	};
+
+	const handleLevelFilterChange = (value: string) => {
+		updateSearchParams((params) => {
+			if (value === "all") {
+				params.delete("level");
+			} else {
+				params.set("level", value);
+			}
+			params.set("page", "1");
+		});
+	};
+
 	const handleStatusFilterChange = (value: string) => {
 		const nextStatus = value === "all" ? undefined : value;
 		updateSearchParams((params) => {
@@ -747,10 +1033,25 @@ export function AttendanceManagement({
 		});
 	};
 
+	const clearScopeAndShiftFilters = () => {
+		updateSearchParams((params) => {
+			params.delete("department");
+			params.delete("section");
+			params.delete("position");
+			params.delete("level");
+			params.delete("shiftType");
+			params.delete("presentGt10Days");
+			params.set("page", "1");
+		});
+	};
+
 	const clearAllTableFilters = () => {
 		setSearchQuery("");
 		updateSearchParams((params) => {
 			params.delete("department");
+			params.delete("section");
+			params.delete("position");
+			params.delete("level");
 			params.delete("manager");
 			params.delete("employee");
 			params.delete("shiftType");
@@ -762,22 +1063,9 @@ export function AttendanceManagement({
 
 	const handleAdvancedFilterChange = (filters: Record<string, string>) => {
 		updateSearchParams((params) => {
-			const departmentChanged =
-				filters.department !== undefined && filters.department !== selectedDepartment;
 			const managerChanged =
 				filters.manager !== undefined && filters.manager !== selectedManager;
-			const nextDepartment = filters.department || "";
-			if (nextDepartment && nextDepartment !== "all") {
-				params.set("department", nextDepartment);
-			} else {
-				params.delete("department");
-			}
-			if (departmentChanged) {
-				params.delete("manager");
-				params.delete("employee");
-			}
-
-			const nextManager = departmentChanged ? "" : filters.manager || "";
+			const nextManager = filters.manager || "";
 			if (nextManager && nextManager !== "all") {
 				params.set("manager", nextManager);
 			} else {
@@ -787,7 +1075,7 @@ export function AttendanceManagement({
 				params.delete("employee");
 			}
 
-			const nextEmployee = departmentChanged || managerChanged ? "" : filters.employee || "";
+			const nextEmployee = managerChanged ? "" : filters.employee || "";
 			if (nextEmployee && nextEmployee !== "all") {
 				params.set("employee", nextEmployee);
 			} else {
@@ -826,18 +1114,25 @@ export function AttendanceManagement({
 	const todayRefreshInterval = isTodayMode ? 15_000 : false;
 
 	const departmentFilter = selectedDepartment !== "all" ? selectedDepartment : undefined;
+	const sectionFilter = selectedSection !== "all" ? selectedSection : undefined;
+	const positionFilter = selectedPosition !== "all" ? selectedPosition : undefined;
+	const levelFilter = selectedLevel !== "all" ? selectedLevel : undefined;
 	const managerFilter = selectedManager !== "all" ? selectedManager : undefined;
 	const employeeFilter = selectedEmployee !== "all" ? selectedEmployee : undefined;
 	const shiftTypeFilter = selectedShiftType !== "all" ? selectedShiftType : undefined;
+	const limitForFetch = presentGt10Days ? 10000 : limitParam;
 	const { data: attendanceRowsData, isLoading: isLoadingTimesheets } =
 		useAttendanceMetricsDetailed(
 			metricsDateRange.from,
 			metricsDateRange.to,
-			limitParam,
+			limitForFetch,
 			pageParam,
 			debouncedSearch,
 			statusFilter,
 			departmentFilter,
+			sectionFilter,
+			positionFilter,
+			levelFilter,
 			managerFilter,
 			employeeFilter,
 			shiftTypeFilter,
@@ -855,6 +1150,9 @@ export function AttendanceManagement({
 			debouncedSearch,
 			undefined,
 			departmentFilter,
+			sectionFilter,
+			positionFilter,
+			levelFilter,
 			managerFilter,
 			employeeFilter,
 			shiftTypeFilter,
@@ -872,6 +1170,9 @@ export function AttendanceManagement({
 			debouncedSearch,
 			undefined,
 			departmentFilter,
+			sectionFilter,
+			positionFilter,
+			levelFilter,
 			managerFilter,
 			employeeFilter,
 			shiftTypeFilter,
@@ -883,6 +1184,9 @@ export function AttendanceManagement({
 	const leaveBalanceFilter = useMemo(
 		() => ({
 			...(departmentFilter ? { departmentId: departmentFilter } : {}),
+			...(sectionFilter ? { sectionId: sectionFilter } : {}),
+			...(positionFilter ? { positionId: positionFilter } : {}),
+			...(levelFilter ? { levelId: levelFilter } : {}),
 			...(managerFilter ? { reportToId: managerFilter } : {}),
 			...(employeeFilter ? { employeeId: employeeFilter } : {}),
 			periodFrom: metricsDateRange.from,
@@ -890,6 +1194,9 @@ export function AttendanceManagement({
 		}),
 		[
 			departmentFilter,
+			sectionFilter,
+			positionFilter,
+			levelFilter,
 			managerFilter,
 			employeeFilter,
 			metricsDateRange.from,
@@ -928,7 +1235,13 @@ export function AttendanceManagement({
 		return options;
 	}, [selectedShiftType, shiftOptionsPayload]);
 	const leaveBalancePayload = leaveBalanceData?.metrics?.leaveBalanceMetrics || null;
-	const records = attendanceRowsPayload?.records || [];
+	const rawRecords = attendanceRowsPayload?.records || [];
+	const records = useMemo(() => {
+		if (!presentGt10Days) return rawRecords;
+		const thresholdFiltered = filterAttendanceRecordsByPresentDayThreshold(rawRecords);
+		const start = (pageParam - 1) * limitParam;
+		return thresholdFiltered.slice(start, start + limitParam);
+	}, [rawRecords, presentGt10Days, pageParam, limitParam]);
 	const overviewRecords = useMemo(
 		() => attendanceOverviewPayload?.records || [],
 		[attendanceOverviewPayload?.records],
@@ -1083,14 +1396,21 @@ export function AttendanceManagement({
 		totalLateMinutes: 0,
 	};
 
-	const totalRecords = attendanceRowsPayload?.totalRecords || records.length;
+	const totalRecords = useMemo(() => {
+		if (!presentGt10Days) return attendanceRowsPayload?.totalRecords || records.length;
+		return filterAttendanceRecordsByPresentDayThreshold(rawRecords).length;
+	}, [attendanceRowsPayload, presentGt10Days, rawRecords, records.length]);
 	const hasActiveTableFilters =
 		Boolean(debouncedSearch) ||
 		Boolean(statusFilter) ||
 		selectedDepartment !== "all" ||
+		selectedSection !== "all" ||
+		selectedPosition !== "all" ||
+		selectedLevel !== "all" ||
 		selectedManager !== "all" ||
 		selectedEmployee !== "all" ||
-		selectedShiftType !== "all";
+		selectedShiftType !== "all" ||
+		presentGt10Days;
 
 	const renderClockValue = (
 		value?: string | null,
@@ -1171,23 +1491,30 @@ export function AttendanceManagement({
 		return byName?.id;
 	};
 
-	const openTimeCorrection = (record: AttendanceRecord) => {
-		const employeeProfileId = getEmployeeProfileId(record);
-		const next = new URLSearchParams();
-		next.set("action", "create");
-		next.set("source", "attendance");
-		next.set("attendanceDate", record.date);
-		next.set("status", record.status || "");
-		next.set("timeIn", record.timeIn || "");
-		next.set("timeOut", record.timeOut || "");
-		next.set("notes", record.notes || "");
-		next.set("employeeCode", record.employeeId || "");
-		next.set("employeeName", record.employeeName || "");
-		if (record.id) next.set("attendanceId", record.id);
-		if (record.timesheetId) next.set("timesheetId", record.timesheetId);
-		if (employeeProfileId) next.set("employeeId", employeeProfileId);
+	const getEmployeeAvatar = (record: AttendanceRecord): string | null => {
+		if (record.employeeRefId) {
+			const byRefId = allEmployees.find((emp: any) => emp.id === record.employeeRefId);
+			if (byRefId?.user?.avatar) return byRefId.user.avatar;
+		}
 
-		navigate(`/hr/time-corrections?${next.toString()}`);
+		const byId = allEmployees.find((emp: any) => emp.id === record.employeeId);
+		if (byId?.user?.avatar) return byId.user.avatar;
+
+		const byEmployeeCode = allEmployees.find(
+			(emp: any) => emp.employeeId === record.employeeId,
+		);
+		if (byEmployeeCode?.user?.avatar) return byEmployeeCode.user.avatar;
+
+		const byName = allEmployees.find((emp: any) => {
+			const firstName = emp.person?.personalInfo?.firstName || "";
+			const lastName = emp.person?.personalInfo?.lastName || "";
+			return `${firstName} ${lastName}`.trim() === record.employeeName;
+		});
+		return byName?.user?.avatar || null;
+	};
+
+	const openFixAttendance = (record: AttendanceRecord) => {
+		setFixAttendanceRecord(record);
 	};
 
 	const openEmployeeProfile = (record: AttendanceRecord) => {
@@ -1624,9 +1951,9 @@ export function AttendanceManagement({
 							<Button
 								type="button"
 								variant="outline"
-								onClick={() => openTimeCorrection(selectedRecord)}>
+								onClick={() => openFixAttendance(selectedRecord)}>
 								<FileEdit className="mr-2 h-4 w-4" />
-								Time Correction
+								Fix Attendance
 							</Button>
 							<Button variant="outline" onClick={() => setSelectedRecord(null)}>
 								Close
@@ -1647,6 +1974,9 @@ export function AttendanceManagement({
 			} else {
 				params.delete("department");
 			}
+			params.delete("section");
+			params.delete("position");
+			params.delete("level");
 			params.delete("manager");
 			params.delete("employee");
 			params.delete("search");
@@ -1659,6 +1989,9 @@ export function AttendanceManagement({
 		updateSearchParams((params) => {
 			params.delete("view");
 			params.delete("department");
+			params.delete("section");
+			params.delete("position");
+			params.delete("level");
 			params.delete("manager");
 			params.delete("employee");
 			params.delete("shiftType");
@@ -1679,6 +2012,7 @@ export function AttendanceManagement({
 					profileId={getEmployeeProfileId(item)}
 					fullName={String(value || item.employeeName || "-")}
 					employeeId={item.employeeId}
+					avatar={getEmployeeAvatar(item)}
 				/>
 			),
 		},
@@ -1982,14 +2316,6 @@ export function AttendanceManagement({
 
 	const advancedFilters: FilterOption[] = [
 		{
-			key: "department",
-			label: "Department",
-			options: departments.map((dept: any) => ({
-				value: dept.id,
-				label: dept.name,
-			})),
-		},
-		{
 			key: "manager",
 			label: "Manager",
 			options: filteredManagers.map((emp: any) => ({
@@ -2016,10 +2342,91 @@ export function AttendanceManagement({
 	];
 
 	const advancedFilterValues = {
-		department: selectedDepartment,
 		manager: selectedManager,
 		employee: selectedEmployee,
 	};
+
+	const attendanceScopeFilterControls = useMemo(
+		() => [
+			{
+				key: "shiftType",
+				label: "Shift Type",
+				value: selectedShiftType,
+				options: [
+					{ value: "all", label: "All Shift Types" },
+					...shiftTypeOptions.map((shift) => ({
+						value: shift.value,
+						label: `${shift.label} (${shift.total})`,
+					})),
+				],
+				onChange: handleShiftTypeChange,
+			},
+			{
+				key: "department",
+				label: "Department",
+				value: selectedDepartment,
+				options: [
+					{ value: "all", label: "All Departments" },
+					...departments.map((dept: any) => ({
+						value: dept.id,
+						label: dept.name,
+					})),
+				],
+				onChange: handleDepartmentFilterChange,
+			},
+			{
+				key: "section",
+				label: "Section",
+				value: selectedSection,
+				options: [
+					{ value: "all", label: "All Sections" },
+					...filteredSections.map((section: any) => ({
+						value: section.id,
+						label: section.name,
+					})),
+				],
+				onChange: handleSectionFilterChange,
+			},
+			{
+				key: "position",
+				label: "Position",
+				value: selectedPosition,
+				options: [
+					{ value: "all", label: "All Positions" },
+					...filteredPositions.map((position: any) => ({
+						value: position.id,
+						label: position.title,
+					})),
+				],
+				onChange: handlePositionFilterChange,
+			},
+			{
+				key: "level",
+				label: "Level",
+				value: selectedLevel,
+				options: [
+					{ value: "all", label: "All Levels" },
+					...filteredLevels.map((level: any) => ({
+						value: level.id,
+						label: level.name,
+					})),
+				],
+				onChange: handleLevelFilterChange,
+			},
+		],
+		[
+			departments,
+			filteredLevels,
+			filteredPositions,
+			filteredSections,
+			selectedDepartment,
+			selectedLevel,
+			selectedPosition,
+			selectedSection,
+			selectedShiftType,
+			shiftTypeOptions,
+		],
+	);
 
 	const customFilters = (
 		<>
@@ -2051,14 +2458,6 @@ export function AttendanceManagement({
 				</SelectContent>
 			</Select>
 
-			<Button
-				type="button"
-				variant="outline"
-				className="h-9 md:h-10 rounded-xl border-neutral-200 px-3 text-xs font-medium disabled:opacity-50"
-				disabled={!hasActiveTableFilters}
-				onClick={clearAllTableFilters}>
-				Clear all filters
-			</Button>
 		</>
 	);
 
@@ -2510,44 +2909,6 @@ export function AttendanceManagement({
 		);
 	};
 
-	// Quick date range helpers
-	const months = [
-		{ value: "0", label: "January" },
-		{ value: "1", label: "February" },
-		{ value: "2", label: "March" },
-		{ value: "3", label: "April" },
-		{ value: "4", label: "May" },
-		{ value: "5", label: "June" },
-		{ value: "6", label: "July" },
-		{ value: "7", label: "August" },
-		{ value: "8", label: "September" },
-		{ value: "9", label: "October" },
-		{ value: "10", label: "November" },
-		{ value: "11", label: "December" },
-	];
-
-	const currentYear = new Date().getFullYear();
-	const maxSelectableYear = attendanceSelectableMaxDate.getFullYear();
-	const years = Array.from({ length: Math.max(5, currentYear - maxSelectableYear + 5) }, (_, i) =>
-		(maxSelectableYear - i).toString(),
-	);
-
-	const handleMonthSelect = (monthStr: string) => {
-		const month = parseInt(monthStr);
-		const year = dateRangeObj?.from?.getFullYear() || currentYear;
-		const start = new Date(year, month, 1);
-		const end = new Date(year, month + 1, 0); // Last day of month
-		setCustomRange({ from: start, to: end });
-	};
-
-	const handleYearSelect = (yearStr: string) => {
-		const year = parseInt(yearStr);
-		const month = dateRangeObj?.from?.getMonth() || 0;
-		const start = new Date(year, month, 1);
-		const end = new Date(year, month + 1, 0);
-		setCustomRange({ from: start, to: end });
-	};
-
 	const renderOverviewMetric = (
 		value: number | string | null,
 		options: { tone?: "default" | "good" | "warn" | "danger"; suffix?: string } = {},
@@ -2710,6 +3071,7 @@ export function AttendanceManagement({
 																)}
 																fullName={item.employeeName || "-"}
 																employeeId={item.employeeId}
+																avatar={getEmployeeAvatar(item)}
 															/>
 														</div>
 													</td>
@@ -2752,37 +3114,42 @@ export function AttendanceManagement({
 													</td>
 													<td className="px-3 py-2 text-right">
 														<div className="flex justify-end">
-															<DropdownMenu>
-																<DropdownMenuTrigger asChild>
-																	<Button
-																		variant="ghost"
-																		size="icon"
-																		className="h-7 w-7 rounded-md">
-																		<MoreVertical className="h-4 w-4" />
-																		<span className="sr-only">
-																			Attendance actions
-																		</span>
-																	</Button>
-																</DropdownMenuTrigger>
-																<DropdownMenuContent
-																	align="end"
-																	className="w-44">
-																	<DropdownMenuItem
-																		onClick={() =>
-																			setSelectedRecord(item)
-																		}>
-																		<ListCheck className="mr-2 h-4 w-4" />
-																		View Details
-																	</DropdownMenuItem>
-																	<DropdownMenuItem
-																		onClick={() =>
-																			openTimeCorrection(item)
-																		}>
-																		<FileEdit className="mr-2 h-4 w-4" />
-																		Time Correction
-																	</DropdownMenuItem>
-																</DropdownMenuContent>
-															</DropdownMenu>
+															<div className="flex items-center justify-end gap-1">
+																<Button
+																	variant="ghost"
+																	size="icon"
+																	className="h-7 w-7 rounded-md"
+																	onClick={() => openFixAttendance(item)}
+																	title="Fix Attendance"
+																	aria-label={`Fix attendance for ${item.employeeName}`}
+																>
+																	<FileEdit className="h-4 w-4 text-orange-600" />
+																</Button>
+																<DropdownMenu>
+																	<DropdownMenuTrigger asChild>
+																		<Button
+																			variant="ghost"
+																			size="icon"
+																			className="h-7 w-7 rounded-md">
+																			<MoreVertical className="h-4 w-4" />
+																			<span className="sr-only">
+																				Attendance actions
+																			</span>
+																		</Button>
+																	</DropdownMenuTrigger>
+																	<DropdownMenuContent
+																		align="end"
+																		className="w-44">
+																		<DropdownMenuItem
+																			onClick={() =>
+																				setSelectedRecord(item)
+																			}>
+																			<ListCheck className="mr-2 h-4 w-4" />
+																			View Details
+																		</DropdownMenuItem>
+																	</DropdownMenuContent>
+																</DropdownMenu>
+															</div>
 														</div>
 													</td>
 												</tr>
@@ -2850,106 +3217,29 @@ export function AttendanceManagement({
 				showCreateTimesheets={true}
 			/>
 
-			{/* Date Range Filters */}
-			<div className="flex flex-col xl:flex-row gap-3 items-end justify-between bg-white p-3 rounded-md border border-gray-200">
-				<div className="flex flex-1 flex-col md:flex-row gap-2 md:gap-3 w-full flex-wrap">
-					<div className="w-full md:w-[200px]">
-						<div className="mb-1 text-xs font-medium">Timesheet Period</div>
-						<Select
-							value={selectedPeriodValue}
-							onValueChange={handlePeriodChange}
-							onOpenChange={(open) => open && setEnablePeriodOptions(true)}>
-							<SelectTrigger className="h-9 w-full rounded-md shadow-sm border-gray-200">
-								<SelectValue placeholder="Select period" />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="today">Today</SelectItem>
-								<SelectItem value="active">
-									Active Timesheet{" "}
-									{currentPeriod
-										? `(${formatDate(currentPeriod.startDate, "short")} - ${formatDate(currentPeriod.endDate, "short")})`
-										: ""}
-								</SelectItem>
-								{payrollPeriodOptions
-									.filter(
-										(period: any) =>
-											period.id === selectedPayrollPeriod?.id ||
-											period.code === selectedPeriodCodeFromUrl ||
-											(period.id !== currentPeriod?.id &&
-												period.code !== currentPeriod?.code),
-									)
-									.map((period: any) => (
-										<SelectItem key={period.id} value={period.id}>
-											{formatPayrollPeriodOption(period)}
-										</SelectItem>
-									))}
-								<SelectItem value="custom">Custom Range</SelectItem>
-							</SelectContent>
-						</Select>
-					</div>
-
-					<div className="w-full md:w-[130px]">
-						<div className="mb-1 text-xs font-medium">Month</div>
-						<Select
-							value={dateRangeObj?.from?.getMonth().toString()}
-							onValueChange={handleMonthSelect}>
-							<SelectTrigger className="h-9 w-full rounded-md shadow-sm border-gray-200">
-								<SelectValue placeholder="Month" />
-							</SelectTrigger>
-							<SelectContent>
-								{months.map((m) => (
-									<SelectItem key={m.value} value={m.value}>
-										{m.label}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					</div>
-					<div className="w-full md:w-[90px]">
-						<div className="mb-1 text-xs font-medium">Year</div>
-						<Select
-							value={dateRangeObj?.from?.getFullYear().toString()}
-							onValueChange={handleYearSelect}>
-							<SelectTrigger className="h-9 w-full rounded-md shadow-sm border-gray-200">
-								<SelectValue placeholder="Year" />
-							</SelectTrigger>
-							<SelectContent>
-								{years.map((y) => (
-									<SelectItem key={y} value={y}>
-										{y}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					</div>
-					<div className="w-full md:w-[280px]">
-						<div className="mb-1 text-xs font-medium">Date Range</div>
-						<DatePickerWithRange
-							value={dateRangeObj}
-							onChange={handleCustomDateChange}
-							placeholder="Select date range"
-							className="h-9 w-full rounded-md shadow-sm border-gray-200"
-							disabled={isAttendanceDateDisabled}
-						/>
-					</div>
-					<div className="w-full md:w-[180px]">
-						<div className="mb-1 text-xs font-medium">Shift Type</div>
-						<Select value={selectedShiftType} onValueChange={handleShiftTypeChange}>
-							<SelectTrigger className="h-9 w-full rounded-md shadow-sm border-gray-200">
-								<SelectValue placeholder="Shift type" />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">All Shift Types</SelectItem>
-								{shiftTypeOptions.map((shift) => (
-									<SelectItem key={shift.value} value={shift.value}>
-										{shift.label} ({shift.total})
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					</div>
+			{/* Attendance Filters */}
+			<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+				<h2 className="text-lg font-semibold text-gray-900 shrink-0">{title}</h2>
+				<div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center">
+					<AttendanceDateFilterPopover
+						triggerLabel={dateFilterTriggerLabel}
+						periodValue={selectedPeriodValue}
+						presetOptions={datePresetOptions}
+						onPeriodSelect={handlePeriodChange}
+						onOpenPresets={() => setEnablePeriodOptions(true)}
+						dateRange={dateRangeObj}
+						onCustomRangeChange={handleCustomDateChange}
+						isDateDisabled={isAttendanceDateDisabled}
+					/>
+					<AttendanceScopeFilterPopover
+						controls={attendanceScopeFilterControls}
+						presentGt10Days={presentGt10Days}
+						onPresentGt10DaysChange={setPresentGt10Days}
+						onClearAll={clearScopeAndShiftFilters}
+					/>
 				</div>
 			</div>
+
 			<Card className="overflow-hidden rounded-md border border-neutral-200 bg-white py-0 shadow-none">
 				<CardContent className="p-0">
 					<div className="grid divide-y divide-neutral-200 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)] xl:divide-y-0">
@@ -3290,6 +3580,24 @@ export function AttendanceManagement({
 				</CardContent>
 			</Card>
 
+			{showAttendanceTrend ? (
+				<AttendanceDailyTrendSection
+					visible={showAttendanceTrend}
+					title={trendTitle}
+					description={trendDescription}
+					filters={{
+						dateFrom: trendDateRange.from,
+						dateTo: trendDateRange.to,
+						search: debouncedSearch || undefined,
+						status: statusFilter,
+						departmentId: departmentFilter,
+						reportToId: managerFilter,
+						employeeId: employeeFilter,
+						shiftType: shiftTypeFilter,
+					}}
+				/>
+			) : null}
+
 			{viewMode === "list" ? (
 				<button
 					type="button"
@@ -3303,46 +3611,73 @@ export function AttendanceManagement({
 			{viewMode === "overview" ? (
 				renderAttendanceOverviewTable()
 			) : (
-				<DataTable
-					title="Attendance Records"
-					description={`${activeFilterLabel ? `Showing ${activeFilterLabel} records - ` : ""}Attendance from ${formatDate(metricsDateRange.from, "short")} to ${formatDate(metricsDateRange.to, "short")}`}
-					data={records}
-					columns={columns}
-					isLoading={isLoadingTimesheets}
-					emptyMessage="No attendance records found"
-					searchPlaceholder="Search employees..."
-					searchValue={searchQuery}
-					onSearch={setSearchQuery}
-					customFilters={customFilters}
-					filters={advancedFilters}
-					filterValues={advancedFilterValues}
-					onFilterChange={handleAdvancedFilterChange}
-					filterButtonLabel="Advanced Filters"
-					itemsPerPage={limitParam}
-					currentPage={pageParam}
-					totalItems={totalRecords}
-					onPageChange={handlePageChange}
-					onView={(item) => setSelectedRecord(item)}
-					renderActions={(item) => (
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
-									<MoreVertical className="h-4 w-4" />
-									<span className="sr-only">Attendance actions</span>
+				<>
+					<DataTable
+						title="Attendance Records"
+						description={`${activeFilterLabel ? `Showing ${activeFilterLabel} records - ` : ""}Attendance from ${formatDate(metricsDateRange.from, "short")} to ${formatDate(metricsDateRange.to, "short")}`}
+						data={records}
+						columns={columns}
+						isLoading={isLoadingTimesheets}
+						emptyMessage="No attendance records found"
+						searchPlaceholder="Search employees..."
+						searchValue={searchQuery}
+						onSearch={setSearchQuery}
+						customFilters={customFilters}
+						filters={advancedFilters}
+						filterValues={advancedFilterValues}
+						onFilterChange={handleAdvancedFilterChange}
+						filterButtonLabel="Advanced Filters"
+						itemsPerPage={limitParam}
+						currentPage={pageParam}
+						totalItems={totalRecords}
+						onPageChange={handlePageChange}
+						onView={(item) => setSelectedRecord(item)}
+						renderActions={(item) => (
+							<div className="flex items-center justify-end gap-1">
+								<Button
+									variant="ghost"
+									size="icon"
+									className="h-8 w-8 rounded-lg"
+									onClick={() => openFixAttendance(item)}
+									title="Fix Attendance"
+									aria-label={`Fix attendance for ${item.employeeName}`}
+								>
+									<FileEdit className="h-4 w-4 text-orange-600" />
 								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-44">
-								<DropdownMenuItem onClick={() => setSelectedRecord(item)}>
-									<ListCheck className="mr-2 h-4 w-4" />
-									View Details
-								</DropdownMenuItem>
-								<DropdownMenuItem onClick={() => openTimeCorrection(item)}>
-									<FileEdit className="mr-2 h-4 w-4" />
-									Time Correction
-								</DropdownMenuItem>
-							</DropdownMenuContent>
-						</DropdownMenu>
-					)}
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
+											<MoreVertical className="h-4 w-4" />
+											<span className="sr-only">Attendance actions</span>
+										</Button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="end" className="w-44">
+										<DropdownMenuItem onClick={() => setSelectedRecord(item)}>
+											<ListCheck className="mr-2 h-4 w-4" />
+											View Details
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							</div>
+						)}
+					/>
+				</>
+			)}
+
+			{fixAttendanceRecord && (
+				<AttendanceFixModal
+					open={!!fixAttendanceRecord}
+					onOpenChange={(open) => {
+						if (!open) setFixAttendanceRecord(null);
+					}}
+					employeeId={getEmployeeProfileId(fixAttendanceRecord) || fixAttendanceRecord.employeeId}
+					employeeName={fixAttendanceRecord.employeeName || "Unknown Employee"}
+					employeeCode={fixAttendanceRecord.employeeId || ""}
+					date={fixAttendanceRecord.date}
+					attendanceId={fixAttendanceRecord.isVirtual ? null : fixAttendanceRecord.id}
+					originalStatus={fixAttendanceRecord.status}
+					originalTimeIn={fixAttendanceRecord.timeIn}
+					originalTimeOut={fixAttendanceRecord.timeOut}
 				/>
 			)}
 		</div>

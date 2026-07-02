@@ -167,7 +167,7 @@ export function TimesheetView({
 	if (showMissingScheduleNotice) {
 		return (
 			<div className={`space-y-3 ${className}`}>
-				<div className="flex gap-3">
+				<div className="flex gap-4">
 					{showEmployee && employee && (
 						<TimesheetEmployeeCard
 							employee={employee}
@@ -194,9 +194,9 @@ export function TimesheetView({
 	}
 
 	return (
-		<div className={`space-y-3 ${className}`}>
+		<div className={`space-y-4 ${className}`}>
 			{/* Employee Details + Hours Overview Row */}
-			<div className="flex gap-3">
+			<div className="flex gap-4">
 				{/* Employee Details - Left */}
 				{showEmployee && employee && (
 					<TimesheetEmployeeCard
