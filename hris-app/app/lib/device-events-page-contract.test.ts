@@ -37,4 +37,11 @@ describe("device events page UX contract", () => {
 		expect(routeSource).not.to.contain("/admin/devices/manage/${activeEvent.deviceId}");
 		expect(routeSource).to.contain("Employee record");
 	});
+
+	it("keeps source details in the event modal instead of the saved punches table", () => {
+		expect(routeSource).not.to.contain('label: "Source",');
+		expect(routeSource).to.contain('next.set("action", "view-event")');
+		expect(routeSource).to.contain("formatEventSource(activeEvent.source)");
+		expect(routeSource).to.contain("formatEventSourceDetail(activeEvent.source)");
+	});
 });

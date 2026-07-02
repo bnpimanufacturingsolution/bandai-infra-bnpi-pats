@@ -1098,60 +1098,6 @@ export default function DeviceEventsPage() {
 				</div>
 			),
 		},
-		{
-			key: "source",
-			label: "Source",
-			sortable: viewMode === "saved",
-			width: "190px",
-			required: true,
-			render: (value, item) => {
-				const realtimeBadge = getSavedDeviceEventRealtimeBadge({
-					viewMode,
-					itemId: item.id,
-					latestRealtimeEventId,
-					highlightedSavedEventId,
-				});
-				const processingLabel = getSavedDeviceEventProcessingLabel({
-					itemId: item.id,
-					latestRealtimeEventId,
-					receivedAt: item.receivedAt,
-					eventTime: item.eventTime,
-				});
-				return (
-					<div className="min-w-0 space-y-1">
-						<span className="block max-w-[170px] truncate text-sm font-medium text-slate-800">
-							{formatEventSource(value)}
-						</span>
-						<span className="block max-w-[170px] truncate text-xs text-slate-500">
-							{item.verifyMode || formatBusinessStatus(item.status)}
-						</span>
-						{item.verifyMode ? (
-							<span className="block max-w-[170px] truncate text-[11px] text-slate-500">
-								{formatBusinessStatus(item.status)}
-							</span>
-						) : null}
-						{processingLabel ? (
-							<Badge
-								variant={
-									processingLabel === "Realtime save"
-										? "success-soft"
-										: processingLabel === "Backfill/sync save"
-											? "warning-soft"
-											: "secondary"
-								}
-								className="max-w-[170px] px-1.5 py-0 text-[11px] font-semibold">
-								<span className="truncate">{processingLabel}</span>
-							</Badge>
-						) : null}
-						{realtimeBadge ? (
-							<span className="block max-w-[170px] truncate text-[11px] font-medium text-emerald-700">
-								{realtimeBadge}
-							</span>
-						) : null}
-					</div>
-				);
-			},
-		},
 	];
 
 	return (
