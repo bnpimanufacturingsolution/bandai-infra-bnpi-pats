@@ -798,6 +798,43 @@ export interface AttendanceTimesheetLineSummaryResponse {
 	};
 }
 
+export interface AttendanceDailyTrendDepartmentTotal {
+	departmentId: string | null;
+	departmentName: string;
+	total: number;
+}
+
+export interface AttendanceDailyTrendDayBucket {
+	businessDate: string;
+	total: number;
+	departmentBreakdown: AttendanceDailyTrendDepartmentTotal[];
+}
+
+export interface AttendanceDailyTrendResult {
+	startDate: string | Date;
+	endDate: string | Date;
+	totalDays: number;
+	totalRecords: number;
+	departments: AttendanceDailyTrendDepartmentTotal[];
+	series: AttendanceDailyTrendDayBucket[];
+}
+
+export interface AttendanceDailyTrendByDepartmentResponse {
+	filter?: {
+		dateFrom?: string;
+		dateTo?: string;
+		search?: string;
+		status?: string;
+		departmentId?: string;
+		reportToId?: string;
+		employeeId?: string;
+		shiftType?: string;
+	};
+	metrics: {
+		attendanceDailyTrendByDepartment: AttendanceDailyTrendResult;
+	};
+}
+
 export interface AttendanceTodayOpsSummary {
 	businessDate: string;
 	scheduledTodayCount: number;
@@ -1145,6 +1182,38 @@ export interface LeaveBalanceMetricsResponse {
 	};
 }
 
+export type TurnoverAttritionGroupBy = "day" | "week" | "month" | "year";
+
+export interface TurnoverAttritionBucket {
+	periodStart: string;
+	periodEnd: string;
+	label: string;
+	openingHeadcount: number;
+	closingHeadcount: number;
+	averageHeadcount: number;
+	totalSeparations: number;
+	voluntarySeparations: number;
+	involuntarySeparations: number;
+	turnoverRate: number;
+	attritionRate: number;
+}
+
+export interface TurnoverAttritionReport {
+	summary: TurnoverAttritionBucket;
+	buckets: TurnoverAttritionBucket[];
+}
+
+export interface TurnoverAttritionReportResponse {
+	filter?: {
+		dateFrom?: string;
+		dateTo?: string;
+		groupBy?: TurnoverAttritionGroupBy;
+	};
+	metrics: {
+		turnoverAttritionReport: TurnoverAttritionReport;
+	};
+}
+
 class MetricsService extends APIService {
 	async getActionMetrics(employeeId?: string): Promise<ActionMetricsResponse> {
 		try {
@@ -1376,6 +1445,40 @@ class MetricsService extends APIService {
 		}
 	}
 
+	async getTurnoverAttritionReport(
+		dateFrom: string,
+		dateTo: string,
+		groupBy: TurnoverAttritionGroupBy,
+	): Promise<TurnoverAttritionReportResponse> {
+		try {
+			const payload = {
+				model: "Employee",
+				data: ["turnoverAttritionReport"],
+				filter: {
+					dateFrom,
+					dateTo,
+					groupBy,
+				},
+			};
+
+			const response = await hrisApiClient.post<any>("/api/metrics", payload);
+			const metricsData = this.extractMetricsData(response);
+
+			if (!metricsData || !metricsData.metrics) {
+				throw new Error("Failed to fetch turnover and attrition report");
+			}
+
+			return metricsData as TurnoverAttritionReportResponse;
+		} catch (error: any) {
+			console.error("Error fetching turnover and attrition report:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error fetching turnover and attrition report",
+			);
+		}
+	}
+
 	/**
 	 * Get comprehensive attendance metrics with full records (including virtual ABSENT/REST_DAY)
 	 * @param dateFrom Start date (YYYY-MM-DD)
@@ -1391,6 +1494,9 @@ class MetricsService extends APIService {
 		search?: string,
 		status?: string,
 		departmentId?: string,
+		sectionId?: string,
+		positionId?: string,
+		levelId?: string,
 		reportToId?: string,
 		employeeId?: string,
 		shiftType?: string,
@@ -1407,6 +1513,9 @@ class MetricsService extends APIService {
 					...(search && { search }),
 					...(status && { status }),
 					...(departmentId && { departmentId }),
+					...(sectionId && { sectionId }),
+					...(positionId && { positionId }),
+					...(levelId && { levelId }),
 					...(reportToId && { reportToId }),
 					...(employeeId && { employeeId }),
 					...(shiftType && { shiftType }),
@@ -1437,6 +1546,9 @@ class MetricsService extends APIService {
 		dateTo?: string,
 		search?: string,
 		departmentId?: string,
+		sectionId?: string,
+		positionId?: string,
+		levelId?: string,
 		reportToId?: string,
 		employeeId?: string,
 		shiftType?: string,
@@ -1450,6 +1562,9 @@ class MetricsService extends APIService {
 					...(dateTo && { dateTo }),
 					...(search && { search }),
 					...(departmentId && { departmentId }),
+					...(sectionId && { sectionId }),
+					...(positionId && { positionId }),
+					...(levelId && { levelId }),
 					...(reportToId && { reportToId }),
 					...(employeeId && { employeeId }),
 					...(shiftType && { shiftType }),
@@ -1480,6 +1595,9 @@ class MetricsService extends APIService {
 		search?: string,
 		status?: string,
 		departmentId?: string,
+		sectionId?: string,
+		positionId?: string,
+		levelId?: string,
 		reportToId?: string,
 		employeeId?: string,
 		shiftType?: string,
@@ -1494,6 +1612,9 @@ class MetricsService extends APIService {
 					...(search && { search }),
 					...(status && { status }),
 					...(departmentId && { departmentId }),
+					...(sectionId && { sectionId }),
+					...(positionId && { positionId }),
+					...(levelId && { levelId }),
 					...(reportToId && { reportToId }),
 					...(employeeId && { employeeId }),
 					...(shiftType && { shiftType }),
@@ -1524,6 +1645,9 @@ class MetricsService extends APIService {
 		search?: string,
 		status?: string,
 		departmentId?: string,
+		sectionId?: string,
+		positionId?: string,
+		levelId?: string,
 		reportToId?: string,
 		employeeId?: string,
 		shiftType?: string,
@@ -1534,10 +1658,57 @@ class MetricsService extends APIService {
 			search,
 			status,
 			departmentId,
+			sectionId,
+			positionId,
+			levelId,
 			reportToId,
 			employeeId,
 			shiftType,
 		);
+	}
+
+	async getAttendanceDailyTrendByDepartment(
+		dateFrom?: string,
+		dateTo?: string,
+		search?: string,
+		status?: string,
+		departmentId?: string,
+		reportToId?: string,
+		employeeId?: string,
+		shiftType?: string,
+	): Promise<AttendanceDailyTrendByDepartmentResponse> {
+		try {
+			const payload = {
+				model: "Attendance",
+				data: ["attendanceDailyTrendByDepartment"],
+				filter: {
+					...(dateFrom && { dateFrom }),
+					...(dateTo && { dateTo }),
+					...(search && { search }),
+					...(status && { status }),
+					...(departmentId && { departmentId }),
+					...(reportToId && { reportToId }),
+					...(employeeId && { employeeId }),
+					...(shiftType && { shiftType }),
+				},
+			};
+
+			const response = await hrisApiClient.post<any>("/api/metrics", payload);
+			const metricsData = this.extractMetricsData(response);
+
+			if (!metricsData || !metricsData.metrics) {
+				throw new Error("Failed to fetch attendance daily trend by department");
+			}
+
+			return metricsData as AttendanceDailyTrendByDepartmentResponse;
+		} catch (error: any) {
+			console.error("Error fetching attendance daily trend by department:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error fetching attendance daily trend by department",
+			);
+		}
 	}
 
 	/**
@@ -2031,6 +2202,8 @@ class MetricsService extends APIService {
 		filter: {
 			departmentId?: string;
 			sectionId?: string;
+			positionId?: string;
+			levelId?: string;
 			reportToId?: string;
 			employeeId?: string;
 			leaveType?: string;

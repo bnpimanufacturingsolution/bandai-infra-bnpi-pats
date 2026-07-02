@@ -64,6 +64,7 @@ export const TIMESHEET_LIST_FIELDS = [
 	"employee.id",
 	"employee.employeeId",
 	"employee.employeeCode",
+	"employee.user.avatar",
 	"employee.embeddedSchedule",
 	"employee.department.id",
 	"employee.department.name",
@@ -438,6 +439,8 @@ export const useTimesheetAction = () => {
 			queryClient.invalidateQueries({
 				queryKey: timesheetQueryKeys.timesheets.detail(variables.id),
 			});
+			queryClient.invalidateQueries({ queryKey: ["employees"] });
+			queryClient.invalidateQueries({ queryKey: ["metrics"] });
 
 			const actionMap = {
 				SUBMIT: "submitted",

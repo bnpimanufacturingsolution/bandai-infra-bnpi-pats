@@ -1,15 +1,18 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { useSearchParams } from "react-router";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import { AttendanceDailyTrendTab } from "./tabs/AttendanceDailyTrendTab";
 import { PerfectAttendanceTab } from "./tabs/PerfectAttendanceTab";
 import { TardinessUndetimeTab } from "./tabs/TardinessUndetimeTab";
 import { OvertimeTab } from "./tabs/OvertimeTab";
 import { LeaveBalanceTab } from "./tabs/LeaveBalanceTab";
 
+const visibleTabs = new Set(["trend", "perfect", "tardiness", "overtime", "leave"]);
+
 /**
  * Attendance & Time Tracking Reports Page
  * Contains tabs for:
+ * - Daily Trend by Department
  * - Perfect Attendance
  * - Tardiness & Undertime
  * - Overtime
@@ -17,7 +20,16 @@ import { LeaveBalanceTab } from "./tabs/LeaveBalanceTab";
  */
 export default function AttendanceReportsPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const currentTab = searchParams.get("tab") || "perfect";
+	const requestedTab = searchParams.get("tab") || "perfect";
+	const currentTab = visibleTabs.has(requestedTab) ? requestedTab : "perfect";
+
+	useEffect(() => {
+		if (visibleTabs.has(requestedTab)) return;
+
+		const nextSearchParams = new URLSearchParams(searchParams);
+		nextSearchParams.set("tab", "perfect");
+		setSearchParams(nextSearchParams, { replace: true });
+	}, [requestedTab, searchParams, setSearchParams]);
 
 	const handleTabChange = (tab: string) => {
 		const nextSearchParams = new URLSearchParams(searchParams);
@@ -28,12 +40,28 @@ export default function AttendanceReportsPage() {
 	return (
 		<div className="flex flex-col gap-6 p-6">
 			<Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
-				<TabsList className="grid w-full grid-cols-4 mb-6">
-					<TabsTrigger value="perfect">Perfect Attendance</TabsTrigger>
-					<TabsTrigger value="tardiness">Tardiness & Undertime</TabsTrigger>
-					<TabsTrigger value="overtime">Overtime</TabsTrigger>
-					<TabsTrigger value="leave">Leave Balance</TabsTrigger>
+				<TabsList className="grid h-auto w-full grid-cols-2 gap-2 mb-6 md:grid-cols-5">
+					<TabsTrigger value="trend" className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+						Daily Trend
+					</TabsTrigger>
+					<TabsTrigger value="perfect" className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+						Perfect Attendance
+					</TabsTrigger>
+					<TabsTrigger value="tardiness" className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+						Tardiness & Undertime
+					</TabsTrigger>
+					<TabsTrigger value="overtime" className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+						Overtime
+					</TabsTrigger>
+					<TabsTrigger value="leave" className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+						Leave Balance
+					</TabsTrigger>
 				</TabsList>
+
+				{/* Daily Trend Tab */}
+				<TabsContent value="trend" className="space-y-4">
+					<AttendanceDailyTrendTab />
+				</TabsContent>
 
 				{/* Perfect Attendance Tab */}
 				<TabsContent value="perfect" className="space-y-4">

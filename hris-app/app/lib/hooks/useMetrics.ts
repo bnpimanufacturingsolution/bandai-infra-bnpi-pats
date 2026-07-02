@@ -14,6 +14,7 @@ import metricsService, {
 	type PayrollRunSummaryResponse,
 	type AttendanceMetricsDetailedResponse,
 	type AttendanceTimesheetLineSummaryResponse,
+	type AttendanceDailyTrendByDepartmentResponse,
 	type AttendanceTodayOpsSummaryResponse,
 	type TimesheetStatisticsResponse,
 	type MetricsRequest,
@@ -27,6 +28,8 @@ import metricsService, {
 	type DirectIndirectLaborSummaryResponse,
 	type LeaveBalanceMetricsResponse,
 	type Bir1601CMetricsResponse,
+	type TurnoverAttritionReportResponse,
+	type TurnoverAttritionGroupBy,
 } from "~/services/metrics.service";
 
 // Query keys structure
@@ -89,6 +92,9 @@ export const queryKeys = {
 			search?: string,
 			status?: string,
 			departmentId?: string,
+			sectionId?: string,
+			positionId?: string,
+			levelId?: string,
 			reportToId?: string,
 			employeeId?: string,
 			shiftType?: string,
@@ -103,6 +109,9 @@ export const queryKeys = {
 				search,
 				status,
 				departmentId,
+				sectionId,
+				positionId,
+				levelId,
 				reportToId,
 				employeeId,
 				shiftType,
@@ -112,6 +121,9 @@ export const queryKeys = {
 			dateTo?: string,
 			search?: string,
 			departmentId?: string,
+			sectionId?: string,
+			positionId?: string,
+			levelId?: string,
 			reportToId?: string,
 			employeeId?: string,
 			shiftType?: string,
@@ -123,6 +135,9 @@ export const queryKeys = {
 				dateTo,
 				search,
 				departmentId,
+				sectionId,
+				positionId,
+				levelId,
 				reportToId,
 				employeeId,
 				shiftType,
@@ -133,6 +148,9 @@ export const queryKeys = {
 			search?: string,
 			status?: string,
 			departmentId?: string,
+			sectionId?: string,
+			positionId?: string,
+			levelId?: string,
 			reportToId?: string,
 			employeeId?: string,
 			shiftType?: string,
@@ -145,11 +163,42 @@ export const queryKeys = {
 				search,
 				status,
 				departmentId,
+				sectionId,
+				positionId,
+				levelId,
 				reportToId,
 				employeeId,
 				shiftType,
 			] as const,
 		attendanceObligationSummary: (
+			dateFrom?: string,
+			dateTo?: string,
+			search?: string,
+			status?: string,
+			departmentId?: string,
+			sectionId?: string,
+			positionId?: string,
+			levelId?: string,
+			reportToId?: string,
+			employeeId?: string,
+			shiftType?: string,
+		) =>
+			[
+				...queryKeys.metrics.all,
+				"attendanceObligationSummary",
+				dateFrom,
+				dateTo,
+				search,
+				status,
+				departmentId,
+				sectionId,
+				positionId,
+				levelId,
+				reportToId,
+				employeeId,
+				shiftType,
+			] as const,
+		attendanceDailyTrendByDepartment: (
 			dateFrom?: string,
 			dateTo?: string,
 			search?: string,
@@ -161,7 +210,7 @@ export const queryKeys = {
 		) =>
 			[
 				...queryKeys.metrics.all,
-				"attendanceObligationSummary",
+				"attendanceDailyTrendByDepartment",
 				dateFrom,
 				dateTo,
 				search,
@@ -240,6 +289,18 @@ export const queryKeys = {
 				payrollPeriodId,
 				departmentId,
 				reportToId,
+			] as const,
+		turnoverAttritionReport: (
+			dateFrom?: string,
+			dateTo?: string,
+			groupBy?: TurnoverAttritionGroupBy,
+		) =>
+			[
+				...queryKeys.metrics.all,
+				"turnoverAttritionReport",
+				dateFrom,
+				dateTo,
+				groupBy,
 			] as const,
 		bir1601CMetrics: (filter: {
 			month: number;
@@ -421,6 +482,9 @@ export const useAttendanceMetricsDetailed = (
 	search?: string,
 	status?: string,
 	departmentId?: string,
+	sectionId?: string,
+	positionId?: string,
+	levelId?: string,
 	reportToId?: string,
 	employeeId?: string,
 	shiftType?: string,
@@ -435,6 +499,9 @@ export const useAttendanceMetricsDetailed = (
 			search,
 			status,
 			departmentId,
+			sectionId,
+			positionId,
+			levelId,
 			reportToId,
 			employeeId,
 			shiftType,
@@ -448,6 +515,9 @@ export const useAttendanceMetricsDetailed = (
 				search,
 				status,
 				departmentId,
+				sectionId,
+				positionId,
+				levelId,
 				reportToId,
 				employeeId,
 				shiftType,
@@ -466,6 +536,9 @@ export const useAttendanceTodayOpsSummary = (
 	dateTo?: string,
 	search?: string,
 	departmentId?: string,
+	sectionId?: string,
+	positionId?: string,
+	levelId?: string,
 	reportToId?: string,
 	employeeId?: string,
 	shiftType?: string,
@@ -477,6 +550,9 @@ export const useAttendanceTodayOpsSummary = (
 			dateTo,
 			search,
 			departmentId,
+			sectionId,
+			positionId,
+			levelId,
 			reportToId,
 			employeeId,
 			shiftType,
@@ -487,6 +563,9 @@ export const useAttendanceTodayOpsSummary = (
 				dateTo,
 				search,
 				departmentId,
+				sectionId,
+				positionId,
+				levelId,
 				reportToId,
 				employeeId,
 				shiftType,
@@ -503,6 +582,9 @@ export const useAttendanceTimesheetLineSummary = (
 	search?: string,
 	status?: string,
 	departmentId?: string,
+	sectionId?: string,
+	positionId?: string,
+	levelId?: string,
 	reportToId?: string,
 	employeeId?: string,
 	shiftType?: string,
@@ -515,6 +597,9 @@ export const useAttendanceTimesheetLineSummary = (
 			search,
 			status,
 			departmentId,
+			sectionId,
+			positionId,
+			levelId,
 			reportToId,
 			employeeId,
 			shiftType,
@@ -526,6 +611,9 @@ export const useAttendanceTimesheetLineSummary = (
 				search,
 				status,
 				departmentId,
+				sectionId,
+				positionId,
+				levelId,
 				reportToId,
 				employeeId,
 				shiftType,
@@ -541,6 +629,9 @@ export const useAttendanceObligationSummary = (
 	search?: string,
 	status?: string,
 	departmentId?: string,
+	sectionId?: string,
+	positionId?: string,
+	levelId?: string,
 	reportToId?: string,
 	employeeId?: string,
 	shiftType?: string,
@@ -553,6 +644,9 @@ export const useAttendanceObligationSummary = (
 			search,
 			status,
 			departmentId,
+			sectionId,
+			positionId,
+			levelId,
 			reportToId,
 			employeeId,
 			shiftType,
@@ -564,12 +658,53 @@ export const useAttendanceObligationSummary = (
 				search,
 				status,
 				departmentId,
+				sectionId,
+				positionId,
+				levelId,
 				reportToId,
 				employeeId,
 				shiftType,
 			),
 		staleTime: 2 * 60 * 1000,
 		enabled: options.enabled ?? true,
+	});
+};
+
+export const useAttendanceDailyTrendByDepartment = (
+	dateFrom?: string,
+	dateTo?: string,
+	search?: string,
+	status?: string,
+	departmentId?: string,
+	reportToId?: string,
+	employeeId?: string,
+	shiftType?: string,
+	options: { enabled?: boolean } = {},
+) => {
+	return useQuery<AttendanceDailyTrendByDepartmentResponse>({
+		queryKey: queryKeys.metrics.attendanceDailyTrendByDepartment(
+			dateFrom,
+			dateTo,
+			search,
+			status,
+			departmentId,
+			reportToId,
+			employeeId,
+			shiftType,
+		),
+		queryFn: () =>
+			metricsService.getAttendanceDailyTrendByDepartment(
+				dateFrom,
+				dateTo,
+				search,
+				status,
+				departmentId,
+				reportToId,
+				employeeId,
+				shiftType,
+			),
+		enabled: (options.enabled ?? true) && !!dateFrom && !!dateTo,
+		staleTime: 2 * 60 * 1000,
 	});
 };
 
@@ -678,6 +813,24 @@ export const useAgencyAttendanceSummary = (
 	});
 };
 
+export const useTurnoverAttritionReport = (
+	dateFrom?: string,
+	dateTo?: string,
+	groupBy?: TurnoverAttritionGroupBy,
+) => {
+	return useQuery<TurnoverAttritionReportResponse>({
+		queryKey: queryKeys.metrics.turnoverAttritionReport(dateFrom, dateTo, groupBy),
+		queryFn: () =>
+			metricsService.getTurnoverAttritionReport(
+				dateFrom || "",
+				dateTo || "",
+				groupBy || "month",
+			),
+		enabled: !!dateFrom && !!dateTo,
+		staleTime: 5 * 60 * 1000,
+	});
+};
+
 export const useActionMetrics = <TData = ActionMetricsResponse>(options?: {
 	employeeId?: string;
 	enabled?: boolean;
@@ -696,16 +849,39 @@ export const useActionMetrics = <TData = ActionMetricsResponse>(options?: {
 };
 
 export const useDashboardActionItems = (options?: { employeeId?: string; enabled?: boolean }) => {
+	const { user } = useAuth();
 	return useActionMetrics<{
 		summary: ActionMetricsResponse["summary"];
 		items: ActionMetricDashboardItem[];
 	}>({
 		employeeId: options?.employeeId,
 		enabled: options?.enabled,
-		select: (metrics) => ({
-			summary: metrics.summary,
-			items: metrics.items.dashboard,
-		}),
+		select: (metrics) => {
+			const items = [...metrics.items.dashboard];
+			const summary = { ...metrics.summary };
+
+			const hasAvatar = !!user?.avatar;
+			if (!hasAvatar) {
+				items.unshift({
+					id: "missing-avatar-action-item",
+					kind: "AVATAR_UPDATE" as any,
+					title: "Upload Profile Photo",
+					description: "You haven't set a profile photo yet. Please upload one.",
+					priority: "medium",
+					statusLabel: "Pending",
+					createdAt: new Date().toISOString(),
+					dueDate: null,
+					targetPath: "/settings",
+				});
+				summary.total += 1;
+				summary.medium += 1;
+			}
+
+			return {
+				summary,
+				items,
+			};
+		},
 	});
 };
 
@@ -804,6 +980,8 @@ export const usePayrollSummaryMetrics = (
 export const useLeaveBalanceMetrics = (filter?: {
 	departmentId?: string;
 	sectionId?: string;
+	positionId?: string;
+	levelId?: string;
 	reportToId?: string;
 	employeeId?: string;
 	leaveType?: string;

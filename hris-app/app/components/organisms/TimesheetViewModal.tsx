@@ -65,6 +65,41 @@ const parseDurationHours = (timeStr?: string | null): number => {
 	return hours + minutes / 60;
 };
 
+const formatLeaveDaysLabel = (value?: number | null) => {
+	const days = Number(value || 0);
+	if (!Number.isFinite(days) || days <= 0) return "0 days";
+	const display =
+		Math.abs(days - Math.round(days)) < 0.0001
+			? String(Math.round(days))
+			: days.toFixed(2).replace(/\.?0+$/, "");
+	return `${display} day${Math.abs(days - 1) < 0.0001 ? "" : "s"}`;
+};
+
+export const getCompensatoryLeaveCredit = (timesheet?: Timesheet | null) => {
+	const metadata =
+		timesheet?.metadata && typeof timesheet.metadata === "object" ? timesheet.metadata : null;
+	const credit =
+		metadata &&
+		typeof metadata.compensatoryLeaveCredit === "object" &&
+		metadata.compensatoryLeaveCredit
+			? metadata.compensatoryLeaveCredit
+			: null;
+	if (!credit) return null;
+	const totalMinutes = Number(credit.totalMinutes || 0);
+	const totalDays = Number(credit.totalDays || 0);
+	const lineCount = Number(credit.lineCount || 0);
+	if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return null;
+
+	return {
+		totalMinutes,
+		totalDays,
+		lineCount: Number.isFinite(lineCount) ? lineCount : 0,
+		creditedAt: credit.creditedAt || null,
+		creditApplied: credit.creditApplied !== false,
+		skipReason: credit.skipReason,
+	};
+};
+
 const toEpochMinute = (value?: string | null) => {
 	if (!value) return null;
 	const parsed = new Date(value);
@@ -817,6 +852,7 @@ export function TimesheetViewModal({
 					leaveEntries: displayedDay.leaveEntries,
 					holidayEntries: displayedDay.holidayEntries,
 					primaryMarker: displayedDay.primaryMarker,
+					approvalStatus: displayedDay.approvalStatus,
 					employeeNotes: displayedDay.employeeNotes,
 					approverNotes: displayedDay.approverNotes,
 					metadata: displayedDay.metadata,
@@ -984,20 +1020,20 @@ export function TimesheetViewModal({
 
 	const timesheetDisplayStatus = timesheet?.lockedAt ? "LOCKED" : timesheet?.status;
 
-	// Get status badge color
+	// Get status badge color (minimal/neutral primary treatment)
 	const getStatusColor = () => {
 		switch (timesheetDisplayStatus) {
 			case "LOCKED":
-				return { bg: "#e5e7eb", text: "#374151" };
+				return { bg: "#f3f4f6", text: "#374151" };
 			case "DRAFT":
 			case "REVISED":
 				return { bg: "#f3f4f6", text: "#6b7280" };
 			case "SUBMITTED":
-				return { bg: themeColors.orangeLight, text: themeColors.orange };
+				return { bg: "#e0f2fe", text: "#0369a1" }; // soft sky
 			case "APPROVED":
-				return { bg: "#dcfce7", text: "#16a34a" };
+				return { bg: "#ecfdf5", text: "#166534" }; // soft emerald
 			case "REJECTED":
-				return { bg: "#fee2e2", text: "#dc2626" };
+				return { bg: "#fef2f2", text: "#b91c1c" };
 			default:
 				return { bg: "#f3f4f6", text: "#6b7280" };
 		}
@@ -1179,6 +1215,7 @@ export function TimesheetViewModal({
 		: showActions
 			? "Review and submit your timesheet for approval"
 			: "Timesheet details and breakdown";
+	const compensatoryLeaveCredit = getCompensatoryLeaveCredit(timesheet);
 
 	return (
 		<>
@@ -1186,23 +1223,20 @@ export function TimesheetViewModal({
 				open={isOpen}
 				onOpenChange={(open) => !open && onClose()}
 				showCloseButton={false}
-				className="w-[96vw] max-w-[1400px]">
+				className="w-[96vw] max-w-[1400px] max-h-[98vh]">
 				{/* Header */}
-				<div className="flex items-start justify-between mb-4">
+				<div className="flex items-start justify-between mb-5">
 					<div className="space-y-0.5 flex-1 min-w-0">
-						<h2 className="text-lg font-bold leading-none tracking-tight">
+						<h2 className="text-xl font-semibold leading-none tracking-tight text-gray-900">
 							{approvalMode ? "Timesheet Approval" : modalTitle}
 						</h2>
-						<p className="text-xs text-gray-500">{approvalDescription}</p>
+						<p className="text-sm text-gray-500">{approvalDescription}</p>
 					</div>
 					<div className="flex items-center gap-2">
 						{timesheet && (
 							<span
-								className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase"
-								style={{
-									backgroundColor: statusColors.bg,
-									color: statusColors.text,
-								}}>
+								className="px-3 py-0.5 rounded-md text-xs font-semibold uppercase border border-gray-200 bg-white text-gray-700"
+								style={statusColors.bg !== "#f3f4f6" ? { borderColor: statusColors.bg, color: statusColors.text } : undefined}>
 								{timesheetDisplayStatus}
 							</span>
 						)}
@@ -1239,7 +1273,7 @@ export function TimesheetViewModal({
 				{/* Content */}
 				{approvalMode ? (
 					// Approval Mode Content
-					<div className="space-y-3">
+					<div className="space-y-4">
 						{isLoading ? (
 							<div className="flex items-center justify-center py-12">
 								<div className="w-8 h-8 border-4 border-gray-200 border-t-orange-500 rounded-full animate-spin" />
@@ -1257,7 +1291,7 @@ export function TimesheetViewModal({
 						) : (
 							<>
 								{/* Employee Details + Hours Overview Row */}
-								<div className="flex gap-3">
+								<div className="flex gap-4">
 									{/* Employee Details - Left */}
 									{employee && (
 										<TimesheetEmployeeCard
@@ -1275,14 +1309,70 @@ export function TimesheetViewModal({
 									/>
 								</div>
 
+								{compensatoryLeaveCredit && compensatoryLeaveCredit.lineCount > 0 ? (
+									compensatoryLeaveCredit.creditApplied === false ? (
+										<div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+											<div className="flex flex-wrap items-start justify-between gap-3">
+												<div>
+													<p className="text-sm font-semibold text-gray-900">
+														Compensatory Leave Not Credited
+													</p>
+													<p className="mt-1 text-sm text-gray-700">
+														{compensatoryLeaveCredit.skipReason === "NO_COMPENSATORY_LEAVE_POLICY"
+															? "Employee's policy does not grant compensatory leave for overtime."
+															: "Approved overtime this period did not result in additional credited leave."}
+													</p>
+												</div>
+												<div className="text-right text-xs text-gray-500">
+													<p>
+														{compensatoryLeaveCredit.lineCount} overtime day
+														{compensatoryLeaveCredit.lineCount === 1 ? "" : "s"}
+													</p>
+												</div>
+											</div>
+										</div>
+									) : (
+										<div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+											<div className="flex flex-wrap items-start justify-between gap-3">
+												<div>
+													<p className="text-sm font-semibold text-emerald-900">
+														Compensatory Leave Credited
+													</p>
+													<p className="mt-1 text-sm text-emerald-800">
+														{formatLeaveDaysLabel(
+															compensatoryLeaveCredit.totalDays,
+														)}{" "}
+														from{" "}
+														{formatDuration(
+															`${Math.floor(compensatoryLeaveCredit.totalMinutes / 60)}:${String(compensatoryLeaveCredit.totalMinutes % 60).padStart(2, "0")}`,
+														)}{" "}
+														approved overtime.
+													</p>
+												</div>
+												<div className="text-right text-xs text-emerald-700">
+													<p>
+														{compensatoryLeaveCredit.lineCount} overtime day
+														{compensatoryLeaveCredit.lineCount === 1 ? "" : "s"}
+													</p>
+													{compensatoryLeaveCredit.creditedAt ? (
+														<p>
+															Credited {formatDate(compensatoryLeaveCredit.creditedAt)}
+														</p>
+													) : null}
+												</div>
+											</div>
+										</div>
+									)
+								) : null}
+
 								{recentModifiedDayItems.length > 0 && (
 									<div className="rounded-lg border border-gray-200 bg-white">
-										<div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+										<div className="flex items-center justify-between border-b border-gray-200 px-3 py-2">
 											<div>
-												<p className="text-sm font-semibold text-gray-900">
+												<p className="text-base font-semibold text-gray-900">
 													Recent Modified Days
 												</p>
-												<p className="text-xs text-gray-500">
+												<p className="text-sm text-gray-500">
 													Latest edited rows appear first.
 												</p>
 											</div>
@@ -1305,7 +1395,7 @@ export function TimesheetViewModal({
 										</div>
 										<TooltipProvider>
 											<div className="overflow-x-auto px-3 py-2">
-												<div className="grid grid-flow-col auto-cols-[56px] gap-1.5">
+												<div className="grid grid-flow-col auto-cols-[80px] gap-1.5">
 													{visibleApprovedEditedDayItems.map((item) => {
 														const dayPreview = item.dayPreview;
 														const hoursWorked =
@@ -1413,7 +1503,7 @@ export function TimesheetViewModal({
 											</div>
 										</TooltipProvider>
 										{selectedApprovedEditedRow && (
-											<div className="border-t border-gray-100 px-3 py-2 text-[11px] text-gray-600">
+											<div className="border-t border-gray-100 px-3 py-2 text-sm text-gray-600">
 												<div>
 													<span className="font-medium text-gray-700">
 														Type:
@@ -1447,6 +1537,58 @@ export function TimesheetViewModal({
 				) : (
 					// Normal View Mode Content
 					<>
+						{compensatoryLeaveCredit && compensatoryLeaveCredit.lineCount > 0 ? (
+							compensatoryLeaveCredit.creditApplied === false ? (
+								<div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+									<div className="flex flex-wrap items-start justify-between gap-3">
+										<div>
+											<p className="text-sm font-semibold text-gray-900">
+												Compensatory Leave Not Credited
+											</p>
+											<p className="mt-1 text-sm text-gray-700">
+												{compensatoryLeaveCredit.skipReason === "NO_COMPENSATORY_LEAVE_POLICY"
+													? "Employee's policy does not grant compensatory leave for overtime."
+													: "Approved overtime this period did not result in additional credited leave."}
+											</p>
+										</div>
+										<div className="text-right text-xs text-gray-500">
+											<p>
+												{compensatoryLeaveCredit.lineCount} overtime day
+												{compensatoryLeaveCredit.lineCount === 1 ? "" : "s"}
+											</p>
+										</div>
+									</div>
+								</div>
+							) : (
+								<div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+									<div className="flex flex-wrap items-start justify-between gap-3">
+										<div>
+											<p className="text-sm font-semibold text-emerald-900">
+												Compensatory Leave Credited
+											</p>
+											<p className="mt-1 text-sm text-emerald-800">
+												{formatLeaveDaysLabel(compensatoryLeaveCredit.totalDays)} from{" "}
+												{formatDuration(
+													`${Math.floor(compensatoryLeaveCredit.totalMinutes / 60)}:${String(compensatoryLeaveCredit.totalMinutes % 60).padStart(2, "0")}`,
+												)}{" "}
+												approved overtime.
+											</p>
+										</div>
+										<div className="text-right text-xs text-emerald-700">
+											<p>
+												{compensatoryLeaveCredit.lineCount} overtime day
+												{compensatoryLeaveCredit.lineCount === 1 ? "" : "s"}
+											</p>
+											{compensatoryLeaveCredit.creditedAt ? (
+												<p>
+													Credited {formatDate(compensatoryLeaveCredit.creditedAt)}
+												</p>
+											) : null}
+										</div>
+									</div>
+								</div>
+							)
+						) : null}
 						<TimesheetView
 							employee={timesheet?.employee}
 							employeeProfileId={timesheetProfileId}
@@ -1464,12 +1606,12 @@ export function TimesheetViewModal({
 							belowSummaryContent={
 								recentModifiedDayItems.length > 0 ? (
 									<div className="rounded-lg border border-gray-200 bg-white">
-										<div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+										<div className="flex items-center justify-between border-b border-gray-200 px-3 py-2">
 											<div>
-												<p className="text-sm font-semibold text-gray-900">
+												<p className="text-base font-semibold text-gray-900">
 													Recent Modified Days
 												</p>
-												<p className="text-xs text-gray-500">
+												<p className="text-sm text-gray-500">
 													Latest edited rows appear first.
 												</p>
 											</div>
@@ -1492,7 +1634,7 @@ export function TimesheetViewModal({
 										</div>
 										<TooltipProvider>
 											<div className="overflow-x-auto px-3 py-2">
-												<div className="grid grid-flow-col auto-cols-[56px] gap-1.5">
+												<div className="grid grid-flow-col auto-cols-[80px] gap-1.5">
 													{visibleApprovedEditedDayItems.map((item) => (
 														<Tooltip key={item.entryId}>
 															<TooltipTrigger asChild>
@@ -1555,6 +1697,14 @@ export function TimesheetViewModal({
 																				)
 																			}
 																			badges={[
+																				...(dayPreview?.employeeNotes || dayPreview?.approverNotes
+																					? [
+																							{
+																								label: "NOTE",
+																								tone: "meta" as const,
+																							},
+																						]
+																					: []),
 																				...(dayPreview?.overtimeHours &&
 																				dayPreview.overtimeHours !==
 																					"0:00"
@@ -1605,7 +1755,7 @@ export function TimesheetViewModal({
 															</TooltipTrigger>
 															<TooltipContent
 																side="top"
-																className="p-2.5 bg-white shadow-lg border z-50 text-xs">
+																className="p-4 bg-white shadow-lg border z-50 text-sm">
 																<TimesheetDayTooltipContent
 																	day={{
 																		date: item.date,
@@ -1638,6 +1788,18 @@ export function TimesheetViewModal({
 																		status:
 																			item.dayPreview
 																				?.status || null,
+																		approvalStatus:
+																			item.dayPreview
+																				?.approvalStatus ||
+																			null,
+																		employeeNotes:
+																			item.dayPreview
+																				?.employeeNotes ||
+																			null,
+																		approverNotes:
+																			item.dayPreview
+																				?.approverNotes ||
+																			null,
 																		metadata: {
 																			breakMinutes:
 																				item.dayPreview
@@ -1753,7 +1915,7 @@ export function TimesheetViewModal({
 											</div>
 										</TooltipProvider>
 										{selectedApprovedEditedRow && (
-											<div className="border-t border-gray-100 px-3 py-2 text-[11px] text-gray-600">
+											<div className="border-t border-gray-100 px-3 py-2 text-sm text-gray-600">
 												<div>
 													<span className="font-medium text-gray-700">
 														Period:
@@ -1831,24 +1993,10 @@ export function TimesheetViewModal({
 						{/* Info Message for Submit Mode */}
 						{showActions && !approvalMode && (
 							<div
-								className="rounded-lg p-2.5 border space-y-2"
-								style={{
-									backgroundColor:
-										isAlreadySubmitted || isApprovedStatus
-											? themeColors.orangeLight
-											: isRejected
-												? "#fee2e2"
-												: themeColors.orangeLight,
-									borderColor:
-										isAlreadySubmitted || isApprovedStatus
-											? themeColors.orange
-											: isRejected
-												? "#dc2626"
-												: themeColors.orange,
-								}}>
+								className="rounded-lg p-3 border border-gray-200 bg-white space-y-2">
 								{canOpenPermissionRequest ? (
 									<div className="flex items-center justify-between gap-2">
-										<p className="text-xs text-gray-700 flex-1">
+										<p className="text-sm text-gray-700 flex-1">
 											{getSubmitInfoMessage()}
 										</p>
 										<Button
@@ -1861,12 +2009,12 @@ export function TimesheetViewModal({
 										</Button>
 									</div>
 								) : (
-									<p className="text-xs text-gray-700">
+									<p className="text-sm text-gray-700">
 										{getSubmitInfoMessage()}
 									</p>
 								)}
 								{managerName && (
-									<p className="text-xs text-gray-700">
+									<p className="text-sm text-gray-700">
 										Approver:{" "}
 										{approverProfileId ? (
 											<button
@@ -1886,7 +2034,7 @@ export function TimesheetViewModal({
 								)}
 								{permissionStatusMessage && (
 									<p
-										className={`text-xs font-medium ${
+										className={`text-sm font-medium ${
 											isPermissionApproved
 												? "text-green-700"
 												: "text-gray-700"
@@ -1895,7 +2043,7 @@ export function TimesheetViewModal({
 									</p>
 								)}
 								{editInstructionMessage && (
-									<p className="text-xs font-medium text-green-700">
+									<p className="text-sm font-medium text-green-700">
 										{editInstructionMessage}
 									</p>
 								)}
@@ -1906,20 +2054,8 @@ export function TimesheetViewModal({
 						{approvalMode && (
 							<>
 								<div
-									className="rounded-lg p-2.5 border"
-									style={{
-										backgroundColor: hasRejectedDays
-											? "#fee2e2"
-											: allDaysReviewed
-												? "#dcfce7"
-												: themeColors.orangeLight,
-										borderColor: hasRejectedDays
-											? "#dc2626"
-											: allDaysReviewed
-												? "#16a34a"
-												: themeColors.orange,
-									}}>
-									<p className="text-xs text-gray-700">
+									className="rounded-lg p-3 border bg-white border-gray-200">
+									<p className="text-sm text-gray-700">
 										{hasRejectedDays ? (
 											<>
 												<AlertCircle className="w-3.5 h-3.5 inline mr-1 text-red-600" />

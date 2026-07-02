@@ -8,6 +8,7 @@ import {
 	getHikvisionClockSkewSecondsFromSystemTime,
 	getHikvisionObservedClockSkewSeconds,
 	hikvisionEventMatchesConfiguredDevice,
+	isHikvisionBiometricVerificationEvent,
 	isHikvisionAttendancePunchEvent,
 	normalizeHikvisionAcsEventListTimes,
 	normalizeHikvisionAddress,
@@ -257,6 +258,17 @@ describe("hikvision event contract helper", () => {
 				actionCode: "MINOR_FACE_COMPARE_PASS",
 			}),
 		).to.equal(true);
+	});
+
+	it("keeps facial verification attempts visible without turning missing employee numbers into attendance", () => {
+		const facialAttempt = {
+			major: 5,
+			minor: 39,
+			verifyMode: "faceOrFpOrCardOrPw",
+		};
+
+		expect(isHikvisionBiometricVerificationEvent(facialAttempt)).to.equal(true);
+		expect(isHikvisionAttendancePunchEvent(facialAttempt)).to.equal(false);
 	});
 
 	it("does not shift callback event time from stale stored skew unless explicitly enabled", () => {

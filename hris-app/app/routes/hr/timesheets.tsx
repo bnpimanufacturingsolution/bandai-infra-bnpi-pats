@@ -455,6 +455,7 @@ export default function TimesheetsPage() {
 						profileId={(item as any).employee?.id}
 						fullName={fullName || item.employeeId || "-"}
 						employeeId={getEmployeeCode(item)}
+						avatar={item.employee?.user?.avatar || null}
 					/>
 				);
 			},
@@ -547,6 +548,8 @@ export default function TimesheetsPage() {
 		const lastName = employee?.person?.personalInfo?.lastName || "";
 		return `${firstName} ${lastName}`.trim();
 	};
+
+	const getEmployeeAvatar = (item: Timesheet) => item.employee?.user?.avatar || null;
 
 	const getEmployeeCode = (item: Timesheet) => {
 		const rawEmployeeId = String(item.employeeId || "");
@@ -1519,7 +1522,7 @@ export default function TimesheetsPage() {
 																key={item.id || item.code}
 																className="hover:bg-neutral-50">
 																<td className="px-3 py-2">
-																	<EmployeeTableCell
+																<EmployeeTableCell
 																		profileId={
 																			item.employee?.id
 																		}
@@ -1538,6 +1541,7 @@ export default function TimesheetsPage() {
 																			item.employeeId ||
 																			"-"
 																		}
+																		avatar={getEmployeeAvatar(item)}
 																	/>
 																</td>
 																<td className="px-3 py-2">

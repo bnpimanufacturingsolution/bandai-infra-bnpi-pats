@@ -88,7 +88,7 @@ describe("attendanceService client contract", () => {
 			status: "PRESENT" as const,
 			timeIn: "2026-05-25T08:00:00.000Z",
 			timeOut: "2026-05-25T17:00:00.000Z",
-			reasonCategory: "MISSED_CLOCK_OUT",
+			reasonCategory: "MISSED_PUNCH" as const,
 			notes: "Corrected by employee request",
 		};
 
@@ -98,6 +98,35 @@ describe("attendanceService client contract", () => {
 		expect(result).toMatchObject({
 			id: "attendance-correction-1",
 			ledgerType: "CORRECTION",
+		});
+	});
+
+	it("posts attendance backfills to the HRIS backfill endpoint", async () => {
+		const { default: attendanceService } = await import("./attendance.service");
+		hrisPostMock.mockResolvedValueOnce({
+			data: {
+				data: {
+					attendance: { id: "attendance-backfill-1", ledgerType: "RAW" },
+				},
+			},
+		});
+
+		const payload = {
+			employeeId: "employee-1",
+			correctionDate: "2026-05-25",
+			status: "PRESENT" as const,
+			timeIn: "2026-05-25T08:00:00.000Z",
+			timeOut: "2026-05-25T17:00:00.000Z",
+			reasonCategory: "MISSED_PUNCH" as const,
+			notes: "Created missing attendance",
+		};
+
+		const result = await attendanceService.createAttendanceBackfill(payload);
+
+		expect(hrisPostMock).toHaveBeenCalledWith("/api/attendance/backfill", payload);
+		expect(result).toMatchObject({
+			id: "attendance-backfill-1",
+			ledgerType: "RAW",
 		});
 	});
 
@@ -116,7 +145,28 @@ describe("attendanceService client contract", () => {
 				employeeId: "employee-1",
 				correctionDate: "2026-05-25",
 				status: "PRESENT",
-				reasonCategory: "MISSED_CLOCK_OUT",
+				reasonCategory: "MISSED_PUNCH" as const,
+				notes: "Needs correction review",
+			}),
+		).rejects.toBe(apiError);
+	});
+
+	it("rethrows structured backfill API errors for form-level handling", async () => {
+		const { default: attendanceService } = await import("./attendance.service");
+		const apiError = {
+			status: 409,
+			message: "Attendance already exists",
+			errors: [{ field: "correctionDate", message: "ALREADY_EXISTS" }],
+		};
+		hrisPostMock.mockRejectedValueOnce(apiError);
+
+		await expect(
+			attendanceService.createAttendanceBackfill({
+				employeeId: "employee-1",
+				correctionDate: "2026-05-25",
+				status: "PRESENT",
+				reasonCategory: "MISSED_PUNCH" as const,
+				notes: "Needs backfill review",
 			}),
 		).rejects.toBe(apiError);
 	});

@@ -3,6 +3,7 @@ import attendanceService, {
 	type AttendancesResponse,
 	type Attendance,
 	type CreateAttendanceCorrectionPayload,
+	type CreateAttendanceBackfillPayload,
 	type ImportAttendanceResponse,
 	type ImportAttendanceOptions,
 } from "../../services/attendance.service";
@@ -131,6 +132,26 @@ export const useCreateAttendanceCorrection = () => {
 				error?.errors?.[0]?.message ||
 					error?.message ||
 					"Failed to apply attendance correction",
+			);
+		},
+	});
+};
+
+export const useCreateAttendanceBackfill = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (payload: CreateAttendanceBackfillPayload) => {
+			return attendanceService.createAttendanceBackfill(payload);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.attendances.all });
+		},
+		onError: (error: any) => {
+			sonnerToast.error(
+				error?.errors?.[0]?.message ||
+					error?.message ||
+					"Failed to create attendance backfill",
 			);
 		},
 	});

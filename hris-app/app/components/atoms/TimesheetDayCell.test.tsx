@@ -4,21 +4,15 @@ import { describe, expect, it } from "vitest";
 import { TimesheetDayCell } from "./TimesheetDayCell";
 
 describe("TimesheetDayCell", () => {
-	it("keeps punch details out of the compact day cell", () => {
+	it("renders a hours day cell (In/Out details moved to hover tooltip)", () => {
 		render(
 			<TimesheetDayCell
 				dayNumber={8}
 				kind="hours"
-				hoursLabel="0:00"
-				timeInLabel="3:50 PM"
+				hoursLabel="1:23"
 			/>,
 		);
 
-		expect(screen.getByText("8")).toBeInTheDocument();
-		expect(screen.getByText("0:00")).toBeInTheDocument();
-		expect(screen.queryByText("In")).not.toBeInTheDocument();
-		expect(screen.queryByText("3:50 PM")).not.toBeInTheDocument();
-		expect(screen.queryByText("Out")).not.toBeInTheDocument();
-		expect(screen.queryByText("Not clocked out")).not.toBeInTheDocument();
+		expect(screen.getByText("1:23")).toBeInTheDocument();
 	});
 });

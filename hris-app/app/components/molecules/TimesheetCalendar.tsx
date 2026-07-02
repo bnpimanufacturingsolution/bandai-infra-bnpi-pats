@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
 import { themeColors } from "~/lib/config/theme";
-import { format12HourTime, formatDuration } from "~/lib/utils";
+import { formatDuration } from "~/lib/utils";
 import {
 	isAbsenceLikeStatus,
 	isVirtualAbsentLikeRecord,
@@ -61,13 +61,6 @@ const sumTimeStrings = (timeStrings: string[]): string => {
 // Day column headers
 const dayHeaders = ["M", "T", "W", "TH", "F", "S", "SU"];
 const businessTimeZone = "Asia/Manila";
-
-const formatClockLabel = (value?: string | null) => {
-	if (!value) return undefined;
-	if (Number.isNaN(new Date(value).getTime())) return undefined;
-	const label = format12HourTime(value);
-	return label || undefined;
-};
 
 const getDatePartsInBusinessTimeZone = (date: Date) => {
 	const parts = new Intl.DateTimeFormat("en-CA", {
@@ -244,33 +237,33 @@ export function TimesheetCalendar({
 
 	return (
 		<TooltipProvider>
-			<div className={`border rounded-lg ${className}`}>
+			<div className={`border border-gray-200 rounded-lg overflow-hidden bg-white ${className}`}>
 				{/* Table Header */}
-				<div className="grid grid-cols-[100px_repeat(7,1fr)_70px] bg-gray-100 border-b">
-					<div className="px-2 py-2 text-[10px] font-bold text-gray-600 uppercase tracking-wide">
+				<div className="grid grid-cols-[100px_repeat(7,1fr)_70px] border-b border-gray-200 bg-white">
+					<div className="px-2 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
 						Week
 					</div>
 					{dayHeaders.map((day, i) => (
 						<div
 							key={i}
-							className="px-1 py-2 text-center text-[10px] font-bold text-gray-600 uppercase tracking-wide">
+							className="px-1 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">
 							{day}
 						</div>
 					))}
-					<div className="px-1 py-2 text-center text-[10px] font-bold text-gray-600 uppercase tracking-wide">
+					<div className="px-1 py-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">
 						Total
 					</div>
 				</div>
 
 				{/* Week Rows */}
-				<div className="max-h-[280px] overflow-y-auto">
+				<div className="max-h-[420px] overflow-y-auto">
 					{weeks.map((week, weekIndex) => (
 						<div
 							key={weekIndex}
 							className={`grid grid-cols-[100px_repeat(7,1fr)_70px] ${weekIndex !== weeks.length - 1 ? "border-b" : ""}`}>
 							{/* Week Label */}
-							<div className="px-2 py-1.5 flex items-center bg-gray-50 border-r">
-								<span className="text-[10px] font-semibold text-gray-700 leading-tight">
+							<div className="px-2 py-1.5 flex items-center bg-white border-r border-gray-200 h-[80px]">
+								<span className="text-xs font-medium text-gray-700 leading-tight">
 									{week.weekLabel}
 								</span>
 							</div>
@@ -282,7 +275,7 @@ export function TimesheetCalendar({
 									return (
 										<div
 											key={i}
-											className="border-r border-gray-100 bg-gray-50/40 flex items-center justify-center min-h-[52px]">
+											className="border-r border-gray-200 bg-white flex items-center justify-center h-[80px]">
 											<span className="text-gray-300 text-xs">—</span>
 										</div>
 									);
@@ -400,8 +393,6 @@ export function TimesheetCalendar({
 										kind={kind}
 										markerLabel={primaryMarker === "HOLIDAY" ? "H" : "M"}
 										hoursLabel={formatDuration(day.hoursWorked)}
-										timeInLabel={formatClockLabel(day.timeIn)}
-										timeOutLabel={formatClockLabel(day.timeOut)}
 										pendingLabel={pendingLabel}
 										pendingTone={pendingTone}
 										leaveLabel={
@@ -466,7 +457,7 @@ export function TimesheetCalendar({
 										<TooltipContent
 											side="top"
 											sideOffset={8}
-											className="p-2.5 bg-white shadow-lg border z-50">
+											className="p-4 bg-white shadow-lg border z-50 min-w-[260px]">
 											<TimesheetDayTooltipContent
 												day={{
 													date: day.date,
@@ -483,6 +474,9 @@ export function TimesheetCalendar({
 													leaveEntries: leaveEntries,
 													holidayEntries: holidayEntries,
 													primaryMarker: primaryMarker,
+													approvalStatus: day.approvalStatus,
+													employeeNotes: day.employeeNotes,
+													approverNotes: day.approverNotes,
 													metadata: {
 														...(day.metadata || {}),
 														businessDate:
@@ -503,7 +497,7 @@ export function TimesheetCalendar({
 							})}
 
 							{/* Week Total */}
-							<div className="px-1 py-1.5 flex items-center justify-center bg-gray-50 border-l">
+							<div className="px-1 py-1.5 flex items-center justify-center bg-gray-50 border-l h-[80px]">
 								<span
 									className="text-xs font-bold leading-tight whitespace-nowrap"
 									style={{ color: themeColors.orange }}>

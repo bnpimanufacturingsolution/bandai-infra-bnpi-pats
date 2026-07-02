@@ -1,5 +1,4 @@
 import { Building2, Briefcase } from "lucide-react";
-import { themeColors } from "~/lib/config/theme";
 
 export interface TimesheetEmployeeData {
 	id?: string;
@@ -57,20 +56,18 @@ export function TimesheetEmployeeCard({
 	const canOpenProfile = Boolean(onOpenProfile && resolvedProfileId);
 
 	return (
-		<div className={`bg-gray-50 rounded-lg px-4 py-3 border ${className}`}>
+		<div className={`bg-white rounded-lg px-4 py-3.5 border border-gray-200 ${className}`}>
 			{canOpenProfile ? (
 				<button
 					type="button"
 					onClick={() => onOpenProfile?.(resolvedProfileId as string)}
-					className="w-full flex items-center gap-3 rounded-md text-left transition enabled:hover:bg-orange-50/60 enabled:focus-visible:outline-none enabled:focus-visible:ring-2 enabled:focus-visible:ring-orange-300">
-					<div
-						className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
-						style={{ backgroundColor: themeColors.orange }}>
+					className="w-full flex items-center gap-3 rounded-md text-left transition enabled:hover:bg-gray-50 enabled:focus-visible:outline-none enabled:focus-visible:ring-2 enabled:focus-visible:ring-orange-300">
+					<div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-semibold text-sm bg-gray-900">
 						{initials}
 					</div>
 					<div className="flex-1 min-w-0">
-						<p className="font-semibold text-gray-900 truncate">{fullName}</p>
-						<div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+						<p className="text-base font-semibold text-gray-900 truncate">{fullName}</p>
+						<div className="flex items-center gap-3 text-sm text-gray-500 mt-0.5">
 							{employee?.position && (
 								<span className="flex items-center gap-1">
 									<Briefcase className="w-3 h-3" />
@@ -85,7 +82,7 @@ export function TimesheetEmployeeCard({
 							)}
 						</div>
 						{employee?.employeeCode && (
-							<p className="text-[10px] text-gray-400 mt-0.5">
+							<p className="text-xs text-gray-400 mt-0.5">
 								ID: {employee.employeeCode}
 							</p>
 						)}
@@ -93,14 +90,12 @@ export function TimesheetEmployeeCard({
 				</button>
 			) : (
 				<div className="flex items-center gap-3">
-					<div
-						className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
-						style={{ backgroundColor: themeColors.orange }}>
+					<div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-semibold text-sm bg-gray-900">
 						{initials}
 					</div>
 					<div className="flex-1 min-w-0">
-						<p className="font-semibold text-gray-900 truncate">{fullName}</p>
-						<div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+						<p className="text-base font-semibold text-gray-900 truncate">{fullName}</p>
+						<div className="flex items-center gap-3 text-sm text-gray-500 mt-0.5">
 							{employee?.position && (
 								<span className="flex items-center gap-1">
 									<Briefcase className="w-3 h-3" />
@@ -115,7 +110,7 @@ export function TimesheetEmployeeCard({
 							)}
 						</div>
 						{employee?.employeeCode && (
-							<p className="text-[10px] text-gray-400 mt-0.5">
+							<p className="text-xs text-gray-400 mt-0.5">
 								ID: {employee.employeeCode}
 							</p>
 						)}

@@ -3,6 +3,10 @@ import { isValidEntityId as isValidObjectId } from "../helper/id-validation.help
 
 import type { Employee } from "./employee.zod";
 import { EmployeeScheduleSchema } from "./schedule.zod";
+import {
+	ATTENDANCE_CORRECTION_REASON_CATEGORY_OPTIONS,
+	normalizeAttendanceCorrectionPayload,
+} from "../app/attendance/attendance-correction.service";
 
 // AttendanceStatus Enum
 export const AttendanceStatus = z.enum([
@@ -126,27 +130,6 @@ export type AttendanceWithRelations = Attendance & {
 	employee: Employee;
 };
 
-const parseWorkedWindowMinutes = (value?: string | null) => {
-	const normalized = String(value || "").trim();
-	const match = normalized.match(/^(\d{1,2}):(\d{2})$/);
-	if (!match) return null;
-
-	const hours = Number(match[1]);
-	const minutes = Number(match[2]);
-	if (
-		Number.isNaN(hours) ||
-		Number.isNaN(minutes) ||
-		hours < 0 ||
-		hours > 23 ||
-		minutes < 0 ||
-		minutes > 59
-	) {
-		return null;
-	}
-
-	return hours * 60 + minutes;
-};
-
 export const CreateAttendanceCorrectionSchema = z
 	.object({
 		attendanceId: z.string().refine((val) => isValidObjectId(val)),
@@ -155,60 +138,54 @@ export const CreateAttendanceCorrectionSchema = z
 		status: AttendanceStatus,
 		timeIn: z.string().optional().nullable(),
 		timeOut: z.string().optional().nullable(),
-		reasonCategory: z.string().min(1),
-		notes: z.string().optional().nullable(),
+		reasonCategory: z.enum(ATTENDANCE_CORRECTION_REASON_CATEGORY_OPTIONS),
+		notes: z.string().trim().min(1, "Explanation is required for attendance corrections."),
 	})
 	.superRefine((data, ctx) => {
-		const normalizedStatus = String(data.status || "").toUpperCase();
-		const usesWorkedWindow = !["ABSENT", "LEAVE", "REST_DAY"].includes(normalizedStatus);
-		if (!usesWorkedWindow) return;
+		const validation = normalizeAttendanceCorrectionPayload(data, {
+			requireAttendanceId: true,
+			allowedReasonCategories: ATTENDANCE_CORRECTION_REASON_CATEGORY_OPTIONS,
+		});
 
-		if (!data.timeIn || !String(data.timeIn).trim()) {
+		if (validation.ok) return;
+
+		for (const issue of validation.issues) {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
-				path: ["timeIn"],
-				message: "Time In is required for worked-day corrections.",
-			});
-		}
-
-		if (!data.timeOut || !String(data.timeOut).trim()) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: ["timeOut"],
-				message: "Time Out is required for worked-day corrections.",
-			});
-		}
-
-		const timeInMinutes = parseWorkedWindowMinutes(data.timeIn);
-		const timeOutMinutes = parseWorkedWindowMinutes(data.timeOut);
-
-		if (data.timeIn && timeInMinutes === null) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: ["timeIn"],
-				message: "Time In must use a valid 24-hour time format.",
-			});
-		}
-
-		if (data.timeOut && timeOutMinutes === null) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: ["timeOut"],
-				message: "Time Out must use a valid 24-hour time format.",
-			});
-		}
-
-		if (
-			timeInMinutes !== null &&
-			timeOutMinutes !== null &&
-			timeOutMinutes <= timeInMinutes
-		) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: ["timeOut"],
-				message: "Time Out must be later than Time In for worked-day corrections.",
+				path: issue.field === "form" ? [] : [issue.field],
+				message: issue.message,
 			});
 		}
 	});
 
 export type CreateAttendanceCorrection = z.infer<typeof CreateAttendanceCorrectionSchema>;
+
+export const CreateAttendanceBackfillSchema = z
+	.object({
+		employeeId: z.string().refine((val) => isValidObjectId(val)),
+		correctionDate: z.string().min(1),
+		status: AttendanceStatus,
+		timeIn: z.string().optional().nullable(),
+		timeOut: z.string().optional().nullable(),
+		reasonCategory: z.enum(ATTENDANCE_CORRECTION_REASON_CATEGORY_OPTIONS),
+		notes: z.string().trim().min(1, "Explanation is required for attendance corrections."),
+	})
+	.superRefine((data, ctx) => {
+		const validation = normalizeAttendanceCorrectionPayload(data, {
+			source: "HR_DIRECT_BACKFILL",
+			requireAttendanceId: false,
+			allowedReasonCategories: ATTENDANCE_CORRECTION_REASON_CATEGORY_OPTIONS,
+		});
+
+		if (validation.ok) return;
+
+		for (const issue of validation.issues) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: issue.field === "form" ? [] : [issue.field],
+				message: issue.message,
+			});
+		}
+	});
+
+export type CreateAttendanceBackfill = z.infer<typeof CreateAttendanceBackfillSchema>;
