@@ -23,6 +23,7 @@
     ".wwg/reports/skill-cleanup-review.md",
     ".wwg/reports/test-alignment-report.md",
     ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
+    ".wwg/reports/upstream-hris-preview-merge-20260702.md",
     ".wwg/reports/upstream-hris-sync-implementation-20260702.md",
     ".wwg/reports/v6-cloudflare-credential-preflight-20260630.md",
     ".wwg/reports/v6-one-shot-fresh-vm-cloudflare-proof-20260630.md",
@@ -197,6 +198,11 @@
     },
     {
       "path": ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
+      "fileType": "report",
+      "reason": "Report directory path."
+    },
+    {
+      "path": ".wwg/reports/upstream-hris-preview-merge-20260702.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
@@ -766,6 +772,15 @@
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/upstream-hris-preview-merge-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -1940,7 +1955,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/HIKVISION_RUNTIME_TRUTH.md",
       "fileType": "public_doc",
-      "line": 71,
+      "line": 75,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2335,6 +2350,15 @@
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/upstream-hris-preview-merge-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -3362,6 +3386,15 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/upstream-hris-preview-merge-20260702.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/upstream-hris-sync-implementation-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
@@ -4076,7 +4109,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/HIKVISION_RUNTIME_TRUTH.md",
       "fileType": "public_doc",
-      "line": 71,
+      "line": 75,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -5033,7 +5066,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/HIKVISION_RUNTIME_TRUTH.md",
       "fileType": "public_doc",
-      "line": 71,
+      "line": 75,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -5253,16 +5286,16 @@
   ],
   "metadataPolicyApplied": "Option C: Skill Registry metadata is canonical; skill files may include lightweight metadata when beneficial, and package-side skills do not require frontmatter.",
   "summary": {
-    "checkedFileCount": 83,
+    "checkedFileCount": 84,
     "skippedFileCount": 1,
     "errorCount": 0,
-    "warningCount": 83,
+    "warningCount": 84,
     "suggestionCount": 91,
     "classificationCounts": {
       "context": 8,
       "skill": 0,
       "governance": 6,
-      "report": 36,
+      "report": 37,
       "public_doc": 27,
       "agent_instruction": 1,
       "changelog_governance": 0,

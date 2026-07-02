@@ -59,13 +59,17 @@ Accepted stored sources remain:
 - `EN_HCNETSDK_ALARM`
 
 The active seed source for the default Hikvision device is now
-`vendor/hikvision-linux`.
+`vendor/hikvision-linux`. Default seeding uses the current reachable Hikvision
+candidate `10.184.38.215` for HTTP/ISAPI on port `80`, with SDK/server port
+`8000` recorded separately in device config. Do not treat `800`, `8000`, and
+HTTP port `80` as interchangeable values.
 
 ## Current Device Evidence
 
 Hikvision physical-device evidence remains split:
 
-- SADP screenshot evidence showed `DS-K1T201AEF` at `192.168.254.181:8000`.
+- Historical SADP screenshot evidence showed `DS-K1T201AEF` at
+  `192.168.254.181:8000`.
 - DEV proof on 2026-06-30 showed HRIS can reach `192.168.254.181:80`, pull ACS
   events, save a `HIKVISION_CALLBACK` row, and render it in the admin
   saved-events UI.
@@ -73,7 +77,8 @@ Hikvision physical-device evidence remains split:
 - UAT temporary seed proof showed callback-shaped attendance creation for
   employee no. `1`.
 - The current Linux candidate path is `10.184.38.215`, which is reachable from
-  the VM and works for ISAPI history reads.
+  the VM on HTTP/ISAPI port `80` and SDK/server port `8000`, and works for
+  ISAPI history reads.
 
 ## Remaining Boundaries
 

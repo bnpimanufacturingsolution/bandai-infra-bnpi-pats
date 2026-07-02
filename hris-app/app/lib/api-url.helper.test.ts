@@ -54,6 +54,18 @@ describe("api-url helper", () => {
 		).toBe("https://bnpi-hris.tech");
 	});
 
+	it("keeps LAN and localhost socket connections on the app host proxy", () => {
+		expect(
+			resolveSocketBaseUrl("http://10.184.38.138:3101/api", "http://10.184.38.138:3100"),
+		).toBe("http://10.184.38.138:3100");
+		expect(
+			resolveSocketBaseUrl("http://localhost:3201/api", "http://localhost:3200"),
+		).toBe("http://localhost:3200");
+		expect(
+			resolveSocketBaseUrl("http://10.184.38.138:3001/api", "http://10.184.38.144:3000"),
+		).toBe("http://10.184.38.138:3001");
+	});
+
 	it("normalizes endpoints to avoid duplicate /api/api paths", () => {
 		expect(normalizeEndpointForBase("http://localhost:3001/api", "/api/metrics")).toBe(
 			"/metrics",

@@ -20,6 +20,12 @@ const PUBLIC_APP_SOCKET_HOSTS: Record<string, Set<string>> = {
 	"uat.bnpi-hris.tech": new Set(["uat-api.bnpi-hris.tech"]),
 };
 
+const APP_TO_API_PORT: Record<string, string> = {
+	"3000": "3001",
+	"3100": "3101",
+	"3200": "3201",
+};
+
 const shouldUseFallbackSocketOrigin = (normalizedBase: string, fallbackOrigin: string): boolean => {
 	if (!fallbackOrigin) return false;
 
@@ -28,7 +34,17 @@ const shouldUseFallbackSocketOrigin = (normalizedBase: string, fallbackOrigin: s
 		const fallback = new URL(fallbackOrigin);
 		const pairedApiHosts = PUBLIC_APP_SOCKET_HOSTS[fallback.hostname.toLowerCase()];
 
-		return Boolean(pairedApiHosts?.has(base.hostname.toLowerCase()));
+		if (pairedApiHosts?.has(base.hostname.toLowerCase())) {
+			return true;
+		}
+
+		const expectedApiPort = APP_TO_API_PORT[fallback.port];
+		return (
+			Boolean(expectedApiPort) &&
+			base.protocol === fallback.protocol &&
+			base.hostname.toLowerCase() === fallback.hostname.toLowerCase() &&
+			base.port === expectedApiPort
+		);
 	} catch {
 		return false;
 	}

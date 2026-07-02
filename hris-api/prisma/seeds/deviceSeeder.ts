@@ -40,12 +40,13 @@ const optionalProtocol = (
 export const DEVICE_DEFINITIONS: DeviceDefinition[] = [
 	{
 		name: "Main Entrance Device",
-		address: optionalEnv("HIKVISION_SEED_ADDRESS") || "192.168.254.181",
+		address: optionalEnv("HIKVISION_SEED_ADDRESS") || "10.184.38.215",
 		port: Number(optionalEnv("HIKVISION_SEED_PORT") || 80),
 		protocol: optionalProtocol(optionalEnv("HIKVISION_SEED_PROTOCOL")) || "http",
 		config: {
 			vendor: "Hikvision",
 			source: "vendor/hikvision-linux",
+			sdkPort: Number(optionalEnv("HIKVISION_SEED_SDK_PORT") || 8000),
 			webhookPath: "/api/hikvision/callback",
 		},
 		access: {
