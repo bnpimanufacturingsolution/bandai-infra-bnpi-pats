@@ -74,6 +74,8 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 					{/* Modal Content */}
 					<div
 						ref={ref}
+						role="dialog"
+						aria-modal="true"
 						className={cn(
 							"relative z-50 flex flex-col w-full max-w-3xl gap-4 border bg-white p-6 shadow-lg duration-200 rounded-lg mx-4 max-h-[90vh] overflow-y-auto modern-scroll",
 							className,

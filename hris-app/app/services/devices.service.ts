@@ -152,6 +152,12 @@ export interface DeviceSyncPreviewRow {
 	syncedEvents: number;
 	totalEvents: number | null;
 	needsSyncEvents: number | null;
+	hrisSavedCount?: number;
+	vendorEventCount?: number | null;
+	vendorUserCount?: number | null;
+	missingEventCount?: number | null;
+	canStartSync?: boolean;
+	syncAction?: "zkteco-bridge-sync" | string | null;
 	status: "synced" | "needs_sync" | "source_total_unavailable" | string;
 	lastSourceEventAt?: string | null;
 	error?: string | null;

@@ -252,6 +252,7 @@ describe("device health ZKTeco Linux bridge", () => {
 							ip: "10.184.38.9",
 							port: 4370,
 							connected: true,
+							userCount: 14,
 							totalEvents: 8410,
 							selectedEvents: 1,
 							lastSelectedAt: "2026-07-02T10:20:00",
@@ -336,7 +337,90 @@ describe("device health ZKTeco Linux bridge", () => {
 			syncedEvents: 8000,
 			totalEvents: 8410,
 			needsSyncEvents: 410,
+			hrisSavedCount: 8000,
+			vendorEventCount: 8410,
+			vendorUserCount: 14,
+			missingEventCount: 410,
+			canStartSync: true,
+			syncAction: "zkteco-bridge-sync",
 			status: "needs_sync",
+		});
+	});
+
+	it("returns DB truth and a non-startable row when the ZKTeco bridge URL is not configured", async () => {
+		delete process.env.ZKTECO_BRIDGE_STATUS_URL;
+		global.fetch = (async () => {
+			throw new Error("preview should not call fetch without a bridge URL");
+		}) as any;
+
+		const prisma = {
+			device: {
+				findMany: async () => [
+					{
+						id: "device-zkteco-a",
+						name: "ZKTeco Device A",
+						address: "10.184.38.9",
+						port: 4370,
+						protocol: "tcp",
+						config: { vendor: "ZKTeco" },
+					},
+				],
+			},
+			deviceEvent: {
+				groupBy: async () => [
+					{
+						deviceId: "device-zkteco-a",
+						source: "ZKTECO_EVENT",
+						_count: { _all: 173614 },
+					},
+				],
+				create: async () => {
+					throw new Error("sync preview must not create device events");
+				},
+				update: async () => {
+					throw new Error("sync preview must not update device events");
+				},
+				upsert: async () => {
+					throw new Error("sync preview must not upsert device events");
+				},
+			},
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			organizationId: "org-1",
+			query: { source: "ZKTECO_EVENT" },
+		};
+		let statusCode = 0;
+		let body: any = null;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json(payload: any) {
+				body = payload;
+				return this;
+			},
+		};
+
+		await deviceController.getDeviceSyncPreview(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(200);
+		expect(body.data.bridge).to.include({
+			ok: false,
+			status: "not_configured",
+			error: "ZKTECO_BRIDGE_STATUS_URL is not configured",
+		});
+		expect(body.data.devices[0]).to.include({
+			deviceId: "device-zkteco-a",
+			hrisSavedCount: 173614,
+			vendorEventCount: null,
+			missingEventCount: null,
+			canStartSync: false,
+			syncAction: null,
+			status: "source_unavailable",
+			error: "ZKTECO_BRIDGE_STATUS_URL is not configured",
 		});
 	});
 });

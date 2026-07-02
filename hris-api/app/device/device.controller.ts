@@ -516,10 +516,32 @@ export const controller = (prisma: PrismaClient) => {
 					device.vendor === "ZKTeco"
 						? sourcePreview?.totalEvents ?? null
 						: sourcePreview?.totalEvents ?? null;
+				const vendorUserCount =
+					device.vendor === "ZKTeco"
+						? firstNumericValueForKeys(sourcePreview, [
+								"userCount",
+								"usersCount",
+								"totalUsers",
+								"userTotal",
+								"users",
+							])
+						: null;
 				const needsSyncEvents =
-					Number.isFinite(Number(totalEvents))
+					totalEvents !== null && totalEvents !== undefined && Number.isFinite(Number(totalEvents))
 						? Math.max(Number(totalEvents) - syncedEvents, 0)
 						: null;
+				const sourceError =
+					sourcePreview?.error ||
+					sourcePreview?.lastError ||
+					(device.vendor === "ZKTeco" && zktecoPreview && !sourcePreview
+						? zktecoPreview.error || "ZKTeco SDK preview did not return this device"
+						: null);
+				const canStartSync =
+					device.vendor === "ZKTeco" &&
+					Boolean(zktecoPreview?.ok) &&
+					!sourceError &&
+					Number.isFinite(Number(needsSyncEvents)) &&
+					Number(needsSyncEvents) > 0;
 				return {
 					deviceId: device.id,
 					name: device.name,
@@ -530,17 +552,23 @@ export const controller = (prisma: PrismaClient) => {
 					syncedEvents,
 					totalEvents,
 					needsSyncEvents,
+					hrisSavedCount: syncedEvents,
+					vendorEventCount: totalEvents,
+					vendorUserCount,
+					missingEventCount: needsSyncEvents,
+					canStartSync,
+					syncAction: canStartSync ? "zkteco-bridge-sync" : null,
 					status:
-						totalEvents === null
+						sourceError
+							? "source_unavailable"
+							: totalEvents === null
 							? "source_total_unavailable"
 							: needsSyncEvents && needsSyncEvents > 0
 								? "needs_sync"
 								: "synced",
 					lastSourceEventAt:
 						device.vendor === "ZKTeco" ? sourcePreview?.lastSelectedAt || null : null,
-					...(sourcePreview?.error || sourcePreview?.lastError
-						? { error: sourcePreview.error || sourcePreview.lastError }
-						: {}),
+					...(sourceError ? { error: sourceError } : {}),
 				};
 			});
 

@@ -796,7 +796,6 @@ export default function DeviceEventsPage() {
 	const syncBridge =
 		(syncPreview?.bridge as ZktecoBridgePreflight | undefined) ||
 		(syncDeviceHealth?.checks?.zktecoBridge as ZktecoBridgePreflight | undefined);
-	const syncLastHrisEvent = syncDeviceHealth?.checks?.lastZktecoEvent;
 	const syncBridgeOk = Boolean(syncBridge?.ok);
 	const syncBridgeError =
 		syncPreviewError?.message ||
@@ -804,9 +803,22 @@ export default function DeviceEventsPage() {
 		syncBridge?.error ||
 		(syncHealthDevice && !syncBridgeOk ? "The ZKTeco bridge is not reachable for this preflight." : "");
 	const syncPreviewRows = syncPreview?.devices || [];
+	const syncStartableRows = syncPreviewRows.filter((row) => row.canStartSync);
+	const syncVendorEventTotal = syncPreviewRows.reduce(
+		(total, row) => total + Number(row.vendorEventCount ?? row.totalEvents ?? 0),
+		0,
+	);
+	const syncVendorUserTotal = syncPreviewRows.reduce(
+		(total, row) => total + Number(row.vendorUserCount ?? 0),
+		0,
+	);
+	const syncHrisSavedTotal = syncPreviewRows.reduce(
+		(total, row) => total + Number(row.hrisSavedCount ?? row.syncedEvents ?? 0),
+		0,
+	);
 	const syncDryRunEstimate = syncPreviewRows.length
 		? syncPreviewRows.reduce(
-				(total, row) => total + Number(row.needsSyncEvents || 0),
+				(total, row) => total + Number(row.missingEventCount ?? row.needsSyncEvents ?? 0),
 				0,
 			)
 		: (
@@ -821,7 +833,7 @@ export default function DeviceEventsPage() {
 		? selectedZktecoDevice.name || selectedZktecoDevice.address || "Selected ZKTeco device"
 		: syncPreviewRows.length
 			? `Preview devices (${syncPreviewRows.length})`
-			: `All ZKTeco devices (${syncScopeDevices.length})`;
+			: `All sync-capable devices (${syncScopeDevices.length})`;
 	const syncStatusLabel = syncBridge
 		? `${syncBridge.status}${syncBridge.latencyMs ? ` / ${syncBridge.latencyMs} ms` : ""}`
 		: isLoadingSyncHealth
@@ -837,7 +849,7 @@ export default function DeviceEventsPage() {
 			if (latestSavedEvent.source) next.set("source", latestSavedEvent.source);
 			next.delete("status");
 			next.delete("query");
-			next.set("sort", "receivedAt");
+			next.set("sort", "eventTime");
 			next.set("order", "desc");
 		});
 	};
@@ -867,7 +879,8 @@ export default function DeviceEventsPage() {
 	};
 	const startZktecoSync = () => {
 		setSyncLogsState({ status: "idle" });
-		zktecoSync.mutate(selectedZktecoDevice ? { deviceId: selectedZktecoDevice.id } : {}, {
+		const startableDeviceId = selectedZktecoDevice?.id || syncStartableRows[0]?.deviceId;
+		zktecoSync.mutate(startableDeviceId ? { deviceId: startableDeviceId } : {}, {
 			onSuccess: () => {
 				setSyncLogsState({
 					status: "accepted",
@@ -1075,10 +1088,9 @@ export default function DeviceEventsPage() {
 						type="button"
 						variant="outline"
 						className="h-9 px-3"
-						disabled={zktecoSync.isPending}
 						onClick={openSyncLogs}>
 						<UploadCloud className="mr-2 h-4 w-4" />
-						{zktecoSync.isPending ? "Starting" : "Sync logs"}
+						Sync logs
 					</Button>
 					<Button
 						type="button"
@@ -1410,8 +1422,8 @@ export default function DeviceEventsPage() {
 				onOpenChange={(open) => {
 					if (!open) closeSyncLogs();
 				}}
-				title="Sync ZKTeco logs"
-				description="Review bridge health and scope before starting an HRIS attendance sync."
+				title="Sync device logs"
+				description="Review SDK/vendor truth, DB truth, and startable devices before running a sync."
 				className="max-w-3xl">
 				<div className="space-y-4">
 					<div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -1455,40 +1467,32 @@ export default function DeviceEventsPage() {
 
 					<div className="grid gap-3 md:grid-cols-2">
 						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">Bridge status</p>
+							<p className="text-xs font-semibold uppercase text-slate-500">SDK/vendor truth</p>
 							<p className="mt-2 text-sm font-semibold text-slate-950">{syncStatusLabel}</p>
+							<p className="mt-1 text-xs text-slate-500">
+								{formatCount(syncVendorEventTotal)} events / {formatCount(syncVendorUserTotal)} users
+							</p>
+						</div>
+						<div className="rounded-lg border border-slate-200 bg-white p-3">
+							<p className="text-xs font-semibold uppercase text-slate-500">DB truth</p>
+							<p className="mt-2 text-sm font-semibold text-slate-950">{formatCount(syncHrisSavedTotal)}</p>
+							<p className="mt-1 text-xs text-slate-500">saved device events in HRIS</p>
+						</div>
+						<div className="rounded-lg border border-slate-200 bg-white p-3">
+							<p className="text-xs font-semibold uppercase text-slate-500">Missing from DB</p>
+							<p className="mt-2 text-sm font-semibold text-slate-950">
+								{syncDryRunEstimate === null || syncDryRunEstimate === undefined
+									? "Unavailable"
+									: formatCount(syncDryRunEstimate)}
+							</p>
+							<p className="mt-1 text-xs text-slate-500">dry-run delta from preview</p>
+						</div>
+						<div className="rounded-lg border border-slate-200 bg-white p-3">
+							<p className="text-xs font-semibold uppercase text-slate-500">Startable devices</p>
+							<p className="mt-2 text-sm font-semibold text-slate-950">
+								{formatCount(syncStartableRows.length)} of {formatCount(syncPreviewRows.length)}
+							</p>
 							<p className="mt-1 break-all text-xs text-slate-500">{syncBridgeStatusUrl}</p>
-						</div>
-						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">Connected devices</p>
-							<p className="mt-2 text-sm font-semibold text-slate-950">
-								{syncBridge
-									? `${formatCount(syncBridge.connectedDevices)} of ${formatCount(syncBridge.configuredDevices)}`
-									: "Unavailable"}
-							</p>
-							<p className="mt-1 text-xs text-slate-500">
-								{syncBridge?.runtime || "Bridge runtime was not reported."}
-							</p>
-						</div>
-						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">Last bridge event</p>
-							<p className="mt-2 text-sm font-semibold text-slate-950">
-								{formatPunchTime(syncBridge?.device?.lastEventAt || syncBridge?.lastEventAt)}
-							</p>
-							<p className="mt-1 text-xs text-slate-500">
-								{syncBridge?.device?.address || syncHealthDevice?.address || "Device not reported"}
-							</p>
-						</div>
-						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">Last HRIS saved event</p>
-							<p className="mt-2 text-sm font-semibold text-slate-950">
-								{formatPunchTime(syncLastHrisEvent?.receivedAt || syncLastHrisEvent?.eventTime)}
-							</p>
-							<p className="mt-1 text-xs text-slate-500">
-								{syncLastHrisEvent
-									? `${formatBusinessStatus(String(syncLastHrisEvent.status))} / No. ${syncLastHrisEvent.employeeNo || "-"}`
-									: "No saved ZKTeco event was reported by health."}
-							</p>
 						</div>
 					</div>
 
@@ -1525,19 +1529,21 @@ export default function DeviceEventsPage() {
 
 					<div className="rounded-lg border border-slate-200 bg-white">
 						<div className="border-b border-slate-100 px-3 py-2">
-							<p className="text-xs font-semibold uppercase text-slate-500">Device dry run</p>
+							<p className="text-xs font-semibold uppercase text-slate-500">Device tally</p>
 						</div>
 						<div className="divide-y divide-slate-100">
 							{syncPreviewRows.length ? (
 								syncPreviewRows.map((device) => {
 									const totalLabel =
-										device.totalEvents === null || device.totalEvents === undefined
+										(device.vendorEventCount ?? device.totalEvents) === null ||
+										(device.vendorEventCount ?? device.totalEvents) === undefined
 											? "?"
-											: formatCount(device.totalEvents);
+											: formatCount(device.vendorEventCount ?? device.totalEvents);
 									const needsLabel =
-										device.needsSyncEvents === null || device.needsSyncEvents === undefined
+										(device.missingEventCount ?? device.needsSyncEvents) === null ||
+										(device.missingEventCount ?? device.needsSyncEvents) === undefined
 											? "unknown"
-											: formatCount(device.needsSyncEvents);
+											: formatCount(device.missingEventCount ?? device.needsSyncEvents);
 									return (
 										<div key={device.deviceId} className="flex flex-col gap-2 px-3 py-3 md:flex-row md:items-center md:justify-between">
 											<div className="min-w-0">
@@ -1555,10 +1561,15 @@ export default function DeviceEventsPage() {
 												<Badge
 													variant={device.status === "needs_sync" ? "warning-soft" : device.status === "synced" ? "success-soft" : "secondary"}
 													className="px-2 py-0.5 font-semibold">
-													{formatCount(device.syncedEvents)} / {totalLabel}
+													DB {formatCount(device.hrisSavedCount ?? device.syncedEvents)} / SDK {totalLabel}
+												</Badge>
+												<Badge
+													variant={device.canStartSync ? "success-soft" : "secondary"}
+													className="px-2 py-0.5 font-semibold">
+													{device.canStartSync ? "Ready to sync" : "Preview only"}
 												</Badge>
 												<span className="text-xs font-medium text-slate-600">
-													{needsLabel} need sync
+													{needsLabel} missing
 												</span>
 											</div>
 										</div>
@@ -1597,7 +1608,7 @@ export default function DeviceEventsPage() {
 						<Button
 							type="button"
 							className="h-9 px-3"
-							disabled={zktecoSync.isPending || !syncBridgeOk || syncScopeDevices.length === 0}
+							disabled={zktecoSync.isPending || syncStartableRows.length === 0}
 							onClick={startZktecoSync}>
 							<UploadCloud className="h-4 w-4" />
 							{zktecoSync.isPending ? "Starting sync" : "Start actual sync"}

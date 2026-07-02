@@ -109,6 +109,7 @@ class ProbeTests(unittest.TestCase):
             return_value={
                 "ok": True,
                 "target": {"name": "ZKTeco A", "host": "10.184.38.9", "port": 4370},
+                "users": {"count": 23},
                 "attendance": {"available": 8410, "selected": 1, "lastSelectedAt": "2026-07-02T10:20:00"},
                 "webhook": {"posted": 1, "failed": 0},
             },
@@ -116,8 +117,10 @@ class ProbeTests(unittest.TestCase):
             payload = run_preview([Target("ZKTeco A", "10.184.38.9", 4370)], args)
 
         self.assertTrue(payload["dryRun"])
+        self.assertEqual(payload["userCount"], 23)
         self.assertEqual(payload["totalEvents"], 8410)
         self.assertEqual(payload["selectedEvents"], 1)
+        self.assertEqual(payload["devices"][0]["userCount"], 23)
         self.assertEqual(payload["devices"][0]["totalEvents"], 8410)
         self.assertEqual(payload["devices"][0]["wouldPost"], 1)
         called_args = sync_target.call_args.args[1]

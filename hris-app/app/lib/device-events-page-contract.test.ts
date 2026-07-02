@@ -18,12 +18,14 @@ describe("device events page UX contract", () => {
 
 	it("opens Sync logs as a modal journey with bridge preflight and actual sync status", () => {
 		expect(routeSource).to.contain('next.set("action", "sync-logs")');
-		expect(routeSource).to.contain('title="Sync ZKTeco logs"');
+		expect(routeSource).to.contain('title="Sync device logs"');
 		expect(routeSource).to.contain("useDeviceSyncPreview");
 		expect(routeSource).to.contain("Bridge connection error");
 		expect(routeSource).to.contain("Refresh preflight");
-		expect(routeSource).to.contain("Device dry run");
-		expect(routeSource).to.contain("need sync");
+		expect(routeSource).to.contain("SDK/vendor truth");
+		expect(routeSource).to.contain("DB truth");
+		expect(routeSource).to.contain("Device tally");
+		expect(routeSource).to.contain("Preview only");
 		expect(routeSource).to.contain("Start actual sync");
 	});
 

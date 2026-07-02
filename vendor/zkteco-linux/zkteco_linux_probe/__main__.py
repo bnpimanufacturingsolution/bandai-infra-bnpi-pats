@@ -525,12 +525,14 @@ def summarize_sync_result(result: dict[str, Any]) -> dict[str, Any]:
     attendance = result.get("attendance") or {}
     webhook = result.get("webhook") or {}
     target = result.get("target") or {}
+    users = result.get("users") or {}
     selected = int(attendance.get("selected") or 0)
     return {
         "name": target.get("name"),
         "ip": target.get("host"),
         "port": target.get("port"),
         "connected": bool(result.get("ok")),
+        "userCount": int(users.get("count") or 0),
         "totalEvents": int(attendance.get("available") or 0),
         "selectedEvents": selected,
         "wouldPost": selected,
@@ -546,6 +548,7 @@ def run_preview(targets: Iterable[Target], args: argparse.Namespace, device_ip: 
     target_list = filter_targets_for_device(targets, device_ip)
     devices = []
     failures = 0
+    user_count = 0
     total_events = 0
     selected_events = 0
 
@@ -557,6 +560,7 @@ def run_preview(targets: Iterable[Target], args: argparse.Namespace, device_ip: 
         devices.append(summary)
         if not result.get("ok"):
             failures += 1
+        user_count += int(summary.get("userCount") or 0)
         total_events += int(summary.get("totalEvents") or 0)
         selected_events += int(summary.get("selectedEvents") or 0)
 
@@ -568,6 +572,7 @@ def run_preview(targets: Iterable[Target], args: argparse.Namespace, device_ip: 
         "deviceIp": device_ip,
         "configuredDevices": len(target_list),
         "connectedDevices": len([device for device in devices if device.get("connected")]),
+        "userCount": user_count,
         "totalEvents": total_events,
         "selectedEvents": selected_events,
         "devices": devices,
