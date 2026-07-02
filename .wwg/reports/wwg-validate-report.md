@@ -2,9 +2,9 @@
 
 ## Summary
 
-Overall status: PASS
+Overall status: FAIL
 
-critical: 0, high: 0, medium: 0, low: 0, info: 12
+critical: 0, high: 1, medium: 0, low: 0, info: 11
 
 ## Command
 
@@ -22,7 +22,7 @@ wwg-native-project
 - PASS Skill Registry and Skill Manifest validate when present - 0 finding(s)
 - PASS Profile skill recommendation metadata validates when present - 1 finding(s)
 - PASS Required WWG directories exist - 1 finding(s)
-- PASS WWG operating loop files are present and actionable - 1 finding(s)
+- FAIL WWG operating loop files are present and actionable - 1 finding(s)
 - PASS Principles folder and Principle Brief frontmatter are valid - 1 finding(s)
 - PASS UI/UX principle pack expectations are profile-aware - 0 finding(s)
 - PASS Generated marker pairs are balanced - 1 finding(s)
@@ -32,20 +32,25 @@ wwg-native-project
 
 ## Findings
 
+- HIGH wwg-report-truth-sync-fields-missing (reports/dev-runtime-serving-truth-20260702.md): evidence=confirmed Report claims readiness or completion without required WWG truth synchronization fields. Recommendation: Add WWG Truth Synchronization, task mode, truth/update/governance/drift fields, and remaining stale context before claiming completion.
 - INFO ambiguous-report-classification: evidence=confirmed risk=low Some report-like files need human classification. Recommendation: Run `wwg reports --target .` and review the Ambiguous / Needs Review section.
 - INFO generated-markers-balanced: Generated marker pairs are balanced where present.
 - INFO gitignore-native-report-backups-missing (.gitignore): evidence=confirmed risk=low Report policy expects `.wwg/reports/backups/` to be ignored. Recommendation: Add a narrow ignore rule for `.wwg/reports/backups/` or `.wwg/.gitignore` `reports/backups/`.
 - INFO json-schemas-parse: Parsed and compiled 0 JSON schema file(s).
-- INFO markdown-contract-quality-report-generated (reports/context-skill-quality.md): evidence=confirmed Markdown contract quality report completed with 82 warning(s) and 91 suggestion(s). Advisory Markdown quality findings are recorded in the quality report and do not change validate status by default. Recommendation: Review `.wwg/reports/context-skill-quality.md` during focused documentation remediation.
+- INFO markdown-contract-quality-report-generated (reports/context-skill-quality.md): evidence=confirmed Markdown contract quality report completed with 83 warning(s) and 91 suggestion(s). Advisory Markdown quality findings are recorded in the quality report and do not change validate status by default. Recommendation: Review `.wwg/reports/context-skill-quality.md` during focused documentation remediation.
 - INFO markdown-readable: Markdown files are non-empty and readable.
 - INFO profile-skill-recommendations-valid: evidence=confirmed Validated skill recommendation metadata for 0 profile file(s). Recommendation: Keep profile skill recommendations advisory until manifest generation and runtime activation are implemented.
 - INFO project-registry-valid (.wwg/config/wwg.project.yaml): WWG project registry parses and matches the registry schema.
 - INFO required-directories-present: Required directories exist for wwg-native-project.
-- INFO wwg-operating-loop-present: WWG operating loop files and AGENTS signals are present.
 - INFO wwg-principles-valid: Principles folder and lightweight Principle Brief checks passed.
 - INFO yaml-files-parse: Parsed 1 YAML file(s).
 
 ## Findings by User Action
+
+### Review Required
+These findings touch project meaning, governance, principles, or selected profile expectations.
+Next command: `wwg audit --upgrade-candidates`
+- HIGH wwg-report-truth-sync-fields-missing (reports/dev-runtime-serving-truth-20260702.md): Report claims readiness or completion without required WWG truth synchronization fields.
 
 ### Info
 Passing or informational validation evidence.
@@ -55,19 +60,18 @@ Next: No command required.
 - INFO project-registry-valid (.wwg/config/wwg.project.yaml): WWG project registry parses and matches the registry schema.
 - INFO profile-skill-recommendations-valid: Validated skill recommendation metadata for 0 profile file(s).
 - INFO required-directories-present: Required directories exist for wwg-native-project.
-- INFO wwg-operating-loop-present: WWG operating loop files and AGENTS signals are present.
 - INFO wwg-principles-valid: Principles folder and lightweight Principle Brief checks passed.
 - INFO generated-markers-balanced: Generated marker pairs are balanced where present.
 - INFO markdown-readable: Markdown files are non-empty and readable.
 - INFO ambiguous-report-classification: Some report-like files need human classification.
 - INFO gitignore-native-report-backups-missing (.gitignore): Report policy expects `.wwg/reports/backups/` to be ignored.
-- INFO markdown-contract-quality-report-generated (reports/context-skill-quality.md): Markdown contract quality report completed with 82 warning(s) and 91 suggestion(s).
+- INFO markdown-contract-quality-report-generated (reports/context-skill-quality.md): Markdown contract quality report completed with 83 warning(s) and 91 suggestion(s).
 
 ## Validation Results
 
-PASS: 13
+PASS: 12
 WARN: 0
-FAIL: 0
+FAIL: 1
 
 ## Principle Review
 
@@ -87,14 +91,14 @@ FAIL: 0
 - Wiki updated: NO / N/A
 - Workspace updated: NO
 - Governance review completed: YES
-- Drift status: NONE
+- Drift status: HIGH
 - Canonical files changed:
   - None by validation.
 - Implementation discoveries synced:
   - None.
 - Remaining stale context:
-  - None detected by validation.
+  - Review findings above.
 
 ## Recommended Next Steps
 
-- Run `wwg lint` for higher-level consistency checks.
+- Review Required: 1 -> wwg audit --upgrade-candidates

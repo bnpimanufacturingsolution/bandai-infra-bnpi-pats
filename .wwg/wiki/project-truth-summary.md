@@ -1,6 +1,6 @@
 # Project Truth Summary
 
-Last updated: 2026-07-01
+Last updated: 2026-07-02
 
 ## Current Runtime Truth
 
@@ -23,6 +23,9 @@ Last updated: 2026-07-01
 - VM login/banner summary currently reports `LAN IP: 10.184.38.144`, `SSH: ssh infra@10.184.38.144`, app/API ports for PROD/DEV/UAT, and VM-managed Cloudflare public targets.
 - Current generated overview line-width check: `MaxLineLength=66`; stale `10.184.38.91` was not present in `/etc/issue`, `/run/project-truth/network-summary.txt`, or the generated overview.
 - On 2026-07-01, DEV LAN checks passed on `10.184.38.144` for app/API (`3100`, `3101`) and SSH (`22`); earlier 2026-06-29 checks passed on `192.168.254.148` for PROD/DEV/UAT app/API and Grafana.
+- On 2026-07-02, the active DEV LAN target checked by SSH and HTTP probes was `10.184.38.138`. `http://10.184.38.138:3100/admin/configuration/devices/events?view=saved` and `http://10.184.38.138:3100/auth/login` returned HTTP 200 from the VM, and `http://10.184.38.138:3101/health` returned HTTP 200 with healthy API status.
+- On 2026-07-02, `10.184.38.138:3100` and `10.184.38.138:3101` were served by K3s DEV workloads, not Docker Compose HRIS app/API containers. K3s namespace `dev` had `hris-app` and `hris-api` deployments using `hris-app-local:develop` and `hris-api-local:develop`; Docker only showed observability port matches such as Grafana and Loki.
+- On 2026-07-02, the VM source checkout for runtime was `/var/lib/project-truth/ansible-pull` on `develop@b1a8678e74229e10f5cfd2f1a1e5e658319c69af`, while the Windows repo was on feature branch `sync/upstream-hris-dryrun-20260702@0b88e12bcd53869a1f6072911c876654658c0692`. Therefore the DEV LAN URL does not automatically preview feature-branch changes unless the VM source/image path is deliberately synced and rebuilt/imported into K3s.
 - The `bnpi-hris.tech` Cloudflare 1033 issue was repaired by logging into the Cloudflare account that owns `bnpi-hris.tech`, creating named tunnel `e3486f00-f974-46d3-9e11-911266749d00`, and routing app/API/dev/uat/Grafana hostnames to it.
 - Public checks passed for `bnpi-hris.tech`, `www.bnpi-hris.tech`, `app.bnpi-hris.tech`, `api.bnpi-hris.tech`, `dev.bnpi-hris.tech`, `dev-api.bnpi-hris.tech`, `uat.bnpi-hris.tech`, `uat-api.bnpi-hris.tech`, and `grafana.bnpi-hris.tech`.
 - Current named tunnel bootstrap ownership remains host-managed on the Windows host through `scripts/start-bnpi-cloudflare-tunnel.ps1`, scheduled task `ProjectTruth-BNPI-HRIS-Cloudflared`, `scripts/ensure-bnpi-cloudflare-host.ps1`, and `cloudflared-bnpi-hris.yml`.
@@ -44,7 +47,7 @@ Last updated: 2026-07-01
 
 ## Current Drift
 
-- Earlier `10.184.38.91` runtime proof is stale; the 2026-06-29 repair pass used `192.168.254.148`, and 2026-07-01 operator/LAN proof now uses `10.184.38.144`.
+- Earlier `10.184.38.91` runtime proof is stale; the 2026-06-29 repair pass used `192.168.254.148`, 2026-07-01 operator/LAN proof used `10.184.38.144`, and the 2026-07-02 DEV serving-path check used `10.184.38.138`.
 - `verify-gitops-state -GuestIp 10.184.38.91` previously reached the VM over SSH, but that IP is stale for the current session. Argo CD/Application state should be checked against current operator/LAN target `10.184.38.144`; previous app sync statuses reported `Unknown`, runtime app health included `Degraded` and `Progressing`, and one Kubernetes API read returned `127.0.0.1:6443` connection refused.
 - V6 runtime proof shows a split serving reality: public/LAN HRIS is green through Docker Compose and VM-side Cloudflare, while many K3s pods are `Pending`, `Evicted`, or `ContainerStatusUnknown` under memory pressure despite Argo Applications reporting `Synced/Healthy`.
 - Runtime quick tunnels are deprecated for normal public access. Historical TryCloudflare evidence may remain in old reports, but active VM boot/sync paths keep the TryCloudflare service disabled by default.
@@ -58,3 +61,4 @@ Last updated: 2026-07-01
 - VM/GitOps/runtime work is admin / `hris-admin` operational work.
 - Host-local Docker health is diagnostic only; the finish line remains VM LAN, GitOps, K3s/Argo CD, and HRIS app/API proof.
 - Treat runtime IPs as evidence snapshots unless persisted through Project Truth configuration or a stable DHCP/static assignment.
+- For `10.184.38.138:3100` / `10.184.38.138:3101`, current evidence points to K3s DEV hostPort traffic. Do not assume Docker Compose app/API or local feature-branch code is being served there without image digest and pod evidence.

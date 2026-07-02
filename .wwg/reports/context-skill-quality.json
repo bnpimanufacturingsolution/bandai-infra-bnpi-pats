@@ -14,6 +14,7 @@
     ".wwg/reports/cloudflare-public-e2e-20260630.md",
     ".wwg/reports/cors-k3s-runtime-repair-20260701.md",
     ".wwg/reports/dev-k3s-data-promotion-20260701.md",
+    ".wwg/reports/dev-runtime-serving-truth-20260702.md",
     ".wwg/reports/generated-project-upgrade-review.md",
     ".wwg/reports/hr-manager-lan-public-dashboard-repair-20260630.md",
     ".wwg/reports/readme-validation.md",
@@ -151,6 +152,11 @@
     },
     {
       "path": ".wwg/reports/dev-k3s-data-promotion-20260701.md",
+      "fileType": "report",
+      "reason": "Report directory path."
+    },
+    {
+      "path": ".wwg/reports/dev-runtime-serving-truth-20260702.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
@@ -679,6 +685,15 @@
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/dev-k3s-data-promotion-20260701.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/dev-runtime-serving-truth-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -1315,7 +1330,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 806,
+      "line": 802,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1325,7 +1340,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 810,
+      "line": 806,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1595,7 +1610,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 43,
+      "line": 46,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1604,16 +1619,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 47,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
-      "line": 51,
+      "line": 50,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1623,6 +1629,15 @@
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
       "line": 54,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 57,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2239,6 +2254,15 @@
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/dev-k3s-data-promotion-20260701.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/dev-runtime-serving-truth-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -2891,7 +2915,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 43,
+      "line": 46,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2900,16 +2924,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 47,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
-      "line": 51,
+      "line": 50,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2919,6 +2934,15 @@
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
       "line": 54,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 57,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3217,6 +3241,15 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/dev-runtime-serving-truth-20260702.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/generated-project-upgrade-review.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
@@ -3303,7 +3336,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 806,
+      "line": 802,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3313,7 +3346,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 810,
+      "line": 806,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4390,7 +4423,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 806,
+      "line": 802,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4400,7 +4433,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 810,
+      "line": 806,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4670,7 +4703,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 43,
+      "line": 46,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4679,16 +4712,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 47,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
-      "line": 51,
+      "line": 50,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4698,6 +4722,15 @@
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
       "line": 54,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 57,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -5220,16 +5253,16 @@
   ],
   "metadataPolicyApplied": "Option C: Skill Registry metadata is canonical; skill files may include lightweight metadata when beneficial, and package-side skills do not require frontmatter.",
   "summary": {
-    "checkedFileCount": 82,
+    "checkedFileCount": 83,
     "skippedFileCount": 1,
     "errorCount": 0,
-    "warningCount": 82,
+    "warningCount": 83,
     "suggestionCount": 91,
     "classificationCounts": {
       "context": 8,
       "skill": 0,
       "governance": 6,
-      "report": 35,
+      "report": 36,
       "public_doc": 27,
       "agent_instruction": 1,
       "changelog_governance": 0,
