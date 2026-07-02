@@ -536,8 +536,12 @@ export const controller = (prisma: PrismaClient) => {
 					(device.vendor === "ZKTeco" && zktecoPreview && !sourcePreview
 						? zktecoPreview.error || "ZKTeco SDK preview did not return this device"
 						: null);
-				const sourceErrorMessage =
+				const rawSourceErrorMessage =
 					sourceError === null || sourceError === undefined ? null : String(sourceError);
+				const sourceErrorMessage =
+					device.vendor === "Hikvision" && rawSourceErrorMessage && /^\d+$/.test(rawSourceErrorMessage)
+						? `Hikvision event total unavailable (code ${rawSourceErrorMessage})`
+						: rawSourceErrorMessage;
 				const canStartSync =
 					device.vendor === "ZKTeco" &&
 					Boolean(zktecoPreview?.ok) &&
