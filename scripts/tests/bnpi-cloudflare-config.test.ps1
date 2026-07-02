@@ -19,7 +19,7 @@ function Assert-Contains {
 }
 
 Assert-Contains -Path 'cloudflared-bnpi-hris.yml' -Pattern 'hostname:\s+ssh\.bnpi-hris\.tech' -Message 'SSH hostname ingress must stay in the generated tunnel config'
-Assert-Contains -Path 'cloudflared-bnpi-hris.yml' -Pattern 'service:\s+ssh://192\.168\.254\.148:22' -Message 'SSH ingress must target the VM SSH origin'
+Assert-Contains -Path 'cloudflared-bnpi-hris.yml' -Pattern 'service:\s+ssh://10\.184\.37\.19:22' -Message 'SSH ingress must target the stable VM SSH origin'
 Assert-Contains -Path 'scripts/start-bnpi-cloudflare-tunnel.ps1' -Pattern '\$SshHostname\s*=\s*''ssh\.bnpi-hris\.tech''' -Message 'Tunnel wrapper must keep the canonical SSH hostname'
 Assert-Contains -Path 'scripts/start-bnpi-cloudflare-tunnel.ps1' -Pattern 'ssh://\$\{GuestIp\}:22' -Message 'Tunnel wrapper must generate SSH origin from discovered VM IP'
 Assert-Contains -Path 'scripts/start-bnpi-cloudflare-tunnel.ps1' -Pattern 'ProvisionDns' -Message 'Tunnel wrapper must keep DNS provisioning switch'

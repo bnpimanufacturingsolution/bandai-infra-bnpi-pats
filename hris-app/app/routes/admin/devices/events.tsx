@@ -255,6 +255,21 @@ const formatCount = (value?: number | string | null) => {
 	return Number.isFinite(numeric) ? numeric.toLocaleString() : "-";
 };
 
+const hasNumericCount = (value?: number | string | null) =>
+	value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+
+const formatOptionalCount = (value?: number | string | null) =>
+	hasNumericCount(value) ? formatCount(value) : "Unavailable";
+
+const getSyncDeviceTitle = (vendor?: string | null, name?: string | null, address?: string | null) => {
+	const vendorLabel = String(vendor || "").trim();
+	const nameLabel = String(name || "").trim();
+	if (!vendorLabel) return nameLabel || address || "Device";
+	if (!nameLabel) return address ? `${vendorLabel} ${address}` : vendorLabel;
+	if (nameLabel.toLowerCase().startsWith(vendorLabel.toLowerCase())) return nameLabel;
+	return `${vendorLabel} ${nameLabel}`;
+};
+
 const getSerialNoFromPayload = (payload: any) =>
 	payload?.AcsEventInfo?.serialNo ||
 	payload?.EventNotificationAlert?.AccessControllerEvent?.serialNo ||
@@ -1502,7 +1517,7 @@ export default function DeviceEventsPage() {
 					if (!open) closeSyncLogs();
 				}}
 				title="Sync device logs"
-				description="Review SDK/vendor truth, DB truth, and startable devices before running a sync."
+				description="Review source counts, HRIS saved counts, and devices that can safely start a sync."
 				className="max-w-3xl">
 				<div className="space-y-4">
 					<div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -1546,23 +1561,23 @@ export default function DeviceEventsPage() {
 
 					<div className="grid gap-3 md:grid-cols-2">
 						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">SDK/vendor truth</p>
+							<p className="text-xs font-semibold uppercase text-slate-500">Source totals</p>
 							<p className="mt-2 text-sm font-semibold text-slate-950">{syncStatusLabel}</p>
 							<p className="mt-1 text-xs text-slate-500">
 								{isLoadingSyncPreview
 									? "Loading SDK counts"
-									: `${formatCount(syncVendorEventTotal)} events / ${formatCount(syncVendorUserTotal)} users`}
+									: `${formatCount(syncVendorEventTotal)} events / ${formatCount(syncVendorUserTotal)} known users`}
 							</p>
 						</div>
 						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">DB truth</p>
+							<p className="text-xs font-semibold uppercase text-slate-500">HRIS saved</p>
 							<p className="mt-2 text-sm font-semibold text-slate-950">
 								{isLoadingSyncPreview ? "Loading" : formatCount(syncHrisSavedTotal)}
 							</p>
-							<p className="mt-1 text-xs text-slate-500">saved device events in HRIS</p>
+							<p className="mt-1 text-xs text-slate-500">saved events in the selected scope</p>
 						</div>
 						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">Missing from DB</p>
+							<p className="text-xs font-semibold uppercase text-slate-500">Sync gap</p>
 							<p className="mt-2 text-sm font-semibold text-slate-950">
 								{isLoadingSyncPreview
 									? "Loading"
@@ -1570,10 +1585,10 @@ export default function DeviceEventsPage() {
 									? "Unavailable"
 									: formatCount(syncDryRunEstimate)}
 							</p>
-							<p className="mt-1 text-xs text-slate-500">dry-run delta from preview</p>
+							<p className="mt-1 text-xs text-slate-500">missing rows reported by the bridge</p>
 						</div>
 						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">Startable devices</p>
+							<p className="text-xs font-semibold uppercase text-slate-500">Can run sync</p>
 							<p className="mt-2 text-sm font-semibold text-slate-950">
 								{isLoadingSyncPreview
 									? "Loading"
@@ -1586,7 +1601,7 @@ export default function DeviceEventsPage() {
 					<div className="rounded-lg border border-slate-200 bg-white p-3">
 						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 							<div>
-								<p className="text-xs font-semibold uppercase text-slate-500">Estimated rows to sync</p>
+								<p className="text-xs font-semibold uppercase text-slate-500">Rows to sync</p>
 								<p className="mt-1 text-sm font-semibold text-slate-950">
 									{syncDryRunEstimate === null || syncDryRunEstimate === undefined
 										? "Unavailable"
@@ -1613,26 +1628,20 @@ export default function DeviceEventsPage() {
 
 					<div className="rounded-lg border border-slate-200 bg-white">
 						<div className="border-b border-slate-100 px-3 py-2">
-							<p className="text-xs font-semibold uppercase text-slate-500">Device tally</p>
+							<p className="text-xs font-semibold uppercase text-slate-500">Per-device tally</p>
 						</div>
 						<div className="divide-y divide-slate-100">
 							{syncPreviewRows.length ? (
 								syncPreviewRows.map((device) => {
-									const totalLabel =
-										(device.vendorEventCount ?? device.totalEvents) === null ||
-										(device.vendorEventCount ?? device.totalEvents) === undefined
-											? "?"
-											: formatCount(device.vendorEventCount ?? device.totalEvents);
-									const needsLabel =
-										(device.missingEventCount ?? device.needsSyncEvents) === null ||
-										(device.missingEventCount ?? device.needsSyncEvents) === undefined
-											? "unknown"
-											: formatCount(device.missingEventCount ?? device.needsSyncEvents);
+									const sourceEvents = device.vendorEventCount ?? device.totalEvents;
+									const sourceUsers = device.vendorUserCount;
+									const hrisSaved = device.hrisSavedCount ?? device.syncedEvents;
+									const missingEvents = device.missingEventCount ?? device.needsSyncEvents;
 									return (
-										<div key={device.deviceId} className="flex flex-col gap-2 px-3 py-3 md:flex-row md:items-center md:justify-between">
+										<div key={device.deviceId} className="flex flex-col gap-3 px-3 py-3 md:flex-row md:items-start md:justify-between">
 											<div className="min-w-0">
 												<p className="truncate text-sm font-semibold text-slate-950">
-													{device.vendor} {device.name || device.address}
+													{getSyncDeviceTitle(device.vendor, device.name, device.address)}
 												</p>
 												<p className="truncate text-xs text-slate-500">
 													{device.address}:{device.port} / {formatEventSource(device.source)}
@@ -1641,20 +1650,30 @@ export default function DeviceEventsPage() {
 													<p className="mt-1 text-xs text-red-700">{device.error}</p>
 												) : null}
 											</div>
-											<div className="flex shrink-0 flex-wrap items-center gap-2 text-sm">
-												<Badge
-													variant={device.status === "needs_sync" ? "warning-soft" : device.status === "synced" ? "success-soft" : "secondary"}
-													className="px-2 py-0.5 font-semibold">
-													DB {formatCount(device.hrisSavedCount ?? device.syncedEvents)} / SDK {totalLabel}
-												</Badge>
-												<Badge
-													variant={device.canStartSync ? "success-soft" : "secondary"}
-													className="px-2 py-0.5 font-semibold">
-													{device.canStartSync ? "Ready to sync" : "Preview only"}
-												</Badge>
-												<span className="text-xs font-medium text-slate-600">
-													{needsLabel} missing
-												</span>
+											<div className="grid shrink-0 grid-cols-2 gap-2 text-sm sm:grid-cols-4 md:min-w-[430px]">
+												<div>
+													<p className="text-[11px] font-semibold uppercase text-slate-500">HRIS</p>
+													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(hrisSaved)}</p>
+												</div>
+												<div>
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Source events</p>
+													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceEvents)}</p>
+												</div>
+												<div>
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Users</p>
+													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceUsers)}</p>
+												</div>
+												<div>
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Missing</p>
+													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(missingEvents)}</p>
+												</div>
+												<div className="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-4">
+													<Badge
+														variant={device.canStartSync ? "success-soft" : "secondary"}
+														className="px-2 py-0.5 font-semibold">
+														{device.canStartSync ? "Ready to sync" : "Preview only"}
+													</Badge>
+												</div>
 											</div>
 										</div>
 									);

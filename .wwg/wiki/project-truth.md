@@ -126,30 +126,30 @@ Accepted or observed architecture:
 - Item: Current Hyper-V proof VM exists as `project-truth-local-vhdx-proof` on the `ProjectTruth-External` switch.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: `Get-VM` and `Get-VMNetworkAdapter` on 2026-06-29 showed VM `project-truth-local-vhdx-proof`, Generation 2, attached to switch `ProjectTruth-External`.
-- Item: Current operator/LAN target is `10.184.38.144`; previous VM interface evidence used `192.168.254.148`.
+- Item: Current operator/LAN target is stable secondary address `10.184.37.19`; previous VM interface evidence used `192.168.254.148` and DHCP `10.184.38.144`.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: 2026-07-01 operator SSH to `infra@10.184.38.144` reached the Project Truth HRIS appliance banner, which reports `LAN IP: 10.184.38.144`, PROD/DEV/UAT app/API endpoints, VM-managed Cloudflare targets, and `Ansible pull: develop@f2b449922559`; the same session showed VM `eth0 192.168.254.148`, so `192.168.254.148` is retained as observed VM interface evidence from earlier repair passes.
+  - Evidence: 2026-07-02 operator SSH to `infra@10.184.37.19` reached `project-truth-node`; `eth0` showed `10.184.37.19/24` plus DHCP `10.184.38.54/24`, and the refreshed appliance summary reports `LAN IP: 10.184.37.19`. 2026-07-01 SSH to `10.184.38.144` and earlier `192.168.254.148` are retained as historical interface evidence.
 - Item: Earlier SSH proof at `10.184.38.91:22` is historical evidence only.
   - Status: STALE
   - Evidence: Earlier 2026-06-29 TCP, password, key, and VMConnect proofs used `10.184.38.91`, but the current Cloudflare/SSH repair pass proved `192.168.254.148` and probes to `10.184.38.91` later timed out.
-- Item: Current Hyper-V proof VM exposes HRIS DEV app/API on the operator/LAN target `10.184.38.144`.
+- Item: Current Hyper-V proof VM exposes HRIS app/API on stable operator/LAN target `10.184.37.19`.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: 2026-07-01 checks returned HTTP 200 for `http://10.184.38.144:3100/admin/configuration/devices/events?...` and `http://10.184.38.144:3101/health`; earlier 2026-06-29 Cloudflare repair evidence showed `192.168.254.148` passing PROD/DEV/UAT app/API and Grafana checks.
-- Item: Current Hyper-V proof VM exposes SSH on LAN at `10.184.38.144:22`.
+  - Evidence: 2026-07-02 checks returned HTTP 200 for `http://10.184.37.19:3000/auth/login`, and TCP checks passed for `10.184.37.19:3000` and `10.184.37.19:22`; earlier checks on `10.184.38.144`, `10.184.38.138`, and `192.168.254.148` are historical runtime evidence.
+- Item: Current Hyper-V proof VM exposes SSH on LAN at `10.184.37.19:22`.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: 2026-07-01 `Test-NetConnection 10.184.38.144 -Port 22` passed; Windows OpenSSH with `%USERPROFILE%\.ssh\node-health-appliance_ed25519` reached hostname `project-truth-node`, user `infra`, and the Project Truth HRIS appliance banner.
-- Item: Current Hyper-V proof VM uses DHCP-only operator/LAN address `10.184.38.144/24`; temporary secondary address `10.184.37.19/32` is removed.
+  - Evidence: 2026-07-02 `Test-NetConnection 10.184.37.19 -Port 22` passed; Windows OpenSSH with `%USERPROFILE%\.ssh\node-health-appliance_ed25519` reached hostname `project-truth-node` and user `infra`.
+- Item: Current Hyper-V proof VM uses static secondary operator/LAN address `10.184.37.19/24` with DHCP still enabled.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: On 2026-07-02, SSH to `10.184.38.144` showed `project-truth-node` on `eth0` with DHCP address `10.184.38.144/24` and default route through `10.184.38.254`, while `10.184.38.138` no longer answered SSH or HRIS port probes. A temporary secondary `10.184.37.19/32` was removed; `/etc/netplan/99-project-truth-lan.yaml` now contains only `dhcp4: true`, and `ip -br addr show eth0` shows only `10.184.38.144/24`.
-- Item: Host-managed Cloudflare Tunnel config targets the current VM DHCP address `10.184.38.144`.
+  - Evidence: On 2026-07-02, `/etc/netplan/99-project-truth-lan.yaml` was set to `dhcp4: true` plus `addresses: [10.184.37.19/24]`; `ip -br addr show eth0` showed `10.184.37.19/24` and DHCP `10.184.38.54/24`.
+- Item: Host-managed Cloudflare Tunnel config targets the stable VM address `10.184.37.19`.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: On 2026-07-02, `cloudflared-bnpi-hris.yml` was corrected from stale secondary-origin routing to `10.184.38.144`; app/API/dev/uat/Grafana origins and `ssh.bnpi-hris.tech` now point at the current VM DHCP address.
+  - Evidence: On 2026-07-02, `cloudflared-bnpi-hris.yml` was corrected from stale DHCP-origin routing to `10.184.37.19`; app/API/dev/uat/Grafana origins and `ssh.bnpi-hris.tech` now point at the stable secondary VM address.
 - Item: Public `bnpi-hris.tech` verification from the client LAN is currently blocked by network policy.
   - Status: CONFIRMED_WITH_BOUNDARY
   - Evidence: On 2026-07-02, plain HTTP to `http://bnpi-hris.tech` returned a company-policy "Web Page Blocked" response, while HTTPS to `bnpi-hris.tech`, `api.bnpi-hris.tech`, DEV, UAT, Grafana, and Cloudflare Access SSH reset during TLS from both Windows and the VM. General HTTPS to `www.cloudflare.com` and `www.google.com` still returned HTTP 200, and `cloudflared tunnel info bnpi-hris` showed active Windows and Linux connectors. Public HRIS checks need an unfiltered vantage point before being treated as origin failure.
 - Item: VM-visible Project Truth summary shows the current operator/LAN SSH target and public Cloudflare endpoints.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: 2026-07-01 SSH banner showed `LAN IP: 10.184.38.144`, `SSH: ssh infra@10.184.38.144`, PROD/DEV/UAT LAN app/API endpoints, VM-managed Cloudflare public endpoints, and `project-truth-lan-summary` entrypoints.
+  - Evidence: 2026-07-02 SSH banner and refreshed summary showed `LAN IP: 10.184.37.19`, `SSH: ssh infra@10.184.37.19`, PROD/DEV/UAT LAN app/API endpoints, VM-managed Cloudflare public endpoints, and `project-truth-lan-summary` entrypoints.
 - Item: `bnpi-hris.tech` public Cloudflare Tunnel access is repaired through named tunnel `e3486f00-f974-46d3-9e11-911266749d00` in the Cloudflare account that owns the `bnpi-hris.tech` zone.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: 2026-06-29 repair pass verified HTTP 200 for `bnpi-hris.tech`, `www.bnpi-hris.tech`, `app.bnpi-hris.tech`, `api.bnpi-hris.tech`, `dev.bnpi-hris.tech`, `dev-api.bnpi-hris.tech`, `uat.bnpi-hris.tech`, `uat-api.bnpi-hris.tech`, and `grafana.bnpi-hris.tech`; public CORS preflight returned HTTP 204 and wrong-password auth returned HTTP 401 through both `api.bnpi-hris.tech` and same-host `bnpi-hris.tech/api/*`. On 2026-06-30, headless browser proof reached `/admin/dashboard` for PROD, DEV, and UAT public app hosts, used the expected public API path for each environment, and received HTTP 200 from `/auth/me` and `/dashboard/overview`; DEV/UAT `/api/system-provisioning/status` CORS headers were repaired and verified for paired public app origins.

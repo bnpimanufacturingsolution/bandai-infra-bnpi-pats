@@ -71,8 +71,8 @@ Status: READY FOR REVIEW
 ## Evidence
 
 - Runtime VM: `project-truth-local-vhdx-proof`
-- Current operator/LAN IP: `10.184.38.144`
-- LAN SSH: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.38.144`
+- Current operator/LAN IP: `10.184.37.19`
+- LAN SSH: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19`
 - Named tunnel: `bnpi-hris`
 - Named tunnel ID: `e3486f00-f974-46d3-9e11-911266749d00`
 - Public verification artifact: `.runtime/cloudflare-drift-proof/20260629-220610/public-verification-final.json`
@@ -138,22 +138,25 @@ Status: READY FOR REVIEW
   `https://dev.bnpi-hris.tech/` loaded the HR login screen, requested
   `https://dev.bnpi-hris.tech/api/system-provisioning/status` with HTTP 200,
   and showed no public `:3001` browser request.
-- On 2026-07-02, `10.184.38.138` no longer answered SSH or HRIS port probes
-  from the Windows host. The VM was reached through DHCP address
-  `10.184.38.144`; a temporary secondary `10.184.37.19/32` experiment was
-  removed, leaving `/etc/netplan/99-project-truth-lan.yaml` as DHCP-only.
-- On 2026-07-02, host-managed `cloudflared-bnpi-hris.yml` was corrected to
-  target `10.184.38.144` origins for app/API/dev/uat/Grafana/SSH. Public
-  verification from the client LAN
-  is currently blocked by network policy: plain HTTP returns a company-policy
-  block page and HTTPS resets during TLS for `bnpi-hris.tech` hostnames, while
-  general Cloudflare/Google HTTPS works.
+- Earlier on 2026-07-02, `10.184.38.138` no longer answered SSH or HRIS port
+  probes from the Windows host. The VM was temporarily reached through DHCP
+  address `10.184.38.144`, and host-managed `cloudflared-bnpi-hris.yml` was
+  temporarily corrected to that DHCP address. This was superseded by stable
+  secondary address `10.184.37.19`.
+- Public verification from the client LAN is currently blocked by network
+  policy: plain HTTP returns a company-policy block page and HTTPS resets
+  during TLS for `bnpi-hris.tech` hostnames, while general Cloudflare/Google
+  HTTPS works.
+- On 2026-07-02, after user correction for the client demo, `10.184.37.19/24`
+  was configured as the stable secondary VM LAN address while DHCP remained
+  enabled. SSH and HRIS passed on `10.184.37.19`; the VM summary script and
+  host-managed `cloudflared-bnpi-hris.yml` now prefer `10.184.37.19` instead
+  of transient DHCP addresses.
 - `git diff --check` passed.
-- `wwg test-check --format plain` now fails because the WWG heuristic sees
-  behavior-sensitive truth words and no changed test files. No application code
-  changed in this V7 publish pass; verification evidence is GCS metadata, public
-  HTTP 200 checks, public ZIP round-trip/hash, and installer dry-run output.
-- `wwg validate` still fails on generated report truth-sync fields outside this Cloudflare task.
+- `wwg test-check --format plain` passes after the stable `10.184.37.19`
+  runtime/config drift repair because the Cloudflare config regression guard was
+  updated with the active SSH origin.
+- `wwg validate` passes after the stable LAN target drift repair.
 
 ## Follow-Up Needed
 

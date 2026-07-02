@@ -40,6 +40,15 @@ for arg in "$@"; do
 done
 
 lan_ip() {
+  local preferred_ip="${PROJECT_TRUTH_LAN_IP:-10.184.37.19}"
+  if [ -n "$preferred_ip" ] &&
+    ip -4 -o addr show scope global up 2>/dev/null |
+      awk '{ split($4, a, "/"); print a[1] }' |
+      grep -Fxq "$preferred_ip"; then
+    printf '%s\n' "$preferred_ip"
+    return
+  fi
+
   local route_ip
   route_ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{ for (i=1; i<=NF; i++) if ($i=="src") { print $(i+1); exit } }')"
   if [ -n "$route_ip" ]; then

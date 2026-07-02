@@ -224,7 +224,7 @@ const installMockApi = async (page: Page) => {
 	};
 };
 
-test("admin device events opens sync logs modal with DB and SDK truth before real sync", async ({
+test("admin device events opens sync logs modal with source and HRIS counts before real sync", async ({
 	page,
 }) => {
 	const api = await installMockApi(page);
@@ -238,10 +238,13 @@ test("admin device events opens sync logs modal with DB and SDK truth before rea
 
 	const dialog = page.getByRole("dialog");
 	await expect(dialog.getByRole("heading", { name: "Sync device logs" })).toBeVisible();
-	await expect(dialog.getByText("SDK/vendor truth", { exact: true })).toBeVisible();
-	await expect(dialog.getByText("DB truth", { exact: true })).toBeVisible();
-	await expect(dialog.getByText("173,614")).toBeVisible();
-	await expect(dialog.getByText("Device tally")).toBeVisible();
+	await expect(dialog.getByText("Source totals", { exact: true })).toBeVisible();
+	await expect(dialog.getByText("HRIS saved", { exact: true })).toBeVisible();
+	await expect(dialog.getByText("173,614")).toHaveCount(2);
+	await expect(dialog.getByText("Per-device tally")).toBeVisible();
+	await expect(dialog.getByText("Source events")).toBeVisible();
+	await expect(dialog.getByText("Users", { exact: true })).toBeVisible();
+	await expect(dialog.getByText("Missing", { exact: true })).toBeVisible();
 	await expect(dialog.getByText("Preview only")).toBeVisible();
 	await expect(dialog.getByText("ZKTECO_BRIDGE_STATUS_URL is not configured")).toBeVisible();
 	await expect(dialog.getByRole("button", { name: /Start actual sync/i })).toBeDisabled();

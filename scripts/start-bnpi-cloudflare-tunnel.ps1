@@ -6,6 +6,7 @@ param(
   [string]$TunnelId = 'e3486f00-f974-46d3-9e11-911266749d00',
   [string]$ConfigPath = '',
   [string]$CredentialsFile = '',
+  [string]$PreferredGuestIp = $(if ($env:PROJECT_TRUTH_PREFERRED_GUEST_IP) { $env:PROJECT_TRUTH_PREFERRED_GUEST_IP } else { '10.184.37.19' }),
   [string]$SshHostname = 'ssh.bnpi-hris.tech',
   [string[]]$Hostnames = @('bnpi-hris.tech', 'www.bnpi-hris.tech', 'app.bnpi-hris.tech'),
   [int]$OriginPort = 3000,
@@ -68,6 +69,13 @@ Or securely import the tunnel credential JSON for tunnel $TunnelId into the oper
 }
 
 function Get-CurrentGuestIp {
+  if (-not [string]::IsNullOrWhiteSpace($PreferredGuestIp)) {
+    $preferredTcp = Test-NetConnection -ComputerName $PreferredGuestIp -Port 22 -InformationLevel Quiet -WarningAction SilentlyContinue
+    if ($preferredTcp) {
+      return $PreferredGuestIp
+    }
+  }
+
   $adapter = Get-VMNetworkAdapter -VMName $VmName -ErrorAction Stop | Select-Object -First 1
   $ip = $adapter.IPAddresses |
     Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' -and $_ -notmatch '^169\.254\.' } |

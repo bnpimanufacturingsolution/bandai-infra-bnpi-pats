@@ -23,9 +23,11 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Refresh preflight");
 		expect(routeSource).to.contain("device-events-sync-preflight");
 		expect(routeSource).to.contain("Sync preflight is unavailable");
-		expect(routeSource).to.contain("SDK/vendor truth");
-		expect(routeSource).to.contain("DB truth");
-		expect(routeSource).to.contain("Device tally");
+		expect(routeSource).to.contain("Source totals");
+		expect(routeSource).to.contain("HRIS saved");
+		expect(routeSource).to.contain("Per-device tally");
+		expect(routeSource).to.contain("Source events");
+		expect(routeSource).to.contain("Missing");
 		expect(routeSource).to.contain("Preview only");
 		expect(routeSource).to.contain("Start actual sync");
 	});
