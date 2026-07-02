@@ -4,6 +4,7 @@ import { controller } from "../app/device/device.controller";
 describe("device health ZKTeco Linux bridge", () => {
 	const originalFetch = global.fetch;
 	const originalBridgeStatusUrl = process.env.ZKTECO_BRIDGE_STATUS_URL;
+	const originalNodeHostIp = process.env.NODE_HOST_IP;
 
 	afterEach(() => {
 		global.fetch = originalFetch;
@@ -11,6 +12,11 @@ describe("device health ZKTeco Linux bridge", () => {
 			delete process.env.ZKTECO_BRIDGE_STATUS_URL;
 		} else {
 			process.env.ZKTECO_BRIDGE_STATUS_URL = originalBridgeStatusUrl;
+		}
+		if (originalNodeHostIp === undefined) {
+			delete process.env.NODE_HOST_IP;
+		} else {
+			process.env.NODE_HOST_IP = originalNodeHostIp;
 		}
 	});
 
@@ -349,6 +355,7 @@ describe("device health ZKTeco Linux bridge", () => {
 
 	it("returns DB truth and a non-startable row when the ZKTeco bridge URL is not configured", async () => {
 		delete process.env.ZKTECO_BRIDGE_STATUS_URL;
+		delete process.env.NODE_HOST_IP;
 		global.fetch = (async () => {
 			throw new Error("preview should not call fetch without a bridge URL");
 		}) as any;
@@ -422,5 +429,130 @@ describe("device health ZKTeco Linux bridge", () => {
 			status: "source_unavailable",
 			error: "ZKTECO_BRIDGE_STATUS_URL is not configured",
 		});
+	});
+
+	it("uses NODE_HOST_IP as the K3s bridge status URL fallback", async () => {
+		delete process.env.ZKTECO_BRIDGE_STATUS_URL;
+		process.env.NODE_HOST_IP = "10.184.38.138";
+		global.fetch = (async (input: any) => {
+			expect(String(input)).to.equal("http://10.184.38.138:4371/preview?deviceIp=10.184.38.9");
+			return {
+				ok: true,
+				status: 200,
+				json: async () => ({
+					status: "degraded",
+					runtime: "project-truth-zkteco-linux-pyzk",
+					devices: [
+						{
+							ip: "10.184.38.9",
+							port: 4370,
+							totalEvents: 8410,
+							selectedEvents: 2,
+							userCount: 25,
+						},
+					],
+				}),
+			} as any;
+		}) as any;
+
+		const prisma = {
+			device: {
+				findMany: async () => [
+					{
+						id: "device-zkteco-a",
+						name: "ZKTeco Device A",
+						address: "10.184.38.9",
+						port: 4370,
+						protocol: "tcp",
+						config: { vendor: "ZKTeco" },
+					},
+				],
+			},
+			deviceEvent: {
+				groupBy: async () => [
+					{
+						deviceId: "device-zkteco-a",
+						source: "ZKTECO_EVENT",
+						_count: { _all: 8400 },
+					},
+				],
+			},
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			organizationId: "org-1",
+			query: { deviceId: "device-zkteco-a" },
+		};
+		let statusCode = 0;
+		let body: any = null;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json(payload: any) {
+				body = payload;
+				return this;
+			},
+		};
+
+		await deviceController.getDeviceSyncPreview(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(200);
+		expect(body.data.bridge.statusUrl).to.equal("http://10.184.38.138:4371/preview?deviceIp=10.184.38.9");
+		expect(body.data.devices[0]).to.include({
+			vendorEventCount: 8410,
+			vendorUserCount: 25,
+			missingEventCount: 10,
+			canStartSync: true,
+		});
+	});
+
+	it("soft-deletes devices so historical device events remain queryable", async () => {
+		const calls: any[] = [];
+		const prisma = {
+			device: {
+				findFirst: async () => ({
+					id: "device-with-events",
+					organizationId: "org-1",
+					isDeleted: false,
+				}),
+				update: async (args: any) => {
+					calls.push(args);
+					return { id: "device-with-events", isDeleted: true };
+				},
+				delete: async () => {
+					throw new Error("device delete must be a soft delete");
+				},
+			},
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			params: { id: "device-with-events" },
+			organizationId: "org-1",
+		};
+		let statusCode = 0;
+		let body: any = null;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json(payload: any) {
+				body = payload;
+				return this;
+			},
+		};
+
+		await deviceController.remove(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(200);
+		expect(calls[0]).to.deep.equal({
+			where: { id: "device-with-events" },
+			data: { isDeleted: true },
+		});
+		expect(body.status).to.equal("success");
 	});
 });

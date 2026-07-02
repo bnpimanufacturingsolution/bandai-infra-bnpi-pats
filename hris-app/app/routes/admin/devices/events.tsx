@@ -1477,18 +1477,24 @@ export default function DeviceEventsPage() {
 							<p className="text-xs font-semibold uppercase text-slate-500">SDK/vendor truth</p>
 							<p className="mt-2 text-sm font-semibold text-slate-950">{syncStatusLabel}</p>
 							<p className="mt-1 text-xs text-slate-500">
-								{formatCount(syncVendorEventTotal)} events / {formatCount(syncVendorUserTotal)} users
+								{isLoadingSyncPreview
+									? "Loading SDK counts"
+									: `${formatCount(syncVendorEventTotal)} events / ${formatCount(syncVendorUserTotal)} users`}
 							</p>
 						</div>
 						<div className="rounded-lg border border-slate-200 bg-white p-3">
 							<p className="text-xs font-semibold uppercase text-slate-500">DB truth</p>
-							<p className="mt-2 text-sm font-semibold text-slate-950">{formatCount(syncHrisSavedTotal)}</p>
+							<p className="mt-2 text-sm font-semibold text-slate-950">
+								{isLoadingSyncPreview ? "Loading" : formatCount(syncHrisSavedTotal)}
+							</p>
 							<p className="mt-1 text-xs text-slate-500">saved device events in HRIS</p>
 						</div>
 						<div className="rounded-lg border border-slate-200 bg-white p-3">
 							<p className="text-xs font-semibold uppercase text-slate-500">Missing from DB</p>
 							<p className="mt-2 text-sm font-semibold text-slate-950">
-								{syncDryRunEstimate === null || syncDryRunEstimate === undefined
+								{isLoadingSyncPreview
+									? "Loading"
+									: syncDryRunEstimate === null || syncDryRunEstimate === undefined
 									? "Unavailable"
 									: formatCount(syncDryRunEstimate)}
 							</p>
@@ -1497,7 +1503,9 @@ export default function DeviceEventsPage() {
 						<div className="rounded-lg border border-slate-200 bg-white p-3">
 							<p className="text-xs font-semibold uppercase text-slate-500">Startable devices</p>
 							<p className="mt-2 text-sm font-semibold text-slate-950">
-								{formatCount(syncStartableRows.length)} of {formatCount(syncPreviewRows.length)}
+								{isLoadingSyncPreview
+									? "Loading"
+									: `${formatCount(syncStartableRows.length)} of ${formatCount(syncPreviewRows.length)}`}
 							</p>
 							<p className="mt-1 break-all text-xs text-slate-500">{syncBridgeStatusUrl}</p>
 						</div>
@@ -1615,7 +1623,7 @@ export default function DeviceEventsPage() {
 						<Button
 							type="button"
 							className="h-9 px-3"
-							disabled={zktecoSync.isPending || syncStartableRows.length === 0}
+							disabled={zktecoSync.isPending || isLoadingSyncPreview || syncStartableRows.length === 0}
 							onClick={startZktecoSync}>
 							<UploadCloud className="h-4 w-4" />
 							{zktecoSync.isPending ? "Starting sync" : "Start actual sync"}

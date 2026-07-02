@@ -194,8 +194,16 @@ export const controller = (prisma: PrismaClient) => {
 		return "offline";
 	};
 
+	const getZktecoBridgeStatusUrl = () => {
+		const configuredUrl = String(process.env.ZKTECO_BRIDGE_STATUS_URL || "").trim();
+		if (configuredUrl) return configuredUrl;
+		const nodeHostIp = String(process.env.NODE_HOST_IP || "").trim();
+		if (nodeHostIp) return `http://${nodeHostIp}:4371/status`;
+		return "";
+	};
+
 	const getZktecoBridgeStatus = async () => {
-		const statusUrl = String(process.env.ZKTECO_BRIDGE_STATUS_URL || "").trim();
+		const statusUrl = getZktecoBridgeStatusUrl();
 		if (!statusUrl) {
 			return {
 				ok: false,
@@ -235,7 +243,7 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const getZktecoBridgePreview = async (deviceIp?: string | null) => {
-		const statusUrl = String(process.env.ZKTECO_BRIDGE_STATUS_URL || "").trim();
+		const statusUrl = getZktecoBridgeStatusUrl();
 		if (!statusUrl) {
 			return {
 				ok: false,
@@ -276,7 +284,7 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const postZktecoBridgeSync = async (deviceIp?: string | null) => {
-		const statusUrl = String(process.env.ZKTECO_BRIDGE_STATUS_URL || "").trim();
+		const statusUrl = getZktecoBridgeStatusUrl();
 		if (!statusUrl) {
 			return {
 				ok: false,
@@ -291,7 +299,7 @@ export const controller = (prisma: PrismaClient) => {
 		syncUrl.pathname = syncUrl.pathname.replace(/\/status\/?$/, "/sync");
 		if (deviceIp) syncUrl.searchParams.set("deviceIp", deviceIp);
 
-		const timeoutMs = Number(process.env.ZKTECO_BRIDGE_SYNC_TIMEOUT_MS || 10000);
+		const timeoutMs = Number(process.env.ZKTECO_BRIDGE_SYNC_TIMEOUT_MS || 90000);
 		try {
 			const response = await fetch(syncUrl.toString(), {
 				method: "POST",
@@ -1440,8 +1448,9 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			await prisma.device.delete({
+			await prisma.device.update({
 				where: { id },
+				data: { isDeleted: true },
 			});
 
 			try {
