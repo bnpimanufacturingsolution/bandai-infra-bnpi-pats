@@ -22,6 +22,7 @@ import { Select, type SelectOption } from "~/components/atoms/Select";
 import {
 	useDeviceEvents,
 	useDeviceHealth,
+	useDeviceSyncPreview,
 	useDevices,
 	useTriggerZktecoAttendanceSync,
 	queryKeys,
@@ -32,8 +33,10 @@ import { useSocket } from "~/contexts/socket-context";
 import {
 	getDeviceEventsRealtimeStatus,
 	getHighlightedSavedDeviceEventId,
+	getSavedDeviceEventProcessingLabel,
 	getSavedDeviceEventRealtimeBadge,
 	prependRealtimeSavedRows,
+	savedDeviceEventMatchesScope,
 } from "~/lib/device-events-realtime-ui";
 import type {
 	DeviceEvent,
@@ -79,6 +82,18 @@ type DeviceEventSavedPayload = {
 	source?: string | null;
 	emittedAt?: string;
 	event?: DeviceEvent;
+};
+
+type SyncLogsState =
+	| { status: "idle" }
+	| { status: "accepted"; message: string }
+	| { status: "error"; message: string };
+
+type ZktecoBridgePreflight = NonNullable<DeviceHealthResponse["checks"]["zktecoBridge"]> & {
+	estimatedRowsToSync?: number | string | null;
+	missingRows?: number | string | null;
+	dryRun?: { missingRows?: number | string | null };
+	data?: { dryRun?: { missingRows?: number | string | null } };
 };
 
 const viewOptions: SelectOption[] = [
@@ -406,6 +421,7 @@ export default function DeviceEventsPage() {
 	const [realtimeSavedEvents, setRealtimeSavedEvents] = useState<DeviceEvent[]>([]);
 	const [lastRoomJoinedAt, setLastRoomJoinedAt] = useState<string | null>(null);
 	const [lastRecoveryRefreshAt, setLastRecoveryRefreshAt] = useState<string | null>(null);
+	const [syncLogsState, setSyncLogsState] = useState<SyncLogsState>({ status: "idle" });
 
 	const pageParam = Number(searchParams.get("page")) || 1;
 	const limitParam = Number(searchParams.get("limit")) || 10;
@@ -427,6 +443,14 @@ export default function DeviceEventsPage() {
 	const { data: devicesData } = useDevices({ limit: 100, document: true });
 	const devices = useMemo(() => (devicesData as any)?.devices || [], [devicesData]);
 	const selectedDevice = deviceId === "all" ? undefined : devices.find((device: any) => device.id === deviceId);
+	const zktecoDevices = useMemo(
+		() => devices.filter((device: any) => isZktecoDevice(device)),
+		[devices],
+	);
+	const selectedZktecoDevice =
+		deviceId === "all" ? undefined : zktecoDevices.find((device: any) => device.id === deviceId);
+	const syncScopeDevices = selectedZktecoDevice ? [selectedZktecoDevice] : zktecoDevices;
+	const syncHealthDevice = selectedZktecoDevice || zktecoDevices[0];
 	const liveDevice = selectedDevice;
 	const liveDeviceId = liveDevice?.id;
 	const selectedDeviceRoomId = deviceId !== "all" ? deviceId : liveDeviceId || "";
@@ -436,6 +460,23 @@ export default function DeviceEventsPage() {
 		refetch: refetchHealth,
 	} = useDeviceHealth(liveDeviceId, Boolean(liveDeviceId));
 	const isZktecoHealth = isZktecoDevice(liveDevice, deviceHealth);
+	const {
+		data: syncDeviceHealth,
+		isLoading: isLoadingSyncHealth,
+		refetch: refetchSyncHealth,
+	} = useDeviceHealth(syncHealthDevice?.id, action === "sync-logs" && Boolean(syncHealthDevice?.id));
+	const {
+		data: syncPreview,
+		isLoading: isLoadingSyncPreview,
+		error: syncPreviewError,
+		refetch: refetchSyncPreview,
+	} = useDeviceSyncPreview(
+		{
+			deviceId,
+			source,
+		},
+		action === "sync-logs",
+	);
 	const canReadLiveEvents = Boolean(
 		liveDeviceId &&
 		!isZktecoHealth &&
@@ -625,9 +666,7 @@ export default function DeviceEventsPage() {
 		const toMs = to ? new Date(`${to}T23:59:59+08:00`).getTime() : null;
 
 		return realtimeSavedEvents.map(normalizeSavedEvent).filter((event) => {
-			if (deviceId !== "all" && event.deviceId !== deviceId) return false;
-			if (status !== "all" && event.status !== status) return false;
-			if (source !== "all" && event.source !== source) return false;
+			if (!savedDeviceEventMatchesScope(event, { deviceId, status, source })) return false;
 
 			const eventTimeMs = getEventTimeMs(event.eventTime);
 			if (fromMs && eventTimeMs !== null && eventTimeMs < fromMs) return false;
@@ -740,6 +779,54 @@ export default function DeviceEventsPage() {
 		latestRealtimeEventId,
 		isLatestSavedFresh,
 	});
+	const latestSavedProcessingLabel = latestSavedEvent
+		? getSavedDeviceEventProcessingLabel({
+				itemId: latestSavedEvent.id,
+				latestRealtimeEventId,
+				receivedAt: latestSavedEvent.receivedAt,
+				eventTime: latestSavedEvent.eventTime,
+			})
+		: null;
+	const savedScopeNote =
+		viewMode !== "saved"
+			? ""
+			: deviceId === "all" && source === "all"
+				? "All devices and all sources are included."
+				: `${selectedDevice?.name || "Selected devices"} / ${source === "all" ? "all sources" : formatEventSource(source)}`;
+	const syncBridge =
+		(syncPreview?.bridge as ZktecoBridgePreflight | undefined) ||
+		(syncDeviceHealth?.checks?.zktecoBridge as ZktecoBridgePreflight | undefined);
+	const syncLastHrisEvent = syncDeviceHealth?.checks?.lastZktecoEvent;
+	const syncBridgeOk = Boolean(syncBridge?.ok);
+	const syncBridgeError =
+		syncPreviewError?.message ||
+		syncPreview?.bridge?.error ||
+		syncBridge?.error ||
+		(syncHealthDevice && !syncBridgeOk ? "The ZKTeco bridge is not reachable for this preflight." : "");
+	const syncPreviewRows = syncPreview?.devices || [];
+	const syncDryRunEstimate = syncPreviewRows.length
+		? syncPreviewRows.reduce(
+				(total, row) => total + Number(row.needsSyncEvents || 0),
+				0,
+			)
+		: (
+				syncBridge?.estimatedRowsToSync ??
+				syncBridge?.missingRows ??
+				syncBridge?.dryRun?.missingRows ??
+				syncBridge?.data?.dryRun?.missingRows ??
+				null
+			);
+	const syncBridgeStatusUrl = syncBridge?.statusUrl || "Not reported";
+	const syncScopeLabel = selectedZktecoDevice
+		? selectedZktecoDevice.name || selectedZktecoDevice.address || "Selected ZKTeco device"
+		: syncPreviewRows.length
+			? `Preview devices (${syncPreviewRows.length})`
+			: `All ZKTeco devices (${syncScopeDevices.length})`;
+	const syncStatusLabel = syncBridge
+		? `${syncBridge.status}${syncBridge.latencyMs ? ` / ${syncBridge.latencyMs} ms` : ""}`
+		: isLoadingSyncHealth
+			? "Checking bridge"
+			: "Unavailable";
 	const focusLatestSavedEvent = () => {
 		if (!latestSavedEvent) return;
 		updateSearchParams((next) => {
@@ -766,6 +853,39 @@ export default function DeviceEventsPage() {
 			next.delete("id");
 		});
 	};
+	const openSyncLogs = () => {
+		setSyncLogsState({ status: "idle" });
+		updateSearchParams((next) => {
+			next.set("action", "sync-logs");
+			next.delete("id");
+		});
+	};
+	const closeSyncLogs = () => {
+		updateSearchParams((next) => {
+			next.delete("action");
+		});
+	};
+	const startZktecoSync = () => {
+		setSyncLogsState({ status: "idle" });
+		zktecoSync.mutate(selectedZktecoDevice ? { deviceId: selectedZktecoDevice.id } : {}, {
+			onSuccess: () => {
+				setSyncLogsState({
+					status: "accepted",
+					message: "Bridge accepted the sync request. Saved events and bridge health are refreshing.",
+				});
+				void refetch();
+				void refetchHealth();
+				void refetchSyncHealth();
+				void refetchSyncPreview();
+			},
+			onError: (error: any) => {
+				setSyncLogsState({
+					status: "error",
+					message: error?.message || "Bridge rejected the sync request.",
+				});
+			},
+		});
+	};
 	const realtimeStatus = getDeviceEventsRealtimeStatus({
 		isConnected,
 		organizationId,
@@ -780,8 +900,8 @@ export default function DeviceEventsPage() {
 			: "offline";
 	const realtimeStatusDetail = lastRealtimeEvent
 		? `Last socket event ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
-		: latestSavedEvent
-			? `Latest saved punch ${formatPunchTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
+			: latestSavedEvent
+			? `${latestSavedProcessingLabel || "Latest saved punch"} ${formatPunchTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
 			: "Waiting for the next saved punch";
 	const roomStatusLabel = realtimeStatus.isScoped
 		? !isConnected
@@ -855,15 +975,9 @@ export default function DeviceEventsPage() {
 			required: true,
 			render: (_value, item) => (
 				<div className="min-w-0">
-					{item.deviceId ? (
-						<Link
-							to={`/admin/devices/manage/${item.deviceId}`}
-							className="block truncate text-sm font-medium text-slate-950 hover:text-slate-700 hover:underline">
-							{item.deviceName || item.deviceId}
-						</Link>
-					) : (
-						<p className="truncate text-sm font-medium text-slate-950">-</p>
-					)}
+					<p className="truncate text-sm font-medium text-slate-950">
+						{item.deviceName || item.deviceId || "-"}
+					</p>
 					<p className="truncate text-xs text-slate-500">
 						{item.hasDeviceAddressDrift
 							? `Observed ${item.observedDeviceAddress}`
@@ -890,6 +1004,12 @@ export default function DeviceEventsPage() {
 					latestRealtimeEventId,
 					highlightedSavedEventId,
 				});
+				const processingLabel = getSavedDeviceEventProcessingLabel({
+					itemId: item.id,
+					latestRealtimeEventId,
+					receivedAt: item.receivedAt,
+					eventTime: item.eventTime,
+				});
 				return (
 					<div className="min-w-0 space-y-1">
 						<span className="block max-w-[170px] truncate text-sm font-medium text-slate-800">
@@ -903,12 +1023,23 @@ export default function DeviceEventsPage() {
 								{formatBusinessStatus(item.status)}
 							</span>
 						) : null}
-						{realtimeBadge ? (
+						{processingLabel ? (
 							<Badge
-								variant={realtimeBadge === "Live socket" ? "success-soft" : "warning-soft"}
+								variant={
+									processingLabel === "Realtime save"
+										? "success-soft"
+										: processingLabel === "Backfill/sync save"
+											? "warning-soft"
+											: "secondary"
+								}
 								className="max-w-[170px] px-1.5 py-0 text-[11px] font-semibold">
-								<span className="truncate">{realtimeBadge}</span>
+								<span className="truncate">{processingLabel}</span>
 							</Badge>
+						) : null}
+						{realtimeBadge ? (
+							<span className="block max-w-[170px] truncate text-[11px] font-medium text-emerald-700">
+								{realtimeBadge}
+							</span>
 						) : null}
 					</div>
 				);
@@ -945,17 +1076,7 @@ export default function DeviceEventsPage() {
 						variant="outline"
 						className="h-9 px-3"
 						disabled={zktecoSync.isPending}
-						onClick={() =>
-							zktecoSync.mutate(
-								deviceId !== "all" ? { deviceId } : {},
-								{
-									onSuccess: () => {
-										void refetch();
-										void refetchHealth();
-									},
-								},
-							)
-						}>
+						onClick={openSyncLogs}>
 						<UploadCloud className="mr-2 h-4 w-4" />
 						{zktecoSync.isPending ? "Starting" : "Sync logs"}
 					</Button>
@@ -1083,6 +1204,16 @@ export default function DeviceEventsPage() {
 										}>
 										{realtimeStatus.scopeLabel} - {realtimeStatusDetail}
 									</p>
+									{viewMode === "saved" && savedScopeNote ? (
+										<p
+											className={
+												realtimeStatus.isListening
+													? "truncate text-[11px] text-emerald-700"
+													: "truncate text-[11px] text-amber-700"
+											}>
+											{savedScopeNote}
+										</p>
+									) : null}
 								</div>
 							</div>
 							<div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
@@ -1193,7 +1324,7 @@ export default function DeviceEventsPage() {
 								}
 							/>
 							<span className="truncate font-medium">
-								{isLatestSavedFresh ? "New punch saved to HRIS" : "Latest saved punch"}
+								{latestSavedProcessingLabel || (isLatestSavedFresh ? "Realtime save" : "Latest saved punch")}
 							</span>
 							<span className="truncate text-xs opacity-80">
 								{latestSavedEvent.employeeName || `No. ${latestSavedEvent.employeeNo || "-"}`}
@@ -1203,6 +1334,8 @@ export default function DeviceEventsPage() {
 							<span className="truncate">{formatPunchTime(latestSavedEvent.receivedAt)}</span>
 							<span className="text-slate-400">/</span>
 							<span className="truncate">{formatEventSource(latestSavedEvent.source)}</span>
+							<span className="text-slate-400">/</span>
+							<span className="truncate">{latestSavedEvent.deviceName || latestSavedEvent.deviceAddress || "Device"}</span>
 							{lastRealtimeEvent?.emittedAt && latestRealtimeEventId === latestSavedEvent.id && (
 								<Badge variant="success-soft" className="px-2 py-0.5">
 									Socket received
@@ -1273,6 +1406,207 @@ export default function DeviceEventsPage() {
 			</div>
 
 			<Modal
+				open={action === "sync-logs"}
+				onOpenChange={(open) => {
+					if (!open) closeSyncLogs();
+				}}
+				title="Sync ZKTeco logs"
+				description="Review bridge health and scope before starting an HRIS attendance sync."
+				className="max-w-3xl">
+				<div className="space-y-4">
+					<div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+						<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+							<div className="min-w-0">
+								<p className="text-xs font-semibold uppercase text-slate-500">Selected scope</p>
+								<p className="mt-1 truncate text-base font-semibold text-slate-950">
+									{syncScopeLabel}
+								</p>
+								<p className="mt-1 text-xs text-slate-600">
+									{selectedZktecoDevice
+										? `${selectedZktecoDevice.address || "-"}:${selectedZktecoDevice.port || "-"}`
+										: "Preview includes configured Hikvision and ZKTeco sources in the current filters."}
+								</p>
+							</div>
+							<Badge
+								variant={syncBridgeOk ? "success-soft" : "warning-soft"}
+								className="w-fit rounded-md px-2 py-1 font-semibold">
+								{syncBridgeOk ? "Bridge reachable" : "Bridge unavailable"}
+							</Badge>
+						</div>
+						{syncPreviewRows.length > 0 ? (
+							<div className="mt-3 flex flex-wrap gap-1.5">
+								{syncPreviewRows.slice(0, 5).map((device) => (
+									<Badge key={device.deviceId} variant="outline" className="px-2 py-0.5">
+										{device.name || device.address || device.deviceId}
+									</Badge>
+								))}
+								{syncPreviewRows.length > 5 ? (
+									<Badge variant="outline" className="px-2 py-0.5">
+										+{syncPreviewRows.length - 5} more
+									</Badge>
+								) : null}
+							</div>
+						) : (
+							<div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+								{isLoadingSyncPreview ? "Building sync preview." : "No sync-capable devices are available in the current filters."}
+							</div>
+						)}
+					</div>
+
+					<div className="grid gap-3 md:grid-cols-2">
+						<div className="rounded-lg border border-slate-200 bg-white p-3">
+							<p className="text-xs font-semibold uppercase text-slate-500">Bridge status</p>
+							<p className="mt-2 text-sm font-semibold text-slate-950">{syncStatusLabel}</p>
+							<p className="mt-1 break-all text-xs text-slate-500">{syncBridgeStatusUrl}</p>
+						</div>
+						<div className="rounded-lg border border-slate-200 bg-white p-3">
+							<p className="text-xs font-semibold uppercase text-slate-500">Connected devices</p>
+							<p className="mt-2 text-sm font-semibold text-slate-950">
+								{syncBridge
+									? `${formatCount(syncBridge.connectedDevices)} of ${formatCount(syncBridge.configuredDevices)}`
+									: "Unavailable"}
+							</p>
+							<p className="mt-1 text-xs text-slate-500">
+								{syncBridge?.runtime || "Bridge runtime was not reported."}
+							</p>
+						</div>
+						<div className="rounded-lg border border-slate-200 bg-white p-3">
+							<p className="text-xs font-semibold uppercase text-slate-500">Last bridge event</p>
+							<p className="mt-2 text-sm font-semibold text-slate-950">
+								{formatPunchTime(syncBridge?.device?.lastEventAt || syncBridge?.lastEventAt)}
+							</p>
+							<p className="mt-1 text-xs text-slate-500">
+								{syncBridge?.device?.address || syncHealthDevice?.address || "Device not reported"}
+							</p>
+						</div>
+						<div className="rounded-lg border border-slate-200 bg-white p-3">
+							<p className="text-xs font-semibold uppercase text-slate-500">Last HRIS saved event</p>
+							<p className="mt-2 text-sm font-semibold text-slate-950">
+								{formatPunchTime(syncLastHrisEvent?.receivedAt || syncLastHrisEvent?.eventTime)}
+							</p>
+							<p className="mt-1 text-xs text-slate-500">
+								{syncLastHrisEvent
+									? `${formatBusinessStatus(String(syncLastHrisEvent.status))} / No. ${syncLastHrisEvent.employeeNo || "-"}`
+									: "No saved ZKTeco event was reported by health."}
+							</p>
+						</div>
+					</div>
+
+					<div className="rounded-lg border border-slate-200 bg-white p-3">
+						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="text-xs font-semibold uppercase text-slate-500">Estimated rows to sync</p>
+								<p className="mt-1 text-sm font-semibold text-slate-950">
+									{syncDryRunEstimate === null || syncDryRunEstimate === undefined
+										? "Unavailable"
+										: formatCount(syncDryRunEstimate)}
+								</p>
+							</div>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="h-8 px-3 text-xs"
+								disabled={isLoadingSyncPreview || isLoadingSyncHealth}
+								onClick={() => {
+									void refetchSyncHealth();
+									void refetchSyncPreview();
+								}}>
+								<RefreshCw className="h-3.5 w-3.5" />
+								Refresh preflight
+							</Button>
+						</div>
+						<p className="mt-2 text-xs text-slate-500">
+							{syncDryRunEstimate === null || syncDryRunEstimate === undefined
+								? "The bridge did not report a dry-run count, so HRIS will not invent one."
+								: "This estimate came from bridge preflight data."}
+						</p>
+					</div>
+
+					<div className="rounded-lg border border-slate-200 bg-white">
+						<div className="border-b border-slate-100 px-3 py-2">
+							<p className="text-xs font-semibold uppercase text-slate-500">Device dry run</p>
+						</div>
+						<div className="divide-y divide-slate-100">
+							{syncPreviewRows.length ? (
+								syncPreviewRows.map((device) => {
+									const totalLabel =
+										device.totalEvents === null || device.totalEvents === undefined
+											? "?"
+											: formatCount(device.totalEvents);
+									const needsLabel =
+										device.needsSyncEvents === null || device.needsSyncEvents === undefined
+											? "unknown"
+											: formatCount(device.needsSyncEvents);
+									return (
+										<div key={device.deviceId} className="flex flex-col gap-2 px-3 py-3 md:flex-row md:items-center md:justify-between">
+											<div className="min-w-0">
+												<p className="truncate text-sm font-semibold text-slate-950">
+													{device.vendor} {device.name || device.address}
+												</p>
+												<p className="truncate text-xs text-slate-500">
+													{device.address}:{device.port} / {formatEventSource(device.source)}
+												</p>
+												{device.error ? (
+													<p className="mt-1 text-xs text-red-700">{device.error}</p>
+												) : null}
+											</div>
+											<div className="flex shrink-0 flex-wrap items-center gap-2 text-sm">
+												<Badge
+													variant={device.status === "needs_sync" ? "warning-soft" : device.status === "synced" ? "success-soft" : "secondary"}
+													className="px-2 py-0.5 font-semibold">
+													{formatCount(device.syncedEvents)} / {totalLabel}
+												</Badge>
+												<span className="text-xs font-medium text-slate-600">
+													{needsLabel} need sync
+												</span>
+											</div>
+										</div>
+									);
+								})
+							) : (
+								<div className="px-3 py-3 text-sm text-slate-500">
+									{isLoadingSyncPreview ? "Reading device history counts." : "No device preview rows returned."}
+								</div>
+							)}
+						</div>
+					</div>
+
+					{syncBridgeError ? (
+						<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+							<p className="font-semibold">Bridge connection error</p>
+							<p className="mt-1 break-words">{syncBridgeError}</p>
+						</div>
+					) : null}
+
+					{syncLogsState.status === "accepted" ? (
+						<div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+							{syncLogsState.message}
+						</div>
+					) : null}
+					{syncLogsState.status === "error" ? (
+						<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+							{syncLogsState.message}
+						</div>
+					) : null}
+
+					<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+						<Button type="button" variant="outline" className="h-9 px-3" onClick={closeSyncLogs}>
+							Close
+						</Button>
+						<Button
+							type="button"
+							className="h-9 px-3"
+							disabled={zktecoSync.isPending || !syncBridgeOk || syncScopeDevices.length === 0}
+							onClick={startZktecoSync}>
+							<UploadCloud className="h-4 w-4" />
+							{zktecoSync.isPending ? "Starting sync" : "Start actual sync"}
+						</Button>
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
 				open={action === "view-event"}
 				onOpenChange={(open) => {
 					if (!open) closeEventDetails();
@@ -1311,14 +1645,6 @@ export default function DeviceEventsPage() {
 										<Link to={getEmployeeRecordUrl(activeEvent.employeeProfileId)}>
 											<UserRound className="h-3.5 w-3.5" />
 											Employee record
-										</Link>
-									</Button>
-								) : null}
-								{activeEvent.deviceId ? (
-									<Button asChild variant="outline" size="sm" className="h-8 px-3 text-xs">
-										<Link to={`/admin/devices/manage/${activeEvent.deviceId}`}>
-											<Server className="h-3.5 w-3.5" />
-											Terminal
 										</Link>
 									</Button>
 								) : null}

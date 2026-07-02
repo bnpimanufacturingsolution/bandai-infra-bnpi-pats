@@ -8,6 +8,7 @@ import socket
 import sys
 import threading
 import time
+from urllib.parse import parse_qs, urlsplit
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Iterable
@@ -510,8 +511,73 @@ def sync_target(target: Target, args: argparse.Namespace) -> dict[str, Any]:
                 pass
 
 
-def run_sync(targets: Iterable[Target], args: argparse.Namespace, state: BridgeState | None = None) -> int:
+def target_matches_device_ip(target: Target, device_ip: str | None) -> bool:
+    return not device_ip or target.host.strip() == device_ip.strip()
+
+
+def filter_targets_for_device(targets: Iterable[Target], device_ip: str | None) -> list[Target]:
     target_list = list(targets)
+    filtered = [target for target in target_list if target_matches_device_ip(target, device_ip)]
+    return filtered if device_ip else target_list
+
+
+def summarize_sync_result(result: dict[str, Any]) -> dict[str, Any]:
+    attendance = result.get("attendance") or {}
+    webhook = result.get("webhook") or {}
+    target = result.get("target") or {}
+    selected = int(attendance.get("selected") or 0)
+    return {
+        "name": target.get("name"),
+        "ip": target.get("host"),
+        "port": target.get("port"),
+        "connected": bool(result.get("ok")),
+        "totalEvents": int(attendance.get("available") or 0),
+        "selectedEvents": selected,
+        "wouldPost": selected,
+        "posted": int(webhook.get("posted") or 0),
+        "failed": int(webhook.get("failed") or 0),
+        "firstSelectedAt": attendance.get("firstSelectedAt"),
+        "lastSelectedAt": attendance.get("lastSelectedAt"),
+        **({"lastError": result.get("error")} if result.get("error") else {}),
+    }
+
+
+def run_preview(targets: Iterable[Target], args: argparse.Namespace, device_ip: str | None = None) -> dict[str, Any]:
+    target_list = filter_targets_for_device(targets, device_ip)
+    devices = []
+    failures = 0
+    total_events = 0
+    selected_events = 0
+
+    emit({"event": "preview_started", "timestamp": utc_now(), "targetCount": len(target_list), "deviceIp": device_ip})
+    for target in target_list:
+        result = sync_target(target, argparse.Namespace(**{**vars(args), "dry_run_webhooks": True}))
+        emit(result)
+        summary = summarize_sync_result(result)
+        devices.append(summary)
+        if not result.get("ok"):
+            failures += 1
+        total_events += int(summary.get("totalEvents") or 0)
+        selected_events += int(summary.get("selectedEvents") or 0)
+
+    payload = {
+        "service": "project-truth-zkteco-linux-pyzk-bridge",
+        "runtime": BRIDGE_RUNTIME,
+        "status": "online" if devices and failures == 0 else "degraded",
+        "dryRun": True,
+        "deviceIp": device_ip,
+        "configuredDevices": len(target_list),
+        "connectedDevices": len([device for device in devices if device.get("connected")]),
+        "totalEvents": total_events,
+        "selectedEvents": selected_events,
+        "devices": devices,
+    }
+    emit({"event": "preview_finished", "timestamp": utc_now(), "failures": failures, "selectedEvents": selected_events})
+    return payload
+
+
+def run_sync(targets: Iterable[Target], args: argparse.Namespace, state: BridgeState | None = None) -> int:
+    target_list = filter_targets_for_device(targets, getattr(args, "device_ip", None))
     failures = 0
     connected = 0
     events_seen = 0
@@ -584,15 +650,30 @@ def make_bridge_handler(state: BridgeState, targets: list[Target], args: argpars
             self.end_headers()
             self.wfile.write(body)
 
+        def _query(self) -> dict[str, list[str]]:
+            return parse_qs(urlsplit(self.path).query)
+
+        def _device_ip(self) -> str | None:
+            query = self._query()
+            value = (query.get("deviceIp") or query.get("device_ip") or [""])[0]
+            return value.strip() or None
+
         def do_GET(self) -> None:  # noqa: N802
-            if self.path.split("?", 1)[0] in {"/health", "/status"}:
+            path = urlsplit(self.path).path
+            if path in {"/health", "/status"}:
                 self._write_json(200, state.snapshot())
+                return
+            if path == "/preview":
+                payload = run_preview(targets, args, self._device_ip())
+                self._write_json(200 if payload["connectedDevices"] else 207, payload)
                 return
             self._write_json(404, {"error": "not_found"})
 
         def do_POST(self) -> None:  # noqa: N802
-            if self.path.split("?", 1)[0] == "/sync":
-                exit_code = run_sync(targets, args, state)
+            path = urlsplit(self.path).path
+            if path == "/sync":
+                sync_args = argparse.Namespace(**{**vars(args), "device_ip": self._device_ip()})
+                exit_code = run_sync(targets, sync_args, state)
                 self._write_json(202 if exit_code == 0 else 207, state.snapshot())
                 return
             self._write_json(404, {"error": "not_found"})
@@ -635,6 +716,10 @@ def run(targets: Iterable[Target], args: argparse.Namespace) -> int:
     if args.mode == "capabilities":
         emit({"event": "capabilities", "timestamp": utc_now(), **CAPABILITY_REPORT})
         return 0
+    if args.mode == "preview":
+        payload = run_preview(targets, args, args.device_ip)
+        emit(payload)
+        return 0 if payload["connectedDevices"] else 1
     if args.mode == "sync":
         return run_sync(targets, args)
     if args.mode == "bridge":
@@ -667,7 +752,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Read-only ZKTeco Linux connectivity trial.")
     parser.add_argument(
         "--mode",
-        choices=("tcp", "handshake", "users", "attendance", "history", "sync", "bridge", "capabilities"),
+        choices=("tcp", "handshake", "users", "attendance", "history", "preview", "sync", "bridge", "capabilities"),
         default="tcp",
     )
     parser.add_argument("--target", action="append", type=parse_target, help="name=host:port")
@@ -680,6 +765,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run-webhooks", action="store_true")
     parser.add_argument("--latest", type=int, default=int(os.environ.get("ZKTECO_SYNC_LATEST", "1")))
     parser.add_argument("--since", default=os.environ.get("ZKTECO_SYNC_SINCE", ""))
+    parser.add_argument("--device-ip", default=os.environ.get("ZKTECO_DEVICE_IP", ""))
     parser.add_argument("--status-host", default=os.environ.get("ZKTECO_STATUS_HOST", "0.0.0.0"))
     parser.add_argument("--status-port", type=int, default=int(os.environ.get("ZKTECO_STATUS_PORT", "4371")))
     parser.add_argument("--poll-seconds", type=float, default=float(os.environ.get("ZKTECO_POLL_SECONDS", "30")))

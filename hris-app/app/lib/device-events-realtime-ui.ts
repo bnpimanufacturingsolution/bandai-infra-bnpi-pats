@@ -38,6 +38,68 @@ export const getDeviceEventsRealtimeStatus = ({
 	};
 };
 
+export type SavedDeviceEventScopeCandidate = {
+	deviceId?: string | null;
+	status?: string | null;
+	source?: string | null;
+};
+
+export type SavedDeviceEventScope = {
+	deviceId?: string | null;
+	status?: string | null;
+	source?: string | null;
+};
+
+export const savedDeviceEventMatchesScope = (
+	event: SavedDeviceEventScopeCandidate,
+	scope: SavedDeviceEventScope,
+) => {
+	if (scope.deviceId && scope.deviceId !== "all" && event.deviceId !== scope.deviceId) {
+		return false;
+	}
+	if (scope.status && scope.status !== "all" && event.status !== scope.status) {
+		return false;
+	}
+	if (scope.source && scope.source !== "all" && event.source !== scope.source) {
+		return false;
+	}
+	return true;
+};
+
+const getTimeMs = (value?: string | Date | null) => {
+	if (!value) return null;
+	const parsed = value instanceof Date ? value : new Date(value);
+	return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+};
+
+export const getSavedDeviceEventProcessingLabel = ({
+	itemId,
+	latestRealtimeEventId,
+	receivedAt,
+	eventTime,
+}: {
+	itemId: string;
+	latestRealtimeEventId?: string | null;
+	receivedAt?: string | Date | null;
+	eventTime?: string | Date | null;
+}) => {
+	if (itemId && latestRealtimeEventId && itemId === latestRealtimeEventId) {
+		return "Realtime save";
+	}
+
+	const receivedAtMs = getTimeMs(receivedAt);
+	const eventTimeMs = getTimeMs(eventTime);
+	if (
+		receivedAtMs !== null &&
+		eventTimeMs !== null &&
+		receivedAtMs - eventTimeMs > 2 * 60 * 1000
+	) {
+		return "Backfill/sync save";
+	}
+
+	return "Historical punch";
+};
+
 export const getSavedDeviceEventRealtimeBadge = ({
 	viewMode,
 	itemId,

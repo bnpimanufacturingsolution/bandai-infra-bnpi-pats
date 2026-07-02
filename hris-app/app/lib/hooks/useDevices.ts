@@ -3,7 +3,7 @@ import devicesService, {
 	type DevicesResponse,
 	type DeviceEventsResponse,
 	type DeviceHealthResponse,
-	type Device,
+	type DeviceSyncPreviewResponse,
 	type CreateDeviceRequest,
 	type UpdateDeviceRequest,
 	type ZktecoAttendanceSyncRequest,
@@ -21,6 +21,8 @@ export const queryKeys = {
 		detail: (id: string) => [...queryKeys.devices.details(), id] as const,
 		events: (params?: ApiQueryParams) => [...queryKeys.devices.all, "events", { params }] as const,
 		health: (id?: string) => [...queryKeys.devices.all, "health", id] as const,
+		syncPreview: (params?: { deviceId?: string; source?: string }) =>
+			[...queryKeys.devices.all, "sync-preview", { params }] as const,
 	},
 };
 
@@ -80,6 +82,19 @@ export const useDeviceHealth = (deviceId?: string, enabled = true) => {
 		enabled: Boolean(deviceId) && enabled,
 		staleTime: 10 * 1000,
 		refetchInterval: enabled && deviceId ? 30 * 1000 : false,
+		retry: 1,
+	});
+};
+
+export const useDeviceSyncPreview = (
+	params: { deviceId?: string; source?: string },
+	enabled = true,
+) => {
+	return useQuery<DeviceSyncPreviewResponse>({
+		queryKey: queryKeys.devices.syncPreview(params),
+		queryFn: () => devicesService.getDeviceSyncPreview(params),
+		enabled,
+		staleTime: 10 * 1000,
 		retry: 1,
 	});
 };

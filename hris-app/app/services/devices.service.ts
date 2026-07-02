@@ -142,6 +142,36 @@ export interface DeviceHealthResponse {
 	};
 }
 
+export interface DeviceSyncPreviewRow {
+	deviceId: string;
+	name: string;
+	address: string;
+	port: number;
+	vendor: "ZKTeco" | "Hikvision" | string;
+	source: DeviceEventSource | string;
+	syncedEvents: number;
+	totalEvents: number | null;
+	needsSyncEvents: number | null;
+	status: "synced" | "needs_sync" | "source_total_unavailable" | string;
+	lastSourceEventAt?: string | null;
+	error?: string | null;
+}
+
+export interface DeviceSyncPreviewResponse {
+	generatedAt: string;
+	scope: {
+		deviceId: string;
+		source: string;
+	};
+	bridge?: {
+		ok: boolean;
+		status: string;
+		statusUrl?: string | null;
+		error?: string | null;
+	} | null;
+	devices: DeviceSyncPreviewRow[];
+}
+
 export interface CreateDeviceRequest {
 	name: string;
 	address: string;
@@ -394,6 +424,26 @@ class DevicesService extends APIService {
 			console.error("Error checking device health:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error checking device health",
+			);
+		}
+	}
+
+	async getDeviceSyncPreview(params: { deviceId?: string; source?: string } = {}): Promise<DeviceSyncPreviewResponse> {
+		try {
+			const query = new URLSearchParams();
+			if (params.deviceId && params.deviceId !== "all") query.set("deviceId", params.deviceId);
+			if (params.source && params.source !== "all") query.set("source", params.source);
+			const endpoint = `/api/device/sync-preview${query.toString() ? `?${query.toString()}` : ""}`;
+			const response = await hrisApiClient.get<any>(endpoint);
+			const previewData = response.data?.data || response.data;
+			if (!previewData) {
+				throw new Error("Failed to build device sync preview");
+			}
+			return previewData as DeviceSyncPreviewResponse;
+		} catch (error: any) {
+			console.error("Error building device sync preview:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error building device sync preview",
 			);
 		}
 	}

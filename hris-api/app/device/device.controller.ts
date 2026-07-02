@@ -177,6 +177,16 @@ export const controller = (prisma: PrismaClient) => {
 		);
 	};
 
+	const isHikvisionDevice = (device: {
+		name?: string | null;
+		config?: Prisma.JsonValue | null;
+	}) => {
+		const configValue = device.config as any;
+		const vendor = String(configValue?.vendor || configValue?.type || configValue?.source || "").toLowerCase();
+		const name = String(device.name || "").toLowerCase();
+		return vendor.includes("hikvision") || name.includes("hikvision") || name.includes("entrance");
+	};
+
 	const getHealthStatus = (checks: Array<{ ok: boolean }>) => {
 		const onlineCount = checks.filter((check) => check.ok).length;
 		if (onlineCount === checks.length) return "online";
@@ -224,6 +234,47 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const getZktecoBridgePreview = async (deviceIp?: string | null) => {
+		const statusUrl = String(process.env.ZKTECO_BRIDGE_STATUS_URL || "").trim();
+		if (!statusUrl) {
+			return {
+				ok: false,
+				status: "not_configured",
+				statusUrl: null,
+				data: null,
+				error: "ZKTECO_BRIDGE_STATUS_URL is not configured",
+			};
+		}
+
+		const previewUrl = new URL(statusUrl);
+		previewUrl.pathname = previewUrl.pathname.replace(/\/status\/?$/, "/preview");
+		if (deviceIp) previewUrl.searchParams.set("deviceIp", deviceIp);
+
+		const timeoutMs = Number(process.env.ZKTECO_BRIDGE_PREVIEW_TIMEOUT_MS || 15000);
+		try {
+			const response = await fetch(previewUrl.toString(), {
+				method: "GET",
+				signal: AbortSignal.timeout(timeoutMs),
+			});
+			const data = await response.json().catch(() => null);
+			return {
+				ok: response.ok,
+				status: response.ok ? data?.status || "previewed" : "failed",
+				statusUrl: previewUrl.toString(),
+				data,
+				...(response.ok ? {} : { error: `HTTP ${response.status}` }),
+			};
+		} catch (error: any) {
+			return {
+				ok: false,
+				status: "offline",
+				statusUrl: previewUrl.toString(),
+				data: null,
+				error: error?.message || "ZKTeco SDK sidecar preview did not respond",
+			};
+		}
+	};
+
 	const postZktecoBridgeSync = async (deviceIp?: string | null) => {
 		const statusUrl = String(process.env.ZKTECO_BRIDGE_STATUS_URL || "").trim();
 		if (!statusUrl) {
@@ -261,6 +312,55 @@ export const controller = (prisma: PrismaClient) => {
 				statusUrl: syncUrl.toString(),
 				data: null,
 				error: error?.message || "ZKTeco SDK sidecar sync did not respond",
+			};
+		}
+	};
+
+	const firstNumericValueForKeys = (value: unknown, keys: string[]): number | null => {
+		if (!value || typeof value !== "object") return null;
+		const record = value as Record<string, unknown>;
+		for (const key of keys) {
+			const direct = record[key];
+			if (direct !== undefined && direct !== null && Number.isFinite(Number(direct))) {
+				return Number(direct);
+			}
+		}
+		for (const nested of Object.values(record)) {
+			const found = firstNumericValueForKeys(nested, keys);
+			if (found !== null) return found;
+		}
+		return null;
+	};
+
+	const getHikvisionSourceTotal = async (req: Request, deviceId: string) => {
+		try {
+			const data = await hikvisionFetch(hikvisionEndpoint.accessControl.acsEventTotalNum.get, {
+				method: "GET",
+				deviceId,
+				prisma,
+				request: req,
+				timeoutMs: 3500,
+			});
+			return {
+				ok: true,
+				totalEvents: firstNumericValueForKeys(data, [
+					"totalNum",
+					"totalNumber",
+					"total",
+					"eventTotal",
+					"eventTotalNum",
+				]),
+				raw: data,
+			};
+		} catch (error: any) {
+			return {
+				ok: false,
+				totalEvents: null,
+				error:
+					error?.data?.errorCode ||
+					error?.data?.errorCause ||
+					error?.message ||
+					"Hikvision ACS total number did not respond",
 			};
 		}
 	};
@@ -306,6 +406,169 @@ export const controller = (prisma: PrismaClient) => {
 		} catch (error: any) {
 			res.status(500).json(
 				buildErrorResponse(error?.message || "Failed to start ZKTeco sync", 500),
+			);
+		}
+	};
+
+	const getDeviceSyncPreview = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const organizationId = (req as any).organizationId;
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("Organization ID not found", 400));
+				return;
+			}
+
+			const selectedDeviceId = String(req.query.deviceId || "").trim();
+			const selectedSource = String(req.query.source || "all").trim();
+			const devices = await prisma.device.findMany({
+				where: {
+					organizationId: String(organizationId),
+					isDeleted: false,
+					...(selectedDeviceId && selectedDeviceId !== "all" ? { id: selectedDeviceId } : {}),
+				},
+				select: {
+					id: true,
+					name: true,
+					address: true,
+					port: true,
+					protocol: true,
+					config: true,
+				},
+				orderBy: [{ name: "asc" }, { address: "asc" }],
+			});
+
+			const syncDevices = devices
+				.map((device) => {
+					if (isZktecoDevice(device)) {
+						return { ...device, vendor: "ZKTeco", source: "ZKTECO_EVENT" as const };
+					}
+					if (isHikvisionDevice(device)) {
+						return { ...device, vendor: "Hikvision", source: "HIKVISION_CALLBACK" as const };
+					}
+					return null;
+				})
+				.filter((device): device is NonNullable<typeof device> => Boolean(device))
+				.filter((device) => selectedSource === "all" || device.source === selectedSource);
+
+			if (!syncDevices.length) {
+				res.status(200).json(
+					buildSuccessResponse(
+						"Device sync preview generated",
+						{
+							generatedAt: new Date().toISOString(),
+							scope: {
+								deviceId: selectedDeviceId || "all",
+								source: selectedSource,
+							},
+							devices: [],
+						},
+						200,
+					),
+				);
+				return;
+			}
+
+			const savedCounts = await (prisma as any).deviceEvent.groupBy({
+				by: ["deviceId", "source"],
+				where: {
+					organizationId: String(organizationId),
+					deviceId: { in: syncDevices.map((device) => device.id) },
+					source: { in: ["ZKTECO_EVENT", "HIKVISION_CALLBACK"] },
+				},
+				_count: { _all: true },
+			});
+			const savedCountByDeviceAndSource = new Map<string, number>();
+			for (const row of savedCounts || []) {
+				savedCountByDeviceAndSource.set(
+					`${row.deviceId}|${row.source}`,
+					Number(row?._count?._all || 0),
+				);
+			}
+
+			const zktecoDevices = syncDevices.filter((device) => device.vendor === "ZKTeco");
+			const zktecoPreview =
+				zktecoDevices.length > 0
+					? await getZktecoBridgePreview(
+							zktecoDevices.length === 1 ? zktecoDevices[0].address : null,
+						)
+					: null;
+			const zktecoPreviewByIp = new Map<string, any>();
+			for (const item of zktecoPreview?.data?.devices || []) {
+				zktecoPreviewByIp.set(String(item?.ip || "").trim(), item);
+			}
+
+			const hikvisionTotals = new Map<string, Awaited<ReturnType<typeof getHikvisionSourceTotal>>>();
+			await Promise.all(
+				syncDevices
+					.filter((device) => device.vendor === "Hikvision")
+					.map(async (device) => {
+						hikvisionTotals.set(device.id, await getHikvisionSourceTotal(req, device.id));
+					}),
+			);
+
+			const previewRows = syncDevices.map((device) => {
+				const syncedEvents = savedCountByDeviceAndSource.get(`${device.id}|${device.source}`) || 0;
+				const sourcePreview =
+					device.vendor === "ZKTeco"
+						? zktecoPreviewByIp.get(String(device.address || "").trim())
+						: hikvisionTotals.get(device.id);
+				const totalEvents =
+					device.vendor === "ZKTeco"
+						? sourcePreview?.totalEvents ?? null
+						: sourcePreview?.totalEvents ?? null;
+				const needsSyncEvents =
+					Number.isFinite(Number(totalEvents))
+						? Math.max(Number(totalEvents) - syncedEvents, 0)
+						: null;
+				return {
+					deviceId: device.id,
+					name: device.name,
+					address: device.address,
+					port: device.port,
+					vendor: device.vendor,
+					source: device.source,
+					syncedEvents,
+					totalEvents,
+					needsSyncEvents,
+					status:
+						totalEvents === null
+							? "source_total_unavailable"
+							: needsSyncEvents && needsSyncEvents > 0
+								? "needs_sync"
+								: "synced",
+					lastSourceEventAt:
+						device.vendor === "ZKTeco" ? sourcePreview?.lastSelectedAt || null : null,
+					...(sourcePreview?.error || sourcePreview?.lastError
+						? { error: sourcePreview.error || sourcePreview.lastError }
+						: {}),
+				};
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"Device sync preview generated",
+					{
+						generatedAt: new Date().toISOString(),
+						scope: {
+							deviceId: selectedDeviceId || "all",
+							source: selectedSource,
+						},
+						bridge: zktecoPreview
+							? {
+									ok: zktecoPreview.ok,
+									status: zktecoPreview.status,
+									statusUrl: zktecoPreview.statusUrl,
+									error: zktecoPreview.error,
+								}
+							: null,
+						devices: previewRows,
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Failed to build device sync preview", 500),
 			);
 		}
 	};
@@ -595,7 +858,7 @@ export const controller = (prisma: PrismaClient) => {
 			const from = String(req.query.from || "").trim();
 			const to = String(req.query.to || "").trim();
 			const dateField = String(req.query.dateField || "eventTime").trim();
-			const sort = String(req.query.sort || "receivedAt").trim();
+			const sort = String(req.query.sort || "eventTime").trim();
 			const order = String(req.query.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
 			const dateColumnSql =
 				dateField === "receivedAt" ? Prisma.sql`de."receivedAt"` : Prisma.sql`de."eventTime"`;
@@ -1557,6 +1820,7 @@ export const controller = (prisma: PrismaClient) => {
 		getAll,
 		getEvents,
 		getDeviceHealth,
+		getDeviceSyncPreview,
 		triggerZktecoAttendanceSync,
 		getById,
 		update,

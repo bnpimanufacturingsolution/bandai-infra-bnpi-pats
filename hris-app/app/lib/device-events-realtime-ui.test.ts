@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
 	getDeviceEventsRealtimeStatus,
 	getHighlightedSavedDeviceEventId,
+	getSavedDeviceEventProcessingLabel,
 	getSavedDeviceEventRealtimeBadge,
 	prependRealtimeSavedRow,
 	prependRealtimeSavedRows,
+	savedDeviceEventMatchesScope,
 } from "./device-events-realtime-ui";
 
 describe("device events realtime UI", () => {
@@ -66,6 +68,55 @@ describe("device events realtime UI", () => {
 				highlightedSavedEventId: "event-1",
 			}),
 		).to.equal("Live socket");
+	});
+
+	it("labels the exact socket row as a realtime save", () => {
+		expect(
+			getSavedDeviceEventProcessingLabel({
+				itemId: "event-1",
+				latestRealtimeEventId: "event-1",
+				eventTime: "2026-07-02T02:20:00.000Z",
+				receivedAt: "2026-07-02T02:20:02.000Z",
+			}),
+		).to.equal("Realtime save");
+	});
+
+	it("labels old punch times saved later as backfill or sync saves", () => {
+		expect(
+			getSavedDeviceEventProcessingLabel({
+				itemId: "event-1",
+				latestRealtimeEventId: null,
+				eventTime: "2026-07-02T00:14:00.000Z",
+				receivedAt: "2026-07-02T02:20:00.000Z",
+			}),
+		).to.equal("Backfill/sync save");
+	});
+
+	it("labels rows without a processing delay as historical punches", () => {
+		expect(
+			getSavedDeviceEventProcessingLabel({
+				itemId: "event-1",
+				latestRealtimeEventId: null,
+				eventTime: "2026-07-02T02:20:00.000Z",
+				receivedAt: "2026-07-02T02:20:30.000Z",
+			}),
+		).to.equal("Historical punch");
+	});
+
+	it("keeps realtime overlays inside the selected device and source scope", () => {
+		expect(
+			savedDeviceEventMatchesScope(
+				{ deviceId: "hikvision-main", source: "HIKVISION_CALLBACK", status: "MATCHED" },
+				{ deviceId: "hikvision-main", source: "HIKVISION_CALLBACK", status: "all" },
+			),
+		).to.equal(true);
+
+		expect(
+			savedDeviceEventMatchesScope(
+				{ deviceId: "zkteco-1", source: "ZKTECO_EVENT", status: "MATCHED" },
+				{ deviceId: "hikvision-main", source: "HIKVISION_CALLBACK", status: "all" },
+			),
+		).to.equal(false);
 	});
 
 	it("keeps the newest saved punch highlighted when a socket event points at an older deduped row", () => {

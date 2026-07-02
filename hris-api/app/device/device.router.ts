@@ -7,6 +7,7 @@ interface IController {
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceHealth(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceSyncPreview(req: Request, res: Response, next: NextFunction): Promise<void>;
 	triggerZktecoAttendanceSync(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -32,6 +33,7 @@ export const router = (route: Router, controller: IController): Router => {
 	);
 
 	routes.get("/:id/health", controller.getDeviceHealth);
+	routes.get("/sync-preview", controller.getDeviceSyncPreview);
 	routes.post("/zkteco/sync", controller.triggerZktecoAttendanceSync);
 
 	/**

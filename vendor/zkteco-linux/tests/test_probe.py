@@ -11,6 +11,7 @@ from zkteco_linux_probe.__main__ import (
     filter_attendance_records,
     main,
     parse_target,
+    run_preview,
     tcp_probe,
 )
 
@@ -85,6 +86,42 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(payload["attendance"]["timestamp"], "2026-07-01T15:21:06")
         self.assertEqual(payload["attendance"]["serialNo"], 37501)
         self.assertEqual(payload["eventType"], "AttendanceTransaction")
+
+    def test_preview_reports_per_device_available_and_selected_counts_without_posting(self) -> None:
+        args = type(
+            "Args",
+            (),
+            {
+                "dry_run_webhooks": True,
+                "since": "",
+                "latest": 1,
+                "timeout": 1,
+                "password": 0,
+                "force_udp": False,
+                "sample_limit": 3,
+                "webhook_url": "http://hris-api:3001/api/zkteco/events",
+                "webhook_timeout": 1,
+            },
+        )()
+
+        with patch("zkteco_linux_probe.__main__.emit"), patch(
+            "zkteco_linux_probe.__main__.sync_target",
+            return_value={
+                "ok": True,
+                "target": {"name": "ZKTeco A", "host": "10.184.38.9", "port": 4370},
+                "attendance": {"available": 8410, "selected": 1, "lastSelectedAt": "2026-07-02T10:20:00"},
+                "webhook": {"posted": 1, "failed": 0},
+            },
+        ) as sync_target:
+            payload = run_preview([Target("ZKTeco A", "10.184.38.9", 4370)], args)
+
+        self.assertTrue(payload["dryRun"])
+        self.assertEqual(payload["totalEvents"], 8410)
+        self.assertEqual(payload["selectedEvents"], 1)
+        self.assertEqual(payload["devices"][0]["totalEvents"], 8410)
+        self.assertEqual(payload["devices"][0]["wouldPost"], 1)
+        called_args = sync_target.call_args.args[1]
+        self.assertTrue(called_args.dry_run_webhooks)
 
 
 if __name__ == "__main__":

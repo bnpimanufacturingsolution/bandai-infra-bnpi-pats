@@ -200,4 +200,143 @@ describe("device health ZKTeco Linux bridge", () => {
 		expect(queries.join("\n")).to.include('de."receivedAt"');
 		expect(queries.join("\n")).to.not.include('de."eventTime" >=');
 	});
+
+	it("defaults saved device event sorting to punch eventTime", async () => {
+		const queries: string[] = [];
+		const prisma = {
+			$queryRaw: async (query: any) => {
+				queries.push(Array.isArray(query?.strings) ? query.strings.join("") : String(query));
+				if (queries.length === 1) return [];
+				if (queries.length === 2) return [{ total: 0 }];
+				return [];
+			},
+			device: { findFirst: async () => null },
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			organizationId: "org-1",
+			query: {
+				source: "ZKTECO_EVENT",
+			},
+		};
+		let statusCode = 0;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json() {
+				return this;
+			},
+		};
+
+		await deviceController.getEvents(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(200);
+		expect(queries[0]).to.include('ORDER BY de."eventTime"');
+	});
+
+	it("returns a per-device ZKTeco sync preview with saved, total, and needs-sync counts", async () => {
+		process.env.ZKTECO_BRIDGE_STATUS_URL = "http://127.0.0.1:4371/status";
+		global.fetch = (async (input: any) => {
+			expect(String(input)).to.equal("http://127.0.0.1:4371/preview?deviceIp=10.184.38.9");
+			return {
+				ok: true,
+				status: 200,
+				json: async () => ({
+					status: "online",
+					devices: [
+						{
+							name: "ZKTeco Device A",
+							ip: "10.184.38.9",
+							port: 4370,
+							connected: true,
+							totalEvents: 8410,
+							selectedEvents: 1,
+							lastSelectedAt: "2026-07-02T10:20:00",
+						},
+					],
+				}),
+			} as any;
+		}) as any;
+
+		const prisma = {
+			device: {
+				findMany: async () => [
+					{
+						id: "device-zkteco-a",
+						name: "ZKTeco Device A",
+						address: "10.184.38.9",
+						port: 4370,
+						protocol: "tcp",
+						config: { vendor: "ZKTeco" },
+					},
+				],
+			},
+			deviceEvent: {
+				groupBy: async () => [
+					{
+						deviceId: "device-zkteco-a",
+						source: "ZKTECO_EVENT",
+						_count: { _all: 8000 },
+					},
+				],
+				create: async () => {
+					throw new Error("sync preview must not create device events");
+				},
+				update: async () => {
+					throw new Error("sync preview must not update device events");
+				},
+				upsert: async () => {
+					throw new Error("sync preview must not upsert device events");
+				},
+				deleteMany: async () => {
+					throw new Error("sync preview must not delete device events");
+				},
+			},
+			attendance: {
+				create: async () => {
+					throw new Error("sync preview must not create attendance rows");
+				},
+				update: async () => {
+					throw new Error("sync preview must not update attendance rows");
+				},
+				upsert: async () => {
+					throw new Error("sync preview must not upsert attendance rows");
+				},
+			},
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			organizationId: "org-1",
+			query: { deviceId: "device-zkteco-a" },
+		};
+		let statusCode = 0;
+		let body: any = null;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json(payload: any) {
+				body = payload;
+				return this;
+			},
+		};
+
+		await deviceController.getDeviceSyncPreview(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(200);
+		expect(body.data.devices[0]).to.include({
+			deviceId: "device-zkteco-a",
+			vendor: "ZKTeco",
+			source: "ZKTECO_EVENT",
+			syncedEvents: 8000,
+			totalEvents: 8410,
+			needsSyncEvents: 410,
+			status: "needs_sync",
+		});
+	});
 });
