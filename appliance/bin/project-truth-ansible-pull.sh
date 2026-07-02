@@ -90,8 +90,8 @@ repair_network_for_git() {
     if command -v systemctl >/dev/null 2>&1; then
       as_root systemctl restart systemd-resolved.service >/dev/null 2>&1 || true
     fi
-    if command -v project-truth-lan-dhcp >/dev/null 2>&1; then
-      PROJECT_TRUTH_SKIP_TTY1_WRITE=1 as_root project-truth-lan-dhcp >/dev/null 2>&1 || true
+    if command -v project-truth-lan-config >/dev/null 2>&1; then
+      PROJECT_TRUTH_SKIP_TTY1_WRITE=1 as_root project-truth-lan-config >/dev/null 2>&1 || true
     fi
     sleep 5
   done

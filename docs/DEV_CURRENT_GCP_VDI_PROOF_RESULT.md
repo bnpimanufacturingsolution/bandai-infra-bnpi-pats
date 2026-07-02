@@ -102,7 +102,7 @@ Important boot finding:
 
 1 vCPU boot:
   PASSED.
-  VM reached login, SSH started, LAN DHCP worked, Docker services started.
+  VM reached login, SSH started, LAN config worked, Docker services started.
 ```
 
 Use this VirtualBox import setting for the current exported VDI:

@@ -23,7 +23,7 @@ Windows host repo
 | Argo CD Application drift | Argo Applications use automated sync, pruning, self-heal, and retry. | No |
 | Argo CD platform drift | `repair-appliance-online -Mode GitOpsRefresh` reapplies the explicit Argo reconciliation config. | No |
 | Missing Argo Applications | `repair-appliance-online` first applies in-image manifests, then uploads host repo manifests if they are absent. | No |
-| VM OS/script drift | `project-truth-ansible-pull.timer` runs `ansible-pull` inside the VM, pulls `develop`, updates `/opt/project-truth`, reinstalls appliance commands/systemd units, repairs resolver/DHCP drift before Git fetch, and refreshes Argo CD. | No, unless the repo is unreachable |
+| VM OS/script drift | `project-truth-ansible-pull.timer` runs `ansible-pull` inside the VM, pulls `develop`, updates `/opt/project-truth`, reinstalls appliance commands/systemd units, reconciles LAN config before Git fetch, and refreshes Argo CD. | No, unless the repo is unreachable |
 | HRIS app/API containers | Docker Compose uses `restart: unless-stopped`; `project-truth-hris` starts the runtime on boot. | No |
 | HRIS Kubernetes runtime | `enable-k8s-runtime` moves PROD/DEV/UAT HRIS app/API/Postgres into K3s Deployments/StatefulSets managed by Argo CD. | No |
 | HRIS runtime outage | `repair-appliance-online -Mode RestartRuntime` restarts Docker, K3s, and HRIS services. | No |

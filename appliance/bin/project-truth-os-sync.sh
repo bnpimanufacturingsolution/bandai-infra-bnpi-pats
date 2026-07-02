@@ -59,8 +59,8 @@ repair_network_for_git() {
     if command -v systemctl >/dev/null 2>&1; then
       as_root systemctl restart systemd-resolved.service >/dev/null 2>&1 || true
     fi
-    if command -v project-truth-lan-dhcp >/dev/null 2>&1; then
-      PROJECT_TRUTH_SKIP_TTY1_WRITE=1 as_root project-truth-lan-dhcp >/dev/null 2>&1 || true
+    if command -v project-truth-lan-config >/dev/null 2>&1; then
+      PROJECT_TRUTH_SKIP_TTY1_WRITE=1 as_root project-truth-lan-config >/dev/null 2>&1 || true
     fi
 
     sleep 5
@@ -240,7 +240,7 @@ install_commands_and_services() {
   as_root install -m 0755 "${bin_dir}/project-truth-hris-observability-start.sh" /usr/local/bin/project-truth-hris-observability-start
   as_root install -m 0755 "${bin_dir}/project-truth-db-access.sh" /usr/local/bin/project-truth-db-access
   as_root install -m 0755 "${bin_dir}/project-truth-cloudflare-vm-tunnel.sh" /usr/local/bin/project-truth-cloudflare-vm-tunnel
-  as_root install -m 0755 "${bin_dir}/project-truth-lan-dhcp.sh" /usr/local/bin/project-truth-lan-dhcp
+  as_root install -m 0755 "${bin_dir}/project-truth-lan-config.sh" /usr/local/bin/project-truth-lan-config
   as_root install -m 0755 "${bin_dir}/project-truth-lan-summary.sh" /usr/local/bin/project-truth-lan-summary
   as_root install -m 0755 "${bin_dir}/project-truth-clean-console.sh" /usr/local/bin/project-truth-clean-console
   as_root install -m 0755 "${bin_dir}/project-truth-console-session-hook.sh" /usr/local/bin/project-truth-console-session-hook

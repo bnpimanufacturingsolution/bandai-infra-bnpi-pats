@@ -197,7 +197,7 @@ sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-status.
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-seed.sh /usr/local/bin/project-truth-hris-seed
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-observability-start.sh /usr/local/bin/project-truth-hris-observability-start
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-db-access.sh /usr/local/bin/project-truth-db-access
-sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-dhcp.sh /usr/local/bin/project-truth-lan-dhcp
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-config.sh /usr/local/bin/project-truth-lan-config
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-summary.sh /usr/local/bin/project-truth-lan-summary
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-clean-console.sh /usr/local/bin/project-truth-clean-console
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-console-session-hook.sh /usr/local/bin/project-truth-console-session-hook
@@ -213,15 +213,15 @@ sudo tee /etc/systemd/journald.conf.d/99-project-truth-console.conf >/dev/null <
 ForwardToConsole=no
 MaxLevelConsole=notice
 JOURNALD
-sudo tee /etc/systemd/system/project-truth-lan-dhcp.service >/dev/null <<'LANDHCP'
+sudo tee /etc/systemd/system/project-truth-lan-config.service >/dev/null <<'LANDHCP'
 [Unit]
-Description=Project Truth first boot LAN DHCP
+Description=Project Truth first boot LAN config
 Before=network-online.target
 Wants=network-pre.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/project-truth-lan-dhcp
+ExecStart=/usr/local/bin/project-truth-lan-config
 RemainAfterExit=yes
 
 [Install]
@@ -250,7 +250,7 @@ for service in hris-api-db-init hris-api hris-app; do
 done
 sudo systemctl daemon-reload
 if [ "$PROJECT_TRUTH_IMAGE_TARGET" != "googlecompute" ]; then
-  sudo systemctl enable project-truth-lan-dhcp.service
+  sudo systemctl enable project-truth-lan-config.service
 fi
 sudo systemctl enable project-truth-lan-summary.service
 sudo systemctl enable project-truth-clean-console.service
@@ -285,8 +285,8 @@ if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
   ssh-keygen -A >/dev/null 2>&1 || true
 fi
 
-if [ "$image_target" != "googlecompute" ] && command -v project-truth-lan-dhcp >/dev/null 2>&1; then
-  project-truth-lan-dhcp >/dev/null 2>&1 || true
+if [ "$image_target" != "googlecompute" ] && command -v project-truth-lan-config >/dev/null 2>&1; then
+  project-truth-lan-config >/dev/null 2>&1 || true
 fi
 
 if command -v project-truth-lan-summary >/dev/null 2>&1; then
@@ -299,7 +299,7 @@ sudo tee /etc/systemd/system/project-truth-firstboot-identity.service >/dev/null
 Description=Project Truth first boot identity and LAN refresh
 DefaultDependencies=no
 After=local-fs.target
-Before=network-pre.target ssh.service sshd.service project-truth-lan-dhcp.service project-truth-lan-summary.service
+Before=network-pre.target ssh.service sshd.service project-truth-lan-config.service project-truth-lan-summary.service
 Wants=network-pre.target
 
 [Service]

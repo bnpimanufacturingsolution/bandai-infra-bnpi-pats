@@ -24,8 +24,8 @@ export PROJECT_TRUTH_SKIP_TTY1_WRITE=1
     echo "----- $(date '+%Y-%m-%d %H:%M:%S %Z') ${PAM_TYPE:-unknown} ${PAM_USER:-unknown} ${PAM_TTY:-unknown} -----"
 
     if [ "${PAM_TYPE:-}" = "open_session" ] || [ "${PAM_TYPE:-}" = "close_session" ]; then
-      if command -v project-truth-lan-dhcp >/dev/null 2>&1; then
-        project-truth-lan-dhcp >/dev/null 2>&1 || true
+      if command -v project-truth-lan-config >/dev/null 2>&1; then
+        project-truth-lan-config >/dev/null 2>&1 || true
       fi
 
       if command -v project-truth-lan-summary >/dev/null 2>&1; then

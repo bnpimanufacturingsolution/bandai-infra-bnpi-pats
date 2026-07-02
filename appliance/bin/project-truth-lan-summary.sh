@@ -266,14 +266,14 @@ write_summary() {
       echo
       echo "The VM has no active non-loopback IPv4 address yet."
       echo "Check that the VM network adapter is bridged/external and cable-connected."
-      echo "Repair command after login: project-truth-lan-dhcp"
+      echo "Repair command after login: project-truth-lan-config"
     fi
     echo
       echo "Useful commands"
       echo "  project-truth-progress --watch"
       echo "  project-truth-hris-status"
       echo "  project-truth-db-access"
-      echo "  project-truth-lan-dhcp"
+      echo "  project-truth-lan-config"
     echo "  sudo project-truth-ansible-pull"
     echo "  project-truth-ansible-pull --status"
   } > "$summary_file"
@@ -410,7 +410,7 @@ emit_screen_summary() {
 
   if [ -z "$ip_addr" ]; then
     echo "LAN IP: NOT DETECTED"
-    echo "Repair: project-truth-lan-dhcp"
+    echo "Repair: project-truth-lan-config"
     return
   fi
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-iface="${1:-}"
+iface="${PROJECT_TRUTH_LAN_IFACE:-${1:-eth0}}"
 config_file="/etc/project-truth/lan.env"
 netplan_file="/etc/netplan/99-project-truth-lan.yaml"
 legacy_dhcp_file="/etc/netplan/99-project-truth-dhcp.yaml"
@@ -14,24 +14,23 @@ search_domains="${PROJECT_TRUTH_LAN_SEARCH_DOMAINS:-}"
 dhcp_addresses="${PROJECT_TRUTH_LAN_DHCP_ADDRESSES:-}"
 
 usage() {
-  cat <<'EOF'
+  cat <<'USAGE'
 Usage:
-  project-truth-lan-dhcp [iface]
-  project-truth-lan-dhcp --dhcp [iface]
-  project-truth-lan-dhcp --static <cidr> <gateway> [dns_csv] [iface]
-  project-truth-lan-dhcp --status
+  project-truth-lan-config [iface]
+  project-truth-lan-config --dhcp [iface]
+  project-truth-lan-config --static <cidr> <gateway> [dns_csv] [iface]
+  project-truth-lan-config --status
 
 Static config is persisted in /etc/project-truth/lan.env and re-applied by
 ansible-pull. Example:
-  sudo project-truth-lan-dhcp --static 192.168.254.50/24 192.168.254.1 1.1.1.1,8.8.8.8
+  sudo project-truth-lan-config --static 192.168.254.50/24 192.168.254.1 1.1.1.1,8.8.8.8
 
 Static mode can pin multiple addresses by setting PROJECT_TRUTH_LAN_ADDRESSES
 to a comma-separated CIDR list in /etc/project-truth/lan.env.
 
-DHCP mode can also preserve pinned secondary addresses by setting
-PROJECT_TRUTH_LAN_DHCP_ADDRESSES to a comma-separated CIDR list in
-/etc/project-truth/lan.env.
-EOF
+DHCP mode is retained only for fresh-image/bootstrap fallback. Current BNPI
+runtime should use PROJECT_TRUTH_LAN_MODE=static with explicit addresses.
+USAGE
 }
 
 if [ -r "$config_file" ]; then
@@ -54,19 +53,23 @@ case "${1:-}" in
     ;;
   --status|status)
     echo "Project Truth LAN config"
-    if [ -r "$config_file" ]; then
-      sed 's/^/  /' "$config_file"
+    echo "  config_file=${config_file}"
+    echo "  iface=${iface}"
+    echo "  mode=${mode}"
+    if [ "$mode" = "static" ]; then
+      echo "  addresses=${addresses:-$address}"
+      echo "  gateway=${gateway}"
+      echo "  dns=${dns}"
+      echo "  search=${search_domains}"
     else
-      echo "  mode=dhcp"
-      echo "  config_file=$config_file"
+      echo "  dhcp_addresses=${dhcp_addresses}"
     fi
-    ip -br addr
     exit 0
     ;;
   --dhcp|dhcp)
     mode="dhcp"
     iface="${2:-$iface}"
-    sudo install -d -m 0755 /etc/project-truth
+    sudo install -d -m 0755 "$(dirname "$config_file")"
     sudo tee "$config_file" >/dev/null <<EOF
 PROJECT_TRUTH_LAN_MODE=dhcp
 PROJECT_TRUTH_LAN_IFACE=${iface}
@@ -75,16 +78,17 @@ EOF
     sudo chmod 0644 "$config_file"
     ;;
   --static|static)
+    if [ $# -lt 3 ]; then
+      usage >&2
+      exit 2
+    fi
     mode="static"
-    address="${2:-}"
-    gateway="${3:-}"
+    address="$2"
+    addresses="$2"
+    gateway="$3"
     dns="${4:-$dns}"
     iface="${5:-$iface}"
-    if [ -z "$address" ] || [ -z "$gateway" ]; then
-      usage >&2
-      exit 1
-    fi
-    sudo install -d -m 0755 /etc/project-truth
+    sudo install -d -m 0755 "$(dirname "$config_file")"
     sudo tee "$config_file" >/dev/null <<EOF
 PROJECT_TRUTH_LAN_MODE=static
 PROJECT_TRUTH_LAN_ADDRESS=${address}
@@ -96,19 +100,23 @@ PROJECT_TRUTH_LAN_IFACE=${iface}
 EOF
     sudo chmod 0644 "$config_file"
     ;;
+  -*)
+    usage >&2
+    exit 2
+    ;;
+  *)
+    iface="${1:-$iface}"
+    ;;
 esac
 
-if [ -z "$iface" ]; then
-  iface="$(ip -o link show |
-    awk -F': ' '$2 != "lo" { print $2; exit }' |
-    sed 's/@.*//')"
+if ! command -v netplan >/dev/null 2>&1; then
+  echo "netplan is not installed; skipping LAN config repair." >&2
+  exit 0
 fi
 
 if ! ip link show "$iface" >/dev/null 2>&1; then
-  echo "Network interface not found: $iface" >&2
-  echo "Available interfaces:" >&2
-  ip -br link >&2
-  exit 1
+  echo "Interface $iface not found; skipping LAN config repair." >&2
+  exit 0
 fi
 
 if [ "$mode" = "static" ]; then
@@ -176,21 +184,6 @@ sudo chmod 600 "$netplan_file"
 sudo rm -f /etc/netplan/50-cloud-init.yaml "$legacy_dhcp_file" /etc/netplan/99-project-truth-static*.yaml
 sudo netplan apply
 
-sleep 3
-lan_ip="$(ip -4 -o addr show dev "$iface" scope global up | awk '{ split($4, a, "/"); print a[1]; exit }')"
-
-if [ -z "$lan_ip" ]; then
-  echo "LAN ${mode} config applied, but no IPv4 address was detected on $iface." >&2
-  echo "Check that the VM adapter is bridged and cable-connected." >&2
-  ip -br addr show "$iface" >&2
-  exit 1
-fi
-
-echo "Project Truth LAN ${mode} repaired on $iface"
-echo "LAN IP: $lan_ip"
-echo "HRIS App URL: http://${lan_ip}:3000"
-echo "HRIS API Health URL: http://${lan_ip}:3001/health"
-
-if command -v project-truth-lan-summary >/dev/null 2>&1; then
-  project-truth-lan-summary || true
+if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-0}" != "1" ] && command -v project-truth-lan-summary >/dev/null 2>&1; then
+  project-truth-lan-summary --quiet || true
 fi

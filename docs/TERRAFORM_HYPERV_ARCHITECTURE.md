@@ -322,7 +322,7 @@ more than one active physical LAN adapter:
 .\scripts\project-truth.ps1 vhdx-autopilot -Mode Import -VhdxPath <path-to-vhdx> -VmName PROJECT-TRUTH-NODE -PreferredSwitch ProjectTruth-External -RequireExternalSwitch -BridgeAdapterName "Wi-Fi" -Start
 ```
 
-The guest IP is still assigned by the LAN DHCP service inside the VM. A correct
+The guest LAN address is reconciled by the LAN config service inside the VM. A correct
 bridge proves the VM NIC is attached to the LAN-facing switch; endpoint proof
 still requires the guest to acquire or report a usable LAN IP.
 

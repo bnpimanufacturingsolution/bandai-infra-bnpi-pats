@@ -68,7 +68,7 @@ Important import setting:
 Use --cpus 1 for this VDI in VirtualBox.
 ```
 
-At 4 vCPU the imported GCP kernel stalled in initramfs on `raid6_pq` under VirtualBox. The one-vCPU import booted, got LAN DHCP, started Docker/HRIS, and passed login proof.
+At 4 vCPU the imported GCP kernel stalled in initramfs on `raid6_pq` under VirtualBox. The one-vCPU import booted, got LAN config, started Docker/HRIS, and passed login proof.
 
 Full result:
 

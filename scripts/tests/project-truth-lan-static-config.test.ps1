@@ -4,7 +4,7 @@ param()
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
-$scriptPath = Join-Path $repoRoot 'appliance/bin/project-truth-lan-dhcp.sh'
+$scriptPath = Join-Path $repoRoot 'appliance/bin/project-truth-lan-config.sh'
 $content = Get-Content -Raw -LiteralPath $scriptPath
 
 function Assert-Matches {

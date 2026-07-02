@@ -21,7 +21,7 @@
       - project-truth-hris-seed
       - project-truth-hris-observability-start
       - project-truth-db-access
-      - project-truth-lan-dhcp
+      - project-truth-lan-config
       - project-truth-lan-summary
       - project-truth-clean-console
       - project-truth-console-session-hook
@@ -32,6 +32,7 @@
       - project-truth-os-sync
     project_truth_systemd_units:
       - project-truth-hris.service
+      - project-truth-lan-config.service
       - project-truth-lan-summary.service
       - project-truth-clean-console.service
       - project-truth-trycloudflare.service
@@ -41,6 +42,7 @@
       - project-truth-os-sync.timer
     project_truth_enabled_services:
       - project-truth-hris.service
+      - project-truth-lan-config.service
       - project-truth-lan-summary.service
       - project-truth-clean-console.service
   tasks:
@@ -181,6 +183,7 @@
       ansible.builtin.systemd:
         daemon_reload: true
 
+
     - name: Enable Project Truth services
       ansible.builtin.systemd:
         name: "{{ item }}"
@@ -203,7 +206,7 @@
     - name: Reconcile Project Truth LAN config
       ansible.builtin.command:
         argv:
-          - project-truth-lan-dhcp
+          - project-truth-lan-config
       environment:
         PROJECT_TRUTH_SKIP_TTY1_WRITE: "1"
       changed_when: false

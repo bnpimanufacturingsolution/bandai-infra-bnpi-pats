@@ -38,7 +38,7 @@ router port forwarding, Windows hosts-file changes, or Windows network changes.
 
 ## Host-Managed Startup
 
-Use this after a fresh VM import, reboot, DHCP change, DNS drift, or public access drift:
+Use this after a fresh VM import, reboot, LAN config change, DNS drift, or public access drift:
 
 ```powershell
 .\scripts\project-truth.ps1 start-bnpi-cloudflare-tunnel -RepairScheduledTask -ProvisionDns -VerifyPublic
@@ -287,13 +287,13 @@ browser-rendered SSH hostname.
 Current VM LAN SSH target:
 
 ```text
-10.184.38.144
+10.184.37.19
 ```
 
-Current private route published to Cloudflare Tunnel:
+Current private route to publish to Cloudflare Tunnel:
 
 ```text
-10.184.38.144/32 -> bnpi-hris
+10.184.37.19/32 -> bnpi-hris
 ```
 
 Current VM connector requirement:
@@ -313,7 +313,7 @@ After the workstation is enrolled into the correct Cloudflare Zero Trust WARP
 organization, the remote CLI command is plain SSH to the private VM address:
 
 ```powershell
-ssh -i $env:USERPROFILE\.ssh\bnpi_hris_cloudflare_ed25519 infra@10.184.38.144
+ssh -i $env:USERPROFILE\.ssh\bnpi_hris_cloudflare_ed25519 infra@10.184.37.19
 ```
 
 Proof with WARP connected and the same key:
@@ -322,7 +322,7 @@ Proof with WARP connected and the same key:
 FINAL_REMOTE_WARP_SSH_OK
 project-truth-node
 infra
-Route: 10.184.38.144/32 via CloudflareWARP, source 100.96.0.1
+Route: 10.184.37.19/32 via CloudflareWARP, source 100.96.0.1
 OpenSSH: Authenticated using publickey, exit status 0
 ```
 
@@ -336,8 +336,8 @@ Current device-profile requirement:
 
 ```text
 Split tunnel mode: Include
-Included destination: 10.184.38.144/32
-Gateway firewall policy: allow TCP destination 10.184.38.144 port 22
+Included destination: 10.184.37.19/32
+Gateway firewall policy: allow TCP destination 10.184.37.19 port 22
 ```
 
 Expected WARP setup on another admin workstation:
@@ -346,7 +346,7 @@ Expected WARP setup on another admin workstation:
 winget install --id Cloudflare.Warp
 & "C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe" --accept-tos registration new tight-thunder-c664
 & "C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe" connect
-ssh -i $env:USERPROFILE\.ssh\bnpi_hris_cloudflare_ed25519 infra@10.184.38.144
+ssh -i $env:USERPROFILE\.ssh\bnpi_hris_cloudflare_ed25519 infra@10.184.37.19
 ```
 
 ## V6 One-Shot Fresh VM Proof
@@ -438,7 +438,7 @@ ssh.bnpi-hris.tech
 Current host-managed origin:
 
 ```text
-ssh://192.168.254.148:22
+ssh://10.184.37.19:22
 ```
 
 VM-managed origin if enabled:

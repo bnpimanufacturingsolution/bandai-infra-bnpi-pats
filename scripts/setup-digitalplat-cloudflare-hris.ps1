@@ -1,7 +1,7 @@
 param(
   [string]$Domain = "uzaro.net",
   [string]$Hostname = "bnpi-hris.uzaro.net",
-  [string]$ServiceUrl = "http://192.168.254.148:3000",
+  [string]$ServiceUrl = "http://10.184.37.19:3000",
   [string]$TunnelName = "bnpi-hris",
   [string]$TunnelId = "1c8ee2c4-c9c5-4840-be39-639e4b5f605b",
   [string]$CloudflareApiToken = "",

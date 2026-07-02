@@ -106,7 +106,7 @@ if [ -n "$ip_addr" ]; then
   echo "  UAT DB:  postgresql://postgres:postgres@${ip_addr}:15434/hris"
 else
   echo "  LAN IP: not detected"
-  echo "  Repair: project-truth-lan-dhcp"
+  echo "  Repair: project-truth-lan-config"
 fi
 echo
 
@@ -170,7 +170,7 @@ echo "  project-truth-hris-status"
 echo "  project-truth-db-access"
 echo "  project-truth-hris-env-start dev|uat|prod|all"
 echo "  project-truth-hris-env-seed dev|uat|prod|all"
-echo "  project-truth-lan-dhcp"
+echo "  project-truth-lan-config"
 echo "  docker compose -f ${compose_file} ps"
 echo "  docker compose -f ${env_compose_file} ps"
 

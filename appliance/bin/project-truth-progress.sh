@@ -182,7 +182,7 @@ render_once() {
     echo "  UAT:  http://${ip_addr}:3200/auth/login"
   else
     echo "Waiting for a bridged LAN address. If it stays here, run:"
-    echo "  project-truth-lan-dhcp"
+    echo "  project-truth-lan-config"
   fi
   echo
   echo "Helpful commands:"

@@ -71,7 +71,7 @@ if [ -n "$lan_ip" ]; then
   printf '  %-10s http://%s:%s\n' "Gateway" "$lan_ip" "38080"
 else
   echo "LAN IP: NOT DETECTED"
-  echo "Repair: project-truth-lan-dhcp"
+  echo "Repair: project-truth-lan-config"
 fi
 
 if [ -s /run/project-truth/trycloudflare-public-urls.txt ]; then

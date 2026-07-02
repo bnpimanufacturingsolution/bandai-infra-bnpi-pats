@@ -64,7 +64,7 @@ echo "Project Truth database access"
 echo "============================="
 if [ -z "$ip_addr" ]; then
   echo "LAN IP: NOT DETECTED"
-  echo "Repair: project-truth-lan-dhcp"
+  echo "Repair: project-truth-lan-config"
   exit 1
 fi
 

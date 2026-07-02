@@ -67,8 +67,8 @@ if [ -n "$lan_ip" ]; then
 else
   echo "LAN IP: NOT DETECTED"
   echo "Reason: no active non-loopback IPv4 address found"
-  echo "Next check: verify VM adapter is bridged/external and DHCP is enabled"
-  echo "Repair command: project-truth-lan-dhcp"
+  echo "Next check: verify VM adapter is bridged/external and LAN config is applied"
+  echo "Repair command: project-truth-lan-config"
 fi
 
 echo "Local App URL: http://127.0.0.1:3000"

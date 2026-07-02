@@ -141,14 +141,14 @@ Status: READY FOR REVIEW
   and showed no public `:3001` browser request.
 - Earlier on 2026-07-02, `10.184.38.138` no longer answered SSH or HRIS port
   probes from the Windows host. The VM was temporarily reached through DHCP
-  address `10.184.38.144`, and host-managed `cloudflared-bnpi-hris.yml` was
+  transient address `10.184.38.144`, and host-managed `cloudflared-bnpi-hris.yml` was
   temporarily corrected to that DHCP address. This was superseded by stable
   secondary address `10.184.37.19`.
 - Public verification from the client LAN is currently blocked by network
   policy: plain HTTP returns a company-policy block page and HTTPS resets
   during TLS for `bnpi-hris.tech` hostnames, while general Cloudflare/Google
   HTTPS works.
-- On 2026-07-03, after the DHCP drift follow-up, the VM was hard-cut over to
+- On 2026-07-03, after the LAN config drift follow-up, the VM was hard-cut over to
   pure static LAN addressing on `eth0`: `10.184.37.78/24` for K3s node/API
   identity and `10.184.37.19/24` for preferred operator/LAN access. DHCP is
   disabled, the default route is static via `10.184.38.254`, and SSH plus HRIS

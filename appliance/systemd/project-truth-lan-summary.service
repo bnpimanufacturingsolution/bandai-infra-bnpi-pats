@@ -1,6 +1,6 @@
 [Unit]
 Description=Project Truth LAN IP and URL login summary
-After=network-online.target project-truth-lan-dhcp.service
+After=network-online.target project-truth-lan-config.service
 Wants=network-online.target
 
 [Service]

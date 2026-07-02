@@ -126,9 +126,9 @@ Accepted or observed architecture:
 - Item: Current Hyper-V proof VM exists as `project-truth-local-vhdx-proof` on the `ProjectTruth-External` switch.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: `Get-VM` and `Get-VMNetworkAdapter` on 2026-06-29 showed VM `project-truth-local-vhdx-proof`, Generation 2, attached to switch `ProjectTruth-External`.
-- Item: Current operator/LAN target is pure static address `10.184.37.19`; K3s node/API identity is pure static address `10.184.37.78`; previous VM interface evidence used `192.168.254.148` and DHCP `10.184.38.144`.
+- Item: Current operator/LAN target is pure static address `10.184.37.19`; K3s node/API identity is pure static address `10.184.37.78`; previous VM interface evidence used transient addresses `192.168.254.148` and `10.184.38.144`.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: 2026-07-03 operator SSH through `ssh project-truth-hris` reached `project-truth-node`; `eth0` showed `10.184.37.78/24` and `10.184.37.19/24` with `dhcp4: false`, default route `10.184.38.254 on-link`, and K3s node/API endpoint `10.184.37.78`. 2026-07-01 SSH to `10.184.38.144` and earlier `192.168.254.148` are retained as historical interface evidence.
+  - Evidence: 2026-07-03 operator SSH through `ssh project-truth-hris` reached `project-truth-node`; `eth0` showed `10.184.37.78/24` and `10.184.37.19/24` with `dhcp4: false`, default route `10.184.38.254 on-link`, and K3s node/API endpoint `10.184.37.78`. 2026-07-01 SSH to historical transient address `10.184.38.144` and earlier `192.168.254.148` are retained as non-current interface evidence.
 - Item: Earlier SSH proof at `10.184.38.91:22` is historical evidence only.
   - Status: STALE
   - Evidence: Earlier 2026-06-29 TCP, password, key, and VMConnect proofs used `10.184.38.91`, but the current Cloudflare/SSH repair pass proved `192.168.254.148` and probes to `10.184.38.91` later timed out.
