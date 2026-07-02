@@ -4,7 +4,7 @@
 
 Validation status: WARN.
 
-Checked 81 Markdown file(s), with 0 error(s), 81 warning(s), and 91 suggestion(s).
+Checked 82 Markdown file(s), with 0 error(s), 82 warning(s), and 91 suggestion(s).
 
 ## Overall Status
 
@@ -37,6 +37,7 @@ Checked 81 Markdown file(s), with 0 error(s), 81 warning(s), and 91 suggestion(s
 - .wwg/reports/skill-cleanup-review.md
 - .wwg/reports/test-alignment-report.md
 - .wwg/reports/upstream-hris-develop-dry-run-20260702.md
+- .wwg/reports/upstream-hris-sync-implementation-20260702.md
 - .wwg/reports/v6-cloudflare-credential-preflight-20260630.md
 - .wwg/reports/v6-one-shot-fresh-vm-cloudflare-proof-20260630.md
 - .wwg/reports/wwg-adoption-plan.md
@@ -104,7 +105,7 @@ Checked 81 Markdown file(s), with 0 error(s), 81 warning(s), and 91 suggestion(s
 | context | 8 |
 | skill | 0 |
 | governance | 6 |
-| report | 34 |
+| report | 35 |
 | public_doc | 27 |
 | agent_instruction | 1 |
 | changelog_governance | 0 |
@@ -147,6 +148,7 @@ Checked 81 Markdown file(s), with 0 error(s), 81 warning(s), and 91 suggestion(s
 - WARNING report-contract-missing-sections (.wwg/reports/skill-cleanup-review.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/test-alignment-report.md) [Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/upstream-hris-develop-dry-run-20260702.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
+- WARNING report-contract-missing-sections (.wwg/reports/upstream-hris-sync-implementation-20260702.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/v6-cloudflare-credential-preflight-20260630.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/v6-one-shot-fresh-vm-cloudflare-proof-20260630.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/wwg-adoption-plan.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
@@ -364,6 +366,7 @@ Checked 81 Markdown file(s), with 0 error(s), 81 warning(s), and 91 suggestion(s
 - SUGGESTION markdown-repeated-heading (.wwg/reports/test-alignment-report.md:806) [Recommended Next Step]: Heading 'Recommended Next Step' repeats at the same level. Recommendation: Rename repeated headings or add a qualifier when repeated sections could confuse agents.
 - SUGGESTION markdown-repeated-heading (.wwg/reports/test-alignment-report.md:810) [Backup CLI]: Heading 'Backup CLI' repeats at the same level. Recommendation: Rename repeated headings or add a qualifier when repeated sections could confuse agents.
 - WARNING report-contract-missing-sections (.wwg/reports/upstream-hris-develop-dry-run-20260702.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
+- WARNING report-contract-missing-sections (.wwg/reports/upstream-hris-sync-implementation-20260702.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/v6-cloudflare-credential-preflight-20260630.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/v6-one-shot-fresh-vm-cloudflare-proof-20260630.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.
 - WARNING report-contract-missing-sections (.wwg/reports/wwg-adoption-plan.md) [Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed]: Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed. Recommendation: Add missing report sections in future reports or mark sections explicitly not applicable.

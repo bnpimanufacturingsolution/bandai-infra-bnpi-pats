@@ -22,6 +22,7 @@
     ".wwg/reports/skill-cleanup-review.md",
     ".wwg/reports/test-alignment-report.md",
     ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
+    ".wwg/reports/upstream-hris-sync-implementation-20260702.md",
     ".wwg/reports/v6-cloudflare-credential-preflight-20260630.md",
     ".wwg/reports/v6-one-shot-fresh-vm-cloudflare-proof-20260630.md",
     ".wwg/reports/wwg-adoption-plan.md",
@@ -190,6 +191,11 @@
     },
     {
       "path": ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
+      "fileType": "report",
+      "reason": "Report directory path."
+    },
+    {
+      "path": ".wwg/reports/upstream-hris-sync-implementation-20260702.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
@@ -745,6 +751,15 @@
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/upstream-hris-sync-implementation-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -2304,6 +2319,15 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/upstream-hris-sync-implementation-20260702.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/v6-cloudflare-credential-preflight-20260630.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
@@ -3297,6 +3321,15 @@
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/upstream-hris-sync-implementation-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -5187,16 +5220,16 @@
   ],
   "metadataPolicyApplied": "Option C: Skill Registry metadata is canonical; skill files may include lightweight metadata when beneficial, and package-side skills do not require frontmatter.",
   "summary": {
-    "checkedFileCount": 81,
+    "checkedFileCount": 82,
     "skippedFileCount": 1,
     "errorCount": 0,
-    "warningCount": 81,
+    "warningCount": 82,
     "suggestionCount": 91,
     "classificationCounts": {
       "context": 8,
       "skill": 0,
       "governance": 6,
-      "report": 34,
+      "report": 35,
       "public_doc": 27,
       "agent_instruction": 1,
       "changelog_governance": 0,
