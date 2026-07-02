@@ -180,7 +180,7 @@ Local feature branch without VM image rebuild/import
   `ansible/.kube/`, `vendor/hikvision-bio/`, and `vendor/zkteco-sdk/`.
   These were not modified.
 
-## Truth Synchronization
+## WWG Truth Synchronization
 
 - Task mode: docs-only runtime truth capture.
 - New truth detected: yes.

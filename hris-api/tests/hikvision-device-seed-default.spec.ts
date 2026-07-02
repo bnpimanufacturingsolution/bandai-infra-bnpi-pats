@@ -19,4 +19,14 @@ describe("Hikvision device seed defaults", () => {
 			webhookPath: "/api/hikvision/callback",
 		});
 	});
+
+	it("keeps Hikvision HTTP and SDK ports distinct", () => {
+		const mainEntranceDevice = DEVICE_DEFINITIONS.find(
+			(device) => device.name === "Main Entrance Device",
+		);
+
+		expect(mainEntranceDevice?.port).to.equal(80);
+		expect(mainEntranceDevice?.port).to.not.equal(800);
+		expect(mainEntranceDevice?.config?.sdkPort).to.equal(8000);
+	});
 });

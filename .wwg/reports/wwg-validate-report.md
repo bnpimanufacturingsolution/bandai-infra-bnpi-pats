@@ -2,9 +2,9 @@
 
 ## Summary
 
-Overall status: FAIL
+Overall status: PASS
 
-critical: 0, high: 2, medium: 0, low: 0, info: 11
+critical: 0, high: 0, medium: 0, low: 0, info: 12
 
 ## Command
 
@@ -22,7 +22,7 @@ wwg-native-project
 - PASS Skill Registry and Skill Manifest validate when present - 0 finding(s)
 - PASS Profile skill recommendation metadata validates when present - 1 finding(s)
 - PASS Required WWG directories exist - 1 finding(s)
-- FAIL WWG operating loop files are present and actionable - 2 finding(s)
+- PASS WWG operating loop files are present and actionable - 1 finding(s)
 - PASS Principles folder and Principle Brief frontmatter are valid - 1 finding(s)
 - PASS UI/UX principle pack expectations are profile-aware - 0 finding(s)
 - PASS Generated marker pairs are balanced - 1 finding(s)
@@ -32,8 +32,6 @@ wwg-native-project
 
 ## Findings
 
-- HIGH wwg-report-truth-sync-fields-missing (reports/dev-runtime-serving-truth-20260702.md): evidence=confirmed Report claims readiness or completion without required WWG truth synchronization fields. Recommendation: Add WWG Truth Synchronization, task mode, truth/update/governance/drift fields, and remaining stale context before claiming completion.
-- HIGH wwg-report-truth-sync-fields-missing (reports/upstream-hris-preview-merge-20260702.md): evidence=confirmed Report claims readiness or completion without required WWG truth synchronization fields. Recommendation: Add WWG Truth Synchronization, task mode, truth/update/governance/drift fields, and remaining stale context before claiming completion.
 - INFO ambiguous-report-classification: evidence=confirmed risk=low Some report-like files need human classification. Recommendation: Run `wwg reports --target .` and review the Ambiguous / Needs Review section.
 - INFO generated-markers-balanced: Generated marker pairs are balanced where present.
 - INFO gitignore-native-report-backups-missing (.gitignore): evidence=confirmed risk=low Report policy expects `.wwg/reports/backups/` to be ignored. Recommendation: Add a narrow ignore rule for `.wwg/reports/backups/` or `.wwg/.gitignore` `reports/backups/`.
@@ -43,16 +41,11 @@ wwg-native-project
 - INFO profile-skill-recommendations-valid: evidence=confirmed Validated skill recommendation metadata for 0 profile file(s). Recommendation: Keep profile skill recommendations advisory until manifest generation and runtime activation are implemented.
 - INFO project-registry-valid (.wwg/config/wwg.project.yaml): WWG project registry parses and matches the registry schema.
 - INFO required-directories-present: Required directories exist for wwg-native-project.
+- INFO wwg-operating-loop-present: WWG operating loop files and AGENTS signals are present.
 - INFO wwg-principles-valid: Principles folder and lightweight Principle Brief checks passed.
 - INFO yaml-files-parse: Parsed 1 YAML file(s).
 
 ## Findings by User Action
-
-### Review Required
-These findings touch project meaning, governance, principles, or selected profile expectations.
-Next command: `wwg audit --upgrade-candidates`
-- HIGH wwg-report-truth-sync-fields-missing (reports/dev-runtime-serving-truth-20260702.md): Report claims readiness or completion without required WWG truth synchronization fields.
-- HIGH wwg-report-truth-sync-fields-missing (reports/upstream-hris-preview-merge-20260702.md): Report claims readiness or completion without required WWG truth synchronization fields.
 
 ### Info
 Passing or informational validation evidence.
@@ -62,6 +55,7 @@ Next: No command required.
 - INFO project-registry-valid (.wwg/config/wwg.project.yaml): WWG project registry parses and matches the registry schema.
 - INFO profile-skill-recommendations-valid: Validated skill recommendation metadata for 0 profile file(s).
 - INFO required-directories-present: Required directories exist for wwg-native-project.
+- INFO wwg-operating-loop-present: WWG operating loop files and AGENTS signals are present.
 - INFO wwg-principles-valid: Principles folder and lightweight Principle Brief checks passed.
 - INFO generated-markers-balanced: Generated marker pairs are balanced where present.
 - INFO markdown-readable: Markdown files are non-empty and readable.
@@ -71,9 +65,9 @@ Next: No command required.
 
 ## Validation Results
 
-PASS: 12
+PASS: 13
 WARN: 0
-FAIL: 1
+FAIL: 0
 
 ## Principle Review
 
@@ -93,14 +87,14 @@ FAIL: 1
 - Wiki updated: NO / N/A
 - Workspace updated: NO
 - Governance review completed: YES
-- Drift status: HIGH
+- Drift status: NONE
 - Canonical files changed:
   - None by validation.
 - Implementation discoveries synced:
   - None.
 - Remaining stale context:
-  - Review findings above.
+  - None detected by validation.
 
 ## Recommended Next Steps
 
-- Review Required: 2 -> wwg audit --upgrade-candidates
+- Run `wwg lint` for higher-level consistency checks.

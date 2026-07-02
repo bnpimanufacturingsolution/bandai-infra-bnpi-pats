@@ -202,3 +202,29 @@ Final warnings:
 - The preview namespace remains running on `5000/5001` and shares the DEV
   database. Remove it after manual review if it is no longer needed.
 
+## WWG Truth Synchronization
+
+- Task mode: mixed source sync, runtime preview, merge-gate validation, and
+  runtime truth capture.
+- New truth detected: yes.
+- Wiki updated: yes.
+- Workspace updated: no.
+- Governance review completed: yes.
+- Drift status: medium.
+- Canonical files changed:
+  - `.wwg/wiki/project-truth-summary.md`
+  - `.wwg/wiki/project-truth.md`
+  - `.wwg/reports/upstream-hris-preview-merge-20260702.md`
+- Implementation discoveries synced:
+  - DEV runtime was promoted to `develop@418e82f` with K3s DEV app/API/watcher
+    images rebuilt and imported.
+  - LAN socket fallback and Hikvision seed/default truth were present in the
+    final develop runtime update.
+  - Current Hikvision truth distinguishes HTTP/ISAPI port `80` from SDK/server
+    port `8000`; port `800` is not supported by current evidence.
+- Remaining stale context:
+  - GitHub Actions status for merge SHA `418e82f` was unavailable during the
+    final check.
+  - The preview namespace on `5000/5001` remained running after validation and
+    still shared the DEV database.
+

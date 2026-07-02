@@ -79,6 +79,12 @@ Hikvision physical-device evidence remains split:
 - The current Linux candidate path is `10.184.38.215`, which is reachable from
   the VM on HTTP/ISAPI port `80` and SDK/server port `8000`, and works for
   ISAPI history reads.
+- On 2026-07-02, DEV K3s runtime at `10.184.38.138` had `Main Entrance Device`
+  configured as `10.184.38.215:80` / `http`; its config was merged with
+  `vendor=Hikvision`, `source=vendor/hikvision-linux`, `sdkPort=8000`, and
+  `webhookPath=/api/hikvision/callback` while preserving existing
+  `hikvisionClockSkew*` evidence. Recent `device_events` rows for that device
+  were `HIKVISION_CALLBACK` / `ATTENDANCE_CREATED`.
 
 ## Remaining Boundaries
 
