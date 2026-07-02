@@ -9,6 +9,7 @@ mode="${PROJECT_TRUTH_LAN_MODE:-dhcp}"
 address="${PROJECT_TRUTH_LAN_ADDRESS:-}"
 gateway="${PROJECT_TRUTH_LAN_GATEWAY:-}"
 dns="${PROJECT_TRUTH_LAN_DNS:-1.1.1.1,8.8.8.8}"
+dhcp_addresses="${PROJECT_TRUTH_LAN_DHCP_ADDRESSES:-}"
 
 usage() {
   cat <<'EOF'
@@ -21,6 +22,10 @@ Usage:
 Static config is persisted in /etc/project-truth/lan.env and re-applied by
 ansible-pull. Example:
   sudo project-truth-lan-dhcp --static 192.168.254.50/24 192.168.254.1 1.1.1.1,8.8.8.8
+
+DHCP mode can also preserve pinned secondary addresses by setting
+PROJECT_TRUTH_LAN_DHCP_ADDRESSES to a comma-separated CIDR list in
+/etc/project-truth/lan.env.
 EOF
 }
 
@@ -31,6 +36,7 @@ if [ -r "$config_file" ]; then
   address="${PROJECT_TRUTH_LAN_ADDRESS:-$address}"
   gateway="${PROJECT_TRUTH_LAN_GATEWAY:-$gateway}"
   dns="${PROJECT_TRUTH_LAN_DNS:-$dns}"
+  dhcp_addresses="${PROJECT_TRUTH_LAN_DHCP_ADDRESSES:-$dhcp_addresses}"
   iface="${PROJECT_TRUTH_LAN_IFACE:-$iface}"
 fi
 
@@ -57,6 +63,7 @@ case "${1:-}" in
     sudo tee "$config_file" >/dev/null <<EOF
 PROJECT_TRUTH_LAN_MODE=dhcp
 PROJECT_TRUTH_LAN_IFACE=${iface}
+PROJECT_TRUTH_LAN_DHCP_ADDRESSES=${dhcp_addresses}
 EOF
     sudo chmod 0644 "$config_file"
     ;;
@@ -116,13 +123,28 @@ network:
         addresses: [${dns_yaml}]
 EOF
 else
-  sudo tee "$netplan_file" >/dev/null <<EOF
+  if [ -n "$dhcp_addresses" ]; then
+    dhcp_address_yaml="$(printf '%s' "$dhcp_addresses" |
+      tr ',' '\n' |
+      awk '{ gsub(/^ +| +$/, ""); if ($0 != "") printf "        - %s\n", $0 }')"
+    sudo tee "$netplan_file" >/dev/null <<EOF
+network:
+  version: 2
+  ethernets:
+    ${iface}:
+      dhcp4: true
+      addresses:
+${dhcp_address_yaml}
+EOF
+  else
+    sudo tee "$netplan_file" >/dev/null <<EOF
 network:
   version: 2
   ethernets:
     ${iface}:
       dhcp4: true
 EOF
+  fi
 fi
 
 sudo chmod 600 "$netplan_file"
