@@ -258,7 +258,7 @@ export const controller = (prisma: PrismaClient) => {
 		previewUrl.pathname = previewUrl.pathname.replace(/\/status\/?$/, "/preview");
 		if (deviceIp) previewUrl.searchParams.set("deviceIp", deviceIp);
 
-		const timeoutMs = Number(process.env.ZKTECO_BRIDGE_PREVIEW_TIMEOUT_MS || 15000);
+		const timeoutMs = Number(process.env.ZKTECO_BRIDGE_PREVIEW_TIMEOUT_MS || 180000);
 		try {
 			const response = await fetch(previewUrl.toString(), {
 				method: "GET",
@@ -496,9 +496,9 @@ export const controller = (prisma: PrismaClient) => {
 			const zktecoDevices = syncDevices.filter((device) => device.vendor === "ZKTeco");
 			const zktecoPreview =
 				zktecoDevices.length > 0
-					? await getZktecoBridgePreview(
-							zktecoDevices.length === 1 ? zktecoDevices[0].address : null,
-						)
+					? zktecoDevices.length === 1
+						? await getZktecoBridgePreview(zktecoDevices[0].address)
+						: await getZktecoBridgeStatus()
 					: null;
 			const zktecoPreviewByIp = new Map<string, any>();
 			for (const item of zktecoPreview?.data?.devices || []) {

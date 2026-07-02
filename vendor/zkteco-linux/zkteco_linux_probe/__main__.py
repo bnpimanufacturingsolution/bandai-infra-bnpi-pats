@@ -595,26 +595,36 @@ def run_sync(targets: Iterable[Target], args: argparse.Namespace, state: BridgeS
     for target in target_list:
         result = sync_target(target, args)
         emit(result)
-        if result["ok"]:
+        attendance = result.get("attendance") or {}
+        users = result.get("users") or {}
+        webhook = result.get("webhook") or {}
+        device_connected = bool(attendance or users) and not result.get("error")
+        if device_connected:
             connected += 1
         else:
             failures += 1
-        selected = int(result.get("attendance", {}).get("selected") or 0)
-        posted = int(result.get("webhook", {}).get("posted") or 0)
-        failed = int(result.get("webhook", {}).get("failed") or 0)
+        selected = int(attendance.get("selected") or 0)
+        posted = int(webhook.get("posted") or 0)
+        failed = int(webhook.get("failed") or 0)
         events_seen += selected
         events_posted += posted
         webhook_failed += failed
-        last_event_at = result.get("attendance", {}).get("lastSelectedAt") or last_event_at
+        last_event_at = attendance.get("lastSelectedAt") or last_event_at
         devices.append(
             {
+                "name": target.name,
                 "ip": target.host,
                 "port": target.port,
-                "connected": bool(result["ok"]),
+                "connected": device_connected,
+                "userCount": int(users.get("count") or 0),
+                "totalEvents": int(attendance.get("available") or 0),
+                "selectedEvents": selected,
                 "eventsSeen": selected,
                 "eventsPosted": posted,
                 "webhookFailed": failed,
-                "lastEventAt": result.get("attendance", {}).get("lastSelectedAt"),
+                "firstSelectedAt": attendance.get("firstSelectedAt"),
+                "lastSelectedAt": attendance.get("lastSelectedAt"),
+                "lastEventAt": attendance.get("lastSelectedAt"),
                 **({"lastError": result.get("error")} if result.get("error") else {}),
             }
         )

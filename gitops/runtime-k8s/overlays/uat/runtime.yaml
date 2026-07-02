@@ -221,6 +221,8 @@ spec:
                   fieldPath: status.hostIP
             - name: ZKTECO_BRIDGE_STATUS_URL
               value: http://$(NODE_HOST_IP):4371/status
+            - name: ZKTECO_BRIDGE_PREVIEW_TIMEOUT_MS
+              value: "180000"
             - name: ZKTECO_BRIDGE_SYNC_TIMEOUT_MS
               value: "90000"
           ports:
