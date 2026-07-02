@@ -9,6 +9,7 @@ import {
 	buildHiringRequisitionDescription,
 	countCurrentHeadcount,
 	getOrCreateWorkforceRecruitmentSetting,
+	listCurrentHeadcounts,
 	resolveWorkforcePolicy,
 	serializeWorkforceRecruitmentSetting,
 	WORKFORCE_REQUISITION_REQUEST_SUBTYPE,
@@ -208,6 +209,28 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(500).json(
 				buildErrorResponse(
 					error?.message || "Failed to update workforce recruitment settings",
+					500,
+				),
+			);
+		}
+	};
+
+	const getHeadcounts = async (req: AuthRequest, res: Response) => {
+		try {
+			const organization = await resolveOrganization(prisma, req.organizationId);
+			const headcounts = await listCurrentHeadcounts(prisma, String(organization.id));
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"Workforce recruitment headcounts retrieved successfully",
+					{ headcounts },
+					200,
+				),
+			);
+		} catch (error: any) {
+			res.status(500).json(
+				buildErrorResponse(
+					error?.message || "Failed to retrieve workforce recruitment headcounts",
 					500,
 				),
 			);
@@ -423,6 +446,7 @@ export const controller = (prisma: PrismaClient) => {
 	return {
 		getSettings,
 		updateSettings,
+		getHeadcounts,
 		getRequestContext,
 	};
 };

@@ -4,9 +4,9 @@ import type {
 } from "~/services/workforce-recruitment-settings.service";
 
 export const ALL_LEVELS_LABEL = "All levels";
-export const POSITION_LEVEL_FALLBACK_LABEL = "Position level";
+export const POSITION_LEVEL_FALLBACK_LABEL = "Position target";
 export const OTHER_DEPARTMENT_LABEL = "Other positions";
-export const UNASSIGNED_SECTION_LABEL = "Unassigned section";
+export const UNASSIGNED_SECTION_LABEL = "No section on employee record";
 
 export type PolicyCoverageRow = WorkforceRecruitmentPolicy & {
 	localId: string;
@@ -58,6 +58,18 @@ type LooseEmployee = {
 	position?: { id?: string | null; title?: string | null } | null;
 	levelId?: string | null;
 	level?: { id?: string | null; name?: string | null } | null;
+};
+
+type LooseHeadcount = {
+	departmentId?: string | null;
+	departmentName?: string | null;
+	sectionId?: string | null;
+	sectionName?: string | null;
+	positionId?: string | null;
+	positionTitle?: string | null;
+	levelId?: string | null;
+	levelName?: string | null;
+	currentHeadcount?: number | null;
 };
 
 type CoveragePlacement = {
@@ -213,6 +225,7 @@ const buildCoverageRow = ({
 	level,
 	placement,
 	index,
+	currentHeadcount,
 }: {
 	policy?: WorkforceRecruitmentPolicy;
 	positionId: string;
@@ -223,6 +236,7 @@ const buildCoverageRow = ({
 	};
 	placement: CoveragePlacement;
 	index: number;
+	currentHeadcount?: number | null;
 }): PolicyCoverageRow => ({
 	localId: policy?.id || `coverage-${positionId}-${level.id || "none"}-${index}`,
 	id: policy?.id || `draft-${positionId}-${level.id || "none"}-${index}`,
@@ -239,7 +253,7 @@ const buildCoverageRow = ({
 	jobTags: Array.isArray(policy?.jobTags) ? policy.jobTags : [],
 	jobDescriptionTemplate: policy?.jobDescriptionTemplate || "",
 	isActive: policy?.isActive !== false,
-	currentHeadcount: policy?.currentHeadcount,
+	currentHeadcount: Number(currentHeadcount ?? policy?.currentHeadcount ?? 0),
 	availableHeadcount: policy?.availableHeadcount,
 	positionTitle,
 	levelName: level.name,
@@ -252,12 +266,14 @@ export const buildRecruitmentCoverageRows = ({
 	settings,
 	positions,
 	employees,
+	headcounts = [],
 	departments,
 	levels = [],
 }: {
 	settings: WorkforceRecruitmentSettings;
 	positions: LoosePosition[];
 	employees: LooseEmployee[];
+	headcounts?: LooseHeadcount[];
 	departments: LooseDepartment[];
 	levels?: LooseLevel[];
 }): PolicyCoverageRow[] => {
@@ -291,10 +307,12 @@ export const buildRecruitmentCoverageRows = ({
 
 	const exactPolicyMap = new Map<string, WorkforceRecruitmentPolicy>();
 	const legacyPolicyMap = new Map<string, WorkforceRecruitmentPolicy>();
+	const positionIdsWithPolicies = new Set<string>();
 
 	settings.policies
 		.filter((policy) => policy.positionId)
 		.forEach((policy) => {
+			positionIdsWithPolicies.add(String(policy.positionId));
 			const exactKey = buildRecruitmentCoverageRowKey(
 				policy.departmentId || null,
 				policy.sectionId || null,
@@ -315,6 +333,7 @@ export const buildRecruitmentCoverageRows = ({
 
 	const nextRows: PolicyCoverageRow[] = [];
 	const seenScopeKeys = new Set<string>();
+	const seenPositionIds = new Set<string>();
 	const matchedPolicyIds = new Set<string>();
 
 	const resolvePolicy = (
@@ -343,12 +362,14 @@ export const buildRecruitmentCoverageRows = ({
 		level,
 		placement,
 		index,
+		currentHeadcount,
 	}: {
 		positionId?: string | null;
 		positionTitle?: string | null;
 		level: { id?: string | null; name?: string | null };
 		placement: CoveragePlacement;
 		index: number;
+		currentHeadcount?: number | null;
 	}) => {
 		const resolvedPositionId = String(positionId || "").trim();
 		if (!resolvedPositionId) return;
@@ -360,6 +381,7 @@ export const buildRecruitmentCoverageRows = ({
 		);
 		if (seenScopeKeys.has(scopeKey)) return;
 		seenScopeKeys.add(scopeKey);
+		seenPositionIds.add(resolvedPositionId);
 
 		nextRows.push(
 			buildCoverageRow({
@@ -372,22 +394,52 @@ export const buildRecruitmentCoverageRows = ({
 				},
 				placement,
 				index,
+				currentHeadcount,
 			}),
 		);
 	};
 
+	headcounts.forEach((headcount, headcountIndex) => {
+		const positionId = String(headcount.positionId || "").trim();
+		if (!positionId) return;
+		const position = positionById.get(positionId);
+		pushCoverageRow({
+			positionId,
+			positionTitle: position?.title || headcount.positionTitle || null,
+			level: {
+				id: headcount.levelId || null,
+				name: headcount.levelName || POSITION_LEVEL_FALLBACK_LABEL,
+			},
+			placement: {
+				departmentId:
+					String(headcount.departmentId || position?.departmentId || "").trim() || null,
+				departmentName:
+					String(headcount.departmentName || "").trim() ||
+					departmentNameById.get(String(headcount.departmentId || "")) ||
+					OTHER_DEPARTMENT_LABEL,
+				sectionId: String(headcount.sectionId || "").trim() || null,
+				sectionName:
+					String(headcount.sectionName || "").trim() ||
+					(headcount.sectionId ? UNASSIGNED_SECTION_LABEL : UNASSIGNED_SECTION_LABEL),
+			},
+			index: headcountIndex,
+			currentHeadcount: headcount.currentHeadcount,
+		});
+	});
+
 	positions.forEach((position, positionIndex) => {
 		const positionId = String(position.id || "").trim();
 		if (!positionId) return;
+		if (seenPositionIds.has(positionId)) return;
+		if (positionIdsWithPolicies.has(positionId)) return;
 		const placement = resolvePositionPlacement(position, departmentNameById);
-		getLevelsForPosition(position, levelCatalogById).forEach((level, levelIndex) => {
-			pushCoverageRow({
-				positionId,
-				positionTitle: position.title || null,
-				level,
-				placement,
-				index: positionIndex * 1000 + levelIndex,
-			});
+		if (!placement.sectionId) return;
+		pushCoverageRow({
+			positionId,
+			positionTitle: position.title || null,
+			level: { id: null, name: POSITION_LEVEL_FALLBACK_LABEL },
+			placement,
+			index: 50000 + positionIndex,
 		});
 	});
 
@@ -404,7 +456,7 @@ export const buildRecruitmentCoverageRows = ({
 			positionTitle: position?.title || employee.position?.title || null,
 			level: {
 				id: employee.level?.id || employee.levelId || null,
-				name: employee.level?.name || null,
+				name: employee.level?.name || POSITION_LEVEL_FALLBACK_LABEL,
 			},
 			placement,
 			index: 100000 + employeeIndex,
@@ -431,9 +483,7 @@ export const buildRecruitmentCoverageRows = ({
 				positionTitle: position?.title || null,
 				level: {
 					id: policy.levelId || null,
-					name:
-						knownLevelName ||
-						(policy.levelId ? POSITION_LEVEL_FALLBACK_LABEL : ALL_LEVELS_LABEL),
+					name: knownLevelName || POSITION_LEVEL_FALLBACK_LABEL,
 				},
 				placement: policyPlacement,
 				index: 200000 + policyIndex,

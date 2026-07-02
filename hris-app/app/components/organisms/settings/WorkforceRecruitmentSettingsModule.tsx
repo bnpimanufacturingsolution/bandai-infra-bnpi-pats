@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CircleAlert, Loader2 } from "lucide-react";
 import { Button } from "~/components/atoms/Button";
 import { RulesPoliciesShell } from "~/components/templates/admin/rules-policies-shell";
@@ -12,12 +12,11 @@ import {
 import { Input } from "~/components/ui/input";
 import { Switch } from "~/components/ui/switch";
 import { useDepartments } from "~/lib/hooks/useDepartments";
-import { useEmployees } from "~/lib/hooks/useEmployees";
 import { useLevels } from "~/lib/hooks/useLevels";
 import { usePositions } from "~/lib/hooks/usePositions";
 import {
 	useUpdateWorkforceRecruitmentSettings,
-	useWorkforceRecruitmentRequestContext,
+	useWorkforceRecruitmentHeadcounts,
 	useWorkforceRecruitmentSettings,
 } from "~/lib/hooks/useWorkforceRecruitmentSettings";
 import {
@@ -62,27 +61,6 @@ const ToggleTile = ({
 	</div>
 );
 
-const LevelStatusDot = ({
-	row,
-}: {
-	row: Pick<PolicyCoverageRow, "targetHeadcount" | "currentHeadcount" | "isActive">;
-}) => {
-	const hasTarget = Number(row.targetHeadcount || 0) > 0;
-	const belowCurrent =
-		hasTarget &&
-		typeof row.currentHeadcount === "number" &&
-		Number(row.targetHeadcount || 0) < Number(row.currentHeadcount || 0);
-	const className = !row.isActive
-		? "bg-gray-400"
-		: belowCurrent
-			? "bg-red-600"
-			: hasTarget
-				? "bg-orange-500"
-				: "bg-amber-500";
-
-	return <span className={`h-2 w-2 shrink-0 rounded-full ${className}`} />;
-};
-
 const ControlLabel = ({ children }: { children: ReactNode }) => (
 	<p className="text-xs font-medium text-gray-600">{children}</p>
 );
@@ -119,16 +97,12 @@ const CompactStat = ({
 }: {
 	label: string;
 	value: number | string;
-	tone?: "default" | "orange" | "amber" | "red";
+	tone?: "default" | "red";
 }) => {
 	const toneClass =
 		tone === "red"
 			? "border-red-200 bg-red-50 text-red-700"
-			: tone === "amber"
-				? "border-amber-200 bg-amber-50 text-amber-700"
-				: tone === "orange"
-					? "border-orange-200 bg-orange-50 text-orange-700"
-					: "border-gray-200 bg-white text-gray-700";
+			: "border-gray-200 bg-white text-gray-700";
 
 	return (
 		<span
@@ -148,16 +122,11 @@ const CoverageHealthStats = ({
 }) => (
 	<div className="flex flex-wrap items-center gap-1.5">
 		<CompactStat
-			label="Headcount"
+			label="Current/Target"
 			value={`${health.currentHeadcount}/${health.targetHeadcount}`}
-			tone={health.targetHeadcount ? "orange" : "amber"}
 		/>
-		<CompactStat label="Set" value={health.configured} tone="orange" />
-		<CompactStat
-			label="Pending"
-			value={health.missing}
-			tone={health.missing ? "amber" : "default"}
-		/>
+		<CompactStat label="Set" value={health.configured} />
+		<CompactStat label="Pending" value={health.missing} />
 		{showBelow && health.belowCurrent ? (
 			<CompactStat label="Below" value={health.belowCurrent} tone="red" />
 		) : null}
@@ -221,17 +190,10 @@ const PolicyCoverageMetrics = ({
 }: {
 	row: Pick<
 		PolicyCoverageRow,
-		"departmentId" | "sectionId" | "positionId" | "levelId" | "targetHeadcount"
+		"targetHeadcount" | "currentHeadcount"
 	>;
 }) => {
-	const { data, isLoading } = useWorkforceRecruitmentRequestContext({
-		departmentId: row.departmentId || undefined,
-		sectionId: row.sectionId || undefined,
-		positionId: row.positionId || undefined,
-		levelId: row.levelId || undefined,
-	});
-
-	const currentHeadcount = data?.headcount.currentHeadcount ?? 0;
+	const currentHeadcount = Number(row.currentHeadcount || 0);
 	const hasTarget = Number(row.targetHeadcount || 0) > 0;
 	const isBelowCurrent = hasTarget && Number(row.targetHeadcount || 0) < currentHeadcount;
 	const remaining = hasTarget
@@ -242,9 +204,9 @@ const PolicyCoverageMetrics = ({
 		<div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-gray-500">
 			<span
 				className={`font-medium ${
-					isBelowCurrent ? "text-red-700" : hasTarget ? "text-gray-700" : "text-amber-700"
+					isBelowCurrent ? "text-red-700" : hasTarget ? "text-gray-700" : "text-gray-500"
 				}`}>
-				{isLoading ? "..." : hasTarget ? `Rem ${remaining}` : "Need target"}
+				{hasTarget ? `Open ${remaining}` : "Set target"}
 			</span>
 			{isBelowCurrent ? (
 				<span className="rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 font-semibold text-red-700">
@@ -258,47 +220,26 @@ const PolicyCoverageMetrics = ({
 const HeadcountPairInput = ({
 	row,
 	onTargetChange,
-	onCurrentHeadcountChange,
 	compact = false,
 }: {
 	row: Pick<
 		PolicyCoverageRow,
-		"localId" | "departmentId" | "sectionId" | "positionId" | "levelId" | "targetHeadcount"
+		"localId" | "targetHeadcount" | "currentHeadcount"
 	>;
 	onTargetChange: (value: number) => void;
-	onCurrentHeadcountChange?: (value: number) => void;
 	compact?: boolean;
 }) => {
-	const { data, isLoading } = useWorkforceRecruitmentRequestContext({
-		departmentId: row.departmentId || undefined,
-		sectionId: row.sectionId || undefined,
-		positionId: row.positionId || undefined,
-		levelId: row.levelId || undefined,
-	});
 	const needsSetup = Number(row.targetHeadcount || 0) <= 0;
-	const currentHeadcount = data?.headcount.currentHeadcount ?? 0;
+	const currentHeadcount = Number(row.currentHeadcount || 0);
 	const isBelowCurrent =
 		Number(row.targetHeadcount || 0) > 0 && Number(row.targetHeadcount || 0) < currentHeadcount;
-	const onCurrentHeadcountChangeRef = useRef(onCurrentHeadcountChange);
-	const lastReportedCurrentHeadcountRef = useRef<number | null>(null);
-
-	useEffect(() => {
-		onCurrentHeadcountChangeRef.current = onCurrentHeadcountChange;
-	}, [onCurrentHeadcountChange]);
-
-	useEffect(() => {
-		if (isLoading) return;
-		if (lastReportedCurrentHeadcountRef.current === currentHeadcount) return;
-		lastReportedCurrentHeadcountRef.current = currentHeadcount;
-		onCurrentHeadcountChangeRef.current?.(currentHeadcount);
-	}, [currentHeadcount, isLoading]);
 
 	return (
 		<div className={compact ? "space-y-1" : "space-y-2"}>
 			{compact ? null : <ControlLabel>Headcount</ControlLabel>}
 			<div className={compact ? "flex items-center gap-1.5" : "flex items-center gap-3"}>
 				<Input
-					value={isLoading ? "..." : String(currentHeadcount)}
+					value={String(currentHeadcount)}
 					disabled
 					className={`rounded-md border-gray-200 bg-gray-100 text-center font-semibold text-gray-700 disabled:opacity-100 ${
 						compact ? "h-8 w-16 px-2 text-xs" : "h-10"
@@ -318,7 +259,7 @@ const HeadcountPairInput = ({
 						isBelowCurrent
 							? "border-red-300 bg-red-50/60 focus-visible:ring-red-200"
 							: needsSetup
-								? "border-amber-300 bg-amber-50/60 focus-visible:ring-amber-200"
+								? "border-gray-300 bg-white focus-visible:ring-gray-200"
 								: "border-gray-200"
 					}`}
 				/>
@@ -338,11 +279,11 @@ const HeadcountPairInput = ({
 };
 
 const CoveragePositionTable = ({
-	positionGroup,
+	positionGroups,
 	limitBehaviorOptions,
 	onCoverageFieldChange,
 }: {
-	positionGroup: CoveragePositionGroup;
+	positionGroups: CoveragePositionGroup[];
 	limitBehaviorOptions: SelectOption[];
 	onCoverageFieldChange: <K extends keyof PolicyCoverageRow>(
 		localId: string,
@@ -354,31 +295,33 @@ const CoveragePositionTable = ({
 		<table className="w-full min-w-[760px] text-sm">
 			<thead>
 				<tr className="border-y border-gray-200 bg-neutral-50 text-left text-[10px] font-bold uppercase text-gray-600">
-					<th className="w-[34%] px-3 py-2">Position</th>
-					<th className="w-[22%] px-3 py-2">Level</th>
-					<th className="w-[20%] px-3 py-2 text-right">Headcount target</th>
-					<th className="w-[16%] px-3 py-2">Limit</th>
-					<th className="w-[8%] px-3 py-2 text-right">Active</th>
+					<th className="w-[38%] px-3 py-2">Position</th>
+					<th className="w-[14%] px-3 py-2 text-right">Current</th>
+					<th className="w-[16%] px-3 py-2 text-right">Target</th>
+					<th className="w-[20%] px-3 py-2">Limit</th>
+					<th className="w-[12%] px-3 py-2 text-right">Active</th>
 				</tr>
 			</thead>
 			<tbody>
-				{positionGroup.rows.map((row) => (
+				{positionGroups.flatMap((positionGroup) => positionGroup.rows).map((row) => (
 					<tr
 						key={row.localId}
 						className="border-b border-gray-100 bg-white hover:bg-neutral-50">
 						<td className="px-3 py-1.5">
 							<p className="truncate text-sm font-medium text-gray-900">
-								{row.levelName}
+								{row.positionTitle}
 							</p>
+							{row.levelId ? (
+								<p className="truncate text-xs font-medium text-gray-500">
+									{row.levelName}
+								</p>
+							) : null}
 							<PolicyCoverageMetrics row={row} />
 						</td>
-						<td className="px-3 py-1.5">
-							<div className="flex min-w-0 items-center gap-2">
-								<LevelStatusDot row={row} />
-								<span className="text-xs font-medium text-gray-500">
-									{Number(row.targetHeadcount || 0) > 0 ? "Target set" : "Needs target"}
-								</span>
-							</div>
+						<td className="px-3 py-1.5 text-right">
+							<span className="tabular-nums text-sm font-semibold text-gray-800">
+								{Number(row.currentHeadcount || 0)}
+							</span>
 						</td>
 						<td className="px-3 py-1.5">
 							<div className="flex justify-end">
@@ -387,9 +330,6 @@ const CoveragePositionTable = ({
 									compact
 									onTargetChange={(value) =>
 										onCoverageFieldChange(row.localId, "targetHeadcount", value)
-									}
-									onCurrentHeadcountChange={(value) =>
-										onCoverageFieldChange(row.localId, "currentHeadcount", value)
 									}
 								/>
 							</div>
@@ -439,38 +379,11 @@ const CoveragePositionAccordions = ({
 		value: PolicyCoverageRow[K],
 	) => void;
 }) => (
-	<Accordion
-		type="multiple"
-		defaultValue={positionGroups.map((positionGroup) => positionGroup.positionId)}
-		className="divide-y divide-gray-100">
-		{positionGroups.map((positionGroup) => (
-			<AccordionItem
-				key={positionGroup.positionId}
-				value={positionGroup.positionId}
-				className="border-b-0">
-				<AccordionTrigger className="bg-white px-3 py-2 hover:bg-neutral-50 hover:no-underline">
-					<div className="flex min-w-0 flex-1 flex-col gap-2 text-left lg:flex-row lg:items-center lg:justify-between">
-						<div className="min-w-0">
-							<p className="truncate text-sm font-semibold text-gray-900">
-								{positionGroup.positionTitle}
-							</p>
-							<p className="text-xs font-medium text-gray-500">
-								{positionGroup.rows.length} levels
-							</p>
-						</div>
-						<CoverageHealthStats health={positionGroup.health} showBelow={false} />
-					</div>
-				</AccordionTrigger>
-				<AccordionContent className="bg-white pb-0">
-					<CoveragePositionTable
-						positionGroup={positionGroup}
-						limitBehaviorOptions={limitBehaviorOptions}
-						onCoverageFieldChange={onCoverageFieldChange}
-					/>
-				</AccordionContent>
-			</AccordionItem>
-		))}
-	</Accordion>
+	<CoveragePositionTable
+		positionGroups={positionGroups}
+		limitBehaviorOptions={limitBehaviorOptions}
+		onCoverageFieldChange={onCoverageFieldChange}
+	/>
 );
 
 export function WorkforceRecruitmentSettingsModule({
@@ -493,10 +406,8 @@ export function WorkforceRecruitmentSettingsModule({
 	const { data: levelsData, isLoading: isLoadingLevels } = useLevels({
 		limit: 1000,
 	});
-	const { data: employeesData, isLoading: isLoadingEmployees } = useEmployees({
-		page: 1,
-		limit: 5000,
-	});
+	const { data: headcountsData, isLoading: isLoadingHeadcounts } =
+		useWorkforceRecruitmentHeadcounts();
 
 	const [draft, setDraft] = useState<WorkforceRecruitmentSettings | null>(null);
 	const [coverageRows, setCoverageRows] = useState<PolicyCoverageRow[]>([]);
@@ -507,7 +418,7 @@ export function WorkforceRecruitmentSettingsModule({
 		() => (levelsData as any)?.levels || (levelsData as any)?.data?.levels || [],
 		[levelsData],
 	);
-	const employees = employeesData?.employees || [];
+	const headcounts = headcountsData || [];
 
 	useEffect(() => {
 		if (!settings) return;
@@ -520,12 +431,13 @@ export function WorkforceRecruitmentSettingsModule({
 			buildRecruitmentCoverageRows({
 				settings,
 				positions,
-				employees,
+				employees: [],
+				headcounts,
 				departments,
 				levels,
 			}),
 		);
-	}, [departments, employees, levels, positions, settings]);
+	}, [departments, headcounts, levels, positions, settings]);
 
 	const unmatchedPolicies = useMemo(() => {
 		if (!settings) return [];
@@ -753,7 +665,8 @@ export function WorkforceRecruitmentSettingsModule({
 			buildRecruitmentCoverageRows({
 				settings,
 				positions,
-				employees,
+				employees: [],
+				headcounts,
 				departments,
 				levels,
 			}),
@@ -784,7 +697,7 @@ export function WorkforceRecruitmentSettingsModule({
 		isLoadingDepartments ||
 		isLoadingPositions ||
 		isLoadingLevels ||
-		isLoadingEmployees ||
+		isLoadingHeadcounts ||
 		!draft
 	) {
 		return (
@@ -881,14 +794,14 @@ export function WorkforceRecruitmentSettingsModule({
 										key={departmentGroup.departmentKey}
 										value={departmentGroup.departmentKey}
 										className="border-b border-gray-200 last:border-b-0">
-										<AccordionTrigger className="rounded-none bg-neutral-100 px-4 py-3 hover:bg-neutral-50 hover:no-underline data-[state=open]:bg-orange-50/70">
+										<AccordionTrigger className="rounded-none bg-neutral-100 px-4 py-3 hover:bg-neutral-50 hover:no-underline data-[state=open]:bg-neutral-50">
 											<div className="flex min-w-0 flex-1 flex-col gap-2 text-left lg:flex-row lg:items-center lg:justify-between">
 												<div className="min-w-0">
 													<p className="truncate text-[15px] font-semibold text-gray-950">
 														{departmentGroup.departmentName}
 													</p>
 													<p className="text-xs font-medium text-gray-500">
-														{departmentGroup.sectionGroups.length} sections / {departmentGroup.rows.length} levels
+														{departmentGroup.sectionGroups.length} sections / {departmentGroup.rows.length} positions
 													</p>
 												</div>
 												<CoverageHealthStats health={departmentGroup.health} />
@@ -915,7 +828,7 @@ export function WorkforceRecruitmentSettingsModule({
 																				{sectionGroup.sectionName}
 																			</p>
 																			<p className="text-xs font-medium text-gray-500">
-																				{sectionGroup.positionGroups.length} positions / {sectionGroup.rows.length} levels
+																				{sectionGroup.positionGroups.length} positions / {sectionGroup.rows.length} targets
 																			</p>
 																		</div>
 																		<CoverageHealthStats
@@ -942,10 +855,10 @@ export function WorkforceRecruitmentSettingsModule({
 														<div className="flex min-w-0 flex-col gap-2 border-b border-gray-100 bg-neutral-50 px-3 py-2.5 text-left lg:flex-row lg:items-center lg:justify-between">
 															<div className="min-w-0">
 																<p className="truncate text-sm font-semibold text-gray-900">
-																	Positions without section
+																	No section on employee record
 																</p>
 																<p className="text-xs font-medium text-gray-500">
-																	{departmentGroup.positionsWithoutSection.length} positions / {departmentGroup.rowsWithoutSection.length} levels
+																	{departmentGroup.positionsWithoutSection.length} positions / {departmentGroup.rowsWithoutSection.length} targets
 																</p>
 															</div>
 															<CoverageHealthStats

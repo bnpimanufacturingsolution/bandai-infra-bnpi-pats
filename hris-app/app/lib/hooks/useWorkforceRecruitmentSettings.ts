@@ -5,6 +5,7 @@ import workforceRecruitmentSettingsService from "~/services/workforce-recruitmen
 export const workforceRecruitmentSettingsKeys = {
 	all: ["workforce-recruitment-settings"] as const,
 	settings: () => [...workforceRecruitmentSettingsKeys.all, "settings"] as const,
+	headcounts: () => [...workforceRecruitmentSettingsKeys.all, "headcounts"] as const,
 	requestContext: (params?: Record<string, string | null | undefined>) =>
 		[...workforceRecruitmentSettingsKeys.all, "request-context", params] as const,
 };
@@ -32,6 +33,13 @@ export const useUpdateWorkforceRecruitmentSettings = () => {
 		},
 	});
 };
+
+export const useWorkforceRecruitmentHeadcounts = () =>
+	useQuery({
+		queryKey: workforceRecruitmentSettingsKeys.headcounts(),
+		queryFn: () => workforceRecruitmentSettingsService.getHeadcounts(),
+		staleTime: 60 * 1000,
+	});
 
 export const useWorkforceRecruitmentRequestContext = (params?: {
 	departmentId?: string | null;

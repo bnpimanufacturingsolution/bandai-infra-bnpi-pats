@@ -35,6 +35,18 @@ export interface WorkforceRecruitmentSettings {
 	updatedAt?: string;
 }
 
+export interface WorkforceRecruitmentHeadcount {
+	departmentId?: string | null;
+	departmentName?: string | null;
+	sectionId?: string | null;
+	sectionName?: string | null;
+	positionId?: string | null;
+	positionTitle?: string | null;
+	levelId?: string | null;
+	levelName?: string | null;
+	currentHeadcount: number;
+}
+
 export interface UpdateWorkforceRecruitmentSettingsPayload
 	extends Partial<Omit<WorkforceRecruitmentSettings, "policies">> {
 	policies?: WorkforceRecruitmentPolicyInput[];
@@ -102,6 +114,18 @@ class WorkforceRecruitmentSettingsService {
 			throw new Error("Failed to update workforce recruitment settings");
 		}
 		return settings as WorkforceRecruitmentSettings;
+	}
+
+	async getHeadcounts(): Promise<WorkforceRecruitmentHeadcount[]> {
+		const response = await hrisApiClient.get<any>(
+			"/api/workforce-recruitment-setting/headcounts",
+		);
+		const data = response.data?.data || response.data;
+		const headcounts = data?.headcounts || data;
+		if (!Array.isArray(headcounts)) {
+			throw new Error("Failed to fetch workforce recruitment headcounts");
+		}
+		return headcounts as WorkforceRecruitmentHeadcount[];
 	}
 
 	async getRequestContext(params?: {

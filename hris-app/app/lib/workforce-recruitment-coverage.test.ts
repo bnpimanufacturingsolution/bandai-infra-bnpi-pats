@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-	ALL_LEVELS_LABEL,
 	buildRecruitmentCoverageRows,
 	UNASSIGNED_SECTION_LABEL,
 } from "./workforce-recruitment-coverage";
@@ -61,7 +60,7 @@ describe("buildRecruitmentCoverageRows", () => {
 		});
 	});
 
-	it("keeps positions without an assigned section visible under Unassigned section", () => {
+	it("does not create a normal catalog row for positions without a section or employees", () => {
 		const rows = buildRecruitmentCoverageRows({
 			settings: baseSettings(),
 			departments: [manufacturingDepartment],
@@ -75,16 +74,10 @@ describe("buildRecruitmentCoverageRows", () => {
 			employees: [],
 		});
 
-		expect(rows).toHaveLength(1);
-		expect(rows[0]).toMatchObject({
-			positionTitle: "Floating Technician",
-			sectionId: null,
-			sectionName: UNASSIGNED_SECTION_LABEL,
-			levelName: "Mid",
-		});
+		expect(rows).toHaveLength(0);
 	});
 
-	it("hydrates relation-only position levels from the global level catalog", () => {
+	it("uses one section-position row instead of catalog levels by default", () => {
 		const rows = buildRecruitmentCoverageRows({
 			settings: baseSettings(),
 			departments: [manufacturingDepartment],
@@ -104,13 +97,12 @@ describe("buildRecruitmentCoverageRows", () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0]).toMatchObject({
 			positionId: "position-operator",
-			levelId: "level-junior",
-			levelName: "Junior",
+			levelId: null,
+			levelName: "Position target",
 		});
-		expect(rows[0].levelId).not.toBe("position-level-relation-1");
 	});
 
-	it("creates one admin coverage row for every linked hydrated position level", () => {
+	it("creates one admin coverage row for a positioned catalog role", () => {
 		const rows = buildRecruitmentCoverageRows({
 			settings: baseSettings(),
 			departments: [manufacturingDepartment],
@@ -137,19 +129,12 @@ describe("buildRecruitmentCoverageRows", () => {
 			],
 		});
 
-		expect(rows).toHaveLength(4);
-		expect(rows.map((row) => row.levelId)).toEqual([
-			"level-junior",
-			"level-mid",
-			"level-senior",
-			"level-lead",
-		]);
-		expect(rows.map((row) => row.levelName)).toEqual([
-			"Junior",
-			"Mid",
-			"Senior",
-			"Lead",
-		]);
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({
+			positionId: "position-operator",
+			levelId: null,
+			levelName: "Position target",
+		});
 	});
 
 	it("creates coverage rows for every position from the position catalog", () => {
@@ -176,9 +161,39 @@ describe("buildRecruitmentCoverageRows", () => {
 		});
 
 		expect(rows.map((row) => `${row.positionTitle}:${row.levelName}`)).toEqual([
-			"Production Operator:Junior",
-			`Line Supervisor:${ALL_LEVELS_LABEL}`,
+			"Production Operator:Position target",
+			"Line Supervisor:Position target",
 		]);
+	});
+
+	it("creates rows and current headcount from the grouped headcount feed", () => {
+		const rows = buildRecruitmentCoverageRows({
+			settings: baseSettings(),
+			departments: [manufacturingDepartment],
+			positions: [],
+			employees: [],
+			headcounts: [
+				{
+					departmentId: "department-manufacturing",
+					departmentName: "Manufacturing",
+					sectionId: "section-assembly",
+					sectionName: "Assembly",
+					positionId: "position-operator",
+					positionTitle: "Production Operator",
+					currentHeadcount: 986,
+				},
+			],
+		});
+
+		expect(rows).toHaveLength(1);
+		expect(rows[0]).toMatchObject({
+			departmentId: "department-manufacturing",
+			sectionId: "section-assembly",
+			positionId: "position-operator",
+			currentHeadcount: 986,
+			levelId: null,
+			levelName: "Position target",
+		});
 	});
 
 	it("attaches legacy policies without section data to the matching position and level row", () => {
