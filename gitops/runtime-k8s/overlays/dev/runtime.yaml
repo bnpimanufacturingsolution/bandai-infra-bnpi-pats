@@ -325,11 +325,11 @@ spec:
             - name: APP_ENV
               value: dev
             - name: HIKVISION_DEVICE_NAME
-              value: HIKVISION-TEST001
+              value: Main Entrance Device
             - name: HIKVISION_DEVICE_ADDRESS
               value: 10.184.38.215
             - name: HIKVISION_DEVICE_PORT
-              value: "800"
+              value: "80"
             - name: HIKVISION_CALLBACK_URL
               value: http://hris-api:3001/api/hikvision/callback
             - name: HIKVISION_EVENT_LIMIT
