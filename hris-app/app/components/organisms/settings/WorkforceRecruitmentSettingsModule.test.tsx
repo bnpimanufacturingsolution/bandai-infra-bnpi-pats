@@ -2,6 +2,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import WorkforceRecruitmentSettingsModule from "./WorkforceRecruitmentSettingsModule";
+import type { WorkforceRecruitmentSettings } from "~/services/workforce-recruitment-settings.service";
 
 const useDepartmentsMock = vi.fn();
 const usePositionsMock = vi.fn();
@@ -83,7 +84,7 @@ const positions = [
 		levels: [{ id: "level-mid", name: "Mid", rank: 2 }],
 	},
 ];
-const settings = {
+const settings: WorkforceRecruitmentSettings = {
 	isEnabled: true,
 	enforceDepartmentManagerScope: true,
 	defaultWorkflowCode: "JOB-REQ",
@@ -95,9 +96,13 @@ const settings = {
 const mockReadyHooks = ({
 	mockPositions = positions,
 	mockLevels = levels,
+	mockSettings = settings,
+	mockRequestContext,
 }: {
-	mockPositions?: any[];
-	mockLevels?: any[];
+	mockPositions?: unknown[];
+	mockLevels?: unknown[];
+	mockSettings?: typeof settings;
+	mockRequestContext?: (args: { positionId?: string }) => unknown;
 } = {}) => {
 	useDepartmentsMock.mockReturnValue({
 		data: { departments },
@@ -116,17 +121,20 @@ const mockReadyHooks = ({
 		isLoading: false,
 	});
 	useSettingsMock.mockReturnValue({
-		data: settings,
+		data: mockSettings,
 		isLoading: false,
 	});
 	useUpdateSettingsMock.mockReturnValue({
 		mutateAsync: vi.fn(),
 		isPending: false,
 	});
-	useRequestContextMock.mockReturnValue({
-		data: { headcount: { currentHeadcount: 0, availableHeadcount: null } },
-		isLoading: false,
-	});
+	useRequestContextMock.mockImplementation(
+		mockRequestContext ||
+			(() => ({
+				data: { headcount: { currentHeadcount: 0, availableHeadcount: null } },
+				isLoading: false,
+			})),
+	);
 };
 
 beforeEach(() => {
@@ -202,5 +210,42 @@ describe("WorkforceRecruitmentSettingsModule coverage terminology", () => {
 		expect(screen.getByText("Senior")).toBeInTheDocument();
 		expect(screen.getByText("Lead")).toBeInTheDocument();
 		expect(screen.getByText("1 positions / 4 levels")).toBeInTheDocument();
+	});
+
+	it("rolls up current and target headcount in compact coverage headers", async () => {
+		mockReadyHooks({
+			mockSettings: {
+				...settings,
+				policies: [
+					{
+						id: "policy-operator-junior",
+						departmentId: "department-manufacturing",
+						sectionId: "section-assembly",
+						positionId: "position-operator",
+						levelId: "level-junior",
+						targetHeadcount: 3,
+						limitBehavior: "BLOCK",
+						autoCreateJobOnApproval: true,
+						isActive: true,
+					},
+				],
+			},
+			mockRequestContext: (args) => ({
+				data: {
+					headcount: {
+						currentHeadcount: args.positionId === "position-operator" ? 2 : 0,
+						availableHeadcount: null,
+					},
+				},
+				isLoading: false,
+			}),
+		});
+
+		render(<WorkforceRecruitmentSettingsModule showHeader={false} />);
+
+		await waitFor(() => {
+			expect(screen.getAllByText("2/3").length).toBeGreaterThan(0);
+		});
+		expect(screen.getAllByText("Headcount").length).toBeGreaterThan(0);
 	});
 });
