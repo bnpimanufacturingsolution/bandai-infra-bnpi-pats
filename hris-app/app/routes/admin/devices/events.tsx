@@ -14,6 +14,7 @@ import {
 	WifiOff,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Badge } from "~/components/atoms/Badge";
 import { Button } from "~/components/atoms/Button";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
@@ -94,6 +95,16 @@ type ZktecoBridgePreflight = NonNullable<DeviceHealthResponse["checks"]["zktecoB
 	missingRows?: number | string | null;
 	dryRun?: { missingRows?: number | string | null };
 	data?: { dryRun?: { missingRows?: number | string | null } };
+};
+
+const getAsyncErrorMessage = (error: unknown, fallback: string) => {
+	if (error instanceof Error && error.message) return error.message;
+	if (typeof error === "object" && error && "message" in error) {
+		const message = String((error as { message?: unknown }).message || "").trim();
+		if (message) return message;
+	}
+	if (typeof error === "string" && error.trim()) return error.trim();
+	return fallback;
 };
 
 const viewOptions: SelectOption[] = [
@@ -603,7 +614,17 @@ export default function DeviceEventsPage() {
 		const refreshFromRecovery = () => {
 			setLastRecoveryRefreshAt(new Date().toISOString());
 			void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
-			void refetch();
+			void refetch().then((result) => {
+				if (result.error) {
+					toast.warning("Saved punches could not refresh", {
+						id: "device-events-recovery-refresh",
+						description: getAsyncErrorMessage(
+							result.error,
+							"The recovery refresh will retry automatically.",
+						),
+					});
+				}
+			});
 		};
 		const handleVisibilityOrFocus = () => {
 			if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
@@ -846,6 +867,14 @@ export default function DeviceEventsPage() {
 		: isLoadingSyncHealth
 			? "Checking bridge"
 			: "Unavailable";
+	useEffect(() => {
+		if (action !== "sync-logs" || !syncBridgeError) return;
+		toast.warning("Sync preflight is unavailable", {
+			id: "device-events-sync-preflight",
+			description: syncBridgeError,
+		});
+	}, [action, syncBridgeError]);
+
 	const focusLatestSavedEvent = () => {
 		if (!latestSavedEvent) return;
 		updateSearchParams((next) => {
@@ -884,11 +913,49 @@ export default function DeviceEventsPage() {
 			next.delete("action");
 		});
 	};
+	const refreshSyncPreflight = async () => {
+		const results = await Promise.allSettled([refetchSyncHealth(), refetchSyncPreview()]);
+		const rejected = results.find(
+			(result): result is PromiseRejectedResult => result.status === "rejected",
+		);
+		if (rejected) {
+			toast.warning("Sync preflight could not refresh", {
+				id: "device-events-sync-preflight",
+				description: getAsyncErrorMessage(
+					rejected.reason,
+					"The bridge may be offline. The modal is still safe to review.",
+				),
+			});
+			return;
+		}
+
+		const failedResult = results
+			.map((result) => (result.status === "fulfilled" ? result.value : null))
+			.find((result) => result?.error);
+		if (failedResult?.error) {
+			toast.warning("Sync preflight could not refresh", {
+				id: "device-events-sync-preflight",
+				description: getAsyncErrorMessage(
+					failedResult.error,
+					"The bridge may be offline. The modal is still safe to review.",
+				),
+			});
+			return;
+		}
+
+		toast.success("Sync preflight refreshed", {
+			id: "device-events-sync-preflight",
+		});
+	};
 	const startZktecoSync = () => {
 		setSyncLogsState({ status: "idle" });
 		const startableDeviceId = selectedZktecoDevice?.id || syncStartableRows[0]?.deviceId;
 		zktecoSync.mutate(startableDeviceId ? { deviceId: startableDeviceId } : {}, {
 			onSuccess: () => {
+				toast.success("Sync logs request accepted", {
+					id: "device-events-sync-start",
+					description: "Saved events and bridge health are refreshing.",
+				});
 				setSyncLogsState({
 					status: "accepted",
 					message: "Bridge accepted the sync request. Saved events and bridge health are refreshing.",
@@ -898,10 +965,15 @@ export default function DeviceEventsPage() {
 				void refetchSyncHealth();
 				void refetchSyncPreview();
 			},
-			onError: (error: any) => {
+			onError: (error: unknown) => {
+				const message = getAsyncErrorMessage(error, "Bridge rejected the sync request.");
 				setSyncLogsState({
 					status: "error",
-					message: error?.message || "Bridge rejected the sync request.",
+					message,
+				});
+				toast.error("Sync logs did not start", {
+					id: "device-events-sync-start",
+					description: message,
 				});
 			},
 		});
@@ -1527,10 +1599,7 @@ export default function DeviceEventsPage() {
 								size="sm"
 								className="h-8 px-3 text-xs"
 								disabled={isLoadingSyncPreview || isLoadingSyncHealth}
-								onClick={() => {
-									void refetchSyncHealth();
-									void refetchSyncPreview();
-								}}>
+								onClick={() => void refreshSyncPreflight()}>
 								<RefreshCw className="h-3.5 w-3.5" />
 								Refresh preflight
 							</Button>
@@ -1598,20 +1667,8 @@ export default function DeviceEventsPage() {
 						</div>
 					</div>
 
-					{syncBridgeError ? (
-						<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-							<p className="font-semibold">Bridge connection error</p>
-							<p className="mt-1 break-words">{syncBridgeError}</p>
-						</div>
-					) : null}
-
 					{syncLogsState.status === "accepted" ? (
 						<div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-							{syncLogsState.message}
-						</div>
-					) : null}
-					{syncLogsState.status === "error" ? (
-						<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
 							{syncLogsState.message}
 						</div>
 					) : null}

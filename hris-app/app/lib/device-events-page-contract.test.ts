@@ -20,8 +20,9 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain('next.set("action", "sync-logs")');
 		expect(routeSource).to.contain('title="Sync device logs"');
 		expect(routeSource).to.contain("useDeviceSyncPreview");
-		expect(routeSource).to.contain("Bridge connection error");
 		expect(routeSource).to.contain("Refresh preflight");
+		expect(routeSource).to.contain("device-events-sync-preflight");
+		expect(routeSource).to.contain("Sync preflight is unavailable");
 		expect(routeSource).to.contain("SDK/vendor truth");
 		expect(routeSource).to.contain("DB truth");
 		expect(routeSource).to.contain("Device tally");

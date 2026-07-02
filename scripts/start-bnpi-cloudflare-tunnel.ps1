@@ -149,8 +149,14 @@ function Write-TunnelConfig {
   }
 
   $lines += '  - hostname: dev.bnpi-hris.tech'
+  $lines += '    path: /api/.*'
+  $lines += "    service: http://${GuestIp}:3101"
+  $lines += '  - hostname: dev.bnpi-hris.tech'
   $lines += '    path: /socket.io/.*'
   $lines += "    service: http://${GuestIp}:3101"
+  $lines += '  - hostname: uat.bnpi-hris.tech'
+  $lines += '    path: /api/.*'
+  $lines += "    service: http://${GuestIp}:3201"
   $lines += '  - hostname: uat.bnpi-hris.tech'
   $lines += '    path: /socket.io/.*'
   $lines += "    service: http://${GuestIp}:3201"

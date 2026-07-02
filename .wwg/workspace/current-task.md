@@ -72,9 +72,7 @@ Status: READY FOR REVIEW
 
 - Runtime VM: `project-truth-local-vhdx-proof`
 - Current operator/LAN IP: `10.184.38.144`
-- Current persistent secondary operator/LAN IP: `10.184.37.19`
 - LAN SSH: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.38.144`
-- Secondary LAN SSH: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19`
 - Named tunnel: `bnpi-hris`
 - Named tunnel ID: `e3486f00-f974-46d3-9e11-911266749d00`
 - Public verification artifact: `.runtime/cloudflare-drift-proof/20260629-220610/public-verification-final.json`
@@ -141,13 +139,12 @@ Status: READY FOR REVIEW
   `https://dev.bnpi-hris.tech/api/system-provisioning/status` with HTTP 200,
   and showed no public `:3001` browser request.
 - On 2026-07-02, `10.184.38.138` no longer answered SSH or HRIS port probes
-  from the Windows host. The VM was reached through DHCP fallback
-  `10.184.38.144`, then configured with persistent secondary address
-  `10.184.37.19/32` while keeping DHCP enabled. LAN probes passed on
-  `10.184.37.19` for SSH, PROD/DEV/UAT app/API, and Grafana ports.
-- On 2026-07-02, host-managed `cloudflared-bnpi-hris.yml` was updated from
-  stale `10.184.38.138` origins to `10.184.37.19`; ingress validation passed
-  and the Windows connector restarted. Public verification from the client LAN
+  from the Windows host. The VM was reached through DHCP address
+  `10.184.38.144`; a temporary secondary `10.184.37.19/32` experiment was
+  removed, leaving `/etc/netplan/99-project-truth-lan.yaml` as DHCP-only.
+- On 2026-07-02, host-managed `cloudflared-bnpi-hris.yml` was corrected to
+  target `10.184.38.144` origins for app/API/dev/uat/Grafana/SSH. Public
+  verification from the client LAN
   is currently blocked by network policy: plain HTTP returns a company-policy
   block page and HTTPS resets during TLS for `bnpi-hris.tech` hostnames, while
   general Cloudflare/Google HTTPS works.

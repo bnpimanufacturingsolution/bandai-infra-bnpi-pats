@@ -56,14 +56,14 @@ describe("api-url helper", () => {
 
 	it("keeps LAN and localhost socket connections on the app host proxy", () => {
 		expect(
-			resolveSocketBaseUrl("http://10.184.38.138:3101/api", "http://10.184.38.138:3100"),
-		).toBe("http://10.184.38.138:3100");
+			resolveSocketBaseUrl("http://10.184.38.144:3101/api", "http://10.184.38.144:3100"),
+		).toBe("http://10.184.38.144:3100");
 		expect(
 			resolveSocketBaseUrl("http://localhost:3201/api", "http://localhost:3200"),
 		).toBe("http://localhost:3200");
 		expect(
-			resolveSocketBaseUrl("http://10.184.38.138:3001/api", "http://10.184.38.144:3000"),
-		).toBe("http://10.184.38.138:3001");
+			resolveSocketBaseUrl("http://10.184.38.144:3001/api", "http://10.184.38.144:3000"),
+		).toBe("http://10.184.38.144:3000");
 	});
 
 	it("normalizes endpoints to avoid duplicate /api/api paths", () => {

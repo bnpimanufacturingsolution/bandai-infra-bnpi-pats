@@ -138,12 +138,12 @@ Accepted or observed architecture:
 - Item: Current Hyper-V proof VM exposes SSH on LAN at `10.184.38.144:22`.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: 2026-07-01 `Test-NetConnection 10.184.38.144 -Port 22` passed; Windows OpenSSH with `%USERPROFILE%\.ssh\node-health-appliance_ed25519` reached hostname `project-truth-node`, user `infra`, and the Project Truth HRIS appliance banner.
-- Item: Current Hyper-V proof VM has persistent secondary LAN address `10.184.37.19/32` while retaining DHCP fallback `10.184.38.144/24`.
+- Item: Current Hyper-V proof VM uses DHCP-only operator/LAN address `10.184.38.144/24`; temporary secondary address `10.184.37.19/32` is removed.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: On 2026-07-02, SSH to `10.184.38.144` showed `project-truth-node` on `eth0` with DHCP address `10.184.38.144/24` and default route through `10.184.38.254`, while `10.184.38.138` no longer answered SSH or HRIS port probes. The VM was configured with `/etc/netplan/99-project-truth-lan.yaml` containing `dhcp4: true` and secondary address `10.184.37.19/32`; `sudo netplan generate` and `sudo netplan apply` succeeded. Windows probes passed on `10.184.37.19` for SSH, PROD/DEV/UAT app/API ports, and Grafana (`22`, `3000`, `3001`, `3100`, `3101`, `3200`, `3201`, `53000`).
-- Item: Host-managed Cloudflare Tunnel config now targets the verified VM secondary address `10.184.37.19`.
+  - Evidence: On 2026-07-02, SSH to `10.184.38.144` showed `project-truth-node` on `eth0` with DHCP address `10.184.38.144/24` and default route through `10.184.38.254`, while `10.184.38.138` no longer answered SSH or HRIS port probes. A temporary secondary `10.184.37.19/32` was removed; `/etc/netplan/99-project-truth-lan.yaml` now contains only `dhcp4: true`, and `ip -br addr show eth0` shows only `10.184.38.144/24`.
+- Item: Host-managed Cloudflare Tunnel config targets the current VM DHCP address `10.184.38.144`.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: On 2026-07-02, `cloudflared-bnpi-hris.yml` was updated from stale `10.184.38.138` service origins to `10.184.37.19`; `cloudflared tunnel ingress validate` returned `OK`, `https://bnpi-hris.tech/api/*` matched `http://10.184.37.19:3001`, and `https://ssh.bnpi-hris.tech` matched `ssh://10.184.37.19:22`. The host connector restarted and registered with tunnel `e3486f00-f974-46d3-9e11-911266749d00`.
+  - Evidence: On 2026-07-02, `cloudflared-bnpi-hris.yml` was corrected from stale secondary-origin routing to `10.184.38.144`; app/API/dev/uat/Grafana origins and `ssh.bnpi-hris.tech` now point at the current VM DHCP address.
 - Item: Public `bnpi-hris.tech` verification from the client LAN is currently blocked by network policy.
   - Status: CONFIRMED_WITH_BOUNDARY
   - Evidence: On 2026-07-02, plain HTTP to `http://bnpi-hris.tech` returned a company-policy "Web Page Blocked" response, while HTTPS to `bnpi-hris.tech`, `api.bnpi-hris.tech`, DEV, UAT, Grafana, and Cloudflare Access SSH reset during TLS from both Windows and the VM. General HTTPS to `www.cloudflare.com` and `www.google.com` still returned HTTP 200, and `cloudflared tunnel info bnpi-hris` showed active Windows and Linux connectors. Public HRIS checks need an unfiltered vantage point before being treated as origin failure.
