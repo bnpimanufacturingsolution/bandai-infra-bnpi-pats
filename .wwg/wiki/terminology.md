@@ -26,6 +26,9 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | fresh | package/name | Observed project term; confirm canonical meaning before broad use. | NEEDS_CONFIRMATION |
 | goal | README heading | Observed project term; confirm canonical meaning before broad use. | NEEDS_CONFIRMATION |
 | hyper | README heading | Observed project term; confirm canonical meaning before broad use. | NEEDS_CONFIRMATION |
+| operator/LAN IP | Runtime repair evidence; appliance summary; WWG Project Truth | The LAN address operators should use for direct SSH/HTTP checks when their workstation can route to the VM LAN. | CONFIRMED_WITH_BOUNDARY |
+| pure static LAN | Runtime repair evidence; netplan state | DHCP-disabled VM network mode where all required VM LAN addresses, default route, DNS, and search domains are persisted through Project Truth config. | CONFIRMED |
+| K3s node/API IP | Runtime repair evidence; K3s node and Kubernetes endpoint checks | Static VM address used by K3s node InternalIP and Kubernetes API endpoint identity. It may differ from the preferred human/operator LAN address. | CONFIRMED_WITH_BOUNDARY |
 
 ## Canonical Term Candidates
 
@@ -41,6 +44,9 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | cli | Cli | None detected | MEDIUM | README heading |
 | admin role | admin / hris-admin | administrator, admin user | HIGH | User correction 2026-06-29; `hris-app/app/routes/admin` |
 | HR manager role | hris-hr-manager | HR Manager, hr-manager route legacy | HIGH | Existing HRIS role tests and HR workflow code |
+| operator LAN access address | operator/LAN IP | LAN IP, stable VM address, static operator/LAN address | HIGH | 2026-07-03 pure static LAN repair evidence |
+| pure static VM LAN mode | pure static LAN | static LAN, hard cutover, DHCP-disabled LAN | HIGH | 2026-07-03 netplan and `/etc/project-truth/lan.env` evidence |
+| K3s node identity address | K3s node/API IP | node IP, Kubernetes endpoint IP | HIGH | 2026-07-03 K3s node InternalIP and `kubernetes` endpoint evidence |
 
 ## Terminology Conflicts
 

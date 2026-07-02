@@ -71,7 +71,8 @@ Status: READY FOR REVIEW
 ## Evidence
 
 - Runtime VM: `project-truth-local-vhdx-proof`
-- Current operator/LAN IP: `10.184.37.19`
+- Current operator/LAN IP: `10.184.37.19` (pure static)
+- Current K3s node/API IP: `10.184.37.78` (pure static)
 - LAN SSH: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19`
 - Named tunnel: `bnpi-hris`
 - Named tunnel ID: `e3486f00-f974-46d3-9e11-911266749d00`
@@ -147,11 +148,11 @@ Status: READY FOR REVIEW
   policy: plain HTTP returns a company-policy block page and HTTPS resets
   during TLS for `bnpi-hris.tech` hostnames, while general Cloudflare/Google
   HTTPS works.
-- On 2026-07-02, after user correction for the client demo, `10.184.37.19/24`
-  was configured as the stable secondary VM LAN address while DHCP remained
-  enabled. SSH and HRIS passed on `10.184.37.19`; the VM summary script and
-  host-managed `cloudflared-bnpi-hris.yml` now prefer `10.184.37.19` instead
-  of transient DHCP addresses.
+- On 2026-07-03, after the DHCP drift follow-up, the VM was hard-cut over to
+  pure static LAN addressing on `eth0`: `10.184.37.78/24` for K3s node/API
+  identity and `10.184.37.19/24` for preferred operator/LAN access. DHCP is
+  disabled, the default route is static via `10.184.38.254`, and SSH plus HRIS
+  API health passed on both static addresses.
 - `git diff --check` passed.
 - `wwg test-check --format plain` passes after the stable `10.184.37.19`
   runtime/config drift repair because the Cloudflare config regression guard was
