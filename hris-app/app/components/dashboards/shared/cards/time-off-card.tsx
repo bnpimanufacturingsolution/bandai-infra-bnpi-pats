@@ -1,4 +1,4 @@
-import { Calendar, Heart } from "lucide-react";
+﻿import { Calendar, Heart } from "lucide-react";
 import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "~/components/atoms/Button";
@@ -63,11 +63,11 @@ export function TimeOffCard({ role, employeeId }: TimeOffCardProps) {
 	}, [employee?.leaveBalances]);
 
 	return (
-		<Card id="dashboard-time-off" className="h-full">
-			<CardHeader>
+		<Card id="dashboard-time-off" className="h-full gap-4 overflow-hidden py-4">
+			<CardHeader className="pb-2">
 				<div className="flex items-center justify-between">
-					<CardTitle className="flex items-center gap-2">
-						<Calendar className="w-5 h-5 text-orange-500" />
+					<CardTitle className="flex items-center gap-2 text-base font-semibold">
+						<Calendar className="h-4 w-4 text-gray-400" />
 						Time Off
 					</CardTitle>
 					<button
@@ -76,19 +76,19 @@ export function TimeOffCard({ role, employeeId }: TimeOffCardProps) {
 							navigate(leaveBalancePath);
 						}}
 						disabled={!canNavigateToLeaveBalance}
-						className={`text-sm ${
+						className={`text-xs ${
 							canNavigateToLeaveBalance
-								? "text-gray-600 hover:text-gray-800"
-								: "text-gray-400 cursor-not-allowed"
+								? "text-gray-400 hover:text-gray-600"
+								: "text-gray-300 cursor-not-allowed"
 						}`}>
-						View All &gt;
+						View all →
 					</button>
 				</div>
 			</CardHeader>
-			<CardContent className="flex flex-1 flex-col">
-				<div className="flex h-full flex-1 flex-col gap-4">
+			<CardContent className="flex min-h-0 flex-1 flex-col pt-0">
+				<div className="flex min-h-0 flex-1 flex-col">
 					{leaveBalances.length > 0 ? (
-						<div className="space-y-3">
+						<div className="min-h-0 flex-1 divide-y divide-gray-100">
 							{leaveBalances.map((balance, index) => {
 								const Icon = balance.icon;
 								const isSickLeave = Icon === Heart;
@@ -99,73 +99,46 @@ export function TimeOffCard({ role, employeeId }: TimeOffCardProps) {
 											if (!canNavigateToLeaveBalance) return;
 											navigate(leaveBalancePath);
 										}}
-										onKeyDown={(event) => {
-											if (event.key === "Enter" || event.key === " ") {
-												event.preventDefault();
-												if (!canNavigateToLeaveBalance) return;
-												navigate(leaveBalancePath);
-											}
-										}}
-										role="button"
-										tabIndex={canNavigateToLeaveBalance ? 0 : -1}
-										className={`flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5 transition-colors ${
+										className={`flex items-center justify-between py-1.5 transition-colors ${
 											canNavigateToLeaveBalance
-												? "hover:bg-gray-50 cursor-pointer"
+												? "hover:bg-gray-50 cursor-pointer -mx-1 px-1 rounded"
 												: "opacity-70 cursor-default"
 										}`}>
-										<div className="flex items-center gap-3">
+										<div className="flex items-center gap-2">
 											<div
-												className={`flex h-9 w-9 items-center justify-center rounded-full border ${
-													isSickLeave
-														? "bg-blue-50 border-blue-100"
-														: "bg-orange-50 border-orange-100"
+												className={`flex h-7 w-7 items-center justify-center rounded-md ${
+													isSickLeave ? "bg-blue-50" : "bg-orange-50"
 												}`}>
 												<Icon
-													className={`w-5 h-5 ${
-														isSickLeave
-															? "text-blue-500"
-															: "text-orange-500"
+													className={`h-3.5 w-3.5 ${
+														isSickLeave ? "text-blue-500" : "text-orange-500"
 													}`}
 												/>
 											</div>
-											<div>
-												<p className="text-sm font-medium text-gray-900">
-													{formatLeaveTypeLabel(balance.leaveType)}
-												</p>
-												<p className="text-xs text-gray-500">
-													Annual allocation
-												</p>
-											</div>
+											<span className="text-sm font-medium text-gray-800">
+												{formatLeaveTypeLabel(balance.leaveType)}
+											</span>
 										</div>
-										<div className="text-right">
-											<p className="text-base font-bold text-gray-900">
+										<div className="text-right tabular-nums">
+											<span className="text-sm font-semibold text-gray-900">
 												{balance.available}
-											</p>
-											<p className="text-xs text-gray-500">
-												{formatDayLabel(balance.available)}
-											</p>
+											</span>
+											<span className="ml-1 text-xs text-gray-400">days</span>
 										</div>
 									</div>
 								);
 							})}
 						</div>
 					) : (
-						<div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center">
-							<p className="text-sm font-medium text-gray-900">
-								No leave balances available
-							</p>
-							<p className="mt-1 text-xs text-gray-500">
-								Your leave balances will appear here once they are configured.
-							</p>
+						<div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-3 text-center text-sm text-gray-500">
+							No leave balances configured
 						</div>
 					)}
 
-					<div className="pt-1">
-						<Button className="w-full" onClick={() => navigate(requestPath)}>
-							<Calendar className="w-4 h-4 mr-2" />
-							Request Time Off
-						</Button>
-					</div>
+					<Button size="sm" className="mt-auto w-full shrink-0" onClick={() => navigate(requestPath)}>
+						<Calendar className="mr-2 h-4 w-4" />
+						Request Time Off
+					</Button>
 				</div>
 			</CardContent>
 		</Card>

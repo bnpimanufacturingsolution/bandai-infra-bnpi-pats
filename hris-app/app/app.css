@@ -1,4 +1,4 @@
-@import "@fontsource/metropolis/400.css";
+﻿@import "@fontsource/metropolis/400.css";
 @import "@fontsource/metropolis/500.css";
 @import "@fontsource/metropolis/600.css";
 @import "@fontsource/metropolis/700.css";
@@ -19,13 +19,13 @@ body {
 .sidebar-scroll {
 	scrollbar-width: thin;
 	/* Firefox */
-	scrollbar-color: rgba(100, 116, 139, 0.35) transparent;
+	scrollbar-color: rgba(100, 116, 139, 0.28) transparent;
 	/* Firefox */
 	scrollbar-gutter: stable;
 }
 
 .sidebar-scroll::-webkit-scrollbar {
-	width: 8px;
+	width: 4px;
 	/* Chrome/Edge */
 }
 
@@ -34,25 +34,25 @@ body {
 }
 
 .sidebar-scroll::-webkit-scrollbar-thumb {
-	background-color: rgba(100, 116, 139, 0.35);
-	/* slate-500 at ~35% */
+	background-color: rgba(100, 116, 139, 0.28);
+	/* slate-500 at ~28% */
 	border-radius: 9999px;
-	border: 2px solid transparent;
-	/* creates inset breathing room */
+	border: 1px solid transparent;
+	/* keeps the thumb slim without touching the track */
 	background-clip: content-box;
 }
 
 .sidebar-scroll:hover::-webkit-scrollbar-thumb {
-	background-color: rgba(100, 116, 139, 0.55);
+	background-color: rgba(100, 116, 139, 0.44);
 }
 
 .dark .sidebar-scroll {
-	scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+	scrollbar-color: rgba(148, 163, 184, 0.28) transparent;
 	/* slate-400 */
 }
 
 .dark .sidebar-scroll::-webkit-scrollbar-thumb {
-	background-color: rgba(148, 163, 184, 0.35);
+	background-color: rgba(148, 163, 184, 0.28);
 }
 
 @theme inline {

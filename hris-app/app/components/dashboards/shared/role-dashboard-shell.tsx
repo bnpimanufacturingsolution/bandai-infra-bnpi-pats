@@ -1,4 +1,4 @@
-import { roleDashboardConfigs } from "./role-dashboard.config";
+﻿import { roleDashboardConfigs } from "./role-dashboard.config";
 import type { RoleDashboardShellProps } from "./role-dashboard.types";
 import { useAuth } from "~/lib/hooks/use-auth";
 import { TimeOffCard } from "./cards/time-off-card";
@@ -11,11 +11,10 @@ import { EmployeeCalendarCard } from "./cards/employee-calendar-card";
 import type { DashboardCardKey } from "./role-dashboard.types";
 import { RegularizationCelebrationModal } from "./regularization-celebration-modal";
 
-export function RoleDashboardShell({ dashboardRole }: RoleDashboardShellProps) {
+export function RoleDashboardShell({ role }: RoleDashboardShellProps) {
 	const { user } = useAuth();
 	const employeeId = user?.metadata?.employee?.id || "";
-	const config = roleDashboardConfigs[dashboardRole];
-	const role = config.role;
+	const config = roleDashboardConfigs[role];
 
 	const renderCard = (cardKey: DashboardCardKey) => {
 		if (cardKey === "time_off") {
@@ -60,27 +59,52 @@ export function RoleDashboardShell({ dashboardRole }: RoleDashboardShellProps) {
 	const bottomLeft = config.layout?.bottomLeft || "my_requests";
 	const bottomRight = config.layout?.bottomRight || "action_needed";
 
+	const firstName =
+		user?.metadata?.employee?.personalInfo?.firstName ||
+		user?.userName?.split(" ")[0] ||
+		"";
+	const greetingName = firstName || "there";
+	const now = new Date();
+	const dateLabel = now.toLocaleDateString(undefined, {
+		weekday: "long",
+		month: "long",
+		day: "numeric",
+	});
+	const hour = now.getHours();
+	const timeGreeting =
+		hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+
 	return (
-		<div className="flex min-h-[calc(100vh-8rem)] min-w-0 flex-col gap-6">
+		<div className="flex min-h-[calc(100vh-8rem)] min-w-0 flex-col gap-4">
 			<RegularizationCelebrationModal
 				employeeId={employeeId}
 				enabled={
-					(dashboardRole === "employee" || dashboardRole === "employee-manager") &&
-					Boolean(employeeId)
+					(role === "employee" || role === "employee-manager") && Boolean(employeeId)
 				}
 			/>
 
-			<div className="grid min-w-0 grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:grid-cols-3">
+			{/* Minimal greeting header */}
+			<div className="flex items-end justify-between gap-3">
+				<div>
+					<h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+						Good {timeGreeting}, {greetingName}.
+					</h1>
+					<p className="mt-0.5 text-sm text-gray-500">Here's what's happening.</p>
+				</div>
+				<div className="hidden text-right text-sm text-gray-500 md:block">{dateLabel}</div>
+			</div>
+
+			<div className="grid min-w-0 grid-cols-1 items-stretch gap-3 md:grid-cols-2 xl:grid-cols-3">
 				{topRow.map((cardKey) => (
-					<div key={`top-${cardKey}`} className="h-[24rem] min-w-0 [&>div]:h-full">
+					<div key={`top-${cardKey}`} className="h-full min-h-[240px] min-w-0">
 						{renderCard(cardKey)}
 					</div>
 				))}
 			</div>
 
-			<div className="grid min-w-0 flex-1 grid-cols-1 items-stretch gap-6 md:grid-cols-2">
-				<div className="min-h-[22rem] min-w-0 [&>div]:h-full">{renderCard(bottomLeft)}</div>
-				<div className="min-h-[22rem] min-w-0 [&>div]:h-full">
+			<div className="grid min-w-0 flex-1 grid-cols-1 items-stretch gap-3 md:grid-cols-2">
+				<div className="min-h-[210px] min-w-0">{renderCard(bottomLeft)}</div>
+				<div className="min-h-[210px] min-w-0">
 					{renderCard(bottomRight)}
 				</div>
 			</div>

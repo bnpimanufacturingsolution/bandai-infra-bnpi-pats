@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+﻿import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
@@ -1515,7 +1515,7 @@ export default function RecruitmentPage() {
 	};
 
 	return (
-		<div className="flex h-full w-full min-w-0 flex-col overflow-x-hidden bg-neutral-50 p-6">
+		<div className="flex h-full w-full min-w-0 flex-col overflow-x-hidden bg-neutral-50">
 			<div className="mb-6 flex items-center justify-between">
 				<div>
 					<h1 className="text-2xl font-semibold text-neutral-900">Recruitment</h1>

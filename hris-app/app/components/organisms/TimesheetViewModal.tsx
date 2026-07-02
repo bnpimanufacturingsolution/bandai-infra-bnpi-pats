@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+﻿import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "~/components/atoms/Button";
 import { Modal } from "~/components/atoms/Modal";
@@ -1292,20 +1292,20 @@ export function TimesheetViewModal({
 							<>
 								{/* Employee Details + Hours Overview Row */}
 								<div className="flex gap-4">
-									{/* Employee Details - Left */}
+									{/* Employee Details - Left (1/3 width) */}
 									{employee && (
 										<TimesheetEmployeeCard
 											employee={employee}
 											profileId={timesheetProfileId}
 											onOpenProfile={handleOpenEmployeeProfile}
-											className="flex-1"
+											className="flex-[1] min-w-0"
 										/>
 									)}
 
-									{/* Hours Overview - Right */}
+									{/* Hours Overview - Right (2/3 width) */}
 									<TimesheetHoursOverview
 										hours={displayedHours}
-										className={employee ? "flex-1" : "w-full"}
+										className={employee ? "flex-[2] min-w-0" : "w-full"}
 									/>
 								</div>
 
@@ -2106,15 +2106,15 @@ export function TimesheetViewModal({
 						)}
 
 						{/* Buttons */}
-						<div className="flex gap-2 pt-1">
-							<Button variant="outline" onClick={onClose} className="flex-1 text-sm">
+						<div className="flex items-center justify-end gap-2 pt-1">
+							<Button variant="outline" onClick={onClose} className="text-sm">
 								{approvalMode ? "Cancel" : "Close"}
 							</Button>
 
 							{/* Submit Mode Buttons */}
 							{shouldShowSubmitButton && (
 								<Button
-									className="flex-1 text-white font-semibold text-sm"
+									className="text-white font-semibold text-sm"
 									style={{ backgroundColor: themeColors.orange }}
 									onClick={handleSubmitClick}
 									disabled={submitButtonDisabled}>
@@ -2138,7 +2138,7 @@ export function TimesheetViewModal({
 								<>
 									{hasRejectedDays ? (
 										<Button
-											className="flex-1 text-white font-semibold text-sm"
+											className="text-white font-semibold text-sm"
 											style={{ backgroundColor: "#dc2626" }}
 											onClick={handleReject}
 											disabled={isApproving || !rejectReason.trim()}>
@@ -2156,7 +2156,7 @@ export function TimesheetViewModal({
 										</Button>
 									) : (
 										<Button
-											className="flex-1 text-white font-semibold text-sm"
+											className="text-white font-semibold text-sm"
 											style={{ backgroundColor: themeColors.orange }}
 											onClick={handleApprove}
 											disabled={!allDaysReviewed || isApproving}>

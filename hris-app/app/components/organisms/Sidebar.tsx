@@ -1,4 +1,4 @@
-import { NavLink } from "react-router";
+﻿import { NavLink } from "react-router";
 import { useAuth } from "~/lib/hooks/use-auth";
 import { useLocation } from "react-router";
 import {
@@ -21,6 +21,7 @@ import {
 	Award,
 	Gift,
 	Play,
+	TrendingDown,
 	TrendingUp,
 	BarChart3,
 	ListCheck,
@@ -28,7 +29,6 @@ import {
 import { useLayoutEffect, useRef, useState } from "react";
 import { useActionMetrics } from "~/lib/hooks/useMetrics";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
-import { resolveUploadUrl } from "~/lib/upload-url";
 
 interface NavItem {
 	id: string;
@@ -102,7 +102,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 	const position = user?.metadata?.employee?.position?.title || "";
 	const positionDisplay = level ? `${level} ${position}` : position;
 	const department = user?.metadata?.employee?.department?.name || "";
-	const avatarUrl = resolveUploadUrl(user?.avatar);
+	const avatarUrl = String(user?.avatar || "").trim();
 	const isDepartmentManager = !!user?.metadata?.employee?.isDepartmentManager;
 	const hrDocumentReviewCount = actionMetrics?.counts.documents.hrPendingApproval || 0;
 
@@ -157,6 +157,12 @@ export function Sidebar({ onClose }: SidebarProps) {
 						label: "Payroll Reports",
 						path: "/hr/reports/payroll",
 						icon: <Wallet className="w-4 h-4" />,
+					},
+					{
+						id: "hr-reports-turnover-attrition",
+						label: "Turnover & Attrition",
+						path: "/hr/reports/turnover-attrition",
+						icon: <TrendingDown className="w-4 h-4" />,
 					},
 					{
 						id: "hr-reports-compliance",
@@ -244,7 +250,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 						},
 						{
 							id: "hr-timekeeping-corrections",
-							label: "Time Corrections",
+							label: "Attendance Corrections",
 							path: "/hr/time-corrections",
 							icon: <FileEdit className="w-4 h-4" />,
 						},
@@ -293,8 +299,19 @@ export function Sidebar({ onClose }: SidebarProps) {
 			]
 		: [];
 
-	// Required HR tail order: Reports
-	const trailingItems: NavItem[] = isHR ? [reportsItem!] : [];
+	const hrUserTailItems: NavItem[] = isHR
+		? [
+				{
+					id: "hr-audit-logs",
+					label: "Audit Logs",
+					path: "/hr/audit-logs",
+					icon: <FileText className="w-5 h-5" />,
+				},
+			]
+		: [];
+
+	// Required HR tail order: Reports, with Audit Logs last for HR users.
+	const trailingItems: NavItem[] = isHR ? [reportsItem!, ...hrUserTailItems] : [];
 
 	const workingSpaceItems: NavItem[] = [
 		...baseWorkingSpaceItems,
@@ -662,7 +679,9 @@ export function Sidebar({ onClose }: SidebarProps) {
 			</div>
 
 			{/* Navigation */}
-			<nav ref={navScrollRef} className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+			<nav
+				ref={navScrollRef}
+				className="sidebar-scroll flex-1 overflow-y-auto px-3 py-4 space-y-6">
 				{/* Working Space (Role-specific) */}
 				{workingSpaceItems.length > 0 && (
 					<div>

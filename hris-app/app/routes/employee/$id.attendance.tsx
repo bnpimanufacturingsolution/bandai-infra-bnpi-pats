@@ -1,4 +1,4 @@
-import { useParams, useNavigate, useSearchParams } from "react-router";
+﻿import { useParams, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { useDebugDeleteTodayAttendance, useEmployee } from "~/lib/hooks/useEmployees";
 import { useAuth } from "~/lib/hooks/use-auth";
@@ -181,7 +181,7 @@ export default function EmployeeAttendanceDetailPage() {
 	}
 
 	return (
-		<div className="container mx-auto py-6 px-4 lg:px-6 max-w-7xl">
+		<div className="container mx-auto max-w-7xl">
 			{/* Back Button */}
 			{shouldShowBackButton && (
 				<div className="mb-4">

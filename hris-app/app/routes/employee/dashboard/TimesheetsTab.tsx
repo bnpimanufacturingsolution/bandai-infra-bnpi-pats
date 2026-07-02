@@ -1,4 +1,4 @@
-import { useSearchParams } from "react-router";
+﻿import { useSearchParams } from "react-router";
 import { formatDate } from "~/lib/utils/text-utils";
 import {
 	useRequestTimesheetEditPermission,
@@ -186,7 +186,7 @@ export default function TimesheetsTab({
 				const lastName = emp?.person?.personalInfo?.lastName || "";
 				const fileAs = `${firstName} ${lastName}`.trim() || "Unknown";
 
-				if (!emp) return <span className="text-gray-400">â€”</span>;
+				if (!emp) return <span className="text-gray-400">-</span>;
 
 				return (
 					<EmployeeTableCell
@@ -204,7 +204,7 @@ export default function TimesheetsTab({
 			width: "250px",
 			render: (_: any, row: any) => {
 				const period = row.payrollPeriod;
-				if (!period) return <span className="text-gray-400">â€”</span>;
+				if (!period) return <span className="text-gray-400">-</span>;
 
 				return (
 					<div className="flex items-center gap-2">
@@ -259,7 +259,7 @@ export default function TimesheetsTab({
 			label: "Submitted",
 			width: "150px",
 			render: (value: string) => {
-				if (!value) return <span className="text-gray-400">â€”</span>;
+				if (!value) return <span className="text-gray-400">-</span>;
 				return (
 					<span className="text-sm text-gray-600">
 						{new Date(value).toLocaleDateString()}
@@ -291,6 +291,7 @@ export default function TimesheetsTab({
 				totalItems={pagination?.total}
 				onPageChange={handlePageChange}
 				showSearch={false}
+				showFilters={false}
 				renderActions={renderActions}
 			/>
 

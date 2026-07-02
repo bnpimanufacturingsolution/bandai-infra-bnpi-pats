@@ -1,4 +1,4 @@
-import { Loader2, FileText } from "lucide-react";
+﻿import { Loader2, FileText } from "lucide-react";
 import type { ReactNode } from "react";
 import { themeColors } from "~/lib/config/theme";
 import {
@@ -172,14 +172,14 @@ export function TimesheetView({
 						<TimesheetEmployeeCard
 							employee={employee}
 							profileId={employeeProfileId}
-							className="flex-1"
+							className="flex-[1] min-w-0"
 							onOpenProfile={onOpenEmployeeProfile}
 						/>
 					)}
 
 					<TimesheetHoursOverview
 						hours={hours}
-						className={showEmployee && employee ? "flex-1" : "w-full"}
+						className={showEmployee && employee ? "flex-[2] min-w-0" : "w-full"}
 					/>
 				</div>
 
@@ -197,20 +197,20 @@ export function TimesheetView({
 		<div className={`space-y-4 ${className}`}>
 			{/* Employee Details + Hours Overview Row */}
 			<div className="flex gap-4">
-				{/* Employee Details - Left */}
+				{/* Employee Details - Left (1/3 width) */}
 				{showEmployee && employee && (
 					<TimesheetEmployeeCard
 						employee={employee}
 						profileId={employeeProfileId}
-						className="flex-1"
+						className="flex-[1] min-w-0"
 						onOpenProfile={onOpenEmployeeProfile}
 					/>
 				)}
 
-				{/* Hours Overview - Right */}
+				{/* Hours Overview - Right (2/3 width) */}
 				<TimesheetHoursOverview
 					hours={hours}
-					className={showEmployee && employee ? "flex-1" : "w-full"}
+					className={showEmployee && employee ? "flex-[2] min-w-0" : "w-full"}
 				/>
 			</div>
 

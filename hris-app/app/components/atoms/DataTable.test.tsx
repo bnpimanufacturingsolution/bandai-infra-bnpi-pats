@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DataTable, type Column } from "./DataTable";
@@ -63,6 +63,44 @@ describe("DataTable", () => {
 		expect(screen.queryByText("People Operations")).not.toBeInTheDocument();
 		expect(screen.getAllByText("Software Engineering").length).toBeGreaterThan(0);
 		expect(screen.getByText("Showing 2 to 2 of 2 results")).toBeInTheDocument();
+	});
+
+	it("renders the column visibility button in the card header when search and filters are hidden", () => {
+		render(
+			<DataTable
+				title="Timesheets"
+				data={rows}
+				columns={columns}
+				showSearch={false}
+				showFilters={false}
+				showExport={false}
+			/>,
+		);
+
+		const columnsButton = screen.getByRole("button", { name: "Columns" });
+		const headerRow = screen.getByText("Timesheets").closest(".flex");
+		expect(columnsButton).toBeInTheDocument();
+		expect(headerRow).toContainElement(columnsButton);
+	});
+
+	it("renders one table when containedScroll is off so header and body columns stay aligned", () => {
+		const { container } = render(
+			<DataTable
+				title="Departments"
+				data={rows}
+				columns={columns}
+				showSearch={false}
+				showFilters={false}
+				showExport={false}
+				noCard
+			/>,
+		);
+
+		const tableShell = container.querySelector("[data-datatable-table-shell]");
+		expect(tableShell).not.toBeNull();
+		expect(tableShell?.querySelectorAll("table")).toHaveLength(1);
+		expect(tableShell?.querySelector("thead")).not.toBeNull();
+		expect(tableShell?.querySelector("tbody")).not.toBeNull();
 	});
 
 	it("calls server-side search while preserving API-provided rows and totals", async () => {

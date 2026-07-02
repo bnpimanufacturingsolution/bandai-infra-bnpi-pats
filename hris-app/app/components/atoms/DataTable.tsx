@@ -1,4 +1,4 @@
-import * as React from "react";
+﻿import * as React from "react";
 import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./Card";
@@ -117,7 +117,9 @@ export interface DataTableProps<T> {
 	headerActions?: ReactNode; // Custom actions to render in the header
 	titleActions?: ReactNode; // Actions rendered beside title/description in CardHeader
 	customFilters?: ReactNode; // Custom filters to render before the action buttons
+	filterPopoverExtra?: ReactNode; // Custom filters rendered inside the filter popover
 	filterButtonLabel?: string; // Label for the filter button (default: "Filters")
+	filterColumns?: 1 | 2; // Layout for the advanced filter popover
 	filterValues?: Record<string, string>; // Controlled advanced filter values for server-side lists
 	rowClassName?: (item: T) => string; // Function to determine row className based on item
 	// Grouping props
@@ -135,6 +137,7 @@ export interface DataTableProps<T> {
 	searchPlaceholder?: string;
 	searchValue?: string; // Controlled search value for server-side search
 	containedScroll?: boolean; // Keep dense admin tables scrolling inside the table shell.
+	toolbarAlign?: "left" | "right";
 }
 
 const DataTable = <T extends Record<string, any>>({
@@ -175,9 +178,11 @@ const DataTable = <T extends Record<string, any>>({
 	noCard = false, // Default to false for backward compatibility
 	rowClassName,
 	customFilters,
+	filterPopoverExtra,
 	headerActions,
 	titleActions,
 	filterButtonLabel = "Filters",
+	filterColumns = 1,
 	filterValues,
 	// Grouping props
 	groupBy,
@@ -194,6 +199,7 @@ const DataTable = <T extends Record<string, any>>({
 	searchPlaceholder,
 	searchValue,
 	containedScroll = false,
+	toolbarAlign = "left",
 }: DataTableProps<T>) => {
 	const getDefaultColumnVisibility = React.useCallback(
 		() =>
@@ -367,7 +373,7 @@ const DataTable = <T extends Record<string, any>>({
 	const containedTableHeaderViewportClassName =
 		"overflow-hidden border-b border-neutral-200 bg-neutral-100";
 	const containedTableBodyViewportClassName =
-		"max-h-[calc(100vh-31rem)] min-h-[12rem] overflow-auto overscroll-contain modern-scroll";
+		"max-h-[calc(100vh-31rem)] min-h-[12rem] overflow-auto overscroll-contain modern-scroll [scrollbar-gutter:stable]";
 	const mobileListViewportClassName = cn(
 		"md:hidden space-y-3 mt-6",
 		containedScroll &&
@@ -384,7 +390,11 @@ const DataTable = <T extends Record<string, any>>({
 	const hasActionsColumn = !!(onEdit || onDelete || onView || renderActions);
 	const actionColumnWidth = "132px";
 	const hasOptionalColumns = columns.some((column) => !column.required && column.priority !== "critical");
-	const tableClassName = cn("w-full text-sm", containedScroll ? "table-fixed" : "min-w-max");
+	const hasExplicitColumnWidths = columns.some((column) => Boolean(column.width));
+	const tableClassName = cn(
+		"w-full text-sm",
+		containedScroll || hasExplicitColumnWidths ? "table-fixed" : "min-w-max",
+	);
 	const totalVisibleColumns = visibleColumns.length + (hasActionsColumn ? 1 : 0);
 	const getColumnWidth = (column: Column<T>) =>
 		column.width || `${100 / Math.max(totalVisibleColumns, 1)}%`;
@@ -534,90 +544,151 @@ const DataTable = <T extends Record<string, any>>({
 		);
 	};
 
-	const renderLoadingSkeleton = () => {
-		const header = (
-			<table className={tableClassName}>
-				{renderColumnGroup()}
-				<thead className={headerClassName}>
-					<tr className="h-12 text-left text-gray-700 border-b border-neutral-200 bg-neutral-100">
-						{visibleColumns.map((column) => (
-							<th
-								key={String(column.key)}
-								className={cn(
-									"px-4 py-3 text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
-									getColumnResponsiveClassName(column),
-									getPinnedColumnClassName(column, "header"),
-									column.className,
-									column.headerClassName,
-								)}>
-								{column.label}
-							</th>
-						))}
-						{hasActionsColumn && (
-							<th
-								className={cn(
-									"px-4 py-3 text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
-									actionHeaderClassName,
-								)}
-								data-datatable-action-column>
-								Actions
-							</th>
+	const renderDesktopTableHead = () => (
+		<thead className={headerClassName}>
+			<tr className="h-12 text-left text-gray-700 border-b border-neutral-200 bg-neutral-100">
+				{visibleColumns.map((column) => (
+					<th
+						key={String(column.key)}
+						className={cn(
+							"px-4 py-3 text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
+							getColumnResponsiveClassName(column),
+							getPinnedColumnClassName(column, "header"),
+							column.className,
+							column.headerClassName,
+							isColumnSortable(column)
+								? "cursor-pointer hover:text-gray-900 transition-colors"
+								: "",
 						)}
-					</tr>
-				</thead>
-			</table>
-		);
-		const body = (
+						onClick={() =>
+							isColumnSortable(column) && handleSort(String(column.key))
+						}>
+						<div className="inline-flex items-center gap-1.5 whitespace-nowrap">
+							{column.label}
+							{isColumnSortable(column) && renderSortIcon(String(column.key))}
+						</div>
+					</th>
+				))}
+				{hasActionsColumn && (
+					<th
+						className={cn(
+							"px-4 py-3 text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
+							actionHeaderClassName,
+						)}
+						data-datatable-action-column>
+						Actions
+					</th>
+				)}
+			</tr>
+		</thead>
+	);
+
+	const renderDesktopDataRows = () => (
+		<tbody className="divide-y divide-neutral-100">
+			{paginatedItems.map((item, index) => (
+				<tr
+					key={item.id || index}
+					className={cn(
+						"hover:bg-neutral-50/50 transition-colors group/row",
+						rowClassName?.(item),
+					)}>
+					{visibleColumns.map((column) => (
+						<td
+							key={String(column.key)}
+							className={cn(
+								"px-4 py-4 group-hover/row:text-gray-900 transition-colors",
+								getColumnResponsiveClassName(column),
+								getPinnedColumnClassName(column),
+							)}>
+							{column.render ? (
+								column.render(item[column.key as keyof T], item)
+							) : (
+								<span className="truncate text-gray-700 font-medium h-fit">
+									{String(item[column.key as keyof T] || "-")}
+								</span>
+							)}
+						</td>
+					))}
+					{hasActionsColumn && (
+						<td className={cn("px-4 py-4", actionColumnClassName)}>
+							<div className="flex justify-center">
+								{renderActions ? renderActions(item) : renderDefaultActions(item)}
+							</div>
+						</td>
+					)}
+				</tr>
+			))}
+		</tbody>
+	);
+
+	const renderDesktopLoadingRows = () => (
+		<tbody className="divide-y divide-neutral-100">
+			{Array.from({ length: loadingRows }).map((_, idx) => (
+				<tr key={idx} className="animate-pulse">
+					{visibleColumns.map((column) => (
+						<td
+							key={String(column.key)}
+							className={cn(
+								"px-4 py-4",
+								getColumnResponsiveClassName(column),
+								getPinnedColumnClassName(column),
+							)}>
+							<div className="h-4 bg-gray-200 rounded w-full max-w-[12rem]" />
+						</td>
+					))}
+					{hasActionsColumn && (
+						<td className={cn("px-4 py-4", actionColumnClassName)}>
+							<div className="ml-auto h-8 bg-gray-200 rounded w-20" />
+						</td>
+					)}
+				</tr>
+			))}
+		</tbody>
+	);
+
+	const renderSplitDesktopTable = (body: ReactNode) => (
+		<div className={containedTableShellClassName} data-datatable-table-shell>
+			<div
+				ref={containedHeaderScrollRef}
+				className={containedTableHeaderViewportClassName}
+				data-datatable-header-viewport>
+				<table className={tableClassName}>
+					{renderColumnGroup()}
+					{renderDesktopTableHead()}
+				</table>
+			</div>
+			<div
+				ref={containedBodyScrollRef}
+				className={containedTableBodyViewportClassName}
+				data-datatable-body-viewport
+				onScroll={syncContainedHeaderScroll}>
+				<table className={tableClassName}>
+					{renderColumnGroup()}
+					{body}
+				</table>
+			</div>
+		</div>
+	);
+
+	const renderUnifiedDesktopTable = (body: ReactNode) => (
+		<div className={desktopTableFrameClassName} data-datatable-table-shell>
 			<table className={tableClassName}>
 				{renderColumnGroup()}
-				<tbody className="divide-y divide-neutral-100">
-					{Array.from({ length: loadingRows }).map((_, idx) => (
-						<tr key={idx} className="animate-pulse">
-							{visibleColumns.map((column) => (
-								<td
-									key={String(column.key)}
-									className={cn(
-										"px-4 py-4",
-										getColumnResponsiveClassName(column),
-										getPinnedColumnClassName(column),
-									)}>
-									<div className="h-4 bg-gray-200 rounded w-full max-w-[12rem]" />
-								</td>
-							))}
-							{hasActionsColumn && (
-								<td className={cn("px-4 py-4", actionColumnClassName)}>
-									<div className="ml-auto h-8 bg-gray-200 rounded w-20" />
-								</td>
-							)}
-						</tr>
-					))}
-				</tbody>
+				{renderDesktopTableHead()}
+				{body}
 			</table>
-		);
+		</div>
+	);
+
+	const renderLoadingSkeleton = () => {
+		const loadingBody = renderDesktopLoadingRows();
 
 		return (
 			<>
 				{containedScroll ? (
-					<div className={containedTableShellClassName} data-datatable-table-shell>
-						<div
-							ref={containedHeaderScrollRef}
-							className={containedTableHeaderViewportClassName}
-							data-datatable-header-viewport>
-							{header}
-						</div>
-						<div
-							ref={containedBodyScrollRef}
-							className={containedTableBodyViewportClassName}
-							data-datatable-body-viewport
-							onScroll={syncContainedHeaderScroll}>
-							{body}
-						</div>
-					</div>
+					renderSplitDesktopTable(loadingBody)
 				) : (
-					<div className="hidden overflow-x-auto rounded-lg border border-neutral-200 bg-white md:block">
-						{header}
-						{body}
-					</div>
+					<div className="hidden md:block">{renderUnifiedDesktopTable(loadingBody)}</div>
 				)}
 				<div className="space-y-3 md:hidden">
 					{Array.from({ length: loadingRows }).map((_, idx) => (
@@ -733,15 +804,96 @@ const DataTable = <T extends Record<string, any>>({
 		</div>
 	);
 
+	const renderColumnDropdown = () => {
+		if (!hasOptionalColumns) return null;
+
+		return (
+			<div className="relative" data-dropdown>
+				<Button
+					variant="outline"
+					onClick={(e) => {
+						e.stopPropagation();
+						setShowColumnDropdown(!showColumnDropdown);
+						setShowFilterDropdown(false);
+						setShowExportDropdown(false);
+					}}
+					className="h-10 rounded-lg px-3 border-neutral-200 bg-white text-xs font-semibold text-gray-700 shadow-sm transition hover:border-primary/20 hover:bg-primary/5 hover:text-primary">
+					<Eye className="h-4 w-4" />
+					<span>Columns</span>
+				</Button>
+
+				{showColumnDropdown && (
+					<div className="absolute right-0 mt-2 w-64 rounded-lg border border-neutral-200 bg-white p-3 shadow-lg z-[100]">
+						<div className="mb-3 flex items-center justify-between">
+							<h4 className="text-xs font-semibold text-gray-900">Columns</h4>
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={clearColumns}
+								className="h-7 text-xs font-medium text-primary hover:bg-primary/5">
+								Reset
+							</Button>
+						</div>
+						<div className="max-h-64 overflow-y-auto pr-2 space-y-1.5 modern-scroll">
+							{columns.map((column) => {
+								const columnKey = String(column.key);
+								const isRequired =
+									column.required || column.priority === "critical";
+								return (
+									<label
+										key={columnKey}
+										className={cn(
+											"flex items-center group p-2 rounded-lg transition-colors",
+											isRequired
+												? "cursor-not-allowed opacity-60"
+												: "cursor-pointer hover:bg-neutral-50",
+										)}>
+										<input
+											type="checkbox"
+											checked={selectedColumns[columnKey]}
+											disabled={isRequired}
+											onChange={(e) => {
+												if (isRequired) return;
+												const visible = e.target.checked;
+												setSelectedColumns((prev) => ({
+													...prev,
+													[columnKey]: visible,
+												}));
+												onColumnVisibilityChange?.(columnKey, visible);
+											}}
+											className="w-3.5 h-3.5 rounded border-neutral-300 text-primary focus:ring-primary/20"
+										/>
+										<span className="ml-2.5 text-xs font-bold text-gray-700 group-hover:text-primary transition-colors">
+											{column.label}
+										</span>
+									</label>
+								);
+							})}
+						</div>
+					</div>
+				)}
+			</div>
+		);
+	};
+
 	const tableContent = (
 		<>
 			{/* Search and Filters */}
 			{(showSearch || showFilters) && (
 				<div className={cn(containedScroll ? "mb-4" : "space-y-4 mb-6")}>
-					<div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 md:gap-4">
+					<div
+						className={cn(
+							"flex flex-col sm:flex-row gap-3 md:gap-4",
+							toolbarAlign === "right"
+								? "items-end sm:items-center sm:justify-end"
+								: "items-stretch sm:items-center justify-between",
+						)}>
 						<div
 							className={cn(
-								"flex min-w-0 flex-1 items-center gap-2",
+								"flex min-w-0 items-center gap-2",
+								toolbarAlign === "right"
+									? "w-full justify-end sm:w-auto"
+									: "flex-1",
 								containedScroll
 									? cn(
 											"flex-wrap md:flex-nowrap md:pb-1",
@@ -798,7 +950,7 @@ const DataTable = <T extends Record<string, any>>({
 
 								{customFilters}
 
-								{showFilters && filters.length > 0 && (
+								{showFilters && (filters.length > 0 || filterPopoverExtra) && (
 									<div className="relative" data-dropdown>
 										<Button
 											variant="outline"
@@ -821,7 +973,10 @@ const DataTable = <T extends Record<string, any>>({
 										</Button>
 
 										{showFilterDropdown && (
-											<div className="absolute right-0 mt-2 w-72 rounded-lg border border-neutral-200 bg-white p-3 shadow-lg z-[100]">
+											<div
+												className={`absolute right-0 mt-2 rounded-lg border border-neutral-200 bg-white p-3 shadow-lg z-[100] ${
+													filterColumns === 2 ? "w-[36rem]" : "w-72"
+												}`}>
 												<div className="mb-3 flex items-center justify-between">
 													<h4 className="text-xs font-semibold text-gray-900">
 														Filters
@@ -834,7 +989,13 @@ const DataTable = <T extends Record<string, any>>({
 														Clear
 													</Button>
 												</div>
-												<div className="space-y-3">
+												<div
+													className={
+														filterColumns === 2
+															? "grid grid-cols-2 gap-x-4 gap-y-3"
+															: "space-y-3"
+													}>
+													{filterPopoverExtra}
 													{filters.map((filter) => (
 														<div
 															key={filter.key}
@@ -910,80 +1071,6 @@ const DataTable = <T extends Record<string, any>>({
 									</div>
 								)}
 
-								{hasOptionalColumns && (
-									<div className="relative" data-dropdown>
-										<Button
-											variant="outline"
-											onClick={(e) => {
-												e.stopPropagation();
-												setShowColumnDropdown(!showColumnDropdown);
-												setShowFilterDropdown(false);
-												setShowExportDropdown(false);
-											}}
-											className="h-10 rounded-lg px-3 border-neutral-200 bg-white text-xs font-semibold text-gray-700 shadow-sm transition hover:border-primary/20 hover:bg-primary/5 hover:text-primary">
-											<Eye className="h-4 w-4" />
-											<span>Columns</span>
-										</Button>
-
-										{showColumnDropdown && (
-											<div className="absolute right-0 mt-2 w-64 rounded-lg border border-neutral-200 bg-white p-3 shadow-lg z-[100]">
-												<div className="mb-3 flex items-center justify-between">
-													<h4 className="text-xs font-semibold text-gray-900">
-														Columns
-													</h4>
-													<Button
-														variant="ghost"
-														size="sm"
-														onClick={clearColumns}
-														className="h-7 text-xs font-medium text-primary hover:bg-primary/5">
-														Reset
-													</Button>
-												</div>
-												<div className="max-h-64 overflow-y-auto pr-2 space-y-1.5 modern-scroll">
-													{columns.map((column) => {
-														const columnKey = String(column.key);
-														const isRequired =
-															column.required ||
-															column.priority === "critical";
-														return (
-														<label
-															key={columnKey}
-															className={cn(
-																"flex items-center group p-2 rounded-lg transition-colors",
-																isRequired
-																	? "cursor-not-allowed opacity-60"
-																	: "cursor-pointer hover:bg-neutral-50",
-															)}>
-															<input
-																type="checkbox"
-																checked={selectedColumns[columnKey]}
-																disabled={isRequired}
-																onChange={(e) => {
-																	if (isRequired) return;
-																	const visible =
-																		e.target.checked;
-																	setSelectedColumns((prev) => ({
-																		...prev,
-																		[columnKey]: visible,
-																	}));
-																	onColumnVisibilityChange?.(
-																		columnKey,
-																		visible,
-																	);
-																}}
-																className="w-3.5 h-3.5 rounded border-neutral-300 text-primary focus:ring-primary/20"
-															/>
-															<span className="ml-2.5 text-xs font-bold text-gray-700 group-hover:text-primary transition-colors">
-																{column.label}
-															</span>
-														</label>
-													);
-													})}
-												</div>
-											</div>
-										)}
-									</div>
-								)}
 							</div>
 						</div>
 					</div>
@@ -1215,134 +1302,10 @@ const DataTable = <T extends Record<string, any>>({
 									);
 								})}
 							</div>
+						) : containedScroll ? (
+							renderSplitDesktopTable(renderDesktopDataRows())
 						) : (
-							// Regular Table View (no grouping)
-							<div
-								className={
-									containedScroll
-										? containedTableShellClassName
-										: desktopTableFrameClassName
-								}
-								data-datatable-table-shell>
-								<div
-									ref={containedScroll ? containedHeaderScrollRef : undefined}
-									className={
-										containedScroll
-											? containedTableHeaderViewportClassName
-											: undefined
-									}
-									data-datatable-header-viewport={containedScroll || undefined}>
-									<table className={tableClassName}>
-										{renderColumnGroup()}
-										<thead className={headerClassName}>
-											<tr className="h-12 text-left text-gray-700 border-b border-neutral-200 bg-neutral-100">
-												{visibleColumns.map((column) => (
-													<th
-														key={String(column.key)}
-														className={cn(
-															"px-4 py-3 text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
-															getColumnResponsiveClassName(column),
-															getPinnedColumnClassName(
-																column,
-																"header",
-															),
-															column.className,
-															column.headerClassName,
-															isColumnSortable(column)
-																? "cursor-pointer hover:text-gray-900 transition-colors"
-																: "",
-														)}
-														onClick={() =>
-															isColumnSortable(column) &&
-															handleSort(String(column.key))
-														}>
-														<div className="inline-flex items-center gap-1.5 whitespace-nowrap">
-															{column.label}
-															{isColumnSortable(column) &&
-																renderSortIcon(String(column.key))}
-														</div>
-													</th>
-												))}
-												{hasActionsColumn && (
-													<th
-														className={cn(
-															"px-4 py-3 text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
-															actionHeaderClassName,
-														)}
-														data-datatable-action-column>
-														Actions
-													</th>
-												)}
-											</tr>
-										</thead>
-									</table>
-								</div>
-								<div
-									ref={containedScroll ? containedBodyScrollRef : undefined}
-									className={
-										containedScroll
-											? containedTableBodyViewportClassName
-											: undefined
-									}
-									data-datatable-body-viewport={containedScroll || undefined}
-									onScroll={
-										containedScroll ? syncContainedHeaderScroll : undefined
-									}>
-									<table className={tableClassName}>
-										{renderColumnGroup()}
-										<tbody className="divide-y divide-neutral-100">
-											{paginatedItems.map((item, index) => (
-												<tr
-													key={item.id || index}
-													className={cn(
-														"hover:bg-neutral-50/50 transition-colors group/row",
-														rowClassName?.(item),
-													)}>
-													{visibleColumns.map((column) => (
-														<td
-															key={String(column.key)}
-															className={cn(
-																"px-4 py-4 group-hover/row:text-gray-900 transition-colors",
-																getColumnResponsiveClassName(
-																	column,
-																),
-																getPinnedColumnClassName(column),
-															)}>
-															{column.render ? (
-																column.render(
-																	item[column.key as keyof T],
-																	item,
-																)
-															) : (
-																<span className="truncate text-gray-700 font-medium h-fit">
-																	{String(
-																		item[
-																			column.key as keyof T
-																		] || "-",
-																	)}
-																</span>
-															)}
-														</td>
-													))}
-													{hasActionsColumn && (
-														<td
-															className={cn(
-																"px-4 py-4",
-																actionColumnClassName,
-															)}>
-															<div className="flex justify-center">
-																{renderActions
-																	? renderActions(item)
-																	: renderDefaultActions(item)}
-															</div>
-														</td>
-													)}
-												</tr>
-											))}
-										</tbody>
-									</table>
-								</div>
-							</div>
+							renderUnifiedDesktopTable(renderDesktopDataRows())
 						)}
 					</div>
 
@@ -1570,7 +1533,14 @@ const DataTable = <T extends Record<string, any>>({
 	);
 
 	if (noCard) {
-		return <div className={cn("space-y-4", className)}>{tableContent}</div>;
+		return (
+			<div className={cn("space-y-4", className)}>
+				{hasOptionalColumns && (
+					<div className="flex justify-end">{renderColumnDropdown()}</div>
+				)}
+				{tableContent}
+			</div>
+		);
 	}
 
 	const renderExportDropdown = () => {
@@ -1658,6 +1628,7 @@ const DataTable = <T extends Record<string, any>>({
 						)}
 					</div>
 					<div className="flex min-h-10 flex-wrap items-center justify-start gap-2 sm:justify-end">
+						{renderColumnDropdown()}
 						{renderExportDropdown()}
 						{titleActions && (
 							<div className="flex items-center gap-2">{titleActions}</div>

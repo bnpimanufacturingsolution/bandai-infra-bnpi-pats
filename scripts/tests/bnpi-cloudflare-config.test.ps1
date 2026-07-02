@@ -31,6 +31,8 @@ Assert-Contains -Path 'scripts/project-truth.ps1' -Pattern 'v6-one-shot' -Messag
 Assert-Contains -Path 'scripts/project-truth-v6-one-shot.ps1' -Pattern 'C:\\ProgramData\\ProjectTruth\\secrets\\cloudflared\\e3486f00-f974-46d3-9e11-911266749d00\.json' -Message 'V6 one-shot must use the stable host-side credential handoff path'
 Assert-Contains -Path 'project-truth-v6-one-shot.cmd' -Pattern 'v6-one-shot' -Message 'Tired-human V6 wrapper must delegate to the project-truth v6-one-shot command'
 Assert-Contains -Path 'appliance/bin/project-truth-cloudflare-vm-tunnel.sh' -Pattern 'ssh://localhost:22' -Message 'VM tunnel helper must route public SSH to the VM SSH daemon'
+Assert-Contains -Path 'appliance/bin/project-truth-cloudflare-vm-tunnel.sh' -Pattern 'hostname:\s+dev\.bnpi-hris\.tech\s+path:\s+/api/\.\*\s+service:\s+http://localhost:3101' -Message 'VM tunnel helper must route DEV same-host API traffic to the DEV API origin'
+Assert-Contains -Path 'appliance/bin/project-truth-cloudflare-vm-tunnel.sh' -Pattern 'hostname:\s+uat\.bnpi-hris\.tech\s+path:\s+/api/\.\*\s+service:\s+http://localhost:3201' -Message 'VM tunnel helper must route UAT same-host API traffic to the UAT API origin'
 Assert-Contains -Path 'appliance/bin/project-truth-cloudflare-vm-tunnel.sh' -Pattern 'cloudflared-bnpi-hris\.service' -Message 'VM tunnel helper must install the VM-side systemd connector'
 Assert-Contains -Path 'appliance/bin/project-truth-cloudflare-vm-tunnel.sh' -Pattern 'Do not run this in image baking' -Message 'VM tunnel helper must preserve the no-baked-credentials boundary'
 Assert-Contains -Path 'appliance/bin/project-truth-os-sync.sh' -Pattern 'project-truth-cloudflare-vm-tunnel\.sh' -Message 'OS sync must install the VM tunnel helper'

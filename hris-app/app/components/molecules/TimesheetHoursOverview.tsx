@@ -1,4 +1,4 @@
-import { formatDuration } from "~/lib/utils";
+﻿import { formatDuration } from "~/lib/utils";
 
 export interface TimesheetHoursData {
 	totalHoursWorked?: string;
@@ -39,16 +39,28 @@ export function TimesheetHoursOverview({ hours, className = "" }: TimesheetHours
 			parseDurationToMinutes(hours.totalEarlyOutHours),
 	);
 
+	const breakdownItems = [
+		{ label: "Regular", value: formatDuration(hours.totalRegularHours) },
+		{ label: "Overtime", value: formatDuration(hours.totalOvertimeHours) },
+		{ label: "Night Shift", value: nightShiftTotal },
+		{ label: "Holiday", value: holidayTotal },
+	];
+
+	const shortfallItems = [
+		{ label: "Late", value: formatDuration(hours.totalLateHours) },
+		{ label: "Early Out", value: formatDuration(hours.totalEarlyOutHours) },
+	];
+
 	return (
 		<div className={`bg-white rounded-lg px-4 py-3 border border-gray-200 ${className}`}>
 			<div className="flex items-center gap-2 w-full">
 				{/* Total Hours Group */}
 				<div className="flex items-center gap-2 pr-3 border-r border-gray-200 shrink-0">
 					<div className="min-w-[86px]">
-						<p className="text-xs text-gray-500 uppercase tracking-wide leading-none mb-1 whitespace-nowrap">
+						<p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider leading-none mb-1.5 whitespace-nowrap">
 							Total Hours
 						</p>
-						<p className="text-2xl font-semibold leading-none whitespace-nowrap text-gray-900">
+						<p className="text-2xl font-bold leading-none whitespace-nowrap text-gray-900 tabular-nums">
 							{formatDuration(hours.totalHoursWorked)}
 						</p>
 					</div>
@@ -56,69 +68,41 @@ export function TimesheetHoursOverview({ hours, className = "" }: TimesheetHours
 
 				{/* Breakdown Group */}
 				<div className="flex items-center px-3 grow min-w-0">
-					<div className="grid grid-cols-2 gap-x-4 gap-y-1.5 w-full">
-						<div className="flex items-center justify-between gap-3">
-							<span className="text-xs text-gray-500 uppercase tracking-wide whitespace-nowrap">
-								Regular
-							</span>
-							<span className="text-sm font-semibold text-gray-800">
-								{formatDuration(hours.totalRegularHours)}
-							</span>
-						</div>
-						<div className="flex items-center justify-between gap-3">
-							<span className="text-xs text-gray-500 uppercase tracking-wide whitespace-nowrap">
-								Overtime
-							</span>
-							<span className="text-sm font-semibold text-green-600">
-								{formatDuration(hours.totalOvertimeHours)}
-							</span>
-						</div>
-						<div className="flex items-center justify-between gap-3">
-							<span className="text-xs text-gray-500 uppercase tracking-wide whitespace-nowrap">
-								Night Shift
-							</span>
-							<span className="text-sm font-semibold text-indigo-600">
-								{nightShiftTotal}
-							</span>
-						</div>
-						<div className="flex items-center justify-between gap-3">
-							<span className="text-xs text-gray-500 uppercase tracking-wide whitespace-nowrap">
-								Holiday
-							</span>
-							<span className="text-sm font-semibold text-fuchsia-600">
-								{holidayTotal}
-							</span>
-						</div>
+					<div className="grid grid-cols-2 gap-x-4 gap-y-2 w-full">
+						{breakdownItems.map((item) => (
+							<div key={item.label}>
+								<p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider leading-none mb-1 whitespace-nowrap">
+									{item.label}
+								</p>
+								<p className="text-base font-bold leading-none text-gray-900 tabular-nums whitespace-nowrap">
+									{item.value}
+								</p>
+							</div>
+						))}
 					</div>
 				</div>
 
 				{/* Shortfall Group */}
 				<div className="flex items-center gap-2 pl-3 border-l border-gray-200 shrink-0">
 					<div className="min-w-[70px]">
-						<p className="text-xs text-gray-500 uppercase tracking-wide leading-none mb-1 whitespace-nowrap">
+						<p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider leading-none mb-1.5 whitespace-nowrap">
 							Shortfall
 						</p>
-						<p className="text-2xl font-semibold text-red-600 leading-none whitespace-nowrap">
+						<p className="text-2xl font-bold text-gray-900 leading-none whitespace-nowrap tabular-nums">
 							{formatDuration(totalShortfallHours)}
 						</p>
 					</div>
-					<div className="flex flex-col justify-center gap-1 border-l pl-3 py-0.5">
-						<div className="flex items-center justify-between gap-2 min-w-[80px]">
-							<span className="text-xs text-gray-500 uppercase tracking-wide whitespace-nowrap">
-								Late
-							</span>
-							<span className="text-sm font-semibold text-red-600">
-								{formatDuration(hours.totalLateHours)}
-							</span>
-						</div>
-						<div className="flex items-center justify-between gap-2 min-w-[80px]">
-							<span className="text-xs text-gray-500 uppercase tracking-wide whitespace-nowrap">
-								Early Out
-							</span>
-							<span className="text-sm font-semibold text-amber-700">
-								{formatDuration(hours.totalEarlyOutHours)}
-							</span>
-						</div>
+					<div className="flex flex-col justify-center gap-2 border-l pl-3 py-0.5">
+						{shortfallItems.map((item) => (
+							<div key={item.label} className="min-w-[80px]">
+								<p className="text-[11px] font-medium text-gray-400 uppercase tracking-wider leading-none mb-1 whitespace-nowrap">
+									{item.label}
+								</p>
+								<p className="text-base font-bold leading-none text-gray-900 tabular-nums whitespace-nowrap">
+									{item.value}
+								</p>
+							</div>
+						))}
 					</div>
 				</div>
 			</div>

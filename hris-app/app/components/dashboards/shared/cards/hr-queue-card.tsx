@@ -1,4 +1,4 @@
-import { AlertTriangle, Clock, FileWarning, ShieldCheck } from "lucide-react";
+﻿import { AlertTriangle, Clock, FileWarning, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/atoms/Card";
@@ -157,7 +157,6 @@ export function HrQueueCard({ role }: HrQueueCardProps) {
 				icon: Clock,
 				path: tardinessPath,
 				basis: windowConfig.label,
-				className: "bg-amber-50 text-amber-700 border-amber-100",
 			},
 			{
 				label: "Absent Cases",
@@ -165,7 +164,6 @@ export function HrQueueCard({ role }: HrQueueCardProps) {
 				icon: AlertTriangle,
 				path: noWorkPath,
 				basis: windowConfig.label,
-				className: "bg-red-50 text-red-700 border-red-100",
 			},
 			{
 				label: "Compliance Tasks",
@@ -173,7 +171,6 @@ export function HrQueueCard({ role }: HrQueueCardProps) {
 				icon: ShieldCheck,
 				path: compliancePath,
 				basis: `As of | ${formatDisplayDate(windowConfig.to)}`,
-				className: "bg-blue-50 text-blue-700 border-blue-100",
 			},
 			{
 				label: role === "hr-manager" ? "Workforce Reports" : "Attendance Reports",
@@ -181,7 +178,6 @@ export function HrQueueCard({ role }: HrQueueCardProps) {
 				icon: FileWarning,
 				path: role === "hr-manager" ? noWorkPath : tardinessPath,
 				basis: windowConfig.label,
-				className: "bg-orange-50 text-orange-700 border-orange-100",
 			},
 		],
 		[
@@ -200,55 +196,53 @@ export function HrQueueCard({ role }: HrQueueCardProps) {
 	const viewAllPath = role === "hr-manager" ? noWorkPath : tardinessPath;
 
 	return (
-		<Card id="dashboard-hr-queue">
-			<CardHeader>
+		<Card id="dashboard-hr-queue" className="gap-4 py-4">
+			<CardHeader className="pb-2">
 				<div className="flex items-start justify-between gap-4">
 					<div>
-						<CardTitle className="flex items-center gap-2">
-							<FileWarning className="h-5 w-5 text-orange-500" />
-							{role === "hr-manager"
-								? "Workforce / Compliance Queue"
-								: "Attendance Exceptions / HR Queue"}
+						<CardTitle className="flex items-center gap-2 text-base font-semibold">
+							<FileWarning className="h-4 w-4 text-gray-400" />
+							{role === "hr-manager" ? "Workforce Queue" : "HR Queue"}
 						</CardTitle>
-						<p className="mt-1 text-xs text-gray-500">
-							Counts reflect the selected date window
-						</p>
+						<p className="mt-0.5 text-xs text-gray-400">Selected window</p>
 					</div>
 					<div className="flex items-center gap-2">
 						<Select
 							value={timeframe}
 							onValueChange={(value) => setTimeframe(value as QueueTimeframe)}>
-							<SelectTrigger className="h-9 w-[150px] border-gray-200 bg-white text-xs shadow-sm">
+							<SelectTrigger className="h-8 w-[118px] border-gray-200 bg-white text-xs">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
 								<SelectItem value="today">Today</SelectItem>
-								<SelectItem value="last_7_days">Last 7 Days</SelectItem>
-								<SelectItem value="month_to_date">Month to Date</SelectItem>
-								<SelectItem value="this_month">This Month</SelectItem>
+								<SelectItem value="last_7_days">Last 7d</SelectItem>
+								<SelectItem value="month_to_date">MTD</SelectItem>
+								<SelectItem value="this_month">This month</SelectItem>
 							</SelectContent>
 						</Select>
 					</div>
 				</div>
 			</CardHeader>
-			<CardContent>
+			<CardContent className="pt-0">
 				{isLoading ? (
-					<div className="flex h-32 items-center justify-center">
-						<div className="text-sm text-gray-600">Loading queue...</div>
-					</div>
+					<div className="flex h-20 items-center justify-center text-sm text-gray-500">Loading...</div>
 				) : (
-					<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+					<div className="grid grid-cols-2 gap-2">
 						{items.map((item) => (
 							<button
 								key={item.label}
 								onClick={() => navigate(item.path)}
-								className={`rounded-lg border p-3 text-left transition-colors hover:bg-gray-50 ${item.className}`}>
-								<div className="flex items-center justify-between">
-									<item.icon className="h-4 w-4" />
-									<span className="text-lg font-bold">{item.value}</span>
+								className="rounded-xl border border-neutral-300 bg-gray-50 px-3 py-2.5 text-left shadow-sm transition-all hover:border-neutral-400 hover:bg-white hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200">
+								<div className="flex items-start justify-between gap-2">
+									<div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white">
+										<item.icon className="h-3.5 w-3.5 text-gray-500" />
+									</div>
+									<span className="text-xl font-semibold tabular-nums text-gray-900">
+										{item.value}
+									</span>
 								</div>
-								<p className="mt-2 text-xs font-medium">{item.label}</p>
-								<p className="mt-1 text-[11px] text-current/70">{item.basis}</p>
+								<div className="mt-2 text-xs font-medium text-gray-700">{item.label}</div>
+								<div className="mt-0.5 text-[10px] text-gray-400">{item.basis}</div>
 							</button>
 						))}
 					</div>
