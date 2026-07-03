@@ -11,14 +11,14 @@ import { EmployeeCalendarCard } from "./cards/employee-calendar-card";
 import type { DashboardCardKey } from "./role-dashboard.types";
 import { RegularizationCelebrationModal } from "./regularization-celebration-modal";
 
-export function RoleDashboardShell({ role }: RoleDashboardShellProps) {
+export function RoleDashboardShell({ dashboardRole }: RoleDashboardShellProps) {
 	const { user } = useAuth();
 	const employeeId = user?.metadata?.employee?.id || "";
-	const config = roleDashboardConfigs[role];
+	const config = roleDashboardConfigs[dashboardRole];
 
 	const renderCard = (cardKey: DashboardCardKey) => {
 		if (cardKey === "time_off") {
-			return <TimeOffCard key={cardKey} role={role} employeeId={employeeId} />;
+			return <TimeOffCard key={cardKey} role={dashboardRole} employeeId={employeeId} />;
 		}
 		if (cardKey === "quick_actions") {
 			return <QuickActionsCard key={cardKey} actions={config.quickActions} />;
@@ -27,7 +27,7 @@ export function RoleDashboardShell({ role }: RoleDashboardShellProps) {
 			return <RequestListCard key={cardKey} type="my-requests" employeeId={employeeId} />;
 		}
 		if (cardKey === "action_needed") {
-			return <ActionNeededCard key={cardKey} role={role} />;
+			return <ActionNeededCard key={cardKey} role={dashboardRole} />;
 		}
 		if (cardKey === "pending_approvals") {
 			return (
@@ -44,7 +44,7 @@ export function RoleDashboardShell({ role }: RoleDashboardShellProps) {
 			return (
 				<HrQueueCard
 					key={cardKey}
-					role={role === "hr-manager" ? "hr-manager" : "hr-user"}
+					role={dashboardRole === "hr-manager" ? "hr-manager" : "hr-user"}
 				/>
 			);
 		}
@@ -52,7 +52,7 @@ export function RoleDashboardShell({ role }: RoleDashboardShellProps) {
 			return <EmployeeCalendarCard key={cardKey} employeeId={employeeId} />;
 		}
 
-		return <ActionNeededCard key={`fallback-${cardKey}`} role={role} />;
+		return <ActionNeededCard key={`fallback-${cardKey}`} role={dashboardRole} />;
 	};
 
 	const topRow = config.layout?.top || ["time_off", "action_needed", "quick_actions"];
@@ -79,7 +79,8 @@ export function RoleDashboardShell({ role }: RoleDashboardShellProps) {
 			<RegularizationCelebrationModal
 				employeeId={employeeId}
 				enabled={
-					(role === "employee" || role === "employee-manager") && Boolean(employeeId)
+					(dashboardRole === "employee" || dashboardRole === "employee-manager") &&
+					Boolean(employeeId)
 				}
 			/>
 
