@@ -105,24 +105,30 @@ UAT   uat-db.bnpi-hris.tech -> tcp://<VM>:15434
 On each client workstation, start the local forwards:
 
 ```powershell
-cloudflared access tcp --hostname db.bnpi-hris.tech --url localhost:5432
-cloudflared access tcp --hostname dev-db.bnpi-hris.tech --url localhost:5433
-cloudflared access tcp --hostname uat-db.bnpi-hris.tech --url localhost:5434
+cloudflared access tcp --hostname db.bnpi-hris.tech --url localhost:55432
+cloudflared access tcp --hostname dev-db.bnpi-hris.tech --url localhost:55433
+cloudflared access tcp --hostname uat-db.bnpi-hris.tech --url localhost:55434
 ```
 
 Then use these local database URLs:
 
 ```text
-PROD  postgresql://postgres:postgres@localhost:5432/hris
-DEV   postgresql://postgres:postgres@localhost:5433/hris
-UAT   postgresql://postgres:postgres@localhost:5434/hris
+PROD  postgresql://postgres:postgres@localhost:55432/hris
+DEV   postgresql://postgres:postgres@localhost:55433/hris
+UAT   postgresql://postgres:postgres@localhost:55434/hris
 ```
 
-Project Truth also provides a small Windows helper that picks a fallback local
-port when `5432` is already occupied:
+Project Truth also provides a small Windows helper that starts the same stable
+ports and falls back only when one is already occupied:
 
 ```powershell
 .\scripts\project-truth.ps1 start-bnpi-db-access -Environment prod
+```
+
+To start all three deployed database forwards at once:
+
+```powershell
+.\scripts\project-truth.ps1 start-bnpi-db-access -Environment all
 ```
 
 It prints the exact `DATABASE_URL` to use and stores the background

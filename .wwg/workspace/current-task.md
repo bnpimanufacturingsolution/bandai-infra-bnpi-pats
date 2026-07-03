@@ -33,7 +33,10 @@ Status: READY FOR REVIEW
 - TryCloudflare is disabled by default and remains only a deprecated manual proof tool.
 - Public SSH through `ssh.bnpi-hris.tech` is verified through Cloudflare Access and the host-managed named tunnel.
 - Public SSH through `ssh.bnpi-hris.tech` is also verified through the VM-side connector using `ssh://localhost:22`.
-- Postgres Cloudflare Access TCP hostnames are configured as client-forwarding targets: `db.bnpi-hris.tech` for PROD, `dev-db.bnpi-hris.tech` for DEV, and `uat-db.bnpi-hris.tech` for UAT. These require client-side `cloudflared access tcp` and produce local DB URLs such as `postgresql://postgres:postgres@localhost:5432/hris`; they are not raw public Postgres URLs through normal Cloudflare Tunnel.
+- Postgres Cloudflare Access TCP hostnames are configured as client-forwarding targets: `db.bnpi-hris.tech` for PROD, `dev-db.bnpi-hris.tech` for DEV, and `uat-db.bnpi-hris.tech` for UAT. These require client-side `cloudflared access tcp` and produce local DB URLs such as `postgresql://postgres:postgres@localhost:55432/hris`; they are not raw public Postgres URLs through normal Cloudflare Tunnel.
+- Local `npm run dev` for HRIS API/app is configured to use the deployed DEV
+  VM-backed Postgres through the Cloudflare Access TCP helper on
+  `localhost:55433`; PROD and UAT helper URLs are documented beside it.
 - Browser-rendered SSH is the desired clean journey for unprepared office or
   remote PCs; it still needs Cloudflare Access browser-rendering proof after the
   Zero Trust application setting is enabled.
@@ -174,6 +177,17 @@ Status: READY FOR REVIEW
   `public_tables=70`. The wrapper command timed out during cleanup, but no
   temporary test forwards remained afterward; only the intentional PROD helper
   forward on `localhost:55432` remained active.
+- Later on 2026-07-03, local dev verification kept the stable DB helper
+  forwards active on PROD `localhost:55432`, DEV `localhost:55433`, and UAT
+  `localhost:55434`. `hris-api/.env` defaulted `npm run dev` to the DEV forward
+  on `localhost:55433`, `http://localhost:3001/health` returned HTTP 200, direct
+  API login for `admin@bandai.local` returned HTTP 200, and Playwright login
+  through the local app at `http://localhost:5175/auth/login` reached
+  `http://localhost:5175/admin/dashboard`. DEV DB snapshot and UI counts
+  matched: `users=2039`, `employees=2217`, `departments=12`. Evidence:
+  `.runtime/local-dev/20260703-verify/db-snapshot-dev-active.json`,
+  `.runtime/local-dev/20260703-verify/api-auth-login-proof.json`, and
+  `.runtime/local-dev/20260703-verify/browser/playwright-login-proof.json`.
 - `git diff --check` passed.
 - `wwg test-check --format plain` passes after the stable `10.184.37.19`
   runtime/config drift repair because the Cloudflare config regression guard was
@@ -187,9 +201,8 @@ Status: READY FOR REVIEW
   reliable Hyper-V artifact, and any in-VM copy should be secondary evidence or
   staging only unless proven bootable/importable from Windows Hyper-V.
 - Keep Cloudflare Access SSH policy in the `933c5547e32839d664d155ce8a7424d5` Zero Trust account aligned with the allowed operator email.
-- Create Cloudflare Access applications/policies for `db.bnpi-hris.tech`,
-  `dev-db.bnpi-hris.tech`, and `uat-db.bnpi-hris.tech`, then capture a client
-  `cloudflared access tcp` proof before treating teammate DB access as verified.
+- Replace shared Postgres superuser teammate URLs with limited per-environment
+  database users before broadening DB Access TCP use beyond trusted operators.
 - Enable and verify browser-rendered SSH for `https://ssh.bnpi-hris.tech` so
   remote admins can access the VM from unprepared browsers without configuring
   BNPI Windows host SSH or per-PC `.ssh/config`.
