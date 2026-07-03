@@ -3,7 +3,7 @@
 	"version": "1.0.122",
 	"main": "dist/lib-entry.js",
 	"scripts": {
-		"predev": "node scripts/cleanup-emitted-js.cjs && node scripts/ensure-prisma-client.cjs && node scripts/ensure-dev-port-ownership.cjs && node scripts/ensure-local-dev-services.cjs",
+		"predev": "node scripts/cleanup-emitted-js.cjs && node scripts/ensure-prisma-client.cjs && node scripts/ensure-dev-port-ownership.cjs && node scripts/ensure-bnpi-db-access.cjs && node scripts/ensure-local-dev-services.cjs",
 		"dev": "dotenv tsx watch index.ts",
 		"dev:api-only": "dotenv tsx watch index.ts",
 		"prestart": "node scripts/cleanup-emitted-js.cjs && node scripts/ensure-prisma-client.cjs",
