@@ -194,9 +194,14 @@ emit_cloudflare_tcp_db_instructions() {
   echo "Cloudflare DB TCP"
   echo "  Use named Cloudflare Tunnel + Access, not trycloudflare HTTP quick tunnels."
   echo "  Client commands after Access/DNS are configured:"
-  echo "    cloudflared access tcp --hostname <prod-db-hostname> --url localhost:15432"
-  echo "    cloudflared access tcp --hostname <dev-db-hostname>  --url localhost:15433"
-  echo "    cloudflared access tcp --hostname <uat-db-hostname>  --url localhost:15434"
+  echo "    cloudflared access tcp --hostname db.bnpi-hris.tech     --url localhost:5432"
+  echo "    cloudflared access tcp --hostname dev-db.bnpi-hris.tech --url localhost:5433"
+  echo "    cloudflared access tcp --hostname uat-db.bnpi-hris.tech --url localhost:5434"
+  echo "  Local URLs after forwarding:"
+  echo "    PROD postgresql://postgres:postgres@localhost:5432/hris"
+  echo "    DEV  postgresql://postgres:postgres@localhost:5433/hris"
+  echo "    UAT  postgresql://postgres:postgres@localhost:5434/hris"
+  echo "  Direct db.bnpi-hris.tech:5432 needs WARP private routing or Spectrum/raw TCP."
 }
 
 emit_screen_os_sync_line() {

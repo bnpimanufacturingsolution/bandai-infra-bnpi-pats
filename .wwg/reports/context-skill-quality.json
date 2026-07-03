@@ -1357,7 +1357,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 817,
+      "line": 1400,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1367,7 +1367,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 821,
+      "line": 1404,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1709,7 +1709,25 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 185,
+      "line": 182,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/workspace/current-task.md",
+      "fileType": "unknown",
+      "line": 168,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/workspace/current-task.md",
+      "fileType": "unknown",
+      "line": 173,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1805,7 +1823,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 91,
+      "line": 126,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1814,7 +1832,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 115,
+      "line": 150,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1823,7 +1841,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 240,
+      "line": 275,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1832,7 +1850,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 262,
+      "line": 297,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1841,7 +1859,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 317,
+      "line": 352,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1877,7 +1895,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 142,
+      "line": 146,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1886,7 +1904,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 147,
+      "line": 151,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3032,7 +3050,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 185,
+      "line": 182,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3372,7 +3390,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 817,
+      "line": 1400,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3382,7 +3400,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 821,
+      "line": 1404,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3878,7 +3896,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 91,
+      "line": 126,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3887,7 +3905,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 115,
+      "line": 150,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3896,7 +3914,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 240,
+      "line": 275,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3905,7 +3923,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 262,
+      "line": 297,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3914,7 +3932,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 317,
+      "line": 352,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3959,7 +3977,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 142,
+      "line": 146,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3968,7 +3986,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 147,
+      "line": 151,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4468,7 +4486,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 817,
+      "line": 1400,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4478,7 +4496,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 821,
+      "line": 1404,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4820,7 +4838,25 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 185,
+      "line": 182,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/workspace/current-task.md",
+      "fileType": "unknown",
+      "line": 168,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/workspace/current-task.md",
+      "fileType": "unknown",
+      "line": 173,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4916,7 +4952,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 91,
+      "line": 126,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4925,7 +4961,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 115,
+      "line": 150,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4934,7 +4970,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 240,
+      "line": 275,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4943,7 +4979,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 262,
+      "line": 297,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4952,7 +4988,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 317,
+      "line": 352,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4988,7 +5024,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 142,
+      "line": 146,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4997,7 +5033,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 147,
+      "line": 151,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -5302,7 +5338,7 @@
     "skippedFileCount": 1,
     "errorCount": 0,
     "warningCount": 84,
-    "suggestionCount": 91,
+    "suggestionCount": 93,
     "classificationCounts": {
       "context": 8,
       "skill": 0,

@@ -80,6 +80,14 @@ echo "  psql postgresql://postgres:postgres@${ip_addr}:15434/hris"
 echo
 echo "Cloudflare TCP access is not a trycloudflare HTTP URL."
 echo "Use named Cloudflare Tunnel + Access, then on each client run:"
-echo "  cloudflared access tcp --hostname <prod-db-hostname> --url localhost:15432"
-echo "  cloudflared access tcp --hostname <dev-db-hostname>  --url localhost:15433"
-echo "  cloudflared access tcp --hostname <uat-db-hostname>  --url localhost:15434"
+echo "  cloudflared access tcp --hostname db.bnpi-hris.tech     --url localhost:5432"
+echo "  cloudflared access tcp --hostname dev-db.bnpi-hris.tech --url localhost:5433"
+echo "  cloudflared access tcp --hostname uat-db.bnpi-hris.tech --url localhost:5434"
+echo
+echo "Then use local database URLs:"
+echo "  PROD postgresql://postgres:postgres@localhost:5432/hris"
+echo "  DEV  postgresql://postgres:postgres@localhost:5433/hris"
+echo "  UAT  postgresql://postgres:postgres@localhost:5434/hris"
+echo
+echo "Direct postgresql://postgres:postgres@db.bnpi-hris.tech:5432/hris requires"
+echo "Cloudflare WARP private routing or Spectrum/raw TCP, not normal Access TCP."

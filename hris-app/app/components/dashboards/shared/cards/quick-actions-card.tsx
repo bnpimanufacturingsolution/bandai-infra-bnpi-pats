@@ -44,11 +44,11 @@ export function QuickActionsCard({ actions }: QuickActionsCardProps) {
 							<button
 								key={action.id}
 								onClick={() => navigate(resolvePath(action.path))}
-								className="flex h-full items-center gap-2.5 rounded-xl border border-neutral-300 bg-gray-50 px-3 py-2.5 text-left shadow-sm transition-all hover:border-neutral-400 hover:bg-white hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200 active:scale-[0.99]">
+								className="flex h-full min-h-0 items-center gap-2.5 rounded-lg border border-neutral-300 bg-gray-50 px-3 py-2.5 text-left shadow-sm transition-all hover:border-neutral-400 hover:bg-white hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-200 active:scale-[0.99]">
 								<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-neutral-200 bg-white shadow-sm">
 									<action.icon className="h-4 w-4 text-gray-700" />
 								</div>
-								<span className="truncate text-sm font-semibold text-gray-900">
+								<span className="line-clamp-2 min-w-0 text-sm font-semibold leading-5 text-gray-900">
 									{action.label}
 								</span>
 							</button>

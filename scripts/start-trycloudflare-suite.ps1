@@ -318,9 +318,9 @@ $md += ''
 $md += 'Client-side TCP examples after named Cloudflare hostnames and Access policies exist:'
 $md += ''
 $md += '```powershell'
-$md += 'cloudflared access tcp --hostname <prod-db-hostname> --url localhost:15432'
-$md += 'cloudflared access tcp --hostname <dev-db-hostname> --url localhost:15433'
-$md += 'cloudflared access tcp --hostname <uat-db-hostname> --url localhost:15434'
+$md += 'cloudflared access tcp --hostname db.bnpi-hris.tech --url localhost:5432'
+$md += 'cloudflared access tcp --hostname dev-db.bnpi-hris.tech --url localhost:5433'
+$md += 'cloudflared access tcp --hostname uat-db.bnpi-hris.tech --url localhost:5434'
 $md += '```'
 $md | Set-Content -LiteralPath $mdPath -Encoding utf8
 

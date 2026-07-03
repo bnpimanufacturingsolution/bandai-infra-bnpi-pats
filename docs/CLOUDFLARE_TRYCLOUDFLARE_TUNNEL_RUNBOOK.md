@@ -159,27 +159,28 @@ Do not use trycloudflare quick tunnels for Postgres. Use named Cloudflare Tunnel
 Server-side helper:
 
 ```powershell
-$env:PROJECT_TRUTH_CF_PROD_DB_HOSTNAME = "prod-db.example.com"
-$env:PROJECT_TRUTH_CF_DEV_DB_HOSTNAME = "dev-db.example.com"
-$env:PROJECT_TRUTH_CF_UAT_DB_HOSTNAME = "uat-db.example.com"
 .\scripts\project-truth.ps1 start-cloudflare-db-tcp -GuestIp <guest-lan-ip>
 ```
 
 Client-side commands:
 
 ```powershell
-cloudflared access tcp --hostname prod-db.example.com --url localhost:15432
-cloudflared access tcp --hostname dev-db.example.com --url localhost:15433
-cloudflared access tcp --hostname uat-db.example.com --url localhost:15434
+cloudflared access tcp --hostname db.bnpi-hris.tech --url localhost:5432
+cloudflared access tcp --hostname dev-db.bnpi-hris.tech --url localhost:5433
+cloudflared access tcp --hostname uat-db.bnpi-hris.tech --url localhost:5434
 ```
 
 Then point the DB client at:
 
 ```text
-postgresql://postgres:postgres@localhost:15432/hris
-postgresql://postgres:postgres@localhost:15433/hris
-postgresql://postgres:postgres@localhost:15434/hris
+postgresql://postgres:postgres@localhost:5432/hris
+postgresql://postgres:postgres@localhost:5433/hris
+postgresql://postgres:postgres@localhost:5434/hris
 ```
+
+Direct `postgresql://postgres:postgres@db.bnpi-hris.tech:5432/hris` requires
+Cloudflare WARP private routing or Spectrum/raw TCP. Normal Access TCP uses the
+local forwarded URL above.
 
 ## VM Boot Test Hook
 

@@ -8,6 +8,9 @@ param(
   [string]$CredentialsFile = '',
   [string]$PreferredGuestIp = $(if ($env:PROJECT_TRUTH_PREFERRED_GUEST_IP) { $env:PROJECT_TRUTH_PREFERRED_GUEST_IP } else { '10.184.37.19' }),
   [string]$SshHostname = 'ssh.bnpi-hris.tech',
+  [string]$ProdDbHostname = 'db.bnpi-hris.tech',
+  [string]$DevDbHostname = 'dev-db.bnpi-hris.tech',
+  [string]$UatDbHostname = 'uat-db.bnpi-hris.tech',
   [string[]]$Hostnames = @('bnpi-hris.tech', 'www.bnpi-hris.tech', 'app.bnpi-hris.tech'),
   [int]$OriginPort = 3000,
   [int]$OriginWarmupSeconds = 180,
@@ -139,6 +142,9 @@ function Write-TunnelConfig {
   $targets += [pscustomobject]@{ Hostname = 'uat-api.bnpi-hris.tech'; Service = "http://${GuestIp}:3201" }
   $targets += [pscustomobject]@{ Hostname = 'grafana.bnpi-hris.tech'; Service = "http://${GuestIp}:53000" }
   $targets += [pscustomobject]@{ Hostname = $SshHostname; Service = "ssh://${GuestIp}:22" }
+  $targets += [pscustomobject]@{ Hostname = $ProdDbHostname; Service = "tcp://${GuestIp}:15432" }
+  $targets += [pscustomobject]@{ Hostname = $DevDbHostname; Service = "tcp://${GuestIp}:15433" }
+  $targets += [pscustomobject]@{ Hostname = $UatDbHostname; Service = "tcp://${GuestIp}:15434" }
 
   $lines = @(
     "tunnel: $TunnelId",
@@ -253,7 +259,10 @@ function Invoke-DnsProvisioning {
     'uat.bnpi-hris.tech',
     'uat-api.bnpi-hris.tech',
     'grafana.bnpi-hris.tech',
-    $SshHostname
+    $SshHostname,
+    $ProdDbHostname,
+    $DevDbHostname,
+    $UatDbHostname
   ) | Select-Object -Unique
 
   $results = @()
@@ -368,6 +377,19 @@ $evidence = [pscustomobject]@{
   TunnelId = $TunnelId
   SshHostname = $SshHostname
   SshOrigin = "ssh://${guestIp}:22"
+  DbTcp = [pscustomobject]@{
+    ProdHostname = $ProdDbHostname
+    DevHostname = $DevDbHostname
+    UatHostname = $UatDbHostname
+    ProdOrigin = "tcp://${guestIp}:15432"
+    DevOrigin = "tcp://${guestIp}:15433"
+    UatOrigin = "tcp://${guestIp}:15434"
+    ClientCommands = @(
+      "cloudflared access tcp --hostname $ProdDbHostname --url localhost:5432",
+      "cloudflared access tcp --hostname $DevDbHostname --url localhost:5433",
+      "cloudflared access tcp --hostname $UatDbHostname --url localhost:5434"
+    )
+  }
   DnsProvisioning = $dnsProvisioning
   TunnelProcess = $tunnelProcess
   Connector = $connector

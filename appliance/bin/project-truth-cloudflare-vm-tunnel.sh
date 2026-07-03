@@ -85,6 +85,12 @@ ingress:
     service: http://localhost:53000
   - hostname: ssh.bnpi-hris.tech
     service: ssh://localhost:22
+  - hostname: db.bnpi-hris.tech
+    service: tcp://localhost:15432
+  - hostname: dev-db.bnpi-hris.tech
+    service: tcp://localhost:15433
+  - hostname: uat-db.bnpi-hris.tech
+    service: tcp://localhost:15434
   - service: http_status:404
 YAML
 chmod 0644 "$config_path"

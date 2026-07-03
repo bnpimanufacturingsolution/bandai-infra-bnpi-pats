@@ -2,9 +2,12 @@ param(
   [string]$GuestIp = '',
   [switch]$HostLocal,
   [switch]$StopExisting,
-  [string]$ProdHostname = $env:PROJECT_TRUTH_CF_PROD_DB_HOSTNAME,
-  [string]$DevHostname = $env:PROJECT_TRUTH_CF_DEV_DB_HOSTNAME,
-  [string]$UatHostname = $env:PROJECT_TRUTH_CF_UAT_DB_HOSTNAME,
+  [string]$ProdHostname = $(if ($env:PROJECT_TRUTH_CF_PROD_DB_HOSTNAME) { $env:PROJECT_TRUTH_CF_PROD_DB_HOSTNAME } else { 'db.bnpi-hris.tech' }),
+  [string]$DevHostname = $(if ($env:PROJECT_TRUTH_CF_DEV_DB_HOSTNAME) { $env:PROJECT_TRUTH_CF_DEV_DB_HOSTNAME } else { 'dev-db.bnpi-hris.tech' }),
+  [string]$UatHostname = $(if ($env:PROJECT_TRUTH_CF_UAT_DB_HOSTNAME) { $env:PROJECT_TRUTH_CF_UAT_DB_HOSTNAME } else { 'uat-db.bnpi-hris.tech' }),
+  [int]$ProdClientPort = $(if ($env:PROJECT_TRUTH_CF_PROD_DB_CLIENT_PORT) { [int]$env:PROJECT_TRUTH_CF_PROD_DB_CLIENT_PORT } else { 5432 }),
+  [int]$DevClientPort = $(if ($env:PROJECT_TRUTH_CF_DEV_DB_CLIENT_PORT) { [int]$env:PROJECT_TRUTH_CF_DEV_DB_CLIENT_PORT } else { 5433 }),
+  [int]$UatClientPort = $(if ($env:PROJECT_TRUTH_CF_UAT_DB_CLIENT_PORT) { [int]$env:PROJECT_TRUTH_CF_UAT_DB_CLIENT_PORT } else { 5434 }),
   [int]$StartupTimeoutSeconds = 10
 )
 
@@ -44,18 +47,18 @@ if (-not $cloudflared) {
 $targetHost = if ($HostLocal) { '127.0.0.1' } elseif ($GuestIp) { $GuestIp } else { throw 'Pass -GuestIp <vm-lan-ip> or -HostLocal.' }
 
 $targets = @(
-  [pscustomobject]@{ Name = 'prod-db'; Hostname = $ProdHostname; TargetUrl = "tcp://${targetHost}:15432"; ClientPort = 15432 },
-  [pscustomobject]@{ Name = 'dev-db'; Hostname = $DevHostname; TargetUrl = "tcp://${targetHost}:15433"; ClientPort = 15433 },
-  [pscustomobject]@{ Name = 'uat-db'; Hostname = $UatHostname; TargetUrl = "tcp://${targetHost}:15434"; ClientPort = 15434 }
+  [pscustomobject]@{ Name = 'prod-db'; Hostname = $ProdHostname; TargetUrl = "tcp://${targetHost}:15432"; ClientPort = $ProdClientPort },
+  [pscustomobject]@{ Name = 'dev-db'; Hostname = $DevHostname; TargetUrl = "tcp://${targetHost}:15433"; ClientPort = $DevClientPort },
+  [pscustomobject]@{ Name = 'uat-db'; Hostname = $UatHostname; TargetUrl = "tcp://${targetHost}:15434"; ClientPort = $UatClientPort }
 )
 
 $missing = @($targets | Where-Object { [string]::IsNullOrWhiteSpace($_.Hostname) })
 if ($missing.Count -gt 0) {
   Write-Warning "Cloudflare DB TCP hostnames are missing: $($missing.Name -join ', ')"
   Write-Host 'Set these environment variables or pass parameters:'
-  Write-Host '  PROJECT_TRUTH_CF_PROD_DB_HOSTNAME=prod-db.example.com'
-  Write-Host '  PROJECT_TRUTH_CF_DEV_DB_HOSTNAME=dev-db.example.com'
-  Write-Host '  PROJECT_TRUTH_CF_UAT_DB_HOSTNAME=uat-db.example.com'
+  Write-Host '  PROJECT_TRUTH_CF_PROD_DB_HOSTNAME=db.bnpi-hris.tech'
+  Write-Host '  PROJECT_TRUTH_CF_DEV_DB_HOSTNAME=dev-db.bnpi-hris.tech'
+  Write-Host '  PROJECT_TRUTH_CF_UAT_DB_HOSTNAME=uat-db.bnpi-hris.tech'
   Write-Host 'Cloudflare requirements: managed domain on Cloudflare, named tunnel auth, Access policy, and cloudflared on every DB client.'
   Write-Host "LAN URLs remain available at:"
   Write-Host "  postgresql://postgres:postgres@${targetHost}:15432/hris"
@@ -85,6 +88,8 @@ foreach ($target in $targets) {
     TargetUrl = $target.TargetUrl
     ClientCommand = "cloudflared access tcp --hostname $($target.Hostname) --url localhost:$($target.ClientPort)"
     DatabaseUrl = "postgresql://postgres:postgres@localhost:$($target.ClientPort)/hris"
+    RequestedPublicUrl = "postgresql://postgres:postgres@$($target.Hostname):5432/hris"
+    RequestedPublicUrlStatus = 'Not valid with normal Cloudflare Access TCP; use the local DatabaseUrl after starting the client-side cloudflared access tcp process.'
   }
 }
 
@@ -99,3 +104,10 @@ Write-Host 'Run these on each client machine before opening psql/DB tools:'
 foreach ($record in $processRecords) {
   Write-Host "  $($record.ClientCommand)"
 }
+Write-Host ''
+Write-Host 'Then use these DB URLs locally:'
+foreach ($record in $processRecords) {
+  Write-Host "  $($record.Name): $($record.DatabaseUrl)"
+}
+Write-Host ''
+Write-Host 'Direct URLs like postgresql://postgres:postgres@db.bnpi-hris.tech:5432/hris require WARP private routing or Spectrum/raw TCP, not normal Cloudflare Access TCP.'

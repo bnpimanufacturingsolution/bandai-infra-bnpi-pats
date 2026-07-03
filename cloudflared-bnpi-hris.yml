@@ -52,5 +52,10 @@ ingress:
     service: http://10.184.37.19:53000
   - hostname: ssh.bnpi-hris.tech
     service: ssh://10.184.37.19:22
+  - hostname: db.bnpi-hris.tech
+    service: tcp://10.184.37.19:15432
+  - hostname: dev-db.bnpi-hris.tech
+    service: tcp://10.184.37.19:15433
+  - hostname: uat-db.bnpi-hris.tech
+    service: tcp://10.184.37.19:15434
   - service: http_status:404
-

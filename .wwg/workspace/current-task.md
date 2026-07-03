@@ -33,6 +33,7 @@ Status: READY FOR REVIEW
 - TryCloudflare is disabled by default and remains only a deprecated manual proof tool.
 - Public SSH through `ssh.bnpi-hris.tech` is verified through Cloudflare Access and the host-managed named tunnel.
 - Public SSH through `ssh.bnpi-hris.tech` is also verified through the VM-side connector using `ssh://localhost:22`.
+- Postgres Cloudflare Access TCP hostnames are configured as client-forwarding targets: `db.bnpi-hris.tech` for PROD, `dev-db.bnpi-hris.tech` for DEV, and `uat-db.bnpi-hris.tech` for UAT. These require client-side `cloudflared access tcp` and produce local DB URLs such as `postgresql://postgres:postgres@localhost:5432/hris`; they are not raw public Postgres URLs through normal Cloudflare Tunnel.
 - Browser-rendered SSH is the desired clean journey for unprepared office or
   remote PCs; it still needs Cloudflare Access browser-rendering proof after the
   Zero Trust application setting is enabled.
@@ -153,6 +154,26 @@ Status: READY FOR REVIEW
   identity and `10.184.37.19/24` for preferred operator/LAN access. DHCP is
   disabled, the default route is static via `10.184.38.254`, and SSH plus HRIS
   API health passed on both static addresses.
+- On 2026-07-03, Postgres Access TCP DNS routes for `db.bnpi-hris.tech`,
+  `dev-db.bnpi-hris.tech`, and `uat-db.bnpi-hris.tech` were provisioned to the
+  named tunnel and resolved to Cloudflare A records. The host-managed connector
+  was started with DB TCP ingress, and the live VM-side `/etc/cloudflared/config.yml`
+  was updated with matching DB TCP ingress while preserving existing SSH routes.
+  A client-side `cloudflared access tcp --hostname db.bnpi-hris.tech --url localhost:55432`
+  smoke test opened the local listener but Postgres protocol probing failed with
+  `websocket: bad handshake`, and a read-only Access API list returned HTTP 403.
+  Treat DNS/tunnel ingress as applied, but teammate DB access is not fully
+  verified until Cloudflare Access applications/policies are created for the DB
+  hostnames.
+- Later on 2026-07-03, after Access browser success and token return, real
+  Postgres query proof passed through Cloudflare Access TCP for all three DB
+  hostnames using a temporary Node `pg` probe under `.runtime/pg-probe`:
+  `db.bnpi-hris.tech` via local `56532`, `dev-db.bnpi-hris.tech` via local
+  `56533`, and `uat-db.bnpi-hris.tech` via local `56534` each returned
+  `current_database=hris`, `current_user=postgres`, server port `5432`, and
+  `public_tables=70`. The wrapper command timed out during cleanup, but no
+  temporary test forwards remained afterward; only the intentional PROD helper
+  forward on `localhost:55432` remained active.
 - `git diff --check` passed.
 - `wwg test-check --format plain` passes after the stable `10.184.37.19`
   runtime/config drift repair because the Cloudflare config regression guard was
@@ -166,6 +187,9 @@ Status: READY FOR REVIEW
   reliable Hyper-V artifact, and any in-VM copy should be secondary evidence or
   staging only unless proven bootable/importable from Windows Hyper-V.
 - Keep Cloudflare Access SSH policy in the `933c5547e32839d664d155ce8a7424d5` Zero Trust account aligned with the allowed operator email.
+- Create Cloudflare Access applications/policies for `db.bnpi-hris.tech`,
+  `dev-db.bnpi-hris.tech`, and `uat-db.bnpi-hris.tech`, then capture a client
+  `cloudflared access tcp` proof before treating teammate DB access as verified.
 - Enable and verify browser-rendered SSH for `https://ssh.bnpi-hris.tech` so
   remote admins can access the VM from unprepared browsers without configuring
   BNPI Windows host SSH or per-PC `.ssh/config`.

@@ -184,7 +184,10 @@ if ($ProvisionDns) {
     'uat.bnpi-hris.tech',
     'uat-api.bnpi-hris.tech',
     'grafana.bnpi-hris.tech',
-    'ssh.bnpi-hris.tech'
+    'ssh.bnpi-hris.tech',
+    'db.bnpi-hris.tech',
+    'dev-db.bnpi-hris.tech',
+    'uat-db.bnpi-hris.tech'
   )
 
   foreach ($dnsName in $dnsNames) {

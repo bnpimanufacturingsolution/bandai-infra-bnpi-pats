@@ -97,7 +97,9 @@ export function RoleDashboardShell({ dashboardRole }: RoleDashboardShellProps) {
 
 			<div className="grid min-w-0 grid-cols-1 items-stretch gap-3 md:grid-cols-2 xl:grid-cols-3">
 				{topRow.map((cardKey) => (
-					<div key={`top-${cardKey}`} className="h-full min-h-[240px] min-w-0">
+					<div
+						key={`top-${cardKey}`}
+						className="h-[320px] min-w-0 sm:h-[340px] xl:h-[360px]">
 						{renderCard(cardKey)}
 					</div>
 				))}

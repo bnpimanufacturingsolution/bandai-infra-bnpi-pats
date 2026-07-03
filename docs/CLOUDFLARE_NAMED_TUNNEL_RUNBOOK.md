@@ -87,6 +87,57 @@ Same-host API routing is also expected:
 https://bnpi-hris.tech/api/*
 ```
 
+## Postgres Through Cloudflare Access TCP
+
+Project Truth can publish Postgres TCP hostnames through the named tunnel, but
+normal Cloudflare Access TCP still requires a client-side `cloudflared` process.
+It does not create a raw public Postgres socket that database tools can open
+directly at `db.bnpi-hris.tech:5432`.
+
+Current DB Access TCP hostnames:
+
+```text
+PROD  db.bnpi-hris.tech     -> tcp://<VM>:15432
+DEV   dev-db.bnpi-hris.tech -> tcp://<VM>:15433
+UAT   uat-db.bnpi-hris.tech -> tcp://<VM>:15434
+```
+
+On each client workstation, start the local forwards:
+
+```powershell
+cloudflared access tcp --hostname db.bnpi-hris.tech --url localhost:5432
+cloudflared access tcp --hostname dev-db.bnpi-hris.tech --url localhost:5433
+cloudflared access tcp --hostname uat-db.bnpi-hris.tech --url localhost:5434
+```
+
+Then use these local database URLs:
+
+```text
+PROD  postgresql://postgres:postgres@localhost:5432/hris
+DEV   postgresql://postgres:postgres@localhost:5433/hris
+UAT   postgresql://postgres:postgres@localhost:5434/hris
+```
+
+Project Truth also provides a small Windows helper that picks a fallback local
+port when `5432` is already occupied:
+
+```powershell
+.\scripts\project-truth.ps1 start-bnpi-db-access -Environment prod
+```
+
+It prints the exact `DATABASE_URL` to use and stores the background
+`cloudflared` PID under `.runtime\cloudflare-db-tcp`.
+
+The URL the user requested:
+
+```text
+postgresql://postgres:postgres@db.bnpi-hris.tech:5432/hris
+```
+
+is only valid if the client is on Cloudflare WARP private routing, Cloudflare
+Spectrum/raw TCP, or another direct TCP path. With normal Access TCP, use the
+local URL after starting `cloudflared access tcp`.
+
 ## Fresh Or Final Images
 
 Fresh VM images should not contain Cloudflare tunnel credentials. The repeatable
