@@ -50,6 +50,9 @@ Status: READY FOR REVIEW
   the latest scripts, Cloudflare VM connector setup, and public checks run after
   import. The live proof VM disk was not published because it has contained
   root-only Cloudflare runtime credentials.
+- A compact in-VM retained current-state VHDX now exists for the live proof VM
+  after pruning development-stage observability rolling backups. It is retained
+  evidence/staging only until Windows Hyper-V boot/import validation passes.
 - Client/local VHDX retention is intentional: the host/client live VHDX may
   differ from the reusable public image and must not be overwritten or promoted
   by default. If a host-side or in-VM retained copy is needed, create it as a
@@ -100,6 +103,14 @@ Status: READY FOR REVIEW
   `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v7/latest/project-truth-hyperv-one-click-installer-v7.zip`
 - Published V7 VHDX path:
   `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v7/latest/project-truth-node-local-hyperv-v7-current-state.vhdx`
+- Retained in-VM compact current-state VHDX:
+  `/var/lib/project-truth/retained-vhdx/20260703-102324/project-truth-node-current-state-20260703-102324.vhdx`
+- Retained current-state VHDX evidence:
+  `.runtime/in-vm-vhdx-build/20260703-102324/current-state-vhdx-report.md`,
+  `.runtime/in-vm-vhdx-build/20260703-102324/manifest.txt`,
+  `.runtime/in-vm-vhdx-build/20260703-102324/project-truth-node-current-state-20260703-102324.vhdx.sha256`,
+  and
+  `.runtime/in-vm-vhdx-build/20260703-102324/project-truth-node-current-state-20260703-102324.vhdx.qemu-img-info.json`
 - 2026-07-01 public app restore evidence:
   `/var/lib/project-truth/backups/public-app-session-restore-20260701-061721`
 - 2026-07-01 DEV public origin restore evidence:
@@ -188,6 +199,19 @@ Status: READY FOR REVIEW
   `.runtime/local-dev/20260703-verify/db-snapshot-dev-active.json`,
   `.runtime/local-dev/20260703-verify/api-auth-login-proof.json`, and
   `.runtime/local-dev/20260703-verify/browser/playwright-login-proof.json`.
+- Later on 2026-07-03, development-stage observability rolling backups were
+  hard-deleted as approved: `/srv/hris/observability/backups/rolling` dropped
+  from about `161G` to zero files, `/srv/hris/observability/backups` was about
+  `28K`, and `/srv/hris/observability` was about `8.2G`. Backup and replicator
+  containers were intentionally left stopped to prevent immediate archive
+  regeneration.
+- Later on 2026-07-03, a compact retained current-state VHDX was built inside
+  the VM after the prune. `qemu-img info` reported VHDX format, virtual size
+  `500 GiB`, file length about `92.6 GiB`, and disk size about `83.2 GiB`;
+  SHA-256 was
+  `486378d08bb76cde3716f3f9d4a24fc02c15636b2e39e895b0c59fba1d8a9a1c`;
+  `qemu-img check -f vhdx` reported no errors. Final local VM checks returned
+  HTTP 200 for PROD/DEV/UAT app/API, Grafana, Prometheus, Loki, and Tempo.
 - `git diff --check` passed.
 - `wwg test-check --format plain` passes after the stable `10.184.37.19`
   runtime/config drift repair because the Cloudflare config regression guard was
@@ -200,6 +224,11 @@ Status: READY FOR REVIEW
 - Define the retained-client-VHDX artifact flow: host export/copy remains the
   reliable Hyper-V artifact, and any in-VM copy should be secondary evidence or
   staging only unless proven bootable/importable from Windows Hyper-V.
+- Boot/import validate the retained in-VM current-state VHDX on Windows Hyper-V
+  before promoting or replacing any clean public VHDX lane.
+- Fix observability backup source/retention before re-enabling backup and
+  replicator containers; the current backup loop generated about `161G` of
+  rolling archives and logged stale `/data/grafana` archive errors.
 - Keep Cloudflare Access SSH policy in the `933c5547e32839d664d155ce8a7424d5` Zero Trust account aligned with the allowed operator email.
 - Replace shared Postgres superuser teammate URLs with limited per-environment
   database users before broadening DB Access TCP use beyond trusted operators.

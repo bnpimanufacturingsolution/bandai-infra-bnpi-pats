@@ -183,6 +183,20 @@
       ansible.builtin.systemd:
         daemon_reload: true
 
+    - name: Restore VM-managed BNPI Cloudflare tunnel after accidental local-mode guard
+      ansible.builtin.shell: |
+        set -euo pipefail
+        rm -f /etc/systemd/system/cloudflared-bnpi-hris.service.d/10-project-truth-cloud-mode.conf
+        rm -f /etc/project-truth/cloud-mode.env
+        rm -f /usr/local/bin/project-truth-cloud-mode
+        systemctl daemon-reload
+        if [ -f /etc/cloudflared/config.yml ] && ls /etc/cloudflared/*.json >/dev/null 2>&1; then
+          systemctl enable --now cloudflared-bnpi-hris.service
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
 
     - name: Enable Project Truth services
       ansible.builtin.systemd:

@@ -1357,7 +1357,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 1400,
+      "line": 1406,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1367,7 +1367,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 1404,
+      "line": 1410,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1633,11 +1633,19 @@
     },
     {
       "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 50,
+      "line": 64,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1646,7 +1654,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 54,
+      "line": 68,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1655,7 +1663,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 59,
+      "line": 77,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1664,7 +1672,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 62,
+      "line": 80,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1718,7 +1726,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 171,
+      "line": 182,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1727,7 +1735,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 176,
+      "line": 187,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2965,11 +2973,19 @@
     },
     {
       "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 50,
+      "line": 64,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2978,7 +2994,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 54,
+      "line": 68,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2987,7 +3003,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 59,
+      "line": 77,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2996,7 +3012,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 62,
+      "line": 80,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3390,7 +3406,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 1400,
+      "line": 1406,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3400,7 +3416,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 1404,
+      "line": 1410,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4486,7 +4502,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 1400,
+      "line": 1406,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4496,7 +4512,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 1404,
+      "line": 1410,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4762,11 +4778,19 @@
     },
     {
       "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 50,
+      "line": 64,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4775,7 +4799,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 54,
+      "line": 68,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4784,7 +4808,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 59,
+      "line": 77,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4793,7 +4817,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 62,
+      "line": 80,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4847,7 +4871,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 171,
+      "line": 182,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4856,7 +4880,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 176,
+      "line": 187,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -5338,7 +5362,7 @@
     "skippedFileCount": 1,
     "errorCount": 0,
     "warningCount": 84,
-    "suggestionCount": 93,
+    "suggestionCount": 94,
     "classificationCounts": {
       "context": 8,
       "skill": 0,

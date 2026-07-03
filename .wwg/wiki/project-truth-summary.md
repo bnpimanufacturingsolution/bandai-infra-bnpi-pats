@@ -38,6 +38,20 @@ Last updated: 2026-07-03
 - The V2 one-click reference under `.runtime/gcp-v2-format` is the accepted packaging shape for V6: ship a small extracted zip with a double-click `.cmd`, download the large VHDX and sidecars from the public storage bucket at install time, verify SHA-256, import/start Hyper-V, keep the console window open, and then run V6 runtime proof steps. V6 must add credential preflight/import from `C:\ProgramData\ProjectTruth\secrets\cloudflared\...json`; it must not place the credential in the zip, bucket image, repo, or baked VM.
 - V6 one-shot proof on 2026-06-30 passed SSH, ansible-pull, VM-side Cloudflare credential import, LAN health, public `bnpi-hris.tech` health, public CORS, and CLI SSH through `ssh.bnpi-hris.tech`; the serving app/API runtime was healthy Docker Compose containers while K3s pods remained resource-constrained.
 - V7 is published under `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v7/latest/` as a V2/V6-style one-click public lane. It promotes the known clean V5 base VHDX to `project-truth-node-local-hyperv-v7-current-state.vhdx` and ships a small V7 installer zip that runs the latest V6 runtime proof/import path after Hyper-V import. The live proof VM disk was not uploaded because it has contained root-only Cloudflare runtime credentials.
+- On 2026-07-03, the live VM observability rolling backups were pruned for a
+  compact retained current-state artifact: `/srv/hris/observability/backups/rolling`
+  dropped from about `161G` to zero files, `/srv/hris/observability` dropped to
+  about `8.2G`, and the VM root filesystem ended at about `164G` used / `308G`
+  free after the retained VHDX build.
+- On 2026-07-03, an in-VM retained current-state VHDX was built at
+  `/var/lib/project-truth/retained-vhdx/20260703-102324/project-truth-node-current-state-20260703-102324.vhdx`.
+  It is a dynamic VHDX with virtual size `500 GiB`, file length about `92.6 GiB`,
+  disk size about `83.2 GiB`, and SHA-256
+  `486378d08bb76cde3716f3f9d4a24fc02c15636b2e39e895b0c59fba1d8a9a1c`.
+  `qemu-img check -f vhdx` reported no errors, EFI was copied, and GRUB was
+  installed. Boundary: this is a live rsync current-state artifact, not an
+  offline Hyper-V checkpoint, and Windows Hyper-V boot/import validation is
+  still required before treating it as a proven replacement image.
 - Host-local PROD and DEV checks passed during validation, but host-local UAT ports `3200` and `3201` failed while LAN UAT passed.
 - `%ProgramData%\ProjectTruth\config\project-truth.json` was previously backed up and updated to use VM `project-truth-local-vhdx-proof`, guest IP hint `192.168.254.148`, memory `1536`, and SSH port `22`; current operator/LAN evidence now points to pure static LAN address `10.184.37.19`.
 - Hikvision integration exists in code through `/api/hikvision/callback`, ISAPI helpers, event persistence, admin device-event filters, and realtime `device-event:saved`; editable source is now `vendor/hikvision-linux`, while proprietary Linux HCNetSDK binaries remain local-only runtime inputs.
@@ -55,6 +69,10 @@ Last updated: 2026-07-03
 - Public `bnpi-hris.tech` verification from the client LAN is currently affected by a network policy block/reset: plain HTTP returns a company-policy "Web Page Blocked" response and HTTPS to `bnpi-hris.tech` / `api.bnpi-hris.tech` resets during TLS, while general HTTPS to Cloudflare and Google succeeds. Treat public checks from this LAN as blocked by network policy until verified from an unfiltered vantage point.
 - `verify-gitops-state -GuestIp 10.184.38.91` previously reached the VM over SSH, but that IP is stale for the current session. Argo CD/Application state should be checked against current operator/LAN target `10.184.37.19` or through `ssh project-truth-hris`; current K3s node and Kubernetes endpoint are `10.184.37.78`.
 - V6 runtime proof shows a split serving reality: public/LAN HRIS is green through Docker Compose and VM-side Cloudflare, while many K3s pods are `Pending`, `Evicted`, or `ContainerStatusUnknown` under memory pressure despite Argo Applications reporting `Synced/Healthy`.
+- Observability backup/replication is intentionally paused after the 2026-07-03
+  retained VHDX build because rolling archives had grown to about `161G` and
+  backup logs repeatedly referenced stale `/data/grafana`. Grafana, Prometheus,
+  Loki, Tempo, and HRIS app/API health passed after pruning and restart.
 - Runtime quick tunnels are deprecated for normal public access. Historical TryCloudflare evidence may remain in old reports, but active VM boot/sync paths keep the TryCloudflare service disabled by default.
 - Hikvision has Docker DEV DB evidence for `HIKVISION_CALLBACK` and `EN_HCNETSDK_ALARM`, DEV physical ACS-pull saved-event proof, DEV VM/K3s watcher proof, and UAT temporary callback/attendance seed proof. It still needs Linux HCNetSDK login/alarm callback proof, direct spontaneous device push proof, UAT physical pull routing, and PROD parity.
 - Device SDK runtime drift: ZKTeco has been converted to a repo-owned Linux/PyZK bridge path; remaining ZKTeco drift is count-parity explanation, realtime push parity, and GitOps/K3s runtime. Hikvision now has a Linux/Docker probe scaffold and a successful VM Docker build, but Project Truth has not converted Hikvision into a managed VM/Docker HCNetSDK listener.
