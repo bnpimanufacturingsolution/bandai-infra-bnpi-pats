@@ -8,7 +8,17 @@ fi
 tty_path="/dev/tty1"
 tty_user="$(who 2>/dev/null | awk '$2 == "tty1" { print $1; exit }')"
 
-lan_ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{ for (i=1; i<=NF; i++) if ($i=="src") { print $(i+1); exit } }')"
+preferred_lan_ip="${PROJECT_TRUTH_LAN_IP:-10.184.37.19}"
+lan_ip=""
+if [ -n "$preferred_lan_ip" ] &&
+  ip -4 -o addr show scope global up 2>/dev/null |
+    awk '{ split($4, a, "/"); print a[1] }' |
+    grep -Fxq "$preferred_lan_ip"; then
+  lan_ip="$preferred_lan_ip"
+fi
+if [ -z "$lan_ip" ]; then
+  lan_ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{ for (i=1; i<=NF; i++) if ($i=="src") { print $(i+1); exit } }')"
+fi
 if [ -z "$lan_ip" ]; then
   lan_ip="$(ip -4 -o addr show scope global up 2>/dev/null | awk '!/ docker| br-| veth| cni| flannel/ { split($4, a, "/"); print a[1]; exit }')"
 fi

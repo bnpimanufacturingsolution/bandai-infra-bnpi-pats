@@ -9,13 +9,13 @@ Last updated: 2026-07-03
 - The VM is attached to the `ProjectTruth-External` switch.
 - The VM boots from `C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx`.
 - The VM initially failed to start with 4 GB startup memory, then started after reducing dynamic memory to 1536 MB startup, 1024 MB minimum, and 3072 MB maximum.
-- The current stable operator/LAN target from 2026-07-03 SSH/HTTP proof is `10.184.37.19`.
-- The VM now uses pure static LAN addressing on `eth0` with DHCP disabled: `10.184.37.78/24` for K3s node/API identity and `10.184.37.19/24` as the preferred operator/LAN access address.
+- The current canonical Project Truth LAN/runtime target from 2026-07-03 SSH/HTTP proof is `10.184.37.19`.
+- The VM uses pure static LAN addressing on `eth0` with DHCP disabled. Desired reconciled order is `10.184.37.19/24` first and `10.184.37.78/24` retained as a secondary transition address/TLS SAN.
 - SSH is exposed on the current stable operator/LAN address at `10.184.37.19:22`.
 - SSH server banner evidence: `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.16`.
 - SSH password login was previously proven on `192.168.254.148` with the repo-documented appliance credential `infra / infra` through pinned-host-key `plink`; current host key fingerprint is `SHA256:+Xxejdej6SPlSKBEvEO/++Hh3j+QvoFSetx6DZXxiok`.
 - SSH key login is proven on `10.184.37.19` with Windows OpenSSH using `%USERPROFILE%\.ssh\node-health-appliance_ed25519`.
-- OpenSSH proof returned hostname `project-truth-node`, user `infra`, VM `eth0 10.184.37.78/24 10.184.37.19/24`, and active SSH service while the appliance summary reports `LAN IP: 10.184.37.19`.
+- OpenSSH proof returned hostname `project-truth-node`, user `infra`, VM `eth0` with both `10.184.37.19/24` and `10.184.37.78/24`, and active SSH service while the appliance summary reports `LAN IP: 10.184.37.19`.
 - Current LAN SSH command: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19`.
 - Public Cloudflare SSH is now verified through `ssh.bnpi-hris.tech` using Cloudflare Access and the host-managed named tunnel.
 - Verified public SSH command: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 -o ProxyCommand="cloudflared access ssh --hostname %h" infra@ssh.bnpi-hris.tech`.
@@ -33,6 +33,7 @@ Last updated: 2026-07-03
 - Public checks passed for `bnpi-hris.tech`, `www.bnpi-hris.tech`, `app.bnpi-hris.tech`, `api.bnpi-hris.tech`, `dev.bnpi-hris.tech`, `dev-api.bnpi-hris.tech`, `uat.bnpi-hris.tech`, `uat-api.bnpi-hris.tech`, and `grafana.bnpi-hris.tech`.
 - Current named tunnel bootstrap ownership remains host-managed on the Windows host through `scripts/start-bnpi-cloudflare-tunnel.ps1`, scheduled task `ProjectTruth-BNPI-HRIS-Cloudflared`, `scripts/ensure-bnpi-cloudflare-host.ps1`, and `cloudflared-bnpi-hris.yml`.
 - Current proof VM also has a VM-side Cloudflare named tunnel connector active through `cloudflared-bnpi-hris.service`, using root-only runtime credentials under `/etc/cloudflared` and localhost ingress, including `ssh.bnpi-hris.tech -> ssh://localhost:22`.
+- Running-server Cloudflare access is a protected runtime dependency. Agents must not disable, stop, mask, remove, or toggle off `cloudflared-bnpi-hris.service`, and must not introduce a default-local/cloud-mode guard for the already-running server, unless the user explicitly requests a time-bounded outage and a verified recovery path is already documented.
 - Fresh/final images must not bake Cloudflare tunnel credentials. The repeatable setup is to boot/import the VM, discover its LAN IP, then run `.\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic` from a Windows host that has `cloudflared` and the named tunnel credentials.
 - VM-managed Cloudflare Tunnel is now current runtime proof for the proof VM only after deliberate credential import. Fresh/final images still must not bake Cloudflare credentials.
 - The V2 one-click reference under `.runtime/gcp-v2-format` is the accepted packaging shape for V6: ship a small extracted zip with a double-click `.cmd`, download the large VHDX and sidecars from the public storage bucket at install time, verify SHA-256, import/start Hyper-V, keep the console window open, and then run V6 runtime proof steps. V6 must add credential preflight/import from `C:\ProgramData\ProjectTruth\secrets\cloudflared\...json`; it must not place the credential in the zip, bucket image, repo, or baked VM.
@@ -67,7 +68,7 @@ Last updated: 2026-07-03
 
 - Earlier `10.184.38.91` runtime proof is stale; the 2026-06-29 repair pass used transient address `192.168.254.148`, 2026-07-01 operator/LAN proof used transient address `10.184.38.144`, and the 2026-07-02 DEV serving-path check used transient address `10.184.38.138`. Later 2026-07-02 probes found `10.184.38.138` unreachable; current operator/LAN access should use pure static address `10.184.37.19`, while K3s remains pinned to `10.184.37.78`.
 - Public `bnpi-hris.tech` verification from the client LAN is currently affected by a network policy block/reset: plain HTTP returns a company-policy "Web Page Blocked" response and HTTPS to `bnpi-hris.tech` / `api.bnpi-hris.tech` resets during TLS, while general HTTPS to Cloudflare and Google succeeds. Treat public checks from this LAN as blocked by network policy until verified from an unfiltered vantage point.
-- `verify-gitops-state -GuestIp 10.184.38.91` previously reached the VM over SSH, but that IP is stale for the current session. Argo CD/Application state should be checked against current operator/LAN target `10.184.37.19` or through `ssh project-truth-hris`; current K3s node and Kubernetes endpoint are `10.184.37.78`.
+- `verify-gitops-state -GuestIp 10.184.38.91` previously reached the VM over SSH, but that IP is stale for the current session. Argo CD/Application state should be checked against canonical LAN/runtime target `10.184.37.19` or through `ssh project-truth-hris`; `10.184.37.78` is only a retained secondary transition address.
 - V6 runtime proof shows a split serving reality: public/LAN HRIS is green through Docker Compose and VM-side Cloudflare, while many K3s pods are `Pending`, `Evicted`, or `ContainerStatusUnknown` under memory pressure despite Argo Applications reporting `Synced/Healthy`.
 - Observability backup/replication is intentionally paused after the 2026-07-03
   retained VHDX build because rolling archives had grown to about `161G` and
@@ -83,5 +84,6 @@ Last updated: 2026-07-03
 
 - VM/GitOps/runtime work is admin / `hris-admin` operational work.
 - Host-local Docker health is diagnostic only; the finish line remains VM LAN, GitOps, K3s/Argo CD, and HRIS app/API proof.
+- Keep the running VM-managed `bnpi-hris` Cloudflare Tunnel active during normal work. Do not implement "cloud mode off" as a default for the live server, because public HRIS and `ssh project-truth-hris` depend on it.
 - Treat runtime IPs as evidence snapshots unless persisted through Project Truth configuration or static addressing.
 - For historical `10.184.38.138:3100` / `10.184.38.138:3101` evidence, the serving path pointed to K3s DEV hostPort traffic. Current 2026-07-03 operator/LAN access should use pure static address `10.184.37.19`, and agents should not assume Docker Compose app/API or local feature-branch code is being served without image digest and pod evidence.

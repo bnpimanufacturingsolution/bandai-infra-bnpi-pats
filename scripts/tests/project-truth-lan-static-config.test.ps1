@@ -19,6 +19,7 @@ function Assert-Matches {
 }
 
 Assert-Matches 'PROJECT_TRUTH_LAN_ADDRESSES' 'Static LAN reconciler must accept a persisted multi-address CIDR list'
+Assert-Matches 'PROJECT_TRUTH_LAN_IP' 'Static LAN reconciler must preserve a preferred operator/runtime LAN IP'
 Assert-Matches 'addresses="\$\{PROJECT_TRUTH_LAN_ADDRESSES:-\}"' 'Static LAN reconciler must read the multi-address variable before loading config'
 Assert-Matches 'addresses="\$\{PROJECT_TRUTH_LAN_ADDRESSES:-\$addresses\}"' 'Static LAN reconciler must let /etc/project-truth/lan.env override multi-address state'
 Assert-Matches 'tr '','' ''\\n''' 'Static LAN reconciler must split comma-separated address lists into YAML entries'
@@ -27,5 +28,27 @@ Assert-Matches 'on-link: true' 'Static LAN reconciler must keep the cross-subnet
 Assert-Matches 'PROJECT_TRUTH_LAN_SEARCH_DOMAINS' 'Static LAN reconciler must persist LAN DNS search domains'
 Assert-Matches 'search: \[\$\{search_yaml\}\]' 'Static LAN reconciler must render DNS search domains into netplan'
 Assert-Matches 'dhcp4: false' 'Static LAN reconciler must support pure static mode without DHCP fallback'
+
+$summaryPath = Join-Path $repoRoot 'appliance/bin/project-truth-lan-summary.sh'
+$summaryContent = Get-Content -Raw -LiteralPath $summaryPath
+if ($summaryContent -notmatch 'PROJECT_TRUTH_LAN_IP:-10\.184\.37\.19') {
+  throw 'LAN summary must prefer 10.184.37.19 as the canonical runtime/client IP.'
+}
+
+$helperPaths = @(
+  'appliance/profile.d/project-truth-hris-help.sh',
+  'appliance/bin/project-truth-clean-console.sh',
+  'appliance/bin/project-truth-db-access.sh',
+  'appliance/bin/project-truth-hris-status.sh',
+  'appliance/bin/project-truth-progress.sh',
+  'appliance/bin/project-truth-status.sh'
+)
+
+foreach ($helperPath in $helperPaths) {
+  $helperContent = Get-Content -Raw -LiteralPath (Join-Path $repoRoot $helperPath)
+  if ($helperContent -notmatch 'PROJECT_TRUTH_LAN_IP:-10\.184\.37\.19') {
+    throw "$helperPath must prefer 10.184.37.19 before route-source IP fallback."
+  }
+}
 
 Write-Host 'Project Truth LAN static config regression checks passed.'

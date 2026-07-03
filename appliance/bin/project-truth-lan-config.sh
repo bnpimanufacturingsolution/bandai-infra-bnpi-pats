@@ -6,6 +6,7 @@ config_file="/etc/project-truth/lan.env"
 netplan_file="/etc/netplan/99-project-truth-lan.yaml"
 legacy_dhcp_file="/etc/netplan/99-project-truth-dhcp.yaml"
 mode="${PROJECT_TRUTH_LAN_MODE:-dhcp}"
+preferred_ip="${PROJECT_TRUTH_LAN_IP:-}"
 address="${PROJECT_TRUTH_LAN_ADDRESS:-}"
 addresses="${PROJECT_TRUTH_LAN_ADDRESSES:-}"
 gateway="${PROJECT_TRUTH_LAN_GATEWAY:-}"
@@ -37,6 +38,7 @@ if [ -r "$config_file" ]; then
   # shellcheck disable=SC1090
   . "$config_file"
   mode="${PROJECT_TRUTH_LAN_MODE:-$mode}"
+  preferred_ip="${PROJECT_TRUTH_LAN_IP:-$preferred_ip}"
   address="${PROJECT_TRUTH_LAN_ADDRESS:-$address}"
   addresses="${PROJECT_TRUTH_LAN_ADDRESSES:-$addresses}"
   gateway="${PROJECT_TRUTH_LAN_GATEWAY:-$gateway}"
@@ -56,6 +58,9 @@ case "${1:-}" in
     echo "  config_file=${config_file}"
     echo "  iface=${iface}"
     echo "  mode=${mode}"
+    if [ -n "$preferred_ip" ]; then
+      echo "  preferred_ip=${preferred_ip}"
+    fi
     if [ "$mode" = "static" ]; then
       echo "  addresses=${addresses:-$address}"
       echo "  gateway=${gateway}"
@@ -73,6 +78,7 @@ case "${1:-}" in
     sudo tee "$config_file" >/dev/null <<EOF
 PROJECT_TRUTH_LAN_MODE=dhcp
 PROJECT_TRUTH_LAN_IFACE=${iface}
+PROJECT_TRUTH_LAN_IP=${preferred_ip}
 PROJECT_TRUTH_LAN_DHCP_ADDRESSES=${dhcp_addresses}
 EOF
     sudo chmod 0644 "$config_file"
@@ -91,6 +97,7 @@ EOF
     sudo install -d -m 0755 "$(dirname "$config_file")"
     sudo tee "$config_file" >/dev/null <<EOF
 PROJECT_TRUTH_LAN_MODE=static
+PROJECT_TRUTH_LAN_IP=${address%%/*}
 PROJECT_TRUTH_LAN_ADDRESS=${address}
 PROJECT_TRUTH_LAN_ADDRESSES=${address}
 PROJECT_TRUTH_LAN_GATEWAY=${gateway}

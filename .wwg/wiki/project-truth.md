@@ -126,9 +126,9 @@ Accepted or observed architecture:
 - Item: Current Hyper-V proof VM exists as `project-truth-local-vhdx-proof` on the `ProjectTruth-External` switch.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: `Get-VM` and `Get-VMNetworkAdapter` on 2026-06-29 showed VM `project-truth-local-vhdx-proof`, Generation 2, attached to switch `ProjectTruth-External`.
-- Item: Current operator/LAN target is pure static address `10.184.37.19`; K3s node/API identity is pure static address `10.184.37.78`; previous VM interface evidence used transient addresses `192.168.254.148` and `10.184.38.144`.
+- Item: Current canonical Project Truth LAN/runtime target is pure static address `10.184.37.19`; `10.184.37.78` is retained only as a secondary transition address/TLS SAN until all runtime surfaces have reconciled.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: 2026-07-03 operator SSH through `ssh project-truth-hris` reached `project-truth-node`; `eth0` showed `10.184.37.78/24` and `10.184.37.19/24` with `dhcp4: false`, default route `10.184.38.254 on-link`, and K3s node/API endpoint `10.184.37.78`. 2026-07-01 SSH to historical transient address `10.184.38.144` and earlier `192.168.254.148` are retained as non-current interface evidence.
+  - Evidence: 2026-07-03 operator SSH through `ssh project-truth-hris` reached `project-truth-node`; `eth0` showed `10.184.37.78/24` and `10.184.37.19/24` with `dhcp4: false` and default route `10.184.38.254 on-link`. Read-only probes from inside the VM proved ping, SSH, and PROD/DEV/UAT API health on `10.184.37.19`; ansible-pull now persists `PROJECT_TRUTH_LAN_IP=10.184.37.19`, writes `10.184.37.19/24` before `10.184.37.78/24`, and reconciles K3s `node-ip` / `advertise-address` to `10.184.37.19` while retaining `10.184.37.78` as a TLS SAN. 2026-07-01 SSH to historical transient address `10.184.38.144` and earlier `192.168.254.148` are retained as non-current interface evidence.
 - Item: Earlier SSH proof at `10.184.38.91:22` is historical evidence only.
   - Status: STALE
   - Evidence: Earlier 2026-06-29 TCP, password, key, and VMConnect proofs used `10.184.38.91`, but the current Cloudflare/SSH repair pass proved `192.168.254.148` and probes to `10.184.38.91` later timed out.
@@ -138,9 +138,9 @@ Accepted or observed architecture:
 - Item: Current Hyper-V proof VM exposes SSH on LAN at `10.184.37.19:22`.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: 2026-07-02 `Test-NetConnection 10.184.37.19 -Port 22` passed; Windows OpenSSH with `%USERPROFILE%\.ssh\node-health-appliance_ed25519` reached hostname `project-truth-node` and user `infra`.
-- Item: Current Hyper-V proof VM uses pure static dual-address LAN config on `eth0`.
+- Item: Current Hyper-V proof VM uses pure static dual-address LAN config on `eth0`, with `10.184.37.19` first/canonical.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
-  - Evidence: On 2026-07-03, `/etc/netplan/99-project-truth-lan.yaml` was set to `dhcp4: false`, addresses `10.184.37.78/24` and `10.184.37.19/24`, static default route via `10.184.38.254` with `on-link: true`, and DNS `10.184.1.144,10.184.37.1` with search domain `bhk.local`.
+  - Evidence: On 2026-07-03, `/etc/netplan/99-project-truth-lan.yaml` used `dhcp4: false`, static default route via `10.184.38.254` with `on-link: true`, and DNS `10.184.1.144,10.184.37.1` with search domain `bhk.local`. The canonical desired address order is `10.184.37.19/24` first, then retained secondary `10.184.37.78/24`.
 - Item: Host-managed Cloudflare Tunnel config targets the static VM operator/LAN address `10.184.37.19`.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: On 2026-07-02, `cloudflared-bnpi-hris.yml` was corrected from stale DHCP-origin routing to `10.184.37.19`; after the 2026-07-03 pure static cutover, app/API/dev/uat/Grafana origins and `ssh.bnpi-hris.tech` continue to point at the static operator/LAN VM address.
@@ -156,6 +156,9 @@ Accepted or observed architecture:
 - Item: Current named Cloudflare Tunnel runtime path is VM-side, with Windows host ownership retained as bootstrap/management context until connector ownership is decided.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: `cloudflared tunnel info bnpi-hris` on 2026-06-29 showed active connector architecture `windows_amd64`; `scripts/start-bnpi-cloudflare-tunnel.ps1` discovers the live VM IP, rewrites `cloudflared-bnpi-hris.yml`, can provision DNS routes, and starts the named connector; `scripts/ensure-bnpi-cloudflare-host.ps1` checks host credential/readiness state; scheduled task `ProjectTruth-BNPI-HRIS-Cloudflared` owns host startup. On 2026-06-30, Windows had no active `cloudflared` process, the VM `cloudflared-bnpi-hris.service` was active using root-only credentials under `/etc/cloudflared`, and public PROD/DEV/UAT app/API browser traffic verified through the VM runtime path.
+- Item: Running-server Cloudflare Tunnel access must stay enabled by default.
+  - Status: ACCEPTED_RUNTIME_SAFETY_RULE
+  - Evidence: On 2026-07-03, the live VM banner reported `Cloudflare named tunnel mode: VM-managed active`, `OS pull last: develop@75e7c1d845df`, and public/SSH targets including `https://bnpi-hris.tech`, `https://api.bnpi-hris.tech/health`, `https://grafana.bnpi-hris.tech/api/health`, and `ssh project-truth-hris`. User correction on 2026-07-03 explicitly banned agents from disabling Cloudflare or introducing default-local/cloud-mode behavior on the running server after a prior attempted toggle disrupted remote access. Agents must not stop, disable, mask, remove, or toggle off `cloudflared-bnpi-hris.service` on the running server unless the user explicitly requests a time-bounded outage and a verified recovery path exists.
 - Item: Fresh/final Project Truth images must not bake Cloudflare tunnel credentials.
   - Status: CONFIRMED
   - Evidence: Current named tunnel credentials live under the Windows operator profile, outside the repo. The active repeatable setup is to boot/import the fresh VM, let it obtain a LAN IP, then run `.\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic` from a configured Windows host.

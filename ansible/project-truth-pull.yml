@@ -9,6 +9,12 @@
     project_truth_repo_root: "{{ playbook_dir | dirname }}"
     project_truth_install_root: "{{ lookup('env', 'PROJECT_TRUTH_ROOT') | default('/opt/project-truth', true) }}"
     project_truth_state_dir: /var/lib/project-truth
+    project_truth_primary_lan_ip: "10.184.37.19"
+    project_truth_secondary_lan_ip: "10.184.37.78"
+    project_truth_lan_cidr: "24"
+    project_truth_lan_gateway: "10.184.38.254"
+    project_truth_lan_dns: "10.184.1.144,10.184.37.1"
+    project_truth_lan_search_domains: "bhk.local"
     project_truth_command_files:
       - project-truth-status
       - project-truth-progress
@@ -217,6 +223,19 @@
         state: stopped
       failed_when: false
 
+    - name: Persist canonical Project Truth LAN address order
+      ansible.builtin.copy:
+        dest: /etc/project-truth/lan.env
+        mode: "0644"
+        content: |
+          PROJECT_TRUTH_LAN_MODE=static
+          PROJECT_TRUTH_LAN_IFACE=eth0
+          PROJECT_TRUTH_LAN_IP={{ project_truth_primary_lan_ip }}
+          PROJECT_TRUTH_LAN_ADDRESSES={{ project_truth_primary_lan_ip }}/{{ project_truth_lan_cidr }},{{ project_truth_secondary_lan_ip }}/{{ project_truth_lan_cidr }}
+          PROJECT_TRUTH_LAN_GATEWAY={{ project_truth_lan_gateway }}
+          PROJECT_TRUTH_LAN_DNS={{ project_truth_lan_dns }}
+          PROJECT_TRUTH_LAN_SEARCH_DOMAINS={{ project_truth_lan_search_domains }}
+
     - name: Reconcile Project Truth LAN config
       ansible.builtin.command:
         argv:
@@ -225,6 +244,40 @@
         PROJECT_TRUTH_SKIP_TTY1_WRITE: "1"
       changed_when: false
       failed_when: false
+
+    - name: Prefer canonical Project Truth IP for K3s node identity
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/config.yaml
+        mode: "0600"
+        content: |
+          node-ip: {{ project_truth_primary_lan_ip }}
+          advertise-address: {{ project_truth_primary_lan_ip }}
+          tls-san:
+            - {{ project_truth_primary_lan_ip }}
+            - {{ project_truth_secondary_lan_ip }}
+            - 127.0.0.1
+      register: project_truth_k3s_config
+
+    - name: Restart K3s only when the canonical node IP config changed
+      ansible.builtin.systemd:
+        name: k3s
+        state: restarted
+      when: project_truth_k3s_config.changed
+      failed_when: false
+
+    - name: Wait for K3s API after canonical node IP reconciliation
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - get
+          - nodes
+      register: project_truth_kubectl_after_ip
+      retries: 30
+      delay: 5
+      until: project_truth_kubectl_after_ip.rc == 0
+      changed_when: false
+      failed_when: false
+      when: project_truth_k3s_config.changed
 
     - name: Repair CoreDNS upstream resolvers for Argo Git access
       ansible.builtin.shell: |

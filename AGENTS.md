@@ -8,6 +8,22 @@ Do not ask for approval for normal development or operations progress. Recover, 
 
 Keep going by default.
 
+## Running Cloudflare Tunnel Safety Rule
+
+The running Project Truth server depends on the VM-managed named Cloudflare
+Tunnel for public HRIS and for `ssh project-truth-hris`.
+
+Agents are banned from disabling, stopping, masking, removing, toggling off, or
+adding a default-local/cloud-mode guard around the running
+`cloudflared-bnpi-hris.service` unless the user explicitly requests a
+time-bounded tunnel outage and a verified recovery path is already documented.
+
+For normal runtime, image, cleanup, pruning, VHDX, GitOps, or observability
+work, keep the VM-managed `bnpi-hris` tunnel active. If tunnel behavior must be
+changed, first preserve working SSH/public access, record the current connector
+state, and prefer additive repair over mode toggles. Never make "cloud mode off"
+the default for the already-running server.
+
 ## Banned Fake Blockers
 
 Do not stop just because:

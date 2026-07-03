@@ -19,6 +19,11 @@ Status: READY FOR REVIEW
 
 - Current tunnel bootstrap ownership: host-managed on the Windows host.
 - Current proof VM also has a VM-managed connector active after deliberate root-only credential import.
+- Running-server Cloudflare access must remain active by default. Agents must
+  not disable, stop, mask, remove, or toggle off `cloudflared-bnpi-hris.service`
+  on the live VM, and must not add a default-local/cloud-mode guard, unless the
+  user explicitly requests a time-bounded outage and a verified recovery path is
+  already documented.
 - Preferred BNPI remote-admin journey is VM-managed Cloudflare Tunnel plus
   browser-rendered SSH at `https://ssh.bnpi-hris.tech`; the BNPI Windows Server
   should remain Hyper-V-only with no inbound ports, no Windows SSH setup, and no
@@ -78,8 +83,8 @@ Status: READY FOR REVIEW
 ## Evidence
 
 - Runtime VM: `project-truth-local-vhdx-proof`
-- Current operator/LAN IP: `10.184.37.19` (pure static)
-- Current K3s node/API IP: `10.184.37.78` (pure static)
+- Canonical Project Truth LAN/runtime IP: `10.184.37.19` (pure static)
+- Retained secondary transition IP/TLS SAN: `10.184.37.78` (pure static)
 - LAN SSH: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19`
 - Named tunnel: `bnpi-hris`
 - Named tunnel ID: `e3486f00-f974-46d3-9e11-911266749d00`
@@ -127,6 +132,10 @@ Status: READY FOR REVIEW
 - Wrong-password auth probe returned HTTP 401.
 - `ssh.bnpi-hris.tech` DNS route and tunnel ingress were provisioned; LAN SSH passed; after Cloudflare Access policy allowed `1bis.solutions.tech@gmail.com`, SSH through `cloudflared access ssh --hostname %h` returned `SSH_ACCESS_OK`.
 - On 2026-06-29, the named tunnel credential was imported into the proof VM as root-only runtime state, `cloudflared-bnpi-hris.service` was enabled and active, `cloudflared tunnel info bnpi-hris` showed a `linux_amd64` connector, and SSH through `ssh.bnpi-hris.tech` returned `SSH_DOMAIN_OK`.
+- On 2026-07-03, live VM banner evidence after `sudo project-truth-ansible-pull`
+  reported `Cloudflare named tunnel mode: VM-managed active`, public HRIS/API,
+  Grafana, SSH browser, and `ssh project-truth-hris` targets, plus `OS pull
+  last: develop@75e7c1d845df` and sync time `2026-07-03T04:40:53Z`.
 - On 2026-06-30, V6 one-shot proof passed LAN PROD/DEV/UAT app/API health,
   public PROD/DEV/UAT app/API/Grafana health, public CORS, VM-side Cloudflare
   ingress validation, and CLI SSH through `ssh.bnpi-hris.tech`.
@@ -164,10 +173,11 @@ Status: READY FOR REVIEW
   during TLS for `bnpi-hris.tech` hostnames, while general Cloudflare/Google
   HTTPS works.
 - On 2026-07-03, after the LAN config drift follow-up, the VM was hard-cut over to
-  pure static LAN addressing on `eth0`: `10.184.37.78/24` for K3s node/API
-  identity and `10.184.37.19/24` for preferred operator/LAN access. DHCP is
-  disabled, the default route is static via `10.184.38.254`, and SSH plus HRIS
-  API health passed on both static addresses.
+  pure static LAN addressing on `eth0`. The accepted canonical runtime target is
+  now `10.184.37.19/24`; `10.184.37.78/24` is retained as a secondary transition
+  address/TLS SAN. DHCP is disabled, the default route is static via
+  `10.184.38.254`, and read-only VM probes proved ping, SSH, and PROD/DEV/UAT
+  API health on `10.184.37.19`.
 - On 2026-07-03, Postgres Access TCP DNS routes for `db.bnpi-hris.tech`,
   `dev-db.bnpi-hris.tech`, and `uat-db.bnpi-hris.tech` were provisioned to the
   named tunnel and resolved to Cloudflare A records. The host-managed connector

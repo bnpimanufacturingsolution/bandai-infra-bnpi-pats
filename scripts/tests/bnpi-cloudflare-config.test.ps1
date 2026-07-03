@@ -34,6 +34,8 @@ Assert-Contains -Path 'appliance/bin/project-truth-cloudflare-vm-tunnel.sh' -Pat
 Assert-Contains -Path 'appliance/bin/project-truth-cloudflare-vm-tunnel.sh' -Pattern 'hostname:\s+dev\.bnpi-hris\.tech\s+path:\s+/api/\.\*\s+service:\s+http://localhost:3101' -Message 'VM tunnel helper must route DEV same-host API traffic to the DEV API origin'
 Assert-Contains -Path 'appliance/bin/project-truth-cloudflare-vm-tunnel.sh' -Pattern 'hostname:\s+uat\.bnpi-hris\.tech\s+path:\s+/api/\.\*\s+service:\s+http://localhost:3201' -Message 'VM tunnel helper must route UAT same-host API traffic to the UAT API origin'
 Assert-Contains -Path 'appliance/bin/project-truth-cloudflare-vm-tunnel.sh' -Pattern 'cloudflared-bnpi-hris\.service' -Message 'VM tunnel helper must install the VM-side systemd connector'
+Assert-Contains -Path 'AGENTS.md' -Pattern 'Agents are banned from disabling, stopping, masking, removing, toggling off' -Message 'Agent rules must ban disabling the live VM-managed Cloudflare tunnel'
+Assert-Contains -Path '.wwg/governance/drift-guard.md' -Pattern 'Cloudflare Tunnel Safety Guard' -Message 'WWG drift guard must protect the live VM-managed Cloudflare tunnel'
 Assert-Contains -Path 'appliance/bin/project-truth-cloudflare-vm-tunnel.sh' -Pattern 'Do not run this in image baking' -Message 'VM tunnel helper must preserve the no-baked-credentials boundary'
 Assert-Contains -Path 'appliance/bin/project-truth-os-sync.sh' -Pattern 'project-truth-cloudflare-vm-tunnel\.sh' -Message 'OS sync must install the VM tunnel helper'
 Assert-Contains -Path 'ansible/project-truth-pull.yml' -Pattern 'project-truth-cloudflare-vm-tunnel' -Message 'ansible-pull must install the VM tunnel helper for fresh V6 sync'

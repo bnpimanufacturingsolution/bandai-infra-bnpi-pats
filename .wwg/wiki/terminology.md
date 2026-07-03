@@ -28,7 +28,9 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | hyper | README heading | Observed project term; confirm canonical meaning before broad use. | NEEDS_CONFIRMATION |
 | operator/LAN IP | Runtime repair evidence; appliance summary; WWG Project Truth | The LAN address operators should use for direct SSH/HTTP checks when their workstation can route to the VM LAN. | CONFIRMED_WITH_BOUNDARY |
 | pure static LAN | Runtime repair evidence; netplan state | DHCP-disabled VM network mode where all required VM LAN addresses, default route, DNS, and search domains are persisted through Project Truth config. | CONFIRMED |
-| K3s node/API IP | Runtime repair evidence; K3s node and Kubernetes endpoint checks | Static VM address used by K3s node InternalIP and Kubernetes API endpoint identity. It may differ from the preferred human/operator LAN address. | CONFIRMED_WITH_BOUNDARY |
+| K3s node/API IP | Runtime repair evidence; K3s node and Kubernetes endpoint checks | Static VM address used by K3s node InternalIP and Kubernetes API endpoint identity. The accepted canonical target is now `10.184.37.19`; `10.184.37.78` is retained only as a secondary transition address/TLS SAN. | CONFIRMED_WITH_BOUNDARY |
+| VM-managed Cloudflare Tunnel | Runtime banner and Project Truth tunnel evidence | The live VM-side `cloudflared-bnpi-hris.service` connector for named tunnel `bnpi-hris`, including public HRIS, Grafana, DB Access TCP helper hostnames, and SSH through `ssh.bnpi-hris.tech`. This must remain active by default on the running server. | CONFIRMED |
+| cloud mode / local mode | 2026-07-03 incident correction | A discouraged toggle concept for the running server. Agents must not make default-local/cloud-mode behavior control the live `cloudflared-bnpi-hris.service`; Cloudflare must stay enabled unless the user explicitly approves a time-bounded outage with recovery. | ACCEPTED_RUNTIME_SAFETY_RULE |
 
 ## Canonical Term Candidates
 
@@ -46,7 +48,8 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | HR manager role | hris-hr-manager | HR Manager, hr-manager route legacy | HIGH | Existing HRIS role tests and HR workflow code |
 | operator LAN access address | operator/LAN IP | LAN IP, stable VM address, static operator/LAN address | HIGH | 2026-07-03 pure static LAN repair evidence |
 | pure static VM LAN mode | pure static LAN | static LAN, hard cutover, DHCP-disabled LAN | HIGH | 2026-07-03 netplan and `/etc/project-truth/lan.env` evidence |
-| K3s node identity address | K3s node/API IP | node IP, Kubernetes endpoint IP | HIGH | 2026-07-03 K3s node InternalIP and `kubernetes` endpoint evidence |
+| K3s node identity address | K3s node/API IP | node IP, Kubernetes endpoint IP | HIGH | 2026-07-03 user correction establishing `10.184.37.19` as canonical runtime truth |
+| live VM named tunnel connector | VM-managed Cloudflare Tunnel | VM-side Cloudflare, cloudflared service, named tunnel connector, cloud mode | HIGH | 2026-07-03 VM banner and user correction after tunnel disable incident |
 
 ## Terminology Conflicts
 

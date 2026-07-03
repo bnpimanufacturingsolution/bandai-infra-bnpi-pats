@@ -1357,7 +1357,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 1406,
+      "line": 1404,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1367,7 +1367,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 1410,
+      "line": 1408,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1645,7 +1645,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 64,
+      "line": 65,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1654,7 +1654,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 68,
+      "line": 69,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1663,7 +1663,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 77,
+      "line": 78,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1672,7 +1672,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 80,
+      "line": 81,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1717,7 +1717,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 182,
+      "line": 185,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1726,7 +1726,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 182,
+      "line": 192,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1735,7 +1735,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 187,
+      "line": 197,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1752,7 +1752,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 148,
+      "line": 164,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2985,7 +2985,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 64,
+      "line": 65,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2994,7 +2994,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 68,
+      "line": 69,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3003,7 +3003,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 77,
+      "line": 78,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3012,7 +3012,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 80,
+      "line": 81,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3066,7 +3066,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 182,
+      "line": 185,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3406,7 +3406,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 1406,
+      "line": 1404,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3416,7 +3416,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 1410,
+      "line": 1408,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4424,7 +4424,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 148,
+      "line": 164,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     }
   ],
@@ -4502,7 +4502,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 1406,
+      "line": 1404,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4512,7 +4512,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 1410,
+      "line": 1408,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4790,7 +4790,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 64,
+      "line": 65,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4799,7 +4799,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 68,
+      "line": 69,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4808,7 +4808,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 77,
+      "line": 78,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4817,7 +4817,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 80,
+      "line": 81,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4862,7 +4862,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 182,
+      "line": 185,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4871,7 +4871,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 182,
+      "line": 192,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4880,7 +4880,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 187,
+      "line": 197,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4897,7 +4897,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 148,
+      "line": 164,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {

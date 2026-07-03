@@ -63,6 +63,21 @@ If uncertain, add a candidate principle or record the issue in the handoff/repor
 - `hris-hr-manager` remains valid only where the task explicitly targets HR workflows or existing code/docs require that role.
 - If a role is unclear, prefer the route/workflow owner in Project Truth and mark the uncertainty instead of substituting a convenient seeded login.
 
+## Cloudflare Tunnel Safety Guard
+
+- Treat the running VM-managed `bnpi-hris` Cloudflare Tunnel as a protected
+  runtime dependency for public HRIS, Grafana, DB Access TCP helpers, and
+  `ssh project-truth-hris`.
+- Agents must not disable, stop, mask, remove, or toggle off
+  `cloudflared-bnpi-hris.service` on the running server during normal repair,
+  pruning, VHDX, GitOps, observability, image, or documentation work.
+- Agents must not add default-local/cloud-mode guards that prevent the live
+  server from starting the named Cloudflare Tunnel on boot.
+- Any requested tunnel outage must be explicit, time-bounded, and paired with a
+  verified recovery path before execution.
+- If Cloudflare behavior drifts, prefer additive repair that preserves current
+  SSH/public access and record connector state before changing tunnel config.
+
 ## Test Enforcement
 
 - Meaningful feature behavior requires meaningful tests.
