@@ -114,8 +114,9 @@ Status: READY FOR REVIEW
   `.runtime/in-vm-vhdx-build/20260703-102324/current-state-vhdx-report.md`,
   `.runtime/in-vm-vhdx-build/20260703-102324/manifest.txt`,
   `.runtime/in-vm-vhdx-build/20260703-102324/project-truth-node-current-state-20260703-102324.vhdx.sha256`,
+  `.runtime/in-vm-vhdx-build/20260703-102324/project-truth-node-current-state-20260703-102324.vhdx.qemu-img-info.json`,
   and
-  `.runtime/in-vm-vhdx-build/20260703-102324/project-truth-node-current-state-20260703-102324.vhdx.qemu-img-info.json`
+  `.runtime/in-vm-vhdx-build/20260703-102324/host-hyperv-boot-validation.md`
 - 2026-07-01 public app restore evidence:
   `/var/lib/project-truth/backups/public-app-session-restore-20260701-061721`
 - 2026-07-01 DEV public origin restore evidence:
@@ -222,6 +223,35 @@ Status: READY FOR REVIEW
   `486378d08bb76cde3716f3f9d4a24fc02c15636b2e39e895b0c59fba1d8a9a1c`;
   `qemu-img check -f vhdx` reported no errors. Final local VM checks returned
   HTTP 200 for PROD/DEV/UAT app/API, Grafana, Prometheus, Loki, and Tempo.
+- Later on 2026-07-03, the host-test copy of the retained current-state VHDX
+  completed on the Windows host at
+  `C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx`, with
+  SHA-256
+  `b1274ae7b50214b0888cd97aa43a79b0e901c19c4ebce1824923778a0a77a8aa`.
+  Hyper-V `Get-VHD` read it as a dynamic VHDX with `500 GiB` virtual size,
+  `88.32 GiB` file size, and `0` fragmentation. The
+  `project-truth-local-vhdx-proof` VM started successfully from the image,
+  Hyper-V Worker/Admin event `18601` reported that it successfully booted an
+  operating system, heartbeat was OK, and KVP reported guest IPs
+  `10.184.37.78` and `10.184.37.19`. Direct Windows host probes to SSH and
+  HRIS ports still failed because the current `ProjectTruth-External`
+  host/vSwitch path is on `192.168.254.149/24` and did not route to the guest's
+  static `10.184.37.x` addresses, even after a temporary additive host
+  `10.184.37.250/24` test address.
+- The host-tested VHDX became fully reachable after moving
+  `project-truth-local-vhdx-proof` to internal switch
+  `ProjectTruth-HostTest-10-184-37` and setting the Windows host-side vEthernet
+  to `10.184.37.250/24` with `SkipAsSource=False`. SSH and PROD/DEV/UAT
+  app/API ports passed on both `10.184.37.19` and `10.184.37.78`; HTTP probes
+  returned `200` for PROD/DEV/UAT login and health URLs on `10.184.37.19`;
+  SSH to `infra@10.184.37.19` returned hostname `project-truth-node`; and
+  Docker showed healthy PROD/DEV/UAT app/API containers.
+- Playwright VM login smoke against `PROJECT_TRUTH_GUEST_IP=10.184.37.19`
+  passed for PROD and UAT. DEV reached the dashboard and captured screenshots,
+  but the strict console-health assertion failed on the already-known
+  non-blocking DEV `400 action metrics` warning: `Employee context is required
+  for action metrics`. Screenshot evidence was captured under
+  `.runtime/browser-evidence/screenshots/host-test-vhdx/`.
 - `git diff --check` passed.
 - `wwg test-check --format plain` passes after the stable `10.184.37.19`
   runtime/config drift repair because the Cloudflare config regression guard was
@@ -234,8 +264,14 @@ Status: READY FOR REVIEW
 - Define the retained-client-VHDX artifact flow: host export/copy remains the
   reliable Hyper-V artifact, and any in-VM copy should be secondary evidence or
   staging only unless proven bootable/importable from Windows Hyper-V.
-- Boot/import validate the retained in-VM current-state VHDX on Windows Hyper-V
-  before promoting or replacing any clean public VHDX lane.
+- Decide whether the internal `ProjectTruth-HostTest-10-184-37` switch should
+  remain the standard local VHDX validation path when the Wi-Fi-backed
+  `ProjectTruth-External` switch cannot route from the Windows host to the
+  guest's static `10.184.37.x` addresses.
+- Repair or classify the DEV `400 action metrics` console warning if future
+  Playwright gates require zero console errors for DEV HR manager dashboard
+  login. The dashboard renders and the warning is already documented as
+  non-blocking in V6 evidence, but the strict smoke assertion still fails.
 - Fix observability backup source/retention before re-enabling backup and
   replicator containers; the current backup loop generated about `161G` of
   rolling archives and logged stale `/data/grafana` archive errors.

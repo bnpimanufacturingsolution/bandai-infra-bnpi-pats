@@ -51,8 +51,28 @@ Last updated: 2026-07-03
   `486378d08bb76cde3716f3f9d4a24fc02c15636b2e39e895b0c59fba1d8a9a1c`.
   `qemu-img check -f vhdx` reported no errors, EFI was copied, and GRUB was
   installed. Boundary: this is a live rsync current-state artifact, not an
-  offline Hyper-V checkpoint, and Windows Hyper-V boot/import validation is
-  still required before treating it as a proven replacement image.
+  offline Hyper-V checkpoint.
+- Later on 2026-07-03, the Windows host-test copy of the retained VHDX
+  completed at `C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx`
+  with SHA-256
+  `b1274ae7b50214b0888cd97aa43a79b0e901c19c4ebce1824923778a0a77a8aa`.
+  Hyper-V read it as a dynamic `500 GiB` VHDX with `88.32 GiB` file size and
+  `0` fragmentation. `project-truth-local-vhdx-proof` started successfully from
+  it; Hyper-V Worker/Admin event `18601` reported the VM successfully booted an
+  operating system, heartbeat was OK, and KVP reported `10.184.37.78` and
+  `10.184.37.19`. Boundary: direct Windows host probes to SSH and HRIS ports
+  still failed because the current `ProjectTruth-External` host/vSwitch path is
+  on `192.168.254.149/24` and does not route to the guest's static
+  `10.184.37.x` addresses.
+- The same host-tested VHDX became reachable for local validation after moving
+  `project-truth-local-vhdx-proof` to the internal
+  `ProjectTruth-HostTest-10-184-37` switch and setting the host vEthernet to
+  `10.184.37.250/24` with `SkipAsSource=False`. SSH plus PROD/DEV/UAT app/API
+  ports passed on both static guest IPs, and HTTP probes returned `200` for
+  PROD/DEV/UAT login and API health on `10.184.37.19`. Playwright VM login
+  smoke passed for PROD and UAT; DEV rendered the dashboard but failed the
+  strict console-health assertion on the already-known non-blocking
+  `400 action metrics` warning.
 - Host-local PROD and DEV checks passed during validation, but host-local UAT ports `3200` and `3201` failed while LAN UAT passed.
 - `%ProgramData%\ProjectTruth\config\project-truth.json` was previously backed up and updated to use VM `project-truth-local-vhdx-proof`, guest IP hint `192.168.254.148`, memory `1536`, and SSH port `22`; current operator/LAN evidence now points to pure static LAN address `10.184.37.19`.
 - Hikvision integration exists in code through `/api/hikvision/callback`, ISAPI helpers, event persistence, admin device-event filters, and realtime `device-event:saved`; editable source is now `vendor/hikvision-linux`, while proprietary Linux HCNetSDK binaries remain local-only runtime inputs.
