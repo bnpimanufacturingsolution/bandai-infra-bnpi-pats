@@ -13,6 +13,7 @@ from hikvision_linux_probe.__main__ import (  # noqa: E402
     parse_target,
     sdk_env_probe,
     tcp_probe,
+    extract_count,
 )
 
 
@@ -78,6 +79,17 @@ class ProbeTests(unittest.TestCase):
 
         self.assertEqual(result["stage"], "sdk_env")
         self.assertFalse(result["ok"])
+
+    def test_extract_count_prefers_match_counts(self) -> None:
+        payload = {
+            "ok": True,
+            "AcsEvent": {
+                "totalMatches": 746,
+                "InfoList": [{"serialNo": 1}],
+            },
+        }
+
+        self.assertEqual(extract_count(payload, ("AcsEvent",)), 746)
 
 
 if __name__ == "__main__":

@@ -20,9 +20,9 @@ describe("device events realtime UI", () => {
 
 		expect(status).to.include({
 			isListening: true,
-			scopeLabel: "All organization devices",
-			statusLabel: "Realtime listening",
-			rowUpdateLabel: "Live updates visible in rows",
+			scopeLabel: "All devices",
+			statusLabel: "Live updates on",
+			rowUpdateLabel: "Rows update live",
 		});
 	});
 
@@ -39,7 +39,7 @@ describe("device events realtime UI", () => {
 			isScoped: false,
 			scopeLabel: "All devices",
 			statusLabel: "Socket connected",
-			rowUpdateLabel: "Rows update after refresh",
+			rowUpdateLabel: "Refresh needed",
 		});
 	});
 
@@ -55,7 +55,7 @@ describe("device events realtime UI", () => {
 			isListening: true,
 			isScoped: true,
 			scopeLabel: "Selected device",
-			statusLabel: "Realtime listening",
+			statusLabel: "Live updates on",
 		});
 	});
 
@@ -81,7 +81,7 @@ describe("device events realtime UI", () => {
 		).to.equal("Realtime save");
 	});
 
-	it("labels old punch times saved later as backfill or sync saves", () => {
+	it("labels old punch times saved later as synced saves", () => {
 		expect(
 			getSavedDeviceEventProcessingLabel({
 				itemId: "event-1",
@@ -89,7 +89,7 @@ describe("device events realtime UI", () => {
 				eventTime: "2026-07-02T00:14:00.000Z",
 				receivedAt: "2026-07-02T02:20:00.000Z",
 			}),
-		).to.equal("Backfill/sync save");
+		).to.equal("Synced save");
 	});
 
 	it("labels rows without a processing delay as historical punches", () => {

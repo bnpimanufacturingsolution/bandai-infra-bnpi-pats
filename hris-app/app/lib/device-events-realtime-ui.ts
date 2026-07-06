@@ -22,7 +22,7 @@ export const getDeviceEventsRealtimeStatus = ({
 		deviceId !== "all"
 			? selectedDeviceName || liveDeviceName || "Selected device"
 			: organizationId
-				? "All organization devices"
+				? "All devices"
 				: "All devices";
 
 	return {
@@ -30,11 +30,11 @@ export const getDeviceEventsRealtimeStatus = ({
 		isScoped,
 		scopeLabel,
 		statusLabel: isListening
-			? "Realtime listening"
+			? "Live updates on"
 			: isConnected
 				? "Socket connected"
 				: "Realtime offline",
-		rowUpdateLabel: isListening ? "Live updates visible in rows" : "Rows update after refresh",
+		rowUpdateLabel: isListening ? "Rows update live" : "Refresh needed",
 	};
 };
 
@@ -94,7 +94,7 @@ export const getSavedDeviceEventProcessingLabel = ({
 		eventTimeMs !== null &&
 		receivedAtMs - eventTimeMs > 2 * 60 * 1000
 	) {
-		return "Backfill/sync save";
+		return "Synced save";
 	}
 
 	return "Historical punch";

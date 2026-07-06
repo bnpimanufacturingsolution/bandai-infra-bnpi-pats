@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','configure','select-image','download-image','build-image','build-image-gcp','watch-gcp-image-build-progress','watch-gcp-build-resources','export-devcurrent-gcp-vhdx','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','hyperv-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','gitops-pull','vm-pull','v6-one-shot','configure-vm-git-creds','apply-argocd-platform','configure-argocd-repo-creds','configure-argocd-webhook','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel','start-trycloudflare-suite','start-cloudflare-db-tcp','start-bnpi-db-access','ensure-bnpi-cloudflare-host','start-bnpi-cloudflare-tunnel')]
+  [ValidateSet('doctor','configure','select-image','download-image','build-image','build-image-gcp','watch-gcp-image-build-progress','watch-gcp-build-resources','export-devcurrent-gcp-vhdx','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','hyperv-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','gitops-pull','vm-pull','v6-one-shot','configure-vm-git-creds','apply-argocd-platform','configure-argocd-repo-creds','configure-argocd-webhook','start-local-hris-runtime','verify-local-hris-runtime','start-trycloudflare-tunnel','start-trycloudflare-suite','start-cloudflare-db-tcp','start-bnpi-db-access','ensure-bnpi-cloudflare-host','start-bnpi-cloudflare-tunnel','watch-sadp-discovery')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -56,6 +56,7 @@ $scriptMap = @{
   'start-bnpi-db-access' = 'start-bnpi-db-access.ps1'
   'ensure-bnpi-cloudflare-host' = 'ensure-bnpi-cloudflare-host.ps1'
   'start-bnpi-cloudflare-tunnel' = 'start-bnpi-cloudflare-tunnel.ps1'
+  'watch-sadp-discovery' = 'watch-sadp-discovery.ps1'
 }
 
 $target = Join-Path $scriptRoot $scriptMap[$Command]

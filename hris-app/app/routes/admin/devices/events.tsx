@@ -5,9 +5,11 @@ import {
 	BadgeCheck,
 	Clock,
 	Eye,
+	Loader2,
 	MapPin,
 	RefreshCw,
 	Server,
+	Trash2,
 	UploadCloud,
 	UserRound,
 	Wifi,
@@ -21,10 +23,20 @@ import { DataTable, type Column } from "~/components/atoms/DataTable";
 import { Modal } from "~/components/atoms/Modal";
 import { Select, type SelectOption } from "~/components/atoms/Select";
 import {
+	Accordion,
+	AccordionContent,
+	AccordionItem,
+	AccordionTrigger,
+} from "~/components/ui/accordion";
+import { Skeleton } from "~/components/ui/skeleton";
+import {
 	useDeviceEvents,
 	useDeviceHealth,
+	useDeviceImportJob,
 	useDeviceSyncPreview,
 	useDevices,
+	useResetDeviceEvents,
+	useTriggerHikvisionAttendanceImport,
 	useTriggerZktecoAttendanceSync,
 	queryKeys,
 } from "~/lib/hooks/useDevices";
@@ -35,13 +47,13 @@ import {
 	getDeviceEventsRealtimeStatus,
 	getHighlightedSavedDeviceEventId,
 	getSavedDeviceEventProcessingLabel,
-	getSavedDeviceEventRealtimeBadge,
 	prependRealtimeSavedRows,
 	savedDeviceEventMatchesScope,
 } from "~/lib/device-events-realtime-ui";
 import type {
 	DeviceEvent,
 	DeviceEventStatus,
+	DeviceEventsResetResponse,
 	DeviceHealthResponse,
 } from "~/services/devices.service";
 import type { ApiQueryParams } from "~/services/api-service";
@@ -90,12 +102,61 @@ type SyncLogsState =
 	| { status: "accepted"; message: string }
 	| { status: "error"; message: string };
 
+type ActiveImportJob = {
+	jobId: string;
+	deviceId: string;
+	deviceName: string;
+	vendor: "Hikvision" | "ZKTeco" | string;
+};
+
+type ResetPreviewState =
+	| { status: "idle" }
+	| { status: "loading" }
+	| { status: "ready"; data: DeviceEventsResetResponse }
+	| { status: "executed"; data: DeviceEventsResetResponse }
+	| { status: "error"; message: string };
+
+const DEVICE_IMPORT_JOB_STORAGE_KEY = "project-truth-device-import-job-v1";
+
 type ZktecoBridgePreflight = NonNullable<DeviceHealthResponse["checks"]["zktecoBridge"]> & {
 	estimatedRowsToSync?: number | string | null;
 	missingRows?: number | string | null;
 	dryRun?: { missingRows?: number | string | null };
 	data?: { dryRun?: { missingRows?: number | string | null } };
 };
+
+const SyncPreviewSkeleton = () => (
+	<div className="mt-3 flex flex-wrap gap-1.5" aria-label="Device preview loading">
+		<Skeleton className="h-6 w-36 rounded-full bg-slate-200" />
+		<Skeleton className="h-6 w-28 rounded-full bg-slate-200" />
+	</div>
+);
+
+const SyncDeviceDetailsSkeleton = () => (
+	<div className="divide-y divide-slate-100" aria-label="Device detail loading">
+		{[0, 1].map((index) => (
+			<div
+				key={`sync-device-detail-skeleton-${index}`}
+				className="flex flex-col gap-3 px-3 py-3 md:flex-row md:items-start md:justify-between">
+				<div className="min-w-0 space-y-2">
+					<Skeleton className="h-4 w-52 bg-slate-200" />
+					<Skeleton className="h-3 w-40 bg-slate-200" />
+				</div>
+				<div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4 md:min-w-[430px]">
+					{[0, 1, 2, 3].map((cell) => (
+						<div key={`sync-device-detail-skeleton-${index}-${cell}`} className="space-y-2">
+							<Skeleton className="h-3 w-20 bg-slate-200" />
+							<Skeleton className="h-4 w-12 bg-slate-200" />
+						</div>
+					))}
+					<div className="col-span-2 sm:col-span-4">
+						<Skeleton className="h-6 w-28 rounded-full bg-slate-200" />
+					</div>
+				</div>
+			</div>
+		))}
+	</div>
+);
 
 const getAsyncErrorMessage = (error: unknown, fallback: string) => {
 	if (error instanceof Error && error.message) return error.message;
@@ -247,6 +308,19 @@ const isZktecoDevice = (device: any, health?: DeviceHealthResponse) => {
 		name.includes("zk") ||
 		port === 4370 ||
 		protocol === "sdk"
+	);
+};
+
+const isHikvisionDevice = (device: any, health?: DeviceHealthResponse) => {
+	const vendor = String(device?.config?.vendor || device?.config?.type || "").toLowerCase();
+	const name = String(device?.name || "").toLowerCase();
+	const model = String(device?.config?.model || "").toLowerCase();
+	return (
+		health?.device?.vendor === "Hikvision" ||
+		Boolean(health?.checks?.hikvisionListener) ||
+		vendor.includes("hikvision") ||
+		name.includes("hikvision") ||
+		model.startsWith("ds-")
 	);
 };
 
@@ -442,12 +516,31 @@ export default function DeviceEventsPage() {
 	const { socket, isConnected } = useSocket();
 	const { user } = useAuth();
 	const zktecoSync = useTriggerZktecoAttendanceSync();
+	const hikvisionImport = useTriggerHikvisionAttendanceImport();
+	const resetDeviceEvents = useResetDeviceEvents();
 	const [lastRealtimeEvent, setLastRealtimeEvent] =
 		useState<DeviceEventSavedPayload | null>(null);
 	const [realtimeSavedEvents, setRealtimeSavedEvents] = useState<DeviceEvent[]>([]);
-	const [lastRoomJoinedAt, setLastRoomJoinedAt] = useState<string | null>(null);
-	const [lastRecoveryRefreshAt, setLastRecoveryRefreshAt] = useState<string | null>(null);
+	const [, setLastRoomJoinedAt] = useState<string | null>(null);
+	const [, setLastRecoveryRefreshAt] = useState<string | null>(null);
 	const [syncLogsState, setSyncLogsState] = useState<SyncLogsState>({ status: "idle" });
+	const [resetPreviewState, setResetPreviewState] = useState<ResetPreviewState>({ status: "idle" });
+	const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
+	const [includeLinkedAttendanceReset, setIncludeLinkedAttendanceReset] = useState(false);
+	const [showImportProgressModal, setShowImportProgressModal] = useState(false);
+	const [activeImportJob, setActiveImportJob] = useState<ActiveImportJob | null>(() => {
+		try {
+			if (typeof window === "undefined") return null;
+			const raw = window.localStorage.getItem(DEVICE_IMPORT_JOB_STORAGE_KEY);
+			return raw ? (JSON.parse(raw) as ActiveImportJob) : null;
+		} catch {
+			return null;
+		}
+	});
+	const { data: importJobProgress } = useDeviceImportJob(
+		activeImportJob?.jobId,
+		Boolean(activeImportJob?.jobId),
+	);
 
 	const pageParam = Number(searchParams.get("page")) || 1;
 	const limitParam = Number(searchParams.get("limit")) || 10;
@@ -459,6 +552,9 @@ export default function DeviceEventsPage() {
 	const sort = searchParams.get("sort") || "eventTime";
 	const order = searchParams.get("order") === "asc" ? "asc" : "desc";
 	const action = searchParams.get("action");
+	const isSyncLogsDebugView = searchParams.get("debug") === "true";
+	const isSyncLogsFlowActive = action === "sync-logs";
+	const isSyncLogsModalOpen = action === "sync-logs" && !isSyncLogsDebugView;
 	const activeEventId = searchParams.get("id");
 	const timeWindow = (searchParams.get("window") ||
 		(viewMode === "saved" ? "all" : "today")) as TimeWindow;
@@ -475,7 +571,15 @@ export default function DeviceEventsPage() {
 	);
 	const selectedZktecoDevice =
 		deviceId === "all" ? undefined : zktecoDevices.find((device: any) => device.id === deviceId);
-	const syncScopeDevices = selectedZktecoDevice ? [selectedZktecoDevice] : zktecoDevices;
+	const syncCapableDevices = useMemo(
+		() => devices.filter((device: any) => isZktecoDevice(device) || isHikvisionDevice(device)),
+		[devices],
+	);
+	const selectedSyncDevice =
+		deviceId === "all"
+			? undefined
+			: syncCapableDevices.find((device: any) => device.id === deviceId);
+	const syncScopeDevices = selectedSyncDevice ? [selectedSyncDevice] : syncCapableDevices;
 	const syncHealthDevice = selectedZktecoDevice || zktecoDevices[0];
 	const liveDevice = selectedDevice;
 	const liveDeviceId = liveDevice?.id;
@@ -490,10 +594,11 @@ export default function DeviceEventsPage() {
 		data: syncDeviceHealth,
 		isLoading: isLoadingSyncHealth,
 		refetch: refetchSyncHealth,
-	} = useDeviceHealth(syncHealthDevice?.id, action === "sync-logs" && Boolean(syncHealthDevice?.id));
+	} = useDeviceHealth(syncHealthDevice?.id, isSyncLogsModalOpen && Boolean(syncHealthDevice?.id));
 	const {
 		data: syncPreview,
 		isLoading: isLoadingSyncPreview,
+		isFetching: isFetchingSyncPreview,
 		error: syncPreviewError,
 		refetch: refetchSyncPreview,
 	} = useDeviceSyncPreview(
@@ -501,7 +606,7 @@ export default function DeviceEventsPage() {
 			deviceId,
 			source,
 		},
-		action === "sync-logs",
+		isSyncLogsFlowActive,
 	);
 	const canReadLiveEvents = Boolean(
 		liveDeviceId &&
@@ -823,12 +928,6 @@ export default function DeviceEventsPage() {
 				eventTime: latestSavedEvent.eventTime,
 			})
 		: null;
-	const savedScopeNote =
-		viewMode !== "saved"
-			? ""
-			: deviceId === "all" && source === "all"
-				? "All devices and all sources are included."
-				: `${selectedDevice?.name || "Selected devices"} / ${source === "all" ? "all sources" : formatEventSource(source)}`;
 	const syncBridge =
 		(syncPreview?.bridge as ZktecoBridgePreflight | undefined) ||
 		(syncDeviceHealth?.checks?.zktecoBridge as ZktecoBridgePreflight | undefined);
@@ -838,16 +937,18 @@ export default function DeviceEventsPage() {
 		syncPreview?.bridge?.error ||
 		syncBridge?.error ||
 		(syncHealthDevice && !syncBridgeOk ? "The ZKTeco bridge is not reachable for this preflight." : "");
-	const syncPreviewRows = syncPreview?.devices || [];
+	const syncPreviewRows = useMemo(() => syncPreview?.devices || [], [syncPreview?.devices]);
+	const syncHasZktecoRows = syncPreviewRows.some((row) => row.vendor === "ZKTeco");
 	const syncStartableRows = syncPreviewRows.filter((row) => row.canStartSync);
-	const syncVendorEventTotal = syncPreviewRows.reduce(
-		(total, row) => total + Number(row.vendorEventCount ?? row.totalEvents ?? 0),
-		0,
+	const syncHasUnknownEventTotal = syncPreviewRows.some(
+		(row) => !hasNumericCount(row.vendorEventCount ?? row.totalEvents),
 	);
-	const syncVendorUserTotal = syncPreviewRows.reduce(
-		(total, row) => total + Number(row.vendorUserCount ?? 0),
-		0,
-	);
+	const syncVendorEventTotal = syncHasUnknownEventTotal
+		? null
+		: syncPreviewRows.reduce(
+				(total, row) => total + Number(row.vendorEventCount ?? row.totalEvents ?? 0),
+				0,
+			);
 	const syncHrisSavedTotal = syncPreviewRows.reduce(
 		(total, row) => total + Number(row.hrisSavedCount ?? row.syncedEvents ?? 0),
 		0,
@@ -871,24 +972,65 @@ export default function DeviceEventsPage() {
 				syncBridge?.data?.dryRun?.missingRows ??
 				null
 			);
-	const syncBridgeStatusUrl = syncBridge?.statusUrl || "Not reported";
+	const showSyncPreviewSkeleton = isSyncLogsModalOpen && (isLoadingSyncPreview || isFetchingSyncPreview);
+	const syncVendorSections = useMemo(() => {
+		const order = ["Hikvision", "ZKTeco"];
+		const groups = new Map<string, typeof syncPreviewRows>();
+		for (const row of syncPreviewRows) {
+			const key = row.vendor || "Other";
+			groups.set(key, [...(groups.get(key) || []), row]);
+		}
+		return [...groups.entries()]
+			.sort(([left], [right]) => {
+				const leftIndex = order.indexOf(left);
+				const rightIndex = order.indexOf(right);
+				if (leftIndex !== -1 || rightIndex !== -1) {
+					return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex);
+				}
+				return left.localeCompare(right);
+			})
+			.map(([vendor, rows]) => ({ vendor, rows }));
+	}, [syncPreviewRows]);
 	const syncScopeLabel = selectedZktecoDevice
 		? selectedZktecoDevice.name || selectedZktecoDevice.address || "Selected ZKTeco device"
 		: syncPreviewRows.length
-			? `Preview devices (${syncPreviewRows.length})`
-			: `All sync-capable devices (${syncScopeDevices.length})`;
+			? `Devices checked (${syncPreviewRows.length})`
+			: `Configured devices (${syncScopeDevices.length})`;
 	const syncStatusLabel = syncBridge
 		? `${syncBridge.status}${syncBridge.latencyMs ? ` / ${syncBridge.latencyMs} ms` : ""}`
 		: isLoadingSyncHealth
 			? "Checking bridge"
-			: "Unavailable";
+			: syncPreviewRows.length
+				? syncPreviewRows.some((row) => row.error || row.status === "source_total_unavailable")
+					? "Counts unavailable"
+					: "Device check complete"
+				: "Unavailable";
+	const adminRole = String((user as any)?.role || (user as any)?.roleId || "").trim();
+	const canUseDebugReset = ["hris-admin", "admin", "super_admin", "superadmin"].includes(adminRole);
+	const resetScopePayload = useMemo(
+		() => ({
+			deviceId,
+			source,
+			status,
+			from,
+			to,
+			dateField: "eventTime" as const,
+			includeLinkedAttendance: includeLinkedAttendanceReset,
+		}),
+		[deviceId, from, includeLinkedAttendanceReset, source, status, to],
+	);
+	const resetPreviewData =
+		resetPreviewState.status === "ready" || resetPreviewState.status === "executed"
+			? resetPreviewState.data
+			: null;
+	const resetPreviewCounts = resetPreviewData?.counts || resetPreviewData?.countsBefore || null;
 	useEffect(() => {
-		if (action !== "sync-logs" || !syncBridgeError) return;
+		if (!isSyncLogsModalOpen || !syncHasZktecoRows || !syncBridgeError) return;
 		toast.warning("Sync preflight is unavailable", {
 			id: "device-events-sync-preflight",
 			description: syncBridgeError,
 		});
-	}, [action, syncBridgeError]);
+	}, [isSyncLogsModalOpen, syncBridgeError, syncHasZktecoRows]);
 
 	const focusLatestSavedEvent = () => {
 		if (!latestSavedEvent) return;
@@ -917,9 +1059,14 @@ export default function DeviceEventsPage() {
 		});
 	};
 	const openSyncLogs = () => {
+		if (activeImportJob && importJobProgress) {
+			setShowImportProgressModal(true);
+			return;
+		}
 		setSyncLogsState({ status: "idle" });
 		updateSearchParams((next) => {
 			next.set("action", "sync-logs");
+			next.delete("debug");
 			next.delete("id");
 		});
 	};
@@ -929,7 +1076,10 @@ export default function DeviceEventsPage() {
 		});
 	};
 	const refreshSyncPreflight = async () => {
-		const results = await Promise.allSettled([refetchSyncHealth(), refetchSyncPreview()]);
+		const checks = syncHealthDevice?.id
+			? [refetchSyncHealth(), refetchSyncPreview()]
+			: [refetchSyncPreview()];
+		const results = await Promise.allSettled(checks);
 		const rejected = results.find(
 			(result): result is PromiseRejectedResult => result.status === "rejected",
 		);
@@ -962,11 +1112,64 @@ export default function DeviceEventsPage() {
 			id: "device-events-sync-preflight",
 		});
 	};
-	const startZktecoSync = () => {
+	const reviewNotImported = (device: { deviceId?: string; source?: string | null }) => {
+		const targetDeviceId = String(device.deviceId || "").trim();
+		if (!targetDeviceId) return;
+		updateSearchParams((next) => {
+			next.set("view", "live");
+			next.set("deviceId", targetDeviceId);
+			next.set("window", "all");
+			next.delete("status");
+			next.delete("source");
+			next.delete("query");
+			next.delete("action");
+			next.set("page", "1");
+		});
+	};
+
+	const startDeviceLogImport = () => {
 		setSyncLogsState({ status: "idle" });
-		const startableDeviceId = selectedZktecoDevice?.id || syncStartableRows[0]?.deviceId;
-		zktecoSync.mutate(startableDeviceId ? { deviceId: startableDeviceId } : {}, {
+		const startableRow = syncStartableRows[0];
+		if (!startableRow?.deviceId) return;
+
+		if (startableRow.syncAction === "hikvision-import" || startableRow.vendor === "Hikvision") {
+			hikvisionImport.mutate(
+				{ deviceId: startableRow.deviceId },
+				{
+					onSuccess: (data: any) => {
+						const jobId = data?.jobId || data?.progress?.jobId;
+						if (jobId) {
+							setActiveImportJob({
+								jobId,
+								deviceId: startableRow.deviceId,
+								deviceName: startableRow.name || startableRow.address || "Hikvision device",
+								vendor: "Hikvision",
+							});
+						}
+						closeSyncLogs();
+						setShowImportProgressModal(true);
+						toast.success("Device log sync started", {
+							id: "device-log-import-progress",
+							description: "Progress is available from Sync logs.",
+						});
+						void refetchSyncPreview();
+					},
+					onError: (error: unknown) => {
+						const message = getAsyncErrorMessage(error, "Device rejected the sync request.");
+						setSyncLogsState({ status: "error", message });
+						toast.error("Sync did not start", {
+							id: "device-events-sync-start",
+							description: message,
+						});
+					},
+				},
+			);
+			return;
+		}
+
+		zktecoSync.mutate({ deviceId: startableRow.deviceId }, {
 			onSuccess: () => {
+				closeSyncLogs();
 				toast.success("Sync logs request accepted", {
 					id: "device-events-sync-start",
 					description: "Saved events and bridge health are refreshing.",
@@ -993,6 +1196,57 @@ export default function DeviceEventsPage() {
 			},
 		});
 	};
+
+	const previewDeviceEventReset = () => {
+		setResetPreviewState({ status: "loading" });
+		resetDeviceEvents.mutate(
+			{ ...resetScopePayload, execute: false },
+			{
+				onSuccess: (data) => {
+					setResetPreviewState({ status: "ready", data });
+					toast.success("Reset preview ready", {
+						id: "device-events-reset-preview",
+						description: `${formatCount(data.counts?.deviceEvents || 0)} saved punches in scope.`,
+					});
+				},
+				onError: (error: unknown) => {
+					const message = getAsyncErrorMessage(error, "Reset preview failed.");
+					setResetPreviewState({ status: "error", message });
+					toast.error("Reset preview failed", {
+						id: "device-events-reset-preview",
+						description: message,
+					});
+				},
+			},
+		);
+	};
+
+	const executeDeviceEventReset = () => {
+		if (!resetPreviewData) return;
+		resetDeviceEvents.mutate(
+			{ ...resetScopePayload, execute: true },
+			{
+				onSuccess: (data) => {
+					setResetPreviewState({ status: "executed", data });
+					setShowResetConfirmModal(false);
+					toast.success("Saved punches reset", {
+						id: "device-events-reset-execute",
+						description: data.backupDir ? `Backup: ${data.backupDir}` : undefined,
+					});
+					void refetch();
+					void refetchSyncPreview();
+				},
+				onError: (error: unknown) => {
+					const message = getAsyncErrorMessage(error, "Reset failed.");
+					setResetPreviewState({ status: "error", message });
+					toast.error("Reset failed", {
+						id: "device-events-reset-execute",
+						description: message,
+					});
+				},
+			},
+		);
+	};
 	const realtimeStatus = getDeviceEventsRealtimeStatus({
 		isConnected,
 		organizationId,
@@ -1001,25 +1255,95 @@ export default function DeviceEventsPage() {
 		selectedDeviceName: selectedDevice?.name,
 		liveDeviceName: liveDevice?.name,
 	});
-	const socketTransport =
-		socket && isConnected
-			? String((socket as any).io?.engine?.transport?.name || "connected")
-			: "offline";
 	const realtimeStatusDetail = lastRealtimeEvent
 		? `Last socket event ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
 			: latestSavedEvent
-			? `${latestSavedProcessingLabel || "Latest saved punch"} ${formatPunchTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
+			? `Latest saved ${formatPunchTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
 			: "Waiting for the next saved punch";
-	const roomStatusLabel = realtimeStatus.isScoped
-		? !isConnected
-			? "Room waiting"
-			: lastRoomJoinedAt
-			? `Room joined ${formatPunchTime(lastRoomJoinedAt)}`
-			: "Room pending"
-		: "No realtime room";
-	const recoveryStatusLabel = lastRecoveryRefreshAt
-		? `Recovery refresh ${formatPunchTime(lastRecoveryRefreshAt)}`
-		: "Recovery refresh armed";
+	const activeImportProgressPercent = importJobProgress
+		? Math.min(
+				100,
+				Math.round(
+					(Number(importJobProgress.processed || 0) /
+						Math.max(Number(importJobProgress.total || 1), 1)) *
+						100,
+				),
+			)
+		: 0;
+	const activeImportJobSummary = importJobProgress
+		? `${formatCount(importJobProgress.imported)} saved, ${formatCount(importJobProgress.skipped)} skipped, ${formatCount(importJobProgress.failed)} failed`
+		: "";
+	const hasImportProgress = Boolean(activeImportJob && importJobProgress);
+	const isImportProcessing = importJobProgress?.status === "processing";
+	const importProgressBubbleLabel = hasImportProgress
+		? isImportProcessing
+			? formatCount(importJobProgress?.processed)
+			: importJobProgress?.status === "completed"
+				? formatCount(importJobProgress?.imported)
+				: "!"
+		: "";
+	const importProgressTitle =
+		importJobProgress?.status === "failed"
+			? "Sync needs attention"
+			: importJobProgress?.status === "completed"
+				? "Sync finished"
+				: isImportProcessing
+					? "Syncing device logs"
+					: "Device sync status";
+	const importProgressToneClass =
+		importJobProgress?.status === "failed"
+			? "border-red-200 bg-red-50 text-red-950"
+			: importJobProgress?.status === "completed"
+				? "border-emerald-200 bg-emerald-50 text-emerald-950"
+				: "border-orange-200 bg-orange-50 text-orange-950";
+	const importProgressFillClass =
+		importJobProgress?.status === "failed"
+			? "bg-red-600"
+			: importJobProgress?.status === "completed"
+				? "bg-emerald-600"
+				: "bg-orange-600";
+	const importProgressStatus = importJobProgress?.status;
+	const importProgressImported = importJobProgress?.imported;
+	const importProgressSkipped = importJobProgress?.skipped;
+	const importProgressMessage = importJobProgress?.message;
+
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		if (activeImportJob) {
+			window.localStorage.setItem(
+				DEVICE_IMPORT_JOB_STORAGE_KEY,
+				JSON.stringify(activeImportJob),
+			);
+			return;
+		}
+		window.localStorage.removeItem(DEVICE_IMPORT_JOB_STORAGE_KEY);
+	}, [activeImportJob]);
+
+	useEffect(() => {
+		if (!importProgressStatus || importProgressStatus === "processing") return;
+		if (importProgressStatus === "completed") {
+			toast.success("Device logs synced", {
+				id: "device-log-import-progress",
+				description: `${formatCount(importProgressImported)} saved, ${formatCount(importProgressSkipped)} skipped.`,
+			});
+			void refetch();
+			void refetchHealth();
+			void refetchSyncPreview();
+		} else {
+			toast.error("Device log sync failed", {
+				id: "device-log-import-progress",
+				description: importProgressMessage || "The sync job stopped before finishing.",
+			});
+		}
+	}, [
+		importProgressImported,
+		importProgressMessage,
+		importProgressSkipped,
+		importProgressStatus,
+		refetch,
+		refetchHealth,
+		refetchSyncPreview,
+	]);
 
 	const columns: Column<UnifiedDeviceEventRow>[] = [
 		{
@@ -1127,10 +1451,19 @@ export default function DeviceEventsPage() {
 					<Button
 						type="button"
 						variant="outline"
-						className="h-9 px-3"
+						className={
+							hasImportProgress
+								? "relative h-9 border-orange-200 bg-orange-50 px-3 text-orange-700 hover:bg-orange-100 hover:text-orange-800"
+								: "h-9 px-3"
+						}
 						onClick={openSyncLogs}>
 						<UploadCloud className="mr-2 h-4 w-4" />
 						Sync logs
+						{importProgressBubbleLabel ? (
+							<span className="ml-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+								{importProgressBubbleLabel}
+							</span>
+						) : null}
 					</Button>
 					<Button
 						type="button"
@@ -1146,6 +1479,96 @@ export default function DeviceEventsPage() {
 					</Button>
 				</div>
 			</div>
+
+			{isSyncLogsDebugView && canUseDebugReset ? (
+				<div className="rounded-md border border-red-200 bg-red-50 px-3 py-3">
+					<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+						<div className="min-w-0">
+							<p className="text-sm font-semibold text-red-950">Debug reset saved punches</p>
+							<p className="mt-1 text-xs text-red-800">
+								Scope: {deviceId === "all" ? "all devices" : selectedDevice?.name || deviceId}
+								{" / "}
+								{source === "all" ? "all sources" : formatEventSource(source)}
+								{" / "}
+								{timeWindowOptions.find((option) => option.value === timeWindow)?.label || timeWindow}
+							</p>
+							<div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-red-900">
+								<span>Models: DeviceEvent</span>
+								<span>Device export only</span>
+								<span>Attendance linked only when selected</span>
+							</div>
+							<label className="mt-3 flex w-fit items-center gap-2 text-xs font-medium text-red-950">
+								<input
+									type="checkbox"
+									checked={includeLinkedAttendanceReset}
+									onChange={(event) => setIncludeLinkedAttendanceReset(event.target.checked)}
+									className="h-4 w-4 rounded border-red-300 text-red-700 focus:ring-red-500"
+								/>
+								Also delete linked attendance rows
+							</label>
+							{resetPreviewCounts ? (
+								<div className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
+									<div>
+										<span className="block text-red-700">Saved punches</span>
+										<span className="font-semibold text-red-950">
+											{formatCount(resetPreviewCounts.deviceEvents)}
+										</span>
+									</div>
+									<div>
+										<span className="block text-red-700">Linked attendance</span>
+										<span className="font-semibold text-red-950">
+											{formatCount(resetPreviewCounts.linkedAttendance)}
+										</span>
+									</div>
+									<div>
+										<span className="block text-red-700">Devices exported</span>
+										<span className="font-semibold text-red-950">
+											{formatCount(resetPreviewCounts.devices)}
+										</span>
+									</div>
+									<div>
+										<span className="block text-red-700">Import jobs noted</span>
+										<span className="font-semibold text-red-950">
+											{formatCount(resetPreviewCounts.importJobs)}
+										</span>
+									</div>
+								</div>
+							) : null}
+							{resetPreviewState.status === "executed" && resetPreviewState.data.backupDir ? (
+								<p className="mt-2 break-all text-xs font-medium text-red-950">
+									Backup: {resetPreviewState.data.backupDir}
+								</p>
+							) : null}
+							{resetPreviewState.status === "error" ? (
+								<p className="mt-2 text-xs font-medium text-red-900">{resetPreviewState.message}</p>
+							) : null}
+						</div>
+						<div className="flex shrink-0 flex-col gap-2 sm:flex-row md:flex-col">
+							<Button
+								type="button"
+								variant="outline"
+								className="h-9 border-red-200 bg-white px-3 text-red-700 hover:bg-red-100 hover:text-red-800"
+								disabled={resetDeviceEvents.isPending || resetPreviewState.status === "loading"}
+								onClick={previewDeviceEventReset}>
+								<RefreshCw className="h-4 w-4" />
+								Preview reset
+							</Button>
+							<Button
+								type="button"
+								className="h-9 bg-red-700 px-3 text-white hover:bg-red-800"
+								disabled={
+									resetDeviceEvents.isPending ||
+									!resetPreviewCounts ||
+									Number(resetPreviewCounts.deviceEvents || 0) === 0
+								}
+								onClick={() => setShowResetConfirmModal(true)}>
+								<Trash2 className="h-4 w-4" />
+								Reset scoped data
+							</Button>
+						</div>
+					</div>
+				</div>
+			) : null}
 
 			<div className="rounded-md border border-slate-200 bg-white">
 				<div
@@ -1254,18 +1677,8 @@ export default function DeviceEventsPage() {
 												? "truncate text-xs text-emerald-800"
 												: "truncate text-xs text-amber-800"
 										}>
-										{realtimeStatus.scopeLabel} - {realtimeStatusDetail}
+										{realtimeStatusDetail}
 									</p>
-									{viewMode === "saved" && savedScopeNote ? (
-										<p
-											className={
-												realtimeStatus.isListening
-													? "truncate text-[11px] text-emerald-700"
-													: "truncate text-[11px] text-amber-700"
-											}>
-											{savedScopeNote}
-										</p>
-									) : null}
 								</div>
 							</div>
 							<div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
@@ -1273,21 +1686,6 @@ export default function DeviceEventsPage() {
 									variant={realtimeStatus.isListening ? "success-soft" : "warning-soft"}
 									className="w-fit rounded-md px-2 py-1 font-semibold">
 									{realtimeStatus.rowUpdateLabel}
-								</Badge>
-								<Badge
-									variant={isConnected ? "success-soft" : "warning-soft"}
-									className="w-fit rounded-md px-2 py-1 font-semibold">
-									Socket {socketTransport}
-								</Badge>
-								<Badge
-									variant={realtimeStatus.isScoped ? "success-soft" : "warning-soft"}
-									className="w-fit rounded-md px-2 py-1 font-semibold">
-									{roomStatusLabel}
-								</Badge>
-								<Badge
-									variant="primary-soft"
-									className="w-fit rounded-md px-2 py-1 font-semibold">
-									{recoveryStatusLabel}
 								</Badge>
 							</div>
 						</div>
@@ -1458,138 +1856,156 @@ export default function DeviceEventsPage() {
 			</div>
 
 			<Modal
-				open={action === "sync-logs"}
+				open={showResetConfirmModal}
+				onOpenChange={(open) => setShowResetConfirmModal(open)}
+				title="Reset scoped saved punches"
+				description="A backup export is written before any records are deleted."
+				className="max-w-lg">
+				<div className="space-y-4">
+					<div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-950">
+						<p className="font-semibold">This will delete only the previewed scope.</p>
+						<div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+							<div>
+								<span className="block text-red-700">Saved punches</span>
+								<span className="font-semibold">{formatCount(resetPreviewCounts?.deviceEvents)}</span>
+							</div>
+							<div>
+								<span className="block text-red-700">Linked attendance</span>
+								<span className="font-semibold">
+									{includeLinkedAttendanceReset
+										? formatCount(resetPreviewCounts?.linkedAttendance)
+										: "Export only"}
+								</span>
+							</div>
+							<div>
+								<span className="block text-red-700">Device</span>
+								<span className="font-semibold">
+									{deviceId === "all" ? "All devices" : selectedDevice?.name || deviceId}
+								</span>
+							</div>
+							<div>
+								<span className="block text-red-700">Source</span>
+								<span className="font-semibold">
+									{source === "all" ? "All sources" : formatEventSource(source)}
+								</span>
+							</div>
+						</div>
+					</div>
+					<p className="text-xs text-slate-600">
+						Devices, employees, person records, and unrelated attendance are not deleted.
+						The backup includes devices, device events, linked attendance, import job state, and a recovery note.
+					</p>
+					<div className="flex flex-col-reverse gap-2 border-t pt-3 sm:flex-row sm:justify-end">
+						<Button
+							type="button"
+							variant="outline"
+							onClick={() => setShowResetConfirmModal(false)}>
+							Cancel
+						</Button>
+						<Button
+							type="button"
+							className="bg-red-700 text-white hover:bg-red-800"
+							disabled={resetDeviceEvents.isPending}
+							onClick={executeDeviceEventReset}>
+							<Trash2 className="h-4 w-4" />
+							Export backup and reset
+						</Button>
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
+				open={isSyncLogsModalOpen}
 				onOpenChange={(open) => {
 					if (!open) closeSyncLogs();
 				}}
 				title="Sync device logs"
-				description="Review source counts, HRIS saved counts, and devices that can safely start a sync."
-				className="max-w-3xl">
-				<div className="space-y-4">
-					<div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-						<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+				className="max-w-5xl">
+				<div className="space-y-3">
+					<div className="rounded-md border border-slate-200 bg-white px-3 py-2.5">
+						<div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
 							<div className="min-w-0">
-								<p className="text-xs font-semibold uppercase text-slate-500">Selected scope</p>
-								<p className="mt-1 truncate text-base font-semibold text-slate-950">
-									{syncScopeLabel}
-								</p>
-								<p className="mt-1 text-xs text-slate-600">
-									{selectedZktecoDevice
-										? `${selectedZktecoDevice.address || "-"}:${selectedZktecoDevice.port || "-"}`
-										: "Preview includes configured Hikvision and ZKTeco sources in the current filters."}
-								</p>
+								<p className="truncate text-sm font-semibold text-slate-950">{syncScopeLabel}</p>
+								{showSyncPreviewSkeleton ? (
+									<SyncPreviewSkeleton />
+								) : syncPreviewRows.length > 0 ? (
+									<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+										<span>Device total: {formatOptionalCount(syncVendorEventTotal)}</span>
+										<span>Saved: {formatCount(syncHrisSavedTotal)}</span>
+										<span>Not saved: {formatOptionalCount(syncDryRunEstimate)}</span>
+										<span>Ready: {formatCount(syncStartableRows.length)} of {formatCount(syncPreviewRows.length)}</span>
+									</div>
+								) : (
+									<p className="mt-1 text-xs text-amber-700">No sync-capable devices.</p>
+								)}
 							</div>
-							<Badge
-								variant={syncBridgeOk ? "success-soft" : "warning-soft"}
-								className="w-fit rounded-md px-2 py-1 font-semibold">
-								{syncBridgeOk ? "Bridge reachable" : "Bridge unavailable"}
-							</Badge>
-						</div>
-						{syncPreviewRows.length > 0 ? (
-							<div className="mt-3 flex flex-wrap gap-1.5">
-								{syncPreviewRows.slice(0, 5).map((device) => (
-									<Badge key={device.deviceId} variant="outline" className="px-2 py-0.5">
-										{device.name || device.address || device.deviceId}
-									</Badge>
-								))}
-								{syncPreviewRows.length > 5 ? (
-									<Badge variant="outline" className="px-2 py-0.5">
-										+{syncPreviewRows.length - 5} more
-									</Badge>
-								) : null}
+							<div className="flex shrink-0 items-center gap-2">
+								<Badge
+									variant={syncStartableRows.length ? "success-soft" : "secondary"}
+									className="rounded-md px-2 py-0.5 font-semibold">
+									{showSyncPreviewSkeleton
+										? "Loading"
+										: syncStartableRows.length
+											? "Ready"
+											: syncStatusLabel}
+								</Badge>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="h-8 px-3 text-xs"
+									disabled={showSyncPreviewSkeleton || isLoadingSyncHealth}
+									onClick={() => void refreshSyncPreflight()}>
+									<RefreshCw className="h-3.5 w-3.5" />
+									Refresh
+								</Button>
 							</div>
-						) : (
-							<div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-								{isLoadingSyncPreview ? "Building sync preview." : "No sync-capable devices are available in the current filters."}
-							</div>
-						)}
-					</div>
-
-					<div className="grid gap-3 md:grid-cols-2">
-						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">Source totals</p>
-							<p className="mt-2 text-sm font-semibold text-slate-950">{syncStatusLabel}</p>
-							<p className="mt-1 text-xs text-slate-500">
-								{isLoadingSyncPreview
-									? "Loading SDK counts"
-									: `${formatCount(syncVendorEventTotal)} events / ${formatCount(syncVendorUserTotal)} known users`}
-							</p>
 						</div>
-						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">HRIS saved</p>
-							<p className="mt-2 text-sm font-semibold text-slate-950">
-								{isLoadingSyncPreview ? "Loading" : formatCount(syncHrisSavedTotal)}
-							</p>
-							<p className="mt-1 text-xs text-slate-500">saved events in the selected scope</p>
-						</div>
-						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">Sync gap</p>
-							<p className="mt-2 text-sm font-semibold text-slate-950">
-								{isLoadingSyncPreview
-									? "Loading"
-									: syncDryRunEstimate === null || syncDryRunEstimate === undefined
-									? "Unavailable"
-									: formatCount(syncDryRunEstimate)}
-							</p>
-							<p className="mt-1 text-xs text-slate-500">missing rows reported by the bridge</p>
-						</div>
-						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">Can run sync</p>
-							<p className="mt-2 text-sm font-semibold text-slate-950">
-								{isLoadingSyncPreview
-									? "Loading"
-									: `${formatCount(syncStartableRows.length)} of ${formatCount(syncPreviewRows.length)}`}
-							</p>
-							<p className="mt-1 break-all text-xs text-slate-500">{syncBridgeStatusUrl}</p>
-						</div>
-					</div>
-
-					<div className="rounded-lg border border-slate-200 bg-white p-3">
-						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-							<div>
-								<p className="text-xs font-semibold uppercase text-slate-500">Rows to sync</p>
-								<p className="mt-1 text-sm font-semibold text-slate-950">
-									{syncDryRunEstimate === null || syncDryRunEstimate === undefined
-										? "Unavailable"
-										: formatCount(syncDryRunEstimate)}
-								</p>
-							</div>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="h-8 px-3 text-xs"
-								disabled={isLoadingSyncPreview || isLoadingSyncHealth}
-								onClick={() => void refreshSyncPreflight()}>
-								<RefreshCw className="h-3.5 w-3.5" />
-								Refresh preflight
-							</Button>
-						</div>
-						<p className="mt-2 text-xs text-slate-500">
-							{syncDryRunEstimate === null || syncDryRunEstimate === undefined
-								? "The bridge did not report a dry-run count, so HRIS will not invent one."
-								: "This estimate came from bridge preflight data."}
-						</p>
 					</div>
 
 					<div className="rounded-lg border border-slate-200 bg-white">
-						<div className="border-b border-slate-100 px-3 py-2">
-							<p className="text-xs font-semibold uppercase text-slate-500">Per-device tally</p>
-						</div>
-						<div className="divide-y divide-slate-100">
-							{syncPreviewRows.length ? (
-								syncPreviewRows.map((device) => {
+						{showSyncPreviewSkeleton ? (
+							<SyncDeviceDetailsSkeleton />
+						) : syncVendorSections.length ? (
+							<Accordion
+								type="multiple"
+								defaultValue={syncVendorSections.map((section) => section.vendor)}
+								className="divide-y divide-slate-100">
+								{syncVendorSections.map((section) => (
+									<AccordionItem
+										key={section.vendor}
+										value={section.vendor}
+										className="border-b-0">
+										<AccordionTrigger className="px-3 py-2.5 hover:no-underline">
+											<div className="flex flex-1 items-center justify-between gap-3 pr-3">
+												<span className="text-sm font-semibold text-slate-950">{section.vendor}</span>
+												<span className="text-xs text-slate-500">{formatCount(section.rows.length)} device{section.rows.length === 1 ? "" : "s"}</span>
+											</div>
+										</AccordionTrigger>
+										<AccordionContent className="pb-0">
+											<div className="divide-y divide-slate-100">
+												{section.rows.map((device) => {
 									const sourceEvents = device.vendorEventCount ?? device.totalEvents;
 									const sourceUsers = device.vendorUserCount;
 									const hrisSaved = device.hrisSavedCount ?? device.syncedEvents;
 									const missingEvents = device.missingEventCount ?? device.needsSyncEvents;
+									const hasMissingEvents = Boolean(missingEvents && Number(missingEvents) > 0);
+									const isSourceUnavailable = Boolean(device.error);
+									const hasUnknownSyncCount =
+										!isSourceUnavailable &&
+										(!hasNumericCount(sourceEvents) || !hasNumericCount(missingEvents));
 									return (
 										<div key={device.deviceId} className="flex flex-col gap-3 px-3 py-3 md:flex-row md:items-start md:justify-between">
 											<div className="min-w-0">
 												<p className="truncate text-sm font-semibold text-slate-950">
 													{getSyncDeviceTitle(device.vendor, device.name, device.address)}
 												</p>
-												<p className="truncate text-xs text-slate-500">
+												<p
+													className={
+														isSourceUnavailable
+															? "truncate text-xs text-slate-400 line-through decoration-slate-400"
+															: "truncate text-xs text-slate-500"
+													}>
 													{device.address}:{device.port} / {formatEventSource(device.source)}
 												</p>
 												{device.error ? (
@@ -1598,42 +2014,79 @@ export default function DeviceEventsPage() {
 											</div>
 											<div className="grid shrink-0 grid-cols-2 gap-2 text-sm sm:grid-cols-4 md:min-w-[430px]">
 												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">HRIS</p>
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Saved</p>
 													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(hrisSaved)}</p>
 												</div>
 												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Source events</p>
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Device entries</p>
 													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceEvents)}</p>
 												</div>
 												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Users</p>
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Enrolled</p>
 													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceUsers)}</p>
 												</div>
 												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Missing</p>
-													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(missingEvents)}</p>
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Not saved</p>
+													{hasMissingEvents ? (
+														<button
+															type="button"
+															className="text-left text-sm font-bold text-red-700 underline-offset-2 hover:underline"
+															onClick={() => reviewNotImported(device)}
+															title="Review device entries not stored as HRIS punches">
+															{formatOptionalCount(missingEvents)}
+														</button>
+													) : (
+														<span className="text-xs font-semibold text-slate-500">
+															{formatOptionalCount(missingEvents)}
+														</span>
+													)}
 												</div>
 												<div className="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-4">
 													<Badge
-														variant={device.canStartSync ? "success-soft" : "secondary"}
+														variant={
+															device.canStartSync
+																? "success-soft"
+																: isSourceUnavailable
+																? "secondary"
+																: hasUnknownSyncCount
+																? "warning-soft"
+																: hasMissingEvents
+																? "warning-soft"
+																: "secondary"
+														}
 														className="px-2 py-0.5 font-semibold">
-														{device.canStartSync ? "Ready to sync" : "Preview only"}
+														{device.canStartSync
+															? "Can scan device"
+															: isSourceUnavailable
+															? "Sync unavailable"
+															: hasUnknownSyncCount
+															? "Counts unavailable"
+															: hasMissingEvents
+															? "Has unsaved entries"
+															: "In sync"}
 													</Badge>
 												</div>
 											</div>
 										</div>
 									);
-								})
-							) : (
-								<div className="px-3 py-3 text-sm text-slate-500">
-									{isLoadingSyncPreview ? "Reading device history counts." : "No device preview rows returned."}
-								</div>
-							)}
-						</div>
+								})}
+							</div>
+										</AccordionContent>
+									</AccordionItem>
+								))}
+							</Accordion>
+						) : (
+							<div className="px-3 py-3 text-sm text-slate-500">No device preview rows returned.</div>
+						)}
 					</div>
 
 					{syncLogsState.status === "accepted" ? (
 						<div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+							{syncLogsState.message}
+						</div>
+					) : null}
+					{syncLogsState.status === "error" ? (
+						<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
 							{syncLogsState.message}
 						</div>
 					) : null}
@@ -1645,11 +2098,124 @@ export default function DeviceEventsPage() {
 						<Button
 							type="button"
 							className="h-9 px-3"
-							disabled={zktecoSync.isPending || isLoadingSyncPreview || syncStartableRows.length === 0}
-							onClick={startZktecoSync}>
+							disabled={
+								zktecoSync.isPending ||
+								hikvisionImport.isPending ||
+								isLoadingSyncPreview ||
+								syncStartableRows.length === 0
+							}
+							onClick={startDeviceLogImport}>
 							<UploadCloud className="h-4 w-4" />
-							{zktecoSync.isPending ? "Starting sync" : "Start actual sync"}
+							{zktecoSync.isPending || hikvisionImport.isPending
+								? "Starting sync"
+								: "Sync logs"}
 						</Button>
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
+				open={showImportProgressModal}
+				onOpenChange={(open) => {
+					if (!open) setShowImportProgressModal(false);
+				}}
+				title="Device sync status"
+				description="You can close this window and reopen status from Sync logs."
+				className="max-w-lg"
+				showCloseButton={!isImportProcessing}
+				closeOnBackdropClick={!isImportProcessing}>
+				<div className="space-y-4">
+					{activeImportJob && importJobProgress ? (
+						<div className={`min-h-[230px] rounded-lg border p-4 ${importProgressToneClass}`}>
+							<div className="flex items-center justify-between gap-3 text-sm">
+								<span className="min-w-0 font-medium">
+									{isImportProcessing ? (
+										<>
+											<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin align-middle" />
+											{importProgressTitle}
+										</>
+									) : (
+										importProgressTitle
+									)}
+								</span>
+								<span className="shrink-0 font-semibold">
+									{activeImportProgressPercent}%
+								</span>
+							</div>
+							<div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
+								<div
+									className={`h-full rounded-full transition-all ${importProgressFillClass}`}
+									style={{ width: `${activeImportProgressPercent}%` }}
+								/>
+							</div>
+							<div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+								<div className="text-emerald-700">
+									Saved: <span className="font-semibold">{formatCount(importJobProgress.imported)}</span>
+								</div>
+								<div className="text-red-700">
+									Failed: <span className="font-semibold">{formatCount(importJobProgress.failed)}</span>
+								</div>
+							</div>
+							<div className="mt-3 grid grid-cols-2 gap-2 rounded-md border border-orange-100 bg-white/70 px-3 py-2 text-xs text-orange-900">
+								<div>
+									<span className="block text-orange-700">Processed</span>
+									<span className="font-semibold">
+										{formatCount(importJobProgress.processed)} / {formatCount(importJobProgress.total)}
+									</span>
+								</div>
+								<div>
+									<span className="block text-orange-700">Skipped</span>
+									<span className="font-semibold">{formatCount(importJobProgress.skipped)}</span>
+								</div>
+								<div>
+									<span className="block text-orange-700">Device</span>
+									<span className="font-semibold">{activeImportJob.deviceName}</span>
+								</div>
+								<div>
+									<span className="block text-orange-700">Run state</span>
+									<span className="font-semibold">
+										{importJobProgress.status === "processing"
+											? "Background sync active"
+											: importJobProgress.status === "completed"
+												? "Complete"
+												: "Retry after review"}
+									</span>
+								</div>
+							</div>
+							{activeImportJobSummary ? (
+								<p className="mt-3 text-xs opacity-90">{activeImportJobSummary}</p>
+							) : null}
+							{importJobProgress.message ? (
+								<p className="mt-2 text-xs opacity-90">{importJobProgress.message}</p>
+							) : null}
+						</div>
+					) : (
+						<div className="min-h-[230px] rounded-lg border border-orange-200 bg-orange-50 p-4">
+							<div className="flex items-center gap-2 text-sm font-medium text-orange-900">
+								<Loader2 className="h-4 w-4 animate-spin" />
+								Loading device sync status...
+							</div>
+						</div>
+					)}
+
+					<div className="flex flex-col-reverse gap-2 border-t pt-2 sm:flex-row sm:justify-end">
+						<Button
+							type="button"
+							variant="outline"
+							onClick={() => setShowImportProgressModal(false)}>
+							Close
+						</Button>
+						{importJobProgress && importJobProgress.status !== "processing" ? (
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => {
+									setActiveImportJob(null);
+									setShowImportProgressModal(false);
+								}}>
+								Dismiss status
+							</Button>
+						) : null}
 					</div>
 				</div>
 			</Modal>

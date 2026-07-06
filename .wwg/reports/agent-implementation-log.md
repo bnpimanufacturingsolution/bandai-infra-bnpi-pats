@@ -1,5 +1,233 @@
 # Agent Implementation Log
 
+## 2026-07-04 ZKTeco Four-Device Recovery Attempt
+
+Task mode: Mixed runtime recovery, network investigation, source-device proof,
+and implementation.
+
+User intent:
+- Try hard to recover/query all four configured ZKTeco devices.
+- Investigate whether VM network/subnet configuration caused `.9` and `.10`
+  to be inaccessible.
+- Do not break the VM-managed Cloudflare SSH/public connection.
+
+Actions taken:
+- Reconfirmed `cloudflared-bnpi-hris.service` stayed active.
+- Queried DEV `hris-postgres-dev` database `hris` for configured ZKTeco device
+  rows.
+- Temporarily added non-persistent `10.184.38.144/24` to VM `eth0` to test
+  whether same-subnet presence recovered `.9` and `.10`.
+- Ran TCP, UDP/ZK, directed discovery, and full PyZK reads after the network
+  test.
+- Removed/left no persistent network change; VM remained on canonical
+  `10.184.37.19/24` and `10.184.37.78/24`.
+- Added read-only `count` and `discover` modes to `vendor/zkteco-linux`.
+- Updated `vendor/zkteco-linux/README.md`.
+- Added recovery report `.wwg/reports/zkteco-four-device-recovery-20260704.md`.
+
+Findings:
+- `.234` and `.235` fully query again: `.234` returned 904 users and 21,510
+  events; `.235` returned 904 users and 18,087 events.
+- `.9` and `.10` still failed full PyZK reads after about 34s each.
+- User-supplied device-screen photos confirm `.9`, `.10`, `.234`, and `.235`
+  are configured on the terminals themselves with mask `255.255.255.0`,
+  gateway `10.184.38.254`, TCP COMM.Port `4370`, and DHCP off.
+- Temporary `10.184.38.144/24` did not recover `.9` or `.10`; TCP changed to
+  `No route to host`, consistent with failed neighbor/L2 resolution.
+- Temporary gateway/source-route variants using `/32` sources
+  `10.184.38.144`, `10.184.38.91`, and `10.184.38.138` through gateway
+  `10.184.38.254` also did not recover `.9` or `.10`.
+- After cleanup, VM networking returned to canonical `10.184.37.19/24` and
+  `10.184.37.78/24`; Cloudflare remained active; `.234/.235` quick counts
+  still passed.
+- Directed UDP/ZK discovery across `10.184.37.0/24`, `10.184.38.0/24`,
+  `10.184.39.0/24`, and `192.168.254.0/24` found only `.234` and `.235`.
+- New probe `count --force-udp` returns `.234/.235` summary counts in about
+  0.12s each.
+
+Validation:
+- `python vendor\zkteco-linux\tests\test_probe.py` passed: 10 tests OK.
+- Remote `/tmp` copy of the new probe ran successfully inside
+  `project-truth-zkteco-linux-bridge`.
+
+Boundary:
+- No device writes were performed.
+- No HRIS sync write was triggered.
+- No Cloudflare tunnel outage or service change was introduced.
+- No persistent VM network config change was left behind.
+- The photos prove the configured device IPs/ports, but they do not prove the
+  devices are currently reachable over the live LAN path.
+
+## 2026-07-04 ZKTeco Reachability And Discovery Recheck
+
+Task mode: Mixed runtime investigation and WWG documentation.
+
+User intent:
+- Recheck whether `10.184.38.9`, `10.184.38.10`, or possibly
+  `10.184.38.1` were really unreachable.
+- Try longer timeouts and determine whether SDK/protocol discovery can find
+  nearby ZKTeco devices without relying only on manually configured IPs.
+
+Actions taken:
+- Retried TCP connects to `4370` with 1s, 3s, 10s, and 20s timeouts.
+- Ran a parallel TCP `4370` sweep across `10.184.38.1-254`.
+- Retried PyZK UDP `connect + read_sizes()` with 5s, 10s, and 20s timeouts.
+- Ran a directed UDP/ZK `connect + read_sizes()` sweep across
+  `10.184.38.1-254`.
+- Sent bounded UDP ZK `CMD_CONNECT` broadcast probes to `255.255.255.255`,
+  `10.184.38.255`, and `10.184.37.255`.
+- Checked ICMP reachability for `.1`, `.9`, `.10`, `.234`, `.235`, and `.254`.
+
+Findings:
+- `10.184.38.9` timed out on TCP `4370`, UDP/ZK, and ICMP.
+- `10.184.38.10` timed out on TCP `4370`, UDP/ZK, and ICMP.
+- `10.184.38.1` replies to ICMP but refuses TCP `4370` and does not answer
+  UDP/ZK, so it is not a ZKTeco SDK endpoint in this proof.
+- TCP and directed UDP/ZK sweeps found only `10.184.38.234` and
+  `10.184.38.235`.
+- UDP broadcast discovery returned no replies from the routed VM position.
+- UDP `read_sizes()` on `.234` and `.235` is extremely fast, about
+  0.07-0.14s end to end in the later proof.
+
+Decision:
+- Treat `.9` and `.10` as currently unreachable from the remote VM, not merely
+  slow.
+- For removable discovery tooling, prefer bounded directed UDP/ZK sweeps over
+  configured CIDR ranges using `read_sizes()` only. Treat broadcast discovery
+  as best-effort because it did not work from the current routed VM path.
+
+Boundary:
+- No device writes were performed.
+- No full-history read was required.
+- No HRIS runtime default was changed.
+
+## 2026-07-04 ZKTeco Quick Count Protocol Proof
+
+Task mode: Mixed runtime investigation and WWG documentation.
+
+User intent:
+- Determine whether the ZKTeco protocol can provide quick source-device counts
+  without downloading all users or attendance events.
+- Keep the answer focused on what is possible for fast sync/preflight summary.
+
+Actions taken:
+- Reviewed `adrobinoga/zk-protocol`, especially terminal/device-status
+  operations.
+- Confirmed the protocol documents `CMD_GET_FREE_SIZES` as a 92-byte status
+  structure containing user count, attendance-log count, capacities, remaining
+  slots, fingerprint count, and face count.
+- Inspected installed PyZK inside `project-truth-zkteco-linux-bridge`.
+- Found PyZK exposes the operation as `read_sizes()`.
+- Ran read-only `read_sizes()` probes from the active remote bridge container
+  against the four configured ZKTeco devices.
+
+Findings:
+- `10.184.38.235` returned quick counts in about 2.3s end to end:
+  `users=904`, `records=18086`, `rec_cap=120000`, `rec_av=101914`.
+- `10.184.38.234` returned quick counts in about 2.5s end to end:
+  `users=904`, `records=21508`, `rec_cap=120000`, `rec_av=98492`.
+- The `read_sizes()` call itself took about 1.0s per reachable device.
+- `10.184.38.9` and `10.184.38.10` still timed out at TCP level.
+- This is the fastest proven source-device summary path and should be used for
+  sync preflight counts instead of full user/event downloads.
+
+Boundary:
+- No device writes were performed.
+- No full-history read was required for the quick count proof.
+- The quick attendance counts were one higher than the earlier full-history
+  read counts; likely new events arrived, but exact semantics should be
+  verified during implementation.
+
+## 2026-07-04 ZKTeco gozk SDK Trial
+
+Task mode: Mixed SDK performance investigation and WWG documentation.
+
+User intent:
+- Test `github.com/canhlinh/gozk` before making it a default replacement or
+  supplement for PyZK.
+- Query the same four configured ZKTeco devices from the real remote VM/client
+  path.
+- Check users and attendance-event performance.
+
+Actions taken:
+- Reviewed gozk source/API behavior.
+- Created a disposable read-only Go probe under `.runtime/gozk-probe`.
+- Copied the probe to `/tmp/project-truth-gozk-probe` on the remote VM.
+- Ran it through disposable `golang:1.22-bookworm` containers with
+  `--network host`.
+- Tested all four known ZKTeco devices, then retried the two TCP-reachable
+  devices one at a time.
+- Added report `.wwg/reports/zkteco-gozk-trial-20260704.md`.
+- Added proposed recommendation `REC-20260704-ZKTECO-GOZK-NOT-DEFAULT`.
+
+Findings:
+- gozk connected quickly to reachable devices.
+- gozk `GetUsers()` did not return user objects; the current API method returns
+  only an error.
+- `10.184.38.235` had one successful gozk full-attendance read of 18,085
+  events in about 22.1 seconds, still above the 15-second interactive
+  threshold.
+- `10.184.38.234` failed gozk attendance history reads where PyZK succeeded.
+- Isolated retries failed attendance history reads on both `.235` and `.234`.
+- `10.184.38.9` and `10.184.38.10` remained TCP-unreachable from the remote VM.
+
+Decision:
+- Do not make gozk the default ZKTeco stack now.
+- Keep PyZK as the active runtime path unless a future gozk fork/probe proves
+  stable user extraction and stable history reads across the reachable devices.
+
+Boundary:
+- No HRIS runtime default was changed.
+- No device writes were performed.
+- No HRIS sync write was triggered.
+- No tunnel/service outage was introduced.
+
+## 2026-07-04 ZKTeco Remote Runtime Truth Pass
+
+Task mode: Mixed runtime investigation, SDK performance proof, and WWG
+documentation.
+
+User intent:
+- Verify the real remote/client-side ZKTeco runtime through `ssh
+  project-truth-hris`, not a host-local VM shortcut.
+- Query current ZKTeco source-device users and attendance events through the
+  Linux/PyZK bridge as fast as practical.
+- Identify whether source reads exceed the user's rough 15-second interactive
+  threshold.
+
+Actions taken:
+- Verified remote SSH to `project-truth-node` through `ssh project-truth-hris`.
+- Confirmed the VM-managed `cloudflared-bnpi-hris.service` remained active.
+- Confirmed runtime checkout `/var/lib/project-truth/ansible-pull` on
+  `develop@9a82734`.
+- Checked active ZKTeco bridge containers on ports `4371`, `4372`, and `4373`.
+- Ran read-only TCP, PyZK handshake, `get_users()`, and `get_attendance()`
+  probes from inside the running Linux bridge container.
+- Compared source-device counts to DEV HRIS saved `ZKTECO_EVENT` rows.
+- Added report `.wwg/reports/zkteco-remote-runtime-truth-20260704.md`.
+- Added proposed recommendation `REC-20260704-ZKTECO-PREVIEW-PERF` to
+  `.wwg/governance/recommendation-registry.md`.
+
+Findings:
+- Current remote queryable devices: 2 of 4.
+- `10.184.38.235` and `10.184.38.234` were reachable and returned 904 users
+  each.
+- `10.184.38.235` returned 18,085 PyZK attendance events, latest
+  `2026-07-04T08:06:55`.
+- `10.184.38.234` returned 21,507 PyZK attendance events, latest
+  `2026-07-04T07:07:17`.
+- `10.184.38.9` and `10.184.38.10` timed out at TCP/PyZK level from the remote
+  VM, so they were not queryable during this pass.
+- PyZK `force_udp=True` was fastest for handshake/user-count reads, but slower
+  for full attendance-history reads.
+- Full attendance pulls exceeded 15 seconds even on reachable devices.
+
+Boundary:
+- No device writes were performed.
+- No HRIS sync write was triggered.
+- No tunnel/service outage was introduced.
+- Count parity remains unresolved and should not be claimed from this pass.
+
 ## 2026-07-01 Public HRIS Restore
 
 Task mode: Mixed runtime incident repair and WWG documentation update.

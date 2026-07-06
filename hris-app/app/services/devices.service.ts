@@ -157,7 +157,7 @@ export interface DeviceSyncPreviewRow {
 	vendorUserCount?: number | null;
 	missingEventCount?: number | null;
 	canStartSync?: boolean;
-	syncAction?: "zkteco-bridge-sync" | string | null;
+	syncAction?: "zkteco-bridge-sync" | "hikvision-import" | string | null;
 	status: "synced" | "needs_sync" | "source_total_unavailable" | string;
 	lastSourceEventAt?: string | null;
 	error?: string | null;
@@ -176,6 +176,68 @@ export interface DeviceSyncPreviewResponse {
 		error?: string | null;
 	} | null;
 	devices: DeviceSyncPreviewRow[];
+}
+
+export interface DeviceImportJobProgress {
+	jobId: string;
+	status: "processing" | "completed" | "failed";
+	deviceId: string;
+	deviceName: string;
+	total: number;
+	processed: number;
+	imported: number;
+	skipped: number;
+	failed: number;
+	message: string;
+	errors?: Array<{ row: number; error: string }>;
+	startedAt: string;
+	completedAt?: string;
+}
+
+export interface DeviceEventsResetScope {
+	deviceId?: string;
+	source?: string;
+	status?: string;
+	from?: string;
+	to?: string;
+	dateField?: "eventTime" | "receivedAt";
+	includeLinkedAttendance?: boolean;
+	execute?: boolean;
+}
+
+export interface DeviceEventsResetResponse {
+	mode: "preview" | "executed";
+	scope: {
+		organizationId: string;
+		deviceId: string;
+		source: string;
+		status: string;
+		from: string | null;
+		to: string | null;
+		dateField: "eventTime" | "receivedAt";
+	};
+	counts?: {
+		devices: number;
+		deviceEvents: number;
+		linkedAttendance: number;
+		importJobs: number;
+	};
+	countsBefore?: {
+		devices: number;
+		deviceEvents: number;
+		linkedAttendance: number;
+		importJobs: number;
+	};
+	countsAfter?: {
+		deviceEvents: number;
+		linkedAttendance: number;
+	};
+	deleted?: {
+		deviceEvents: number;
+		linkedAttendance: number;
+	};
+	backupDir?: string;
+	affectedModels?: string[];
 }
 
 export interface CreateDeviceRequest {
@@ -417,6 +479,9 @@ class DevicesService extends APIService {
 
 	async getDeviceHealth(deviceId: string): Promise<DeviceHealthResponse> {
 		try {
+			if (!String(deviceId || "").trim()) {
+				throw new Error("Select a device before checking health");
+			}
 			const response = await hrisApiClient.get<any>(`/api/device/${deviceId}/health`);
 			let healthData = response.data;
 			if (healthData && typeof healthData === "object" && "data" in healthData) {
@@ -508,6 +573,50 @@ class DevicesService extends APIService {
 			console.error("Error starting ZKTeco sync:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error starting ZKTeco sync",
+			);
+		}
+	}
+
+	async triggerHikvisionAttendanceImport(payload: { deviceId: string }): Promise<any> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/hikvision/sync", payload);
+			if (!response.data) {
+				throw new Error("Failed to start device log sync");
+			}
+			return response.data?.data || response.data;
+		} catch (error: any) {
+			console.error("Error starting Hikvision sync:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error starting device log sync",
+			);
+		}
+	}
+
+	async getDeviceImportJob(jobId: string): Promise<DeviceImportJobProgress> {
+		try {
+			if (!String(jobId || "").trim()) throw new Error("Import job is required");
+			const response = await hrisApiClient.get<any>(`/api/device/import-jobs/${jobId}`);
+			const progress = response.data?.data || response.data;
+			if (!progress) throw new Error("Import job was not found");
+			return progress as DeviceImportJobProgress;
+		} catch (error: any) {
+			console.error("Error loading device import job:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error loading import progress",
+			);
+		}
+	}
+
+	async resetDeviceEvents(payload: DeviceEventsResetScope): Promise<DeviceEventsResetResponse> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/events/reset", payload);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to reset saved device events");
+			return data as DeviceEventsResetResponse;
+		} catch (error: any) {
+			console.error("Error resetting device events:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error resetting saved device events",
 			);
 		}
 	}

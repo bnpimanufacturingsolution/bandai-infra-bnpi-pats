@@ -16,20 +16,40 @@ describe("device events page UX contract", () => {
 		);
 	});
 
-	it("opens Sync logs as a modal journey with bridge preflight and actual sync status", () => {
+	it("opens Sync logs as a modal journey with device counts and sync status", () => {
 		expect(routeSource).to.contain('next.set("action", "sync-logs")');
+		expect(routeSource).to.contain('searchParams.get("debug") === "true"');
+		expect(routeSource).to.contain('next.delete("debug")');
 		expect(routeSource).to.contain('title="Sync device logs"');
+		expect(routeSource).to.contain('title="Device sync status"');
 		expect(routeSource).to.contain("useDeviceSyncPreview");
-		expect(routeSource).to.contain("Refresh preflight");
+		expect(routeSource).to.contain("setShowImportProgressModal(true)");
+		expect(routeSource).to.contain("Refresh");
 		expect(routeSource).to.contain("device-events-sync-preflight");
 		expect(routeSource).to.contain("Sync preflight is unavailable");
-		expect(routeSource).to.contain("Source totals");
-		expect(routeSource).to.contain("HRIS saved");
-		expect(routeSource).to.contain("Per-device tally");
-		expect(routeSource).to.contain("Source events");
-		expect(routeSource).to.contain("Missing");
-		expect(routeSource).to.contain("Preview only");
-		expect(routeSource).to.contain("Start actual sync");
+		expect(routeSource).to.contain("Syncing device logs");
+		expect(routeSource).to.contain("Progress is available from Sync logs.");
+		expect(routeSource).not.to.contain("Progress is shown below the toolbar");
+		expect(routeSource).not.to.contain("Sync in progress");
+		expect(routeSource).to.contain("Device total");
+		expect(routeSource).to.contain("Saved:");
+		expect(routeSource).to.contain("Not saved");
+		expect(routeSource).to.contain("Can scan device");
+		expect(routeSource).to.contain("Accordion");
+		expect(routeSource).to.contain("Sync logs");
+	});
+
+	it("exposes the saved punch reset only in the admin debug sync view", () => {
+		expect(routeSource).to.contain('searchParams.get("debug") === "true"');
+		expect(routeSource).to.contain("canUseDebugReset");
+		expect(routeSource).to.contain("Debug reset saved punches");
+		expect(routeSource).to.contain("Preview reset");
+		expect(routeSource).to.contain("Reset scoped data");
+		expect(routeSource).to.contain("Export backup and reset");
+		expect(routeSource).to.contain("Also delete linked attendance rows");
+		expect(routeSource).to.contain('execute: false');
+		expect(routeSource).to.contain('execute: true');
+		expect(routeSource).to.contain('title="Reset scoped saved punches"');
 	});
 
 	it("does not render terminal manage deeplinks from saved rows or punch details", () => {

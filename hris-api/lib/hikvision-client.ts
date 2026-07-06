@@ -47,17 +47,6 @@ export const getHikvisionDeviceHttpPort = (device: {
 	protocol: string;
 	config?: unknown;
 }) => {
-	const config = device.config && typeof device.config === "object" ? (device.config as any) : {};
-	const configuredPort =
-		config.httpPort ??
-		config.isapiPort ??
-		config.webPort ??
-		config.restPort;
-	if (configuredPort !== undefined && configuredPort !== null && configuredPort !== "") {
-		const parsed = Number(configuredPort);
-		if (Number.isFinite(parsed) && parsed > 0) return parsed;
-	}
-
 	if (device.protocol !== "https" && Number(device.port) === 8000) return 80;
 	if (device.protocol === "https" && Number(device.port) === 8000) return 443;
 	return Number(device.port);

@@ -4,6 +4,8 @@ import devicesService, {
 	type DeviceEventsResponse,
 	type DeviceHealthResponse,
 	type DeviceSyncPreviewResponse,
+	type DeviceImportJobProgress,
+	type DeviceEventsResetScope,
 	type CreateDeviceRequest,
 	type UpdateDeviceRequest,
 	type ZktecoAttendanceSyncRequest,
@@ -23,6 +25,7 @@ export const queryKeys = {
 		health: (id?: string) => [...queryKeys.devices.all, "health", id] as const,
 		syncPreview: (params?: { deviceId?: string; source?: string }) =>
 			[...queryKeys.devices.all, "sync-preview", { params }] as const,
+		importJob: (jobId?: string) => [...queryKeys.devices.all, "import-job", jobId] as const,
 	},
 };
 
@@ -86,6 +89,20 @@ export const useDeviceHealth = (deviceId?: string, enabled = true) => {
 	});
 };
 
+export const useDeviceImportJob = (jobId?: string | null, enabled = true) => {
+	return useQuery<DeviceImportJobProgress>({
+		queryKey: queryKeys.devices.importJob(jobId || undefined),
+		queryFn: () => devicesService.getDeviceImportJob(jobId || ""),
+		enabled: Boolean(jobId) && enabled,
+		staleTime: 1000,
+		refetchInterval: (query) => {
+			const status = query.state.data?.status;
+			return status === "processing" ? 1500 : false;
+		},
+		retry: 1,
+	});
+};
+
 export const useDeviceSyncPreview = (
 	params: { deviceId?: string; source?: string },
 	enabled = true,
@@ -112,6 +129,40 @@ export const useTriggerZktecoAttendanceSync = () => {
 		},
 		onError: (error: any) => {
 			sonnerToast.error(error?.message || "Failed to start ZKTeco sync");
+		},
+	});
+};
+
+export const useTriggerHikvisionAttendanceImport = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (payload: { deviceId: string }) => {
+			return await devicesService.triggerHikvisionAttendanceImport(payload);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			sonnerToast.success("Device log sync started");
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to start device log sync");
+		},
+	});
+};
+
+export const useResetDeviceEvents = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (payload: DeviceEventsResetScope) => {
+			return await devicesService.resetDeviceEvents(payload);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			sonnerToast.success("Saved device events reset request completed");
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to reset saved device events");
 		},
 	});
 };
