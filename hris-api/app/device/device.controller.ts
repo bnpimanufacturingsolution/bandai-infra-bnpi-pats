@@ -28,6 +28,13 @@ import {
 	getHikvisionDeviceHttpPort,
 	hikvisionFetch,
 } from "../../lib/hikvision-client";
+import {
+	buildDeviceUserEmployeeNoCandidates,
+	normalizeHikvisionDeviceUser,
+	resolveDeviceUserLinkDecision,
+	summarizeDeviceUserStatuses,
+	type DeviceUserCandidate,
+} from "../../helper/device-user-sync.helper";
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
 import net from "net";
 import { execFile } from "child_process";
@@ -52,11 +59,13 @@ const DEVICE_EVENT_SOURCES = new Set([
 	"ZKTECO_EVENT",
 ]);
 const DEVICE_EVENT_RESET_ADMIN_ROLES = new Set(["hris-admin", "admin", "super_admin", "superadmin"]);
+const DEVICE_USER_ADMIN_ROLES = new Set(["hris-admin", "admin", "super_admin", "superadmin"]);
 
 type DeviceImportJobStatus = "processing" | "completed" | "failed";
 
 type DeviceImportJob = {
 	jobId: string;
+	runId?: string;
 	status: DeviceImportJobStatus;
 	organizationId: string;
 	deviceId: string;
@@ -662,6 +671,507 @@ export const controller = (prisma: PrismaClient) => {
 		return Array.isArray(events) ? events : [];
 	};
 
+	const getUserInfoSearchList = (data: any): any[] => {
+		const users = data?.UserInfoSearch?.UserInfo || data?.data?.UserInfoSearch?.UserInfo;
+		return Array.isArray(users) ? users : [];
+	};
+
+	const assertDeviceUserAdmin = (req: Request, res: Response) => {
+		const organizationId = String((req as any).organizationId || "").trim();
+		const role = String((req as any).role || "").trim();
+		if (!organizationId) {
+			res.status(400).json(buildErrorResponse("Organization ID not found", 400));
+			return null;
+		}
+		if (!DEVICE_USER_ADMIN_ROLES.has(role)) {
+			res.status(403).json(buildErrorResponse("Only admins can manage device users", 403));
+			return null;
+		}
+		return { organizationId, role };
+	};
+
+	const getDeviceForUserSync = async (organizationId: string, deviceId: string) => {
+		if (!deviceId) return null;
+		return (prisma as any).device.findFirst({
+			where: { id: deviceId, organizationId, isDeleted: false },
+			select: {
+				id: true,
+				organizationId: true,
+				name: true,
+				address: true,
+				port: true,
+				protocol: true,
+				config: true,
+			},
+		});
+	};
+
+	const loadEmployeesForDeviceUserCandidates = async (
+		organizationId: string,
+		candidates: DeviceUserCandidate[],
+	) => {
+		const values = Array.from(
+			new Set(
+				candidates
+					.flatMap((candidate) => [
+						candidate.employeeNo,
+						...buildDeviceUserEmployeeNoCandidates(candidate.employeeNo),
+					])
+					.map((value) => String(value || "").trim())
+					.filter(Boolean),
+			),
+		);
+		if (!values.length) return [];
+		return prisma.employee.findMany({
+			where: {
+				organizationId,
+				isDeleted: false,
+				OR: [{ deviceEmpId: { in: values } }, { employeeId: { in: values } }],
+			},
+			select: {
+				id: true,
+				employeeId: true,
+				deviceEmpId: true,
+			},
+		});
+	};
+
+	const buildDeviceUserSelect = () => ({
+		id: true,
+		organizationId: true,
+		deviceId: true,
+		employeeId: true,
+		vendorUserId: true,
+		employeeNo: true,
+		displayName: true,
+		userType: true,
+		status: true,
+		validFrom: true,
+		validTo: true,
+		doorRight: true,
+		accessPlan: true,
+		rawPayload: true,
+		lastSyncedAt: true,
+		createdAt: true,
+		updatedAt: true,
+		device: {
+			select: {
+				id: true,
+				name: true,
+				address: true,
+				port: true,
+				protocol: true,
+			},
+		},
+		employee: {
+			select: {
+				id: true,
+				employeeId: true,
+				deviceEmpId: true,
+				person: { select: { personalInfo: true } },
+			},
+		},
+	});
+
+	const decorateDeviceUser = (row: any) => {
+		const employee = row?.employee;
+		return {
+			...row,
+			employee: employee
+				? {
+						id: employee.id,
+						employeeId: employee.employeeId,
+						deviceEmpId: employee.deviceEmpId,
+						fullName: getEmployeeDisplayName(employee) || employee.employeeId,
+					}
+				: null,
+		};
+	};
+
+	const listDeviceUsers = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const organizationId = String((req as any).organizationId || "").trim();
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("Organization ID not found", 400));
+				return;
+			}
+			const deviceId = String(req.params.id || req.query.deviceId || "").trim();
+			if (!deviceId) {
+				res.status(400).json(buildErrorResponse("Device is required", 400));
+				return;
+			}
+			const status = String(req.query.status || "all").trim();
+			const query = String(req.query.query || req.query.search || "").trim();
+			const page = Math.max(Number(req.query.page || 1), 1);
+			const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 100);
+			const where: any = {
+				organizationId,
+				deviceId,
+				...(status && status !== "all" ? { status } : {}),
+				...(query
+					? {
+							OR: [
+								{ vendorUserId: { contains: query, mode: "insensitive" } },
+								{ employeeNo: { contains: query, mode: "insensitive" } },
+								{ displayName: { contains: query, mode: "insensitive" } },
+								{ employee: { employeeId: { contains: query, mode: "insensitive" } } },
+								{ employee: { deviceEmpId: { contains: query, mode: "insensitive" } } },
+							],
+						}
+					: {}),
+			};
+
+			const [rows, total, allRows] = await Promise.all([
+				(prisma as any).deviceUser.findMany({
+					where,
+					select: buildDeviceUserSelect(),
+					orderBy: [{ status: "asc" }, { vendorUserId: "asc" }],
+					skip: (page - 1) * limit,
+					take: limit,
+				}),
+				(prisma as any).deviceUser.count({ where }),
+				(prisma as any).deviceUser.findMany({
+					where: { organizationId, deviceId },
+					select: { status: true, employeeId: true },
+				}),
+			]);
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"Device users retrieved",
+					{
+						deviceUsers: rows.map(decorateDeviceUser),
+						summary: summarizeDeviceUserStatuses(allRows),
+						pagination: buildPagination(total, page, limit),
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			res.status(500).json(buildErrorResponse(error?.message || "Failed to retrieve device users", 500));
+		}
+	};
+
+	const fetchAllHikvisionDeviceUsers = async (req: Request, device: any) => {
+		const pageSize = Math.max(1, Math.min(Number(process.env.HIKVISION_USER_SYNC_PAGE_SIZE || 100), 200));
+		const maxUsers = Math.max(1, Math.min(Number(process.env.HIKVISION_USER_SYNC_MAX_USERS || 2000), 10000));
+		const allUsers: any[] = [];
+		let position = 0;
+		for (let page = 0; page < 100 && allUsers.length < maxUsers; page += 1) {
+			const data = await hikvisionFetch(hikvisionEndpoint.accessControl.userInfo.search, {
+				method: "POST",
+				deviceId: device.id,
+				prisma,
+				request: req,
+				timeoutMs: 15000,
+				headers: { "Content-Type": "application/json" },
+				body: {
+					UserInfoSearchCond: {
+						searchID: `device-user-sync-${Date.now()}-${position}`,
+						searchResultPosition: position,
+						maxResults: Math.min(pageSize, maxUsers - allUsers.length),
+					},
+				},
+			});
+			const pageUsers = getUserInfoSearchList(data);
+			const search = data?.UserInfoSearch || data?.data?.UserInfoSearch || {};
+			allUsers.push(...pageUsers);
+			const numOfMatches = Number(search.numOfMatches || pageUsers.length || 0);
+			const status = String(search.responseStatusStrg || "").toUpperCase();
+			if (!pageUsers.length || status !== "MORE" || numOfMatches <= 0) break;
+			position += numOfMatches;
+		}
+		return Array.from(new Map(allUsers.map((user) => [String(user?.employeeNo || user?.employeeNoString || user?.userId), user])).values());
+	};
+
+	const upsertDeviceUsersFromCandidates = async (params: {
+		organizationId: string;
+		deviceId: string;
+		candidates: DeviceUserCandidate[];
+		source: "hikvision" | "legacy-backfill";
+	}) => {
+		const { organizationId, deviceId, candidates } = params;
+		const employees = await loadEmployeesForDeviceUserCandidates(organizationId, candidates);
+		const now = new Date();
+		let created = 0;
+		let updated = 0;
+		let linked = 0;
+		let unmatched = 0;
+		let conflict = 0;
+		let disabled = 0;
+
+		for (const candidate of candidates) {
+			const existing = await (prisma as any).deviceUser.findUnique({
+				where: {
+					organizationId_deviceId_vendorUserId: {
+						organizationId,
+						deviceId,
+						vendorUserId: candidate.vendorUserId,
+					},
+				},
+				select: { id: true, employeeId: true, status: true },
+			});
+			const decision = resolveDeviceUserLinkDecision(candidate, employees);
+			const preserveManualEmployee =
+				existing?.employeeId &&
+				decision.status !== "CONFLICT" &&
+				decision.status !== "DISABLED" &&
+				(!decision.employeeId || decision.employeeId === existing.employeeId);
+			const employeeId = preserveManualEmployee
+				? existing.employeeId
+				: decision.employeeId;
+			const status = preserveManualEmployee ? "ACTIVE" : decision.status;
+			if (status === "ACTIVE" && employeeId) linked += 1;
+			else if (status === "CONFLICT") conflict += 1;
+			else if (status === "DISABLED") disabled += 1;
+			else unmatched += 1;
+
+			const data = {
+				employeeId,
+				employeeNo: candidate.employeeNo,
+				displayName: candidate.displayName,
+				userType: candidate.userType,
+				status,
+				validFrom: candidate.validFrom,
+				validTo: candidate.validTo,
+				doorRight: candidate.doorRight,
+				accessPlan: candidate.accessPlan as any,
+				rawPayload: {
+					...(candidate.rawPayload as any),
+					hrisSync: {
+						source: params.source,
+						matchReason: preserveManualEmployee ? "manual_existing" : decision.matchReason,
+						matchCount: decision.matchCount,
+					},
+				},
+				lastSyncedAt: now,
+			};
+			if (existing?.id) {
+				await (prisma as any).deviceUser.update({ where: { id: existing.id }, data });
+				updated += 1;
+			} else {
+				await (prisma as any).deviceUser.create({
+					data: {
+						organizationId,
+						deviceId,
+						vendorUserId: candidate.vendorUserId,
+						...data,
+					},
+				});
+				created += 1;
+			}
+		}
+		return { created, updated, linked, unmatched, conflict, disabled };
+	};
+
+	const backfillDeviceUsersFromLegacyEmployees = async (params: {
+		organizationId: string;
+		deviceId: string;
+	}) => {
+		const legacyEmployees = await prisma.employee.findMany({
+			where: {
+				organizationId: params.organizationId,
+				isDeleted: false,
+				deviceEmpId: { not: null },
+			},
+			select: {
+				id: true,
+				employeeId: true,
+				deviceEmpId: true,
+				person: { select: { personalInfo: true } },
+			},
+		});
+		const candidates = legacyEmployees.reduce<DeviceUserCandidate[]>((items, employee) => {
+				const vendorUserId = String(employee.deviceEmpId || "").trim();
+				if (!vendorUserId) return items;
+				items.push({
+					vendorUserId,
+					employeeNo: vendorUserId,
+					displayName: getEmployeeDisplayName(employee) || employee.employeeId,
+					userType: "legacy",
+					status: "UNMATCHED" as const,
+					validFrom: null,
+					validTo: null,
+					doorRight: null,
+					accessPlan: null,
+					rawPayload: {
+						source: "Employee.deviceEmpId",
+						employeeId: employee.employeeId,
+						employeeDbId: employee.id,
+					},
+				});
+				return items;
+			}, []);
+		const result = await upsertDeviceUsersFromCandidates({
+			organizationId: params.organizationId,
+			deviceId: params.deviceId,
+			candidates,
+			source: "legacy-backfill",
+		});
+		return { total: candidates.length, ...result };
+	};
+
+	const syncDeviceUsers = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			const deviceId = String(req.params.id || (req.body as any)?.deviceId || "").trim();
+			const device = await getDeviceForUserSync(gate.organizationId, deviceId);
+			if (!device || !isHikvisionDevice(device)) {
+				res.status(400).json(buildErrorResponse("Select a Hikvision device before syncing users", 400));
+				return;
+			}
+			const run = await (prisma as any).deviceSyncRun.create({
+				data: {
+					organizationId: gate.organizationId,
+					deviceId: device.id,
+					runType: "DEVICE_USERS",
+					status: "PROCESSING",
+					startedByUserId: (req as any).userId || null,
+				},
+			});
+			try {
+				const rawUsers = await fetchAllHikvisionDeviceUsers(req, device);
+				const candidates = rawUsers
+					.map(normalizeHikvisionDeviceUser)
+					.filter((candidate): candidate is DeviceUserCandidate => Boolean(candidate));
+				const result = await upsertDeviceUsersFromCandidates({
+					organizationId: gate.organizationId,
+					deviceId: device.id,
+					candidates,
+					source: "hikvision",
+				});
+				const updatedRun = await (prisma as any).deviceSyncRun.update({
+					where: { id: run.id },
+					data: {
+						status: "COMPLETED",
+						totalSourceRecords: rawUsers.length,
+						importableRecords: candidates.length,
+						savedRecords: result.created + result.updated,
+						skippedRecords: rawUsers.length - candidates.length,
+						failedRecords: 0,
+						missingRecords: 0,
+						skipSummary: { invalidUserId: rawUsers.length - candidates.length },
+						rawSummary: result,
+						completedAt: new Date(),
+					},
+				});
+				await invalidateCache.byPattern("cache:device:*").catch(() => undefined);
+				res.status(200).json(
+					buildSuccessResponse(
+						"Device users synced",
+						{
+							run: updatedRun,
+							summary: {
+								totalSourceRecords: rawUsers.length,
+								importableRecords: candidates.length,
+								...result,
+							},
+						},
+						200,
+					),
+				);
+			} catch (error: any) {
+				await (prisma as any).deviceSyncRun.update({
+					where: { id: run.id },
+					data: {
+						status: "FAILED",
+						failedRecords: 1,
+						failureSummary: { message: error?.message || "device_user_sync_failed" },
+						completedAt: new Date(),
+					},
+				});
+				throw error;
+			}
+		} catch (error: any) {
+			res.status(500).json(buildErrorResponse(error?.message || "Failed to sync device users", 500));
+		}
+	};
+
+	const backfillDeviceUsers = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			const deviceId = String(req.params.id || (req.body as any)?.deviceId || "").trim();
+			const device = await getDeviceForUserSync(gate.organizationId, deviceId);
+			if (!device) {
+				res.status(404).json(buildErrorResponse("Device not found", 404));
+				return;
+			}
+			const result = await backfillDeviceUsersFromLegacyEmployees({
+				organizationId: gate.organizationId,
+				deviceId: device.id,
+			});
+			res.status(200).json(buildSuccessResponse("Legacy device users backfilled", result, 200));
+		} catch (error: any) {
+			res.status(500).json(buildErrorResponse(error?.message || "Failed to backfill device users", 500));
+		}
+	};
+
+	const linkDeviceUser = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			const deviceUserId = String(req.params.userId || "").trim();
+			const employeeId = String((req.body as any)?.employeeId || "").trim();
+			if (!employeeId) {
+				res.status(400).json(buildErrorResponse("Employee is required", 400));
+				return;
+			}
+			const [deviceUser, employee] = await Promise.all([
+				(prisma as any).deviceUser.findFirst({
+					where: { id: deviceUserId, organizationId: gate.organizationId },
+				}),
+				prisma.employee.findFirst({
+					where: { id: employeeId, organizationId: gate.organizationId, isDeleted: false },
+					select: { id: true },
+				}),
+			]);
+			if (!deviceUser) {
+				res.status(404).json(buildErrorResponse("Device user not found", 404));
+				return;
+			}
+			if (!employee) {
+				res.status(404).json(buildErrorResponse("Employee not found", 404));
+				return;
+			}
+			const updated = await (prisma as any).deviceUser.update({
+				where: { id: deviceUserId },
+				data: { employeeId: employee.id, status: "ACTIVE" },
+				select: buildDeviceUserSelect(),
+			});
+			res.status(200).json(buildSuccessResponse("Device user linked", decorateDeviceUser(updated), 200));
+		} catch (error: any) {
+			res.status(500).json(buildErrorResponse(error?.message || "Failed to link device user", 500));
+		}
+	};
+
+	const unlinkDeviceUser = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			const deviceUserId = String(req.params.userId || "").trim();
+			const deviceUser = await (prisma as any).deviceUser.findFirst({
+				where: { id: deviceUserId, organizationId: gate.organizationId },
+			});
+			if (!deviceUser) {
+				res.status(404).json(buildErrorResponse("Device user not found", 404));
+				return;
+			}
+			const updated = await (prisma as any).deviceUser.update({
+				where: { id: deviceUserId },
+				data: {
+					employeeId: null,
+					status: deviceUser.status === "DISABLED" ? "DISABLED" : "UNMATCHED",
+				},
+				select: buildDeviceUserSelect(),
+			});
+			res.status(200).json(buildSuccessResponse("Device user unlinked", decorateDeviceUser(updated), 200));
+		} catch (error: any) {
+			res.status(500).json(buildErrorResponse(error?.message || "Failed to unlink device user", 500));
+		}
+	};
+
 	const getHikvisionImportProgress = (jobId: string) => {
 		cleanupDeviceImportJobs();
 		return deviceImportJobs.get(jobId) || null;
@@ -669,11 +1179,12 @@ export const controller = (prisma: PrismaClient) => {
 
 	const processHikvisionImportJob = async (params: {
 		jobId: string;
+		runId?: string;
 		req: Request;
 		device: any;
 		totalHint: number;
 	}) => {
-		const { jobId, req, device, totalHint } = params;
+		const { jobId, runId, req, device, totalHint } = params;
 		const ctrl = callbackController(prisma);
 		const pageSize = Math.max(
 			1,
@@ -799,6 +1310,32 @@ export const controller = (prisma: PrismaClient) => {
 						: `Imported ${imported.toLocaleString()} device logs`,
 				completedAt: new Date(),
 			});
+			if (runId) {
+				await (prisma as any).deviceSyncRun.update({
+					where: { id: runId },
+					data: {
+						status: failed > 0 && imported === 0 ? "FAILED" : "COMPLETED",
+						totalSourceRecords: processed,
+						importableRecords: processed - skipped,
+						savedRecords: imported,
+						skippedRecords: skipped,
+						failedRecords: failed,
+						missingRecords: 0,
+						skipSummary: {
+							missingEmployeeNo: skipped,
+						},
+						failureSummary: failed ? { failed } : null,
+						rawSummary: {
+							totalHint,
+							processed,
+							imported,
+							skipped,
+							failed,
+						},
+						completedAt: new Date(),
+					},
+				});
+			}
 			await invalidateCache.byPattern("cache:device:events:*").catch(() => undefined);
 		} catch (error: any) {
 			const job = deviceImportJobs.get(jobId);
@@ -811,9 +1348,24 @@ export const controller = (prisma: PrismaClient) => {
 				imported,
 				skipped,
 				failed: failed + 1,
-					message: error?.message || "Sync failed",
+				message: error?.message || "Sync failed",
 				completedAt: new Date(),
 			});
+			if (runId) {
+				await (prisma as any).deviceSyncRun.update({
+					where: { id: runId },
+					data: {
+						status: "FAILED",
+						totalSourceRecords: processed,
+						importableRecords: processed - skipped,
+						savedRecords: imported,
+						skippedRecords: skipped,
+						failedRecords: failed + 1,
+						failureSummary: { message: error?.message || "Sync failed" },
+						completedAt: new Date(),
+					},
+				}).catch(() => undefined);
+			}
 		}
 	};
 
@@ -841,8 +1393,20 @@ export const controller = (prisma: PrismaClient) => {
 			const counts = await getHikvisionSourceCounts(req, device.id);
 			const totalHint = Number(counts.totalEvents || 0);
 			const jobId = randomUUID();
+			const run = await (prisma as any).deviceSyncRun.create({
+				data: {
+					organizationId: String(organizationId),
+					deviceId: device.id,
+					runType: "DEVICE_LOGS",
+					status: "PROCESSING",
+					source: "HIKVISION_CALLBACK",
+					startedByUserId: (req as any).userId || null,
+					totalSourceRecords: totalHint,
+				},
+			});
 			const job: DeviceImportJob = {
 				jobId,
+				runId: run.id,
 				status: "processing",
 				organizationId: String(organizationId),
 				deviceId: device.id,
@@ -857,7 +1421,7 @@ export const controller = (prisma: PrismaClient) => {
 				startedAt: new Date(),
 			};
 			deviceImportJobs.set(jobId, job);
-			processHikvisionImportJob({ jobId, req, device, totalHint }).catch((error) => {
+			processHikvisionImportJob({ jobId, runId: run.id, req, device, totalHint }).catch((error) => {
 				deviceLogger.error(`Hikvision import job ${jobId} failed: ${error}`);
 			});
 
@@ -1143,9 +1707,28 @@ export const controller = (prisma: PrismaClient) => {
 						hikvisionTotals.set(device.id, await getHikvisionSourceTotal(req, device.id));
 					}),
 			);
+			const latestCompletedRuns = await Promise.all(
+				syncDevices.map(async (device) => {
+					const run = await (prisma as any).deviceSyncRun.findFirst({
+						where: {
+							organizationId: String(organizationId),
+							deviceId: device.id,
+							runType: "DEVICE_LOGS",
+							status: "COMPLETED",
+							source: device.source,
+						},
+						orderBy: { completedAt: "desc" },
+					});
+					return [device.id, run] as const;
+				}),
+			);
+			const latestRunByDeviceId = new Map(latestCompletedRuns);
 
 			const previewRows = syncDevices.map((device) => {
 				const syncedEvents = savedCountByDeviceAndSource.get(`${device.id}|${device.source}`) || 0;
+				const latestRun = latestRunByDeviceId.get(device.id);
+				const knownSkippedEvents = Number(latestRun?.skippedRecords || 0);
+				const failedEvents = Number(latestRun?.failedRecords || 0);
 				const sourcePreview =
 					device.vendor === "ZKTeco"
 						? zktecoPreviewByIp.get(String(device.address || "").trim())
@@ -1166,7 +1749,7 @@ export const controller = (prisma: PrismaClient) => {
 						: sourcePreview?.userCount ?? null;
 				const needsSyncEvents =
 					totalEvents !== null && totalEvents !== undefined && Number.isFinite(Number(totalEvents))
-						? Math.max(Number(totalEvents) - syncedEvents, 0)
+						? Math.max(Number(totalEvents) - syncedEvents - knownSkippedEvents, 0)
 						: null;
 				const sourceError =
 					sourcePreview?.error ||
@@ -1199,6 +1782,9 @@ export const controller = (prisma: PrismaClient) => {
 					hrisSavedCount: syncedEvents,
 					vendorEventCount: totalEvents,
 					vendorUserCount,
+					knownSkippedEventCount: knownSkippedEvents,
+					failedEventCount: failedEvents,
+					importableSavedCount: syncedEvents,
 					missingEventCount: needsSyncEvents,
 					canStartSync,
 					syncAction: canStartSync
@@ -1578,8 +2164,10 @@ export const controller = (prisma: PrismaClient) => {
 					OR de."doorNo" ILIKE ${queryLike}
 					OR d."name" ILIKE ${queryLike}
 					OR d."address" ILIKE ${queryLike}
-					OR COALESCE(employee_by_id."employeeId", employee_by_device."employeeId", employee_by_code."employeeId") ILIKE ${queryLike}
-					OR COALESCE(employee_by_id."deviceEmpId", employee_by_device."deviceEmpId", employee_by_code."deviceEmpId") ILIKE ${queryLike}
+					OR du."vendorUserId" ILIKE ${queryLike}
+					OR du."displayName" ILIKE ${queryLike}
+					OR COALESCE(employee_by_id."employeeId", employee_by_device_user."employeeId", employee_by_device."employeeId", employee_by_code."employeeId") ILIKE ${queryLike}
+					OR COALESCE(employee_by_id."deviceEmpId", employee_by_device_user."deviceEmpId", employee_by_device."deviceEmpId", employee_by_code."deviceEmpId") ILIKE ${queryLike}
 					OR NULLIF(
 						BTRIM(
 							CONCAT_WS(
@@ -1593,7 +2181,7 @@ export const controller = (prisma: PrismaClient) => {
 					) ILIKE ${queryLike}
 					OR (
 						${paddedEmployeeCode} <> ''
-						AND COALESCE(employee_by_id."employeeId", employee_by_device."employeeId", employee_by_code."employeeId") IN (
+						AND COALESCE(employee_by_id."employeeId", employee_by_device_user."employeeId", employee_by_device."employeeId", employee_by_code."employeeId") IN (
 							${query},
 							${strippedNumericQuery},
 							${paddedEmployeeCode}
@@ -1606,6 +2194,7 @@ export const controller = (prisma: PrismaClient) => {
 			const baseFromSql = Prisma.sql`
 				FROM device_events de
 				LEFT JOIN "Device" d ON d.id = de."deviceId"
+				LEFT JOIN device_users du ON du.id = de."deviceUserId"
 			`;
 			const employeeJoinSql = Prisma.sql`
 				LEFT JOIN LATERAL (
@@ -1621,6 +2210,17 @@ export const controller = (prisma: PrismaClient) => {
 					SELECT emp.id, emp."employeeId", emp."deviceEmpId", emp."personId"
 					FROM employees emp
 					WHERE employee_by_id.id IS NULL
+						AND du."employeeId" IS NOT NULL
+						AND emp."organizationId" = de."organizationId"
+						AND emp."isDeleted" = false
+						AND emp.id = du."employeeId"
+					LIMIT 1
+				) employee_by_device_user ON true
+				LEFT JOIN LATERAL (
+					SELECT emp.id, emp."employeeId", emp."deviceEmpId", emp."personId"
+					FROM employees emp
+					WHERE employee_by_id.id IS NULL
+						AND employee_by_device_user.id IS NULL
 						AND emp."organizationId" = de."organizationId"
 						AND emp."isDeleted" = false
 						AND de."employeeNo" IS NOT NULL
@@ -1632,6 +2232,7 @@ export const controller = (prisma: PrismaClient) => {
 					SELECT emp.id, emp."employeeId", emp."deviceEmpId", emp."personId"
 					FROM employees emp
 					WHERE employee_by_id.id IS NULL
+						AND employee_by_device_user.id IS NULL
 						AND employee_by_device.id IS NULL
 						AND emp."organizationId" = de."organizationId"
 						AND emp."isDeleted" = false
@@ -1658,6 +2259,7 @@ export const controller = (prisma: PrismaClient) => {
 				) employee_by_code ON true
 				LEFT JOIN "Person" matched_person ON matched_person.id = COALESCE(
 					employee_by_id."personId",
+					employee_by_device_user."personId",
 					employee_by_device."personId",
 					employee_by_code."personId"
 				)
@@ -1698,6 +2300,7 @@ export const controller = (prisma: PrismaClient) => {
 					de.id,
 					de."organizationId",
 					de."deviceId",
+					de."deviceUserId",
 					de."employeeId",
 					de."attendanceId",
 					de."eventTime",
@@ -1726,11 +2329,22 @@ export const controller = (prisma: PrismaClient) => {
 						)
 					END AS device,
 					CASE
-						WHEN COALESCE(employee_by_id.id, employee_by_device.id, employee_by_code.id) IS NULL THEN NULL
+						WHEN du.id IS NULL THEN NULL
 						ELSE JSON_BUILD_OBJECT(
-							'id', COALESCE(employee_by_id.id, employee_by_device.id, employee_by_code.id),
-							'employeeId', COALESCE(employee_by_id."employeeId", employee_by_device."employeeId", employee_by_code."employeeId"),
-							'deviceEmpId', COALESCE(employee_by_id."deviceEmpId", employee_by_device."deviceEmpId", employee_by_code."deviceEmpId"),
+							'id', du.id,
+							'vendorUserId', du."vendorUserId",
+							'employeeNo', du."employeeNo",
+							'displayName', du."displayName",
+							'status', du.status::text,
+							'employeeId', du."employeeId"
+						)
+					END AS "deviceUser",
+					CASE
+						WHEN COALESCE(employee_by_id.id, employee_by_device_user.id, employee_by_device.id, employee_by_code.id) IS NULL THEN NULL
+						ELSE JSON_BUILD_OBJECT(
+							'id', COALESCE(employee_by_id.id, employee_by_device_user.id, employee_by_device.id, employee_by_code.id),
+							'employeeId', COALESCE(employee_by_id."employeeId", employee_by_device_user."employeeId", employee_by_device."employeeId", employee_by_code."employeeId"),
+							'deviceEmpId', COALESCE(employee_by_id."deviceEmpId", employee_by_device_user."deviceEmpId", employee_by_device."deviceEmpId", employee_by_code."deviceEmpId"),
 							'fullName', COALESCE(
 								NULLIF(
 									BTRIM(
@@ -1743,7 +2357,7 @@ export const controller = (prisma: PrismaClient) => {
 									),
 									''
 								),
-								COALESCE(employee_by_id."employeeId", employee_by_device."employeeId", employee_by_code."employeeId")
+								COALESCE(employee_by_id."employeeId", employee_by_device_user."employeeId", employee_by_device."employeeId", employee_by_code."employeeId")
 							)
 						)
 					END AS employee
@@ -2499,6 +3113,11 @@ export const controller = (prisma: PrismaClient) => {
 		getEvents,
 		getDeviceHealth,
 		getDeviceSyncPreview,
+		listDeviceUsers,
+		syncDeviceUsers,
+		backfillDeviceUsers,
+		linkDeviceUser,
+		unlinkDeviceUser,
 		resetDeviceEvents,
 		triggerZktecoAttendanceSync,
 		triggerHikvisionAttendanceImport,

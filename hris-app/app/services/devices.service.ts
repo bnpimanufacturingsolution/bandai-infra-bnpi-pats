@@ -34,6 +34,15 @@ export interface DeviceEvent {
 	organizationId: string;
 	deviceId: string;
 	device?: Pick<Device, "id" | "name" | "address" | "port" | "protocol">;
+	deviceUserId?: string | null;
+	deviceUser?: {
+		id: string;
+		vendorUserId: string;
+		employeeNo?: string | null;
+		displayName?: string | null;
+		status: DeviceUserStatus;
+		employeeId?: string | null;
+	} | null;
 	employee?: {
 		id: string;
 		employeeId: string;
@@ -155,6 +164,9 @@ export interface DeviceSyncPreviewRow {
 	hrisSavedCount?: number;
 	vendorEventCount?: number | null;
 	vendorUserCount?: number | null;
+	knownSkippedEventCount?: number;
+	failedEventCount?: number;
+	importableSavedCount?: number;
 	missingEventCount?: number | null;
 	canStartSync?: boolean;
 	syncAction?: "zkteco-bridge-sync" | "hikvision-import" | string | null;
@@ -287,6 +299,67 @@ export interface EnrollDeviceUserRequest {
 	userId: string;
 	deviceId: string;
 	deviceUserId: string;
+}
+
+export type DeviceUserStatus = "ACTIVE" | "UNMATCHED" | "CONFLICT" | "DISABLED";
+
+export interface DeviceUser {
+	id: string;
+	organizationId: string;
+	deviceId: string;
+	employeeId?: string | null;
+	vendorUserId: string;
+	employeeNo?: string | null;
+	displayName?: string | null;
+	userType?: string | null;
+	status: DeviceUserStatus;
+	validFrom?: string | null;
+	validTo?: string | null;
+	doorRight?: string | null;
+	accessPlan?: any;
+	rawPayload?: any;
+	lastSyncedAt?: string | null;
+	createdAt?: string;
+	updatedAt?: string;
+	device?: Pick<Device, "id" | "name" | "address" | "port" | "protocol">;
+	employee?: {
+		id: string;
+		employeeId: string;
+		deviceEmpId?: string | null;
+		fullName?: string | null;
+	} | null;
+}
+
+export interface DeviceUsersResponse {
+	deviceUsers: DeviceUser[];
+	summary: {
+		total: number;
+		active: number;
+		matched: number;
+		unmatched: number;
+		conflict: number;
+		disabled: number;
+	};
+	pagination?: {
+		total: number;
+		page: number;
+		limit: number;
+		totalPages?: number;
+	};
+}
+
+export interface DeviceUserSyncResponse {
+	run?: any;
+	summary: {
+		totalSourceRecords: number;
+		importableRecords: number;
+		created: number;
+		updated: number;
+		linked: number;
+		unmatched: number;
+		conflict: number;
+		disabled: number;
+	};
 }
 
 export interface DevicesResponse {
@@ -515,6 +588,88 @@ class DevicesService extends APIService {
 			console.error("Error building device sync preview:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error building device sync preview",
+			);
+		}
+	}
+
+	async getDeviceUsers(
+		deviceId: string,
+		params: { page?: number; limit?: number; query?: string; status?: string } = {},
+	): Promise<DeviceUsersResponse> {
+		try {
+			if (!String(deviceId || "").trim()) throw new Error("Device is required");
+			const query = new URLSearchParams();
+			if (params.page) query.set("page", String(params.page));
+			if (params.limit) query.set("limit", String(params.limit));
+			if (params.query) query.set("query", params.query);
+			if (params.status && params.status !== "all") query.set("status", params.status);
+			const endpoint = `/api/device/${deviceId}/users${query.toString() ? `?${query.toString()}` : ""}`;
+			const response = await hrisApiClient.get<any>(endpoint);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to load device users");
+			return data as DeviceUsersResponse;
+		} catch (error: any) {
+			console.error("Error loading device users:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error loading device users",
+			);
+		}
+	}
+
+	async syncDeviceUsers(deviceId: string): Promise<DeviceUserSyncResponse> {
+		try {
+			if (!String(deviceId || "").trim()) throw new Error("Device is required");
+			const response = await hrisApiClient.post<any>(`/api/device/${deviceId}/users/sync`, {});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to sync device users");
+			return data as DeviceUserSyncResponse;
+		} catch (error: any) {
+			console.error("Error syncing device users:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error syncing device users",
+			);
+		}
+	}
+
+	async backfillDeviceUsers(deviceId: string): Promise<any> {
+		try {
+			if (!String(deviceId || "").trim()) throw new Error("Device is required");
+			const response = await hrisApiClient.post<any>(`/api/device/${deviceId}/users/backfill`, {});
+			return response.data?.data || response.data;
+		} catch (error: any) {
+			console.error("Error backfilling device users:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error backfilling device users",
+			);
+		}
+	}
+
+	async linkDeviceUser(deviceUserId: string, employeeId: string): Promise<DeviceUser> {
+		try {
+			const response = await hrisApiClient.post<any>(`/api/device/users/${deviceUserId}/link`, {
+				employeeId,
+			});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to link device user");
+			return data as DeviceUser;
+		} catch (error: any) {
+			console.error("Error linking device user:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error linking device user",
+			);
+		}
+	}
+
+	async unlinkDeviceUser(deviceUserId: string): Promise<DeviceUser> {
+		try {
+			const response = await hrisApiClient.post<any>(`/api/device/users/${deviceUserId}/unlink`, {});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to unlink device user");
+			return data as DeviceUser;
+		} catch (error: any) {
+			console.error("Error unlinking device user:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error unlinking device user",
 			);
 		}
 	}

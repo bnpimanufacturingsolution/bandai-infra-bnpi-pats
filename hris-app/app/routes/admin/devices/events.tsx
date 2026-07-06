@@ -953,6 +953,14 @@ export default function DeviceEventsPage() {
 		(total, row) => total + Number(row.hrisSavedCount ?? row.syncedEvents ?? 0),
 		0,
 	);
+	const syncKnownSkippedTotal = syncPreviewRows.reduce(
+		(total, row) => total + Number(row.knownSkippedEventCount ?? 0),
+		0,
+	);
+	const syncFailedTotal = syncPreviewRows.reduce(
+		(total, row) => total + Number(row.failedEventCount ?? 0),
+		0,
+	);
 	const syncHasUnknownMissingCount = syncPreviewRows.some(
 		(row) =>
 			(row.missingEventCount ?? row.needsSyncEvents) === null ||
@@ -1932,7 +1940,9 @@ export default function DeviceEventsPage() {
 									<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
 										<span>Device total: {formatOptionalCount(syncVendorEventTotal)}</span>
 										<span>Saved: {formatCount(syncHrisSavedTotal)}</span>
-										<span>Not saved: {formatOptionalCount(syncDryRunEstimate)}</span>
+										<span>Known skipped: {formatCount(syncKnownSkippedTotal)}</span>
+										<span>Failed: {formatCount(syncFailedTotal)}</span>
+										<span>Still missing: {formatOptionalCount(syncDryRunEstimate)}</span>
 										<span>Ready: {formatCount(syncStartableRows.length)} of {formatCount(syncPreviewRows.length)}</span>
 									</div>
 								) : (
@@ -1988,6 +1998,8 @@ export default function DeviceEventsPage() {
 									const sourceEvents = device.vendorEventCount ?? device.totalEvents;
 									const sourceUsers = device.vendorUserCount;
 									const hrisSaved = device.hrisSavedCount ?? device.syncedEvents;
+									const knownSkipped = device.knownSkippedEventCount ?? 0;
+									const failedEvents = device.failedEventCount ?? 0;
 									const missingEvents = device.missingEventCount ?? device.needsSyncEvents;
 									const hasMissingEvents = Boolean(missingEvents && Number(missingEvents) > 0);
 									const isSourceUnavailable = Boolean(device.error);
@@ -2012,7 +2024,7 @@ export default function DeviceEventsPage() {
 													<p className="mt-1 text-xs text-red-700">{device.error}</p>
 												) : null}
 											</div>
-											<div className="grid shrink-0 grid-cols-2 gap-2 text-sm sm:grid-cols-4 md:min-w-[430px]">
+											<div className="grid shrink-0 grid-cols-2 gap-2 text-sm sm:grid-cols-5 md:min-w-[540px]">
 												<div>
 													<p className="text-[11px] font-semibold uppercase text-slate-500">Saved</p>
 													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(hrisSaved)}</p>
@@ -2026,7 +2038,11 @@ export default function DeviceEventsPage() {
 													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceUsers)}</p>
 												</div>
 												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Not saved</p>
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Known skipped</p>
+													<p className="text-xs font-semibold text-slate-950">{formatCount(knownSkipped)}</p>
+												</div>
+												<div>
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Still missing</p>
 													{hasMissingEvents ? (
 														<button
 															type="button"
@@ -2041,7 +2057,14 @@ export default function DeviceEventsPage() {
 														</span>
 													)}
 												</div>
-												<div className="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-4">
+												{failedEvents > 0 ? (
+													<div className="col-span-2 sm:col-span-5">
+														<span className="text-xs font-semibold text-red-700">
+															Failed rows: {formatCount(failedEvents)}
+														</span>
+													</div>
+												) : null}
+												<div className="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-5">
 													<Badge
 														variant={
 															device.canStartSync

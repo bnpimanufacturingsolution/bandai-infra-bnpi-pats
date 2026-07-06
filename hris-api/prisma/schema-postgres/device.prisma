@@ -21,6 +21,24 @@ enum DeviceEventSource {
   ZKTECO_EVENT
 }
 
+enum DeviceUserStatus {
+  ACTIVE
+  UNMATCHED
+  CONFLICT
+  DISABLED
+}
+
+enum DeviceSyncRunType {
+  DEVICE_USERS
+  DEVICE_LOGS
+}
+
+enum DeviceSyncRunStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model Device {
   id             String @id @default(cuid())
   organizationId String
@@ -36,6 +54,8 @@ model Device {
 
   employees Employee[]
   events    DeviceEvent[]
+  users     DeviceUser[]
+  syncRuns  DeviceSyncRun[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -45,10 +65,12 @@ model Device {
 }
 
 model DeviceEvent {
-  id             String            @id @default(cuid())
+  id             String      @id @default(cuid())
   organizationId String
-  device         Device            @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  device         Device      @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   deviceId       String
+  deviceUser     DeviceUser? @relation(fields: [deviceUserId], references: [id], onDelete: SetNull)
+  deviceUserId   String?
   employeeId     String?
   attendanceId   String?
 
@@ -76,5 +98,64 @@ model DeviceEvent {
   @@index([organizationId, source, status])
   @@index([organizationId, source, receivedAt(sort: Desc), createdAt(sort: Desc)])
   @@index([organizationId, employeeNo, receivedAt])
+  @@index([organizationId, deviceUserId, receivedAt])
   @@map("device_events")
+}
+
+model DeviceUser {
+  id             String           @id @default(cuid())
+  organizationId String
+  device         Device           @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId       String
+  employee       Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  employeeId     String?
+  vendorUserId   String
+  employeeNo     String?
+  displayName    String?
+  userType       String?
+  status         DeviceUserStatus @default(UNMATCHED)
+  validFrom      DateTime?
+  validTo        DateTime?
+  doorRight      String?
+  accessPlan     Json?
+  rawPayload     Json?
+  lastSyncedAt   DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  events DeviceEvent[]
+
+  @@unique([organizationId, deviceId, vendorUserId])
+  @@index([organizationId, deviceId, status])
+  @@index([organizationId, employeeId])
+  @@index([organizationId, vendorUserId])
+  @@map("device_users")
+}
+
+model DeviceSyncRun {
+  id                 String              @id @default(cuid())
+  organizationId     String
+  device             Device              @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId           String
+  runType            DeviceSyncRunType
+  status             DeviceSyncRunStatus @default(PROCESSING)
+  source             DeviceEventSource?
+  startedByUserId    String?
+  totalSourceRecords Int                 @default(0)
+  importableRecords  Int                 @default(0)
+  savedRecords       Int                 @default(0)
+  skippedRecords     Int                 @default(0)
+  failedRecords      Int                 @default(0)
+  missingRecords     Int                 @default(0)
+  skipSummary        Json?
+  failureSummary     Json?
+  rawSummary         Json?
+  startedAt          DateTime            @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([organizationId, deviceId, runType, startedAt])
+  @@index([organizationId, runType, status])
+  @@map("device_sync_runs")
 }

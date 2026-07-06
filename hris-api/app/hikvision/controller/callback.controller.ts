@@ -296,6 +296,7 @@ export const controller = (prisma: PrismaClient) => {
 		eventId: string,
 		data: {
 			status: string;
+			deviceUserId?: string | null;
 			employeeId?: string | null;
 			attendanceId?: string | null;
 			errorMessage?: string | null;
@@ -475,29 +476,60 @@ export const controller = (prisma: PrismaClient) => {
 					return;
 				}
 
-				const employee = await prisma.employee.findFirst({
-					where: {
-						isDeleted: false,
-						organizationId: device.organizationId,
-						deviceEmpId: employeeNo,
-					},
-					select: {
-						id: true,
-						organizationId: true,
-						deviceEmpId: true,
-					},
-				});
+				const deviceUser = employeeNo
+					? await (prisma as any).deviceUser.findFirst({
+							where: {
+								organizationId: device.organizationId,
+								deviceId: device.id,
+								vendorUserId: employeeNo,
+							},
+							select: {
+								id: true,
+								employeeId: true,
+								status: true,
+							},
+						})
+					: null;
+				const linkedDeviceUserEmployee = deviceUser?.employeeId
+					? await prisma.employee.findFirst({
+							where: {
+								id: deviceUser.employeeId,
+								isDeleted: false,
+								organizationId: device.organizationId,
+							},
+							select: {
+								id: true,
+								organizationId: true,
+								deviceEmpId: true,
+							},
+						})
+					: null;
+				const employee =
+					linkedDeviceUserEmployee ||
+					(await prisma.employee.findFirst({
+						where: {
+							isDeleted: false,
+							organizationId: device.organizationId,
+							deviceEmpId: employeeNo,
+						},
+						select: {
+							id: true,
+							organizationId: true,
+							deviceEmpId: true,
+						},
+					}));
 
 				if (!employee) {
 					console.log(
-						`[HIKVISION_CALLBACK][CTRL] no employee matched by deviceEmpId=${employeeNo}`,
+						`[HIKVISION_CALLBACK][CTRL] no employee matched by deviceUser or deviceEmpId=${employeeNo}`,
 					);
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "UNMATCHED",
+						deviceUserId: deviceUser?.id || null,
 						errorMessage: "employee_not_found",
 					});
 					const successResponse = buildSuccessResponse(
-						"Callback received but no employee matched by deviceEmpId",
+						"Callback received but no employee matched by device user or legacy deviceEmpId",
 						{
 							received: true,
 							matched: false,
@@ -537,6 +569,7 @@ export const controller = (prisma: PrismaClient) => {
 				const sameDayDeviceEvents = await (prisma as any).deviceEvent.findMany({
 					where: {
 						organizationId: employee.organizationId,
+						deviceId: device.id,
 						employeeNo,
 						eventTime: {
 							gte: normalizedStartOfDay,
@@ -710,6 +743,7 @@ export const controller = (prisma: PrismaClient) => {
 				if (attendanceAction === "clock_in_created") {
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "ATTENDANCE_CREATED",
+						deviceUserId: deviceUser?.id || null,
 						employeeId: employee.id,
 						attendanceId,
 						errorMessage: null,
@@ -717,6 +751,7 @@ export const controller = (prisma: PrismaClient) => {
 				} else if (attendanceAction === "clock_out_updated") {
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "ATTENDANCE_UPDATED",
+						deviceUserId: deviceUser?.id || null,
 						employeeId: employee.id,
 						attendanceId,
 						errorMessage: null,
@@ -727,6 +762,7 @@ export const controller = (prisma: PrismaClient) => {
 				) {
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "MATCHED",
+						deviceUserId: deviceUser?.id || null,
 						employeeId: employee.id,
 						attendanceId,
 						errorMessage: attendanceAction,
@@ -742,6 +778,7 @@ export const controller = (prisma: PrismaClient) => {
 						deviceId: device.id,
 						dedupeKey,
 						employeeNo,
+						deviceUserId: deviceUser?.id || null,
 						employeeId: employee.id,
 						attendanceAction,
 						attendanceId,

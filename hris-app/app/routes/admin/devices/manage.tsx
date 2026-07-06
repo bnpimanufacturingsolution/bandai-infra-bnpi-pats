@@ -15,7 +15,7 @@ import {
 	AdminConfigPrimaryCell,
 	AdminConfigSourceChip,
 } from "~/lib/ui/admin-configuration-table";
-import { Eye, Edit, Trash2, MoreVertical, UserPlus, Activity, RefreshCw } from "lucide-react";
+import { Eye, Edit, Trash2, MoreVertical, Activity, RefreshCw, UsersRound } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useNavigate, useSearchParams } from "react-router";
 import {
@@ -414,9 +414,10 @@ export default function DevicesManagePage() {
 		});
 	};
 
-	const openEnrollment = () => {
+	const openEnrollment = (device?: Device) => {
 		updateSearchParams((next) => {
 			next.set("action", "enroll-users");
+			if (device?.id) next.set("deviceId", device.id);
 			next.delete("id");
 			next.delete("enrollmentAction");
 			next.delete("employeeId");
@@ -447,6 +448,9 @@ export default function DevicesManagePage() {
 				</DropdownMenuItem>
 				<DropdownMenuItem onClick={() => openEvents(item)}>
 					<Activity className="h-4 w-4 mr-2" /> View Events
+				</DropdownMenuItem>
+				<DropdownMenuItem onClick={() => openEnrollment(item)}>
+					<UsersRound className="h-4 w-4 mr-2" /> View Device Users
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
 				<DropdownMenuItem onClick={() => handleDelete(item)} className="text-red-600">
@@ -497,10 +501,10 @@ export default function DevicesManagePage() {
 						</Button>
 						<Button
 							variant="outline"
-							onClick={openEnrollment}
+							onClick={() => openEnrollment()}
 							className="h-9 px-3 text-xs">
-							<UserPlus className="h-4 w-4 mr-2" />
-							Enroll Users
+							<UsersRound className="h-4 w-4 mr-2" />
+							Device Users
 						</Button>
 					</div>
 				}
@@ -552,9 +556,9 @@ export default function DevicesManagePage() {
 					<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
 						<div className="grid grid-cols-2 gap-4">
 							<div data-field-path="name">
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Name *
-								</label>
+								</div>
 								<Input
 									placeholder="e.g., Main Entrance Device"
 									aria-invalid={false}
@@ -565,9 +569,9 @@ export default function DevicesManagePage() {
 								/>
 							</div>
 							<div data-field-path="protocol">
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Protocol *
-								</label>
+								</div>
 								<Select
 									options={protocolOptions}
 									value={watchedProtocol || "http"}
@@ -582,9 +586,9 @@ export default function DevicesManagePage() {
 
 						<div className="grid grid-cols-2 gap-4">
 							<div data-field-path="address">
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Address *
-								</label>
+								</div>
 								<Input
 									placeholder="e.g., 192.168.1.100"
 									aria-invalid={false}
@@ -595,9 +599,9 @@ export default function DevicesManagePage() {
 								/>
 							</div>
 							<div data-field-path="port">
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Port *
-								</label>
+								</div>
 								<Input
 									type="number"
 									placeholder="e.g., 80"
@@ -612,9 +616,9 @@ export default function DevicesManagePage() {
 
 						<div className="grid grid-cols-2 gap-4">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Username (optional)
-								</label>
+								</div>
 								<Input
 									placeholder="Device username"
 									{...register("access.username", {
@@ -623,9 +627,9 @@ export default function DevicesManagePage() {
 								/>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Password (optional)
-								</label>
+								</div>
 								<Input
 									type="password"
 									placeholder="Device password"
@@ -679,17 +683,17 @@ export default function DevicesManagePage() {
 					<div className="space-y-4">
 						<div className="grid grid-cols-2 gap-4">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<p className="block text-sm font-medium text-gray-700 mb-1">
 									Name
-								</label>
+								</p>
 								<div className="p-3 bg-gray-50 rounded-md border">
 									{activeDevice.name}
 								</div>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<p className="block text-sm font-medium text-gray-700 mb-1">
 									Protocol
-								</label>
+								</p>
 								<div className="p-3 bg-gray-50 rounded-md border">
 									<Badge variant="secondary">
 										{activeDevice.protocol.toUpperCase()}
@@ -699,17 +703,17 @@ export default function DevicesManagePage() {
 						</div>
 						<div className="grid grid-cols-2 gap-4">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<p className="block text-sm font-medium text-gray-700 mb-1">
 									Address
-								</label>
+								</p>
 								<div className="p-3 bg-gray-50 rounded-md border font-mono">
 									{activeDevice.address}
 								</div>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<p className="block text-sm font-medium text-gray-700 mb-1">
 									Port
-								</label>
+								</p>
 								<div className="p-3 bg-gray-50 rounded-md border">
 									{activeDevice.port}
 								</div>
@@ -718,17 +722,17 @@ export default function DevicesManagePage() {
 						{activeDevice.access && (
 							<div className="grid grid-cols-2 gap-4">
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">
+									<p className="block text-sm font-medium text-gray-700 mb-1">
 										Username
-									</label>
+									</p>
 									<div className="p-3 bg-gray-50 rounded-md border">
 										{activeDevice.access.username || "-"}
 									</div>
 								</div>
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">
+									<p className="block text-sm font-medium text-gray-700 mb-1">
 										Password
-									</label>
+									</p>
 									<div className="p-3 bg-gray-50 rounded-md border">
 										{activeDevice.access.password ? "********" : "-"}
 									</div>
@@ -767,7 +771,7 @@ export default function DevicesManagePage() {
 						});
 					}
 				}}
-				title="Enroll Users"
+				title="Device Users"
 				className={HR_MODAL_WIDE_CLASS}>
 				<DeviceEnrollmentPanel embedded />
 			</Modal>

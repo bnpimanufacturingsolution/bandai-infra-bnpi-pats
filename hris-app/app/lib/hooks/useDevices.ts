@@ -5,6 +5,7 @@ import devicesService, {
 	type DeviceHealthResponse,
 	type DeviceSyncPreviewResponse,
 	type DeviceImportJobProgress,
+	type DeviceUsersResponse,
 	type DeviceEventsResetScope,
 	type CreateDeviceRequest,
 	type UpdateDeviceRequest,
@@ -26,6 +27,8 @@ export const queryKeys = {
 		syncPreview: (params?: { deviceId?: string; source?: string }) =>
 			[...queryKeys.devices.all, "sync-preview", { params }] as const,
 		importJob: (jobId?: string) => [...queryKeys.devices.all, "import-job", jobId] as const,
+		users: (deviceId?: string, params?: { page?: number; limit?: number; query?: string; status?: string }) =>
+			[...queryKeys.devices.all, "users", deviceId, { params }] as const,
 	},
 };
 
@@ -146,6 +149,71 @@ export const useTriggerHikvisionAttendanceImport = () => {
 		},
 		onError: (error: any) => {
 			sonnerToast.error(error?.message || "Failed to start device log sync");
+		},
+	});
+};
+
+export const useDeviceUsers = (
+	deviceId?: string,
+	params: { page?: number; limit?: number; query?: string; status?: string } = {},
+	enabled = true,
+) => {
+	return useQuery<DeviceUsersResponse>({
+		queryKey: queryKeys.devices.users(deviceId, params),
+		queryFn: () => devicesService.getDeviceUsers(deviceId || "", params),
+		enabled: Boolean(deviceId) && enabled,
+		staleTime: 15 * 1000,
+		retry: 1,
+	});
+};
+
+export const useSyncDeviceUsers = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (deviceId: string) => {
+			return await devicesService.syncDeviceUsers(deviceId);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			sonnerToast.success("Device users synced");
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to sync device users");
+		},
+	});
+};
+
+export const useLinkDeviceUser = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async ({ deviceUserId, employeeId }: { deviceUserId: string; employeeId: string }) => {
+			return await devicesService.linkDeviceUser(deviceUserId, employeeId);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			sonnerToast.success("Device user linked");
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to link device user");
+		},
+	});
+};
+
+export const useUnlinkDeviceUser = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (deviceUserId: string) => {
+			return await devicesService.unlinkDeviceUser(deviceUserId);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			sonnerToast.success("Device user unlinked");
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to unlink device user");
 		},
 	});
 };

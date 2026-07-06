@@ -6,12 +6,30 @@ import { Select } from "~/components/atoms/Select";
 import { SearchableSelect } from "~/components/ui/searchable-select";
 import { formatDateTime } from "~/lib/utils/text-utils";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
-import { UserCog, Eye, UserPlus, MoreVertical, ArrowLeft } from "lucide-react";
+import {
+	UserCog,
+	Eye,
+	UserPlus,
+	MoreVertical,
+	ArrowLeft,
+	RefreshCw,
+	Link2,
+	Unlink,
+	FileJson,
+	Loader2,
+} from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useEmployee, useEmployees } from "~/lib/hooks/useEmployees";
-import { useDevices, useImportDeviceEnrollment } from "~/lib/hooks/useDevices";
+import {
+	useDevices,
+	useDeviceUsers,
+	useImportDeviceEnrollment,
+	useLinkDeviceUser,
+	useSyncDeviceUsers,
+	useUnlinkDeviceUser,
+} from "~/lib/hooks/useDevices";
 import { useHikvisionUserSearchMutation } from "~/lib/hooks/use-hikvision";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -22,7 +40,7 @@ import {
 } from "~/components/ui/dropdown-menu";
 import type { HikvisionUserInfo } from "~/types/hikvision";
 import { GenericImportModal } from "~/components/organisms/shared/GenericImportModal";
-import deviceService from "~/services/devices.service";
+import deviceService, { type DeviceUser } from "~/services/devices.service";
 import { DeviceEnrollmentPreviewTable } from "~/components/molecules/device/DeviceEnrollmentPreviewTable";
 import type { Employee } from "~/services/employees.service";
 
@@ -93,6 +111,35 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 		document: "true",
 	});
 	const devices = (devicesData as any)?.devices || [];
+	const selectedDeviceId =
+		searchParams.get("deviceId") || devices[0]?.id || "";
+	const deviceUserStatus = searchParams.get("deviceUserStatus") || "all";
+	const deviceUserSearch = searchParams.get("deviceUserSearch") || "";
+	const {
+		data: dbDeviceUsers,
+		isLoading: isLoadingDbDeviceUsers,
+		refetch: refetchDbDeviceUsers,
+	} = useDeviceUsers(selectedDeviceId, {
+		limit: 50,
+		status: deviceUserStatus,
+		query: deviceUserSearch,
+	});
+	const syncDeviceUsersMutation = useSyncDeviceUsers();
+	const linkDeviceUserMutation = useLinkDeviceUser();
+	const unlinkDeviceUserMutation = useUnlinkDeviceUser();
+	const [deviceUserSyncState, setDeviceUserSyncState] = useState<{
+		open: boolean;
+		status: "idle" | "review" | "syncing" | "complete" | "error";
+		message: string;
+		summary?: Record<string, number>;
+	}>({
+		open: false,
+		status: "idle",
+		message: "",
+	});
+	const [detailsDeviceUser, setDetailsDeviceUser] = useState<DeviceUser | null>(null);
+	const [linkTarget, setLinkTarget] = useState<DeviceUser | null>(null);
+	const [selectedEmployeeForLink, setSelectedEmployeeForLink] = useState("");
 
 	const { data: allEmployeesData } = useEmployees({
 		limit: 1000,
@@ -117,7 +164,6 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 				lastName: employee.person?.personalInfo?.lastName,
 			}))
 			.filter((user: { id: string; email: string }) => user.id && user.email) || [];
-
 	const getEmployeeDisplayName = (employee?: Employee | null) => {
 		const firstName = employee?.person?.personalInfo?.firstName || "";
 		const lastName = employee?.person?.personalInfo?.lastName || "";
@@ -129,6 +175,12 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 			"Employee"
 		);
 	};
+	const employeeLinkOptions =
+		allEmployeesPayload?.employees?.map((employee: Employee) => ({
+			value: employee.id,
+			label: `${getEmployeeDisplayName(employee)} - ${employee.employeeId || "No employee ID"}`,
+			description: employee.deviceEmpId ? `Legacy device ID ${employee.deviceEmpId}` : undefined,
+		})) || [];
 
 	// Hikvision user search mutation
 	const hikvisionUserSearchMutation = useHikvisionUserSearchMutation();
@@ -353,6 +405,92 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 		[setSearchParams],
 	);
 
+	const setSelectedDeviceId = (deviceId: string) => {
+		updateSearchParams((next) => {
+			if (deviceId) next.set("deviceId", deviceId);
+			else next.delete("deviceId");
+		});
+	};
+
+	const setDeviceUserStatus = (status: string) => {
+		updateSearchParams((next) => {
+			if (status && status !== "all") next.set("deviceUserStatus", status);
+			else next.delete("deviceUserStatus");
+		});
+	};
+
+	const openDeviceUserSyncReview = () => {
+		if (!selectedDeviceId) {
+			toast.error("Select a device before syncing users");
+			return;
+		}
+		setDeviceUserSyncState({
+			open: true,
+			status: "review",
+			message: "Review the selected device users before updating HRIS identity records.",
+		});
+	};
+
+	const handleDeviceUserSearch = (query: string) => {
+		updateSearchParams((next) => {
+			if (query) next.set("deviceUserSearch", query);
+			else next.delete("deviceUserSearch");
+		});
+	};
+
+	const runDeviceUserSync = async () => {
+		if (!selectedDeviceId) {
+			toast.error("Select a device before syncing users");
+			return;
+		}
+		setDeviceUserSyncState({
+			open: true,
+			status: "syncing",
+			message: "Reading identity records from the physical device.",
+		});
+		try {
+			const result = await syncDeviceUsersMutation.mutateAsync(selectedDeviceId);
+			const summary = result.summary || {};
+			setDeviceUserSyncState({
+				open: true,
+				status: "complete",
+				message: "Device users synced from the physical device.",
+				summary,
+			});
+			void refetchDbDeviceUsers();
+		} catch (error: any) {
+			setDeviceUserSyncState({
+				open: true,
+				status: "error",
+				message: error?.message || "Device user sync failed.",
+			});
+		}
+	};
+
+	const openLinkDeviceUser = (deviceUser: DeviceUser) => {
+		setLinkTarget(deviceUser);
+		setSelectedEmployeeForLink(deviceUser.employeeId || "");
+	};
+
+	const submitLinkDeviceUser = async () => {
+		if (!linkTarget || !selectedEmployeeForLink) {
+			toast.error("Select an employee to link");
+			return;
+		}
+		await linkDeviceUserMutation.mutateAsync({
+			deviceUserId: linkTarget.id,
+			employeeId: selectedEmployeeForLink,
+		});
+		setLinkTarget(null);
+		setSelectedEmployeeForLink("");
+		void refetchDbDeviceUsers();
+	};
+
+	const unlinkDeviceUser = async (deviceUser: DeviceUser) => {
+		await unlinkDeviceUserMutation.mutateAsync(deviceUser.id);
+		void refetchDbDeviceUsers();
+	};
+
 	const openEnroll = (employee: Employee) => {
 		reset({
 			deviceId: "",
@@ -480,6 +618,15 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 		);
 	};
 
+	const dbDeviceUserRows = dbDeviceUsers?.deviceUsers || [];
+	const dbDeviceUserSummary = dbDeviceUsers?.summary;
+	const getDeviceUserBadgeVariant = (status?: string) => {
+		if (status === "ACTIVE") return "success";
+		if (status === "CONFLICT") return "warning";
+		if (status === "DISABLED") return "secondary";
+		return "warning-soft";
+	};
+
 	return (
 		<div className="space-y-6">
 			{!embedded && (
@@ -503,6 +650,192 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 					</div>
 				</div>
 			)}
+
+			<section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+				<div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+					<div className="min-w-0">
+						<h2 className="text-base font-semibold text-slate-950">Device Users</h2>
+						<p className="mt-1 text-sm text-slate-600">
+							Identity records synced from the selected physical device and linked to employees in HRIS.
+						</p>
+					</div>
+					<div className="flex flex-wrap gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							className="h-9 px-3"
+							disabled={!selectedDeviceId || syncDeviceUsersMutation.isPending}
+							onClick={openDeviceUserSyncReview}>
+							{syncDeviceUsersMutation.isPending ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<RefreshCw className="h-4 w-4" />
+							)}
+							Review sync
+						</Button>
+					</div>
+				</div>
+
+				<div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_180px_minmax(220px,1fr)]">
+					<Select
+						options={devices.map((device: any) => ({
+							value: device.id,
+							label: device.name || `${device.address}:${device.port}`,
+						}))}
+						value={selectedDeviceId}
+						onChange={setSelectedDeviceId}
+						placeholder={isLoadingDevices ? "Loading devices..." : "Select device"}
+						disabled={isLoadingDevices}
+					/>
+					<Select
+						options={[
+							{ value: "all", label: "All statuses" },
+							{ value: "ACTIVE", label: "Matched" },
+							{ value: "UNMATCHED", label: "Unmatched" },
+							{ value: "CONFLICT", label: "Conflict" },
+							{ value: "DISABLED", label: "Disabled" },
+						]}
+						value={deviceUserStatus}
+						onChange={setDeviceUserStatus}
+						placeholder="Status"
+					/>
+					<div className="flex min-h-[42px] items-center rounded-md border border-slate-200 px-3">
+						<input
+							value={deviceUserSearch}
+							onChange={(event) => handleDeviceUserSearch(event.target.value)}
+							placeholder="Search device user, name, or employee..."
+							className="w-full bg-transparent text-sm outline-none"
+						/>
+					</div>
+				</div>
+
+				<div className="grid gap-2 sm:grid-cols-4">
+					<div className="rounded-md border border-slate-200 px-3 py-2">
+						<p className="text-xs font-medium text-slate-500">Matched</p>
+						<p className="text-lg font-semibold text-slate-950">
+							{dbDeviceUserSummary?.active ?? 0}
+						</p>
+					</div>
+					<div className="rounded-md border border-slate-200 px-3 py-2">
+						<p className="text-xs font-medium text-slate-500">Unmatched</p>
+						<p className="text-lg font-semibold text-slate-950">
+							{dbDeviceUserSummary?.unmatched ?? 0}
+						</p>
+					</div>
+					<div className="rounded-md border border-slate-200 px-3 py-2">
+						<p className="text-xs font-medium text-slate-500">Conflict</p>
+						<p className="text-lg font-semibold text-slate-950">
+							{dbDeviceUserSummary?.conflict ?? 0}
+						</p>
+					</div>
+					<div className="rounded-md border border-slate-200 px-3 py-2">
+						<p className="text-xs font-medium text-slate-500">Disabled</p>
+						<p className="text-lg font-semibold text-slate-950">
+							{dbDeviceUserSummary?.disabled ?? 0}
+						</p>
+					</div>
+				</div>
+
+				<div className="overflow-hidden rounded-lg border border-slate-200">
+					<table className="min-w-full divide-y divide-slate-200 text-sm">
+						<thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+							<tr>
+								<th className="px-3 py-2">Device user</th>
+								<th className="px-3 py-2">Employee</th>
+								<th className="px-3 py-2">Status</th>
+								<th className="px-3 py-2">Last synced</th>
+								<th className="px-3 py-2 text-right">Actions</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-100 bg-white">
+							{isLoadingDbDeviceUsers ? (
+								<tr>
+									<td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+										<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
+										Loading device users...
+									</td>
+								</tr>
+							) : dbDeviceUserRows.length === 0 ? (
+								<tr>
+									<td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+										No device users found for this view.
+									</td>
+								</tr>
+							) : (
+								dbDeviceUserRows.map((deviceUser) => (
+									<tr key={deviceUser.id} className="align-top">
+										<td className="px-3 py-3">
+											<p className="font-medium text-slate-950">
+												{deviceUser.displayName || "Unnamed device user"}
+											</p>
+											<p className="text-xs text-slate-500">
+												{deviceUser.vendorUserId}
+												{deviceUser.userType ? ` - ${deviceUser.userType}` : ""}
+											</p>
+										</td>
+										<td className="px-3 py-3">
+											{deviceUser.employee ? (
+												<div>
+													<p className="font-medium text-slate-900">
+														{deviceUser.employee.fullName || deviceUser.employee.employeeId}
+													</p>
+													<p className="text-xs text-slate-500">
+														{deviceUser.employee.employeeId}
+													</p>
+												</div>
+											) : (
+												<span className="text-slate-500">Not linked</span>
+											)}
+										</td>
+										<td className="px-3 py-3">
+											<Badge variant={getDeviceUserBadgeVariant(deviceUser.status) as any}>
+												{deviceUser.status === "ACTIVE" ? "Matched" : deviceUser.status}
+											</Badge>
+										</td>
+										<td className="px-3 py-3 text-slate-600">
+											{deviceUser.lastSyncedAt ? formatDateTime(deviceUser.lastSyncedAt) : "-"}
+										</td>
+										<td className="px-3 py-3">
+											<div className="flex justify-end gap-2">
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													className="h-8 px-2"
+													onClick={() => setDetailsDeviceUser(deviceUser)}>
+													<FileJson className="h-4 w-4" />
+													Details
+												</Button>
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													className="h-8 px-2"
+													onClick={() => openLinkDeviceUser(deviceUser)}>
+													<Link2 className="h-4 w-4" />
+													Link
+												</Button>
+												{deviceUser.employeeId ? (
+													<Button
+														type="button"
+														variant="outline"
+														size="sm"
+														className="h-8 px-2"
+														disabled={unlinkDeviceUserMutation.isPending}
+														onClick={() => unlinkDeviceUser(deviceUser)}>
+														<Unlink className="h-4 w-4" />
+														Unlink
+													</Button>
+												) : null}
+											</div>
+										</td>
+									</tr>
+								))
+							)}
+						</tbody>
+					</table>
+				</div>
+			</section>
 
 			<DataTable
 				title="Employees"
@@ -530,7 +863,7 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 									<head>
 										<title>Employees Export - PDF</title>
 										<style>
-											body { font-family: Arial, sans-serif; margin: 20px; }
+											body { font-family: system-ui, sans-serif; margin: 20px; }
 											h1 { color: #333; margin-bottom: 20px; }
 											table { border-collapse: collapse; width: 100%; }
 											th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
@@ -624,6 +957,194 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 				}} containedScroll
 			/>
 
+			<Modal
+				open={deviceUserSyncState.open}
+				onOpenChange={(open) => setDeviceUserSyncState((current) => ({ ...current, open }))}
+				title="Device user sync status"
+				description="This updates identity records only. Device logs are synced from the logs page."
+				className="max-w-lg"
+				showCloseButton={deviceUserSyncState.status !== "syncing"}
+				closeOnBackdropClick={deviceUserSyncState.status !== "syncing"}>
+				<div className="space-y-4">
+					<div
+						className={
+							deviceUserSyncState.status === "error"
+								? "rounded-lg border border-red-200 bg-red-50 p-4 text-red-950"
+								: deviceUserSyncState.status === "complete"
+									? "rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-950"
+									: deviceUserSyncState.status === "review"
+										? "rounded-lg border border-slate-200 bg-slate-50 p-4 text-slate-950"
+										: "rounded-lg border border-orange-200 bg-orange-50 p-4 text-orange-950"
+						}>
+						<div className="flex items-center gap-2 text-sm font-medium">
+							{deviceUserSyncState.status === "syncing" ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : null}
+							{deviceUserSyncState.message || "Preparing device user sync."}
+						</div>
+						{deviceUserSyncState.status === "review" ? (
+							<div className="mt-3 space-y-3 text-sm text-slate-700">
+								<p>
+									HRIS will read the physical device user list, upsert DeviceUser rows by vendor
+									user ID, and auto-link only exact employee matches.
+								</p>
+								<div className="grid grid-cols-2 gap-2 text-xs">
+									<div>
+										<span className="block text-slate-500">Current device users</span>
+										<span className="font-semibold text-slate-950">
+											{dbDeviceUserSummary?.total ?? 0}
+										</span>
+									</div>
+									<div>
+										<span className="block text-slate-500">Matched</span>
+										<span className="font-semibold text-slate-950">
+											{dbDeviceUserSummary?.active ?? dbDeviceUserSummary?.matched ?? 0}
+										</span>
+									</div>
+									<div>
+										<span className="block text-slate-500">Unmatched</span>
+										<span className="font-semibold text-slate-950">
+											{dbDeviceUserSummary?.unmatched ?? 0}
+										</span>
+									</div>
+									<div>
+										<span className="block text-slate-500">Conflict</span>
+										<span className="font-semibold text-slate-950">
+											{dbDeviceUserSummary?.conflict ?? 0}
+										</span>
+									</div>
+								</div>
+								<p className="text-xs text-slate-600">
+									This does not import attendance logs and does not reset existing manual links.
+								</p>
+							</div>
+						) : null}
+						{deviceUserSyncState.summary ? (
+							<div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+								<div>Source: {deviceUserSyncState.summary.totalSourceRecords ?? 0}</div>
+								<div>Saved: {(deviceUserSyncState.summary.created ?? 0) + (deviceUserSyncState.summary.updated ?? 0)}</div>
+								<div>Matched: {deviceUserSyncState.summary.linked ?? 0}</div>
+								<div>Unmatched: {deviceUserSyncState.summary.unmatched ?? 0}</div>
+								<div>Conflict: {deviceUserSyncState.summary.conflict ?? 0}</div>
+								<div>Disabled: {deviceUserSyncState.summary.disabled ?? 0}</div>
+							</div>
+						) : null}
+					</div>
+					<div className="flex justify-end gap-2 border-t pt-2">
+						<Button
+							type="button"
+							variant="outline"
+							disabled={deviceUserSyncState.status === "syncing"}
+							onClick={() =>
+								setDeviceUserSyncState((current) => ({ ...current, open: false }))
+							}>
+							Close
+						</Button>
+						{deviceUserSyncState.status === "review" || deviceUserSyncState.status === "error" ? (
+							<Button
+								type="button"
+								disabled={syncDeviceUsersMutation.isPending || !selectedDeviceId}
+								onClick={runDeviceUserSync}>
+								{syncDeviceUsersMutation.isPending ? (
+									<Loader2 className="h-4 w-4 animate-spin" />
+								) : (
+									<RefreshCw className="h-4 w-4" />
+								)}
+								Sync device users
+							</Button>
+						) : null}
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
+				open={Boolean(detailsDeviceUser)}
+				onOpenChange={(open) => {
+					if (!open) setDetailsDeviceUser(null);
+				}}
+				title="Device user details"
+				className="max-w-3xl">
+				{detailsDeviceUser ? (
+					<div className="space-y-4">
+						<div className="grid gap-3 md:grid-cols-3">
+							<div className="rounded-md border border-slate-200 p-3">
+								<p className="text-xs font-medium text-slate-500">Vendor user ID</p>
+								<p className="mt-1 text-sm font-semibold text-slate-950">
+									{detailsDeviceUser.vendorUserId}
+								</p>
+							</div>
+							<div className="rounded-md border border-slate-200 p-3">
+								<p className="text-xs font-medium text-slate-500">Status</p>
+								<p className="mt-1 text-sm font-semibold text-slate-950">
+									{detailsDeviceUser.status}
+								</p>
+							</div>
+							<div className="rounded-md border border-slate-200 p-3">
+								<p className="text-xs font-medium text-slate-500">Door right</p>
+								<p className="mt-1 text-sm font-semibold text-slate-950">
+									{detailsDeviceUser.doorRight || "-"}
+								</p>
+							</div>
+						</div>
+						<pre className="max-h-[360px] overflow-auto rounded-md border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">
+							{JSON.stringify(detailsDeviceUser.rawPayload || {}, null, 2)}
+						</pre>
+					</div>
+				) : null}
+			</Modal>
+
+			<Modal
+				open={Boolean(linkTarget)}
+				onOpenChange={(open) => {
+					if (!open) {
+						setLinkTarget(null);
+						setSelectedEmployeeForLink("");
+					}
+				}}
+				title="Link device user"
+				description="Manual links override automatic matching for this device user.">
+				<div className="space-y-4">
+					{linkTarget ? (
+						<div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+							<p className="font-medium text-slate-950">
+								{linkTarget.displayName || "Unnamed device user"}
+							</p>
+							<p className="text-slate-600">Vendor user ID {linkTarget.vendorUserId}</p>
+						</div>
+					) : null}
+					<SearchableSelect
+						options={employeeLinkOptions}
+						value={selectedEmployeeForLink}
+						onValueChange={setSelectedEmployeeForLink}
+						placeholder="Select employee"
+						searchPlaceholder="Search employee..."
+						emptyText="No employees found."
+					/>
+					<div className="flex justify-end gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							onClick={() => {
+								setLinkTarget(null);
+								setSelectedEmployeeForLink("");
+							}}>
+							Cancel
+						</Button>
+						<Button
+							type="button"
+							disabled={!selectedEmployeeForLink || linkDeviceUserMutation.isPending}
+							onClick={submitLinkDeviceUser}>
+							{linkDeviceUserMutation.isPending ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<Link2 className="h-4 w-4" />
+							)}
+							Link device user
+						</Button>
+					</div>
+				</div>
+			</Modal>
+
 			{/* Enroll Employee Modal */}
 			<Modal
 				open={action === "enroll"}
@@ -660,9 +1181,9 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 							</div>
 						)}
 						<div>
-							<label className="block text-sm font-medium text-gray-700 mb-1">
+							<div className="block text-sm font-medium text-gray-700 mb-1">
 								Select Device *
-							</label>
+							</div>
 							<Select
 								options={devices.map((device: any) => ({
 									value: device.id,
@@ -681,9 +1202,9 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 						</div>
 
 						<div>
-							<label className="block text-sm font-medium text-gray-700 mb-1">
+							<div className="block text-sm font-medium text-gray-700 mb-1">
 								Select Device User *
-							</label>
+							</div>
 							<SearchableSelect
 								options={deviceUserOptions}
 								value={watchedDeviceUserId}
@@ -773,33 +1294,33 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 
 						<div className="grid grid-cols-2 gap-4">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<p className="block text-sm font-medium text-gray-700 mb-1">
 									Email
-								</label>
+								</p>
 								<div className="rounded-md border bg-gray-50 p-3">
 									{activeEmployee.user?.email || "No linked email"}
 								</div>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<p className="block text-sm font-medium text-gray-700 mb-1">
 									Department
-								</label>
+								</p>
 								<div className="rounded-md border bg-gray-50 p-3">
 									{activeEmployee.department?.name || "N/A"}
 								</div>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<p className="block text-sm font-medium text-gray-700 mb-1">
 									Position
-								</label>
+								</p>
 								<div className="rounded-md border bg-gray-50 p-3">
 									{activeEmployee.position?.title || "N/A"}
 								</div>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<p className="block text-sm font-medium text-gray-700 mb-1">
 									Device User ID
-								</label>
+								</p>
 								<div className="rounded-md border bg-gray-50 p-3">
 									{activeEmployee.deviceEmpId ||
 										(activeEmployee.user?.metadata as any)?.device?.access

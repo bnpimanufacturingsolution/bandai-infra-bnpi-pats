@@ -12,6 +12,11 @@ interface IController {
 	triggerZktecoAttendanceSync(req: Request, res: Response, next: NextFunction): Promise<void>;
 	triggerHikvisionAttendanceImport(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	listDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	backfillDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	linkDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
+	unlinkDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -37,6 +42,11 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/events/reset", controller.resetDeviceEvents);
 
 	routes.get("/:id/health", controller.getDeviceHealth);
+	routes.get("/:id/users", controller.listDeviceUsers);
+	routes.post("/:id/users/sync", controller.syncDeviceUsers);
+	routes.post("/:id/users/backfill", controller.backfillDeviceUsers);
+	routes.post("/users/:userId/link", controller.linkDeviceUser);
+	routes.post("/users/:userId/unlink", controller.unlinkDeviceUser);
 	routes.get("/sync-preview", controller.getDeviceSyncPreview);
 	routes.get("/import-jobs/:jobId", controller.getDeviceImportJob);
 	routes.post("/zkteco/sync", controller.triggerZktecoAttendanceSync);

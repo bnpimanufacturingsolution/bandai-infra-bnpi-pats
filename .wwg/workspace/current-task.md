@@ -2,6 +2,27 @@
 
 Status: READY FOR REVIEW
 
+## Latest Task Addendum - 2026-07-06
+
+- Task mode: Mixed meaningful feature, persistence, admin UX, and local runtime verification.
+- Latest user request:
+  - Add Device Users as a clear row dropdown destination from `/admin/configuration/devices`.
+  - Replace immediate user sync with a review-first flow and a final `Sync device users` confirmation inside the modal.
+  - Keep the flow visually consistent with the existing Sync Logs modal while using distinct terminology so admins do not confuse identity records with attendance logs.
+- Local decision:
+  - `DeviceUser` is the durable device identity/enrollment record.
+  - `EmployeeDeviceEnrollment` was avoided because current evidence supports direct optional `DeviceUser.employeeId` plus status/source metadata.
+  - `Sync device users` and `Sync logs` remain separate admin actions.
+  - Biometric template transfer was not implemented because safe vendor read/write plus backup/restore capability was not proven.
+- Local evidence:
+  - API and frontend hot reload used `localhost:3001` and `localhost:5175`.
+  - Physical Hikvision `UserInfo/Search` sync created 6 physical-source `DeviceUser` rows; 4 were auto-linked and 2 remained `UNMATCHED`.
+  - Legacy backfill from `Employee.deviceEmpId` created 2,213 additional rows, leaving 2,219 total `DeviceUser` rows and 2,217 linked rows.
+  - Hikvision log sync processed 982 source rows, saved 376, classified 606 as known skipped, failed 0, and left 0 truly missing.
+  - Browser proof exists at `.runtime/browser-evidence/screenshots/device-users-review-sync-modal.png` and `.runtime/browser-evidence/device-users-review-sync-evidence.json`.
+- Remaining drift:
+  - Promote and verify the implementation through VM/GitOps/public DEV before calling it production runtime truth.
+
 ## Task Summary
 
 - Task mode: Mixed docs/config/runtime drift repair after Existing Project Adoption
