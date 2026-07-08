@@ -21,7 +21,13 @@ import { config as appConfig } from "../../config/config";
 import { redisClient } from "../../config/redis";
 import { invalidateCache } from "../../middleware/cache";
 import { createEmployeeHelpers } from "../../helper/employee.helper";
-import { parseHikvisionBusinessDateBound } from "../../helper/hikvision-event-contract.helper";
+import {
+	buildHikvisionDeviceEventDedupeKey,
+	normalizeHikvisionDeviceEventSource,
+	normalizeHikvisionFutureSkewedEventTime,
+	parseHikvisionBusinessDateBound,
+	parseHikvisionEventTime,
+} from "../../helper/hikvision-event-contract.helper";
 import { hikvisionEndpoint } from "../../config/hikvision.endpoint";
 import {
 	buildHikvisionDeviceBaseUrl,
@@ -61,7 +67,7 @@ const DEVICE_EVENT_SOURCES = new Set([
 const DEVICE_EVENT_RESET_ADMIN_ROLES = new Set(["hris-admin", "admin", "super_admin", "superadmin"]);
 const DEVICE_USER_ADMIN_ROLES = new Set(["hris-admin", "admin", "super_admin", "superadmin"]);
 
-type DeviceImportJobStatus = "processing" | "completed" | "failed";
+type DeviceImportJobStatus = "processing" | "completed" | "failed" | "cancelled";
 
 type DeviceImportJob = {
 	jobId: string;
@@ -74,6 +80,11 @@ type DeviceImportJob = {
 	processed: number;
 	imported: number;
 	skipped: number;
+	alreadySaved?: number;
+	knownSkipped?: number;
+	skipMissingEmployeeNo?: boolean;
+	cancelRequested?: boolean;
+	cancelRequestedAt?: Date;
 	failed: number;
 	message: string;
 	errors: Array<{ row: number; error: string }>;
@@ -802,12 +813,27 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const status = String(req.query.status || "all").trim();
 			const query = String(req.query.query || req.query.search || "").trim();
+			const vendorUserId = String(req.query.vendorUserId || "").trim();
+			const vendorUserIds = Array.from(
+				new Set(
+					[]
+						.concat(req.query.vendorUserIds as any)
+						.flatMap((value) => String(value || "").split(","))
+						.map((value) => value.trim())
+						.filter(Boolean),
+				),
+			).slice(0, 100);
 			const page = Math.max(Number(req.query.page || 1), 1);
 			const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 100);
 			const where: any = {
 				organizationId,
 				deviceId,
 				...(status && status !== "all" ? { status } : {}),
+				...(vendorUserId
+					? { vendorUserId }
+					: vendorUserIds.length
+						? { vendorUserId: { in: vendorUserIds } }
+						: {}),
 				...(query
 					? {
 							OR: [
@@ -849,6 +875,53 @@ export const controller = (prisma: PrismaClient) => {
 			);
 		} catch (error: any) {
 			res.status(500).json(buildErrorResponse(error?.message || "Failed to retrieve device users", 500));
+		}
+	};
+
+	const getDeviceSyncRuns = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const organizationId = String((req as any).organizationId || "").trim();
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("Organization ID not found", 400));
+				return;
+			}
+			const deviceId = String(req.params.id || "").trim();
+			if (!deviceId) {
+				res.status(400).json(buildErrorResponse("Device is required", 400));
+				return;
+			}
+			const limit = Math.min(Math.max(Number(req.query.limit || 10), 1), 50);
+			const rows = await (prisma as any).deviceSyncRun.findMany({
+				where: { organizationId, deviceId },
+				orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+				take: limit,
+				select: {
+					id: true,
+					organizationId: true,
+					deviceId: true,
+					runType: true,
+					status: true,
+					source: true,
+					totalSourceRecords: true,
+					importableRecords: true,
+					savedRecords: true,
+					skippedRecords: true,
+					failedRecords: true,
+					missingRecords: true,
+					skipSummary: true,
+					failureSummary: true,
+					rawSummary: true,
+					startedAt: true,
+					completedAt: true,
+					createdAt: true,
+					updatedAt: true,
+				},
+			});
+			res.status(200).json(
+				buildSuccessResponse("Device sync runs retrieved", { syncRuns: rows }, 200),
+			);
+		} catch (error: any) {
+			res.status(500).json(buildErrorResponse(error?.message || "Failed to retrieve device sync runs", 500));
 		}
 	};
 
@@ -1177,14 +1250,94 @@ export const controller = (prisma: PrismaClient) => {
 		return deviceImportJobs.get(jobId) || null;
 	};
 
+	const buildHikvisionImportEventFingerprint = (device: any, event: any) => {
+		const employeeNo = String(event?.employeeNoString || event?.employeeNo || "").trim();
+		const receivedAt = new Date();
+		const knownSkewSeconds = Number((device?.config as any)?.hikvisionClockSkewSeconds || 0);
+		const allowClockSkewCorrection =
+			(device?.config as any)?.hikvisionAllowClockSkewCorrection === true;
+		const eventWasAlreadyAdjusted = Boolean(event?.timeAdjusted);
+		const normalizedTime = eventWasAlreadyAdjusted
+			? parseHikvisionEventTime(event?.time)
+			: normalizeHikvisionFutureSkewedEventTime(event?.time, receivedAt, knownSkewSeconds, {
+					allowStoredSkew: allowClockSkewCorrection,
+					allowAutoAdjust: allowClockSkewCorrection,
+				}).eventTime;
+		const source = normalizeHikvisionDeviceEventSource(event?.source);
+		return {
+			employeeNo,
+			eventTime: normalizedTime,
+			source,
+			serialNo: String(event?.serialNo || "").trim(),
+			dedupeKey: buildHikvisionDeviceEventDedupeKey({
+				deviceId: device.id,
+				source,
+				eventTime: normalizedTime,
+				employeeNo,
+				event,
+			}),
+		};
+	};
+
+	const findExistingHikvisionDeviceEvent = async (params: {
+		organizationId: string;
+		deviceId: string;
+		employeeNo: string;
+		source: string;
+		eventTime: Date;
+		serialNo?: string | null;
+		dedupeKey: string;
+	}) => {
+		const existingByDedupe = await (prisma as any).deviceEvent.findFirst({
+			where: {
+				organizationId: params.organizationId,
+				dedupeKey: params.dedupeKey,
+			},
+			select: { id: true },
+		});
+		if (existingByDedupe) return existingByDedupe;
+
+		const serialNo = String(params.serialNo || "").trim();
+		if (!serialNo || !params.employeeNo) return null;
+		const start = new Date(params.eventTime);
+		start.setUTCHours(0, 0, 0, 0);
+		start.setUTCDate(start.getUTCDate() - 1);
+		const end = new Date(params.eventTime);
+		end.setUTCHours(23, 59, 59, 999);
+		end.setUTCDate(end.getUTCDate() + 1);
+		const candidates = await (prisma as any).deviceEvent.findMany({
+			where: {
+				organizationId: params.organizationId,
+				deviceId: params.deviceId,
+				employeeNo: params.employeeNo,
+				source: params.source,
+				eventTime: { gte: start, lte: end },
+			},
+			select: { id: true, payload: true },
+			orderBy: { receivedAt: "desc" },
+			take: 200,
+		});
+		return candidates.find((candidate: any) => {
+			const payload = candidate?.payload || {};
+			const candidateSerial =
+				payload?.serialNo ||
+				payload?.AcsEventInfo?.serialNo ||
+				payload?.EventNotificationAlert?.AccessControllerEvent?.serialNo ||
+				payload?.AccessControllerEvent?.serialNo;
+			return String(candidateSerial || "").trim() === serialNo;
+		}) || null;
+	};
+
 	const processHikvisionImportJob = async (params: {
 		jobId: string;
 		runId?: string;
 		req: Request;
 		device: any;
 		totalHint: number;
+		skipMissingEmployeeNo?: boolean;
 	}) => {
 		const { jobId, runId, req, device, totalHint } = params;
+		const skipMissingEmployeeNo = params.skipMissingEmployeeNo === true;
 		const ctrl = callbackController(prisma);
 		const pageSize = Math.max(
 			1,
@@ -1199,6 +1352,8 @@ export const controller = (prisma: PrismaClient) => {
 		let processed = 0;
 		let imported = 0;
 		let skipped = 0;
+		let alreadySaved = 0;
+		let knownSkipped = 0;
 		let failed = 0;
 
 		try {
@@ -1208,6 +1363,15 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			while (processed < maxEvents) {
+				const currentJob = deviceImportJobs.get(jobId);
+				if (currentJob?.cancelRequested) {
+					updateDeviceImportJob(jobId, {
+						status: "cancelled",
+						message: "Sync cancelled",
+						completedAt: new Date(),
+					});
+					break;
+				}
 				const payload = {
 					AcsEventCond: {
 						searchID: `${jobId}-${position}`,
@@ -1246,37 +1410,51 @@ export const controller = (prisma: PrismaClient) => {
 				for (const event of pageEvents) {
 					processed += 1;
 					const employeeNo = String(event?.employeeNoString || event?.employeeNo || "").trim();
-					if (!employeeNo) {
+					if (!employeeNo && skipMissingEmployeeNo) {
 						skipped += 1;
 					} else {
-						let statusCode = 200;
-						const callbackReq = {
-							...req,
-							body: { deviceId: device.id, AcsEventInfo: event },
-							query: {},
-							get: () => "application/json",
-						} as any;
-						const callbackRes = {
-							status(code: number) {
-								statusCode = code;
-								return this;
-							},
-							json() {
-								return this;
-							},
-						} as any;
-						try {
-							await ctrl.handleCallback(callbackReq, callbackRes, (() => undefined) as any);
-							if (statusCode >= 200 && statusCode < 300) imported += 1;
-							else failed += 1;
-						} catch (error: any) {
-							failed += 1;
-							const job = deviceImportJobs.get(jobId);
-							if (job && job.errors.length < 25) {
-								job.errors.push({
-									row: processed,
-									error: error?.message || "Failed to save device punch",
-								});
+						const fingerprint = buildHikvisionImportEventFingerprint(device, event);
+						const existingEvent = await findExistingHikvisionDeviceEvent({
+							organizationId: String(device.organizationId),
+							deviceId: device.id,
+							employeeNo,
+							source: fingerprint.source,
+							eventTime: fingerprint.eventTime,
+							serialNo: fingerprint.serialNo,
+							dedupeKey: fingerprint.dedupeKey,
+						});
+						if (existingEvent) {
+							alreadySaved += 1;
+						} else {
+							let statusCode = 200;
+							const callbackReq = {
+								...req,
+								body: { deviceId: device.id, AcsEventInfo: event },
+								query: {},
+								get: () => "application/json",
+							} as any;
+							const callbackRes = {
+								status(code: number) {
+									statusCode = code;
+									return this;
+								},
+								json() {
+									return this;
+								},
+							} as any;
+							try {
+								await ctrl.handleCallback(callbackReq, callbackRes, (() => undefined) as any);
+								if (statusCode >= 200 && statusCode < 300) imported += 1;
+								else failed += 1;
+							} catch (error: any) {
+								failed += 1;
+								const job = deviceImportJobs.get(jobId);
+								if (job && job.errors.length < 25) {
+									job.errors.push({
+										row: processed,
+										error: error?.message || "Failed to save device punch",
+									});
+								}
 							}
 						}
 					}
@@ -1286,8 +1464,10 @@ export const controller = (prisma: PrismaClient) => {
 							processed,
 							imported,
 							skipped,
+							alreadySaved,
+							knownSkipped,
 							failed,
-							message: "Syncing device logs",
+							message: "Checking for missing device logs",
 						});
 					}
 					if (processed >= maxEvents) break;
@@ -1298,31 +1478,39 @@ export const controller = (prisma: PrismaClient) => {
 				if (position >= total) break;
 			}
 
+			const finalJob = deviceImportJobs.get(jobId);
+			const wasCancelled = finalJob?.status === "cancelled" || finalJob?.cancelRequested;
 			updateDeviceImportJob(jobId, {
-				status: failed > 0 && imported === 0 ? "failed" : "completed",
+				status: wasCancelled ? "cancelled" : failed > 0 && imported === 0 ? "failed" : "completed",
 				processed,
 				imported,
 				skipped,
+				alreadySaved,
+				knownSkipped,
 				failed,
-				message:
-					failed > 0 && imported === 0
+				message: wasCancelled
+					? "Sync cancelled"
+					: failed > 0 && imported === 0
 						? "Import failed"
-						: `Imported ${imported.toLocaleString()} device logs`,
+						: imported > 0
+							? `Saved ${imported.toLocaleString()} missing device logs`
+							: "No missing device logs found",
 				completedAt: new Date(),
 			});
 			if (runId) {
 				await (prisma as any).deviceSyncRun.update({
 					where: { id: runId },
 					data: {
-						status: failed > 0 && imported === 0 ? "FAILED" : "COMPLETED",
+						status: wasCancelled ? "FAILED" : failed > 0 && imported === 0 ? "FAILED" : "COMPLETED",
 						totalSourceRecords: processed,
-						importableRecords: processed - skipped,
+						importableRecords: Math.max(processed - skipped - alreadySaved, 0),
 						savedRecords: imported,
 						skippedRecords: skipped,
 						failedRecords: failed,
 						missingRecords: 0,
 						skipSummary: {
 							missingEmployeeNo: skipped,
+							alreadySaved,
 						},
 						failureSummary: failed ? { failed } : null,
 						rawSummary: {
@@ -1330,7 +1518,11 @@ export const controller = (prisma: PrismaClient) => {
 							processed,
 							imported,
 							skipped,
+							alreadySaved,
+							knownSkipped,
 							failed,
+							skipMissingEmployeeNo,
+							cancelled: wasCancelled,
 						},
 						completedAt: new Date(),
 					},
@@ -1377,6 +1569,9 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 			const deviceId = String((req.body as any)?.deviceId || (req.query as any)?.deviceId || "").trim();
+			const skipMissingEmployeeNo =
+				(req.body as any)?.skipMissingEmployeeNo === true ||
+				(req.query as any)?.skipMissingEmployeeNo === "true";
 			if (!deviceId) {
 				res.status(400).json(buildErrorResponse("Device is required", 400));
 				return;
@@ -1415,13 +1610,21 @@ export const controller = (prisma: PrismaClient) => {
 				processed: 0,
 				imported: 0,
 				skipped: 0,
+				skipMissingEmployeeNo,
 				failed: 0,
 				message: "Sync queued",
 				errors: [],
 				startedAt: new Date(),
 			};
 			deviceImportJobs.set(jobId, job);
-			processHikvisionImportJob({ jobId, runId: run.id, req, device, totalHint }).catch((error) => {
+			processHikvisionImportJob({
+				jobId,
+				runId: run.id,
+				req,
+				device,
+				totalHint,
+				skipMissingEmployeeNo,
+			}).catch((error) => {
 				deviceLogger.error(`Hikvision import job ${jobId} failed: ${error}`);
 			});
 
@@ -1447,6 +1650,38 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 		res.status(200).json(buildSuccessResponse("Import job retrieved", job, 200));
+	};
+
+	const cancelDeviceImportJob = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const organizationId = String((req as any).organizationId || "").trim();
+			const jobId = String(req.params.jobId || "").trim();
+			const job = getHikvisionImportProgress(jobId);
+			if (!job || job.organizationId !== organizationId) {
+				res.status(404).json(buildErrorResponse("Import job not found or expired", 404));
+				return;
+			}
+			if (job.status !== "processing") {
+				res.status(200).json(buildSuccessResponse("Import job already finished", job, 200));
+				return;
+			}
+			updateDeviceImportJob(jobId, {
+				cancelRequested: true,
+				cancelRequestedAt: new Date(),
+				message: "Cancel requested",
+			});
+			res.status(200).json(
+				buildSuccessResponse(
+					"Device log sync cancellation requested",
+					getHikvisionImportProgress(jobId) || job,
+					200,
+				),
+			);
+		} catch (error: any) {
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Failed to cancel device log sync", 500),
+			);
+		}
 	};
 
 	const resetDeviceEvents = async (req: Request, res: Response, _next: NextFunction) => {
@@ -3113,6 +3348,7 @@ export const controller = (prisma: PrismaClient) => {
 		getEvents,
 		getDeviceHealth,
 		getDeviceSyncPreview,
+		getDeviceSyncRuns,
 		listDeviceUsers,
 		syncDeviceUsers,
 		backfillDeviceUsers,
@@ -3122,6 +3358,7 @@ export const controller = (prisma: PrismaClient) => {
 		triggerZktecoAttendanceSync,
 		triggerHikvisionAttendanceImport,
 		getDeviceImportJob,
+		cancelDeviceImportJob,
 		getById,
 		update,
 		remove,

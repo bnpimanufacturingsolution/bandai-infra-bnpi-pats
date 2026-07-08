@@ -1,13 +1,12 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Button } from "~/components/atoms/Button";
 import { Modal } from "~/components/atoms/Modal";
 import { Badge } from "~/components/atoms/Badge";
 import { Select } from "~/components/atoms/Select";
 import { SearchableSelect } from "~/components/ui/searchable-select";
 import { formatDateTime } from "~/lib/utils/text-utils";
-import { DataTable, type Column } from "~/components/atoms/DataTable";
+import type { Column } from "~/components/atoms/DataTable";
 import {
-	UserCog,
 	Eye,
 	UserPlus,
 	MoreVertical,
@@ -17,6 +16,8 @@ import {
 	Unlink,
 	FileJson,
 	Loader2,
+	Activity,
+	Clock3,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -24,24 +25,32 @@ import { toast } from "sonner";
 import { useEmployee, useEmployees } from "~/lib/hooks/useEmployees";
 import {
 	useDevices,
+	useDeviceSyncPreview,
+	useDeviceSyncRuns,
 	useDeviceUsers,
 	useImportDeviceEnrollment,
 	useLinkDeviceUser,
 	useSyncDeviceUsers,
 	useUnlinkDeviceUser,
 } from "~/lib/hooks/useDevices";
-import { useHikvisionUserSearchMutation } from "~/lib/hooks/use-hikvision";
+import { useHikvisionDeviceUsers } from "~/lib/hooks/use-hikvision";
 import { useQueryClient } from "@tanstack/react-query";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
+import {
+	Accordion,
+	AccordionContent,
+	AccordionItem,
+	AccordionTrigger,
+} from "~/components/ui/accordion";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { HikvisionUserInfo } from "~/types/hikvision";
-import { GenericImportModal } from "~/components/organisms/shared/GenericImportModal";
-import deviceService, { type DeviceUser } from "~/services/devices.service";
-import { DeviceEnrollmentPreviewTable } from "~/components/molecules/device/DeviceEnrollmentPreviewTable";
+import deviceService, { type DeviceSyncPreviewRow, type DeviceUser } from "~/services/devices.service";
 import type { Employee } from "~/services/employees.service";
 
 interface EnrollFormData {
@@ -51,9 +60,44 @@ interface EnrollFormData {
 
 interface DeviceEnrollmentPanelProps {
 	embedded?: boolean;
+	mode?: "sync-review" | "device-users";
 }
 
-export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPanelProps) {
+type SyncCenterDeviceItem = {
+	device: any;
+	preview?: DeviceSyncPreviewRow;
+	vendor: string;
+	status: string;
+};
+
+type VisibleDeviceUserRow = {
+	key: string;
+	vendorUserId: string;
+	displayName?: string | null;
+	userType?: string | null;
+	status: DeviceUser["status"] | "SOURCE_ONLY" | "CHECKING_LINK" | "LINK_CHECK_FAILED";
+	employeeId?: string | null;
+	employee?: DeviceUser["employee"];
+	lastSyncedAt?: string | null;
+	rawPayload?: any;
+	hrisDeviceUser?: DeviceUser;
+	sourceUser?: HikvisionUserInfo;
+};
+
+type DeviceUserSyncSummary = {
+	totalSourceRecords?: number;
+	importableRecords?: number;
+	created?: number;
+	updated?: number;
+	linked?: number;
+	unmatched?: number;
+	conflict?: number;
+	disabled?: number;
+	skipped?: number;
+	failed?: number;
+};
+
+export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }: DeviceEnrollmentPanelProps) {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -113,17 +157,33 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 	const devices = (devicesData as any)?.devices || [];
 	const selectedDeviceId =
 		searchParams.get("deviceId") || devices[0]?.id || "";
+	const selectedDevice = devices.find((device: any) => device.id === selectedDeviceId);
+	const activePanelParam = searchParams.get("syncPanel") || (mode === "device-users" ? "users" : "overview");
+	const activePanel = ["overview", "users", "logs", "runs"].includes(activePanelParam)
+		? activePanelParam
+		: "overview";
 	const deviceUserStatus = searchParams.get("deviceUserStatus") || "all";
 	const deviceUserSearch = searchParams.get("deviceUserSearch") || "";
+	const deviceUserView = searchParams.get("deviceUserView") || "shown";
+	const deviceUserPage = Math.max(Number(searchParams.get("deviceUserPage") || 1), 1);
+	const deviceUserLimit = Math.min(Math.max(Number(searchParams.get("deviceUserLimit") || 8), 1), 25);
 	const {
-		data: dbDeviceUsers,
-		isLoading: isLoadingDbDeviceUsers,
-		refetch: refetchDbDeviceUsers,
-	} = useDeviceUsers(selectedDeviceId, {
-		limit: 50,
-		status: deviceUserStatus,
-		query: deviceUserSearch,
-	});
+		data: syncPreview,
+		isLoading: isLoadingSyncPreview,
+		refetch: refetchSyncPreview,
+	} = useDeviceSyncPreview(
+		{ deviceId: activePanel === "overview" ? "all" : selectedDeviceId || "all" },
+		activePanel === "overview" || Boolean(selectedDeviceId),
+	);
+	const {
+		data: syncRunsData,
+		isLoading: isLoadingSyncRuns,
+		refetch: refetchSyncRuns,
+	} = useDeviceSyncRuns(
+		selectedDeviceId,
+		{ limit: 12 },
+		Boolean(selectedDeviceId),
+	);
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
 	const linkDeviceUserMutation = useLinkDeviceUser();
 	const unlinkDeviceUserMutation = useUnlinkDeviceUser();
@@ -131,17 +191,22 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 		open: boolean;
 		status: "idle" | "review" | "syncing" | "complete" | "error";
 		message: string;
-		summary?: Record<string, number>;
+		summary?: DeviceUserSyncSummary;
 	}>({
 		open: false,
 		status: "idle",
 		message: "",
 	});
-	const [detailsDeviceUser, setDetailsDeviceUser] = useState<DeviceUser | null>(null);
-	const [linkTarget, setLinkTarget] = useState<DeviceUser | null>(null);
+	const [detailsDeviceUser, setDetailsDeviceUser] = useState<VisibleDeviceUserRow | null>(null);
+	const [linkTarget, setLinkTarget] = useState<VisibleDeviceUserRow | null>(null);
+	const [unlinkTarget, setUnlinkTarget] = useState<VisibleDeviceUserRow | null>(null);
 	const [selectedEmployeeForLink, setSelectedEmployeeForLink] = useState("");
 
-	const { data: allEmployeesData } = useEmployees({
+	const {
+		data: allEmployeesData,
+		isLoading: isLoadingEmployeeLinkOptions,
+		error: employeeLinkOptionsError,
+	} = useEmployees({
 		limit: 1000,
 		document: true,
 		pagination: true,
@@ -179,27 +244,134 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 		allEmployeesPayload?.employees?.map((employee: Employee) => ({
 			value: employee.id,
 			label: `${getEmployeeDisplayName(employee)} - ${employee.employeeId || "No employee ID"}`,
-			description: employee.deviceEmpId ? `Legacy device ID ${employee.deviceEmpId}` : undefined,
+			description: [
+				employee.deviceEmpId ? `Legacy device ID ${employee.deviceEmpId}` : null,
+				employee.department?.name,
+				employee.position?.title,
+			]
+				.filter(Boolean)
+				.join(" - ") || undefined,
+			badge: employee.employeeId || undefined,
 		})) || [];
 
-	// Hikvision user search mutation
-	const hikvisionUserSearchMutation = useHikvisionUserSearchMutation();
-	const hikvisionSearchRef = useRef(hikvisionUserSearchMutation.mutateAsync);
-
-	useEffect(() => {
-		hikvisionSearchRef.current = hikvisionUserSearchMutation.mutateAsync;
-	}, [hikvisionUserSearchMutation.mutateAsync]);
-
 	const importEnrollmentMutation = useImportDeviceEnrollment();
-	const [deviceUsers, setDeviceUsers] = useState<HikvisionUserInfo[]>([]);
-	const [isLoadingDeviceUsers, setIsLoadingDeviceUsers] = useState(false);
-	const deviceUsersCacheRef = useRef<Record<string, HikvisionUserInfo[]>>({});
-	const lastFetchKeyRef = useRef<string>("");
 
 	const fallbackDeviceUserId = String(
 		activeEmployee?.deviceEmpId || activeEmployee?.employeeId || "",
 	).trim();
 
+	// Enroll form
+	const { handleSubmit, reset, setValue, watch } = useForm<EnrollFormData>({
+		defaultValues: {
+			deviceId: "",
+			deviceUserId: "",
+		},
+	});
+
+	const watchedDeviceId = watch("deviceId");
+	const watchedDeviceUserId = watch("deviceUserId");
+	const sourceDeviceId =
+		activePanel === "users" && selectedDeviceId
+			? selectedDeviceId
+			: watchedDeviceId || selectedDeviceId;
+	const shouldFetchDeviceUsers =
+		(watchedDeviceId && action === "enroll") ||
+		action === "import" ||
+		(activePanel === "users" && Boolean(selectedDeviceId));
+	const {
+		data: deviceUsersData = [],
+		isLoading: isLoadingDeviceUsers,
+		isFetching: isFetchingDeviceUsers,
+		error: sourceDeviceUsersError,
+		refetch: refetchSourceDeviceUsers,
+	} = useHikvisionDeviceUsers(sourceDeviceId, Boolean(shouldFetchDeviceUsers));
+	const deviceUsers = useMemo(
+		() => (shouldFetchDeviceUsers ? deviceUsersData : []),
+		[deviceUsersData, shouldFetchDeviceUsers],
+	);
+	const isReadingDeviceUsers = isLoadingDeviceUsers || isFetchingDeviceUsers;
+	const sourceVendorUserIds = useMemo(
+		() =>
+			Array.from(
+				new Set(
+					deviceUsers
+						.map((user) => String(user.employeeNo || "").trim())
+						.filter(Boolean),
+				),
+			),
+		[deviceUsers],
+	);
+	const sourceVendorUserIdKey = sourceVendorUserIds.join("|");
+	const sourceVendorUserIdsForQuery = useMemo(
+		() => (sourceVendorUserIdKey ? sourceVendorUserIdKey.split("|") : []),
+		[sourceVendorUserIdKey],
+	);
+	const hasSourceVendorUsers =
+		activePanel === "users" && Boolean(selectedDeviceId) && sourceVendorUserIdsForQuery.length > 0;
+	const {
+		data: sourceMatchedDeviceUsersData,
+		isLoading: isLoadingSourceMatchedDeviceUsers,
+		isFetching: isFetchingSourceMatchedDeviceUsers,
+		isError: isSourceMatchedDeviceUsersError,
+		refetch: refetchSourceMatchedDeviceUsers,
+	} = useDeviceUsers(
+		selectedDeviceId,
+		{
+			limit: Math.min(Math.max(sourceVendorUserIdsForQuery.length, 1), 100),
+			vendorUserIds: sourceVendorUserIdsForQuery,
+		},
+		hasSourceVendorUsers,
+	);
+	const hasSourceMatchedDeviceUsersData = Boolean(sourceMatchedDeviceUsersData);
+	const isCheckingSourceDeviceUserLinks =
+		hasSourceVendorUsers &&
+		!hasSourceMatchedDeviceUsersData &&
+		(isLoadingSourceMatchedDeviceUsers || isFetchingSourceMatchedDeviceUsers);
+	const shouldUseSourceScopedDeviceUsers =
+		Boolean(selectedDeviceId) &&
+		activePanel === "users" &&
+		!sourceDeviceUsersError &&
+		!isSourceMatchedDeviceUsersError &&
+		deviceUserStatus === "all" &&
+		!deviceUserSearch &&
+		deviceUserView !== "hris";
+	const {
+		data: dbDeviceUsers,
+		isLoading: isLoadingDbDeviceUsers,
+		refetch: refetchDbDeviceUsers,
+	} = useDeviceUsers(
+		selectedDeviceId,
+		{
+			limit: 50,
+			status: deviceUserStatus,
+			query: deviceUserSearch,
+		},
+		Boolean(selectedDeviceId) && (!shouldUseSourceScopedDeviceUsers || activePanel !== "users"),
+	);
+	const {
+		data: openDbDeviceUsers,
+		isLoading: isLoadingOpenDbDeviceUsers,
+		refetch: refetchOpenDbDeviceUsers,
+	} = useDeviceUsers(
+		selectedDeviceId,
+		{
+			limit: 50,
+			status: "UNMATCHED",
+			query: deviceUserSearch,
+		},
+		Boolean(selectedDeviceId) &&
+			activePanel === "users" &&
+			deviceUserStatus === "all" &&
+			!shouldUseSourceScopedDeviceUsers,
+	);
+	const sourceMatchedDeviceUsers = useMemo(() => {
+		const nextMatches: Record<string, DeviceUser> = {};
+		for (const deviceUser of sourceMatchedDeviceUsersData?.deviceUsers || []) {
+			const vendorUserId = String(deviceUser.vendorUserId || "").trim();
+			if (vendorUserId) nextMatches[vendorUserId] = deviceUser;
+		}
+		return nextMatches;
+	}, [sourceMatchedDeviceUsersData?.deviceUsers]);
 	const deviceUserOptions = useMemo(() => {
 		const options = deviceUsers
 			.filter((user) => String(user.employeeNo || "").trim())
@@ -221,115 +393,12 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 		return options;
 	}, [activeEmployee?.deviceEmpId, deviceUsers, fallbackDeviceUserId]);
 
-	// Enroll form
-	const { handleSubmit, reset, setValue, watch } = useForm<EnrollFormData>({
-		defaultValues: {
-			deviceId: "",
-			deviceUserId: "",
-		},
-	});
-
-	const watchedDeviceId = watch("deviceId");
-	const watchedDeviceUserId = watch("deviceUserId");
-
 	useEffect(() => {
 		if (action !== "enroll" || !fallbackDeviceUserId) return;
 		if (!String(watchedDeviceUserId || "").trim()) {
 			setValue("deviceUserId", fallbackDeviceUserId);
 		}
 	}, [action, fallbackDeviceUserId, setValue, watchedDeviceUserId]);
-
-	// Fetch device users when device is selected or import modal is open
-	useEffect(() => {
-		const shouldFetch = (watchedDeviceId && action === "enroll") || action === "import";
-		if (!shouldFetch) {
-			if (deviceUsers.length > 0) {
-				setDeviceUsers([]);
-			}
-			lastFetchKeyRef.current = "";
-			return;
-		}
-
-		const scopeKey = action === "import" ? "import" : `enroll:${watchedDeviceId}`;
-
-		if (deviceUsersCacheRef.current[scopeKey]) {
-			setDeviceUsers(deviceUsersCacheRef.current[scopeKey]);
-			return;
-		}
-
-		if (lastFetchKeyRef.current === scopeKey) {
-			return;
-		}
-		lastFetchKeyRef.current = scopeKey;
-
-		let cancelled = false;
-		setIsLoadingDeviceUsers(true);
-
-		const run = async () => {
-			const allUsers: HikvisionUserInfo[] = [];
-			const pageSize = 200;
-			let searchResultPosition = 0;
-			let hasMore = true;
-			let pageGuard = 0;
-			let lastSignature = "";
-
-			while (hasMore && pageGuard < 10) {
-				pageGuard += 1;
-				const response = await hikvisionSearchRef.current({
-					deviceId: watchedDeviceId || undefined,
-					searchID: `enroll-${Date.now()}-${searchResultPosition}`,
-					searchResultPosition,
-					maxResults: pageSize,
-				});
-
-				const searchData = response?.data?.UserInfoSearch;
-				const users = Array.isArray(searchData?.UserInfo) ? searchData.UserInfo : [];
-				const responseStatus = String(searchData?.responseStatusStrg || "").toUpperCase();
-				const numOfMatches = Number(searchData?.numOfMatches || users.length || 0);
-				const signature = `${users[0]?.employeeNo || "none"}:${users.length}:${responseStatus}`;
-
-				if (signature === lastSignature) {
-					hasMore = false;
-					break;
-				}
-				lastSignature = signature;
-				allUsers.push(...users);
-
-				if (responseStatus !== "MORE" || numOfMatches <= 0) {
-					hasMore = false;
-				} else {
-					searchResultPosition += numOfMatches;
-				}
-			}
-
-			const deduped = Array.from(
-				new Map(allUsers.map((user) => [String(user.employeeNo), user])).values(),
-			);
-
-			if (!cancelled) {
-				deviceUsersCacheRef.current[scopeKey] = deduped;
-				setDeviceUsers(deduped);
-			}
-		};
-
-		void run()
-			.catch(() => {
-				if (!cancelled) {
-					setDeviceUsers([]);
-					toast.error("Failed to fetch device users");
-					lastFetchKeyRef.current = "";
-				}
-			})
-			.finally(() => {
-				if (!cancelled) {
-					setIsLoadingDeviceUsers(false);
-				}
-			});
-
-		return () => {
-			cancelled = true;
-		};
-	}, [watchedDeviceId, action, deviceUsers.length]);
 
 	// Define table columns
 	const columns: Column<Employee>[] = [
@@ -409,6 +478,17 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 		updateSearchParams((next) => {
 			if (deviceId) next.set("deviceId", deviceId);
 			else next.delete("deviceId");
+			next.set("deviceUserPage", "1");
+		});
+	};
+
+	const setActivePanel = (panel: string) => {
+		updateSearchParams((next) => {
+			next.set("syncPanel", panel);
+			if (panel === "users") next.set("action", "device-users");
+			if (panel !== "users" && next.get("action") === "device-users") {
+				next.set("action", "sync-review");
+			}
 		});
 	};
 
@@ -416,18 +496,52 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 		updateSearchParams((next) => {
 			if (status && status !== "all") next.set("deviceUserStatus", status);
 			else next.delete("deviceUserStatus");
+			next.set("deviceUserPage", "1");
 		});
 	};
 
-	const openDeviceUserSyncReview = () => {
+	const setDeviceUserView = (view: string) => {
+		updateSearchParams((next) => {
+			if (view && view !== "shown") next.set("deviceUserView", view);
+			else next.delete("deviceUserView");
+			next.delete("deviceUserStatus");
+			next.delete("deviceUserSearch");
+			next.set("deviceUserPage", "1");
+			next.set("syncPanel", "users");
+			next.set("action", "device-users");
+		});
+	};
+
+	const setDeviceUserPage = (page: number) => {
+		updateSearchParams((next) => {
+			next.set("deviceUserPage", String(Math.max(page, 1)));
+		});
+	};
+
+	const refreshSourceDeviceUsers = () => {
 		if (!selectedDeviceId) {
+			toast.error("Select a device before reading source users");
+			return;
+		}
+		updateSearchParams((next) => {
+			next.set("action", "device-users");
+			next.set("syncPanel", "users");
+			next.set("deviceUserPage", "1");
+		});
+		void refetchSourceDeviceUsers();
+	};
+
+	const openDeviceUserSyncReview = (deviceIdOverride?: string) => {
+		const targetDeviceId = deviceIdOverride || selectedDeviceId;
+		if (!targetDeviceId) {
 			toast.error("Select a device before syncing users");
 			return;
 		}
+		if (deviceIdOverride) setSelectedDeviceId(deviceIdOverride);
 		setDeviceUserSyncState({
 			open: true,
 			status: "review",
-			message: "Review the selected device users before updating HRIS identity records.",
+			message: "Sync physical device users into HRIS identity records.",
 		});
 	};
 
@@ -435,6 +549,7 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 		updateSearchParams((next) => {
 			if (query) next.set("deviceUserSearch", query);
 			else next.delete("deviceUserSearch");
+			next.set("deviceUserPage", "1");
 		});
 	};
 
@@ -450,14 +565,20 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 		});
 		try {
 			const result = await syncDeviceUsersMutation.mutateAsync(selectedDeviceId);
-			const summary = result.summary || {};
+			const summary = (result.summary || {}) as DeviceUserSyncSummary;
+			await Promise.allSettled([
+				refetchDbDeviceUsers(),
+				refetchOpenDbDeviceUsers(),
+				refetchSourceMatchedDeviceUsers(),
+				refetchSyncRuns(),
+				refetchSyncPreview(),
+			]);
 			setDeviceUserSyncState({
 				open: true,
 				status: "complete",
 				message: "Device users synced from the physical device.",
 				summary,
 			});
-			void refetchDbDeviceUsers();
 		} catch (error: any) {
 			setDeviceUserSyncState({
 				open: true,
@@ -467,7 +588,7 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 		}
 	};
 
-	const openLinkDeviceUser = (deviceUser: DeviceUser) => {
+	const openLinkDeviceUser = (deviceUser: VisibleDeviceUserRow) => {
 		setLinkTarget(deviceUser);
 		setSelectedEmployeeForLink(deviceUser.employeeId || "");
 	};
@@ -477,18 +598,69 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 			toast.error("Select an employee to link");
 			return;
 		}
-		await linkDeviceUserMutation.mutateAsync({
-			deviceUserId: linkTarget.id,
-			employeeId: selectedEmployeeForLink,
-		});
-		setLinkTarget(null);
-		setSelectedEmployeeForLink("");
-		void refetchDbDeviceUsers();
+		if (!selectedDeviceId) {
+			toast.error("Select a device before linking");
+			return;
+		}
+
+		try {
+			let targetDeviceUser = linkTarget.hrisDeviceUser || null;
+
+			if (!targetDeviceUser) {
+				await syncDeviceUsersMutation.mutateAsync(selectedDeviceId);
+				const refreshed = await deviceService.getDeviceUsers(selectedDeviceId, {
+					limit: 100,
+					vendorUserId: linkTarget.vendorUserId,
+				});
+				targetDeviceUser =
+					refreshed.deviceUsers.find(
+						(deviceUser) =>
+							String(deviceUser.vendorUserId || "").trim() === linkTarget.vendorUserId,
+					) || null;
+			}
+
+			if (!targetDeviceUser) {
+				throw new Error(
+					"Device user was read from the source, but was not saved in HRIS after sync. Review sync and try again.",
+				);
+			}
+
+			await linkDeviceUserMutation.mutateAsync({
+				deviceUserId: targetDeviceUser.id,
+				employeeId: selectedEmployeeForLink,
+			});
+			setLinkTarget(null);
+			setSelectedEmployeeForLink("");
+			await Promise.allSettled([
+				refetchDbDeviceUsers(),
+				refetchOpenDbDeviceUsers(),
+				refetchSourceMatchedDeviceUsers(),
+				refetchSyncPreview(),
+			]);
+		} catch (error: any) {
+			toast.error(error?.message || "Failed to link device user");
+		}
 	};
 
-	const unlinkDeviceUser = async (deviceUser: DeviceUser) => {
-		await unlinkDeviceUserMutation.mutateAsync(deviceUser.id);
-		void refetchDbDeviceUsers();
+	const openUnlinkDeviceUser = (deviceUser: VisibleDeviceUserRow) => {
+		if (!deviceUser.hrisDeviceUser || !deviceUser.employeeId) return;
+		setUnlinkTarget(deviceUser);
+	};
+
+	const confirmUnlinkDeviceUser = async () => {
+		if (!unlinkTarget?.hrisDeviceUser) return;
+		try {
+			await unlinkDeviceUserMutation.mutateAsync(unlinkTarget.hrisDeviceUser.id);
+			toast.success("Device user unlinked");
+			setUnlinkTarget(null);
+			void Promise.allSettled([
+				refetchDbDeviceUsers(),
+				refetchOpenDbDeviceUsers(),
+				refetchSourceMatchedDeviceUsers(),
+			]);
+		} catch (error: any) {
+			toast.error(error?.message || "Failed to unlink device user");
+		}
 	};
 
 	const openEnroll = (employee: Employee) => {
@@ -547,7 +719,6 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 
 			toast.success("User enrolled successfully");
 			reset();
-			setDeviceUsers([]);
 			updateSearchParams((next) => {
 				next.delete(actionParamName);
 				next.delete(idParamName);
@@ -611,20 +782,255 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 							if (hasLinkedUser) openEnroll(item);
 						}}>
 						<UserPlus className="h-4 w-4 mr-2" />
-						{hasLinkedUser ? "Enroll Employee" : "No linked user"}
+						{hasLinkedUser ? "Link device ID" : "No linked user"}
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
 		);
 	};
 
-	const dbDeviceUserRows = dbDeviceUsers?.deviceUsers || [];
-	const dbDeviceUserSummary = dbDeviceUsers?.summary;
+	const dbDeviceUserRows = useMemo(() => {
+		const rows = [
+			...(dbDeviceUsers?.deviceUsers || []),
+			...(openDbDeviceUsers?.deviceUsers || []),
+		];
+		const byId = new Map<string, DeviceUser>();
+		for (const row of rows) {
+			if (row?.id) byId.set(row.id, row);
+		}
+		return Array.from(byId.values());
+	}, [dbDeviceUsers?.deviceUsers, openDbDeviceUsers?.deviceUsers]);
+	const syncRuns = syncRunsData?.syncRuns || [];
+	const latestUserSync = syncRuns.find((run) => run.runType === "DEVICE_USERS");
+	const latestLogSync = syncRuns.find((run) => run.runType === "DEVICE_LOGS");
+	const selectedLogPreview = (syncPreview?.devices || []).find(
+		(row: DeviceSyncPreviewRow) => row.deviceId === selectedDeviceId,
+	) || syncPreview?.devices?.[0];
+	const metricValue = (value: unknown) =>
+		typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : "-";
+	const getDeviceVendor = (device: any) => {
+		const rawVendor =
+			device?.config?.vendor || device?.config?.type || device?.config?.source || "Unclassified";
+		const vendor = String(rawVendor || "Unclassified").trim();
+		if (!vendor) return "Unclassified";
+		if (vendor.toLowerCase().includes("zkteco")) return "ZKTeco";
+		if (vendor.toLowerCase().includes("hikvision")) return "Hikvision";
+		return vendor;
+	};
+	const previewByDeviceId = new Map(
+		(syncPreview?.devices || []).map((row: DeviceSyncPreviewRow) => [row.deviceId, row]),
+	);
+	const syncCenterDevices: SyncCenterDeviceItem[] = devices.map((device: any) => {
+		const preview = previewByDeviceId.get(device.id);
+		const vendor = preview?.vendor || getDeviceVendor(device);
+		const missingCount = preview?.missingEventCount ?? preview?.needsSyncEvents;
+		const failedCount = preview?.failedEventCount;
+		const hasError = Boolean(preview?.error);
+		const hasMissing = typeof missingCount === "number" && missingCount > 0;
+		const hasFailed = typeof failedCount === "number" && failedCount > 0;
+		const status =
+			!preview
+				? "not_checked"
+				: hasError || hasFailed
+					? "needs_attention"
+					: hasMissing
+						? "needs_sync"
+						: preview.status || "synced";
+		return { device, preview, vendor, status };
+	});
+	const selectedSyncCenterItem = syncCenterDevices.find((item) => item.device.id === selectedDeviceId);
+	const getDeviceUserSource = (deviceUser?: { rawPayload?: any } | null) => {
+		const raw = (deviceUser?.rawPayload || {}) as any;
+		const source = raw?.hrisSync?.source || raw?.source || raw?.syncSource || "";
+		if (String(source).toLowerCase() === "legacy-backfill") return "historical";
+		return "physical";
+	};
+	const getDeviceUserSourceLabel = (deviceUser?: { rawPayload?: any } | null) =>
+		getDeviceUserSource(deviceUser) === "historical" ? "Historical HRIS backfill" : "Physical device";
+	const physicalDeviceUserRows = dbDeviceUserRows.filter((deviceUser) => getDeviceUserSource(deviceUser) === "physical");
+	const hrisDeviceUsersByVendorId = new Map<string, DeviceUser>();
+	for (const deviceUser of [...physicalDeviceUserRows, ...Object.values(sourceMatchedDeviceUsers)]) {
+		const vendorUserId = String(deviceUser.vendorUserId || "").trim();
+		if (vendorUserId) hrisDeviceUsersByVendorId.set(vendorUserId, deviceUser);
+	}
+	const sourceDeviceUserRows = deviceUsers
+		.filter((user) => String(user.employeeNo || "").trim())
+		.map<VisibleDeviceUserRow>((user) => {
+			const vendorUserId = String(user.employeeNo || "").trim();
+			const hrisDeviceUser = hrisDeviceUsersByVendorId.get(vendorUserId);
+			const isLinkCheckFailed = hasSourceVendorUsers && isSourceMatchedDeviceUsersError;
+			const isLinkCheckPending =
+				!hrisDeviceUser &&
+				isCheckingSourceDeviceUserLinks &&
+				!isLinkCheckFailed;
+			return {
+				key: hrisDeviceUser?.id || `source:${vendorUserId}`,
+				vendorUserId,
+				displayName: hrisDeviceUser?.displayName || user.name || `User ${vendorUserId}`,
+				userType: hrisDeviceUser?.userType || user.userType,
+				status: hrisDeviceUser?.status || (isLinkCheckFailed ? "LINK_CHECK_FAILED" : isLinkCheckPending ? "CHECKING_LINK" : "SOURCE_ONLY"),
+				employeeId: hrisDeviceUser?.employeeId || null,
+				employee: hrisDeviceUser?.employee || null,
+				lastSyncedAt: hrisDeviceUser?.lastSyncedAt || null,
+				rawPayload: hrisDeviceUser?.rawPayload || { UserInfo: user },
+				hrisDeviceUser,
+				sourceUser: user,
+			};
+		});
+	const sourceVendorIds = new Set(sourceDeviceUserRows.map((row) => row.vendorUserId));
+	const hrisOnlyDeviceUserRows = physicalDeviceUserRows
+		.filter((deviceUser) => !sourceVendorIds.has(String(deviceUser.vendorUserId || "").trim()))
+		.map<VisibleDeviceUserRow>((deviceUser) => ({
+			key: deviceUser.id,
+			vendorUserId: deviceUser.vendorUserId,
+			displayName: deviceUser.displayName,
+			userType: deviceUser.userType,
+			status: deviceUser.status,
+			employeeId: deviceUser.employeeId,
+			employee: deviceUser.employee,
+			lastSyncedAt: deviceUser.lastSyncedAt,
+			rawPayload: deviceUser.rawPayload,
+			hrisDeviceUser: deviceUser,
+		}));
+	const mergedDeviceUserRows = sourceDeviceUserRows.length
+		? [...sourceDeviceUserRows, ...hrisOnlyDeviceUserRows]
+		: hrisOnlyDeviceUserRows;
+	const viewDeviceUserRows = mergedDeviceUserRows.filter((row) => {
+		if (deviceUserView === "source") return Boolean(row.sourceUser);
+		if (deviceUserView === "hris") return Boolean(row.hrisDeviceUser);
+		if (deviceUserView === "linked") return row.status === "ACTIVE" && Boolean(row.employeeId);
+		if (deviceUserView === "open") {
+			return row.status === "SOURCE_ONLY" || row.status === "UNMATCHED";
+		}
+		return true;
+	});
+	const normalizedDeviceUserSearch = deviceUserSearch.trim().toLowerCase();
+	const visibleDeviceUserRows = viewDeviceUserRows.filter((row) => {
+		const statusMatch =
+			deviceUserStatus === "all" ||
+			row.status === deviceUserStatus ||
+			(deviceUserStatus === "UNMATCHED" && row.status === "SOURCE_ONLY");
+		if (!statusMatch) return false;
+		if (!normalizedDeviceUserSearch) return true;
+		return [
+			row.vendorUserId,
+			row.displayName,
+			row.userType,
+			row.employee?.employeeId,
+			row.employee?.fullName,
+		]
+			.filter(Boolean)
+			.some((value) => String(value).toLowerCase().includes(normalizedDeviceUserSearch));
+	});
+	const deviceUserTotalPages = Math.max(Math.ceil(visibleDeviceUserRows.length / deviceUserLimit), 1);
+	const safeDeviceUserPage = Math.min(deviceUserPage, deviceUserTotalPages);
+	const pagedDeviceUserRows = visibleDeviceUserRows.slice(
+		(safeDeviceUserPage - 1) * deviceUserLimit,
+		safeDeviceUserPage * deviceUserLimit,
+	);
+	const physicalSourceCount =
+		sourceDeviceUserRows.length || selectedSyncCenterItem?.preview?.vendorUserCount;
+	const physicalHrisUserCount = physicalDeviceUserRows.length;
+	const shownDeviceUserCount = mergedDeviceUserRows.length;
+	const linkedPhysicalUserCount = mergedDeviceUserRows.filter(
+		(deviceUser) => deviceUser.status === "ACTIVE" && Boolean(deviceUser.employeeId),
+	).length;
+	const openPhysicalUserCount = mergedDeviceUserRows.filter(
+		(deviceUser) =>
+			deviceUser.status === "SOURCE_ONLY" ||
+			deviceUser.status === "UNMATCHED",
+	).length;
+	const reviewPhysicalUserCount = mergedDeviceUserRows.filter(
+		(deviceUser) => deviceUser.status === "CONFLICT",
+	).length;
+	const usersToSaveCount = Math.max(Number(physicalSourceCount || 0) - physicalHrisUserCount, 0);
+	const completedDeviceUserSyncItems = [
+		["Read from device", deviceUserSyncState.summary?.totalSourceRecords],
+		["Imported to HRIS", deviceUserSyncState.summary?.importableRecords],
+		["Created", deviceUserSyncState.summary?.created],
+		["Updated", deviceUserSyncState.summary?.updated],
+		["Auto-linked", deviceUserSyncState.summary?.linked],
+		["Needs link", deviceUserSyncState.summary?.unmatched],
+		["Needs review", deviceUserSyncState.summary?.conflict],
+		["Skipped/off", (deviceUserSyncState.summary?.skipped || 0) + (deviceUserSyncState.summary?.disabled || 0)],
+	] as const;
+	const devicesByVendor = syncCenterDevices.reduce<Record<string, SyncCenterDeviceItem[]>>(
+		(groups, item) => {
+			const vendor = item.vendor || "Unclassified";
+			groups[vendor] = groups[vendor] || [];
+			groups[vendor].push(item);
+			return groups;
+		},
+		{},
+	);
+	const vendorGroups = Object.entries(devicesByVendor).sort(([left], [right]) =>
+		left.localeCompare(right),
+	);
+	const getSyncStatusLabel = (status: string) => {
+		if (status === "synced") return "Synced";
+		if (status === "needs_sync") return "Needs sync";
+		if (status === "needs_attention") return "Needs attention";
+		if (status === "source_total_unavailable") return "Source unavailable";
+		return "Not checked";
+	};
+	const getSyncStatusBadge = (status: string) => {
+		if (status === "synced") return "success";
+		if (status === "needs_attention") return "destructive";
+		if (status === "needs_sync" || status === "source_total_unavailable") return "warning";
+		return "secondary";
+	};
+	const getSourceReadLabel = (vendor?: string) => {
+		const normalized = String(vendor || "").toLowerCase();
+		if (normalized.includes("hikvision")) return "ISAPI source";
+		if (normalized.includes("zkteco")) return "SDK source";
+		return "Device API";
+	};
+	const openDevicePanel = (deviceId: string, panel: "users" | "logs" | "runs") => {
+		updateSearchParams((next) => {
+			next.set("deviceId", deviceId);
+			next.set("syncPanel", panel);
+			next.set("action", panel === "users" ? "device-users" : "sync-review");
+		});
+	};
+	const openPhysicalDeviceUsers = (deviceId: string) => {
+		updateSearchParams((next) => {
+			next.set("deviceId", deviceId);
+			next.set("syncPanel", "users");
+			next.set("action", "device-users");
+			next.set("deviceUserView", "source");
+			next.delete("deviceUserStatus");
+			next.delete("deviceUserSearch");
+			next.set("deviceUserPage", "1");
+		});
+	};
+	const openDeviceEvents = (view = "saved") => {
+		if (!selectedDeviceId) return;
+		navigate(`/admin/configuration/devices/events?deviceId=${encodeURIComponent(selectedDeviceId)}&view=${view}`);
+	};
+	const openLogSyncReview = () => {
+		if (!selectedDeviceId) {
+			toast.error("Select a device before reviewing logs");
+			return;
+		}
+		navigate(`/admin/configuration/devices/events?deviceId=${encodeURIComponent(selectedDeviceId)}&view=saved&action=sync-logs`);
+	};
 	const getDeviceUserBadgeVariant = (status?: string) => {
 		if (status === "ACTIVE") return "success";
 		if (status === "CONFLICT") return "warning";
 		if (status === "DISABLED") return "secondary";
+		if (status === "CHECKING_LINK") return "secondary";
+		if (status === "LINK_CHECK_FAILED") return "destructive";
 		return "warning-soft";
+	};
+	const getDeviceUserStatusLabel = (status?: string) => {
+		if (status === "SOURCE_ONLY") return "Open";
+		if (status === "ACTIVE") return "Linked";
+		if (status === "UNMATCHED") return "Open";
+		if (status === "CONFLICT") return "Review";
+		if (status === "DISABLED") return "Off";
+		if (status === "CHECKING_LINK") return "Checking link";
+		if (status === "LINK_CHECK_FAILED") return "Check failed";
+		return status || "-";
 	};
 
 	return (
@@ -640,7 +1046,7 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 							<ArrowLeft className="mr-2 h-4 w-4" />
 							Back to devices
 						</Button>
-						<h1 className="text-xl font-semibold text-slate-950">Device Enrollment</h1>
+						<h1 className="text-xl font-semibold text-slate-950">Sync Center</h1>
 					</div>
 					<div className="flex flex-wrap gap-2">
 						<Badge variant="secondary">{devices.length} devices</Badge>
@@ -651,21 +1057,219 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 				</div>
 			)}
 
-			<section className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
-				<div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+			<Tabs value={activePanel} onValueChange={setActivePanel} className="space-y-4">
+				<TabsList className="grid h-auto w-full grid-cols-4 rounded-md bg-slate-100 p-1">
+					<TabsTrigger value="overview">Overview</TabsTrigger>
+					<TabsTrigger value="users">Device Users</TabsTrigger>
+					<TabsTrigger value="logs">Device Logs</TabsTrigger>
+					<TabsTrigger value="runs">Sync Runs</TabsTrigger>
+				</TabsList>
+
+				<TabsContent value="overview" className="m-0 space-y-3">
+					{isLoadingDevices || isLoadingSyncPreview ? (
+						<div className="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+							<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
+							Loading device sync...
+						</div>
+					) : vendorGroups.length === 0 ? (
+						<div className="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+							No configured physical devices found.
+						</div>
+					) : (
+						<Accordion
+							type="multiple"
+							defaultValue={vendorGroups.map(([vendor]) => vendor)}
+							className="space-y-2">
+							{vendorGroups.map(([vendor, group]) => {
+								const attentionCount = group.filter((item) => item.status !== "synced").length;
+								const groupUserTotal = group.reduce((total, item) => {
+									const count = item.preview?.vendorUserCount;
+									return total + (typeof count === "number" && Number.isFinite(count) ? count : 0);
+								}, 0);
+								const groupLogTotal = group.reduce((total, item) => {
+									const count = item.preview?.vendorEventCount ?? item.preview?.totalEvents;
+									return total + (typeof count === "number" && Number.isFinite(count) ? count : 0);
+								}, 0);
+								return (
+									<AccordionItem
+										key={vendor}
+										value={vendor}
+										className="rounded-md border border-slate-200 bg-white px-3">
+										<AccordionTrigger className="py-2 hover:no-underline">
+											<div className="flex w-full items-center justify-between gap-3 pr-3 text-left">
+												<div className="min-w-0">
+													<p className="text-sm font-semibold text-slate-950">{vendor}</p>
+													<p className="mt-0.5 text-xs text-slate-500">
+														Device read: {metricValue(groupUserTotal)} users, {metricValue(groupLogTotal)} log entries
+													</p>
+												</div>
+												<Badge variant={attentionCount ? "warning" : "success"}>
+													{attentionCount ? `${attentionCount}/${group.length} review` : `${group.length}/${group.length} synced`}
+												</Badge>
+											</div>
+										</AccordionTrigger>
+										<AccordionContent className="pb-3">
+											<div className="overflow-hidden rounded-md border border-slate-200">
+												<div className="hidden grid-cols-[minmax(150px,1.2fr)_108px_92px_92px_104px_104px_92px_108px_164px] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 lg:grid">
+													<span>Device</span>
+													<span>Address</span>
+													<span>Status</span>
+													<span>Device users</span>
+													<span>Device logs</span>
+													<span>HRIS events</span>
+													<span>Needs review</span>
+													<span>Last sync</span>
+													<span className="text-right">Actions</span>
+												</div>
+												{group.map(({ device, preview, status }) => {
+													const isSelected = device.id === selectedDeviceId;
+													const sourceTotal = preview?.vendorEventCount ?? preview?.totalEvents;
+													const savedTotal = preview?.hrisSavedCount ?? preview?.syncedEvents;
+													const missingTotal = preview?.missingEventCount ?? preview?.needsSyncEvents;
+													const userTotal = preview?.vendorUserCount;
+													const lastSyncAt =
+														device.id === selectedDeviceId
+															? latestUserSync?.completedAt ||
+																latestLogSync?.completedAt ||
+																latestUserSync?.startedAt ||
+																latestLogSync?.startedAt
+															: preview?.lastSourceEventAt;
+													return (
+														<div
+															key={device.id}
+															className={`grid gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 lg:grid-cols-[minmax(150px,1.2fr)_108px_92px_92px_104px_104px_92px_108px_164px] lg:items-center ${isSelected ? "bg-orange-50/40" : "bg-white"}`}>
+															<div className="min-w-0">
+																<p className="truncate font-medium text-slate-950">
+																	{device.name || "Unnamed device"}
+																</p>
+																{preview?.error ? (
+																	<p className="truncate text-xs text-red-600">{preview.error}</p>
+																) : null}
+															</div>
+															<div className="text-slate-700 lg:text-xs">
+																<span className="lg:hidden">Address </span>
+																{device.address || "-"}:{device.port || "-"}
+															</div>
+															<div>
+																<span className="lg:hidden text-slate-500">Status </span>
+																<Badge
+																	variant={getSyncStatusBadge(status) as any}
+																	className="h-6 shrink-0 items-center border border-current/20">
+																	{getSyncStatusLabel(status)}
+																</Badge>
+															</div>
+															<div>
+																<span className="lg:hidden text-slate-500">Device users </span>
+																<Button
+																	type="button"
+																	variant="ghost"
+																	className="h-7 px-1 text-sm font-semibold text-slate-950 hover:bg-slate-100"
+																	disabled={typeof userTotal !== "number"}
+																	onClick={() => openPhysicalDeviceUsers(device.id)}
+																	title="Open physical device users">
+																	{metricValue(userTotal)}
+																</Button>
+															</div>
+															<div className="font-semibold text-slate-950">
+																<span className="lg:hidden text-slate-500">Device logs </span>
+																{metricValue(sourceTotal)}
+															</div>
+															<div className="font-semibold text-slate-950">
+																<span className="lg:hidden text-slate-500">HRIS events </span>
+																{metricValue(savedTotal)}
+															</div>
+															<div className="font-semibold text-slate-950">
+																<span className="lg:hidden text-slate-500">Needs review </span>
+																{metricValue(missingTotal)}
+															</div>
+															<div className="text-xs text-slate-600">
+																<span className="lg:hidden">Last sync </span>
+																{lastSyncAt ? formatDateTime(lastSyncAt) : "-"}
+															</div>
+															<div className="flex justify-end">
+																<DropdownMenu>
+																	<DropdownMenuTrigger asChild>
+																		<Button
+																			type="button"
+																			variant="outline"
+																			size="sm"
+																			className="h-8 w-8 bg-white p-0"
+																			aria-label={`More actions for ${device.name || "device"}`}>
+																			<MoreVertical className="h-4 w-4" />
+																		</Button>
+																	</DropdownMenuTrigger>
+																	<DropdownMenuContent align="end" className="w-48">
+																		<DropdownMenuItem onClick={() => openDevicePanel(device.id, "users")}>
+																			<UserPlus className="mr-2 h-4 w-4" />
+																			Device users
+																		</DropdownMenuItem>
+																		<DropdownMenuItem onClick={() => openDeviceUserSyncReview(device.id)}>
+																			<RefreshCw className="mr-2 h-4 w-4" />
+																			Review user sync
+																		</DropdownMenuItem>
+																		<DropdownMenuSeparator />
+																		<DropdownMenuItem
+																			onClick={() => {
+																				setSelectedDeviceId(device.id);
+																				navigate(`/admin/configuration/devices/events?deviceId=${encodeURIComponent(device.id)}&view=saved`);
+																			}}>
+																			<Activity className="mr-2 h-4 w-4" />
+																			Device logs
+																		</DropdownMenuItem>
+																		<DropdownMenuItem onClick={() => openDevicePanel(device.id, "runs")}>
+																			<Clock3 className="mr-2 h-4 w-4" />
+																			Sync runs
+																		</DropdownMenuItem>
+																	</DropdownMenuContent>
+																</DropdownMenu>
+															</div>
+														</div>
+													);
+												})}
+											</div>
+										</AccordionContent>
+									</AccordionItem>
+								);
+							})}
+						</Accordion>
+					)}
+				</TabsContent>
+
+				<TabsContent value="users" className="m-0">
+					<section className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
+					<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 					<div className="min-w-0">
-						<h2 className="text-base font-semibold text-slate-950">Device Users</h2>
-						<p className="mt-1 text-sm text-slate-600">
-							Identity records synced from the selected physical device and linked to employees in HRIS.
-						</p>
+						<h2 className="truncate text-sm font-semibold text-slate-950">
+							{selectedDevice?.name || "Device Users"}
+						</h2>
+						<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+							<span>{selectedSyncCenterItem?.vendor || (selectedDevice ? getDeviceVendor(selectedDevice) : "-")}</span>
+							<span>{getSourceReadLabel(selectedSyncCenterItem?.vendor || (selectedDevice ? getDeviceVendor(selectedDevice) : ""))}</span>
+							<span className="font-semibold text-slate-950">
+								{metricValue(selectedSyncCenterItem?.preview?.vendorUserCount)} read from device
+							</span>
+						</div>
 					</div>
 					<div className="flex flex-wrap gap-2">
 						<Button
 							type="button"
 							variant="outline"
-							className="h-9 px-3"
+							className="h-8 px-3"
+							disabled={!selectedDeviceId || isReadingDeviceUsers}
+							onClick={refreshSourceDeviceUsers}>
+							{isReadingDeviceUsers ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<RefreshCw className="h-4 w-4" />
+							)}
+							Refresh source users
+						</Button>
+						<Button
+							type="button"
+							variant="outline"
+							className="h-8 px-3"
 							disabled={!selectedDeviceId || syncDeviceUsersMutation.isPending}
-							onClick={openDeviceUserSyncReview}>
+							onClick={() => openDeviceUserSyncReview()}>
 							{syncDeviceUsersMutation.isPending ? (
 								<Loader2 className="h-4 w-4 animate-spin" />
 							) : (
@@ -676,7 +1280,7 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 					</div>
 				</div>
 
-				<div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_180px_minmax(220px,1fr)]">
+				<div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_150px_minmax(220px,1fr)]">
 					<Select
 						options={devices.map((device: any) => ({
 							value: device.id,
@@ -690,10 +1294,10 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 					<Select
 						options={[
 							{ value: "all", label: "All statuses" },
-							{ value: "ACTIVE", label: "Matched" },
-							{ value: "UNMATCHED", label: "Unmatched" },
-							{ value: "CONFLICT", label: "Conflict" },
-							{ value: "DISABLED", label: "Disabled" },
+							{ value: "ACTIVE", label: "Linked" },
+							{ value: "UNMATCHED", label: "Open" },
+							{ value: "CONFLICT", label: "Review" },
+							{ value: "DISABLED", label: "Off" },
 						]}
 						value={deviceUserStatus}
 						onChange={setDeviceUserStatus}
@@ -703,41 +1307,51 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 						<input
 							value={deviceUserSearch}
 							onChange={(event) => handleDeviceUserSearch(event.target.value)}
-							placeholder="Search device user, name, or employee..."
+							placeholder="Search user, name, employee..."
 							className="w-full bg-transparent text-sm outline-none"
 						/>
 					</div>
 				</div>
 
-				<div className="grid gap-2 sm:grid-cols-4">
-					<div className="rounded-md border border-slate-200 px-3 py-2">
-						<p className="text-xs font-medium text-slate-500">Matched</p>
-						<p className="text-lg font-semibold text-slate-950">
-							{dbDeviceUserSummary?.active ?? 0}
-						</p>
-					</div>
-					<div className="rounded-md border border-slate-200 px-3 py-2">
-						<p className="text-xs font-medium text-slate-500">Unmatched</p>
-						<p className="text-lg font-semibold text-slate-950">
-							{dbDeviceUserSummary?.unmatched ?? 0}
-						</p>
-					</div>
-					<div className="rounded-md border border-slate-200 px-3 py-2">
-						<p className="text-xs font-medium text-slate-500">Conflict</p>
-						<p className="text-lg font-semibold text-slate-950">
-							{dbDeviceUserSummary?.conflict ?? 0}
-						</p>
-					</div>
-					<div className="rounded-md border border-slate-200 px-3 py-2">
-						<p className="text-xs font-medium text-slate-500">Disabled</p>
-						<p className="text-lg font-semibold text-slate-950">
-							{dbDeviceUserSummary?.disabled ?? 0}
-						</p>
-					</div>
+				<div className="grid gap-2 sm:grid-cols-5">
+					{[
+						["source", "Read from device", physicalSourceCount],
+						["shown", "Current view", shownDeviceUserCount],
+						["hris", "HRIS records", physicalHrisUserCount],
+						["linked", "Linked employees", linkedPhysicalUserCount],
+						["open", "Needs link", openPhysicalUserCount],
+					].map(([view, label, value]) => (
+						<button
+							key={String(label)}
+							type="button"
+							aria-label={`${label}: ${metricValue(value)}`}
+							className={`rounded-md border px-3 py-2 text-left transition-colors ${
+								deviceUserView === view || (view === "shown" && deviceUserView === "shown")
+									? "border-orange-300 bg-orange-50"
+									: "border-slate-200 bg-white hover:bg-slate-50"
+							}`}
+							onClick={() => setDeviceUserView(String(view))}>
+							<span className="block text-xs font-medium text-slate-500">{label}</span>
+							<span className="block text-lg font-semibold text-slate-950">{metricValue(value)}</span>
+						</button>
+					))}
 				</div>
 
+				{deviceUserView === "source" ? (
+					<div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-950">
+						Showing the users read directly through {getSourceReadLabel(selectedSyncCenterItem?.vendor || (selectedDevice ? getDeviceVendor(selectedDevice) : ""))}.
+					</div>
+				) : null}
+
 				<div className="overflow-hidden rounded-lg border border-slate-200">
-					<table className="min-w-full divide-y divide-slate-200 text-sm">
+					<table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
+						<colgroup>
+							<col className="w-[26%]" />
+							<col className="w-[26%]" />
+							<col className="w-[14%]" />
+							<col className="w-[22%]" />
+							<col className="w-[88px]" />
+						</colgroup>
 						<thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
 							<tr>
 								<th className="px-3 py-2">Device user</th>
@@ -748,85 +1362,118 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 							</tr>
 						</thead>
 						<tbody className="divide-y divide-slate-100 bg-white">
-							{isLoadingDbDeviceUsers ? (
+							{isLoadingDbDeviceUsers || isLoadingOpenDbDeviceUsers ? (
 								<tr>
 									<td colSpan={5} className="px-3 py-8 text-center text-slate-500">
 										<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
 										Loading device users...
 									</td>
 								</tr>
-							) : dbDeviceUserRows.length === 0 ? (
+							) : isReadingDeviceUsers && mergedDeviceUserRows.length === 0 ? (
+								<tr>
+									<td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+										<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
+										Reading source users from the physical device...
+									</td>
+								</tr>
+							) : visibleDeviceUserRows.length === 0 ? (
 								<tr>
 									<td colSpan={5} className="px-3 py-8 text-center text-slate-500">
 										No device users found for this view.
 									</td>
 								</tr>
 							) : (
-								dbDeviceUserRows.map((deviceUser) => (
-									<tr key={deviceUser.id} className="align-top">
-										<td className="px-3 py-3">
-											<p className="font-medium text-slate-950">
+								pagedDeviceUserRows.map((deviceUser) => (
+									<tr key={deviceUser.key} className="align-middle">
+										<td className="px-3 py-2">
+											<p className="font-medium leading-5 text-slate-950">
 												{deviceUser.displayName || "Unnamed device user"}
 											</p>
 											<p className="text-xs text-slate-500">
 												{deviceUser.vendorUserId}
 												{deviceUser.userType ? ` - ${deviceUser.userType}` : ""}
+												{deviceUser.sourceUser && !deviceUser.hrisDeviceUser ? " - Read from device" : ""}
 											</p>
 										</td>
-										<td className="px-3 py-3">
+										<td className="px-3 py-2">
 											{deviceUser.employee ? (
-												<div>
-													<p className="font-medium text-slate-900">
+												<div className="min-w-0">
+													<p className="truncate font-medium leading-5 text-slate-900">
 														{deviceUser.employee.fullName || deviceUser.employee.employeeId}
 													</p>
 													<p className="text-xs text-slate-500">
 														{deviceUser.employee.employeeId}
 													</p>
 												</div>
+											) : deviceUser.status === "CHECKING_LINK" ? (
+												<span className="inline-flex items-center gap-1.5 text-slate-500">
+													<Loader2 className="h-3.5 w-3.5 animate-spin" />
+													Checking HRIS link
+												</span>
+											) : deviceUser.status === "LINK_CHECK_FAILED" ? (
+												<span className="text-red-700">Could not verify link</span>
 											) : (
 												<span className="text-slate-500">Not linked</span>
 											)}
 										</td>
-										<td className="px-3 py-3">
-											<Badge variant={getDeviceUserBadgeVariant(deviceUser.status) as any}>
-												{deviceUser.status === "ACTIVE" ? "Matched" : deviceUser.status}
-											</Badge>
+										<td className="px-3 py-2">
+											<div className="flex flex-wrap items-center gap-1.5">
+												<Badge variant={getDeviceUserBadgeVariant(deviceUser.status) as any} className="h-6 items-center">
+													{getDeviceUserStatusLabel(deviceUser.status)}
+												</Badge>
+											</div>
 										</td>
-										<td className="px-3 py-3 text-slate-600">
+										<td className="px-3 py-2 text-slate-600">
 											{deviceUser.lastSyncedAt ? formatDateTime(deviceUser.lastSyncedAt) : "-"}
 										</td>
-										<td className="px-3 py-3">
-											<div className="flex justify-end gap-2">
-												<Button
-													type="button"
-													variant="outline"
-													size="sm"
-													className="h-8 px-2"
-													onClick={() => setDetailsDeviceUser(deviceUser)}>
-													<FileJson className="h-4 w-4" />
-													Details
-												</Button>
-												<Button
-													type="button"
-													variant="outline"
-													size="sm"
-													className="h-8 px-2"
-													onClick={() => openLinkDeviceUser(deviceUser)}>
-													<Link2 className="h-4 w-4" />
-													Link
-												</Button>
-												{deviceUser.employeeId ? (
-													<Button
-														type="button"
-														variant="outline"
-														size="sm"
-														className="h-8 px-2"
-														disabled={unlinkDeviceUserMutation.isPending}
-														onClick={() => unlinkDeviceUser(deviceUser)}>
-														<Unlink className="h-4 w-4" />
-														Unlink
-													</Button>
-												) : null}
+										<td className="px-3 py-2">
+											<div className="flex justify-end">
+												<DropdownMenu>
+													<DropdownMenuTrigger asChild>
+														<Button
+															type="button"
+															variant="outline"
+															size="sm"
+															className="h-8 w-8 bg-white p-0"
+															aria-label={`More actions for device user ${deviceUser.displayName || deviceUser.vendorUserId}`}>
+															<MoreVertical className="h-4 w-4" />
+														</Button>
+													</DropdownMenuTrigger>
+													<DropdownMenuContent align="end" className="w-48">
+														<DropdownMenuItem onClick={() => setDetailsDeviceUser(deviceUser)}>
+															<FileJson className="mr-2 h-4 w-4" />
+															Details
+														</DropdownMenuItem>
+														<DropdownMenuItem
+															disabled={deviceUser.status === "CHECKING_LINK" || deviceUser.status === "LINK_CHECK_FAILED"}
+															onClick={() => openLinkDeviceUser(deviceUser)}>
+															<Link2 className="mr-2 h-4 w-4" />
+															{deviceUser.status === "CHECKING_LINK"
+																? "Checking HRIS link"
+																: deviceUser.status === "LINK_CHECK_FAILED"
+																	? "Refresh before linking"
+																	: deviceUser.employeeId ? "Change employee link" : "Link employee"}
+														</DropdownMenuItem>
+														{!deviceUser.hrisDeviceUser ? (
+															<DropdownMenuItem onClick={() => openDeviceUserSyncReview()}>
+																<RefreshCw className="mr-2 h-4 w-4" />
+																Review sync
+															</DropdownMenuItem>
+														) : null}
+														{deviceUser.employeeId && deviceUser.hrisDeviceUser ? (
+															<>
+																<DropdownMenuSeparator />
+																<DropdownMenuItem
+																	disabled={unlinkDeviceUserMutation.isPending}
+																	className="text-red-700 focus:text-red-700"
+																	onClick={() => openUnlinkDeviceUser(deviceUser)}>
+																	<Unlink className="mr-2 h-4 w-4" />
+																	Unlink employee
+																</DropdownMenuItem>
+															</>
+														) : null}
+													</DropdownMenuContent>
+												</DropdownMenu>
 											</div>
 										</td>
 									</tr>
@@ -835,146 +1482,150 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 						</tbody>
 					</table>
 				</div>
+				<div className="flex flex-col gap-2 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+					<span>
+						Showing {visibleDeviceUserRows.length === 0 ? 0 : (safeDeviceUserPage - 1) * deviceUserLimit + 1}
+						{" - "}
+						{Math.min(safeDeviceUserPage * deviceUserLimit, visibleDeviceUserRows.length)}
+						{" of "}
+						{visibleDeviceUserRows.length}
+					</span>
+					<div className="flex items-center gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							className="h-8 px-3"
+							disabled={safeDeviceUserPage <= 1}
+							onClick={() => setDeviceUserPage(safeDeviceUserPage - 1)}>
+							Previous
+						</Button>
+						<span className="min-w-12 text-center">
+							{safeDeviceUserPage} / {deviceUserTotalPages}
+						</span>
+						<Button
+							type="button"
+							variant="outline"
+							className="h-8 px-3"
+							disabled={safeDeviceUserPage >= deviceUserTotalPages}
+							onClick={() => setDeviceUserPage(safeDeviceUserPage + 1)}>
+							Next
+						</Button>
+					</div>
+				</div>
 			</section>
+				</TabsContent>
 
-			<DataTable
-				title="Employees"
-				data={items}
-				columns={columns}
-				onImport={openImport}
-				renderActions={renderActions}
-				isLoading={isLoading}
-				emptyMessage="No employees found"
-				emptyDescription="No employee records match the current view."
-				searchWidth="w-80"
-				searchPlaceholder="Search employees..."
-				itemsPerPage={limitParam}
-				currentPage={pageParam}
-				totalItems={pagination?.total}
-				onSearch={handleSearch}
-				onPageChange={handlePageChange}
-				searchValue={searchQuery || ""}
-				onExportPDF={() => {
-					// Export to PDF functionality
-					const printWindow = window.open("", "_blank");
-					if (printWindow) {
-						const tableHTML = `
-								<html>
-									<head>
-										<title>Employees Export - PDF</title>
-										<style>
-											body { font-family: system-ui, sans-serif; margin: 20px; }
-											h1 { color: #333; margin-bottom: 20px; }
-											table { border-collapse: collapse; width: 100%; }
-											th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-											th { background-color: #f2f2f2; font-weight: bold; }
-											.status-active { color: green; }
-											.status-inactive { color: red; }
-										</style>
-									</head>
-									<body>
-										<h1>Employees - PDF Export</h1>
-										<p>Generated on: ${formatDateTime(new Date())}</p>
-										<table>
-											<thead>
-												<tr>
-													<th>Email</th>
-													<th>Employee Name</th>
-													<th>Department</th>
-													<th>Position</th>
-													<th>Status</th>
-												</tr>
-											</thead>
-											<tbody>
-												${items
-													.map((item: Employee) => {
-														const fullName =
-															getEmployeeDisplayName(item);
-														const deptName =
-															item.department?.name || "N/A";
-														const positionTitle =
-															item.position?.title || "N/A";
-														return `
-												<tr>
-													<td>${item.user?.email || "N/A"}</td>
-													<td>${fullName}</td>
-													<td>${deptName}</td>
-													<td>${positionTitle}</td>
-													<td>${item.employmentStatus || "N/A"}</td>
-												</tr>
-											`;
-													})
-													.join("")}
-											</tbody>
-										</table>
-									</body>
-								</html>
-							`;
-						printWindow.document.write(tableHTML);
-						printWindow.document.close();
-						printWindow.print();
-					}
-				}}
-				onExportExcel={() => {
-					// Export to Excel functionality
-					const csvContent = [
-						// Headers
-						[
-							"Email",
-							"Employee Name",
-							"Department",
-							"Position",
-							"Employee ID",
-							"Status",
-						],
-						// Data rows
-						...items.map((item: Employee) => {
-							return [
-								item.user?.email || "",
-								getEmployeeDisplayName(item),
-								item.department?.name || "",
-								item.position?.title || "",
-								item.employeeId || "",
-								item.employmentStatus || "",
-							];
-						}),
-					]
-						.map((row) => row.map((cell: any) => `"${cell}"`).join(","))
-						.join("\n");
+				<TabsContent value="logs" className="m-0">
+					<section className="space-y-4 rounded-md border border-slate-200 bg-white p-4">
+						<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+							<div>
+								<h2 className="text-sm font-semibold text-slate-950">Device Logs</h2>
+								<p className="text-xs text-slate-500">Summary only. Open the events page for rows.</p>
+							</div>
+							<div className="flex flex-wrap gap-2">
+								<Button type="button" variant="outline" className="h-8 px-3" onClick={openLogSyncReview}>
+									<RefreshCw className="h-4 w-4" />
+									Review log sync
+								</Button>
+								<Button type="button" variant="outline" className="h-8 px-3" onClick={() => openDeviceEvents("saved")}>
+									<Activity className="h-4 w-4" />
+									Open device events
+								</Button>
+							</div>
+						</div>
+						<div className="grid gap-2 sm:grid-cols-5">
+							{[
+								["Physical log entries", selectedLogPreview?.vendorEventCount ?? selectedLogPreview?.totalEvents],
+								["Saved events", selectedLogPreview?.hrisSavedCount ?? selectedLogPreview?.syncedEvents],
+								["Known skipped", selectedLogPreview?.knownSkippedEventCount],
+								["Failed", selectedLogPreview?.failedEventCount],
+								["Still missing", selectedLogPreview?.missingEventCount ?? selectedLogPreview?.needsSyncEvents],
+							].map(([label, value]) => (
+								<div key={String(label)} className="rounded-md border border-slate-200 px-3 py-2">
+									<p className="text-xs font-medium text-slate-500">{label}</p>
+									<p className="text-lg font-semibold text-slate-950">{metricValue(value)}</p>
+								</div>
+							))}
+						</div>
+					</section>
+				</TabsContent>
 
-					const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-					const link = document.createElement("a");
-					const url = URL.createObjectURL(blob);
-					link.setAttribute("href", url);
-					link.setAttribute(
-						"download",
-						`device_enrollment_employees_${new Date().toISOString().split("T")[0]}.csv`,
-					);
-					link.style.visibility = "hidden";
-					document.body.appendChild(link);
-					link.click();
-					document.body.removeChild(link);
-				}} containedScroll
-			/>
+				<TabsContent value="runs" className="m-0">
+					<section className="space-y-4 rounded-md border border-slate-200 bg-white p-4">
+						<div className="flex items-center gap-2">
+							<Clock3 className="h-4 w-4 text-slate-500" />
+							<h2 className="text-sm font-semibold text-slate-950">Sync Runs</h2>
+						</div>
+						<div className="overflow-hidden rounded-md border border-slate-200">
+							<table className="min-w-full divide-y divide-slate-200 text-sm">
+								<thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
+									<tr>
+										<th className="px-3 py-2">Type</th>
+										<th className="px-3 py-2">Status</th>
+										<th className="px-3 py-2">Source</th>
+										<th className="px-3 py-2">Saved</th>
+										<th className="px-3 py-2">Skipped</th>
+										<th className="px-3 py-2">Failed</th>
+										<th className="px-3 py-2">Started</th>
+									</tr>
+								</thead>
+								<tbody className="divide-y divide-slate-100 bg-white">
+									{isLoadingSyncRuns ? (
+										<tr>
+											<td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+												<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
+												Loading sync runs...
+											</td>
+										</tr>
+									) : syncRuns.length === 0 ? (
+										<tr>
+											<td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+												No sync runs found for this device.
+											</td>
+										</tr>
+									) : (
+										syncRuns.map((run) => (
+											<tr key={run.id}>
+												<td className="px-3 py-2">
+													{run.runType === "DEVICE_USERS" ? "Device Users" : "Device Logs"}
+												</td>
+												<td className="px-3 py-2">
+													<Badge variant={run.status === "COMPLETED" ? "success" : run.status === "FAILED" ? "destructive" : "secondary"}>
+														{run.status}
+													</Badge>
+												</td>
+												<td className="px-3 py-2 text-slate-600">{run.source || "-"}</td>
+												<td className="px-3 py-2">{metricValue(run.savedRecords)}</td>
+												<td className="px-3 py-2">{metricValue(run.skippedRecords)}</td>
+												<td className="px-3 py-2">{metricValue(run.failedRecords)}</td>
+												<td className="px-3 py-2 text-slate-600">{formatDateTime(run.startedAt)}</td>
+											</tr>
+										))
+									)}
+								</tbody>
+							</table>
+						</div>
+					</section>
+				</TabsContent>
+			</Tabs>
 
 			<Modal
 				open={deviceUserSyncState.open}
 				onOpenChange={(open) => setDeviceUserSyncState((current) => ({ ...current, open }))}
-				title="Device user sync status"
-				description="This updates identity records only. Device logs are synced from the logs page."
+				title="Sync device users"
 				className="max-w-lg"
 				showCloseButton={deviceUserSyncState.status !== "syncing"}
 				closeOnBackdropClick={deviceUserSyncState.status !== "syncing"}>
-				<div className="space-y-4">
+				<div className="space-y-3">
 					<div
 						className={
 							deviceUserSyncState.status === "error"
-								? "rounded-lg border border-red-200 bg-red-50 p-4 text-red-950"
+								? "rounded-md border border-red-200 bg-red-50 p-3 text-red-950"
 								: deviceUserSyncState.status === "complete"
-									? "rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-950"
+									? "rounded-md border border-emerald-200 bg-emerald-50 p-3 text-emerald-950"
 									: deviceUserSyncState.status === "review"
-										? "rounded-lg border border-slate-200 bg-slate-50 p-4 text-slate-950"
-										: "rounded-lg border border-orange-200 bg-orange-50 p-4 text-orange-950"
+										? "rounded-md border border-slate-200 bg-white p-3 text-slate-950"
+										: "rounded-md border border-orange-200 bg-orange-50 p-3 text-orange-950"
 						}>
 						<div className="flex items-center gap-2 text-sm font-medium">
 							{deviceUserSyncState.status === "syncing" ? (
@@ -983,50 +1634,52 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 							{deviceUserSyncState.message || "Preparing device user sync."}
 						</div>
 						{deviceUserSyncState.status === "review" ? (
-							<div className="mt-3 space-y-3 text-sm text-slate-700">
-								<p>
-									HRIS will read the physical device user list, upsert DeviceUser rows by vendor
-									user ID, and auto-link only exact employee matches.
-								</p>
-								<div className="grid grid-cols-2 gap-2 text-xs">
+							<div className="mt-3 space-y-3 text-xs">
+								<div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
 									<div>
-										<span className="block text-slate-500">Current device users</span>
+										<span className="block text-slate-500">Device</span>
 										<span className="font-semibold text-slate-950">
-											{dbDeviceUserSummary?.total ?? 0}
+											{selectedDevice?.name || selectedSyncCenterItem?.device?.name || "-"}
 										</span>
 									</div>
 									<div>
-										<span className="block text-slate-500">Matched</span>
+										<span className="block text-slate-500">Vendor</span>
 										<span className="font-semibold text-slate-950">
-											{dbDeviceUserSummary?.active ?? dbDeviceUserSummary?.matched ?? 0}
-										</span>
-									</div>
-									<div>
-										<span className="block text-slate-500">Unmatched</span>
-										<span className="font-semibold text-slate-950">
-											{dbDeviceUserSummary?.unmatched ?? 0}
-										</span>
-									</div>
-									<div>
-										<span className="block text-slate-500">Conflict</span>
-										<span className="font-semibold text-slate-950">
-											{dbDeviceUserSummary?.conflict ?? 0}
+											{selectedSyncCenterItem?.vendor || (selectedDevice ? getDeviceVendor(selectedDevice) : "-")}
 										</span>
 									</div>
 								</div>
-								<p className="text-xs text-slate-600">
-									This does not import attendance logs and does not reset existing manual links.
+								<div className="grid gap-2 sm:grid-cols-4">
+									{[
+										["Read from device", physicalSourceCount],
+										["HRIS records", physicalHrisUserCount],
+										["New records", usersToSaveCount],
+										["Needs link", openPhysicalUserCount],
+									].map(([label, value]) => (
+										<div key={String(label)} className="rounded-md border border-slate-200 px-2 py-1.5">
+											<span className="block text-slate-500">{label}</span>
+											<span className="font-semibold text-slate-950">{metricValue(value)}</span>
+										</div>
+									))}
+								</div>
+								<p className="text-slate-600">
+									Existing manual links stay intact. Device-only users become HRIS device users after sync.
 								</p>
 							</div>
 						) : null}
-						{deviceUserSyncState.summary ? (
-							<div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-								<div>Source: {deviceUserSyncState.summary.totalSourceRecords ?? 0}</div>
-								<div>Saved: {(deviceUserSyncState.summary.created ?? 0) + (deviceUserSyncState.summary.updated ?? 0)}</div>
-								<div>Matched: {deviceUserSyncState.summary.linked ?? 0}</div>
-								<div>Unmatched: {deviceUserSyncState.summary.unmatched ?? 0}</div>
-								<div>Conflict: {deviceUserSyncState.summary.conflict ?? 0}</div>
-								<div>Disabled: {deviceUserSyncState.summary.disabled ?? 0}</div>
+						{deviceUserSyncState.status === "complete" ? (
+							<div className="mt-3 space-y-3 text-xs">
+								<div className="grid gap-2 sm:grid-cols-4">
+									{completedDeviceUserSyncItems.map(([label, value]) => (
+										<div key={label} className="rounded-md border border-emerald-200 bg-white/80 px-2 py-1.5">
+											<span className="block text-emerald-700">{label}</span>
+											<span className="font-semibold text-slate-950">{metricValue(value)}</span>
+										</div>
+									))}
+								</div>
+								<p className="text-emerald-900">
+									Rows marked Needs link were saved in HRIS, but no safe employee match was found. Use Link to attach the employee manually.
+								</p>
 							</div>
 						) : null}
 					</div>
@@ -1038,7 +1691,7 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 							onClick={() =>
 								setDeviceUserSyncState((current) => ({ ...current, open: false }))
 							}>
-							Close
+							{deviceUserSyncState.status === "complete" ? "Close" : "Cancel"}
 						</Button>
 						{deviceUserSyncState.status === "review" || deviceUserSyncState.status === "error" ? (
 							<Button
@@ -1063,32 +1716,32 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 					if (!open) setDetailsDeviceUser(null);
 				}}
 				title="Device user details"
-				className="max-w-3xl">
+				className="max-w-2xl">
 				{detailsDeviceUser ? (
-					<div className="space-y-4">
-						<div className="grid gap-3 md:grid-cols-3">
-							<div className="rounded-md border border-slate-200 p-3">
-								<p className="text-xs font-medium text-slate-500">Vendor user ID</p>
-								<p className="mt-1 text-sm font-semibold text-slate-950">
-									{detailsDeviceUser.vendorUserId}
-								</p>
-							</div>
-							<div className="rounded-md border border-slate-200 p-3">
-								<p className="text-xs font-medium text-slate-500">Status</p>
-								<p className="mt-1 text-sm font-semibold text-slate-950">
-									{detailsDeviceUser.status}
-								</p>
-							</div>
-							<div className="rounded-md border border-slate-200 p-3">
-								<p className="text-xs font-medium text-slate-500">Door right</p>
-								<p className="mt-1 text-sm font-semibold text-slate-950">
-									{detailsDeviceUser.doorRight || "-"}
-								</p>
-							</div>
+					<div className="space-y-3">
+						<div className="grid gap-x-4 gap-y-2 text-sm md:grid-cols-2">
+							{[
+								["Vendor user ID", detailsDeviceUser.vendorUserId],
+								["Device", selectedDevice?.name || detailsDeviceUser.hrisDeviceUser?.device?.name || "-"],
+								["Source", getDeviceUserSourceLabel(detailsDeviceUser)],
+								["Status", detailsDeviceUser.status],
+								["Employee link", detailsDeviceUser.employee?.employeeId || "Not linked"],
+								["Last synced", detailsDeviceUser.lastSyncedAt ? formatDateTime(detailsDeviceUser.lastSyncedAt) : "-"],
+							].map(([label, value]) => (
+								<div key={label} className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 border-b border-slate-100 py-2 last:border-b-0">
+									<span className="text-xs font-medium text-slate-500">{label}</span>
+									<span className="min-w-0 truncate font-semibold text-slate-950">{value}</span>
+								</div>
+							))}
 						</div>
-						<pre className="max-h-[360px] overflow-auto rounded-md border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">
-							{JSON.stringify(detailsDeviceUser.rawPayload || {}, null, 2)}
-						</pre>
+						<details className="rounded-md border border-slate-200">
+							<summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700">
+								Raw
+							</summary>
+							<pre className="max-h-[260px] overflow-auto border-t border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">
+								{JSON.stringify(detailsDeviceUser.rawPayload || {}, null, 2)}
+							</pre>
+						</details>
 					</div>
 				) : null}
 			</Modal>
@@ -1105,21 +1758,38 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 				description="Manual links override automatic matching for this device user.">
 				<div className="space-y-4">
 					{linkTarget ? (
-						<div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-							<p className="font-medium text-slate-950">
-								{linkTarget.displayName || "Unnamed device user"}
-							</p>
-							<p className="text-slate-600">Vendor user ID {linkTarget.vendorUserId}</p>
+						<div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+							<div className="min-w-0">
+								<p className="truncate font-medium text-slate-950">
+									{linkTarget.displayName || "Unnamed device user"}
+								</p>
+								<p className="truncate text-slate-600">Vendor user ID {linkTarget.vendorUserId}</p>
+							</div>
+							{!linkTarget.hrisDeviceUser ? (
+								<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+									This user was read from the device. Submitting will save current device users first, then link the employee.
+								</div>
+							) : null}
 						</div>
 					) : null}
-					<SearchableSelect
-						options={employeeLinkOptions}
-						value={selectedEmployeeForLink}
-						onValueChange={setSelectedEmployeeForLink}
-						placeholder="Select employee"
-						searchPlaceholder="Search employee..."
-						emptyText="No employees found."
-					/>
+					<div>
+						<div className="text-sm font-medium text-slate-700">Employee</div>
+						<SearchableSelect
+							options={employeeLinkOptions}
+							value={selectedEmployeeForLink}
+							onValueChange={setSelectedEmployeeForLink}
+							placeholder={
+								isLoadingEmployeeLinkOptions ? "Loading employees..." : "Select employee"
+							}
+							searchPlaceholder="Search employee name, ID, device ID..."
+							emptyText={
+								employeeLinkOptionsError
+									? "Employees could not be loaded."
+									: "No employees found."
+							}
+							disabled={isLoadingEmployeeLinkOptions || Boolean(employeeLinkOptionsError)}
+						/>
+					</div>
 					<div className="flex justify-end gap-2">
 						<Button
 							type="button"
@@ -1132,290 +1802,92 @@ export function DeviceEnrollmentPanel({ embedded = false }: DeviceEnrollmentPane
 						</Button>
 						<Button
 							type="button"
-							disabled={!selectedEmployeeForLink || linkDeviceUserMutation.isPending}
+							disabled={
+								!selectedEmployeeForLink ||
+								linkDeviceUserMutation.isPending ||
+								syncDeviceUsersMutation.isPending
+							}
 							onClick={submitLinkDeviceUser}>
-							{linkDeviceUserMutation.isPending ? (
+							{linkDeviceUserMutation.isPending || syncDeviceUsersMutation.isPending ? (
 								<Loader2 className="h-4 w-4 animate-spin" />
 							) : (
 								<Link2 className="h-4 w-4" />
 							)}
-							Link device user
+							{linkTarget?.hrisDeviceUser ? "Link device user" : "Save and link"}
 						</Button>
 					</div>
 				</div>
 			</Modal>
 
-			{/* Enroll Employee Modal */}
 			<Modal
-				open={action === "enroll"}
+				open={Boolean(unlinkTarget)}
 				onOpenChange={(open) => {
-					if (!open) {
-						reset();
-						setDeviceUsers([]);
-						updateSearchParams((next) => {
-							next.delete(actionParamName);
-							next.delete(idParamName);
-						});
+					if (!open && !unlinkDeviceUserMutation.isPending) {
+						setUnlinkTarget(null);
 					}
 				}}
-				title={
-					isDeepLinkLoading && action === "enroll"
-						? "Loading Employee..."
-						: "Enroll Employee"
-				}>
-				{isDeepLinkLoading && action === "enroll" ? (
-					<div className="py-8 text-center text-gray-500">Loading employee...</div>
-				) : (
-					<form onSubmit={handleSubmit(onSubmitEnroll)} className="space-y-4">
-						{activeEmployee && (
-							<div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-								<p className="text-sm font-medium text-slate-900">
-									{getEmployeeDisplayName(activeEmployee)}
-								</p>
-								<p className="text-xs text-slate-500">
-									{activeEmployee.employeeId}
-									{activeEmployee.user?.email
-										? ` - ${activeEmployee.user.email}`
-										: ""}
-								</p>
-							</div>
-						)}
-						<div>
-							<div className="block text-sm font-medium text-gray-700 mb-1">
-								Select Device *
-							</div>
-							<Select
-								options={devices.map((device: any) => ({
-									value: device.id,
-									label: device.name || `${device.address}:${device.port}`,
-								}))}
-								value={watchedDeviceId}
-								onChange={(value) => {
-									setValue("deviceId", value);
-									setValue("deviceUserId", ""); // Reset device user when device changes
-								}}
-								placeholder={
-									isLoadingDevices ? "Loading devices..." : "Select Device"
-								}
-								disabled={isLoadingDevices}
-							/>
-						</div>
-
-						<div>
-							<div className="block text-sm font-medium text-gray-700 mb-1">
-								Select Device User *
-							</div>
-							<SearchableSelect
-								options={deviceUserOptions}
-								value={watchedDeviceUserId}
-								onValueChange={(value) => setValue("deviceUserId", value)}
-								placeholder={
-									isLoadingDeviceUsers
-										? "Loading device users..."
-										: !watchedDeviceId
-											? "Select a device first"
-											: deviceUserOptions.length === 0
-												? "No device users found"
-												: "Select Device User"
-								}
-								searchPlaceholder="Search device user by ID or name..."
-								emptyText={
-									isLoadingDeviceUsers
-										? "Loading device users..."
-										: "No device users found."
-								}
-								disabled={isLoadingDeviceUsers || !watchedDeviceId}
-							/>
-						</div>
-
-						<div className="flex justify-end gap-3">
-							<Button
-								type="button"
-								variant="outline"
-								onClick={() => {
-									reset();
-									setDeviceUsers([]);
-									updateSearchParams((next) => {
-										next.delete(actionParamName);
-										next.delete(idParamName);
-									});
-								}}>
-								Cancel
-							</Button>
-							<Button
-								type="submit"
-								disabled={
-									(isLoadingDeviceUsers && !watchedDeviceUserId) ||
-									!watchedDeviceId ||
-									!watchedDeviceUserId
-								}>
-								Enroll Employee
-							</Button>
-						</div>
-					</form>
-				)}
-			</Modal>
-
-			{/* View Modal */}
-			<Modal
-				open={action === "view"}
-				onOpenChange={(open) => {
-					if (!open) {
-						updateSearchParams((next) => {
-							next.delete(actionParamName);
-							next.delete(idParamName);
-						});
-					}
-				}}
-				title="Employee Details">
-				{isDeepLinkLoading && action === "view" ? (
-					<div className="py-8 text-center text-gray-500">Loading employee...</div>
-				) : activeEmployee && action === "view" ? (
-					<div className="space-y-4">
-						<div className="flex items-center gap-4">
-							<div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-200">
-								<UserCog className="h-8 w-8 text-gray-500" />
-							</div>
-							<div>
-								<h3 className="text-lg font-semibold">
-									{getEmployeeDisplayName(activeEmployee)}
-								</h3>
-								<p className="text-gray-600">{activeEmployee.employeeId}</p>
-								<Badge
-									variant={
-										activeEmployee.employmentStatus === "ACTIVE"
-											? "success"
-											: "secondary"
-									}>
-									{activeEmployee.employmentStatus}
-								</Badge>
-							</div>
-						</div>
-
-						<div className="grid grid-cols-2 gap-4">
-							<div>
-								<p className="block text-sm font-medium text-gray-700 mb-1">
-									Email
-								</p>
-								<div className="rounded-md border bg-gray-50 p-3">
-									{activeEmployee.user?.email || "No linked email"}
+				title="Unlink employee"
+				description="This keeps the device user record, but removes its employee match."
+				className="max-w-lg"
+				showCloseButton={!unlinkDeviceUserMutation.isPending}
+				closeOnBackdropClick={!unlinkDeviceUserMutation.isPending}>
+				<div className="space-y-4">
+					{unlinkTarget ? (
+						<div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-950">
+							<p className="font-semibold">Confirm this device user should be unlinked.</p>
+							<div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+								<div>
+									<span className="block text-red-700">Device user</span>
+									<span className="font-semibold">
+										{unlinkTarget.displayName || unlinkTarget.vendorUserId}
+									</span>
 								</div>
-							</div>
-							<div>
-								<p className="block text-sm font-medium text-gray-700 mb-1">
-									Department
-								</p>
-								<div className="rounded-md border bg-gray-50 p-3">
-									{activeEmployee.department?.name || "N/A"}
+								<div>
+									<span className="block text-red-700">Employee</span>
+									<span className="font-semibold">
+										{unlinkTarget.employee?.fullName || unlinkTarget.employee?.employeeId || "Linked employee"}
+									</span>
 								</div>
-							</div>
-							<div>
-								<p className="block text-sm font-medium text-gray-700 mb-1">
-									Position
-								</p>
-								<div className="rounded-md border bg-gray-50 p-3">
-									{activeEmployee.position?.title || "N/A"}
+								<div>
+									<span className="block text-red-700">Vendor user ID</span>
+									<span className="font-semibold">{unlinkTarget.vendorUserId}</span>
 								</div>
-							</div>
-							<div>
-								<p className="block text-sm font-medium text-gray-700 mb-1">
-									Device User ID
-								</p>
-								<div className="rounded-md border bg-gray-50 p-3">
-									{activeEmployee.deviceEmpId ||
-										(activeEmployee.user?.metadata as any)?.device?.access
-											?.empId ||
-										"-"}
+								<div>
+									<span className="block text-red-700">Device</span>
+									<span className="font-semibold">
+										{selectedDevice?.name || unlinkTarget.hrisDeviceUser?.device?.name || "-"}
+									</span>
 								</div>
 							</div>
 						</div>
-
-						<div className="flex justify-end gap-3 pt-4">
-							<Button
-								variant="outline"
-								onClick={() => {
-									updateSearchParams((next) => {
-										next.delete(actionParamName);
-										next.delete(idParamName);
-									});
-								}}>
-								Close
-							</Button>
-							<Button
-								disabled={!activeEmployee.userId && !activeEmployee.user?.id}
-								onClick={() => openEnroll(activeEmployee)}>
-								Enroll Employee
-							</Button>
-						</div>
+					) : null}
+					<p className="text-xs text-slate-600">
+						Future punches from this device user will need matching again until a new employee link is chosen.
+					</p>
+					<div className="flex flex-col-reverse gap-2 border-t pt-3 sm:flex-row sm:justify-end">
+						<Button
+							type="button"
+							variant="outline"
+							disabled={unlinkDeviceUserMutation.isPending}
+							onClick={() => setUnlinkTarget(null)}>
+							Cancel
+						</Button>
+						<Button
+							type="button"
+							className="bg-red-700 text-white hover:bg-red-800"
+							disabled={unlinkDeviceUserMutation.isPending}
+							onClick={confirmUnlinkDeviceUser}>
+							{unlinkDeviceUserMutation.isPending ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<Unlink className="h-4 w-4" />
+							)}
+							Unlink employee
+						</Button>
 					</div>
-				) : (
-					<div className="py-8 text-center text-gray-500">Employee not found</div>
-				)}
+				</div>
 			</Modal>
 
-			{/* Import Modal */}
-			<GenericImportModal
-				open={action === "import"}
-				onOpenChange={handleImportClose}
-				title="Import Device Enrollments"
-				description=""
-				fields={{
-					required: [
-						{ key: "EMAIL", label: "Email", required: true, description: "User Email" },
-						{
-							key: "DEVICE_ID",
-							label: "Device ID",
-							required: true,
-							description: "Device ID (MongoDB ID)",
-						},
-						{
-							key: "DEVICE_USER_ID",
-							label: "Device User ID",
-							required: true,
-							description: "User ID on the device",
-						},
-					],
-					optional: [],
-					system: [],
-				}}
-				customPreviewComponent={DeviceEnrollmentPreviewTable}
-				customPreviewProps={{
-					users: allUsers,
-					devices: devices,
-					deviceUsers: deviceUsers,
-				}}
-				onDownloadTemplate={() => {
-					const headers = ["EMAIL", "DEVICE_ID", "DEVICE_USER_ID"];
-					const csvContent = headers.join(",") + "\n";
-					const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-					const link = document.createElement("a");
-					const url = URL.createObjectURL(blob);
-					link.setAttribute("href", url);
-					link.setAttribute("download", "device_enrollment_template.csv");
-					link.style.visibility = "hidden";
-					document.body.appendChild(link);
-					link.click();
-					document.body.removeChild(link);
-				}}
-				onImport={async (file) => {
-					try {
-						const result = await importEnrollmentMutation.mutateAsync(file);
-						if (result?.summary?.totalRows > 0) {
-							toast.success(
-								`Import complete: ${result.summary.enrolled} enrolled, ${result.summary.failed} failed`,
-							);
-							queryClient.invalidateQueries({ queryKey: ["users"] });
-							return result;
-						}
-						return result;
-					} catch (error: any) {
-						console.error("Import failed:", error);
-						toast.error(error.message || "Import failed");
-						throw error;
-					}
-				}}
-				isImporting={importEnrollmentMutation.isPending}
-			/>
 		</div>
 	);
 }

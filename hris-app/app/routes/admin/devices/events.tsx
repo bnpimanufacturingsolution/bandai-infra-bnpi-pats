@@ -14,6 +14,7 @@ import {
 	UserRound,
 	Wifi,
 	WifiOff,
+	XCircle,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -29,11 +30,13 @@ import {
 	AccordionTrigger,
 } from "~/components/ui/accordion";
 import { Skeleton } from "~/components/ui/skeleton";
+import { Switch } from "~/components/ui/switch";
 import {
 	useDeviceEvents,
 	useDeviceHealth,
 	useDeviceImportJob,
 	useDeviceSyncPreview,
+	useCancelDeviceImportJob,
 	useDevices,
 	useResetDeviceEvents,
 	useTriggerHikvisionAttendanceImport,
@@ -517,6 +520,7 @@ export default function DeviceEventsPage() {
 	const { user } = useAuth();
 	const zktecoSync = useTriggerZktecoAttendanceSync();
 	const hikvisionImport = useTriggerHikvisionAttendanceImport();
+	const cancelDeviceImportJob = useCancelDeviceImportJob();
 	const resetDeviceEvents = useResetDeviceEvents();
 	const [lastRealtimeEvent, setLastRealtimeEvent] =
 		useState<DeviceEventSavedPayload | null>(null);
@@ -528,6 +532,7 @@ export default function DeviceEventsPage() {
 	const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
 	const [includeLinkedAttendanceReset, setIncludeLinkedAttendanceReset] = useState(false);
 	const [showImportProgressModal, setShowImportProgressModal] = useState(false);
+	const [skipMissingEmployeeNo, setSkipMissingEmployeeNo] = useState(false);
 	const [activeImportJob, setActiveImportJob] = useState<ActiveImportJob | null>(() => {
 		try {
 			if (typeof window === "undefined") return null;
@@ -1135,43 +1140,66 @@ export default function DeviceEventsPage() {
 		});
 	};
 
+	const startHikvisionDeviceLogImport = (device: {
+		deviceId: string;
+		name?: string | null;
+		address?: string | null;
+		vendor?: string | null;
+	}) => {
+		hikvisionImport.mutate(
+			{ deviceId: device.deviceId, skipMissingEmployeeNo },
+			{
+				onSuccess: (data: any) => {
+					const jobId = data?.jobId || data?.progress?.jobId;
+					if (jobId) {
+						setActiveImportJob({
+							jobId,
+							deviceId: device.deviceId,
+							deviceName: device.name || device.address || "Hikvision device",
+							vendor: "Hikvision",
+						});
+					}
+					closeSyncLogs();
+					setShowImportProgressModal(true);
+					toast.success("Device log sync started", {
+						id: "device-log-import-progress",
+						description: "Progress is available from Sync logs.",
+					});
+					void refetchSyncPreview();
+				},
+				onError: (error: unknown) => {
+					const message = getAsyncErrorMessage(error, "Device rejected the sync request.");
+					setSyncLogsState({ status: "error", message });
+					toast.error("Sync did not start", {
+						id: "device-events-sync-start",
+						description: message,
+					});
+				},
+			},
+		);
+	};
+
+	const retryActiveImportJob = () => {
+		if (!activeImportJob?.deviceId) return;
+		startHikvisionDeviceLogImport({
+			deviceId: activeImportJob.deviceId,
+			name: activeImportJob.deviceName,
+			vendor: activeImportJob.vendor,
+		});
+	};
+
+	const requestCancelActiveImportJob = () => {
+		if (!activeImportJob?.jobId) return;
+		cancelDeviceImportJob.mutate(activeImportJob.jobId);
+	};
+
 	const startDeviceLogImport = () => {
 		setSyncLogsState({ status: "idle" });
 		const startableRow = syncStartableRows[0];
 		if (!startableRow?.deviceId) return;
 
 		if (startableRow.syncAction === "hikvision-import" || startableRow.vendor === "Hikvision") {
-			hikvisionImport.mutate(
-				{ deviceId: startableRow.deviceId },
-				{
-					onSuccess: (data: any) => {
-						const jobId = data?.jobId || data?.progress?.jobId;
-						if (jobId) {
-							setActiveImportJob({
-								jobId,
-								deviceId: startableRow.deviceId,
-								deviceName: startableRow.name || startableRow.address || "Hikvision device",
-								vendor: "Hikvision",
-							});
-						}
-						closeSyncLogs();
-						setShowImportProgressModal(true);
-						toast.success("Device log sync started", {
-							id: "device-log-import-progress",
-							description: "Progress is available from Sync logs.",
-						});
-						void refetchSyncPreview();
-					},
-					onError: (error: unknown) => {
-						const message = getAsyncErrorMessage(error, "Device rejected the sync request.");
-						setSyncLogsState({ status: "error", message });
-						toast.error("Sync did not start", {
-							id: "device-events-sync-start",
-							description: message,
-						});
-					},
-				},
-			);
+			startHikvisionDeviceLogImport(startableRow);
 			return;
 		}
 
@@ -1279,10 +1307,11 @@ export default function DeviceEventsPage() {
 			)
 		: 0;
 	const activeImportJobSummary = importJobProgress
-		? `${formatCount(importJobProgress.imported)} saved, ${formatCount(importJobProgress.skipped)} skipped, ${formatCount(importJobProgress.failed)} failed`
+		? `${formatCount(importJobProgress.imported)} missing HRIS events saved, ${formatCount(importJobProgress.alreadySaved || 0)} already in HRIS, ${formatCount(importJobProgress.skipped)} skipped with no employee number, ${formatCount(importJobProgress.failed)} failed`
 		: "";
 	const hasImportProgress = Boolean(activeImportJob && importJobProgress);
 	const isImportProcessing = importJobProgress?.status === "processing";
+	const isImportCancelRequested = Boolean(importJobProgress?.cancelRequested);
 	const importProgressBubbleLabel = hasImportProgress
 		? isImportProcessing
 			? formatCount(importJobProgress?.processed)
@@ -1291,22 +1320,30 @@ export default function DeviceEventsPage() {
 				: "!"
 		: "";
 	const importProgressTitle =
-		importJobProgress?.status === "failed"
+		importJobProgress?.status === "cancelled"
+			? "Sync cancelled"
+			: importJobProgress?.status === "failed"
 			? "Sync needs attention"
 			: importJobProgress?.status === "completed"
 				? "Sync finished"
 				: isImportProcessing
-					? "Syncing device logs"
+					? isImportCancelRequested
+						? "Cancelling device log sync"
+						: "Checking for missing device logs"
 					: "Device sync status";
 	const importProgressToneClass =
 		importJobProgress?.status === "failed"
 			? "border-red-200 bg-red-50 text-red-950"
+			: importJobProgress?.status === "cancelled"
+				? "border-amber-200 bg-amber-50 text-amber-950"
 			: importJobProgress?.status === "completed"
 				? "border-emerald-200 bg-emerald-50 text-emerald-950"
 				: "border-orange-200 bg-orange-50 text-orange-950";
 	const importProgressFillClass =
 		importJobProgress?.status === "failed"
 			? "bg-red-600"
+			: importJobProgress?.status === "cancelled"
+				? "bg-amber-600"
 			: importJobProgress?.status === "completed"
 				? "bg-emerald-600"
 				: "bg-orange-600";
@@ -1332,7 +1369,15 @@ export default function DeviceEventsPage() {
 		if (importProgressStatus === "completed") {
 			toast.success("Device logs synced", {
 				id: "device-log-import-progress",
-				description: `${formatCount(importProgressImported)} saved, ${formatCount(importProgressSkipped)} skipped.`,
+				description: `${formatCount(importProgressImported)} missing HRIS events saved. ${formatCount(importJobProgress?.alreadySaved || 0)} already in HRIS, ${formatCount(importProgressSkipped)} skipped with no employee number.`,
+			});
+			void refetch();
+			void refetchHealth();
+			void refetchSyncPreview();
+		} else if (importProgressStatus === "cancelled") {
+			toast.warning("Device log sync cancelled", {
+				id: "device-log-import-progress",
+				description: "The current job stopped. Retry will check the remaining gaps again.",
 			});
 			void refetch();
 			void refetchHealth();
@@ -1348,6 +1393,7 @@ export default function DeviceEventsPage() {
 		importProgressMessage,
 		importProgressSkipped,
 		importProgressStatus,
+		importJobProgress?.alreadySaved,
 		refetch,
 		refetchHealth,
 		refetchSyncPreview,
@@ -1938,11 +1984,11 @@ export default function DeviceEventsPage() {
 									<SyncPreviewSkeleton />
 								) : syncPreviewRows.length > 0 ? (
 									<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
-										<span>Device total: {formatOptionalCount(syncVendorEventTotal)}</span>
-										<span>Saved: {formatCount(syncHrisSavedTotal)}</span>
-										<span>Known skipped: {formatCount(syncKnownSkippedTotal)}</span>
+										<span>Device logs: {formatOptionalCount(syncVendorEventTotal)}</span>
+										<span>HRIS events: {formatCount(syncHrisSavedTotal)}</span>
+										<span>Skipped: {formatCount(syncKnownSkippedTotal)}</span>
 										<span>Failed: {formatCount(syncFailedTotal)}</span>
-										<span>Still missing: {formatOptionalCount(syncDryRunEstimate)}</span>
+										<span>Not stored: {formatOptionalCount(syncDryRunEstimate)}</span>
 										<span>Ready: {formatCount(syncStartableRows.length)} of {formatCount(syncPreviewRows.length)}</span>
 									</div>
 								) : (
@@ -2024,47 +2070,9 @@ export default function DeviceEventsPage() {
 													<p className="mt-1 text-xs text-red-700">{device.error}</p>
 												) : null}
 											</div>
-											<div className="grid shrink-0 grid-cols-2 gap-2 text-sm sm:grid-cols-5 md:min-w-[540px]">
-												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Saved</p>
-													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(hrisSaved)}</p>
-												</div>
-												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Device entries</p>
-													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceEvents)}</p>
-												</div>
-												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Enrolled</p>
-													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceUsers)}</p>
-												</div>
-												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Known skipped</p>
-													<p className="text-xs font-semibold text-slate-950">{formatCount(knownSkipped)}</p>
-												</div>
-												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Still missing</p>
-													{hasMissingEvents ? (
-														<button
-															type="button"
-															className="text-left text-sm font-bold text-red-700 underline-offset-2 hover:underline"
-															onClick={() => reviewNotImported(device)}
-															title="Review device entries not stored as HRIS punches">
-															{formatOptionalCount(missingEvents)}
-														</button>
-													) : (
-														<span className="text-xs font-semibold text-slate-500">
-															{formatOptionalCount(missingEvents)}
-														</span>
-													)}
-												</div>
-												{failedEvents > 0 ? (
-													<div className="col-span-2 sm:col-span-5">
-														<span className="text-xs font-semibold text-red-700">
-															Failed rows: {formatCount(failedEvents)}
-														</span>
-													</div>
-												) : null}
-												<div className="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-5">
+											<div className="grid shrink-0 grid-cols-2 gap-2 text-sm sm:grid-cols-3 md:min-w-[660px] lg:grid-cols-[104px_repeat(5,minmax(76px,1fr))]">
+												<div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Status</p>
 													<Badge
 														variant={
 															device.canStartSync
@@ -2077,18 +2085,58 @@ export default function DeviceEventsPage() {
 																? "warning-soft"
 																: "secondary"
 														}
-														className="px-2 py-0.5 font-semibold">
+														className="mt-1 px-2 py-0.5 font-semibold">
 														{device.canStartSync
-															? "Can scan device"
+															? "Ready to read"
 															: isSourceUnavailable
-															? "Sync unavailable"
+															? "Unavailable"
 															: hasUnknownSyncCount
-															? "Counts unavailable"
+															? "Check counts"
 															: hasMissingEvents
-															? "Has unsaved entries"
+															? "Needs sync"
 															: "In sync"}
 													</Badge>
 												</div>
+												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Device logs</p>
+													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceEvents)}</p>
+												</div>
+												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
+													<p className="text-[11px] font-semibold uppercase text-slate-500">HRIS events</p>
+													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(hrisSaved)}</p>
+												</div>
+												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Device users</p>
+													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceUsers)}</p>
+												</div>
+												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Skipped</p>
+													<p className="text-xs font-semibold text-slate-950">{formatCount(knownSkipped)}</p>
+													<p className="text-[10px] text-slate-500">No employee no.</p>
+												</div>
+												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Not stored</p>
+													{hasMissingEvents ? (
+														<button
+															type="button"
+															className="text-left text-sm font-bold text-red-700 underline-offset-2 hover:underline"
+															onClick={() => reviewNotImported(device)}
+															title="Review device log rows not stored as HRIS events">
+															{formatOptionalCount(missingEvents)}
+														</button>
+													) : (
+														<span className="text-xs font-semibold text-slate-500">
+															{formatOptionalCount(missingEvents)}
+														</span>
+													)}
+												</div>
+												{failedEvents > 0 ? (
+													<div className="col-span-2 sm:col-span-3 lg:col-span-6">
+														<span className="text-xs font-semibold text-red-700">
+															Failed rows: {formatCount(failedEvents)}
+														</span>
+													</div>
+												) : null}
 											</div>
 										</div>
 									);
@@ -2114,25 +2162,45 @@ export default function DeviceEventsPage() {
 						</div>
 					) : null}
 
-					<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-						<Button type="button" variant="outline" className="h-9 px-3" onClick={closeSyncLogs}>
-							Close
-						</Button>
-						<Button
-							type="button"
-							className="h-9 px-3"
-							disabled={
-								zktecoSync.isPending ||
-								hikvisionImport.isPending ||
-								isLoadingSyncPreview ||
-								syncStartableRows.length === 0
-							}
-							onClick={startDeviceLogImport}>
-							<UploadCloud className="h-4 w-4" />
-							{zktecoSync.isPending || hikvisionImport.isPending
-								? "Starting sync"
-								: "Sync logs"}
-						</Button>
+					<div className="flex flex-col gap-3 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+						<label
+							htmlFor="skip-missing-employee-no"
+							className="flex min-w-0 items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+							<Switch
+								id="skip-missing-employee-no"
+								checked={skipMissingEmployeeNo}
+								onCheckedChange={setSkipMissingEmployeeNo}
+								disabled={zktecoSync.isPending || hikvisionImport.isPending}
+								aria-label="Skip rows with no employee number"
+								className="mt-0.5"
+							/>
+							<span className="min-w-0">
+								<span className="block font-semibold text-slate-950">Skip rows with no employee no.</span>
+								<span className="block text-xs text-slate-600">
+									Off by default so employee-less device logs are still saved as ignored events.
+								</span>
+							</span>
+						</label>
+						<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+							<Button type="button" variant="outline" className="h-9 px-3" onClick={closeSyncLogs}>
+								Close
+							</Button>
+							<Button
+								type="button"
+								className="h-9 px-3"
+								disabled={
+									zktecoSync.isPending ||
+									hikvisionImport.isPending ||
+									isLoadingSyncPreview ||
+									syncStartableRows.length === 0
+								}
+								onClick={startDeviceLogImport}>
+								<UploadCloud className="h-4 w-4" />
+								{zktecoSync.isPending || hikvisionImport.isPending
+									? "Starting sync"
+									: "Sync logs"}
+							</Button>
+						</div>
 					</div>
 				</div>
 			</Modal>
@@ -2173,7 +2241,7 @@ export default function DeviceEventsPage() {
 							</div>
 							<div className="mt-3 grid grid-cols-2 gap-2 text-xs">
 								<div className="text-emerald-700">
-									Saved: <span className="font-semibold">{formatCount(importJobProgress.imported)}</span>
+									Missing saved: <span className="font-semibold">{formatCount(importJobProgress.imported)}</span>
 								</div>
 								<div className="text-red-700">
 									Failed: <span className="font-semibold">{formatCount(importJobProgress.failed)}</span>
@@ -2187,8 +2255,13 @@ export default function DeviceEventsPage() {
 									</span>
 								</div>
 								<div>
+									<span className="block text-orange-700">Already saved</span>
+									<span className="font-semibold">{formatCount(importJobProgress.alreadySaved || 0)}</span>
+								</div>
+								<div>
 									<span className="block text-orange-700">Skipped</span>
 									<span className="font-semibold">{formatCount(importJobProgress.skipped)}</span>
+									<span className="block text-[10px] text-orange-700/80">No employee number</span>
 								</div>
 								<div>
 									<span className="block text-orange-700">Device</span>
@@ -2197,8 +2270,12 @@ export default function DeviceEventsPage() {
 								<div>
 									<span className="block text-orange-700">Run state</span>
 									<span className="font-semibold">
-										{importJobProgress.status === "processing"
-											? "Background sync active"
+										{importJobProgress.status === "cancelled"
+											? "Cancelled; ready to retry"
+											: importJobProgress.status === "processing"
+											? importJobProgress.cancelRequested
+												? "Cancel requested"
+												: "Background sync active"
 											: importJobProgress.status === "completed"
 												? "Complete"
 												: "Retry after review"}
@@ -2228,6 +2305,39 @@ export default function DeviceEventsPage() {
 							onClick={() => setShowImportProgressModal(false)}>
 							Close
 						</Button>
+						{isImportProcessing ? (
+							<Button
+								type="button"
+								variant="outline"
+								className="gap-2 border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+								disabled={cancelDeviceImportJob.isPending || isImportCancelRequested}
+								onClick={requestCancelActiveImportJob}>
+								{cancelDeviceImportJob.isPending ? (
+									<Loader2 className="h-4 w-4 animate-spin" />
+								) : (
+									<XCircle className="h-4 w-4" />
+								)}
+								{cancelDeviceImportJob.isPending
+									? "Cancelling..."
+									: isImportCancelRequested
+										? "Cancel requested"
+										: "Cancel sync"}
+							</Button>
+						) : null}
+						{importJobProgress && importJobProgress.status !== "processing" ? (
+							<Button
+								type="button"
+								className="gap-2 bg-orange-500 text-white hover:bg-orange-600"
+								disabled={hikvisionImport.isPending}
+								onClick={retryActiveImportJob}>
+								{hikvisionImport.isPending ? (
+									<Loader2 className="h-4 w-4 animate-spin" />
+								) : (
+									<RefreshCw className="h-4 w-4" />
+								)}
+								{hikvisionImport.isPending ? "Starting..." : "Retry gap sync"}
+							</Button>
+						) : null}
 						{importJobProgress && importJobProgress.status !== "processing" ? (
 							<Button
 								type="button"

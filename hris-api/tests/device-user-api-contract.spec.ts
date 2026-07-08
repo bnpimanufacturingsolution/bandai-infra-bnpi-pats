@@ -12,8 +12,14 @@ describe("DeviceUser API contract", () => {
 		const controller = controllerSource();
 		expect(router).to.include('routes.get("/:id/users", controller.listDeviceUsers)');
 		expect(router).to.include('routes.post("/:id/users/sync", controller.syncDeviceUsers)');
+		expect(router).to.include('routes.get("/:id/sync-runs", controller.getDeviceSyncRuns)');
+		expect(router).to.include('routes.post("/import-jobs/:jobId/cancel", controller.cancelDeviceImportJob)');
 		expect(router).to.include('routes.post("/users/:userId/link", controller.linkDeviceUser)');
 		expect(router).to.include('routes.post("/users/:userId/unlink", controller.unlinkDeviceUser)');
+		expect(controller).to.include('req.query.vendorUserId');
+		expect(controller).to.include('req.query.vendorUserIds');
+		expect(controller).to.include("? { vendorUserId }");
+		expect(controller).to.include('vendorUserId: { in: vendorUserIds }');
 		expect(controller).to.include("DEVICE_USER_ADMIN_ROLES");
 		expect(controller).to.include('"hris-admin"');
 		expect(controller).to.include("assertDeviceUserAdmin(req, res)");
@@ -24,6 +30,12 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("deviceSyncRun.create");
 		expect(controller).to.include('runType: "DEVICE_LOGS"');
 		expect(controller).to.include("skippedRecords: skipped");
+		expect(controller).to.include("skipMissingEmployeeNo");
+		expect(controller).to.include("const skipMissingEmployeeNo =");
+		expect(controller).to.include("if (!employeeNo && skipMissingEmployeeNo)");
+		expect(controller).to.include("alreadySaved");
+		expect(controller).to.include("findExistingHikvisionDeviceEvent");
+		expect(controller).to.include("cancelRequested");
 		expect(controller).to.include("knownSkippedEventCount");
 		expect(controller).to.include("Math.max(Number(totalEvents) - syncedEvents - knownSkippedEvents, 0)");
 	});

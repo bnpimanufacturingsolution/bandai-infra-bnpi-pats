@@ -4,6 +4,7 @@ import devicesService, {
 	type DeviceEventsResponse,
 	type DeviceHealthResponse,
 	type DeviceSyncPreviewResponse,
+	type DeviceSyncRunsResponse,
 	type DeviceImportJobProgress,
 	type DeviceUsersResponse,
 	type DeviceEventsResetScope,
@@ -29,6 +30,8 @@ export const queryKeys = {
 		importJob: (jobId?: string) => [...queryKeys.devices.all, "import-job", jobId] as const,
 		users: (deviceId?: string, params?: { page?: number; limit?: number; query?: string; status?: string }) =>
 			[...queryKeys.devices.all, "users", deviceId, { params }] as const,
+		syncRuns: (deviceId?: string, params?: { limit?: number }) =>
+			[...queryKeys.devices.all, "sync-runs", deviceId, { params }] as const,
 	},
 };
 
@@ -106,6 +109,25 @@ export const useDeviceImportJob = (jobId?: string | null, enabled = true) => {
 	});
 };
 
+export const useCancelDeviceImportJob = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (jobId: string) => {
+			return await devicesService.cancelDeviceImportJob(jobId);
+		},
+		onSuccess: (data) => {
+			queryClient.invalidateQueries({
+				queryKey: queryKeys.devices.importJob(data?.jobId),
+			});
+			sonnerToast.success("Device log sync cancellation requested");
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to cancel device log sync");
+		},
+	});
+};
+
 export const useDeviceSyncPreview = (
 	params: { deviceId?: string; source?: string },
 	enabled = true,
@@ -140,7 +162,7 @@ export const useTriggerHikvisionAttendanceImport = () => {
 	const queryClient = useQueryClient();
 
 	return useMutation({
-		mutationFn: async (payload: { deviceId: string }) => {
+		mutationFn: async (payload: { deviceId: string; skipMissingEmployeeNo?: boolean }) => {
 			return await devicesService.triggerHikvisionAttendanceImport(payload);
 		},
 		onSuccess: () => {
@@ -155,12 +177,26 @@ export const useTriggerHikvisionAttendanceImport = () => {
 
 export const useDeviceUsers = (
 	deviceId?: string,
-	params: { page?: number; limit?: number; query?: string; status?: string } = {},
+	params: { page?: number; limit?: number; query?: string; status?: string; vendorUserId?: string; vendorUserIds?: string[] } = {},
 	enabled = true,
 ) => {
 	return useQuery<DeviceUsersResponse>({
 		queryKey: queryKeys.devices.users(deviceId, params),
 		queryFn: () => devicesService.getDeviceUsers(deviceId || "", params),
+		enabled: Boolean(deviceId) && enabled,
+		staleTime: 15 * 1000,
+		retry: 1,
+	});
+};
+
+export const useDeviceSyncRuns = (
+	deviceId?: string,
+	params: { limit?: number } = {},
+	enabled = true,
+) => {
+	return useQuery<DeviceSyncRunsResponse>({
+		queryKey: queryKeys.devices.syncRuns(deviceId, params),
+		queryFn: () => devicesService.getDeviceSyncRuns(deviceId || "", params),
 		enabled: Boolean(deviceId) && enabled,
 		staleTime: 15 * 1000,
 		retry: 1,
@@ -176,6 +212,7 @@ export const useSyncDeviceUsers = () => {
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users"] });
 			sonnerToast.success("Device users synced");
 		},
 		onError: (error: any) => {

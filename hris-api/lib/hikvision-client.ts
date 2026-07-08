@@ -52,12 +52,63 @@ export const getHikvisionDeviceHttpPort = (device: {
 	return Number(device.port);
 };
 
+const getHikvisionRuntimeEndpoint = (device: {
+	address: string;
+	port: number;
+	protocol: string;
+	config?: unknown;
+}) => {
+	const config = device.config && typeof device.config === "object" ? (device.config as any) : {};
+	const runtimeBaseUrl = String(
+		config.hikvisionRuntimeBaseUrl ||
+			config.hikvisionProxyBaseUrl ||
+			config.runtimeBaseUrl ||
+			"",
+	).trim();
+	if (runtimeBaseUrl) return runtimeBaseUrl.replace(/\/$/, "");
+
+	const runtimeAddress = String(
+		config.hikvisionRuntimeAddress ||
+			config.hikvisionProxyAddress ||
+			config.runtimeAddress ||
+			"",
+	).trim();
+	if (!runtimeAddress) return "";
+
+	const runtimePort = Number(
+		config.hikvisionRuntimePort ||
+			config.hikvisionProxyPort ||
+			config.runtimePort ||
+			getHikvisionDeviceHttpPort(device),
+	);
+	const runtimeProtocol = String(
+		config.hikvisionRuntimeProtocol ||
+			config.hikvisionProxyProtocol ||
+			config.runtimeProtocol ||
+			device.protocol ||
+			"http",
+	).toLowerCase() === "https"
+		? "https"
+		: "http";
+
+	if (/^https?:\/\//i.test(runtimeAddress)) {
+		const parsed = new URL(runtimeAddress);
+		if (!parsed.port && runtimePort) parsed.port = String(runtimePort);
+		return parsed.toString().replace(/\/$/, "");
+	}
+
+	return `${runtimeProtocol}://${runtimeAddress}:${runtimePort}`;
+};
+
 export const buildHikvisionDeviceBaseUrl = (device: {
 	address: string;
 	port: number;
 	protocol: string;
 	config?: unknown;
 }) => {
+	const runtimeEndpoint = getHikvisionRuntimeEndpoint(device);
+	if (runtimeEndpoint) return runtimeEndpoint;
+
 	const address = String(device.address || "").trim();
 	const httpPort = getHikvisionDeviceHttpPort(device);
 	if (/^https?:\/\//i.test(address)) {

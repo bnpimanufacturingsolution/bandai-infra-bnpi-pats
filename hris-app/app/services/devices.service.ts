@@ -190,15 +190,46 @@ export interface DeviceSyncPreviewResponse {
 	devices: DeviceSyncPreviewRow[];
 }
 
+export interface DeviceSyncRun {
+	id: string;
+	organizationId: string;
+	deviceId: string;
+	runType: "DEVICE_USERS" | "DEVICE_LOGS" | string;
+	status: "PROCESSING" | "COMPLETED" | "FAILED" | string;
+	source?: DeviceEventSource | string | null;
+	totalSourceRecords: number;
+	importableRecords: number;
+	savedRecords: number;
+	skippedRecords: number;
+	failedRecords: number;
+	missingRecords: number;
+	skipSummary?: Record<string, unknown> | null;
+	failureSummary?: Record<string, unknown> | null;
+	rawSummary?: Record<string, unknown> | null;
+	startedAt: string;
+	completedAt?: string | null;
+	createdAt?: string;
+	updatedAt?: string;
+}
+
+export interface DeviceSyncRunsResponse {
+	syncRuns: DeviceSyncRun[];
+}
+
 export interface DeviceImportJobProgress {
 	jobId: string;
-	status: "processing" | "completed" | "failed";
+	status: "processing" | "completed" | "failed" | "cancelled";
 	deviceId: string;
 	deviceName: string;
 	total: number;
 	processed: number;
 	imported: number;
 	skipped: number;
+	alreadySaved?: number;
+	knownSkipped?: number;
+	skipMissingEmployeeNo?: boolean;
+	cancelRequested?: boolean;
+	cancelRequestedAt?: string;
 	failed: number;
 	message: string;
 	errors?: Array<{ row: number; error: string }>;
@@ -594,7 +625,7 @@ class DevicesService extends APIService {
 
 	async getDeviceUsers(
 		deviceId: string,
-		params: { page?: number; limit?: number; query?: string; status?: string } = {},
+		params: { page?: number; limit?: number; query?: string; status?: string; vendorUserId?: string; vendorUserIds?: string[] } = {},
 	): Promise<DeviceUsersResponse> {
 		try {
 			if (!String(deviceId || "").trim()) throw new Error("Device is required");
@@ -603,6 +634,13 @@ class DevicesService extends APIService {
 			if (params.limit) query.set("limit", String(params.limit));
 			if (params.query) query.set("query", params.query);
 			if (params.status && params.status !== "all") query.set("status", params.status);
+			if (params.vendorUserId) query.set("vendorUserId", params.vendorUserId);
+			if (params.vendorUserIds?.length) {
+				query.set(
+					"vendorUserIds",
+					params.vendorUserIds.map((vendorUserId) => String(vendorUserId).trim()).filter(Boolean).join(","),
+				);
+			}
 			const endpoint = `/api/device/${deviceId}/users${query.toString() ? `?${query.toString()}` : ""}`;
 			const response = await hrisApiClient.get<any>(endpoint);
 			const data = response.data?.data || response.data;
@@ -627,6 +665,27 @@ class DevicesService extends APIService {
 			console.error("Error syncing device users:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error syncing device users",
+			);
+		}
+	}
+
+	async getDeviceSyncRuns(
+		deviceId: string,
+		params: { limit?: number } = {},
+	): Promise<DeviceSyncRunsResponse> {
+		try {
+			if (!String(deviceId || "").trim()) throw new Error("Device is required");
+			const query = new URLSearchParams();
+			if (params.limit) query.set("limit", String(params.limit));
+			const endpoint = `/api/device/${deviceId}/sync-runs${query.toString() ? `?${query.toString()}` : ""}`;
+			const response = await hrisApiClient.get<any>(endpoint);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to load device sync runs");
+			return data as DeviceSyncRunsResponse;
+		} catch (error: any) {
+			console.error("Error loading device sync runs:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error loading device sync runs",
 			);
 		}
 	}
@@ -732,7 +791,10 @@ class DevicesService extends APIService {
 		}
 	}
 
-	async triggerHikvisionAttendanceImport(payload: { deviceId: string }): Promise<any> {
+	async triggerHikvisionAttendanceImport(payload: {
+		deviceId: string;
+		skipMissingEmployeeNo?: boolean;
+	}): Promise<any> {
 		try {
 			const response = await hrisApiClient.post<any>("/api/device/hikvision/sync", payload);
 			if (!response.data) {
@@ -758,6 +820,21 @@ class DevicesService extends APIService {
 			console.error("Error loading device import job:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error loading import progress",
+			);
+		}
+	}
+
+	async cancelDeviceImportJob(jobId: string): Promise<DeviceImportJobProgress> {
+		try {
+			if (!String(jobId || "").trim()) throw new Error("Import job is required");
+			const response = await hrisApiClient.post<any>(`/api/device/import-jobs/${jobId}/cancel`, {});
+			const progress = response.data?.data || response.data;
+			if (!progress) throw new Error("Import job was not found");
+			return progress as DeviceImportJobProgress;
+		} catch (error: any) {
+			console.error("Error cancelling device import job:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error cancelling import job",
 			);
 		}
 	}
