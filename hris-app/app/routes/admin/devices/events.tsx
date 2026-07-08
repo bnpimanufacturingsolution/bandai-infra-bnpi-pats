@@ -338,6 +338,43 @@ const hasNumericCount = (value?: number | string | null) =>
 const formatOptionalCount = (value?: number | string | null) =>
 	hasNumericCount(value) ? formatCount(value) : "Unavailable";
 
+const getNumericCount = (value?: number | string | null) =>
+	hasNumericCount(value) ? Number(value) : null;
+
+const getSyncKnownSkippedCount = (row: { knownSkippedEventCount?: number | string | null }) =>
+	Math.max(getNumericCount(row.knownSkippedEventCount) ?? 0, 0);
+
+const getSyncStillMissingCount = (row: {
+	missingEventCount?: number | string | null;
+	needsSyncEvents?: number | string | null;
+}) => {
+	const value = getNumericCount(row.missingEventCount ?? row.needsSyncEvents);
+	return value === null ? null : Math.max(value, 0);
+};
+
+const getSyncProjectedSaveCount = (
+	row: {
+		importableIfSaveMissingEmployeeNo?: number | string | null;
+		missingEventCount?: number | string | null;
+		needsSyncEvents?: number | string | null;
+		knownSkippedEventCount?: number | string | null;
+	},
+	skipMissingEmployeeNo: boolean,
+) => {
+	const stillMissing = getSyncStillMissingCount(row);
+	if (stillMissing === null) return null;
+	if (skipMissingEmployeeNo) return stillMissing;
+	const explicitSaveAll = getNumericCount(row.importableIfSaveMissingEmployeeNo);
+	return explicitSaveAll === null
+		? stillMissing + getSyncKnownSkippedCount(row)
+		: Math.max(explicitSaveAll, 0);
+};
+
+const getSyncProjectedSkipCount = (
+	row: { knownSkippedEventCount?: number | string | null },
+	skipMissingEmployeeNo: boolean,
+) => (skipMissingEmployeeNo ? getSyncKnownSkippedCount(row) : 0);
+
 const getSyncDeviceTitle = (vendor?: string | null, name?: string | null, address?: string | null) => {
 	const vendorLabel = String(vendor || "").trim();
 	const nameLabel = String(name || "").trim();
@@ -944,7 +981,10 @@ export default function DeviceEventsPage() {
 		(syncHealthDevice && !syncBridgeOk ? "The ZKTeco bridge is not reachable for this preflight." : "");
 	const syncPreviewRows = useMemo(() => syncPreview?.devices || [], [syncPreview?.devices]);
 	const syncHasZktecoRows = syncPreviewRows.some((row) => row.vendor === "ZKTeco");
-	const syncStartableRows = syncPreviewRows.filter((row) => row.canStartSync);
+	const syncStartableRows = syncPreviewRows.filter((row) => {
+		const projectedSaveCount = getSyncProjectedSaveCount(row, skipMissingEmployeeNo);
+		return !row.error && (Boolean(row.canStartSync) || Boolean(projectedSaveCount && projectedSaveCount > 0));
+	});
 	const syncHasUnknownEventTotal = syncPreviewRows.some(
 		(row) => !hasNumericCount(row.vendorEventCount ?? row.totalEvents),
 	);
@@ -958,8 +998,8 @@ export default function DeviceEventsPage() {
 		(total, row) => total + Number(row.hrisSavedCount ?? row.syncedEvents ?? 0),
 		0,
 	);
-	const syncKnownSkippedTotal = syncPreviewRows.reduce(
-		(total, row) => total + Number(row.knownSkippedEventCount ?? 0),
+	const syncProjectedSkippedTotal = syncPreviewRows.reduce(
+		(total, row) => total + getSyncProjectedSkipCount(row, skipMissingEmployeeNo),
 		0,
 	);
 	const syncFailedTotal = syncPreviewRows.reduce(
@@ -967,15 +1007,14 @@ export default function DeviceEventsPage() {
 		0,
 	);
 	const syncHasUnknownMissingCount = syncPreviewRows.some(
-		(row) =>
-			(row.missingEventCount ?? row.needsSyncEvents) === null ||
-			(row.missingEventCount ?? row.needsSyncEvents) === undefined,
+		(row) => getSyncProjectedSaveCount(row, skipMissingEmployeeNo) === null,
 	);
 	const syncDryRunEstimate = syncPreviewRows.length
 		? syncHasUnknownMissingCount
 			? null
 			: syncPreviewRows.reduce(
-					(total, row) => total + Number(row.missingEventCount ?? row.needsSyncEvents ?? 0),
+					(total, row) =>
+						total + Number(getSyncProjectedSaveCount(row, skipMissingEmployeeNo) ?? 0),
 					0,
 				)
 		: (
@@ -1307,7 +1346,7 @@ export default function DeviceEventsPage() {
 			)
 		: 0;
 	const activeImportJobSummary = importJobProgress
-		? `${formatCount(importJobProgress.imported)} missing HRIS events saved, ${formatCount(importJobProgress.alreadySaved || 0)} already in HRIS, ${formatCount(importJobProgress.skipped)} skipped with no employee number, ${formatCount(importJobProgress.failed)} failed`
+		? `${formatCount(importJobProgress.imported)} device logs saved to HRIS, ${formatCount(importJobProgress.alreadySaved || 0)} already in HRIS, ${formatCount(importJobProgress.skipped)} skipped with no employee number, ${formatCount(importJobProgress.failed)} failed`
 		: "";
 	const hasImportProgress = Boolean(activeImportJob && importJobProgress);
 	const isImportProcessing = importJobProgress?.status === "processing";
@@ -1329,7 +1368,7 @@ export default function DeviceEventsPage() {
 				: isImportProcessing
 					? isImportCancelRequested
 						? "Cancelling device log sync"
-						: "Checking for missing device logs"
+						: "Scanning device logs"
 					: "Device sync status";
 	const importProgressToneClass =
 		importJobProgress?.status === "failed"
@@ -1369,7 +1408,7 @@ export default function DeviceEventsPage() {
 		if (importProgressStatus === "completed") {
 			toast.success("Device logs synced", {
 				id: "device-log-import-progress",
-				description: `${formatCount(importProgressImported)} missing HRIS events saved. ${formatCount(importJobProgress?.alreadySaved || 0)} already in HRIS, ${formatCount(importProgressSkipped)} skipped with no employee number.`,
+				description: `${formatCount(importProgressImported)} device logs saved to HRIS. ${formatCount(importJobProgress?.alreadySaved || 0)} already in HRIS, ${formatCount(importProgressSkipped)} skipped with no employee number.`,
 			});
 			void refetch();
 			void refetchHealth();
@@ -1986,9 +2025,9 @@ export default function DeviceEventsPage() {
 									<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
 										<span>Device logs: {formatOptionalCount(syncVendorEventTotal)}</span>
 										<span>HRIS events: {formatCount(syncHrisSavedTotal)}</span>
-										<span>Skipped: {formatCount(syncKnownSkippedTotal)}</span>
+										<span>Estimated unsaved: {formatOptionalCount(syncDryRunEstimate)}</span>
+										<span>Will skip: {formatCount(syncProjectedSkippedTotal)}</span>
 										<span>Failed: {formatCount(syncFailedTotal)}</span>
-										<span>Not stored: {formatOptionalCount(syncDryRunEstimate)}</span>
 										<span>Ready: {formatCount(syncStartableRows.length)} of {formatCount(syncPreviewRows.length)}</span>
 									</div>
 								) : (
@@ -2046,12 +2085,13 @@ export default function DeviceEventsPage() {
 									const hrisSaved = device.hrisSavedCount ?? device.syncedEvents;
 									const knownSkipped = device.knownSkippedEventCount ?? 0;
 									const failedEvents = device.failedEventCount ?? 0;
-									const missingEvents = device.missingEventCount ?? device.needsSyncEvents;
-									const hasMissingEvents = Boolean(missingEvents && Number(missingEvents) > 0);
+									const projectedSaveEvents = getSyncProjectedSaveCount(device, skipMissingEmployeeNo);
+									const projectedSkipEvents = getSyncProjectedSkipCount(device, skipMissingEmployeeNo);
+									const hasProjectedSaveEvents = Boolean(projectedSaveEvents && projectedSaveEvents > 0);
 									const isSourceUnavailable = Boolean(device.error);
 									const hasUnknownSyncCount =
 										!isSourceUnavailable &&
-										(!hasNumericCount(sourceEvents) || !hasNumericCount(missingEvents));
+										(!hasNumericCount(sourceEvents) || projectedSaveEvents === null);
 									return (
 										<div key={device.deviceId} className="flex flex-col gap-3 px-3 py-3 md:flex-row md:items-start md:justify-between">
 											<div className="min-w-0">
@@ -2081,7 +2121,7 @@ export default function DeviceEventsPage() {
 																? "secondary"
 																: hasUnknownSyncCount
 																? "warning-soft"
-																: hasMissingEvents
+																: hasProjectedSaveEvents
 																? "warning-soft"
 																: "secondary"
 														}
@@ -2092,7 +2132,7 @@ export default function DeviceEventsPage() {
 															? "Unavailable"
 															: hasUnknownSyncCount
 															? "Check counts"
-															: hasMissingEvents
+															: hasProjectedSaveEvents
 															? "Needs sync"
 															: "In sync"}
 													</Badge>
@@ -2110,23 +2150,25 @@ export default function DeviceEventsPage() {
 													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceUsers)}</p>
 												</div>
 												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Skipped</p>
-													<p className="text-xs font-semibold text-slate-950">{formatCount(knownSkipped)}</p>
-													<p className="text-[10px] text-slate-500">No employee no.</p>
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Will skip</p>
+													<p className="text-xs font-semibold text-slate-950">{formatCount(projectedSkipEvents)}</p>
+													<p className="text-[10px] text-slate-500">
+														{skipMissingEmployeeNo ? "No employee no." : `Known: ${formatCount(knownSkipped)}`}
+													</p>
 												</div>
 												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Not stored</p>
-													{hasMissingEvents ? (
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Estimated unsaved</p>
+													{hasProjectedSaveEvents ? (
 														<button
 															type="button"
 															className="text-left text-sm font-bold text-red-700 underline-offset-2 hover:underline"
 															onClick={() => reviewNotImported(device)}
 															title="Review device log rows not stored as HRIS events">
-															{formatOptionalCount(missingEvents)}
+															{formatOptionalCount(projectedSaveEvents)}
 														</button>
 													) : (
 														<span className="text-xs font-semibold text-slate-500">
-															{formatOptionalCount(missingEvents)}
+															{formatOptionalCount(projectedSaveEvents)}
 														</span>
 													)}
 												</div>
@@ -2177,7 +2219,9 @@ export default function DeviceEventsPage() {
 							<span className="min-w-0">
 								<span className="block font-semibold text-slate-950">Skip rows with no employee no.</span>
 								<span className="block text-xs text-slate-600">
-									Off by default so employee-less device logs are still saved as ignored events.
+									{skipMissingEmployeeNo
+										? `${formatCount(syncProjectedSkippedTotal)} known employee-less row${syncProjectedSkippedTotal === 1 ? "" : "s"} will stay skipped during the source scan.`
+										: `${formatOptionalCount(syncDryRunEstimate)} estimated unsaved row${Number(syncDryRunEstimate) === 1 ? "" : "s"}; sync scans source logs and saves rows not already in HRIS.`}
 								</span>
 							</span>
 						</label>
@@ -2197,7 +2241,7 @@ export default function DeviceEventsPage() {
 								onClick={startDeviceLogImport}>
 								<UploadCloud className="h-4 w-4" />
 								{zktecoSync.isPending || hikvisionImport.isPending
-									? "Starting sync"
+									? "Syncing device logs"
 									: "Sync logs"}
 							</Button>
 						</div>
@@ -2233,6 +2277,9 @@ export default function DeviceEventsPage() {
 									{activeImportProgressPercent}%
 								</span>
 							</div>
+							<p className="mt-1 text-xs opacity-90">
+								Sync scans device source logs, then classifies each row against HRIS.
+							</p>
 							<div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
 								<div
 									className={`h-full rounded-full transition-all ${importProgressFillClass}`}
@@ -2241,7 +2288,7 @@ export default function DeviceEventsPage() {
 							</div>
 							<div className="mt-3 grid grid-cols-2 gap-2 text-xs">
 								<div className="text-emerald-700">
-									Missing saved: <span className="font-semibold">{formatCount(importJobProgress.imported)}</span>
+									Saved to HRIS: <span className="font-semibold">{formatCount(importJobProgress.imported)}</span>
 								</div>
 								<div className="text-red-700">
 									Failed: <span className="font-semibold">{formatCount(importJobProgress.failed)}</span>
@@ -2249,7 +2296,7 @@ export default function DeviceEventsPage() {
 							</div>
 							<div className="mt-3 grid grid-cols-2 gap-2 rounded-md border border-orange-100 bg-white/70 px-3 py-2 text-xs text-orange-900">
 								<div>
-									<span className="block text-orange-700">Processed</span>
+									<span className="block text-orange-700">Source logs scanned</span>
 									<span className="font-semibold">
 										{formatCount(importJobProgress.processed)} / {formatCount(importJobProgress.total)}
 									</span>

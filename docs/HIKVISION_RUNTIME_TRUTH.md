@@ -1,7 +1,7 @@
 # Hikvision Runtime Truth
 
 Task mode: Linux-first SDK/runtime truth.
-Last updated: 2026-07-01.
+Last updated: 2026-07-08.
 
 ## Active Runtime Direction
 
@@ -57,6 +57,17 @@ Accepted stored sources remain:
 
 - `HIKVISION_CALLBACK`
 - `EN_HCNETSDK_ALARM`
+
+As of 2026-07-08, the HRIS callback parser accepts Hikvision HTTP-host XML
+aliases used by physical terminals, including `ipAddress` for observed device
+matching and `dateTime` for punch time. Localhost callback proof passed against
+the DEV API after restart: posting XML with `ipAddress=10.184.38.96` matched
+the current local `Main Entrance Device` row and persisted a marked
+`HIKVISION_CALLBACK` `DeviceEvent`; the marked smoke row was deleted after
+verification. Boundary: `localhost` is valid for a local SDK/watcher process
+running on the same machine as the HRIS API. A physical Hikvision terminal must
+post to a LAN-reachable or tunneled HRIS API URL; configuring the terminal
+itself to `localhost` points back at the terminal, not the Windows host API.
 
 The active seed source for the default Hikvision device is now
 `vendor/hikvision-linux`. Default seeding uses the current reachable Hikvision

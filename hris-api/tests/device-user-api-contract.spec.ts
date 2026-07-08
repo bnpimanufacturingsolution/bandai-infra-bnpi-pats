@@ -33,10 +33,16 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("skipMissingEmployeeNo");
 		expect(controller).to.include("const skipMissingEmployeeNo =");
 		expect(controller).to.include("if (!employeeNo && skipMissingEmployeeNo)");
+		expect(controller).to.include("knownSkipped += 1");
+		expect(controller).to.include("missingEmployeeNo: knownSkipped");
 		expect(controller).to.include("alreadySaved");
 		expect(controller).to.include("findExistingHikvisionDeviceEvent");
 		expect(controller).to.include("cancelRequested");
 		expect(controller).to.include("knownSkippedEventCount");
-		expect(controller).to.include("Math.max(Number(totalEvents) - syncedEvents - knownSkippedEvents, 0)");
+		expect(controller).to.include("totalUnsavedEventCount");
+		expect(controller).to.include("importableIfSkipMissingEmployeeNo");
+		expect(controller).to.include("importableIfSaveMissingEmployeeNo");
+		expect(controller).to.include("Math.max(Number(totalEvents) - syncedEvents, 0)");
+		expect(controller).to.include("Math.max(totalUnsavedEvents - knownSkippedEvents, 0)");
 	});
 });

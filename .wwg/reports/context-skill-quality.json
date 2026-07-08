@@ -41,7 +41,10 @@
     ".wwg/reports/wwg-upgrade-report.md",
     ".wwg/reports/wwg-validate-report.md",
     ".wwg/reports/zkteco-device-events-filter-truth-20260629.md",
+    ".wwg/reports/zkteco-four-device-recovery-20260704.md",
+    ".wwg/reports/zkteco-gozk-trial-20260704.md",
     ".wwg/reports/zkteco-node-bridge-retirement-20260629.md",
+    ".wwg/reports/zkteco-remote-runtime-truth-20260704.md",
     ".wwg/reports/zkteco-sdk-device-counts-20260629.md",
     ".wwg/wiki/01-sources/raw/hikvision-dev-vm-watcher-proof-20260630.md",
     ".wwg/wiki/01-sources/raw/hikvision-sadp-device-screenshot-20260630.md",
@@ -294,7 +297,22 @@
       "reason": "Report directory path."
     },
     {
+      "path": ".wwg/reports/zkteco-four-device-recovery-20260704.md",
+      "fileType": "report",
+      "reason": "Report directory path."
+    },
+    {
+      "path": ".wwg/reports/zkteco-gozk-trial-20260704.md",
+      "fileType": "report",
+      "reason": "Report directory path."
+    },
+    {
       "path": ".wwg/reports/zkteco-node-bridge-retirement-20260629.md",
+      "fileType": "report",
+      "reason": "Report directory path."
+    },
+    {
+      "path": ".wwg/reports/zkteco-remote-runtime-truth-20260704.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
@@ -953,10 +971,37 @@
     {
       "severity": "warning",
       "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/zkteco-four-device-recovery-20260704.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/zkteco-gozk-trial-20260704.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/zkteco-node-bridge-retirement-20260629.md",
       "fileType": "report",
       "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/zkteco-remote-runtime-truth-20260704.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
     },
     {
@@ -1357,7 +1402,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 1406,
+      "line": 638,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1367,7 +1412,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 1410,
+      "line": 642,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -1606,6 +1651,14 @@
     },
     {
       "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": ".wwg/reports/zkteco-remote-runtime-truth-20260704.md",
+      "fileType": "report",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/01-sources/raw/hikvision-uat-temp-seed-proof-20260630.md",
@@ -1645,7 +1698,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 85,
+      "line": 81,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1654,7 +1707,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 89,
+      "line": 88,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1663,7 +1716,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 98,
+      "line": 92,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1679,9 +1732,26 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 105,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 123,
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 141,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1690,7 +1760,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 125,
+      "line": 143,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1699,7 +1769,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 134,
+      "line": 152,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1708,7 +1778,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 155,
+      "line": 173,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1717,7 +1787,24 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 185,
+      "line": 203,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": ".wwg/workspace/current-task.md",
+      "fileType": "unknown",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/workspace/current-task.md",
+      "fileType": "unknown",
+      "line": 214,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1726,7 +1813,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 193,
+      "line": 219,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -1735,16 +1822,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 198,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/workspace/current-task.md",
-      "fileType": "unknown",
-      "line": 237,
+      "line": 258,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2002,7 +2080,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/HIKVISION_RUNTIME_TRUTH.md",
       "fileType": "public_doc",
-      "line": 75,
+      "line": 86,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2566,10 +2644,37 @@
     {
       "severity": "warning",
       "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/zkteco-four-device-recovery-20260704.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/zkteco-gozk-trial-20260704.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/zkteco-node-bridge-retirement-20260629.md",
       "fileType": "report",
       "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/zkteco-remote-runtime-truth-20260704.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
     },
     {
@@ -2994,7 +3099,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 85,
+      "line": 81,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3003,7 +3108,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 89,
+      "line": 88,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3012,7 +3117,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 98,
+      "line": 92,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3022,6 +3127,15 @@
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
       "line": 101,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 105,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3035,11 +3149,19 @@
     },
     {
       "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 123,
+      "line": 141,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3048,7 +3170,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 125,
+      "line": 143,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3057,7 +3179,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 134,
+      "line": 152,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3066,7 +3188,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 155,
+      "line": 173,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3075,7 +3197,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 185,
+      "line": 203,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3415,7 +3537,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 1406,
+      "line": 638,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3425,7 +3547,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 1410,
+      "line": 642,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -3836,11 +3958,46 @@
     {
       "severity": "warning",
       "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/zkteco-four-device-recovery-20260704.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/zkteco-gozk-trial-20260704.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/zkteco-node-bridge-retirement-20260629.md",
       "fileType": "report",
       "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/zkteco-remote-runtime-truth-20260704.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": ".wwg/reports/zkteco-remote-runtime-truth-20260704.md",
+      "fileType": "report",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
     },
     {
       "severity": "warning",
@@ -4164,7 +4321,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/HIKVISION_RUNTIME_TRUTH.md",
       "fileType": "public_doc",
-      "line": 75,
+      "line": 86,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4511,7 +4668,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Recommended Next Step",
-      "line": 1406,
+      "line": 638,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4521,7 +4678,7 @@
       "affectedFile": ".wwg/reports/test-alignment-report.md",
       "fileType": "report",
       "affectedSection": "Backup CLI",
-      "line": 1410,
+      "line": 642,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     },
     {
@@ -4760,6 +4917,14 @@
     },
     {
       "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": ".wwg/reports/zkteco-remote-runtime-truth-20260704.md",
+      "fileType": "report",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/01-sources/raw/hikvision-uat-temp-seed-proof-20260630.md",
@@ -4799,7 +4964,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 85,
+      "line": 81,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4808,7 +4973,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 89,
+      "line": 88,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4817,7 +4982,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 98,
+      "line": 92,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4833,9 +4998,26 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 105,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 123,
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "line": 141,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4844,7 +5026,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 125,
+      "line": 143,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4853,7 +5035,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 134,
+      "line": 152,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4862,7 +5044,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 155,
+      "line": 173,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4871,7 +5053,24 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 185,
+      "line": 203,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": ".wwg/workspace/current-task.md",
+      "fileType": "unknown",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/workspace/current-task.md",
+      "fileType": "unknown",
+      "line": 214,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4880,7 +5079,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 193,
+      "line": 219,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4889,16 +5088,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 198,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/workspace/current-task.md",
-      "fileType": "unknown",
-      "line": 237,
+      "line": 258,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -5156,7 +5346,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/HIKVISION_RUNTIME_TRUTH.md",
       "fileType": "public_doc",
-      "line": 75,
+      "line": 86,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -5376,16 +5566,16 @@
   ],
   "metadataPolicyApplied": "Option C: Skill Registry metadata is canonical; skill files may include lightweight metadata when beneficial, and package-side skills do not require frontmatter.",
   "summary": {
-    "checkedFileCount": 86,
+    "checkedFileCount": 89,
     "skippedFileCount": 1,
     "errorCount": 0,
-    "warningCount": 84,
-    "suggestionCount": 95,
+    "warningCount": 87,
+    "suggestionCount": 99,
     "classificationCounts": {
       "context": 8,
       "skill": 0,
       "governance": 6,
-      "report": 37,
+      "report": 40,
       "public_doc": 27,
       "agent_instruction": 1,
       "changelog_governance": 0,

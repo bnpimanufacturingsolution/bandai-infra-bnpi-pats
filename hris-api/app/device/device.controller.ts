@@ -1412,6 +1412,7 @@ export const controller = (prisma: PrismaClient) => {
 					const employeeNo = String(event?.employeeNoString || event?.employeeNo || "").trim();
 					if (!employeeNo && skipMissingEmployeeNo) {
 						skipped += 1;
+						knownSkipped += 1;
 					} else {
 						const fingerprint = buildHikvisionImportEventFingerprint(device, event);
 						const existingEvent = await findExistingHikvisionDeviceEvent({
@@ -1467,7 +1468,7 @@ export const controller = (prisma: PrismaClient) => {
 							alreadySaved,
 							knownSkipped,
 							failed,
-							message: "Checking for missing device logs",
+							message: "Scanning device logs and checking HRIS matches",
 						});
 					}
 					if (processed >= maxEvents) break;
@@ -1493,8 +1494,8 @@ export const controller = (prisma: PrismaClient) => {
 					: failed > 0 && imported === 0
 						? "Import failed"
 						: imported > 0
-							? `Saved ${imported.toLocaleString()} missing device logs`
-							: "No missing device logs found",
+							? `Saved ${imported.toLocaleString()} device logs to HRIS`
+							: "No new device logs saved",
 				completedAt: new Date(),
 			});
 			if (runId) {
@@ -1509,7 +1510,7 @@ export const controller = (prisma: PrismaClient) => {
 						failedRecords: failed,
 						missingRecords: 0,
 						skipSummary: {
-							missingEmployeeNo: skipped,
+							missingEmployeeNo: knownSkipped,
 							alreadySaved,
 						},
 						failureSummary: failed ? { failed } : null,
@@ -1944,7 +1945,7 @@ export const controller = (prisma: PrismaClient) => {
 			);
 			const latestCompletedRuns = await Promise.all(
 				syncDevices.map(async (device) => {
-					const run = await (prisma as any).deviceSyncRun.findFirst({
+					const run = await (prisma as any).deviceSyncRun?.findFirst?.({
 						where: {
 							organizationId: String(organizationId),
 							deviceId: device.id,
@@ -1982,9 +1983,13 @@ export const controller = (prisma: PrismaClient) => {
 								"users",
 							])
 						: sourcePreview?.userCount ?? null;
-				const needsSyncEvents =
+				const totalUnsavedEvents =
 					totalEvents !== null && totalEvents !== undefined && Number.isFinite(Number(totalEvents))
-						? Math.max(Number(totalEvents) - syncedEvents - knownSkippedEvents, 0)
+						? Math.max(Number(totalEvents) - syncedEvents, 0)
+						: null;
+				const needsSyncEvents =
+					totalUnsavedEvents !== null && totalUnsavedEvents !== undefined
+						? Math.max(totalUnsavedEvents - knownSkippedEvents, 0)
 						: null;
 				const sourceError =
 					sourcePreview?.error ||
@@ -2018,6 +2023,9 @@ export const controller = (prisma: PrismaClient) => {
 					vendorEventCount: totalEvents,
 					vendorUserCount,
 					knownSkippedEventCount: knownSkippedEvents,
+					totalUnsavedEventCount: totalUnsavedEvents,
+					importableIfSkipMissingEmployeeNo: needsSyncEvents,
+					importableIfSaveMissingEmployeeNo: totalUnsavedEvents,
 					failedEventCount: failedEvents,
 					importableSavedCount: syncedEvents,
 					missingEventCount: needsSyncEvents,

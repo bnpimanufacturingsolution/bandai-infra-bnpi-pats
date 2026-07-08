@@ -225,6 +225,30 @@ describe("hikvision event contract helper", () => {
 		expect(payload.serialNo).to.equal("12345");
 	});
 
+	it("parses Hikvision HTTP host XML date and IP aliases for device matching", () => {
+		const payload = parseHikvisionBodyPayload(`
+			<EventNotificationAlert version="2.0">
+				<ipAddress>10.184.38.215</ipAddress>
+				<dateTime>2026-07-08T10:04:12+08:00</dateTime>
+				<AccessControllerEvent>
+					<major>5</major>
+					<minor>38</minor>
+					<employeeNoString>1</employeeNoString>
+					<currentVerifyMode>faceOrFpOrCardOrPw</currentVerifyMode>
+					<serialNo>997</serialNo>
+				</AccessControllerEvent>
+			</EventNotificationAlert>
+		`);
+		const event = extractHikvisionEventData(payload);
+
+		expect(event.deviceIP).to.equal("10.184.38.215");
+		expect(event.time).to.equal("2026-07-08T10:04:12+08:00");
+		expect(event.employeeNo).to.equal("1");
+		expect(event.major).to.equal("5");
+		expect(event.minor).to.equal("38");
+		expect(isHikvisionAttendancePunchEvent(event)).to.equal(true);
+	});
+
 	it("does not treat fingerprint enrollment as an attendance punch", () => {
 		expect(
 			isHikvisionAttendancePunchEvent({
