@@ -77,6 +77,9 @@ type DeviceImportJob = {
 	deviceId: string;
 	deviceName: string;
 	total: number;
+	sourceTotal?: number | null;
+	targetImportCount?: number | null;
+	scanLimit?: number | null;
 	processed: number;
 	imported: number;
 	skipped: number;
@@ -1334,19 +1337,42 @@ export const controller = (prisma: PrismaClient) => {
 		req: Request;
 		device: any;
 		totalHint: number;
+		targetImportCount?: number | null;
 		skipMissingEmployeeNo?: boolean;
 	}) => {
 		const { jobId, runId, req, device, totalHint } = params;
 		const skipMissingEmployeeNo = params.skipMissingEmployeeNo === true;
+		const targetImportCount =
+			params.targetImportCount !== null &&
+			params.targetImportCount !== undefined &&
+			Number.isFinite(Number(params.targetImportCount))
+				? Math.max(Number(params.targetImportCount), 0)
+				: null;
 		const ctrl = callbackController(prisma);
 		const pageSize = Math.max(
 			1,
 			Math.min(Number(process.env.HIKVISION_IMPORT_PAGE_SIZE || 50), 200),
 		);
-		const maxEvents = Math.max(
+		const fullScanLimit = Math.max(
 			1,
 			Math.min(Number(process.env.HIKVISION_IMPORT_MAX_EVENTS || totalHint || 1000), 10000),
 		);
+		const targetedScanLimit = targetImportCount
+			? Math.max(
+					Math.min(
+						Number(process.env.HIKVISION_IMPORT_TARGETED_MAX_SCAN || 200),
+						Math.max(targetImportCount + 10, targetImportCount * 3, 10),
+					),
+				)
+			: null;
+		const maxEvents = Math.min(
+			fullScanLimit,
+			targetedScanLimit || fullScanLimit,
+		);
+		const effectivePageSize =
+			targetImportCount !== null
+				? Math.min(pageSize, Math.max(targetImportCount + 10, 10))
+				: pageSize;
 		const endTime = formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
 		let position = 0;
 		let processed = 0;
@@ -1355,11 +1381,20 @@ export const controller = (prisma: PrismaClient) => {
 		let alreadySaved = 0;
 		let knownSkipped = 0;
 		let failed = 0;
+		let sourceTotalForLoop =
+			Number.isFinite(Number(totalHint)) && Number(totalHint) > 0
+				? Math.min(Number(totalHint), maxEvents)
+				: maxEvents;
 
 		try {
 			updateDeviceImportJob(jobId, {
-				total: Math.min(totalHint || maxEvents, maxEvents),
-				message: "Reading device logs",
+				total: targetImportCount || Math.min(totalHint || maxEvents, maxEvents),
+				sourceTotal: totalHint,
+				targetImportCount,
+				scanLimit: maxEvents,
+				message: targetImportCount
+					? `Reading latest device logs for ${targetImportCount.toLocaleString()} estimated unsaved row${targetImportCount === 1 ? "" : "s"}`
+					: "Reading device logs",
 			});
 
 			while (processed < maxEvents) {
@@ -1376,7 +1411,7 @@ export const controller = (prisma: PrismaClient) => {
 					AcsEventCond: {
 						searchID: `${jobId}-${position}`,
 						searchResultPosition: position,
-						maxResults: Math.min(pageSize, maxEvents - processed),
+						maxResults: Math.min(effectivePageSize, maxEvents - processed),
 						major: 0,
 						minor: 0,
 						startTime: "2000-01-01T00:00:00+08:00",
@@ -1401,8 +1436,10 @@ export const controller = (prisma: PrismaClient) => {
 					"total",
 				]);
 				if (totalFromDevice !== null) {
+					sourceTotalForLoop = Math.min(Number(totalFromDevice), maxEvents);
 					updateDeviceImportJob(jobId, {
-						total: Math.min(Number(totalFromDevice), maxEvents),
+						total: targetImportCount || Math.min(Number(totalFromDevice), maxEvents),
+						sourceTotal: Number(totalFromDevice),
 					});
 				}
 				if (!pageEvents.length) break;
@@ -1468,19 +1505,24 @@ export const controller = (prisma: PrismaClient) => {
 							alreadySaved,
 							knownSkipped,
 							failed,
-							message: "Scanning device logs and checking HRIS matches",
+							message: targetImportCount
+								? "Checking latest estimated unsaved rows against HRIS"
+								: "Scanning device logs and checking HRIS matches",
 						});
 					}
+					if (targetImportCount !== null && imported >= targetImportCount) break;
 					if (processed >= maxEvents) break;
 				}
 
 				position += pageEvents.length;
-				const total = deviceImportJobs.get(jobId)?.total || totalHint || maxEvents;
-				if (position >= total) break;
+				if (targetImportCount !== null && imported >= targetImportCount) break;
+				if (position >= sourceTotalForLoop) break;
 			}
 
 			const finalJob = deviceImportJobs.get(jobId);
 			const wasCancelled = finalJob?.status === "cancelled" || finalJob?.cancelRequested;
+			const remainingEstimatedMissing =
+				targetImportCount === null ? 0 : Math.max(targetImportCount - imported, 0);
 			updateDeviceImportJob(jobId, {
 				status: wasCancelled ? "cancelled" : failed > 0 && imported === 0 ? "failed" : "completed",
 				processed,
@@ -1495,7 +1537,9 @@ export const controller = (prisma: PrismaClient) => {
 						? "Import failed"
 						: imported > 0
 							? `Saved ${imported.toLocaleString()} device logs to HRIS`
-							: "No new device logs saved",
+							: remainingEstimatedMissing > 0
+								? "Estimated rows were not found in the latest device scan"
+								: "No new device logs saved",
 				completedAt: new Date(),
 			});
 			if (runId) {
@@ -1508,7 +1552,7 @@ export const controller = (prisma: PrismaClient) => {
 						savedRecords: imported,
 						skippedRecords: skipped,
 						failedRecords: failed,
-						missingRecords: 0,
+						missingRecords: remainingEstimatedMissing,
 						skipSummary: {
 							missingEmployeeNo: knownSkipped,
 							alreadySaved,
@@ -1523,6 +1567,10 @@ export const controller = (prisma: PrismaClient) => {
 							knownSkipped,
 							failed,
 							skipMissingEmployeeNo,
+							targetImportCount,
+							scanLimit: maxEvents,
+							targetedLatestScan: targetImportCount !== null,
+							remainingEstimatedMissing,
 							cancelled: wasCancelled,
 						},
 						completedAt: new Date(),
@@ -1570,6 +1618,8 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 			const deviceId = String((req.body as any)?.deviceId || (req.query as any)?.deviceId || "").trim();
+			const requestedTargetImportCount = Number((req.body as any)?.targetImportCount ?? (req.query as any)?.targetImportCount);
+			const hasRequestedTargetImportCount = Number.isFinite(requestedTargetImportCount) && requestedTargetImportCount >= 0;
 			const skipMissingEmployeeNo =
 				(req.body as any)?.skipMissingEmployeeNo === true ||
 				(req.query as any)?.skipMissingEmployeeNo === "true";
@@ -1588,6 +1638,66 @@ export const controller = (prisma: PrismaClient) => {
 
 			const counts = await getHikvisionSourceCounts(req, device.id);
 			const totalHint = Number(counts.totalEvents || 0);
+			const [savedEvents, latestCompletedRun] = await Promise.all([
+				(prisma as any).deviceEvent.count({
+					where: {
+						organizationId: String(organizationId),
+						deviceId: device.id,
+						source: "HIKVISION_CALLBACK",
+					},
+				}),
+				(prisma as any).deviceSyncRun.findFirst({
+					where: {
+						organizationId: String(organizationId),
+						deviceId: device.id,
+						runType: "DEVICE_LOGS",
+						status: "COMPLETED",
+						source: "HIKVISION_CALLBACK",
+					},
+					orderBy: { completedAt: "desc" },
+					select: { skippedRecords: true },
+				}),
+			]);
+			const knownSkippedEvents = Number(latestCompletedRun?.skippedRecords || 0);
+			const estimatedUnsaved =
+				Number.isFinite(totalHint) && totalHint > 0
+					? Math.max(totalHint - Number(savedEvents || 0), 0)
+					: null;
+			const serverEstimatedTargetImportCount =
+				estimatedUnsaved === null
+					? null
+					: skipMissingEmployeeNo
+						? Math.max(estimatedUnsaved - knownSkippedEvents, 0)
+						: estimatedUnsaved;
+			const targetImportCount =
+				hasRequestedTargetImportCount
+					? Math.max(Math.floor(requestedTargetImportCount), 0)
+					: serverEstimatedTargetImportCount;
+			if (targetImportCount === 0) {
+				res.status(200).json(
+					buildSuccessResponse(
+						"No unsaved device logs found",
+						{
+							jobId: null,
+							progress: {
+								status: "completed",
+								deviceId: device.id,
+								deviceName: device.name || device.address,
+								total: totalHint,
+								sourceTotal: totalHint,
+								targetImportCount,
+								processed: 0,
+								imported: 0,
+								skipped: 0,
+								failed: 0,
+								message: "No unsaved device logs found in the dry-run estimate",
+							},
+						},
+						200,
+					),
+				);
+				return;
+			}
 			const jobId = randomUUID();
 			const run = await (prisma as any).deviceSyncRun.create({
 				data: {
@@ -1598,6 +1708,19 @@ export const controller = (prisma: PrismaClient) => {
 					source: "HIKVISION_CALLBACK",
 					startedByUserId: (req as any).userId || null,
 					totalSourceRecords: totalHint,
+					importableRecords: targetImportCount,
+					rawSummary: {
+						totalHint,
+						savedEvents,
+						knownSkippedEvents,
+						estimatedUnsaved,
+						serverEstimatedTargetImportCount,
+						requestedTargetImportCount: hasRequestedTargetImportCount
+							? Math.max(Math.floor(requestedTargetImportCount), 0)
+							: null,
+						targetImportCount,
+						targetedLatestScan: targetImportCount !== null,
+					},
 				},
 			});
 			const job: DeviceImportJob = {
@@ -1607,7 +1730,9 @@ export const controller = (prisma: PrismaClient) => {
 				organizationId: String(organizationId),
 				deviceId: device.id,
 				deviceName: device.name || device.address,
-				total: totalHint,
+				total: targetImportCount || totalHint,
+				sourceTotal: totalHint,
+				targetImportCount,
 				processed: 0,
 				imported: 0,
 				skipped: 0,
@@ -1624,6 +1749,7 @@ export const controller = (prisma: PrismaClient) => {
 				req,
 				device,
 				totalHint,
+				targetImportCount,
 				skipMissingEmployeeNo,
 			}).catch((error) => {
 				deviceLogger.error(`Hikvision import job ${jobId} failed: ${error}`);

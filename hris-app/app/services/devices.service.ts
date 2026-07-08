@@ -225,6 +225,9 @@ export interface DeviceImportJobProgress {
 	deviceId: string;
 	deviceName: string;
 	total: number;
+	sourceTotal?: number | null;
+	targetImportCount?: number | null;
+	scanLimit?: number | null;
 	processed: number;
 	imported: number;
 	skipped: number;
@@ -797,6 +800,7 @@ class DevicesService extends APIService {
 	async triggerHikvisionAttendanceImport(payload: {
 		deviceId: string;
 		skipMissingEmployeeNo?: boolean;
+		targetImportCount?: number | null;
 	}): Promise<any> {
 		try {
 			const response = await hrisApiClient.post<any>("/api/device/hikvision/sync", payload);

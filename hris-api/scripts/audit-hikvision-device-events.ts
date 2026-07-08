@@ -108,6 +108,18 @@ const getSerialNoFromPayload = (payload: any) =>
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const getPositiveIntegerOption = (
+	options: Record<string, string | boolean>,
+	keys: string[],
+	fallback = 0,
+) => {
+	for (const key of keys) {
+		const value = Number(options[key]);
+		if (Number.isFinite(value) && value > 0) return Math.floor(value);
+	}
+	return fallback;
+};
+
 const resolveCallbackUrl = (options: Record<string, string | boolean>) => {
 	const configured = String(
 		options["callback-url"] ||
@@ -220,6 +232,11 @@ const resolveAuditDevice = async (options: Record<string, string | boolean>) => 
 
 const runAudit = async (options: Record<string, string | boolean>) => {
 	const apply = options.apply === true;
+	const targetUnsaved = getPositiveIntegerOption(options, [
+		"target-unsaved",
+		"targetUnsaved",
+		"target",
+	]);
 	const device = await resolveAuditDevice(options);
 	const deviceId = device.id;
 
@@ -377,11 +394,12 @@ const runAudit = async (options: Record<string, string | boolean>) => {
 
 	const applied: any[] = [];
 	if (apply) {
-		for (const item of [
+		const applyCandidates = [
 			...missingWithEmployeeNo,
 			...missingVisibleBiometric,
 			...needsClockNormalization,
-		]) {
+		];
+		for (const item of (targetUnsaved > 0 ? applyCandidates.slice(0, targetUnsaved) : applyCandidates)) {
 			const reason = missingWithEmployeeNo.includes(item)
 				? "missing"
 				: missingVisibleBiometric.includes(item)
@@ -404,6 +422,14 @@ const runAudit = async (options: Record<string, string | boolean>) => {
 	const report = {
 		mode: apply ? "apply" : "dry-run",
 		checkedAt: new Date().toISOString(),
+		target: {
+			unsaved: targetUnsaved || null,
+			appliesAtMostTarget: apply && targetUnsaved > 0,
+			note:
+				targetUnsaved > 0
+					? "This checks the latest ACS page from the device and compares fingerprints against HRIS; Hikvision does not filter by HRIS-unsaved server-side."
+					: null,
+		},
 		device: {
 			id: device.id,
 			organizationId: device.organizationId,

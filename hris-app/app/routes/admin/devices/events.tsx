@@ -579,7 +579,10 @@ export default function DeviceEventsPage() {
 			return null;
 		}
 	});
-	const { data: importJobProgress } = useDeviceImportJob(
+	const {
+		data: importJobProgress,
+		isError: isImportJobError,
+	} = useDeviceImportJob(
 		activeImportJob?.jobId,
 		Boolean(activeImportJob?.jobId),
 	);
@@ -1024,6 +1027,12 @@ export default function DeviceEventsPage() {
 				syncBridge?.data?.dryRun?.missingRows ??
 				null
 			);
+	const syncActionLabel =
+		zktecoSync.isPending || hikvisionImport.isPending
+			? "Syncing device logs"
+			: hasNumericCount(syncDryRunEstimate)
+				? `Sync ${formatCount(syncDryRunEstimate)} log${Number(syncDryRunEstimate) === 1 ? "" : "s"}`
+				: "Sync logs";
 	const showSyncPreviewSkeleton = isSyncLogsModalOpen && (isLoadingSyncPreview || isFetchingSyncPreview);
 	const syncVendorSections = useMemo(() => {
 		const order = ["Hikvision", "ZKTeco"];
@@ -1184,12 +1193,27 @@ export default function DeviceEventsPage() {
 		name?: string | null;
 		address?: string | null;
 		vendor?: string | null;
+		targetImportCount?: number | null;
 	}) => {
 		hikvisionImport.mutate(
-			{ deviceId: device.deviceId, skipMissingEmployeeNo },
+			{
+				deviceId: device.deviceId,
+				skipMissingEmployeeNo,
+				targetImportCount: device.targetImportCount,
+			},
 			{
 				onSuccess: (data: any) => {
 					const jobId = data?.jobId || data?.progress?.jobId;
+					if (!jobId) {
+						closeSyncLogs();
+						toast.success("No unsaved device logs found", {
+							id: "device-log-import-progress",
+							description: "The dry-run estimate is already clean.",
+						});
+						void refetch();
+						void refetchSyncPreview();
+						return;
+					}
 					if (jobId) {
 						setActiveImportJob({
 							jobId,
@@ -1224,6 +1248,7 @@ export default function DeviceEventsPage() {
 			deviceId: activeImportJob.deviceId,
 			name: activeImportJob.deviceName,
 			vendor: activeImportJob.vendor,
+			targetImportCount: importJobProgress?.targetImportCount ?? null,
 		});
 	};
 
@@ -1238,7 +1263,10 @@ export default function DeviceEventsPage() {
 		if (!startableRow?.deviceId) return;
 
 		if (startableRow.syncAction === "hikvision-import" || startableRow.vendor === "Hikvision") {
-			startHikvisionDeviceLogImport(startableRow);
+			startHikvisionDeviceLogImport({
+				...startableRow,
+				targetImportCount: getSyncProjectedSaveCount(startableRow, skipMissingEmployeeNo),
+			});
 			return;
 		}
 
@@ -1335,13 +1363,20 @@ export default function DeviceEventsPage() {
 			: latestSavedEvent
 			? `Latest saved ${formatPunchTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
 			: "Waiting for the next saved punch";
+	const activeImportTargetCount = getNumericCount(importJobProgress?.targetImportCount);
+	const activeImportScanLimit = getNumericCount(importJobProgress?.scanLimit);
+	const isTargetedImport = activeImportTargetCount !== null;
+	const activeImportProgressDone = isTargetedImport
+		? Number(importJobProgress?.imported || 0)
+		: Number(importJobProgress?.processed || 0);
+	const activeImportProgressTotal = isTargetedImport
+		? Math.max(activeImportTargetCount || 1, 1)
+		: Math.max(Number(importJobProgress?.total || 1), 1);
 	const activeImportProgressPercent = importJobProgress
 		? Math.min(
 				100,
 				Math.round(
-					(Number(importJobProgress.processed || 0) /
-						Math.max(Number(importJobProgress.total || 1), 1)) *
-						100,
+					(activeImportProgressDone / activeImportProgressTotal) * 100,
 				),
 			)
 		: 0;
@@ -1368,7 +1403,9 @@ export default function DeviceEventsPage() {
 				: isImportProcessing
 					? isImportCancelRequested
 						? "Cancelling device log sync"
-						: "Scanning device logs"
+						: isTargetedImport
+							? "Syncing estimated unsaved logs"
+							: "Scanning device logs"
 					: "Device sync status";
 	const importProgressToneClass =
 		importJobProgress?.status === "failed"
@@ -1402,6 +1439,16 @@ export default function DeviceEventsPage() {
 		}
 		window.localStorage.removeItem(DEVICE_IMPORT_JOB_STORAGE_KEY);
 	}, [activeImportJob]);
+
+	useEffect(() => {
+		if (!activeImportJob || !isImportJobError) return;
+		setActiveImportJob(null);
+		setShowImportProgressModal(false);
+		toast.warning("Previous sync status expired", {
+			id: "device-log-import-progress",
+			description: "Open Sync logs again to run the latest targeted check.",
+		});
+	}, [activeImportJob, isImportJobError]);
 
 	useEffect(() => {
 		if (!importProgressStatus || importProgressStatus === "processing") return;
@@ -2221,7 +2268,7 @@ export default function DeviceEventsPage() {
 								<span className="block text-xs text-slate-600">
 									{skipMissingEmployeeNo
 										? `${formatCount(syncProjectedSkippedTotal)} known employee-less row${syncProjectedSkippedTotal === 1 ? "" : "s"} will stay skipped during the source scan.`
-										: `${formatOptionalCount(syncDryRunEstimate)} estimated unsaved row${Number(syncDryRunEstimate) === 1 ? "" : "s"}; sync scans source logs and saves rows not already in HRIS.`}
+										: `${formatOptionalCount(syncDryRunEstimate)} estimated unsaved row${Number(syncDryRunEstimate) === 1 ? "" : "s"} from this preview; sync reads the latest device logs first and stops after the estimate when possible.`}
 								</span>
 							</span>
 						</label>
@@ -2240,9 +2287,7 @@ export default function DeviceEventsPage() {
 								}
 								onClick={startDeviceLogImport}>
 								<UploadCloud className="h-4 w-4" />
-								{zktecoSync.isPending || hikvisionImport.isPending
-									? "Syncing device logs"
-									: "Sync logs"}
+								{syncActionLabel}
 							</Button>
 						</div>
 					</div>
@@ -2278,7 +2323,9 @@ export default function DeviceEventsPage() {
 								</span>
 							</div>
 							<p className="mt-1 text-xs opacity-90">
-								Sync scans device source logs, then classifies each row against HRIS.
+								{isTargetedImport
+									? `Sync is saving up to ${formatCount(activeImportTargetCount)} estimated unsaved log${activeImportTargetCount === 1 ? "" : "s"} from the latest device rows.`
+									: "Sync scans device source logs, then classifies each row against HRIS."}
 							</p>
 							<div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
 								<div
@@ -2296,15 +2343,29 @@ export default function DeviceEventsPage() {
 							</div>
 							<div className="mt-3 grid grid-cols-2 gap-2 rounded-md border border-orange-100 bg-white/70 px-3 py-2 text-xs text-orange-900">
 								<div>
-									<span className="block text-orange-700">Source logs scanned</span>
+									<span className="block text-orange-700">
+										{isTargetedImport ? "Latest rows checked" : "Source logs scanned"}
+									</span>
 									<span className="font-semibold">
-										{formatCount(importJobProgress.processed)} / {formatCount(importJobProgress.total)}
+										{formatCount(importJobProgress.processed)} / {formatCount(isTargetedImport ? activeImportScanLimit ?? importJobProgress.total : importJobProgress.total)}
 									</span>
 								</div>
+								{isTargetedImport ? (
+									<div>
+										<span className="block text-orange-700">Target estimate</span>
+										<span className="font-semibold">{formatCount(activeImportTargetCount)}</span>
+									</div>
+								) : null}
 								<div>
 									<span className="block text-orange-700">Already saved</span>
 									<span className="font-semibold">{formatCount(importJobProgress.alreadySaved || 0)}</span>
 								</div>
+								{isTargetedImport ? (
+									<div>
+										<span className="block text-orange-700">Device total</span>
+										<span className="font-semibold">{formatOptionalCount(importJobProgress.sourceTotal)}</span>
+									</div>
+								) : null}
 								<div>
 									<span className="block text-orange-700">Skipped</span>
 									<span className="font-semibold">{formatCount(importJobProgress.skipped)}</span>

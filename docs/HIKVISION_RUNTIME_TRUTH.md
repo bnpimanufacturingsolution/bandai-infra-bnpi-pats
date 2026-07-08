@@ -112,3 +112,29 @@ Still not claimed:
 Linux ISAPI/ACS polling is the safe current path. Linux HCNetSDK alarm listening
 must remain experimental until SDK login and callback receipt are proven with
 device-source evidence.
+
+## Fast Gap Sync Evidence
+
+On 2026-07-08, the local DEV path proved a bounded dry-run against the physical
+`Main Entrance Device` at `10.184.38.96:80`:
+
+```powershell
+npx tsx scripts/audit-hikvision-device-events.ts --deviceName="Main Entrance Device" --limit=13 --target-unsaved=3
+```
+
+The dry run read 13 latest-first ACS rows from the device, compared generated
+HRIS dedupe keys against `device_events`, and found 4 missing rows in about 8
+seconds: 2 with employee no. and 2 employee-less device rows. This confirms the
+fast safe sync architecture for small gaps:
+
+- Use ISAPI ACS event paging with `timeReverseOrder=true`, `searchResultPosition`,
+  and a small `maxResults`.
+- Compute HRIS fingerprints/dedupe keys locally and compare against the DB.
+- Stop after the target missing count is found or after a bounded latest-row
+  scan limit.
+- Do not present the device's historical total as the sync job size for a small
+  targeted gap.
+
+Boundary: Hikvision ISAPI does not know which rows are absent from HRIS, so the
+physical device cannot directly query "only unsaved HRIS rows." HRIS must read a
+bounded latest page and perform the missing-row comparison.

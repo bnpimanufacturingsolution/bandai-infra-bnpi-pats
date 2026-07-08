@@ -96,14 +96,15 @@ describe("admin device user and log sync UI contract", () => {
 		expect(events).toContain("missingEventCount");
 		expect(events).toContain("getSyncProjectedSaveCount");
 		expect(events).toContain("getSyncProjectedSkipCount");
-		expect(events).toContain("Rows to check");
+		expect(events).toContain("Estimated unsaved");
 		expect(events).toContain("Will skip");
 		expect(events).toContain("Source logs scanned");
 		expect(events).toContain("Saved to HRIS");
+		expect(events).toContain("Sync scans device source logs, then classifies each row against HRIS.");
 		expect(events).toContain("const [skipMissingEmployeeNo, setSkipMissingEmployeeNo] = useState(false)");
 		expect(events).toContain("Skip rows with no employee no.");
-		expect(events).toContain("will stay skipped");
-		expect(events).toContain("will be scanned and saved only if not already in HRIS");
+		expect(events).toContain("will stay skipped during the source scan");
+		expect(events).toContain("sync scans source logs and saves rows not already in HRIS");
 		expect(events).not.toContain("Missing saved");
 		expect(events).not.toContain("Checking for missing device logs");
 		expect(events).toContain("{ deviceId: device.deviceId, skipMissingEmployeeNo }");

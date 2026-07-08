@@ -162,7 +162,7 @@ export const useTriggerHikvisionAttendanceImport = () => {
 	const queryClient = useQueryClient();
 
 	return useMutation({
-		mutationFn: async (payload: { deviceId: string; skipMissingEmployeeNo?: boolean }) => {
+		mutationFn: async (payload: { deviceId: string; skipMissingEmployeeNo?: boolean; targetImportCount?: number | null }) => {
 			return await devicesService.triggerHikvisionAttendanceImport(payload);
 		},
 		onSuccess: () => {
