@@ -317,9 +317,7 @@ spec:
               export PATH=/usr/local/bin:/usr/bin:/bin:/app/node_modules/.bin
               while true; do
                 /app/node_modules/.bin/tsx scripts/audit-hikvision-device-events.ts \
-                  --deviceName="${HIKVISION_DEVICE_NAME}" \
-                  --deviceAddress="${HIKVISION_DEVICE_ADDRESS}" \
-                  --devicePort="${HIKVISION_DEVICE_PORT:-80}" \
+                  --all-hikvision \
                   --from="$(date +%F)" \
                   --to="$(date +%F)" \
                   --limit="${HIKVISION_EVENT_LIMIT:-50}" \
@@ -334,12 +332,6 @@ spec:
               value: development
             - name: APP_ENV
               value: dev
-            - name: HIKVISION_DEVICE_NAME
-              value: Main Entrance Device
-            - name: HIKVISION_DEVICE_ADDRESS
-              value: 10.184.38.215
-            - name: HIKVISION_DEVICE_PORT
-              value: "80"
             - name: HIKVISION_CALLBACK_URL
               value: http://hris-api:3001/api/hikvision/callback
             - name: HIKVISION_EVENT_LIMIT
