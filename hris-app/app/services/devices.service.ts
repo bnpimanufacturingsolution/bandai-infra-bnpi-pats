@@ -289,6 +289,40 @@ export interface DeviceEventsResetResponse {
 	affectedModels?: string[];
 }
 
+export type HikvisionListenerAction = "start" | "stop" | "restart";
+
+export interface HikvisionListenerStatus {
+	service: string;
+	vm: {
+		host: string;
+		user: string;
+	};
+	running: boolean;
+	status: "running" | "stopped" | "inactive" | "failed" | "unknown" | string;
+	activeState: string;
+	subState: string;
+	mainPid?: number | null;
+	restarts: number;
+	execMainStatus: number;
+	result?: string | null;
+	checkedAt: string;
+	control: {
+		available: boolean;
+		actions: HikvisionListenerAction[];
+	};
+	logs?: {
+		available: boolean;
+		recent: string[];
+		error?: string | null;
+	};
+	error?: string | null;
+}
+
+export interface HikvisionListenerControlResponse {
+	action: HikvisionListenerAction;
+	status: HikvisionListenerStatus;
+}
+
 export interface CreateDeviceRequest {
 	name: string;
 	address: string;
@@ -856,6 +890,42 @@ class DevicesService extends APIService {
 			console.error("Error resetting device events:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error resetting saved device events",
+			);
+		}
+	}
+
+	async getHikvisionListenerStatus(): Promise<HikvisionListenerStatus> {
+		try {
+			const response = await hrisApiClient.get<any>("/api/device/hikvision/listener");
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to load Hikvision listener status");
+			return data as HikvisionListenerStatus;
+		} catch (error: any) {
+			console.error("Error loading Hikvision listener status:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error loading Hikvision listener status",
+			);
+		}
+	}
+
+	async controlHikvisionListener(
+		action: HikvisionListenerAction,
+	): Promise<HikvisionListenerControlResponse> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/hikvision/listener", {
+				action,
+			});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to control Hikvision listener");
+			return data as HikvisionListenerControlResponse;
+		} catch (error: any) {
+			console.error("Error controlling Hikvision listener:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error controlling Hikvision listener",
 			);
 		}
 	}

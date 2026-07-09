@@ -47,4 +47,26 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include("rawFingerprintTemplateStored");
 		expect(service).to.not.include('"fingerData"');
 	});
+
+	it("exposes fixed local VM listener status and control endpoints for admin recovery", () => {
+		const router = routerSource();
+		const controller = controllerSource();
+
+		expect(router).to.include(
+			'routes.get("/hikvision/listener", controller.getHikvisionListenerStatus)',
+		);
+		expect(router).to.include(
+			'routes.post("/hikvision/listener", controller.controlHikvisionListener)',
+		);
+		expect(controller).to.include("const getHikvisionListenerStatus = async");
+		expect(controller).to.include("const controlHikvisionListener = async");
+		expect(controller).to.include("const admin = assertDeviceUserAdmin(req, res)");
+		expect(controller).to.include("HIKVISION_HOT_RELOAD_LISTENER_SERVICE");
+		expect(controller).to.include('"project-truth-hikvision-hot-reload-listener.service"');
+		expect(controller).to.include("HIKVISION_LISTENER_CONTROL_ACTIONS.has(action)");
+		expect(controller).to.include("runFixedProcess");
+		expect(controller).to.include("execFile(");
+		expect(controller).to.include('"systemctl"');
+		expect(controller).to.include('"start", "stop", "restart"');
+	});
 });

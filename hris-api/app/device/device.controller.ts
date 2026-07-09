@@ -46,6 +46,7 @@ import net from "net";
 import { execFile } from "child_process";
 import { randomUUID } from "crypto";
 import fs from "fs/promises";
+import * as os from "os";
 import path from "path";
 
 const logger = getLogger();
@@ -68,6 +69,9 @@ const DEVICE_EVENT_RESET_ADMIN_ROLES = new Set(["hris-admin", "admin", "super_ad
 const DEVICE_USER_ADMIN_ROLES = new Set(["hris-admin", "admin", "super_admin", "superadmin"]);
 const DEVICE_ADDRESS_PORT_CONFLICT_MESSAGE =
 	"Another device already uses this address and port.";
+const HIKVISION_HOT_RELOAD_LISTENER_SERVICE =
+	"project-truth-hikvision-hot-reload-listener.service";
+const HIKVISION_LISTENER_CONTROL_ACTIONS = new Set(["start", "stop", "restart"]);
 
 type DeviceImportJobStatus = "processing" | "completed" | "failed" | "cancelled";
 
@@ -111,6 +115,67 @@ const updateDeviceImportJob = (jobId: string, patch: Partial<Omit<DeviceImportJo
 	if (!job) return;
 	deviceImportJobs.set(jobId, { ...job, ...patch });
 };
+
+const runFixedProcess = (
+	file: string,
+	args: string[],
+	options: { timeoutMs?: number } = {},
+): Promise<{ exitCode: number; stdout: string; stderr: string }> =>
+	new Promise((resolve) => {
+		execFile(
+			file,
+			args,
+			{
+				timeout: options.timeoutMs ?? 7000,
+				windowsHide: true,
+				maxBuffer: 128 * 1024,
+			},
+			(error: any, stdout, stderr) => {
+				resolve({
+					exitCode: typeof error?.code === "number" ? error.code : error ? 1 : 0,
+					stdout: String(stdout || ""),
+					stderr: String(stderr || ""),
+				});
+			},
+		);
+	});
+
+const getHikvisionListenerVmTarget = () => ({
+	host: process.env.PROJECT_TRUTH_VM_HOST || "10.184.37.241",
+	user: process.env.PROJECT_TRUTH_VM_USER || "infra",
+	key:
+		process.env.PROJECT_TRUTH_VM_SSH_KEY ||
+		path.join(os.homedir(), ".ssh", "node-health-appliance_ed25519"),
+});
+
+const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) => {
+	const target = getHikvisionListenerVmTarget();
+	return runFixedProcess(
+		process.env.PROJECT_TRUTH_SSH_BIN || "ssh",
+		[
+			"-i",
+			target.key,
+			"-o",
+			"BatchMode=yes",
+			"-o",
+			"ConnectTimeout=5",
+			"-o",
+			"StrictHostKeyChecking=accept-new",
+			`${target.user}@${target.host}`,
+			...remoteArgs,
+		],
+		{ timeoutMs },
+	);
+};
+
+const parseSystemctlShow = (stdout: string) =>
+	String(stdout || "")
+		.split(/\r?\n/)
+		.reduce<Record<string, string>>((acc, line) => {
+			const index = line.indexOf("=");
+			if (index > 0) acc[line.slice(0, index)] = line.slice(index + 1);
+			return acc;
+		}, {});
 
 export const controller = (prisma: PrismaClient) => {
 	// Initialize employee helpers for auth service communication
@@ -2669,6 +2734,153 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const readHikvisionListenerStatus = async () => {
+		const target = getHikvisionListenerVmTarget();
+		const [activeResult, showResult, tailResult] = await Promise.all([
+			runHikvisionListenerVmCommand(
+				["systemctl", "is-active", HIKVISION_HOT_RELOAD_LISTENER_SERVICE],
+				7000,
+			),
+			runHikvisionListenerVmCommand(
+				[
+					"systemctl",
+					"show",
+					HIKVISION_HOT_RELOAD_LISTENER_SERVICE,
+					"--property=ActiveState,SubState,MainPID,NRestarts,ExecMainStatus,Result",
+					"--no-pager",
+				],
+				7000,
+			),
+			runHikvisionListenerVmCommand(
+				[
+					"sudo",
+					"tail",
+					"-n",
+					"12",
+					"/var/log/project-truth/hikvision-hot-reload-listener.jsonl",
+				],
+				7000,
+			),
+		]);
+
+		const show = parseSystemctlShow(showResult.stdout);
+		const activeText = activeResult.stdout.trim();
+		const activeState = show.ActiveState || activeText || "unknown";
+		const subState = show.SubState || "unknown";
+		const running = activeState === "active" && subState !== "failed";
+		const recentLogLines = tailResult.stdout
+			.split(/\r?\n/)
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.slice(-12);
+
+		return {
+			service: HIKVISION_HOT_RELOAD_LISTENER_SERVICE,
+			vm: {
+				host: target.host,
+				user: target.user,
+			},
+			running,
+			status: running ? "running" : activeState === "inactive" ? "stopped" : activeState,
+			activeState,
+			subState,
+			mainPid: Number(show.MainPID || 0) || null,
+			restarts: Number(show.NRestarts || 0) || 0,
+			execMainStatus: Number(show.ExecMainStatus || 0) || 0,
+			result: show.Result || null,
+			checkedAt: new Date().toISOString(),
+			control: {
+				available: showResult.exitCode === 0 || activeResult.exitCode === 0 || Boolean(activeText),
+				actions: ["start", "stop", "restart"],
+			},
+			logs: {
+				available: tailResult.exitCode === 0,
+				recent: recentLogLines,
+				error: tailResult.exitCode === 0 ? null : tailResult.stderr.trim() || tailResult.stdout.trim() || null,
+			},
+			error:
+				showResult.exitCode === 0
+					? null
+					: showResult.stderr.trim() || activeResult.stderr.trim() || null,
+		};
+	};
+
+	const getHikvisionListenerStatus = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+			const status = await readHikvisionListenerStatus();
+			res.status(200).json(
+				buildSuccessResponse("Hikvision hot-reload listener status loaded", status, 200),
+			);
+		} catch (error: any) {
+			deviceLogger.error(`Hikvision listener status failed: ${error?.message || error}`);
+			res.status(500).json(buildErrorResponse("Failed to load Hikvision listener status", 500));
+		}
+	};
+
+	const controlHikvisionListener = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+			const action = String(req.body?.action || "").trim().toLowerCase();
+			if (!HIKVISION_LISTENER_CONTROL_ACTIONS.has(action)) {
+				res.status(400).json(buildErrorResponse("Unsupported listener action", 400));
+				return;
+			}
+
+			const result = await runHikvisionListenerVmCommand(
+				[
+					"sudo",
+					"systemctl",
+					action,
+					HIKVISION_HOT_RELOAD_LISTENER_SERVICE,
+				],
+				12000,
+			);
+
+			if (result.exitCode !== 0) {
+				res.status(502).json(
+					buildErrorResponse(
+						result.stderr.trim() || result.stdout.trim() || "Listener control failed",
+						502,
+					),
+				);
+				return;
+			}
+
+			const status = await readHikvisionListenerStatus();
+			logActivity(req, {
+				userId: String((req as any).userId || "unknown"),
+				action: "HIKVISION_LISTENER_CONTROL",
+				description: `Hikvision hot-reload listener ${action}`,
+				page: {
+					url: req.originalUrl,
+					title: "Device Attendance",
+				},
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					`Hikvision hot-reload listener ${action} requested`,
+					{ action, status },
+					200,
+				),
+			);
+		} catch (error: any) {
+			deviceLogger.error(`Hikvision listener control failed: ${error?.message || error}`);
+			res.status(500).json(buildErrorResponse("Failed to control Hikvision listener", 500));
+		}
+	};
+
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
 		let requestData = req.body;
 		const contentType = req.get("Content-Type") || "";
@@ -3808,6 +4020,8 @@ export const controller = (prisma: PrismaClient) => {
 		getAll,
 		getEvents,
 		getDeviceHealth,
+		getHikvisionListenerStatus,
+		controlHikvisionListener,
 		getDeviceSyncPreview,
 		getDeviceSyncRuns,
 		listDeviceUsers,

@@ -88,4 +88,15 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Socket connected, SDK idle");
 		expect(routeSource).to.contain("Waiting for SDK rows");
 	});
+
+	it("lets admin recover the VM Hikvision hot-reload listener from the saved SDK view", () => {
+		expect(routeSource).to.contain("useHikvisionListenerStatus");
+		expect(routeSource).to.contain("useControlHikvisionListener");
+		expect(routeSource).to.contain("VM listener running");
+		expect(routeSource).to.contain("VM listener stopped");
+		expect(routeSource).to.contain("Start listener");
+		expect(routeSource).to.contain("Restart listener");
+		expect(routeSource).to.contain('runHikvisionListenerControl("stop")');
+		expect(routeSource).to.contain("refetchHikvisionListenerStatus");
+	});
 });

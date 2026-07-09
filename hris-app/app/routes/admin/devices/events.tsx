@@ -7,6 +7,7 @@ import {
 	Eye,
 	Loader2,
 	MapPin,
+	Power,
 	RefreshCw,
 	Server,
 	Trash2,
@@ -37,7 +38,9 @@ import {
 	useDeviceImportJob,
 	useDeviceSyncPreview,
 	useCancelDeviceImportJob,
+	useControlHikvisionListener,
 	useDevices,
+	useHikvisionListenerStatus,
 	useResetDeviceEvents,
 	useTriggerHikvisionAttendanceImport,
 	useTriggerZktecoAttendanceSync,
@@ -673,6 +676,12 @@ export default function DeviceEventsPage() {
 		: shouldPollSavedEvents
 			? 30 * 1000
 			: false;
+	const {
+		data: hikvisionListenerStatus,
+		isLoading: isLoadingHikvisionListenerStatus,
+		refetch: refetchHikvisionListenerStatus,
+	} = useHikvisionListenerStatus(isSdkAlarmSavedScope);
+	const hikvisionListenerControl = useControlHikvisionListener();
 
 	const savedQueryParams: ApiQueryParams = {
 		page: pageParam,
@@ -1438,6 +1447,31 @@ export default function DeviceEventsPage() {
 			? "SDK alarm rows fresh"
 			: "Waiting for SDK rows"
 		: realtimeStatus.rowUpdateLabel;
+	const hikvisionListenerRunning = Boolean(hikvisionListenerStatus?.running);
+	const hikvisionListenerUnavailable =
+		isSdkAlarmSavedScope && Boolean(!isLoadingHikvisionListenerStatus && !hikvisionListenerStatus);
+	const hikvisionListenerStatusLabel = isSdkAlarmSavedScope
+		? isLoadingHikvisionListenerStatus
+			? "Checking VM listener"
+			: hikvisionListenerRunning
+				? "VM listener running"
+				: hikvisionListenerUnavailable
+					? "VM listener unknown"
+					: "VM listener stopped"
+		: "";
+	const hikvisionListenerStatusVariant = hikvisionListenerRunning
+		? "success-soft"
+		: hikvisionListenerUnavailable
+			? "secondary"
+			: "warning-soft";
+	const runHikvisionListenerControl = (action: "start" | "stop" | "restart") => {
+		hikvisionListenerControl.mutate(action, {
+			onSuccess: () => {
+				void refetchHikvisionListenerStatus();
+				void refetch();
+			},
+		});
+	};
 	const activeImportTargetCount = getNumericCount(importJobProgress?.targetImportCount);
 	const activeImportScanLimit = getNumericCount(importJobProgress?.scanLimit);
 	const isTargetedImport = activeImportTargetCount !== null;
@@ -1663,6 +1697,48 @@ export default function DeviceEventsPage() {
 						className="rounded-md px-2 py-1">
 						{savedRowsBadgeLabel}
 					</Badge>
+					{isSdkAlarmSavedScope ? (
+						<>
+							<Badge
+								variant={hikvisionListenerStatusVariant}
+								className="rounded-md px-2 py-1">
+								{hikvisionListenerStatusLabel}
+							</Badge>
+							<Button
+								type="button"
+								variant="outline"
+								className="h-9 px-3"
+								disabled={
+									hikvisionListenerControl.isPending ||
+									isLoadingHikvisionListenerStatus
+								}
+								onClick={() =>
+									runHikvisionListenerControl(
+										hikvisionListenerRunning ? "restart" : "start",
+									)
+								}>
+								{hikvisionListenerControl.isPending ? (
+									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+								) : hikvisionListenerRunning ? (
+									<RefreshCw className="mr-2 h-4 w-4" />
+								) : (
+									<Power className="mr-2 h-4 w-4" />
+								)}
+								{hikvisionListenerRunning ? "Restart listener" : "Start listener"}
+							</Button>
+							{hikvisionListenerRunning ? (
+								<Button
+									type="button"
+									variant="outline"
+									className="h-9 border-amber-200 px-3 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+									disabled={hikvisionListenerControl.isPending}
+									onClick={() => runHikvisionListenerControl("stop")}>
+									<Power className="mr-2 h-4 w-4" />
+									Stop
+								</Button>
+							) : null}
+						</>
+					) : null}
 					<Button
 						type="button"
 						variant="outline"
@@ -1686,6 +1762,7 @@ export default function DeviceEventsPage() {
 						className="h-9 px-3"
 						onClick={() => {
 							void refetchHealth();
+							if (isSdkAlarmSavedScope) void refetchHikvisionListenerStatus();
 							if (viewMode === "live") void refetchLive();
 							else void refetch();
 						}}>

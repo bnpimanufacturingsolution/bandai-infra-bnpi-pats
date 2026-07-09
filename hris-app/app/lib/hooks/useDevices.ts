@@ -8,6 +8,8 @@ import devicesService, {
 	type DeviceImportJobProgress,
 	type DeviceUsersResponse,
 	type DeviceEventsResetScope,
+	type HikvisionListenerAction,
+	type HikvisionListenerStatus,
 	type CreateDeviceRequest,
 	type UpdateDeviceRequest,
 	type ZktecoAttendanceSyncRequest,
@@ -25,6 +27,7 @@ export const queryKeys = {
 		detail: (id: string) => [...queryKeys.devices.details(), id] as const,
 		events: (params?: ApiQueryParams) => [...queryKeys.devices.all, "events", { params }] as const,
 		health: (id?: string) => [...queryKeys.devices.all, "health", id] as const,
+		hikvisionListener: () => [...queryKeys.devices.all, "hikvision-listener"] as const,
 		syncPreview: (params?: { deviceId?: string; source?: string }) =>
 			[...queryKeys.devices.all, "sync-preview", { params }] as const,
 		importJob: (jobId?: string) => [...queryKeys.devices.all, "import-job", jobId] as const,
@@ -95,6 +98,35 @@ export const useDeviceHealth = (deviceId?: string, enabled = true) => {
 		staleTime: 10 * 1000,
 		refetchInterval: enabled && deviceId ? 30 * 1000 : false,
 		retry: 1,
+	});
+};
+
+export const useHikvisionListenerStatus = (enabled = true) => {
+	return useQuery<HikvisionListenerStatus>({
+		queryKey: queryKeys.devices.hikvisionListener(),
+		queryFn: () => devicesService.getHikvisionListenerStatus(),
+		enabled,
+		staleTime: 2 * 1000,
+		refetchInterval: enabled ? 5 * 1000 : false,
+		retry: 1,
+	});
+};
+
+export const useControlHikvisionListener = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (action: HikvisionListenerAction) => {
+			return await devicesService.controlHikvisionListener(action);
+		},
+		onSuccess: (data) => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.hikvisionListener() });
+			queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
+			sonnerToast.success(`Hikvision listener ${data.action} requested`);
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to control Hikvision listener");
+		},
 	});
 };
 

@@ -7,6 +7,8 @@ interface IController {
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceHealth(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getHikvisionListenerStatus(req: Request, res: Response, next: NextFunction): Promise<void>;
+	controlHikvisionListener(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceSyncPreview(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceSyncRuns(req: Request, res: Response, next: NextFunction): Promise<void>;
 	resetDeviceEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -45,6 +47,8 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/events/reset", controller.resetDeviceEvents);
 
 	routes.get("/:id/health", controller.getDeviceHealth);
+	routes.get("/hikvision/listener", controller.getHikvisionListenerStatus);
+	routes.post("/hikvision/listener", controller.controlHikvisionListener);
 	routes.get("/:id/users", controller.listDeviceUsers);
 	routes.post("/:id/users/sync", controller.syncDeviceUsers);
 	routes.post("/:id/users/backfill", controller.backfillDeviceUsers);
