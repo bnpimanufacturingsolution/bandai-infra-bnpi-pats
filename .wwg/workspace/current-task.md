@@ -2,6 +2,48 @@
 
 Status: IN PROGRESS
 
+## Latest Task Addendum - 2026-07-09 Hikvision Listener Admin Control
+
+- Task mode: Mixed UI/UX hardening, local runtime control, and operator
+  evidence.
+- User goal:
+  - The Device attendance page should show the real VM listener heartbeat, not
+    only recent tap evidence.
+  - Admin should have a clean control journey to check, start/stop, and restart
+    the local VM hot-reload Hikvision listener if it stops.
+- Backend result:
+  - Added admin-only fixed endpoints:
+    `GET /api/device/hikvision/listener` and
+    `POST /api/device/hikvision/listener`.
+  - The API controls only the fixed VM systemd service
+    `project-truth-hikvision-hot-reload-listener.service` over SSH to
+    `10.184.37.241`; allowed actions are `start`, `stop`, and `restart`.
+  - The implementation uses `execFile` with fixed arguments and an action
+    allowlist, not arbitrary shell command input.
+- UI result:
+  - The header separates saved-row proof from VM listener heartbeat:
+    `SDK listener recent` / `VM listener running`.
+  - The status strip now treats a running VM service as healthy heartbeat and
+    uses `Waiting for next tap` when no fresh tap has arrived yet.
+  - Added a `Hikvision listener` modal with service status, enabled toggle,
+    non-mutating `Check status`, restart action, runtime target, and recent
+    listener log tail.
+  - The shared modal component now wires its visible title into
+    `aria-labelledby` and description into `aria-describedby`.
+- Validation:
+  - `npm test -- app/lib/device-events-page-contract.test.ts` passed in
+    `hris-app`.
+  - `npm test -- --grep "Hikvision biometric sync contract"` passed in
+    `hris-api`.
+  - Playwright proof logged in locally, opened the listener modal, refreshed
+    status, closed/reopened, closed with Escape, and captured screenshots.
+  - Admin API restart proof restarted the VM service from PID `129398` to
+    `192455`, then returned `active/running`; SDK init/login/alarm arm and
+    callback posts were `ok=true`.
+- Evidence:
+  - `.runtime/hikvision-listener-modal-playwright-20260709-221455/`
+  - `.runtime/hikvision-listener-api-restart-20260709-221703/`
+
 ## Latest Task Addendum - 2026-07-09 Hikvision Live Listener Execute Default
 
 - Task mode: Bug fix / operator workflow repair for local hot-reload tap

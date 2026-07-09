@@ -267,6 +267,44 @@ Evidence:
 - `.runtime/hikvision-hot-reload-daemon-20260709-213948/`
 - `.runtime/hikvision-hot-reload-service-20260709-214733/`
 
+## 2026-07-09 Hot-Reload Listener Admin Control
+
+Latest local listener control truth:
+
+- The Device attendance page now separates browser/socket state, VM listener
+  heartbeat, and fresh SDK tap proof.
+- A running VM service can show as healthy with `VM listener running` and
+  `Waiting for next tap` even when no fresh tap has arrived in the current
+  freshness window.
+- Fresh SDK rows still elevate the page to `SDK listener recent`,
+  `SDK listener receiving taps`, and `SDK alarm rows fresh`.
+- The page now exposes a `Hikvision listener` admin modal with:
+  - service heartbeat/status
+  - an enabled toggle for the fixed VM listener service
+  - non-mutating `Check status`
+  - restart control
+  - VM/runtime target
+  - recent listener log tail
+- The API exposes admin-only fixed service controls at
+  `GET /api/device/hikvision/listener` and
+  `POST /api/device/hikvision/listener`; allowed actions are `start`, `stop`,
+  and `restart`.
+- The backend controls only
+  `project-truth-hikvision-hot-reload-listener.service` on VM
+  `10.184.37.241` with fixed SSH/systemctl arguments. It is not an arbitrary
+  command runner.
+- Playwright proof opened the modal, refreshed status, closed/reopened it, and
+  closed it with Escape. The modal showed `VM listener running`, `Tap path
+  fresh`, and log tail lines with `hikvision_callback_post_result` `ok=true`.
+- Admin API restart proof restarted the VM service from PID `129398` to
+  `192455`, then returned `active/running`; SDK login/alarm arm and callback
+  posting remained `ok=true`.
+
+Evidence:
+
+- `.runtime/hikvision-listener-modal-playwright-20260709-221455/`
+- `.runtime/hikvision-listener-api-restart-20260709-221703/`
+
 ## 2026-07-09 Credential Repair And Real SDK Event Proof
 
 Latest credential truth:

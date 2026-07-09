@@ -2299,7 +2299,7 @@ export default function DeviceEventsPage() {
 										onCheckedChange={(checked) =>
 											runHikvisionListenerControl(checked ? "start" : "stop")
 										}
-										className="mt-0.5"
+										className="mt-0.5 data-[state=checked]:bg-emerald-600 data-[state=unchecked]:bg-slate-300"
 									/>
 									<span className="min-w-0">
 										<span className="block text-sm font-semibold text-slate-950">
