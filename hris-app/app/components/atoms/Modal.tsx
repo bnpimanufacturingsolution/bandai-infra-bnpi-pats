@@ -31,6 +31,9 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 		},
 		ref,
 	) => {
+		const titleId = React.useId();
+		const descriptionId = React.useId();
+
 		React.useEffect(() => {
 			if (open) {
 				document.body.style.overflow = "hidden";
@@ -76,6 +79,8 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 						ref={ref}
 						role="dialog"
 						aria-modal="true"
+						aria-labelledby={title ? titleId : undefined}
+						aria-describedby={description ? descriptionId : undefined}
 						className={cn(
 							"relative z-50 flex flex-col w-full max-w-3xl gap-4 border bg-white p-6 shadow-lg duration-200 rounded-lg mx-4 max-h-[90vh] overflow-y-auto modern-scroll",
 							className,
@@ -84,12 +89,14 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 						{(title || description) && (
 							<div className="space-y-1.5">
 								{title && (
-									<h2 className="text-lg font-semibold leading-none tracking-tight">
+									<h2
+										id={titleId}
+										className="text-lg font-semibold leading-none tracking-tight">
 										{title}
 									</h2>
 								)}
 								{description && (
-									<p className="text-sm text-muted-foreground">{description}</p>
+									<p id={descriptionId} className="text-sm text-muted-foreground">{description}</p>
 								)}
 							</div>
 						)}

@@ -8,6 +8,10 @@ const routeSource = readFileSync(
 	resolve(currentDir, "../routes/admin/devices/events.tsx"),
 	"utf8",
 );
+const modalSource = readFileSync(
+	resolve(currentDir, "../components/atoms/Modal.tsx"),
+	"utf8",
+);
 
 describe("device events page UX contract", () => {
 	it("defaults saved events to punch time descending so sync/backfill rows keep punch chronology", () => {
@@ -84,19 +88,32 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("savedEventsRefetchInterval");
 		expect(routeSource).to.contain("? 2 * 1000");
 		expect(routeSource).to.contain("SDK listener receiving taps");
-		expect(routeSource).to.contain("SDK listener not recently proven");
+		expect(routeSource).to.contain("VM listener running");
 		expect(routeSource).to.contain("Socket connected, SDK idle");
-		expect(routeSource).to.contain("Waiting for SDK rows");
+		expect(routeSource).to.contain("Waiting for next tap");
 	});
 
 	it("lets admin recover the VM Hikvision hot-reload listener from the saved SDK view", () => {
 		expect(routeSource).to.contain("useHikvisionListenerStatus");
 		expect(routeSource).to.contain("useControlHikvisionListener");
+		expect(routeSource).to.contain('action === "listener-control"');
+		expect(routeSource).to.contain('next.set("action", "listener-control")');
+		expect(routeSource).to.contain('title="Hikvision listener"');
 		expect(routeSource).to.contain("VM listener running");
 		expect(routeSource).to.contain("VM listener stopped");
+		expect(routeSource).to.contain("Listener enabled");
+		expect(routeSource).to.contain("Check status");
 		expect(routeSource).to.contain("Start listener");
 		expect(routeSource).to.contain("Restart listener");
-		expect(routeSource).to.contain('runHikvisionListenerControl("stop")');
+		expect(routeSource).to.contain('runHikvisionListenerControl(checked ? "start" : "stop")');
 		expect(routeSource).to.contain("refetchHikvisionListenerStatus");
+		expect(routeSource).to.contain("Recent listener log");
+		expect(routeSource).to.contain("Tap path idle");
+	});
+
+	it("keeps shared modals accessible by their visible title", () => {
+		expect(modalSource).to.contain("React.useId()");
+		expect(modalSource).to.contain("aria-labelledby={title ? titleId : undefined}");
+		expect(modalSource).to.contain("aria-describedby={description ? descriptionId : undefined}");
 	});
 });

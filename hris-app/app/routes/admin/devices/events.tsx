@@ -4,6 +4,7 @@ import {
 	ArrowLeft,
 	BadgeCheck,
 	Clock,
+	ExternalLink,
 	Eye,
 	Loader2,
 	MapPin,
@@ -604,6 +605,7 @@ export default function DeviceEventsPage() {
 	const isSyncLogsDebugView = searchParams.get("debug") === "true";
 	const isSyncLogsFlowActive = action === "sync-logs";
 	const isSyncLogsModalOpen = action === "sync-logs" && !isSyncLogsDebugView;
+	const isListenerControlModalOpen = action === "listener-control";
 	const activeEventId = searchParams.get("id");
 	const timeWindow = (searchParams.get("window") ||
 		(viewMode === "saved" ? "all" : "today")) as TimeWindow;
@@ -679,6 +681,7 @@ export default function DeviceEventsPage() {
 	const {
 		data: hikvisionListenerStatus,
 		isLoading: isLoadingHikvisionListenerStatus,
+		error: hikvisionListenerStatusError,
 		refetch: refetchHikvisionListenerStatus,
 	} = useHikvisionListenerStatus(isSdkAlarmSavedScope);
 	const hikvisionListenerControl = useControlHikvisionListener();
@@ -1181,6 +1184,18 @@ export default function DeviceEventsPage() {
 			next.delete("action");
 		});
 	};
+	const openListenerControl = () => {
+		updateSearchParams((next) => {
+			next.set("action", "listener-control");
+			next.delete("id");
+		});
+		void refetchHikvisionListenerStatus();
+	};
+	const closeListenerControl = () => {
+		updateSearchParams((next) => {
+			next.delete("action");
+		});
+	};
 	const refreshSyncPreflight = async () => {
 		const checks = syncHealthDevice?.id
 			? [refetchSyncHealth(), refetchSyncPreview()]
@@ -1434,22 +1449,10 @@ export default function DeviceEventsPage() {
 			: isLatestSavedFresh
 				? "New saved row"
 				: "Saved rows idle";
-	const realtimePanelIsLive = isSdkAlarmSavedScope
-		? isLatestSdkSavedFresh
-		: realtimeStatus.isListening;
-	const realtimePanelStatusLabel = isSdkAlarmSavedScope
-		? isLatestSdkSavedFresh
-			? "SDK listener receiving taps"
-			: "SDK listener not recently proven"
-		: realtimeStatus.statusLabel;
-	const realtimePanelUpdateLabel = isSdkAlarmSavedScope
-		? isLatestSdkSavedFresh
-			? "SDK alarm rows fresh"
-			: "Waiting for SDK rows"
-		: realtimeStatus.rowUpdateLabel;
 	const hikvisionListenerRunning = Boolean(hikvisionListenerStatus?.running);
 	const hikvisionListenerUnavailable =
-		isSdkAlarmSavedScope && Boolean(!isLoadingHikvisionListenerStatus && !hikvisionListenerStatus);
+		isSdkAlarmSavedScope &&
+		Boolean(!isLoadingHikvisionListenerStatus && (!hikvisionListenerStatus || hikvisionListenerStatusError));
 	const hikvisionListenerStatusLabel = isSdkAlarmSavedScope
 		? isLoadingHikvisionListenerStatus
 			? "Checking VM listener"
@@ -1464,6 +1467,34 @@ export default function DeviceEventsPage() {
 		: hikvisionListenerUnavailable
 			? "secondary"
 			: "warning-soft";
+	const hikvisionListenerDetail = hikvisionListenerStatus
+		? `${hikvisionListenerStatus.activeState || "unknown"} / ${hikvisionListenerStatus.subState || "unknown"}${
+				hikvisionListenerStatus.mainPid ? ` / PID ${hikvisionListenerStatus.mainPid}` : ""
+			}`
+		: hikvisionListenerStatusError
+			? getAsyncErrorMessage(hikvisionListenerStatusError, "Listener status unavailable")
+			: "Status check has not completed";
+	const hikvisionListenerLastLog =
+		hikvisionListenerStatus?.logs?.recent?.[hikvisionListenerStatus.logs.recent.length - 1] || "";
+	const realtimePanelIsLive = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh || hikvisionListenerRunning
+		: realtimeStatus.isListening;
+	const realtimePanelStatusLabel = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh
+			? "SDK listener receiving taps"
+			: hikvisionListenerRunning
+				? "VM listener running"
+				: hikvisionListenerUnavailable
+					? "VM listener status unavailable"
+					: "VM listener stopped"
+		: realtimeStatus.statusLabel;
+	const realtimePanelUpdateLabel = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh
+			? "SDK alarm rows fresh"
+			: hikvisionListenerRunning
+				? "Waiting for next tap"
+				: "Waiting for SDK listener"
+		: realtimeStatus.rowUpdateLabel;
 	const runHikvisionListenerControl = (action: "start" | "stop" | "restart") => {
 		hikvisionListenerControl.mutate(action, {
 			onSuccess: () => {
@@ -1708,35 +1739,10 @@ export default function DeviceEventsPage() {
 								type="button"
 								variant="outline"
 								className="h-9 px-3"
-								disabled={
-									hikvisionListenerControl.isPending ||
-									isLoadingHikvisionListenerStatus
-								}
-								onClick={() =>
-									runHikvisionListenerControl(
-										hikvisionListenerRunning ? "restart" : "start",
-									)
-								}>
-								{hikvisionListenerControl.isPending ? (
-									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-								) : hikvisionListenerRunning ? (
-									<RefreshCw className="mr-2 h-4 w-4" />
-								) : (
-									<Power className="mr-2 h-4 w-4" />
-								)}
-								{hikvisionListenerRunning ? "Restart listener" : "Start listener"}
+								onClick={openListenerControl}>
+								<Power className="mr-2 h-4 w-4" />
+								Listener
 							</Button>
-							{hikvisionListenerRunning ? (
-								<Button
-									type="button"
-									variant="outline"
-									className="h-9 border-amber-200 px-3 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
-									disabled={hikvisionListenerControl.isPending}
-									onClick={() => runHikvisionListenerControl("stop")}>
-									<Power className="mr-2 h-4 w-4" />
-									Stop
-								</Button>
-							) : null}
 						</>
 					) : null}
 					<Button
@@ -2201,6 +2207,218 @@ export default function DeviceEventsPage() {
 							onClick={executeDeviceEventReset}>
 							<Trash2 className="h-4 w-4" />
 							Export backup and reset
+						</Button>
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
+				open={isListenerControlModalOpen}
+				onOpenChange={(open) => {
+					if (!open) closeListenerControl();
+				}}
+				title="Hikvision listener"
+				description="VM service heartbeat and local hot-reload tap listener control."
+				className="max-w-3xl">
+				<div className="space-y-4">
+					<div
+						className={
+							hikvisionListenerRunning
+								? "rounded-lg border border-emerald-200 bg-emerald-50 p-4"
+								: hikvisionListenerUnavailable
+									? "rounded-lg border border-slate-200 bg-slate-50 p-4"
+									: "rounded-lg border border-amber-200 bg-amber-50 p-4"
+						}>
+						<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+							<div className="flex min-w-0 items-start gap-3">
+								<span
+									className={
+										hikvisionListenerRunning
+											? "flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-100 text-emerald-700"
+											: "flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700"
+									}
+									aria-hidden="true">
+									{isLoadingHikvisionListenerStatus ? (
+										<Loader2 className="h-4 w-4 animate-spin" />
+									) : hikvisionListenerRunning ? (
+										<Wifi className="h-4 w-4" />
+									) : (
+										<WifiOff className="h-4 w-4" />
+									)}
+								</span>
+								<div className="min-w-0">
+									<p
+										className={
+											hikvisionListenerRunning
+												? "text-sm font-semibold text-emerald-950"
+												: "text-sm font-semibold text-amber-950"
+										}>
+										{hikvisionListenerStatusLabel}
+									</p>
+									<p
+										className={
+											hikvisionListenerRunning
+												? "mt-1 break-words text-xs text-emerald-800"
+												: "mt-1 break-words text-xs text-amber-800"
+										}>
+										{hikvisionListenerDetail}
+									</p>
+									<p className="mt-2 text-xs text-slate-600">
+										Tap proof:{" "}
+										<span className="font-semibold">
+											{isLatestSdkSavedFresh
+												? `fresh row at ${formatPunchTime(latestSdkSavedEvent?.receivedAt || latestSdkSavedEvent?.eventTime)}`
+												: latestSdkSavedEvent
+													? `last row at ${formatPunchTime(latestSdkSavedEvent.receivedAt || latestSdkSavedEvent.eventTime)}`
+													: "no SDK rows in the current scope"}
+										</span>
+									</p>
+								</div>
+							</div>
+							<Badge
+								variant={isLatestSdkSavedFresh ? "success-soft" : "warning-soft"}
+								className="w-fit rounded-md px-2 py-1">
+								{isLatestSdkSavedFresh ? "Tap path fresh" : "Tap path idle"}
+							</Badge>
+						</div>
+					</div>
+
+					<div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,280px)]">
+						<div className="rounded-lg border border-slate-200 bg-white p-4">
+							<div className="flex items-start justify-between gap-4">
+								<label
+									htmlFor="hikvision-listener-toggle"
+									className="flex min-w-0 items-start gap-3">
+									<Switch
+										id="hikvision-listener-toggle"
+										checked={hikvisionListenerRunning}
+										disabled={
+											hikvisionListenerControl.isPending ||
+											isLoadingHikvisionListenerStatus
+										}
+										onCheckedChange={(checked) =>
+											runHikvisionListenerControl(checked ? "start" : "stop")
+										}
+										className="mt-0.5"
+									/>
+									<span className="min-w-0">
+										<span className="block text-sm font-semibold text-slate-950">
+											Listener enabled
+										</span>
+										<span className="mt-1 block text-xs text-slate-600">
+											{hikvisionListenerRunning
+												? "The VM service is armed for live HCNetSDK callbacks."
+												: "Turn this on before testing physical taps."}
+										</span>
+									</span>
+								</label>
+								{hikvisionListenerControl.isPending ? (
+									<Loader2 className="h-4 w-4 shrink-0 animate-spin text-slate-500" />
+								) : null}
+							</div>
+
+							<div className="mt-4 flex flex-wrap gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									className="h-9 px-3"
+									disabled={hikvisionListenerControl.isPending}
+									onClick={() => void refetchHikvisionListenerStatus()}>
+									<RefreshCw className="h-4 w-4" />
+									Check status
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									className="h-9 px-3"
+									disabled={hikvisionListenerControl.isPending || !hikvisionListenerRunning}
+									onClick={() => runHikvisionListenerControl("restart")}>
+									<RefreshCw className="h-4 w-4" />
+									Restart
+								</Button>
+							</div>
+						</div>
+
+						<div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+							<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+								<ExternalLink className="h-3.5 w-3.5" />
+								Runtime
+							</div>
+							<dl className="mt-3 space-y-2 text-xs">
+								<div className="flex min-w-0 justify-between gap-3">
+									<dt className="text-slate-500">VM</dt>
+									<dd className="truncate font-semibold text-slate-900">
+										{hikvisionListenerStatus?.vm?.host || "10.184.37.241"}
+									</dd>
+								</div>
+								<div className="flex min-w-0 justify-between gap-3">
+									<dt className="text-slate-500">Service</dt>
+									<dd className="truncate font-semibold text-slate-900">
+										{hikvisionListenerStatus?.service ||
+											"project-truth-hikvision-hot-reload-listener.service"}
+									</dd>
+								</div>
+								<div className="flex min-w-0 justify-between gap-3">
+									<dt className="text-slate-500">Checked</dt>
+									<dd className="truncate font-semibold text-slate-900">
+										{formatPunchTime(hikvisionListenerStatus?.checkedAt)}
+									</dd>
+								</div>
+							</dl>
+						</div>
+					</div>
+
+					{hikvisionListenerStatusError ? (
+						<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+							{getAsyncErrorMessage(hikvisionListenerStatusError, "Listener status check failed")}
+						</div>
+					) : null}
+
+					<div className="rounded-lg border border-slate-200 bg-white p-4">
+						<div className="flex items-center justify-between gap-3">
+							<h3 className="text-sm font-semibold text-slate-950">Recent listener log</h3>
+							<Badge variant="secondary" className="rounded-md px-2 py-1">
+								{hikvisionListenerStatus?.logs?.available ? "Log tail loaded" : "No log tail"}
+							</Badge>
+						</div>
+						<div className="mt-3 max-h-48 overflow-y-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+							{hikvisionListenerStatus?.logs?.recent?.length ? (
+								<pre className="whitespace-pre-wrap break-words font-mono leading-5">
+									{hikvisionListenerStatus.logs.recent.join("\n")}
+								</pre>
+							) : (
+								<p className="text-slate-300">
+									{hikvisionListenerStatus?.logs?.error ||
+										"No listener log lines returned by the VM status check."}
+								</p>
+							)}
+						</div>
+						{hikvisionListenerLastLog ? (
+							<p className="mt-2 truncate text-xs text-slate-500">
+								Latest log line: {hikvisionListenerLastLog}
+							</p>
+						) : null}
+					</div>
+
+					<div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end">
+						<Button type="button" variant="outline" onClick={closeListenerControl}>
+							Done
+						</Button>
+						<Button
+							type="button"
+							className="bg-orange-500 text-white hover:bg-orange-600"
+							disabled={hikvisionListenerControl.isPending || isLoadingHikvisionListenerStatus}
+							onClick={() =>
+								runHikvisionListenerControl(hikvisionListenerRunning ? "restart" : "start")
+							}>
+							{hikvisionListenerControl.isPending ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : hikvisionListenerRunning ? (
+								<RefreshCw className="h-4 w-4" />
+							) : (
+								<Power className="h-4 w-4" />
+							)}
+							{hikvisionListenerRunning ? "Restart listener" : "Start listener"}
 						</Button>
 					</div>
 				</div>
