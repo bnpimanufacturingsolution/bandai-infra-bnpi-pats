@@ -2,6 +2,66 @@
 
 Status: IN PROGRESS
 
+## Latest Task Addendum - 2026-07-09 Hikvision Real-Tap Pipeline Continuation
+
+- Task mode: Mixed runtime proof, credential boundary, callback/realtime
+  simulation, tests, and evidence.
+- User goal:
+  - Continue the previously blocked real physical Hikvision tap pipeline now
+    that host-test VM `10.184.37.241` can reach `10.184.37.139`.
+  - Prove the path from Linux HCNetSDK alarm callback through
+    `/api/hikvision/callback`, `DeviceEvent`, socket emit, and local saved-events
+    UI when real tap evidence is available.
+- Current-state result:
+  - Local API dry-run proof passed. `http://localhost:3001/health` was healthy,
+    admin login succeeded, `/api/hikvision/callback?preview=true` matched
+    `Main Entrance Device` id `cmpxw13hx002h7zwso7dyedrn` at
+    `10.184.37.139:80`, used source `EN_HCNETSDK_ALARM`, and saved zero rows
+    for the preview marker.
+  - Host-test VM `10.184.37.241` reached the Hikvision physical device:
+    `ping 10.184.37.139` passed with 0% loss, TCP `80` passed, and TCP `8000`
+    passed.
+  - Docker is running on the host-test VM; PROD/DEV/UAT app/API containers are
+    present. A stale existing `hris-hikvision-watcher` process was observed
+    using old `10.184.38.215`, so it is drift and not current device proof.
+  - Current local `vendor/hikvision-linux` source was copied to a task-scoped
+    VM temp folder and built with
+    `vendor/hikvision-linux/scripts/build-hikvision-biometric-service.sh`
+    against Linux HCNetSDK.
+  - Bounded SDK run proved `NET_DVR_Init` and
+    `NET_DVR_SetDVRMessageCallBack_V51`; `NET_DVR_Login_V40` failed with
+    HCNetSDK error `1` because no real Hikvision device credential pair was
+    available from documented local config, VM env, Docker env, Kubernetes env,
+    or previous evidence searched in this pass. `NET_DVR_SetupAlarmChan_V50`
+    could not be reached without login.
+- Simulation evidence, explicitly not real-tap proof:
+  - Non-production SDK-shaped callback saved `DeviceEvent`
+    `cmrd1gb4900347zk0v59jp7e6`, returned through the saved-events API, and
+    emitted one `device-event:saved` socket payload.
+  - Browser proof opened
+    `http://localhost:5175/admin/configuration/devices/events?deviceId=cmpxw13hx002h7zwso7dyedrn&source=EN_HCNETSDK_ALARM`
+    first, waited for "Saved rows update live", then a simulated callback made
+    marker `CODEX-UI-LIVE-HCNETSDK-READY-1783573373427` appear with
+    "Socket received" and no manual refresh.
+- Evidence directory:
+  - `.runtime/hikvision-real-tap-pipeline-20260709-125441/`
+- Validation:
+  - `python -m unittest vendor.hikvision-linux.tests.test_probe` passed
+    11 tests.
+  - `npm test -- --grep "Hikvision callback controller|Hikvision biometric sync contract|device event realtime helper"`
+    in `hris-api` passed 7 tests.
+  - `npm run typecheck` in `hris-api` passed.
+  - `npm test -- app/lib/device-events-realtime-ui.test.ts` in `hris-app`
+    passed 16 tests.
+- Remaining boundary:
+  - Real physical tap proof is still missing. The current blocker is not
+    host-test VM reachability; it is absence of a documented real Hikvision
+    credential source for SDK login/alarm arm. Once credentials are supplied,
+    rerun the service, prove `NET_DVR_Login_V40`,
+    `NET_DVR_SetupAlarmChan_V50`, capture real JSONL callback output, and then
+    verify real saved row, attendance/timesheet projection where applicable,
+    socket emit, and browser live-row update.
+
 ## Latest Task Addendum - 2026-07-09 Hikvision HCNetSDK Single Source
 
 - Task mode: Mixed runtime path repair, API contract, tests, and evidence.

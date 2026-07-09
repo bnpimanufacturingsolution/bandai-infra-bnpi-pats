@@ -3,6 +3,52 @@
 Task mode: Linux-first SDK/runtime truth.
 Last updated: 2026-07-09.
 
+## 2026-07-09 Host-Test VM Real-Tap Continuation
+
+Current evidence from `.runtime/hikvision-real-tap-pipeline-20260709-125441`:
+
+- Local API dry-run proof passed against `http://localhost:3001`: health
+  returned healthy, `admin@bandai.local` login succeeded, and
+  `/api/hikvision/callback?preview=true` matched `Main Entrance Device`
+  `cmpxw13hx002h7zwso7dyedrn` at `10.184.37.139:80` with source
+  `EN_HCNETSDK_ALARM`. The preview marker saved zero rows.
+- Host-test VM `10.184.37.241` now reaches the physical Hikvision device:
+  ping to `10.184.37.139` passed with 0% loss, TCP `80` passed, and TCP
+  `8000` passed.
+- Docker is running on the host-test VM. PROD/DEV/UAT HRIS app/API containers
+  are healthy enough for runtime inspection, and the VM has Linux HCNetSDK at
+  `/home/infra/project-truth-hcnetsdk/EN-HCNetSDKV6.1.9.48_build20230410_linux64`.
+- The current local `vendor/hikvision-linux` source was copied to a task-scoped
+  VM temp folder and built with
+  `scripts/build-hikvision-biometric-service.sh`; the resulting
+  `hikvision-biometric-service` binary linked to `libhcnetsdk.so`, `libhpr.so`,
+  and `libHCCore.so`.
+- A bounded service run proved `NET_DVR_Init` and
+  `NET_DVR_SetDVRMessageCallBack_V51` registration on the host-test VM, then
+  `NET_DVR_Login_V40` failed with HCNetSDK error `1` because no real Hikvision
+  device credential pair was available from VM env, Docker env, Kubernetes env,
+  local config, or previous evidence searched in this pass.
+- Because SDK login and alarm arm were blocked by missing credentials, the
+  saved-row/socket/browser proof is explicitly a non-production simulation:
+  a unique SDK-shaped `EN_HCNETSDK_ALARM` callback saved `DeviceEvent`
+  `cmrd1gb4900347zk0v59jp7e6`, emitted `device-event:saved`, and the API query
+  returned the saved row. A second browser-in-the-loop simulation opened
+  `http://localhost:5175/admin/configuration/devices/events?deviceId=cmpxw13hx002h7zwso7dyedrn&source=EN_HCNETSDK_ALARM`
+  before posting, waited for "Saved rows update live", then displayed the new
+  marker `CODEX-UI-LIVE-HCNETSDK-READY-1783573373427` with "Socket received"
+  without manual refresh.
+- Host-test VM drift was observed: the existing `hris-hikvision-watcher` path is
+  still running with stale `HIKVISION_DEVICE_ADDRESS=10.184.38.215`. That
+  watcher is not the real-tap HCNetSDK service and must not be used as proof for
+  the current `10.184.37.139` device row.
+
+Boundary: VM/device reachability is no longer the blocker for the host-test VM.
+Real SDK login, `NET_DVR_SetupAlarmChan_V50`, physical tap callback receipt,
+attendance/timesheet projection from a real tap, and real browser live-row proof
+remain unproven until valid Hikvision SDK credentials are supplied through a
+documented runtime source. The simulation rows prove only the HRIS
+callback/persistence/socket/UI leg.
+
 ## 2026-07-09 HCNetSDK Single-Source Pass
 
 Current implementation state:
