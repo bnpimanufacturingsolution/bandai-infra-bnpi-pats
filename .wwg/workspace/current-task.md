@@ -29,6 +29,50 @@ Status: IN PROGRESS
 - Evidence:
   - `.runtime/hikvision-default-execute-smoke-20260709-213551/`
 
+## Latest Task Addendum - 2026-07-09 Hikvision Hot-Reload Listener Truth UI
+
+- Task mode: Mixed local runtime repair, UI truth repair, and operator
+  evidence.
+- User goal:
+  - The Device attendance page must not show a green/live state merely because
+    the browser socket is connected when the VM Hikvision SDK listener is not
+    actually receiving/posting tap events.
+  - Local hot reload should keep receiving taps without an agent manually
+    starting a one-off listener.
+- Runtime repair:
+  - Installed and enabled VM systemd service
+    `project-truth-hikvision-hot-reload-listener.service`.
+  - The service runs the rebuilt Linux HCNetSDK listener continuously against
+    live Hikvision `192.168.254.189:8000` and posts to the Windows host local
+    hot-reload API at `http://10.184.37.248:3001`.
+  - The service uses `--device-file
+    /run/project-truth/hikvision-hot-reload-device.spec` so the device password
+    does not appear in process arguments.
+  - Service status was active/running, posted callback results with `ok=true`,
+    and local API showed recent rows including serial `1613` mapped to
+    `Ernst tey Malasa`.
+- UI repair:
+  - Saved Hikvision/HCNetSDK views now poll saved rows every 2 seconds even
+    when the browser socket is connected.
+  - The page now distinguishes browser socket connectivity from fresh SDK
+    listener evidence.
+  - The prior green labels are replaced for SDK alarm scopes with:
+    `SDK listener recent`, `SDK listener receiving taps`, and
+    `SDK alarm rows fresh` only when recent `EN_HCNETSDK_ALARM` rows exist.
+  - When no recent SDK row exists, the page shows SDK idle/not-recent wording
+    instead of implying the physical tap path is live.
+- Validation:
+  - `npm test -- --grep "Hikvision biometric sync contract"` passed in
+    `hris-api`.
+  - `npm test -- app/lib/device-events-page-contract.test.ts` passed in
+    `hris-app`.
+  - Headless browser proof showed the localhost page contains
+    `SDK listener recent`, `SDK listener receiving taps`, and no old
+    `Saved rows live` / `Saved rows update live` wording.
+- Evidence:
+  - `.runtime/hikvision-hot-reload-daemon-20260709-213948/`
+  - `.runtime/hikvision-hot-reload-service-20260709-214733/`
+
 ## Latest Task Addendum - 2026-07-09 Hikvision Credential Repair Success
 
 - Task mode: Mixed credential repair, local hot-reload proof, VM SDK proof,

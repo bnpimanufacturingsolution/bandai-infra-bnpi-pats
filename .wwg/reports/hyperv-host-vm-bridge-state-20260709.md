@@ -232,6 +232,41 @@ Evidence:
 
 - `.runtime/hikvision-default-execute-smoke-20260709-213551/`
 
+## 2026-07-09 Hot-Reload Listener Service And UI Truth
+
+Latest local hot-reload service truth:
+
+- The VM now owns a persistent local hot-reload Hikvision listener service:
+  `project-truth-hikvision-hot-reload-listener.service`.
+- The service is enabled and active under systemd.
+- It runs inside the Linux VM while the VM remains on `Default Switch`.
+- It posts live SDK alarm callbacks to the Windows host local hot-reload API:
+  `http://10.184.37.248:3001`.
+- It reads the DEV `Main Entrance Device` row from `hris-postgres-dev`, writes a
+  root-scoped runtime device spec under `/run/project-truth/`, and starts
+  `hikvision-biometric-service` with `--device-file` so the Hikvision password
+  is not exposed in process arguments.
+- Runtime proof showed callback post results with `ok=true` and local API rows
+  through `localhost:3001` including serial `1613` as
+  `ATTENDANCE_UPDATED` for `Ernst tey Malasa`.
+
+Latest UI truth:
+
+- The Device attendance page no longer treats browser socket connectivity as
+  proof that the physical Hikvision SDK listener is receiving taps.
+- Saved Hikvision/HCNetSDK views poll saved rows every 2 seconds so localhost
+  hot reload catches recent SDK rows even if a socket event is missed.
+- The green state now requires fresh `EN_HCNETSDK_ALARM` rows in the current
+  saved-events scope and renders `SDK listener recent`,
+  `SDK listener receiving taps`, and `SDK alarm rows fresh`.
+- If no recent SDK rows exist, the page shows SDK idle/not-recent wording
+  instead of implying the full tap path is live.
+
+Evidence:
+
+- `.runtime/hikvision-hot-reload-daemon-20260709-213948/`
+- `.runtime/hikvision-hot-reload-service-20260709-214733/`
+
 ## 2026-07-09 Credential Repair And Real SDK Event Proof
 
 Latest credential truth:
