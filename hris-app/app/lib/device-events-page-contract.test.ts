@@ -78,4 +78,14 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("formatEventSource(activeEvent.source)");
 		expect(routeSource).to.contain("formatEventSourceDetail(activeEvent.source)");
 	});
+
+	it("does not treat a connected socket as proof that the Hikvision SDK listener is receiving taps", () => {
+		expect(routeSource).to.contain("isSdkAlarmSavedScope");
+		expect(routeSource).to.contain("savedEventsRefetchInterval");
+		expect(routeSource).to.contain("? 2 * 1000");
+		expect(routeSource).to.contain("SDK listener receiving taps");
+		expect(routeSource).to.contain("SDK listener not recently proven");
+		expect(routeSource).to.contain("Socket connected, SDK idle");
+		expect(routeSource).to.contain("Waiting for SDK rows");
+	});
 });

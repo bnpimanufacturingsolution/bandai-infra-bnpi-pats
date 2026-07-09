@@ -2,6 +2,138 @@
 
 Status: IN PROGRESS
 
+## Latest Task Addendum - 2026-07-09 Hikvision Live Listener Execute Default
+
+- Task mode: Bug fix / operator workflow repair for local hot-reload tap
+  debugging.
+- User goal:
+  - Live taps should save into the hot-reload HRIS path by default instead of
+    silently running preview-only.
+- Change:
+  - `vendor/hikvision-linux/hikvision_biometric_service.cpp` now defaults
+    `execute_mode` to `true`.
+  - `--execute` remains accepted and idempotent.
+  - New `--dry-run` flag restores preview-only behavior when intentionally
+    needed.
+  - `vendor/hikvision-linux/README.md` now documents execute as the live
+    listener default.
+- Validation:
+  - Focused contract test passed:
+    `npm test -- --grep "Hikvision biometric sync contract"` in `hris-api`.
+  - The VM copy under
+    `/tmp/project-truth-hikvision-live-20260709-credential-repair/vendor-hikvision-linux`
+    was rebuilt.
+  - Default-mode smoke ran without `--execute`, reported `mode=execute`,
+    `sdk_alarm_arm ok true`, posted callback results with `ok=true`, and
+    cleaned up the alarm channel.
+- Evidence:
+  - `.runtime/hikvision-default-execute-smoke-20260709-213551/`
+
+## Latest Task Addendum - 2026-07-09 Hikvision Credential Repair Success
+
+- Task mode: Mixed credential repair, local hot-reload proof, VM SDK proof,
+  and evidence.
+- User supplied a new Digest Auth credential for `admin` on the live Hikvision
+  terminal at `192.168.254.189`.
+- Host direct credential proof:
+  - `GET http://192.168.254.189:80/ISAPI/Security/userCheck` with Digest Auth
+    returned HTTP `200`, `statusValue=200`, and `statusString=OK`.
+- VM/PROD runtime repair:
+  - Updated PROD `Main Entrance Device` `Device.access` in VM Postgres with
+    username `admin` and a redacted 16-character password.
+  - VM-backed `GET /api/device/:id/health` now reports network `reachable`,
+    device API `online`, and reads terminal time from `192.168.254.189`.
+  - Current PROD `sync-preview` still reports event-total unavailable
+    (`code 1073741828`), which is now separate from credential auth because
+    device health succeeds.
+- Local hot-reload repair:
+  - Local hot-reload API/app were already running at `localhost:3001` and
+    `localhost:5175`.
+  - Local API points at VM DEV Postgres on `10.184.37.241:15433`, so the DEV
+    `Main Entrance Device` row was updated to `192.168.254.189:80`, protocol
+    `http`, model `DS-K1T341CMFW`, SDK port `8000`, source
+    `vendor/hikvision-linux`, callback path `/api/hikvision/callback`, and the
+    same redacted credential.
+  - Local `GET /api/device/:id/health` now reports `online`.
+  - Local `GET /api/device/sync-preview?deviceId=cmpxw13hx002h7zwso7dyedrn`
+    now reports `vendorEventCount=1518`, `vendorUserCount=7`,
+    `canStartSync=true`, and `status=needs_sync`.
+  - Local Playwright proof opened
+    `http://localhost:5175/admin/configuration/devices/events?view=saved&deviceId=cmpxw13hx002h7zwso7dyedrn&source=EN_HCNETSDK_ALARM`
+    and rendered the saved-events page with `Main Entrance Device`,
+    `Ernst tey Malasa`, live-row text, and the updated configured address.
+- VM HCNetSDK proof:
+  - Current `vendor/hikvision-linux/hikvision_biometric_service.cpp` built and
+    ran from the VM against `192.168.254.189:8000`.
+  - SDK init succeeded, callback registration succeeded, SDK login succeeded
+    with `lastError=0`, and alarm arm succeeded with `lastError=0`.
+  - The listener received live ACS/fingerprint events, posted them to
+    `/api/hikvision/callback`, and HRIS persisted 74 recent
+    `EN_HCNETSDK_ALARM` rows for `Main Entrance Device`.
+  - Recent saved rows include fingerprint pass events for `employeeNo=1`; they
+    currently persist as `UNMATCHED` where employee mapping is not resolved in
+    the PROD data.
+- Evidence:
+  - `.runtime/hikvision-credential-local-hotreload-20260709-210645/`
+- Remaining boundary:
+  - Credential auth and real SDK event delivery are no longer blocked.
+  - Remaining work is product/data follow-up: reconcile employee/device-user
+    mapping and classify why PROD sync-preview event-total still reports
+    `code 1073741828` while health and SDK listener succeed.
+
+## Latest Task Addendum - 2026-07-09 Hyper-V Default Switch Route Repair
+
+- Task mode: Mixed VM route repair, credential boundary, SDK proof, and
+  evidence.
+- User goal:
+  - Continue local Hyper-V plus Hikvision repair with Project Truth runtime
+    inside `project-truth-local-vhdx-proof`, Docker inside the VM, and no new
+    Hyper-V switch unless `Default Switch` is disproven.
+  - First repair boot-time route drift, then repair live Hikvision credentials
+    for `Main Entrance Device` at `192.168.254.189`, then rerun HRIS and SDK
+    proof.
+- Runtime result:
+  - VM remains attached to `Default Switch`.
+  - VM host-access IP remains `10.184.37.241/24`.
+  - Boot-time LAN owner config was changed from stale static
+    `172.31.99.250/23` plus default route `172.31.98.1` to
+    `/etc/project-truth/lan.env` DHCP mode with pinned
+    `PROJECT_TRUTH_LAN_DHCP_ADDRESSES=10.184.37.241/24`.
+  - After reboot, netplan kept `dhcp4: true` plus `10.184.37.241/24`, the VM
+    received `Default Switch` DHCP/NAT address `172.26.59.137/20`, defaulted
+    through `172.26.48.1`, and reached `192.168.254.189:80` and `:8000`.
+  - Stale failed `project-truth-hikvision-route.service` was disabled. The
+    normal `project-truth-ansible-pull.timer` was re-enabled.
+- HRIS/API proof:
+  - `http://10.184.37.241:3001/health` returned healthy after reboot.
+  - Admin login to the VM-backed API succeeded.
+  - `/api/device/:id/health` for `Main Entrance Device` reported network
+    `reachable` and device API `Unauthorized`.
+  - `/api/device/sync-preview?deviceId=cmqq3ho8c002eti3dzzk94z1w` returned
+    `source_unavailable` with error `Unauthorized`.
+- Credential boundary:
+  - The runtime `Device.access` source has username `admin` and a present
+    9-character password, but direct digest auth to
+    `http://192.168.254.189/ISAPI/System/time?format=json` returned HTTP `401`
+    and the device reported `lockStatus=lock`.
+  - Redacted credential-source search found no alternate documented runtime
+    credential. Historical `AlarmDemo.config` matches the current 9-character
+    credential hash; other hits are examples, tests, or placeholders.
+- SDK proof:
+  - Current `vendor/hikvision-linux/hikvision_biometric_service.cpp` was copied
+    to the VM and built against the Linux HCNetSDK under
+    `~/project-truth-hcnetsdk/EN-HCNetSDKV6.1.9.48_build20230410_linux64`.
+  - SDK init and callback registration succeeded.
+  - SDK login to `192.168.254.189:8000` failed with HCNetSDK error `153` while
+    the device was locked, so no alarm channel was armed.
+- Evidence:
+  - `.runtime/hikvision-route-credential-repair-20260709-204243/`
+- Remaining boundary:
+  - Real tap proof is still missing. Route drift is repaired; the active
+    blocker is credential custody/rotation for the live Hikvision terminal.
+    Continuing without a verified credential would mean guessing an unknown
+    device secret and can prolong terminal lockout.
+
 ## Latest Task Addendum - 2026-07-09 Hikvision Real-Tap Pipeline Continuation
 
 - Task mode: Mixed runtime proof, credential boundary, callback/realtime

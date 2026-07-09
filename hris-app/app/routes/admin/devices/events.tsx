@@ -664,6 +664,15 @@ export default function DeviceEventsPage() {
 		user?.organizationId || (user as any)?.organization?.id || liveDevice?.organizationId || "";
 	const hasRealtimeScope = Boolean(organizationId || selectedDeviceRoomId);
 	const shouldPollSavedEvents = viewMode !== "saved" || !isConnected || !hasRealtimeScope;
+	const isSdkAlarmSavedScope =
+		viewMode === "saved" &&
+		(source === "all" || source === "EN_HCNETSDK_ALARM") &&
+		(deviceId === "all" || isHikvisionDevice(selectedDevice));
+	const savedEventsRefetchInterval = isSdkAlarmSavedScope
+		? 2 * 1000
+		: shouldPollSavedEvents
+			? 30 * 1000
+			: false;
 
 	const savedQueryParams: ApiQueryParams = {
 		page: pageParam,
@@ -684,7 +693,7 @@ export default function DeviceEventsPage() {
 		error: savedError,
 		refetch,
 	} = useDeviceEvents(savedQueryParams, {
-		refetchInterval: shouldPollSavedEvents ? 30 * 1000 : false,
+		refetchInterval: savedEventsRefetchInterval,
 	});
 	const {
 		data: liveData,
@@ -962,15 +971,30 @@ export default function DeviceEventsPage() {
 		(event: UnifiedDeviceEventRow) => event.status === "NOT_SAVED",
 	).length;
 	const latestSavedEvent = viewMode === "saved" ? rows[0] : undefined;
+	const latestSdkSavedEvent =
+		viewMode === "saved"
+			? rows.find((event) => event.source === "EN_HCNETSDK_ALARM")
+			: undefined;
 	const latestSavedReceivedAt = latestSavedEvent?.receivedAt
 		? new Date(latestSavedEvent.receivedAt)
+		: null;
+	const latestSdkSavedReceivedAt = latestSdkSavedEvent?.receivedAt
+		? new Date(latestSdkSavedEvent.receivedAt)
 		: null;
 	const latestSavedAgeMs =
 		latestSavedReceivedAt && !Number.isNaN(latestSavedReceivedAt.getTime())
 			? Date.now() - latestSavedReceivedAt.getTime()
 			: null;
+	const latestSdkSavedAgeMs =
+		latestSdkSavedReceivedAt && !Number.isNaN(latestSdkSavedReceivedAt.getTime())
+			? Date.now() - latestSdkSavedReceivedAt.getTime()
+			: null;
 	const isLatestSavedFresh =
 		latestSavedAgeMs !== null && latestSavedAgeMs >= 0 && latestSavedAgeMs <= 2 * 60 * 1000;
+	const isLatestSdkSavedFresh =
+		latestSdkSavedAgeMs !== null &&
+		latestSdkSavedAgeMs >= 0 &&
+		latestSdkSavedAgeMs <= 2 * 60 * 1000;
 	const latestRealtimeEventId = lastRealtimeEvent?.eventId || null;
 	const highlightedSavedEventId = getHighlightedSavedDeviceEventId({
 		latestSavedEventId: latestSavedEvent?.id,
@@ -1372,9 +1396,48 @@ export default function DeviceEventsPage() {
 	});
 	const realtimeStatusDetail = lastRealtimeEvent
 		? `Last saved-row socket event ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
+		: isSdkAlarmSavedScope && latestSdkSavedEvent
+			? `Last SDK alarm row ${formatPunchTime(latestSdkSavedEvent.receivedAt || latestSdkSavedEvent.eventTime)}`
+			: isSdkAlarmSavedScope
+				? "No recent SDK alarm rows in this saved-events scope"
 			: latestSavedEvent
 			? `Latest saved row ${formatPunchTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
 			: "Waiting for the next saved row from watcher or callback";
+	const savedRowsBadgeVariant = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh
+			? "success-soft"
+			: isConnected
+				? "warning-soft"
+				: "secondary"
+		: isConnected
+			? "success-soft"
+			: isLatestSavedFresh
+				? "warning-soft"
+				: "secondary";
+	const savedRowsBadgeLabel = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh
+			? "SDK listener recent"
+			: isConnected
+				? "Socket connected, SDK idle"
+				: "Socket offline, SDK unknown"
+		: isConnected
+			? "Saved rows socket live"
+			: isLatestSavedFresh
+				? "New saved row"
+				: "Saved rows idle";
+	const realtimePanelIsLive = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh
+		: realtimeStatus.isListening;
+	const realtimePanelStatusLabel = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh
+			? "SDK listener receiving taps"
+			: "SDK listener not recently proven"
+		: realtimeStatus.statusLabel;
+	const realtimePanelUpdateLabel = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh
+			? "SDK alarm rows fresh"
+			: "Waiting for SDK rows"
+		: realtimeStatus.rowUpdateLabel;
 	const activeImportTargetCount = getNumericCount(importJobProgress?.targetImportCount);
 	const activeImportScanLimit = getNumericCount(importJobProgress?.scanLimit);
 	const isTargetedImport = activeImportTargetCount !== null;
@@ -1596,9 +1659,9 @@ export default function DeviceEventsPage() {
 				</div>
 				<div className="flex items-center gap-2">
 					<Badge
-						variant={isConnected ? "success-soft" : isLatestSavedFresh ? "warning-soft" : "secondary"}
+						variant={savedRowsBadgeVariant}
 						className="rounded-md px-2 py-1">
-						{isConnected ? "Saved rows live" : isLatestSavedFresh ? "New saved row" : "Saved rows idle"}
+						{savedRowsBadgeLabel}
 					</Badge>
 					<Button
 						type="button"
@@ -1795,7 +1858,7 @@ export default function DeviceEventsPage() {
 				<div className="grid grid-cols-3 gap-0 divide-x divide-slate-200">
 					<div
 						className={
-							realtimeStatus.isListening
+							realtimePanelIsLive
 								? "col-span-3 border-b border-emerald-200 bg-emerald-50 px-3 py-2"
 								: "col-span-3 border-b border-amber-200 bg-amber-50 px-3 py-2"
 						}>
@@ -1803,12 +1866,12 @@ export default function DeviceEventsPage() {
 							<div className="flex min-w-0 items-center gap-2">
 								<span
 									className={
-										realtimeStatus.isListening
+										realtimePanelIsLive
 											? "flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-100 text-emerald-700"
 											: "flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700"
 									}
 									aria-hidden="true">
-									{realtimeStatus.isListening ? (
+									{realtimePanelIsLive ? (
 										<Wifi className="h-4 w-4" />
 									) : (
 										<WifiOff className="h-4 w-4" />
@@ -1817,15 +1880,15 @@ export default function DeviceEventsPage() {
 								<div className="min-w-0">
 									<p
 										className={
-											realtimeStatus.isListening
+											realtimePanelIsLive
 												? "truncate text-sm font-semibold text-emerald-950"
 												: "truncate text-sm font-semibold text-amber-950"
 										}>
-										{realtimeStatus.statusLabel}
+										{realtimePanelStatusLabel}
 									</p>
 									<p
 										className={
-											realtimeStatus.isListening
+											realtimePanelIsLive
 												? "truncate text-xs text-emerald-800"
 												: "truncate text-xs text-amber-800"
 										}>
@@ -1835,9 +1898,9 @@ export default function DeviceEventsPage() {
 							</div>
 							<div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
 								<Badge
-									variant={realtimeStatus.isListening ? "success-soft" : "warning-soft"}
+									variant={realtimePanelIsLive ? "success-soft" : "warning-soft"}
 									className="w-fit rounded-md px-2 py-1 font-semibold">
-									{realtimeStatus.rowUpdateLabel}
+									{realtimePanelUpdateLabel}
 								</Badge>
 							</div>
 						</div>

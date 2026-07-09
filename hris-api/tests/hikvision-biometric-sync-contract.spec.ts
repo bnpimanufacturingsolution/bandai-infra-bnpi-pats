@@ -38,6 +38,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include("EN_HCNETSDK_ALARM");
 		expect(service).to.include("queue_reconcile(job)");
 		expect(service).to.include("worker_loop");
+		expect(service).to.include("bool execute_mode = true;");
+		expect(service).to.include('arg == "--dry-run"');
+		expect(service).to.include('arg == "--device-file"');
+		expect(service).to.include("std::ifstream device_file");
 		expect(service).to.include("NET_DVR_GET_FINGERPRINT_CFG_V50");
 		expect(service).to.include("NET_DVR_SET_FINGERPRINT_CFG_V50");
 		expect(service).to.include("rawFingerprintTemplateStored");

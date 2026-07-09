@@ -63,7 +63,7 @@ std::deque<ReconcileJob> reconcile_queue;
 std::vector<DeviceSession> sessions;
 std::ofstream evidence_stream;
 std::mutex evidence_mutex;
-bool execute_mode = false;
+bool execute_mode = true;
 std::string hris_api_base;
 std::string hris_api_token;
 std::string min_sdk_time;
@@ -956,8 +956,9 @@ void close_sessions() {
 void usage(const char *program) {
     std::cerr
         << "Usage: " << program << " --device id|org|name|host|sdkPort|username|password[|peer] "
+        << "[--device-file path] "
         << "[--device ...] [--evidence-jsonl path] [--hris-api-base url] [--hris-api-token token] "
-        << "[--min-sdk-time YYYY-MM-DDTHH:MM:SS] [--execute] [--seconds n]\n";
+        << "[--min-sdk-time YYYY-MM-DDTHH:MM:SS] [--execute|--dry-run] [--seconds n]\n";
 }
 
 }  // namespace
@@ -986,6 +987,27 @@ int main(int argc, char **argv) {
                 return 2;
             }
             configs.push_back(config);
+        } else if (arg == "--device-file") {
+            std::string value;
+            if (!next(&value)) return 2;
+            std::ifstream device_file(value);
+            if (!device_file) {
+                std::cerr << "Unable to open --device-file: " << value << "\n";
+                return 2;
+            }
+            std::string line;
+            while (std::getline(device_file, line)) {
+                const auto first = line.find_first_not_of(" \t\r\n");
+                if (first == std::string::npos || line[first] == '#') continue;
+                const auto last = line.find_last_not_of(" \t\r\n");
+                const std::string spec = line.substr(first, last - first + 1);
+                DeviceConfig config;
+                if (!parse_device_spec(spec, &config)) {
+                    std::cerr << "Invalid --device-file entry. Expected id|org|name|host|sdkPort|username|password[|peer]\n";
+                    return 2;
+                }
+                configs.push_back(config);
+            }
         } else if (arg == "--evidence-jsonl") {
             std::string value;
             if (!next(&value)) return 2;
@@ -998,6 +1020,8 @@ int main(int argc, char **argv) {
             if (!next(&min_sdk_time)) return 2;
         } else if (arg == "--execute") {
             execute_mode = true;
+        } else if (arg == "--dry-run") {
+            execute_mode = false;
         } else if (arg == "--seconds") {
             std::string value;
             if (!next(&value)) return 2;

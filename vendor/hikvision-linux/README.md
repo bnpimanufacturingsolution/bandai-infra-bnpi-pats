@@ -82,7 +82,7 @@ export HIKVISION_LINUX_SDK_ROOT=/home/infra/project-truth-hcnetsdk/EN-HCNetSDKV6
 scripts/build-hikvision-biometric-service.sh
 ```
 
-Run dry-run listener evidence against the current Device row target:
+Run the live listener against the current Device row target:
 
 ```bash
 ./build/hikvision-biometric-service \
@@ -92,11 +92,21 @@ Run dry-run listener evidence against the current Device row target:
   --seconds 60
 ```
 
-The default mode is dry-run. `--execute` is required before peer device writes
-or HRIS biometric reconcile persistence. SDK alarm events are queued and posted
-to `/api/hikvision/callback`, which remains the single HRIS persistence and
-socket broadcast path for saved `DeviceEvent` rows. Raw fingerprint template
-bytes are never written to normal HRIS `User` records or JSONL evidence.
+For a managed service, prefer a root-readable device spec file so the device
+password does not appear in process arguments:
+
+```bash
+./build/hikvision-biometric-service \
+  --device-file /run/project-truth/hikvision-device.spec \
+  --hris-api-base "http://localhost:3001" \
+  --evidence-jsonl ".runtime/hikvision-biometric-service.jsonl"
+```
+
+The default mode is execute for live tap debugging, so SDK alarm events are
+posted to `/api/hikvision/callback` and saved in HRIS. Pass `--dry-run` only
+when you intentionally want preview-only evidence that does not persist saved
+`DeviceEvent` rows. Raw fingerprint template bytes are never written to normal
+HRIS `User` records or JSONL evidence.
 
 ## Docker Trial
 
