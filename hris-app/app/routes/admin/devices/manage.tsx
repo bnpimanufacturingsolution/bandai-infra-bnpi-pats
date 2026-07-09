@@ -1148,7 +1148,7 @@ export default function DevicesManagePage() {
 								<div>
 									<p className="text-sm font-semibold text-slate-950">Device config truth</p>
 									<p className="text-xs text-slate-500">
-										Fields saved into device config for source readers, callbacks, and sync review.
+										Fields HRIS uses to reach the terminal, run the vendor adapter, and receive callbacks.
 									</p>
 								</div>
 								<AdminConfigSourceChip>{watchedVendor || "Unclassified"}</AdminConfigSourceChip>
@@ -1184,7 +1184,7 @@ export default function DevicesManagePage() {
 								</div>
 								<div data-field-path="config.source">
 									<div className="mb-1 block text-sm font-medium text-gray-700">
-										Source adapter *
+										Runtime adapter *
 									</div>
 									<Input
 										placeholder="vendor/hikvision-linux"
@@ -1193,12 +1193,12 @@ export default function DevicesManagePage() {
 										})}
 									/>
 									<ConstraintTokenRow
-										tokens={[{ label: "Runtime source", tone: "default" }]}
+										tokens={[{ label: "Internal adapter key", tone: "default" }]}
 									/>
 								</div>
 								<div data-field-path="config.webhookPath">
 									<div className="mb-1 block text-sm font-medium text-gray-700">
-										Webhook path
+										Callback path
 									</div>
 									<Input
 										placeholder="/api/hikvision/callback"
@@ -1207,7 +1207,7 @@ export default function DevicesManagePage() {
 										})}
 									/>
 									<ConstraintTokenRow
-										tokens={[{ label: "API path", tone: "subtle" }]}
+										tokens={[{ label: "HRIS API path", tone: "subtle" }]}
 									/>
 								</div>
 								<div data-field-path="config.sdkPort">

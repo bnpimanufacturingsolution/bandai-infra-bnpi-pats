@@ -28,6 +28,7 @@ import {
 	parseHikvisionBusinessDateBound,
 	parseHikvisionEventTime,
 } from "../../helper/hikvision-event-contract.helper";
+import { classifyDeviceEvent } from "../../helper/device-event-taxonomy.helper";
 import { hikvisionEndpoint } from "../../config/hikvision.endpoint";
 import {
 	buildHikvisionDeviceBaseUrl,
@@ -64,6 +65,31 @@ const DEVICE_EVENT_SOURCES = new Set([
 	"HIKVISION_CALLBACK",
 	"EN_HCNETSDK_ALARM",
 	"ZKTECO_EVENT",
+]);
+const DEVICE_EVENT_CATEGORIES = new Set([
+	"ATTENDANCE",
+	"ENROLLMENT",
+	"USER_MANAGEMENT",
+	"ACCESS_CONTROL",
+	"DEVICE_HEALTH",
+	"RUNTIME",
+	"UNKNOWN_VENDOR",
+]);
+const DEVICE_EVENT_ACTIONS = new Set([
+	"TAP",
+	"FINGERPRINT_ENROLLED",
+	"FINGERPRINT_UPDATED",
+	"FINGERPRINT_DELETED",
+	"CARD_ENROLLED",
+	"CARD_UPDATED",
+	"CARD_DELETED",
+	"USER_CREATED",
+	"USER_UPDATED",
+	"USER_DELETED",
+	"TAP_REJECTED",
+	"SYNC_IMPORTED",
+	"LISTENER_RECEIVED",
+	"UNKNOWN",
 ]);
 const DEVICE_EVENT_RESET_ADMIN_ROLES = new Set(["hris-admin", "admin", "super_admin", "superadmin"]);
 const DEVICE_USER_ADMIN_ROLES = new Set(["hris-admin", "admin", "super_admin", "superadmin"]);
@@ -2974,6 +3000,8 @@ export const controller = (prisma: PrismaClient) => {
 			const deviceId = String(req.query.deviceId || "").trim();
 			const status = String(req.query.status || "").trim();
 			const source = String(req.query.source || "").trim();
+			const eventCategory = String(req.query.eventCategory || "").trim().toUpperCase();
+			const eventAction = String(req.query.eventAction || "").trim().toUpperCase();
 			const query = String(req.query.query || req.query.search || "").trim();
 			const from = String(req.query.from || "").trim();
 			const to = String(req.query.to || "").trim();
@@ -2993,6 +3021,12 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			if (source && source !== "all" && DEVICE_EVENT_SOURCES.has(source)) {
 				whereConditions.push(Prisma.sql`de."source" = ${source}::"DeviceEventSource"`);
+			}
+			if (eventCategory && eventCategory !== "ALL" && DEVICE_EVENT_CATEGORIES.has(eventCategory)) {
+				whereConditions.push(Prisma.sql`de."eventCategory" = ${eventCategory}::"DeviceEventCategory"`);
+			}
+			if (eventAction && eventAction !== "ALL" && DEVICE_EVENT_ACTIONS.has(eventAction)) {
+				whereConditions.push(Prisma.sql`de."eventAction" = ${eventAction}::"DeviceEventAction"`);
 			}
 
 			if (from || to) {
@@ -3018,6 +3052,7 @@ export const controller = (prisma: PrismaClient) => {
 				whereConditions.push(Prisma.sql`(
 					de."employeeNo" ILIKE ${queryLike}
 					OR de."eventType" ILIKE ${queryLike}
+					OR de."eventLabel" ILIKE ${queryLike}
 					OR de."doorNo" ILIKE ${queryLike}
 					OR d."name" ILIKE ${queryLike}
 					OR d."address" ILIKE ${queryLike}
@@ -3127,22 +3162,18 @@ export const controller = (prisma: PrismaClient) => {
 			`;
 			const pageFromSql = hasQuery ? fromSql : baseFromSql;
 			const aggregateFromSql = hasQuery ? fromSql : baseFromSql;
-			const orderColumnSql =
-				sort === "deviceName"
-					? Prisma.sql`d."name"`
-					: sort === "eventTime"
-						? Prisma.sql`de."eventTime"`
-						: sort === "updatedAt"
-							? Prisma.sql`de."updatedAt"`
-							: sort === "status"
-								? Prisma.sql`de."status"`
-								: sort === "source"
-									? Prisma.sql`de."source"`
-									: sort === "employeeNo"
-										? Prisma.sql`de."employeeNo"`
-										: sort === "doorNo"
-											? Prisma.sql`de."doorNo"`
-											: Prisma.sql`de."receivedAt"`;
+			const orderColumnSqlBySort: Record<string, Prisma.Sql> = {
+				deviceName: Prisma.sql`d."name"`,
+				eventTime: Prisma.sql`de."eventTime"`,
+				updatedAt: Prisma.sql`de."updatedAt"`,
+				status: Prisma.sql`de."status"`,
+				source: Prisma.sql`de."source"`,
+				eventCategory: Prisma.sql`de."eventCategory"`,
+				eventAction: Prisma.sql`de."eventAction"`,
+				employeeNo: Prisma.sql`de."employeeNo"`,
+				doorNo: Prisma.sql`de."doorNo"`,
+			};
+			const orderColumnSql = orderColumnSqlBySort[sort] || Prisma.sql`de."receivedAt"`;
 			const orderDirectionSql = Prisma.raw(order === "asc" ? "ASC" : "DESC");
 			const eventsSql = Prisma.sql`
 				WITH page_events AS (
@@ -3165,6 +3196,10 @@ export const controller = (prisma: PrismaClient) => {
 					de."employeeNo",
 					de.source::text AS source,
 					de.status::text AS status,
+					de."eventCategory"::text AS "eventCategory",
+					de."eventAction"::text AS "eventAction",
+					de."eventLabel",
+					de."eventConfidence"::text AS "eventConfidence",
 					de."eventType",
 					de.major,
 					de.minor,
@@ -3239,30 +3274,71 @@ export const controller = (prisma: PrismaClient) => {
 				${whereSql}
 				GROUP BY de.source
 			`;
+			const categoryGroupsSql = Prisma.sql`
+				SELECT de."eventCategory"::text AS "eventCategory", COUNT(*)::bigint AS count
+				${aggregateFromSql}
+				${whereSql}
+				GROUP BY de."eventCategory"
+			`;
+			const actionGroupsSql = Prisma.sql`
+				SELECT de."eventAction"::text AS "eventAction", COUNT(*)::bigint AS count
+				${aggregateFromSql}
+				${whereSql}
+				GROUP BY de."eventAction"
+			`;
 
-			const [events, totalRows, statusGroups, sourceGroups] = await Promise.all([
+			const [events, totalRows, statusGroups, sourceGroups, categoryGroups, actionGroups] = await Promise.all([
 				prisma.$queryRaw<any[]>(eventsSql),
 				prisma.$queryRaw<Array<{ total: bigint | number }>>(countSql),
 				prisma.$queryRaw<Array<{ status: string; count: bigint | number }>>(statusGroupsSql),
 				prisma.$queryRaw<Array<{ source: string; count: bigint | number }>>(sourceGroupsSql),
+				prisma.$queryRaw<Array<{ eventCategory: string; count: bigint | number }>>(categoryGroupsSql),
+				prisma.$queryRaw<Array<{ eventAction: string; count: bigint | number }>>(actionGroupsSql),
 			]);
 			const total = Number(totalRows[0]?.total || 0);
+			const enrichedEvents = events.map((event) => {
+				const runtimeLabels = classifyDeviceEvent(event);
+				return {
+					...event,
+					taxonomy: {
+						eventCategory: event.eventCategory,
+						eventAction: event.eventAction,
+						eventLabel: event.eventLabel,
+						eventConfidence: event.eventConfidence,
+						processingLabel: runtimeLabels.processingLabel,
+						transportLabel: runtimeLabels.transportLabel,
+						capabilityConfidence: String(event.eventConfidence || "UNKNOWN").toLowerCase(),
+					},
+				};
+			});
+			const byProcessingResult = Object.fromEntries(
+				statusGroups.map((item: any) => [item.status, Number(item.count || 0)]),
+			);
+			const byRuntimePath = Object.fromEntries(
+				sourceGroups.map((item: any) => [item.source, Number(item.count || 0)]),
+			);
+			const byCategory = Object.fromEntries(
+				categoryGroups.map((item: any) => [item.eventCategory, Number(item.count || 0)]),
+			);
+			const byAction = Object.fromEntries(
+				actionGroups.map((item: any) => [item.eventAction, Number(item.count || 0)]),
+			);
 
 			const summary = {
 				total,
-				byStatus: Object.fromEntries(
-					statusGroups.map((item: any) => [item.status, Number(item.count || 0)]),
-				),
-				bySource: Object.fromEntries(
-					sourceGroups.map((item: any) => [item.source, Number(item.count || 0)]),
-				),
+				byCategory,
+				byAction,
+				byProcessingResult,
+				byRuntimePath,
+				byStatus: byProcessingResult,
+				bySource: byRuntimePath,
 			};
 
 			res.status(200).json(
 				buildSuccessResponse(
 					"Device events retrieved successfully",
 					{
-						events,
+						events: enrichedEvents,
 						summary,
 						pagination: buildPagination(total, page, limit),
 					},

@@ -706,6 +706,18 @@ Status: IN PROGRESS
   runtime/config drift repair because the Cloudflare config regression guard was
   updated with the active SSH origin.
 - `wwg validate` passes after the stable LAN target drift repair.
+- On 2026-07-09, the local HRIS device-event model was hard-cut over from
+  attendance/source/status-led UI language to persisted `DeviceEvent`
+  taxonomy fields: `eventCategory`, `eventAction`, `eventLabel`, and
+  `eventConfidence`. A narrow SQL migration/backfill preserved all 96 existing
+  `device_events` rows, created backup table
+  `device_events_backup_20260709_225223`, and backfilled:
+  `ATTENDANCE/TAP/PROVEN=32`, `ACCESS_CONTROL/UNKNOWN/UNKNOWN=62`, and
+  `UNKNOWN_VENDOR/LISTENER_RECEIVED/UNKNOWN=2`. The admin route now presents
+  `Device events`, category/action filters, `HRIS result`, and debug-only
+  runtime path wording while retaining raw `source` and processing `status`
+  compatibility fields. Evidence:
+  `.runtime/device-event-model-hardcutover-20260709-225223/`.
 
 ## Follow-Up Needed
 

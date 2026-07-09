@@ -155,6 +155,8 @@ std::string minor_name(DWORD minor) {
         case MINOR_MOD_FINGER_BY_CARD: return "MINOR_MOD_FINGER_BY_CARD";
         case MINOR_MOD_FINGER_BY_EMPLOYEE_NO: return "MINOR_MOD_FINGER_BY_EMPLOYEE_NO";
         case MINOR_DEL_FINGER: return "MINOR_DEL_FINGER";
+        case MINOR_ADD_CARD: return "MINOR_ADD_CARD";
+        case MINOR_MOD_CARD: return "MINOR_MOD_CARD";
         case MINOR_ADD_USER_INFO: return "MINOR_ADD_USER_INFO";
         case MINOR_MODIFY_USER_INFO: return "MINOR_MODIFY_USER_INFO";
         case MINOR_CLR_USER_INFO: return "MINOR_CLR_USER_INFO";
@@ -181,9 +183,17 @@ bool is_user_management_minor(DWORD minor) {
            minor == MINOR_CLR_USER_INFO;
 }
 
+bool is_card_management_minor(DWORD minor) {
+    return minor == MINOR_ADD_CARD ||
+           minor == MINOR_MOD_CARD;
+}
+
 std::string classify_event(DWORD major, DWORD minor) {
     if (major == MAJOR_OPERATION && is_fingerprint_management_minor(minor)) {
         return "biometric_fingerprint_management";
+    }
+    if (major == MAJOR_OPERATION && is_card_management_minor(minor)) {
+        return "biometric_card_management";
     }
     if (major == MAJOR_OPERATION && is_user_management_minor(minor)) {
         return "biometric_user_management";
@@ -202,7 +212,9 @@ std::string classify_event(DWORD major, DWORD minor) {
 
 bool should_queue_reconcile(DWORD major, DWORD minor) {
     return major == MAJOR_OPERATION &&
-           (is_fingerprint_management_minor(minor) || is_user_management_minor(minor));
+           (is_fingerprint_management_minor(minor) ||
+            is_card_management_minor(minor) ||
+            is_user_management_minor(minor));
 }
 
 DeviceSession *find_session_by_host(const std::string &host) {

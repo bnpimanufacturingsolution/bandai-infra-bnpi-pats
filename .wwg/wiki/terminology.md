@@ -37,6 +37,11 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | Hikvision alarm listener | 2026-07-09 Hikvision biometric sync architecture | Linux/VM-owned HCNetSDK service that logs into configured Hikvision devices, registers SDK alarm callbacks, arms alarm channels, classifies ACS events, and queues reconciliation work. It must not be named or treated as Windows `AlarmDemo` runtime. | TARGET_ARCHITECTURE_PENDING_IMPLEMENTATION |
 | Biometric enrollment sync | 2026-07-09 Hikvision biometric sync architecture | Target workflow where a device enrollment/user-change event triggers source user/fingerprint reads, syncs the employee/device user to peer biometric devices, and persists HRIS `DeviceUser`/biometric metadata with dry-run/audit gates. This is higher-risk than device identity sync or attendance log sync. | TARGET_ARCHITECTURE_PENDING_IMPLEMENTATION |
 | Biometric reconciliation worker | 2026-07-09 Hikvision biometric sync architecture | Background worker that performs the slow/sensitive user and fingerprint template read/write work after the alarm listener queues a reconcile event. It should provide dry-run, audit, and recovery evidence before mutating devices. | TARGET_ARCHITECTURE_PENDING_IMPLEMENTATION |
+| Device events | 2026-07-09 local device-event model hard cutover | Generic admin ledger for persisted physical-device/runtime events. This replaces `Device attendance` as the page identity. Attendance punches are one event action, not the ledger concept. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
+| Event category / event action | 2026-07-09 `DeviceEvent` schema/API/UI hard cutover | Persisted canonical event truth on `DeviceEvent` used by API filters and admin UI: category describes the human event family, action describes the specific event behavior. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
+| Event confidence | 2026-07-09 `DeviceEvent` schema/API/UI hard cutover | Persisted confidence for how the category/action was classified: `PROVEN`, `SUPPORTED`, `INFERRED`, or `UNKNOWN`. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
+| Runtime path | 2026-07-09 device-event copy hard cutover | User-facing/debug name for raw `DeviceEvent.source`, meaning the listener/callback/transport path that delivered the event, not the human event concept. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
+| HRIS result | 2026-07-09 device-event copy hard cutover | User-facing name for raw `DeviceEvent.status`, meaning HRIS processing result such as received, matched, ignored, or attendance updated; it is not the generic event status. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
 
 ## Canonical Term Candidates
 
@@ -61,6 +66,11 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | device event import action | Sync logs / Sync device logs | sync events, device log sync, attendance log sync | HIGH | 2026-07-06 admin events UI implementation |
 | Hikvision SDK callback service | Hikvision alarm listener | HCNetSDK alarm listener, Linux alarm service | HIGH | 2026-07-09 architecture intake |
 | cross-device fingerprint/user sync | Biometric enrollment sync | biometric sync, ONENROLL event, enrollment sync, fingerprint sync | HIGH | 2026-07-09 architecture intake |
+| persisted device event ledger | Device events | Device attendance, punches page, saved punches | HIGH | 2026-07-09 schema/API/UI hard cutover |
+| persisted event family | Event category | source filter, status filter, attendance type | HIGH | 2026-07-09 `DeviceEvent.eventCategory` schema/API/UI hard cutover |
+| persisted event behavior | Event action | punch type, event type, action code | HIGH | 2026-07-09 `DeviceEvent.eventAction` schema/API/UI hard cutover |
+| raw transport/source path | Runtime path | source, runtime source | HIGH | 2026-07-09 device-event hard cutover |
+| HRIS processing result | HRIS result | status, processing status | HIGH | 2026-07-09 device-event hard cutover |
 
 ## Terminology Conflicts
 
@@ -68,6 +78,8 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 |---|---|---|
 | Admin device/configuration work was previously left as inferred generic roles | `.wwg/wiki/project-truth.md` previously listed `user, owner, guest`; user correction 2026-06-29 says this is clearly admin role | Use admin / `hris-admin` for `/admin` device, runtime, GitOps, VM, and ZKTeco drift work; use `hris-hr-manager` only for explicit HR workflows |
 | `Enroll Users` sounded like a new attendance/biometric enrollment flow | Earlier admin device button/modal copy and user correction on 2026-07-06 | Use `Device Users` for the durable identity table, `Review sync` before the mutating pull, and keep `Sync logs` terminology for attendance/event import |
+| `Device attendance`, `Punches`, `Saved punches`, and `Live punches` made the ledger sound attendance-only | 2026-07-09 hard cutover request and implementation on `/admin/configuration/devices/events` | Use `Device events`, `Events`, `Saved events`, and `Live events`; reserve `attendance punch` only for actual `ATTENDANCE/TAP` labels |
+| Raw `source` and `status` were used as primary event concepts | 2026-07-09 hard cutover request and implementation | Treat `source` as `Runtime path` and `status` as `HRIS result`; primary filters and summaries must use persisted event category/action |
 
 ## Rules
 

@@ -14,7 +14,7 @@ const modalSource = readFileSync(
 );
 
 describe("device events page UX contract", () => {
-	it("defaults saved events to punch time descending so sync/backfill rows keep punch chronology", () => {
+	it("defaults saved events to event time descending so sync/backfill rows keep chronology", () => {
 		expect(routeSource).to.contain(
 			'const sort = searchParams.get("sort") || "eventTime";',
 		);
@@ -47,7 +47,7 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("HRIS events");
 		expect(routeSource).to.contain("Estimated unsaved");
 		expect(routeSource).to.contain("Will skip");
-		expect(routeSource).to.contain("Source logs scanned");
+		expect(routeSource).to.contain("Device logs scanned");
 		expect(routeSource).to.contain("Saved to HRIS");
 		expect(routeSource).to.contain("Sync scans device source logs, then classifies each row against HRIS.");
 		expect(routeSource).not.to.contain("Missing saved");
@@ -57,30 +57,65 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Sync logs");
 	});
 
-	it("exposes the saved punch reset only in the admin debug sync view", () => {
+	it("exposes the saved event reset only in the admin debug sync view", () => {
 		expect(routeSource).to.contain('searchParams.get("debug") === "true"');
 		expect(routeSource).to.contain("canUseDebugReset");
-		expect(routeSource).to.contain("Debug reset saved punches");
+		expect(routeSource).to.contain("Debug reset saved events");
 		expect(routeSource).to.contain("Preview reset");
 		expect(routeSource).to.contain("Reset scoped data");
 		expect(routeSource).to.contain("Export backup and reset");
 		expect(routeSource).to.contain("Also delete linked attendance rows");
 		expect(routeSource).to.contain('execute: false');
 		expect(routeSource).to.contain('execute: true');
-		expect(routeSource).to.contain('title="Reset scoped saved punches"');
+		expect(routeSource).to.contain('title="Reset scoped saved events"');
 	});
 
-	it("does not render terminal manage deeplinks from saved rows or punch details", () => {
+	it("does not render terminal manage deeplinks from saved rows or event details", () => {
 		expect(routeSource).not.to.contain("/admin/devices/manage/${item.deviceId}");
 		expect(routeSource).not.to.contain("/admin/devices/manage/${activeEvent.deviceId}");
 		expect(routeSource).to.contain("Employee record");
 	});
 
-	it("keeps source details in the event modal instead of the saved punches table", () => {
+	it("keeps runtime details in the event modal instead of the saved events table", () => {
 		expect(routeSource).not.to.contain('label: "Source",');
 		expect(routeSource).to.contain('next.set("action", "view-event")');
 		expect(routeSource).to.contain("formatEventSource(activeEvent.source)");
 		expect(routeSource).to.contain("formatEventSourceDetail(activeEvent.source)");
+	});
+
+	it("uses human event and HRIS result language instead of raw source/status labels", () => {
+		expect(routeSource).to.contain("Device events");
+		expect(routeSource).to.contain("All event categories");
+		expect(routeSource).to.contain("All event actions");
+		expect(routeSource).to.contain('label: "Event"');
+		expect(routeSource).to.contain('label: "HRIS result"');
+		expect(routeSource).to.contain("event.taxonomy?.eventLabel");
+		expect(routeSource).to.contain("activeEvent.eventLabel");
+		expect(routeSource).to.contain("activeEvent.eventCategory");
+		expect(routeSource).to.contain("activeEvent.eventAction");
+		expect(routeSource).to.contain("activeEvent.eventConfidence");
+		expect(routeSource).to.contain("All HRIS results");
+		expect(routeSource).to.contain("All runtime paths");
+		expect(routeSource).to.contain("Hikvision SDK listener");
+		expect(routeSource).to.contain("ZKTeco Linux bridge");
+		expect(routeSource).to.contain('title="Device event details"');
+		expect(routeSource).to.not.contain("Device attendance");
+		expect(routeSource).to.not.contain("Punch details");
+		expect(routeSource).to.not.contain("All statuses");
+		expect(routeSource).to.not.contain("All sources");
+	});
+
+	it("keeps device form runtime adapter copy out of raw source wording", () => {
+		const manageSource = readFileSync(
+			resolve(currentDir, "../routes/admin/devices/manage.tsx"),
+			"utf8",
+		);
+
+		expect(manageSource).to.contain("Runtime adapter *");
+		expect(manageSource).to.contain("Callback path");
+		expect(manageSource).to.contain("Internal adapter key");
+		expect(manageSource).not.to.contain("Source adapter *");
+		expect(manageSource).not.to.contain("Runtime source");
 	});
 
 	it("does not treat a connected socket as proof that the Hikvision SDK listener is receiving taps", () => {

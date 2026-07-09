@@ -12,6 +12,7 @@ import {
 	parseZktecoEventTime,
 	ZKTECO_DEVICE_EVENT_SOURCE,
 } from "../../helper/zkteco-event-contract.helper";
+import { buildPersistedDeviceEventTaxonomy } from "../../helper/device-event-taxonomy.helper";
 
 export const controller = (prisma: PrismaClient) => {
 	const publishDeviceEventSaved = (req: Request, eventRecord: any) =>
@@ -72,6 +73,16 @@ export const controller = (prisma: PrismaClient) => {
 
 		if (existing) return { eventRecord: existing, isDuplicate: true };
 
+		const eventType = data.event.eventType || "AttendanceTransaction";
+		const taxonomy = buildPersistedDeviceEventTaxonomy({
+			source: ZKTECO_DEVICE_EVENT_SOURCE,
+			status: "RECEIVED",
+			eventType,
+			major: data.event.attState !== undefined ? String(data.event.attState) : null,
+			minor: data.event.attStateName || null,
+			payload: data.payload,
+		});
+
 		const eventRecord = await eventClient.create({
 			data: {
 				organizationId: data.device.organizationId,
@@ -80,7 +91,8 @@ export const controller = (prisma: PrismaClient) => {
 				employeeNo: data.employeeNo || null,
 				source: ZKTECO_DEVICE_EVENT_SOURCE,
 				status: "RECEIVED",
-				eventType: data.event.eventType || "AttendanceTransaction",
+				...taxonomy,
+				eventType,
 				verifyMode: data.event.verifyMode || null,
 				major: data.event.attState !== undefined ? String(data.event.attState) : null,
 				minor: data.event.attStateName || null,

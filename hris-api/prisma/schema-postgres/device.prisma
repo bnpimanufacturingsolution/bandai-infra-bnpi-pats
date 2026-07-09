@@ -21,6 +21,40 @@ enum DeviceEventSource {
   ZKTECO_EVENT
 }
 
+enum DeviceEventCategory {
+  ATTENDANCE
+  ENROLLMENT
+  USER_MANAGEMENT
+  ACCESS_CONTROL
+  DEVICE_HEALTH
+  RUNTIME
+  UNKNOWN_VENDOR
+}
+
+enum DeviceEventAction {
+  TAP
+  FINGERPRINT_ENROLLED
+  FINGERPRINT_UPDATED
+  FINGERPRINT_DELETED
+  CARD_ENROLLED
+  CARD_UPDATED
+  CARD_DELETED
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  TAP_REJECTED
+  SYNC_IMPORTED
+  LISTENER_RECEIVED
+  UNKNOWN
+}
+
+enum DeviceEventConfidence {
+  PROVEN
+  SUPPORTED
+  INFERRED
+  UNKNOWN
+}
+
 enum DeviceUserStatus {
   ACTIVE
   UNMATCHED
@@ -79,6 +113,10 @@ model DeviceEvent {
   employeeNo   String?
   source       DeviceEventSource @default(HIKVISION_CALLBACK)
   status       DeviceEventStatus @default(RECEIVED)
+  eventCategory   DeviceEventCategory   @default(UNKNOWN_VENDOR)
+  eventAction     DeviceEventAction     @default(UNKNOWN)
+  eventLabel      String                @default("Device event")
+  eventConfidence DeviceEventConfidence @default(UNKNOWN)
   eventType    String?
   major        String?
   minor        String?
@@ -95,6 +133,9 @@ model DeviceEvent {
   @@index([organizationId, deviceId, receivedAt])
   @@index([organizationId, status, receivedAt])
   @@index([organizationId, source, receivedAt])
+  @@index([organizationId, eventCategory, eventAction, eventTime])
+  @@index([organizationId, source, eventTime])
+  @@index([organizationId, status, eventTime])
   @@index([organizationId, source, status])
   @@index([organizationId, source, receivedAt(sort: Desc), createdAt(sort: Desc)])
   @@index([organizationId, employeeNo, receivedAt])

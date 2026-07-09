@@ -36,6 +36,7 @@ import {
 import { emitDeviceEventSaved } from "../../../helper/device-event-realtime.helper";
 import { emitAttendanceRealtimeEvent } from "../../../helper/attendance-realtime.helper";
 import { refreshTimesheetForAttendanceDate } from "../../../helper/timesheet.helper";
+import { buildPersistedDeviceEventTaxonomy } from "../../../helper/device-event-taxonomy.helper";
 
 export const controller = (prisma: PrismaClient) => {
 	const getEmployeeDisplayNameFromSnapshot = (employee: any) => {
@@ -66,6 +67,10 @@ export const controller = (prisma: PrismaClient) => {
 						employeeNo: true,
 						source: true,
 						status: true,
+						eventCategory: true,
+						eventAction: true,
+						eventLabel: true,
+						eventConfidence: true,
 						eventType: true,
 						major: true,
 						minor: true,
@@ -258,18 +263,35 @@ export const controller = (prisma: PrismaClient) => {
 				return String(candidateSerial || "").trim() === serialNo;
 			});
 			if (existingBySerial) {
+				const taxonomy = buildPersistedDeviceEventTaxonomy({
+					source: data.source,
+					status: existingBySerial.status || "RECEIVED",
+					eventType: data.event.eventType ? String(data.event.eventType) : null,
+					major: data.event.major ? String(data.event.major) : null,
+					minor: data.event.minor ? String(data.event.minor) : null,
+					payload: data.payload,
+				});
 				const updated = await eventClient.update({
 					where: { id: existingBySerial.id },
 					data: {
 						eventTime: data.eventTime,
 						dedupeKey: data.dedupeKey,
 						payload: data.payload,
+						...taxonomy,
 					},
 				});
 				return { eventRecord: updated, isDuplicate: true };
 			}
 		}
 
+		const taxonomy = buildPersistedDeviceEventTaxonomy({
+			source: data.source,
+			status: "RECEIVED",
+			eventType: data.event.eventType ? String(data.event.eventType) : null,
+			major: data.event.major ? String(data.event.major) : null,
+			minor: data.event.minor ? String(data.event.minor) : null,
+			payload: data.payload,
+		});
 		const eventRecord = await eventClient.create({
 			data: {
 				organizationId: data.device.organizationId,
@@ -278,6 +300,7 @@ export const controller = (prisma: PrismaClient) => {
 				employeeNo: data.employeeNo || null,
 				source: data.source,
 				status: "RECEIVED",
+				...taxonomy,
 				eventType: data.event.eventType ? String(data.event.eventType) : null,
 				major: data.event.major ? String(data.event.major) : null,
 				minor: data.event.minor ? String(data.event.minor) : null,

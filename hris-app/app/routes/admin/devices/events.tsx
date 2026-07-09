@@ -93,6 +93,12 @@ type UnifiedDeviceEventRow = {
 	verifyMode?: string | null;
 	serialNo?: string | number | null;
 	savedEventId?: string | null;
+	eventCategory?: string | null;
+	eventAction?: string | null;
+	eventLabel?: string | null;
+	processingLabel?: string | null;
+	transportLabel?: string | null;
+	capabilityConfidence?: string | null;
 };
 
 type DeviceEventSavedPayload = {
@@ -192,21 +198,50 @@ const timeWindowOptions: SelectOption[] = [
 const PH_TIME_ZONE = "Asia/Manila";
 
 const savedStatusOptions: SelectOption[] = [
-	{ value: "all", label: "All statuses" },
-	{ value: "MATCHED", label: "Matched" },
+	{ value: "all", label: "All HRIS results" },
+	{ value: "MATCHED", label: "Matched to employee" },
 	{ value: "RECEIVED", label: "Received" },
 	{ value: "ATTENDANCE_CREATED", label: "Attendance created" },
 	{ value: "ATTENDANCE_UPDATED", label: "Attendance updated" },
 	{ value: "UNMATCHED", label: "Needs match" },
-	{ value: "IGNORED", label: "Recorded" },
-	{ value: "FAILED", label: "Review" },
+	{ value: "IGNORED", label: "Recorded only" },
+	{ value: "FAILED", label: "Needs review" },
 ];
 
 const sourceOptions: SelectOption[] = [
-	{ value: "all", label: "All sources" },
-	{ value: "HIKVISION_CALLBACK", label: "Hikvision watcher" },
-	{ value: "EN_HCNETSDK_ALARM", label: "SDK alarm listener" },
-	{ value: "ZKTECO_EVENT", label: "ZKTeco sidecar" },
+	{ value: "all", label: "All runtime paths" },
+	{ value: "HIKVISION_CALLBACK", label: "Hikvision callback watcher" },
+	{ value: "EN_HCNETSDK_ALARM", label: "Hikvision SDK listener" },
+	{ value: "ZKTECO_EVENT", label: "ZKTeco Linux bridge" },
+];
+
+const eventCategoryOptions: SelectOption[] = [
+	{ value: "all", label: "All event categories" },
+	{ value: "ATTENDANCE", label: "Attendance" },
+	{ value: "ENROLLMENT", label: "Enrollment" },
+	{ value: "USER_MANAGEMENT", label: "User management" },
+	{ value: "ACCESS_CONTROL", label: "Access control" },
+	{ value: "DEVICE_HEALTH", label: "Device health" },
+	{ value: "RUNTIME", label: "Runtime" },
+	{ value: "UNKNOWN_VENDOR", label: "Unknown vendor" },
+];
+
+const eventActionOptions: SelectOption[] = [
+	{ value: "all", label: "All event actions" },
+	{ value: "TAP", label: "Tap" },
+	{ value: "FINGERPRINT_ENROLLED", label: "Fingerprint enrolled" },
+	{ value: "FINGERPRINT_UPDATED", label: "Fingerprint updated" },
+	{ value: "FINGERPRINT_DELETED", label: "Fingerprint deleted" },
+	{ value: "CARD_ENROLLED", label: "Card enrolled" },
+	{ value: "CARD_UPDATED", label: "Card updated" },
+	{ value: "CARD_DELETED", label: "Card deleted" },
+	{ value: "USER_CREATED", label: "User created" },
+	{ value: "USER_UPDATED", label: "User updated" },
+	{ value: "USER_DELETED", label: "User deleted" },
+	{ value: "TAP_REJECTED", label: "Rejected tap" },
+	{ value: "SYNC_IMPORTED", label: "Sync imported" },
+	{ value: "LISTENER_RECEIVED", label: "Listener received" },
+	{ value: "UNKNOWN", label: "Unknown" },
 ];
 
 const compactSelectClassName = "h-7 text-xs";
@@ -228,7 +263,7 @@ const getDateKey = (date: Date) => {
 const subtractDays = (date: Date, days: number) =>
 	new Date(date.getTime() - days * 24 * 60 * 60 * 1000);
 
-const formatPunchTime = (value: string | Date | null | undefined) => {
+const formatEventTime = (value: string | Date | null | undefined) => {
 	if (!value) return "-";
 	const date = value instanceof Date ? value : new Date(value);
 	if (Number.isNaN(date.getTime())) return "-";
@@ -261,8 +296,8 @@ const formatBusinessStatus = (status: string) => {
 	if (status === "ATTENDANCE_CREATED") return "Attendance created";
 	if (status === "ATTENDANCE_UPDATED") return "Attendance updated";
 	if (status === "UNMATCHED") return "Needs match";
-	if (status === "IGNORED") return "Recorded";
-	if (status === "FAILED") return "Review";
+	if (status === "IGNORED") return "Recorded, no attendance change";
+	if (status === "FAILED") return "Needs review";
 	if (status === "RECEIVED") return "Received";
 	if (status === "MATCHED") return "Matched to employee";
 	return status
@@ -273,9 +308,9 @@ const formatBusinessStatus = (status: string) => {
 };
 
 const formatEventSource = (source?: string | null) => {
-	if (source === "ZKTECO_EVENT") return "ZKTeco sidecar";
-	if (source === "EN_HCNETSDK_ALARM") return "SDK alarm listener";
-	if (source === "HIKVISION_CALLBACK") return "Hikvision watcher";
+	if (source === "ZKTECO_EVENT") return "ZKTeco Linux bridge";
+	if (source === "EN_HCNETSDK_ALARM") return "Hikvision SDK listener";
+	if (source === "HIKVISION_CALLBACK") return "Hikvision callback watcher";
 	return source || "-";
 };
 
@@ -284,6 +319,17 @@ const formatEventSourceDetail = (source?: string | null) => {
 	if (source === "EN_HCNETSDK_ALARM") return "Saved from the HCNetSDK alarm listener.";
 	if (source === "HIKVISION_CALLBACK") return "Saved from the Hikvision callback watcher.";
 	return "Saved by HRIS device event processing.";
+};
+
+const formatEventTaxonomyToken = (value?: string | null) => {
+	const text = String(value || "").trim();
+	if (!text) return "-";
+	return text
+		.toLowerCase()
+		.split(/[_\s-]+/)
+		.filter(Boolean)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join(" ");
 };
 
 const getEmployeeRecordUrl = (employeeProfileId?: string | null) =>
@@ -516,7 +562,14 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		status: event.status,
 		source: event.source,
 		receivedAt: event.receivedAt,
-		businessStatus: formatBusinessStatus(event.status),
+		businessStatus: event.taxonomy?.processingLabel || formatBusinessStatus(event.status),
+		eventCategory: event.eventCategory || event.taxonomy?.eventCategory || null,
+		eventAction: event.eventAction || event.taxonomy?.eventAction || null,
+		eventLabel: event.eventLabel || event.taxonomy?.eventLabel || event.eventType || payload.eventKind || null,
+		processingLabel: event.taxonomy?.processingLabel || formatBusinessStatus(event.status),
+		transportLabel: event.taxonomy?.transportLabel || formatEventSource(event.source),
+		capabilityConfidence:
+			event.eventConfidence || event.taxonomy?.eventConfidence || event.taxonomy?.capabilityConfidence || null,
 		attendanceId: event.attendanceId,
 		doorNo: event.doorNo,
 		verifyMode: event.verifyMode || getVerifyModeFromPayload(payload),
@@ -546,7 +599,13 @@ const normalizeLiveEvent = (
 	employeeName: event.hrisEmployee?.fullName || savedMatch?.employeeName || event.name,
 	status: savedMatch?.status || "NOT_SAVED",
 	source: savedMatch?.source || null,
-	businessStatus: savedMatch?.businessStatus || "Pending",
+	businessStatus: savedMatch?.businessStatus || "Not saved yet",
+	eventCategory: savedMatch?.eventCategory || "ATTENDANCE",
+	eventAction: savedMatch?.eventAction || "TAP",
+	eventLabel: savedMatch?.eventLabel || "Attendance punch",
+	processingLabel: savedMatch?.processingLabel || "Not saved yet",
+	transportLabel: savedMatch?.transportLabel || "Live ACS preview",
+	capabilityConfidence: savedMatch?.capabilityConfidence || "inferred",
 	attendanceId: savedMatch?.attendanceId || null,
 	doorNo: event.doorNo,
 	verifyMode: event.currentVerifyMode || savedMatch?.verifyMode || null,
@@ -597,6 +656,8 @@ export default function DeviceEventsPage() {
 	const query = searchParams.get("query") || "";
 	const deviceId = searchParams.get("deviceId") || "all";
 	const viewMode = (searchParams.get("view") || "saved") as EventViewMode;
+	const eventCategory = searchParams.get("eventCategory") || "all";
+	const eventAction = searchParams.get("eventAction") || "all";
 	const status = searchParams.get("status") || "all";
 	const source = searchParams.get("source") || "all";
 	const sort = searchParams.get("sort") || "eventTime";
@@ -691,6 +752,8 @@ export default function DeviceEventsPage() {
 		limit: limitParam,
 		query: viewMode === "saved" ? query : undefined,
 		deviceId: deviceId === "all" ? undefined : deviceId,
+		eventCategory: viewMode === "saved" && eventCategory !== "all" ? eventCategory : undefined,
+		eventAction: viewMode === "saved" && eventAction !== "all" ? eventAction : undefined,
 		status: viewMode === "saved" && status !== "all" ? status : undefined,
 		source: viewMode === "saved" && source !== "all" ? source : undefined,
 		sort: viewMode === "saved" ? sort : undefined,
@@ -751,6 +814,20 @@ export default function DeviceEventsPage() {
 			if (status !== "all" && payload.status && payload.status !== status) {
 				return false;
 			}
+			if (
+				eventCategory !== "all" &&
+				payload.event?.eventCategory &&
+				payload.event.eventCategory !== eventCategory
+			) {
+				return false;
+			}
+			if (
+				eventAction !== "all" &&
+				payload.event?.eventAction &&
+				payload.event.eventAction !== eventAction
+			) {
+				return false;
+			}
 			if (source !== "all" && payload.source && payload.source !== source) {
 				return false;
 			}
@@ -791,6 +868,8 @@ export default function DeviceEventsPage() {
 		};
 	}, [
 		deviceId,
+		eventAction,
+		eventCategory,
 		isConnected,
 		limitParam,
 		organizationId,
@@ -814,7 +893,7 @@ export default function DeviceEventsPage() {
 			void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
 			void refetch().then((result) => {
 				if (result.error) {
-					toast.warning("Saved punches could not refresh", {
+					toast.warning("Saved events could not refresh", {
 						id: "device-events-recovery-refresh",
 						description: getAsyncErrorMessage(
 							result.error,
@@ -1369,7 +1448,7 @@ export default function DeviceEventsPage() {
 					setResetPreviewState({ status: "ready", data });
 					toast.success("Reset preview ready", {
 						id: "device-events-reset-preview",
-						description: `${formatCount(data.counts?.deviceEvents || 0)} saved punches in scope.`,
+						description: `${formatCount(data.counts?.deviceEvents || 0)} saved events in scope.`,
 					});
 				},
 				onError: (error: unknown) => {
@@ -1392,7 +1471,7 @@ export default function DeviceEventsPage() {
 				onSuccess: (data) => {
 					setResetPreviewState({ status: "executed", data });
 					setShowResetConfirmModal(false);
-					toast.success("Saved punches reset", {
+					toast.success("Saved events reset", {
 						id: "device-events-reset-execute",
 						description: data.backupDir ? `Backup: ${data.backupDir}` : undefined,
 					});
@@ -1419,13 +1498,13 @@ export default function DeviceEventsPage() {
 		liveDeviceName: liveDevice?.name,
 	});
 	const realtimeStatusDetail = lastRealtimeEvent
-		? `Last saved-row socket event ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
+		? `Last saved-row socket event ${formatEventTime(lastRealtimeEvent.emittedAt)}`
 		: isSdkAlarmSavedScope && latestSdkSavedEvent
-			? `Last SDK alarm row ${formatPunchTime(latestSdkSavedEvent.receivedAt || latestSdkSavedEvent.eventTime)}`
+			? `Last SDK alarm row ${formatEventTime(latestSdkSavedEvent.receivedAt || latestSdkSavedEvent.eventTime)}`
 			: isSdkAlarmSavedScope
 				? "No recent SDK alarm rows in this saved-events scope"
 			: latestSavedEvent
-			? `Latest saved row ${formatPunchTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
+			? `Latest saved row ${formatEventTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
 			: "Waiting for the next saved row from watcher or callback";
 	const savedRowsBadgeVariant = isSdkAlarmSavedScope
 		? isLatestSdkSavedFresh
@@ -1628,19 +1707,42 @@ export default function DeviceEventsPage() {
 	const columns: Column<UnifiedDeviceEventRow>[] = [
 		{
 			key: "eventTime",
-			label: "Punch time",
+			label: "Event time",
 			sortable: viewMode === "saved",
 			width: "190px",
 			required: true,
 			render: (value) => (
 				<span className="whitespace-nowrap text-sm font-medium text-slate-950">
-					{formatPunchTime(value)}
+					{formatEventTime(value)}
 				</span>
 			),
 		},
 		{
+			key: "eventAction",
+			label: "Event",
+			width: "220px",
+			required: true,
+			render: (value, item) => (
+				<div className="min-w-0">
+					<p className="truncate text-sm font-semibold text-slate-950">
+						{item.eventLabel || "Device event"}
+					</p>
+					<div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+						<span className="truncate text-xs text-slate-500">
+							{formatEventTaxonomyToken(item.eventCategory)}
+						</span>
+						{item.capabilityConfidence && item.capabilityConfidence !== "PROVEN" && item.capabilityConfidence !== "proven" ? (
+							<Badge variant="secondary" className="px-1.5 py-0 text-[11px] font-semibold">
+								{formatEventTaxonomyToken(item.capabilityConfidence)}
+							</Badge>
+						) : null}
+					</div>
+				</div>
+			),
+		},
+		{
 			key: "employeeNo",
-			label: "Employee",
+			label: "Employee/User",
 			sortable: viewMode === "saved",
 			width: "290px",
 			required: true,
@@ -1702,6 +1804,22 @@ export default function DeviceEventsPage() {
 				</div>
 			),
 		},
+		{
+			key: "status",
+			label: "HRIS result",
+			sortable: viewMode === "saved",
+			width: "190px",
+			render: (_value, item) => (
+				<div className="min-w-0">
+					<p className="truncate text-sm font-medium text-slate-950">
+						{item.processingLabel || item.businessStatus}
+					</p>
+					<p className="truncate text-xs text-slate-500">
+						{item.attendanceId ? "Attendance linked" : "No attendance link"}
+					</p>
+				</div>
+			),
+		},
 	];
 
 	return (
@@ -1718,7 +1836,7 @@ export default function DeviceEventsPage() {
 					</Button>
 					<div className="min-w-0">
 						<h1 className="truncate text-lg font-semibold text-slate-950">
-							Device attendance
+							Device events
 						</h1>
 					</div>
 				</div>
@@ -1782,11 +1900,11 @@ export default function DeviceEventsPage() {
 				<div className="rounded-md border border-red-200 bg-red-50 px-3 py-3">
 					<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
 						<div className="min-w-0">
-							<p className="text-sm font-semibold text-red-950">Debug reset saved punches</p>
+							<p className="text-sm font-semibold text-red-950">Debug reset saved events</p>
 							<p className="mt-1 text-xs text-red-800">
 								Scope: {deviceId === "all" ? "all devices" : selectedDevice?.name || deviceId}
 								{" / "}
-								{source === "all" ? "all sources" : formatEventSource(source)}
+								{source === "all" ? "all runtime paths" : formatEventSource(source)}
 								{" / "}
 								{timeWindowOptions.find((option) => option.value === timeWindow)?.label || timeWindow}
 							</p>
@@ -1807,7 +1925,7 @@ export default function DeviceEventsPage() {
 							{resetPreviewCounts ? (
 								<div className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
 									<div>
-										<span className="block text-red-700">Saved punches</span>
+										<span className="block text-red-700">Saved events</span>
 										<span className="font-semibold text-red-950">
 											{formatCount(resetPreviewCounts.deviceEvents)}
 										</span>
@@ -1885,6 +2003,8 @@ export default function DeviceEventsPage() {
 								if (value === "live") {
 									next.delete("status");
 									next.delete("source");
+									next.delete("eventCategory");
+									next.delete("eventAction");
 									next.delete("query");
 									next.set("window", "today");
 									if (
@@ -1919,24 +2039,44 @@ export default function DeviceEventsPage() {
 					{viewMode === "saved" && (
 						<>
 							<Select
-								options={savedStatusOptions}
-								value={status}
-								onChange={(value) => setFilter("status", value)}
-								placeholder="All statuses"
+								options={eventCategoryOptions}
+								value={eventCategory}
+								onChange={(value) => setFilter("eventCategory", value)}
+								placeholder="All event categories"
 								className={compactSelectClassName}
 								dropdownClassName={compactSelectDropdownClassName}
 							/>
 							<Select
-								options={sourceOptions}
-								value={source}
-								onChange={(value) => setFilter("source", value)}
-								placeholder="All sources"
+								options={eventActionOptions}
+								value={eventAction}
+								onChange={(value) => setFilter("eventAction", value)}
+								placeholder="All event actions"
 								className={compactSelectClassName}
 								dropdownClassName={compactSelectDropdownClassName}
 							/>
 						</>
 					)}
 				</div>
+				{viewMode === "saved" && isSyncLogsDebugView ? (
+					<div className="grid gap-2 border-b border-slate-200 bg-slate-50 p-2 md:grid-cols-2">
+						<Select
+							options={sourceOptions}
+							value={source}
+							onChange={(value) => setFilter("source", value)}
+							placeholder="Runtime path"
+							className={compactSelectClassName}
+							dropdownClassName={compactSelectDropdownClassName}
+						/>
+						<Select
+							options={savedStatusOptions}
+							value={status}
+							onChange={(value) => setFilter("status", value)}
+							placeholder="HRIS result"
+							className={compactSelectClassName}
+							dropdownClassName={compactSelectDropdownClassName}
+						/>
+					</div>
+				) : null}
 
 				<div className="grid grid-cols-3 gap-0 divide-x divide-slate-200">
 					<div
@@ -1994,7 +2134,7 @@ export default function DeviceEventsPage() {
 									viewMode === "saved" && sdkSummary
 										? "SDK events"
 										: viewMode === "live"
-											? "Device punches"
+											? "Live events"
 											: "Total events",
 								value:
 									viewMode === "saved" && sdkSummary
@@ -2041,7 +2181,7 @@ export default function DeviceEventsPage() {
 			{viewMode === "live" && liveDeviceId && !canReadLiveEvents && !isLoadingHealth && (
 				<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
 					{isZktecoHealth
-						? "ZKTeco punches are received through the configured SDK sidecar and shown after they are saved in HRIS."
+						? "ZKTeco events are received through the configured SDK sidecar and shown after they are saved in HRIS."
 						: "Live reads are paused until the selected device connection responds."}
 				</div>
 			)}
@@ -2056,7 +2196,7 @@ export default function DeviceEventsPage() {
 				<button
 					type="button"
 					onClick={focusLatestSavedEvent}
-					aria-label="Show latest saved punch row"
+					aria-label="Show latest saved event row"
 					className={
 						isLatestSavedFresh
 							? "w-full rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-sm text-emerald-900 transition hover:border-emerald-300 hover:bg-emerald-100"
@@ -2072,14 +2212,14 @@ export default function DeviceEventsPage() {
 								}
 							/>
 							<span className="truncate font-medium">
-								{latestSavedProcessingLabel || (isLatestSavedFresh ? "Latest watcher save" : "Latest saved punch")}
+								{latestSavedProcessingLabel || (isLatestSavedFresh ? "Latest watcher save" : "Latest saved event")}
 							</span>
 							<span className="truncate text-xs opacity-80">
 								{latestSavedEvent.employeeName || `No. ${latestSavedEvent.employeeNo || "-"}`}
 							</span>
 						</div>
 						<div className="flex min-w-0 items-center gap-2 text-xs">
-							<span className="truncate">{formatPunchTime(latestSavedEvent.receivedAt)}</span>
+							<span className="truncate">{formatEventTime(latestSavedEvent.receivedAt)}</span>
 							<span className="text-slate-400">/</span>
 							<span className="truncate">{formatEventSource(latestSavedEvent.source)}</span>
 							<span className="text-slate-400">/</span>
@@ -2098,17 +2238,17 @@ export default function DeviceEventsPage() {
 				<div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
 					<div className="min-w-0">
 						<h2 className="truncate text-sm font-semibold text-slate-950">
-							{viewMode === "live" ? "Live punches" : "Saved punches"}
+							{viewMode === "live" ? "Live events" : "Saved events"}
 						</h2>
 					</div>
 				</div>
 				<DataTable<UnifiedDeviceEventRow>
-					title={viewMode === "live" ? "Punches" : "Saved punches"}
+					title={viewMode === "live" ? "Events" : "Saved events"}
 					description=""
 					data={rows}
 					columns={columns}
 					isLoading={isEventLoading}
-					emptyMessage={viewMode === "live" ? "No device punches found" : "No saved events found"}
+					emptyMessage={viewMode === "live" ? "No device events found" : "No saved events found"}
 					emptyDescription=""
 					showSearch={viewMode === "saved"}
 					showFilters={false}
@@ -2156,7 +2296,7 @@ export default function DeviceEventsPage() {
 			<Modal
 				open={showResetConfirmModal}
 				onOpenChange={(open) => setShowResetConfirmModal(open)}
-				title="Reset scoped saved punches"
+				title="Reset scoped saved events"
 				description="A backup export is written before any records are deleted."
 				className="max-w-lg">
 				<div className="space-y-4">
@@ -2164,7 +2304,7 @@ export default function DeviceEventsPage() {
 						<p className="font-semibold">This will delete only the previewed scope.</p>
 						<div className="mt-3 grid grid-cols-2 gap-2 text-xs">
 							<div>
-								<span className="block text-red-700">Saved punches</span>
+								<span className="block text-red-700">Saved events</span>
 								<span className="font-semibold">{formatCount(resetPreviewCounts?.deviceEvents)}</span>
 							</div>
 							<div>
@@ -2182,9 +2322,9 @@ export default function DeviceEventsPage() {
 								</span>
 							</div>
 							<div>
-								<span className="block text-red-700">Source</span>
+								<span className="block text-red-700">Runtime path</span>
 								<span className="font-semibold">
-									{source === "all" ? "All sources" : formatEventSource(source)}
+									{source === "all" ? "All runtime paths" : formatEventSource(source)}
 								</span>
 							</div>
 						</div>
@@ -2267,9 +2407,9 @@ export default function DeviceEventsPage() {
 										Tap proof:{" "}
 										<span className="font-semibold">
 											{isLatestSdkSavedFresh
-												? `fresh row at ${formatPunchTime(latestSdkSavedEvent?.receivedAt || latestSdkSavedEvent?.eventTime)}`
+												? `fresh row at ${formatEventTime(latestSdkSavedEvent?.receivedAt || latestSdkSavedEvent?.eventTime)}`
 												: latestSdkSavedEvent
-													? `last row at ${formatPunchTime(latestSdkSavedEvent.receivedAt || latestSdkSavedEvent.eventTime)}`
+													? `last row at ${formatEventTime(latestSdkSavedEvent.receivedAt || latestSdkSavedEvent.eventTime)}`
 													: "no SDK rows in the current scope"}
 										</span>
 									</p>
@@ -2361,7 +2501,7 @@ export default function DeviceEventsPage() {
 								<div className="flex min-w-0 justify-between gap-3">
 									<dt className="text-slate-500">Checked</dt>
 									<dd className="truncate font-semibold text-slate-900">
-										{formatPunchTime(hikvisionListenerStatus?.checkedAt)}
+										{formatEventTime(hikvisionListenerStatus?.checkedAt)}
 									</dd>
 								</div>
 							</dl>
@@ -2532,7 +2672,7 @@ export default function DeviceEventsPage() {
 											</div>
 											<div className="grid shrink-0 grid-cols-2 gap-2 text-sm sm:grid-cols-3 md:min-w-[660px] lg:grid-cols-[104px_repeat(5,minmax(76px,1fr))]">
 												<div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Status</p>
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Read state</p>
 													<Badge
 														variant={
 															device.canStartSync
@@ -2717,7 +2857,7 @@ export default function DeviceEventsPage() {
 							<div className="mt-3 grid grid-cols-2 gap-2 rounded-md border border-orange-100 bg-white/70 px-3 py-2 text-xs text-orange-900">
 								<div>
 									<span className="block text-orange-700">
-										{isTargetedImport ? "Latest rows checked" : "Source logs scanned"}
+										{isTargetedImport ? "Latest rows checked" : "Device logs scanned"}
 									</span>
 									<span className="font-semibold">
 										{formatCount(importJobProgress.processed)} / {formatCount(isTargetedImport ? activeImportScanLimit ?? importJobProgress.total : importJobProgress.total)}
@@ -2839,7 +2979,7 @@ export default function DeviceEventsPage() {
 				onOpenChange={(open) => {
 					if (!open) closeEventDetails();
 				}}
-				title="Punch details"
+				title="Device event details"
 				className="max-w-4xl">
 				{activeEvent ? (
 					<div className="space-y-5">
@@ -2879,26 +3019,40 @@ export default function DeviceEventsPage() {
 							</div>
 						</div>
 
-						<div className="grid gap-3 md:grid-cols-3">
+						<div className="grid gap-3 md:grid-cols-4">
+							<div className="rounded-lg border border-slate-200 bg-white p-3">
+								<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+									<BadgeCheck className="h-3.5 w-3.5" />
+									Event
+								</div>
+								<p className="mt-2 text-sm font-semibold text-slate-950">
+									{activeEvent.eventLabel || "Device event"}
+								</p>
+								<div className="mt-2 space-y-1 text-xs text-slate-500">
+									<p>Event category: {formatEventTaxonomyToken(activeEvent.eventCategory || "UNKNOWN_VENDOR")}</p>
+									<p>Event action: {formatEventTaxonomyToken(activeEvent.eventAction || "UNKNOWN")}</p>
+									<p>Event confidence: {formatEventTaxonomyToken(activeEvent.eventConfidence || "UNKNOWN")}</p>
+								</div>
+							</div>
 							<div className="rounded-lg border border-slate-200 bg-white p-3">
 								<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
 									<Clock className="h-3.5 w-3.5" />
-									Punch time
+									Event time
 								</div>
 								<p className="mt-2 text-sm font-semibold text-slate-950">
-									{formatPunchTime(activeEvent.eventTime)}
+									{formatEventTime(activeEvent.eventTime)}
 								</p>
 								<p className="mt-1 text-xs text-slate-500">
-									Received {formatPunchTime(activeEvent.receivedAt || activeEvent.eventTime)}
+									Received {formatEventTime(activeEvent.receivedAt || activeEvent.eventTime)}
 								</p>
 							</div>
 							<div className="rounded-lg border border-slate-200 bg-white p-3">
 								<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
 									<BadgeCheck className="h-3.5 w-3.5" />
-									Status
+									HRIS result
 								</div>
 								<p className="mt-2 text-sm font-semibold text-slate-950">
-									{formatBusinessStatus(activeEvent.status)}
+									{activeEvent.processingLabel || formatBusinessStatus(activeEvent.status)}
 								</p>
 								<p className="mt-1 text-xs text-slate-500">
 									Attendance {activeEvent.attendanceId ? activeEvent.attendanceId : "not created yet"}
@@ -2907,10 +3061,10 @@ export default function DeviceEventsPage() {
 							<div className="rounded-lg border border-slate-200 bg-white p-3">
 								<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
 									<Wifi className="h-3.5 w-3.5" />
-									Source
+									Runtime path
 								</div>
 								<p className="mt-2 text-sm font-semibold text-slate-950">
-									{formatEventSource(activeEvent.source)}
+									{activeEvent.transportLabel || formatEventSource(activeEvent.source)}
 								</p>
 								<p className="mt-1 text-xs text-slate-500">
 									{formatEventSourceDetail(activeEvent.source)}
@@ -2974,7 +3128,7 @@ export default function DeviceEventsPage() {
 					</div>
 				) : (
 					<div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-						This punch is not in the current table page. Refresh the saved view or open it from the row again.
+						This event is not in the current table page. Refresh the saved view or open it from the row again.
 					</div>
 				)}
 			</Modal>

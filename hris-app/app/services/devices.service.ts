@@ -28,6 +28,30 @@ export type DeviceEventStatus =
 	| "FAILED";
 
 export type DeviceEventSource = "HIKVISION_CALLBACK" | "EN_HCNETSDK_ALARM" | "ZKTECO_EVENT";
+export type DeviceEventCategory =
+	| "ATTENDANCE"
+	| "ENROLLMENT"
+	| "USER_MANAGEMENT"
+	| "ACCESS_CONTROL"
+	| "DEVICE_HEALTH"
+	| "RUNTIME"
+	| "UNKNOWN_VENDOR";
+export type DeviceEventAction =
+	| "TAP"
+	| "FINGERPRINT_ENROLLED"
+	| "FINGERPRINT_UPDATED"
+	| "FINGERPRINT_DELETED"
+	| "CARD_ENROLLED"
+	| "CARD_UPDATED"
+	| "CARD_DELETED"
+	| "USER_CREATED"
+	| "USER_UPDATED"
+	| "USER_DELETED"
+	| "TAP_REJECTED"
+	| "SYNC_IMPORTED"
+	| "LISTENER_RECEIVED"
+	| "UNKNOWN";
+export type DeviceEventConfidence = "PROVEN" | "SUPPORTED" | "INFERRED" | "UNKNOWN";
 
 export interface DeviceEvent {
 	id: string;
@@ -56,6 +80,10 @@ export interface DeviceEvent {
 	employeeNo?: string | null;
 	source: DeviceEventSource;
 	status: DeviceEventStatus;
+	eventCategory: DeviceEventCategory | string;
+	eventAction: DeviceEventAction | string;
+	eventLabel: string;
+	eventConfidence: DeviceEventConfidence | string;
 	eventType?: string | null;
 	major?: string | null;
 	minor?: string | null;
@@ -64,12 +92,25 @@ export interface DeviceEvent {
 	dedupeKey: string;
 	payload?: any;
 	errorMessage?: string | null;
+	taxonomy?: {
+		eventCategory: string;
+		eventAction: string;
+		eventLabel: string;
+		eventConfidence?: DeviceEventConfidence | string;
+		processingLabel: string;
+		transportLabel: string;
+		capabilityConfidence: "proven" | "supported" | "inferred" | "unknown" | string;
+	};
 }
 
 export interface DeviceEventsResponse {
 	events: DeviceEvent[];
 	summary: {
 		total: number;
+		byCategory: Partial<Record<DeviceEventCategory | string, number>>;
+		byAction: Partial<Record<DeviceEventAction | string, number>>;
+		byProcessingResult: Partial<Record<DeviceEventStatus | string, number>>;
+		byRuntimePath: Partial<Record<DeviceEventSource | string, number>>;
 		byStatus: Partial<Record<DeviceEventStatus, number>>;
 		bySource: Partial<Record<DeviceEventSource, number>>;
 	};
@@ -610,7 +651,15 @@ class DevicesService extends APIService {
 
 			return {
 				events: eventsData?.events || [],
-				summary: eventsData?.summary || { total: 0, byStatus: {}, bySource: {} },
+				summary: eventsData?.summary || {
+					total: 0,
+					byCategory: {},
+					byAction: {},
+					byProcessingResult: {},
+					byRuntimePath: {},
+					byStatus: {},
+					bySource: {},
+				},
 				pagination: eventsData?.pagination,
 			};
 		} catch (error: any) {

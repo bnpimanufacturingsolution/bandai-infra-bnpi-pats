@@ -231,7 +231,7 @@ test("admin device events opens sync logs modal with device and saved counts bef
 
 	await page.goto("/admin/configuration/devices/events?view=saved");
 
-	await expect(page.getByRole("heading", { name: "Device attendance" })).toBeVisible({
+	await expect(page.getByRole("heading", { name: "Device events" })).toBeVisible({
 		timeout: routeReadyTimeoutMs,
 	});
 	await page.getByRole("button", { name: "Sync logs" }).click();
