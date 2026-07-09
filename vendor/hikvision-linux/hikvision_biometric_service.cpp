@@ -66,6 +66,7 @@ std::mutex evidence_mutex;
 bool execute_mode = false;
 std::string hris_api_base;
 std::string hris_api_token;
+std::string min_sdk_time;
 
 void handle_signal(int) {
     keep_running = 0;
@@ -308,6 +309,22 @@ void CALLBACK alarm_callback(
     job.minor = acs->dwMinor;
     job.event_kind = kind;
     job.sdk_time = sdk_time_to_string(acs->struTime);
+
+    if (!min_sdk_time.empty() && job.sdk_time < min_sdk_time) {
+        emit_json({
+            {"event", "acs_alarm_ignored_before_min_sdk_time"},
+            {"sourceDeviceId", source_device_id},
+            {"sourceHost", job.source_host},
+            {"employeeNo", job.employee_no},
+            {"serialNo", job.serial_no},
+            {"major", std::to_string(job.major)},
+            {"minor", std::to_string(job.minor)},
+            {"sdkTime", job.sdk_time},
+            {"minSdkTime", min_sdk_time}
+        });
+        return;
+    }
+
     job.include_fingerprints = is_fingerprint_management_minor(acs->dwMinor);
     queue_hris_device_event(job);
 
@@ -940,7 +957,7 @@ void usage(const char *program) {
     std::cerr
         << "Usage: " << program << " --device id|org|name|host|sdkPort|username|password[|peer] "
         << "[--device ...] [--evidence-jsonl path] [--hris-api-base url] [--hris-api-token token] "
-        << "[--execute] [--seconds n]\n";
+        << "[--min-sdk-time YYYY-MM-DDTHH:MM:SS] [--execute] [--seconds n]\n";
 }
 
 }  // namespace
@@ -977,6 +994,8 @@ int main(int argc, char **argv) {
             if (!next(&hris_api_base)) return 2;
         } else if (arg == "--hris-api-token") {
             if (!next(&hris_api_token)) return 2;
+        } else if (arg == "--min-sdk-time") {
+            if (!next(&min_sdk_time)) return 2;
         } else if (arg == "--execute") {
             execute_mode = true;
         } else if (arg == "--seconds") {

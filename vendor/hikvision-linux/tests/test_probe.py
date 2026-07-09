@@ -105,6 +105,8 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("queue_reconcile(job)", text)
         self.assertIn("worker_loop", text)
         self.assertIn("rawFingerprintTemplateStored", text)
+        self.assertIn("--min-sdk-time", text)
+        self.assertIn("acs_alarm_ignored_before_min_sdk_time", text)
         self.assertIn("MINOR_ADD_FINGER_BY_EMPLOYEE_NO", text)
         self.assertIn("MINOR_MOD_FINGER_BY_EMPLOYEE_NO", text)
 

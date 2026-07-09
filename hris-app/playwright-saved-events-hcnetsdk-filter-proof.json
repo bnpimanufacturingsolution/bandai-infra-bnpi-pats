@@ -1,0 +1,68 @@
+{
+  "targetUrl": "http://localhost:5175/admin/configuration/devices/events?view=saved&deviceId=cmpxw13hx002h7zwso7dyedrn&source=EN_HCNETSDK_ALARM",
+  "capturedAt": "2026-07-09T06:19:24.768Z",
+  "title": "HR Management System",
+  "finalUrl": "http://localhost:5175/admin/configuration/devices/events?view=saved&deviceId=cmpxw13hx002h7zwso7dyedrn&source=EN_HCNETSDK_ALARM",
+  "contains": {
+    "deviceAttendance": true,
+    "mainEntranceDevice": true,
+    "ernstTeyMalasa": true,
+    "savedRowsLive": true
+  },
+  "bodyPreview": "H\nhris-admin\n\nSystem Administrator\n\nhris-admin\nWORKING SPACE\nDashboard\nLoggings\nRULES & POLICIES\nRules & Policies\nCONFIGURATION\nConfiguration\nCompany Profile\nUsers\nEmployees\nDepartments\nSections\nPositions\nLevels\nSchedule Templates\nLeave Types\n201 Document Types\nBenefit Management\nAgencies\nHolidays\nPayroll Period Setup\nDevices\nMigration\nGuide\nDevice attendance\nSaved rows live\nSync logs\nRefresh\nSaved\nMain Entrance Device\nAll time\nAll statuses\nSDK alarm listener\n\nSaved-row updates on\n\nLatest saved row Jul 9, 2026, 2:05 PM\n\nSaved rows update live\n\nTotal events\n\n7\n\nMatched\n\n5\n\nNeeds match\n\n0\n\nHistorical punch\nNo. -\nJul 9, 2026, 2:05 PM\n/\nSDK alarm listener\n/\nMain Entrance Device\nSaved punches\nPUNCH TIME\n\tEMPLOYEE\n\tTERMINAL\n\tACTIONS\nJul 9, 2026, 2:05 PM\t\n?\n\nUnknown employee\n\nNo. -\nNeeds match\n\t\n\nMain Entrance Device\n\n10.184.37.139\n\n\t\nView\n\nJul 9, 2026, 2:05 PM\t\nEM\nErnst tey Malasa\nNo. 1\nMatched\n\t\n\nMain Entrance Device\n\n10.184.37.139\n\n\t\nView\n\nJul 9, 2026, 2:05 PM\t\nEM\nErnst tey Malasa\nNo. 1\nMatched\n\t\n\nMain Entrance Device\n\n10.184.37.139\n\n\t\nView\n\nJul 9, 2026, 2:05 PM\t\nEM\nErnst tey Malasa\nNo. 1\nMatched\n\t\n\nMain Entrance Device\n\n10.184.37.139\n\n\t\nView\n\nJul 9, 2026, 2:05 PM\t\nEM\nErnst tey Malasa\nNo. 1\nMatched\n\t\n\nMain Entrance Device\n\n10.184.37.139\n\n\t\nView\n\nJul 9, 2026, 2:05 PM\t\n?\n\nUnknown employee\n\nNo. -\nNeeds match\n\t\n\nMain Entrance Device\n\n10.184.37.139\n\n\t\nView\n\nJul 9, 2026, 2:05 PM\t\nEM\nErnst tey Malasa\nNo. 1\nMatched\n\t\n\nMain Entrance Device\n\n10.184.37.139\n\n\t\nView\nShowing 1 to 7 of 7 results\nPrevious\n1\nNext",
+  "network": [
+    {
+      "url": "http://localhost:3001/api/device/events?page=1&limit=10&deviceId=cmpxw13hx002h7zwso7dyedrn&source=EN_HCNETSDK_ALARM&sort=eventTime&order=desc&dateField=eventTime",
+      "status": 200,
+      "method": "GET",
+      "bodyPreview": "{\"status\":\"success\",\"message\":\"Device events retrieved successfully\",\"data\":{\"events\":[{\"id\":\"cmrd3s2ci00s87zgk677xk7jj\",\"organizationId\":\"cmpxw0mfe00007zws3iypuu9d\",\"deviceId\":\"cmpxw13hx002h7zwso7dyedrn\",\"deviceUserId\":null,\"employeeId\":null,\"attendanceId\":null,\"eventTime\":\"2026-07-09T06:05:13.000Z\",\"receivedAt\":\"2026-07-09T06:05:41.730Z\",\"employeeNo\":null,\"source\":\"EN_HCNETSDK_ALARM\",\"status\":\"IGNORED\",\"eventType\":null,\"major\":\"5\",\"minor\":\"22\",\"doorNo\":\"1\",\"verifyMode\":null,\"dedupeKey\":\"f7c39fc3a4038992e5cab79656ece9b08f0aec1c372a2aa9619eaf26ae093171\",\"payload\":{\"time\":\"2026-07-09T14:05:13\",\"major\":5,\"minor\":22,\"cardNo\":\"\",\"doorNo\":\"1\",\"source\":\"EN_HCNETSDK_ALARM\",\"dateTime\":\"2026-07-09T14:05:13\",\"deviceIP\":\"10.184.37.139\",\"deviceId\":\"cmpxw13hx002h7zwso7dyedrn\",\"rawAlarm\":{\"deviceIp\":\"10.184.37.139\",\"sourceDeviceId\":\"cmpxw13hx002h7zwso7dyedrn\",\"rawFingerprintTemplateStored\":false},\"serialNo\":\"1450\",\"eventKind\":\"acs_event\",\"ipAddress\":\"10.184.37.139\",\"actionCode\":\"UNKNOWN_MINOR\",\"empl"
+    }
+  ],
+  "consoleMessages": [
+    {
+      "type": "log",
+      "text": "💿 Hey developer 👋. You can provide a way better UX than this when your app is loading JS modules and/or running `clientLoader` functions. Check out https://reactrouter.com/start/framework/route-module#hydratefallback for more information."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "type": "info",
+      "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+    },
+    {
+      "type": "log",
+      "text": "Fetching devices from HRIS API: /api/device?fields=id%2Cname%2Caddress%2Cport%2Cprotocol%2Cconfig%2Caccess%2CorganizationId%2CcreatedAt%2CupdatedAt&page=1&limit=100&document=true&pagination=true&count=false"
+    },
+    {
+      "type": "log",
+      "text": "📬 Socket not ready for notifications {socket: false, isConnected: false}"
+    },
+    {
+      "type": "warning",
+      "text": "WebSocket connection to 'ws://localhost:3001/socket.io/?EIO=4&transport=websocket' failed: WebSocket is closed before the connection is established."
+    },
+    {
+      "type": "log",
+      "text": "📬 Socket not ready for notifications {socket: false, isConnected: false}"
+    },
+    {
+      "type": "log",
+      "text": "📬 Socket not ready for notifications {socket: true, isConnected: false}"
+    },
+    {
+      "type": "log",
+      "text": "🔌 Socket connected: q7OXfaH-awGmCEHNAACM"
+    },
+    {
+      "type": "log",
+      "text": "📬 Setting up notification listeners on socket: q7OXfaH-awGmCEHNAACM"
+    }
+  ],
+  "screenshot": "C:\\Users\\anoni\\OneDrive\\Desktop\\PROJECT_TRUTH_HYPERV_FRESH\\hris-app\\playwright-saved-events-hcnetsdk-filter.png"
+}

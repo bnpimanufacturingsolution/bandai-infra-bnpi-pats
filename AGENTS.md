@@ -40,6 +40,81 @@ prove public Cloudflare SSH/browser access. Keeping the VM-managed tunnel active
 is still required; local-first means direct evidence first, not disabling
 Cloudflare.
 
+## Local Windows Host + Hyper-V VM Architecture Rule
+
+For this Windows workstation, the clean local Project Truth architecture is
+host plus one Linux Hyper-V VM. The Windows host must not become the Project
+Truth runtime.
+
+```text
+Windows Host
+  - Hyper-V only
+  - Wi-Fi / LAN access
+  - SSH client
+  - Browser
+  - No Project Truth Docker runtime
+  - No Project Truth WSL runtime
+
+Hyper-V VM: project-truth-local-vhdx-proof
+  - Owns Project Truth runtime
+  - Has one stable VM IP
+  - Runs Docker Engine inside Linux
+  - Runs HRIS app/API/Postgres/device services
+  - Reaches Hikvision/ZKTeco devices from inside VM
+
+Docker Inside VM
+  - Uses Linux Docker bridge networks
+  - Containers talk to each other internally
+  - Publishes required ports on VM IP
+
+Devices
+  - Hikvision/ZKTeco reachable from VM
+  - Device SDK/listeners run in VM or VM Docker containers
+
+Host Access
+  - Host pings VM IP
+  - Host SSHs into VM
+  - Host opens HRIS URLs using VM IP
+```
+
+Do not run Project Truth through Windows Docker Desktop. Do not depend on WSL
+for Project Truth runtime. Do not bridge Docker Desktop or WSL adapters into the
+Project Truth path. Do not create multiple ProjectTruth Hyper-V switches. Do
+not assign occupied gateway IPs such as `10.184.37.254` to the host or VM.
+
+The clean host network target is:
+
+```text
+Windows Wi-Fi/LAN
+        |
+Hyper-V VM network
+        |
+Linux VM IP, for example:
+  10.184.37.241 or DHCP-assigned LAN IP
+        |
+Docker inside VM
+  hris-app
+  hris-api
+  postgres
+  hikvision service
+  zkteco service
+```
+
+The Windows host should only need:
+
+```powershell
+ping <VM_IP>
+ssh infra@<VM_IP>
+http://<VM_IP>:3000
+http://<VM_IP>:3001/health
+```
+
+Everything else belongs inside the VM. If `vEthernet (WSL (Hyper-V firewall))`
+appears on this workstation, treat it as WSL/Docker Desktop host drift and not
+as a Project Truth network dependency. Removing it means disabling/removing the
+WSL/Docker Desktop host path, while preserving Hyper-V and the VM switch needed
+for `project-truth-local-vhdx-proof`.
+
 ## Banned Fake Blockers
 
 Do not stop just because:
