@@ -40,7 +40,7 @@ const optionalProtocol = (
 export const DEVICE_DEFINITIONS: DeviceDefinition[] = [
 	{
 		name: "Main Entrance Device",
-		address: optionalEnv("HIKVISION_SEED_ADDRESS") || "10.184.38.215",
+		address: optionalEnv("HIKVISION_SEED_ADDRESS") || "10.184.37.139",
 		port: Number(optionalEnv("HIKVISION_SEED_PORT") || 80),
 		protocol: optionalProtocol(optionalEnv("HIKVISION_SEED_PROTOCOL")) || "http",
 		config: {

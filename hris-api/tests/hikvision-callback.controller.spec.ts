@@ -32,7 +32,7 @@ describe("Hikvision callback controller", () => {
 			id: "device-1",
 			organizationId: "org-1",
 			name: "Main Entrance Device",
-			address: "10.184.38.215",
+			address: "10.184.37.139",
 			port: 80,
 			protocol: "http",
 			config: {},
@@ -40,7 +40,7 @@ describe("Hikvision callback controller", () => {
 		const prisma = {
 			device: {
 				findFirst: async (input: any) => {
-					if (input.where?.address === "10.184.38.215") return device;
+					if (input.where?.address === "10.184.37.139") return device;
 					if (input.where?.id === "device-1") return device;
 					return null;
 				},
@@ -79,7 +79,7 @@ describe("Hikvision callback controller", () => {
 		const request = {
 			body: `
 				<EventNotificationAlert>
-					<ipAddress>10.184.38.215</ipAddress>
+					<ipAddress>10.184.37.139</ipAddress>
 					<dateTime>2026-07-08T10:04:12+08:00</dateTime>
 					<AccessControllerEvent>
 						<major>5</major>
@@ -121,5 +121,76 @@ describe("Hikvision callback controller", () => {
 			status: "UNMATCHED",
 			errorMessage: "employee_not_found",
 		});
+	});
+
+	it("previews SDK alarm callback payloads without persisting a DeviceEvent", async () => {
+		const createdEvents: any[] = [];
+		const device = {
+			id: "device-1",
+			organizationId: "org-1",
+			name: "Main Entrance Device",
+			address: "10.184.37.139",
+			port: 80,
+			protocol: "http",
+			config: {},
+		};
+		const prisma = {
+			device: {
+				findFirst: async (input: any) => {
+					if (input.where?.id === "device-1") return device;
+					if (input.where?.address === "10.184.37.139") return device;
+					return null;
+				},
+			},
+			deviceEvent: {
+				findFirst: async () => null,
+				findUnique: async () => null,
+				findMany: async () => [],
+				create: async (input: any) => {
+					createdEvents.push(input.data);
+					return { id: "event-1", ...input.data };
+				},
+				update: async () => {
+					throw new Error("preview should not update");
+				},
+			},
+			deviceUser: { findFirst: async () => null },
+			employee: { findFirst: async () => null },
+		};
+		const response = createResponse();
+		const request = {
+			body: {
+				source: "EN_HCNETSDK_ALARM",
+				deviceId: "device-1",
+				deviceIP: "10.184.37.139",
+				time: "2026-07-09T10:04:12+08:00",
+				employeeNo: "1",
+				major: 5,
+				minor: 75,
+				serialNo: "1201",
+				dryRun: true,
+			},
+			query: { preview: "true" },
+			get: () => "application/json",
+			io: null,
+		} as any;
+
+		await callbackController(prisma as any).handleCallback(
+			request,
+			response.res as any,
+			(() => undefined) as any,
+		);
+
+		expect(response.statusCode).to.equal(200);
+		expect(response.body.data).to.deep.include({
+			received: true,
+			preview: true,
+			matched: true,
+			wouldPersistDeviceEvent: true,
+			wouldProcessAttendance: true,
+			employeeNo: "1",
+			source: "EN_HCNETSDK_ALARM",
+		});
+		expect(createdEvents).to.deep.equal([]);
 	});
 });

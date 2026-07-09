@@ -4,7 +4,7 @@ import path from "path";
 import YAML from "yaml";
 
 describe("DEV Hikvision watcher runtime manifest", () => {
-	it("uses the current Main Entrance Device ISAPI address and port", () => {
+	it("discovers configured Hikvision devices from HRIS DB truth", () => {
 		const manifestPath = path.resolve(
 			__dirname,
 			"../../gitops/runtime-k8s/overlays/dev/runtime.yaml",
@@ -17,16 +17,19 @@ describe("DEV Hikvision watcher runtime manifest", () => {
 				document?.kind === "Deployment" &&
 				document?.metadata?.name === "hris-hikvision-watcher",
 		);
+		const container = watcher?.spec?.template?.spec?.containers?.[0];
+		const args = String(container?.args?.[0] || "");
 		const env = Object.fromEntries(
-			(
-				watcher?.spec?.template?.spec?.containers?.[0]?.env || []
-			).map((entry: { name: string; value: string }) => [entry.name, entry.value]),
+			(container?.env || []).map((entry: { name: string; value: string }) => [
+				entry.name,
+				entry.value,
+			]),
 		);
 
-		expect(env.HIKVISION_DEVICE_NAME).to.equal("Main Entrance Device");
-		expect(env.HIKVISION_DEVICE_ADDRESS).to.equal("10.184.38.215");
-		expect(env.HIKVISION_DEVICE_PORT).to.equal("80");
-		expect(env.HIKVISION_DEVICE_PORT).to.not.equal("800");
+		expect(args).to.contain("--all-hikvision");
+		expect(env).not.to.have.property("HIKVISION_DEVICE_NAME");
+		expect(env).not.to.have.property("HIKVISION_DEVICE_ADDRESS");
+		expect(env).not.to.have.property("HIKVISION_DEVICE_PORT");
 		expect(env.HIKVISION_CALLBACK_URL).to.equal(
 			"http://hris-api:3001/api/hikvision/callback",
 		);

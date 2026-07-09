@@ -34,6 +34,9 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | DeviceUser / Device Users | 2026-07-06 local implementation; admin device UI | Durable HRIS record for a user identity read from a physical device and optionally linked to an Employee. This is identity/enrollment data, not attendance/device-log data and not biometric template transfer. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
 | Sync device users | 2026-07-06 local implementation; admin device UI | Admin action that reviews then pulls physical device user identities through vendor APIs such as Hikvision `UserInfo/Search`, upserts `DeviceUser`, and auto-links only safe exact employee matches. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
 | Sync logs / Sync device logs | 2026-07-06 local implementation; admin device UI | Admin action that imports or classifies physical device attendance/event records. It remains separate from Sync device users and resolves employee identity through `DeviceUser` first, then legacy fields. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
+| Hikvision alarm listener | 2026-07-09 Hikvision biometric sync architecture | Linux/VM-owned HCNetSDK service that logs into configured Hikvision devices, registers SDK alarm callbacks, arms alarm channels, classifies ACS events, and queues reconciliation work. It must not be named or treated as Windows `AlarmDemo` runtime. | TARGET_ARCHITECTURE_PENDING_IMPLEMENTATION |
+| Biometric enrollment sync | 2026-07-09 Hikvision biometric sync architecture | Target workflow where a device enrollment/user-change event triggers source user/fingerprint reads, syncs the employee/device user to peer biometric devices, and persists HRIS `DeviceUser`/biometric metadata with dry-run/audit gates. This is higher-risk than device identity sync or attendance log sync. | TARGET_ARCHITECTURE_PENDING_IMPLEMENTATION |
+| Biometric reconciliation worker | 2026-07-09 Hikvision biometric sync architecture | Background worker that performs the slow/sensitive user and fingerprint template read/write work after the alarm listener queues a reconcile event. It should provide dry-run, audit, and recovery evidence before mutating devices. | TARGET_ARCHITECTURE_PENDING_IMPLEMENTATION |
 
 ## Canonical Term Candidates
 
@@ -56,6 +59,8 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | physical device identity record | DeviceUser / Device Users | device users, enroll users, enrollment data | HIGH | 2026-07-06 schema/API/UI implementation |
 | device identity sync action | Sync device users | review sync, user sync, enroll users sync | HIGH | 2026-07-06 admin device UI implementation |
 | device event import action | Sync logs / Sync device logs | sync events, device log sync, attendance log sync | HIGH | 2026-07-06 admin events UI implementation |
+| Hikvision SDK callback service | Hikvision alarm listener | HCNetSDK alarm listener, Linux alarm service | HIGH | 2026-07-09 architecture intake |
+| cross-device fingerprint/user sync | Biometric enrollment sync | biometric sync, ONENROLL event, enrollment sync, fingerprint sync | HIGH | 2026-07-09 architecture intake |
 
 ## Terminology Conflicts
 

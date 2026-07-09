@@ -28,7 +28,7 @@ describe("Hikvision endpoint config", () => {
 
 	it("can dial a runtime proxy while preserving the physical display address", async () => {
 		const baseUrl = buildHikvisionDeviceBaseUrl({
-			address: "10.184.38.96",
+			address: "10.184.37.139",
 			port: 80,
 			protocol: "http",
 			config: {

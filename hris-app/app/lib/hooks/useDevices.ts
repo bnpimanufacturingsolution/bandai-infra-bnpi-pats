@@ -75,12 +75,15 @@ export const useDevice = (id: string) => {
 	});
 };
 
-export const useDeviceEvents = (params?: ApiQueryParams) => {
+export const useDeviceEvents = (
+	params?: ApiQueryParams,
+	options: { refetchInterval?: number | false } = {},
+) => {
 	return useQuery<DeviceEventsResponse>({
 		queryKey: queryKeys.devices.events(params),
 		queryFn: () => devicesService.getDeviceEvents(params),
 		staleTime: 15 * 1000,
-		refetchInterval: 30 * 1000,
+		refetchInterval: options.refetchInterval ?? 30 * 1000,
 	});
 };
 

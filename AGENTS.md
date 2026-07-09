@@ -24,6 +24,22 @@ changed, first preserve working SSH/public access, record the current connector
 state, and prefer additive repair over mode toggles. Never make "cloud mode off"
 the default for the already-running server.
 
+## Host-Local VM First Rule
+
+When the user is on the Windows host or asks about host-local VM, LAN, device,
+DB, GitOps, or runtime drift, check the canonical direct LAN path before using a
+public/Cloudflare SSH alias:
+
+```powershell
+ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19
+```
+
+Use `ssh project-truth-hris` only as a fallback when direct LAN SSH is not
+routable from the current workstation, or when the task specifically needs to
+prove public Cloudflare SSH/browser access. Keeping the VM-managed tunnel active
+is still required; local-first means direct evidence first, not disabling
+Cloudflare.
+
 ## Banned Fake Blockers
 
 Do not stop just because:
@@ -40,9 +56,55 @@ Do not stop just because:
 
 Research, recover, retry, and capture evidence before calling anything blocked.
 
+## Real Endpoint Dry-Run Rule
+
+Before diagnosing from UI screenshots or guessing from code, identify the exact
+endpoint used by the page, hook, or service and run that endpoint directly with
+the same role the page should use.
+
+For local HRIS admin/device/configuration checks, the default actor is
+`admin@bandai.local` / `password123` with `appCode='hris'`, unless the task
+explicitly targets another role. Use a non-mutating mode first: `execute=false`,
+`dryRun=true`, a preview endpoint, `?preview=true`, or the endpoint's documented
+equivalent. Wrap the call in `Measure-Command`, capture full JSON
+(`ConvertTo-Json -Depth 6` or deeper when needed), request URL, payload, status,
+errors, and elapsed seconds into `.runtime/<task-stamp>/...json`.
+
+Use this PowerShell shape as the canonical local pattern and adapt only the
+endpoint/body to the page being investigated:
+
+```powershell
+$loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='hris' } | ConvertTo-Json
+$login = Invoke-RestMethod -Method Post 'http://localhost:3001/api/auth/login' -ContentType 'application/json' -Body $loginBody
+$headers = @{ Authorization = "Bearer $($login.data.token)" }
+$body = @{ execute=$false; deviceId='all'; source='all'; status='all'; dateField='eventTime'; includeLinkedAttendance=$true } | ConvertTo-Json
+Measure-Command {
+  $result = Invoke-RestMethod -Method Post 'http://localhost:3001/api/device/events/reset' -Headers $headers -ContentType 'application/json' -Body $body
+  $result | ConvertTo-Json -Depth 6
+} | Select-Object TotalSeconds
+```
+
+For longer investigations, create a stamped evidence directory first:
+
+```powershell
+$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$dir = Join-Path '.runtime' "endpoint-proof-$stamp"
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+```
+
+If the endpoint has no safe dry-run/preview mode, do not invent safety. Inspect
+the implementation and add a safe preview/dry-run path when that is in scope, or
+stop before irreversible mutation unless the user explicitly approved the
+destructive action and a backup/recovery path is verified. Browser proof comes
+after API/network proof.
+
 ## Browser Verification Tool
 
-When browser verification is requested, prefer `agent-browser`.
+Temporary 2026-07-09 local rule: prefer headless Playwright for Project Truth
+browser verification until the Vercel `agent-browser` path is repaired on this
+Windows host. Use direct API/network probes first, then Playwright console,
+network, URL/text, and screenshot evidence. Use `agent-browser` only as a
+fallback or when a task explicitly targets that tool.
 
 On this Windows host the npm global prefix is:
 
@@ -79,16 +141,14 @@ New-Item -ItemType Directory -Force -Path $env:AGENT_BROWSER_SCREENSHOT_DIR | Ou
 ```
 
 If `agent-browser doctor` reports `DevToolsActivePort` or Chrome exits early,
-do not switch away from browser verification. First retry with the
-`AGENT_BROWSER_ARGS` above, then run `agent-browser doctor --fix`, then
-`agent-browser install`, documenting each attempt.
+do not treat browser verification as blocked. Prefer the current Playwright
+path, and document any `agent-browser` recovery attempts separately.
 
 For login, CORS, Cloudflare, and gateway checks, collect evidence in this order:
 
 1. Network/API proof: health URL, auth login POST, CORS preflight, and failed
-   browser requests from `agent-browser network requests` or equivalent HTTP
-   probes.
-2. Browser proof: headless `agent-browser` navigation, login form interaction,
+   browser requests from Playwright network capture or equivalent HTTP probes.
+2. Browser proof: headless Playwright navigation, login form interaction,
    post-login URL/text extraction, console errors, and screenshots.
 3. Runtime proof: VM state, LAN app/API ports, Cloudflare tunnel process/config,
    and public host checks.

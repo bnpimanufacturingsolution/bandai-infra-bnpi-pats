@@ -73,6 +73,64 @@ const protocolOptions: SelectOption[] = [
 	{ value: "udp", label: "UDP" },
 ];
 
+const deviceVendorOptions: SelectOption[] = [
+	{ value: "Hikvision", label: "Hikvision" },
+	{ value: "ZKTeco", label: "ZKTeco" },
+	{ value: "Other", label: "Other / manual" },
+];
+
+const sdkProtocolOptions: SelectOption[] = [
+	{ value: "tcp", label: "TCP" },
+	{ value: "udp", label: "UDP" },
+	{ value: "http", label: "HTTP" },
+	{ value: "https", label: "HTTPS" },
+];
+
+const getDeviceConfigRecord = (config: unknown): DeviceConfigRecord =>
+	config && typeof config === "object" && !Array.isArray(config)
+		? { ...(config as DeviceConfigRecord) }
+		: {};
+
+const buildDeviceConfigPreset = (vendor: string): DeviceConfigRecord => {
+	const normalized = vendor.toLowerCase();
+	if (normalized.includes("hikvision")) {
+		return {
+			vendor: "Hikvision",
+			source: "vendor/hikvision-linux",
+			sdkPort: 8000,
+			sdkProtocol: "tcp",
+			webhookPath: "/api/hikvision/callback",
+		};
+	}
+	if (normalized.includes("zkteco") || normalized.includes("zk")) {
+		return {
+			vendor: "ZKTeco",
+			source: "vendor/zkteco-linux",
+			sdkPort: 4370,
+			sdkProtocol: "tcp",
+			webhookPath: "/api/zkteco/events",
+		};
+	}
+	return { vendor };
+};
+
+const getDefaultDeviceConfig = () => buildDeviceConfigPreset("Hikvision");
+
+const normalizeDeviceConfigForSubmit = (config: unknown): DeviceConfigRecord => {
+	const next = getDeviceConfigRecord(config);
+	Object.entries(next).forEach(([key, value]) => {
+		if (typeof value === "string") {
+			const trimmed = value.trim();
+			if (trimmed) next[key] = trimmed;
+			else delete next[key];
+		}
+	});
+	const sdkPort = Number(next.sdkPort);
+	if (Number.isFinite(sdkPort) && sdkPort > 0) next.sdkPort = sdkPort;
+	else delete next.sdkPort;
+	return next;
+};
+
 const healthToneClass = (ok: boolean) => (ok ? "text-green-700" : "text-amber-700");
 
 function HealthCheckRow({
@@ -213,20 +271,14 @@ function DeviceHealthPanel({ deviceId }: { deviceId?: string }) {
 }
 
 const getDeviceConfigValue = (device: Device | undefined, key: string) => {
-	const config: DeviceConfigRecord =
-		device?.config && typeof device.config === "object"
-			? (device.config as DeviceConfigRecord)
-			: {};
+	const config = getDeviceConfigRecord(device?.config);
 	const value = config[key];
 	if (value === undefined || value === null || value === "") return "-";
 	return String(value);
 };
 
 const isHikvisionDevice = (device?: Device) => {
-	const config: DeviceConfigRecord =
-		device?.config && typeof device.config === "object"
-			? (device.config as DeviceConfigRecord)
-			: {};
+	const config = getDeviceConfigRecord(device?.config);
 	const vendor = String(config.vendor || config.source || device?.name || "").toLowerCase();
 	return vendor.includes("hikvision");
 };
@@ -635,7 +687,7 @@ export default function DevicesManagePage() {
 			address: "",
 			port: 80,
 			protocol: "http",
-			config: {},
+			config: getDefaultDeviceConfig(),
 			access: {
 				username: "",
 				password: "",
@@ -644,17 +696,37 @@ export default function DevicesManagePage() {
 	});
 
 	const watchedProtocol = watch("protocol");
+	const watchedVendor = String((watch("config") as DeviceConfigRecord | undefined)?.vendor || "Hikvision");
+
+	const applyVendorPreset = (vendor: string) => {
+		const currentConfig = getDeviceConfigRecord(watch("config"));
+		const preset = buildDeviceConfigPreset(vendor);
+		setValue(
+			"config",
+			{
+				...currentConfig,
+				...preset,
+				model: currentConfig.model || "",
+				hikvisionRuntimeNote: currentConfig.hikvisionRuntimeNote || "",
+			},
+			{ shouldDirty: true, shouldValidate: true },
+		);
+	};
 
 	// Handle deep linking: populate forms
 	useEffect(() => {
 		// Populate form when editing and data is loaded
 		if (action === "edit" && !isLoadingDevice && activeDevice) {
+			const activeConfig = getDeviceConfigRecord(activeDevice.config);
 			reset({
 				name: activeDevice.name,
 				address: activeDevice.address,
 				port: activeDevice.port,
 				protocol: activeDevice.protocol,
-				config: activeDevice.config || {},
+				config: {
+					...buildDeviceConfigPreset(String(activeConfig.vendor || "")),
+					...activeConfig,
+				},
 				access: activeDevice.access || {
 					username: "",
 					password: "",
@@ -685,6 +757,26 @@ export default function DevicesManagePage() {
 			required: true,
 			priority: "high",
 			render: (value) => (value ? <AdminConfigCodeChip>{value}</AdminConfigCodeChip> : <AdminConfigMutedDash />),
+		},
+		{
+			key: "config",
+			label: "Vendor",
+			width: "150px",
+			priority: "high",
+			render: (value) => {
+				const config = getDeviceConfigRecord(value);
+				const vendor = String(config.vendor || config.type || "");
+				const model = String(config.model || config.source || "");
+				return vendor ? (
+					<AdminConfigPrimaryCell
+						primary={vendor}
+						secondary={model || null}
+						title={model || vendor}
+					/>
+				) : (
+					<AdminConfigMutedDash />
+				);
+			},
 		},
 		{
 			key: "port",
@@ -720,7 +812,7 @@ export default function DevicesManagePage() {
 			address: "",
 			port: 80,
 			protocol: "http",
-			config: {},
+			config: getDefaultDeviceConfig(),
 			access: {
 				username: "",
 				password: "",
@@ -743,6 +835,7 @@ export default function DevicesManagePage() {
 	const onSubmit = (data: DeviceFormData) => {
 		// Check if we're editing by looking at search params
 		const isEditing = action === "edit";
+		const normalizedConfig = normalizeDeviceConfigForSubmit(data.config);
 
 		if (isEditing && activeDevice) {
 			const updatePayload: UpdateDeviceRequest = {
@@ -750,7 +843,7 @@ export default function DevicesManagePage() {
 				address: data.address,
 				port: data.port,
 				protocol: data.protocol,
-				config: data.config,
+				config: normalizedConfig,
 				access: data.access,
 			};
 
@@ -772,7 +865,7 @@ export default function DevicesManagePage() {
 				address: data.address,
 				port: data.port,
 				protocol: data.protocol,
-				config: data.config,
+				config: normalizedConfig,
 				access: data.access,
 			};
 
@@ -989,8 +1082,8 @@ export default function DevicesManagePage() {
 				{isDeepLinkLoading && action === "edit" ? (
 					<div className="py-8 text-center text-gray-500">Loading device...</div>
 				) : (
-					<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-						<div className="grid grid-cols-2 gap-4">
+					<form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+						<div className="grid gap-4 md:grid-cols-2">
 							<div data-field-path="name">
 								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Name *
@@ -1020,7 +1113,7 @@ export default function DevicesManagePage() {
 							</div>
 						</div>
 
-						<div className="grid grid-cols-2 gap-4">
+						<div className="grid gap-4 md:grid-cols-2">
 							<div data-field-path="address">
 								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Address *
@@ -1050,7 +1143,125 @@ export default function DevicesManagePage() {
 							</div>
 						</div>
 
-						<div className="grid grid-cols-2 gap-4">
+						<div className="rounded-md border border-slate-200 bg-slate-50/60 p-3">
+							<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+								<div>
+									<p className="text-sm font-semibold text-slate-950">Device config truth</p>
+									<p className="text-xs text-slate-500">
+										Fields saved into device config for source readers, callbacks, and sync review.
+									</p>
+								</div>
+								<AdminConfigSourceChip>{watchedVendor || "Unclassified"}</AdminConfigSourceChip>
+							</div>
+							<div className="grid gap-4 md:grid-cols-2">
+								<div data-field-path="config.vendor">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										Vendor *
+									</div>
+									<Select
+										options={deviceVendorOptions}
+										value={watchedVendor}
+										onChange={(value) => applyVendorPreset(value || "Other")}
+										placeholder="Select vendor"
+									/>
+									<ConstraintTokenRow
+										tokens={[{ label: "Config vendor", tone: "default" }]}
+									/>
+								</div>
+								<div data-field-path="config.model">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										Model / device type
+									</div>
+									<Input
+										placeholder="e.g., DS-K1T341CMFW"
+										{...register("config.model", {
+											setValueAs: (value) => value || undefined,
+										})}
+									/>
+									<ConstraintTokenRow
+										tokens={[{ label: "Optional", tone: "subtle" }]}
+									/>
+								</div>
+								<div data-field-path="config.source">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										Source adapter *
+									</div>
+									<Input
+										placeholder="vendor/hikvision-linux"
+										{...register("config.source", {
+											setValueAs: (value) => value || undefined,
+										})}
+									/>
+									<ConstraintTokenRow
+										tokens={[{ label: "Runtime source", tone: "default" }]}
+									/>
+								</div>
+								<div data-field-path="config.webhookPath">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										Webhook path
+									</div>
+									<Input
+										placeholder="/api/hikvision/callback"
+										{...register("config.webhookPath", {
+											setValueAs: (value) => value || undefined,
+										})}
+									/>
+									<ConstraintTokenRow
+										tokens={[{ label: "API path", tone: "subtle" }]}
+									/>
+								</div>
+								<div data-field-path="config.sdkPort">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										SDK port
+									</div>
+									<Input
+										type="number"
+										placeholder="8000"
+										{...register("config.sdkPort", {
+											valueAsNumber: true,
+										})}
+									/>
+									<ConstraintTokenRow
+										tokens={[{ label: "Vendor SDK", tone: "subtle" }]}
+									/>
+								</div>
+								<div data-field-path="config.sdkProtocol">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										SDK protocol
+									</div>
+									<Select
+										options={sdkProtocolOptions}
+										value={String((watch("config") as DeviceConfigRecord | undefined)?.sdkProtocol || "tcp")}
+										onChange={(value) =>
+											setValue("config.sdkProtocol", value || "tcp", {
+												shouldDirty: true,
+												shouldValidate: true,
+											})
+										}
+										placeholder="SDK protocol"
+									/>
+									<ConstraintTokenRow
+										tokens={[{ label: "Usually TCP", tone: "subtle" }]}
+									/>
+								</div>
+								<div className="md:col-span-2" data-field-path="config.hikvisionRuntimeNote">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										Runtime note / metadata
+									</div>
+									<Input
+										placeholder="Optional evidence or routing note"
+										{...register("config.hikvisionRuntimeNote", {
+											setValueAs: (value) => value || undefined,
+										})}
+									/>
+									<ConstraintTokenRow
+										tokens={[{ label: "Preserved in config", tone: "subtle" }]}
+									/>
+								</div>
+							</div>
+						</div>
+
+						<div className="grid gap-4 md:grid-cols-2">
 							<div>
 								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Username (optional)

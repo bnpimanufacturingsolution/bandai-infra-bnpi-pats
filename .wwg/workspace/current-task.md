@@ -1,6 +1,156 @@
 # Current Task
 
-Status: READY FOR REVIEW
+Status: IN PROGRESS
+
+## Latest Task Addendum - 2026-07-09 Hikvision HCNetSDK Single Source
+
+- Task mode: Mixed runtime path repair, API contract, tests, and evidence.
+- User goal:
+  - Make the Linux HCNetSDK path the clean single source of truth for live
+    Hikvision tap events.
+  - Keep HRIS `Device` row truth at `Main Entrance Device`,
+    `10.184.37.139:80`, protocol `http`, model `DS-K1T341CMFW`, SDK port
+    `8000`.
+- Implementation result:
+  - `vendor/hikvision-linux/hikvision_biometric_service.cpp` is now the only
+    active C++ HCNetSDK runtime source.
+  - Removed the old active `hcnetsdk_alarm_probe` build path and replaced it
+    with `scripts/build-hikvision-biometric-service.sh`.
+  - SDK callback work stays minimal: parse ACS alarm, emit JSONL evidence,
+    queue HRIS callback posting, and queue biometric reconcile only for
+    user/fingerprint management events.
+  - Worker posts SDK alarm events to `/api/hikvision/callback` with source
+    `EN_HCNETSDK_ALARM`, so existing callback logic owns `DeviceEvent`
+    persistence, attendance/timesheet projection, cache invalidation, and
+    `device-event:saved` socket emission.
+  - Added `/api/hikvision/callback?preview=true` / `dryRun=true` as a
+    non-mutating proof path before persistence.
+  - DEV seed defaults and Hikvision tests now use `10.184.37.139` instead of
+    stale Hikvision addresses.
+- Evidence:
+  - Endpoint/API proof:
+    `.runtime/hikvision-hcnetsdk-single-source-20260709-100621/local-api-callback-preview-proof-after-restart.json`.
+    Admin login passed, callback preview matched `Main Entrance Device`,
+    no preview row was saved, and biometric reconcile dry-run returned planned
+    changes with `rawFingerprintTemplateStored=false`.
+  - Accidental stale-API preview row cleanup:
+    `.runtime/hikvision-hcnetsdk-single-source-20260709-100621/accidental-preview-row-cleanup.json`
+    deleted only `employeeNo=CODEX-PREVIEW` row
+    `cmrcvgud903247zb8zk9bt6e4` after the stale API saved it before restart.
+  - Network/runtime proof:
+    `.runtime/hikvision-hcnetsdk-single-source-20260709-100621/network-runtime-owner-proof.json`
+    and `vm-network-cloudflared-proof-clean.json`.
+    Windows host reached `10.184.37.139:80` and `:8000`; direct VM at
+    `10.184.37.19` failed both with `No route to host`.
+  - SDK/build proof:
+    `.runtime/hikvision-hcnetsdk-single-source-20260709-100621/vm-hikvision-biometric-service-build-proof-after-fix.json`
+    compiled and linked `hikvision-biometric-service` against VM
+    `libhcnetsdk.so`.
+    `.runtime/hikvision-hcnetsdk-single-source-20260709-100621/vm-hikvision-biometric-service-bounded-run.json`
+    proved `NET_DVR_Init` and callback registration, then `NET_DVR_Login_V40`
+    failed with SDK error `7` before arm because the VM cannot route to the
+    device.
+  - Host-local Linux owner check:
+    `.runtime/hikvision-hcnetsdk-single-source-20260709-100621/wsl-runtime-owner-proof.json`
+    found only `docker-desktop` WSL and no usable bash userland; Docker Linux
+    engine was not running.
+- Validation:
+  - `python -m unittest vendor.hikvision-linux.tests.test_probe` passed.
+  - `npm test -- --grep "Hikvision callback controller|Hikvision biometric sync contract|Hikvision device seed defaults|Hikvision endpoint config|device event realtime helper|DEV Hikvision watcher runtime manifest"` passed.
+  - `npm run typecheck` in `hris-api` passed.
+  - `npm test -- app/lib/device-events-realtime-ui.test.ts` in `hris-app`
+    passed.
+- Remaining boundary:
+  - Real SDK login, alarm arm, physical tap callback, saved row existence,
+    socket delivery to `localhost:5175`, and browser live-row proof remain
+    unproven until either VM-to-device routing is repaired or a real
+    host-local Linux runtime with device reachability is prepared and supplied
+    valid Hikvision credentials.
+
+## Latest Task Addendum - 2026-07-09 Hikvision Device Row Drift Correction
+
+- User clarified current Hikvision config truth from the admin UI:
+  `Main Entrance Device`, `Hikvision` / `DS-K1T341CMFW`, address
+  `10.184.37.139`, HTTP port `80`, protocol `HTTP`.
+- Drift correction:
+  - Hikvision Linux probe defaults, README examples, and discovery wrapper now
+    use `10.184.37.139` instead of historical `192.168.254.181` /
+    `10.184.38.215` candidates.
+  - The discovery wrapper now uses direct LAN SSH `10.184.37.19` with
+    `node-health-appliance_ed25519` and no longer defaults Hikvision username
+    to HRIS `admin@bandai.local`.
+  - Historical `.234/.235` references are ZKTeco evidence, not Hikvision
+    config truth, and must not be copied into the Hikvision runtime path.
+
+## Latest Task Addendum - 2026-07-09 Hikvision Biometric Sync Architecture
+
+- Task mode: Docs-only architecture intake with code-discovery evidence.
+- Latest user request:
+  - Document the Hikvision Linux HCNetSDK alarm-callback biometric sync
+    architecture in WWG.
+  - Use the existing Windows HCNetSDK reference under
+    `C:\Users\anoni\OneDrive\Desktop\HRIS-PROJECT\EN-HCNetSDKV6.1.9.4_build20220412_win64`
+    as behavior evidence.
+  - Make the future Linux runtime copy/refactor the callback/user/fingerprint
+    sync behavior without preserving demo names such as `AlarmDemo`.
+- Current-state finding:
+  - The Windows reference `AlarmDemo.cpp` includes multi-device SDK login,
+    `NET_DVR_SetDVRMessageCallBack_V51`, alarm arming, ACS event
+    classification, user sync, fingerprint read/write, broker enrollment,
+    queued employee sync, and event-triggered reconcile.
+  - The Project Truth Linux scaffold already has a bounded
+    `hcnetsdk_alarm_probe.cpp`, but Linux SDK login/alarm callback remains
+    unproven from the VM because the earlier SDK login returned
+    `NET_DVR_PASSWORD_ERROR (1)`.
+- Documentation result:
+  - Added `.wwg/wiki/05-architecture/hikvision-biometric-sync-architecture.md`
+    as target architecture.
+  - Synced Project Truth, Project Truth Summary, terminology, runtime truth,
+    and recommendation registry with the target architecture and boundaries.
+- Boundaries:
+  - Raw fingerprint template storage in normal `User` records is not approved
+    without encryption, access-control, and retention design.
+  - Device writes/deletes and template propagation require dry-run, audit,
+    backup/recovery, and rollback evidence before production use.
+  - The running VM-managed Cloudflare Tunnel must remain active during future
+    VM/GitOps/runtime proof.
+
+## Latest Task Addendum - 2026-07-09 Real Endpoint Dry-Run Pattern
+
+- User standardized the preferred investigation pattern: authenticate as the
+  correct local actor, call the exact endpoint used by the page in dry-run or
+  preview mode, time it with `Measure-Command`, and capture full JSON/API
+  evidence before browser/UI diagnosis.
+- `AGENTS.md` now records this as the Project Truth Real Endpoint Dry-Run Rule.
+- `.wwg/governance/drift-guard.md` now enforces direct API/network endpoint
+  proof before screenshots or code guessing, with `.runtime/<task-stamp>/`
+  evidence capture.
+- Browser verification remains Playwright-first for the current local
+  environment, but browser proof follows endpoint proof for runtime regressions.
+
+## Latest Task Addendum - 2026-07-09
+
+- Task mode: Mixed governance update, runtime schema repair, and admin UI regression repair.
+- Latest user request:
+  - Prefer headless Playwright over Vercel `agent-browser` for current Project Truth browser verification because `agent-browser` is unreliable on this Windows host.
+  - Use dry-run/API evidence against the actual page endpoint before guessing from the UI.
+  - Repair `/admin/configuration/devices/events?view=saved&action=sync-logs` so the Sync device logs modal can find configured sync-capable devices.
+- Local evidence:
+  - Direct API proof hit the real frontend endpoint `GET http://localhost:3001/api/device/sync-preview`.
+  - Initial API proof failed with HTTP 500 because local DEV Postgres was missing `public.device_sync_runs`.
+  - Full `npm run prisma-postgres:push` was not applied because Prisma warned it would drop populated `benefit_types.sourceCode`, `sourceFrequency`, and `sourceSchedule` columns.
+  - A narrow create-only SQL repair created `DeviceSyncRunType`, `DeviceSyncRunStatus`, `device_sync_runs`, its foreign key, and indexes without dropping data. Evidence: `.runtime/device-sync-preview-20260709-080841-db-repair/db-repair-output-split.json`.
+  - After repair, `GET /api/device/sync-preview` returned HTTP 200 in about `0.075s` with one `Main Entrance Device` row. Evidence: `.runtime/device-sync-preview-20260709-080841/api-sync-preview-evidence.json`.
+  - Headless Playwright against `http://localhost:5175/admin/configuration/devices/events?view=saved&action=sync-logs` captured one preview row, no "No sync-capable devices", and no "No device preview rows returned". Evidence: `.runtime/device-sync-preview-20260709-081043-playwright/playwright-sync-logs-evidence.json` and `.runtime/device-sync-preview-20260709-081043-playwright/sync-logs-modal.png`.
+- Code/test result:
+  - The sync preview path now tolerates a missing `device_sync_runs` table by continuing without latest skipped-run counts instead of blanking/failing the modal.
+  - Focused backend regression passed: `npm test -- --grep "sync preview"`.
+  - Focused Playwright smoke passed: `npx playwright test -c playwright.smoke.config.ts tests/smoke/admin-device-events-sync-modal.spec.ts`.
+- Remaining drift:
+  - Hikvision source-count and SDK proof must be rerun against the current
+    `Main Entrance Device` row `10.184.37.139:80` with SDK port `8000` from
+    device config. Older `10.184.38.x` Hikvision targets are historical only.
+  - GitOps/K3s/public DEV promotion remains open before treating this local fix as production runtime proof.
 
 ## Latest Task Addendum - 2026-07-06
 

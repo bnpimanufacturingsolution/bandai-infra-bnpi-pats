@@ -396,6 +396,37 @@ export const controller = (prisma: PrismaClient) => {
 					employeeNo,
 					event,
 				});
+				const previewOnly =
+					(req.query as any)?.preview === "true" ||
+					(req.query as any)?.dryRun === "true" ||
+					(req.body as any)?.preview === true ||
+					(req.body as any)?.dryRun === true;
+				if (previewOnly) {
+					const successResponse = buildSuccessResponse(
+						"Hikvision callback preview completed",
+						{
+							received: true,
+							preview: true,
+							matched: true,
+							wouldPersistDeviceEvent: true,
+							wouldProcessAttendance: isHikvisionAttendancePunchEvent(event),
+							device: {
+								id: device.id,
+								name: device.name,
+								address: device.address,
+								port: device.port,
+								protocol: device.protocol,
+							},
+							employeeNo,
+							source,
+							dedupeKey,
+							event,
+						},
+						200,
+					);
+					res.status(200).json(successResponse);
+					return;
+				}
 				const { eventRecord, isDuplicate } = await saveInitialDeviceEvent({
 					device,
 					event,

@@ -7,6 +7,7 @@ import {
 	prependRealtimeSavedRow,
 	prependRealtimeSavedRows,
 	savedDeviceEventMatchesScope,
+	shouldRefreshSavedEventsAfterSocketEvent,
 } from "./device-events-realtime-ui";
 
 describe("device events realtime UI", () => {
@@ -21,8 +22,8 @@ describe("device events realtime UI", () => {
 		expect(status).to.include({
 			isListening: true,
 			scopeLabel: "All devices",
-			statusLabel: "Live updates on",
-			rowUpdateLabel: "Rows update live",
+			statusLabel: "Saved-row updates on",
+			rowUpdateLabel: "Saved rows update live",
 		});
 	});
 
@@ -55,7 +56,7 @@ describe("device events realtime UI", () => {
 			isListening: true,
 			isScoped: true,
 			scopeLabel: "Selected device",
-			statusLabel: "Live updates on",
+			statusLabel: "Saved-row updates on",
 		});
 	});
 
@@ -70,7 +71,7 @@ describe("device events realtime UI", () => {
 		).to.equal("Live socket");
 	});
 
-	it("labels the exact socket row as a realtime save", () => {
+	it("labels the exact socket row as a watcher save", () => {
 		expect(
 			getSavedDeviceEventProcessingLabel({
 				itemId: "event-1",
@@ -78,7 +79,7 @@ describe("device events realtime UI", () => {
 				eventTime: "2026-07-02T02:20:00.000Z",
 				receivedAt: "2026-07-02T02:20:02.000Z",
 			}),
-		).to.equal("Realtime save");
+		).to.equal("Watcher save");
 	});
 
 	it("labels old punch times saved later as synced saves", () => {
@@ -227,5 +228,28 @@ describe("device events realtime UI", () => {
 			"tap-3",
 			"server-row",
 		]);
+	});
+
+	it("trusts socket-carried saved rows without forcing an immediate saved-list refetch", () => {
+		expect(
+			shouldRefreshSavedEventsAfterSocketEvent({
+				viewMode: "saved",
+				hasRealtimeEventRow: true,
+			}),
+		).to.equal(false);
+
+		expect(
+			shouldRefreshSavedEventsAfterSocketEvent({
+				viewMode: "saved",
+				hasRealtimeEventRow: false,
+			}),
+		).to.equal(true);
+
+		expect(
+			shouldRefreshSavedEventsAfterSocketEvent({
+				viewMode: "live",
+				hasRealtimeEventRow: true,
+			}),
+		).to.equal(true);
 	});
 });

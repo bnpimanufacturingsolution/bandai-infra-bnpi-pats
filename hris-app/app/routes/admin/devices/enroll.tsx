@@ -1110,14 +1110,12 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 										</AccordionTrigger>
 										<AccordionContent className="pb-3">
 											<div className="overflow-hidden rounded-md border border-slate-200">
-												<div className="hidden grid-cols-[minmax(150px,1.2fr)_108px_92px_92px_104px_104px_92px_108px_164px] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 lg:grid">
+												<div className="hidden grid-cols-[minmax(180px,1.35fr)_132px_118px_132px_132px_108px_96px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 xl:grid">
 													<span>Device</span>
 													<span>Address</span>
 													<span>Status</span>
-													<span>Device users</span>
-													<span>Device logs</span>
-													<span>HRIS events</span>
-													<span>Needs review</span>
+													<span>Source counts</span>
+													<span>HRIS / review</span>
 													<span>Last sync</span>
 													<span className="text-right">Actions</span>
 												</div>
@@ -1137,53 +1135,57 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 													return (
 														<div
 															key={device.id}
-															className={`grid gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 lg:grid-cols-[minmax(150px,1.2fr)_108px_92px_92px_104px_104px_92px_108px_164px] lg:items-center ${isSelected ? "bg-orange-50/40" : "bg-white"}`}>
+															className={`grid gap-3 border-b border-slate-100 px-3 py-3 text-sm last:border-b-0 xl:grid-cols-[minmax(180px,1.35fr)_132px_118px_132px_132px_108px_96px] xl:items-center ${isSelected ? "bg-orange-50/40" : "bg-white"}`}>
 															<div className="min-w-0">
 																<p className="truncate font-medium text-slate-950">
 																	{device.name || "Unnamed device"}
 																</p>
 																{preview?.error ? (
-																	<p className="truncate text-xs text-red-600">{preview.error}</p>
+																	<p className="line-clamp-2 text-xs text-red-600">{preview.error}</p>
 																) : null}
 															</div>
-															<div className="text-slate-700 lg:text-xs">
-																<span className="lg:hidden">Address </span>
+															<div className="min-w-0 font-mono text-xs text-slate-700">
+																<span className="mr-1 font-sans text-slate-500 xl:hidden">Address</span>
 																{device.address || "-"}:{device.port || "-"}
 															</div>
 															<div>
-																<span className="lg:hidden text-slate-500">Status </span>
+																<span className="mr-1 text-slate-500 xl:hidden">Status</span>
 																<Badge
 																	variant={getSyncStatusBadge(status) as any}
-																	className="h-6 shrink-0 items-center border border-current/20">
+																	className="inline-flex min-h-6 max-w-full items-center whitespace-normal break-words border border-current/20 px-2 py-0.5 text-left leading-4">
 																	{getSyncStatusLabel(status)}
 																</Badge>
 															</div>
-															<div>
-																<span className="lg:hidden text-slate-500">Device users </span>
-																<Button
-																	type="button"
-																	variant="ghost"
-																	className="h-7 px-1 text-sm font-semibold text-slate-950 hover:bg-slate-100"
-																	disabled={typeof userTotal !== "number"}
-																	onClick={() => openPhysicalDeviceUsers(device.id)}
-																	title="Open physical device users">
-																	{metricValue(userTotal)}
-																</Button>
+															<div className="min-w-0 space-y-1">
+																<div className="flex items-center justify-between gap-2 xl:block">
+																	<span className="text-xs text-slate-500">Device users</span>
+																	<Button
+																		type="button"
+																		variant="ghost"
+																		className="h-auto min-h-7 px-1 text-sm font-semibold text-slate-950 hover:bg-slate-100"
+																		disabled={typeof userTotal !== "number"}
+																		onClick={() => openPhysicalDeviceUsers(device.id)}
+																		title="Open physical device users">
+																		{metricValue(userTotal)}
+																	</Button>
+																</div>
+																<div className="flex items-center justify-between gap-2 xl:block">
+																	<span className="text-xs text-slate-500">Device logs</span>
+																	<span className="font-semibold text-slate-950">{metricValue(sourceTotal)}</span>
+																</div>
 															</div>
-															<div className="font-semibold text-slate-950">
-																<span className="lg:hidden text-slate-500">Device logs </span>
-																{metricValue(sourceTotal)}
-															</div>
-															<div className="font-semibold text-slate-950">
-																<span className="lg:hidden text-slate-500">HRIS events </span>
-																{metricValue(savedTotal)}
-															</div>
-															<div className="font-semibold text-slate-950">
-																<span className="lg:hidden text-slate-500">Needs review </span>
-																{metricValue(missingTotal)}
+															<div className="min-w-0 space-y-1">
+																<div className="flex items-center justify-between gap-2 xl:block">
+																	<span className="text-xs text-slate-500">HRIS events</span>
+																	<span className="font-semibold text-slate-950">{metricValue(savedTotal)}</span>
+																</div>
+																<div className="flex items-center justify-between gap-2 xl:block">
+																	<span className="text-xs text-slate-500">Needs review</span>
+																	<span className="font-semibold text-slate-950">{metricValue(missingTotal)}</span>
+																</div>
 															</div>
 															<div className="text-xs text-slate-600">
-																<span className="lg:hidden">Last sync </span>
+																<span className="mr-1 text-slate-500 xl:hidden">Last sync</span>
 																{lastSyncAt ? formatDateTime(lastSyncAt) : "-"}
 															</div>
 															<div className="flex justify-end">

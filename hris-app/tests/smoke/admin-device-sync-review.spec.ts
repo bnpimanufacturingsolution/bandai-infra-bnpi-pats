@@ -409,17 +409,18 @@ test("admin reviews device user and log sync from the device home", async ({ pag
 	await expect(page.getByText("Noel")).toBeVisible();
 	await expect(page.locator("tbody").getByText("Read from device")).toHaveCount(5);
 	await expect(page.locator("tbody").getByText("Open", { exact: true })).toHaveCount(5);
-	await expect(page.getByRole("button", { name: "Sync first" })).toHaveCount(5);
+	await expect(page.getByRole("button", { name: "Sync first" })).toHaveCount(0);
+	await expect(page.locator("tbody").getByRole("button", { name: /More actions for device user/ })).toHaveCount(6);
 	await expect(page.getByText("Legacy Backfill User")).toHaveCount(0);
 	await page.getByRole("button", { name: /HRIS records:\s+1/ }).click();
 	await expect(page).toHaveURL(/deviceUserView=hris/);
 	await expect(page.locator("tbody").getByText("Read from device")).toHaveCount(0);
-	await page.locator("tbody").getByRole("button", { name: "Link", exact: true }).click();
+	await page.locator("tbody").getByRole("button", { name: /More actions for device user Ernest/ }).click();
+	await page.getByRole("menuitem", { name: "Change employee link" }).click();
 	await expect(page.getByRole("heading", { name: "Link device user" })).toBeVisible();
 	await page.locator('button[role="combobox"]').filter({ hasText: "Ernest Ramos" }).click();
-	await page.getByPlaceholder("Search employee...").fill("Arvin");
-	await expect(page.getByText("Arvin Salud - EMP-002")).toBeVisible();
-	await page.getByText("Arvin Salud - EMP-002").click();
+	await expect(page.getByRole("option", { name: /Arvin Salud - EMP-002/ })).toBeVisible();
+	await page.getByRole("option", { name: /Arvin Salud - EMP-002/ }).click();
 	const linkRequest = page.waitForRequest((request) =>
 		request.url().includes("/api/device/users/device-user-1/link") && request.method() === "POST",
 	);
@@ -452,13 +453,14 @@ test("admin reviews device user and log sync from the device home", async ({ pag
 		.first()
 		.click();
 	await expect(page.getByRole("button", { name: "Sync first" })).toHaveCount(0);
-	await expect(page.locator("tbody").getByRole("button", { name: "Link", exact: true })).toHaveCount(6);
+	await expect(page.locator("tbody").getByRole("button", { name: /More actions for device user/ })).toHaveCount(6);
 
 	await page.getByRole("tab", { name: "Device Users" }).click();
 	await expect(page.getByText("Ernest", { exact: true })).toBeVisible();
 	await expect(page.getByText("Legacy Backfill User")).toHaveCount(0);
 	await page.screenshot({ path: `${evidenceDir}/device-sync-device-users-tab.png`, fullPage: true });
-	await page.getByRole("button", { name: "Details" }).first().click();
+	await page.locator("tbody").getByRole("button", { name: /More actions for device user Ernest/ }).click();
+	await page.getByRole("menuitem", { name: "Details" }).click();
 	await expect(page.getByRole("heading", { name: "Device user details" })).toBeVisible();
 	await expect(page.getByText("Physical device")).toBeVisible();
 	await expect(page.locator("pre")).toBeHidden();

@@ -52,6 +52,7 @@ import {
 	getSavedDeviceEventProcessingLabel,
 	prependRealtimeSavedRows,
 	savedDeviceEventMatchesScope,
+	shouldRefreshSavedEventsAfterSocketEvent,
 } from "~/lib/device-events-realtime-ui";
 import type {
 	DeviceEvent,
@@ -661,6 +662,8 @@ export default function DeviceEventsPage() {
 	);
 	const organizationId =
 		user?.organizationId || (user as any)?.organization?.id || liveDevice?.organizationId || "";
+	const hasRealtimeScope = Boolean(organizationId || selectedDeviceRoomId);
+	const shouldPollSavedEvents = viewMode !== "saved" || !isConnected || !hasRealtimeScope;
 
 	const savedQueryParams: ApiQueryParams = {
 		page: pageParam,
@@ -680,7 +683,9 @@ export default function DeviceEventsPage() {
 		isLoading: isLoadingSaved,
 		error: savedError,
 		refetch,
-	} = useDeviceEvents(savedQueryParams);
+	} = useDeviceEvents(savedQueryParams, {
+		refetchInterval: shouldPollSavedEvents ? 30 * 1000 : false,
+	});
 	const {
 		data: liveData,
 		isLoading: isLoadingLive,
@@ -734,14 +739,22 @@ export default function DeviceEventsPage() {
 		const handleDeviceEventSaved = (payload: DeviceEventSavedPayload) => {
 			if (!matchesCurrentScope(payload)) return;
 			setLastRealtimeEvent(payload);
-			if (payload.event?.id) {
+			const hasRealtimeEventRow = Boolean(payload.event?.id);
+			if (hasRealtimeEventRow) {
 				setRealtimeSavedEvents((current) => [
 					payload.event as DeviceEvent,
 					...current.filter((event) => event.id !== payload.event?.id),
 				].slice(0, limitParam));
 			}
-			void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
-			void refetch();
+			if (
+				shouldRefreshSavedEventsAfterSocketEvent({
+					viewMode,
+					hasRealtimeEventRow,
+				})
+			) {
+				void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
+				void refetch();
+			}
 			if (viewMode === "live") {
 				void refetchLive();
 			}
@@ -774,7 +787,6 @@ export default function DeviceEventsPage() {
 		if (viewMode !== "saved") return;
 		if (typeof window === "undefined") return;
 
-		const hasRealtimeScope = Boolean(organizationId || selectedDeviceRoomId);
 		const intervalMs = isConnected && hasRealtimeScope ? 30000 : 10000;
 		const refreshFromRecovery = () => {
 			setLastRecoveryRefreshAt(new Date().toISOString());
@@ -1273,13 +1285,13 @@ export default function DeviceEventsPage() {
 		zktecoSync.mutate({ deviceId: startableRow.deviceId }, {
 			onSuccess: () => {
 				closeSyncLogs();
-				toast.success("Sync logs request accepted", {
+				toast.success("Sync device logs started", {
 					id: "device-events-sync-start",
-					description: "Saved events and bridge health are refreshing.",
+					description: "Saved device-log rows and bridge health are refreshing.",
 				});
 				setSyncLogsState({
 					status: "accepted",
-					message: "Bridge accepted the sync request. Saved events and bridge health are refreshing.",
+					message: "Bridge accepted the device-log sync. Saved rows and bridge health are refreshing.",
 				});
 				void refetch();
 				void refetchHealth();
@@ -1359,10 +1371,10 @@ export default function DeviceEventsPage() {
 		liveDeviceName: liveDevice?.name,
 	});
 	const realtimeStatusDetail = lastRealtimeEvent
-		? `Last socket event ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
+		? `Last saved-row socket event ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
 			: latestSavedEvent
-			? `Latest saved ${formatPunchTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
-			: "Waiting for the next saved punch";
+			? `Latest saved row ${formatPunchTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
+			: "Waiting for the next saved row from watcher or callback";
 	const activeImportTargetCount = getNumericCount(importJobProgress?.targetImportCount);
 	const activeImportScanLimit = getNumericCount(importJobProgress?.scanLimit);
 	const isTargetedImport = activeImportTargetCount !== null;
@@ -1586,7 +1598,7 @@ export default function DeviceEventsPage() {
 					<Badge
 						variant={isConnected ? "success-soft" : isLatestSavedFresh ? "warning-soft" : "secondary"}
 						className="rounded-md px-2 py-1">
-						{isConnected ? "Realtime on" : isLatestSavedFresh ? "New saved" : "Realtime off"}
+						{isConnected ? "Saved rows live" : isLatestSavedFresh ? "New saved row" : "Saved rows idle"}
 					</Badge>
 					<Button
 						type="button"
@@ -1914,7 +1926,7 @@ export default function DeviceEventsPage() {
 								}
 							/>
 							<span className="truncate font-medium">
-								{latestSavedProcessingLabel || (isLatestSavedFresh ? "Realtime save" : "Latest saved punch")}
+								{latestSavedProcessingLabel || (isLatestSavedFresh ? "Latest watcher save" : "Latest saved punch")}
 							</span>
 							<span className="truncate text-xs opacity-80">
 								{latestSavedEvent.employeeName || `No. ${latestSavedEvent.employeeNo || "-"}`}
@@ -2080,6 +2092,9 @@ export default function DeviceEventsPage() {
 								) : (
 									<p className="mt-1 text-xs text-amber-700">No sync-capable devices.</p>
 								)}
+								<p className="mt-2 text-xs text-slate-500">
+									Saved rows here update from the watcher/callback path. Sync logs is the backfill tool when that runtime lags.
+								</p>
 							</div>
 							<div className="flex shrink-0 items-center gap-2">
 								<Badge

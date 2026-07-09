@@ -1,11 +1,11 @@
 param(
-  [string]$VmHost = "10.184.38.144",
+  [string]$VmHost = "10.184.37.19",
   [string]$VmUser = "infra",
-  [string]$SshKey = "$env:USERPROFILE\.ssh\bnpi_hris_cloudflare_ed25519",
-  [string]$DeviceHost = "10.184.38.215",
+  [string]$SshKey = "$env:USERPROFILE\.ssh\node-health-appliance_ed25519",
+  [string]$DeviceHost = "10.184.37.139",
   [int]$HttpPort = 80,
   [int]$SdkPort = 8000,
-  [string]$Username = "admin@bandai.local",
+  [string]$Username = $env:HIKVISION_USERNAME,
   [string]$Password = $env:HIKVISION_PASSWORD,
   [int]$Loops = 12,
   [int]$IntervalSeconds = 5,
@@ -40,9 +40,9 @@ $targetSdk = "Bandai Hikvision SDK=${DeviceHost}:${SdkPort}:tcp"
 $tcp = "cd '$RemoteDir' && . .venv/bin/activate && python -m hikvision_linux_probe --mode tcp --timeout 8 --target '$targetHttp' --target '$targetSdk'"
 ssh @sshBase $sshTarget $tcp
 
-if ([string]::IsNullOrWhiteSpace($Password)) {
-  Write-Host "HIKVISION_PASSWORD is not set. Skipping credentialed ISAPI/ACS event discovery."
-  Write-Host "Set `$env:HIKVISION_PASSWORD, then rerun this script while you tap the device."
+if ([string]::IsNullOrWhiteSpace($Username) -or [string]::IsNullOrWhiteSpace($Password)) {
+  Write-Host "HIKVISION_USERNAME/HIKVISION_PASSWORD is not set. Skipping credentialed ISAPI/ACS event discovery."
+  Write-Host "Set `$env:HIKVISION_USERNAME and `$env:HIKVISION_PASSWORD, then rerun this script while you tap the device."
   exit 0
 }
 

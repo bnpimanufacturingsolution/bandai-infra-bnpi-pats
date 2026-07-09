@@ -1,24 +1,27 @@
 # Project Truth Hikvision Linux Trial
 
-Experimental Linux-side Hikvision connectivity proof for Project Truth.
+Linux-side Hikvision connectivity and biometric-sync proof for Project Truth.
 
 This folder intentionally does not vendor proprietary Hikvision SDK binaries,
 headers, samples, device credentials, or local customer data. It provides a
-small read-only Python probe that can be run directly in the Ubuntu VM or in a
-Docker container to prove the network path and ISAPI handshake before a later
-Linux HCNetSDK listener is added.
+small read-only Python probe and a Project Truth-named HCNetSDK biometric
+service scaffold. Run them directly in the Ubuntu VM or in a container to prove
+the network path, ISAPI handshake, SDK login, alarm callback, and dry-run
+reconciliation before any device mutation.
 
 ## Device Targets
 
-Default trial targets:
+Default trial targets follow the current HRIS Device row truth. Do not use old
+SADP/dev watcher addresses as defaults.
 
 | Name | Address | Port | Protocol |
 | --- | --- | ---: | --- |
-| Main Entrance Device ISAPI | `192.168.254.181` | 80 | HTTP ISAPI |
-| Main Entrance Device SDK | `192.168.254.181` | 8000 | TCP SDK service |
+| Main Entrance Device ISAPI | `10.184.37.139` | 80 | HTTP ISAPI |
+| Main Entrance Device SDK | `10.184.37.139` | 8000 | TCP SDK service |
 
-Earlier notes mention `192.168.1.61:8000`; use that only when the current LAN
-route is proven.
+Current UI truth: `Main Entrance Device`, vendor `Hikvision`, model
+`DS-K1T341CMFW`, address `10.184.37.139`, HTTP port `80`. SDK port is `8000`
+when present in device config. The HRIS `Device` row is the source of truth.
 
 ## Local Python Trial
 
@@ -45,7 +48,7 @@ To query recent ACS event history directly from the device:
 
 ```bash
 python -m hikvision_linux_probe --mode acs-events \
-  --target "Bandai Hikvision ISAPI=10.184.38.215:80:http" \
+  --target "Main Entrance Device ISAPI=10.184.37.139:80:http" \
   --lookback-minutes 10
 ```
 
@@ -53,7 +56,7 @@ To watch while somebody taps:
 
 ```bash
 python -m hikvision_linux_probe --mode watch \
-  --target "Bandai Hikvision ISAPI=10.184.38.215:80:http" \
+  --target "Main Entrance Device ISAPI=10.184.37.139:80:http" \
   --lookback-minutes 10 \
   --loops 12 \
   --interval 5
@@ -68,6 +71,32 @@ From the Windows repo root, the VM wrapper is:
 $env:HIKVISION_PASSWORD='<device-password>'
 .\vendor\hikvision-linux\scripts\discover-device-truth.ps1
 ```
+
+## Linux HCNetSDK Biometric Service
+
+Build on the VM with the local SDK installed:
+
+```bash
+cd vendor/hikvision-linux
+export HIKVISION_LINUX_SDK_ROOT=/home/infra/project-truth-hcnetsdk/EN-HCNetSDKV6.1.9.48_build20230410_linux64
+scripts/build-hikvision-biometric-service.sh
+```
+
+Run dry-run listener evidence against the current Device row target:
+
+```bash
+./build/hikvision-biometric-service \
+  --device "main-entrance|<org-id>|Main Entrance Device|10.184.37.139|8000|$HIKVISION_USERNAME|$HIKVISION_PASSWORD|true" \
+  --hris-api-base "http://localhost:3001" \
+  --evidence-jsonl ".runtime/hikvision-biometric-service.jsonl" \
+  --seconds 60
+```
+
+The default mode is dry-run. `--execute` is required before peer device writes
+or HRIS biometric reconcile persistence. SDK alarm events are queued and posted
+to `/api/hikvision/callback`, which remains the single HRIS persistence and
+socket broadcast path for saved `DeviceEvent` rows. Raw fingerprint template
+bytes are never written to normal HRIS `User` records or JSONL evidence.
 
 ## Docker Trial
 

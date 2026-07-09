@@ -66,6 +66,8 @@ const DEVICE_EVENT_SOURCES = new Set([
 ]);
 const DEVICE_EVENT_RESET_ADMIN_ROLES = new Set(["hris-admin", "admin", "super_admin", "superadmin"]);
 const DEVICE_USER_ADMIN_ROLES = new Set(["hris-admin", "admin", "super_admin", "superadmin"]);
+const DEVICE_ADDRESS_PORT_CONFLICT_MESSAGE =
+	"Another device already uses this address and port.";
 
 type DeviceImportJobStatus = "processing" | "completed" | "failed" | "cancelled";
 
@@ -881,6 +883,75 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const buildReleasedDeviceAddress = (device: { id: string; address?: string | null }) => {
+		const address = String(device.address || "unknown").trim() || "unknown";
+		const prefix = `deleted:${device.id}:`;
+		return address.startsWith(prefix) ? address : `${prefix}${address}`;
+	};
+
+	const isDeviceAddressPortUniqueError = (error: unknown) => {
+		const record = error as { code?: string; meta?: { target?: unknown } };
+		const target = Array.isArray(record?.meta?.target)
+			? record.meta.target.map((item) => String(item))
+			: [];
+		return (
+			record?.code === "P2002" &&
+			target.includes("organizationId") &&
+			target.includes("address") &&
+			target.includes("port")
+		);
+	};
+
+	const buildDeviceAddressPortConflictResponse = () =>
+		buildErrorResponse(DEVICE_ADDRESS_PORT_CONFLICT_MESSAGE, 409, [
+			{
+				field: "address",
+				message: "Choose a different address or restore the deleted device that already used this endpoint.",
+			},
+			{
+				field: "port",
+				message: "Choose a different port or restore the deleted device that already used this endpoint.",
+			},
+		]);
+
+	const isMissingDeviceSyncRunTableError = (error: unknown) => {
+		const record = error as { code?: string; message?: string; meta?: { table?: string; modelName?: string } };
+		const message = String(record?.message || "").toLowerCase();
+		return (
+			record?.code === "P2021" ||
+			record?.meta?.table === "public.device_sync_runs" ||
+			record?.meta?.modelName === "DeviceSyncRun" ||
+			(message.includes("device_sync_runs") && message.includes("does not exist"))
+		);
+	};
+
+	const findLatestCompletedDeviceLogRun = async (
+		organizationId: string,
+		deviceId: string,
+		source: "HIKVISION_CALLBACK" | "ZKTECO_EVENT",
+	) => {
+		try {
+			return await (prisma as any).deviceSyncRun?.findFirst?.({
+				where: {
+					organizationId,
+					deviceId,
+					runType: "DEVICE_LOGS",
+					status: "COMPLETED",
+					source,
+				},
+				orderBy: { completedAt: "desc" },
+			});
+		} catch (error) {
+			if (isMissingDeviceSyncRunTableError(error)) {
+				deviceLogger.warn(
+					`Device sync run history table is missing; continuing preview without known skipped counts for device ${deviceId}`,
+				);
+				return null;
+			}
+			throw error;
+		}
+	};
+
 	const getDeviceSyncRuns = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
 			const organizationId = String((req as any).organizationId || "").trim();
@@ -1161,6 +1232,193 @@ export const controller = (prisma: PrismaClient) => {
 			}
 		} catch (error: any) {
 			res.status(500).json(buildErrorResponse(error?.message || "Failed to sync device users", 500));
+		}
+	};
+
+	const reconcileBiometricSync = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+
+			const body = (req.body || {}) as Record<string, any>;
+			const execute = body.execute === true;
+			const sourceDeviceId = String(body.sourceDeviceId || "").trim();
+			const employeeNo = String(body.employeeNo || body.vendorUserId || "").trim();
+			const cardNo = String(body.cardNo || "").trim();
+			const eventKind = String(body.eventKind || "biometric_reconcile").trim();
+			const minor = String(body.minor || "").trim();
+			const source = String(body.source || "EN_HCNETSDK_ALARM").trim();
+			const fingerprintSummary = body.fingerprintSummary && typeof body.fingerprintSummary === "object"
+				? body.fingerprintSummary
+				: {};
+
+			if (!sourceDeviceId || !employeeNo) {
+				res.status(400).json(
+					buildErrorResponse("sourceDeviceId and employeeNo are required", 400),
+				);
+				return;
+			}
+
+			const sourceDevice = await prisma.device.findFirst({
+				where: {
+					id: sourceDeviceId,
+					organizationId: String(admin.organizationId),
+					isDeleted: false,
+				},
+				select: { id: true, name: true, address: true, port: true, config: true },
+			});
+			if (!sourceDevice) {
+				res.status(404).json(buildErrorResponse("Source device not found", 404));
+				return;
+			}
+
+			const peerDeviceIds = Array.isArray(body.peerDeviceIds)
+				? body.peerDeviceIds.map((id) => String(id).trim()).filter(Boolean)
+				: [];
+			const peerDevices = await prisma.device.findMany({
+				where: {
+					organizationId: String(admin.organizationId),
+					isDeleted: false,
+					NOT: { id: sourceDevice.id },
+					...(peerDeviceIds.length ? { id: { in: peerDeviceIds } } : {}),
+				},
+				select: { id: true, name: true, address: true, port: true, config: true },
+			});
+			const biometricPeers = peerDevices.filter((device) => isHikvisionDevice(device));
+
+			const employee = await prisma.employee.findFirst({
+				where: {
+					organizationId: String(admin.organizationId),
+					isDeleted: false,
+					OR: [
+						{ employeeId: employeeNo },
+						{ deviceEmpId: employeeNo },
+					],
+				},
+				select: { id: true, employeeId: true, deviceEmpId: true },
+			});
+
+			const biometricSyncPayload = {
+				source,
+				eventKind,
+				minor,
+				sourceDeviceId: sourceDevice.id,
+				cardNo: cardNo || null,
+				fingerprintTemplateCount: Number(fingerprintSummary.templateCount || 0),
+				rawFingerprintTemplateStored: false,
+				reconciledAt: new Date().toISOString(),
+			};
+
+			const targetDevices = [sourceDevice, ...biometricPeers];
+			const plannedChanges = targetDevices.map((device) => ({
+				deviceId: device.id,
+				deviceName: device.name,
+				vendorUserId: employeeNo,
+				employeeId: employee?.id || null,
+				status: employee?.id ? "ACTIVE" : "UNMATCHED",
+				wouldPersistDeviceUser: true,
+				rawFingerprintTemplateStored: false,
+			}));
+
+			if (!execute) {
+				res.status(200).json(
+					buildSuccessResponse(
+						"Biometric sync reconcile dry-run completed",
+						{
+							execute: false,
+							sourceDevice,
+							employee,
+							plannedChanges,
+							biometricSyncPayload,
+						},
+						200,
+					),
+				);
+				return;
+			}
+
+			const persisted = [];
+			for (const device of targetDevices) {
+				const existing = await prisma.deviceUser.findUnique({
+					where: {
+						organizationId_deviceId_vendorUserId: {
+							organizationId: String(admin.organizationId),
+							deviceId: device.id,
+							vendorUserId: employeeNo,
+						},
+					},
+					select: { id: true, rawPayload: true },
+				});
+				const nextRawPayload = {
+					...((existing?.rawPayload as any) || {}),
+					biometricSync: biometricSyncPayload,
+				};
+				const record = await prisma.deviceUser.upsert({
+					where: {
+						organizationId_deviceId_vendorUserId: {
+							organizationId: String(admin.organizationId),
+							deviceId: device.id,
+							vendorUserId: employeeNo,
+						},
+					},
+					create: {
+						organizationId: String(admin.organizationId),
+						deviceId: device.id,
+						vendorUserId: employeeNo,
+						employeeNo,
+						employeeId: employee?.id || null,
+						displayName: employee?.employeeId || employeeNo,
+						status: employee?.id ? "ACTIVE" : "UNMATCHED",
+						rawPayload: nextRawPayload,
+						lastSyncedAt: new Date(),
+					},
+					update: {
+						employeeNo,
+						employeeId: employee?.id || null,
+						status: employee?.id ? "ACTIVE" : "UNMATCHED",
+						rawPayload: nextRawPayload,
+						lastSyncedAt: new Date(),
+					},
+					select: {
+						id: true,
+						deviceId: true,
+						vendorUserId: true,
+						employeeId: true,
+						status: true,
+						lastSyncedAt: true,
+					},
+				});
+				persisted.push(record);
+			}
+
+			logActivity(req, {
+				userId: (req as any).userId || "hikvision-biometric-service",
+				action: "HIKVISION_BIOMETRIC_RECONCILE",
+				description: `Reconciled biometric metadata for employee ${employeeNo} from device ${sourceDevice.name}`,
+				page: {
+					url: req.originalUrl,
+					title: "Hikvision Biometric Sync",
+				},
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"Biometric sync reconcile persisted",
+					{
+						execute: true,
+						sourceDevice,
+						employee,
+						persisted,
+						rawFingerprintTemplateStored: false,
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			deviceLogger.error(`Biometric sync reconcile failed: ${error}`);
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Failed to reconcile biometric sync", 500),
+			);
 		}
 	};
 
@@ -1646,17 +1904,11 @@ export const controller = (prisma: PrismaClient) => {
 						source: "HIKVISION_CALLBACK",
 					},
 				}),
-				(prisma as any).deviceSyncRun.findFirst({
-					where: {
-						organizationId: String(organizationId),
-						deviceId: device.id,
-						runType: "DEVICE_LOGS",
-						status: "COMPLETED",
-						source: "HIKVISION_CALLBACK",
-					},
-					orderBy: { completedAt: "desc" },
-					select: { skippedRecords: true },
-				}),
+				findLatestCompletedDeviceLogRun(
+					String(organizationId),
+					device.id,
+					"HIKVISION_CALLBACK",
+				),
 			]);
 			const knownSkippedEvents = Number(latestCompletedRun?.skippedRecords || 0);
 			const estimatedUnsaved =
@@ -1828,6 +2080,51 @@ export const controller = (prisma: PrismaClient) => {
 			const includeLinkedAttendance = Boolean((req.body as any)?.includeLinkedAttendance);
 			const { where, scope } = buildDeviceEventResetScope(req, organizationId);
 
+			if (!execute) {
+				const isAllTimeScope =
+					scope.deviceId === "all" &&
+					scope.source === "all" &&
+					scope.status === "all" &&
+					!scope.from &&
+					!scope.to;
+				const deviceEventsCount = await prisma.deviceEvent.count({ where });
+				const [devicesInScope, linkedAttendanceInScope] = isAllTimeScope
+					? [[], []]
+					: await Promise.all([
+							prisma.deviceEvent.groupBy({
+								by: ["deviceId"],
+								where,
+							}),
+							prisma.deviceEvent.groupBy({
+								by: ["attendanceId"],
+								where: {
+									...where,
+									attendanceId: { not: null },
+								} as Prisma.DeviceEventWhereInput,
+							}),
+						]);
+				const counts = {
+					devices: isAllTimeScope ? 0 : devicesInScope.length,
+					deviceEvents: deviceEventsCount,
+					linkedAttendance: isAllTimeScope ? 0 : linkedAttendanceInScope.length,
+					importJobs: deviceImportJobs.size,
+				};
+
+				res.status(200).json(
+					buildSuccessResponse(
+						"Device event reset preview generated",
+						{
+							mode: "preview",
+							scope,
+							counts,
+							affectedModels: ["DeviceEvent", "Attendance (linked only, optional)", "Device (export only)"],
+						},
+						200,
+					),
+				);
+				return;
+			}
+
 			const events = await prisma.deviceEvent.findMany({
 				where,
 				orderBy: [{ receivedAt: "desc" }, { createdAt: "desc" }],
@@ -1867,22 +2164,6 @@ export const controller = (prisma: PrismaClient) => {
 				linkedAttendance: linkedAttendance.length,
 				importJobs: deviceImportJobs.size,
 			};
-
-			if (!execute) {
-				res.status(200).json(
-					buildSuccessResponse(
-						"Device event reset preview generated",
-						{
-							mode: "preview",
-							scope,
-							counts,
-							affectedModels: ["DeviceEvent", "Attendance (linked only, optional)", "Device (export only)"],
-						},
-						200,
-					),
-				);
-				return;
-			}
 
 			const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 			const backupDir = path.join(getProjectRuntimeRoot(), "backups", `device-events-reset-${timestamp}`);
@@ -2071,16 +2352,11 @@ export const controller = (prisma: PrismaClient) => {
 			);
 			const latestCompletedRuns = await Promise.all(
 				syncDevices.map(async (device) => {
-					const run = await (prisma as any).deviceSyncRun?.findFirst?.({
-						where: {
-							organizationId: String(organizationId),
-							deviceId: device.id,
-							runType: "DEVICE_LOGS",
-							status: "COMPLETED",
-							source: device.source,
-						},
-						orderBy: { completedAt: "desc" },
-					});
+					const run = await findLatestCompletedDeviceLogRun(
+						String(organizationId),
+						device.id,
+						device.source,
+					);
 					return [device.id, run] as const;
 				}),
 			);
@@ -3005,6 +3281,48 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			const nextOrganizationId = String(
+				validatedData.organizationId || (existingDevice as any).organizationId || "",
+			);
+			const nextAddress = String(validatedData.address || (existingDevice as any).address || "");
+			const nextPort =
+				typeof validatedData.port === "number"
+					? validatedData.port
+					: Number((existingDevice as any).port);
+
+			if (nextOrganizationId && nextAddress && Number.isFinite(nextPort)) {
+				const conflictingDevice = await prisma.device.findFirst({
+					where: {
+						organizationId: nextOrganizationId,
+						address: nextAddress,
+						port: nextPort,
+						NOT: { id },
+					},
+					select: {
+						id: true,
+						name: true,
+						address: true,
+						port: true,
+						isDeleted: true,
+					},
+				});
+
+				if (conflictingDevice && !conflictingDevice.isDeleted) {
+					res.status(409).json(buildDeviceAddressPortConflictResponse());
+					return;
+				}
+
+				if (conflictingDevice?.isDeleted) {
+					await prisma.device.update({
+						where: { id: conflictingDevice.id },
+						data: { address: buildReleasedDeviceAddress(conflictingDevice) },
+					});
+					deviceLogger.info(
+						`Released soft-deleted device endpoint before device ${id} update: ${conflictingDevice.id}`,
+					);
+				}
+			}
+
 			const prismaData = { ...validatedData };
 
 			const updatedDevice = await prisma.device.update({
@@ -3028,6 +3346,12 @@ export const controller = (prisma: PrismaClient) => {
 			);
 			res.status(200).json(successResponse);
 		} catch (error) {
+			if (isDeviceAddressPortUniqueError(error)) {
+				deviceLogger.warn(`Device endpoint conflict while updating ${id}: ${error}`);
+				res.status(409).json(buildDeviceAddressPortConflictResponse());
+				return;
+			}
+
 			deviceLogger.error(`${config.ERROR.DEVICE.ERROR_UPDATING}: ${error}`);
 			const errorResponse = buildErrorResponse(
 				config.ERROR.COMMON.INTERNAL_SERVER_ERROR,
@@ -3068,7 +3392,10 @@ export const controller = (prisma: PrismaClient) => {
 
 			await prisma.device.update({
 				where: { id },
-				data: { isDeleted: true },
+				data: {
+					isDeleted: true,
+					address: buildReleasedDeviceAddress(existingDevice),
+				},
 			});
 
 			try {
@@ -3485,6 +3812,7 @@ export const controller = (prisma: PrismaClient) => {
 		getDeviceSyncRuns,
 		listDeviceUsers,
 		syncDeviceUsers,
+		reconcileBiometricSync,
 		backfillDeviceUsers,
 		linkDeviceUser,
 		unlinkDeviceUser,

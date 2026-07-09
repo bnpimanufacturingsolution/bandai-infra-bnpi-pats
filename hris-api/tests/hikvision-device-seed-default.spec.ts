@@ -8,7 +8,7 @@ describe("Hikvision device seed defaults", () => {
 		);
 
 		expect(mainEntranceDevice).to.deep.include({
-			address: "10.184.38.215",
+			address: "10.184.37.139",
 			port: 80,
 			protocol: "http",
 		});

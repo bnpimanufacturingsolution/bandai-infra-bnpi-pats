@@ -16,8 +16,8 @@ from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 
 DEFAULT_TARGETS = (
-    "Main Entrance Device ISAPI=192.168.254.181:80:http",
-    "Main Entrance Device SDK=192.168.254.181:8000:tcp",
+    "Main Entrance Device ISAPI=10.184.37.139:80:http",
+    "Main Entrance Device SDK=10.184.37.139:8000:tcp",
 )
 
 SYSTEM_TIME_PATH = "/ISAPI/System/time"
