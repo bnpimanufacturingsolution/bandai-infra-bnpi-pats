@@ -12,6 +12,7 @@ import {
 	parseZktecoEventTime,
 	ZKTECO_DEVICE_EVENT_SOURCE,
 } from "../../helper/zkteco-event-contract.helper";
+import { buildPersistedDeviceEventTaxonomy } from "../../helper/device-event-taxonomy.helper";
 
 export const controller = (prisma: PrismaClient) => {
 	const publishDeviceEventSaved = (req: Request, eventRecord: any) =>
@@ -72,6 +73,16 @@ export const controller = (prisma: PrismaClient) => {
 
 		if (existing) return { eventRecord: existing, isDuplicate: true };
 
+		const eventType = data.event.eventType || "AttendanceTransaction";
+		const taxonomy = buildPersistedDeviceEventTaxonomy({
+			source: ZKTECO_DEVICE_EVENT_SOURCE,
+			status: "RECEIVED",
+			eventType,
+			major: data.event.attState !== undefined ? String(data.event.attState) : null,
+			minor: data.event.attStateName || null,
+			payload: data.payload,
+		});
+
 		const eventRecord = await eventClient.create({
 			data: {
 				organizationId: data.device.organizationId,
@@ -80,7 +91,8 @@ export const controller = (prisma: PrismaClient) => {
 				employeeNo: data.employeeNo || null,
 				source: ZKTECO_DEVICE_EVENT_SOURCE,
 				status: "RECEIVED",
-				eventType: data.event.eventType || "AttendanceTransaction",
+				...taxonomy,
+				eventType,
 				verifyMode: data.event.verifyMode || null,
 				major: data.event.attState !== undefined ? String(data.event.attState) : null,
 				minor: data.event.attStateName || null,
@@ -97,6 +109,7 @@ export const controller = (prisma: PrismaClient) => {
 		eventId: string,
 		data: {
 			status: string;
+			deviceUserId?: string | null;
 			employeeId?: string | null;
 			attendanceId?: string | null;
 			errorMessage?: string | null;
@@ -220,25 +233,52 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const employee = await prisma.employee.findFirst({
-				where: {
-					isDeleted: false,
-					organizationId: device.organizationId,
-					OR: [
-						{ deviceEmpId: employeeNo },
-						{ employeeId: { in: buildZktecoEmployeeNoCandidates(employeeNo) } },
-					],
-				},
-				select: {
-					id: true,
-					organizationId: true,
-					deviceEmpId: true,
-				},
-			});
+			const deviceUser = employeeNo
+				? await (prisma as any).deviceUser.findFirst({
+						where: {
+							organizationId: device.organizationId,
+							deviceId: device.id,
+							vendorUserId: employeeNo,
+						},
+						select: { id: true, employeeId: true, status: true },
+					})
+				: null;
+			const linkedDeviceUserEmployee = deviceUser?.employeeId
+				? await prisma.employee.findFirst({
+						where: {
+							id: deviceUser.employeeId,
+							organizationId: device.organizationId,
+							isDeleted: false,
+						},
+						select: {
+							id: true,
+							organizationId: true,
+							deviceEmpId: true,
+						},
+					})
+				: null;
+			const employee =
+				linkedDeviceUserEmployee ||
+				(await prisma.employee.findFirst({
+					where: {
+						isDeleted: false,
+						organizationId: device.organizationId,
+						OR: [
+							{ deviceEmpId: employeeNo },
+							{ employeeId: { in: buildZktecoEmployeeNoCandidates(employeeNo) } },
+						],
+					},
+					select: {
+						id: true,
+						organizationId: true,
+						deviceEmpId: true,
+					},
+				}));
 
 			if (!employee) {
 				await updateEventStatus(req, eventRecord.id, {
 					status: "UNMATCHED",
+					deviceUserId: deviceUser?.id || null,
 					errorMessage: "employee_not_found",
 				});
 				res.status(200).json(
@@ -260,6 +300,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			await updateEventStatus(req, eventRecord.id, {
 				status: "MATCHED",
+				deviceUserId: deviceUser?.id || null,
 				employeeId: employee.id,
 				attendanceId: null,
 				errorMessage: null,

@@ -22,7 +22,7 @@ export const getDeviceEventsRealtimeStatus = ({
 		deviceId !== "all"
 			? selectedDeviceName || liveDeviceName || "Selected device"
 			: organizationId
-				? "All organization devices"
+				? "All devices"
 				: "All devices";
 
 	return {
@@ -30,11 +30,11 @@ export const getDeviceEventsRealtimeStatus = ({
 		isScoped,
 		scopeLabel,
 		statusLabel: isListening
-			? "Realtime listening"
+			? "Saved-row updates on"
 			: isConnected
 				? "Socket connected"
 				: "Realtime offline",
-		rowUpdateLabel: isListening ? "Live updates visible in rows" : "Rows update after refresh",
+		rowUpdateLabel: isListening ? "Saved rows update live" : "Refresh needed",
 	};
 };
 
@@ -84,7 +84,7 @@ export const getSavedDeviceEventProcessingLabel = ({
 	eventTime?: string | Date | null;
 }) => {
 	if (itemId && latestRealtimeEventId && itemId === latestRealtimeEventId) {
-		return "Realtime save";
+		return "Watcher save";
 	}
 
 	const receivedAtMs = getTimeMs(receivedAt);
@@ -94,7 +94,7 @@ export const getSavedDeviceEventProcessingLabel = ({
 		eventTimeMs !== null &&
 		receivedAtMs - eventTimeMs > 2 * 60 * 1000
 	) {
-		return "Backfill/sync save";
+		return "Synced save";
 	}
 
 	return "Historical punch";
@@ -158,3 +158,11 @@ export const prependRealtimeSavedRow = <T extends { id: string }>({
 		realtimeRows: realtimeRow ? [realtimeRow] : [],
 		maxRealtimeRows: 1,
 	});
+
+export const shouldRefreshSavedEventsAfterSocketEvent = ({
+	viewMode,
+	hasRealtimeEventRow,
+}: {
+	viewMode: "live" | "saved";
+	hasRealtimeEventRow: boolean;
+}) => viewMode === "live" || !hasRealtimeEventRow;

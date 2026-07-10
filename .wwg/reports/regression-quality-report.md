@@ -1,23 +1,26 @@
-# WWG Truth Alignment Report
+# WWG Execution Stopped
 
-WWG STATUS: Mild Truth Drift
-Truth Alignment Status: YELLOW / Mild Truth Drift
-EXECUTION GATE: Warn
+WWG STATUS: Critical Alignment Break
+Truth Alignment Status: RED / Critical Alignment Break
+EXECUTION GATE: Stop
 
 ## Plain-English Summary
 
-Recent work introduced small assumptions, terminology changes, or documentation lag that may not yet be reflected in Project Truth.
+A recent change appears to conflict with Project Truth, reintroduce a regression, weaken required verification, or touch a high-risk area without proper documentation.
 
 Recommended decision:
 Regression / Quality Repair
 
 Why:
-- Recent reports suggest documentation lag or stale context that may need Project Truth synchronization.
+- Test Enforcement requires regression repair or reports removed/weakened verification.
+- Test Enforcement detected weak or superficial tests where behavior coverage is expected.
+- Lint/typecheck/check script is missing while governance expects quality gates.
 - Recent docs use customer terminology not fully reflected in canonical terminology.
+- Recent reports suggest documentation lag or stale context that may need Project Truth synchronization.
 
 ## Recommended Next Step
 
-Review and sync Project Truth only if the change was intentional.
+Stop implementation and resolve the truth conflict, regression, or verification gap before continuing.
 
 ## Recommended Natural Prompt
 
@@ -28,18 +31,39 @@ Tell the agent: "Treat this as a regression or quality gap. Add or update meanin
 wwg regression-check
 wwg test-check
 
+## Why Execution Was Stopped
+
+- Test Enforcement requires regression repair or reports removed/weakened verification.
+- Test Enforcement detected weak or superficial tests where behavior coverage is expected.
+- Lint/typecheck/check script is missing while governance expects quality gates.
+- Recent docs use customer terminology not fully reflected in canonical terminology.
+- Recent reports suggest documentation lag or stale context that may need Project Truth synchronization.
+
+## Required Resolution
+
+Choose one:
+
+1. Confirm this is intentional and update Project Truth first.
+2. Reconcile implementation/docs back to Project Truth.
+3. Repair regression and add/update tests.
+4. Create a planning review before proceeding.
+
+
 ## Status
 
-- Alignment Level: YELLOW / Mild Truth Drift
-- Execution Gate: warn / Warn
-- Summary: Drift Score 3/10 does not necessarily mean the project is wrong. It reflects requirement evolution or documentation lag that should be reviewed.
+- Alignment Level: RED / Critical Alignment Break
+- Execution Gate: stop / Stop
+- Summary: Drift Score 10/10 indicates a critical conflict, regression, missing verification, or high-risk change that needs planning/reconciliation before more implementation.
 - Recommended Decision:
   - Regression / Quality Repair
 
 ## Why This Was Flagged
 
-- Recent reports suggest documentation lag or stale context that may need Project Truth synchronization.
+- Test Enforcement requires regression repair or reports removed/weakened verification.
+- Test Enforcement detected weak or superficial tests where behavior coverage is expected.
+- Lint/typecheck/check script is missing while governance expects quality gates.
 - Recent docs use customer terminology not fully reflected in canonical terminology.
+- Recent reports suggest documentation lag or stale context that may need Project Truth synchronization.
 
 ## Evidence
 
@@ -60,9 +84,9 @@ wwg test-check
 
 ### Implementation/test/build signals
 
-- Source files: 83825
-- Test files: 958
-- Git changed files: 11
+- Source files: 82367
+- Test files: 862
+- Git changed files: 16
 - package.json scripts: test
 
 ### Terminology signals
@@ -88,14 +112,17 @@ Only suggested edits or bullets are listed here. This command did not silently o
 ## Suggested Reconciliation Actions
 
 - Restore canonical terminology unless the term change is accepted: Recent docs use customer terminology not fully reflected in canonical terminology.
+- Repair quality drift and add or update verification: Test Enforcement requires regression repair or reports removed/weakened verification.
+- Repair quality drift and add or update verification: Test Enforcement detected weak or superficial tests where behavior coverage is expected.
+- Repair quality drift and add or update verification: Lint/typecheck/check script is missing while governance expects quality gates.
 
 ## Test / Quality Expectations
 
-- Meaningful behavior changes detected: Onboarding behavior, Auth/security, Parsing/validation, API/client integration seam, Bug fix
-- Tests found: .runtime/upstream-hris-api-pass2/tests/announcement-notification.spec.ts, .runtime/upstream-hris-api-pass2/tests/approved-overtime-comp-leave.service.spec.ts, .runtime/upstream-hris-api-pass2/tests/attendance-action.helper.spec.ts, .runtime/upstream-hris-api-pass2/tests/attendance-backfill.service.spec.ts, .runtime/upstream-hris-api-pass2/tests/attendance-correction.service.spec.ts, .runtime/upstream-hris-api-pass2/tests/attendance-daily-trend-by-department.helper.spec.ts, .runtime/upstream-hris-api-pass2/tests/attendance-obligation.helper.spec.ts, .runtime/upstream-hris-api-pass2/tests/attendance-realtime.helper.spec.ts, .runtime/upstream-hris-api-pass2/tests/attendance-status-migration.spec.ts, .runtime/upstream-hris-api-pass2/tests/auditLogger.spec.ts, .runtime/upstream-hris-api-pass2/tests/auth-login-identifier.spec.ts, .runtime/upstream-hris-api-pass2/tests/bulk-password.helper.spec.ts, .runtime/upstream-hris-api-pass2/tests/device-event-realtime.helper.spec.ts, .runtime/upstream-hris-api-pass2/tests/dm3-attendance-obligation-repair.helper.spec.ts, .runtime/upstream-hris-api-pass2/tests/dm4-biometric-proof.spec.ts, .runtime/upstream-hris-api-pass2/tests/document-field-validation.helper.spec.ts, .runtime/upstream-hris-api-pass2/tests/employee-action-block.helper.spec.ts, .runtime/upstream-hris-api-pass2/tests/employee-helper-credentials.spec.ts, .runtime/upstream-hris-api-pass2/tests/employee-import.helper.spec.ts, .runtime/upstream-hris-api-pass2/tests/employee-organization-reporting-query.contract.spec.ts
-- Tests missing: None detected by heuristic.
-- Regression coverage needed: None detected by heuristic.
-- Weak tests: None detected by heuristic.
+- Meaningful behavior changes detected: Cart behavior, Onboarding behavior, Dashboard metrics, Auth/security, Persistence, Parsing/validation, API/client integration seam, Bug fix
+- Tests found: .runtime/pg-probe/node_modules/pg-protocol/dist/inbound-parser.test.js, .runtime/pg-probe/node_modules/pg-protocol/dist/outbound-serializer.test.js, .runtime/pg-probe/node_modules/pg-protocol/src/inbound-parser.test.ts, .runtime/pg-probe/node_modules/pg-protocol/src/outbound-serializer.test.ts, .runtime/upstream-hris-app-current-files/app/components/atoms/DataTable.test.tsx, .runtime/upstream-hris-app-current-files/app/routes/employee/dashboard/TimesheetsTab.test.tsx, hris-api/node_modules/@eslint/eslintrc/node_modules/json-schema-traverse/spec/index.spec.js, hris-api/node_modules/@logtail/core/dist/cjs/base.test.js, hris-api/node_modules/@logtail/core/dist/es6/base.test.js, hris-api/node_modules/@logtail/core/src/base.test.ts, hris-api/node_modules/@logtail/node/dist/cjs/node.test.js, hris-api/node_modules/@logtail/node/dist/cjs/timeout.test.js, hris-api/node_modules/@logtail/node/dist/es6/node.test.js, hris-api/node_modules/@logtail/node/dist/es6/timeout.test.js, hris-api/node_modules/@logtail/node/src/node.test.ts, hris-api/node_modules/@logtail/tools/dist/cjs/batch.test.js, hris-api/node_modules/@logtail/tools/dist/cjs/encode.test.js, hris-api/node_modules/@logtail/tools/dist/cjs/queue.test.js, hris-api/node_modules/@logtail/tools/dist/cjs/retry.test.js, hris-api/node_modules/@logtail/tools/dist/cjs/throttle.test.js
+- Tests missing: Expected behavior tests are not satisfied by the detected weak/static tests.
+- Regression coverage needed: Test Enforcement requires regression repair or reports removed/weakened verification.; Test Enforcement detected weak or superficial tests where behavior coverage is expected.; Lint/typecheck/check script is missing while governance expects quality gates.
+- Weak tests: hris-api/tests/attendance-action.helper.spec.ts: appears to check file existence, static structure, static copy, or build smoke without behavior assertions.; hris-api/tests/db/schema-source-truth.contract.spec.ts: appears to check file existence, static structure, static copy, or build smoke without behavior assertions.; hris-api/tests/device-user-api-contract.spec.ts: appears to check file existence, static structure, static copy, or build smoke without behavior assertions.; hris-api/tests/employee-organization-reporting-query.contract.spec.ts: appears to check file existence, static structure, static copy, or build smoke without behavior assertions.; hris-api/tests/hikvision-dev-watcher-runtime.spec.ts: appears to check file existence, static structure, static copy, or build smoke without behavior assertions.; hris-api/tests/timesheet-line-version.helper.spec.ts: appears to check file existence, static structure, static copy, or build smoke without behavior assertions.; Recent reports mention smoke/static/file-existence testing while behavior changed.
 
 ## Recommended Next Step
 
@@ -103,10 +130,10 @@ Review regression and quality evidence, then repair missing or weakened verifica
 
 ## Decision Log Entry Draft
 
-- Date: 2026-07-02
-- Truth Alignment: YELLOW / Mild Truth Drift
+- Date: 2026-07-08
+- Truth Alignment: RED / Critical Alignment Break
 - Decision path: Regression / Quality Repair
-- Rationale: Recent reports suggest documentation lag or stale context that may need Project Truth synchronization.
+- Rationale: Test Enforcement requires regression repair or reports removed/weakened verification.
 - Follow-up: Update canonical truth, reconcile drift, plan first, or repair regression according to the accepted decision.
 
 ## Safety

@@ -62,11 +62,14 @@ export const parseHikvisionBodyPayload = (rawBody: unknown): Record<string, any>
 		eventType: getXmlTagValue(text, "eventType"),
 		major: getXmlTagValue(text, "major"),
 		minor: getXmlTagValue(text, "minor"),
-		time: getXmlTagValue(text, "time"),
+		time: getXmlTagValue(text, "time") || getXmlTagValue(text, "dateTime"),
 		employeeNo: getXmlTagValue(text, "employeeNo"),
 		employeeNoString: getXmlTagValue(text, "employeeNoString"),
 		name: getXmlTagValue(text, "name"),
-		deviceIP: getXmlTagValue(text, "deviceIP"),
+		deviceIP:
+			getXmlTagValue(text, "deviceIP") ||
+			getXmlTagValue(text, "deviceIp") ||
+			getXmlTagValue(text, "ipAddress"),
 		doorNo: getXmlTagValue(text, "doorNo"),
 		verifyMode: getXmlTagValue(text, "verifyMode"),
 		currentVerifyMode: getXmlTagValue(text, "currentVerifyMode"),

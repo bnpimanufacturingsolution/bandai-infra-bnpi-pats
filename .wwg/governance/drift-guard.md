@@ -63,6 +63,18 @@ If uncertain, add a candidate principle or record the issue in the handoff/repor
 - `hris-hr-manager` remains valid only where the task explicitly targets HR workflows or existing code/docs require that role.
 - If a role is unclear, prefer the route/workflow owner in Project Truth and mark the uncertainty instead of substituting a convenient seeded login.
 
+## Host-Local VM First Guard
+
+- For host-local VM, LAN, device, DB, GitOps, and runtime drift work from the
+  Windows host, collect direct LAN evidence first through
+  `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19`.
+- Use `ssh project-truth-hris` as fallback evidence when the direct LAN path is
+  not routable from the current workstation, or as explicit public Cloudflare
+  SSH proof when the task asks for public/remote access.
+- Do not confuse local-first evidence with disabling Cloudflare. The
+  VM-managed tunnel must remain active while agents prefer direct LAN proof for
+  host-local drift.
+
 ## Cloudflare Tunnel Safety Guard
 
 - Treat the running VM-managed `bnpi-hris` Cloudflare Tunnel as a protected
@@ -85,17 +97,52 @@ If uncertain, add a candidate principle or record the issue in the handoff/repor
 - Tests should verify behavior, not only file existence, static structure, or build smoke.
 - Non-software work may use decision logs, manual verification, approval checklists, or Project Truth updates when software tests are not the right evidence.
 
+## Real Endpoint Dry-Run Guard
+
+Before UI/browser diagnosis or code guessing, agents must find the exact
+endpoint used by the page, hook, or service and run that endpoint directly with
+the same expected actor.
+
+- For local HRIS admin/device/configuration checks, default to admin /
+  `hris-admin`: `admin@bandai.local`, `password123`, `appCode='hris'`.
+- Prefer non-mutating endpoint modes first: `execute=false`, `dryRun=true`,
+  preview endpoints, `?preview=true`, or the documented equivalent.
+- Time the call with `Measure-Command` and capture full JSON response,
+  request URL, payload, status, errors, and elapsed seconds into
+  `.runtime/<task-stamp>/...json`.
+- Use the API/network result to choose the patch order. Browser screenshots are
+  supporting evidence, not the first source of truth.
+- If a mutating endpoint has no safe preview/dry-run mode, inspect and patch a
+  safe path when in scope, or stop before irreversible mutation unless the user
+  explicitly approved it and a recovery path is verified.
+
+Canonical local PowerShell pattern:
+
+```powershell
+$loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='hris' } | ConvertTo-Json
+$login = Invoke-RestMethod -Method Post 'http://localhost:3001/api/auth/login' -ContentType 'application/json' -Body $loginBody
+$headers = @{ Authorization = "Bearer $($login.data.token)" }
+$body = @{ execute=$false; deviceId='all'; source='all'; status='all'; dateField='eventTime'; includeLinkedAttendance=$true } | ConvertTo-Json
+Measure-Command {
+  $result = Invoke-RestMethod -Method Post 'http://localhost:3001/api/device/events/reset' -Headers $headers -ContentType 'application/json' -Body $body
+  $result | ConvertTo-Json -Depth 6
+} | Select-Object TotalSeconds
+```
+
 ## Browser Verification Guard
 
-- Browser verification should prefer headless `agent-browser` with screenshots,
-  console checks, and network request evidence.
-- On this Windows host, agents must carry stable Chrome flags through the whole
-  browser session before declaring `agent-browser` broken:
+- Temporary 2026-07-09 local rule: browser verification should prefer headless
+  Playwright first because the Vercel `agent-browser` path is currently
+  unreliable in this environment.
+- Required evidence order is direct API/network probes first, then Playwright
+  network/console/URL/text/screenshot evidence, then `agent-browser` only as a
+  fallback or when a task explicitly targets that tool.
+- Missing Playwright browsers, stale dev servers, closed ports, or expired auth
+  state are recoverable issues. Repair or restart the local verification path
+  before treating browser verification as blocked.
+- On this Windows host, if `agent-browser` is used as fallback, agents should
+  carry stable Chrome flags through the command chain:
   `AGENT_BROWSER_ARGS=--no-sandbox,--disable-gpu,--disable-dev-shm-usage`.
-- `DevToolsActivePort`, early Chrome exit, missing screenshots, or a stale
-  browser daemon are recoverable browser-tool issues. Retry with stable launch
-  flags, `agent-browser doctor --fix`, and `agent-browser install` before
-  treating browser verification as blocked.
 - For CORS, proxy, Cloudflare, and login drift, screenshots are supporting
   evidence only. Required evidence is network/API behavior: health checks, auth
   POST result, CORS preflight result, browser network failures, and the resolved

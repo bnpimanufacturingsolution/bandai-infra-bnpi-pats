@@ -16,12 +16,15 @@ from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 
 DEFAULT_TARGETS = (
-    "Main Entrance Device ISAPI=192.168.254.181:80:http",
-    "Main Entrance Device SDK=192.168.254.181:8000:tcp",
+    "Main Entrance Device ISAPI=10.184.37.139:80:http",
+    "Main Entrance Device SDK=10.184.37.139:8000:tcp",
 )
 
 SYSTEM_TIME_PATH = "/ISAPI/System/time"
 ACS_EVENT_PATH = "/ISAPI/AccessControl/AcsEvent?format=json"
+ACS_EVENT_TOTAL_NUM_PATH = "/ISAPI/AccessControl/AcsEventTotalNum?format=json"
+USER_INFO_COUNT_PATH = "/ISAPI/AccessControl/UserInfo/Count?format=json"
+USER_INFO_SEARCH_PATH = "/ISAPI/AccessControl/UserInfo/Search?format=json"
 
 
 @dataclass(frozen=True)
@@ -297,6 +300,234 @@ def acs_events_probe(
         }
 
 
+def first_number(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    if isinstance(value, list):
+        for item in value:
+            found = first_number(item)
+            if found is not None:
+                return found
+    if isinstance(value, dict):
+        preferred_keys = (
+            "totalMatches",
+            "numOfMatches",
+            "userNumber",
+            "userCount",
+            "count",
+            "totalNum",
+            "num",
+            "total",
+        )
+        for key in preferred_keys:
+            if key in value:
+                found = first_number(value[key])
+                if found is not None:
+                    return found
+        for item in value.values():
+            found = first_number(item)
+            if found is not None:
+                return found
+    return None
+
+
+def extract_count(payload: dict[str, Any], keys: tuple[str, ...]) -> int | None:
+    for key in keys:
+        if key in payload:
+            found = first_number(payload[key])
+            if found is not None:
+                return found
+    return first_number(payload)
+
+
+def get_user_info_search_count(
+    target: Target,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    started = time.monotonic()
+    url = build_isapi_url(target, USER_INFO_SEARCH_PATH)
+    body = {
+        "UserInfoSearchCond": {
+            "searchID": f"user-count-{int(time.time())}",
+            "searchResultPosition": 0,
+            "maxResults": 1,
+        }
+    }
+    try:
+        response = requests.post(
+            url,
+            auth=build_auth(args.auth, args.username, args.password),
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            json=body,
+            timeout=args.timeout,
+            verify=args.verify_tls,
+        )
+        parsed = parse_response_body(response)
+        search = parsed.get("UserInfoSearch") if isinstance(parsed, dict) else None
+        count = extract_count(search if isinstance(search, dict) else parsed, ("totalMatches", "numOfMatches"))
+        return {
+            "ok": response.ok and count is not None,
+            "stage": "user_info_search_count",
+            "url": url,
+            "statusCode": response.status_code,
+            "elapsedSeconds": round(time.monotonic() - started, 3),
+            "count": count,
+            "rawKeys": sorted(parsed.keys()) if isinstance(parsed, dict) else [],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "stage": "user_info_search_count",
+            "url": url,
+            "elapsedSeconds": round(time.monotonic() - started, 3),
+            "errorType": type(exc).__name__,
+            "error": str(exc),
+        }
+
+
+def get_acs_events_search_count(
+    target: Target,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    started = time.monotonic()
+    url = build_isapi_url(target, ACS_EVENT_PATH)
+    body = build_acs_event_body(argparse.Namespace(**{**vars(args), "limit": 1, "position": 0}))
+    try:
+        response = requests.post(
+            url,
+            auth=build_auth(args.auth, args.username, args.password),
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            json=body,
+            timeout=args.timeout,
+            verify=args.verify_tls,
+        )
+        parsed = parse_response_body(response)
+        acs_event = parsed.get("AcsEvent") if isinstance(parsed, dict) else None
+        count = extract_count(acs_event if isinstance(acs_event, dict) else parsed, ("totalMatches", "numOfMatches"))
+        return {
+            "ok": response.ok and count is not None,
+            "stage": "acs_events_search_count",
+            "url": url,
+            "statusCode": response.status_code,
+            "elapsedSeconds": round(time.monotonic() - started, 3),
+            "count": count,
+            "query": body,
+            "rawKeys": sorted(parsed.keys()) if isinstance(parsed, dict) else [],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "stage": "acs_events_search_count",
+            "url": url,
+            "elapsedSeconds": round(time.monotonic() - started, 3),
+            "query": body,
+            "errorType": type(exc).__name__,
+            "error": str(exc),
+        }
+
+
+def get_simple_count_endpoint(
+    target: Target,
+    args: argparse.Namespace,
+    path: str,
+    stage: str,
+    keys: tuple[str, ...],
+) -> dict[str, Any]:
+    started = time.monotonic()
+    url = build_isapi_url(target, path)
+    try:
+        response = requests.get(
+            url,
+            auth=build_auth(args.auth, args.username, args.password),
+            headers={"Accept": "application/json"},
+            timeout=args.timeout,
+            verify=args.verify_tls,
+        )
+        parsed = parse_response_body(response)
+        count = extract_count(parsed, keys) if isinstance(parsed, dict) else None
+        return {
+            "ok": response.ok and count is not None,
+            "stage": stage,
+            "url": url,
+            "statusCode": response.status_code,
+            "elapsedSeconds": round(time.monotonic() - started, 3),
+            "count": count,
+            "rawKeys": sorted(parsed.keys()) if isinstance(parsed, dict) else [],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "stage": stage,
+            "url": url,
+            "elapsedSeconds": round(time.monotonic() - started, 3),
+            "errorType": type(exc).__name__,
+            "error": str(exc),
+        }
+
+
+def summary_counts_probe(target: Target, args: argparse.Namespace) -> dict[str, Any]:
+    if not args.username or args.password is None:
+        return {
+            "ok": False,
+            "stage": "summary_counts",
+            "target": target.__dict__,
+            "errorType": "MissingCredentials",
+            "error": "HIKVISION_USERNAME and HIKVISION_PASSWORD are required for summary counts.",
+        }
+
+    started = time.monotonic()
+    stages = [
+        get_simple_count_endpoint(
+            target,
+            args,
+            USER_INFO_COUNT_PATH,
+            "user_info_count_endpoint",
+            ("UserInfoCount", "userNumber", "userCount", "count", "total"),
+        ),
+        get_user_info_search_count(target, args),
+        get_simple_count_endpoint(
+            target,
+            args,
+            ACS_EVENT_TOTAL_NUM_PATH,
+            "acs_event_total_num_endpoint",
+            ("AcsEventTotalNum", "totalNum", "total", "count", "num"),
+        ),
+        get_acs_events_search_count(target, args),
+    ]
+    user_count = next(
+        (
+            item.get("count")
+            for item in stages
+            if item["stage"].startswith("user_") and item.get("ok") and item.get("count") is not None
+        ),
+        None,
+    )
+    event_count = next(
+        (
+            item.get("count")
+            for item in stages
+            if item["stage"].startswith("acs_") and item.get("ok") and item.get("count") is not None
+        ),
+        None,
+    )
+    return {
+        "ok": user_count is not None or event_count is not None,
+        "stage": "summary_counts",
+        "target": target.__dict__,
+        "elapsedSeconds": round(time.monotonic() - started, 3),
+        "userCount": user_count,
+        "eventCount": event_count,
+        "attempts": stages,
+    }
+
+
 def sdk_env_probe(sdk_root: str | None) -> dict[str, Any]:
     if not sdk_root:
         return {
@@ -370,6 +601,11 @@ def run(targets: Iterable[Target], args: argparse.Namespace) -> int:
                 emit(result)
                 if not result["ok"]:
                     failures += 1
+            if args.mode == "summary-counts" and target.protocol in {"http", "https"}:
+                result = summary_counts_probe(target, args)
+                emit(result)
+                if not result["ok"]:
+                    failures += 1
         if args.mode == "watch" and loop < loops:
             time.sleep(args.interval)
     emit({"event": "probe_finished", "mode": args.mode, "timestamp": utc_now(), "failures": failures})
@@ -378,7 +614,11 @@ def run(targets: Iterable[Target], args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Read-only Hikvision Linux connectivity trial.")
-    parser.add_argument("--mode", choices=("tcp", "isapi-time", "acs-events", "watch", "sdk-env"), default="tcp")
+    parser.add_argument(
+        "--mode",
+        choices=("tcp", "isapi-time", "acs-events", "summary-counts", "watch", "sdk-env"),
+        default="tcp",
+    )
     parser.add_argument("--target", action="append", type=parse_target, help="name=host:port[:protocol]")
     parser.add_argument("--timeout", type=float, default=5)
     parser.add_argument("--username", default=os.getenv("HIKVISION_USERNAME"))

@@ -260,4 +260,47 @@ describe("employeesService client contract", () => {
 			"/api/employee/documents/BIR%202316%2F2026?employeeId=employee-4",
 		);
 	});
+
+	it("previews employee hard delete before any execute request", async () => {
+		const { default: employeesService } = await import("./employees.service");
+		hrisPostMock.mockResolvedValueOnce({
+			data: {
+				data: {
+					mode: "preview",
+					execute: false,
+					safeToExecute: false,
+					summary: { blockerCount: 1 },
+					blockers: [{ reason: "attendance records exist", count: 4 }],
+				},
+			},
+		});
+
+		await employeesService.previewEmployeeHardDelete("employee-5");
+
+		expect(hrisPostMock).toHaveBeenCalledWith(
+			"/api/employee/employee-5/hard-delete-preview",
+			{ execute: false, dryRun: true },
+		);
+	});
+
+	it("requires explicit confirmation to execute employee hard delete", async () => {
+		const { default: employeesService } = await import("./employees.service");
+		hrisPostMock.mockResolvedValueOnce({
+			data: {
+				data: {
+					mode: "executed",
+					execute: true,
+					safeToExecute: true,
+					summary: { blockerCount: 0 },
+				},
+			},
+		});
+
+		await employeesService.executeEmployeeHardDelete("employee-6", "DELETE BNPI-0006");
+
+		expect(hrisPostMock).toHaveBeenCalledWith(
+			"/api/employee/employee-6/hard-delete-preview",
+			{ execute: true, dryRun: false, confirmation: "DELETE BNPI-0006" },
+		);
+	});
 });

@@ -4,14 +4,19 @@ import {
 	ArrowLeft,
 	BadgeCheck,
 	Clock,
+	ExternalLink,
 	Eye,
+	Loader2,
 	MapPin,
+	Power,
 	RefreshCw,
 	Server,
+	Trash2,
 	UploadCloud,
 	UserRound,
 	Wifi,
 	WifiOff,
+	XCircle,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -21,10 +26,24 @@ import { DataTable, type Column } from "~/components/atoms/DataTable";
 import { Modal } from "~/components/atoms/Modal";
 import { Select, type SelectOption } from "~/components/atoms/Select";
 import {
+	Accordion,
+	AccordionContent,
+	AccordionItem,
+	AccordionTrigger,
+} from "~/components/ui/accordion";
+import { Skeleton } from "~/components/ui/skeleton";
+import { Switch } from "~/components/ui/switch";
+import {
 	useDeviceEvents,
 	useDeviceHealth,
+	useDeviceImportJob,
 	useDeviceSyncPreview,
+	useCancelDeviceImportJob,
+	useControlHikvisionListener,
 	useDevices,
+	useHikvisionListenerStatus,
+	useResetDeviceEvents,
+	useTriggerHikvisionAttendanceImport,
 	useTriggerZktecoAttendanceSync,
 	queryKeys,
 } from "~/lib/hooks/useDevices";
@@ -35,13 +54,14 @@ import {
 	getDeviceEventsRealtimeStatus,
 	getHighlightedSavedDeviceEventId,
 	getSavedDeviceEventProcessingLabel,
-	getSavedDeviceEventRealtimeBadge,
 	prependRealtimeSavedRows,
 	savedDeviceEventMatchesScope,
+	shouldRefreshSavedEventsAfterSocketEvent,
 } from "~/lib/device-events-realtime-ui";
 import type {
 	DeviceEvent,
 	DeviceEventStatus,
+	DeviceEventsResetResponse,
 	DeviceHealthResponse,
 } from "~/services/devices.service";
 import type { ApiQueryParams } from "~/services/api-service";
@@ -73,6 +93,12 @@ type UnifiedDeviceEventRow = {
 	verifyMode?: string | null;
 	serialNo?: string | number | null;
 	savedEventId?: string | null;
+	eventCategory?: string | null;
+	eventAction?: string | null;
+	eventLabel?: string | null;
+	processingLabel?: string | null;
+	transportLabel?: string | null;
+	capabilityConfidence?: string | null;
 };
 
 type DeviceEventSavedPayload = {
@@ -90,12 +116,61 @@ type SyncLogsState =
 	| { status: "accepted"; message: string }
 	| { status: "error"; message: string };
 
+type ActiveImportJob = {
+	jobId: string;
+	deviceId: string;
+	deviceName: string;
+	vendor: "Hikvision" | "ZKTeco" | string;
+};
+
+type ResetPreviewState =
+	| { status: "idle" }
+	| { status: "loading" }
+	| { status: "ready"; data: DeviceEventsResetResponse }
+	| { status: "executed"; data: DeviceEventsResetResponse }
+	| { status: "error"; message: string };
+
+const DEVICE_IMPORT_JOB_STORAGE_KEY = "project-truth-device-import-job-v1";
+
 type ZktecoBridgePreflight = NonNullable<DeviceHealthResponse["checks"]["zktecoBridge"]> & {
 	estimatedRowsToSync?: number | string | null;
 	missingRows?: number | string | null;
 	dryRun?: { missingRows?: number | string | null };
 	data?: { dryRun?: { missingRows?: number | string | null } };
 };
+
+const SyncPreviewSkeleton = () => (
+	<div className="mt-3 flex flex-wrap gap-1.5" aria-label="Device preview loading">
+		<Skeleton className="h-6 w-36 rounded-full bg-slate-200" />
+		<Skeleton className="h-6 w-28 rounded-full bg-slate-200" />
+	</div>
+);
+
+const SyncDeviceDetailsSkeleton = () => (
+	<div className="divide-y divide-slate-100" aria-label="Device detail loading">
+		{[0, 1].map((index) => (
+			<div
+				key={`sync-device-detail-skeleton-${index}`}
+				className="flex flex-col gap-3 px-3 py-3 md:flex-row md:items-start md:justify-between">
+				<div className="min-w-0 space-y-2">
+					<Skeleton className="h-4 w-52 bg-slate-200" />
+					<Skeleton className="h-3 w-40 bg-slate-200" />
+				</div>
+				<div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4 md:min-w-[430px]">
+					{[0, 1, 2, 3].map((cell) => (
+						<div key={`sync-device-detail-skeleton-${index}-${cell}`} className="space-y-2">
+							<Skeleton className="h-3 w-20 bg-slate-200" />
+							<Skeleton className="h-4 w-12 bg-slate-200" />
+						</div>
+					))}
+					<div className="col-span-2 sm:col-span-4">
+						<Skeleton className="h-6 w-28 rounded-full bg-slate-200" />
+					</div>
+				</div>
+			</div>
+		))}
+	</div>
+);
 
 const getAsyncErrorMessage = (error: unknown, fallback: string) => {
 	if (error instanceof Error && error.message) return error.message;
@@ -123,21 +198,50 @@ const timeWindowOptions: SelectOption[] = [
 const PH_TIME_ZONE = "Asia/Manila";
 
 const savedStatusOptions: SelectOption[] = [
-	{ value: "all", label: "All statuses" },
-	{ value: "MATCHED", label: "Matched" },
+	{ value: "all", label: "All HRIS results" },
+	{ value: "MATCHED", label: "Matched to employee" },
 	{ value: "RECEIVED", label: "Received" },
 	{ value: "ATTENDANCE_CREATED", label: "Attendance created" },
 	{ value: "ATTENDANCE_UPDATED", label: "Attendance updated" },
 	{ value: "UNMATCHED", label: "Needs match" },
-	{ value: "IGNORED", label: "Recorded" },
-	{ value: "FAILED", label: "Review" },
+	{ value: "IGNORED", label: "Recorded only" },
+	{ value: "FAILED", label: "Needs review" },
 ];
 
 const sourceOptions: SelectOption[] = [
-	{ value: "all", label: "All sources" },
-	{ value: "HIKVISION_CALLBACK", label: "Hikvision watcher" },
-	{ value: "EN_HCNETSDK_ALARM", label: "SDK alarm listener" },
-	{ value: "ZKTECO_EVENT", label: "ZKTeco sidecar" },
+	{ value: "all", label: "All runtime paths" },
+	{ value: "HIKVISION_CALLBACK", label: "Hikvision callback watcher" },
+	{ value: "EN_HCNETSDK_ALARM", label: "Hikvision SDK listener" },
+	{ value: "ZKTECO_EVENT", label: "ZKTeco Linux bridge" },
+];
+
+const eventCategoryOptions: SelectOption[] = [
+	{ value: "all", label: "Any event category" },
+	{ value: "ATTENDANCE", label: "Attendance" },
+	{ value: "ENROLLMENT", label: "Enrollment" },
+	{ value: "USER_MANAGEMENT", label: "User management" },
+	{ value: "ACCESS_CONTROL", label: "Access control" },
+	{ value: "DEVICE_HEALTH", label: "Device health" },
+	{ value: "RUNTIME", label: "Runtime" },
+	{ value: "UNKNOWN_VENDOR", label: "Unknown vendor" },
+];
+
+const eventActionOptions: SelectOption[] = [
+	{ value: "all", label: "Any event action" },
+	{ value: "TAP", label: "Attendance tap" },
+	{ value: "FINGERPRINT_ENROLLED", label: "Fingerprint enrolled" },
+	{ value: "FINGERPRINT_UPDATED", label: "Fingerprint updated" },
+	{ value: "FINGERPRINT_DELETED", label: "Fingerprint deleted" },
+	{ value: "CARD_ENROLLED", label: "Card enrolled" },
+	{ value: "CARD_UPDATED", label: "Card updated" },
+	{ value: "CARD_DELETED", label: "Card deleted" },
+	{ value: "USER_CREATED", label: "User created" },
+	{ value: "USER_UPDATED", label: "User updated" },
+	{ value: "USER_DELETED", label: "User deleted" },
+	{ value: "TAP_REJECTED", label: "Rejected access tap" },
+	{ value: "SYNC_IMPORTED", label: "Sync imported" },
+	{ value: "LISTENER_RECEIVED", label: "Listener received" },
+	{ value: "UNKNOWN", label: "Unknown" },
 ];
 
 const compactSelectClassName = "h-7 text-xs";
@@ -159,7 +263,7 @@ const getDateKey = (date: Date) => {
 const subtractDays = (date: Date, days: number) =>
 	new Date(date.getTime() - days * 24 * 60 * 60 * 1000);
 
-const formatPunchTime = (value: string | Date | null | undefined) => {
+const formatEventTime = (value: string | Date | null | undefined) => {
 	if (!value) return "-";
 	const date = value instanceof Date ? value : new Date(value);
 	if (Number.isNaN(date.getTime())) return "-";
@@ -192,8 +296,8 @@ const formatBusinessStatus = (status: string) => {
 	if (status === "ATTENDANCE_CREATED") return "Attendance created";
 	if (status === "ATTENDANCE_UPDATED") return "Attendance updated";
 	if (status === "UNMATCHED") return "Needs match";
-	if (status === "IGNORED") return "Recorded";
-	if (status === "FAILED") return "Review";
+	if (status === "IGNORED") return "Recorded, no attendance change";
+	if (status === "FAILED") return "Needs review";
 	if (status === "RECEIVED") return "Received";
 	if (status === "MATCHED") return "Matched to employee";
 	return status
@@ -204,9 +308,9 @@ const formatBusinessStatus = (status: string) => {
 };
 
 const formatEventSource = (source?: string | null) => {
-	if (source === "ZKTECO_EVENT") return "ZKTeco sidecar";
-	if (source === "EN_HCNETSDK_ALARM") return "SDK alarm listener";
-	if (source === "HIKVISION_CALLBACK") return "Hikvision watcher";
+	if (source === "ZKTECO_EVENT") return "ZKTeco Linux bridge";
+	if (source === "EN_HCNETSDK_ALARM") return "Hikvision SDK listener";
+	if (source === "HIKVISION_CALLBACK") return "Hikvision callback watcher";
 	return source || "-";
 };
 
@@ -215,6 +319,17 @@ const formatEventSourceDetail = (source?: string | null) => {
 	if (source === "EN_HCNETSDK_ALARM") return "Saved from the HCNetSDK alarm listener.";
 	if (source === "HIKVISION_CALLBACK") return "Saved from the Hikvision callback watcher.";
 	return "Saved by HRIS device event processing.";
+};
+
+const formatEventTaxonomyToken = (value?: string | null) => {
+	const text = String(value || "").trim();
+	if (!text) return "-";
+	return text
+		.toLowerCase()
+		.split(/[_\s-]+/)
+		.filter(Boolean)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join(" ");
 };
 
 const getEmployeeRecordUrl = (employeeProfileId?: string | null) =>
@@ -250,6 +365,19 @@ const isZktecoDevice = (device: any, health?: DeviceHealthResponse) => {
 	);
 };
 
+const isHikvisionDevice = (device: any, health?: DeviceHealthResponse) => {
+	const vendor = String(device?.config?.vendor || device?.config?.type || "").toLowerCase();
+	const name = String(device?.name || "").toLowerCase();
+	const model = String(device?.config?.model || "").toLowerCase();
+	return (
+		health?.device?.vendor === "Hikvision" ||
+		Boolean(health?.checks?.hikvisionListener) ||
+		vendor.includes("hikvision") ||
+		name.includes("hikvision") ||
+		model.startsWith("ds-")
+	);
+};
+
 const formatCount = (value?: number | string | null) => {
 	const numeric = Number(value || 0);
 	return Number.isFinite(numeric) ? numeric.toLocaleString() : "-";
@@ -260,6 +388,43 @@ const hasNumericCount = (value?: number | string | null) =>
 
 const formatOptionalCount = (value?: number | string | null) =>
 	hasNumericCount(value) ? formatCount(value) : "Unavailable";
+
+const getNumericCount = (value?: number | string | null) =>
+	hasNumericCount(value) ? Number(value) : null;
+
+const getSyncKnownSkippedCount = (row: { knownSkippedEventCount?: number | string | null }) =>
+	Math.max(getNumericCount(row.knownSkippedEventCount) ?? 0, 0);
+
+const getSyncStillMissingCount = (row: {
+	missingEventCount?: number | string | null;
+	needsSyncEvents?: number | string | null;
+}) => {
+	const value = getNumericCount(row.missingEventCount ?? row.needsSyncEvents);
+	return value === null ? null : Math.max(value, 0);
+};
+
+const getSyncProjectedSaveCount = (
+	row: {
+		importableIfSaveMissingEmployeeNo?: number | string | null;
+		missingEventCount?: number | string | null;
+		needsSyncEvents?: number | string | null;
+		knownSkippedEventCount?: number | string | null;
+	},
+	skipMissingEmployeeNo: boolean,
+) => {
+	const stillMissing = getSyncStillMissingCount(row);
+	if (stillMissing === null) return null;
+	if (skipMissingEmployeeNo) return stillMissing;
+	const explicitSaveAll = getNumericCount(row.importableIfSaveMissingEmployeeNo);
+	return explicitSaveAll === null
+		? stillMissing + getSyncKnownSkippedCount(row)
+		: Math.max(explicitSaveAll, 0);
+};
+
+const getSyncProjectedSkipCount = (
+	row: { knownSkippedEventCount?: number | string | null },
+	skipMissingEmployeeNo: boolean,
+) => (skipMissingEmployeeNo ? getSyncKnownSkippedCount(row) : 0);
 
 const getSyncDeviceTitle = (vendor?: string | null, name?: string | null, address?: string | null) => {
 	const vendorLabel = String(vendor || "").trim();
@@ -397,7 +562,14 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		status: event.status,
 		source: event.source,
 		receivedAt: event.receivedAt,
-		businessStatus: formatBusinessStatus(event.status),
+		businessStatus: event.taxonomy?.processingLabel || formatBusinessStatus(event.status),
+		eventCategory: event.eventCategory || event.taxonomy?.eventCategory || null,
+		eventAction: event.eventAction || event.taxonomy?.eventAction || null,
+		eventLabel: event.eventLabel || event.taxonomy?.eventLabel || event.eventType || payload.eventKind || null,
+		processingLabel: event.taxonomy?.processingLabel || formatBusinessStatus(event.status),
+		transportLabel: event.taxonomy?.transportLabel || formatEventSource(event.source),
+		capabilityConfidence:
+			event.eventConfidence || event.taxonomy?.eventConfidence || event.taxonomy?.capabilityConfidence || null,
 		attendanceId: event.attendanceId,
 		doorNo: event.doorNo,
 		verifyMode: event.verifyMode || getVerifyModeFromPayload(payload),
@@ -427,7 +599,13 @@ const normalizeLiveEvent = (
 	employeeName: event.hrisEmployee?.fullName || savedMatch?.employeeName || event.name,
 	status: savedMatch?.status || "NOT_SAVED",
 	source: savedMatch?.source || null,
-	businessStatus: savedMatch?.businessStatus || "Pending",
+	businessStatus: savedMatch?.businessStatus || "Not saved yet",
+	eventCategory: savedMatch?.eventCategory || "ATTENDANCE",
+	eventAction: savedMatch?.eventAction || "TAP",
+	eventLabel: savedMatch?.eventLabel || "Attendance punch",
+	processingLabel: savedMatch?.processingLabel || "Not saved yet",
+	transportLabel: savedMatch?.transportLabel || "Live ACS preview",
+	capabilityConfidence: savedMatch?.capabilityConfidence || "inferred",
 	attendanceId: savedMatch?.attendanceId || null,
 	doorNo: event.doorNo,
 	verifyMode: event.currentVerifyMode || savedMatch?.verifyMode || null,
@@ -442,23 +620,53 @@ export default function DeviceEventsPage() {
 	const { socket, isConnected } = useSocket();
 	const { user } = useAuth();
 	const zktecoSync = useTriggerZktecoAttendanceSync();
+	const hikvisionImport = useTriggerHikvisionAttendanceImport();
+	const cancelDeviceImportJob = useCancelDeviceImportJob();
+	const resetDeviceEvents = useResetDeviceEvents();
 	const [lastRealtimeEvent, setLastRealtimeEvent] =
 		useState<DeviceEventSavedPayload | null>(null);
 	const [realtimeSavedEvents, setRealtimeSavedEvents] = useState<DeviceEvent[]>([]);
-	const [lastRoomJoinedAt, setLastRoomJoinedAt] = useState<string | null>(null);
-	const [lastRecoveryRefreshAt, setLastRecoveryRefreshAt] = useState<string | null>(null);
+	const [, setLastRoomJoinedAt] = useState<string | null>(null);
+	const [, setLastRecoveryRefreshAt] = useState<string | null>(null);
 	const [syncLogsState, setSyncLogsState] = useState<SyncLogsState>({ status: "idle" });
+	const [resetPreviewState, setResetPreviewState] = useState<ResetPreviewState>({ status: "idle" });
+	const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
+	const [includeLinkedAttendanceReset, setIncludeLinkedAttendanceReset] = useState(false);
+	const [showImportProgressModal, setShowImportProgressModal] = useState(false);
+	const [skipMissingEmployeeNo, setSkipMissingEmployeeNo] = useState(false);
+	const [activeImportJob, setActiveImportJob] = useState<ActiveImportJob | null>(() => {
+		try {
+			if (typeof window === "undefined") return null;
+			const raw = window.localStorage.getItem(DEVICE_IMPORT_JOB_STORAGE_KEY);
+			return raw ? (JSON.parse(raw) as ActiveImportJob) : null;
+		} catch {
+			return null;
+		}
+	});
+	const {
+		data: importJobProgress,
+		isError: isImportJobError,
+	} = useDeviceImportJob(
+		activeImportJob?.jobId,
+		Boolean(activeImportJob?.jobId),
+	);
 
 	const pageParam = Number(searchParams.get("page")) || 1;
 	const limitParam = Number(searchParams.get("limit")) || 10;
 	const query = searchParams.get("query") || "";
 	const deviceId = searchParams.get("deviceId") || "all";
 	const viewMode = (searchParams.get("view") || "saved") as EventViewMode;
+	const eventCategory = searchParams.get("eventCategory") || "all";
+	const eventAction = searchParams.get("eventAction") || "all";
 	const status = searchParams.get("status") || "all";
 	const source = searchParams.get("source") || "all";
 	const sort = searchParams.get("sort") || "eventTime";
 	const order = searchParams.get("order") === "asc" ? "asc" : "desc";
 	const action = searchParams.get("action");
+	const isSyncLogsDebugView = searchParams.get("debug") === "true";
+	const isSyncLogsFlowActive = action === "sync-logs";
+	const isSyncLogsModalOpen = action === "sync-logs" && !isSyncLogsDebugView;
+	const isListenerControlModalOpen = action === "listener-control";
 	const activeEventId = searchParams.get("id");
 	const timeWindow = (searchParams.get("window") ||
 		(viewMode === "saved" ? "all" : "today")) as TimeWindow;
@@ -475,7 +683,15 @@ export default function DeviceEventsPage() {
 	);
 	const selectedZktecoDevice =
 		deviceId === "all" ? undefined : zktecoDevices.find((device: any) => device.id === deviceId);
-	const syncScopeDevices = selectedZktecoDevice ? [selectedZktecoDevice] : zktecoDevices;
+	const syncCapableDevices = useMemo(
+		() => devices.filter((device: any) => isZktecoDevice(device) || isHikvisionDevice(device)),
+		[devices],
+	);
+	const selectedSyncDevice =
+		deviceId === "all"
+			? undefined
+			: syncCapableDevices.find((device: any) => device.id === deviceId);
+	const syncScopeDevices = selectedSyncDevice ? [selectedSyncDevice] : syncCapableDevices;
 	const syncHealthDevice = selectedZktecoDevice || zktecoDevices[0];
 	const liveDevice = selectedDevice;
 	const liveDeviceId = liveDevice?.id;
@@ -490,10 +706,11 @@ export default function DeviceEventsPage() {
 		data: syncDeviceHealth,
 		isLoading: isLoadingSyncHealth,
 		refetch: refetchSyncHealth,
-	} = useDeviceHealth(syncHealthDevice?.id, action === "sync-logs" && Boolean(syncHealthDevice?.id));
+	} = useDeviceHealth(syncHealthDevice?.id, isSyncLogsModalOpen && Boolean(syncHealthDevice?.id));
 	const {
 		data: syncPreview,
 		isLoading: isLoadingSyncPreview,
+		isFetching: isFetchingSyncPreview,
 		error: syncPreviewError,
 		refetch: refetchSyncPreview,
 	} = useDeviceSyncPreview(
@@ -501,7 +718,7 @@ export default function DeviceEventsPage() {
 			deviceId,
 			source,
 		},
-		action === "sync-logs",
+		isSyncLogsFlowActive,
 	);
 	const canReadLiveEvents = Boolean(
 		liveDeviceId &&
@@ -511,12 +728,32 @@ export default function DeviceEventsPage() {
 	);
 	const organizationId =
 		user?.organizationId || (user as any)?.organization?.id || liveDevice?.organizationId || "";
+	const hasRealtimeScope = Boolean(organizationId || selectedDeviceRoomId);
+	const shouldPollSavedEvents = viewMode !== "saved" || !isConnected || !hasRealtimeScope;
+	const isSdkAlarmSavedScope =
+		viewMode === "saved" &&
+		(source === "all" || source === "EN_HCNETSDK_ALARM") &&
+		(deviceId === "all" || isHikvisionDevice(selectedDevice));
+	const savedEventsRefetchInterval = isSdkAlarmSavedScope
+		? 2 * 1000
+		: shouldPollSavedEvents
+			? 30 * 1000
+			: false;
+	const {
+		data: hikvisionListenerStatus,
+		isLoading: isLoadingHikvisionListenerStatus,
+		error: hikvisionListenerStatusError,
+		refetch: refetchHikvisionListenerStatus,
+	} = useHikvisionListenerStatus(isSdkAlarmSavedScope);
+	const hikvisionListenerControl = useControlHikvisionListener();
 
 	const savedQueryParams: ApiQueryParams = {
 		page: pageParam,
 		limit: limitParam,
 		query: viewMode === "saved" ? query : undefined,
 		deviceId: deviceId === "all" ? undefined : deviceId,
+		eventCategory: viewMode === "saved" && eventCategory !== "all" ? eventCategory : undefined,
+		eventAction: viewMode === "saved" && eventAction !== "all" ? eventAction : undefined,
 		status: viewMode === "saved" && status !== "all" ? status : undefined,
 		source: viewMode === "saved" && source !== "all" ? source : undefined,
 		sort: viewMode === "saved" ? sort : undefined,
@@ -530,7 +767,9 @@ export default function DeviceEventsPage() {
 		isLoading: isLoadingSaved,
 		error: savedError,
 		refetch,
-	} = useDeviceEvents(savedQueryParams);
+	} = useDeviceEvents(savedQueryParams, {
+		refetchInterval: savedEventsRefetchInterval,
+	});
 	const {
 		data: liveData,
 		isLoading: isLoadingLive,
@@ -575,6 +814,20 @@ export default function DeviceEventsPage() {
 			if (status !== "all" && payload.status && payload.status !== status) {
 				return false;
 			}
+			if (
+				eventCategory !== "all" &&
+				payload.event?.eventCategory &&
+				payload.event.eventCategory !== eventCategory
+			) {
+				return false;
+			}
+			if (
+				eventAction !== "all" &&
+				payload.event?.eventAction &&
+				payload.event.eventAction !== eventAction
+			) {
+				return false;
+			}
 			if (source !== "all" && payload.source && payload.source !== source) {
 				return false;
 			}
@@ -584,14 +837,22 @@ export default function DeviceEventsPage() {
 		const handleDeviceEventSaved = (payload: DeviceEventSavedPayload) => {
 			if (!matchesCurrentScope(payload)) return;
 			setLastRealtimeEvent(payload);
-			if (payload.event?.id) {
+			const hasRealtimeEventRow = Boolean(payload.event?.id);
+			if (hasRealtimeEventRow) {
 				setRealtimeSavedEvents((current) => [
 					payload.event as DeviceEvent,
 					...current.filter((event) => event.id !== payload.event?.id),
 				].slice(0, limitParam));
 			}
-			void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
-			void refetch();
+			if (
+				shouldRefreshSavedEventsAfterSocketEvent({
+					viewMode,
+					hasRealtimeEventRow,
+				})
+			) {
+				void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
+				void refetch();
+			}
 			if (viewMode === "live") {
 				void refetchLive();
 			}
@@ -607,6 +868,8 @@ export default function DeviceEventsPage() {
 		};
 	}, [
 		deviceId,
+		eventAction,
+		eventCategory,
 		isConnected,
 		limitParam,
 		organizationId,
@@ -624,14 +887,13 @@ export default function DeviceEventsPage() {
 		if (viewMode !== "saved") return;
 		if (typeof window === "undefined") return;
 
-		const hasRealtimeScope = Boolean(organizationId || selectedDeviceRoomId);
 		const intervalMs = isConnected && hasRealtimeScope ? 30000 : 10000;
 		const refreshFromRecovery = () => {
 			setLastRecoveryRefreshAt(new Date().toISOString());
 			void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
 			void refetch().then((result) => {
 				if (result.error) {
-					toast.warning("Saved punches could not refresh", {
+					toast.warning("Saved events could not refresh", {
 						id: "device-events-recovery-refresh",
 						description: getAsyncErrorMessage(
 							result.error,
@@ -800,15 +1062,30 @@ export default function DeviceEventsPage() {
 		(event: UnifiedDeviceEventRow) => event.status === "NOT_SAVED",
 	).length;
 	const latestSavedEvent = viewMode === "saved" ? rows[0] : undefined;
+	const latestSdkSavedEvent =
+		viewMode === "saved"
+			? rows.find((event) => event.source === "EN_HCNETSDK_ALARM")
+			: undefined;
 	const latestSavedReceivedAt = latestSavedEvent?.receivedAt
 		? new Date(latestSavedEvent.receivedAt)
+		: null;
+	const latestSdkSavedReceivedAt = latestSdkSavedEvent?.receivedAt
+		? new Date(latestSdkSavedEvent.receivedAt)
 		: null;
 	const latestSavedAgeMs =
 		latestSavedReceivedAt && !Number.isNaN(latestSavedReceivedAt.getTime())
 			? Date.now() - latestSavedReceivedAt.getTime()
 			: null;
+	const latestSdkSavedAgeMs =
+		latestSdkSavedReceivedAt && !Number.isNaN(latestSdkSavedReceivedAt.getTime())
+			? Date.now() - latestSdkSavedReceivedAt.getTime()
+			: null;
 	const isLatestSavedFresh =
 		latestSavedAgeMs !== null && latestSavedAgeMs >= 0 && latestSavedAgeMs <= 2 * 60 * 1000;
+	const isLatestSdkSavedFresh =
+		latestSdkSavedAgeMs !== null &&
+		latestSdkSavedAgeMs >= 0 &&
+		latestSdkSavedAgeMs <= 2 * 60 * 1000;
 	const latestRealtimeEventId = lastRealtimeEvent?.eventId || null;
 	const highlightedSavedEventId = getHighlightedSavedDeviceEventId({
 		latestSavedEventId: latestSavedEvent?.id,
@@ -823,12 +1100,6 @@ export default function DeviceEventsPage() {
 				eventTime: latestSavedEvent.eventTime,
 			})
 		: null;
-	const savedScopeNote =
-		viewMode !== "saved"
-			? ""
-			: deviceId === "all" && source === "all"
-				? "All devices and all sources are included."
-				: `${selectedDevice?.name || "Selected devices"} / ${source === "all" ? "all sources" : formatEventSource(source)}`;
 	const syncBridge =
 		(syncPreview?.bridge as ZktecoBridgePreflight | undefined) ||
 		(syncDeviceHealth?.checks?.zktecoBridge as ZktecoBridgePreflight | undefined);
@@ -838,30 +1109,42 @@ export default function DeviceEventsPage() {
 		syncPreview?.bridge?.error ||
 		syncBridge?.error ||
 		(syncHealthDevice && !syncBridgeOk ? "The ZKTeco bridge is not reachable for this preflight." : "");
-	const syncPreviewRows = syncPreview?.devices || [];
-	const syncStartableRows = syncPreviewRows.filter((row) => row.canStartSync);
-	const syncVendorEventTotal = syncPreviewRows.reduce(
-		(total, row) => total + Number(row.vendorEventCount ?? row.totalEvents ?? 0),
-		0,
+	const syncPreviewRows = useMemo(() => syncPreview?.devices || [], [syncPreview?.devices]);
+	const syncHasZktecoRows = syncPreviewRows.some((row) => row.vendor === "ZKTeco");
+	const syncStartableRows = syncPreviewRows.filter((row) => {
+		const projectedSaveCount = getSyncProjectedSaveCount(row, skipMissingEmployeeNo);
+		return !row.error && (Boolean(row.canStartSync) || Boolean(projectedSaveCount && projectedSaveCount > 0));
+	});
+	const syncHasUnknownEventTotal = syncPreviewRows.some(
+		(row) => !hasNumericCount(row.vendorEventCount ?? row.totalEvents),
 	);
-	const syncVendorUserTotal = syncPreviewRows.reduce(
-		(total, row) => total + Number(row.vendorUserCount ?? 0),
-		0,
-	);
+	const syncVendorEventTotal = syncHasUnknownEventTotal
+		? null
+		: syncPreviewRows.reduce(
+				(total, row) => total + Number(row.vendorEventCount ?? row.totalEvents ?? 0),
+				0,
+			);
 	const syncHrisSavedTotal = syncPreviewRows.reduce(
 		(total, row) => total + Number(row.hrisSavedCount ?? row.syncedEvents ?? 0),
 		0,
 	);
+	const syncProjectedSkippedTotal = syncPreviewRows.reduce(
+		(total, row) => total + getSyncProjectedSkipCount(row, skipMissingEmployeeNo),
+		0,
+	);
+	const syncFailedTotal = syncPreviewRows.reduce(
+		(total, row) => total + Number(row.failedEventCount ?? 0),
+		0,
+	);
 	const syncHasUnknownMissingCount = syncPreviewRows.some(
-		(row) =>
-			(row.missingEventCount ?? row.needsSyncEvents) === null ||
-			(row.missingEventCount ?? row.needsSyncEvents) === undefined,
+		(row) => getSyncProjectedSaveCount(row, skipMissingEmployeeNo) === null,
 	);
 	const syncDryRunEstimate = syncPreviewRows.length
 		? syncHasUnknownMissingCount
 			? null
 			: syncPreviewRows.reduce(
-					(total, row) => total + Number(row.missingEventCount ?? row.needsSyncEvents ?? 0),
+					(total, row) =>
+						total + Number(getSyncProjectedSaveCount(row, skipMissingEmployeeNo) ?? 0),
 					0,
 				)
 		: (
@@ -871,24 +1154,71 @@ export default function DeviceEventsPage() {
 				syncBridge?.data?.dryRun?.missingRows ??
 				null
 			);
-	const syncBridgeStatusUrl = syncBridge?.statusUrl || "Not reported";
+	const syncActionLabel =
+		zktecoSync.isPending || hikvisionImport.isPending
+			? "Syncing device logs"
+			: hasNumericCount(syncDryRunEstimate)
+				? `Sync ${formatCount(syncDryRunEstimate)} log${Number(syncDryRunEstimate) === 1 ? "" : "s"}`
+				: "Sync logs";
+	const showSyncPreviewSkeleton = isSyncLogsModalOpen && (isLoadingSyncPreview || isFetchingSyncPreview);
+	const syncVendorSections = useMemo(() => {
+		const order = ["Hikvision", "ZKTeco"];
+		const groups = new Map<string, typeof syncPreviewRows>();
+		for (const row of syncPreviewRows) {
+			const key = row.vendor || "Other";
+			groups.set(key, [...(groups.get(key) || []), row]);
+		}
+		return [...groups.entries()]
+			.sort(([left], [right]) => {
+				const leftIndex = order.indexOf(left);
+				const rightIndex = order.indexOf(right);
+				if (leftIndex !== -1 || rightIndex !== -1) {
+					return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex);
+				}
+				return left.localeCompare(right);
+			})
+			.map(([vendor, rows]) => ({ vendor, rows }));
+	}, [syncPreviewRows]);
 	const syncScopeLabel = selectedZktecoDevice
 		? selectedZktecoDevice.name || selectedZktecoDevice.address || "Selected ZKTeco device"
 		: syncPreviewRows.length
-			? `Preview devices (${syncPreviewRows.length})`
-			: `All sync-capable devices (${syncScopeDevices.length})`;
+			? `Devices checked (${syncPreviewRows.length})`
+			: `Configured devices (${syncScopeDevices.length})`;
 	const syncStatusLabel = syncBridge
 		? `${syncBridge.status}${syncBridge.latencyMs ? ` / ${syncBridge.latencyMs} ms` : ""}`
 		: isLoadingSyncHealth
 			? "Checking bridge"
-			: "Unavailable";
+			: syncPreviewRows.length
+				? syncPreviewRows.some((row) => row.error || row.status === "source_total_unavailable")
+					? "Counts unavailable"
+					: "Device check complete"
+				: "Unavailable";
+	const adminRole = String((user as any)?.role || (user as any)?.roleId || "").trim();
+	const canUseDebugReset = ["hris-admin", "admin", "super_admin", "superadmin"].includes(adminRole);
+	const resetScopePayload = useMemo(
+		() => ({
+			deviceId,
+			source,
+			status,
+			from,
+			to,
+			dateField: "eventTime" as const,
+			includeLinkedAttendance: includeLinkedAttendanceReset,
+		}),
+		[deviceId, from, includeLinkedAttendanceReset, source, status, to],
+	);
+	const resetPreviewData =
+		resetPreviewState.status === "ready" || resetPreviewState.status === "executed"
+			? resetPreviewState.data
+			: null;
+	const resetPreviewCounts = resetPreviewData?.counts || resetPreviewData?.countsBefore || null;
 	useEffect(() => {
-		if (action !== "sync-logs" || !syncBridgeError) return;
+		if (!isSyncLogsModalOpen || !syncHasZktecoRows || !syncBridgeError) return;
 		toast.warning("Sync preflight is unavailable", {
 			id: "device-events-sync-preflight",
 			description: syncBridgeError,
 		});
-	}, [action, syncBridgeError]);
+	}, [isSyncLogsModalOpen, syncBridgeError, syncHasZktecoRows]);
 
 	const focusLatestSavedEvent = () => {
 		if (!latestSavedEvent) return;
@@ -917,9 +1247,14 @@ export default function DeviceEventsPage() {
 		});
 	};
 	const openSyncLogs = () => {
+		if (activeImportJob && importJobProgress) {
+			setShowImportProgressModal(true);
+			return;
+		}
 		setSyncLogsState({ status: "idle" });
 		updateSearchParams((next) => {
 			next.set("action", "sync-logs");
+			next.delete("debug");
 			next.delete("id");
 		});
 	};
@@ -928,8 +1263,23 @@ export default function DeviceEventsPage() {
 			next.delete("action");
 		});
 	};
+	const openListenerControl = () => {
+		updateSearchParams((next) => {
+			next.set("action", "listener-control");
+			next.delete("id");
+		});
+		void refetchHikvisionListenerStatus();
+	};
+	const closeListenerControl = () => {
+		updateSearchParams((next) => {
+			next.delete("action");
+		});
+	};
 	const refreshSyncPreflight = async () => {
-		const results = await Promise.allSettled([refetchSyncHealth(), refetchSyncPreview()]);
+		const checks = syncHealthDevice?.id
+			? [refetchSyncHealth(), refetchSyncPreview()]
+			: [refetchSyncPreview()];
+		const results = await Promise.allSettled(checks);
 		const rejected = results.find(
 			(result): result is PromiseRejectedResult => result.status === "rejected",
 		);
@@ -962,18 +1312,113 @@ export default function DeviceEventsPage() {
 			id: "device-events-sync-preflight",
 		});
 	};
-	const startZktecoSync = () => {
+	const reviewNotImported = (device: { deviceId?: string; source?: string | null }) => {
+		const targetDeviceId = String(device.deviceId || "").trim();
+		if (!targetDeviceId) return;
+		updateSearchParams((next) => {
+			next.set("view", "live");
+			next.set("deviceId", targetDeviceId);
+			next.set("window", "all");
+			next.delete("status");
+			next.delete("source");
+			next.delete("query");
+			next.delete("action");
+			next.set("page", "1");
+		});
+	};
+
+	const startHikvisionDeviceLogImport = (device: {
+		deviceId: string;
+		name?: string | null;
+		address?: string | null;
+		vendor?: string | null;
+		targetImportCount?: number | null;
+	}) => {
+		hikvisionImport.mutate(
+			{
+				deviceId: device.deviceId,
+				skipMissingEmployeeNo,
+				targetImportCount: device.targetImportCount,
+			},
+			{
+				onSuccess: (data: any) => {
+					const jobId = data?.jobId || data?.progress?.jobId;
+					if (!jobId) {
+						closeSyncLogs();
+						toast.success("No unsaved device logs found", {
+							id: "device-log-import-progress",
+							description: "The dry-run estimate is already clean.",
+						});
+						void refetch();
+						void refetchSyncPreview();
+						return;
+					}
+					if (jobId) {
+						setActiveImportJob({
+							jobId,
+							deviceId: device.deviceId,
+							deviceName: device.name || device.address || "Hikvision device",
+							vendor: "Hikvision",
+						});
+					}
+					closeSyncLogs();
+					setShowImportProgressModal(true);
+					toast.success("Device log sync started", {
+						id: "device-log-import-progress",
+						description: "Progress is available from Sync logs.",
+					});
+					void refetchSyncPreview();
+				},
+				onError: (error: unknown) => {
+					const message = getAsyncErrorMessage(error, "Device rejected the sync request.");
+					setSyncLogsState({ status: "error", message });
+					toast.error("Sync did not start", {
+						id: "device-events-sync-start",
+						description: message,
+					});
+				},
+			},
+		);
+	};
+
+	const retryActiveImportJob = () => {
+		if (!activeImportJob?.deviceId) return;
+		startHikvisionDeviceLogImport({
+			deviceId: activeImportJob.deviceId,
+			name: activeImportJob.deviceName,
+			vendor: activeImportJob.vendor,
+			targetImportCount: importJobProgress?.targetImportCount ?? null,
+		});
+	};
+
+	const requestCancelActiveImportJob = () => {
+		if (!activeImportJob?.jobId) return;
+		cancelDeviceImportJob.mutate(activeImportJob.jobId);
+	};
+
+	const startDeviceLogImport = () => {
 		setSyncLogsState({ status: "idle" });
-		const startableDeviceId = selectedZktecoDevice?.id || syncStartableRows[0]?.deviceId;
-		zktecoSync.mutate(startableDeviceId ? { deviceId: startableDeviceId } : {}, {
+		const startableRow = syncStartableRows[0];
+		if (!startableRow?.deviceId) return;
+
+		if (startableRow.syncAction === "hikvision-import" || startableRow.vendor === "Hikvision") {
+			startHikvisionDeviceLogImport({
+				...startableRow,
+				targetImportCount: getSyncProjectedSaveCount(startableRow, skipMissingEmployeeNo),
+			});
+			return;
+		}
+
+		zktecoSync.mutate({ deviceId: startableRow.deviceId }, {
 			onSuccess: () => {
-				toast.success("Sync logs request accepted", {
+				closeSyncLogs();
+				toast.success("Sync device logs started", {
 					id: "device-events-sync-start",
-					description: "Saved events and bridge health are refreshing.",
+					description: "Saved device-log rows and bridge health are refreshing.",
 				});
 				setSyncLogsState({
 					status: "accepted",
-					message: "Bridge accepted the sync request. Saved events and bridge health are refreshing.",
+					message: "Bridge accepted the device-log sync. Saved rows and bridge health are refreshing.",
 				});
 				void refetch();
 				void refetchHealth();
@@ -993,6 +1438,57 @@ export default function DeviceEventsPage() {
 			},
 		});
 	};
+
+	const previewDeviceEventReset = () => {
+		setResetPreviewState({ status: "loading" });
+		resetDeviceEvents.mutate(
+			{ ...resetScopePayload, execute: false },
+			{
+				onSuccess: (data) => {
+					setResetPreviewState({ status: "ready", data });
+					toast.success("Reset preview ready", {
+						id: "device-events-reset-preview",
+						description: `${formatCount(data.counts?.deviceEvents || 0)} saved events in scope.`,
+					});
+				},
+				onError: (error: unknown) => {
+					const message = getAsyncErrorMessage(error, "Reset preview failed.");
+					setResetPreviewState({ status: "error", message });
+					toast.error("Reset preview failed", {
+						id: "device-events-reset-preview",
+						description: message,
+					});
+				},
+			},
+		);
+	};
+
+	const executeDeviceEventReset = () => {
+		if (!resetPreviewData) return;
+		resetDeviceEvents.mutate(
+			{ ...resetScopePayload, execute: true },
+			{
+				onSuccess: (data) => {
+					setResetPreviewState({ status: "executed", data });
+					setShowResetConfirmModal(false);
+					toast.success("Saved events reset", {
+						id: "device-events-reset-execute",
+						description: data.backupDir ? `Backup: ${data.backupDir}` : undefined,
+					});
+					void refetch();
+					void refetchSyncPreview();
+				},
+				onError: (error: unknown) => {
+					const message = getAsyncErrorMessage(error, "Reset failed.");
+					setResetPreviewState({ status: "error", message });
+					toast.error("Reset failed", {
+						id: "device-events-reset-execute",
+						description: message,
+					});
+				},
+			},
+		);
+	};
 	const realtimeStatus = getDeviceEventsRealtimeStatus({
 		isConnected,
 		organizationId,
@@ -1001,42 +1497,252 @@ export default function DeviceEventsPage() {
 		selectedDeviceName: selectedDevice?.name,
 		liveDeviceName: liveDevice?.name,
 	});
-	const socketTransport =
-		socket && isConnected
-			? String((socket as any).io?.engine?.transport?.name || "connected")
-			: "offline";
 	const realtimeStatusDetail = lastRealtimeEvent
-		? `Last socket event ${formatPunchTime(lastRealtimeEvent.emittedAt)}`
+		? `Last saved-row socket event ${formatEventTime(lastRealtimeEvent.emittedAt)}`
+		: isSdkAlarmSavedScope && latestSdkSavedEvent
+			? `Last SDK alarm row ${formatEventTime(latestSdkSavedEvent.receivedAt || latestSdkSavedEvent.eventTime)}`
+			: isSdkAlarmSavedScope
+				? "No recent SDK alarm rows in this saved-events scope"
 			: latestSavedEvent
-			? `${latestSavedProcessingLabel || "Latest saved punch"} ${formatPunchTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
-			: "Waiting for the next saved punch";
-	const roomStatusLabel = realtimeStatus.isScoped
-		? !isConnected
-			? "Room waiting"
-			: lastRoomJoinedAt
-			? `Room joined ${formatPunchTime(lastRoomJoinedAt)}`
-			: "Room pending"
-		: "No realtime room";
-	const recoveryStatusLabel = lastRecoveryRefreshAt
-		? `Recovery refresh ${formatPunchTime(lastRecoveryRefreshAt)}`
-		: "Recovery refresh armed";
+			? `Latest saved row ${formatEventTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
+			: "No saved device event has arrived in this view yet";
+	const savedRowsBadgeVariant = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh
+			? "success-soft"
+			: isConnected
+				? "warning-soft"
+				: "secondary"
+		: isConnected
+			? "success-soft"
+			: isLatestSavedFresh
+				? "warning-soft"
+				: "secondary";
+	const savedRowsBadgeLabel = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh
+			? "Recent SDK tap saved"
+			: isConnected
+				? "Browser connected; no recent SDK tap"
+				: "Browser offline; SDK evidence unknown"
+		: isConnected
+			? "Browser updates connected"
+			: isLatestSavedFresh
+				? "New saved row"
+				: "No recent saved event";
+	const hikvisionListenerRunning = Boolean(hikvisionListenerStatus?.running);
+	const hikvisionListenerUnavailable =
+		isSdkAlarmSavedScope &&
+		Boolean(!isLoadingHikvisionListenerStatus && (!hikvisionListenerStatus || hikvisionListenerStatusError));
+	const hikvisionListenerStatusLabel = isSdkAlarmSavedScope
+		? isLoadingHikvisionListenerStatus
+			? "Checking VM listener"
+			: hikvisionListenerRunning
+				? "VM listener running"
+				: hikvisionListenerUnavailable
+					? "VM listener unknown"
+					: "VM listener stopped"
+		: "";
+	const hikvisionListenerStatusVariant = hikvisionListenerRunning
+		? "success-soft"
+		: hikvisionListenerUnavailable
+			? "secondary"
+			: "warning-soft";
+	const hikvisionListenerDetail = hikvisionListenerStatus
+		? `${hikvisionListenerStatus.activeState || "unknown"} / ${hikvisionListenerStatus.subState || "unknown"}${
+				hikvisionListenerStatus.mainPid ? ` / PID ${hikvisionListenerStatus.mainPid}` : ""
+			}`
+		: hikvisionListenerStatusError
+			? getAsyncErrorMessage(hikvisionListenerStatusError, "Listener status unavailable")
+			: "Status check has not completed";
+	const hikvisionListenerLastLog =
+		hikvisionListenerStatus?.logs?.recent?.[hikvisionListenerStatus.logs.recent.length - 1] || "";
+	const realtimePanelIsLive = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh || hikvisionListenerRunning
+		: realtimeStatus.isListening;
+	const realtimePanelStatusLabel = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh
+			? "SDK tap evidence recent"
+			: hikvisionListenerRunning
+				? "VM listener running"
+				: hikvisionListenerUnavailable
+					? "VM listener status unavailable"
+					: "VM listener stopped"
+		: realtimeStatus.statusLabel;
+	const realtimePanelUpdateLabel = isSdkAlarmSavedScope
+		? isLatestSdkSavedFresh
+			? "SDK tap row saved recently"
+			: hikvisionListenerRunning
+				? "VM listener is running; no tap saved yet"
+				: "Waiting for SDK listener"
+		: realtimeStatus.rowUpdateLabel;
+	const runHikvisionListenerControl = (action: "start" | "stop" | "restart") => {
+		hikvisionListenerControl.mutate(action, {
+			onSuccess: () => {
+				void refetchHikvisionListenerStatus();
+				void refetch();
+			},
+		});
+	};
+	const activeImportTargetCount = getNumericCount(importJobProgress?.targetImportCount);
+	const activeImportScanLimit = getNumericCount(importJobProgress?.scanLimit);
+	const isTargetedImport = activeImportTargetCount !== null;
+	const activeImportProgressDone = isTargetedImport
+		? Number(importJobProgress?.imported || 0)
+		: Number(importJobProgress?.processed || 0);
+	const activeImportProgressTotal = isTargetedImport
+		? Math.max(activeImportTargetCount || 1, 1)
+		: Math.max(Number(importJobProgress?.total || 1), 1);
+	const activeImportProgressPercent = importJobProgress
+		? Math.min(
+				100,
+				Math.round(
+					(activeImportProgressDone / activeImportProgressTotal) * 100,
+				),
+			)
+		: 0;
+	const activeImportJobSummary = importJobProgress
+		? `${formatCount(importJobProgress.imported)} device logs saved to HRIS, ${formatCount(importJobProgress.alreadySaved || 0)} already in HRIS, ${formatCount(importJobProgress.skipped)} skipped with no employee number, ${formatCount(importJobProgress.failed)} failed`
+		: "";
+	const hasImportProgress = Boolean(activeImportJob && importJobProgress);
+	const isImportProcessing = importJobProgress?.status === "processing";
+	const isImportCancelRequested = Boolean(importJobProgress?.cancelRequested);
+	const importProgressBubbleLabel = hasImportProgress
+		? isImportProcessing
+			? formatCount(importJobProgress?.processed)
+			: importJobProgress?.status === "completed"
+				? formatCount(importJobProgress?.imported)
+				: "!"
+		: "";
+	const importProgressTitle =
+		importJobProgress?.status === "cancelled"
+			? "Sync cancelled"
+			: importJobProgress?.status === "failed"
+			? "Sync needs attention"
+			: importJobProgress?.status === "completed"
+				? "Sync finished"
+				: isImportProcessing
+					? isImportCancelRequested
+						? "Cancelling device log sync"
+						: isTargetedImport
+							? "Syncing estimated unsaved logs"
+							: "Scanning device logs"
+					: "Device sync status";
+	const importProgressToneClass =
+		importJobProgress?.status === "failed"
+			? "border-red-200 bg-red-50 text-red-950"
+			: importJobProgress?.status === "cancelled"
+				? "border-amber-200 bg-amber-50 text-amber-950"
+			: importJobProgress?.status === "completed"
+				? "border-emerald-200 bg-emerald-50 text-emerald-950"
+				: "border-orange-200 bg-orange-50 text-orange-950";
+	const importProgressFillClass =
+		importJobProgress?.status === "failed"
+			? "bg-red-600"
+			: importJobProgress?.status === "cancelled"
+				? "bg-amber-600"
+			: importJobProgress?.status === "completed"
+				? "bg-emerald-600"
+				: "bg-orange-600";
+	const importProgressStatus = importJobProgress?.status;
+	const importProgressImported = importJobProgress?.imported;
+	const importProgressSkipped = importJobProgress?.skipped;
+	const importProgressMessage = importJobProgress?.message;
+
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		if (activeImportJob) {
+			window.localStorage.setItem(
+				DEVICE_IMPORT_JOB_STORAGE_KEY,
+				JSON.stringify(activeImportJob),
+			);
+			return;
+		}
+		window.localStorage.removeItem(DEVICE_IMPORT_JOB_STORAGE_KEY);
+	}, [activeImportJob]);
+
+	useEffect(() => {
+		if (!activeImportJob || !isImportJobError) return;
+		setActiveImportJob(null);
+		setShowImportProgressModal(false);
+		toast.warning("Previous sync status expired", {
+			id: "device-log-import-progress",
+			description: "Open Sync logs again to run the latest targeted check.",
+		});
+	}, [activeImportJob, isImportJobError]);
+
+	useEffect(() => {
+		if (!importProgressStatus || importProgressStatus === "processing") return;
+		if (importProgressStatus === "completed") {
+			toast.success("Device logs synced", {
+				id: "device-log-import-progress",
+				description: `${formatCount(importProgressImported)} device logs saved to HRIS. ${formatCount(importJobProgress?.alreadySaved || 0)} already in HRIS, ${formatCount(importProgressSkipped)} skipped with no employee number.`,
+			});
+			void refetch();
+			void refetchHealth();
+			void refetchSyncPreview();
+		} else if (importProgressStatus === "cancelled") {
+			toast.warning("Device log sync cancelled", {
+				id: "device-log-import-progress",
+				description: "The current job stopped. Retry will check the remaining gaps again.",
+			});
+			void refetch();
+			void refetchHealth();
+			void refetchSyncPreview();
+		} else {
+			toast.error("Device log sync failed", {
+				id: "device-log-import-progress",
+				description: importProgressMessage || "The sync job stopped before finishing.",
+			});
+		}
+	}, [
+		importProgressImported,
+		importProgressMessage,
+		importProgressSkipped,
+		importProgressStatus,
+		importJobProgress?.alreadySaved,
+		refetch,
+		refetchHealth,
+		refetchSyncPreview,
+	]);
 
 	const columns: Column<UnifiedDeviceEventRow>[] = [
 		{
 			key: "eventTime",
-			label: "Punch time",
+			label: "Event time",
 			sortable: viewMode === "saved",
 			width: "190px",
 			required: true,
 			render: (value) => (
 				<span className="whitespace-nowrap text-sm font-medium text-slate-950">
-					{formatPunchTime(value)}
+					{formatEventTime(value)}
 				</span>
 			),
 		},
 		{
+			key: "eventAction",
+			label: "Event",
+			width: "220px",
+			required: true,
+			render: (value, item) => (
+				<div className="min-w-0">
+					<p className="truncate text-sm font-semibold text-slate-950">
+						{item.eventLabel || "Device event"}
+					</p>
+					<div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+						<span className="truncate text-xs text-slate-500">
+							{formatEventTaxonomyToken(item.eventCategory)}
+						</span>
+						{item.capabilityConfidence && item.capabilityConfidence !== "PROVEN" && item.capabilityConfidence !== "proven" ? (
+							<Badge variant="secondary" className="px-1.5 py-0 text-[11px] font-semibold">
+								{formatEventTaxonomyToken(item.capabilityConfidence)}
+							</Badge>
+						) : null}
+					</div>
+				</div>
+			),
+		},
+		{
 			key: "employeeNo",
-			label: "Employee",
+			label: "Employee/User",
 			sortable: viewMode === "saved",
 			width: "290px",
 			required: true,
@@ -1098,6 +1804,22 @@ export default function DeviceEventsPage() {
 				</div>
 			),
 		},
+		{
+			key: "status",
+			label: "HRIS result",
+			sortable: viewMode === "saved",
+			width: "190px",
+			render: (_value, item) => (
+				<div className="min-w-0">
+					<p className="truncate text-sm font-medium text-slate-950">
+						{item.processingLabel || item.businessStatus}
+					</p>
+					<p className="truncate text-xs text-slate-500">
+						{item.attendanceId ? "Attendance linked" : "No attendance link"}
+					</p>
+				</div>
+			),
+		},
 	];
 
 	return (
@@ -1114,23 +1836,49 @@ export default function DeviceEventsPage() {
 					</Button>
 					<div className="min-w-0">
 						<h1 className="truncate text-lg font-semibold text-slate-950">
-							Device attendance
+							Device events
 						</h1>
 					</div>
 				</div>
 				<div className="flex items-center gap-2">
 					<Badge
-						variant={isConnected ? "success-soft" : isLatestSavedFresh ? "warning-soft" : "secondary"}
+						variant={savedRowsBadgeVariant}
 						className="rounded-md px-2 py-1">
-						{isConnected ? "Realtime on" : isLatestSavedFresh ? "New saved" : "Realtime off"}
+						{savedRowsBadgeLabel}
 					</Badge>
+					{isSdkAlarmSavedScope ? (
+						<>
+							<Badge
+								variant={hikvisionListenerStatusVariant}
+								className="rounded-md px-2 py-1">
+								{hikvisionListenerStatusLabel}
+							</Badge>
+							<Button
+								type="button"
+								variant="outline"
+								className="h-9 px-3"
+								onClick={openListenerControl}>
+								<Power className="mr-2 h-4 w-4" />
+								Listener
+							</Button>
+						</>
+					) : null}
 					<Button
 						type="button"
 						variant="outline"
-						className="h-9 px-3"
+						className={
+							hasImportProgress
+								? "relative h-9 border-orange-200 bg-orange-50 px-3 text-orange-700 hover:bg-orange-100 hover:text-orange-800"
+								: "h-9 px-3"
+						}
 						onClick={openSyncLogs}>
 						<UploadCloud className="mr-2 h-4 w-4" />
 						Sync logs
+						{importProgressBubbleLabel ? (
+							<span className="ml-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+								{importProgressBubbleLabel}
+							</span>
+						) : null}
 					</Button>
 					<Button
 						type="button"
@@ -1138,6 +1886,7 @@ export default function DeviceEventsPage() {
 						className="h-9 px-3"
 						onClick={() => {
 							void refetchHealth();
+							if (isSdkAlarmSavedScope) void refetchHikvisionListenerStatus();
 							if (viewMode === "live") void refetchLive();
 							else void refetch();
 						}}>
@@ -1146,6 +1895,96 @@ export default function DeviceEventsPage() {
 					</Button>
 				</div>
 			</div>
+
+			{isSyncLogsDebugView && canUseDebugReset ? (
+				<div className="rounded-md border border-red-200 bg-red-50 px-3 py-3">
+					<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+						<div className="min-w-0">
+							<p className="text-sm font-semibold text-red-950">Debug reset saved events</p>
+							<p className="mt-1 text-xs text-red-800">
+								Scope: {deviceId === "all" ? "all devices" : selectedDevice?.name || deviceId}
+								{" / "}
+								{source === "all" ? "all runtime paths" : formatEventSource(source)}
+								{" / "}
+								{timeWindowOptions.find((option) => option.value === timeWindow)?.label || timeWindow}
+							</p>
+							<div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-red-900">
+								<span>Models: DeviceEvent</span>
+								<span>Device export only</span>
+								<span>Attendance linked only when selected</span>
+							</div>
+							<label className="mt-3 flex w-fit items-center gap-2 text-xs font-medium text-red-950">
+								<input
+									type="checkbox"
+									checked={includeLinkedAttendanceReset}
+									onChange={(event) => setIncludeLinkedAttendanceReset(event.target.checked)}
+									className="h-4 w-4 rounded border-red-300 text-red-700 focus:ring-red-500"
+								/>
+								Also delete linked attendance rows
+							</label>
+							{resetPreviewCounts ? (
+								<div className="mt-3 grid gap-2 text-xs sm:grid-cols-4">
+									<div>
+										<span className="block text-red-700">Saved events</span>
+										<span className="font-semibold text-red-950">
+											{formatCount(resetPreviewCounts.deviceEvents)}
+										</span>
+									</div>
+									<div>
+										<span className="block text-red-700">Linked attendance</span>
+										<span className="font-semibold text-red-950">
+											{formatCount(resetPreviewCounts.linkedAttendance)}
+										</span>
+									</div>
+									<div>
+										<span className="block text-red-700">Devices exported</span>
+										<span className="font-semibold text-red-950">
+											{formatCount(resetPreviewCounts.devices)}
+										</span>
+									</div>
+									<div>
+										<span className="block text-red-700">Import jobs noted</span>
+										<span className="font-semibold text-red-950">
+											{formatCount(resetPreviewCounts.importJobs)}
+										</span>
+									</div>
+								</div>
+							) : null}
+							{resetPreviewState.status === "executed" && resetPreviewState.data.backupDir ? (
+								<p className="mt-2 break-all text-xs font-medium text-red-950">
+									Backup: {resetPreviewState.data.backupDir}
+								</p>
+							) : null}
+							{resetPreviewState.status === "error" ? (
+								<p className="mt-2 text-xs font-medium text-red-900">{resetPreviewState.message}</p>
+							) : null}
+						</div>
+						<div className="flex shrink-0 flex-col gap-2 sm:flex-row md:flex-col">
+							<Button
+								type="button"
+								variant="outline"
+								className="h-9 border-red-200 bg-white px-3 text-red-700 hover:bg-red-100 hover:text-red-800"
+								disabled={resetDeviceEvents.isPending || resetPreviewState.status === "loading"}
+								onClick={previewDeviceEventReset}>
+								<RefreshCw className="h-4 w-4" />
+								Preview reset
+							</Button>
+							<Button
+								type="button"
+								className="h-9 bg-red-700 px-3 text-white hover:bg-red-800"
+								disabled={
+									resetDeviceEvents.isPending ||
+									!resetPreviewCounts ||
+									Number(resetPreviewCounts.deviceEvents || 0) === 0
+								}
+								onClick={() => setShowResetConfirmModal(true)}>
+								<Trash2 className="h-4 w-4" />
+								Reset scoped data
+							</Button>
+						</div>
+					</div>
+				</div>
+			) : null}
 
 			<div className="rounded-md border border-slate-200 bg-white">
 				<div
@@ -1164,6 +2003,8 @@ export default function DeviceEventsPage() {
 								if (value === "live") {
 									next.delete("status");
 									next.delete("source");
+									next.delete("eventCategory");
+									next.delete("eventAction");
 									next.delete("query");
 									next.set("window", "today");
 									if (
@@ -1198,29 +2039,49 @@ export default function DeviceEventsPage() {
 					{viewMode === "saved" && (
 						<>
 							<Select
-								options={savedStatusOptions}
-								value={status}
-								onChange={(value) => setFilter("status", value)}
-								placeholder="All statuses"
+								options={eventCategoryOptions}
+								value={eventCategory}
+								onChange={(value) => setFilter("eventCategory", value)}
+								placeholder="Any event category"
 								className={compactSelectClassName}
 								dropdownClassName={compactSelectDropdownClassName}
 							/>
 							<Select
-								options={sourceOptions}
-								value={source}
-								onChange={(value) => setFilter("source", value)}
-								placeholder="All sources"
+								options={eventActionOptions}
+								value={eventAction}
+								onChange={(value) => setFilter("eventAction", value)}
+								placeholder="Any event action"
 								className={compactSelectClassName}
 								dropdownClassName={compactSelectDropdownClassName}
 							/>
 						</>
 					)}
 				</div>
+				{viewMode === "saved" && isSyncLogsDebugView ? (
+					<div className="grid gap-2 border-b border-slate-200 bg-slate-50 p-2 md:grid-cols-2">
+						<Select
+							options={sourceOptions}
+							value={source}
+							onChange={(value) => setFilter("source", value)}
+							placeholder="Runtime path"
+							className={compactSelectClassName}
+							dropdownClassName={compactSelectDropdownClassName}
+						/>
+						<Select
+							options={savedStatusOptions}
+							value={status}
+							onChange={(value) => setFilter("status", value)}
+							placeholder="HRIS result"
+							className={compactSelectClassName}
+							dropdownClassName={compactSelectDropdownClassName}
+						/>
+					</div>
+				) : null}
 
 				<div className="grid grid-cols-3 gap-0 divide-x divide-slate-200">
 					<div
 						className={
-							realtimeStatus.isListening
+							realtimePanelIsLive
 								? "col-span-3 border-b border-emerald-200 bg-emerald-50 px-3 py-2"
 								: "col-span-3 border-b border-amber-200 bg-amber-50 px-3 py-2"
 						}>
@@ -1228,12 +2089,12 @@ export default function DeviceEventsPage() {
 							<div className="flex min-w-0 items-center gap-2">
 								<span
 									className={
-										realtimeStatus.isListening
+										realtimePanelIsLive
 											? "flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-100 text-emerald-700"
 											: "flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700"
 									}
 									aria-hidden="true">
-									{realtimeStatus.isListening ? (
+									{realtimePanelIsLive ? (
 										<Wifi className="h-4 w-4" />
 									) : (
 										<WifiOff className="h-4 w-4" />
@@ -1242,52 +2103,27 @@ export default function DeviceEventsPage() {
 								<div className="min-w-0">
 									<p
 										className={
-											realtimeStatus.isListening
+											realtimePanelIsLive
 												? "truncate text-sm font-semibold text-emerald-950"
 												: "truncate text-sm font-semibold text-amber-950"
 										}>
-										{realtimeStatus.statusLabel}
+										{realtimePanelStatusLabel}
 									</p>
 									<p
 										className={
-											realtimeStatus.isListening
+											realtimePanelIsLive
 												? "truncate text-xs text-emerald-800"
 												: "truncate text-xs text-amber-800"
 										}>
-										{realtimeStatus.scopeLabel} - {realtimeStatusDetail}
+										{realtimeStatusDetail}
 									</p>
-									{viewMode === "saved" && savedScopeNote ? (
-										<p
-											className={
-												realtimeStatus.isListening
-													? "truncate text-[11px] text-emerald-700"
-													: "truncate text-[11px] text-amber-700"
-											}>
-											{savedScopeNote}
-										</p>
-									) : null}
 								</div>
 							</div>
 							<div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
 								<Badge
-									variant={realtimeStatus.isListening ? "success-soft" : "warning-soft"}
+									variant={realtimePanelIsLive ? "success-soft" : "warning-soft"}
 									className="w-fit rounded-md px-2 py-1 font-semibold">
-									{realtimeStatus.rowUpdateLabel}
-								</Badge>
-								<Badge
-									variant={isConnected ? "success-soft" : "warning-soft"}
-									className="w-fit rounded-md px-2 py-1 font-semibold">
-									Socket {socketTransport}
-								</Badge>
-								<Badge
-									variant={realtimeStatus.isScoped ? "success-soft" : "warning-soft"}
-									className="w-fit rounded-md px-2 py-1 font-semibold">
-									{roomStatusLabel}
-								</Badge>
-								<Badge
-									variant="primary-soft"
-									className="w-fit rounded-md px-2 py-1 font-semibold">
-									{recoveryStatusLabel}
+									{realtimePanelUpdateLabel}
 								</Badge>
 							</div>
 						</div>
@@ -1298,7 +2134,7 @@ export default function DeviceEventsPage() {
 									viewMode === "saved" && sdkSummary
 										? "SDK events"
 										: viewMode === "live"
-											? "Device punches"
+											? "Live events"
 											: "Total events",
 								value:
 									viewMode === "saved" && sdkSummary
@@ -1345,7 +2181,7 @@ export default function DeviceEventsPage() {
 			{viewMode === "live" && liveDeviceId && !canReadLiveEvents && !isLoadingHealth && (
 				<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
 					{isZktecoHealth
-						? "ZKTeco punches are received through the configured SDK sidecar and shown after they are saved in HRIS."
+						? "ZKTeco events are received through the configured SDK sidecar and shown after they are saved in HRIS."
 						: "Live reads are paused until the selected device connection responds."}
 				</div>
 			)}
@@ -1360,7 +2196,7 @@ export default function DeviceEventsPage() {
 				<button
 					type="button"
 					onClick={focusLatestSavedEvent}
-					aria-label="Show latest saved punch row"
+					aria-label="Show latest saved event row"
 					className={
 						isLatestSavedFresh
 							? "w-full rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-sm text-emerald-900 transition hover:border-emerald-300 hover:bg-emerald-100"
@@ -1376,14 +2212,14 @@ export default function DeviceEventsPage() {
 								}
 							/>
 							<span className="truncate font-medium">
-								{latestSavedProcessingLabel || (isLatestSavedFresh ? "Realtime save" : "Latest saved punch")}
+								{latestSavedProcessingLabel || (isLatestSavedFresh ? "Latest watcher save" : "Latest saved event")}
 							</span>
 							<span className="truncate text-xs opacity-80">
 								{latestSavedEvent.employeeName || `No. ${latestSavedEvent.employeeNo || "-"}`}
 							</span>
 						</div>
 						<div className="flex min-w-0 items-center gap-2 text-xs">
-							<span className="truncate">{formatPunchTime(latestSavedEvent.receivedAt)}</span>
+							<span className="truncate">{formatEventTime(latestSavedEvent.receivedAt)}</span>
 							<span className="text-slate-400">/</span>
 							<span className="truncate">{formatEventSource(latestSavedEvent.source)}</span>
 							<span className="text-slate-400">/</span>
@@ -1402,17 +2238,17 @@ export default function DeviceEventsPage() {
 				<div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
 					<div className="min-w-0">
 						<h2 className="truncate text-sm font-semibold text-slate-950">
-							{viewMode === "live" ? "Live punches" : "Saved punches"}
+							{viewMode === "live" ? "Live events" : "Saved events"}
 						</h2>
 					</div>
 				</div>
 				<DataTable<UnifiedDeviceEventRow>
-					title={viewMode === "live" ? "Punches" : "Saved punches"}
+					title={viewMode === "live" ? "Events" : "Saved events"}
 					description=""
 					data={rows}
 					columns={columns}
 					isLoading={isEventLoading}
-					emptyMessage={viewMode === "live" ? "No device punches found" : "No saved events found"}
+					emptyMessage={viewMode === "live" ? "No device events found" : "No saved events found"}
 					emptyDescription=""
 					showSearch={viewMode === "saved"}
 					showFilters={false}
@@ -1458,178 +2294,463 @@ export default function DeviceEventsPage() {
 			</div>
 
 			<Modal
-				open={action === "sync-logs"}
+				open={showResetConfirmModal}
+				onOpenChange={(open) => setShowResetConfirmModal(open)}
+				title="Reset scoped saved events"
+				description="A backup export is written before any records are deleted."
+				className="max-w-lg">
+				<div className="space-y-4">
+					<div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-950">
+						<p className="font-semibold">This will delete only the previewed scope.</p>
+						<div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+							<div>
+								<span className="block text-red-700">Saved events</span>
+								<span className="font-semibold">{formatCount(resetPreviewCounts?.deviceEvents)}</span>
+							</div>
+							<div>
+								<span className="block text-red-700">Linked attendance</span>
+								<span className="font-semibold">
+									{includeLinkedAttendanceReset
+										? formatCount(resetPreviewCounts?.linkedAttendance)
+										: "Export only"}
+								</span>
+							</div>
+							<div>
+								<span className="block text-red-700">Device</span>
+								<span className="font-semibold">
+									{deviceId === "all" ? "All devices" : selectedDevice?.name || deviceId}
+								</span>
+							</div>
+							<div>
+								<span className="block text-red-700">Runtime path</span>
+								<span className="font-semibold">
+									{source === "all" ? "All runtime paths" : formatEventSource(source)}
+								</span>
+							</div>
+						</div>
+					</div>
+					<p className="text-xs text-slate-600">
+						Devices, employees, person records, and unrelated attendance are not deleted.
+						The backup includes devices, device events, linked attendance, import job state, and a recovery note.
+					</p>
+					<div className="flex flex-col-reverse gap-2 border-t pt-3 sm:flex-row sm:justify-end">
+						<Button
+							type="button"
+							variant="outline"
+							onClick={() => setShowResetConfirmModal(false)}>
+							Cancel
+						</Button>
+						<Button
+							type="button"
+							className="bg-red-700 text-white hover:bg-red-800"
+							disabled={resetDeviceEvents.isPending}
+							onClick={executeDeviceEventReset}>
+							<Trash2 className="h-4 w-4" />
+							Export backup and reset
+						</Button>
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
+				open={isListenerControlModalOpen}
+				onOpenChange={(open) => {
+					if (!open) closeListenerControl();
+				}}
+				title="Hikvision listener"
+				description="VM service heartbeat and local hot-reload tap listener control."
+				className="max-w-3xl">
+				<div className="space-y-4">
+					<div
+						className={
+							hikvisionListenerRunning
+								? "rounded-lg border border-emerald-200 bg-emerald-50 p-4"
+								: hikvisionListenerUnavailable
+									? "rounded-lg border border-slate-200 bg-slate-50 p-4"
+									: "rounded-lg border border-amber-200 bg-amber-50 p-4"
+						}>
+						<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+							<div className="flex min-w-0 items-start gap-3">
+								<span
+									className={
+										hikvisionListenerRunning
+											? "flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-100 text-emerald-700"
+											: "flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700"
+									}
+									aria-hidden="true">
+									{isLoadingHikvisionListenerStatus ? (
+										<Loader2 className="h-4 w-4 animate-spin" />
+									) : hikvisionListenerRunning ? (
+										<Wifi className="h-4 w-4" />
+									) : (
+										<WifiOff className="h-4 w-4" />
+									)}
+								</span>
+								<div className="min-w-0">
+									<p
+										className={
+											hikvisionListenerRunning
+												? "text-sm font-semibold text-emerald-950"
+												: "text-sm font-semibold text-amber-950"
+										}>
+										{hikvisionListenerStatusLabel}
+									</p>
+									<p
+										className={
+											hikvisionListenerRunning
+												? "mt-1 break-words text-xs text-emerald-800"
+												: "mt-1 break-words text-xs text-amber-800"
+										}>
+										{hikvisionListenerDetail}
+									</p>
+									<p className="mt-2 text-xs text-slate-600">
+										Tap proof:{" "}
+										<span className="font-semibold">
+											{isLatestSdkSavedFresh
+												? `fresh row at ${formatEventTime(latestSdkSavedEvent?.receivedAt || latestSdkSavedEvent?.eventTime)}`
+												: latestSdkSavedEvent
+													? `last row at ${formatEventTime(latestSdkSavedEvent.receivedAt || latestSdkSavedEvent.eventTime)}`
+													: "no SDK rows in the current scope"}
+										</span>
+									</p>
+								</div>
+							</div>
+							<Badge
+								variant={isLatestSdkSavedFresh ? "success-soft" : "warning-soft"}
+								className="w-fit rounded-md px-2 py-1">
+								{isLatestSdkSavedFresh ? "SDK tap saved recently" : "No recent SDK tap saved"}
+							</Badge>
+						</div>
+					</div>
+
+					<div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,280px)]">
+						<div className="rounded-lg border border-slate-200 bg-white p-4">
+							<div className="flex items-start justify-between gap-4">
+								<label
+									htmlFor="hikvision-listener-toggle"
+									className="flex min-w-0 items-start gap-3">
+									<Switch
+										id="hikvision-listener-toggle"
+										checked={hikvisionListenerRunning}
+										disabled={
+											hikvisionListenerControl.isPending ||
+											isLoadingHikvisionListenerStatus
+										}
+										onCheckedChange={(checked) =>
+											runHikvisionListenerControl(checked ? "start" : "stop")
+										}
+										className="mt-0.5 data-[state=checked]:bg-emerald-600 data-[state=unchecked]:bg-slate-300"
+									/>
+									<span className="min-w-0">
+										<span className="block text-sm font-semibold text-slate-950">
+											Listener enabled
+										</span>
+										<span className="mt-1 block text-xs text-slate-600">
+											{hikvisionListenerRunning
+												? "The VM service is armed for live HCNetSDK callbacks."
+												: "Turn this on before testing physical taps."}
+										</span>
+									</span>
+								</label>
+								{hikvisionListenerControl.isPending ? (
+									<Loader2 className="h-4 w-4 shrink-0 animate-spin text-slate-500" />
+								) : null}
+							</div>
+
+							<div className="mt-4 flex flex-wrap gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									className="h-9 px-3"
+									disabled={hikvisionListenerControl.isPending}
+									onClick={() => void refetchHikvisionListenerStatus()}>
+									<RefreshCw className="h-4 w-4" />
+									Check status
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									className="h-9 px-3"
+									disabled={hikvisionListenerControl.isPending || !hikvisionListenerRunning}
+									onClick={() => runHikvisionListenerControl("restart")}>
+									<RefreshCw className="h-4 w-4" />
+									Restart
+								</Button>
+							</div>
+						</div>
+
+						<div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+							<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+								<ExternalLink className="h-3.5 w-3.5" />
+								Runtime
+							</div>
+							<dl className="mt-3 space-y-2 text-xs">
+								<div className="flex min-w-0 justify-between gap-3">
+									<dt className="text-slate-500">VM</dt>
+									<dd className="truncate font-semibold text-slate-900">
+										{hikvisionListenerStatus?.vm?.host || "10.184.37.241"}
+									</dd>
+								</div>
+								<div className="flex min-w-0 justify-between gap-3">
+									<dt className="text-slate-500">Service</dt>
+									<dd className="truncate font-semibold text-slate-900">
+										{hikvisionListenerStatus?.service ||
+											"project-truth-hikvision-hot-reload-listener.service"}
+									</dd>
+								</div>
+								<div className="flex min-w-0 justify-between gap-3">
+									<dt className="text-slate-500">Checked</dt>
+									<dd className="truncate font-semibold text-slate-900">
+										{formatEventTime(hikvisionListenerStatus?.checkedAt)}
+									</dd>
+								</div>
+							</dl>
+						</div>
+					</div>
+
+					{hikvisionListenerStatusError ? (
+						<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+							{getAsyncErrorMessage(hikvisionListenerStatusError, "Listener status check failed")}
+						</div>
+					) : null}
+
+					<div className="rounded-lg border border-slate-200 bg-white p-4">
+						<div className="flex items-center justify-between gap-3">
+							<h3 className="text-sm font-semibold text-slate-950">Recent listener log</h3>
+							<Badge variant="secondary" className="rounded-md px-2 py-1">
+								{hikvisionListenerStatus?.logs?.available ? "Log tail loaded" : "No log tail"}
+							</Badge>
+						</div>
+						<div className="mt-3 max-h-48 overflow-y-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
+							{hikvisionListenerStatus?.logs?.recent?.length ? (
+								<pre className="whitespace-pre-wrap break-words font-mono leading-5">
+									{hikvisionListenerStatus.logs.recent.join("\n")}
+								</pre>
+							) : (
+								<p className="text-slate-300">
+									{hikvisionListenerStatus?.logs?.error ||
+										"No listener log lines returned by the VM status check."}
+								</p>
+							)}
+						</div>
+						{hikvisionListenerLastLog ? (
+							<p className="mt-2 truncate text-xs text-slate-500">
+								Latest log line: {hikvisionListenerLastLog}
+							</p>
+						) : null}
+					</div>
+
+					<div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end">
+						<Button type="button" variant="outline" onClick={closeListenerControl}>
+							Done
+						</Button>
+						<Button
+							type="button"
+							className="bg-orange-500 text-white hover:bg-orange-600"
+							disabled={hikvisionListenerControl.isPending || isLoadingHikvisionListenerStatus}
+							onClick={() =>
+								runHikvisionListenerControl(hikvisionListenerRunning ? "restart" : "start")
+							}>
+							{hikvisionListenerControl.isPending ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : hikvisionListenerRunning ? (
+								<RefreshCw className="h-4 w-4" />
+							) : (
+								<Power className="h-4 w-4" />
+							)}
+							{hikvisionListenerRunning ? "Restart listener" : "Start listener"}
+						</Button>
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
+				open={isSyncLogsModalOpen}
 				onOpenChange={(open) => {
 					if (!open) closeSyncLogs();
 				}}
 				title="Sync device logs"
-				description="Review source counts, HRIS saved counts, and devices that can safely start a sync."
-				className="max-w-3xl">
-				<div className="space-y-4">
-					<div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-						<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+				className="max-w-5xl">
+				<div className="space-y-3">
+					<div className="rounded-md border border-slate-200 bg-white px-3 py-2.5">
+						<div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
 							<div className="min-w-0">
-								<p className="text-xs font-semibold uppercase text-slate-500">Selected scope</p>
-								<p className="mt-1 truncate text-base font-semibold text-slate-950">
-									{syncScopeLabel}
-								</p>
-								<p className="mt-1 text-xs text-slate-600">
-									{selectedZktecoDevice
-										? `${selectedZktecoDevice.address || "-"}:${selectedZktecoDevice.port || "-"}`
-										: "Preview includes configured Hikvision and ZKTeco sources in the current filters."}
-								</p>
-							</div>
-							<Badge
-								variant={syncBridgeOk ? "success-soft" : "warning-soft"}
-								className="w-fit rounded-md px-2 py-1 font-semibold">
-								{syncBridgeOk ? "Bridge reachable" : "Bridge unavailable"}
-							</Badge>
-						</div>
-						{syncPreviewRows.length > 0 ? (
-							<div className="mt-3 flex flex-wrap gap-1.5">
-								{syncPreviewRows.slice(0, 5).map((device) => (
-									<Badge key={device.deviceId} variant="outline" className="px-2 py-0.5">
-										{device.name || device.address || device.deviceId}
-									</Badge>
-								))}
-								{syncPreviewRows.length > 5 ? (
-									<Badge variant="outline" className="px-2 py-0.5">
-										+{syncPreviewRows.length - 5} more
-									</Badge>
-								) : null}
-							</div>
-						) : (
-							<div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-								{isLoadingSyncPreview ? "Building sync preview." : "No sync-capable devices are available in the current filters."}
-							</div>
-						)}
-					</div>
-
-					<div className="grid gap-3 md:grid-cols-2">
-						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">Source totals</p>
-							<p className="mt-2 text-sm font-semibold text-slate-950">{syncStatusLabel}</p>
-							<p className="mt-1 text-xs text-slate-500">
-								{isLoadingSyncPreview
-									? "Loading SDK counts"
-									: `${formatCount(syncVendorEventTotal)} events / ${formatCount(syncVendorUserTotal)} known users`}
-							</p>
-						</div>
-						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">HRIS saved</p>
-							<p className="mt-2 text-sm font-semibold text-slate-950">
-								{isLoadingSyncPreview ? "Loading" : formatCount(syncHrisSavedTotal)}
-							</p>
-							<p className="mt-1 text-xs text-slate-500">saved events in the selected scope</p>
-						</div>
-						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">Sync gap</p>
-							<p className="mt-2 text-sm font-semibold text-slate-950">
-								{isLoadingSyncPreview
-									? "Loading"
-									: syncDryRunEstimate === null || syncDryRunEstimate === undefined
-									? "Unavailable"
-									: formatCount(syncDryRunEstimate)}
-							</p>
-							<p className="mt-1 text-xs text-slate-500">missing rows reported by the bridge</p>
-						</div>
-						<div className="rounded-lg border border-slate-200 bg-white p-3">
-							<p className="text-xs font-semibold uppercase text-slate-500">Can run sync</p>
-							<p className="mt-2 text-sm font-semibold text-slate-950">
-								{isLoadingSyncPreview
-									? "Loading"
-									: `${formatCount(syncStartableRows.length)} of ${formatCount(syncPreviewRows.length)}`}
-							</p>
-							<p className="mt-1 break-all text-xs text-slate-500">{syncBridgeStatusUrl}</p>
-						</div>
-					</div>
-
-					<div className="rounded-lg border border-slate-200 bg-white p-3">
-						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-							<div>
-								<p className="text-xs font-semibold uppercase text-slate-500">Rows to sync</p>
-								<p className="mt-1 text-sm font-semibold text-slate-950">
-									{syncDryRunEstimate === null || syncDryRunEstimate === undefined
-										? "Unavailable"
-										: formatCount(syncDryRunEstimate)}
+								<p className="truncate text-sm font-semibold text-slate-950">{syncScopeLabel}</p>
+								{showSyncPreviewSkeleton ? (
+									<SyncPreviewSkeleton />
+								) : syncPreviewRows.length > 0 ? (
+									<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+										<span>Device logs: {formatOptionalCount(syncVendorEventTotal)}</span>
+										<span>HRIS events: {formatCount(syncHrisSavedTotal)}</span>
+										<span>Estimated unsaved: {formatOptionalCount(syncDryRunEstimate)}</span>
+										<span>Will skip: {formatCount(syncProjectedSkippedTotal)}</span>
+										<span>Failed: {formatCount(syncFailedTotal)}</span>
+										<span>Ready: {formatCount(syncStartableRows.length)} of {formatCount(syncPreviewRows.length)}</span>
+									</div>
+								) : (
+									<p className="mt-1 text-xs text-amber-700">No sync-capable devices.</p>
+								)}
+								<p className="mt-2 text-xs text-slate-500">
+									Saved rows here update from the watcher/callback path. Sync logs is the backfill tool when that runtime lags.
 								</p>
 							</div>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="h-8 px-3 text-xs"
-								disabled={isLoadingSyncPreview || isLoadingSyncHealth}
-								onClick={() => void refreshSyncPreflight()}>
-								<RefreshCw className="h-3.5 w-3.5" />
-								Refresh preflight
-							</Button>
+							<div className="flex shrink-0 items-center gap-2">
+								<Badge
+									variant={syncStartableRows.length ? "success-soft" : "secondary"}
+									className="rounded-md px-2 py-0.5 font-semibold">
+									{showSyncPreviewSkeleton
+										? "Loading"
+										: syncStartableRows.length
+											? "Ready"
+											: syncStatusLabel}
+								</Badge>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="h-8 px-3 text-xs"
+									disabled={showSyncPreviewSkeleton || isLoadingSyncHealth}
+									onClick={() => void refreshSyncPreflight()}>
+									<RefreshCw className="h-3.5 w-3.5" />
+									Refresh
+								</Button>
+							</div>
 						</div>
-						<p className="mt-2 text-xs text-slate-500">
-							{syncDryRunEstimate === null || syncDryRunEstimate === undefined
-								? "The bridge did not report a dry-run count, so HRIS will not invent one."
-								: "This estimate came from bridge preflight data."}
-						</p>
 					</div>
 
 					<div className="rounded-lg border border-slate-200 bg-white">
-						<div className="border-b border-slate-100 px-3 py-2">
-							<p className="text-xs font-semibold uppercase text-slate-500">Per-device tally</p>
-						</div>
-						<div className="divide-y divide-slate-100">
-							{syncPreviewRows.length ? (
-								syncPreviewRows.map((device) => {
+						{showSyncPreviewSkeleton ? (
+							<SyncDeviceDetailsSkeleton />
+						) : syncVendorSections.length ? (
+							<Accordion
+								type="multiple"
+								defaultValue={syncVendorSections.map((section) => section.vendor)}
+								className="divide-y divide-slate-100">
+								{syncVendorSections.map((section) => (
+									<AccordionItem
+										key={section.vendor}
+										value={section.vendor}
+										className="border-b-0">
+										<AccordionTrigger className="px-3 py-2.5 hover:no-underline">
+											<div className="flex flex-1 items-center justify-between gap-3 pr-3">
+												<span className="text-sm font-semibold text-slate-950">{section.vendor}</span>
+												<span className="text-xs text-slate-500">{formatCount(section.rows.length)} device{section.rows.length === 1 ? "" : "s"}</span>
+											</div>
+										</AccordionTrigger>
+										<AccordionContent className="pb-0">
+											<div className="divide-y divide-slate-100">
+												{section.rows.map((device) => {
 									const sourceEvents = device.vendorEventCount ?? device.totalEvents;
 									const sourceUsers = device.vendorUserCount;
 									const hrisSaved = device.hrisSavedCount ?? device.syncedEvents;
-									const missingEvents = device.missingEventCount ?? device.needsSyncEvents;
+									const knownSkipped = device.knownSkippedEventCount ?? 0;
+									const failedEvents = device.failedEventCount ?? 0;
+									const projectedSaveEvents = getSyncProjectedSaveCount(device, skipMissingEmployeeNo);
+									const projectedSkipEvents = getSyncProjectedSkipCount(device, skipMissingEmployeeNo);
+									const hasProjectedSaveEvents = Boolean(projectedSaveEvents && projectedSaveEvents > 0);
+									const isSourceUnavailable = Boolean(device.error);
+									const hasUnknownSyncCount =
+										!isSourceUnavailable &&
+										(!hasNumericCount(sourceEvents) || projectedSaveEvents === null);
 									return (
 										<div key={device.deviceId} className="flex flex-col gap-3 px-3 py-3 md:flex-row md:items-start md:justify-between">
 											<div className="min-w-0">
 												<p className="truncate text-sm font-semibold text-slate-950">
 													{getSyncDeviceTitle(device.vendor, device.name, device.address)}
 												</p>
-												<p className="truncate text-xs text-slate-500">
+												<p
+													className={
+														isSourceUnavailable
+															? "truncate text-xs text-slate-400 line-through decoration-slate-400"
+															: "truncate text-xs text-slate-500"
+													}>
 													{device.address}:{device.port} / {formatEventSource(device.source)}
 												</p>
 												{device.error ? (
 													<p className="mt-1 text-xs text-red-700">{device.error}</p>
 												) : null}
 											</div>
-											<div className="grid shrink-0 grid-cols-2 gap-2 text-sm sm:grid-cols-4 md:min-w-[430px]">
-												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">HRIS</p>
-													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(hrisSaved)}</p>
-												</div>
-												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Source events</p>
-													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceEvents)}</p>
-												</div>
-												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Users</p>
-													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceUsers)}</p>
-												</div>
-												<div>
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Missing</p>
-													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(missingEvents)}</p>
-												</div>
-												<div className="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-4">
+											<div className="grid shrink-0 grid-cols-2 gap-2 text-sm sm:grid-cols-3 md:min-w-[660px] lg:grid-cols-[104px_repeat(5,minmax(76px,1fr))]">
+												<div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Read state</p>
 													<Badge
-														variant={device.canStartSync ? "success-soft" : "secondary"}
-														className="px-2 py-0.5 font-semibold">
-														{device.canStartSync ? "Ready to sync" : "Preview only"}
+														variant={
+															device.canStartSync
+																? "success-soft"
+																: isSourceUnavailable
+																? "secondary"
+																: hasUnknownSyncCount
+																? "warning-soft"
+																: hasProjectedSaveEvents
+																? "warning-soft"
+																: "secondary"
+														}
+														className="mt-1 px-2 py-0.5 font-semibold">
+														{device.canStartSync
+															? "Ready to read"
+															: isSourceUnavailable
+															? "Unavailable"
+															: hasUnknownSyncCount
+															? "Check counts"
+															: hasProjectedSaveEvents
+															? "Needs sync"
+															: "In sync"}
 													</Badge>
 												</div>
+												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Device logs</p>
+													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceEvents)}</p>
+												</div>
+												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
+													<p className="text-[11px] font-semibold uppercase text-slate-500">HRIS events</p>
+													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(hrisSaved)}</p>
+												</div>
+												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Device users</p>
+													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceUsers)}</p>
+												</div>
+												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Will skip</p>
+													<p className="text-xs font-semibold text-slate-950">{formatCount(projectedSkipEvents)}</p>
+													<p className="text-[10px] text-slate-500">
+														{skipMissingEmployeeNo ? "No employee no." : `Known: ${formatCount(knownSkipped)}`}
+													</p>
+												</div>
+												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
+													<p className="text-[11px] font-semibold uppercase text-slate-500">Estimated unsaved</p>
+													{hasProjectedSaveEvents ? (
+														<button
+															type="button"
+															className="text-left text-sm font-bold text-red-700 underline-offset-2 hover:underline"
+															onClick={() => reviewNotImported(device)}
+															title="Review device log rows not stored as HRIS events">
+															{formatOptionalCount(projectedSaveEvents)}
+														</button>
+													) : (
+														<span className="text-xs font-semibold text-slate-500">
+															{formatOptionalCount(projectedSaveEvents)}
+														</span>
+													)}
+												</div>
+												{failedEvents > 0 ? (
+													<div className="col-span-2 sm:col-span-3 lg:col-span-6">
+														<span className="text-xs font-semibold text-red-700">
+															Failed rows: {formatCount(failedEvents)}
+														</span>
+													</div>
+												) : null}
 											</div>
 										</div>
 									);
-								})
-							) : (
-								<div className="px-3 py-3 text-sm text-slate-500">
-									{isLoadingSyncPreview ? "Reading device history counts." : "No device preview rows returned."}
-								</div>
-							)}
-						</div>
+								})}
+							</div>
+										</AccordionContent>
+									</AccordionItem>
+								))}
+							</Accordion>
+						) : (
+							<div className="px-3 py-3 text-sm text-slate-500">No device preview rows returned.</div>
+						)}
 					</div>
 
 					{syncLogsState.status === "accepted" ? (
@@ -1637,19 +2758,218 @@ export default function DeviceEventsPage() {
 							{syncLogsState.message}
 						</div>
 					) : null}
+					{syncLogsState.status === "error" ? (
+						<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+							{syncLogsState.message}
+						</div>
+					) : null}
 
-					<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-						<Button type="button" variant="outline" className="h-9 px-3" onClick={closeSyncLogs}>
-							Close
-						</Button>
+					<div className="flex flex-col gap-3 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+						<label
+							htmlFor="skip-missing-employee-no"
+							className="flex min-w-0 items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+							<Switch
+								id="skip-missing-employee-no"
+								checked={skipMissingEmployeeNo}
+								onCheckedChange={setSkipMissingEmployeeNo}
+								disabled={zktecoSync.isPending || hikvisionImport.isPending}
+								aria-label="Skip rows with no employee number"
+								className="mt-0.5"
+							/>
+							<span className="min-w-0">
+								<span className="block font-semibold text-slate-950">Skip rows with no employee no.</span>
+								<span className="block text-xs text-slate-600">
+									{skipMissingEmployeeNo
+										? `${formatCount(syncProjectedSkippedTotal)} known employee-less row${syncProjectedSkippedTotal === 1 ? "" : "s"} will stay skipped during the source scan.`
+										: `${formatOptionalCount(syncDryRunEstimate)} estimated unsaved row${Number(syncDryRunEstimate) === 1 ? "" : "s"} from this preview; sync reads the latest device logs first and stops after the estimate when possible.`}
+								</span>
+							</span>
+						</label>
+						<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+							<Button type="button" variant="outline" className="h-9 px-3" onClick={closeSyncLogs}>
+								Close
+							</Button>
+							<Button
+								type="button"
+								className="h-9 px-3"
+								disabled={
+									zktecoSync.isPending ||
+									hikvisionImport.isPending ||
+									isLoadingSyncPreview ||
+									syncStartableRows.length === 0
+								}
+								onClick={startDeviceLogImport}>
+								<UploadCloud className="h-4 w-4" />
+								{syncActionLabel}
+							</Button>
+						</div>
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
+				open={showImportProgressModal}
+				onOpenChange={(open) => {
+					if (!open) setShowImportProgressModal(false);
+				}}
+				title="Device sync status"
+				description="You can close this window and reopen status from Sync logs."
+				className="max-w-lg"
+				showCloseButton={!isImportProcessing}
+				closeOnBackdropClick={!isImportProcessing}>
+				<div className="space-y-4">
+					{activeImportJob && importJobProgress ? (
+						<div className={`min-h-[230px] rounded-lg border p-4 ${importProgressToneClass}`}>
+							<div className="flex items-center justify-between gap-3 text-sm">
+								<span className="min-w-0 font-medium">
+									{isImportProcessing ? (
+										<>
+											<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin align-middle" />
+											{importProgressTitle}
+										</>
+									) : (
+										importProgressTitle
+									)}
+								</span>
+								<span className="shrink-0 font-semibold">
+									{activeImportProgressPercent}%
+								</span>
+							</div>
+							<p className="mt-1 text-xs opacity-90">
+								{isTargetedImport
+									? `Sync is saving up to ${formatCount(activeImportTargetCount)} estimated unsaved log${activeImportTargetCount === 1 ? "" : "s"} from the latest device rows.`
+									: "Sync scans device source logs, then classifies each row against HRIS."}
+							</p>
+							<div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
+								<div
+									className={`h-full rounded-full transition-all ${importProgressFillClass}`}
+									style={{ width: `${activeImportProgressPercent}%` }}
+								/>
+							</div>
+							<div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+								<div className="text-emerald-700">
+									Saved to HRIS: <span className="font-semibold">{formatCount(importJobProgress.imported)}</span>
+								</div>
+								<div className="text-red-700">
+									Failed: <span className="font-semibold">{formatCount(importJobProgress.failed)}</span>
+								</div>
+							</div>
+							<div className="mt-3 grid grid-cols-2 gap-2 rounded-md border border-orange-100 bg-white/70 px-3 py-2 text-xs text-orange-900">
+								<div>
+									<span className="block text-orange-700">
+										{isTargetedImport ? "Latest rows checked" : "Device logs scanned"}
+									</span>
+									<span className="font-semibold">
+										{formatCount(importJobProgress.processed)} / {formatCount(isTargetedImport ? activeImportScanLimit ?? importJobProgress.total : importJobProgress.total)}
+									</span>
+								</div>
+								{isTargetedImport ? (
+									<div>
+										<span className="block text-orange-700">Target estimate</span>
+										<span className="font-semibold">{formatCount(activeImportTargetCount)}</span>
+									</div>
+								) : null}
+								<div>
+									<span className="block text-orange-700">Already saved</span>
+									<span className="font-semibold">{formatCount(importJobProgress.alreadySaved || 0)}</span>
+								</div>
+								{isTargetedImport ? (
+									<div>
+										<span className="block text-orange-700">Device total</span>
+										<span className="font-semibold">{formatOptionalCount(importJobProgress.sourceTotal)}</span>
+									</div>
+								) : null}
+								<div>
+									<span className="block text-orange-700">Skipped</span>
+									<span className="font-semibold">{formatCount(importJobProgress.skipped)}</span>
+									<span className="block text-[10px] text-orange-700/80">No employee number</span>
+								</div>
+								<div>
+									<span className="block text-orange-700">Device</span>
+									<span className="font-semibold">{activeImportJob.deviceName}</span>
+								</div>
+								<div>
+									<span className="block text-orange-700">Run state</span>
+									<span className="font-semibold">
+										{importJobProgress.status === "cancelled"
+											? "Cancelled; ready to retry"
+											: importJobProgress.status === "processing"
+											? importJobProgress.cancelRequested
+												? "Cancel requested"
+												: "Background sync active"
+											: importJobProgress.status === "completed"
+												? "Complete"
+												: "Retry after review"}
+									</span>
+								</div>
+							</div>
+							{activeImportJobSummary ? (
+								<p className="mt-3 text-xs opacity-90">{activeImportJobSummary}</p>
+							) : null}
+							{importJobProgress.message ? (
+								<p className="mt-2 text-xs opacity-90">{importJobProgress.message}</p>
+							) : null}
+						</div>
+					) : (
+						<div className="min-h-[230px] rounded-lg border border-orange-200 bg-orange-50 p-4">
+							<div className="flex items-center gap-2 text-sm font-medium text-orange-900">
+								<Loader2 className="h-4 w-4 animate-spin" />
+								Loading device sync status...
+							</div>
+						</div>
+					)}
+
+					<div className="flex flex-col-reverse gap-2 border-t pt-2 sm:flex-row sm:justify-end">
 						<Button
 							type="button"
-							className="h-9 px-3"
-							disabled={zktecoSync.isPending || isLoadingSyncPreview || syncStartableRows.length === 0}
-							onClick={startZktecoSync}>
-							<UploadCloud className="h-4 w-4" />
-							{zktecoSync.isPending ? "Starting sync" : "Start actual sync"}
+							variant="outline"
+							onClick={() => setShowImportProgressModal(false)}>
+							Close
 						</Button>
+						{isImportProcessing ? (
+							<Button
+								type="button"
+								variant="outline"
+								className="gap-2 border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+								disabled={cancelDeviceImportJob.isPending || isImportCancelRequested}
+								onClick={requestCancelActiveImportJob}>
+								{cancelDeviceImportJob.isPending ? (
+									<Loader2 className="h-4 w-4 animate-spin" />
+								) : (
+									<XCircle className="h-4 w-4" />
+								)}
+								{cancelDeviceImportJob.isPending
+									? "Cancelling..."
+									: isImportCancelRequested
+										? "Cancel requested"
+										: "Cancel sync"}
+							</Button>
+						) : null}
+						{importJobProgress && importJobProgress.status !== "processing" ? (
+							<Button
+								type="button"
+								className="gap-2 bg-orange-500 text-white hover:bg-orange-600"
+								disabled={hikvisionImport.isPending}
+								onClick={retryActiveImportJob}>
+								{hikvisionImport.isPending ? (
+									<Loader2 className="h-4 w-4 animate-spin" />
+								) : (
+									<RefreshCw className="h-4 w-4" />
+								)}
+								{hikvisionImport.isPending ? "Starting..." : "Retry gap sync"}
+							</Button>
+						) : null}
+						{importJobProgress && importJobProgress.status !== "processing" ? (
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => {
+									setActiveImportJob(null);
+									setShowImportProgressModal(false);
+								}}>
+								Dismiss status
+							</Button>
+						) : null}
 					</div>
 				</div>
 			</Modal>
@@ -1659,7 +2979,7 @@ export default function DeviceEventsPage() {
 				onOpenChange={(open) => {
 					if (!open) closeEventDetails();
 				}}
-				title="Punch details"
+				title="Device event details"
 				className="max-w-4xl">
 				{activeEvent ? (
 					<div className="space-y-5">
@@ -1699,26 +3019,40 @@ export default function DeviceEventsPage() {
 							</div>
 						</div>
 
-						<div className="grid gap-3 md:grid-cols-3">
+						<div className="grid gap-3 md:grid-cols-4">
+							<div className="rounded-lg border border-slate-200 bg-white p-3">
+								<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+									<BadgeCheck className="h-3.5 w-3.5" />
+									Event
+								</div>
+								<p className="mt-2 text-sm font-semibold text-slate-950">
+									{activeEvent.eventLabel || "Device event"}
+								</p>
+								<div className="mt-2 space-y-1 text-xs text-slate-500">
+									<p>Event category: {formatEventTaxonomyToken(activeEvent.eventCategory || "UNKNOWN_VENDOR")}</p>
+									<p>Event action: {formatEventTaxonomyToken(activeEvent.eventAction || "UNKNOWN")}</p>
+									<p>Event confidence: {formatEventTaxonomyToken(activeEvent.eventConfidence || "UNKNOWN")}</p>
+								</div>
+							</div>
 							<div className="rounded-lg border border-slate-200 bg-white p-3">
 								<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
 									<Clock className="h-3.5 w-3.5" />
-									Punch time
+									Event time
 								</div>
 								<p className="mt-2 text-sm font-semibold text-slate-950">
-									{formatPunchTime(activeEvent.eventTime)}
+									{formatEventTime(activeEvent.eventTime)}
 								</p>
 								<p className="mt-1 text-xs text-slate-500">
-									Received {formatPunchTime(activeEvent.receivedAt || activeEvent.eventTime)}
+									Received {formatEventTime(activeEvent.receivedAt || activeEvent.eventTime)}
 								</p>
 							</div>
 							<div className="rounded-lg border border-slate-200 bg-white p-3">
 								<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
 									<BadgeCheck className="h-3.5 w-3.5" />
-									Status
+									HRIS result
 								</div>
 								<p className="mt-2 text-sm font-semibold text-slate-950">
-									{formatBusinessStatus(activeEvent.status)}
+									{activeEvent.processingLabel || formatBusinessStatus(activeEvent.status)}
 								</p>
 								<p className="mt-1 text-xs text-slate-500">
 									Attendance {activeEvent.attendanceId ? activeEvent.attendanceId : "not created yet"}
@@ -1727,10 +3061,10 @@ export default function DeviceEventsPage() {
 							<div className="rounded-lg border border-slate-200 bg-white p-3">
 								<div className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
 									<Wifi className="h-3.5 w-3.5" />
-									Source
+									Runtime path
 								</div>
 								<p className="mt-2 text-sm font-semibold text-slate-950">
-									{formatEventSource(activeEvent.source)}
+									{activeEvent.transportLabel || formatEventSource(activeEvent.source)}
 								</p>
 								<p className="mt-1 text-xs text-slate-500">
 									{formatEventSourceDetail(activeEvent.source)}
@@ -1794,7 +3128,7 @@ export default function DeviceEventsPage() {
 					</div>
 				) : (
 					<div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-						This punch is not in the current table page. Refresh the saved view or open it from the row again.
+						This event is not in the current table page. Refresh the saved view or open it from the row again.
 					</div>
 				)}
 			</Modal>

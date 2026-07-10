@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import datetime as dt
+import ipaddress
 import json
 import os
 import socket
@@ -212,6 +214,108 @@ def handshake_probe(target: Target, timeout: float, password: int, force_udp: bo
                 conn.disconnect()
             except Exception:
                 pass
+
+
+def quick_count_probe(target: Target, timeout: float, password: int, force_udp: bool) -> dict[str, Any]:
+    started = time.monotonic()
+    try:
+        from zk import ZK
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "stage": "count",
+            "target": target.__dict__,
+            "errorType": type(exc).__name__,
+            "error": str(exc),
+        }
+
+    conn = None
+    try:
+        zk = ZK(
+            target.host,
+            port=target.port,
+            timeout=int(timeout),
+            password=password,
+            force_udp=force_udp,
+            ommit_ping=True,
+        )
+        conn = zk.connect()
+        connected_at = time.monotonic()
+        conn.read_sizes()
+        return {
+            "ok": True,
+            "stage": "count",
+            "target": target.__dict__,
+            "transport": "udp" if force_udp else "tcp",
+            "elapsedSeconds": round(time.monotonic() - started, 3),
+            "connectSeconds": round(connected_at - started, 3),
+            "readSizesSeconds": round(time.monotonic() - connected_at, 3),
+            "counts": {
+                "users": getattr(conn, "users", None),
+                "fingers": getattr(conn, "fingers", None),
+                "records": getattr(conn, "records", None),
+                "cards": getattr(conn, "cards", None),
+                "faces": getattr(conn, "faces", None),
+                "usersCapacity": getattr(conn, "users_cap", None),
+                "recordsCapacity": getattr(conn, "rec_cap", None),
+                "usersAvailable": getattr(conn, "users_av", None),
+                "recordsAvailable": getattr(conn, "rec_av", None),
+            },
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "stage": "count",
+            "target": target.__dict__,
+            "transport": "udp" if force_udp else "tcp",
+            "elapsedSeconds": round(time.monotonic() - started, 3),
+            "errorType": type(exc).__name__,
+            "error": str(exc),
+        }
+    finally:
+        if conn is not None:
+            try:
+                conn.disconnect()
+            except Exception:
+                pass
+
+
+def cidr_hosts(cidr_values: list[str]) -> list[Target]:
+    targets: list[Target] = []
+    for cidr in cidr_values:
+        network = ipaddress.ip_network(cidr, strict=False)
+        for host in network.hosts():
+            targets.append(Target(name=str(host), host=str(host), port=4370))
+    return targets
+
+
+def discover_targets(targets: list[Target], args: argparse.Namespace) -> dict[str, Any]:
+    started = time.monotonic()
+    found: list[dict[str, Any]] = []
+
+    def probe(target: Target) -> dict[str, Any] | None:
+        result = quick_count_probe(target, args.timeout, args.password, True)
+        if not result.get("ok"):
+            return None
+        return result
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.discover_workers) as executor:
+        for result in executor.map(probe, targets):
+            if result is not None:
+                found.append(result)
+
+    return {
+        "event": "discover_finished",
+        "timestamp": utc_now(),
+        "stage": "discover",
+        "ok": True,
+        "transport": "udp",
+        "cidrs": args.discover_cidr,
+        "scannedHosts": len(targets),
+        "foundDevices": len(found),
+        "elapsedSeconds": round(time.monotonic() - started, 3),
+        "devices": found,
+    }
 
 
 def attendance_time(value: Any) -> str | None:
@@ -731,6 +835,22 @@ def run(targets: Iterable[Target], args: argparse.Namespace) -> int:
     if args.mode == "capabilities":
         emit({"event": "capabilities", "timestamp": utc_now(), **CAPABILITY_REPORT})
         return 0
+    if args.mode == "discover":
+        discover_cidrs = args.discover_cidr or []
+        if not discover_cidrs:
+            emit(
+                {
+                    "event": "discover_failed",
+                    "timestamp": utc_now(),
+                    "ok": False,
+                    "error": "--discover-cidr is required for discover mode",
+                }
+            )
+            return 2
+        emit({"event": "discover_started", "timestamp": utc_now(), "cidrs": discover_cidrs})
+        payload = discover_targets(cidr_hosts(discover_cidrs), args)
+        emit(payload)
+        return 0 if payload["foundDevices"] else 1
     if args.mode == "preview":
         payload = run_preview(targets, args, args.device_ip)
         emit(payload)
@@ -743,6 +863,13 @@ def run(targets: Iterable[Target], args: argparse.Namespace) -> int:
     failures = 0
     emit({"event": "probe_started", "mode": args.mode, "timestamp": utc_now()})
     for target in targets:
+        if args.mode == "count":
+            result = quick_count_probe(target, args.timeout, args.password, args.force_udp)
+            emit(result)
+            if not result["ok"]:
+                failures += 1
+            continue
+
         result = tcp_probe(target, args.timeout)
         emit(result)
         if not result["ok"]:
@@ -767,7 +894,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Read-only ZKTeco Linux connectivity trial.")
     parser.add_argument(
         "--mode",
-        choices=("tcp", "handshake", "users", "attendance", "history", "preview", "sync", "bridge", "capabilities"),
+        choices=(
+            "tcp",
+            "handshake",
+            "count",
+            "discover",
+            "users",
+            "attendance",
+            "history",
+            "preview",
+            "sync",
+            "bridge",
+            "capabilities",
+        ),
         default="tcp",
     )
     parser.add_argument("--target", action="append", type=parse_target, help="name=host:port")
@@ -781,6 +920,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--latest", type=int, default=int(os.environ.get("ZKTECO_SYNC_LATEST", "1")))
     parser.add_argument("--since", default=os.environ.get("ZKTECO_SYNC_SINCE", ""))
     parser.add_argument("--device-ip", default=os.environ.get("ZKTECO_DEVICE_IP", ""))
+    parser.add_argument("--discover-cidr", action="append", default=[])
+    parser.add_argument("--discover-workers", type=int, default=int(os.environ.get("ZKTECO_DISCOVER_WORKERS", "64")))
     parser.add_argument("--status-host", default=os.environ.get("ZKTECO_STATUS_HOST", "0.0.0.0"))
     parser.add_argument("--status-port", type=int, default=int(os.environ.get("ZKTECO_STATUS_PORT", "4371")))
     parser.add_argument("--poll-seconds", type=float, default=float(os.environ.get("ZKTECO_POLL_SECONDS", "30")))

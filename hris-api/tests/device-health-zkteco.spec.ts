@@ -1,4 +1,6 @@
 import { expect } from "chai";
+import fs from "fs";
+import path from "path";
 import { controller } from "../app/device/device.controller";
 
 describe("device health ZKTeco Linux bridge", () => {
@@ -313,6 +315,11 @@ describe("device health ZKTeco Linux bridge", () => {
 					throw new Error("sync preview must not upsert attendance rows");
 				},
 			},
+			deviceSyncRun: {
+				findFirst: async () => {
+					throw new Error("The table `public.device_sync_runs` does not exist in the current database.");
+				},
+			},
 			employee: { findFirst: async () => null },
 		};
 		const deviceController = controller(prisma as any);
@@ -346,6 +353,7 @@ describe("device health ZKTeco Linux bridge", () => {
 			hrisSavedCount: 8000,
 			vendorEventCount: 8410,
 			vendorUserCount: 14,
+			knownSkippedEventCount: 0,
 			missingEventCount: 410,
 			canStartSync: true,
 			syncAction: "zkteco-bridge-sync",
@@ -509,6 +517,168 @@ describe("device health ZKTeco Linux bridge", () => {
 		});
 	});
 
+	it("releases a soft-deleted endpoint collision before updating the active device", async () => {
+		const updates: any[] = [];
+		const prisma = {
+			device: {
+				findFirst: async (args: any) => {
+					if (args.where.id === "device-active") {
+						return {
+							id: "device-active",
+							organizationId: "org-1",
+							name: "Lobby",
+							address: "a",
+							port: 80,
+							protocol: "http",
+							config: {},
+							access: {},
+							isDeleted: false,
+						};
+					}
+					if (
+						args.where.organizationId === "org-1" &&
+						args.where.address === "192.168.8.195" &&
+						args.where.port === 80
+					) {
+						return {
+							id: "device-deleted",
+							name: "Deleted old endpoint",
+							address: "192.168.8.195",
+							port: 80,
+							isDeleted: true,
+						};
+					}
+					return null;
+				},
+				update: async (args: any) => {
+					updates.push(args);
+					if (args.where.id === "device-deleted") {
+						return { id: "device-deleted", ...args.data };
+					}
+					return {
+						id: "device-active",
+						organizationId: "org-1",
+						name: args.data.name,
+						address: args.data.address,
+						port: args.data.port,
+						protocol: args.data.protocol,
+						config: args.data.config,
+						access: args.data.access,
+					};
+				},
+			},
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			params: { id: "device-active" },
+			organizationId: "org-1",
+			body: {
+				name: "Lobby",
+				address: "192.168.8.195",
+				port: 80,
+				protocol: "http",
+				config: { vendor: "Hikvision" },
+				access: { username: "admin", password: "password" },
+			},
+		};
+		let statusCode = 0;
+		let body: any = null;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json(payload: any) {
+				body = payload;
+				return this;
+			},
+		};
+
+		await deviceController.update(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(200);
+		expect(updates[0]).to.deep.equal({
+			where: { id: "device-deleted" },
+			data: { address: "deleted:device-deleted:192.168.8.195" },
+		});
+		expect(updates[1]).to.deep.include({
+			where: { id: "device-active" },
+		});
+		expect(updates[1].data).to.include({
+			name: "Lobby",
+			address: "192.168.8.195",
+			port: 80,
+			protocol: "http",
+		});
+		expect(body.status).to.equal("success");
+	});
+
+	it("returns a conflict instead of a 500 when an active device already owns the endpoint", async () => {
+		const prisma = {
+			device: {
+				findFirst: async (args: any) => {
+					if (args.where.id === "device-active") {
+						return {
+							id: "device-active",
+							organizationId: "org-1",
+							name: "Lobby",
+							address: "a",
+							port: 80,
+							protocol: "http",
+							config: {},
+							access: {},
+							isDeleted: false,
+						};
+					}
+					return {
+						id: "device-other",
+						name: "Other active endpoint",
+						address: "192.168.8.195",
+						port: 80,
+						isDeleted: false,
+					};
+				},
+				update: async () => {
+					throw new Error("active duplicate must not update");
+				},
+			},
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			params: { id: "device-active" },
+			organizationId: "org-1",
+			body: {
+				name: "Lobby",
+				address: "192.168.8.195",
+				port: 80,
+				protocol: "http",
+				config: { vendor: "Hikvision" },
+				access: { username: "admin", password: "password" },
+			},
+		};
+		let statusCode = 0;
+		let body: any = null;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json(payload: any) {
+				body = payload;
+				return this;
+			},
+		};
+
+		await deviceController.update(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(409);
+		expect(body.message).to.equal("Another device already uses this address and port.");
+		expect(JSON.stringify(body)).to.include("address");
+		expect(JSON.stringify(body)).to.include("port");
+	});
+
 	it("soft-deletes devices so historical device events remain queryable", async () => {
 		const calls: any[] = [];
 		const prisma = {
@@ -516,6 +686,7 @@ describe("device health ZKTeco Linux bridge", () => {
 				findFirst: async () => ({
 					id: "device-with-events",
 					organizationId: "org-1",
+					address: "10.184.38.9",
 					isDeleted: false,
 				}),
 				update: async (args: any) => {
@@ -551,8 +722,190 @@ describe("device health ZKTeco Linux bridge", () => {
 		expect(statusCode).to.equal(200);
 		expect(calls[0]).to.deep.equal({
 			where: { id: "device-with-events" },
-			data: { isDeleted: true },
+			data: {
+				isDeleted: true,
+				address: "deleted:device-with-events:10.184.38.9",
+			},
 		});
 		expect(body.status).to.equal("success");
+	});
+
+	it("previews saved device event reset scope without deleting records", async () => {
+		let deleteCalled = false;
+		const prisma = {
+			deviceEvent: {
+				findMany: async (args: any) => {
+					expect(args.where).to.deep.include({
+						organizationId: "org-1",
+						deviceId: "device-hikvision",
+						source: "HIKVISION_CALLBACK",
+					});
+					return [
+						{
+							id: "event-1",
+							organizationId: "org-1",
+							deviceId: "device-hikvision",
+							attendanceId: "attendance-1",
+						},
+					];
+				},
+				deleteMany: async () => {
+					deleteCalled = true;
+					return { count: 1 };
+				},
+			},
+			device: {
+				findMany: async () => [{ id: "device-hikvision", name: "Main Entrance Device" }],
+			},
+			attendance: {
+				findMany: async () => [{ id: "attendance-1" }],
+			},
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			organizationId: "org-1",
+			role: "hris-admin",
+			body: {
+				deviceId: "device-hikvision",
+				source: "HIKVISION_CALLBACK",
+				from: "2026-06-23",
+				to: "2026-06-23",
+				execute: false,
+			},
+			query: {},
+		};
+		let statusCode = 0;
+		let body: any = null;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json(payload: any) {
+				body = payload;
+				return this;
+			},
+		};
+
+		await deviceController.resetDeviceEvents(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(200);
+		expect(body.data.mode).to.equal("preview");
+		expect(body.data.counts).to.deep.include({
+			devices: 1,
+			deviceEvents: 1,
+			linkedAttendance: 1,
+		});
+		expect(deleteCalled).to.equal(false);
+	});
+
+	it("rejects saved device event reset for non-admin roles", async () => {
+		const prisma = {
+			deviceEvent: {
+				findMany: async () => {
+					throw new Error("non-admin reset must not read scope");
+				},
+			},
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			organizationId: "org-1",
+			role: "hris-hr-manager",
+			body: { execute: false },
+			query: {},
+		};
+		let statusCode = 0;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json() {
+				return this;
+			},
+		};
+
+		await deviceController.resetDeviceEvents(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(403);
+	});
+
+	it("exports a backup before deleting scoped saved device events", async () => {
+		const deleted: string[] = [];
+		const runtimeRoot = path.resolve(process.cwd(), "..", ".runtime", "backups");
+		const beforeDirs = fs.existsSync(runtimeRoot) ? new Set(fs.readdirSync(runtimeRoot)) : new Set<string>();
+		const prisma = {
+			deviceEvent: {
+				findMany: async () => [
+					{
+						id: "event-1",
+						organizationId: "org-1",
+						deviceId: "device-hikvision",
+						attendanceId: "attendance-1",
+						source: "HIKVISION_CALLBACK",
+					},
+				],
+				deleteMany: async (args: any) => {
+					expect(args.where).to.deep.include({
+						organizationId: "org-1",
+						deviceId: "device-hikvision",
+					});
+					deleted.push("deviceEvent");
+					return { count: 1 };
+				},
+				count: async () => 0,
+			},
+			device: {
+				findMany: async () => [{ id: "device-hikvision", name: "Main Entrance Device" }],
+			},
+			attendance: {
+				findMany: async () => [{ id: "attendance-1" }],
+				deleteMany: async () => {
+					deleted.push("attendance");
+					return { count: 1 };
+				},
+				count: async () => 0,
+			},
+			$transaction: async (fn: any) => fn(prisma),
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			organizationId: "org-1",
+			role: "hris-admin",
+			body: {
+				deviceId: "device-hikvision",
+				source: "HIKVISION_CALLBACK",
+				includeLinkedAttendance: true,
+				execute: true,
+			},
+			query: {},
+		};
+		let statusCode = 0;
+		let body: any = null;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json(payload: any) {
+				body = payload;
+				return this;
+			},
+		};
+
+		await deviceController.resetDeviceEvents(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(200);
+		expect(body.data.mode).to.equal("executed");
+		expect(deleted).to.deep.equal(["attendance", "deviceEvent"]);
+		expect(fs.existsSync(path.join(body.data.backupDir, "manifest.json"))).to.equal(true);
+		expect(fs.existsSync(path.join(body.data.backupDir, "device-events.json"))).to.equal(true);
+		expect(fs.existsSync(path.join(body.data.backupDir, "linked-attendance.json"))).to.equal(true);
+		const afterDirs = fs.existsSync(runtimeRoot) ? fs.readdirSync(runtimeRoot) : [];
+		const created = afterDirs.filter((name) => !beforeDirs.has(name) && name.startsWith("device-events-reset-"));
+		expect(created.length).to.be.greaterThan(0);
 	});
 });

@@ -224,30 +224,33 @@ const installMockApi = async (page: Page) => {
 	};
 };
 
-test("admin device events opens sync logs modal with source and HRIS counts before real sync", async ({
+test("admin device events opens sync logs modal with device and saved counts before sync", async ({
 	page,
 }) => {
 	const api = await installMockApi(page);
 
 	await page.goto("/admin/configuration/devices/events?view=saved");
 
-	await expect(page.getByRole("heading", { name: "Device attendance" })).toBeVisible({
+	await expect(page.getByRole("heading", { name: "Device events" })).toBeVisible({
 		timeout: routeReadyTimeoutMs,
 	});
 	await page.getByRole("button", { name: "Sync logs" }).click();
 
 	const dialog = page.getByRole("dialog");
 	await expect(dialog.getByRole("heading", { name: "Sync device logs" })).toBeVisible();
-	await expect(dialog.getByText("Source totals", { exact: true })).toBeVisible();
-	await expect(dialog.getByText("HRIS saved", { exact: true })).toBeVisible();
-	await expect(dialog.getByText("173,614")).toHaveCount(2);
-	await expect(dialog.getByText("Per-device tally")).toBeVisible();
-	await expect(dialog.getByText("Source events")).toBeVisible();
-	await expect(dialog.getByText("Users", { exact: true })).toBeVisible();
-	await expect(dialog.getByText("Missing", { exact: true })).toBeVisible();
-	await expect(dialog.getByText("Preview only")).toBeVisible();
+	await expect(dialog.getByText("Devices checked (1)", { exact: true })).toBeVisible();
+	await expect(dialog.getByText("Device logs: Unavailable")).toBeVisible();
+	await expect(dialog.getByText("HRIS events: 173,614")).toBeVisible();
+	await expect(dialog.getByText("Estimated unsaved: Unavailable")).toBeVisible();
+	await expect(dialog.getByText("Will skip: 0")).toBeVisible();
+	await expect(dialog.getByText("Ready: 0 of 1")).toBeVisible();
+	await expect(dialog.getByText("ZKTeco", { exact: true })).toBeVisible();
+	await expect(dialog.getByText("ZKTeco sidecar", { exact: true }).first()).toBeVisible();
+	await expect(dialog.getByText("Device users", { exact: true })).toBeVisible();
+	await expect(dialog.getByText("Estimated unsaved", { exact: true }).first()).toBeVisible();
+	await expect(dialog.getByText("Unavailable", { exact: true }).first()).toBeVisible();
 	await expect(dialog.getByText("ZKTECO_BRIDGE_STATUS_URL is not configured")).toBeVisible();
-	await expect(dialog.getByRole("button", { name: /Start actual sync/i })).toBeDisabled();
+	await expect(dialog.getByRole("button", { name: /Sync logs/i })).toBeDisabled();
 	expect(api.getSyncPostCount()).toBe(0);
 
 	const screenshotDir = resolve(process.cwd(), "..", ".runtime", "browser-evidence", "screenshots");

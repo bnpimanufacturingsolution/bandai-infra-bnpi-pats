@@ -36,6 +36,7 @@ import {
 import { emitDeviceEventSaved } from "../../../helper/device-event-realtime.helper";
 import { emitAttendanceRealtimeEvent } from "../../../helper/attendance-realtime.helper";
 import { refreshTimesheetForAttendanceDate } from "../../../helper/timesheet.helper";
+import { buildPersistedDeviceEventTaxonomy } from "../../../helper/device-event-taxonomy.helper";
 
 export const controller = (prisma: PrismaClient) => {
 	const getEmployeeDisplayNameFromSnapshot = (employee: any) => {
@@ -66,6 +67,10 @@ export const controller = (prisma: PrismaClient) => {
 						employeeNo: true,
 						source: true,
 						status: true,
+						eventCategory: true,
+						eventAction: true,
+						eventLabel: true,
+						eventConfidence: true,
 						eventType: true,
 						major: true,
 						minor: true,
@@ -258,18 +263,35 @@ export const controller = (prisma: PrismaClient) => {
 				return String(candidateSerial || "").trim() === serialNo;
 			});
 			if (existingBySerial) {
+				const taxonomy = buildPersistedDeviceEventTaxonomy({
+					source: data.source,
+					status: existingBySerial.status || "RECEIVED",
+					eventType: data.event.eventType ? String(data.event.eventType) : null,
+					major: data.event.major ? String(data.event.major) : null,
+					minor: data.event.minor ? String(data.event.minor) : null,
+					payload: data.payload,
+				});
 				const updated = await eventClient.update({
 					where: { id: existingBySerial.id },
 					data: {
 						eventTime: data.eventTime,
 						dedupeKey: data.dedupeKey,
 						payload: data.payload,
+						...taxonomy,
 					},
 				});
 				return { eventRecord: updated, isDuplicate: true };
 			}
 		}
 
+		const taxonomy = buildPersistedDeviceEventTaxonomy({
+			source: data.source,
+			status: "RECEIVED",
+			eventType: data.event.eventType ? String(data.event.eventType) : null,
+			major: data.event.major ? String(data.event.major) : null,
+			minor: data.event.minor ? String(data.event.minor) : null,
+			payload: data.payload,
+		});
 		const eventRecord = await eventClient.create({
 			data: {
 				organizationId: data.device.organizationId,
@@ -278,6 +300,7 @@ export const controller = (prisma: PrismaClient) => {
 				employeeNo: data.employeeNo || null,
 				source: data.source,
 				status: "RECEIVED",
+				...taxonomy,
 				eventType: data.event.eventType ? String(data.event.eventType) : null,
 				major: data.event.major ? String(data.event.major) : null,
 				minor: data.event.minor ? String(data.event.minor) : null,
@@ -296,6 +319,7 @@ export const controller = (prisma: PrismaClient) => {
 		eventId: string,
 		data: {
 			status: string;
+			deviceUserId?: string | null;
 			employeeId?: string | null;
 			attendanceId?: string | null;
 			errorMessage?: string | null;
@@ -395,6 +419,37 @@ export const controller = (prisma: PrismaClient) => {
 					employeeNo,
 					event,
 				});
+				const previewOnly =
+					(req.query as any)?.preview === "true" ||
+					(req.query as any)?.dryRun === "true" ||
+					(req.body as any)?.preview === true ||
+					(req.body as any)?.dryRun === true;
+				if (previewOnly) {
+					const successResponse = buildSuccessResponse(
+						"Hikvision callback preview completed",
+						{
+							received: true,
+							preview: true,
+							matched: true,
+							wouldPersistDeviceEvent: true,
+							wouldProcessAttendance: isHikvisionAttendancePunchEvent(event),
+							device: {
+								id: device.id,
+								name: device.name,
+								address: device.address,
+								port: device.port,
+								protocol: device.protocol,
+							},
+							employeeNo,
+							source,
+							dedupeKey,
+							event,
+						},
+						200,
+					);
+					res.status(200).json(successResponse);
+					return;
+				}
 				const { eventRecord, isDuplicate } = await saveInitialDeviceEvent({
 					device,
 					event,
@@ -475,29 +530,60 @@ export const controller = (prisma: PrismaClient) => {
 					return;
 				}
 
-				const employee = await prisma.employee.findFirst({
-					where: {
-						isDeleted: false,
-						organizationId: device.organizationId,
-						deviceEmpId: employeeNo,
-					},
-					select: {
-						id: true,
-						organizationId: true,
-						deviceEmpId: true,
-					},
-				});
+				const deviceUser = employeeNo
+					? await (prisma as any).deviceUser.findFirst({
+							where: {
+								organizationId: device.organizationId,
+								deviceId: device.id,
+								vendorUserId: employeeNo,
+							},
+							select: {
+								id: true,
+								employeeId: true,
+								status: true,
+							},
+						})
+					: null;
+				const linkedDeviceUserEmployee = deviceUser?.employeeId
+					? await prisma.employee.findFirst({
+							where: {
+								id: deviceUser.employeeId,
+								isDeleted: false,
+								organizationId: device.organizationId,
+							},
+							select: {
+								id: true,
+								organizationId: true,
+								deviceEmpId: true,
+							},
+						})
+					: null;
+				const employee =
+					linkedDeviceUserEmployee ||
+					(await prisma.employee.findFirst({
+						where: {
+							isDeleted: false,
+							organizationId: device.organizationId,
+							deviceEmpId: employeeNo,
+						},
+						select: {
+							id: true,
+							organizationId: true,
+							deviceEmpId: true,
+						},
+					}));
 
 				if (!employee) {
 					console.log(
-						`[HIKVISION_CALLBACK][CTRL] no employee matched by deviceEmpId=${employeeNo}`,
+						`[HIKVISION_CALLBACK][CTRL] no employee matched by deviceUser or deviceEmpId=${employeeNo}`,
 					);
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "UNMATCHED",
+						deviceUserId: deviceUser?.id || null,
 						errorMessage: "employee_not_found",
 					});
 					const successResponse = buildSuccessResponse(
-						"Callback received but no employee matched by deviceEmpId",
+						"Callback received but no employee matched by device user or legacy deviceEmpId",
 						{
 							received: true,
 							matched: false,
@@ -537,6 +623,7 @@ export const controller = (prisma: PrismaClient) => {
 				const sameDayDeviceEvents = await (prisma as any).deviceEvent.findMany({
 					where: {
 						organizationId: employee.organizationId,
+						deviceId: device.id,
 						employeeNo,
 						eventTime: {
 							gte: normalizedStartOfDay,
@@ -710,6 +797,7 @@ export const controller = (prisma: PrismaClient) => {
 				if (attendanceAction === "clock_in_created") {
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "ATTENDANCE_CREATED",
+						deviceUserId: deviceUser?.id || null,
 						employeeId: employee.id,
 						attendanceId,
 						errorMessage: null,
@@ -717,6 +805,7 @@ export const controller = (prisma: PrismaClient) => {
 				} else if (attendanceAction === "clock_out_updated") {
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "ATTENDANCE_UPDATED",
+						deviceUserId: deviceUser?.id || null,
 						employeeId: employee.id,
 						attendanceId,
 						errorMessage: null,
@@ -727,6 +816,7 @@ export const controller = (prisma: PrismaClient) => {
 				) {
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "MATCHED",
+						deviceUserId: deviceUser?.id || null,
 						employeeId: employee.id,
 						attendanceId,
 						errorMessage: attendanceAction,
@@ -742,6 +832,7 @@ export const controller = (prisma: PrismaClient) => {
 						deviceId: device.id,
 						dedupeKey,
 						employeeNo,
+						deviceUserId: deviceUser?.id || null,
 						employeeId: employee.id,
 						attendanceAction,
 						attendanceId,

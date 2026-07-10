@@ -116,10 +116,10 @@ foreach ($envName in $Environments) {
   if ($envName -eq 'dev') {
     $checks.Add((Assert-Text "runtime-dev deploys Hikvision watcher" $rendered '(?ms)^kind:\s*Deployment.*?name:\s*hris-hikvision-watcher'))
     $checks.Add((Assert-Text "runtime-dev Hikvision watcher uses DB init tools image" $rendered 'image:\s*hris-api-db-init:develop'))
-    $checks.Add((Assert-Text "runtime-dev Hikvision watcher targets current Main Entrance Device by name" $rendered 'HIKVISION_DEVICE_NAME\s*\r?\n\s*value:\s*Main Entrance Device'))
-    $checks.Add((Assert-Text "runtime-dev Hikvision watcher uses ISAPI port 80" $rendered 'HIKVISION_DEVICE_PORT\s*\r?\n\s*value:\s*"80"'))
-    $checks.Add((Assert-NoText "runtime-dev Hikvision watcher does not use stale port 800" $rendered 'HIKVISION_DEVICE_PORT\s*\r?\n\s*value:\s*"800"'))
-    $checks.Add((Assert-Text "runtime-dev Hikvision watcher targets client DEV device address" $rendered 'HIKVISION_DEVICE_ADDRESS\s*\r?\n\s*value:\s*10\.184\.38\.215'))
+    $checks.Add((Assert-Text "runtime-dev Hikvision watcher discovers configured devices from DB truth" $rendered 'audit-hikvision-device-events\.ts[\s\S]*--all-hikvision'))
+    $checks.Add((Assert-NoText "runtime-dev Hikvision watcher does not pin device name in manifest env" $rendered 'HIKVISION_DEVICE_NAME\s*\r?\n\s*value:'))
+    $checks.Add((Assert-NoText "runtime-dev Hikvision watcher does not pin device port in manifest env" $rendered 'HIKVISION_DEVICE_PORT\s*\r?\n\s*value:'))
+    $checks.Add((Assert-NoText "runtime-dev Hikvision watcher does not pin device address in manifest env" $rendered 'HIKVISION_DEVICE_ADDRESS\s*\r?\n\s*value:'))
     $checks.Add((Assert-NoText "runtime-dev Hikvision watcher is not pinned to stale seeded id" $rendered 'cmqquro2g002em73cdp74rx0q'))
     $checks.Add((Assert-Text "runtime-dev Hikvision watcher runs apply loop" $rendered 'audit-hikvision-device-events\.ts[\s\S]*--apply[\s\S]*--watch'))
   } else {

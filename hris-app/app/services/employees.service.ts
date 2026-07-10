@@ -679,6 +679,47 @@ export interface UpdateEmployeeDocumentsRequest {
 	files?: Record<string, File | null | undefined>;
 }
 
+export interface EmployeeHardDeletePlanItem {
+	model: string;
+	action: "delete" | "detach" | "archive";
+	count: number;
+	description: string;
+}
+
+export interface EmployeeHardDeleteBlocker {
+	key: string;
+	reason: string;
+	count: number;
+	severity: "blocked";
+}
+
+export interface EmployeeHardDeletePreview {
+	mode: "preview" | "executed";
+	execute: boolean;
+	requiresConfirmation: string;
+	employee: {
+		id: string;
+		employeeId: string;
+		organizationId: string;
+		name?: string | null;
+	};
+	safeToExecute: boolean;
+	blockers: EmployeeHardDeleteBlocker[];
+	relationCounts: Record<string, number>;
+	plan: {
+		delete: EmployeeHardDeletePlanItem[];
+		detach: EmployeeHardDeletePlanItem[];
+		archive: EmployeeHardDeletePlanItem[];
+		blocked: EmployeeHardDeleteBlocker[];
+	};
+	summary: {
+		blockerCount: number;
+		deleteCount: number;
+		detachCount: number;
+		archiveCount: number;
+	};
+}
+
 export interface EmployeeDocumentActor {
 	id: string;
 	employeeId: string;
@@ -1974,6 +2015,43 @@ class EmployeesService extends APIService {
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error deleting employee",
 			);
+		}
+	}
+
+	async previewEmployeeHardDelete(employeeId: string): Promise<EmployeeHardDeletePreview> {
+		try {
+			const response = await hrisApiClient.post<any>(
+				`/api/employee/${employeeId}/hard-delete-preview`,
+				{ execute: false, dryRun: true },
+			);
+			return (response.data?.data || response.data) as EmployeeHardDeletePreview;
+		} catch (error: any) {
+			console.error("Error previewing employee hard delete:", error);
+			const errorMessage =
+				error.data?.errors?.[0]?.message ||
+				getErrorMessage(error) ||
+				"Error previewing employee hard delete";
+			throw new Error(errorMessage);
+		}
+	}
+
+	async executeEmployeeHardDelete(
+		employeeId: string,
+		confirmation: string,
+	): Promise<EmployeeHardDeletePreview> {
+		try {
+			const response = await hrisApiClient.post<any>(
+				`/api/employee/${employeeId}/hard-delete-preview`,
+				{ execute: true, dryRun: false, confirmation },
+			);
+			return (response.data?.data || response.data) as EmployeeHardDeletePreview;
+		} catch (error: any) {
+			console.error("Error executing employee hard delete:", error);
+			const errorMessage =
+				error.data?.errors?.[0]?.message ||
+				getErrorMessage(error) ||
+				"Error executing employee hard delete";
+			throw new Error(errorMessage);
 		}
 	}
 

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
@@ -15,7 +15,21 @@ import {
 	AdminConfigPrimaryCell,
 	AdminConfigSourceChip,
 } from "~/lib/ui/admin-configuration-table";
-import { Eye, Edit, Trash2, MoreVertical, UserPlus, Activity, RefreshCw } from "lucide-react";
+import {
+	Activity,
+	ArrowLeft,
+	Clock3,
+	Database,
+	Edit,
+	ExternalLink,
+	MoreVertical,
+	Network,
+	RefreshCw,
+	ShieldAlert,
+	TerminalSquare,
+	Trash2,
+	UsersRound,
+} from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useNavigate, useSearchParams } from "react-router";
 import {
@@ -28,9 +42,15 @@ import {
 	useDevices,
 	useDevice,
 	useDeviceHealth,
+	useDeviceSyncPreview,
+	useDeviceSyncRuns,
+	useDeviceUsers,
 	useCreateDevice,
 	useUpdateDevice,
 	useDeleteDevice,
+	useResetDeviceEvents,
+	useSyncDeviceUsers,
+	useTriggerHikvisionAttendanceImport,
 } from "~/lib/hooks/useDevices";
 import {
 	DropdownMenu,
@@ -43,6 +63,8 @@ import { DeviceEnrollmentPanel } from "./enroll";
 
 const DeviceFormSchema = CreateDeviceSchema;
 type DeviceFormData = CreateDevice;
+type DeviceConfigRecord = Record<string, unknown>;
+type LegacyDevicesResponse = { devices?: Device[]; pagination?: { total?: number } };
 
 const protocolOptions: SelectOption[] = [
 	{ value: "http", label: "HTTP" },
@@ -50,6 +72,64 @@ const protocolOptions: SelectOption[] = [
 	{ value: "tcp", label: "TCP" },
 	{ value: "udp", label: "UDP" },
 ];
+
+const deviceVendorOptions: SelectOption[] = [
+	{ value: "Hikvision", label: "Hikvision" },
+	{ value: "ZKTeco", label: "ZKTeco" },
+	{ value: "Other", label: "Other / manual" },
+];
+
+const sdkProtocolOptions: SelectOption[] = [
+	{ value: "tcp", label: "TCP" },
+	{ value: "udp", label: "UDP" },
+	{ value: "http", label: "HTTP" },
+	{ value: "https", label: "HTTPS" },
+];
+
+const getDeviceConfigRecord = (config: unknown): DeviceConfigRecord =>
+	config && typeof config === "object" && !Array.isArray(config)
+		? { ...(config as DeviceConfigRecord) }
+		: {};
+
+const buildDeviceConfigPreset = (vendor: string): DeviceConfigRecord => {
+	const normalized = vendor.toLowerCase();
+	if (normalized.includes("hikvision")) {
+		return {
+			vendor: "Hikvision",
+			source: "vendor/hikvision-linux",
+			sdkPort: 8000,
+			sdkProtocol: "tcp",
+			webhookPath: "/api/hikvision/callback",
+		};
+	}
+	if (normalized.includes("zkteco") || normalized.includes("zk")) {
+		return {
+			vendor: "ZKTeco",
+			source: "vendor/zkteco-linux",
+			sdkPort: 4370,
+			sdkProtocol: "tcp",
+			webhookPath: "/api/zkteco/events",
+		};
+	}
+	return { vendor };
+};
+
+const getDefaultDeviceConfig = () => buildDeviceConfigPreset("Hikvision");
+
+const normalizeDeviceConfigForSubmit = (config: unknown): DeviceConfigRecord => {
+	const next = getDeviceConfigRecord(config);
+	Object.entries(next).forEach(([key, value]) => {
+		if (typeof value === "string") {
+			const trimmed = value.trim();
+			if (trimmed) next[key] = trimmed;
+			else delete next[key];
+		}
+	});
+	const sdkPort = Number(next.sdkPort);
+	if (Number.isFinite(sdkPort) && sdkPort > 0) next.sdkPort = sdkPort;
+	else delete next.sdkPort;
+	return next;
+};
 
 const healthToneClass = (ok: boolean) => (ok ? "text-green-700" : "text-amber-700");
 
@@ -190,6 +270,379 @@ function DeviceHealthPanel({ deviceId }: { deviceId?: string }) {
 	);
 }
 
+const getDeviceConfigValue = (device: Device | undefined, key: string) => {
+	const config = getDeviceConfigRecord(device?.config);
+	const value = config[key];
+	if (value === undefined || value === null || value === "") return "-";
+	return String(value);
+};
+
+const isHikvisionDevice = (device?: Device) => {
+	const config = getDeviceConfigRecord(device?.config);
+	const vendor = String(config.vendor || config.source || device?.name || "").toLowerCase();
+	return vendor.includes("hikvision");
+};
+
+function DeviceFact({
+	label,
+	value,
+	mono,
+}: {
+	label: string;
+	value: string | number | null | undefined;
+	mono?: boolean;
+}) {
+	return (
+		<div className="min-w-0 rounded-md border border-slate-200 bg-white px-3 py-2">
+			<p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+			<p className={`mt-1 truncate text-sm font-medium text-slate-950 ${mono ? "font-mono" : ""}`}>
+				{value || "-"}
+			</p>
+		</div>
+	);
+}
+
+function CapabilityRow({
+	icon,
+	title,
+	description,
+	state,
+	children,
+}: {
+	icon: ReactNode;
+	title: string;
+	description: string;
+	state: "ready" | "guarded" | "blocked";
+	children?: ReactNode;
+}) {
+	const tone =
+		state === "ready"
+			? "border-emerald-200 bg-emerald-50 text-emerald-800"
+			: state === "guarded"
+				? "border-amber-200 bg-amber-50 text-amber-800"
+				: "border-slate-200 bg-slate-50 text-slate-600";
+	const label = state === "ready" ? "Available" : state === "guarded" ? "Guarded" : "Not wired";
+
+	return (
+		<div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 last:border-b-0 md:flex-row md:items-start md:justify-between">
+			<div className="flex min-w-0 gap-3">
+				<div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600">
+					{icon}
+				</div>
+				<div className="min-w-0">
+					<div className="flex flex-wrap items-center gap-2">
+						<p className="text-sm font-semibold text-slate-950">{title}</p>
+						<span className={`rounded-md border px-2 py-0.5 text-xs font-medium ${tone}`}>
+							{label}
+						</span>
+					</div>
+					<p className="mt-1 max-w-3xl text-sm leading-5 text-slate-600">{description}</p>
+				</div>
+			</div>
+			{children ? <div className="flex shrink-0 flex-wrap gap-2 md:justify-end">{children}</div> : null}
+		</div>
+	);
+}
+
+function DeviceConsolePage({
+	device,
+	isLoading,
+	onBack,
+	onEdit,
+	onEvents,
+	onReviewSync,
+	onDeviceUsers,
+}: {
+	device?: Device;
+	isLoading: boolean;
+	onBack: () => void;
+	onEdit: (device: Device) => void;
+	onEvents: (device: Device) => void;
+	onReviewSync: (device?: Device) => void;
+	onDeviceUsers: (device?: Device) => void;
+}) {
+	const deviceId = device?.id;
+	const hikvision = isHikvisionDevice(device);
+	const { data: health, refetch: refetchHealth, isFetching: isCheckingHealth } =
+		useDeviceHealth(deviceId, Boolean(deviceId));
+	const { data: syncPreview, refetch: refetchPreview, isFetching: isCheckingPreview } =
+		useDeviceSyncPreview(
+			{ deviceId: deviceId || undefined, source: hikvision ? "HIKVISION_CALLBACK" : "all" },
+			Boolean(deviceId),
+		);
+	const { data: usersData, isLoading: isLoadingUsers } = useDeviceUsers(
+		deviceId,
+		{ page: 1, limit: 1 },
+		Boolean(deviceId),
+	);
+	const { data: runsData } = useDeviceSyncRuns(deviceId, { limit: 5 }, Boolean(deviceId));
+	const syncLogsMutation = useTriggerHikvisionAttendanceImport();
+	const syncUsersMutation = useSyncDeviceUsers();
+	const resetEventsMutation = useResetDeviceEvents();
+	const previewRow = syncPreview?.devices?.[0];
+	const latestRun = runsData?.syncRuns?.[0];
+	const checks = health?.checks;
+	const baseUrl = health?.device?.baseUrl || `${device?.protocol || "http"}://${device?.address || "-"}:${device?.port || "-"}`;
+	const sdkPort = getDeviceConfigValue(device, "sdkPort");
+	const userCount =
+		previewRow?.vendorUserCount ??
+		usersData?.summary?.total ??
+		(isLoadingUsers ? "Loading..." : null);
+	const eventCount = previewRow?.vendorEventCount ?? previewRow?.totalEvents ?? null;
+	const savedCount = previewRow?.hrisSavedCount ?? previewRow?.syncedEvents ?? null;
+	const skippedCount = previewRow?.knownSkippedEventCount ?? null;
+	const missingCount = previewRow?.missingEventCount ?? previewRow?.needsSyncEvents ?? null;
+
+	if (isLoading) {
+		return (
+			<div className="space-y-4">
+				<Button variant="ghost" onClick={onBack} className="h-9 px-2">
+					<ArrowLeft className="mr-2 h-4 w-4" />
+					Back
+				</Button>
+				<div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+					Loading device console...
+				</div>
+			</div>
+		);
+	}
+
+	if (!device) {
+		return (
+			<div className="space-y-4">
+				<Button variant="ghost" onClick={onBack} className="h-9 px-2">
+					<ArrowLeft className="mr-2 h-4 w-4" />
+					Back
+				</Button>
+				<div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+					Device not found.
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="space-y-5">
+			<div className="flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-start lg:justify-between">
+				<div className="min-w-0">
+					<Button variant="ghost" onClick={onBack} className="mb-2 h-9 px-2">
+						<ArrowLeft className="mr-2 h-4 w-4" />
+						Back to devices
+					</Button>
+					<div className="flex flex-wrap items-center gap-2">
+						<h1 className="truncate text-2xl font-semibold text-slate-950">{device.name}</h1>
+						<AdminConfigSourceChip>{device.protocol.toUpperCase()}</AdminConfigSourceChip>
+						{hikvision ? <Badge variant="secondary">Hikvision</Badge> : null}
+					</div>
+					<p className="mt-1 max-w-3xl text-sm text-slate-600">
+						Device truth, reachable endpoints, import counts, and operator actions for this terminal.
+					</p>
+				</div>
+				<div className="flex flex-wrap gap-2">
+					<Button variant="outline" onClick={() => onEvents(device)} className="h-9 px-3 text-xs">
+						<Activity className="mr-2 h-4 w-4" />
+						Events
+					</Button>
+					<Button variant="outline" onClick={() => onReviewSync(device)} className="h-9 px-3 text-xs">
+						<RefreshCw className="mr-2 h-4 w-4" />
+						Sync Center
+					</Button>
+					<Button onClick={() => onEdit(device)} className="h-9 px-3 text-xs">
+						<Edit className="mr-2 h-4 w-4" />
+						Edit
+					</Button>
+				</div>
+			</div>
+
+			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+				<DeviceFact label="HTTP endpoint" value={baseUrl} mono />
+				<DeviceFact label="SDK endpoint" value={sdkPort === "-" ? "-" : `${device.address}:${sdkPort}`} mono />
+				<DeviceFact label="Device users" value={userCount} />
+				<DeviceFact label="Device logs" value={eventCount ?? "Unavailable"} />
+			</div>
+
+			<div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+				<section className="rounded-xl border border-slate-200 bg-white">
+					<div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+						<div>
+							<h2 className="text-sm font-semibold text-slate-950">Runtime Truth</h2>
+							<p className="text-xs text-slate-500">What HRIS can currently read from this device.</p>
+						</div>
+						<Button
+							type="button"
+							variant="outline"
+							className="h-8 px-2 text-xs"
+							onClick={() => {
+								refetchHealth();
+								refetchPreview();
+							}}
+							disabled={isCheckingHealth || isCheckingPreview}>
+							<RefreshCw className="mr-2 h-3.5 w-3.5" />
+							Refresh
+						</Button>
+					</div>
+					<div className="divide-y divide-slate-200">
+						<div className="grid gap-3 px-4 py-4 md:grid-cols-3">
+							<DeviceFact label="Saved HRIS events" value={savedCount} />
+							<DeviceFact label="Known skipped" value={skippedCount} />
+							<DeviceFact label="Missing/importable" value={missingCount} />
+						</div>
+						<div className="grid gap-3 px-4 py-4 md:grid-cols-2">
+							<HealthCheckRow
+								label="Network port"
+								ok={Boolean(checks?.network?.ok)}
+								value={checks?.network?.status || "unchecked"}
+								detail={checks?.network ? `${checks.network.host}:${checks.network.port}` : undefined}
+							/>
+							<HealthCheckRow
+								label="Device API"
+								ok={Boolean(checks?.deviceApi?.ok)}
+								value={checks?.deviceApi?.status || "unchecked"}
+								detail={checks?.deviceApi?.error}
+							/>
+							<HealthCheckRow
+								label="Latest sync run"
+								ok={latestRun?.status !== "FAILED"}
+								value={latestRun?.status || "none"}
+								detail={latestRun?.completedAt ? new Date(latestRun.completedAt).toLocaleString() : latestRun?.startedAt ? new Date(latestRun.startedAt).toLocaleString() : undefined}
+							/>
+							<HealthCheckRow
+								label="Configuration"
+								ok
+								value={device.config ? "present" : "basic"}
+								detail={getDeviceConfigValue(device, "source")}
+							/>
+						</div>
+					</div>
+				</section>
+
+				<section className="rounded-xl border border-slate-200 bg-white">
+					<div className="border-b border-slate-200 px-4 py-3">
+						<h2 className="text-sm font-semibold text-slate-950">Hikvision Capabilities</h2>
+						<p className="text-xs text-slate-500">Read paths are proven; device-destructive writes need a backend contract.</p>
+					</div>
+					<div className="divide-y divide-slate-200 px-4 py-1 text-sm">
+						<div className="flex items-center justify-between gap-3 py-3">
+							<span className="text-slate-600">System time</span>
+							<Badge variant={checks?.deviceApi?.ok ? "success" : "secondary"}>
+								{checks?.deviceApi?.ok ? "Readable" : "Unchecked"}
+							</Badge>
+						</div>
+						<div className="flex items-center justify-between gap-3 py-3">
+							<span className="text-slate-600">Users</span>
+							<Badge variant={userCount ? "success" : "secondary"}>
+								{userCount ? "Readable" : "Unknown"}
+							</Badge>
+						</div>
+						<div className="flex items-center justify-between gap-3 py-3">
+							<span className="text-slate-600">ACS event history</span>
+							<Badge variant={eventCount ? "success" : "secondary"}>
+								{eventCount ? "Readable" : "Unknown"}
+							</Badge>
+						</div>
+						<div className="flex items-center justify-between gap-3 py-3">
+							<span className="text-slate-600">Factory reset</span>
+							<Badge variant="secondary">Not wired</Badge>
+						</div>
+					</div>
+				</section>
+			</div>
+
+			<section className="rounded-xl border border-slate-200 bg-white">
+				<div className="border-b border-slate-200 px-4 py-3">
+					<h2 className="text-sm font-semibold text-slate-950">Manual Operations</h2>
+					<p className="text-xs text-slate-500">Actions stay narrow: HRIS imports are active; physical wipe/reset actions are blocked until explicitly implemented.</p>
+				</div>
+				<CapabilityRow
+					icon={<Database className="h-4 w-4" />}
+					title="Sync attendance logs into HRIS"
+					description="Pull ACS event history, classify skipped rows, and save importable attendance events through the existing sync job."
+					state={hikvision ? "ready" : "blocked"}>
+					<Button
+						type="button"
+						size="sm"
+						disabled={!hikvision || syncLogsMutation.isPending}
+						onClick={() => syncLogsMutation.mutate({ deviceId: device.id })}>
+						{syncLogsMutation.isPending ? "Starting..." : "Sync logs"}
+					</Button>
+				</CapabilityRow>
+				<CapabilityRow
+					icon={<UsersRound className="h-4 w-4" />}
+					title="Sync device users"
+					description="Read enrolled users from the terminal and refresh HRIS device-user matching without deleting device records."
+					state={hikvision ? "ready" : "blocked"}>
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						disabled={!hikvision || syncUsersMutation.isPending}
+						onClick={() => syncUsersMutation.mutate(device.id)}>
+						{syncUsersMutation.isPending ? "Syncing..." : "Sync users"}
+					</Button>
+					<Button type="button" size="sm" variant="outline" onClick={() => onDeviceUsers(device)}>
+						Review users
+					</Button>
+				</CapabilityRow>
+				<CapabilityRow
+					icon={<TerminalSquare className="h-4 w-4" />}
+					title="Preview HRIS saved-event reset"
+					description="Dry-run the local HRIS event reset scope. This does not erase anything from the physical Hikvision device."
+					state="guarded">
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						disabled={resetEventsMutation.isPending}
+						onClick={() =>
+							resetEventsMutation.mutate({
+								deviceId: device.id,
+								source: "HIKVISION_CALLBACK",
+								execute: false,
+							})
+						}>
+						Preview reset
+					</Button>
+				</CapabilityRow>
+				<CapabilityRow
+					icon={<ShieldAlert className="h-4 w-4" />}
+					title="Factory reset / erase device logs / erase enrolled users"
+					description="Not exposed yet. These are physical-device destructive operations and need a server endpoint, explicit typed confirmation, audit logging, and a verified backup/recovery path."
+					state="blocked">
+					<Button type="button" size="sm" variant="outline" disabled>
+						Requires backend
+					</Button>
+				</CapabilityRow>
+			</section>
+
+			<section className="rounded-xl border border-slate-200 bg-white">
+				<div className="border-b border-slate-200 px-4 py-3">
+					<h2 className="text-sm font-semibold text-slate-950">Endpoint Map</h2>
+				</div>
+				<div className="grid gap-3 px-4 py-4 md:grid-cols-2 xl:grid-cols-4">
+					<DeviceFact label="Address" value={device.address} mono />
+					<DeviceFact label="HTTP port" value={device.port} />
+					<DeviceFact label="SDK port" value={sdkPort} />
+					<DeviceFact label="Webhook" value={getDeviceConfigValue(device, "webhookPath")} mono />
+				</div>
+				<div className="flex flex-wrap gap-2 border-t border-slate-200 px-4 py-3">
+					<Button type="button" variant="outline" size="sm" onClick={() => onEvents(device)}>
+						<ExternalLink className="mr-2 h-4 w-4" />
+						Open saved events
+					</Button>
+					<Button type="button" variant="outline" size="sm" onClick={() => onReviewSync(device)}>
+						<Clock3 className="mr-2 h-4 w-4" />
+						Open sync history
+					</Button>
+					<Button type="button" variant="outline" size="sm" onClick={() => refetchHealth()}>
+						<Network className="mr-2 h-4 w-4" />
+						Check network
+					</Button>
+				</div>
+			</section>
+		</div>
+	);
+}
+
 export default function DevicesManagePage() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const navigate = useNavigate();
@@ -206,7 +659,10 @@ export default function DevicesManagePage() {
 		query: searchQuery,
 		count: true,
 	});
-	const items = (devicesData as any)?.devices || [];
+	const legacyDevicesData = devicesData as unknown as LegacyDevicesResponse | undefined;
+	const items = Array.isArray(devicesData?.data)
+		? devicesData.data
+		: devicesData?.data?.devices || legacyDevicesData?.devices || [];
 
 	// Deep link URL params
 	const action = searchParams.get("action");
@@ -231,7 +687,7 @@ export default function DevicesManagePage() {
 			address: "",
 			port: 80,
 			protocol: "http",
-			config: {},
+			config: getDefaultDeviceConfig(),
 			access: {
 				username: "",
 				password: "",
@@ -240,17 +696,37 @@ export default function DevicesManagePage() {
 	});
 
 	const watchedProtocol = watch("protocol");
+	const watchedVendor = String((watch("config") as DeviceConfigRecord | undefined)?.vendor || "Hikvision");
+
+	const applyVendorPreset = (vendor: string) => {
+		const currentConfig = getDeviceConfigRecord(watch("config"));
+		const preset = buildDeviceConfigPreset(vendor);
+		setValue(
+			"config",
+			{
+				...currentConfig,
+				...preset,
+				model: currentConfig.model || "",
+				hikvisionRuntimeNote: currentConfig.hikvisionRuntimeNote || "",
+			},
+			{ shouldDirty: true, shouldValidate: true },
+		);
+	};
 
 	// Handle deep linking: populate forms
 	useEffect(() => {
 		// Populate form when editing and data is loaded
 		if (action === "edit" && !isLoadingDevice && activeDevice) {
+			const activeConfig = getDeviceConfigRecord(activeDevice.config);
 			reset({
 				name: activeDevice.name,
 				address: activeDevice.address,
 				port: activeDevice.port,
 				protocol: activeDevice.protocol,
-				config: activeDevice.config || {},
+				config: {
+					...buildDeviceConfigPreset(String(activeConfig.vendor || "")),
+					...activeConfig,
+				},
 				access: activeDevice.access || {
 					username: "",
 					password: "",
@@ -266,14 +742,10 @@ export default function DevicesManagePage() {
 			width: "200px",
 			required: true,
 			priority: "critical",
-			render: (value, item) => (
+			render: (value) => (
 				<AdminConfigPrimaryCell
 					primary={value || "Unnamed device"}
-					secondary={
-						<AdminConfigSourceChip>
-						{`${item.address || "-"}:${item.port || "-"}`}
-						</AdminConfigSourceChip>
-					}
+					secondary={null}
 					title={String(value || "")}
 				/>
 			),
@@ -285,6 +757,26 @@ export default function DevicesManagePage() {
 			required: true,
 			priority: "high",
 			render: (value) => (value ? <AdminConfigCodeChip>{value}</AdminConfigCodeChip> : <AdminConfigMutedDash />),
+		},
+		{
+			key: "config",
+			label: "Vendor",
+			width: "150px",
+			priority: "high",
+			render: (value) => {
+				const config = getDeviceConfigRecord(value);
+				const vendor = String(config.vendor || config.type || "");
+				const model = String(config.model || config.source || "");
+				return vendor ? (
+					<AdminConfigPrimaryCell
+						primary={vendor}
+						secondary={model || null}
+						title={model || vendor}
+					/>
+				) : (
+					<AdminConfigMutedDash />
+				);
+			},
 		},
 		{
 			key: "port",
@@ -320,7 +812,7 @@ export default function DevicesManagePage() {
 			address: "",
 			port: 80,
 			protocol: "http",
-			config: {},
+			config: getDefaultDeviceConfig(),
 			access: {
 				username: "",
 				password: "",
@@ -343,6 +835,7 @@ export default function DevicesManagePage() {
 	const onSubmit = (data: DeviceFormData) => {
 		// Check if we're editing by looking at search params
 		const isEditing = action === "edit";
+		const normalizedConfig = normalizeDeviceConfigForSubmit(data.config);
 
 		if (isEditing && activeDevice) {
 			const updatePayload: UpdateDeviceRequest = {
@@ -350,7 +843,7 @@ export default function DevicesManagePage() {
 				address: data.address,
 				port: data.port,
 				protocol: data.protocol,
-				config: data.config,
+				config: normalizedConfig,
 				access: data.access,
 			};
 
@@ -372,7 +865,7 @@ export default function DevicesManagePage() {
 				address: data.address,
 				port: data.port,
 				protocol: data.protocol,
-				config: data.config,
+				config: normalizedConfig,
 				access: data.access,
 			};
 
@@ -414,9 +907,24 @@ export default function DevicesManagePage() {
 		});
 	};
 
-	const openEnrollment = () => {
+	const openReviewSync = (device?: Device) => {
 		updateSearchParams((next) => {
-			next.set("action", "enroll-users");
+			next.set("action", "sync-review");
+			if (device?.id) next.set("deviceId", device.id);
+			else next.delete("deviceId");
+			next.set("syncPanel", "overview");
+			next.delete("id");
+			next.delete("enrollmentAction");
+			next.delete("employeeId");
+		});
+	};
+
+	const openDeviceUsers = (device?: Device) => {
+		updateSearchParams((next) => {
+			next.set("action", "device-users");
+			if (device?.id) next.set("deviceId", device.id);
+			else next.delete("deviceId");
+			next.set("syncPanel", "users");
 			next.delete("id");
 			next.delete("enrollmentAction");
 			next.delete("employeeId");
@@ -431,6 +939,28 @@ export default function DevicesManagePage() {
 		navigate("/admin/configuration/devices/events?view=saved");
 	};
 
+	// Check if modal/page should show loading state for deep links
+	const isDeepLinkLoading = !!activeDeviceId && isLoadingDevice;
+
+	if (action === "view") {
+		return (
+			<DeviceConsolePage
+				device={activeDevice}
+				isLoading={isDeepLinkLoading}
+				onBack={() =>
+					updateSearchParams((next) => {
+						next.delete("action");
+						next.delete("id");
+					})
+				}
+				onEdit={openEdit}
+				onEvents={openEvents}
+				onReviewSync={openReviewSync}
+				onDeviceUsers={openDeviceUsers}
+			/>
+		);
+	}
+
 	const renderActions = (item: Device) => (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
@@ -440,13 +970,19 @@ export default function DevicesManagePage() {
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end" className="w-48">
 				<DropdownMenuItem onClick={() => handleView(item)}>
-					<Eye className="h-4 w-4 mr-2" /> View Details
+					<TerminalSquare className="h-4 w-4 mr-2" /> Device Console
+				</DropdownMenuItem>
+				<DropdownMenuItem onClick={() => openReviewSync(item)}>
+					<RefreshCw className="h-4 w-4 mr-2" /> Sync Center
+				</DropdownMenuItem>
+				<DropdownMenuItem onClick={() => openDeviceUsers(item)}>
+					<UsersRound className="h-4 w-4 mr-2" /> View Device Users
+				</DropdownMenuItem>
+				<DropdownMenuItem onClick={() => openEvents(item)}>
+					<Activity className="h-4 w-4 mr-2" /> View Device Events
 				</DropdownMenuItem>
 				<DropdownMenuItem onClick={() => openEdit(item)}>
 					<Edit className="h-4 w-4 mr-2" /> Edit
-				</DropdownMenuItem>
-				<DropdownMenuItem onClick={() => openEvents(item)}>
-					<Activity className="h-4 w-4 mr-2" /> View Events
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
 				<DropdownMenuItem onClick={() => handleDelete(item)} className="text-red-600">
@@ -455,9 +991,6 @@ export default function DevicesManagePage() {
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);
-
-	// Check if modal should show loading state for deep links
-	const isDeepLinkLoading = !!activeDeviceId && isLoadingDevice;
 
 	// Server-side search handler
 	const handleSearch = (query: string) => {
@@ -497,10 +1030,10 @@ export default function DevicesManagePage() {
 						</Button>
 						<Button
 							variant="outline"
-							onClick={openEnrollment}
+							onClick={() => openReviewSync()}
 							className="h-9 px-3 text-xs">
-							<UserPlus className="h-4 w-4 mr-2" />
-							Enroll Users
+							<RefreshCw className="h-4 w-4 mr-2" />
+							Sync Center
 						</Button>
 					</div>
 				}
@@ -513,7 +1046,7 @@ export default function DevicesManagePage() {
 				searchPlaceholder="Search devices..."
 				itemsPerPage={limitParam}
 				currentPage={pageParam}
-				totalItems={(devicesData as any)?.pagination?.total}
+				totalItems={devicesData?.pagination?.total ?? legacyDevicesData?.pagination?.total}
 				onSearch={handleSearch}
 				onPageChange={handlePageChange}
 				searchValue={searchQuery || ""}
@@ -549,12 +1082,12 @@ export default function DevicesManagePage() {
 				{isDeepLinkLoading && action === "edit" ? (
 					<div className="py-8 text-center text-gray-500">Loading device...</div>
 				) : (
-					<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-						<div className="grid grid-cols-2 gap-4">
+					<form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+						<div className="grid gap-4 md:grid-cols-2">
 							<div data-field-path="name">
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Name *
-								</label>
+								</div>
 								<Input
 									placeholder="e.g., Main Entrance Device"
 									aria-invalid={false}
@@ -565,13 +1098,13 @@ export default function DevicesManagePage() {
 								/>
 							</div>
 							<div data-field-path="protocol">
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Protocol *
-								</label>
+								</div>
 								<Select
 									options={protocolOptions}
 									value={watchedProtocol || "http"}
-									onChange={(v) => setValue("protocol", (v || "http") as any)}
+									onChange={(v) => setValue("protocol", (v || "http") as DeviceFormData["protocol"])}
 									placeholder="Select Protocol"
 								/>
 								<ConstraintTokenRow
@@ -580,11 +1113,11 @@ export default function DevicesManagePage() {
 							</div>
 						</div>
 
-						<div className="grid grid-cols-2 gap-4">
+						<div className="grid gap-4 md:grid-cols-2">
 							<div data-field-path="address">
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Address *
-								</label>
+								</div>
 								<Input
 									placeholder="e.g., 192.168.1.100"
 									aria-invalid={false}
@@ -595,9 +1128,9 @@ export default function DevicesManagePage() {
 								/>
 							</div>
 							<div data-field-path="port">
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Port *
-								</label>
+								</div>
 								<Input
 									type="number"
 									placeholder="e.g., 80"
@@ -610,11 +1143,135 @@ export default function DevicesManagePage() {
 							</div>
 						</div>
 
-						<div className="grid grid-cols-2 gap-4">
+						<div className="rounded-md border border-slate-200 bg-slate-50/60 p-3">
+							<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+								<div>
+									<p className="text-sm font-semibold text-slate-950">Vendor and runtime routing</p>
+									<p className="text-xs text-slate-500">
+										How HRIS reaches this terminal, which adapter handles it, and where device callbacks arrive.
+									</p>
+								</div>
+								<AdminConfigSourceChip>{watchedVendor || "Unclassified"}</AdminConfigSourceChip>
+							</div>
+							<div className="grid gap-4 md:grid-cols-2">
+								<div data-field-path="config.vendor">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										Vendor *
+									</div>
+									<Select
+										options={deviceVendorOptions}
+										value={watchedVendor}
+										onChange={(value) => applyVendorPreset(value || "Other")}
+										placeholder="Select vendor"
+									/>
+									<ConstraintTokenRow
+										tokens={[{ label: "Config vendor", tone: "default" }]}
+									/>
+								</div>
+								<div data-field-path="config.model">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										Model / device type
+									</div>
+									<Input
+										placeholder="e.g., DS-K1T341CMFW"
+										{...register("config.model", {
+											setValueAs: (value) => value || undefined,
+										})}
+									/>
+									<ConstraintTokenRow
+										tokens={[{ label: "Optional", tone: "subtle" }]}
+									/>
+								</div>
+								<div data-field-path="config.source">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										Runtime adapter *
+									</div>
+									<Input
+										placeholder="vendor/hikvision-linux"
+										{...register("config.source", {
+											setValueAs: (value) => value || undefined,
+										})}
+									/>
+									<p className="mt-1 text-xs text-slate-500">
+										Use the exact Internal adapter key expected by the HRIS runtime.
+									</p>
+									<ConstraintTokenRow
+										tokens={[{ label: "Internal adapter key", tone: "default" }]}
+									/>
+								</div>
+								<div data-field-path="config.webhookPath">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										Callback path
+									</div>
+									<Input
+										placeholder="/api/hikvision/callback"
+										{...register("config.webhookPath", {
+											setValueAs: (value) => value || undefined,
+										})}
+									/>
+									<p className="mt-1 text-xs text-slate-500">
+										HRIS API path that receives device callback or listener events.
+									</p>
+									<ConstraintTokenRow
+										tokens={[{ label: "HRIS API path", tone: "subtle" }]}
+									/>
+								</div>
+								<div data-field-path="config.sdkPort">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										SDK port
+									</div>
+									<Input
+										type="number"
+										placeholder="8000"
+										{...register("config.sdkPort", {
+											valueAsNumber: true,
+										})}
+									/>
+									<ConstraintTokenRow
+										tokens={[{ label: "Vendor SDK", tone: "subtle" }]}
+									/>
+								</div>
+								<div data-field-path="config.sdkProtocol">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										SDK protocol
+									</div>
+									<Select
+										options={sdkProtocolOptions}
+										value={String((watch("config") as DeviceConfigRecord | undefined)?.sdkProtocol || "tcp")}
+										onChange={(value) =>
+											setValue("config.sdkProtocol", value || "tcp", {
+												shouldDirty: true,
+												shouldValidate: true,
+											})
+										}
+										placeholder="SDK protocol"
+									/>
+									<ConstraintTokenRow
+										tokens={[{ label: "Usually TCP", tone: "subtle" }]}
+									/>
+								</div>
+								<div className="md:col-span-2" data-field-path="config.hikvisionRuntimeNote">
+									<div className="mb-1 block text-sm font-medium text-gray-700">
+										Runtime note / metadata
+									</div>
+									<Input
+										placeholder="Optional evidence or routing note"
+										{...register("config.hikvisionRuntimeNote", {
+											setValueAs: (value) => value || undefined,
+										})}
+									/>
+									<ConstraintTokenRow
+										tokens={[{ label: "Preserved in config", tone: "subtle" }]}
+									/>
+								</div>
+							</div>
+						</div>
+
+						<div className="grid gap-4 md:grid-cols-2">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Username (optional)
-								</label>
+								</div>
 								<Input
 									placeholder="Device username"
 									{...register("access.username", {
@@ -623,9 +1280,9 @@ export default function DevicesManagePage() {
 								/>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<div className="block text-sm font-medium text-gray-700 mb-1">
 									Password (optional)
-								</label>
+								</div>
 								<Input
 									type="password"
 									placeholder="Device password"
@@ -679,17 +1336,17 @@ export default function DevicesManagePage() {
 					<div className="space-y-4">
 						<div className="grid grid-cols-2 gap-4">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<p className="block text-sm font-medium text-gray-700 mb-1">
 									Name
-								</label>
+								</p>
 								<div className="p-3 bg-gray-50 rounded-md border">
 									{activeDevice.name}
 								</div>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<p className="block text-sm font-medium text-gray-700 mb-1">
 									Protocol
-								</label>
+								</p>
 								<div className="p-3 bg-gray-50 rounded-md border">
 									<Badge variant="secondary">
 										{activeDevice.protocol.toUpperCase()}
@@ -699,17 +1356,17 @@ export default function DevicesManagePage() {
 						</div>
 						<div className="grid grid-cols-2 gap-4">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<p className="block text-sm font-medium text-gray-700 mb-1">
 									Address
-								</label>
+								</p>
 								<div className="p-3 bg-gray-50 rounded-md border font-mono">
 									{activeDevice.address}
 								</div>
 							</div>
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-1">
+								<p className="block text-sm font-medium text-gray-700 mb-1">
 									Port
-								</label>
+								</p>
 								<div className="p-3 bg-gray-50 rounded-md border">
 									{activeDevice.port}
 								</div>
@@ -718,17 +1375,17 @@ export default function DevicesManagePage() {
 						{activeDevice.access && (
 							<div className="grid grid-cols-2 gap-4">
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">
+									<p className="block text-sm font-medium text-gray-700 mb-1">
 										Username
-									</label>
+									</p>
 									<div className="p-3 bg-gray-50 rounded-md border">
 										{activeDevice.access.username || "-"}
 									</div>
 								</div>
 								<div>
-									<label className="block text-sm font-medium text-gray-700 mb-1">
+									<p className="block text-sm font-medium text-gray-700 mb-1">
 										Password
-									</label>
+									</p>
 									<div className="p-3 bg-gray-50 rounded-md border">
 										{activeDevice.access.password ? "********" : "-"}
 									</div>
@@ -756,20 +1413,21 @@ export default function DevicesManagePage() {
 			</Modal>
 
 			<Modal
-				open={action === "enroll-users"}
+				open={action === "sync-review" || action === "device-users"}
 				onOpenChange={(open) => {
 					if (!open) {
 						updateSearchParams((next) => {
 							next.delete("action");
 							next.delete("id");
+							next.delete("syncPanel");
 							next.delete("enrollmentAction");
 							next.delete("employeeId");
 						});
 					}
 				}}
-				title="Enroll Users"
+				title="Sync Center"
 				className={HR_MODAL_WIDE_CLASS}>
-				<DeviceEnrollmentPanel embedded />
+				<DeviceEnrollmentPanel embedded mode={action === "device-users" ? "device-users" : "sync-review"} />
 			</Modal>
 
 			{/* Remove Confirmation Modal */}

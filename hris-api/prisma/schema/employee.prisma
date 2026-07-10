@@ -176,6 +176,7 @@ model Employee {
 
   device   Device? @relation(fields: [deviceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   deviceId String? @db.ObjectId
+  deviceUsers DeviceUser[]
 
   attendances                        Attendance[]
   attendanceObligations              AttendanceObligation[]

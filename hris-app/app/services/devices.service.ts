@@ -28,12 +28,45 @@ export type DeviceEventStatus =
 	| "FAILED";
 
 export type DeviceEventSource = "HIKVISION_CALLBACK" | "EN_HCNETSDK_ALARM" | "ZKTECO_EVENT";
+export type DeviceEventCategory =
+	| "ATTENDANCE"
+	| "ENROLLMENT"
+	| "USER_MANAGEMENT"
+	| "ACCESS_CONTROL"
+	| "DEVICE_HEALTH"
+	| "RUNTIME"
+	| "UNKNOWN_VENDOR";
+export type DeviceEventAction =
+	| "TAP"
+	| "FINGERPRINT_ENROLLED"
+	| "FINGERPRINT_UPDATED"
+	| "FINGERPRINT_DELETED"
+	| "CARD_ENROLLED"
+	| "CARD_UPDATED"
+	| "CARD_DELETED"
+	| "USER_CREATED"
+	| "USER_UPDATED"
+	| "USER_DELETED"
+	| "TAP_REJECTED"
+	| "SYNC_IMPORTED"
+	| "LISTENER_RECEIVED"
+	| "UNKNOWN";
+export type DeviceEventConfidence = "PROVEN" | "SUPPORTED" | "INFERRED" | "UNKNOWN";
 
 export interface DeviceEvent {
 	id: string;
 	organizationId: string;
 	deviceId: string;
 	device?: Pick<Device, "id" | "name" | "address" | "port" | "protocol">;
+	deviceUserId?: string | null;
+	deviceUser?: {
+		id: string;
+		vendorUserId: string;
+		employeeNo?: string | null;
+		displayName?: string | null;
+		status: DeviceUserStatus;
+		employeeId?: string | null;
+	} | null;
 	employee?: {
 		id: string;
 		employeeId: string;
@@ -47,6 +80,10 @@ export interface DeviceEvent {
 	employeeNo?: string | null;
 	source: DeviceEventSource;
 	status: DeviceEventStatus;
+	eventCategory: DeviceEventCategory | string;
+	eventAction: DeviceEventAction | string;
+	eventLabel: string;
+	eventConfidence: DeviceEventConfidence | string;
 	eventType?: string | null;
 	major?: string | null;
 	minor?: string | null;
@@ -55,12 +92,25 @@ export interface DeviceEvent {
 	dedupeKey: string;
 	payload?: any;
 	errorMessage?: string | null;
+	taxonomy?: {
+		eventCategory: string;
+		eventAction: string;
+		eventLabel: string;
+		eventConfidence?: DeviceEventConfidence | string;
+		processingLabel: string;
+		transportLabel: string;
+		capabilityConfidence: "proven" | "supported" | "inferred" | "unknown" | string;
+	};
 }
 
 export interface DeviceEventsResponse {
 	events: DeviceEvent[];
 	summary: {
 		total: number;
+		byCategory: Partial<Record<DeviceEventCategory | string, number>>;
+		byAction: Partial<Record<DeviceEventAction | string, number>>;
+		byProcessingResult: Partial<Record<DeviceEventStatus | string, number>>;
+		byRuntimePath: Partial<Record<DeviceEventSource | string, number>>;
 		byStatus: Partial<Record<DeviceEventStatus, number>>;
 		bySource: Partial<Record<DeviceEventSource, number>>;
 	};
@@ -155,9 +205,15 @@ export interface DeviceSyncPreviewRow {
 	hrisSavedCount?: number;
 	vendorEventCount?: number | null;
 	vendorUserCount?: number | null;
+	knownSkippedEventCount?: number;
+	totalUnsavedEventCount?: number | null;
+	importableIfSkipMissingEmployeeNo?: number | null;
+	importableIfSaveMissingEmployeeNo?: number | null;
+	failedEventCount?: number;
+	importableSavedCount?: number;
 	missingEventCount?: number | null;
 	canStartSync?: boolean;
-	syncAction?: "zkteco-bridge-sync" | string | null;
+	syncAction?: "zkteco-bridge-sync" | "hikvision-import" | string | null;
 	status: "synced" | "needs_sync" | "source_total_unavailable" | string;
 	lastSourceEventAt?: string | null;
 	error?: string | null;
@@ -176,6 +232,136 @@ export interface DeviceSyncPreviewResponse {
 		error?: string | null;
 	} | null;
 	devices: DeviceSyncPreviewRow[];
+}
+
+export interface DeviceSyncRun {
+	id: string;
+	organizationId: string;
+	deviceId: string;
+	runType: "DEVICE_USERS" | "DEVICE_LOGS" | string;
+	status: "PROCESSING" | "COMPLETED" | "FAILED" | string;
+	source?: DeviceEventSource | string | null;
+	totalSourceRecords: number;
+	importableRecords: number;
+	savedRecords: number;
+	skippedRecords: number;
+	failedRecords: number;
+	missingRecords: number;
+	skipSummary?: Record<string, unknown> | null;
+	failureSummary?: Record<string, unknown> | null;
+	rawSummary?: Record<string, unknown> | null;
+	startedAt: string;
+	completedAt?: string | null;
+	createdAt?: string;
+	updatedAt?: string;
+}
+
+export interface DeviceSyncRunsResponse {
+	syncRuns: DeviceSyncRun[];
+}
+
+export interface DeviceImportJobProgress {
+	jobId: string;
+	status: "processing" | "completed" | "failed" | "cancelled";
+	deviceId: string;
+	deviceName: string;
+	total: number;
+	sourceTotal?: number | null;
+	targetImportCount?: number | null;
+	scanLimit?: number | null;
+	processed: number;
+	imported: number;
+	skipped: number;
+	alreadySaved?: number;
+	knownSkipped?: number;
+	skipMissingEmployeeNo?: boolean;
+	cancelRequested?: boolean;
+	cancelRequestedAt?: string;
+	failed: number;
+	message: string;
+	errors?: Array<{ row: number; error: string }>;
+	startedAt: string;
+	completedAt?: string;
+}
+
+export interface DeviceEventsResetScope {
+	deviceId?: string;
+	source?: string;
+	status?: string;
+	from?: string;
+	to?: string;
+	dateField?: "eventTime" | "receivedAt";
+	includeLinkedAttendance?: boolean;
+	execute?: boolean;
+}
+
+export interface DeviceEventsResetResponse {
+	mode: "preview" | "executed";
+	scope: {
+		organizationId: string;
+		deviceId: string;
+		source: string;
+		status: string;
+		from: string | null;
+		to: string | null;
+		dateField: "eventTime" | "receivedAt";
+	};
+	counts?: {
+		devices: number;
+		deviceEvents: number;
+		linkedAttendance: number;
+		importJobs: number;
+	};
+	countsBefore?: {
+		devices: number;
+		deviceEvents: number;
+		linkedAttendance: number;
+		importJobs: number;
+	};
+	countsAfter?: {
+		deviceEvents: number;
+		linkedAttendance: number;
+	};
+	deleted?: {
+		deviceEvents: number;
+		linkedAttendance: number;
+	};
+	backupDir?: string;
+	affectedModels?: string[];
+}
+
+export type HikvisionListenerAction = "start" | "stop" | "restart";
+
+export interface HikvisionListenerStatus {
+	service: string;
+	vm: {
+		host: string;
+		user: string;
+	};
+	running: boolean;
+	status: "running" | "stopped" | "inactive" | "failed" | "unknown" | string;
+	activeState: string;
+	subState: string;
+	mainPid?: number | null;
+	restarts: number;
+	execMainStatus: number;
+	result?: string | null;
+	checkedAt: string;
+	control: {
+		available: boolean;
+		actions: HikvisionListenerAction[];
+	};
+	logs?: {
+		available: boolean;
+		recent: string[];
+		error?: string | null;
+	};
+	error?: string | null;
+}
+
+export interface HikvisionListenerControlResponse {
+	action: HikvisionListenerAction;
+	status: HikvisionListenerStatus;
 }
 
 export interface CreateDeviceRequest {
@@ -225,6 +411,67 @@ export interface EnrollDeviceUserRequest {
 	userId: string;
 	deviceId: string;
 	deviceUserId: string;
+}
+
+export type DeviceUserStatus = "ACTIVE" | "UNMATCHED" | "CONFLICT" | "DISABLED";
+
+export interface DeviceUser {
+	id: string;
+	organizationId: string;
+	deviceId: string;
+	employeeId?: string | null;
+	vendorUserId: string;
+	employeeNo?: string | null;
+	displayName?: string | null;
+	userType?: string | null;
+	status: DeviceUserStatus;
+	validFrom?: string | null;
+	validTo?: string | null;
+	doorRight?: string | null;
+	accessPlan?: any;
+	rawPayload?: any;
+	lastSyncedAt?: string | null;
+	createdAt?: string;
+	updatedAt?: string;
+	device?: Pick<Device, "id" | "name" | "address" | "port" | "protocol">;
+	employee?: {
+		id: string;
+		employeeId: string;
+		deviceEmpId?: string | null;
+		fullName?: string | null;
+	} | null;
+}
+
+export interface DeviceUsersResponse {
+	deviceUsers: DeviceUser[];
+	summary: {
+		total: number;
+		active: number;
+		matched: number;
+		unmatched: number;
+		conflict: number;
+		disabled: number;
+	};
+	pagination?: {
+		total: number;
+		page: number;
+		limit: number;
+		totalPages?: number;
+	};
+}
+
+export interface DeviceUserSyncResponse {
+	run?: any;
+	summary: {
+		totalSourceRecords: number;
+		importableRecords: number;
+		created: number;
+		updated: number;
+		linked: number;
+		unmatched: number;
+		conflict: number;
+		disabled: number;
+	};
 }
 
 export interface DevicesResponse {
@@ -404,7 +651,15 @@ class DevicesService extends APIService {
 
 			return {
 				events: eventsData?.events || [],
-				summary: eventsData?.summary || { total: 0, byStatus: {}, bySource: {} },
+				summary: eventsData?.summary || {
+					total: 0,
+					byCategory: {},
+					byAction: {},
+					byProcessingResult: {},
+					byRuntimePath: {},
+					byStatus: {},
+					bySource: {},
+				},
 				pagination: eventsData?.pagination,
 			};
 		} catch (error: any) {
@@ -417,6 +672,9 @@ class DevicesService extends APIService {
 
 	async getDeviceHealth(deviceId: string): Promise<DeviceHealthResponse> {
 		try {
+			if (!String(deviceId || "").trim()) {
+				throw new Error("Select a device before checking health");
+			}
 			const response = await hrisApiClient.get<any>(`/api/device/${deviceId}/health`);
 			let healthData = response.data;
 			if (healthData && typeof healthData === "object" && "data" in healthData) {
@@ -450,6 +708,116 @@ class DevicesService extends APIService {
 			console.error("Error building device sync preview:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error building device sync preview",
+			);
+		}
+	}
+
+	async getDeviceUsers(
+		deviceId: string,
+		params: { page?: number; limit?: number; query?: string; status?: string; vendorUserId?: string; vendorUserIds?: string[] } = {},
+	): Promise<DeviceUsersResponse> {
+		try {
+			if (!String(deviceId || "").trim()) throw new Error("Device is required");
+			const query = new URLSearchParams();
+			if (params.page) query.set("page", String(params.page));
+			if (params.limit) query.set("limit", String(params.limit));
+			if (params.query) query.set("query", params.query);
+			if (params.status && params.status !== "all") query.set("status", params.status);
+			if (params.vendorUserId) query.set("vendorUserId", params.vendorUserId);
+			if (params.vendorUserIds?.length) {
+				query.set(
+					"vendorUserIds",
+					params.vendorUserIds.map((vendorUserId) => String(vendorUserId).trim()).filter(Boolean).join(","),
+				);
+			}
+			const endpoint = `/api/device/${deviceId}/users${query.toString() ? `?${query.toString()}` : ""}`;
+			const response = await hrisApiClient.get<any>(endpoint);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to load device users");
+			return data as DeviceUsersResponse;
+		} catch (error: any) {
+			console.error("Error loading device users:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error loading device users",
+			);
+		}
+	}
+
+	async syncDeviceUsers(deviceId: string): Promise<DeviceUserSyncResponse> {
+		try {
+			if (!String(deviceId || "").trim()) throw new Error("Device is required");
+			const response = await hrisApiClient.post<any>(`/api/device/${deviceId}/users/sync`, {});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to sync device users");
+			return data as DeviceUserSyncResponse;
+		} catch (error: any) {
+			console.error("Error syncing device users:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error syncing device users",
+			);
+		}
+	}
+
+	async getDeviceSyncRuns(
+		deviceId: string,
+		params: { limit?: number } = {},
+	): Promise<DeviceSyncRunsResponse> {
+		try {
+			if (!String(deviceId || "").trim()) throw new Error("Device is required");
+			const query = new URLSearchParams();
+			if (params.limit) query.set("limit", String(params.limit));
+			const endpoint = `/api/device/${deviceId}/sync-runs${query.toString() ? `?${query.toString()}` : ""}`;
+			const response = await hrisApiClient.get<any>(endpoint);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to load device sync runs");
+			return data as DeviceSyncRunsResponse;
+		} catch (error: any) {
+			console.error("Error loading device sync runs:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error loading device sync runs",
+			);
+		}
+	}
+
+	async backfillDeviceUsers(deviceId: string): Promise<any> {
+		try {
+			if (!String(deviceId || "").trim()) throw new Error("Device is required");
+			const response = await hrisApiClient.post<any>(`/api/device/${deviceId}/users/backfill`, {});
+			return response.data?.data || response.data;
+		} catch (error: any) {
+			console.error("Error backfilling device users:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error backfilling device users",
+			);
+		}
+	}
+
+	async linkDeviceUser(deviceUserId: string, employeeId: string): Promise<DeviceUser> {
+		try {
+			const response = await hrisApiClient.post<any>(`/api/device/users/${deviceUserId}/link`, {
+				employeeId,
+			});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to link device user");
+			return data as DeviceUser;
+		} catch (error: any) {
+			console.error("Error linking device user:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error linking device user",
+			);
+		}
+	}
+
+	async unlinkDeviceUser(deviceUserId: string): Promise<DeviceUser> {
+		try {
+			const response = await hrisApiClient.post<any>(`/api/device/users/${deviceUserId}/unlink`, {});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to unlink device user");
+			return data as DeviceUser;
+		} catch (error: any) {
+			console.error("Error unlinking device user:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error unlinking device user",
 			);
 		}
 	}
@@ -508,6 +876,105 @@ class DevicesService extends APIService {
 			console.error("Error starting ZKTeco sync:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error starting ZKTeco sync",
+			);
+		}
+	}
+
+	async triggerHikvisionAttendanceImport(payload: {
+		deviceId: string;
+		skipMissingEmployeeNo?: boolean;
+		targetImportCount?: number | null;
+	}): Promise<any> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/hikvision/sync", payload);
+			if (!response.data) {
+				throw new Error("Failed to start device log sync");
+			}
+			return response.data?.data || response.data;
+		} catch (error: any) {
+			console.error("Error starting Hikvision sync:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error starting device log sync",
+			);
+		}
+	}
+
+	async getDeviceImportJob(jobId: string): Promise<DeviceImportJobProgress> {
+		try {
+			if (!String(jobId || "").trim()) throw new Error("Import job is required");
+			const response = await hrisApiClient.get<any>(`/api/device/import-jobs/${jobId}`);
+			const progress = response.data?.data || response.data;
+			if (!progress) throw new Error("Import job was not found");
+			return progress as DeviceImportJobProgress;
+		} catch (error: any) {
+			console.error("Error loading device import job:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error loading import progress",
+			);
+		}
+	}
+
+	async cancelDeviceImportJob(jobId: string): Promise<DeviceImportJobProgress> {
+		try {
+			if (!String(jobId || "").trim()) throw new Error("Import job is required");
+			const response = await hrisApiClient.post<any>(`/api/device/import-jobs/${jobId}/cancel`, {});
+			const progress = response.data?.data || response.data;
+			if (!progress) throw new Error("Import job was not found");
+			return progress as DeviceImportJobProgress;
+		} catch (error: any) {
+			console.error("Error cancelling device import job:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error cancelling import job",
+			);
+		}
+	}
+
+	async resetDeviceEvents(payload: DeviceEventsResetScope): Promise<DeviceEventsResetResponse> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/events/reset", payload);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to reset saved device events");
+			return data as DeviceEventsResetResponse;
+		} catch (error: any) {
+			console.error("Error resetting device events:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error resetting saved device events",
+			);
+		}
+	}
+
+	async getHikvisionListenerStatus(): Promise<HikvisionListenerStatus> {
+		try {
+			const response = await hrisApiClient.get<any>("/api/device/hikvision/listener");
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to load Hikvision listener status");
+			return data as HikvisionListenerStatus;
+		} catch (error: any) {
+			console.error("Error loading Hikvision listener status:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error loading Hikvision listener status",
+			);
+		}
+	}
+
+	async controlHikvisionListener(
+		action: HikvisionListenerAction,
+	): Promise<HikvisionListenerControlResponse> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/hikvision/listener", {
+				action,
+			});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to control Hikvision listener");
+			return data as HikvisionListenerControlResponse;
+		} catch (error: any) {
+			console.error("Error controlling Hikvision listener:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error controlling Hikvision listener",
 			);
 		}
 	}

@@ -29,6 +29,8 @@ python3 -m venv .venv
 python -m pip install -r requirements.txt
 python -m zkteco_linux_probe --mode tcp
 python -m zkteco_linux_probe --mode handshake
+python -m zkteco_linux_probe --mode count --force-udp
+python -m zkteco_linux_probe --mode discover --discover-cidr 10.184.38.0/24 --timeout 1 --discover-workers 96
 python -m zkteco_linux_probe --mode users
 python -m zkteco_linux_probe --mode attendance
 python -m zkteco_linux_probe --mode history
@@ -38,6 +40,17 @@ python -m zkteco_linux_probe --mode capabilities
 The handshake mode connects, reads light metadata when supported, and
 disconnects. It does not clear logs, write users, restart devices, or post HRIS
 events.
+
+The count mode uses PyZK `read_sizes()` / ZKTeco `CMD_GET_FREE_SIZES` to read
+source-device summary counts without downloading every user or attendance row.
+Use `--force-udp` for the fastest proven count path on the current Project
+Truth terminals.
+
+The discover mode performs a bounded directed UDP/ZK sweep over explicitly
+supplied CIDR ranges and reports only devices that answer `read_sizes()`. It is
+read-only and intended for admin recovery/debugging when configured ZKTeco IPs
+drift. Broadcast discovery is not assumed to work across the current routed VM
+network.
 
 The `users`, `attendance`, and `history` modes read source-device user and
 stored attendance records from the terminals through PyZK. They are read-only
@@ -56,6 +69,8 @@ cd vendor/zkteco-linux
 docker build -t project-truth-zkteco-linux-trial:local .
 docker run --rm --network host project-truth-zkteco-linux-trial:local --mode tcp
 docker run --rm --network host project-truth-zkteco-linux-trial:local --mode handshake
+docker run --rm --network host project-truth-zkteco-linux-trial:local --mode count --force-udp
+docker run --rm --network host project-truth-zkteco-linux-trial:local --mode discover --discover-cidr 10.184.38.0/24 --timeout 1 --discover-workers 96
 docker run --rm --network host project-truth-zkteco-linux-trial:local --mode history
 docker run --rm --network host project-truth-zkteco-linux-trial:local --mode capabilities
 ```

@@ -43,7 +43,7 @@ describe("device event realtime helper", () => {
 			device: {
 				id: "device-1",
 				name: "Main Entrance Device",
-				address: "192.168.254.181",
+				address: "10.184.37.139",
 				port: 80,
 				protocol: "http",
 				access: { username: "admin", password: "secret" },
@@ -61,7 +61,7 @@ describe("device event realtime helper", () => {
 		expect(event?.device).to.deep.equal({
 			id: "device-1",
 			name: "Main Entrance Device",
-			address: "192.168.254.181",
+			address: "10.184.37.139",
 			port: 80,
 			protocol: "http",
 		});

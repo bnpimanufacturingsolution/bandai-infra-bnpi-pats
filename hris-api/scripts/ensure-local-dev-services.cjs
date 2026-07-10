@@ -377,6 +377,7 @@ async function main() {
 		console.log(
 			`[local-services] Datasource is ${datasource.protocol}; local Postgres bootstrap is not needed.`,
 		);
+		console.log("[local-services] Hikvision watcher is Linux/VM managed and is not started on this host.");
 		return;
 	}
 
@@ -384,12 +385,14 @@ async function main() {
 		console.log(
 			`[local-services] Postgres host is ${datasource.hostname}; assuming externally managed database.`,
 		);
+		console.log("[local-services] Hikvision watcher is Linux/VM managed and is not started on this host.");
 		return;
 	}
 
 	if (await canConnect(datasource.port, datasource.hostname)) {
 		console.log(`[local-services] Postgres is reachable at ${datasource.hostname}:${datasource.port}.`);
 		ensureLocalDatabase(datasource);
+		console.log("[local-services] Hikvision watcher is Linux/VM managed and is not started on this host.");
 		return;
 	}
 
@@ -410,6 +413,7 @@ async function main() {
 
 	console.log(`[local-services] Postgres is ready at ${datasource.hostname}:${datasource.port}.`);
 	ensureLocalDatabase(datasource);
+	console.log("[local-services] Hikvision watcher is Linux/VM managed and is not started on this host.");
 }
 
 main().catch((error) => {

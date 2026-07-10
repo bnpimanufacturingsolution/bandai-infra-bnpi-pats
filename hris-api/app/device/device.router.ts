@@ -7,8 +7,21 @@ interface IController {
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceHealth(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getHikvisionListenerStatus(req: Request, res: Response, next: NextFunction): Promise<void>;
+	controlHikvisionListener(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceSyncPreview(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceSyncRuns(req: Request, res: Response, next: NextFunction): Promise<void>;
+	resetDeviceEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
 	triggerZktecoAttendanceSync(req: Request, res: Response, next: NextFunction): Promise<void>;
+	triggerHikvisionAttendanceImport(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	cancelDeviceImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	listDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	reconcileBiometricSync(req: Request, res: Response, next: NextFunction): Promise<void>;
+	backfillDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	linkDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
+	unlinkDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -31,10 +44,24 @@ export const router = (route: Router, controller: IController): Router => {
 		}),
 		controller.getEvents,
 	);
+	routes.post("/events/reset", controller.resetDeviceEvents);
 
 	routes.get("/:id/health", controller.getDeviceHealth);
+	routes.get("/hikvision/listener", controller.getHikvisionListenerStatus);
+	routes.post("/hikvision/listener", controller.controlHikvisionListener);
+	routes.get("/:id/users", controller.listDeviceUsers);
+	routes.post("/:id/users/sync", controller.syncDeviceUsers);
+	routes.post("/:id/users/backfill", controller.backfillDeviceUsers);
+	routes.post("/biometric-sync/reconcile", controller.reconcileBiometricSync);
+	routes.get("/:id/sync-runs", controller.getDeviceSyncRuns);
+	routes.post("/users/:userId/link", controller.linkDeviceUser);
+	routes.post("/users/:userId/unlink", controller.unlinkDeviceUser);
 	routes.get("/sync-preview", controller.getDeviceSyncPreview);
+	routes.get("/import-jobs/:jobId", controller.getDeviceImportJob);
+	routes.post("/import-jobs/:jobId/cancel", controller.cancelDeviceImportJob);
 	routes.post("/zkteco/sync", controller.triggerZktecoAttendanceSync);
+	routes.post("/hikvision/sync", controller.triggerHikvisionAttendanceImport);
+	routes.post("/hikvision/import", controller.triggerHikvisionAttendanceImport);
 
 	/**
 	 * @openapi

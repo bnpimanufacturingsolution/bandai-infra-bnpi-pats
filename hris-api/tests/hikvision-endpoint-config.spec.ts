@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { buildHikvisionConfig } from "../config/hikvision.endpoint";
+import { buildHikvisionDeviceBaseUrl } from "../lib/hikvision-client";
 
 describe("Hikvision endpoint config", () => {
 	it("does not default to a device address or credentials", async () => {
@@ -23,5 +24,18 @@ describe("Hikvision endpoint config", () => {
 		expect(config.username).to.equal("operator");
 		expect(config.password).to.equal("provided-password");
 		expect(config.protocol).to.equal("http");
+	});
+
+	it("can dial a runtime proxy while preserving the physical display address", async () => {
+		const baseUrl = buildHikvisionDeviceBaseUrl({
+			address: "10.184.37.139",
+			port: 80,
+			protocol: "http",
+			config: {
+				hikvisionRuntimeBaseUrl: "http://10.184.37.250:10080",
+			},
+		});
+
+		expect(baseUrl).to.equal("http://10.184.37.250:10080");
 	});
 });

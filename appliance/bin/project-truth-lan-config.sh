@@ -13,6 +13,7 @@ gateway="${PROJECT_TRUTH_LAN_GATEWAY:-}"
 dns="${PROJECT_TRUTH_LAN_DNS:-1.1.1.1,8.8.8.8}"
 search_domains="${PROJECT_TRUTH_LAN_SEARCH_DOMAINS:-}"
 dhcp_addresses="${PROJECT_TRUTH_LAN_DHCP_ADDRESSES:-}"
+static_routes="${PROJECT_TRUTH_LAN_STATIC_ROUTES:-}"
 
 usage() {
   cat <<'USAGE'
@@ -45,6 +46,7 @@ if [ -r "$config_file" ]; then
   dns="${PROJECT_TRUTH_LAN_DNS:-$dns}"
   search_domains="${PROJECT_TRUTH_LAN_SEARCH_DOMAINS:-$search_domains}"
   dhcp_addresses="${PROJECT_TRUTH_LAN_DHCP_ADDRESSES:-$dhcp_addresses}"
+  static_routes="${PROJECT_TRUTH_LAN_STATIC_ROUTES:-$static_routes}"
   iface="${PROJECT_TRUTH_LAN_IFACE:-$iface}"
 fi
 
@@ -66,6 +68,7 @@ case "${1:-}" in
       echo "  gateway=${gateway}"
       echo "  dns=${dns}"
       echo "  search=${search_domains}"
+      echo "  static_routes=${static_routes}"
     else
       echo "  dhcp_addresses=${dhcp_addresses}"
     fi
@@ -103,6 +106,7 @@ PROJECT_TRUTH_LAN_ADDRESSES=${address}
 PROJECT_TRUTH_LAN_GATEWAY=${gateway}
 PROJECT_TRUTH_LAN_DNS=${dns}
 PROJECT_TRUTH_LAN_SEARCH_DOMAINS=${search_domains}
+PROJECT_TRUTH_LAN_STATIC_ROUTES=${static_routes}
 PROJECT_TRUTH_LAN_IFACE=${iface}
 EOF
     sudo chmod 0644 "$config_file"
@@ -154,6 +158,26 @@ ${static_address_yaml}
         - to: default
           via: ${gateway}
           on-link: true
+EOF
+  if [ -n "$static_routes" ]; then
+    while IFS= read -r route_entry; do
+      route_entry="$(printf '%s' "$route_entry" | sed 's/^ *//; s/ *$//')"
+      [ -n "$route_entry" ] || continue
+      route_to="${route_entry%@*}"
+      route_via="${route_entry#*@}"
+      if [ -z "$route_to" ] || [ "$route_to" = "$route_entry" ] || [ -z "$route_via" ]; then
+        echo "Ignoring invalid PROJECT_TRUTH_LAN_STATIC_ROUTES entry: $route_entry" >&2
+        continue
+      fi
+      sudo tee -a "$netplan_file" >/dev/null <<EOF
+        - to: ${route_to}
+          via: ${route_via}
+EOF
+    done <<EOF
+$(printf '%s' "$static_routes" | tr ',' '\n')
+EOF
+  fi
+  sudo tee -a "$netplan_file" >/dev/null <<EOF
       nameservers:
         addresses: [${dns_yaml}]
 EOF

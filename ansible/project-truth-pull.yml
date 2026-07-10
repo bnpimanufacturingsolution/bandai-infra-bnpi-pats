@@ -15,6 +15,7 @@
     project_truth_lan_gateway: "10.184.38.254"
     project_truth_lan_dns: "10.184.1.144,10.184.37.1"
     project_truth_lan_search_domains: "bhk.local"
+    project_truth_lan_static_routes: "10.184.38.0/24@10.184.37.250"
     project_truth_command_files:
       - project-truth-status
       - project-truth-progress
@@ -235,6 +236,7 @@
           PROJECT_TRUTH_LAN_GATEWAY={{ project_truth_lan_gateway }}
           PROJECT_TRUTH_LAN_DNS={{ project_truth_lan_dns }}
           PROJECT_TRUTH_LAN_SEARCH_DOMAINS={{ project_truth_lan_search_domains }}
+          PROJECT_TRUTH_LAN_STATIC_ROUTES={{ project_truth_lan_static_routes }}
 
     - name: Reconcile Project Truth LAN config
       ansible.builtin.command:
