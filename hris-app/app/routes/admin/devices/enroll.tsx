@@ -554,6 +554,21 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			refetchSyncRuns(),
 		]);
 	};
+	const goBackToDeviceUserSummary = () => {
+		updateSearchParams((next) => {
+			next.delete("deviceId");
+			next.delete("deviceUserStatus");
+			next.delete("deviceUserSearch");
+			next.delete("deviceUserView");
+			next.delete("deviceUserPage");
+			next.set("syncPanel", "users");
+			next.set("action", "device-users");
+		});
+		void refetchSyncPreview();
+	};
+	const refreshDeviceUserSummary = async () => {
+		await Promise.allSettled([refetchSyncPreview(), refetchSyncRuns()]);
+	};
 
 	const openDeviceUserSyncReview = (deviceIdOverride?: string) => {
 		const targetDeviceId = deviceIdOverride || selectedDeviceId;
@@ -1338,11 +1353,19 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				<TabsContent value="users" className="m-0">
 					{!selectedDeviceId ? (
 						<section className="space-y-4 rounded-md border border-slate-200 bg-white p-4">
-							<div className="space-y-1">
-								<h2 className="text-sm font-semibold text-slate-950">Choose a device first</h2>
-								<p className="text-sm text-slate-600">
-									Start from the per-device summary so you can see the gap before opening the detailed user table.
-								</p>
+							<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+								<div className="space-y-1">
+									<h2 className="text-sm font-semibold text-slate-950">Choose a device first</h2>
+									<p className="text-sm text-slate-600">
+										Start from the per-device summary so you can see the gap before opening the detailed user table.
+									</p>
+								</div>
+								<div className="flex gap-2">
+									<Button type="button" variant="outline" className="h-8 px-3" onClick={() => void refreshDeviceUserSummary()}>
+										<RefreshCw className="h-4 w-4" />
+										Refresh tally
+									</Button>
+								</div>
 							</div>
 							<div className="overflow-hidden rounded-md border border-slate-200">
 								<div className="hidden grid-cols-[minmax(180px,1.4fr)_120px_120px_120px_120px_96px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 lg:grid">
@@ -1419,7 +1442,15 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 					) : (
 					<section className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
 					<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-					<div className="min-w-0">
+					<div className="min-w-0 space-y-2">
+						<Button
+							type="button"
+							variant="ghost"
+							className="h-8 px-0 text-sm text-slate-600 hover:bg-transparent hover:text-slate-900"
+							onClick={goBackToDeviceUserSummary}>
+							<ArrowLeft className="mr-2 h-4 w-4" />
+							Back to device summary
+						</Button>
 						<h2 className="truncate text-sm font-semibold text-slate-950">
 							{selectedDevice?.name || "Device Users"}
 						</h2>
@@ -1910,10 +1941,10 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 					if (!open) setDetailsDeviceUser(null);
 				}}
 				title="Device user details"
-				className="max-w-2xl">
+				className="max-w-4xl">
 				{detailsDeviceUser ? (
 					<div className="space-y-4">
-						<div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+						<div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
 							<div className="space-y-3">
 								<div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
 									<div className="aspect-[4/5] bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.16),_transparent_55%),linear-gradient(180deg,#f8fafc_0%,#e2e8f0_100%)]">
@@ -1948,10 +1979,18 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									</div>
 								</div>
 								<div className="rounded-2xl border border-slate-200 bg-white p-3">
-									<p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Credential truth</p>
-									<div className="mt-3 grid grid-cols-3 gap-2">
+									<p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fingerprint truth</p>
+									<div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+										<p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Fingerprints</p>
+										<p className="mt-2 text-3xl font-semibold text-slate-950">
+											{String(getDeviceUserCredentialSummary(detailsDeviceUser).fingerprintCount)}
+										</p>
+										<p className="mt-2 text-xs text-slate-500">
+											Primary biometric truth for device-user matching and copy verification.
+										</p>
+									</div>
+									<div className="mt-3 grid grid-cols-2 gap-2">
 										{[
-											["Fingerprints", getDeviceUserCredentialSummary(detailsDeviceUser).fingerprintCount],
 											["Cards", getDeviceUserCredentialSummary(detailsDeviceUser).cardCount],
 											["Faces", getDeviceUserCredentialSummary(detailsDeviceUser).faceCount],
 										].map(([label, value]) => (

@@ -44,6 +44,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("xl:grid-cols-[minmax(180px,1.35fr)_132px_118px_132px_132px_108px_96px]");
 		expect(enroll).toContain("whitespace-normal break-words");
 		expect(enroll).toContain("openPhysicalDeviceUsers");
+		expect(enroll).toContain("Choose a device first");
+		expect(enroll).toContain("Back to device summary");
+		expect(enroll).toContain("Refresh tally");
 		expect(enroll).toContain("Review user sync");
 		expect(enroll).not.toContain("Sync first");
 		expect(enroll).toContain("Change employee link");
@@ -89,7 +92,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Physical");
 		expect(enroll).toContain("Historical HRIS backfill");
 		expect(enroll).toContain("Loading enrolled face photo");
-		expect(enroll).toContain("Credential truth");
+		expect(enroll).toContain("Fingerprint truth");
 		expect(enroll).toContain("Raw fingerprint template blobs are not shown in this normal record.");
 		expect(enroll).toContain(".getDeviceUserPhoto(");
 		expect(enroll).toContain("Photo source");
