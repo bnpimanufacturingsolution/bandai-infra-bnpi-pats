@@ -38,6 +38,7 @@ import {
 } from "../../lib/hikvision-client";
 import {
 	buildDeviceUserEmployeeNoCandidates,
+	extractHikvisionCredentialSummary,
 	normalizeHikvisionDeviceUser,
 	resolveDeviceUserLinkDecision,
 	summarizeDeviceUserStatuses,
@@ -1522,6 +1523,70 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const createBiometricLifecycleSyncRun = async (params: {
+		organizationId: string;
+		deviceId: string;
+		startedByUserId?: string | null;
+		source?: string | null;
+		eventKind: string;
+		minor: string;
+		employeeNo?: string | null;
+		cardNo?: string | null;
+		sourceWideRefresh: boolean;
+		targetDeviceCount: number;
+	}) => {
+		try {
+			return await (prisma as any).deviceSyncRun.create({
+				data: {
+					organizationId: params.organizationId,
+					deviceId: params.deviceId,
+					runType: "DEVICE_USERS",
+					status: "PROCESSING",
+					source: DEVICE_EVENT_SOURCES.has(String(params.source || "").trim())
+						? String(params.source || "").trim()
+						: null,
+					startedByUserId: params.startedByUserId || null,
+					totalSourceRecords: params.sourceWideRefresh ? params.targetDeviceCount : 1,
+					importableRecords: params.sourceWideRefresh ? params.targetDeviceCount : 1,
+					rawSummary: {
+						kind: "biometric_lifecycle_reconcile",
+						eventKind: params.eventKind,
+						minor: params.minor,
+						employeeNo: params.employeeNo || null,
+						cardNo: params.cardNo || null,
+						sourceWideRefresh: params.sourceWideRefresh,
+						targetDeviceCount: params.targetDeviceCount,
+					},
+				},
+				select: { id: true },
+			});
+		} catch (error) {
+			if (isMissingDeviceSyncRunTableError(error)) {
+				deviceLogger.warn(
+					`Device sync run history table is missing; continuing biometric reconcile without durable run journal for device ${params.deviceId}`,
+				);
+				return null;
+			}
+			throw error;
+		}
+	};
+
+	const finalizeBiometricLifecycleSyncRun = async (
+		runId: string | null | undefined,
+		data: Record<string, any>,
+	) => {
+		if (!runId) return;
+		try {
+			await (prisma as any).deviceSyncRun.update({
+				where: { id: runId },
+				data,
+			});
+		} catch (error) {
+			if (isMissingDeviceSyncRunTableError(error)) return;
+			throw error;
+		}
+	};
+
 	const buildReconcileDerivedEventTaxonomy = (minor: string, eventKind: string) => {
 		const normalizedMinor = String(minor || "").trim().toUpperCase();
 		if (
@@ -1664,6 +1729,199 @@ export const controller = (prisma: PrismaClient) => {
 		return eventRecord;
 	};
 
+	const buildDeviceUserLifecycleBackfillPlan = (params: {
+		deviceUsers: Array<{
+			id: string;
+			vendorUserId?: string | null;
+			employeeId?: string | null;
+			employeeNo?: string | null;
+			rawPayload?: any;
+			lastSyncedAt?: Date | string | null;
+		}>;
+		existingKeys: Set<string>;
+	}) => {
+		const planned: Array<Record<string, any>> = [];
+		for (const deviceUser of params.deviceUsers) {
+			const employeeNo =
+				String(deviceUser.employeeNo || deviceUser.vendorUserId || "").trim() || null;
+			if (!employeeNo) continue;
+			const credentialSummary = extractHikvisionCredentialSummary(deviceUser.rawPayload || {});
+			const createdKey = `${deviceUser.id}:USER_CREATED`;
+			if (!params.existingKeys.has(createdKey)) {
+				planned.push({
+					deviceUser,
+					employeeNo,
+					eventAction: "USER_CREATED",
+					eventCategory: "USER_MANAGEMENT",
+					eventLabel: "Device user created",
+					eventConfidence: "INFERRED",
+					eventType: "BiometricStateBackfill",
+					payload: {
+						derivedFromCurrentDeviceState: true,
+						credentialSummary,
+					},
+				});
+			}
+			if (credentialSummary.fingerprintCount > 0) {
+				const fingerprintKey = `${deviceUser.id}:FINGERPRINT_ENROLLED`;
+				if (!params.existingKeys.has(fingerprintKey)) {
+					planned.push({
+						deviceUser,
+						employeeNo,
+						eventAction: "FINGERPRINT_ENROLLED",
+						eventCategory: "ENROLLMENT",
+						eventLabel: "Fingerprint enrolled",
+						eventConfidence: "INFERRED",
+						eventType: "BiometricStateBackfill",
+						payload: {
+							derivedFromCurrentDeviceState: true,
+							credentialSummary,
+						},
+					});
+				}
+			}
+		}
+		return planned;
+	};
+
+	const persistDeviceUserLifecycleBackfill = async (params: {
+		organizationId: string;
+		sourceDevice: { id: string; name: string; address?: string | null };
+		deviceUsers: Array<{
+			id: string;
+			vendorUserId?: string | null;
+			employeeId?: string | null;
+			employeeNo?: string | null;
+			rawPayload?: any;
+			lastSyncedAt?: Date | string | null;
+		}>;
+		source: string;
+		reason: string;
+		execute: boolean;
+		sdkTime?: string | null;
+		minor?: string | null;
+	}) => {
+		const deviceUserIds = params.deviceUsers.map((row) => String(row.id || "").trim()).filter(Boolean);
+		if (!deviceUserIds.length) {
+			return {
+				execute: params.execute,
+				totalDeviceUsers: 0,
+				plannedEvents: [],
+				createdEvents: [],
+			};
+		}
+
+		const existingEvents = await (prisma as any).deviceEvent.findMany({
+			where: {
+				organizationId: params.organizationId,
+				deviceId: params.sourceDevice.id,
+				deviceUserId: { in: deviceUserIds },
+				eventAction: { in: ["USER_CREATED", "FINGERPRINT_ENROLLED"] },
+			},
+			select: {
+				deviceUserId: true,
+				eventAction: true,
+			},
+		});
+		const existingKeys = new Set<string>(
+			existingEvents.map((event: { deviceUserId?: string | null; eventAction?: string | null }) =>
+				`${String(event.deviceUserId || "").trim()}:${String(event.eventAction || "").trim()}`,
+			),
+		);
+		const plannedEvents = buildDeviceUserLifecycleBackfillPlan({
+			deviceUsers: params.deviceUsers,
+			existingKeys,
+		});
+
+		if (!params.execute) {
+			return {
+				execute: false,
+				totalDeviceUsers: params.deviceUsers.length,
+				plannedEvents: plannedEvents.map((event) => ({
+					deviceUserId: event.deviceUser.id,
+					vendorUserId: event.deviceUser.vendorUserId || null,
+					employeeNo: event.employeeNo,
+					eventAction: event.eventAction,
+					eventCategory: event.eventCategory,
+				})),
+				createdEvents: [],
+			};
+		}
+
+		const createdEvents = [];
+		for (const plannedEvent of plannedEvents) {
+			const eventTime = params.sdkTime
+				? parseHikvisionEventTime(params.sdkTime)
+				: plannedEvent.deviceUser.lastSyncedAt
+					? new Date(plannedEvent.deviceUser.lastSyncedAt)
+					: new Date();
+			const dedupeKey = [
+				"device-user-lifecycle-backfill",
+				params.sourceDevice.id,
+				plannedEvent.deviceUser.id,
+				plannedEvent.eventAction,
+			].join(":");
+			const eventRecord = await (prisma as any).deviceEvent.create({
+				data: {
+					organizationId: params.organizationId,
+					deviceId: params.sourceDevice.id,
+					deviceUserId: plannedEvent.deviceUser.id,
+					employeeId: plannedEvent.deviceUser.employeeId || null,
+					eventTime,
+					employeeNo: plannedEvent.employeeNo,
+					source: params.source,
+					status: plannedEvent.deviceUser.employeeId ? "MATCHED" : "UNMATCHED",
+					eventCategory: plannedEvent.eventCategory,
+					eventAction: plannedEvent.eventAction,
+					eventLabel: plannedEvent.eventLabel,
+					eventConfidence: plannedEvent.eventConfidence,
+					eventType: plannedEvent.eventType,
+					major: "3",
+					minor: params.minor || "STATE_BACKFILL",
+					dedupeKey,
+					payload: {
+						...plannedEvent.payload,
+						backfillReason: params.reason,
+						sourceDeviceId: params.sourceDevice.id,
+						sourceDeviceName: params.sourceDevice.name,
+						deviceIP: params.sourceDevice.address || null,
+						ipAddress: params.sourceDevice.address || null,
+						employeeNo: plannedEvent.employeeNo,
+						employeeNoString: plannedEvent.employeeNo,
+						deviceUserMetadata:
+							plannedEvent.deviceUser.rawPayload &&
+							typeof plannedEvent.deviceUser.rawPayload === "object"
+								? (plannedEvent.deviceUser.rawPayload as any)._hrisDeviceMetadata || null
+								: null,
+					},
+				},
+				select: {
+					id: true,
+					deviceUserId: true,
+					eventAction: true,
+					eventCategory: true,
+					employeeNo: true,
+				},
+			});
+			createdEvents.push(eventRecord);
+		}
+		if (createdEvents.length) {
+			await invalidateCache.byPattern("cache:device:events:*").catch(() => undefined);
+		}
+		return {
+			execute: true,
+			totalDeviceUsers: params.deviceUsers.length,
+			plannedEvents: plannedEvents.map((event) => ({
+				deviceUserId: event.deviceUser.id,
+				vendorUserId: event.deviceUser.vendorUserId || null,
+				employeeNo: event.employeeNo,
+				eventAction: event.eventAction,
+				eventCategory: event.eventCategory,
+			})),
+			createdEvents,
+		};
+	};
+
 	const syncDeviceUsers = async (req: Request, res: Response, _next: NextFunction) => {
 		const gate = assertDeviceUserAdmin(req, res);
 		if (!gate) return;
@@ -1697,6 +1955,10 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const reconcileBiometricSync = async (req: Request, res: Response, _next: NextFunction) => {
+		let reconcileRunId: string | null = null;
+		let reconcileRunOrganizationId: string | null = null;
+		let reconcileRunDeviceId: string | null = null;
+		let reconcileRunRequestSummary: Record<string, any> | null = null;
 		try {
 			const admin = assertDeviceUserAdmin(req, res);
 			if (!admin) return;
@@ -1814,8 +2076,42 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			reconcileRunOrganizationId = String(admin.organizationId);
+			reconcileRunDeviceId = sourceDevice.id;
+			reconcileRunRequestSummary = {
+				kind: "biometric_lifecycle_reconcile",
+				sourceDeviceId: sourceDevice.id,
+				sourceDeviceName: sourceDevice.name,
+				eventKind,
+				minor,
+				source,
+				employeeNo: employeeNo || null,
+				cardNo: cardNo || null,
+				sdkTime,
+				allowsSourceWideRefresh,
+				peerDeviceIds: biometricPeers.map((device) => device.id),
+				plannedChanges,
+				fingerprintSummary,
+				rawFingerprintTemplateStored: false,
+			};
+			const reconcileRun = await createBiometricLifecycleSyncRun({
+				organizationId: reconcileRunOrganizationId,
+				deviceId: reconcileRunDeviceId,
+				startedByUserId: (req as any).userId || null,
+				source,
+				eventKind,
+				minor,
+				employeeNo,
+				cardNo,
+				sourceWideRefresh: allowsSourceWideRefresh,
+				targetDeviceCount: targetDevices.length,
+			});
+			reconcileRunId = reconcileRun?.id || null;
+
 			const persisted = [];
 			const refreshResults: Array<Record<string, any>> = [];
+			let sourceLifecycleBackfillResult: Record<string, any> | null = null;
+			let derivedLifecycleEvent: Record<string, any> | null = null;
 			for (const device of targetDevices) {
 				try {
 					const { rawUsers, candidates } = await loadHikvisionDeviceUserSnapshot(req, device);
@@ -1832,6 +2128,34 @@ export const controller = (prisma: PrismaClient) => {
 						importableRecords: candidates.length,
 						...result,
 					});
+
+					if (allowsSourceWideRefresh && device.id === sourceDevice.id) {
+						const sourceDeviceUsers = await prisma.deviceUser.findMany({
+							where: {
+								organizationId: String(admin.organizationId),
+								deviceId: device.id,
+								vendorUserId: { in: candidates.map((candidate) => candidate.vendorUserId) },
+							},
+							select: {
+								id: true,
+								vendorUserId: true,
+								employeeId: true,
+								employeeNo: true,
+								rawPayload: true,
+								lastSyncedAt: true,
+							},
+						});
+						sourceLifecycleBackfillResult = await persistDeviceUserLifecycleBackfill({
+							organizationId: String(admin.organizationId),
+							sourceDevice,
+							deviceUsers: sourceDeviceUsers,
+							source,
+							reason: eventKind,
+							execute: true,
+							sdkTime,
+							minor: minor || "OBSERVED_OPERATION_SYNC",
+						});
+					}
 
 					if (!allowsSourceWideRefresh && employeeNo) {
 						const matchedCandidate = candidates.find(
@@ -1898,9 +2222,9 @@ export const controller = (prisma: PrismaClient) => {
 							vendorUserId: employeeNo,
 						},
 					},
-					select: { id: true, employeeId: true, rawPayload: true },
+						select: { id: true, employeeId: true, rawPayload: true },
 				});
-				await persistDerivedBiometricLifecycleEvent({
+				derivedLifecycleEvent = await persistDerivedBiometricLifecycleEvent({
 					req,
 					organizationId: String(admin.organizationId),
 					sourceDevice,
@@ -1913,6 +2237,44 @@ export const controller = (prisma: PrismaClient) => {
 					deviceUser: sourceDeviceUser,
 				});
 			}
+
+			const refreshUpsertCount = refreshResults.reduce(
+				(total, item) => total + Number(item.created || 0) + Number(item.updated || 0),
+				0,
+			);
+			const refreshFailureCount = refreshResults.filter((item) => item.error).length;
+			const refreshSkippedCount = refreshResults.reduce(
+				(total, item) => total + Math.max(Number(item.totalSourceRecords || 0) - Number(item.importableRecords || 0), 0),
+				0,
+			);
+			const lifecycleCreatedCount =
+				Number(sourceLifecycleBackfillResult?.createdEvents?.length || 0) +
+				(derivedLifecycleEvent ? 1 : 0);
+			await finalizeBiometricLifecycleSyncRun(reconcileRunId, {
+				status: "COMPLETED",
+				totalSourceRecords: allowsSourceWideRefresh
+					? Number(sourceLifecycleBackfillResult?.totalDeviceUsers || 0)
+					: 1,
+				importableRecords: allowsSourceWideRefresh
+					? Number(sourceLifecycleBackfillResult?.plannedEvents?.length || 0)
+					: 1,
+				savedRecords: refreshUpsertCount + persisted.length + lifecycleCreatedCount,
+				skippedRecords: refreshSkippedCount,
+				failedRecords: refreshFailureCount,
+				missingRecords: 0,
+				skipSummary: {
+					refreshSkippedCount,
+					refreshFailureCount,
+				},
+				rawSummary: {
+					...(reconcileRunRequestSummary || {}),
+					refreshResults,
+					persistedCount: persisted.length,
+					derivedLifecycleEventId: derivedLifecycleEvent?.id || null,
+					sourceLifecycleBackfillResult,
+				},
+				completedAt: new Date(),
+			});
 
 			logActivity(req, {
 				userId: (req as any).userId || "hikvision-biometric-service",
@@ -1935,12 +2297,27 @@ export const controller = (prisma: PrismaClient) => {
 						employee,
 						persisted,
 						refreshResults,
+						sourceLifecycleBackfillResult,
 						rawFingerprintTemplateStored: false,
 					},
 					200,
 				),
 			);
 		} catch (error: any) {
+			await finalizeBiometricLifecycleSyncRun(reconcileRunId, {
+				status: "FAILED",
+				failedRecords: 1,
+				failureSummary: {
+					message: error?.message || "Failed to reconcile biometric sync",
+				},
+				rawSummary: reconcileRunRequestSummary
+					? {
+							...reconcileRunRequestSummary,
+							failed: true,
+						}
+					: undefined,
+				completedAt: new Date(),
+			}).catch(() => undefined);
 			deviceLogger.error(`Biometric sync reconcile failed: ${error}`);
 			res.status(500).json(
 				buildErrorResponse(error?.message || "Failed to reconcile biometric sync", 500),
@@ -1965,6 +2342,67 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(200).json(buildSuccessResponse("Legacy device users backfilled", result, 200));
 		} catch (error: any) {
 			res.status(500).json(buildErrorResponse(error?.message || "Failed to backfill device users", 500));
+		}
+	};
+
+	const backfillDeviceUserLifecycleEvents = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			const deviceId = String(req.params.id || (req.body as any)?.deviceId || "").trim();
+			const execute = (req.body as any)?.execute === true;
+			const device = await getDeviceForUserSync(gate.organizationId, deviceId);
+			if (!device || !isHikvisionDevice(device)) {
+				res.status(400).json(buildErrorResponse("Select a Hikvision device before backfilling lifecycle events", 400));
+				return;
+			}
+
+			const deviceUsers = await prisma.deviceUser.findMany({
+				where: {
+					organizationId: gate.organizationId,
+					deviceId: device.id,
+				},
+				orderBy: { vendorUserId: "asc" },
+				select: {
+					id: true,
+					vendorUserId: true,
+					employeeId: true,
+					employeeNo: true,
+					rawPayload: true,
+					lastSyncedAt: true,
+				},
+			});
+			const result = await persistDeviceUserLifecycleBackfill({
+				organizationId: gate.organizationId,
+				sourceDevice: {
+					id: device.id,
+					name: device.name,
+					address: device.address,
+				},
+				deviceUsers,
+				source: "EN_HCNETSDK_ALARM",
+				reason: "manual_device_user_lifecycle_backfill",
+				execute,
+				minor: "STATE_BACKFILL",
+			});
+			res.status(200).json(
+				buildSuccessResponse(
+					execute
+						? "Device user lifecycle events backfilled"
+						: "Device user lifecycle backfill preview ready",
+					{
+						device: {
+							id: device.id,
+							name: device.name,
+							address: device.address,
+						},
+						...result,
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			res.status(500).json(buildErrorResponse(error?.message || "Failed to backfill device user lifecycle events", 500));
 		}
 	};
 
@@ -2855,6 +3293,38 @@ export const controller = (prisma: PrismaClient) => {
 					Number(row?._count?._all || 0),
 				);
 			}
+			const deviceUserRows = await (prisma as any).deviceUser.findMany({
+				where: {
+					organizationId: String(organizationId),
+					deviceId: { in: syncDevices.map((device) => device.id) },
+				},
+				select: {
+					deviceId: true,
+					status: true,
+					employeeId: true,
+				},
+			});
+			const deviceUserRowsByDeviceId = deviceUserRows.reduce<Map<string, Array<{ status?: string | null; employeeId?: string | null }>>>(
+				(groups, row: any) => {
+					const deviceId = String(row.deviceId || "").trim();
+					if (!deviceId) return groups;
+					const bucket = groups.get(deviceId) || [];
+					bucket.push({ status: row.status, employeeId: row.employeeId });
+					groups.set(deviceId, bucket);
+					return groups;
+				},
+				new Map(),
+			);
+			const deviceUserSummaryByDeviceId = new Map<
+				string,
+				ReturnType<typeof summarizeDeviceUserStatuses>
+			>();
+			for (const device of syncDevices) {
+				deviceUserSummaryByDeviceId.set(
+					device.id,
+					summarizeDeviceUserStatuses(deviceUserRowsByDeviceId.get(device.id) || []),
+				);
+			}
 
 			const zktecoDevices = syncDevices.filter((device) => device.vendor === "ZKTeco");
 			const zktecoPreview =
@@ -2890,6 +3360,14 @@ export const controller = (prisma: PrismaClient) => {
 
 			const previewRows = syncDevices.map((device) => {
 				const syncedEvents = savedCountByDeviceAndSource.get(`${device.id}|${device.source}`) || 0;
+				const deviceUserSummary = deviceUserSummaryByDeviceId.get(device.id) || {
+					total: 0,
+					active: 0,
+					matched: 0,
+					unmatched: 0,
+					conflict: 0,
+					disabled: 0,
+				};
 				const latestRun = latestRunByDeviceId.get(device.id);
 				const knownSkippedEvents = Number(latestRun?.skippedRecords || 0);
 				const failedEvents = Number(latestRun?.failedRecords || 0);
@@ -2950,6 +3428,11 @@ export const controller = (prisma: PrismaClient) => {
 					hrisSavedCount: syncedEvents,
 					vendorEventCount: totalEvents,
 					vendorUserCount,
+					hrisUserCount: deviceUserSummary.total,
+					linkedUserCount: deviceUserSummary.matched,
+					openUserCount: deviceUserSummary.unmatched,
+					conflictUserCount: deviceUserSummary.conflict,
+					disabledUserCount: deviceUserSummary.disabled,
 					knownSkippedEventCount: knownSkippedEvents,
 					totalUnsavedEventCount: totalUnsavedEvents,
 					importableIfSkipMissingEmployeeNo: needsSyncEvents,
@@ -4654,6 +5137,7 @@ export const controller = (prisma: PrismaClient) => {
 		listDeviceUsers,
 		getDeviceUserPhoto,
 		syncDeviceUsers,
+		backfillDeviceUserLifecycleEvents,
 		reconcileBiometricSync,
 		backfillDeviceUsers,
 		linkDeviceUser,

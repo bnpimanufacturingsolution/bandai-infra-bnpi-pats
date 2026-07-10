@@ -17,7 +17,11 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <algorithm>
+#include <cerrno>
 
+#include <dirent.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "HCNetSDK.h"
@@ -66,11 +70,15 @@ std::vector<DeviceSession> sessions;
 std::ofstream evidence_stream;
 std::mutex evidence_mutex;
 std::mutex peer_apply_guard_mutex;
+std::mutex reconcile_spool_mutex;
 std::map<std::string, std::chrono::steady_clock::time_point> recent_peer_apply_by_host;
 bool execute_mode = true;
 std::string hris_api_base;
 std::string hris_api_token;
 std::string min_sdk_time;
+std::string reconcile_spool_dir = "/tmp/project-truth-hikvision-reconcile-spool";
+
+bool curl_post_json(const std::string &url, const std::string &body, const std::string &event_name);
 
 void handle_signal(int) {
     keep_running = 0;
@@ -1067,6 +1075,230 @@ std::string shell_quote(const std::string &value) {
     return quoted;
 }
 
+long long unix_time_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+}
+
+std::string sanitize_filename_token(const std::string &value) {
+    std::string token;
+    token.reserve(value.size());
+    for (const char c : value) {
+        if ((c >= 'a' && c <= 'z') ||
+            (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9')) {
+            token.push_back(c);
+        } else {
+            token.push_back('_');
+        }
+    }
+    while (token.find("__") != std::string::npos) {
+        token = std::regex_replace(token, std::regex("__"), "_");
+    }
+    if (token.empty()) {
+        return "unknown";
+    }
+    return token;
+}
+
+bool ensure_reconcile_spool_dir() {
+    std::lock_guard<std::mutex> lock(reconcile_spool_mutex);
+    if (::mkdir(reconcile_spool_dir.c_str(), 0755) == 0) {
+        return true;
+    }
+    if (errno == EEXIST) {
+        return true;
+    }
+    emit_json({
+        {"event", "hris_contract_spool_dir_failed"},
+        {"path", reconcile_spool_dir},
+        {"errno", std::to_string(errno)}
+    });
+    return false;
+}
+
+std::string build_reconcile_spool_path(const ReconcileJob &job, const std::string &status) {
+    std::ostringstream path;
+    path << reconcile_spool_dir
+         << "/"
+         << unix_time_ms()
+         << "_"
+         << sanitize_filename_token(job.source_device_id)
+         << "_"
+         << sanitize_filename_token(job.employee_no.empty() ? "all" : job.employee_no)
+         << "_"
+         << sanitize_filename_token(status)
+         << ".json";
+    return path.str();
+}
+
+std::string build_reconcile_spool_path_from_key(const std::string &spool_key) {
+    std::ostringstream path;
+    path << reconcile_spool_dir
+         << "/"
+         << unix_time_ms()
+         << "_"
+         << sanitize_filename_token(spool_key)
+         << ".json";
+    return path.str();
+}
+
+bool write_text_file(const std::string &path, const std::string &body) {
+    std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+    if (!stream) {
+        return false;
+    }
+    stream << body;
+    return stream.good();
+}
+
+bool read_text_file(const std::string &path, std::string *body) {
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) {
+        return false;
+    }
+    std::ostringstream buffer;
+    buffer << stream.rdbuf();
+    *body = buffer.str();
+    return true;
+}
+
+std::vector<std::string> list_reconcile_spool_files() {
+    std::vector<std::string> paths;
+    DIR *dir = opendir(reconcile_spool_dir.c_str());
+    if (dir == nullptr) {
+        return paths;
+    }
+    struct dirent *entry = nullptr;
+    while ((entry = readdir(dir)) != nullptr) {
+        const std::string name = entry->d_name;
+        if (name == "." || name == "..") {
+            continue;
+        }
+        paths.push_back(reconcile_spool_dir + "/" + name);
+    }
+    closedir(dir);
+    std::sort(paths.begin(), paths.end());
+    return paths;
+}
+
+bool post_json_with_retries(
+    const std::string &url,
+    const std::string &body,
+    const std::string &event_name,
+    int attempts,
+    int retry_sleep_ms) {
+    for (int attempt = 1; attempt <= attempts; ++attempt) {
+        const bool ok = curl_post_json(url, body, event_name);
+        emit_json({
+            {"event", event_name + "_attempt"},
+            {"attempt", std::to_string(attempt)},
+            {"maxAttempts", std::to_string(attempts)},
+            {"ok", ok ? "true" : "false"}
+        });
+        if (ok) {
+            return true;
+        }
+        if (attempt < attempts) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(retry_sleep_ms));
+        }
+    }
+    return false;
+}
+
+void replay_pending_hris_contract_posts() {
+    if (!execute_mode || hris_api_base.empty()) {
+        return;
+    }
+    if (!ensure_reconcile_spool_dir()) {
+        return;
+    }
+    const std::vector<std::string> paths = list_reconcile_spool_files();
+    if (paths.empty()) {
+        return;
+    }
+    const std::string url = hris_api_base + "/api/device/biometric-sync/reconcile";
+    for (const auto &path : paths) {
+        std::string body;
+        if (!read_text_file(path, &body)) {
+            emit_json({
+                {"event", "hris_contract_spool_read_failed"},
+                {"path", path}
+            });
+            continue;
+        }
+        const bool ok = post_json_with_retries(url, body, "hris_contract_spool_replay", 3, 1500);
+        emit_json({
+            {"event", "hris_contract_spool_replay_result"},
+            {"path", path},
+            {"ok", ok ? "true" : "false"}
+        });
+        if (ok) {
+            std::remove(path.c_str());
+        }
+    }
+}
+
+bool post_hris_contract_payload(
+    const std::string &contract,
+    const std::string &spool_key,
+    const std::map<std::string, std::string> &spool_meta) {
+    std::string spool_path;
+    if (execute_mode && ensure_reconcile_spool_dir()) {
+        spool_path = build_reconcile_spool_path_from_key(spool_key);
+        if (!write_text_file(spool_path, contract)) {
+            emit_json({
+                {"event", "hris_contract_spool_write_failed"},
+                {"path", spool_path}
+            });
+            spool_path.clear();
+        } else {
+            std::map<std::string, std::string> fields = {
+                {"event", "hris_contract_spool_written"},
+                {"path", spool_path},
+                {"spoolKey", spool_key}
+            };
+            fields.insert(spool_meta.begin(), spool_meta.end());
+            emit_json(fields);
+        }
+    }
+    if (hris_api_base.empty()) {
+        emit_json({
+            {"event", "hris_contract_post_skipped"},
+            {"reason", "missing_hris_api_base"},
+            {"spoolKey", spool_key}
+        });
+        return false;
+    }
+    if (!execute_mode) {
+        emit_json({
+            {"event", "hris_contract_preview"},
+            {"apiBase", hris_api_base},
+            {"contractPath", "/api/device/biometric-sync/reconcile"},
+            {"body", contract}
+        });
+        return true;
+    }
+
+    const std::string url = hris_api_base + "/api/device/biometric-sync/reconcile";
+    const bool ok = post_json_with_retries(url, contract, "hris_contract_post", 3, 1500);
+    emit_json({
+        {"event", "hris_contract_post"},
+        {"apiBase", hris_api_base},
+        {"spoolKey", spool_key},
+        {"ok", ok ? "true" : "false"}
+    });
+    if (ok && !spool_path.empty()) {
+        std::remove(spool_path.c_str());
+        emit_json({
+            {"event", "hris_contract_spool_cleared"},
+            {"path", spool_path}
+        });
+    }
+    return ok;
+}
+
 bool curl_post_json(const std::string &url, const std::string &body, const std::string &event_name) {
     char body_template[] = "/tmp/project-truth-hikvision-body-XXXXXX";
     const int body_fd = mkstemp(body_template);
@@ -1103,6 +1335,8 @@ bool curl_post_json(const std::string &url, const std::string &body, const std::
     std::fprintf(config_file, "url = \"%s\"\n", url.c_str());
     std::fprintf(config_file, "request = \"POST\"\n");
     std::fprintf(config_file, "header = \"Content-Type: application/json\"\n");
+    std::fprintf(config_file, "connect-timeout = 3\n");
+    std::fprintf(config_file, "max-time = 5\n");
     if (!hris_api_token.empty()) {
         std::fprintf(config_file, "header = \"Authorization: Bearer %s\"\n", hris_api_token.c_str());
     }
@@ -1152,27 +1386,25 @@ bool post_hikvision_callback(const ReconcileJob &job) {
 
 bool post_hris_contract(const ReconcileJob &job, const std::string &status) {
     const std::string contract = build_status_contract_json(job, status);
-    if (hris_api_base.empty()) {
+    if (hris_api_base.empty() || !execute_mode) {
         post_hris_contract_preview(job, status);
-        emit_json({
-            {"event", "hris_contract_post_skipped"},
-            {"reason", "missing_hris_api_base"}
-        });
-        return false;
-    }
-    if (!execute_mode) {
-        post_hris_contract_preview(job, status);
+        if (hris_api_base.empty()) {
+            emit_json({
+                {"event", "hris_contract_post_skipped"},
+                {"reason", "missing_hris_api_base"}
+            });
+            return false;
+        }
         return true;
     }
-
-    const std::string url = hris_api_base + "/api/device/biometric-sync/reconcile";
-    const bool ok = curl_post_json(url, contract, "hris_contract_post");
-    emit_json({
-        {"event", "hris_contract_post"},
-        {"apiBase", hris_api_base},
-        {"ok", ok ? "true" : "false"}
-    });
-    return ok;
+    return post_hris_contract_payload(
+        contract,
+        sanitize_filename_token(job.source_device_id + "_" + (job.employee_no.empty() ? "all" : job.employee_no) + "_" + status),
+        {
+            {"sourceDeviceId", job.source_device_id},
+            {"employeeNo", job.employee_no},
+            {"status", status}
+        });
 }
 
 void process_reconcile_job(const ReconcileJob &job) {
@@ -1393,7 +1625,8 @@ void usage(const char *program) {
         << "Usage: " << program << " --device id|org|name|host|sdkPort|username|password[|peer] "
         << "[--device-file path] "
         << "[--device ...] [--evidence-jsonl path] [--hris-api-base url] [--hris-api-token token] "
-        << "[--min-sdk-time YYYY-MM-DDTHH:MM:SS] [--execute|--dry-run] [--seconds n]\n";
+        << "[--min-sdk-time YYYY-MM-DDTHH:MM:SS] [--execute|--dry-run] [--seconds n] "
+        << "[--replay-spool-only] [--post-contract-file path]\n";
 }
 
 }  // namespace
@@ -1401,6 +1634,8 @@ void usage(const char *program) {
 int main(int argc, char **argv) {
     int seconds = 0;
     std::vector<DeviceConfig> configs;
+    bool replay_spool_only = false;
+    std::string post_contract_file;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -1451,12 +1686,16 @@ int main(int argc, char **argv) {
             if (!next(&hris_api_base)) return 2;
         } else if (arg == "--hris-api-token") {
             if (!next(&hris_api_token)) return 2;
+        } else if (arg == "--post-contract-file") {
+            if (!next(&post_contract_file)) return 2;
         } else if (arg == "--min-sdk-time") {
             if (!next(&min_sdk_time)) return 2;
         } else if (arg == "--execute") {
             execute_mode = true;
         } else if (arg == "--dry-run") {
             execute_mode = false;
+        } else if (arg == "--replay-spool-only") {
+            replay_spool_only = true;
         } else if (arg == "--seconds") {
             std::string value;
             if (!next(&value)) return 2;
@@ -1465,6 +1704,32 @@ int main(int argc, char **argv) {
             usage(argv[0]);
             return 2;
         }
+    }
+
+    const char *env_token = std::getenv("HIKVISION_HRIS_API_TOKEN");
+    if (hris_api_token.empty() && env_token != nullptr) {
+        hris_api_token = env_token;
+    }
+
+    if (replay_spool_only) {
+        replay_pending_hris_contract_posts();
+        return 0;
+    }
+
+    if (!post_contract_file.empty()) {
+        std::string contract;
+        if (!read_text_file(post_contract_file, &contract)) {
+            std::cerr << "Unable to read --post-contract-file: " << post_contract_file << "\n";
+            return 2;
+        }
+        post_hris_contract_payload(
+            contract,
+            "manual_contract",
+            {
+                {"source", "manual_contract_file"},
+                {"path", post_contract_file}
+            });
+        return 0;
     }
 
     if (configs.empty()) {
@@ -1497,6 +1762,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     emit_json({{"event", "sdk_callback_register"}, {"ok", "true"}});
+    replay_pending_hris_contract_posts();
 
     for (const auto &config : configs) {
         DeviceSession session;

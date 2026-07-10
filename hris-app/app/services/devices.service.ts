@@ -207,6 +207,11 @@ export interface DeviceSyncPreviewRow {
 	hrisSavedCount?: number;
 	vendorEventCount?: number | null;
 	vendorUserCount?: number | null;
+	hrisUserCount?: number;
+	linkedUserCount?: number;
+	openUserCount?: number;
+	conflictUserCount?: number;
+	disabledUserCount?: number;
 	knownSkippedEventCount?: number;
 	totalUnsavedEventCount?: number | null;
 	importableIfSkipMissingEmployeeNo?: number | null;

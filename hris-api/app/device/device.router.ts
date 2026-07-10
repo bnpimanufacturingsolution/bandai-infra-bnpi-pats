@@ -19,6 +19,7 @@ interface IController {
 	listDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceUserPhoto(req: Request, res: Response, next: NextFunction): Promise<void>;
 	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	backfillDeviceUserLifecycleEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
 	reconcileBiometricSync(req: Request, res: Response, next: NextFunction): Promise<void>;
 	backfillDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	linkDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -53,6 +54,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get("/:id/users", controller.listDeviceUsers);
 	routes.get("/users/:userId/photo", controller.getDeviceUserPhoto);
 	routes.post("/:id/users/sync", controller.syncDeviceUsers);
+	routes.post("/:id/users/lifecycle-backfill", controller.backfillDeviceUserLifecycleEvents);
 	routes.post("/:id/users/backfill", controller.backfillDeviceUsers);
 	routes.post("/biometric-sync/reconcile", controller.reconcileBiometricSync);
 	routes.get("/:id/sync-runs", controller.getDeviceSyncRuns);

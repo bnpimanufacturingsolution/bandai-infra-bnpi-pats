@@ -159,8 +159,10 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		document: "true",
 	});
 	const devices = (devicesData as any)?.devices || [];
+	const requestedDeviceId = String(searchParams.get("deviceId") || "").trim();
+	const shouldAutoSelectFirstDevice = action === "enroll" || action === "import";
 	const selectedDeviceId =
-		searchParams.get("deviceId") || devices[0]?.id || "";
+		requestedDeviceId || (shouldAutoSelectFirstDevice ? devices[0]?.id || "" : "");
 	const selectedDevice = devices.find((device: any) => device.id === selectedDeviceId);
 	const activePanelParam = searchParams.get("syncPanel") || (mode === "device-users" ? "users" : "overview");
 	const activePanel = ["overview", "users", "logs", "runs"].includes(activePanelParam)
@@ -177,7 +179,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		refetch: refetchSyncPreview,
 	} = useDeviceSyncPreview(
 		{ deviceId: activePanel === "overview" ? "all" : selectedDeviceId || "all" },
-		activePanel === "overview" || Boolean(selectedDeviceId),
+		activePanel === "overview" || activePanel === "users" || Boolean(selectedDeviceId),
 	);
 	const {
 		data: syncRunsData,
@@ -354,6 +356,16 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			query: deviceUserSearch,
 		},
 		Boolean(selectedDeviceId) && (!shouldUseSourceScopedDeviceUsers || activePanel !== "users"),
+	);
+	const {
+		data: deviceUserSummaryData,
+		refetch: refetchDeviceUserSummary,
+	} = useDeviceUsers(
+		selectedDeviceId,
+		{
+			limit: 1,
+		},
+		Boolean(selectedDeviceId) && activePanel === "users",
 	);
 	const {
 		data: openDbDeviceUsers,
@@ -535,7 +547,12 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			next.set("syncPanel", "users");
 			next.set("deviceUserPage", "1");
 		});
-		void refetchSourceDeviceUsers();
+		void Promise.allSettled([
+			refetchSourceDeviceUsers(),
+			refetchSyncPreview(),
+			refetchDeviceUserSummary(),
+			refetchSyncRuns(),
+		]);
 	};
 
 	const openDeviceUserSyncReview = (deviceIdOverride?: string) => {
@@ -574,8 +591,10 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			const result = await syncDeviceUsersMutation.mutateAsync(selectedDeviceId);
 			const summary = (result.summary || {}) as DeviceUserSyncSummary;
 			await Promise.allSettled([
+				refetchSourceDeviceUsers(),
 				refetchDbDeviceUsers(),
 				refetchOpenDbDeviceUsers(),
+				refetchDeviceUserSummary(),
 				refetchSourceMatchedDeviceUsers(),
 				refetchSyncRuns(),
 				refetchSyncPreview(),
@@ -641,6 +660,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			await Promise.allSettled([
 				refetchDbDeviceUsers(),
 				refetchOpenDbDeviceUsers(),
+				refetchDeviceUserSummary(),
 				refetchSourceMatchedDeviceUsers(),
 				refetchSyncPreview(),
 			]);
@@ -663,6 +683,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			void Promise.allSettled([
 				refetchDbDeviceUsers(),
 				refetchOpenDbDeviceUsers(),
+				refetchDeviceUserSummary(),
 				refetchSourceMatchedDeviceUsers(),
 			]);
 		} catch (error: any) {
@@ -956,21 +977,23 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		(safeDeviceUserPage - 1) * deviceUserLimit,
 		safeDeviceUserPage * deviceUserLimit,
 	);
+	const deviceUserSummary = deviceUserSummaryData?.summary;
 	const physicalSourceCount =
-		sourceDeviceUserRows.length || selectedSyncCenterItem?.preview?.vendorUserCount;
-	const physicalHrisUserCount = physicalDeviceUserRows.length;
-	const shownDeviceUserCount = mergedDeviceUserRows.length;
-	const linkedPhysicalUserCount = mergedDeviceUserRows.filter(
-		(deviceUser) => deviceUser.status === "ACTIVE" && Boolean(deviceUser.employeeId),
-	).length;
-	const openPhysicalUserCount = mergedDeviceUserRows.filter(
-		(deviceUser) =>
-			deviceUser.status === "SOURCE_ONLY" ||
-			deviceUser.status === "UNMATCHED",
-	).length;
-	const reviewPhysicalUserCount = mergedDeviceUserRows.filter(
-		(deviceUser) => deviceUser.status === "CONFLICT",
-	).length;
+		selectedSyncCenterItem?.preview?.vendorUserCount ?? sourceDeviceUserRows.length;
+	const physicalHrisUserCount = deviceUserSummary?.total ?? physicalDeviceUserRows.length;
+	const shownDeviceUserCount = visibleDeviceUserRows.length;
+	const linkedPhysicalUserCount =
+		deviceUserSummary?.matched ??
+		mergedDeviceUserRows.filter(
+			(deviceUser) => deviceUser.status === "ACTIVE" && Boolean(deviceUser.employeeId),
+		).length;
+	const openPhysicalUserCount =
+		deviceUserSummary?.unmatched ??
+		mergedDeviceUserRows.filter(
+			(deviceUser) =>
+				deviceUser.status === "SOURCE_ONLY" ||
+				deviceUser.status === "UNMATCHED",
+		).length;
 	const usersToSaveCount = Math.max(Number(physicalSourceCount || 0) - physicalHrisUserCount, 0);
 	const completedDeviceUserSyncItems = [
 		["Read from device", deviceUserSyncState.summary?.totalSourceRecords],
@@ -1158,8 +1181,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									const count = item.preview?.vendorUserCount;
 									return total + (typeof count === "number" && Number.isFinite(count) ? count : 0);
 								}, 0);
-								const groupLogTotal = group.reduce((total, item) => {
-									const count = item.preview?.vendorEventCount ?? item.preview?.totalEvents;
+								const groupHrisUserTotal = group.reduce((total, item) => {
+									const count = item.preview?.hrisUserCount;
 									return total + (typeof count === "number" && Number.isFinite(count) ? count : 0);
 								}, 0);
 								return (
@@ -1172,7 +1195,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 												<div className="min-w-0">
 													<p className="text-sm font-semibold text-slate-950">{vendor}</p>
 													<p className="mt-0.5 text-xs text-slate-500">
-														Device read: {metricValue(groupUserTotal)} users, {metricValue(groupLogTotal)} log entries
+														Source users: {metricValue(groupUserTotal)}. Saved in HRIS: {metricValue(groupHrisUserTotal)}.
 													</p>
 												</div>
 												<Badge variant={attentionCount ? "warning" : "success"}>
@@ -1186,17 +1209,20 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 													<span>Device</span>
 													<span>Address</span>
 													<span>Status</span>
-													<span>Source counts</span>
-													<span>HRIS / review</span>
+													<span>Source / gap</span>
+													<span>HRIS users</span>
 													<span>Last sync</span>
 													<span className="text-right">Actions</span>
 												</div>
 												{group.map(({ device, preview, status }) => {
 													const isSelected = device.id === selectedDeviceId;
-													const sourceTotal = preview?.vendorEventCount ?? preview?.totalEvents;
-													const savedTotal = preview?.hrisSavedCount ?? preview?.syncedEvents;
-													const missingTotal = preview?.missingEventCount ?? preview?.needsSyncEvents;
-													const userTotal = preview?.vendorUserCount;
+													const sourceUserTotal = preview?.vendorUserCount;
+													const hrisUserTotal = preview?.hrisUserCount;
+													const openUserTotal = preview?.openUserCount;
+													const userGap =
+														typeof sourceUserTotal === "number" && typeof hrisUserTotal === "number"
+															? Math.max(sourceUserTotal - hrisUserTotal, 0)
+															: null;
 													const lastSyncAt =
 														device.id === selectedDeviceId
 															? latestUserSync?.completedAt ||
@@ -1230,30 +1256,30 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 															</div>
 															<div className="min-w-0 space-y-1">
 																<div className="flex items-center justify-between gap-2 xl:block">
-																	<span className="text-xs text-slate-500">Device users</span>
+																	<span className="text-xs text-slate-500">From device</span>
 																	<Button
 																		type="button"
 																		variant="ghost"
 																		className="h-auto min-h-7 px-1 text-sm font-semibold text-slate-950 hover:bg-slate-100"
-																		disabled={typeof userTotal !== "number"}
+																		disabled={typeof sourceUserTotal !== "number"}
 																		onClick={() => openPhysicalDeviceUsers(device.id)}
 																		title="Open physical device users">
-																		{metricValue(userTotal)}
+																		{metricValue(sourceUserTotal)}
 																	</Button>
 																</div>
 																<div className="flex items-center justify-between gap-2 xl:block">
-																	<span className="text-xs text-slate-500">Device logs</span>
-																	<span className="font-semibold text-slate-950">{metricValue(sourceTotal)}</span>
+																	<span className="text-xs text-slate-500">Gap</span>
+																	<span className="font-semibold text-slate-950">{metricValue(userGap)}</span>
 																</div>
 															</div>
 															<div className="min-w-0 space-y-1">
 																<div className="flex items-center justify-between gap-2 xl:block">
-																	<span className="text-xs text-slate-500">HRIS events</span>
-																	<span className="font-semibold text-slate-950">{metricValue(savedTotal)}</span>
+																	<span className="text-xs text-slate-500">Saved in HRIS</span>
+																	<span className="font-semibold text-slate-950">{metricValue(hrisUserTotal)}</span>
 																</div>
 																<div className="flex items-center justify-between gap-2 xl:block">
-																	<span className="text-xs text-slate-500">Needs review</span>
-																	<span className="font-semibold text-slate-950">{metricValue(missingTotal)}</span>
+																	<span className="text-xs text-slate-500">Needs link</span>
+																	<span className="font-semibold text-slate-950">{metricValue(openUserTotal)}</span>
 																</div>
 															</div>
 															<div className="text-xs text-slate-600">
@@ -1310,6 +1336,87 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				</TabsContent>
 
 				<TabsContent value="users" className="m-0">
+					{!selectedDeviceId ? (
+						<section className="space-y-4 rounded-md border border-slate-200 bg-white p-4">
+							<div className="space-y-1">
+								<h2 className="text-sm font-semibold text-slate-950">Choose a device first</h2>
+								<p className="text-sm text-slate-600">
+									Start from the per-device summary so you can see the gap before opening the detailed user table.
+								</p>
+							</div>
+							<div className="overflow-hidden rounded-md border border-slate-200">
+								<div className="hidden grid-cols-[minmax(180px,1.4fr)_120px_120px_120px_120px_96px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 lg:grid">
+									<span>Device</span>
+									<span>From device</span>
+									<span>Saved in HRIS</span>
+									<span>Gap</span>
+									<span>Needs link</span>
+									<span className="text-right">Open</span>
+								</div>
+								{syncCenterDevices.map(({ device, preview }) => {
+									const sourceCount = preview?.vendorUserCount;
+									const hrisCount = preview?.hrisUserCount;
+									const openCount = preview?.openUserCount;
+									const gapCount =
+										typeof sourceCount === "number" && typeof hrisCount === "number"
+											? Math.max(sourceCount - hrisCount, 0)
+											: null;
+									return (
+										<div
+											key={device.id}
+											role="button"
+											tabIndex={0}
+											onClick={() => openPhysicalDeviceUsers(device.id)}
+											onKeyDown={(event) => {
+												if (event.key === "Enter" || event.key === " ") {
+													event.preventDefault();
+													openPhysicalDeviceUsers(device.id);
+												}
+											}}
+											className="grid cursor-pointer gap-3 border-b border-slate-100 px-3 py-3 text-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-300 last:border-b-0 lg:grid-cols-[minmax(180px,1.4fr)_120px_120px_120px_120px_96px] lg:items-center">
+											<div className="min-w-0">
+												<p className="truncate font-medium text-slate-950">
+													{device.name || "Unnamed device"}
+												</p>
+												<p className="truncate text-xs text-slate-500">
+													{device.address || "-"}:{device.port || "-"}
+												</p>
+											</div>
+											<div className="flex items-center justify-between gap-2 lg:block">
+												<span className="text-xs text-slate-500 lg:hidden">From device</span>
+												<span className="font-semibold text-slate-950">{metricValue(sourceCount)}</span>
+											</div>
+											<div className="flex items-center justify-between gap-2 lg:block">
+												<span className="text-xs text-slate-500 lg:hidden">Saved in HRIS</span>
+												<span className="font-semibold text-slate-950">{metricValue(hrisCount)}</span>
+											</div>
+											<div className="flex items-center justify-between gap-2 lg:block">
+												<span className="text-xs text-slate-500 lg:hidden">Gap</span>
+												<span className="font-semibold text-slate-950">{metricValue(gapCount)}</span>
+											</div>
+											<div className="flex items-center justify-between gap-2 lg:block">
+												<span className="text-xs text-slate-500 lg:hidden">Needs link</span>
+												<span className="font-semibold text-slate-950">{metricValue(openCount)}</span>
+											</div>
+											<div className="flex justify-end">
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													onClick={(event) => {
+														event.stopPropagation();
+														openPhysicalDeviceUsers(device.id);
+													}}
+													onKeyDown={(event) => event.stopPropagation()}>
+													Open
+												</Button>
+											</div>
+										</div>
+									);
+								})}
+							</div>
+						</section>
+					) : (
 					<section className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
 					<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 					<div className="min-w-0">
@@ -1356,10 +1463,18 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 
 				<div className="grid gap-2 md:grid-cols-[minmax(220px,1fr)_150px_minmax(220px,1fr)]">
 					<Select
-						options={devices.map((device: any) => ({
-							value: device.id,
-							label: device.name || `${device.address}:${device.port}`,
-						}))}
+						options={devices.map((device: any) => {
+							const preview = syncCenterDevices.find((item) => item.device.id === device.id)?.preview;
+							const labelBase = device.name || `${device.address}:${device.port}`;
+							const sourceCount = preview?.vendorUserCount;
+							return {
+								value: device.id,
+								label:
+									typeof sourceCount === "number" && Number.isFinite(sourceCount)
+										? `${labelBase} (${sourceCount} source)`
+										: labelBase,
+							};
+						})}
 						value={selectedDeviceId}
 						onChange={setSelectedDeviceId}
 						placeholder={isLoadingDevices ? "Loading devices..." : "Select device"}
@@ -1410,6 +1525,10 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 						</button>
 					))}
 				</div>
+
+				<p className="text-xs text-slate-500">
+					Read from device comes from the fastest available source count for the selected device. HRIS records, linked employees, and needs link come from saved device-user summary truth for that device.
+				</p>
 
 				{deviceUserView === "source" ? (
 					<div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-950">
@@ -1587,6 +1706,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 					</div>
 				</div>
 			</section>
+					)}
 				</TabsContent>
 
 				<TabsContent value="logs" className="m-0">

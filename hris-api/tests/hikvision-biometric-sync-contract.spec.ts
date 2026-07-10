@@ -32,10 +32,18 @@ describe("Hikvision biometric sync contract", () => {
 		const controller = controllerSource();
 
 		expect(controller).to.include("const loadHikvisionDeviceUserSnapshot = async");
+		expect(controller).to.include("const createBiometricLifecycleSyncRun = async");
+		expect(controller).to.include("const finalizeBiometricLifecycleSyncRun = async");
 		expect(controller).to.include("const persistDerivedBiometricLifecycleEvent = async");
+		expect(controller).to.include("const persistDeviceUserLifecycleBackfill = async");
 		expect(controller).to.include("const allowsSourceWideRefresh =");
+		expect(controller).to.include('kind: "biometric_lifecycle_reconcile"');
+		expect(controller).to.include("await finalizeBiometricLifecycleSyncRun(reconcileRunId");
 		expect(controller).to.include('scope: "all_source_users"');
 		expect(controller).to.include("refreshResults");
+		expect(controller).to.include("sourceLifecycleBackfillResult");
+		expect(controller).to.include("manual_device_user_lifecycle_backfill");
+		expect(controller).to.include("derivedFromCurrentDeviceState: true");
 		expect(controller).to.include('eventAction: "USER_CREATED"');
 		expect(controller).to.include('eventAction: "FINGERPRINT_ENROLLED"');
 		expect(controller).to.include('eventAction: "SYNC_IMPORTED"');
@@ -54,6 +62,16 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include("queue_reconcile(job)");
 		expect(service).to.include("worker_loop");
 		expect(service).to.include("bool execute_mode = true;");
+		expect(service).to.include('std::string reconcile_spool_dir = "/tmp/project-truth-hikvision-reconcile-spool";');
+		expect(service).to.include("post_json_with_retries");
+		expect(service).to.include("post_hris_contract_payload");
+		expect(service).to.include('std::fprintf(config_file, "connect-timeout = 3\\n");');
+		expect(service).to.include('std::fprintf(config_file, "max-time = 5\\n");');
+		expect(service).to.include('arg == "--replay-spool-only"');
+		expect(service).to.include('arg == "--post-contract-file"');
+		expect(service).to.include('std::getenv("HIKVISION_HRIS_API_TOKEN")');
+		expect(service).to.include("hris_contract_spool_written");
+		expect(service).to.include("replay_pending_hris_contract_posts();");
 		expect(service).to.include('arg == "--dry-run"');
 		expect(service).to.include('arg == "--device-file"');
 		expect(service).to.include("std::ifstream device_file");
@@ -107,6 +125,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(wrapper).to.include('COALESCE(config->>\'vendor\', \'\') = \'Hikvision\'');
 		expect(wrapper).to.include('COALESCE(access->>\'password\', \'\') <> \'\'');
 		expect(wrapper).to.include('--device-file "$SPEC"');
+		expect(wrapper).to.include('fetch_hikvision_hris_token()');
+		expect(wrapper).to.include('/api/auth/login');
+		expect(wrapper).to.include('export HIKVISION_HRIS_API_TOKEN="$(fetch_hikvision_hris_token)"');
 		expect(wrapper).to.not.include("where name='Main Entrance Device'");
 		expect(controller).to.include("reconcileHikvisionRuntimeAfterDeviceChange");
 		expect(controller).to.include('await reconcileHikvisionRuntimeAfterDeviceChange(device, "device_create")');

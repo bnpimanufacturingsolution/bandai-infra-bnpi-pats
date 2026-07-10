@@ -13,6 +13,7 @@ describe("DeviceUser API contract", () => {
 		expect(router).to.include('routes.get("/:id/users", controller.listDeviceUsers)');
 		expect(router).to.include('routes.get("/users/:userId/photo", controller.getDeviceUserPhoto)');
 		expect(router).to.include('routes.post("/:id/users/sync", controller.syncDeviceUsers)');
+		expect(router).to.include('routes.post("/:id/users/lifecycle-backfill", controller.backfillDeviceUserLifecycleEvents)');
 		expect(router).to.include('routes.get("/:id/sync-runs", controller.getDeviceSyncRuns)');
 		expect(router).to.include('routes.post("/import-jobs/:jobId/cancel", controller.cancelDeviceImportJob)');
 		expect(router).to.include('routes.post("/users/:userId/link", controller.linkDeviceUser)');
@@ -25,6 +26,9 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include('"hris-admin"');
 		expect(controller).to.include("assertDeviceUserAdmin(req, res)");
 		expect(controller).to.include("const getDeviceUserPhoto = async");
+		expect(controller).to.include("const backfillDeviceUserLifecycleEvents = async");
+		expect(controller).to.include("persistDeviceUserLifecycleBackfill");
+		expect(controller).to.include("manual_device_user_lifecycle_backfill");
 		expect(controller).to.include("hikvisionFetchBinary");
 		expect(controller).to.include("readDeviceUserFaceUrl");
 		expect(controller).to.include("Device user face photo host does not match the configured device");
@@ -33,6 +37,8 @@ describe("DeviceUser API contract", () => {
 	it("persists log sync run summaries so known skipped rows do not remain forever missing", () => {
 		const controller = controllerSource();
 		expect(controller).to.include("deviceSyncRun.create");
+		expect(controller).to.include('kind: "biometric_lifecycle_reconcile"');
+		expect(controller).to.include("await finalizeBiometricLifecycleSyncRun(reconcileRunId");
 		expect(controller).to.include('runType: "DEVICE_LOGS"');
 		expect(controller).to.include("skippedRecords: skipped");
 		expect(controller).to.include("skipMissingEmployeeNo");
