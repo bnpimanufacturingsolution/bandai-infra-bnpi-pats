@@ -158,7 +158,12 @@ export const classifyDeviceEvent = (event: {
 		});
 	}
 
-	if (actionCode === "MINOR_DEL_FINGER") {
+	if (
+		actionCode === "MINOR_DEL_FINGER" ||
+		actionCode === "MINOR_CLR_FINGER_BY_READER" ||
+		actionCode === "MINOR_CLR_FINGER_BY_CARD" ||
+		actionCode === "MINOR_CLR_FINGER_BY_EMPLOYEE_ON"
+	) {
 		return withCompatibilityConfidence({
 			eventCategory: "ENROLLMENT",
 			eventAction: "FINGERPRINT_DELETED",
@@ -191,7 +196,11 @@ export const classifyDeviceEvent = (event: {
 		});
 	}
 
-	if (actionCode === "MINOR_DELETE_CARD_INFO") {
+	if (
+		actionCode === "MINOR_DELETE_CARD_INFO" ||
+		actionCode === "MINOR_CLR_CARD" ||
+		actionCode === "MINOR_CLR_CARD_BY_CARD_OR_EMPLOYEE"
+	) {
 		return withCompatibilityConfidence({
 			eventCategory: "ENROLLMENT",
 			eventAction: "CARD_DELETED",

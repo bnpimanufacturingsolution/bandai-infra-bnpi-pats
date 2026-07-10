@@ -44,7 +44,12 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include("std::ifstream device_file");
 		expect(service).to.include("NET_DVR_GET_FINGERPRINT_CFG_V50");
 		expect(service).to.include("NET_DVR_SET_FINGERPRINT_CFG_V50");
+		expect(service).to.include("NET_DVR_DEL_FINGERPRINT_CFG_V50");
 		expect(service).to.include("rawFingerprintTemplateStored");
+		expect(service).to.include("delete_peer_user");
+		expect(service).to.include("delete_peer_fingerprints");
+		expect(service).to.include("MINOR_CLR_USER_INFO");
+		expect(service).to.include("MINOR_CLR_FINGER_BY_CARD");
 		expect(service).to.not.include('"fingerData"');
 	});
 

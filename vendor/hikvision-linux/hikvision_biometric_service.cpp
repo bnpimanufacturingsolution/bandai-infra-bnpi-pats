@@ -155,8 +155,16 @@ std::string minor_name(DWORD minor) {
         case MINOR_MOD_FINGER_BY_CARD: return "MINOR_MOD_FINGER_BY_CARD";
         case MINOR_MOD_FINGER_BY_EMPLOYEE_NO: return "MINOR_MOD_FINGER_BY_EMPLOYEE_NO";
         case MINOR_DEL_FINGER: return "MINOR_DEL_FINGER";
+        case MINOR_CLR_FINGER_BY_READER: return "MINOR_CLR_FINGER_BY_READER";
+        case MINOR_CLR_FINGER_BY_CARD: return "MINOR_CLR_FINGER_BY_CARD";
+        case MINOR_CLR_FINGER_BY_EMPLOYEE_ON: return "MINOR_CLR_FINGER_BY_EMPLOYEE_ON";
         case MINOR_ADD_CARD: return "MINOR_ADD_CARD";
         case MINOR_MOD_CARD: return "MINOR_MOD_CARD";
+        case MINOR_ADD_CARD_INFO: return "MINOR_ADD_CARD_INFO";
+        case MINOR_MODIFY_CARD_INFO: return "MINOR_MODIFY_CARD_INFO";
+        case MINOR_DELETE_CARD_INFO: return "MINOR_DELETE_CARD_INFO";
+        case MINOR_CLR_CARD: return "MINOR_CLR_CARD";
+        case MINOR_CLR_CARD_BY_CARD_OR_EMPLOYEE: return "MINOR_CLR_CARD_BY_CARD_OR_EMPLOYEE";
         case MINOR_ADD_USER_INFO: return "MINOR_ADD_USER_INFO";
         case MINOR_MODIFY_USER_INFO: return "MINOR_MODIFY_USER_INFO";
         case MINOR_CLR_USER_INFO: return "MINOR_CLR_USER_INFO";
@@ -174,7 +182,10 @@ bool is_fingerprint_management_minor(DWORD minor) {
            minor == MINOR_ADD_FINGER_BY_EMPLOYEE_NO ||
            minor == MINOR_MOD_FINGER_BY_CARD ||
            minor == MINOR_MOD_FINGER_BY_EMPLOYEE_NO ||
-           minor == MINOR_DEL_FINGER;
+           minor == MINOR_DEL_FINGER ||
+           minor == MINOR_CLR_FINGER_BY_READER ||
+           minor == MINOR_CLR_FINGER_BY_CARD ||
+           minor == MINOR_CLR_FINGER_BY_EMPLOYEE_ON;
 }
 
 bool is_user_management_minor(DWORD minor) {
@@ -185,7 +196,23 @@ bool is_user_management_minor(DWORD minor) {
 
 bool is_card_management_minor(DWORD minor) {
     return minor == MINOR_ADD_CARD ||
-           minor == MINOR_MOD_CARD;
+           minor == MINOR_MOD_CARD ||
+           minor == MINOR_ADD_CARD_INFO ||
+           minor == MINOR_MODIFY_CARD_INFO ||
+           minor == MINOR_DELETE_CARD_INFO ||
+           minor == MINOR_CLR_CARD ||
+           minor == MINOR_CLR_CARD_BY_CARD_OR_EMPLOYEE;
+}
+
+bool is_user_delete_minor(DWORD minor) {
+    return minor == MINOR_CLR_USER_INFO;
+}
+
+bool is_fingerprint_delete_minor(DWORD minor) {
+    return minor == MINOR_DEL_FINGER ||
+           minor == MINOR_CLR_FINGER_BY_READER ||
+           minor == MINOR_CLR_FINGER_BY_CARD ||
+           minor == MINOR_CLR_FINGER_BY_EMPLOYEE_ON;
 }
 
 std::string classify_event(DWORD major, DWORD minor) {
@@ -669,6 +696,123 @@ bool write_peer_fingerprints(
     return ok;
 }
 
+bool delete_peer_user(DeviceSession &target, const ReconcileJob &job) {
+    if (job.employee_no.empty()) {
+        emit_json({
+            {"event", "peer_user_delete_skipped"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"reason", "missing_employee_no"}
+        });
+        return false;
+    }
+
+    if (!execute_mode) {
+        emit_json({
+            {"event", "peer_user_delete_preview"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", job.employee_no},
+            {"wouldCall", "POST /ISAPI/AccessControl/UserInfoDetail/Delete?format=json"}
+        });
+        return true;
+    }
+
+    std::ostringstream body;
+    body << "{\"UserInfoDetail\":{\"mode\":\"byEmployeeNo\",\"EmployeeNoList\":[{\"employeeNo\":\""
+         << json_escape(job.employee_no)
+         << "\"}]}}";
+
+    std::string response;
+    bool ok = stdxml_json_request(
+        target,
+        "POST /ISAPI/AccessControl/UserInfoDetail/Delete?format=json",
+        body.str(),
+        &response);
+
+    if (!ok) {
+        std::ostringstream fallback;
+        fallback << "{\"UserInfo\":{\"employeeNo\":\"" << json_escape(job.employee_no) << "\",\"deleteUser\":true}}";
+        ok = stdxml_json_request(
+            target,
+            "PUT /ISAPI/AccessControl/UserInfo/SetUp?format=json",
+            fallback.str(),
+            &response);
+    }
+
+    emit_json({
+        {"event", "peer_user_delete"},
+        {"targetDeviceId", target.config.hris_device_id},
+        {"employeeNo", job.employee_no},
+        {"ok", ok ? "true" : "false"},
+        {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
+    });
+    return ok;
+}
+
+bool delete_peer_fingerprints(DeviceSession &target, const ReconcileJob &job) {
+    if (job.employee_no.empty()) {
+        emit_json({
+            {"event", "peer_fingerprint_delete_skipped"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"reason", "missing_employee_no"}
+        });
+        return false;
+    }
+
+    if (!execute_mode) {
+        emit_json({
+            {"event", "peer_fingerprint_delete_preview"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", job.employee_no},
+            {"wouldCall", "NET_DVR_DEL_FINGERPRINT_CFG_V50"},
+            {"rawFingerprintTemplateStored", "false"}
+        });
+        return true;
+    }
+
+    NET_DVR_FINGER_PRINT_INFO_CTRL_V50 cond{};
+    cond.dwSize = sizeof(cond);
+    cond.byMode = 0;
+    std::strncpy(
+        reinterpret_cast<char *>(cond.struProcessMode.struByCard.byEmployeeNo),
+        job.employee_no.c_str(),
+        NET_SDK_EMPLOYEE_NO_LEN - 1);
+    for (size_t i = 0; i < sizeof(cond.struProcessMode.struByCard.byEnableCardReader); ++i) {
+        cond.struProcessMode.struByCard.byEnableCardReader[i] = 1;
+    }
+    for (size_t i = 0; i < sizeof(cond.struProcessMode.struByCard.byFingerPrintID); ++i) {
+        cond.struProcessMode.struByCard.byFingerPrintID[i] = 1;
+    }
+
+    FingerprintReadContext ctx;
+    const LONG handle = NET_DVR_StartRemoteConfig(
+        target.user_id,
+        NET_DVR_DEL_FINGERPRINT_CFG_V50,
+        &cond,
+        sizeof(cond),
+        fingerprint_callback,
+        &ctx);
+
+    bool ok = handle >= 0;
+    if (handle >= 0) {
+        {
+            std::unique_lock<std::mutex> lock(ctx.mutex);
+            ctx.cv.wait_for(lock, std::chrono::seconds(10), [&ctx] { return ctx.done; });
+        }
+        NET_DVR_StopRemoteConfig(handle);
+        ok = !ctx.failed;
+    }
+
+    emit_json({
+        {"event", "peer_fingerprint_delete"},
+        {"targetDeviceId", target.config.hris_device_id},
+        {"employeeNo", job.employee_no},
+        {"ok", ok ? "true" : "false"},
+        {"rawFingerprintTemplateStored", "false"},
+        {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
+    });
+    return ok;
+}
+
 void post_hris_contract_preview(const ReconcileJob &job, const std::string &status) {
     const std::string contract = build_status_contract_json(job, status);
     emit_json({
@@ -822,9 +966,13 @@ void process_reconcile_job(const ReconcileJob &job) {
     }
 
     std::string user_json;
-    const bool user_ok = read_source_user(*source, job, &user_json);
+    const bool user_delete = is_user_delete_minor(job.minor);
+    const bool fingerprint_delete = is_fingerprint_delete_minor(job.minor);
+    const bool user_ok = user_delete ? true : read_source_user(*source, job, &user_json);
     const std::vector<NET_DVR_FINGER_PRINT_CFG_V50> fingerprints =
-        job.include_fingerprints ? read_source_fingerprints(*source, job) : std::vector<NET_DVR_FINGER_PRINT_CFG_V50>{};
+        job.include_fingerprints && !fingerprint_delete
+            ? read_source_fingerprints(*source, job)
+            : std::vector<NET_DVR_FINGER_PRINT_CFG_V50>{};
 
     int peer_count = 0;
     int peer_write_count = 0;
@@ -833,15 +981,17 @@ void process_reconcile_job(const ReconcileJob &job) {
             continue;
         }
         peer_count += 1;
-        if (user_ok && write_peer_user(target, job, user_json)) {
+        if (user_delete ? delete_peer_user(target, job) : (user_ok && write_peer_user(target, job, user_json))) {
             peer_write_count += 1;
         }
-        if (job.include_fingerprints) {
+        if (fingerprint_delete) {
+            delete_peer_fingerprints(target, job);
+        } else if (job.include_fingerprints) {
             write_peer_fingerprints(target, job, fingerprints);
         }
     }
 
-    post_hris_contract(job, user_ok ? "reviewed" : "source-user-read-failed");
+    post_hris_contract(job, user_delete ? "deleted" : user_ok ? "reviewed" : "source-user-read-failed");
     emit_json({
         {"event", "reconcile_completed"},
         {"sourceDeviceId", source->config.hris_device_id},

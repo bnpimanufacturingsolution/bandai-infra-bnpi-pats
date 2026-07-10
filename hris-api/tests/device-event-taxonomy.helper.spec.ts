@@ -92,6 +92,34 @@ describe("Device event taxonomy helper", () => {
 			eventConfidence: "SUPPORTED",
 			capabilityConfidence: "supported",
 		});
+
+		expect(
+			classifyDeviceEvent({
+				source: "EN_HCNETSDK_ALARM",
+				status: "IGNORED",
+				payload: { actionCode: "MINOR_CLR_FINGER_BY_CARD" },
+			}),
+		).to.deep.include({
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_DELETED",
+			eventLabel: "Fingerprint deleted",
+			eventConfidence: "SUPPORTED",
+			capabilityConfidence: "supported",
+		});
+
+		expect(
+			classifyDeviceEvent({
+				source: "EN_HCNETSDK_ALARM",
+				status: "IGNORED",
+				payload: { actionCode: "MINOR_CLR_CARD" },
+			}),
+		).to.deep.include({
+			eventCategory: "ENROLLMENT",
+			eventAction: "CARD_DELETED",
+			eventLabel: "Card deleted",
+			eventConfidence: "SUPPORTED",
+			capabilityConfidence: "supported",
+		});
 	});
 
 	it("returns an unknown access-controller event instead of inventing an action", () => {
