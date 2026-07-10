@@ -42,6 +42,7 @@ import {
 	summarizeDeviceUserStatuses,
 	type DeviceUserCandidate,
 } from "../../helper/device-user-sync.helper";
+import { buildDeviceRuntimeConfig } from "../../helper/device-config-defaults.helper";
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
 import net from "net";
 import { execFile } from "child_process";
@@ -2933,7 +2934,26 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		try {
-			const device = await prisma.device.create({ data: validation.data });
+			const organizationId =
+				validation.data.organizationId || String((req as any).organizationId || "");
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("Organization ID not found", 400));
+				return;
+			}
+
+			const deviceData = {
+				...validation.data,
+				organizationId,
+				access: validation.data.access || {},
+				config: buildDeviceRuntimeConfig({
+					config: validation.data.config,
+					name: validation.data.name,
+					protocol: validation.data.protocol,
+					port: validation.data.port,
+				}),
+			};
+
+			const device = await prisma.device.create({ data: deviceData });
 			deviceLogger.info(`Device created successfully: ${device.id}`);
 
 			logActivity(req, {
@@ -3611,7 +3631,27 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 
-			const prismaData = { ...validatedData };
+			const prismaData = {
+				...validatedData,
+				...(validatedData.config !== undefined ||
+				validatedData.name !== undefined ||
+				validatedData.protocol !== undefined ||
+				validatedData.port !== undefined
+					? {
+							config: buildDeviceRuntimeConfig({
+								config: validatedData.config,
+								existingConfig: existingDevice.config,
+								name: validatedData.name || existingDevice.name,
+								protocol: validatedData.protocol || existingDevice.protocol,
+								port:
+									typeof validatedData.port === "number"
+										? validatedData.port
+										: existingDevice.port,
+							}),
+						}
+					: {}),
+				...(validatedData.access !== undefined ? { access: validatedData.access || {} } : {}),
+			};
 
 			const updatedDevice = await prisma.device.update({
 				where: { id },

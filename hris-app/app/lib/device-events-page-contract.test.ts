@@ -105,17 +105,19 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.not.contain("All sources");
 	});
 
-	it("keeps device form runtime adapter copy out of raw source wording", () => {
+	it("keeps backend-owned device runtime fields out of the normal device form", () => {
 		const manageSource = readFileSync(
 			resolve(currentDir, "../routes/admin/devices/manage.tsx"),
 			"utf8",
 		);
 
-		expect(manageSource).to.contain("Runtime adapter *");
-		expect(manageSource).to.contain("Callback path");
-		expect(manageSource).to.contain("Internal adapter key");
-		expect(manageSource).to.contain("Vendor and runtime routing");
-		expect(manageSource).to.contain("Use the exact Internal adapter key expected by the HRIS runtime.");
+		expect(manageSource).to.contain("Device vendor");
+		expect(manageSource).to.contain("HRIS applies the correct runtime settings automatically.");
+		expect(manageSource).to.contain('data-field-path="config.vendor"');
+		expect(manageSource).not.to.contain("Runtime adapter *");
+		expect(manageSource).not.to.contain("Callback path");
+		expect(manageSource).not.to.contain("Internal adapter key");
+		expect(manageSource).not.to.contain("Vendor and runtime routing");
 		expect(manageSource).not.to.contain("Source adapter *");
 		expect(manageSource).not.to.contain("Runtime source");
 	});

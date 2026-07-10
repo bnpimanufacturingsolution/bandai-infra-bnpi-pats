@@ -76,14 +76,6 @@ const protocolOptions: SelectOption[] = [
 const deviceVendorOptions: SelectOption[] = [
 	{ value: "Hikvision", label: "Hikvision" },
 	{ value: "ZKTeco", label: "ZKTeco" },
-	{ value: "Other", label: "Other / manual" },
-];
-
-const sdkProtocolOptions: SelectOption[] = [
-	{ value: "tcp", label: "TCP" },
-	{ value: "udp", label: "UDP" },
-	{ value: "http", label: "HTTP" },
-	{ value: "https", label: "HTTPS" },
 ];
 
 const getDeviceConfigRecord = (config: unknown): DeviceConfigRecord =>
@@ -94,41 +86,45 @@ const getDeviceConfigRecord = (config: unknown): DeviceConfigRecord =>
 const buildDeviceConfigPreset = (vendor: string): DeviceConfigRecord => {
 	const normalized = vendor.toLowerCase();
 	if (normalized.includes("hikvision")) {
-		return {
-			vendor: "Hikvision",
-			source: "vendor/hikvision-linux",
-			sdkPort: 8000,
-			sdkProtocol: "tcp",
-			webhookPath: "/api/hikvision/callback",
-		};
+		return { vendor: "Hikvision" };
 	}
 	if (normalized.includes("zkteco") || normalized.includes("zk")) {
-		return {
-			vendor: "ZKTeco",
-			source: "vendor/zkteco-linux",
-			sdkPort: 4370,
-			sdkProtocol: "tcp",
-			webhookPath: "/api/zkteco/events",
-		};
+		return { vendor: "ZKTeco" };
 	}
-	return { vendor };
+	return { vendor: "Hikvision" };
 };
 
 const getDefaultDeviceConfig = () => buildDeviceConfigPreset("Hikvision");
 
 const normalizeDeviceConfigForSubmit = (config: unknown): DeviceConfigRecord => {
 	const next = getDeviceConfigRecord(config);
-	Object.entries(next).forEach(([key, value]) => {
-		if (typeof value === "string") {
-			const trimmed = value.trim();
-			if (trimmed) next[key] = trimmed;
-			else delete next[key];
-		}
-	});
-	const sdkPort = Number(next.sdkPort);
-	if (Number.isFinite(sdkPort) && sdkPort > 0) next.sdkPort = sdkPort;
-	else delete next.sdkPort;
-	return next;
+	const vendor = String(next.vendor || "").trim();
+	return buildDeviceConfigPreset(vendor || "Hikvision");
+};
+
+const normalizeAccessForSubmit = (access: DeviceFormData["access"]) => {
+	const username = String(access?.username || "").trim();
+	const password = String(access?.password || "").trim();
+	return {
+		...(username ? { username } : {}),
+		...(password ? { password } : {}),
+	};
+};
+
+const getVendorConnectionDefaults = (vendor: string) => {
+	const normalized = vendor.toLowerCase();
+	if (normalized.includes("zkteco") || normalized.includes("zk")) {
+		return { protocol: "tcp" as const, port: 4370 };
+	}
+	return { protocol: "http" as const, port: 80 };
+};
+
+const getVendorHelperText = (vendor: string) => {
+	const normalized = vendor.toLowerCase();
+	if (normalized.includes("zkteco") || normalized.includes("zk")) {
+		return "ZKTeco terminals normally use TCP port 4370.";
+	}
+	return "Hikvision terminals normally use HTTP port 80 for HRIS checks.";
 };
 
 const healthToneClass = (ok: boolean) => (ok ? "text-green-700" : "text-amber-700");
@@ -202,7 +198,6 @@ function DeviceHealthPanel({ deviceId }: { deviceId?: string }) {
 							label="ZKTeco webhook"
 							ok={Boolean(checks.zktecoWebhook.ok)}
 							value={checks.zktecoWebhook.status || "-"}
-							detail={checks.zktecoWebhook.path}
 						/>
 					) : null}
 					<HealthCheckRow
@@ -383,7 +378,6 @@ function DeviceConsolePage({
 	const latestRun = runsData?.syncRuns?.[0];
 	const checks = health?.checks;
 	const baseUrl = health?.device?.baseUrl || `${device?.protocol || "http"}://${device?.address || "-"}:${device?.port || "-"}`;
-	const sdkPort = getDeviceConfigValue(device, "sdkPort");
 	const userCount =
 		previewRow?.vendorUserCount ??
 		usersData?.summary?.total ??
@@ -456,7 +450,7 @@ function DeviceConsolePage({
 
 			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
 				<DeviceFact label="HTTP endpoint" value={baseUrl} mono />
-				<DeviceFact label="SDK endpoint" value={sdkPort === "-" ? "-" : `${device.address}:${sdkPort}`} mono />
+				<DeviceFact label="Vendor" value={getDeviceConfigValue(device, "vendor")} />
 				<DeviceFact label="Device users" value={userCount} />
 				<DeviceFact label="Device logs" value={eventCount ?? "Unavailable"} />
 			</div>
@@ -507,10 +501,9 @@ function DeviceConsolePage({
 								detail={latestRun?.completedAt ? new Date(latestRun.completedAt).toLocaleString() : latestRun?.startedAt ? new Date(latestRun.startedAt).toLocaleString() : undefined}
 							/>
 							<HealthCheckRow
-								label="Configuration"
+								label="Device profile"
 								ok
-								value={device.config ? "present" : "basic"}
-								detail={getDeviceConfigValue(device, "source")}
+								value={getDeviceConfigValue(device, "vendor")}
 							/>
 						</div>
 					</div>
@@ -616,13 +609,13 @@ function DeviceConsolePage({
 
 			<section className="rounded-xl border border-slate-200 bg-white">
 				<div className="border-b border-slate-200 px-4 py-3">
-					<h2 className="text-sm font-semibold text-slate-950">Endpoint Map</h2>
+					<h2 className="text-sm font-semibold text-slate-950">Connection</h2>
 				</div>
 				<div className="grid gap-3 px-4 py-4 md:grid-cols-2 xl:grid-cols-4">
 					<DeviceFact label="Address" value={device.address} mono />
-					<DeviceFact label="HTTP port" value={device.port} />
-					<DeviceFact label="SDK port" value={sdkPort} />
-					<DeviceFact label="Webhook" value={getDeviceConfigValue(device, "webhookPath")} mono />
+					<DeviceFact label="Port" value={device.port} />
+					<DeviceFact label="Protocol" value={device.protocol.toUpperCase()} />
+					<DeviceFact label="Vendor" value={getDeviceConfigValue(device, "vendor")} />
 				</div>
 				<div className="flex flex-wrap gap-2 border-t border-slate-200 px-4 py-3">
 					<Button type="button" variant="outline" size="sm" onClick={() => onEvents(device)}>
@@ -699,18 +692,11 @@ export default function DevicesManagePage() {
 	const watchedVendor = String((watch("config") as DeviceConfigRecord | undefined)?.vendor || "Hikvision");
 
 	const applyVendorPreset = (vendor: string) => {
-		const currentConfig = getDeviceConfigRecord(watch("config"));
+		const defaults = getVendorConnectionDefaults(vendor);
 		const preset = buildDeviceConfigPreset(vendor);
-		setValue(
-			"config",
-			{
-				...currentConfig,
-				...preset,
-				model: currentConfig.model || "",
-				hikvisionRuntimeNote: currentConfig.hikvisionRuntimeNote || "",
-			},
-			{ shouldDirty: true, shouldValidate: true },
-		);
+		setValue("config", preset, { shouldDirty: true, shouldValidate: true });
+		setValue("protocol", defaults.protocol, { shouldDirty: true, shouldValidate: true });
+		setValue("port", defaults.port, { shouldDirty: true, shouldValidate: true });
 	};
 
 	// Handle deep linking: populate forms
@@ -724,8 +710,7 @@ export default function DevicesManagePage() {
 				port: activeDevice.port,
 				protocol: activeDevice.protocol,
 				config: {
-					...buildDeviceConfigPreset(String(activeConfig.vendor || "")),
-					...activeConfig,
+					...buildDeviceConfigPreset(String(activeConfig.vendor || "Hikvision")),
 				},
 				access: activeDevice.access || {
 					username: "",
@@ -766,7 +751,7 @@ export default function DevicesManagePage() {
 			render: (value) => {
 				const config = getDeviceConfigRecord(value);
 				const vendor = String(config.vendor || config.type || "");
-				const model = String(config.model || config.source || "");
+				const model = String(config.model || "");
 				return vendor ? (
 					<AdminConfigPrimaryCell
 						primary={vendor}
@@ -838,13 +823,14 @@ export default function DevicesManagePage() {
 		const normalizedConfig = normalizeDeviceConfigForSubmit(data.config);
 
 		if (isEditing && activeDevice) {
+			const normalizedAccess = normalizeAccessForSubmit(data.access);
 			const updatePayload: UpdateDeviceRequest = {
 				name: data.name,
 				address: data.address,
 				port: data.port,
 				protocol: data.protocol,
 				config: normalizedConfig,
-				access: data.access,
+				access: normalizedAccess,
 			};
 
 			updateDeviceMutation.mutate(
@@ -860,13 +846,14 @@ export default function DevicesManagePage() {
 				},
 			);
 		} else {
+			const normalizedAccess = normalizeAccessForSubmit(data.access);
 			const payload: CreateDeviceRequest = {
 				name: data.name,
 				address: data.address,
 				port: data.port,
 				protocol: data.protocol,
 				config: normalizedConfig,
-				access: data.access,
+				access: normalizedAccess,
 			};
 
 			createDeviceMutation.mutate(payload, {
@@ -1146,124 +1133,26 @@ export default function DevicesManagePage() {
 						<div className="rounded-md border border-slate-200 bg-slate-50/60 p-3">
 							<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
 								<div>
-									<p className="text-sm font-semibold text-slate-950">Vendor and runtime routing</p>
+									<p className="text-sm font-semibold text-slate-950">Device vendor</p>
 									<p className="text-xs text-slate-500">
-										How HRIS reaches this terminal, which adapter handles it, and where device callbacks arrive.
+										Choose the terminal brand. HRIS applies the correct runtime settings automatically.
 									</p>
 								</div>
-								<AdminConfigSourceChip>{watchedVendor || "Unclassified"}</AdminConfigSourceChip>
+								<AdminConfigSourceChip>{watchedVendor}</AdminConfigSourceChip>
 							</div>
-							<div className="grid gap-4 md:grid-cols-2">
-								<div data-field-path="config.vendor">
-									<div className="mb-1 block text-sm font-medium text-gray-700">
-										Vendor *
-									</div>
-									<Select
-										options={deviceVendorOptions}
-										value={watchedVendor}
-										onChange={(value) => applyVendorPreset(value || "Other")}
-										placeholder="Select vendor"
-									/>
-									<ConstraintTokenRow
-										tokens={[{ label: "Config vendor", tone: "default" }]}
-									/>
+							<div data-field-path="config.vendor">
+								<div className="mb-1 block text-sm font-medium text-gray-700">
+									Vendor *
 								</div>
-								<div data-field-path="config.model">
-									<div className="mb-1 block text-sm font-medium text-gray-700">
-										Model / device type
-									</div>
-									<Input
-										placeholder="e.g., DS-K1T341CMFW"
-										{...register("config.model", {
-											setValueAs: (value) => value || undefined,
-										})}
-									/>
-									<ConstraintTokenRow
-										tokens={[{ label: "Optional", tone: "subtle" }]}
-									/>
-								</div>
-								<div data-field-path="config.source">
-									<div className="mb-1 block text-sm font-medium text-gray-700">
-										Runtime adapter *
-									</div>
-									<Input
-										placeholder="vendor/hikvision-linux"
-										{...register("config.source", {
-											setValueAs: (value) => value || undefined,
-										})}
-									/>
-									<p className="mt-1 text-xs text-slate-500">
-										Use the exact Internal adapter key expected by the HRIS runtime.
-									</p>
-									<ConstraintTokenRow
-										tokens={[{ label: "Internal adapter key", tone: "default" }]}
-									/>
-								</div>
-								<div data-field-path="config.webhookPath">
-									<div className="mb-1 block text-sm font-medium text-gray-700">
-										Callback path
-									</div>
-									<Input
-										placeholder="/api/hikvision/callback"
-										{...register("config.webhookPath", {
-											setValueAs: (value) => value || undefined,
-										})}
-									/>
-									<p className="mt-1 text-xs text-slate-500">
-										HRIS API path that receives device callback or listener events.
-									</p>
-									<ConstraintTokenRow
-										tokens={[{ label: "HRIS API path", tone: "subtle" }]}
-									/>
-								</div>
-								<div data-field-path="config.sdkPort">
-									<div className="mb-1 block text-sm font-medium text-gray-700">
-										SDK port
-									</div>
-									<Input
-										type="number"
-										placeholder="8000"
-										{...register("config.sdkPort", {
-											valueAsNumber: true,
-										})}
-									/>
-									<ConstraintTokenRow
-										tokens={[{ label: "Vendor SDK", tone: "subtle" }]}
-									/>
-								</div>
-								<div data-field-path="config.sdkProtocol">
-									<div className="mb-1 block text-sm font-medium text-gray-700">
-										SDK protocol
-									</div>
-									<Select
-										options={sdkProtocolOptions}
-										value={String((watch("config") as DeviceConfigRecord | undefined)?.sdkProtocol || "tcp")}
-										onChange={(value) =>
-											setValue("config.sdkProtocol", value || "tcp", {
-												shouldDirty: true,
-												shouldValidate: true,
-											})
-										}
-										placeholder="SDK protocol"
-									/>
-									<ConstraintTokenRow
-										tokens={[{ label: "Usually TCP", tone: "subtle" }]}
-									/>
-								</div>
-								<div className="md:col-span-2" data-field-path="config.hikvisionRuntimeNote">
-									<div className="mb-1 block text-sm font-medium text-gray-700">
-										Runtime note / metadata
-									</div>
-									<Input
-										placeholder="Optional evidence or routing note"
-										{...register("config.hikvisionRuntimeNote", {
-											setValueAs: (value) => value || undefined,
-										})}
-									/>
-									<ConstraintTokenRow
-										tokens={[{ label: "Preserved in config", tone: "subtle" }]}
-									/>
-								</div>
+								<Select
+									options={deviceVendorOptions}
+									value={watchedVendor}
+									onChange={(value) => applyVendorPreset(value || "Hikvision")}
+									placeholder="Select vendor"
+								/>
+								<p className="mt-1 text-xs text-slate-500">
+									{getVendorHelperText(watchedVendor)}
+								</p>
 							</div>
 						</div>
 
