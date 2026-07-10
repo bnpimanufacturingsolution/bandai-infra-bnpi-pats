@@ -50,6 +50,7 @@ export type DeviceEventAction =
 	| "USER_UPDATED"
 	| "USER_DELETED"
 	| "TAP_REJECTED"
+	| "SYNC_SIGNAL"
 	| "SYNC_IMPORTED"
 	| "LISTENER_RECEIVED"
 	| "UNKNOWN";
@@ -291,9 +292,17 @@ export interface DeviceImportJobProgress {
 	completedAt?: string;
 }
 
+export type DeviceUserSyncMode = "full_refresh" | "needs_attention_only";
+
+export interface DeviceUserSyncJobStartRequest {
+	mode?: DeviceUserSyncMode;
+	deviceIds?: string[];
+}
+
 export interface DeviceUserSyncJobProgress {
 	jobId: string;
 	status: "processing" | "completed" | "failed" | "cancelled";
+	syncMode?: DeviceUserSyncMode;
 	totalDevices: number;
 	processedDevices: number;
 	successfulDevices: number;
@@ -808,9 +817,11 @@ class DevicesService extends APIService {
 		}
 	}
 
-	async startDeviceUserSyncJob(): Promise<{ jobId: string; progress: DeviceUserSyncJobProgress }> {
+	async startDeviceUserSyncJob(
+		payload: DeviceUserSyncJobStartRequest = { mode: "full_refresh" },
+	): Promise<{ jobId: string; progress: DeviceUserSyncJobProgress }> {
 		try {
-			const response = await hrisApiClient.post<any>("/api/device/users/sync-jobs", {});
+			const response = await hrisApiClient.post<any>("/api/device/users/sync-jobs", payload);
 			const data = response.data?.data || response.data;
 			if (!data?.jobId) throw new Error("Failed to start device-user sync");
 			return data as { jobId: string; progress: DeviceUserSyncJobProgress };

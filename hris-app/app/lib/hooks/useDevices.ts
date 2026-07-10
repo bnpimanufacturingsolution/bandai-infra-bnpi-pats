@@ -6,6 +6,7 @@ import devicesService, {
 	type DeviceSyncPreviewResponse,
 	type DeviceSyncRunsResponse,
 	type DeviceImportJobProgress,
+	type DeviceUserSyncJobStartRequest,
 	type DeviceUserSyncJobProgress,
 	type DeviceUsersResponse,
 	type DeviceEventsResetScope,
@@ -182,8 +183,8 @@ export const useStartDeviceUserSyncJob = () => {
 	const queryClient = useQueryClient();
 
 	return useMutation({
-		mutationFn: async () => {
-			return await devicesService.startDeviceUserSyncJob();
+		mutationFn: async (payload: DeviceUserSyncJobStartRequest = { mode: "full_refresh" }) => {
+			return await devicesService.startDeviceUserSyncJob(payload);
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });

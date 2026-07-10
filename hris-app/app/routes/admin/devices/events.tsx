@@ -239,6 +239,7 @@ const eventActionOptions: SelectOption[] = [
 	{ value: "USER_UPDATED", label: "User updated" },
 	{ value: "USER_DELETED", label: "User deleted" },
 	{ value: "TAP_REJECTED", label: "Rejected access tap" },
+	{ value: "SYNC_SIGNAL", label: "Sync signal" },
 	{ value: "SYNC_IMPORTED", label: "Sync imported" },
 	{ value: "LISTENER_RECEIVED", label: "Listener received" },
 	{ value: "UNKNOWN", label: "Unknown" },

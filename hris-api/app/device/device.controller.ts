@@ -92,6 +92,7 @@ const DEVICE_EVENT_ACTIONS = new Set([
 	"USER_UPDATED",
 	"USER_DELETED",
 	"TAP_REJECTED",
+	"SYNC_SIGNAL",
 	"SYNC_IMPORTED",
 	"LISTENER_RECEIVED",
 	"UNKNOWN",
@@ -137,6 +138,7 @@ type DeviceImportJob = {
 const deviceImportJobs = new Map<string, DeviceImportJob>();
 
 type DeviceUserSyncJobStatus = "processing" | "completed" | "failed" | "cancelled";
+type DeviceUserSyncMode = "full_refresh" | "needs_attention_only";
 
 type DeviceUserSyncJobResult = {
 	deviceId: string;
@@ -150,6 +152,7 @@ type DeviceUserSyncJobResult = {
 type DeviceUserSyncJob = {
 	jobId: string;
 	status: DeviceUserSyncJobStatus;
+	syncMode: DeviceUserSyncMode;
 	organizationId: string;
 	totalDevices: number;
 	processedDevices: number;
@@ -2399,6 +2402,7 @@ export const controller = (prisma: PrismaClient) => {
 		req: Request;
 		organizationId: string;
 		devices: any[];
+		syncMode: DeviceUserSyncMode;
 		startedByUserId?: string | null;
 	}) => {
 		const results: DeviceUserSyncJobResult[] = [];
@@ -2411,7 +2415,10 @@ export const controller = (prisma: PrismaClient) => {
 			if (currentJob.cancelRequested) {
 				updateDeviceUserSyncJob(params.jobId, {
 					status: "cancelled",
-					message: "Cancel requested. The current tally stopped before the next device.",
+					message:
+						params.syncMode === "needs_attention_only"
+							? "Cancel requested. The needs-attention refresh stopped before the next device."
+							: "Cancel requested. The full source refresh stopped before the next device.",
 					processedDevices: results.length,
 					successfulDevices,
 					failedDevices,
@@ -2438,7 +2445,10 @@ export const controller = (prisma: PrismaClient) => {
 				successfulDevices += 1;
 				updateDeviceUserSyncJob(params.jobId, {
 					status: "processing",
-					message: `Synced ${device.name || device.address || "device"} (${results.length}/${params.devices.length}).`,
+					message:
+						params.syncMode === "needs_attention_only"
+							? `Refreshed ${device.name || device.address || "device"} from the needs-attention queue (${results.length}/${params.devices.length}).`
+							: `Refreshed ${device.name || device.address || "device"} from live source truth (${results.length}/${params.devices.length}).`,
 					processedDevices: results.length,
 					successfulDevices,
 					failedDevices,
@@ -2454,7 +2464,10 @@ export const controller = (prisma: PrismaClient) => {
 				failedDevices += 1;
 				updateDeviceUserSyncJob(params.jobId, {
 					status: "processing",
-					message: `Review needed for ${device.name || device.address || "device"} (${results.length}/${params.devices.length}).`,
+					message:
+						params.syncMode === "needs_attention_only"
+							? `Review needed for ${device.name || device.address || "device"} in the needs-attention queue (${results.length}/${params.devices.length}).`
+							: `Review needed for ${device.name || device.address || "device"} during the full source refresh (${results.length}/${params.devices.length}).`,
 					processedDevices: results.length,
 					successfulDevices,
 					failedDevices,
@@ -2468,8 +2481,12 @@ export const controller = (prisma: PrismaClient) => {
 			status: failedDevices > 0 ? "failed" : "completed",
 			message:
 				failedDevices > 0
-					? "Device-user tally finished with devices needing review."
-					: "Device-user tally finished across configured devices.",
+					? params.syncMode === "needs_attention_only"
+						? "Needs-attention device-user refresh finished with devices still needing review."
+						: "Full device-user refresh finished with devices still needing review."
+					: params.syncMode === "needs_attention_only"
+						? "Needs-attention device-user refresh finished."
+						: "Full device-user refresh finished across configured devices.",
 			processedDevices: results.length,
 			successfulDevices,
 			failedDevices,
@@ -2482,6 +2499,18 @@ export const controller = (prisma: PrismaClient) => {
 		const gate = assertDeviceUserAdmin(req, res);
 		if (!gate) return;
 		try {
+			const requestedMode = String((req.body as any)?.mode || "").trim().toLowerCase();
+			const syncMode: DeviceUserSyncMode =
+				requestedMode === "needs_attention_only" ? "needs_attention_only" : "full_refresh";
+			const requestedDeviceIds = Array.isArray((req.body as any)?.deviceIds)
+				? Array.from(
+						new Set(
+							((req.body as any).deviceIds as unknown[])
+								.map((value) => String(value || "").trim())
+								.filter(Boolean),
+						),
+					)
+				: [];
 			cleanupDeviceUserSyncJobs();
 			const devices = await prisma.device.findMany({
 				where: {
@@ -2503,17 +2532,35 @@ export const controller = (prisma: PrismaClient) => {
 				res.status(400).json(buildErrorResponse("No Hikvision devices are configured for device-user sync", 400));
 				return;
 			}
+			const targetDevices = requestedDeviceIds.length
+				? hikvisionDevices.filter((device) => requestedDeviceIds.includes(String(device.id)))
+				: hikvisionDevices;
+			if (!targetDevices.length) {
+				res.status(400).json(
+					buildErrorResponse(
+						syncMode === "needs_attention_only"
+							? "No configured Hikvision devices matched the current needs-attention refresh scope"
+							: "No configured Hikvision devices matched the requested sync scope",
+						400,
+					),
+				);
+				return;
+			}
 
 			const jobId = randomUUID();
 			const job: DeviceUserSyncJob = {
 				jobId,
 				status: "processing",
+				syncMode,
 				organizationId: gate.organizationId,
-				totalDevices: hikvisionDevices.length,
+				totalDevices: targetDevices.length,
 				processedDevices: 0,
 				successfulDevices: 0,
 				failedDevices: 0,
-				message: "Device-user tally queued",
+				message:
+					syncMode === "needs_attention_only"
+						? "Needs-attention device-user refresh queued"
+						: "Full device-user refresh queued",
 				results: [],
 				startedAt: new Date(),
 			};
@@ -2523,7 +2570,8 @@ export const controller = (prisma: PrismaClient) => {
 				jobId,
 				req,
 				organizationId: gate.organizationId,
-				devices: hikvisionDevices,
+				devices: targetDevices,
+				syncMode,
 				startedByUserId: (req as any).userId || null,
 			}).catch((error: any) => {
 				deviceLogger.error(`Device user sync job ${jobId} failed: ${error}`);

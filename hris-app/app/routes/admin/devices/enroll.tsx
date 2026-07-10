@@ -58,6 +58,7 @@ import deviceService, {
 	type DeviceSyncPreviewRow,
 	type DeviceUser,
 	type DeviceUserCredentialSummary,
+	type DeviceUserSyncMode,
 } from "~/services/devices.service";
 import type { Employee } from "~/services/employees.service";
 
@@ -116,6 +117,7 @@ type ActiveDeviceUserSyncJob = {
 };
 
 const DEVICE_USER_SYNC_JOB_STORAGE_KEY = "hris.device-user-sync-job";
+const DEFAULT_BULK_DEVICE_USER_SYNC_MODE: DeviceUserSyncMode = "full_refresh";
 
 export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }: DeviceEnrollmentPanelProps) {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -226,6 +228,9 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		status: "idle",
 		message: "",
 	});
+	const [bulkDeviceUserSyncMode, setBulkDeviceUserSyncMode] = useState<DeviceUserSyncMode>(
+		DEFAULT_BULK_DEVICE_USER_SYNC_MODE,
+	);
 	const [activeDeviceUserSyncJob, setActiveDeviceUserSyncJob] = useState<ActiveDeviceUserSyncJob | null>(() => {
 		try {
 			if (typeof window === "undefined") return null;
@@ -322,7 +327,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		setActiveDeviceUserSyncJob(null);
 		toast.warning("Previous device-user sync status expired", {
 			id: "device-user-sync-progress",
-			description: "Open Sync device users again to run the latest tally check.",
+			description: "Open Sync device users again to run the latest device-user refresh.",
 		});
 	}, [activeDeviceUserSyncJob, isDeviceUserSyncJobError]);
 
@@ -466,17 +471,17 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		if (deviceUserSyncJobStatus === "completed") {
 			toast.success("Device users synced", {
 				id: "device-user-sync-progress",
-				description: deviceUserSyncJobProgress?.message || "Configured devices were tallied successfully.",
+				description: deviceUserSyncJobProgress?.message || "Configured devices were refreshed successfully.",
 			});
 		} else if (deviceUserSyncJobStatus === "cancelled") {
 			toast.warning("Device-user sync cancelled", {
 				id: "device-user-sync-progress",
-				description: "The current tally stopped. Retry will check the latest device truth again.",
+				description: "The current refresh stopped. Retry will reread the latest device-user truth again.",
 			});
 		} else {
 			toast.error("Device-user sync needs attention", {
 				id: "device-user-sync-progress",
-				description: deviceUserSyncJobProgress?.message || "One or more devices failed during tally sync.",
+				description: deviceUserSyncJobProgress?.message || "One or more devices failed during the device-user refresh.",
 			});
 		}
 	}, [
@@ -684,7 +689,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		setBulkDeviceUserSyncState({
 			open: true,
 			status: "review",
-			message: "Review the per-device gap first, then run the manual tally sync.",
+			message: "Choose how wide the manual refresh should go, then run it against live device-user truth.",
 		});
 	};
 	const getBulkDeviceUserSyncStartFailureMessage = (error: unknown) => {
@@ -705,13 +710,36 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			toast.error("No configured devices are available to sync");
 			return;
 		}
+		const request =
+			bulkDeviceUserSyncMode === "needs_attention_only"
+				? {
+						mode: "needs_attention_only" as const,
+						deviceIds: needsAttentionDeviceIds,
+					}
+				: {
+						mode: "full_refresh" as const,
+					};
+		if (
+			bulkDeviceUserSyncMode === "needs_attention_only" &&
+			request.deviceIds.length === 0
+		) {
+			setBulkDeviceUserSyncState({
+				open: true,
+				status: "error",
+				message: "Every configured device already looks in sync. Switch to Full source refresh if you still want to reread every device user and biometric summary.",
+			});
+			return;
+		}
 		setBulkDeviceUserSyncState({
 			open: true,
 			status: "starting",
-			message: "Starting device-user tally and waiting for the first progress heartbeat.",
+			message:
+				bulkDeviceUserSyncMode === "needs_attention_only"
+					? "Starting the needs-attention refresh and waiting for the first progress heartbeat."
+					: "Starting the full source refresh and waiting for the first progress heartbeat.",
 		});
 		try {
-			const data = await startDeviceUserSyncJobMutation.mutateAsync();
+			const data = await startDeviceUserSyncJobMutation.mutateAsync(request);
 			if (data?.jobId) {
 				setActiveDeviceUserSyncJob({ jobId: data.jobId });
 				setBulkDeviceUserSyncState({
@@ -1051,6 +1079,24 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 						: preview.status || "synced";
 		return { device, preview, vendor, status };
 	});
+	const deviceNeedsUserRefresh = (item: SyncCenterDeviceItem) => {
+		const sourceCount = item.preview?.vendorUserCount;
+		const hrisCount = item.preview?.hrisUserCount;
+		const openCount = item.preview?.openUserCount;
+		const conflictCount = item.preview?.conflictUserCount;
+		const hasCountMismatch =
+			typeof sourceCount === "number" &&
+			typeof hrisCount === "number" &&
+			sourceCount !== hrisCount;
+		return (
+			hasCountMismatch ||
+			Number(openCount || 0) > 0 ||
+			Number(conflictCount || 0) > 0 ||
+			item.status === "needs_attention"
+		);
+	};
+	const needsAttentionSyncCenterDevices = syncCenterDevices.filter(deviceNeedsUserRefresh);
+	const needsAttentionDeviceIds = needsAttentionSyncCenterDevices.map((item) => item.device.id);
 	const selectedSyncCenterItem = syncCenterDevices.find((item) => item.device.id === selectedDeviceId);
 	const getDeviceUserSource = (deviceUser?: { rawPayload?: any } | null) => {
 		const raw = (deviceUser?.rawPayload || {}) as any;
@@ -1192,6 +1238,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	] as const;
 	const deviceUserSyncJobProcessed = Number(deviceUserSyncJobProgress?.processedDevices || 0);
 	const deviceUserSyncJobTotal = Math.max(Number(deviceUserSyncJobProgress?.totalDevices || syncCenterDevices.length || 1), 1);
+	const deviceUserSyncJobMode = deviceUserSyncJobProgress?.syncMode || DEFAULT_BULK_DEVICE_USER_SYNC_MODE;
 	const deviceUserSyncJobPercent = deviceUserSyncJobProgress
 		? Math.min(100, Math.round((deviceUserSyncJobProcessed / deviceUserSyncJobTotal) * 100))
 		: 0;
@@ -1222,8 +1269,10 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 					? "Sync finished"
 					: deviceUserSyncJobIsProcessing
 						? deviceUserSyncJobCancelRequested
-							? "Cancelling device-user tally"
-							: "Syncing device users"
+							? "Cancelling device-user refresh"
+							: deviceUserSyncJobMode === "needs_attention_only"
+								? "Refreshing devices that need attention"
+								: "Refreshing all device users"
 						: "Device-user sync status";
 	const bulkDeviceUserSyncSummaryItems = [
 		["Configured devices", deviceUserSyncJobProgress?.totalDevices ?? syncCenterDevices.length],
@@ -1234,7 +1283,11 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const bulkDeviceUserSyncResults = deviceUserSyncJobProgress?.results || [];
 	const deviceUserSyncJobSummary =
 		deviceUserSyncJobProgress
-			? `${metricValue(deviceUserSyncJobProgress.successfulDevices)} devices synced, ${metricValue(deviceUserSyncJobProgress.failedDevices)} need attention.`
+			? `${
+					deviceUserSyncJobMode === "needs_attention_only"
+						? "Needs-attention scope"
+						: "Full source refresh"
+				}: ${metricValue(deviceUserSyncJobProgress.successfulDevices)} devices synced, ${metricValue(deviceUserSyncJobProgress.failedDevices)} need attention.`
 			: "";
 	const bulkDeviceUserSyncToneClass =
 		bulkDeviceUserSyncState.status === "error"
@@ -1247,7 +1300,15 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			? "Sync could not start"
 			: bulkDeviceUserSyncState.status === "starting"
 				? "Starting device-user sync"
-				: bulkDeviceUserSyncState.message || "Run a manual device-user tally across all configured devices.";
+				: bulkDeviceUserSyncState.message || "Run a manual device-user refresh across configured devices.";
+	const bulkDeviceUserSyncModeDescription =
+		bulkDeviceUserSyncMode === "needs_attention_only"
+			? "Refresh only devices with a count mismatch, unresolved links, conflicts, or an existing attention flag."
+			: "Default and recommended. Reread every source user for each configured device and refresh saved biometric summaries even when the visible gap is zero.";
+	const bulkDeviceUserSyncScopeItems = [
+		["Full refresh scope", syncCenterDevices.length],
+		["Needs-attention scope", needsAttentionSyncCenterDevices.length],
+	] as const;
 	const devicesByVendor = syncCenterDevices.reduce<Record<string, SyncCenterDeviceItem[]>>(
 		(groups, item) => {
 			const vendor = item.vendor || "Unclassified";
@@ -1585,13 +1646,13 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								<div className="space-y-1">
 									<h2 className="text-sm font-semibold text-slate-950">Choose a device first</h2>
 									<p className="text-sm text-slate-600">
-										Start from the per-device summary so you can see the gap before opening the detailed user table.
+										Start from the per-device summary so you can compare source truth, saved HRIS rows, and unresolved links before opening the detailed user table.
 									</p>
 								</div>
 							<div className="flex gap-2">
 								<Button type="button" variant="outline" className="h-8 px-3" onClick={() => void refreshDeviceUserSummary()}>
 									<RefreshCw className="h-4 w-4" />
-									Refresh tally
+									Refresh summary
 								</Button>
 								<Button
 									type="button"
@@ -2124,7 +2185,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									))}
 								</div>
 								<p className="text-slate-600">
-									Existing manual links stay intact. Device-only users become HRIS device users after sync.
+									This device refresh rereads every source user for the selected device. Existing manual links stay intact, while saved biometric summaries and device-only users are refreshed in HRIS.
 								</p>
 							</div>
 						) : null}
@@ -2181,7 +2242,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				description={
 					activeDeviceUserSyncJob
 						? "You can close this window and reopen status from Sync device users."
-						: "Review the per-device gap first, then run a manual tally sync across all configured devices."
+						: "Choose the manual refresh scope, then reread live device-user truth."
 				}
 				className="max-w-4xl"
 				showCloseButton={!deviceUserSyncJobIsProcessing}
@@ -2223,7 +2284,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 							</p>
 						) : (
 							<p className="mt-2 text-xs text-orange-900/80">
-								This follows the same manual recovery path as Sync logs: run it when the source devices changed and you want HRIS to tally users again.
+								Use this when a device user, face count, card count, fingerprint count, or employee link may have changed and you want HRIS to reread the source truth.
 							</p>
 						)}
 						<div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -2234,6 +2295,63 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								</div>
 							))}
 						</div>
+						{!activeDeviceUserSyncJob ? (
+							<div className="mt-4 rounded-xl border border-white/80 bg-white/70 p-3">
+								<div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+									<div className="space-y-1">
+										<p className="text-sm font-semibold text-slate-950">Refresh scope</p>
+										<p className="text-xs text-slate-600">
+											Full refresh is the default because a zero visible gap can still hide stale biometric summaries or unresolved device-user truth.
+										</p>
+									</div>
+									<div className="grid gap-2 sm:grid-cols-2 lg:min-w-[420px]">
+										<button
+											type="button"
+											onClick={() => setBulkDeviceUserSyncMode("full_refresh")}
+											className={`rounded-xl border px-4 py-3 text-left transition ${
+												bulkDeviceUserSyncMode === "full_refresh"
+													? "border-orange-300 bg-orange-50 text-orange-950 shadow-sm"
+													: "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+											}`}>
+											<div className="flex items-center justify-between gap-3">
+												<span className="text-sm font-semibold">Full source refresh</span>
+												<Badge variant="success">Default</Badge>
+											</div>
+											<p className="mt-1 text-xs text-current/80">
+												Reread every saved source user on every configured device and refresh HRIS metadata for cards, faces, and fingerprint counts.
+											</p>
+										</button>
+										<button
+											type="button"
+											onClick={() => setBulkDeviceUserSyncMode("needs_attention_only")}
+											className={`rounded-xl border px-4 py-3 text-left transition ${
+												bulkDeviceUserSyncMode === "needs_attention_only"
+													? "border-amber-300 bg-amber-50 text-amber-950 shadow-sm"
+													: "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+											}`}>
+											<div className="flex items-center justify-between gap-3">
+												<span className="text-sm font-semibold">Needs attention only</span>
+												<Badge variant="secondary">{metricValue(needsAttentionSyncCenterDevices.length)} devices</Badge>
+											</div>
+											<p className="mt-1 text-xs text-current/80">
+												Only refresh devices whose current summary shows a mismatch, open links, conflicts, or an attention flag.
+											</p>
+										</button>
+									</div>
+								</div>
+								<div className="mt-3 flex flex-col gap-3 border-t border-slate-200/80 pt-3 sm:flex-row sm:items-center sm:justify-between">
+									<p className="text-xs text-slate-600">{bulkDeviceUserSyncModeDescription}</p>
+									<div className="grid grid-cols-2 gap-2 sm:min-w-[260px]">
+										{bulkDeviceUserSyncScopeItems.map(([label, value]) => (
+											<div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+												<p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
+												<p className="mt-1 text-sm font-semibold text-slate-950">{metricValue(value)}</p>
+											</div>
+										))}
+									</div>
+								</div>
+							</div>
+						) : null}
 					</div>
 
 					<div className="overflow-hidden rounded-md border border-slate-200">
@@ -2350,7 +2468,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								) : (
 									<RefreshCw className="h-4 w-4" />
 								)}
-								{startDeviceUserSyncJobMutation.isPending ? "Starting..." : "Retry gap sync"}
+								{startDeviceUserSyncJobMutation.isPending ? "Starting..." : "Run another refresh"}
 							</Button>
 						) : null}
 						{activeDeviceUserSyncJob && !deviceUserSyncJobIsProcessing ? (
@@ -2368,7 +2486,11 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 							<Button
 								type="button"
 								className="gap-2 bg-orange-500 text-white hover:bg-orange-600"
-								disabled={startDeviceUserSyncJobMutation.isPending || syncCenterDevices.length === 0}
+								disabled={
+									startDeviceUserSyncJobMutation.isPending ||
+									syncCenterDevices.length === 0 ||
+									(bulkDeviceUserSyncMode === "needs_attention_only" && needsAttentionSyncCenterDevices.length === 0)
+								}
 								onClick={() => void runBulkDeviceUserSync()}>
 								{startDeviceUserSyncJobMutation.isPending ? (
 									<Loader2 className="h-4 w-4 animate-spin" />
@@ -2377,9 +2499,9 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								)}
 								{startDeviceUserSyncJobMutation.isPending
 									? "Starting..."
-									: bulkDeviceUserSyncState.status === "error"
-										? "Retry gap sync"
-										: "Sync device users"}
+									: bulkDeviceUserSyncMode === "needs_attention_only"
+										? "Refresh needs-attention devices"
+										: "Refresh all device users"}
 							</Button>
 						) : null}
 						{!activeDeviceUserSyncJob && bulkDeviceUserSyncState.status === "error" ? (
