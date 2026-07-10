@@ -1152,6 +1152,10 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 					? "The VM service is up, but there is no fresh callback proof yet."
 					: "Start or restart the VM listener before testing device-to-device biometric sync.";
 	const formatSyncCenterTime = (value?: string | null) => (value ? formatDateTime(value) : "-");
+	const hikvisionRecentLogs = hikvisionListenerStatus?.logs?.recent || [];
+	const hikvisionLatestLog = hikvisionRecentLogs.length
+		? hikvisionRecentLogs[hikvisionRecentLogs.length - 1]
+		: "";
 	const runSyncCenterListenerAction = (action: "start" | "restart") => {
 		hikvisionListenerControl.mutate(action, {
 			onSuccess: () => {
@@ -1562,9 +1566,6 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 										</Badge>
 									</div>
 									<p className="mt-1 text-sm opacity-90">{hikvisionListenerSummary}</p>
-									<p className="mt-2 text-xs opacity-80">
-										Job tracking survives page refresh, but an API restart expires the in-memory active job id. You can safely rerun the refresh, and durable per-device results remain visible in Sync Runs.
-									</p>
 								</div>
 							</div>
 							<div className="flex flex-wrap gap-2">
@@ -1617,6 +1618,33 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								{hikvisionListenerStatus.sdk.lastError}
 							</p>
 						) : null}
+
+						<div className="mt-4 rounded-lg border border-current/10 bg-slate-950 p-3 text-slate-100">
+							<div className="flex items-center justify-between gap-3">
+								<p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
+									Recent listener log
+								</p>
+								<Badge variant="secondary">
+									{hikvisionRecentLogs.length ? `${hikvisionRecentLogs.length} lines` : "No log tail"}
+								</Badge>
+							</div>
+							<div className="mt-3 max-h-48 overflow-y-auto rounded-md bg-black/20 p-3">
+								{hikvisionRecentLogs.length ? (
+									<pre className="whitespace-pre-wrap break-words text-xs leading-5 text-slate-100">
+										{hikvisionRecentLogs.join("\n")}
+									</pre>
+								) : (
+									<p className="text-xs text-slate-300">
+										{hikvisionListenerStatus?.logs?.error || "No listener log lines returned by the VM status check."}
+									</p>
+								)}
+							</div>
+							{hikvisionLatestLog ? (
+								<p className="mt-2 truncate text-xs text-slate-400">
+									Latest log line: {hikvisionLatestLog}
+								</p>
+							) : null}
+						</div>
 					</section>
 				) : null}
 
@@ -1801,9 +1829,6 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 							<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
 								<div className="space-y-1">
 									<h2 className="text-sm font-semibold text-slate-950">Choose a device first</h2>
-									<p className="text-sm text-slate-600">
-										Start from the per-device summary so you can compare source truth, saved HRIS rows, and unresolved links before opening the detailed user table.
-									</p>
 								</div>
 							<div className="flex gap-2">
 								<Button type="button" variant="outline" className="h-8 px-3" onClick={() => void refreshDeviceUserSummary()}>

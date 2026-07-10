@@ -18,6 +18,7 @@
 #include <thread>
 #include <vector>
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 
 #include <dirent.h>
@@ -70,8 +71,13 @@ std::vector<DeviceSession> sessions;
 std::ofstream evidence_stream;
 std::mutex evidence_mutex;
 std::mutex peer_apply_guard_mutex;
+std::mutex delayed_reconcile_guard_mutex;
+std::mutex full_mirror_guard_mutex;
 std::mutex reconcile_spool_mutex;
 std::map<std::string, std::chrono::steady_clock::time_point> recent_peer_apply_by_host;
+std::map<std::string, unsigned long long> delayed_reconcile_by_host;
+std::set<std::string> pending_full_mirror_hosts;
+std::atomic<unsigned long long> delayed_reconcile_token{0};
 bool execute_mode = true;
 std::string hris_api_base;
 std::string hris_api_token;
@@ -79,6 +85,7 @@ std::string min_sdk_time;
 std::string reconcile_spool_dir = "/tmp/project-truth-hikvision-reconcile-spool";
 
 bool curl_post_json(const std::string &url, const std::string &body, const std::string &event_name);
+void queue_reconcile(const ReconcileJob &job);
 
 void handle_signal(int) {
     keep_running = 0;
@@ -301,6 +308,57 @@ bool should_suppress_recent_peer_apply(const std::string &host, DWORD major, DWO
     return true;
 }
 
+void schedule_delayed_reconcile(const ReconcileJob &job, std::chrono::seconds delay) {
+    if (job.source_host.empty()) {
+        queue_reconcile(job);
+        return;
+    }
+
+    const unsigned long long token = delayed_reconcile_token.fetch_add(1) + 1;
+    {
+        std::lock_guard<std::mutex> lock(delayed_reconcile_guard_mutex);
+        const auto found = delayed_reconcile_by_host.find(job.source_host);
+        if (found != delayed_reconcile_by_host.end()) {
+            emit_json({
+                {"event", "reconcile_deferred_already_pending"},
+                {"sourceDeviceId", job.source_device_id},
+                {"sourceHost", job.source_host},
+                {"minor", minor_name(job.minor)},
+                {"delaySeconds", std::to_string(delay.count())}
+            });
+            return;
+        }
+        delayed_reconcile_by_host[job.source_host] = token;
+    }
+
+    emit_json({
+        {"event", "reconcile_deferred_recent_peer_apply"},
+        {"sourceDeviceId", job.source_device_id},
+        {"sourceHost", job.source_host},
+        {"minor", minor_name(job.minor)},
+        {"delaySeconds", std::to_string(delay.count())}
+    });
+
+    std::thread([job, delay, token]() {
+        std::this_thread::sleep_for(delay);
+        {
+            std::lock_guard<std::mutex> lock(delayed_reconcile_guard_mutex);
+            const auto found = delayed_reconcile_by_host.find(job.source_host);
+            if (found == delayed_reconcile_by_host.end() || found->second != token) {
+                return;
+            }
+            delayed_reconcile_by_host.erase(found);
+        }
+        emit_json({
+            {"event", "reconcile_deferred_queue_release"},
+            {"sourceDeviceId", job.source_device_id},
+            {"sourceHost", job.source_host},
+            {"minor", minor_name(job.minor)}
+        });
+        queue_reconcile(job);
+    }).detach();
+}
+
 void enable_default_card_reader(BYTE *readers, size_t count) {
     if (readers == nullptr || count == 0) {
         return;
@@ -318,6 +376,21 @@ DeviceSession *find_session_by_host(const std::string &host) {
 }
 
 void queue_reconcile(const ReconcileJob &job) {
+    const bool full_mirror = should_full_mirror_reconcile(job);
+    if (full_mirror && !job.source_host.empty()) {
+        std::lock_guard<std::mutex> lock(full_mirror_guard_mutex);
+        if (pending_full_mirror_hosts.find(job.source_host) != pending_full_mirror_hosts.end()) {
+            emit_json({
+                {"event", "reconcile_queue_deduped_full_mirror"},
+                {"sourceDeviceId", job.source_device_id},
+                {"sourceHost", job.source_host},
+                {"minor", minor_name(job.minor)}
+            });
+            return;
+        }
+        pending_full_mirror_hosts.insert(job.source_host);
+    }
+
     {
         std::lock_guard<std::mutex> lock(queue_mutex);
         reconcile_queue.push_back(job);
@@ -441,6 +514,7 @@ void CALLBACK alarm_callback(
             {"sourceHost", job.source_host},
             {"minor", minor_name(job.minor)}
         });
+        schedule_delayed_reconcile(job, std::chrono::seconds(25));
         return;
     }
     queue_reconcile(job);
@@ -1408,6 +1482,19 @@ bool post_hris_contract(const ReconcileJob &job, const std::string &status) {
 }
 
 void process_reconcile_job(const ReconcileJob &job) {
+    const bool full_mirror = should_full_mirror_reconcile(job);
+    struct FullMirrorGuard {
+        bool enabled;
+        std::string host;
+        ~FullMirrorGuard() {
+            if (!enabled || host.empty()) {
+                return;
+            }
+            std::lock_guard<std::mutex> lock(full_mirror_guard_mutex);
+            pending_full_mirror_hosts.erase(host);
+        }
+    } full_mirror_guard{full_mirror, job.source_host};
+
     DeviceSession *source = find_session_by_host(job.source_host);
     if (source == nullptr && !job.source_device_id.empty()) {
         for (auto &session : sessions) {
@@ -1626,7 +1713,9 @@ void usage(const char *program) {
         << "[--device-file path] "
         << "[--device ...] [--evidence-jsonl path] [--hris-api-base url] [--hris-api-token token] "
         << "[--min-sdk-time YYYY-MM-DDTHH:MM:SS] [--execute|--dry-run] [--seconds n] "
-        << "[--replay-spool-only] [--post-contract-file path]\n";
+        << "[--replay-spool-only] [--post-contract-file path] "
+        << "[--manual-full-mirror-source-device-id id] "
+        << "[--manual-employee-no employeeNo] [--manual-include-fingerprints]\n";
 }
 
 }  // namespace
@@ -1636,6 +1725,9 @@ int main(int argc, char **argv) {
     std::vector<DeviceConfig> configs;
     bool replay_spool_only = false;
     std::string post_contract_file;
+    std::string manual_full_mirror_source_device_id;
+    std::string manual_employee_no;
+    bool manual_include_fingerprints = false;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -1688,6 +1780,12 @@ int main(int argc, char **argv) {
             if (!next(&hris_api_token)) return 2;
         } else if (arg == "--post-contract-file") {
             if (!next(&post_contract_file)) return 2;
+        } else if (arg == "--manual-full-mirror-source-device-id") {
+            if (!next(&manual_full_mirror_source_device_id)) return 2;
+        } else if (arg == "--manual-employee-no") {
+            if (!next(&manual_employee_no)) return 2;
+        } else if (arg == "--manual-include-fingerprints") {
+            manual_include_fingerprints = true;
         } else if (arg == "--min-sdk-time") {
             if (!next(&min_sdk_time)) return 2;
         } else if (arg == "--execute") {
@@ -1732,6 +1830,9 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    const bool manual_reconcile_mode =
+        !manual_full_mirror_source_device_id.empty() || !manual_employee_no.empty();
+
     if (configs.empty()) {
         usage(argv[0]);
         return 2;
@@ -1767,10 +1868,12 @@ int main(int argc, char **argv) {
     for (const auto &config : configs) {
         DeviceSession session;
         session.config = config;
-        if (login_device(session) && arm_alarm(session)) {
-            sessions.push_back(session);
-        } else if (session.user_id >= 0) {
-            NET_DVR_Logout_V30(session.user_id);
+        if (login_device(session)) {
+            if (arm_alarm(session) || manual_reconcile_mode) {
+                sessions.push_back(session);
+            } else if (session.user_id >= 0) {
+                NET_DVR_Logout_V30(session.user_id);
+            }
         }
     }
 
@@ -1781,6 +1884,42 @@ int main(int argc, char **argv) {
     }
 
     std::thread worker(worker_loop);
+    if (!manual_full_mirror_source_device_id.empty()) {
+        DeviceSession *manual_source = nullptr;
+        for (auto &session : sessions) {
+            if (session.config.hris_device_id == manual_full_mirror_source_device_id) {
+                manual_source = &session;
+                break;
+            }
+        }
+        if (manual_source == nullptr) {
+            emit_json({
+                {"event", "manual_reconcile_queue_failed"},
+                {"reason", "source_device_not_armed"},
+                {"sourceDeviceId", manual_full_mirror_source_device_id}
+            });
+        } else {
+            ReconcileJob manual_job;
+            manual_job.source_host = manual_source->config.host;
+            manual_job.source_device_id = manual_source->config.hris_device_id;
+            manual_job.employee_no = manual_employee_no;
+            manual_job.major = MAJOR_OPERATION;
+            manual_job.minor = manual_employee_no.empty() ? 112 : MINOR_ADD_USER_INFO;
+            manual_job.event_kind = manual_employee_no.empty()
+                ? "manual_full_mirror"
+                : "manual_single_user_reconcile";
+            manual_job.include_fingerprints = manual_include_fingerprints || manual_employee_no.empty();
+            queue_reconcile(manual_job);
+            emit_json({
+                {"event", "manual_reconcile_queued"},
+                {"sourceDeviceId", manual_job.source_device_id},
+                {"sourceHost", manual_job.source_host},
+                {"employeeNo", manual_job.employee_no},
+                {"includeFingerprints", manual_job.include_fingerprints ? "true" : "false"},
+                {"mode", execute_mode ? "execute" : "dry-run"}
+            });
+        }
+    }
     emit_json({
         {"event", "service_started"},
         {"armedDevices", std::to_string(sessions.size())},

@@ -1401,6 +1401,12 @@ export const controller = (prisma: PrismaClient) => {
 		let unmatched = 0;
 		let conflict = 0;
 		let disabled = 0;
+		let pruned = 0;
+		const currentVendorUserIds = new Set(
+			candidates
+				.map((candidate) => String(candidate.vendorUserId || "").trim())
+				.filter(Boolean),
+		);
 
 		for (const candidate of candidates) {
 			const existing = await (prisma as any).deviceUser.findUnique({
@@ -1463,7 +1469,32 @@ export const controller = (prisma: PrismaClient) => {
 				created += 1;
 			}
 		}
-		return { created, updated, linked, unmatched, conflict, disabled };
+		if (params.source === "hikvision") {
+			const staleWhere = {
+				organizationId,
+				deviceId,
+				...(currentVendorUserIds.size > 0
+					? {
+							vendorUserId: {
+								notIn: [...currentVendorUserIds],
+							},
+						}
+					: {}),
+			};
+			const staleRows = await (prisma as any).deviceUser.findMany({
+				where: staleWhere,
+				select: { id: true },
+			});
+			if (staleRows.length > 0) {
+				pruned = staleRows.length;
+				await (prisma as any).deviceUser.deleteMany({
+					where: {
+						id: { in: staleRows.map((row: { id: string }) => row.id) },
+					},
+				});
+			}
+		}
+		return { created, updated, linked, unmatched, conflict, disabled, pruned };
 	};
 
 	const backfillDeviceUsersFromLegacyEmployees = async (params: {
