@@ -46,7 +46,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("openPhysicalDeviceUsers");
 		expect(enroll).toContain("Choose a device first");
 		expect(enroll).toContain("Back to device summary");
-		expect(enroll).toContain("Refresh tally");
+		expect(enroll).toContain("Refresh summary");
 		expect(enroll).toContain("Review user sync");
 		expect(enroll).not.toContain("Sync first");
 		expect(enroll).toContain("Change employee link");
@@ -74,6 +74,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Review sync");
 		expect(enroll).toContain("Sync device users");
 		expect(enroll).toContain('title="Sync device users"');
+		expect(enroll).toContain("Full source refresh");
+		expect(enroll).toContain("Needs attention only");
+		expect(enroll).toContain("Full refresh is the default");
+		expect(enroll).toContain("Refresh all device users");
+		expect(enroll).toContain("Refresh needs-attention devices");
 		expect(enroll).toContain("Read from device");
 		expect(enroll).toContain("Current view");
 		expect(enroll).toContain("HRIS records");
@@ -89,6 +94,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("New records");
 		expect(enroll).toContain("Auto-linked");
 		expect(enroll).toContain("Rows marked Needs link were saved in HRIS");
+		expect(enroll).toContain("saved biometric summaries");
 		expect(enroll).toContain("Physical");
 		expect(enroll).toContain("Historical HRIS backfill");
 		expect(enroll).toContain("Loading enrolled face photo");

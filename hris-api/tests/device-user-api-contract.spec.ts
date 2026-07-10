@@ -35,6 +35,10 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("hikvisionFetchBinary");
 		expect(controller).to.include("readDeviceUserFaceUrl");
 		expect(controller).to.include("Device user face photo host does not match the configured device");
+		expect(controller).to.include('type DeviceUserSyncMode = "full_refresh" | "needs_attention_only"');
+		expect(controller).to.include('const requestedMode = String((req.body as any)?.mode || "").trim().toLowerCase()');
+		expect(controller).to.include('syncMode === "needs_attention_only"');
+		expect(controller).to.include("deviceIds");
 	});
 
 	it("persists log sync run summaries so known skipped rows do not remain forever missing", () => {

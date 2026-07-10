@@ -19,6 +19,10 @@ import {
 	Activity,
 	Clock3,
 	XCircle,
+	Power,
+	Wifi,
+	WifiOff,
+	AlertTriangle,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -30,6 +34,8 @@ import {
 	useDeviceSyncRuns,
 	useDeviceUsers,
 	useImportDeviceEnrollment,
+	useHikvisionListenerStatus,
+	useControlHikvisionListener,
 	useLinkDeviceUser,
 	useStartDeviceUserSyncJob,
 	useDeviceUserSyncJob,
@@ -208,6 +214,13 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		{ limit: 12 },
 		Boolean(selectedDeviceId),
 	);
+	const {
+		data: hikvisionListenerStatus,
+		isLoading: isLoadingHikvisionListenerStatus,
+		error: hikvisionListenerStatusError,
+		refetch: refetchHikvisionListenerStatus,
+	} = useHikvisionListenerStatus(activePanel === "overview" || activePanel === "users" || activePanel === "runs");
+	const hikvisionListenerControl = useControlHikvisionListener();
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
 	const startDeviceUserSyncJobMutation = useStartDeviceUserSyncJob();
 	const cancelDeviceUserSyncJobMutation = useCancelDeviceUserSyncJob();
@@ -325,6 +338,12 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	useEffect(() => {
 		if (!activeDeviceUserSyncJob || !isDeviceUserSyncJobError) return;
 		setActiveDeviceUserSyncJob(null);
+		setBulkDeviceUserSyncState({
+			open: true,
+			status: "error",
+			message:
+				"Previous device-user sync status expired after an API restart or cleanup. You can rerun the refresh safely; per-device sync is retryable and durable Sync Runs remain available below.",
+		});
 		toast.warning("Previous device-user sync status expired", {
 			id: "device-user-sync-progress",
 			description: "Open Sync device users again to run the latest device-user refresh.",
@@ -721,7 +740,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 					};
 		if (
 			bulkDeviceUserSyncMode === "needs_attention_only" &&
-			request.deviceIds.length === 0
+			needsAttentionDeviceIds.length === 0
 		) {
 			setBulkDeviceUserSyncState({
 				open: true,
@@ -1098,6 +1117,48 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const needsAttentionSyncCenterDevices = syncCenterDevices.filter(deviceNeedsUserRefresh);
 	const needsAttentionDeviceIds = needsAttentionSyncCenterDevices.map((item) => item.device.id);
 	const selectedSyncCenterItem = syncCenterDevices.find((item) => item.device.id === selectedDeviceId);
+	const syncCenterHasHikvisionDevices = syncCenterDevices.some((item) => item.vendor === "Hikvision");
+	const hikvisionListenerRunning = Boolean(hikvisionListenerStatus?.running);
+	const hikvisionSdkState = String(hikvisionListenerStatus?.sdk?.state || "unknown").trim();
+	const hikvisionSdkReceiving = Boolean(hikvisionListenerStatus?.sdk?.receivingCallbacks);
+	const hikvisionSdkPosting = Boolean(hikvisionListenerStatus?.sdk?.postingToHris);
+	const hikvisionSdkArmed = Boolean(hikvisionListenerStatus?.sdk?.armed);
+	const hikvisionListenerToneClass =
+		hikvisionSdkReceiving || hikvisionSdkArmed
+			? "border-emerald-200 bg-emerald-50 text-emerald-950"
+			: hikvisionListenerStatusError
+				? "border-red-200 bg-red-50 text-red-950"
+				: "border-amber-200 bg-amber-50 text-amber-950";
+	const hikvisionListenerTitle = isLoadingHikvisionListenerStatus
+		? "Checking Hikvision listener"
+		: hikvisionSdkReceiving
+			? "SDK listener receiving callbacks"
+			: hikvisionSdkState === "posting_failed"
+				? "SDK listener cannot post back to HRIS"
+				: hikvisionSdkState === "login_failed"
+					? "SDK listener login failed"
+					: hikvisionSdkArmed
+						? "SDK listener armed"
+						: hikvisionListenerRunning
+							? "VM listener running without fresh callback proof"
+							: "VM listener stopped";
+	const hikvisionListenerSummary = hikvisionListenerStatusError
+		? "Listener status is unavailable right now."
+		: hikvisionSdkReceiving
+			? "Callbacks are reaching the VM and the listener is actively receiving device events."
+			: hikvisionSdkPosting
+				? "The listener is posting to HRIS, but a fresh callback has not been observed in this window."
+				: hikvisionListenerRunning
+					? "The VM service is up, but there is no fresh callback proof yet."
+					: "Start or restart the VM listener before testing device-to-device biometric sync.";
+	const formatSyncCenterTime = (value?: string | null) => (value ? formatDateTime(value) : "-");
+	const runSyncCenterListenerAction = (action: "start" | "restart") => {
+		hikvisionListenerControl.mutate(action, {
+			onSuccess: () => {
+				void refetchHikvisionListenerStatus();
+			},
+		});
+	};
 	const getDeviceUserSource = (deviceUser?: { rawPayload?: any } | null) => {
 		const raw = (deviceUser?.rawPayload || {}) as any;
 		const source = raw?.hrisSync?.source || raw?.source || raw?.syncSource || "";
@@ -1463,6 +1524,101 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 					<TabsTrigger value="logs">Device Logs</TabsTrigger>
 					<TabsTrigger value="runs">Sync Runs</TabsTrigger>
 				</TabsList>
+
+				{syncCenterHasHikvisionDevices ? (
+					<section className={`rounded-xl border p-4 ${hikvisionListenerToneClass}`}>
+						<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+							<div className="flex min-w-0 gap-3">
+								<div
+									className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+										hikvisionSdkReceiving || hikvisionSdkArmed
+											? "bg-emerald-100 text-emerald-700"
+											: hikvisionListenerStatusError
+												? "bg-red-100 text-red-700"
+												: "bg-amber-100 text-amber-700"
+									}`}>
+									{isLoadingHikvisionListenerStatus ? (
+										<Loader2 className="h-4 w-4 animate-spin" />
+									) : hikvisionSdkReceiving ? (
+										<Wifi className="h-4 w-4" />
+									) : hikvisionListenerStatusError ? (
+										<AlertTriangle className="h-4 w-4" />
+									) : (
+										<WifiOff className="h-4 w-4" />
+									)}
+								</div>
+								<div className="min-w-0">
+									<div className="flex flex-wrap items-center gap-2">
+										<p className="text-sm font-semibold">{hikvisionListenerTitle}</p>
+										<Badge
+											variant={
+												hikvisionSdkReceiving || hikvisionSdkArmed
+													? "success"
+													: hikvisionListenerStatusError
+														? "destructive"
+														: "warning"
+											}>
+											{hikvisionSdkState.replace(/_/g, " ")}
+										</Badge>
+									</div>
+									<p className="mt-1 text-sm opacity-90">{hikvisionListenerSummary}</p>
+									<p className="mt-2 text-xs opacity-80">
+										Job tracking survives page refresh, but an API restart expires the in-memory active job id. You can safely rerun the refresh, and durable per-device results remain visible in Sync Runs.
+									</p>
+								</div>
+							</div>
+							<div className="flex flex-wrap gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									className="h-9 px-3"
+									disabled={hikvisionListenerControl.isPending || isLoadingHikvisionListenerStatus}
+									onClick={() => void refetchHikvisionListenerStatus()}>
+									<RefreshCw className="h-4 w-4" />
+									Check listener
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									className="h-9 px-3"
+									disabled={hikvisionListenerControl.isPending}
+									onClick={() =>
+										runSyncCenterListenerAction(hikvisionListenerRunning ? "restart" : "start")
+									}>
+									{hikvisionListenerControl.isPending ? (
+										<Loader2 className="h-4 w-4 animate-spin" />
+									) : hikvisionListenerRunning ? (
+										<RefreshCw className="h-4 w-4" />
+									) : (
+										<Power className="h-4 w-4" />
+									)}
+									{hikvisionListenerRunning ? "Restart listener" : "Start listener"}
+								</Button>
+							</div>
+						</div>
+
+						<div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+							{[
+								["VM service", hikvisionListenerRunning ? "Running" : "Stopped"],
+								["Last callback", formatSyncCenterTime(hikvisionListenerStatus?.sdk?.lastAlarmAt)],
+								["Last HRIS post", formatSyncCenterTime(hikvisionListenerStatus?.sdk?.lastPostAt)],
+								["Last login", formatSyncCenterTime(hikvisionListenerStatus?.sdk?.lastLoginAt)],
+								["Checked", formatSyncCenterTime(hikvisionListenerStatus?.checkedAt)],
+							].map(([label, value]) => (
+								<div key={label} className="rounded-lg border border-current/10 bg-white/70 px-3 py-2">
+									<p className="text-[11px] font-medium uppercase tracking-wide opacity-70">{label}</p>
+									<p className="mt-1 text-sm font-semibold text-slate-950">{value}</p>
+								</div>
+							))}
+						</div>
+
+						{hikvisionListenerStatus?.sdk?.lastError ? (
+							<p className="mt-3 rounded-lg border border-current/15 bg-white/70 px-3 py-2 text-sm text-slate-900">
+								{hikvisionListenerStatus.sdk.lastError}
+							</p>
+						) : null}
+					</section>
+				) : null}
 
 				<TabsContent value="overview" className="m-0 space-y-3">
 					{isLoadingDevices || isLoadingSyncPreview ? (

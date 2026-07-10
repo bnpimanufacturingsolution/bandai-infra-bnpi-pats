@@ -3589,7 +3589,7 @@ export const controller = (prisma: PrismaClient) => {
 					Number(row?._count?._all || 0),
 				);
 			}
-			const deviceUserRows = await (prisma as any).deviceUser.findMany({
+			const deviceUserRows = (await (prisma as any).deviceUser.findMany({
 				where: {
 					organizationId: String(organizationId),
 					deviceId: { in: syncDevices.map((device) => device.id) },
@@ -3599,9 +3599,12 @@ export const controller = (prisma: PrismaClient) => {
 					status: true,
 					employeeId: true,
 				},
-			});
-			const deviceUserRowsByDeviceId = deviceUserRows.reduce<Map<string, Array<{ status?: string | null; employeeId?: string | null }>>>(
-				(groups, row: any) => {
+			})) as Array<{ deviceId?: string | null; status?: string | null; employeeId?: string | null }>;
+			const deviceUserRowsByDeviceId = deviceUserRows.reduce(
+				(
+					groups: Map<string, Array<{ status?: string | null; employeeId?: string | null }>>,
+					row,
+				) => {
 					const deviceId = String(row.deviceId || "").trim();
 					if (!deviceId) return groups;
 					const bucket = groups.get(deviceId) || [];

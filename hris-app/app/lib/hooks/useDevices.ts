@@ -224,6 +224,7 @@ export const useDeviceSyncPreview = (
 		queryFn: () => devicesService.getDeviceSyncPreview(params),
 		enabled,
 		staleTime: 10 * 1000,
+		refetchInterval: enabled ? 5 * 1000 : false,
 		retry: 1,
 	});
 };
