@@ -141,6 +141,27 @@ describe("Device event taxonomy helper", () => {
 		});
 	});
 
+	it("surfaces observed Hikvision operation minors as enrollment-sync signals instead of generic access-control rows", () => {
+		const taxonomy = classifyDeviceEvent({
+			source: "EN_HCNETSDK_ALARM",
+			status: "IGNORED",
+			major: "3",
+			minor: "80",
+			payload: {
+				eventKind: "biometric_operation_sync",
+				actionCode: "OBSERVED_OPERATION_MINOR_80",
+			},
+		});
+
+		expect(taxonomy).to.deep.include({
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "SYNC_SIGNAL",
+			eventLabel: "Device user or biometric operation",
+			eventConfidence: "INFERRED",
+			capabilityConfidence: "inferred",
+		});
+	});
+
 	it("returns only persisted fields from the write-time taxonomy helper", () => {
 		const persisted = buildPersistedDeviceEventTaxonomy({
 			source: "ZKTECO_EVENT",

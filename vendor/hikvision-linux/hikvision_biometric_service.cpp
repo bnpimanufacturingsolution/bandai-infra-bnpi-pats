@@ -11,6 +11,8 @@
 #include <iostream>
 #include <map>
 #include <mutex>
+#include <regex>
+#include <set>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -63,6 +65,8 @@ std::deque<ReconcileJob> reconcile_queue;
 std::vector<DeviceSession> sessions;
 std::ofstream evidence_stream;
 std::mutex evidence_mutex;
+std::mutex peer_apply_guard_mutex;
+std::map<std::string, std::chrono::steady_clock::time_point> recent_peer_apply_by_host;
 bool execute_mode = true;
 std::string hris_api_base;
 std::string hris_api_token;
@@ -150,6 +154,10 @@ void emit_json(const std::map<std::string, std::string> &fields) {
 
 std::string minor_name(DWORD minor) {
     switch (minor) {
+        case 80: return "OBSERVED_OPERATION_MINOR_80";
+        case 112: return "OBSERVED_OPERATION_MINOR_112";
+        case 121: return "OBSERVED_OPERATION_MINOR_121";
+        case 122: return "OBSERVED_OPERATION_MINOR_122";
         case MINOR_ADD_FINGER_BY_CARD: return "MINOR_ADD_FINGER_BY_CARD";
         case MINOR_ADD_FINGER_BY_EMPLOYEE_NO: return "MINOR_ADD_FINGER_BY_EMPLOYEE_NO";
         case MINOR_MOD_FINGER_BY_CARD: return "MINOR_MOD_FINGER_BY_CARD";
@@ -194,6 +202,10 @@ bool is_user_management_minor(DWORD minor) {
            minor == MINOR_CLR_USER_INFO;
 }
 
+bool is_observed_operation_sync_minor(DWORD minor) {
+    return minor == 80 || minor == 112 || minor == 121 || minor == 122;
+}
+
 bool is_card_management_minor(DWORD minor) {
     return minor == MINOR_ADD_CARD ||
            minor == MINOR_MOD_CARD ||
@@ -225,6 +237,9 @@ std::string classify_event(DWORD major, DWORD minor) {
     if (major == MAJOR_OPERATION && is_user_management_minor(minor)) {
         return "biometric_user_management";
     }
+    if (major == MAJOR_OPERATION && is_observed_operation_sync_minor(minor)) {
+        return "biometric_operation_sync";
+    }
     if (minor == MINOR_FINGERPRINT_COMPARE_PASS ||
         minor == MINOR_CARD_FINGERPRINT_VERIFY_PASS) {
         return "attendance_fingerprint_success";
@@ -241,7 +256,48 @@ bool should_queue_reconcile(DWORD major, DWORD minor) {
     return major == MAJOR_OPERATION &&
            (is_fingerprint_management_minor(minor) ||
             is_card_management_minor(minor) ||
-            is_user_management_minor(minor));
+            is_user_management_minor(minor) ||
+            is_observed_operation_sync_minor(minor));
+}
+
+bool should_full_mirror_reconcile(const ReconcileJob &job) {
+    return job.major == MAJOR_OPERATION &&
+           (job.employee_no.empty() || is_observed_operation_sync_minor(job.minor));
+}
+
+void mark_recent_peer_apply(const std::string &host) {
+    if (host.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(peer_apply_guard_mutex);
+    recent_peer_apply_by_host[host] = std::chrono::steady_clock::now();
+}
+
+bool should_suppress_recent_peer_apply(const std::string &host, DWORD major, DWORD minor) {
+    if (host.empty() || major != MAJOR_OPERATION || !is_observed_operation_sync_minor(minor)) {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(peer_apply_guard_mutex);
+    const auto found = recent_peer_apply_by_host.find(host);
+    if (found == recent_peer_apply_by_host.end()) {
+        return false;
+    }
+
+    const auto age = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now() - found->second);
+    if (age > std::chrono::seconds(20)) {
+        recent_peer_apply_by_host.erase(found);
+        return false;
+    }
+    return true;
+}
+
+void enable_default_card_reader(BYTE *readers, size_t count) {
+    if (readers == nullptr || count == 0) {
+        return;
+    }
+    readers[0] = 1;
 }
 
 DeviceSession *find_session_by_host(const std::string &host) {
@@ -370,6 +426,15 @@ void CALLBACK alarm_callback(
     if (!should_queue_reconcile(acs->dwMajor, acs->dwMinor)) {
         return;
     }
+    if (should_suppress_recent_peer_apply(job.source_host, job.major, job.minor)) {
+        emit_json({
+            {"event", "reconcile_suppressed_recent_peer_apply"},
+            {"sourceDeviceId", job.source_device_id},
+            {"sourceHost", job.source_host},
+            {"minor", minor_name(job.minor)}
+        });
+        return;
+    }
     queue_reconcile(job);
 }
 
@@ -487,11 +552,121 @@ bool read_source_user(DeviceSession &source, const ReconcileJob &job, std::strin
     return ok;
 }
 
+std::string extract_first_object_for_key(const std::string &json, const std::string &key) {
+    const size_t key_pos = json.find(key);
+    if (key_pos == std::string::npos) {
+        return "";
+    }
+
+    const size_t object_start = json.find('{', key_pos + key.size());
+    if (object_start == std::string::npos) {
+        return "";
+    }
+
+    int depth = 0;
+    bool in_string = false;
+    bool escaped = false;
+    for (size_t index = object_start; index < json.size(); ++index) {
+        const char c = json[index];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (c == '"') {
+            in_string = true;
+            continue;
+        }
+        if (c == '{') {
+            depth += 1;
+        } else if (c == '}') {
+            depth -= 1;
+            if (depth == 0) {
+                return json.substr(object_start, index - object_start + 1);
+            }
+        }
+    }
+    return "";
+}
+
+std::string build_user_setup_payload_from_search_response(const std::string &response) {
+    const std::string user_object = extract_first_object_for_key(response, "\"UserInfo\"");
+    if (user_object.empty()) {
+        return "";
+    }
+    return std::string("{\"UserInfo\":") + user_object + "}";
+}
+
+std::set<std::string> extract_employee_numbers_from_search_response(const std::string &response) {
+    std::set<std::string> employee_numbers;
+    static const std::regex employee_regex("\"employeeNo\"\\s*:\\s*\"([^\"]+)\"");
+    for (std::sregex_iterator it(response.begin(), response.end(), employee_regex), end; it != end; ++it) {
+        const std::string employee_no = (*it)[1].str();
+        if (!employee_no.empty()) {
+            employee_numbers.insert(employee_no);
+        }
+    }
+    return employee_numbers;
+}
+
+std::vector<std::string> read_source_employee_numbers(DeviceSession &source) {
+    constexpr int page_size = 64;
+    std::set<std::string> employee_numbers;
+
+    for (int offset = 0; offset < 1024; offset += page_size) {
+        std::ostringstream body;
+        body << "{\"UserInfoSearchCond\":{\"searchID\":\"pt-full-mirror-" << offset
+             << "\",\"searchResultPosition\":" << offset
+             << ",\"maxResults\":" << page_size << "}}";
+
+        std::string response;
+        const bool ok = stdxml_json_request(
+            source,
+            "POST /ISAPI/AccessControl/UserInfo/Search?format=json",
+            body.str(),
+            &response);
+
+        if (!ok) {
+            emit_json({
+                {"event", "source_user_inventory_read"},
+                {"sourceDeviceId", source.config.hris_device_id},
+                {"ok", "false"},
+                {"offset", std::to_string(offset)},
+                {"lastError", std::to_string(NET_DVR_GetLastError())}
+            });
+            break;
+        }
+
+        const std::set<std::string> page_employee_numbers =
+            extract_employee_numbers_from_search_response(response);
+        employee_numbers.insert(page_employee_numbers.begin(), page_employee_numbers.end());
+        emit_json({
+            {"event", "source_user_inventory_read"},
+            {"sourceDeviceId", source.config.hris_device_id},
+            {"ok", "true"},
+            {"offset", std::to_string(offset)},
+            {"pageEmployees", std::to_string(page_employee_numbers.size())}
+        });
+
+        if (page_employee_numbers.size() < page_size) {
+            break;
+        }
+    }
+
+    return std::vector<std::string>(employee_numbers.begin(), employee_numbers.end());
+}
+
 struct FingerprintReadContext {
     std::mutex mutex;
     std::condition_variable cv;
     bool done = false;
     bool failed = false;
+    bool saw_failure = false;
     int records = 0;
     std::vector<NET_DVR_FINGER_PRINT_CFG_V50> templates;
 };
@@ -510,6 +685,17 @@ void CALLBACK fingerprint_callback(DWORD type, void *buffer, DWORD buffer_length
         if (record.dwFingerPrintLen > 0) {
             ctx->templates.push_back(record);
             ctx->records += 1;
+        }
+    } else if (type == NET_SDK_CALLBACK_TYPE_DATA && buffer != nullptr &&
+        buffer_length >= sizeof(NET_DVR_FINGER_PRINT_STATUS_V50)) {
+        NET_DVR_FINGER_PRINT_STATUS_V50 status{};
+        std::memcpy(&status, buffer, sizeof(status));
+        const bool reader_failed =
+            status.dwCardReaderNo < MAX_CARD_READER_NUM_512 &&
+            status.byCardReaderRecvStatus[status.dwCardReaderNo] != 0 &&
+            status.byCardReaderRecvStatus[status.dwCardReaderNo] != 1;
+        if (status.byRecvStatus != 0 || reader_failed) {
+            ctx->saw_failure = true;
         }
     } else if (type == NET_SDK_CALLBACK_TYPE_STATUS) {
         if (buffer != nullptr && buffer_length >= sizeof(DWORD)) {
@@ -542,9 +728,7 @@ std::vector<NET_DVR_FINGER_PRINT_CFG_V50> read_source_fingerprints(DeviceSession
     cond.dwFingerPrintNum = 0xffffffff;
     cond.byFingerPrintID = 0xff;
     std::strncpy(reinterpret_cast<char *>(cond.byEmployeeNo), job.employee_no.c_str(), NET_SDK_EMPLOYEE_NO_LEN - 1);
-    for (size_t i = 0; i < sizeof(cond.byEnableCardReader); ++i) {
-        cond.byEnableCardReader[i] = 1;
-    }
+    enable_default_card_reader(cond.byEnableCardReader, sizeof(cond.byEnableCardReader));
 
     FingerprintReadContext ctx;
     const LONG handle = NET_DVR_StartRemoteConfig(
@@ -585,6 +769,17 @@ std::vector<NET_DVR_FINGER_PRINT_CFG_V50> read_source_fingerprints(DeviceSession
 }
 
 bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::string &user_json) {
+    const std::string setup_payload = build_user_setup_payload_from_search_response(user_json);
+    if (setup_payload.empty()) {
+        emit_json({
+            {"event", "peer_user_write_skipped"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", job.employee_no},
+            {"reason", "invalid_source_user_payload"}
+        });
+        return false;
+    }
+
     if (!execute_mode) {
         emit_json({
             {"event", "peer_user_write_preview"},
@@ -599,7 +794,7 @@ bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::
     const bool ok = stdxml_json_request(
         target,
         "PUT /ISAPI/AccessControl/UserInfo/SetUp?format=json",
-        user_json,
+        setup_payload,
         &response);
 
     emit_json({
@@ -609,6 +804,9 @@ bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::
         {"ok", ok ? "true" : "false"},
         {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
     });
+    if (ok) {
+        mark_recent_peer_apply(target.config.host);
+    }
     return ok;
 }
 
@@ -642,9 +840,7 @@ bool write_peer_fingerprints(
     cond.dwFingerPrintNum = static_cast<DWORD>(templates.size());
     cond.byFingerPrintID = 0xff;
     std::strncpy(reinterpret_cast<char *>(cond.byEmployeeNo), job.employee_no.c_str(), NET_SDK_EMPLOYEE_NO_LEN - 1);
-    for (size_t i = 0; i < sizeof(cond.byEnableCardReader); ++i) {
-        cond.byEnableCardReader[i] = 1;
-    }
+    enable_default_card_reader(cond.byEnableCardReader, sizeof(cond.byEnableCardReader));
 
     FingerprintReadContext ctx;
     const LONG handle = NET_DVR_StartRemoteConfig(
@@ -668,21 +864,47 @@ bool write_peer_fingerprints(
 
     bool ok = true;
     for (auto record : templates) {
+        record.dwSize = sizeof(record);
         std::strncpy(reinterpret_cast<char *>(record.byEmployeeNo), job.employee_no.c_str(), NET_SDK_EMPLOYEE_NO_LEN - 1);
-        DWORD returned = 0;
-        NET_DVR_FINGER_PRINT_STATUS_V50 status{};
-        const LONG send_status = NET_DVR_SendWithRecvRemoteConfig(
+        enable_default_card_reader(record.byEnableCardReader, sizeof(record.byEnableCardReader));
+        const BOOL send_ok = NET_DVR_SendRemoteConfig(
             handle,
-            &record,
-            sizeof(record),
-            &status,
-            sizeof(status),
-            &returned);
-        if (send_status < 0) {
+            3,
+            reinterpret_cast<char *>(&record),
+            sizeof(record));
+        if (send_ok != TRUE) {
             ok = false;
+            emit_json({
+                {"event", "peer_fingerprint_write_status"},
+                {"targetDeviceId", target.config.hris_device_id},
+                {"employeeNo", job.employee_no},
+                {"sendStatus", "send_remote_config_failed"},
+                {"recvStatus", "unknown"},
+                {"fingerPrintId", std::to_string(record.byFingerPrintID)},
+                {"attempts", "1"},
+                {"lastError", std::to_string(NET_DVR_GetLastError())}
+            });
         }
     }
+    {
+        std::unique_lock<std::mutex> lock(ctx.mutex);
+        ctx.cv.wait_for(lock, std::chrono::seconds(10), [&ctx] { return ctx.done; });
+    }
     NET_DVR_StopRemoteConfig(handle);
+    ok = ok && !ctx.failed && !ctx.saw_failure;
+    if (!ok) {
+        const std::vector<NET_DVR_FINGER_PRINT_CFG_V50> verified_templates =
+            read_source_fingerprints(target, job);
+        if (verified_templates.size() >= templates.size() && !verified_templates.empty()) {
+            ok = true;
+            emit_json({
+                {"event", "peer_fingerprint_write_verified_after_error"},
+                {"targetDeviceId", target.config.hris_device_id},
+                {"employeeNo", job.employee_no},
+                {"verifiedTemplateCount", std::to_string(verified_templates.size())}
+            });
+        }
+    }
 
     emit_json({
         {"event", "peer_fingerprint_write"},
@@ -693,6 +915,9 @@ bool write_peer_fingerprints(
         {"rawFingerprintTemplateStored", "false"},
         {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
     });
+    if (ok) {
+        mark_recent_peer_apply(target.config.host);
+    }
     return ok;
 }
 
@@ -745,6 +970,9 @@ bool delete_peer_user(DeviceSession &target, const ReconcileJob &job) {
         {"ok", ok ? "true" : "false"},
         {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
     });
+    if (ok) {
+        mark_recent_peer_apply(target.config.host);
+    }
     return ok;
 }
 
@@ -776,9 +1004,9 @@ bool delete_peer_fingerprints(DeviceSession &target, const ReconcileJob &job) {
         reinterpret_cast<char *>(cond.struProcessMode.struByCard.byEmployeeNo),
         job.employee_no.c_str(),
         NET_SDK_EMPLOYEE_NO_LEN - 1);
-    for (size_t i = 0; i < sizeof(cond.struProcessMode.struByCard.byEnableCardReader); ++i) {
-        cond.struProcessMode.struByCard.byEnableCardReader[i] = 1;
-    }
+    enable_default_card_reader(
+        cond.struProcessMode.struByCard.byEnableCardReader,
+        sizeof(cond.struProcessMode.struByCard.byEnableCardReader));
     for (size_t i = 0; i < sizeof(cond.struProcessMode.struByCard.byFingerPrintID); ++i) {
         cond.struProcessMode.struByCard.byFingerPrintID[i] = 1;
     }
@@ -810,6 +1038,9 @@ bool delete_peer_fingerprints(DeviceSession &target, const ReconcileJob &job) {
         {"rawFingerprintTemplateStored", "false"},
         {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
     });
+    if (ok) {
+        mark_recent_peer_apply(target.config.host);
+    }
     return ok;
 }
 
@@ -965,17 +1196,59 @@ void process_reconcile_job(const ReconcileJob &job) {
         return;
     }
 
-    std::string user_json;
     const bool user_delete = is_user_delete_minor(job.minor);
     const bool fingerprint_delete = is_fingerprint_delete_minor(job.minor);
+    int peer_count = 0;
+    int peer_write_count = 0;
+    if (should_full_mirror_reconcile(job)) {
+        const std::vector<std::string> employee_numbers = read_source_employee_numbers(*source);
+        int mirrored_users = 0;
+
+        for (const auto &employee_no : employee_numbers) {
+            ReconcileJob mirror_job = job;
+            mirror_job.employee_no = employee_no;
+            mirror_job.include_fingerprints = true;
+
+            std::string mirror_user_json;
+            if (!read_source_user(*source, mirror_job, &mirror_user_json)) {
+                continue;
+            }
+            const std::vector<NET_DVR_FINGER_PRINT_CFG_V50> mirror_fingerprints =
+                read_source_fingerprints(*source, mirror_job);
+
+            for (auto &target : sessions) {
+                if (target.config.host == source->config.host || !target.config.biometric_peer) {
+                    continue;
+                }
+                peer_count += 1;
+                if (write_peer_user(target, mirror_job, mirror_user_json)) {
+                    peer_write_count += 1;
+                }
+                write_peer_fingerprints(target, mirror_job, mirror_fingerprints);
+            }
+            mirrored_users += 1;
+        }
+
+        post_hris_contract(job, "mirrored");
+        emit_json({
+            {"event", "reconcile_full_mirror_completed"},
+            {"sourceDeviceId", source->config.hris_device_id},
+            {"employeeNo", job.employee_no},
+            {"mirroredUsers", std::to_string(mirrored_users)},
+            {"peerDevices", std::to_string(peer_count)},
+            {"peerUserWrites", std::to_string(peer_write_count)},
+            {"mode", execute_mode ? "execute" : "dry-run"}
+        });
+        return;
+    }
+
+    std::string user_json;
     const bool user_ok = user_delete ? true : read_source_user(*source, job, &user_json);
     const std::vector<NET_DVR_FINGER_PRINT_CFG_V50> fingerprints =
         job.include_fingerprints && !fingerprint_delete
             ? read_source_fingerprints(*source, job)
             : std::vector<NET_DVR_FINGER_PRINT_CFG_V50>{};
 
-    int peer_count = 0;
-    int peer_write_count = 0;
     for (auto &target : sessions) {
         if (target.config.host == source->config.host || !target.config.biometric_peer) {
             continue;

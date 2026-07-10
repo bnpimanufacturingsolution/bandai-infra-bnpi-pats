@@ -50,6 +50,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include("delete_peer_fingerprints");
 		expect(service).to.include("MINOR_CLR_USER_INFO");
 		expect(service).to.include("MINOR_CLR_FINGER_BY_CARD");
+		expect(service).to.include("is_observed_operation_sync_minor");
+		expect(service).to.include("build_user_setup_payload_from_search_response");
+		expect(service).to.include("read_source_employee_numbers");
+		expect(service).to.include("reconcile_full_mirror_completed");
+		expect(service).to.include("reconcile_suppressed_recent_peer_apply");
 		expect(service).to.not.include('"fingerData"');
 	});
 
