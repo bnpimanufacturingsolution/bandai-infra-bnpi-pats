@@ -361,6 +361,14 @@ type HikvisionManualCopyParams = {
 	waitSeconds?: number;
 };
 
+const readStoredHikvisionSyntheticFingerprintCount = (rawPayload: any) => {
+	const count = Number(
+		rawPayload?._hrisDeviceMetadata?.syntheticCredentialSummary?.fingerprintCount ?? 0,
+	);
+	if (!Number.isFinite(count) || count <= 0) return 0;
+	return Math.max(0, Math.floor(count));
+};
+
 export const controller = (prisma: PrismaClient) => {
 	// Initialize employee helpers for auth service communication
 	const helpers = createEmployeeHelpers(prisma, deviceLogger);
@@ -456,6 +464,81 @@ export const controller = (prisma: PrismaClient) => {
 			stderr: result.stderr,
 			events,
 		};
+	};
+
+	const updateHikvisionSyntheticFingerprintTally = async (params: {
+		organizationId: string;
+		deviceId: string;
+		vendorUserId: string;
+		fingerprintCount: number;
+		copiedFromDeviceId?: string | null;
+		copiedFromVendorUserId?: string | null;
+		note?: string | null;
+	}) => {
+		const deviceUser = await (prisma as any).deviceUser.findUnique({
+			where: {
+				organizationId_deviceId_vendorUserId: {
+					organizationId: params.organizationId,
+					deviceId: params.deviceId,
+					vendorUserId: params.vendorUserId,
+				},
+			},
+			select: {
+				id: true,
+				vendorUserId: true,
+				employeeId: true,
+				status: true,
+				lastSyncedAt: true,
+				rawPayload: true,
+			},
+		});
+		if (!deviceUser?.id) {
+			throw new Error(
+				`Device user ${params.vendorUserId} does not exist in HRIS truth for device ${params.deviceId}`,
+			);
+		}
+
+		const nextCount = Math.max(0, Math.min(10, Math.floor(Number(params.fingerprintCount) || 0)));
+		const rawPayload =
+			deviceUser.rawPayload && typeof deviceUser.rawPayload === "object" && !Array.isArray(deviceUser.rawPayload)
+				? { ...(deviceUser.rawPayload as Record<string, any>) }
+				: {};
+		const metadata =
+			rawPayload._hrisDeviceMetadata &&
+			typeof rawPayload._hrisDeviceMetadata === "object" &&
+			!Array.isArray(rawPayload._hrisDeviceMetadata)
+				? { ...(rawPayload._hrisDeviceMetadata as Record<string, any>) }
+				: {};
+		if (nextCount > 0) {
+			metadata.syntheticCredentialSummary = {
+				fingerprintCount: nextCount,
+				hasFingerprint: true,
+				source: "dev_mock",
+				updatedAt: new Date().toISOString(),
+				...(params.copiedFromDeviceId ? { copiedFromDeviceId: params.copiedFromDeviceId } : {}),
+				...(params.copiedFromVendorUserId
+					? { copiedFromVendorUserId: params.copiedFromVendorUserId }
+					: {}),
+				...(params.note ? { note: params.note } : {}),
+			};
+		} else {
+			delete metadata.syntheticCredentialSummary;
+		}
+		if (Object.keys(metadata).length > 0) rawPayload._hrisDeviceMetadata = metadata;
+		else delete rawPayload._hrisDeviceMetadata;
+
+		return (prisma as any).deviceUser.update({
+			where: { id: deviceUser.id },
+			data: { rawPayload },
+			select: {
+				id: true,
+				vendorUserId: true,
+				employeeId: true,
+				status: true,
+				lastSyncedAt: true,
+				rawPayload: true,
+			},
+		});
 	};
 
 	const getEmployeeDisplayName = (employee: any) => {
@@ -2670,6 +2753,24 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			const sourceDeviceUser = await (prisma as any).deviceUser.findUnique({
+				where: {
+					organizationId_deviceId_vendorUserId: {
+						organizationId: String(admin.organizationId),
+						deviceId: sourceDeviceId,
+						vendorUserId: employeeNo,
+					},
+				},
+				select: {
+					id: true,
+					vendorUserId: true,
+					employeeId: true,
+					status: true,
+					lastSyncedAt: true,
+					rawPayload: true,
+				},
+			});
+
 			const copyResult = await runHikvisionManualCopyOnVm({
 				sourceDeviceId,
 				targetDeviceId,
@@ -2689,7 +2790,7 @@ export const controller = (prisma: PrismaClient) => {
 				vendorUserId: employeeNo,
 			});
 
-			const targetDeviceUser = await (prisma as any).deviceUser.findUnique({
+			let targetDeviceUser = await (prisma as any).deviceUser.findUnique({
 				where: {
 					organizationId_deviceId_vendorUserId: {
 						organizationId: String(admin.organizationId),
@@ -2714,6 +2815,41 @@ export const controller = (prisma: PrismaClient) => {
 					),
 				);
 				return;
+			}
+
+			const sourceSyntheticFingerprintCount = readStoredHikvisionSyntheticFingerprintCount(
+				sourceDeviceUser?.rawPayload || {},
+			);
+			const sourceRealCredentialSummary = extractHikvisionCredentialSummary(
+				sourceDeviceUser?.rawPayload || {},
+			);
+			const fingerprintSkippedNoTemplates = copyResult.events.some(
+				(event) =>
+					event?.event === "peer_fingerprint_write_skipped" &&
+					String(event?.employeeNo || "").trim() === employeeNo &&
+					String(event?.reason || "").trim() === "no_source_templates",
+			);
+			let syntheticFingerprintOverlayApplied: Record<string, any> | null = null;
+			if (
+				includeFingerprints &&
+				sourceSyntheticFingerprintCount > 0 &&
+				(sourceRealCredentialSummary.fingerprintCount <= 0 || fingerprintSkippedNoTemplates)
+			) {
+				targetDeviceUser = await updateHikvisionSyntheticFingerprintTally({
+					organizationId: String(admin.organizationId),
+					deviceId: targetDeviceId,
+					vendorUserId: employeeNo,
+					fingerprintCount: sourceSyntheticFingerprintCount,
+					copiedFromDeviceId: sourceDeviceId,
+					copiedFromVendorUserId: employeeNo,
+					note: "Copied as dev-only synthetic fingerprint tally because no real source templates were available",
+				});
+				syntheticFingerprintOverlayApplied = {
+					fingerprintCount: sourceSyntheticFingerprintCount,
+					reason: "no_real_source_templates",
+					sourceDeviceId,
+					targetDeviceId,
+				};
 			}
 
 			logActivity(req, {
@@ -2744,6 +2880,7 @@ export const controller = (prisma: PrismaClient) => {
 							waitSeconds: copyResult.waitSeconds,
 							events: copyResult.events,
 						},
+						syntheticFingerprintOverlayApplied,
 						targetSyncSummary: targetSummary,
 						targetDeviceUser,
 					},
@@ -2754,6 +2891,127 @@ export const controller = (prisma: PrismaClient) => {
 			deviceLogger.error(`Hikvision peer copy failed: ${error?.message || error}`);
 			res.status(500).json(
 				buildErrorResponse(error?.message || "Failed to copy Hikvision device user", 500),
+			);
+		}
+	};
+
+	const mockHikvisionFingerprintTally = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+
+			const deviceId = String(req.body?.deviceId || "").trim();
+			const vendorUserId = String(req.body?.vendorUserId || req.body?.employeeNo || "").trim();
+			const targetDeviceId = String(req.body?.targetDeviceId || "").trim();
+			const fingerprintCount = Math.max(
+				0,
+				Math.min(10, Math.floor(Number(req.body?.fingerprintCount) || 0)),
+			);
+			if (!deviceId || !vendorUserId) {
+				res.status(400).json(
+					buildErrorResponse("deviceId and vendorUserId are required", 400),
+				);
+				return;
+			}
+
+			const deviceIds = [deviceId, targetDeviceId].filter(Boolean);
+			const devices = await prisma.device.findMany({
+				where: {
+					organizationId: String(admin.organizationId),
+					isDeleted: false,
+					id: { in: deviceIds },
+				},
+			});
+			const sourceDevice = devices.find((device) => device.id === deviceId);
+			const targetDevice = targetDeviceId
+				? devices.find((device) => device.id === targetDeviceId)
+				: null;
+			if (!sourceDevice) {
+				res.status(404).json(buildErrorResponse("Source device was not found", 404));
+				return;
+			}
+			if (!isHikvisionDevice(sourceDevice)) {
+				res.status(400).json(buildErrorResponse("Source device must be Hikvision", 400));
+				return;
+			}
+			if (targetDeviceId) {
+				if (!targetDevice) {
+					res.status(404).json(buildErrorResponse("Target device was not found", 404));
+					return;
+				}
+				if (!isHikvisionDevice(targetDevice)) {
+					res.status(400).json(buildErrorResponse("Target device must be Hikvision", 400));
+					return;
+				}
+			}
+
+			const sourceDeviceUser = await updateHikvisionSyntheticFingerprintTally({
+				organizationId: String(admin.organizationId),
+				deviceId,
+				vendorUserId,
+				fingerprintCount,
+				note:
+					fingerprintCount > 0
+						? "Applied as dev-only synthetic fingerprint tally for UI verification"
+						: "Cleared dev-only synthetic fingerprint tally",
+			});
+			const targetDeviceUser =
+				targetDeviceId && targetDevice
+					? await updateHikvisionSyntheticFingerprintTally({
+							organizationId: String(admin.organizationId),
+							deviceId: targetDeviceId,
+							vendorUserId,
+							fingerprintCount,
+							copiedFromDeviceId: deviceId,
+							copiedFromVendorUserId: vendorUserId,
+							note:
+								fingerprintCount > 0
+									? "Copied as dev-only synthetic fingerprint tally for peer verification"
+									: "Cleared dev-only synthetic fingerprint tally",
+					  })
+					: null;
+
+			logActivity(req, {
+				userId: String((req as any).userId || "unknown"),
+				action: "HIKVISION_DEVICE_USER_MOCK_FINGERPRINT",
+				description:
+					fingerprintCount > 0
+						? `Applied dev-only synthetic fingerprint tally ${fingerprintCount} to Hikvision device user ${vendorUserId}`
+						: `Cleared dev-only synthetic fingerprint tally for Hikvision device user ${vendorUserId}`,
+				page: {
+					url: req.originalUrl,
+					title: "Device Users",
+				},
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					fingerprintCount > 0
+						? "Synthetic fingerprint tally applied"
+						: "Synthetic fingerprint tally cleared",
+					{
+						deviceId,
+						targetDeviceId: targetDeviceId || null,
+						vendorUserId,
+						fingerprintCount,
+						synthetic: true,
+						sourceDeviceUser,
+						targetDeviceUser,
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			deviceLogger.error(`Hikvision synthetic fingerprint tally failed: ${error?.message || error}`);
+			res.status(500).json(
+				buildErrorResponse(
+					error?.message || "Failed to apply synthetic fingerprint tally",
+					500,
+				),
 			);
 		}
 	};
@@ -5886,6 +6144,7 @@ export const controller = (prisma: PrismaClient) => {
 		backfillDeviceUserLifecycleEvents,
 		reconcileBiometricSync,
 		copyHikvisionDeviceUserToPeer,
+		mockHikvisionFingerprintTally,
 		backfillDeviceUsers,
 		linkDeviceUser,
 		unlinkDeviceUser,

@@ -45,10 +45,25 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("HIKVISION_DEVICE_USER_COPY");
 		expect(controller).to.include("sourceDeviceId, targetDeviceId, and employeeNo are required");
 		expect(controller).to.include("Target device does not currently have Hikvision user");
+		expect(controller).to.include("syntheticFingerprintOverlayApplied");
 		expect(controller).to.include("await mirrorDeviceUserLinkToPeer({");
 		expect(wrapper).to.include("--run-once");
 		expect(wrapper).to.include("HIKVISION_DEVICE_ID_FILTER");
-		expect(wrapper).to.include('cmd+=(--seconds "${HIKVISION_RUN_SECONDS:-8}")');
+		expect(wrapper).to.include('cmd+=(--seconds "${HIKVISION_RUN_SECONDS:-1}")');
+	});
+
+	it("exposes a dev-safe synthetic fingerprint tally route without claiming physical device truth", () => {
+		const router = routerSource();
+		const controller = controllerSource();
+
+		expect(router).to.include(
+			'routes.post("/hikvision/mock-fingerprint", controller.mockHikvisionFingerprintTally)',
+		);
+		expect(controller).to.include("const mockHikvisionFingerprintTally = async");
+		expect(controller).to.include("deviceId and vendorUserId are required");
+		expect(controller).to.include("Source device must be Hikvision");
+		expect(controller).to.include("syntheticCredentialSummary");
+		expect(controller).to.include("Applied as dev-only synthetic fingerprint tally for UI verification");
 	});
 
 	it("refreshes per-device Hikvision DeviceUser truth during reconcile and persists derived lifecycle events", () => {

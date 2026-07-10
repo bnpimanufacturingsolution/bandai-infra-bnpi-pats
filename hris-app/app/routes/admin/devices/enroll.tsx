@@ -43,6 +43,7 @@ import {
 	useSyncDeviceUsers,
 	useUnlinkDeviceUser,
 	useCopyHikvisionDeviceUserToPeer,
+	useMockHikvisionFingerprintTally,
 } from "~/lib/hooks/useDevices";
 import { useHikvisionDeviceUsers } from "~/lib/hooks/use-hikvision";
 import { useQueryClient } from "@tanstack/react-query";
@@ -231,6 +232,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const hikvisionListenerControl = useControlHikvisionListener();
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
 	const copyHikvisionDeviceUserMutation = useCopyHikvisionDeviceUserToPeer();
+	const mockHikvisionFingerprintMutation = useMockHikvisionFingerprintTally();
 	const startDeviceUserSyncJobMutation = useStartDeviceUserSyncJob();
 	const cancelDeviceUserSyncJobMutation = useCancelDeviceUserSyncJob();
 	const linkDeviceUserMutation = useLinkDeviceUser();
@@ -974,12 +976,17 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		}
 
 		try {
-			await copyHikvisionDeviceUserMutation.mutateAsync({
+			const result = await copyHikvisionDeviceUserMutation.mutateAsync({
 				sourceDeviceId: selectedDeviceId,
 				targetDeviceId: copyDeviceUserState.targetDeviceId,
 				employeeNo: sourceDeviceUser.vendorUserId,
 				includeFingerprints: copyDeviceUserState.includeFingerprints,
 			});
+			if (result?.syntheticFingerprintOverlayApplied?.fingerprintCount > 0) {
+				toast.success(
+					"Peer copy used a dev-only synthetic fingerprint tally because the source user has no real template bytes.",
+				);
+			}
 			setCopyDeviceUserState({
 				open: false,
 				sourceDeviceUser: null,
@@ -997,6 +1004,44 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			]);
 		} catch (error: any) {
 			toast.error(error?.message || "Failed to copy device user");
+		}
+	};
+
+	const applyMockFingerprintToDetails = async (fingerprintCount: number) => {
+		if (!selectedDeviceId || !detailsDeviceUser?.vendorUserId) {
+			toast.error("Open a device user record before changing synthetic fingerprint tally");
+			return;
+		}
+		try {
+			const result = await mockHikvisionFingerprintMutation.mutateAsync({
+				deviceId: selectedDeviceId,
+				vendorUserId: detailsDeviceUser.vendorUserId,
+				fingerprintCount,
+			});
+			const nextRawPayload = result?.sourceDeviceUser?.rawPayload;
+			if (nextRawPayload) {
+				setDetailsDeviceUser((current) =>
+					current
+						? {
+								...current,
+								rawPayload: nextRawPayload,
+								hrisDeviceUser: current.hrisDeviceUser
+									? { ...current.hrisDeviceUser, rawPayload: nextRawPayload }
+									: current.hrisDeviceUser,
+						  }
+						: current,
+				);
+			}
+			await Promise.allSettled([
+				refetchSourceDeviceUsers(),
+				refetchDbDeviceUsers(),
+				refetchOpenDbDeviceUsers(),
+				refetchDeviceUserSummary(),
+				refetchSourceMatchedDeviceUsers(),
+				refetchSyncPreview(),
+			]);
+		} catch (error: any) {
+			toast.error(error?.message || "Failed to update synthetic fingerprint tally");
 		}
 	};
 
@@ -1264,6 +1309,17 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			hasFingerprint: Boolean(metaSummary.hasFingerprint ?? fingerprintCount > 0),
 			hasCard: Boolean(metaSummary.hasCard ?? cardCount > 0),
 			hasFace: Boolean(metaSummary.hasFace ?? faceCount > 0),
+		};
+	};
+	const getDeviceUserSyntheticFingerprintSummary = (deviceUser?: { rawPayload?: any } | null) => {
+		const raw = (deviceUser?.rawPayload || {}) as any;
+		const synthetic = raw?._hrisDeviceMetadata?.syntheticCredentialSummary || {};
+		const fingerprintCount = Math.max(0, Number(synthetic.fingerprintCount ?? 0) || 0);
+		return {
+			fingerprintCount,
+			hasFingerprint: Boolean(synthetic.hasFingerprint ?? fingerprintCount > 0),
+			updatedAt: String(synthetic.updatedAt || "").trim() || null,
+			copiedFromVendorUserId: String(synthetic.copiedFromVendorUserId || "").trim() || null,
 		};
 	};
 	const getDeviceUserFaceUrl = (deviceUser?: { rawPayload?: any } | null) => {
@@ -2845,6 +2901,41 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 											Primary biometric truth for device-user matching and copy verification.
 										</p>
 									</div>
+									<div className="mt-3 flex flex-wrap gap-2">
+										<Button
+											type="button"
+											size="sm"
+											variant="outline"
+											disabled={mockHikvisionFingerprintMutation.isPending}
+											onClick={() => applyMockFingerprintToDetails(1)}>
+											Mock 1 fingerprint
+										</Button>
+										<Button
+											type="button"
+											size="sm"
+											variant="outline"
+											disabled={mockHikvisionFingerprintMutation.isPending}
+											onClick={() => applyMockFingerprintToDetails(0)}>
+											Clear mock tally
+										</Button>
+									</div>
+									{getDeviceUserSyntheticFingerprintSummary(detailsDeviceUser).fingerprintCount > 0 ? (
+										<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
+											<p className="font-semibold uppercase tracking-wide">Dev mock fingerprint tally</p>
+											<p className="mt-2 text-2xl font-semibold">
+												{String(getDeviceUserSyntheticFingerprintSummary(detailsDeviceUser).fingerprintCount)}
+											</p>
+											<p className="mt-2 leading-5 text-amber-900">
+												This is synthetic UI test state only. The physical device fingerprint truth above stays
+												{` ${String(getDeviceUserCredentialSummary(detailsDeviceUser).fingerprintCount)}`}.
+											</p>
+											{getDeviceUserSyntheticFingerprintSummary(detailsDeviceUser).updatedAt ? (
+												<p className="mt-2 text-[11px] text-amber-900">
+													Updated {formatDateTime(getDeviceUserSyntheticFingerprintSummary(detailsDeviceUser).updatedAt || "")}
+												</p>
+											) : null}
+										</div>
+									) : null}
 									<div className="mt-3 grid grid-cols-2 gap-2">
 										{[
 											["Cards", getDeviceUserCredentialSummary(detailsDeviceUser).cardCount],
@@ -2857,7 +2948,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 										))}
 									</div>
 									<p className="mt-3 text-xs leading-5 text-slate-500">
-										HRIS stores source counts and face-photo access here. Raw fingerprint template blobs are not shown in this normal record.
+										HRIS stores source counts and face-photo access here. Raw fingerprint template blobs are not shown in this normal record, and dev mock tallies are kept separate from physical device truth.
 									</p>
 								</div>
 							</div>
@@ -2989,7 +3080,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 					}
 				}}
 				title="Copy device user to peer"
-				description="Run the Hikvision SDK fast path and refresh HRIS truth after the peer write."
+				description="Run the Hikvision SDK fast path and refresh HRIS truth after the peer write. If the source user only has a dev mock fingerprint tally, the peer copy can mirror that synthetic tally for UI testing while keeping real device truth separate."
 				className="max-w-lg"
 				showCloseButton={!copyHikvisionDeviceUserMutation.isPending}
 				closeOnBackdropClick={!copyHikvisionDeviceUserMutation.isPending}>

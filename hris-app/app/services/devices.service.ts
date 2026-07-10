@@ -470,6 +470,13 @@ export interface HikvisionCopyUserRequest {
 	includeFingerprints?: boolean;
 }
 
+export interface HikvisionMockFingerprintRequest {
+	deviceId: string;
+	vendorUserId: string;
+	fingerprintCount: number;
+	targetDeviceId?: string;
+}
+
 export type DeviceUserStatus = "ACTIVE" | "UNMATCHED" | "CONFLICT" | "DISABLED";
 
 export interface DeviceUser {
@@ -1020,6 +1027,23 @@ class DevicesService extends APIService {
 				error.data?.errors?.[0]?.message ||
 					error.message ||
 					"Error copying Hikvision device user",
+			);
+		}
+	}
+
+	async mockHikvisionFingerprintTally(payload: HikvisionMockFingerprintRequest): Promise<any> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/hikvision/mock-fingerprint", payload);
+			if (!response.data) {
+				throw new Error("Failed to apply synthetic fingerprint tally");
+			}
+			return response.data?.data || response.data;
+		} catch (error: any) {
+			console.error("Error applying synthetic fingerprint tally:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error applying synthetic fingerprint tally",
 			);
 		}
 	}

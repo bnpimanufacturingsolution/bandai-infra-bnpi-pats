@@ -2,6 +2,72 @@
 
 Status: COMPLETE
 
+## Latest Task Addendum - 2026-07-10 Hikvision FE To SDK Peer Copy Journey Under 5 Seconds
+
+- Task mode: Local frontend/backend/runtime repair with real-device proof.
+- User goal:
+  - Make the admin device-user journey tell the truth and physically copy the
+    selected Hikvision user to the peer device quickly enough that the flow
+    feels under 5 seconds.
+- Current-state finding before the final pass:
+  - The new `POST /api/device/hikvision/copy-user` path existed, but the local
+    API process at `localhost:3001` was stale and did not expose the route
+    until the local dev API was restarted.
+  - The first working API copy pass still felt slow because it waited on a
+    scoped VM run window plus a full target-device user reread; real timings
+    were about `10.4s`, then about `6.4s` after removing the whole-device
+    source refresh.
+- Final change:
+  - `scripts/project-truth-hikvision-hot-reload-listener.sh` now supports
+    scoped one-off runs with device filtering and a short run window intended
+    for a single user-copy request.
+  - `hris-api/app/device/device.controller.ts` now exposes a real
+    admin-only `POST /api/device/hikvision/copy-user` path that:
+    - runs a scoped VM SDK copy from a chosen source device to a chosen target
+      device,
+    - confirms the peer write from SDK evidence,
+    - refreshes only the copied target user into HRIS truth instead of
+      rereading the entire target device,
+    - and reuses the same copy helper during Hikvision enrollment when the
+      target device does not yet physically contain the requested vendor user.
+  - `hris-app/app/routes/admin/devices/enroll.tsx`,
+    `hris-app/app/lib/hooks/useDevices.ts`, and
+    `hris-app/app/services/devices.service.ts` now expose a real
+    `Copy to peer device` action in the Device Users panel instead of forcing
+    the journey through metadata-only sync assumptions.
+- Runtime proof:
+  - Temp user `9022` proved the route after the stale API restart; the physical
+    peer write landed immediately, but the old endpoint shape still returned in
+    about `10.4s`.
+  - Temp user `9025` proved the scoped single-user target refresh was active:
+    the API response returned `targetSyncTotalSourceRecords=1` and the full
+    copy request completed in about `6.392s`.
+  - Temp user `9026` reduced the same end-to-end API call to about `5.601s`
+    with the shorter VM run window.
+  - Temp user `9027` completed the same real device-to-device copy in about
+    `2.910s` end to end through the local API route, with
+    `beforeTargetStatus=NO MATCH`, `targetSyncTotalSourceRecords=1`, and
+    `targetAfterCopyStatus=OK`.
+  - Cleanup then deleted temp users `9022` through `9027` from both devices;
+    post-delete searches returned `NO MATCH` on `10.184.38.86` and
+    `10.184.38.136`.
+- Remaining truth:
+  - The admin Device Users page now has a real FE-to-SDK copy action in code,
+    and the backing API/runtime path is proven under 5 seconds by direct
+    endpoint plus device truth.
+  - I did not run a final browser-rendered click proof against the new modal in
+    this pass; the FE code is wired, but the proof here is API plus direct
+    device SDK truth.
+- Evidence:
+  - `.runtime/hikvision-peer-copy-proof-20260710-163204/copy-9022-proof.json`
+  - `.runtime/hikvision-peer-copy-proof-20260710-163204/copy-9022-after-api-restart.json`
+  - `.runtime/hikvision-peer-copy-proof-20260710-163204/copy-9023-summary.json`
+  - `.runtime/hikvision-peer-copy-proof-20260710-163204/copy-9024-summary.json`
+  - `.runtime/hikvision-peer-copy-proof-20260710-163204/copy-9025-summary.json`
+  - `.runtime/hikvision-peer-copy-proof-20260710-163204/copy-9026-summary.json`
+  - `.runtime/hikvision-peer-copy-proof-20260710-163204/copy-9027-summary.json`
+  - `.runtime/hikvision-peer-copy-proof-20260710-163204/cleanup-9022-9027.json`
+
 ## Latest Task Addendum - 2026-07-10 Hikvision Fast User Delta Path
 
 - Task mode: Local runtime refactor, device-to-device latency reduction, and
