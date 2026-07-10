@@ -85,8 +85,8 @@ describe("device events page UX contract", () => {
 
 	it("uses human event and HRIS result language instead of raw source/status labels", () => {
 		expect(routeSource).to.contain("Device events");
-		expect(routeSource).to.contain("All event categories");
-		expect(routeSource).to.contain("All event actions");
+		expect(routeSource).to.contain("Any event category");
+		expect(routeSource).to.contain("Any event action");
 		expect(routeSource).to.contain('label: "Event"');
 		expect(routeSource).to.contain('label: "HRIS result"');
 		expect(routeSource).to.contain("event.taxonomy?.eventLabel");
@@ -114,6 +114,8 @@ describe("device events page UX contract", () => {
 		expect(manageSource).to.contain("Runtime adapter *");
 		expect(manageSource).to.contain("Callback path");
 		expect(manageSource).to.contain("Internal adapter key");
+		expect(manageSource).to.contain("Vendor and runtime routing");
+		expect(manageSource).to.contain("Use the exact Internal adapter key expected by the HRIS runtime.");
 		expect(manageSource).not.to.contain("Source adapter *");
 		expect(manageSource).not.to.contain("Runtime source");
 	});
@@ -122,10 +124,12 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("isSdkAlarmSavedScope");
 		expect(routeSource).to.contain("savedEventsRefetchInterval");
 		expect(routeSource).to.contain("? 2 * 1000");
-		expect(routeSource).to.contain("SDK listener receiving taps");
+		expect(routeSource).to.contain("SDK tap evidence recent");
 		expect(routeSource).to.contain("VM listener running");
-		expect(routeSource).to.contain("Socket connected, SDK idle");
-		expect(routeSource).to.contain("Waiting for next tap");
+		expect(routeSource).to.contain("Browser connected; no recent SDK tap");
+		expect(routeSource).to.contain("VM listener is running; no tap saved yet");
+		expect(routeSource).not.to.contain("Socket connected, SDK idle");
+		expect(routeSource).not.to.contain("Waiting for next tap");
 	});
 
 	it("lets admin recover the VM Hikvision hot-reload listener from the saved SDK view", () => {
@@ -143,7 +147,7 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain('runHikvisionListenerControl(checked ? "start" : "stop")');
 		expect(routeSource).to.contain("refetchHikvisionListenerStatus");
 		expect(routeSource).to.contain("Recent listener log");
-		expect(routeSource).to.contain("Tap path idle");
+		expect(routeSource).to.contain("No recent SDK tap saved");
 	});
 
 	it("keeps shared modals accessible by their visible title", () => {

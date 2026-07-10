@@ -161,6 +161,160 @@ const applyEmployeeDocumentSelectionDefaults = (fieldSelections: Record<string, 
 };
 
 const MAX_EMPLOYEE_CREATE_VALIDATION_ERRORS = 6;
+const EMPLOYEE_HARD_DELETE_ADMIN_ROLES = new Set([
+	"hris-admin",
+	"admin",
+	"super_admin",
+	"superadmin",
+]);
+
+const isEmployeeHardDeleteAdmin = (req: Request) => {
+	const role = String(
+		(req as any)?.role ||
+			(req as any)?.user?.role ||
+			(req as any)?.metadata?.role ||
+			(req as any)?.metadata?.employee?.role ||
+			"",
+	)
+		.trim()
+		.toLowerCase();
+	return EMPLOYEE_HARD_DELETE_ADMIN_ROLES.has(role);
+};
+
+const countEmployeeRelation = async (
+	prisma: PrismaClient,
+	delegateName: string,
+	where: Record<string, unknown>,
+) => {
+	const delegate = (prisma as any)[delegateName];
+	if (!delegate?.count) return 0;
+	return delegate.count({ where });
+};
+
+const buildEmployeeHardDeletePreview = async (prisma: PrismaClient, employee: any) => {
+	const employeeId = employee.id;
+	const organizationId = employee.organizationId;
+	const relationCounts = {
+		attendanceRecords: await countEmployeeRelation(prisma, "attendance", { employeeId }),
+		attendanceObligations: await countEmployeeRelation(prisma, "attendanceObligation", {
+			employeeId,
+		}),
+		timesheets: await countEmployeeRelation(prisma, "timesheet", { employeeId }),
+		timesheetLines: await countEmployeeRelation(prisma, "timesheetline", { employeeId }),
+		employeePayrolls: await countEmployeeRelation(prisma, "employeePayroll", { employeeId }),
+		terminations: await countEmployeeRelation(prisma, "termination", { employeeId }),
+		scheduleOverrides: await countEmployeeRelation(prisma, "scheduleOverride", { employeeId }),
+		scheduleHistoryRecords: await countEmployeeRelation(prisma, "employeeScheduleHistory", {
+			employeeId,
+		}),
+		soaLineItems: await countEmployeeRelation(prisma, "sOALineItem", { employeeId }),
+		deviceEvents: await countEmployeeRelation(prisma, "deviceEvent", { employeeId }),
+		deviceUsers: await countEmployeeRelation(prisma, "deviceUser", { employeeId }),
+		documents: await countEmployeeRelation(prisma, "document", { employeeId }),
+		documentFolders: await countEmployeeRelation(prisma, "documentFolder", { employeeId }),
+		employeeBenefits: await countEmployeeRelation(prisma, "employeeBenefit", { employeeId }),
+		employeeLoans: await countEmployeeRelation(prisma, "employeeLoan", { employeeId }),
+		leaveBalances: await countEmployeeRelation(prisma, "employeeLeaveBalance", {
+			employeeId,
+		}),
+		boardingProcesses: await countEmployeeRelation(prisma, "boardingProcess", { employeeId }),
+		activityLogs: await countEmployeeRelation(prisma, "activityLogging", { employeeId }),
+		auditLogs: await countEmployeeRelation(prisma, "auditLogging", { employeeId }),
+	};
+
+	const blockerDefinitions = [
+		["attendanceRecords", "attendance records exist"],
+		["attendanceObligations", "attendance obligations exist"],
+		["timesheets", "timesheets exist"],
+		["timesheetLines", "timesheet lines exist"],
+		["employeePayrolls", "payroll records exist"],
+		["terminations", "termination history exists"],
+		["scheduleOverrides", "schedule overrides exist"],
+		["scheduleHistoryRecords", "schedule history exists"],
+		["soaLineItems", "statement of account line items exist"],
+	] as const;
+	const blockers = blockerDefinitions
+		.map(([key, reason]) => ({
+			key,
+			reason,
+			count: relationCounts[key],
+			severity: "blocked" as const,
+		}))
+		.filter((item) => item.count > 0);
+
+	const detach = [
+		{
+			model: "DeviceEvent",
+			action: "detach",
+			count: relationCounts.deviceEvents,
+			description: "Clear employee link and keep the device event audit row.",
+		},
+		{
+			model: "DeviceUser",
+			action: "detach",
+			count: relationCounts.deviceUsers,
+			description: "Clear employee link and keep the device user identity record.",
+		},
+		{
+			model: "ActivityLogging",
+			action: "detach",
+			count: relationCounts.activityLogs,
+			description: "Clear employee link and keep the activity log.",
+		},
+		{
+			model: "AuditLogging",
+			action: "detach",
+			count: relationCounts.auditLogs,
+			description: "Clear employee link and keep the audit log.",
+		},
+	].filter((item) => item.count > 0);
+
+	const deleted = [
+		["Employee", 1, "Delete the employee record."],
+		["Document", relationCounts.documents, "Delete employee documents through cascade/delete."],
+		["DocumentFolder", relationCounts.documentFolders, "Delete employee document folders."],
+		["EmployeeBenefit", relationCounts.employeeBenefits, "Delete employee benefit rows."],
+		["EmployeeLoan", relationCounts.employeeLoans, "Delete employee loan rows."],
+		["EmployeeLeaveBalance", relationCounts.leaveBalances, "Delete leave balance rows."],
+		["BoardingProcess", relationCounts.boardingProcesses, "Delete onboarding/offboarding process rows."],
+	].map(([model, count, description]) => ({
+		model,
+		action: "delete",
+		count,
+		description,
+	}));
+
+	return {
+		employee: {
+			id: employee.id,
+			employeeId: employee.employeeId,
+			organizationId,
+			name: [
+				employee.person?.personalInfo?.firstName,
+				employee.person?.personalInfo?.middleName,
+				employee.person?.personalInfo?.lastName,
+			]
+				.filter(Boolean)
+				.join(" ")
+				.trim(),
+		},
+		safeToExecute: blockers.length === 0,
+		blockers,
+		relationCounts,
+		plan: {
+			delete: deleted,
+			detach,
+			archive: [],
+			blocked: blockers,
+		},
+		summary: {
+			blockerCount: blockers.length,
+			deleteCount: deleted.reduce((sum, item) => sum + Number(item.count || 0), 0),
+			detachCount: detach.reduce((sum, item) => sum + Number(item.count || 0), 0),
+			archiveCount: 0,
+		},
+	};
+};
 
 const normalizeValidationFieldPath = (field: string) => field.replace(/\[(\d+)\]/g, ".$1");
 
@@ -5584,6 +5738,127 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const previewHardDelete = async (req: Request, res: Response, _next: NextFunction) => {
+		const { id } = req.params;
+		const execute = req.body?.execute === true;
+		const dryRun = req.body?.dryRun !== false && !execute;
+		const confirmation = String(req.body?.confirmation || "").trim();
+
+		try {
+			if (!id) {
+				res.status(400).json(buildErrorResponse("Employee ID is required", 400));
+				return;
+			}
+
+			if (!isEmployeeHardDeleteAdmin(req)) {
+				res.status(403).json(
+					buildErrorResponse("Only HRIS admins can preview or execute employee hard delete.", 403),
+				);
+				return;
+			}
+
+			const existingEmployee = await prisma.employee.findFirst({
+				where: { id },
+				include: {
+					person: {
+						select: {
+							personalInfo: true,
+						},
+					},
+				},
+			});
+
+			if (!existingEmployee) {
+				res.status(404).json(buildErrorResponse(config.ERROR.EMPLOYEE.NOT_FOUND, 404));
+				return;
+			}
+
+			const preview = await buildEmployeeHardDeletePreview(prisma, existingEmployee);
+			const expectedConfirmation = `DELETE ${existingEmployee.employeeId}`;
+
+			if (!execute || dryRun) {
+				res.status(200).json(
+					buildSuccessResponse("Employee hard delete preview complete", {
+						mode: "preview",
+						execute: false,
+						requiresConfirmation: expectedConfirmation,
+						...preview,
+					}, 200),
+				);
+				return;
+			}
+
+			if (!preview.safeToExecute) {
+				const firstReason = preview.blockers[0]?.reason || "relation blockers found";
+				res.status(409).json(
+					buildErrorResponse(`Cannot hard delete employee: ${firstReason}`, 409, [
+						{
+							field: "employeeId",
+							message: `${preview.summary.blockerCount} blocker(s) found. Run preview for full relation details.`,
+						},
+					]),
+				);
+				return;
+			}
+
+			if (confirmation !== expectedConfirmation) {
+				res.status(400).json(
+					buildErrorResponse(
+						`Type ${expectedConfirmation} to execute employee hard delete.`,
+						400,
+					),
+				);
+				return;
+			}
+
+			await prisma.$transaction(async (tx) => {
+				await (tx as any).deviceEvent?.updateMany?.({
+					where: { employeeId: id },
+					data: { employeeId: null },
+				});
+				await (tx as any).deviceUser?.updateMany?.({
+					where: { employeeId: id },
+					data: { employeeId: null, status: "UNMATCHED" },
+				});
+				await (tx as any).activityLogging?.updateMany?.({
+					where: { employeeId: id },
+					data: { employeeId: null },
+				});
+				await (tx as any).auditLogging?.updateMany?.({
+					where: { employeeId: id },
+					data: { employeeId: null },
+				});
+				await tx.employee.delete({ where: { id } });
+			});
+
+			await helpers.invalidateEmployeeCaches(id);
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.DELETE,
+				resource: config.AUDIT_LOG.RESOURCES.EMPLOYEE,
+				severity: config.AUDIT_LOG.SEVERITY.HIGH,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.EMPLOYEE,
+				entityId: id,
+				changesBefore: existingEmployee,
+				changesAfter: null,
+				description: `Employee hard deleted: ${existingEmployee.employeeId || id}`,
+			});
+
+			res.status(200).json(
+				buildSuccessResponse("Employee hard deleted", {
+					mode: "executed",
+					execute: true,
+					...preview,
+				}, 200),
+			);
+		} catch (error) {
+			employeeLogger.error(`Employee hard delete preview failed: ${error}`);
+			res.status(500).json(
+				buildErrorResponse("Employee hard delete failed before completion", 500),
+			);
+		}
+	};
+
 	// Employee-specific attendance methods
 	const getAttendanceRecords = async (req: Request, res: Response, _next: NextFunction) => {
 		const { id: employeeId } = req.params;
@@ -8720,6 +8995,7 @@ export const controller = (prisma: PrismaClient) => {
 		getAll,
 		getById,
 		update,
+		previewHardDelete,
 		setActiveEmployeeSchedule,
 		getEmployeeSchedules,
 		deactivateEmployeeSchedule,

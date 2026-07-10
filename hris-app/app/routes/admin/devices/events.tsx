@@ -216,7 +216,7 @@ const sourceOptions: SelectOption[] = [
 ];
 
 const eventCategoryOptions: SelectOption[] = [
-	{ value: "all", label: "All event categories" },
+	{ value: "all", label: "Any event category" },
 	{ value: "ATTENDANCE", label: "Attendance" },
 	{ value: "ENROLLMENT", label: "Enrollment" },
 	{ value: "USER_MANAGEMENT", label: "User management" },
@@ -227,8 +227,8 @@ const eventCategoryOptions: SelectOption[] = [
 ];
 
 const eventActionOptions: SelectOption[] = [
-	{ value: "all", label: "All event actions" },
-	{ value: "TAP", label: "Tap" },
+	{ value: "all", label: "Any event action" },
+	{ value: "TAP", label: "Attendance tap" },
 	{ value: "FINGERPRINT_ENROLLED", label: "Fingerprint enrolled" },
 	{ value: "FINGERPRINT_UPDATED", label: "Fingerprint updated" },
 	{ value: "FINGERPRINT_DELETED", label: "Fingerprint deleted" },
@@ -238,7 +238,7 @@ const eventActionOptions: SelectOption[] = [
 	{ value: "USER_CREATED", label: "User created" },
 	{ value: "USER_UPDATED", label: "User updated" },
 	{ value: "USER_DELETED", label: "User deleted" },
-	{ value: "TAP_REJECTED", label: "Rejected tap" },
+	{ value: "TAP_REJECTED", label: "Rejected access tap" },
 	{ value: "SYNC_IMPORTED", label: "Sync imported" },
 	{ value: "LISTENER_RECEIVED", label: "Listener received" },
 	{ value: "UNKNOWN", label: "Unknown" },
@@ -1505,7 +1505,7 @@ export default function DeviceEventsPage() {
 				? "No recent SDK alarm rows in this saved-events scope"
 			: latestSavedEvent
 			? `Latest saved row ${formatEventTime(latestSavedEvent.receivedAt || latestSavedEvent.eventTime)}`
-			: "Waiting for the next saved row from watcher or callback";
+			: "No saved device event has arrived in this view yet";
 	const savedRowsBadgeVariant = isSdkAlarmSavedScope
 		? isLatestSdkSavedFresh
 			? "success-soft"
@@ -1519,15 +1519,15 @@ export default function DeviceEventsPage() {
 				: "secondary";
 	const savedRowsBadgeLabel = isSdkAlarmSavedScope
 		? isLatestSdkSavedFresh
-			? "SDK listener recent"
+			? "Recent SDK tap saved"
 			: isConnected
-				? "Socket connected, SDK idle"
-				: "Socket offline, SDK unknown"
+				? "Browser connected; no recent SDK tap"
+				: "Browser offline; SDK evidence unknown"
 		: isConnected
-			? "Saved rows socket live"
+			? "Browser updates connected"
 			: isLatestSavedFresh
 				? "New saved row"
-				: "Saved rows idle";
+				: "No recent saved event";
 	const hikvisionListenerRunning = Boolean(hikvisionListenerStatus?.running);
 	const hikvisionListenerUnavailable =
 		isSdkAlarmSavedScope &&
@@ -1560,7 +1560,7 @@ export default function DeviceEventsPage() {
 		: realtimeStatus.isListening;
 	const realtimePanelStatusLabel = isSdkAlarmSavedScope
 		? isLatestSdkSavedFresh
-			? "SDK listener receiving taps"
+			? "SDK tap evidence recent"
 			: hikvisionListenerRunning
 				? "VM listener running"
 				: hikvisionListenerUnavailable
@@ -1569,9 +1569,9 @@ export default function DeviceEventsPage() {
 		: realtimeStatus.statusLabel;
 	const realtimePanelUpdateLabel = isSdkAlarmSavedScope
 		? isLatestSdkSavedFresh
-			? "SDK alarm rows fresh"
+			? "SDK tap row saved recently"
 			: hikvisionListenerRunning
-				? "Waiting for next tap"
+				? "VM listener is running; no tap saved yet"
 				: "Waiting for SDK listener"
 		: realtimeStatus.rowUpdateLabel;
 	const runHikvisionListenerControl = (action: "start" | "stop" | "restart") => {
@@ -2042,7 +2042,7 @@ export default function DeviceEventsPage() {
 								options={eventCategoryOptions}
 								value={eventCategory}
 								onChange={(value) => setFilter("eventCategory", value)}
-								placeholder="All event categories"
+								placeholder="Any event category"
 								className={compactSelectClassName}
 								dropdownClassName={compactSelectDropdownClassName}
 							/>
@@ -2050,7 +2050,7 @@ export default function DeviceEventsPage() {
 								options={eventActionOptions}
 								value={eventAction}
 								onChange={(value) => setFilter("eventAction", value)}
-								placeholder="All event actions"
+								placeholder="Any event action"
 								className={compactSelectClassName}
 								dropdownClassName={compactSelectDropdownClassName}
 							/>
@@ -2418,7 +2418,7 @@ export default function DeviceEventsPage() {
 							<Badge
 								variant={isLatestSdkSavedFresh ? "success-soft" : "warning-soft"}
 								className="w-fit rounded-md px-2 py-1">
-								{isLatestSdkSavedFresh ? "Tap path fresh" : "Tap path idle"}
+								{isLatestSdkSavedFresh ? "SDK tap saved recently" : "No recent SDK tap saved"}
 							</Badge>
 						</div>
 					</div>

@@ -1146,9 +1146,9 @@ export default function DevicesManagePage() {
 						<div className="rounded-md border border-slate-200 bg-slate-50/60 p-3">
 							<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
 								<div>
-									<p className="text-sm font-semibold text-slate-950">Device config truth</p>
+									<p className="text-sm font-semibold text-slate-950">Vendor and runtime routing</p>
 									<p className="text-xs text-slate-500">
-										Fields HRIS uses to reach the terminal, run the vendor adapter, and receive callbacks.
+										How HRIS reaches this terminal, which adapter handles it, and where device callbacks arrive.
 									</p>
 								</div>
 								<AdminConfigSourceChip>{watchedVendor || "Unclassified"}</AdminConfigSourceChip>
@@ -1192,6 +1192,9 @@ export default function DevicesManagePage() {
 											setValueAs: (value) => value || undefined,
 										})}
 									/>
+									<p className="mt-1 text-xs text-slate-500">
+										Use the exact Internal adapter key expected by the HRIS runtime.
+									</p>
 									<ConstraintTokenRow
 										tokens={[{ label: "Internal adapter key", tone: "default" }]}
 									/>
@@ -1206,6 +1209,9 @@ export default function DevicesManagePage() {
 											setValueAs: (value) => value || undefined,
 										})}
 									/>
+									<p className="mt-1 text-xs text-slate-500">
+										HRIS API path that receives device callback or listener events.
+									</p>
 									<ConstraintTokenRow
 										tokens={[{ label: "HRIS API path", tone: "subtle" }]}
 									/>

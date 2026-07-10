@@ -1,6 +1,111 @@
 # Current Task
 
-Status: IN PROGRESS
+Status: COMPLETE
+
+## Latest Task Addendum - 2026-07-10 VM Static IP 10.184.37.241 Host Route Repair
+
+- Task mode: Runtime/network drift repair with local host evidence.
+- User goal:
+  - The running Hyper-V VM should be reachable from the Windows host at static
+    `10.184.37.241`, not only through the transient `192.168.*` Default Switch
+    address.
+  - Local HRIS API/database access should work when the app/browser is
+    refreshed.
+- Current-state finding:
+  - Hyper-V reported `project-truth-local-vhdx-proof` running on
+    `Default Switch` with guest IPs `10.184.37.241`,
+    `192.168.237.193`, and link-local IPv6.
+  - Inside the VM, `eth0` had `10.184.37.241/24` and
+    `192.168.237.193/20`; DB/API ports were listening on `0.0.0.0`.
+  - Windows could reach the transient `192.168.237.193` address, but could not
+    reach `10.184.37.241` because `vEthernet (Default Switch)` only had
+    `192.168.224.1/20`, so Windows routed `10.184.37.241` through Wi-Fi.
+- Repair:
+  - Added host-side `10.184.37.250/24` to `vEthernet (Default Switch)`.
+  - Added idempotent recovery script:
+    `scripts/ensure-project-truth-vm-241-host-route.ps1`.
+  - The script verifies the named VM, ensures the host-side Default Switch
+    address exists, and probes `10.184.37.241` ports `22`, `3000`, `3001`,
+    `15432`, `15433`, and `15434`.
+- Validation:
+  - Windows TCP probes to `10.184.37.241` passed for SSH, app/API, and
+    PROD/DEV/UAT DB ports.
+  - SSH to `infra@10.184.37.241` returned hostname `project-truth-node` and
+    `eth0` with `10.184.37.241/24`.
+  - Prisma from Windows to
+    `postgresql://postgres:postgres@10.184.37.241:15433/hris?schema=public`
+    returned `db=hris`, `user=postgres`, server port `5432`, and
+    `public_tables=73`.
+  - `http://10.184.37.241:3001/health`, `http://localhost:3001/health`, and
+    admin login through both API paths passed.
+  - Headless browser refresh/login at `http://localhost:5175/auth/login`
+    reached `http://localhost:5175/admin/dashboard`.
+- Evidence:
+  - `.runtime/vm-static-ip-241-repair-20260710-075945/`
+  - Screenshot proof:
+    `.runtime/vm-static-ip-241-repair-20260710-075945/vm-10.184.37.241-proof.png`
+    and
+    `.runtime/vm-static-ip-241-repair-20260710-075945/localhost-app-refresh-login-proof.png`
+
+## Latest Task Addendum - 2026-07-09 Device UX And Employee Hard Delete
+
+- Task mode: Mixed UI/UX hardening, admin destructive-action safety, API
+  contract repair, and local evidence.
+- User goal:
+  - Verify and clarify Add/Edit Device, device list event journeys, Device
+    events modals/details, and responsive behavior for a normal HRIS admin.
+  - Keep the Device events model truth centered on `eventCategory` and
+    `eventAction`, with `source` only as Runtime path/debug and `status` only
+    as HRIS result.
+  - Add an admin-only Employee hard delete dropdown journey that previews
+    relation blockers before any destructive execute path can run.
+- UI result:
+  - Add/Edit Device now groups adapter/callback fields under
+    `Vendor and runtime routing`, while retaining `Runtime adapter`,
+    `Internal adapter key`, and `Callback path` as intended terms with clearer
+    helper copy.
+  - Device events copy no longer presents browser socket connectivity as SDK
+    tap truth. The page uses clearer labels such as
+    `Browser connected; no recent SDK tap`,
+    `No saved device event has arrived in this view yet`,
+    `No recent SDK tap saved`, `Any event category`, and `Any event action`.
+  - Employee admin rows expose `Preview hard delete` only for admin
+    configuration users. The modal shows blocker, delete, detach, and archive
+    counts, relation details, typed confirmation only when safe, and specific
+    toasts.
+- API result:
+  - Added `POST /api/employee/:id/hard-delete-preview`.
+  - Preview mode is non-mutating and returns the exact blocker/delete/detach
+    plan.
+  - Execute mode requires an admin actor, a safe preview with no blockers, and
+    typed `DELETE <employeeId>` confirmation. Device events/users and audit
+    references are detached rather than deleted; legal/payroll/attendance/time
+    history blockers stop hard delete.
+- Validation:
+  - `hris-app` focused tests passed:
+    `npm test -- app/lib/device-events-page-contract.test.ts app/lib/employee-hard-delete-ui-contract.test.ts app/services/employees.service.test.ts`.
+  - `hris-api` focused direct Mocha tests passed:
+    `npx tsx node_modules/mocha/bin/mocha --no-config tests/employee-hard-delete.contract.spec.ts tests/device-events-api-contract.spec.ts tests/device-event-taxonomy.helper.spec.ts`.
+  - `hris-api npm run typecheck` passed.
+  - `hris-app npm run typecheck:test` still fails only on the pre-existing
+    `TimesheetsTab.test.tsx` React Query mock typing issue already tracked as
+    `REC-20260706-TEST-TYPECHECK-MOCKS`.
+  - Real local API dry-run as `admin@bandai.local` returned HTTP 200 with
+    `blockerCount=2`, `deleteCount=2`, `detachCount=13`, and
+    `archiveCount=0`; no execute call was made against live employee data.
+  - Headless Playwright verified admin login, Add Device desktop/narrow,
+    Edit Device from list, device list `View all events`, row
+    `View Device Events`, Device events page desktop/narrow, Sync logs modal,
+    Listener modal, event details modal, and employee hard-delete preview
+    blocker modal.
+- Evidence:
+  - `.runtime/device-ui-ux-employee-delete-20260709-231712/`
+  - API dry-run:
+    `.runtime/device-ui-ux-employee-delete-20260709-231712/employee-hard-delete-preview-dry-run.json`
+  - Browser proof:
+    `.runtime/device-ui-ux-employee-delete-20260709-231712/playwright-verification.json`
+    and screenshots under
+    `.runtime/device-ui-ux-employee-delete-20260709-231712/screenshots/`
 
 ## Latest Task Addendum - 2026-07-09 Hikvision Listener Admin Control
 

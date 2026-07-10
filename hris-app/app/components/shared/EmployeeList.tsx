@@ -4,6 +4,7 @@ import { DataTable, type Column } from "~/components/atoms/DataTable";
 import { StatusBadge } from "~/components/atoms/StatusBadge";
 import { Button } from "~/components/atoms/Button";
 import { Badge } from "~/components/atoms/Badge";
+import { Input } from "~/components/atoms/Input";
 import { Modal } from "~/components/atoms/Modal";
 import { DatePicker } from "~/components/atoms/DatePicker";
 import {
@@ -17,7 +18,12 @@ import {
 	Edit,
 	FileText,
 } from "lucide-react";
-import { useEmployee, useEmployees } from "~/lib/hooks/useEmployees";
+import {
+	useEmployee,
+	useEmployees,
+	useExecuteEmployeeHardDelete,
+	usePreviewEmployeeHardDelete,
+} from "~/lib/hooks/useEmployees";
 import { useDepartments } from "~/lib/hooks/useDepartments";
 import { usePositions } from "~/lib/hooks/usePositions";
 import { useLevels } from "~/lib/hooks/useLevels";
@@ -247,6 +253,10 @@ export default function EmployeeList({
 	const basePath = location.pathname.replace(/\/$/, "");
 	const isAdminConfigurationEmployees = basePath === "/admin/configuration/employees";
 	const { user } = useAuth();
+	const actorRole = String((user as any)?.role || (user as any)?.metadata?.role || "").toLowerCase();
+	const canPreviewHardDelete =
+		isAdminConfigurationEmployees &&
+		["hris-admin", "admin", "super_admin", "superadmin"].includes(actorRole);
 
 	// Termination modal state
 	const [terminationEmployee, setTerminationEmployee] = useState<EmployeeDisplay | null>(null);
@@ -254,8 +264,11 @@ export default function EmployeeList({
 	const [terminationDate, setTerminationDate] = useState("");
 	const [lastWorkingDay, setLastWorkingDay] = useState("");
 	const [terminationReason, setTerminationReason] = useState("");
+	const [hardDeleteConfirmation, setHardDeleteConfirmation] = useState("");
 	const createTerminationMutation = useCreateTermination();
 	const submitTerminationMutation = useSubmitTermination();
+	const previewHardDeleteMutation = usePreviewEmployeeHardDelete();
+	const executeHardDeleteMutation = useExecuteEmployeeHardDelete();
 
 	// Get search and pagination params from URL
 	const searchQuery = searchParams.get("search") || undefined;
@@ -632,8 +645,8 @@ export default function EmployeeList({
 	const id = searchParams.get("id");
 	const selectFor = searchParams.get("selectFor");
 
-	// Single employee ID for fetching (when action is view or delete)
-	const activeEmployeeId = action === "view" || action === "delete" ? id : null;
+	// Single employee ID for fetching (when action is view or hard-delete)
+	const activeEmployeeId = action === "view" || action === "hard-delete" ? id : null;
 
 	// Single useEmployee hook for all modals (view, delete)
 	const { data: activeEmployee, isLoading: isLoadingEmployee } = useEmployee(
@@ -666,19 +679,36 @@ export default function EmployeeList({
 		navigate(`${item.id}/edit`);
 	};
 
-	const handleDeleteEmployee = (item: EmployeeDisplay) => {
+	const handlePreviewHardDelete = (item: EmployeeDisplay) => {
 		updateSearchParams((next) => {
-			next.set("action", "delete");
+			next.set("action", "hard-delete");
 			next.set("id", item.id);
 		});
+		setHardDeleteConfirmation("");
 	};
 
-	const confirmDelete = () => {
-		if (!activeEmployee) return;
-		// Note: Assuming there's a delete mutation, but since it's not implemented, we'll just close
+	useEffect(() => {
+		if (action !== "hard-delete" || !activeEmployee?.id) return;
+		previewHardDeleteMutation.mutate(activeEmployee.id);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [action, activeEmployee?.id]);
+
+	const closeHardDelete = () => {
+		setHardDeleteConfirmation("");
+		previewHardDeleteMutation.reset();
 		updateSearchParams((next) => {
 			next.delete("action");
 			next.delete("id");
+		});
+	};
+
+	const executeHardDelete = () => {
+		if (!activeEmployee) return;
+		executeHardDeleteMutation.mutate({
+			employeeId: activeEmployee.id,
+			confirmation: hardDeleteConfirmation,
+		}, {
+			onSuccess: closeHardDelete,
 		});
 	};
 
@@ -1166,6 +1196,16 @@ export default function EmployeeList({
 								onClick={() => handleTerminateEmployee(item)}
 								className="text-orange-600">
 								<UserMinus className="h-4 w-4 mr-2" /> Terminate
+							</DropdownMenuItem>
+						</>
+					)}
+					{canPreviewHardDelete && (
+						<>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem
+								onClick={() => handlePreviewHardDelete(item)}
+								className="text-red-600">
+								<Trash2 className="h-4 w-4 mr-2" /> Preview hard delete
 							</DropdownMenuItem>
 						</>
 					)}
@@ -1838,46 +1878,137 @@ export default function EmployeeList({
 				)}
 			</Modal>
 
-			{/* Delete Confirmation Modal */}
+			{/* Employee hard delete preview modal */}
 			<Modal
-				open={action === "delete"}
+				open={action === "hard-delete"}
 				onOpenChange={(open) => {
-					if (!open) {
-						updateSearchParams((next) => {
-							next.delete("action");
-							next.delete("id");
-						});
-					}
+					if (!open) closeHardDelete();
 				}}
-				title="Delete Employee">
-				{isDeepLinkLoading && action === "delete" ? (
+				title="Preview employee hard delete">
+				{isDeepLinkLoading && action === "hard-delete" ? (
 					<div className="py-8 text-center text-gray-500">Loading employee...</div>
-				) : activeEmployee && action === "delete" ? (
-					<div className="space-y-4">
-						<div className="p-4 bg-red-50 border border-red-200 rounded-md">
-							<p className="text-sm text-red-800">
-								This action cannot be undone. This will permanently delete the
-								employee{" "}
-								<strong>
-									{formatEmployeeForDisplay(activeEmployee as ApiEmployee).name}
-								</strong>{" "}
-								({activeEmployee.employeeId}).
+				) : activeEmployee && action === "hard-delete" ? (
+					<div className="space-y-5">
+						<div className="rounded-md border border-red-200 bg-red-50 p-4">
+							<p className="text-sm font-semibold text-red-900">
+								Preview hard delete for{" "}
+								{formatEmployeeForDisplay(activeEmployee as ApiEmployee).name} (
+								{activeEmployee.employeeId})
+							</p>
+							<p className="mt-1 text-sm text-red-800">
+								HRIS checks payroll, attendance, legal/history, device, and document
+								relations before any data is removed.
 							</p>
 						</div>
-						<div className="flex justify-end gap-3">
+
+						{previewHardDeleteMutation.isPending ? (
+							<div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+								Checking employee relations...
+							</div>
+						) : previewHardDeleteMutation.data ? (
+							<div className="space-y-4">
+								<div className="grid gap-2 sm:grid-cols-3">
+									<div className="rounded-md border border-slate-200 bg-white p-3">
+										<p className="text-xs font-semibold uppercase text-slate-500">Blocked</p>
+										<p className="mt-1 text-lg font-semibold text-slate-950">
+											{previewHardDeleteMutation.data.summary.blockerCount}
+										</p>
+									</div>
+									<div className="rounded-md border border-slate-200 bg-white p-3">
+										<p className="text-xs font-semibold uppercase text-slate-500">Would delete</p>
+										<p className="mt-1 text-lg font-semibold text-slate-950">
+											{previewHardDeleteMutation.data.summary.deleteCount}
+										</p>
+									</div>
+									<div className="rounded-md border border-slate-200 bg-white p-3">
+										<p className="text-xs font-semibold uppercase text-slate-500">Would detach</p>
+										<p className="mt-1 text-lg font-semibold text-slate-950">
+											{previewHardDeleteMutation.data.summary.detachCount}
+										</p>
+									</div>
+								</div>
+
+								{previewHardDeleteMutation.data.blockers.length > 0 ? (
+									<div className="rounded-md border border-red-200 bg-white">
+										<div className="border-b border-red-100 px-3 py-2 text-sm font-semibold text-red-900">
+											Cannot hard delete this employee
+										</div>
+										<div className="divide-y divide-red-100">
+											{previewHardDeleteMutation.data.blockers.map((blocker) => (
+												<div key={blocker.key} className="flex justify-between gap-3 px-3 py-2 text-sm">
+													<span className="text-red-800">{blocker.reason}</span>
+													<span className="font-semibold text-red-900">{blocker.count}</span>
+												</div>
+											))}
+										</div>
+									</div>
+								) : (
+									<div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+										No payroll, attendance, legal/history, or timesheet blockers were found.
+									</div>
+								)}
+
+								<div className="rounded-md border border-slate-200 bg-white">
+									<div className="border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-900">
+										Previewed actions
+									</div>
+									<div className="max-h-56 divide-y divide-slate-100 overflow-auto">
+										{[
+											...previewHardDeleteMutation.data.plan.delete,
+											...previewHardDeleteMutation.data.plan.detach,
+											...previewHardDeleteMutation.data.plan.archive,
+										].map((item) => (
+											<div key={`${item.action}-${item.model}`} className="px-3 py-2 text-sm">
+												<div className="flex items-center justify-between gap-3">
+													<span className="font-medium text-slate-900">
+														{item.action === "detach" ? "Detach" : item.action === "archive" ? "Archive" : "Delete"} {item.model}
+													</span>
+													<span className="font-semibold text-slate-700">{item.count}</span>
+												</div>
+												<p className="mt-0.5 text-xs text-slate-500">{item.description}</p>
+											</div>
+										))}
+									</div>
+								</div>
+
+								{previewHardDeleteMutation.data.safeToExecute ? (
+									<div>
+										<Label htmlFor="hard-delete-confirmation">
+											Type {previewHardDeleteMutation.data.requiresConfirmation}
+										</Label>
+										<Input
+											id="hard-delete-confirmation"
+											className="mt-1"
+											value={hardDeleteConfirmation}
+											onChange={(event) => setHardDeleteConfirmation(event.target.value)}
+											placeholder={previewHardDeleteMutation.data.requiresConfirmation}
+										/>
+									</div>
+								) : null}
+							</div>
+						) : (
+							<div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+								Preview is required before hard delete can run.
+							</div>
+						)}
+
+						<div className="flex justify-end gap-3 border-t pt-3">
 							<Button
 								type="button"
 								variant="outline"
-								onClick={() => {
-									updateSearchParams((next) => {
-										next.delete("action");
-										next.delete("id");
-									});
-								}}>
+								onClick={closeHardDelete}>
 								Cancel
 							</Button>
-							<Button type="button" variant="destructive" onClick={confirmDelete}>
-								Delete Employee
+							<Button
+								type="button"
+								variant="destructive"
+								onClick={executeHardDelete}
+								disabled={
+									!previewHardDeleteMutation.data?.safeToExecute ||
+									hardDeleteConfirmation !== previewHardDeleteMutation.data?.requiresConfirmation ||
+									executeHardDeleteMutation.isPending
+								}>
+								{executeHardDeleteMutation.isPending ? "Deleting..." : "Hard delete employee"}
 							</Button>
 						</div>
 					</div>

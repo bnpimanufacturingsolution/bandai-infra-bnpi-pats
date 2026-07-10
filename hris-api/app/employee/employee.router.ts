@@ -10,6 +10,7 @@ interface IController {
 	reserveEmployeeId(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
+	previewHardDelete(req: Request, res: Response, next: NextFunction): Promise<void>;
 	setActiveEmployeeSchedule(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getEmployeeSchedules(req: Request, res: Response, next: NextFunction): Promise<void>;
 	deactivateEmployeeSchedule(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -625,6 +626,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       500:
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
+	routes.post("/:id/hard-delete-preview", controller.previewHardDelete);
 	routes.delete("/:id", controller.remove);
 
 	routes.get("/team/schedule-calendar", controller.getTeamScheduleCalendar);

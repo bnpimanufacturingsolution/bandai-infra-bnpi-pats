@@ -42,6 +42,7 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | Event confidence | 2026-07-09 `DeviceEvent` schema/API/UI hard cutover | Persisted confidence for how the category/action was classified: `PROVEN`, `SUPPORTED`, `INFERRED`, or `UNKNOWN`. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
 | Runtime path | 2026-07-09 device-event copy hard cutover | User-facing/debug name for raw `DeviceEvent.source`, meaning the listener/callback/transport path that delivered the event, not the human event concept. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
 | HRIS result | 2026-07-09 device-event copy hard cutover | User-facing name for raw `DeviceEvent.status`, meaning HRIS processing result such as received, matched, ignored, or attendance updated; it is not the generic event status. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
+| Employee hard delete preview | 2026-07-09 admin employee delete safety implementation | Admin-only non-mutating preview that reports employee relation blockers and the exact delete/detach/archive plan before any hard-delete execute path can be enabled. This is not offboarding, termination, archival, or soft delete. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
 
 ## Canonical Term Candidates
 
@@ -71,6 +72,7 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | persisted event behavior | Event action | punch type, event type, action code | HIGH | 2026-07-09 `DeviceEvent.eventAction` schema/API/UI hard cutover |
 | raw transport/source path | Runtime path | source, runtime source | HIGH | 2026-07-09 device-event hard cutover |
 | HRIS processing result | HRIS result | status, processing status | HIGH | 2026-07-09 device-event hard cutover |
+| admin destructive employee delete dry-run | Employee hard delete preview | preview hard delete, hard-delete dry-run | HIGH | 2026-07-09 admin employee delete safety implementation |
 
 ## Terminology Conflicts
 
