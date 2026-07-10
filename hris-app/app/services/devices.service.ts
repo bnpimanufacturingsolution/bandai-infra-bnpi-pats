@@ -1,4 +1,6 @@
 import { apiClient, hrisApiClient } from "../lib/api-client";
+import { resolveApiUrl } from "../lib/api-url.helper";
+import { getRuntimeApiBase } from "../lib/runtime-api-base";
 import { APIService } from "./api-service";
 import type { ApiQueryParams } from "./api-service";
 
@@ -472,6 +474,15 @@ export interface DeviceUsersResponse {
 	};
 }
 
+export interface DeviceUserCredentialSummary {
+	fingerprintCount: number;
+	cardCount: number;
+	faceCount: number;
+	hasFingerprint: boolean;
+	hasCard: boolean;
+	hasFace: boolean;
+}
+
 export interface DeviceUserSyncResponse {
 	run?: any;
 	summary: {
@@ -830,6 +841,36 @@ class DevicesService extends APIService {
 			console.error("Error unlinking device user:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error unlinking device user",
+			);
+		}
+	}
+
+	async getDeviceUserPhoto(deviceUserId: string): Promise<Blob> {
+		try {
+			if (!String(deviceUserId || "").trim()) throw new Error("Device user is required");
+			const token =
+				typeof window !== "undefined" ? window.localStorage.getItem("authToken") : null;
+			const endpoint = `/api/device/users/${deviceUserId}/photo`;
+			const url = resolveApiUrl(getRuntimeApiBase() || "/api", endpoint);
+			const response = await fetch(url, {
+				method: "GET",
+				headers: token ? { Authorization: `Bearer ${token}` } : {},
+			});
+			if (!response.ok) {
+				let message = "Failed to load device user photo";
+				try {
+					const data = await response.json();
+					message = data?.message || data?.error || message;
+				} catch {
+					// Ignore JSON parse errors for binary/image responses.
+				}
+				throw new Error(message);
+			}
+			return await response.blob();
+		} catch (error: any) {
+			console.error("Error loading device user photo:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error loading device user photo",
 			);
 		}
 	}

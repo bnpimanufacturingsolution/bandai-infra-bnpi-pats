@@ -11,6 +11,13 @@ interface HikvisionFetchOptions extends Omit<RequestInit, "body"> {
 	timeoutMs?: number;
 }
 
+export type HikvisionBinaryResponse = {
+	status: number;
+	contentType: string;
+	contentLength: number;
+	buffer: Buffer;
+};
+
 type HikvisionDeviceConnection = {
 	id?: string;
 	name?: string;
@@ -218,14 +225,18 @@ class HikvisionClient {
 		}
 	}
 
+	private buildRequestUrl(connection: HikvisionDeviceConnection, endpoint: string, ensureJsonFormat = true) {
+		if (/^https?:\/\//i.test(endpoint)) return endpoint;
+		const normalizedEndpoint = ensureJsonFormat ? this.normalizeEndpoint(endpoint) : endpoint;
+		return `${connection.baseUrl}${normalizedEndpoint}`;
+	}
+
 	/**
 	 * Main fetch method - handles digest authentication automatically
 	 */
 	async fetch(endpoint: string, options: HikvisionFetchOptions = {}): Promise<any> {
 		const connection = await this.resolveDeviceConnection(options);
-		// Normalize endpoint to ensure ?format=json is present
-		const normalizedEndpoint = this.normalizeEndpoint(endpoint);
-		const url = `${connection.baseUrl}${normalizedEndpoint}`;
+		const url = this.buildRequestUrl(connection, endpoint, true);
 
 		// Prepare headers from curl example
 		const headers: Record<string, string> = {
@@ -319,6 +330,84 @@ class HikvisionClient {
 			clearTimeout(timeout);
 		}
 	}
+
+	async fetchBinary(
+		endpoint: string,
+		options: HikvisionFetchOptions = {},
+	): Promise<HikvisionBinaryResponse> {
+		const connection = await this.resolveDeviceConnection(options);
+		const url = this.buildRequestUrl(connection, endpoint, false);
+		const headers: Record<string, string> = {
+			Accept: "image/*,*/*",
+			"Accept-Language": "en-US,en;q=0.9",
+			"Cache-Control": "no-cache",
+			Connection: "keep-alive",
+			Origin: connection.baseUrl,
+			"X-Requested-With": "XMLHttpRequest",
+			...((options.headers as Record<string, string>) || {}),
+		};
+		const timeoutMs = Math.max(Number(options.timeoutMs || HIKVISION_CONFIG.timeout || 10000), 1000);
+		const abortController = new AbortController();
+		const timeout = setTimeout(() => abortController.abort(), timeoutMs);
+		const fetchOptions: RequestInit = {
+			method: options.method || "GET",
+			headers,
+			signal: abortController.signal,
+		};
+
+		if (url.startsWith("https")) {
+			const httpsAgent = new https.Agent({
+				rejectUnauthorized: false,
+			});
+			// @ts-ignore - digest-fetch supports agent option
+			fetchOptions.agent = httpsAgent;
+		}
+
+		try {
+			const client = await this.createClient(connection.username, connection.password);
+			const response = await client.fetch(url, fetchOptions);
+
+			if (!response.ok) {
+				const errorText = await response.text().catch(() => "");
+				throw {
+					status: response.status,
+					message: errorText || response.statusText || "Failed to fetch Hikvision binary content",
+					data: {
+						deviceId: connection.id,
+						deviceName: connection.name,
+						baseUrl: connection.baseUrl,
+					},
+				};
+			}
+
+			const buffer = Buffer.from(await response.arrayBuffer());
+			return {
+				status: response.status,
+				contentType: response.headers.get("content-type") || "application/octet-stream",
+				contentLength: Number(response.headers.get("content-length") || buffer.length || 0),
+				buffer,
+			};
+		} catch (error: any) {
+			if (error.status) throw error;
+			throw {
+				status: 502,
+				message: error.message
+					? `Hikvision binary request failed: ${error.message}`
+					: "Hikvision binary request failed",
+				data: {
+					deviceId: connection.id,
+					deviceName: connection.name,
+					baseUrl: connection.baseUrl,
+					timeoutMs,
+					errorName: error?.name,
+					errorCode: error?.code || error?.cause?.code,
+					errorCause: error?.cause?.message,
+				},
+			};
+		} finally {
+			clearTimeout(timeout);
+		}
+	}
 }
 
 // Export singleton instance
@@ -332,4 +421,11 @@ export const hikvisionFetch = async (
 	options: HikvisionFetchOptions = {},
 ): Promise<any> => {
 	return hikvisionClient.fetch(endpoint, options);
+};
+
+export const hikvisionFetchBinary = async (
+	endpoint: string,
+	options: HikvisionFetchOptions = {},
+): Promise<HikvisionBinaryResponse> => {
+	return hikvisionClient.fetchBinary(endpoint, options);
 };

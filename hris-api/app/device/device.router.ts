@@ -17,6 +17,7 @@ interface IController {
 	getDeviceImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	cancelDeviceImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	listDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceUserPhoto(req: Request, res: Response, next: NextFunction): Promise<void>;
 	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	reconcileBiometricSync(req: Request, res: Response, next: NextFunction): Promise<void>;
 	backfillDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -50,6 +51,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get("/hikvision/listener", controller.getHikvisionListenerStatus);
 	routes.post("/hikvision/listener", controller.controlHikvisionListener);
 	routes.get("/:id/users", controller.listDeviceUsers);
+	routes.get("/users/:userId/photo", controller.getDeviceUserPhoto);
 	routes.post("/:id/users/sync", controller.syncDeviceUsers);
 	routes.post("/:id/users/backfill", controller.backfillDeviceUsers);
 	routes.post("/biometric-sync/reconcile", controller.reconcileBiometricSync);

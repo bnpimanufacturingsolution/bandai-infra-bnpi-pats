@@ -11,6 +11,7 @@ describe("DeviceUser API contract", () => {
 		const router = routerSource();
 		const controller = controllerSource();
 		expect(router).to.include('routes.get("/:id/users", controller.listDeviceUsers)');
+		expect(router).to.include('routes.get("/users/:userId/photo", controller.getDeviceUserPhoto)');
 		expect(router).to.include('routes.post("/:id/users/sync", controller.syncDeviceUsers)');
 		expect(router).to.include('routes.get("/:id/sync-runs", controller.getDeviceSyncRuns)');
 		expect(router).to.include('routes.post("/import-jobs/:jobId/cancel", controller.cancelDeviceImportJob)');
@@ -23,6 +24,10 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("DEVICE_USER_ADMIN_ROLES");
 		expect(controller).to.include('"hris-admin"');
 		expect(controller).to.include("assertDeviceUserAdmin(req, res)");
+		expect(controller).to.include("const getDeviceUserPhoto = async");
+		expect(controller).to.include("hikvisionFetchBinary");
+		expect(controller).to.include("readDeviceUserFaceUrl");
+		expect(controller).to.include("Device user face photo host does not match the configured device");
 	});
 
 	it("persists log sync run summaries so known skipped rows do not remain forever missing", () => {

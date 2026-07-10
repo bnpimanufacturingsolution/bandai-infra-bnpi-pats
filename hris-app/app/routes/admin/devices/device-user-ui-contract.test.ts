@@ -89,6 +89,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Rows marked Needs link were saved in HRIS");
 		expect(enroll).toContain("Physical");
 		expect(enroll).toContain("Historical HRIS backfill");
+		expect(enroll).toContain("Loading enrolled face photo");
+		expect(enroll).toContain("Credential truth");
+		expect(enroll).toContain("Raw fingerprint template blobs are not shown in this normal record.");
+		expect(enroll).toContain(".getDeviceUserPhoto(");
+		expect(enroll).toContain("Photo source");
 		expect(enroll).toContain("<summary");
 		expect(enroll).toContain("getDeviceUserSource");
 		expect(enroll).not.toContain("historical shown by filter");

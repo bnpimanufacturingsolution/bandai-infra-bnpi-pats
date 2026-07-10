@@ -50,7 +50,11 @@ import {
 } from "~/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { HikvisionUserInfo } from "~/types/hikvision";
-import deviceService, { type DeviceSyncPreviewRow, type DeviceUser } from "~/services/devices.service";
+import deviceService, {
+	type DeviceSyncPreviewRow,
+	type DeviceUser,
+	type DeviceUserCredentialSummary,
+} from "~/services/devices.service";
 import type { Employee } from "~/services/employees.service";
 
 interface EnrollFormData {
@@ -198,6 +202,9 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		message: "",
 	});
 	const [detailsDeviceUser, setDetailsDeviceUser] = useState<VisibleDeviceUserRow | null>(null);
+	const [detailsPhotoUrl, setDetailsPhotoUrl] = useState<string | null>(null);
+	const [detailsPhotoState, setDetailsPhotoState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+	const [detailsPhotoError, setDetailsPhotoError] = useState("");
 	const [linkTarget, setLinkTarget] = useState<VisibleDeviceUserRow | null>(null);
 	const [unlinkTarget, setUnlinkTarget] = useState<VisibleDeviceUserRow | null>(null);
 	const [selectedEmployeeForLink, setSelectedEmployeeForLink] = useState("");
@@ -847,6 +854,27 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	};
 	const getDeviceUserSourceLabel = (deviceUser?: { rawPayload?: any } | null) =>
 		getDeviceUserSource(deviceUser) === "historical" ? "Historical HRIS backfill" : "Physical device";
+	const getDeviceUserCredentialSummary = (deviceUser?: { rawPayload?: any } | null): DeviceUserCredentialSummary => {
+		const raw = (deviceUser?.rawPayload || {}) as any;
+		const metaSummary = raw?._hrisDeviceMetadata?.credentialSummary || {};
+		const fingerprintCount = Number(metaSummary.fingerprintCount ?? raw?.numOfFP ?? raw?.UserInfo?.numOfFP ?? 0) || 0;
+		const cardCount = Number(metaSummary.cardCount ?? raw?.numOfCard ?? raw?.UserInfo?.numOfCard ?? 0) || 0;
+		const faceCount = Number(metaSummary.faceCount ?? raw?.numOfFace ?? raw?.UserInfo?.numOfFace ?? 0) || 0;
+		return {
+			fingerprintCount,
+			cardCount,
+			faceCount,
+			hasFingerprint: Boolean(metaSummary.hasFingerprint ?? fingerprintCount > 0),
+			hasCard: Boolean(metaSummary.hasCard ?? cardCount > 0),
+			hasFace: Boolean(metaSummary.hasFace ?? faceCount > 0),
+		};
+	};
+	const getDeviceUserFaceUrl = (deviceUser?: { rawPayload?: any } | null) => {
+		const raw = (deviceUser?.rawPayload || {}) as any;
+		return String(raw?.faceURL || raw?.UserInfo?.faceURL || "").trim();
+	};
+	const getDeviceUserDisplayName = (deviceUser?: VisibleDeviceUserRow | null) =>
+		deviceUser?.displayName || String((deviceUser?.rawPayload as any)?.name || "").trim() || `User ${deviceUser?.vendorUserId || "-"}`;
 	const physicalDeviceUserRows = dbDeviceUserRows.filter((deviceUser) => getDeviceUserSource(deviceUser) === "physical");
 	const hrisDeviceUsersByVendorId = new Map<string, DeviceUser>();
 	for (const deviceUser of [...physicalDeviceUserRows, ...Object.values(sourceMatchedDeviceUsers)]) {
@@ -1032,6 +1060,50 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		if (status === "LINK_CHECK_FAILED") return "Check failed";
 		return status || "-";
 	};
+
+	useEffect(() => {
+		let cancelled = false;
+		let objectUrl: string | null = null;
+
+		if (!detailsDeviceUser?.hrisDeviceUser?.id || !getDeviceUserFaceUrl(detailsDeviceUser)) {
+			setDetailsPhotoState("idle");
+			setDetailsPhotoError("");
+			setDetailsPhotoUrl((current) => {
+				if (current) URL.revokeObjectURL(current);
+				return null;
+			});
+			return;
+		}
+
+		setDetailsPhotoState("loading");
+		setDetailsPhotoError("");
+
+		void deviceService
+			.getDeviceUserPhoto(detailsDeviceUser.hrisDeviceUser.id)
+			.then((blob) => {
+				if (cancelled) return;
+				objectUrl = URL.createObjectURL(blob);
+				setDetailsPhotoUrl((current) => {
+					if (current) URL.revokeObjectURL(current);
+					return objectUrl;
+				});
+				setDetailsPhotoState("ready");
+			})
+			.catch((error: any) => {
+				if (cancelled) return;
+				setDetailsPhotoState("error");
+				setDetailsPhotoError(error?.message || "Failed to load device user photo");
+				setDetailsPhotoUrl((current) => {
+					if (current) URL.revokeObjectURL(current);
+					return null;
+				});
+			});
+
+		return () => {
+			cancelled = true;
+			if (objectUrl) URL.revokeObjectURL(objectUrl);
+		};
+	}, [detailsDeviceUser]);
 
 	return (
 		<div className="space-y-6">
@@ -1720,8 +1792,68 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				title="Device user details"
 				className="max-w-2xl">
 				{detailsDeviceUser ? (
-					<div className="space-y-3">
-						<div className="grid gap-x-4 gap-y-2 text-sm md:grid-cols-2">
+					<div className="space-y-4">
+						<div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+							<div className="space-y-3">
+								<div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+									<div className="aspect-[4/5] bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.16),_transparent_55%),linear-gradient(180deg,#f8fafc_0%,#e2e8f0_100%)]">
+										{detailsPhotoState === "ready" && detailsPhotoUrl ? (
+											<img
+												src={detailsPhotoUrl}
+												alt={`${getDeviceUserDisplayName(detailsDeviceUser)} face photo`}
+												className="h-full w-full object-cover"
+											/>
+										) : (
+											<div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-slate-500">
+												{detailsPhotoState === "loading" ? (
+													<>
+														<Loader2 className="h-6 w-6 animate-spin" />
+														<p className="text-sm font-medium text-slate-700">Loading enrolled face photo</p>
+													</>
+												) : detailsPhotoState === "error" ? (
+													<>
+														<Eye className="h-6 w-6" />
+														<p className="text-sm font-medium text-slate-700">Face photo unavailable</p>
+														<p className="text-xs text-slate-500">{detailsPhotoError}</p>
+													</>
+												) : (
+													<>
+														<Eye className="h-6 w-6" />
+														<p className="text-sm font-medium text-slate-700">No face photo enrolled</p>
+														<p className="text-xs text-slate-500">This device user does not currently expose a saved face image.</p>
+													</>
+												)}
+											</div>
+										)}
+									</div>
+								</div>
+								<div className="rounded-2xl border border-slate-200 bg-white p-3">
+									<p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Credential truth</p>
+									<div className="mt-3 grid grid-cols-3 gap-2">
+										{[
+											["Fingerprints", getDeviceUserCredentialSummary(detailsDeviceUser).fingerprintCount],
+											["Cards", getDeviceUserCredentialSummary(detailsDeviceUser).cardCount],
+											["Faces", getDeviceUserCredentialSummary(detailsDeviceUser).faceCount],
+										].map(([label, value]) => (
+											<div key={String(label)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+												<p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
+												<p className="mt-1 text-lg font-semibold text-slate-950">{String(value)}</p>
+											</div>
+										))}
+									</div>
+									<p className="mt-3 text-xs leading-5 text-slate-500">
+										HRIS stores source counts and face-photo access here. Raw fingerprint template blobs are not shown in this normal record.
+									</p>
+								</div>
+							</div>
+							<div className="space-y-3">
+								<div className="rounded-2xl border border-slate-200 bg-white p-4">
+									<p className="text-lg font-semibold text-slate-950">{getDeviceUserDisplayName(detailsDeviceUser)}</p>
+									<p className="mt-1 text-sm text-slate-500">
+										Vendor user ID {detailsDeviceUser.vendorUserId}
+									</p>
+								</div>
+								<div className="grid gap-x-4 gap-y-2 text-sm md:grid-cols-2">
 							{[
 								["Vendor user ID", detailsDeviceUser.vendorUserId],
 								["Device", selectedDevice?.name || detailsDeviceUser.hrisDeviceUser?.device?.name || "-"],
@@ -1730,11 +1862,19 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								["Employee link", detailsDeviceUser.employee?.employeeId || "Not linked"],
 								["Last synced", detailsDeviceUser.lastSyncedAt ? formatDateTime(detailsDeviceUser.lastSyncedAt) : "-"],
 							].map(([label, value]) => (
-								<div key={label} className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 border-b border-slate-100 py-2 last:border-b-0">
+								<div key={label} className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 rounded-xl border border-slate-100 bg-white px-3 py-2">
 									<span className="text-xs font-medium text-slate-500">{label}</span>
 									<span className="min-w-0 truncate font-semibold text-slate-950">{value}</span>
 								</div>
 							))}
+								</div>
+								{getDeviceUserFaceUrl(detailsDeviceUser) ? (
+									<div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+										<p className="font-medium text-slate-800">Photo source</p>
+										<p className="mt-1 break-all">{getDeviceUserFaceUrl(detailsDeviceUser)}</p>
+									</div>
+								) : null}
+							</div>
 						</div>
 						<details className="rounded-md border border-slate-200">
 							<summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700">

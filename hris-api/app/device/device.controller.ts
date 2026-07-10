@@ -34,6 +34,7 @@ import {
 	buildHikvisionDeviceBaseUrl,
 	getHikvisionDeviceHttpPort,
 	hikvisionFetch,
+	hikvisionFetchBinary,
 } from "../../lib/hikvision-client";
 import {
 	buildDeviceUserEmployeeNoCandidates,
@@ -976,6 +977,125 @@ export const controller = (prisma: PrismaClient) => {
 					}
 				: null,
 		};
+	};
+
+	const readDeviceUserFaceUrl = (rawPayload: any) => {
+		const direct = String(rawPayload?.faceURL || rawPayload?.UserInfo?.faceURL || "").trim();
+		return direct || "";
+	};
+
+	const getAllowedDeviceHosts = (device: {
+		address?: string | null;
+		port?: number | null;
+		protocol?: string | null;
+		config?: unknown;
+	}) => {
+		const hosts = new Set<string>();
+		const rawAddress = String(device.address || "").trim();
+		if (rawAddress) {
+			try {
+				if (/^https?:\/\//i.test(rawAddress)) {
+					hosts.add(new URL(rawAddress).hostname.toLowerCase());
+				} else {
+					hosts.add(rawAddress.toLowerCase());
+				}
+			} catch {
+				hosts.add(rawAddress.toLowerCase());
+			}
+		}
+		try {
+			const runtimeBaseUrl = buildHikvisionDeviceBaseUrl({
+				address: String(device.address || ""),
+				port: Number(device.port || 0),
+				protocol: String(device.protocol || "http"),
+				config: device.config,
+			});
+			if (runtimeBaseUrl) hosts.add(new URL(runtimeBaseUrl).hostname.toLowerCase());
+		} catch {
+			// Ignore malformed runtime base URL and rely on direct device address validation.
+		}
+		return hosts;
+	};
+
+	const getDeviceUserPhoto = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+			const userId = String(req.params.userId || "").trim();
+			if (!userId) {
+				res.status(400).json(buildErrorResponse("Device user is required", 400));
+				return;
+			}
+
+			const deviceUser = await (prisma as any).deviceUser.findFirst({
+				where: {
+					id: userId,
+					organizationId: admin.organizationId,
+				},
+				select: {
+					id: true,
+					vendorUserId: true,
+					displayName: true,
+					rawPayload: true,
+					device: {
+						select: {
+							id: true,
+							name: true,
+							address: true,
+							port: true,
+							protocol: true,
+							config: true,
+							access: true,
+						},
+					},
+				},
+			});
+
+			if (!deviceUser?.device) {
+				res.status(404).json(buildErrorResponse("Device user not found", 404));
+				return;
+			}
+
+			const faceUrl = readDeviceUserFaceUrl(deviceUser.rawPayload);
+			if (!faceUrl) {
+				res.status(404).json(buildErrorResponse("No enrolled face photo found for this device user", 404));
+				return;
+			}
+
+			const parsedFaceUrl = new URL(faceUrl);
+			const allowedHosts = getAllowedDeviceHosts(deviceUser.device);
+			if (!allowedHosts.has(parsedFaceUrl.hostname.toLowerCase())) {
+				res.status(400).json(
+					buildErrorResponse("Device user face photo host does not match the configured device", 400),
+				);
+				return;
+			}
+
+			const relativePath = `${parsedFaceUrl.pathname}${parsedFaceUrl.search}`;
+			const binary = await hikvisionFetchBinary(relativePath, {
+				deviceId: deviceUser.device.id,
+				prisma,
+				request: req,
+				timeoutMs: 15000,
+				headers: {
+					Accept: "image/*,*/*",
+				},
+			});
+
+			res.setHeader("Content-Type", binary.contentType || "image/jpeg");
+			res.setHeader("Content-Length", String(binary.contentLength || binary.buffer.length));
+			res.setHeader("Cache-Control", "private, max-age=30");
+			res.setHeader(
+				"Content-Disposition",
+				`inline; filename=\"device-user-${deviceUser.vendorUserId || deviceUser.id}.jpg\"`,
+			);
+			res.status(200).send(binary.buffer);
+		} catch (error: any) {
+			const status = Number(error?.status || 500);
+			res
+				.status(status)
+				.json(buildErrorResponse(error?.message || "Failed to load device user face photo", status));
+		}
 	};
 
 	const listDeviceUsers = async (req: Request, res: Response, _next: NextFunction) => {
@@ -4532,6 +4652,7 @@ export const controller = (prisma: PrismaClient) => {
 		getDeviceSyncPreview,
 		getDeviceSyncRuns,
 		listDeviceUsers,
+		getDeviceUserPhoto,
 		syncDeviceUsers,
 		reconcileBiometricSync,
 		backfillDeviceUsers,
