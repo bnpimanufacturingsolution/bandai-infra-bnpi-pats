@@ -264,7 +264,6 @@ export default function EmployeeList({
 	const [terminationDate, setTerminationDate] = useState("");
 	const [lastWorkingDay, setLastWorkingDay] = useState("");
 	const [terminationReason, setTerminationReason] = useState("");
-	const [hardDeleteConfirmation, setHardDeleteConfirmation] = useState("");
 	const createTerminationMutation = useCreateTermination();
 	const submitTerminationMutation = useSubmitTermination();
 	const previewHardDeleteMutation = usePreviewEmployeeHardDelete();
@@ -684,7 +683,6 @@ export default function EmployeeList({
 			next.set("action", "hard-delete");
 			next.set("id", item.id);
 		});
-		setHardDeleteConfirmation("");
 	};
 
 	useEffect(() => {
@@ -694,7 +692,6 @@ export default function EmployeeList({
 	}, [action, activeEmployee?.id]);
 
 	const closeHardDelete = () => {
-		setHardDeleteConfirmation("");
 		previewHardDeleteMutation.reset();
 		updateSearchParams((next) => {
 			next.delete("action");
@@ -707,7 +704,6 @@ export default function EmployeeList({
 		const forceDelete = Boolean(previewHardDeleteMutation.data?.blockers?.length);
 		executeHardDeleteMutation.mutate({
 			employeeId: activeEmployee.id,
-			confirmation: hardDeleteConfirmation,
 			force: forceDelete,
 		}, {
 			onSuccess: closeHardDelete,
@@ -1953,22 +1949,6 @@ export default function EmployeeList({
 									</div>
 								)}
 
-								{previewHardDeleteMutation.data.safeToExecute ||
-								previewHardDeleteMutation.data.forceExecuteAvailable ? (
-									<div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-										<Label htmlFor="hard-delete-confirmation">
-											Type {previewHardDeleteMutation.data.requiresConfirmation}
-										</Label>
-										<Input
-											id="hard-delete-confirmation"
-											className="mt-1 bg-white"
-											value={hardDeleteConfirmation}
-											onChange={(event) => setHardDeleteConfirmation(event.target.value)}
-											placeholder={previewHardDeleteMutation.data.requiresConfirmation}
-										/>
-									</div>
-								) : null}
-
 								<div className="rounded-md border border-slate-200 bg-white">
 									<div className="border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-900">
 										Previewed actions
@@ -2015,7 +1995,6 @@ export default function EmployeeList({
 										previewHardDeleteMutation.data?.safeToExecute ||
 										previewHardDeleteMutation.data?.forceExecuteAvailable
 									) ||
-									hardDeleteConfirmation !== previewHardDeleteMutation.data?.requiresConfirmation ||
 									executeHardDeleteMutation.isPending
 								}>
 								{executeHardDeleteMutation.isPending ? "Deleting..." : "Hard delete employee"}

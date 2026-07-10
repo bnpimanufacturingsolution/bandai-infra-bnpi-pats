@@ -5805,17 +5805,12 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const preview = await buildEmployeeHardDeletePreview(prisma, existingEmployee);
-			const expectedConfirmation =
-				preview.blockers.length > 0
-					? `FORCE DELETE ${existingEmployee.employeeId}`
-					: `DELETE ${existingEmployee.employeeId}`;
-
 			if (!execute || dryRun) {
 				res.status(200).json(
 					buildSuccessResponse("Employee hard delete preview complete", {
 						mode: "preview",
 						execute: false,
-						requiresConfirmation: expectedConfirmation,
+						requiresConfirmation: null,
 						...preview,
 					}, 200),
 				);
@@ -5832,16 +5827,6 @@ export const controller = (prisma: PrismaClient) => {
 							message: `${preview.summary.blockerCount} protected relation type(s) found. Run preview and confirm force delete to remove them.`,
 						},
 					]),
-				);
-				return;
-			}
-
-			if (confirmation !== expectedConfirmation) {
-				res.status(400).json(
-					buildErrorResponse(
-						`Type ${expectedConfirmation} to execute employee hard delete.`,
-						400,
-					),
 				);
 				return;
 			}

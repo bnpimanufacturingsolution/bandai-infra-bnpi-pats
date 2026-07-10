@@ -43,10 +43,8 @@ describe("Employee hard delete API contract", () => {
 		expect(controllerSource).to.contain("preview.blockers.length > 0 && !force");
 	});
 
-	it("reports delete and detach behavior explicitly and requires typed confirmation for execute", () => {
+	it("reports delete and detach behavior explicitly and allows click-only execute", () => {
 		expect(controllerSource).to.contain("requiresConfirmation");
-		expect(controllerSource).to.contain("FORCE DELETE ${existingEmployee.employeeId}");
-		expect(controllerSource).to.contain("DELETE ${existingEmployee.employeeId}");
 		expect(controllerSource).to.contain('mode: "preview"');
 		expect(controllerSource).to.contain('mode: "executed"');
 		expect(controllerSource).to.contain("attendanceObligation?.deleteMany");
@@ -58,5 +56,6 @@ describe("Employee hard delete API contract", () => {
 		expect(controllerSource).to.contain("deviceUser?.updateMany");
 		expect(controllerSource).to.contain("activityLogging?.updateMany");
 		expect(controllerSource).to.contain("auditLogging?.updateMany");
+		expect(controllerSource).to.not.contain("Type ${expectedConfirmation} to execute employee hard delete.");
 	});
 });

@@ -696,7 +696,7 @@ export interface EmployeeHardDeleteBlocker {
 export interface EmployeeHardDeletePreview {
 	mode: "preview" | "executed";
 	execute: boolean;
-	requiresConfirmation: string;
+	requiresConfirmation: string | null;
 	forceExecuteAvailable?: boolean;
 	employee: {
 		id: string;
@@ -2036,15 +2036,11 @@ class EmployeesService extends APIService {
 		}
 	}
 
-	async executeEmployeeHardDelete(
-		employeeId: string,
-		confirmation: string,
-		force = false,
-	): Promise<EmployeeHardDeletePreview> {
+	async executeEmployeeHardDelete(employeeId: string, force = false): Promise<EmployeeHardDeletePreview> {
 		try {
 			const response = await hrisApiClient.post<any>(
 				`/api/employee/${employeeId}/hard-delete-preview`,
-				{ execute: true, dryRun: false, confirmation, force },
+				{ execute: true, dryRun: false, force },
 			);
 			return (response.data?.data || response.data) as EmployeeHardDeletePreview;
 		} catch (error: any) {

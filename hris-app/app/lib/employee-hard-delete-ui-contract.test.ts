@@ -25,8 +25,6 @@ describe("employee hard delete UI contract", () => {
 		expect(listSource).to.contain("Would delete");
 		expect(listSource).to.contain("Would detach");
 		expect(listSource).to.contain("forceExecuteAvailable");
-		expect(listSource).to.contain("hardDeleteConfirmation");
-		expect(listSource).to.contain("requiresConfirmation");
 		expect(listSource).to.contain("Hard delete employee");
 	});
 
