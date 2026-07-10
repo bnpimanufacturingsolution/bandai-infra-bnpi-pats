@@ -23,9 +23,24 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("const admin = assertDeviceUserAdmin(req, res)");
 		expect(controller).to.include("const execute = body.execute === true");
 		expect(controller).to.include("Biometric sync reconcile dry-run completed");
-		expect(controller).to.include("deviceUser.upsert");
+		expect(controller).to.include("upsertDeviceUsersFromCandidates");
 		expect(controller).to.include("biometricSync: biometricSyncPayload");
 		expect(controller).to.include("rawFingerprintTemplateStored: false");
+	});
+
+	it("refreshes per-device Hikvision DeviceUser truth during reconcile and persists derived lifecycle events", () => {
+		const controller = controllerSource();
+
+		expect(controller).to.include("const loadHikvisionDeviceUserSnapshot = async");
+		expect(controller).to.include("const persistDerivedBiometricLifecycleEvent = async");
+		expect(controller).to.include("const allowsSourceWideRefresh =");
+		expect(controller).to.include('scope: "all_source_users"');
+		expect(controller).to.include("refreshResults");
+		expect(controller).to.include('eventAction: "USER_CREATED"');
+		expect(controller).to.include('eventAction: "FINGERPRINT_ENROLLED"');
+		expect(controller).to.include('eventAction: "SYNC_IMPORTED"');
+		expect(controller).to.include('eventType: "BiometricReconcile"');
+		expect(controller).to.include("derivedFromReconcile: true");
 	});
 
 	it("keeps Linux callback work queued and omits raw fingerprint templates from evidence", () => {

@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import {
 	buildDeviceUserEmployeeNoCandidates,
+	extractHikvisionCredentialSummary,
 	normalizeHikvisionDeviceUser,
 	resolveDeviceUserLinkDecision,
 	summarizeDeviceUserStatuses,
@@ -28,6 +29,7 @@ describe("DeviceUser sync helper", () => {
 		const normalized = normalizeHikvisionDeviceUser({
 			employeeNo: "1360",
 			name: "Rio",
+			numOfFP: 2,
 			userType: "normal",
 			Valid: {
 				enable: true,
@@ -41,6 +43,23 @@ describe("DeviceUser sync helper", () => {
 		expect(normalized?.displayName).to.equal("Rio");
 		expect(normalized?.status).to.equal("UNMATCHED");
 		expect(normalized?.validFrom).to.be.instanceOf(Date);
+		expect(normalized?.rawPayload?._hrisDeviceMetadata?.credentialSummary?.fingerprintCount).to.equal(2);
+	});
+
+	it("extracts Hikvision credential counts for device-user metadata", () => {
+		const summary = extractHikvisionCredentialSummary({
+			numOfFP: 1,
+			cardNo: "123456",
+			Faces: [{ id: 1 }],
+		});
+		expect(summary).to.deep.equal({
+			fingerprintCount: 1,
+			cardCount: 1,
+			faceCount: 1,
+			hasFingerprint: true,
+			hasCard: true,
+			hasFace: true,
+		});
 	});
 
 	it("auto-links exactly one safe deviceEmpId match", () => {

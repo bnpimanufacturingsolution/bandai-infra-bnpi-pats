@@ -47,6 +47,22 @@ const parseOptionalDeviceDate = (value: unknown) => {
 	return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const readFirstFiniteNumber = (...values: unknown[]) => {
+	for (const value of values) {
+		if (value === null || value === undefined || value === "") continue;
+		const numeric = Number(value);
+		if (Number.isFinite(numeric)) return numeric;
+	}
+	return null;
+};
+
+const readArrayCount = (...values: unknown[]) => {
+	for (const value of values) {
+		if (Array.isArray(value)) return value.length;
+	}
+	return null;
+};
+
 const isUserEnabled = (rawUser: any) => {
 	const valid = rawUser?.Valid || rawUser?.valid || {};
 	const enabled = valid?.enable;
@@ -55,10 +71,53 @@ const isUserEnabled = (rawUser: any) => {
 	return true;
 };
 
+export const extractHikvisionCredentialSummary = (rawUser: any) => {
+	const fingerprintCount =
+		readFirstFiniteNumber(
+			rawUser?.numOfFP,
+			rawUser?.numOfFingerPrint,
+			rawUser?.fingerPrintNum,
+			rawUser?.fingerprintCount,
+			rawUser?.numOfFingerprint,
+		) ??
+		readArrayCount(
+			rawUser?.FingerPrintList,
+			rawUser?.FingerPrint,
+			rawUser?.fingerPrint,
+			rawUser?.fingerprints,
+		) ??
+		0;
+	const cardCount =
+		readFirstFiniteNumber(
+			rawUser?.numOfCard,
+			rawUser?.cardNum,
+			rawUser?.cardCount,
+		) ??
+		readArrayCount(rawUser?.CardList, rawUser?.Cards, rawUser?.cards) ??
+		(normalizeText(rawUser?.cardNo) ? 1 : 0);
+	const faceCount =
+		readFirstFiniteNumber(
+			rawUser?.numOfFace,
+			rawUser?.faceNum,
+			rawUser?.faceCount,
+		) ??
+		readArrayCount(rawUser?.FaceList, rawUser?.Faces, rawUser?.faces) ??
+		0;
+	return {
+		fingerprintCount,
+		cardCount,
+		faceCount,
+		hasFingerprint: fingerprintCount > 0,
+		hasCard: cardCount > 0,
+		hasFace: faceCount > 0,
+	};
+};
+
 export const normalizeHikvisionDeviceUser = (rawUser: any): DeviceUserCandidate | null => {
 	const vendorUserId = normalizeText(rawUser?.employeeNo || rawUser?.employeeNoString || rawUser?.userId);
 	if (!vendorUserId) return null;
 	const valid = rawUser?.Valid || rawUser?.valid || {};
+	const credentialSummary = extractHikvisionCredentialSummary(rawUser);
 	return {
 		vendorUserId,
 		employeeNo: vendorUserId,
@@ -69,7 +128,14 @@ export const normalizeHikvisionDeviceUser = (rawUser: any): DeviceUserCandidate 
 		validTo: parseOptionalDeviceDate(valid?.endTime),
 		doorRight: normalizeText(rawUser?.doorRight) || null,
 		accessPlan: rawUser?.RightPlan || rawUser?.rightPlan || null,
-		rawPayload: rawUser || {},
+		rawPayload: {
+			...(rawUser || {}),
+			_hrisDeviceMetadata: {
+				vendor: "Hikvision",
+				source: "UserInfo/Search",
+				credentialSummary,
+			},
+		},
 	};
 };
 

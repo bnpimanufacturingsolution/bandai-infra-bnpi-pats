@@ -1205,6 +1205,14 @@ export const controller = (prisma: PrismaClient) => {
 		return Array.from(new Map(allUsers.map((user) => [String(user?.employeeNo || user?.employeeNoString || user?.userId), user])).values());
 	};
 
+	const loadHikvisionDeviceUserSnapshot = async (req: Request, device: any) => {
+		const rawUsers = await fetchAllHikvisionDeviceUsers(req, device);
+		const candidates = rawUsers
+			.map(normalizeHikvisionDeviceUser)
+			.filter((candidate): candidate is DeviceUserCandidate => Boolean(candidate));
+		return { rawUsers, candidates };
+	};
+
 	const upsertDeviceUsersFromCandidates = async (params: {
 		organizationId: string;
 		deviceId: string;
@@ -1349,10 +1357,10 @@ export const controller = (prisma: PrismaClient) => {
 		});
 
 		try {
-			const rawUsers = await fetchAllHikvisionDeviceUsers(params.req, params.device);
-			const candidates = rawUsers
-				.map(normalizeHikvisionDeviceUser)
-				.filter((candidate): candidate is DeviceUserCandidate => Boolean(candidate));
+			const { rawUsers, candidates } = await loadHikvisionDeviceUserSnapshot(
+				params.req,
+				params.device,
+			);
 			const result = await upsertDeviceUsersFromCandidates({
 				organizationId: params.organizationId,
 				deviceId: params.device.id,
@@ -1392,6 +1400,148 @@ export const controller = (prisma: PrismaClient) => {
 			});
 			throw error;
 		}
+	};
+
+	const buildReconcileDerivedEventTaxonomy = (minor: string, eventKind: string) => {
+		const normalizedMinor = String(minor || "").trim().toUpperCase();
+		if (
+			normalizedMinor === "MINOR_ADD_FINGER_BY_CARD" ||
+			normalizedMinor === "MINOR_ADD_FINGER_BY_EMPLOYEE_NO"
+		) {
+			return {
+				eventCategory: "ENROLLMENT",
+				eventAction: "FINGERPRINT_ENROLLED",
+				eventLabel: "Fingerprint enrolled",
+				eventConfidence: "SUPPORTED",
+			} as const;
+		}
+		if (
+			normalizedMinor === "MINOR_MOD_FINGER_BY_CARD" ||
+			normalizedMinor === "MINOR_MOD_FINGER_BY_EMPLOYEE_NO"
+		) {
+			return {
+				eventCategory: "ENROLLMENT",
+				eventAction: "FINGERPRINT_UPDATED",
+				eventLabel: "Fingerprint updated",
+				eventConfidence: "SUPPORTED",
+			} as const;
+		}
+		if (
+			normalizedMinor === "MINOR_DEL_FINGER" ||
+			normalizedMinor === "MINOR_CLR_FINGER_BY_READER" ||
+			normalizedMinor === "MINOR_CLR_FINGER_BY_CARD" ||
+			normalizedMinor === "MINOR_CLR_FINGER_BY_EMPLOYEE_ON"
+		) {
+			return {
+				eventCategory: "ENROLLMENT",
+				eventAction: "FINGERPRINT_DELETED",
+				eventLabel: "Fingerprint deleted",
+				eventConfidence: "SUPPORTED",
+			} as const;
+		}
+		if (normalizedMinor === "MINOR_ADD_USER_INFO") {
+			return {
+				eventCategory: "USER_MANAGEMENT",
+				eventAction: "USER_CREATED",
+				eventLabel: "Device user created",
+				eventConfidence: "SUPPORTED",
+			} as const;
+		}
+		if (normalizedMinor === "MINOR_MODIFY_USER_INFO") {
+			return {
+				eventCategory: "USER_MANAGEMENT",
+				eventAction: "USER_UPDATED",
+				eventLabel: "Device user updated",
+				eventConfidence: "SUPPORTED",
+			} as const;
+		}
+		if (normalizedMinor === "MINOR_CLR_USER_INFO") {
+			return {
+				eventCategory: "USER_MANAGEMENT",
+				eventAction: "USER_DELETED",
+				eventLabel: "Device user deleted",
+				eventConfidence: "SUPPORTED",
+			} as const;
+		}
+		if (eventKind === "biometric_operation_sync" || normalizedMinor.startsWith("OBSERVED_OPERATION_MINOR_")) {
+			return {
+				eventCategory: "RUNTIME",
+				eventAction: "SYNC_IMPORTED",
+				eventLabel: "Device user sync reconciled",
+				eventConfidence: "INFERRED",
+			} as const;
+		}
+		return null;
+	};
+
+	const persistDerivedBiometricLifecycleEvent = async (params: {
+		req: Request;
+		organizationId: string;
+		sourceDevice: any;
+		employeeNo: string;
+		eventKind: string;
+		minor: string;
+		source: string;
+		sdkTime?: string | null;
+		fingerprintSummary?: Record<string, any>;
+		deviceUser?: { id?: string | null; employeeId?: string | null; rawPayload?: any } | null;
+	}) => {
+		const taxonomy = buildReconcileDerivedEventTaxonomy(params.minor, params.eventKind);
+		if (!taxonomy) return null;
+		const eventTime = params.sdkTime ? parseHikvisionEventTime(params.sdkTime) : new Date();
+		const dedupeKey = [
+			"reconcile-derived",
+			params.sourceDevice.id,
+			params.employeeNo || "all",
+			taxonomy.eventAction,
+			String(params.sdkTime || eventTime.toISOString()).trim(),
+			String(params.minor || "").trim(),
+		].join(":");
+		const existing = await (prisma as any).deviceEvent.findFirst({
+			where: {
+				organizationId: params.organizationId,
+				dedupeKey,
+			},
+			select: { id: true },
+		});
+		if (existing) return existing;
+		const eventRecord = await (prisma as any).deviceEvent.create({
+			data: {
+				organizationId: params.organizationId,
+				deviceId: params.sourceDevice.id,
+				deviceUserId: params.deviceUser?.id || null,
+				employeeId: params.deviceUser?.employeeId || null,
+				eventTime,
+				employeeNo: params.employeeNo || null,
+				source: params.source,
+				status: params.deviceUser?.employeeId ? "MATCHED" : "UNMATCHED",
+				eventCategory: taxonomy.eventCategory,
+				eventAction: taxonomy.eventAction,
+				eventLabel: taxonomy.eventLabel,
+				eventConfidence: taxonomy.eventConfidence,
+				eventType: "BiometricReconcile",
+				major: "3",
+				minor: params.minor || null,
+				dedupeKey,
+				payload: {
+					derivedFromReconcile: true,
+					eventKind: params.eventKind,
+					actionCode: params.minor,
+					sourceDeviceId: params.sourceDevice.id,
+					deviceIP: params.sourceDevice.address,
+					ipAddress: params.sourceDevice.address,
+					employeeNo: params.employeeNo,
+					employeeNoString: params.employeeNo,
+					fingerprintSummary: params.fingerprintSummary || {},
+					deviceUserMetadata:
+						params.deviceUser?.rawPayload && typeof params.deviceUser.rawPayload === "object"
+							? (params.deviceUser.rawPayload as any)._hrisDeviceMetadata || null
+							: null,
+				},
+			},
+		});
+		await invalidateCache.byPattern("cache:device:events:*").catch(() => undefined);
+		return eventRecord;
 	};
 
 	const syncDeviceUsers = async (req: Request, res: Response, _next: NextFunction) => {
@@ -1439,13 +1589,22 @@ export const controller = (prisma: PrismaClient) => {
 			const eventKind = String(body.eventKind || "biometric_reconcile").trim();
 			const minor = String(body.minor || "").trim();
 			const source = String(body.source || "EN_HCNETSDK_ALARM").trim();
+			const sdkTime = String(body.sdkTime || "").trim() || null;
 			const fingerprintSummary = body.fingerprintSummary && typeof body.fingerprintSummary === "object"
 				? body.fingerprintSummary
 				: {};
+			const allowsSourceWideRefresh =
+				!employeeNo &&
+				(eventKind === "biometric_operation_sync" ||
+					minor.toUpperCase().startsWith("OBSERVED_OPERATION_MINOR_") ||
+					String(body.status || "").trim().toLowerCase() === "mirrored");
 
-			if (!sourceDeviceId || !employeeNo) {
+			if (!sourceDeviceId || (!employeeNo && !allowsSourceWideRefresh)) {
 				res.status(400).json(
-					buildErrorResponse("sourceDeviceId and employeeNo are required", 400),
+					buildErrorResponse(
+						"sourceDeviceId is required, and employeeNo is required unless this is a source-wide sync reconcile",
+						400,
+					),
 				);
 				return;
 			}
@@ -1477,17 +1636,16 @@ export const controller = (prisma: PrismaClient) => {
 			});
 			const biometricPeers = peerDevices.filter((device) => isHikvisionDevice(device));
 
-			const employee = await prisma.employee.findFirst({
-				where: {
-					organizationId: String(admin.organizationId),
-					isDeleted: false,
-					OR: [
-						{ employeeId: employeeNo },
-						{ deviceEmpId: employeeNo },
-					],
-				},
-				select: { id: true, employeeId: true, deviceEmpId: true },
-			});
+			const employee = employeeNo
+				? await prisma.employee.findFirst({
+						where: {
+							organizationId: String(admin.organizationId),
+							isDeleted: false,
+							OR: [{ employeeId: employeeNo }, { deviceEmpId: employeeNo }],
+						},
+						select: { id: true, employeeId: true, deviceEmpId: true },
+					})
+				: null;
 
 			const biometricSyncPayload = {
 				source,
@@ -1501,15 +1659,23 @@ export const controller = (prisma: PrismaClient) => {
 			};
 
 			const targetDevices = [sourceDevice, ...biometricPeers];
-			const plannedChanges = targetDevices.map((device) => ({
-				deviceId: device.id,
-				deviceName: device.name,
-				vendorUserId: employeeNo,
-				employeeId: employee?.id || null,
-				status: employee?.id ? "ACTIVE" : "UNMATCHED",
-				wouldPersistDeviceUser: true,
-				rawFingerprintTemplateStored: false,
-			}));
+			const plannedChanges = allowsSourceWideRefresh
+				? targetDevices.map((device) => ({
+						deviceId: device.id,
+						deviceName: device.name,
+						scope: "all_source_users",
+						wouldPersistDeviceUser: true,
+						rawFingerprintTemplateStored: false,
+					}))
+				: targetDevices.map((device) => ({
+						deviceId: device.id,
+						deviceName: device.name,
+						vendorUserId: employeeNo,
+						employeeId: employee?.id || null,
+						status: employee?.id ? "ACTIVE" : "UNMATCHED",
+						wouldPersistDeviceUser: true,
+						rawFingerprintTemplateStored: false,
+					}));
 
 			if (!execute) {
 				res.status(200).json(
@@ -1529,63 +1695,111 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const persisted = [];
+			const refreshResults: Array<Record<string, any>> = [];
 			for (const device of targetDevices) {
-				const existing = await prisma.deviceUser.findUnique({
-					where: {
-						organizationId_deviceId_vendorUserId: {
-							organizationId: String(admin.organizationId),
-							deviceId: device.id,
-							vendorUserId: employeeNo,
-						},
-					},
-					select: { id: true, rawPayload: true },
-				});
-				const nextRawPayload = {
-					...((existing?.rawPayload as any) || {}),
-					biometricSync: biometricSyncPayload,
-				};
-				const record = await prisma.deviceUser.upsert({
-					where: {
-						organizationId_deviceId_vendorUserId: {
-							organizationId: String(admin.organizationId),
-							deviceId: device.id,
-							vendorUserId: employeeNo,
-						},
-					},
-					create: {
+				try {
+					const { rawUsers, candidates } = await loadHikvisionDeviceUserSnapshot(req, device);
+					const result = await upsertDeviceUsersFromCandidates({
 						organizationId: String(admin.organizationId),
 						deviceId: device.id,
-						vendorUserId: employeeNo,
-						employeeNo,
-						employeeId: employee?.id || null,
-						displayName: employee?.employeeId || employeeNo,
-						status: employee?.id ? "ACTIVE" : "UNMATCHED",
-						rawPayload: nextRawPayload,
-						lastSyncedAt: new Date(),
+						candidates,
+						source: "hikvision",
+					});
+					refreshResults.push({
+						deviceId: device.id,
+						deviceName: device.name,
+						totalSourceRecords: rawUsers.length,
+						importableRecords: candidates.length,
+						...result,
+					});
+
+					if (!allowsSourceWideRefresh && employeeNo) {
+						const matchedCandidate = candidates.find(
+							(candidate) => candidate.vendorUserId === employeeNo,
+						);
+						const existing = await prisma.deviceUser.findUnique({
+							where: {
+								organizationId_deviceId_vendorUserId: {
+									organizationId: String(admin.organizationId),
+									deviceId: device.id,
+									vendorUserId: employeeNo,
+								},
+							},
+							select: {
+								id: true,
+								rawPayload: true,
+								employeeId: true,
+								status: true,
+								lastSyncedAt: true,
+							},
+						});
+						if (existing) {
+							const nextRawPayload = {
+								...((existing.rawPayload as any) || {}),
+								biometricSync: biometricSyncPayload,
+								...(matchedCandidate?.rawPayload && typeof matchedCandidate.rawPayload === "object"
+									? { _hrisDeviceMetadata: (matchedCandidate.rawPayload as any)._hrisDeviceMetadata }
+									: {}),
+							};
+							const record = await prisma.deviceUser.update({
+								where: { id: existing.id },
+								data: {
+									rawPayload: nextRawPayload,
+									lastSyncedAt: new Date(),
+								},
+								select: {
+									id: true,
+									deviceId: true,
+									vendorUserId: true,
+									employeeId: true,
+									status: true,
+									lastSyncedAt: true,
+									rawPayload: true,
+								},
+							});
+							persisted.push(record);
+						}
+					}
+				} catch (error: any) {
+					refreshResults.push({
+						deviceId: device.id,
+						deviceName: device.name,
+						error: error?.message || "device_user_refresh_failed",
+					});
+				}
+			}
+
+			if (!allowsSourceWideRefresh && employeeNo) {
+				const sourceDeviceUser = await prisma.deviceUser.findUnique({
+					where: {
+						organizationId_deviceId_vendorUserId: {
+							organizationId: String(admin.organizationId),
+							deviceId: sourceDevice.id,
+							vendorUserId: employeeNo,
+						},
 					},
-					update: {
-						employeeNo,
-						employeeId: employee?.id || null,
-						status: employee?.id ? "ACTIVE" : "UNMATCHED",
-						rawPayload: nextRawPayload,
-						lastSyncedAt: new Date(),
-					},
-					select: {
-						id: true,
-						deviceId: true,
-						vendorUserId: true,
-						employeeId: true,
-						status: true,
-						lastSyncedAt: true,
-					},
+					select: { id: true, employeeId: true, rawPayload: true },
 				});
-				persisted.push(record);
+				await persistDerivedBiometricLifecycleEvent({
+					req,
+					organizationId: String(admin.organizationId),
+					sourceDevice,
+					employeeNo,
+					eventKind,
+					minor,
+					source,
+					sdkTime,
+					fingerprintSummary,
+					deviceUser: sourceDeviceUser,
+				});
 			}
 
 			logActivity(req, {
 				userId: (req as any).userId || "hikvision-biometric-service",
 				action: "HIKVISION_BIOMETRIC_RECONCILE",
-				description: `Reconciled biometric metadata for employee ${employeeNo} from device ${sourceDevice.name}`,
+				description: allowsSourceWideRefresh
+					? `Reconciled full Hikvision device-user truth from device ${sourceDevice.name}`
+					: `Reconciled biometric metadata for employee ${employeeNo} from device ${sourceDevice.name}`,
 				page: {
 					url: req.originalUrl,
 					title: "Hikvision Biometric Sync",
@@ -1600,6 +1814,7 @@ export const controller = (prisma: PrismaClient) => {
 						sourceDevice,
 						employee,
 						persisted,
+						refreshResults,
 						rawFingerprintTemplateStored: false,
 					},
 					200,
