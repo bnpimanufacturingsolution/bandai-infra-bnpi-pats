@@ -1332,6 +1332,68 @@ export const controller = (prisma: PrismaClient) => {
 		return { total: candidates.length, ...result };
 	};
 
+	const syncHikvisionDeviceUsersFromSource = async (params: {
+		req: Request;
+		organizationId: string;
+		device: any;
+		startedByUserId?: string | null;
+	}) => {
+		const run = await (prisma as any).deviceSyncRun.create({
+			data: {
+				organizationId: params.organizationId,
+				deviceId: params.device.id,
+				runType: "DEVICE_USERS",
+				status: "PROCESSING",
+				startedByUserId: params.startedByUserId || null,
+			},
+		});
+
+		try {
+			const rawUsers = await fetchAllHikvisionDeviceUsers(params.req, params.device);
+			const candidates = rawUsers
+				.map(normalizeHikvisionDeviceUser)
+				.filter((candidate): candidate is DeviceUserCandidate => Boolean(candidate));
+			const result = await upsertDeviceUsersFromCandidates({
+				organizationId: params.organizationId,
+				deviceId: params.device.id,
+				candidates,
+				source: "hikvision",
+			});
+			const summary = {
+				totalSourceRecords: rawUsers.length,
+				importableRecords: candidates.length,
+				...result,
+			};
+			const updatedRun = await (prisma as any).deviceSyncRun.update({
+				where: { id: run.id },
+				data: {
+					status: "COMPLETED",
+					totalSourceRecords: rawUsers.length,
+					importableRecords: candidates.length,
+					savedRecords: result.created + result.updated,
+					skippedRecords: rawUsers.length - candidates.length,
+					failedRecords: 0,
+					missingRecords: 0,
+					skipSummary: { invalidUserId: rawUsers.length - candidates.length },
+					rawSummary: result,
+					completedAt: new Date(),
+				},
+			});
+			return { run: updatedRun, summary };
+		} catch (error: any) {
+			await (prisma as any).deviceSyncRun.update({
+				where: { id: run.id },
+				data: {
+					status: "FAILED",
+					failedRecords: 1,
+					failureSummary: { message: error?.message || "device_user_sync_failed" },
+					completedAt: new Date(),
+				},
+			});
+			throw error;
+		}
+	};
+
 	const syncDeviceUsers = async (req: Request, res: Response, _next: NextFunction) => {
 		const gate = assertDeviceUserAdmin(req, res);
 		if (!gate) return;
@@ -1342,68 +1404,23 @@ export const controller = (prisma: PrismaClient) => {
 				res.status(400).json(buildErrorResponse("Select a Hikvision device before syncing users", 400));
 				return;
 			}
-			const run = await (prisma as any).deviceSyncRun.create({
-				data: {
-					organizationId: gate.organizationId,
-					deviceId: device.id,
-					runType: "DEVICE_USERS",
-					status: "PROCESSING",
-					startedByUserId: (req as any).userId || null,
-				},
+			const { run: updatedRun, summary } = await syncHikvisionDeviceUsersFromSource({
+				req,
+				organizationId: gate.organizationId,
+				device,
+				startedByUserId: (req as any).userId || null,
 			});
-			try {
-				const rawUsers = await fetchAllHikvisionDeviceUsers(req, device);
-				const candidates = rawUsers
-					.map(normalizeHikvisionDeviceUser)
-					.filter((candidate): candidate is DeviceUserCandidate => Boolean(candidate));
-				const result = await upsertDeviceUsersFromCandidates({
-					organizationId: gate.organizationId,
-					deviceId: device.id,
-					candidates,
-					source: "hikvision",
-				});
-				const updatedRun = await (prisma as any).deviceSyncRun.update({
-					where: { id: run.id },
-					data: {
-						status: "COMPLETED",
-						totalSourceRecords: rawUsers.length,
-						importableRecords: candidates.length,
-						savedRecords: result.created + result.updated,
-						skippedRecords: rawUsers.length - candidates.length,
-						failedRecords: 0,
-						missingRecords: 0,
-						skipSummary: { invalidUserId: rawUsers.length - candidates.length },
-						rawSummary: result,
-						completedAt: new Date(),
+			await invalidateCache.byPattern("cache:device:*").catch(() => undefined);
+			res.status(200).json(
+				buildSuccessResponse(
+					"Device users synced",
+					{
+						run: updatedRun,
+						summary,
 					},
-				});
-				await invalidateCache.byPattern("cache:device:*").catch(() => undefined);
-				res.status(200).json(
-					buildSuccessResponse(
-						"Device users synced",
-						{
-							run: updatedRun,
-							summary: {
-								totalSourceRecords: rawUsers.length,
-								importableRecords: candidates.length,
-								...result,
-							},
-						},
-						200,
-					),
-				);
-			} catch (error: any) {
-				await (prisma as any).deviceSyncRun.update({
-					where: { id: run.id },
-					data: {
-						status: "FAILED",
-						failedRecords: 1,
-						failureSummary: { message: error?.message || "device_user_sync_failed" },
-						completedAt: new Date(),
-					},
-				});
-				throw error;
-			}
+					200,
+				),
+			);
 		} catch (error: any) {
 			res.status(500).json(buildErrorResponse(error?.message || "Failed to sync device users", 500));
 		}
@@ -3092,6 +3109,25 @@ export const controller = (prisma: PrismaClient) => {
 
 			const device = await prisma.device.create({ data: deviceData });
 			deviceLogger.info(`Device created successfully: ${device.id}`);
+
+			if (isHikvisionDevice(device) && String((device as any)?.access?.password || "").trim()) {
+				try {
+					await syncHikvisionDeviceUsersFromSource({
+						req,
+						organizationId,
+						device,
+						startedByUserId: (req as any).userId || null,
+					});
+					await invalidateCache.byPattern("cache:device:*").catch(() => undefined);
+					deviceLogger.info(`Post-create Hikvision device users synced for ${device.id}`);
+				} catch (postCreateSyncError: any) {
+					deviceLogger.warn(
+						`Post-create Hikvision device user sync failed for ${device.id}: ${
+							postCreateSyncError?.message || postCreateSyncError
+						}`,
+					);
+				}
+			}
 			await reconcileHikvisionRuntimeAfterDeviceChange(device, "device_create");
 
 			logActivity(req, {

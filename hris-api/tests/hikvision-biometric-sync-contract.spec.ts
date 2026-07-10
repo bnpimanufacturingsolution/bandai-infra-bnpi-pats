@@ -88,4 +88,14 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include('await reconcileHikvisionRuntimeAfterDeviceChange(updatedDevice, "device_update")');
 		expect(controller).to.include('await reconcileHikvisionRuntimeAfterDeviceChange(existingDevice, "device_delete")');
 	});
+
+	it("auto-syncs Hikvision device users right after create so Sync Center can show linked and open matches immediately", () => {
+		const controller = controllerSource();
+
+		expect(controller).to.include("const syncHikvisionDeviceUsersFromSource = async");
+		expect(controller).to.include("await syncHikvisionDeviceUsersFromSource({");
+		expect(controller).to.include("Post-create Hikvision device users synced");
+		expect(controller).to.include("startedByUserId: (req as any).userId || null");
+		expect(controller).to.include('if (isHikvisionDevice(device) && String((device as any)?.access?.password || "").trim())');
+	});
 });
