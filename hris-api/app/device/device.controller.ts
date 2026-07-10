@@ -43,6 +43,7 @@ import {
 	type DeviceUserCandidate,
 } from "../../helper/device-user-sync.helper";
 import { buildDeviceRuntimeConfig } from "../../helper/device-config-defaults.helper";
+import { summarizeHikvisionListenerLogs } from "../../helper/hikvision-listener-status.helper";
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
 import net from "net";
 import { execFile } from "child_process";
@@ -2783,7 +2784,7 @@ export const controller = (prisma: PrismaClient) => {
 					"sudo",
 					"tail",
 					"-n",
-					"12",
+					"80",
 					"/var/log/project-truth/hikvision-hot-reload-listener.jsonl",
 				],
 				7000,
@@ -2799,7 +2800,8 @@ export const controller = (prisma: PrismaClient) => {
 			.split(/\r?\n/)
 			.map((line) => line.trim())
 			.filter(Boolean)
-			.slice(-12);
+			.slice(-80);
+		const sdk = summarizeHikvisionListenerLogs(recentLogLines);
 
 		return {
 			service: HIKVISION_HOT_RELOAD_LISTENER_SERVICE,
@@ -2809,6 +2811,7 @@ export const controller = (prisma: PrismaClient) => {
 			},
 			running,
 			status: running ? "running" : activeState === "inactive" ? "stopped" : activeState,
+			sdk,
 			activeState,
 			subState,
 			mainPid: Number(show.MainPID || 0) || null,

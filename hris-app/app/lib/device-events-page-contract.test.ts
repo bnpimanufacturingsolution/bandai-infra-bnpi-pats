@@ -129,7 +129,7 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("SDK tap evidence recent");
 		expect(routeSource).to.contain("VM listener running");
 		expect(routeSource).to.contain("Browser connected; no recent SDK tap");
-		expect(routeSource).to.contain("VM listener is running; no tap saved yet");
+		expect(routeSource).to.contain("VM service is running; waiting for SDK tap proof");
 		expect(routeSource).not.to.contain("Socket connected, SDK idle");
 		expect(routeSource).not.to.contain("Waiting for next tap");
 	});
@@ -140,9 +140,12 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain('action === "listener-control"');
 		expect(routeSource).to.contain('next.set("action", "listener-control")');
 		expect(routeSource).to.contain('title="Hikvision listener"');
-		expect(routeSource).to.contain("VM listener running");
+		expect(routeSource).to.contain("SDK listener receiving taps");
+		expect(routeSource).to.contain("VM service running, no SDK callback yet");
 		expect(routeSource).to.contain("VM listener stopped");
-		expect(routeSource).to.contain("Listener enabled");
+		expect(routeSource).to.contain("Service enabled");
+		expect(routeSource).to.contain("SDK state");
+		expect(routeSource).to.contain("Last callback");
 		expect(routeSource).to.contain("Check status");
 		expect(routeSource).to.contain("Start listener");
 		expect(routeSource).to.contain("Restart listener");

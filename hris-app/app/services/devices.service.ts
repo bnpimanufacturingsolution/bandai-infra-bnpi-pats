@@ -340,6 +340,18 @@ export interface HikvisionListenerStatus {
 	};
 	running: boolean;
 	status: "running" | "stopped" | "inactive" | "failed" | "unknown" | string;
+	sdk?: {
+		receivingCallbacks: boolean;
+		postingToHris: boolean;
+		armed: boolean;
+		lastAlarmAt?: string | null;
+		lastPostAt?: string | null;
+		lastLoginAt?: string | null;
+		lastLoginOk?: boolean | null;
+		lastLoginError?: string | null;
+		lastError?: string | null;
+		state: "receiving" | "armed" | "login_failed" | "posting_failed" | "idle" | "unknown" | string;
+	};
 	activeState: string;
 	subState: string;
 	mainPid?: number | null;

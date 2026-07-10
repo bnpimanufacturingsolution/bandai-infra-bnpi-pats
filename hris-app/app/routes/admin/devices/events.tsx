@@ -1529,19 +1529,30 @@ export default function DeviceEventsPage() {
 				? "New saved row"
 				: "No recent saved event";
 	const hikvisionListenerRunning = Boolean(hikvisionListenerStatus?.running);
+	const hikvisionSdkState = hikvisionListenerStatus?.sdk?.state || "unknown";
+	const hikvisionSdkReceiving = Boolean(hikvisionListenerStatus?.sdk?.receivingCallbacks);
+	const hikvisionSdkArmed = Boolean(hikvisionListenerStatus?.sdk?.armed);
 	const hikvisionListenerUnavailable =
 		isSdkAlarmSavedScope &&
 		Boolean(!isLoadingHikvisionListenerStatus && (!hikvisionListenerStatus || hikvisionListenerStatusError));
 	const hikvisionListenerStatusLabel = isSdkAlarmSavedScope
 		? isLoadingHikvisionListenerStatus
 			? "Checking VM listener"
-			: hikvisionListenerRunning
-				? "VM listener running"
-				: hikvisionListenerUnavailable
-					? "VM listener unknown"
-					: "VM listener stopped"
+			: hikvisionSdkReceiving
+				? "SDK listener receiving taps"
+				: hikvisionSdkArmed
+					? "SDK listener armed"
+					: hikvisionSdkState === "login_failed"
+						? "SDK login failed"
+						: hikvisionSdkState === "posting_failed"
+							? "SDK post failed"
+							: hikvisionListenerRunning
+								? "VM service running, no SDK callback yet"
+								: hikvisionListenerUnavailable
+									? "VM listener unknown"
+									: "VM listener stopped"
 		: "";
-	const hikvisionListenerStatusVariant = hikvisionListenerRunning
+	const hikvisionListenerStatusVariant = hikvisionSdkReceiving || hikvisionSdkArmed
 		? "success-soft"
 		: hikvisionListenerUnavailable
 			? "secondary"
@@ -1556,23 +1567,31 @@ export default function DeviceEventsPage() {
 	const hikvisionListenerLastLog =
 		hikvisionListenerStatus?.logs?.recent?.[hikvisionListenerStatus.logs.recent.length - 1] || "";
 	const realtimePanelIsLive = isSdkAlarmSavedScope
-		? isLatestSdkSavedFresh || hikvisionListenerRunning
+		? isLatestSdkSavedFresh || hikvisionSdkReceiving
 		: realtimeStatus.isListening;
 	const realtimePanelStatusLabel = isSdkAlarmSavedScope
-		? isLatestSdkSavedFresh
-			? "SDK tap evidence recent"
-			: hikvisionListenerRunning
-				? "VM listener running"
-				: hikvisionListenerUnavailable
-					? "VM listener status unavailable"
-					: "VM listener stopped"
+		? isLoadingHikvisionListenerStatus
+			? "Checking VM listener"
+			: isLatestSdkSavedFresh
+				? "SDK tap evidence recent"
+				: hikvisionSdkReceiving
+					? "SDK listener receiving taps"
+					: hikvisionListenerRunning
+						? "VM service running"
+						: hikvisionListenerUnavailable
+							? "VM listener status unavailable"
+							: "VM listener stopped"
 		: realtimeStatus.statusLabel;
 	const realtimePanelUpdateLabel = isSdkAlarmSavedScope
-		? isLatestSdkSavedFresh
-			? "SDK tap row saved recently"
-			: hikvisionListenerRunning
-				? "VM listener is running; no tap saved yet"
-				: "Waiting for SDK listener"
+		? isLoadingHikvisionListenerStatus
+			? "Checking listener status"
+			: isLatestSdkSavedFresh
+				? "SDK tap row saved recently"
+				: hikvisionSdkReceiving
+					? "SDK callbacks are reaching HRIS"
+					: hikvisionListenerRunning
+						? "VM service is running; waiting for SDK tap proof"
+						: "Waiting for SDK listener"
 		: realtimeStatus.rowUpdateLabel;
 	const runHikvisionListenerControl = (action: "start" | "stop" | "restart") => {
 		hikvisionListenerControl.mutate(action, {
@@ -2363,7 +2382,7 @@ export default function DeviceEventsPage() {
 				<div className="space-y-4">
 					<div
 						className={
-							hikvisionListenerRunning
+							hikvisionSdkReceiving
 								? "rounded-lg border border-emerald-200 bg-emerald-50 p-4"
 								: hikvisionListenerUnavailable
 									? "rounded-lg border border-slate-200 bg-slate-50 p-4"
@@ -2373,14 +2392,14 @@ export default function DeviceEventsPage() {
 							<div className="flex min-w-0 items-start gap-3">
 								<span
 									className={
-										hikvisionListenerRunning
+										hikvisionSdkReceiving
 											? "flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-emerald-100 text-emerald-700"
 											: "flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-700"
 									}
 									aria-hidden="true">
 									{isLoadingHikvisionListenerStatus ? (
 										<Loader2 className="h-4 w-4 animate-spin" />
-									) : hikvisionListenerRunning ? (
+									) : hikvisionSdkReceiving ? (
 										<Wifi className="h-4 w-4" />
 									) : (
 										<WifiOff className="h-4 w-4" />
@@ -2389,7 +2408,7 @@ export default function DeviceEventsPage() {
 								<div className="min-w-0">
 									<p
 										className={
-											hikvisionListenerRunning
+											hikvisionSdkReceiving
 												? "text-sm font-semibold text-emerald-950"
 												: "text-sm font-semibold text-amber-950"
 										}>
@@ -2397,7 +2416,7 @@ export default function DeviceEventsPage() {
 									</p>
 									<p
 										className={
-											hikvisionListenerRunning
+											hikvisionSdkReceiving
 												? "mt-1 break-words text-xs text-emerald-800"
 												: "mt-1 break-words text-xs text-amber-800"
 										}>
@@ -2416,9 +2435,13 @@ export default function DeviceEventsPage() {
 								</div>
 							</div>
 							<Badge
-								variant={isLatestSdkSavedFresh ? "success-soft" : "warning-soft"}
+								variant={isLatestSdkSavedFresh || hikvisionSdkReceiving ? "success-soft" : "warning-soft"}
 								className="w-fit rounded-md px-2 py-1">
-								{isLatestSdkSavedFresh ? "SDK tap saved recently" : "No recent SDK tap saved"}
+								{isLatestSdkSavedFresh
+									? "SDK tap saved recently"
+									: hikvisionSdkReceiving
+										? "SDK callback received"
+										: "No recent SDK tap saved"}
 							</Badge>
 						</div>
 					</div>
@@ -2443,11 +2466,13 @@ export default function DeviceEventsPage() {
 									/>
 									<span className="min-w-0">
 										<span className="block text-sm font-semibold text-slate-950">
-											Listener enabled
+											Service enabled
 										</span>
 										<span className="mt-1 block text-xs text-slate-600">
 											{hikvisionListenerRunning
-												? "The VM service is armed for live HCNetSDK callbacks."
+												? hikvisionSdkReceiving
+													? "The VM service is receiving HCNetSDK callbacks and posting to HRIS."
+													: "The VM service is on; use the SDK status above for tap truth."
 												: "Turn this on before testing physical taps."}
 										</span>
 									</span>
@@ -2504,9 +2529,33 @@ export default function DeviceEventsPage() {
 										{formatEventTime(hikvisionListenerStatus?.checkedAt)}
 									</dd>
 								</div>
+								<div className="flex min-w-0 justify-between gap-3">
+									<dt className="text-slate-500">SDK state</dt>
+									<dd className="truncate font-semibold text-slate-900">
+										{formatEventTaxonomyToken(hikvisionSdkState)}
+									</dd>
+								</div>
+								<div className="flex min-w-0 justify-between gap-3">
+									<dt className="text-slate-500">Last callback</dt>
+									<dd className="truncate font-semibold text-slate-900">
+										{formatEventTime(hikvisionListenerStatus?.sdk?.lastAlarmAt)}
+									</dd>
+								</div>
+								<div className="flex min-w-0 justify-between gap-3">
+									<dt className="text-slate-500">Last HRIS post</dt>
+									<dd className="truncate font-semibold text-slate-900">
+										{formatEventTime(hikvisionListenerStatus?.sdk?.lastPostAt)}
+									</dd>
+								</div>
 							</dl>
 						</div>
 					</div>
+
+					{hikvisionListenerStatus?.sdk?.lastError ? (
+						<div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+							{hikvisionListenerStatus.sdk.lastError}
+						</div>
+					) : null}
 
 					{hikvisionListenerStatusError ? (
 						<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">

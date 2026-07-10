@@ -3,7 +3,7 @@ param(
     [string]$SwitchAlias = "vEthernet (Default Switch)",
     [string]$HostSwitchIp = "10.184.37.250",
     [int]$PrefixLength = 24,
-    [string]$VmIp = "10.184.37.241"
+    [string]$VmIp = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +23,18 @@ function Test-Port {
 
 $vm = Get-VM -Name $VmName -ErrorAction Stop
 $adapter = Get-VMNetworkAdapter -VMName $VmName -ErrorAction Stop
+$reportedIps = @($adapter.IPAddresses | Where-Object { $_ -match '^\d{1,3}(\.\d{1,3}){3}$' })
+
+if ([string]::IsNullOrWhiteSpace($VmIp)) {
+    $preferredIps = @("10.184.37.241", "10.184.37.19", "10.184.37.78")
+    $candidateIps = @($preferredIps + $reportedIps) | Select-Object -Unique
+    $VmIp = $candidateIps | Where-Object { $_ -match '^10\.184\.37\.' } | Select-Object -First 1
+}
+
+if ([string]::IsNullOrWhiteSpace($VmIp)) {
+    throw "Could not determine the Project Truth VM LAN IP. Pass -VmIp explicitly."
+}
+
 $switchIp = Get-NetIPAddress -InterfaceAlias $SwitchAlias -IPAddress $HostSwitchIp -ErrorAction SilentlyContinue
 
 if (-not $switchIp) {
@@ -47,7 +59,8 @@ $ports = @(22, 3000, 3001, 15432, 15433, 15434) | ForEach-Object {
         state = $vm.State.ToString()
         status = $vm.Status
         switchName = $adapter.SwitchName
-        reportedIps = $adapter.IPAddresses
+        reportedIps = $reportedIps
+        selectedIp = $VmIp
     }
     hostSwitchIps = $currentSwitchIps
     routes = $routes
