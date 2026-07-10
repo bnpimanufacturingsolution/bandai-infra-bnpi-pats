@@ -291,6 +291,28 @@ export interface DeviceImportJobProgress {
 	completedAt?: string;
 }
 
+export interface DeviceUserSyncJobProgress {
+	jobId: string;
+	status: "processing" | "completed" | "failed" | "cancelled";
+	totalDevices: number;
+	processedDevices: number;
+	successfulDevices: number;
+	failedDevices: number;
+	message: string;
+	cancelRequested?: boolean;
+	cancelRequestedAt?: string;
+	results: Array<{
+		deviceId: string;
+		deviceName: string;
+		status: "success" | "error" | "cancelled";
+		runId?: string | null;
+		summary?: DeviceUserSyncResponse["summary"];
+		error?: string | null;
+	}>;
+	startedAt: string;
+	completedAt?: string;
+}
+
 export interface DeviceEventsResetScope {
 	deviceId?: string;
 	source?: string;
@@ -782,6 +804,50 @@ class DevicesService extends APIService {
 			console.error("Error syncing device users:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error syncing device users",
+			);
+		}
+	}
+
+	async startDeviceUserSyncJob(): Promise<{ jobId: string; progress: DeviceUserSyncJobProgress }> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/users/sync-jobs", {});
+			const data = response.data?.data || response.data;
+			if (!data?.jobId) throw new Error("Failed to start device-user sync");
+			return data as { jobId: string; progress: DeviceUserSyncJobProgress };
+		} catch (error: any) {
+			console.error("Error starting device-user sync job:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error starting device-user sync job",
+			);
+		}
+	}
+
+	async getDeviceUserSyncJob(jobId: string): Promise<DeviceUserSyncJobProgress> {
+		try {
+			if (!String(jobId || "").trim()) throw new Error("Device-user sync job is required");
+			const response = await hrisApiClient.get<any>(`/api/device/users/sync-jobs/${jobId}`);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Device-user sync job was not found");
+			return data as DeviceUserSyncJobProgress;
+		} catch (error: any) {
+			console.error("Error loading device-user sync job:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error loading device-user sync job",
+			);
+		}
+	}
+
+	async cancelDeviceUserSyncJob(jobId: string): Promise<DeviceUserSyncJobProgress> {
+		try {
+			if (!String(jobId || "").trim()) throw new Error("Device-user sync job is required");
+			const response = await hrisApiClient.post<any>(`/api/device/users/sync-jobs/${jobId}/cancel`, {});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Device-user sync job was not found");
+			return data as DeviceUserSyncJobProgress;
+		} catch (error: any) {
+			console.error("Error cancelling device-user sync job:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error cancelling device-user sync job",
 			);
 		}
 	}

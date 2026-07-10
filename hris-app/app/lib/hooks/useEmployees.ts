@@ -617,11 +617,13 @@ export const useExecuteEmployeeHardDelete = () => {
 		mutationFn: async ({
 			employeeId,
 			confirmation,
+			force,
 		}: {
 			employeeId: string;
 			confirmation: string;
+			force?: boolean;
 		}) => {
-			return await employeesService.executeEmployeeHardDelete(employeeId, confirmation);
+			return await employeesService.executeEmployeeHardDelete(employeeId, confirmation, force);
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: employeesQueryKeys.employees.all });

@@ -26,7 +26,7 @@ describe("Employee hard delete API contract", () => {
 		expect(controllerSource).to.contain("Only HRIS admins can preview or execute employee hard delete.");
 	});
 
-	it("checks high-risk payroll, attendance, legal, and history blockers before execution", () => {
+	it("checks high-risk payroll, attendance, legal, and history relations before execution", () => {
 		[
 			"attendanceRecords",
 			"attendanceObligations",
@@ -38,15 +38,22 @@ describe("Employee hard delete API contract", () => {
 			"scheduleHistoryRecords",
 			"soaLineItems",
 		].forEach((term) => expect(controllerSource).to.contain(term));
-		expect(controllerSource).to.contain("Cannot hard delete employee:");
-		expect(controllerSource).to.contain("preview.safeToExecute");
+		expect(controllerSource).to.contain("forceExecuteAvailable");
+		expect(controllerSource).to.contain("Cannot hard delete employee without force confirmation:");
+		expect(controllerSource).to.contain("preview.blockers.length > 0 && !force");
 	});
 
 	it("reports delete and detach behavior explicitly and requires typed confirmation for execute", () => {
 		expect(controllerSource).to.contain("requiresConfirmation");
+		expect(controllerSource).to.contain("FORCE DELETE ${existingEmployee.employeeId}");
 		expect(controllerSource).to.contain("DELETE ${existingEmployee.employeeId}");
 		expect(controllerSource).to.contain('mode: "preview"');
 		expect(controllerSource).to.contain('mode: "executed"');
+		expect(controllerSource).to.contain("attendanceObligation?.deleteMany");
+		expect(controllerSource).to.contain("timesheetline?.deleteMany");
+		expect(controllerSource).to.contain("attendance?.deleteMany");
+		expect(controllerSource).to.contain("employeePayroll?.deleteMany");
+		expect(controllerSource).to.contain("timesheet?.deleteMany");
 		expect(controllerSource).to.contain("deviceEvent?.updateMany");
 		expect(controllerSource).to.contain("deviceUser?.updateMany");
 		expect(controllerSource).to.contain("activityLogging?.updateMany");

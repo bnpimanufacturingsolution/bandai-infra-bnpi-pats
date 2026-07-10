@@ -13,6 +13,9 @@ describe("DeviceUser API contract", () => {
 		expect(router).to.include('routes.get("/:id/users", controller.listDeviceUsers)');
 		expect(router).to.include('routes.get("/users/:userId/photo", controller.getDeviceUserPhoto)');
 		expect(router).to.include('routes.post("/:id/users/sync", controller.syncDeviceUsers)');
+		expect(router).to.include('routes.post("/users/sync-jobs", controller.startDeviceUserSyncJob)');
+		expect(router).to.include('routes.get("/users/sync-jobs/:jobId", controller.getDeviceUserSyncJob)');
+		expect(router).to.include('routes.post("/users/sync-jobs/:jobId/cancel", controller.cancelDeviceUserSyncJob)');
 		expect(router).to.include('routes.post("/:id/users/lifecycle-backfill", controller.backfillDeviceUserLifecycleEvents)');
 		expect(router).to.include('routes.get("/:id/sync-runs", controller.getDeviceSyncRuns)');
 		expect(router).to.include('routes.post("/import-jobs/:jobId/cancel", controller.cancelDeviceImportJob)');

@@ -704,9 +704,11 @@ export default function EmployeeList({
 
 	const executeHardDelete = () => {
 		if (!activeEmployee) return;
+		const forceDelete = Boolean(previewHardDeleteMutation.data?.blockers?.length);
 		executeHardDeleteMutation.mutate({
 			employeeId: activeEmployee.id,
 			confirmation: hardDeleteConfirmation,
+			force: forceDelete,
 		}, {
 			onSuccess: closeHardDelete,
 		});
@@ -1931,7 +1933,7 @@ export default function EmployeeList({
 								{previewHardDeleteMutation.data.blockers.length > 0 ? (
 									<div className="rounded-md border border-red-200 bg-white">
 										<div className="border-b border-red-100 px-3 py-2 text-sm font-semibold text-red-900">
-											Cannot hard delete this employee
+											Force delete required
 										</div>
 										<div className="divide-y divide-red-100">
 											{previewHardDeleteMutation.data.blockers.map((blocker) => (
@@ -1941,12 +1943,31 @@ export default function EmployeeList({
 												</div>
 											))}
 										</div>
+										<div className="border-t border-red-100 px-3 py-2 text-xs text-red-900">
+											This employee has protected attendance, timesheet, payroll, or legal history. Hard delete can still run, but it will permanently remove those rows.
+										</div>
 									</div>
 								) : (
 									<div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
 										No payroll, attendance, legal/history, or timesheet blockers were found.
 									</div>
 								)}
+
+								{previewHardDeleteMutation.data.safeToExecute ||
+								previewHardDeleteMutation.data.forceExecuteAvailable ? (
+									<div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+										<Label htmlFor="hard-delete-confirmation">
+											Type {previewHardDeleteMutation.data.requiresConfirmation}
+										</Label>
+										<Input
+											id="hard-delete-confirmation"
+											className="mt-1 bg-white"
+											value={hardDeleteConfirmation}
+											onChange={(event) => setHardDeleteConfirmation(event.target.value)}
+											placeholder={previewHardDeleteMutation.data.requiresConfirmation}
+										/>
+									</div>
+								) : null}
 
 								<div className="rounded-md border border-slate-200 bg-white">
 									<div className="border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-900">
@@ -1971,20 +1992,6 @@ export default function EmployeeList({
 									</div>
 								</div>
 
-								{previewHardDeleteMutation.data.safeToExecute ? (
-									<div>
-										<Label htmlFor="hard-delete-confirmation">
-											Type {previewHardDeleteMutation.data.requiresConfirmation}
-										</Label>
-										<Input
-											id="hard-delete-confirmation"
-											className="mt-1"
-											value={hardDeleteConfirmation}
-											onChange={(event) => setHardDeleteConfirmation(event.target.value)}
-											placeholder={previewHardDeleteMutation.data.requiresConfirmation}
-										/>
-									</div>
-								) : null}
 							</div>
 						) : (
 							<div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -2004,7 +2011,10 @@ export default function EmployeeList({
 								variant="destructive"
 								onClick={executeHardDelete}
 								disabled={
-									!previewHardDeleteMutation.data?.safeToExecute ||
+									!(
+										previewHardDeleteMutation.data?.safeToExecute ||
+										previewHardDeleteMutation.data?.forceExecuteAvailable
+									) ||
 									hardDeleteConfirmation !== previewHardDeleteMutation.data?.requiresConfirmation ||
 									executeHardDeleteMutation.isPending
 								}>

@@ -6,6 +6,7 @@ import devicesService, {
 	type DeviceSyncPreviewResponse,
 	type DeviceSyncRunsResponse,
 	type DeviceImportJobProgress,
+	type DeviceUserSyncJobProgress,
 	type DeviceUsersResponse,
 	type DeviceEventsResetScope,
 	type HikvisionListenerAction,
@@ -159,6 +160,56 @@ export const useCancelDeviceImportJob = () => {
 		},
 		onError: (error: any) => {
 			sonnerToast.error(error?.message || "Failed to cancel device log sync");
+		},
+	});
+};
+
+export const useDeviceUserSyncJob = (jobId?: string | null, enabled = true) => {
+	return useQuery<DeviceUserSyncJobProgress>({
+		queryKey: [...queryKeys.devices.all, "user-sync-job", jobId] as const,
+		queryFn: () => devicesService.getDeviceUserSyncJob(jobId || ""),
+		enabled: Boolean(jobId) && enabled,
+		staleTime: 1000,
+		refetchInterval: (query) => {
+			const status = query.state.data?.status;
+			return status === "processing" ? 1500 : false;
+		},
+		retry: 1,
+	});
+};
+
+export const useStartDeviceUserSyncJob = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async () => {
+			return await devicesService.startDeviceUserSyncJob();
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			sonnerToast.success("Device-user sync started");
+		},
+		onError: () => {
+			// The bulk sync modal renders inline start failures and retry actions.
+		},
+	});
+};
+
+export const useCancelDeviceUserSyncJob = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (jobId: string) => {
+			return await devicesService.cancelDeviceUserSyncJob(jobId);
+		},
+		onSuccess: (data) => {
+			queryClient.invalidateQueries({
+				queryKey: [...queryKeys.devices.all, "user-sync-job", data?.jobId] as const,
+			});
+			sonnerToast.success("Device-user sync cancellation requested");
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to cancel device-user sync");
 		},
 	});
 };

@@ -296,11 +296,16 @@ describe("employeesService client contract", () => {
 			},
 		});
 
-		await employeesService.executeEmployeeHardDelete("employee-6", "DELETE BNPI-0006");
+		await employeesService.executeEmployeeHardDelete("employee-6", "FORCE DELETE BNPI-0006", true);
 
 		expect(hrisPostMock).toHaveBeenCalledWith(
 			"/api/employee/employee-6/hard-delete-preview",
-			{ execute: true, dryRun: false, confirmation: "DELETE BNPI-0006" },
+			{
+				execute: true,
+				dryRun: false,
+				confirmation: "FORCE DELETE BNPI-0006",
+				force: true,
+			},
 		);
 	});
 });

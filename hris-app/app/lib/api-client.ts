@@ -118,6 +118,56 @@ class ApiClient {
 		);
 	}
 
+	private stripHtmlTags(value: string): string {
+		return value.replace(/<[^>]+>/g, " ");
+	}
+
+	private decodeHtmlEntities(value: string): string {
+		return value
+			.replace(/&nbsp;/gi, " ")
+			.replace(/&amp;/gi, "&")
+			.replace(/&lt;/gi, "<")
+			.replace(/&gt;/gi, ">")
+			.replace(/&quot;/gi, '"')
+			.replace(/&#39;/gi, "'");
+	}
+
+	private normalizeHtmlErrorMessage(responseText: string, url: string, status: number): string {
+		const preMatch = responseText.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+		const titleMatch = responseText.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+		const candidate = preMatch?.[1] || titleMatch?.[1] || responseText;
+		const cleaned = this.decodeHtmlEntities(this.stripHtmlTags(candidate)).replace(/\s+/g, " ").trim();
+
+		if (cleaned.includes("Cannot POST") && cleaned.includes("/api/device/users/sync-jobs")) {
+			return "This API runtime does not expose the manual device-user sync start route yet.";
+		}
+
+		if (cleaned) {
+			return cleaned;
+		}
+
+		return `Server returned an HTML error page (${status}) for ${url}`;
+	}
+
+	private normalizeNonJsonResponse(responseText: string, url: string, status: number): {
+		message: string;
+		raw: string;
+	} {
+		const trimmed = responseText.trim();
+		const looksLikeHtml = /^<!doctype html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed);
+		if (looksLikeHtml) {
+			return {
+				message: this.normalizeHtmlErrorMessage(trimmed, url, status),
+				raw: trimmed,
+			};
+		}
+
+		return {
+			message: responseText || `Non-JSON response from ${url}`,
+			raw: responseText,
+		};
+	}
+
 	// Generic request method
 	private async request<T>(
 		endpoint: string,
@@ -200,10 +250,7 @@ class ApiClient {
 					try {
 						data = responseText ? JSON.parse(responseText) : {};
 					} catch {
-						data = {
-							message: responseText || `Non-JSON response from ${url}`,
-							raw: responseText,
-						};
+						data = this.normalizeNonJsonResponse(responseText, url, response.status);
 					}
 
 					if (!response.ok) {
@@ -319,7 +366,7 @@ class ApiClient {
 				try {
 					errorPayload = responseText ? JSON.parse(responseText) : {};
 				} catch {
-					errorPayload = { message: responseText };
+					errorPayload = this.normalizeNonJsonResponse(responseText, url, response.status);
 				}
 				throw {
 					status: response.status,

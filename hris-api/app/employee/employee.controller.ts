@@ -242,6 +242,33 @@ const buildEmployeeHardDeletePreview = async (prisma: PrismaClient, employee: an
 		}))
 		.filter((item) => item.count > 0);
 
+	const protectedDeletes = [
+		["Attendance", relationCounts.attendanceRecords, "Delete attendance rows for this employee."],
+		[
+			"AttendanceObligation",
+			relationCounts.attendanceObligations,
+			"Delete attendance obligation rows tied to this employee.",
+		],
+		["Timesheet", relationCounts.timesheets, "Delete employee timesheets."],
+		["Timesheetline", relationCounts.timesheetLines, "Delete employee timesheet line rows."],
+		["EmployeePayroll", relationCounts.employeePayrolls, "Delete employee payroll rows."],
+		["Termination", relationCounts.terminations, "Delete termination records for this employee."],
+		["ScheduleOverride", relationCounts.scheduleOverrides, "Delete employee schedule overrides."],
+		[
+			"EmployeeScheduleHistory",
+			relationCounts.scheduleHistoryRecords,
+			"Delete employee schedule history rows.",
+		],
+		["SOALineItem", relationCounts.soaLineItems, "Delete statement-of-account line items."],
+	]
+		.map(([model, count, description]) => ({
+			model,
+			action: "delete" as const,
+			count,
+			description,
+		}))
+		.filter((item) => item.count > 0);
+
 	const detach = [
 		{
 			model: "DeviceEvent",
@@ -283,6 +310,8 @@ const buildEmployeeHardDeletePreview = async (prisma: PrismaClient, employee: an
 		count,
 		description,
 	}));
+	const deletePlan = [...deleted, ...protectedDeletes];
+	const forceExecuteAvailable = blockers.length > 0;
 
 	return {
 		employee: {
@@ -299,17 +328,18 @@ const buildEmployeeHardDeletePreview = async (prisma: PrismaClient, employee: an
 				.trim(),
 		},
 		safeToExecute: blockers.length === 0,
+		forceExecuteAvailable,
 		blockers,
 		relationCounts,
 		plan: {
-			delete: deleted,
+			delete: deletePlan,
 			detach,
 			archive: [],
 			blocked: blockers,
 		},
 		summary: {
 			blockerCount: blockers.length,
-			deleteCount: deleted.reduce((sum, item) => sum + Number(item.count || 0), 0),
+			deleteCount: deletePlan.reduce((sum, item) => sum + Number(item.count || 0), 0),
 			detachCount: detach.reduce((sum, item) => sum + Number(item.count || 0), 0),
 			archiveCount: 0,
 		},
@@ -5742,6 +5772,7 @@ export const controller = (prisma: PrismaClient) => {
 		const { id } = req.params;
 		const execute = req.body?.execute === true;
 		const dryRun = req.body?.dryRun !== false && !execute;
+		const force = req.body?.force === true;
 		const confirmation = String(req.body?.confirmation || "").trim();
 
 		try {
@@ -5774,7 +5805,10 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const preview = await buildEmployeeHardDeletePreview(prisma, existingEmployee);
-			const expectedConfirmation = `DELETE ${existingEmployee.employeeId}`;
+			const expectedConfirmation =
+				preview.blockers.length > 0
+					? `FORCE DELETE ${existingEmployee.employeeId}`
+					: `DELETE ${existingEmployee.employeeId}`;
 
 			if (!execute || dryRun) {
 				res.status(200).json(
@@ -5788,13 +5822,14 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			if (!preview.safeToExecute) {
-				const firstReason = preview.blockers[0]?.reason || "relation blockers found";
+			if (preview.blockers.length > 0 && !force) {
+				const firstReason =
+					preview.blockers[0]?.reason || "protected history requires force confirmation";
 				res.status(409).json(
-					buildErrorResponse(`Cannot hard delete employee: ${firstReason}`, 409, [
+					buildErrorResponse(`Cannot hard delete employee without force confirmation: ${firstReason}`, 409, [
 						{
 							field: "employeeId",
-							message: `${preview.summary.blockerCount} blocker(s) found. Run preview for full relation details.`,
+							message: `${preview.summary.blockerCount} protected relation type(s) found. Run preview and confirm force delete to remove them.`,
 						},
 					]),
 				);
@@ -5812,6 +5847,42 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			await prisma.$transaction(async (tx) => {
+				await tx.employee.updateMany({
+					where: { reportToId: id },
+					data: { reportToId: null },
+				});
+				await (tx as any).calendarItem?.updateMany?.({
+					where: { assignedEmployeeId: id },
+					data: { assignedEmployeeId: null },
+				});
+				await (tx as any).workflowStepExecution?.updateMany?.({
+					where: { assigneeId: id },
+					data: { assigneeId: null },
+				});
+				await (tx as any).request?.updateMany?.({
+					where: { targetEmployeeId: id },
+					data: { targetEmployeeId: null },
+				});
+				await (tx as any).notification?.updateMany?.({
+					where: { sourceEmployeeId: id },
+					data: { sourceEmployeeId: null },
+				});
+				await (tx as any).employeeScheduleHistory?.updateMany?.({
+					where: { actorEmployeeId: id },
+					data: { actorEmployeeId: null },
+				});
+				await (tx as any).scheduleOverride?.updateMany?.({
+					where: { createdByEmployeeId: id },
+					data: { createdByEmployeeId: null },
+				});
+				await (tx as any).termination?.updateMany?.({
+					where: { hrDirectorId: id },
+					data: { hrDirectorId: null },
+				});
+				await (tx as any).termination?.updateMany?.({
+					where: { legalApproverId: id },
+					data: { legalApproverId: null },
+				});
 				await (tx as any).deviceEvent?.updateMany?.({
 					where: { employeeId: id },
 					data: { employeeId: null },
@@ -5827,6 +5898,33 @@ export const controller = (prisma: PrismaClient) => {
 				await (tx as any).auditLogging?.updateMany?.({
 					where: { employeeId: id },
 					data: { employeeId: null },
+				});
+				await (tx as any).attendanceObligation?.deleteMany?.({
+					where: { employeeId: id },
+				});
+				await (tx as any).timesheetline?.deleteMany?.({
+					where: { employeeId: id },
+				});
+				await (tx as any).attendance?.deleteMany?.({
+					where: { employeeId: id },
+				});
+				await (tx as any).sOALineItem?.deleteMany?.({
+					where: { employeeId: id },
+				});
+				await (tx as any).employeePayroll?.deleteMany?.({
+					where: { employeeId: id },
+				});
+				await (tx as any).timesheet?.deleteMany?.({
+					where: { employeeId: id },
+				});
+				await (tx as any).termination?.deleteMany?.({
+					where: { employeeId: id },
+				});
+				await (tx as any).employeeScheduleHistory?.deleteMany?.({
+					where: { employeeId: id },
+				});
+				await (tx as any).scheduleOverride?.deleteMany?.({
+					where: { employeeId: id },
 				});
 				await tx.employee.delete({ where: { id } });
 			});

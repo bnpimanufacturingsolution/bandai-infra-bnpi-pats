@@ -19,11 +19,12 @@ describe("employee hard delete UI contract", () => {
 		expect(listSource).to.contain("useExecuteEmployeeHardDelete");
 	});
 
-	it("shows blockers and planned delete/detach work before enabling execution", () => {
-		expect(listSource).to.contain("Cannot hard delete this employee");
+	it("shows force-delete warnings and planned delete/detach work before enabling execution", () => {
+		expect(listSource).to.contain("Force delete required");
 		expect(listSource).to.contain("Previewed actions");
 		expect(listSource).to.contain("Would delete");
 		expect(listSource).to.contain("Would detach");
+		expect(listSource).to.contain("forceExecuteAvailable");
 		expect(listSource).to.contain("hardDeleteConfirmation");
 		expect(listSource).to.contain("requiresConfirmation");
 		expect(listSource).to.contain("Hard delete employee");

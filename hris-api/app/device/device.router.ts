@@ -16,6 +16,9 @@ interface IController {
 	triggerHikvisionAttendanceImport(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	cancelDeviceImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	startDeviceUserSyncJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceUserSyncJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	cancelDeviceUserSyncJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	listDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceUserPhoto(req: Request, res: Response, next: NextFunction): Promise<void>;
 	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -63,6 +66,9 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get("/sync-preview", controller.getDeviceSyncPreview);
 	routes.get("/import-jobs/:jobId", controller.getDeviceImportJob);
 	routes.post("/import-jobs/:jobId/cancel", controller.cancelDeviceImportJob);
+	routes.post("/users/sync-jobs", controller.startDeviceUserSyncJob);
+	routes.get("/users/sync-jobs/:jobId", controller.getDeviceUserSyncJob);
+	routes.post("/users/sync-jobs/:jobId/cancel", controller.cancelDeviceUserSyncJob);
 	routes.post("/zkteco/sync", controller.triggerZktecoAttendanceSync);
 	routes.post("/hikvision/sync", controller.triggerHikvisionAttendanceImport);
 	routes.post("/hikvision/import", controller.triggerHikvisionAttendanceImport);

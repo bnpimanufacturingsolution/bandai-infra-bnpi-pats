@@ -136,6 +136,35 @@ type DeviceImportJob = {
 
 const deviceImportJobs = new Map<string, DeviceImportJob>();
 
+type DeviceUserSyncJobStatus = "processing" | "completed" | "failed" | "cancelled";
+
+type DeviceUserSyncJobResult = {
+	deviceId: string;
+	deviceName: string;
+	status: "success" | "error" | "cancelled";
+	summary?: Record<string, any>;
+	runId?: string | null;
+	error?: string | null;
+};
+
+type DeviceUserSyncJob = {
+	jobId: string;
+	status: DeviceUserSyncJobStatus;
+	organizationId: string;
+	totalDevices: number;
+	processedDevices: number;
+	successfulDevices: number;
+	failedDevices: number;
+	message: string;
+	cancelRequested?: boolean;
+	cancelRequestedAt?: Date;
+	results: DeviceUserSyncJobResult[];
+	startedAt: Date;
+	completedAt?: Date;
+};
+
+const deviceUserSyncJobs = new Map<string, DeviceUserSyncJob>();
+
 const cleanupDeviceImportJobs = () => {
 	const cutoff = Date.now() - 60 * 60 * 1000;
 	for (const [jobId, job] of deviceImportJobs.entries()) {
@@ -143,10 +172,30 @@ const cleanupDeviceImportJobs = () => {
 	}
 };
 
+const cleanupDeviceUserSyncJobs = () => {
+	const cutoff = Date.now() - 60 * 60 * 1000;
+	for (const [jobId, job] of deviceUserSyncJobs.entries()) {
+		if (job.startedAt.getTime() < cutoff) deviceUserSyncJobs.delete(jobId);
+	}
+};
+
 const updateDeviceImportJob = (jobId: string, patch: Partial<Omit<DeviceImportJob, "jobId">>) => {
 	const job = deviceImportJobs.get(jobId);
 	if (!job) return;
 	deviceImportJobs.set(jobId, { ...job, ...patch });
+};
+
+const updateDeviceUserSyncJob = (
+	jobId: string,
+	patch: Partial<Omit<DeviceUserSyncJob, "jobId" | "results">> & { results?: DeviceUserSyncJobResult[] },
+) => {
+	const job = deviceUserSyncJobs.get(jobId);
+	if (!job) return;
+	deviceUserSyncJobs.set(jobId, {
+		...job,
+		...patch,
+		results: patch.results || job.results,
+	});
 };
 
 const runFixedProcess = (
@@ -2342,6 +2391,205 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(200).json(buildSuccessResponse("Legacy device users backfilled", result, 200));
 		} catch (error: any) {
 			res.status(500).json(buildErrorResponse(error?.message || "Failed to backfill device users", 500));
+		}
+	};
+
+	const processBulkDeviceUserSyncJob = async (params: {
+		jobId: string;
+		req: Request;
+		organizationId: string;
+		devices: any[];
+		startedByUserId?: string | null;
+	}) => {
+		const results: DeviceUserSyncJobResult[] = [];
+		let successfulDevices = 0;
+		let failedDevices = 0;
+
+		for (const device of params.devices) {
+			const currentJob = deviceUserSyncJobs.get(params.jobId);
+			if (!currentJob) return;
+			if (currentJob.cancelRequested) {
+				updateDeviceUserSyncJob(params.jobId, {
+					status: "cancelled",
+					message: "Cancel requested. The current tally stopped before the next device.",
+					processedDevices: results.length,
+					successfulDevices,
+					failedDevices,
+					results,
+					completedAt: new Date(),
+				});
+				return;
+			}
+
+			try {
+				const { run, summary } = await syncHikvisionDeviceUsersFromSource({
+					req: params.req,
+					organizationId: params.organizationId,
+					device,
+					startedByUserId: params.startedByUserId || null,
+				});
+				results.push({
+					deviceId: device.id,
+					deviceName: device.name || device.address || "Hikvision device",
+					status: "success",
+					runId: run?.id || null,
+					summary,
+				});
+				successfulDevices += 1;
+				updateDeviceUserSyncJob(params.jobId, {
+					status: "processing",
+					message: `Synced ${device.name || device.address || "device"} (${results.length}/${params.devices.length}).`,
+					processedDevices: results.length,
+					successfulDevices,
+					failedDevices,
+					results,
+				});
+			} catch (error: any) {
+				results.push({
+					deviceId: device.id,
+					deviceName: device.name || device.address || "Hikvision device",
+					status: "error",
+					error: error?.message || "Device-user sync failed.",
+				});
+				failedDevices += 1;
+				updateDeviceUserSyncJob(params.jobId, {
+					status: "processing",
+					message: `Review needed for ${device.name || device.address || "device"} (${results.length}/${params.devices.length}).`,
+					processedDevices: results.length,
+					successfulDevices,
+					failedDevices,
+					results,
+				});
+			}
+		}
+
+		await invalidateCache.byPattern("cache:device:*").catch(() => undefined);
+		updateDeviceUserSyncJob(params.jobId, {
+			status: failedDevices > 0 ? "failed" : "completed",
+			message:
+				failedDevices > 0
+					? "Device-user tally finished with devices needing review."
+					: "Device-user tally finished across configured devices.",
+			processedDevices: results.length,
+			successfulDevices,
+			failedDevices,
+			results,
+			completedAt: new Date(),
+		});
+	};
+
+	const startDeviceUserSyncJob = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			cleanupDeviceUserSyncJobs();
+			const devices = await prisma.device.findMany({
+				where: {
+					organizationId: gate.organizationId,
+					isDeleted: false,
+				},
+				select: {
+					id: true,
+					name: true,
+					address: true,
+					port: true,
+					protocol: true,
+					config: true,
+				},
+				orderBy: { createdAt: "asc" },
+			});
+			const hikvisionDevices = devices.filter((device) => isHikvisionDevice(device));
+			if (!hikvisionDevices.length) {
+				res.status(400).json(buildErrorResponse("No Hikvision devices are configured for device-user sync", 400));
+				return;
+			}
+
+			const jobId = randomUUID();
+			const job: DeviceUserSyncJob = {
+				jobId,
+				status: "processing",
+				organizationId: gate.organizationId,
+				totalDevices: hikvisionDevices.length,
+				processedDevices: 0,
+				successfulDevices: 0,
+				failedDevices: 0,
+				message: "Device-user tally queued",
+				results: [],
+				startedAt: new Date(),
+			};
+			deviceUserSyncJobs.set(jobId, job);
+
+			processBulkDeviceUserSyncJob({
+				jobId,
+				req,
+				organizationId: gate.organizationId,
+				devices: hikvisionDevices,
+				startedByUserId: (req as any).userId || null,
+			}).catch((error: any) => {
+				deviceLogger.error(`Device user sync job ${jobId} failed: ${error}`);
+				updateDeviceUserSyncJob(jobId, {
+					status: "failed",
+					message: error?.message || "Device-user tally failed.",
+					failedDevices: Math.max(
+						1,
+						deviceUserSyncJobs.get(jobId)?.failedDevices || 0,
+					),
+					completedAt: new Date(),
+				});
+			});
+
+			res.status(202).json(
+				buildSuccessResponse(
+					"Device user sync started",
+					{ jobId, progress: job },
+					202,
+				),
+			);
+		} catch (error: any) {
+			res.status(500).json(buildErrorResponse(error?.message || "Failed to start device-user sync", 500));
+		}
+	};
+
+	const getDeviceUserSyncJob = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		const jobId = String(req.params.jobId || "").trim();
+		const job = deviceUserSyncJobs.get(jobId);
+		if (!job || job.organizationId !== gate.organizationId) {
+			res.status(404).json(buildErrorResponse("Device-user sync job not found or expired", 404));
+			return;
+		}
+		res.status(200).json(buildSuccessResponse("Device-user sync job retrieved", job, 200));
+	};
+
+	const cancelDeviceUserSyncJob = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			const jobId = String(req.params.jobId || "").trim();
+			const job = deviceUserSyncJobs.get(jobId);
+			if (!job || job.organizationId !== gate.organizationId) {
+				res.status(404).json(buildErrorResponse("Device-user sync job not found or expired", 404));
+				return;
+			}
+			if (job.status !== "processing") {
+				res.status(200).json(buildSuccessResponse("Device-user sync job already finished", job, 200));
+				return;
+			}
+			updateDeviceUserSyncJob(jobId, {
+				cancelRequested: true,
+				cancelRequestedAt: new Date(),
+				message: "Cancel requested",
+			});
+			res.status(200).json(
+				buildSuccessResponse(
+					"Device-user sync cancellation requested",
+					deviceUserSyncJobs.get(jobId) || job,
+					200,
+				),
+			);
+		} catch (error: any) {
+			res.status(500).json(buildErrorResponse(error?.message || "Failed to cancel device-user sync", 500));
 		}
 	};
 
@@ -5147,6 +5395,9 @@ export const controller = (prisma: PrismaClient) => {
 		triggerHikvisionAttendanceImport,
 		getDeviceImportJob,
 		cancelDeviceImportJob,
+		startDeviceUserSyncJob,
+		getDeviceUserSyncJob,
+		cancelDeviceUserSyncJob,
 		getById,
 		update,
 		remove,
