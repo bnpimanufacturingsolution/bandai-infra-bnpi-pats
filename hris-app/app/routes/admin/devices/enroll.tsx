@@ -42,6 +42,7 @@ import {
 	useCancelDeviceUserSyncJob,
 	useSyncDeviceUsers,
 	useUnlinkDeviceUser,
+	useCopyHikvisionDeviceUserToPeer,
 } from "~/lib/hooks/useDevices";
 import { useHikvisionDeviceUsers } from "~/lib/hooks/use-hikvision";
 import { useQueryClient } from "@tanstack/react-query";
@@ -120,6 +121,13 @@ type BulkDeviceUserSyncState = {
 
 type ActiveDeviceUserSyncJob = {
 	jobId: string;
+};
+
+type CopyDeviceUserState = {
+	open: boolean;
+	sourceDeviceUser: VisibleDeviceUserRow | null;
+	targetDeviceId: string;
+	includeFingerprints: boolean;
 };
 
 const DEVICE_USER_SYNC_JOB_STORAGE_KEY = "hris.device-user-sync-job";
@@ -222,6 +230,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	} = useHikvisionListenerStatus(activePanel === "overview" || activePanel === "users" || activePanel === "runs");
 	const hikvisionListenerControl = useControlHikvisionListener();
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
+	const copyHikvisionDeviceUserMutation = useCopyHikvisionDeviceUserToPeer();
 	const startDeviceUserSyncJobMutation = useStartDeviceUserSyncJob();
 	const cancelDeviceUserSyncJobMutation = useCancelDeviceUserSyncJob();
 	const linkDeviceUserMutation = useLinkDeviceUser();
@@ -267,6 +276,12 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const [detailsPhotoError, setDetailsPhotoError] = useState("");
 	const [linkTarget, setLinkTarget] = useState<VisibleDeviceUserRow | null>(null);
 	const [unlinkTarget, setUnlinkTarget] = useState<VisibleDeviceUserRow | null>(null);
+	const [copyDeviceUserState, setCopyDeviceUserState] = useState<CopyDeviceUserState>({
+		open: false,
+		sourceDeviceUser: null,
+		targetDeviceId: "",
+		includeFingerprints: true,
+	});
 	const [selectedEmployeeForLink, setSelectedEmployeeForLink] = useState("");
 
 	const {
@@ -923,6 +938,68 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		}
 	};
 
+	const copyTargetDeviceOptions = useMemo(
+		() =>
+			devices
+				.filter(
+					(device: any) =>
+						device.id !== selectedDeviceId &&
+						String(device?.config?.vendor || "").trim().toLowerCase() === "hikvision",
+				)
+				.map((device: any) => ({
+					value: device.id,
+					label: device.name || `${device.address || "-"}:${device.port || "-"}`,
+				})),
+		[devices, selectedDeviceId],
+	);
+
+	const openCopyDeviceUser = (deviceUser: VisibleDeviceUserRow) => {
+		setCopyDeviceUserState({
+			open: true,
+			sourceDeviceUser: deviceUser,
+			targetDeviceId: copyTargetDeviceOptions[0]?.value || "",
+			includeFingerprints: true,
+		});
+	};
+
+	const submitCopyDeviceUser = async () => {
+		const sourceDeviceUser = copyDeviceUserState.sourceDeviceUser;
+		if (!selectedDeviceId || !sourceDeviceUser?.vendorUserId) {
+			toast.error("Select a source device user before copying");
+			return;
+		}
+		if (!copyDeviceUserState.targetDeviceId) {
+			toast.error("Select a target device");
+			return;
+		}
+
+		try {
+			await copyHikvisionDeviceUserMutation.mutateAsync({
+				sourceDeviceId: selectedDeviceId,
+				targetDeviceId: copyDeviceUserState.targetDeviceId,
+				employeeNo: sourceDeviceUser.vendorUserId,
+				includeFingerprints: copyDeviceUserState.includeFingerprints,
+			});
+			setCopyDeviceUserState({
+				open: false,
+				sourceDeviceUser: null,
+				targetDeviceId: "",
+				includeFingerprints: true,
+			});
+			await Promise.allSettled([
+				refetchSourceDeviceUsers(),
+				refetchDbDeviceUsers(),
+				refetchOpenDbDeviceUsers(),
+				refetchDeviceUserSummary(),
+				refetchSourceMatchedDeviceUsers(),
+				refetchSyncPreview(),
+				refetchSyncRuns(),
+			]);
+		} catch (error: any) {
+			toast.error(error?.message || "Failed to copy device user");
+		}
+	};
+
 	const openEnroll = (employee: Employee) => {
 		reset({
 			deviceId: "",
@@ -1174,9 +1251,12 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const getDeviceUserCredentialSummary = (deviceUser?: { rawPayload?: any } | null): DeviceUserCredentialSummary => {
 		const raw = (deviceUser?.rawPayload || {}) as any;
 		const metaSummary = raw?._hrisDeviceMetadata?.credentialSummary || {};
-		const fingerprintCount = Number(metaSummary.fingerprintCount ?? raw?.numOfFP ?? raw?.UserInfo?.numOfFP ?? 0) || 0;
-		const cardCount = Number(metaSummary.cardCount ?? raw?.numOfCard ?? raw?.UserInfo?.numOfCard ?? 0) || 0;
-		const faceCount = Number(metaSummary.faceCount ?? raw?.numOfFace ?? raw?.UserInfo?.numOfFace ?? 0) || 0;
+		const rawFingerprintCount = Number(raw?.numOfFP ?? raw?.UserInfo?.numOfFP ?? 0) || 0;
+		const rawCardCount = Number(raw?.numOfCard ?? raw?.UserInfo?.numOfCard ?? 0) || 0;
+		const rawFaceCount = Number(raw?.numOfFace ?? raw?.UserInfo?.numOfFace ?? 0) || 0;
+		const fingerprintCount = Math.max(Number(metaSummary.fingerprintCount ?? 0) || 0, rawFingerprintCount);
+		const cardCount = Math.max(Number(metaSummary.cardCount ?? 0) || 0, rawCardCount);
+		const faceCount = Math.max(Number(metaSummary.faceCount ?? 0) || 0, rawFaceCount);
 		return {
 			fingerprintCount,
 			cardCount,
@@ -2154,7 +2234,15 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 																? "Checking HRIS link"
 																: deviceUser.status === "LINK_CHECK_FAILED"
 																	? "Refresh before linking"
-																	: deviceUser.employeeId ? "Change employee link" : "Link employee"}
+																: deviceUser.employeeId ? "Change employee link" : "Link employee"}
+														</DropdownMenuItem>
+														<DropdownMenuItem
+															disabled={!copyTargetDeviceOptions.length}
+															onClick={() => openCopyDeviceUser(deviceUser)}>
+															<RefreshCw className="mr-2 h-4 w-4" />
+															{copyTargetDeviceOptions.length
+																? "Copy to peer device"
+																: "No peer device available"}
 														</DropdownMenuItem>
 														{!deviceUser.hrisDeviceUser ? (
 															<DropdownMenuItem onClick={() => openDeviceUserSyncReview()}>
@@ -2780,10 +2868,10 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 										Vendor user ID {detailsDeviceUser.vendorUserId}
 									</p>
 								</div>
-								<div className="grid gap-x-4 gap-y-2 text-sm md:grid-cols-2">
+							<div className="grid gap-x-4 gap-y-2 text-sm md:grid-cols-2">
 							{[
 								["Vendor user ID", detailsDeviceUser.vendorUserId],
-								["Device", selectedDevice?.name || detailsDeviceUser.hrisDeviceUser?.device?.name || "-"],
+								["Device", detailsDeviceUser.hrisDeviceUser?.device?.name || selectedDevice?.name || "-"],
 								["Source", getDeviceUserSourceLabel(detailsDeviceUser)],
 								["Status", detailsDeviceUser.status],
 								["Employee link", detailsDeviceUser.employee?.employeeId || "Not linked"],
@@ -2883,6 +2971,115 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								<Link2 className="h-4 w-4" />
 							)}
 							{linkTarget?.hrisDeviceUser ? "Link device user" : "Save and link"}
+						</Button>
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
+				open={copyDeviceUserState.open}
+				onOpenChange={(open) => {
+					if (!open && !copyHikvisionDeviceUserMutation.isPending) {
+						setCopyDeviceUserState({
+							open: false,
+							sourceDeviceUser: null,
+							targetDeviceId: "",
+							includeFingerprints: true,
+						});
+					}
+				}}
+				title="Copy device user to peer"
+				description="Run the Hikvision SDK fast path and refresh HRIS truth after the peer write."
+				className="max-w-lg"
+				showCloseButton={!copyHikvisionDeviceUserMutation.isPending}
+				closeOnBackdropClick={!copyHikvisionDeviceUserMutation.isPending}>
+				<div className="space-y-4">
+					{copyDeviceUserState.sourceDeviceUser ? (
+						<div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+							<p className="font-semibold text-slate-950">
+								{copyDeviceUserState.sourceDeviceUser.displayName ||
+									copyDeviceUserState.sourceDeviceUser.vendorUserId}
+							</p>
+							<div className="mt-2 grid gap-2 text-xs text-slate-600 sm:grid-cols-2">
+								<div>
+									<span className="block text-slate-500">Source device</span>
+									<span className="font-semibold text-slate-950">
+										{selectedDevice?.name || "-"}
+									</span>
+								</div>
+								<div>
+									<span className="block text-slate-500">Vendor user ID</span>
+									<span className="font-semibold text-slate-950">
+										{copyDeviceUserState.sourceDeviceUser.vendorUserId}
+									</span>
+								</div>
+							</div>
+						</div>
+					) : null}
+					<div className="space-y-2">
+						<div className="text-sm font-medium text-slate-700">Target device</div>
+						<Select
+							options={copyTargetDeviceOptions}
+							value={copyDeviceUserState.targetDeviceId}
+							onChange={(value) =>
+								setCopyDeviceUserState((current) => ({
+									...current,
+									targetDeviceId: value,
+								}))
+							}
+							placeholder="Select target device"
+							disabled={!copyTargetDeviceOptions.length}
+						/>
+					</div>
+					<label className="flex items-start gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+						<input
+							type="checkbox"
+							className="mt-1 h-4 w-4 rounded border-slate-300"
+							checked={copyDeviceUserState.includeFingerprints}
+							onChange={(event) =>
+								setCopyDeviceUserState((current) => ({
+									...current,
+									includeFingerprints: event.target.checked,
+								}))
+							}
+							disabled={copyHikvisionDeviceUserMutation.isPending}
+						/>
+						<span>
+							<span className="block font-medium text-slate-950">Include fingerprints</span>
+							<span className="block text-xs text-slate-500">
+								Keep this on for the normal journey so the peer receives the same biometric user state when templates are available.
+							</span>
+						</span>
+					</label>
+					<div className="flex justify-end gap-2 border-t pt-3">
+						<Button
+							type="button"
+							variant="outline"
+							disabled={copyHikvisionDeviceUserMutation.isPending}
+							onClick={() =>
+								setCopyDeviceUserState({
+									open: false,
+									sourceDeviceUser: null,
+									targetDeviceId: "",
+									includeFingerprints: true,
+								})
+							}>
+							Cancel
+						</Button>
+						<Button
+							type="button"
+							disabled={
+								copyHikvisionDeviceUserMutation.isPending ||
+								!copyDeviceUserState.targetDeviceId ||
+								!copyDeviceUserState.sourceDeviceUser?.vendorUserId
+							}
+							onClick={submitCopyDeviceUser}>
+							{copyHikvisionDeviceUserMutation.isPending ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<RefreshCw className="h-4 w-4" />
+							)}
+							{copyHikvisionDeviceUserMutation.isPending ? "Copying..." : "Copy to peer"}
 						</Button>
 					</div>
 				</div>

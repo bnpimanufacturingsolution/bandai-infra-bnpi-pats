@@ -463,6 +463,13 @@ export interface EnrollDeviceUserRequest {
 	deviceUserId: string;
 }
 
+export interface HikvisionCopyUserRequest {
+	sourceDeviceId: string;
+	targetDeviceId: string;
+	employeeNo: string;
+	includeFingerprints?: boolean;
+}
+
 export type DeviceUserStatus = "ACTIVE" | "UNMATCHED" | "CONFLICT" | "DISABLED";
 
 export interface DeviceUser {
@@ -996,6 +1003,23 @@ class DevicesService extends APIService {
 			console.error("Error enrolling user to device:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error enrolling user to device",
+			);
+		}
+	}
+
+	async copyHikvisionDeviceUserToPeer(payload: HikvisionCopyUserRequest): Promise<any> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/hikvision/copy-user", payload);
+			if (!response.data) {
+				throw new Error("Failed to copy Hikvision device user");
+			}
+			return response.data?.data || response.data;
+		} catch (error: any) {
+			console.error("Error copying Hikvision device user:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error copying Hikvision device user",
 			);
 		}
 	}

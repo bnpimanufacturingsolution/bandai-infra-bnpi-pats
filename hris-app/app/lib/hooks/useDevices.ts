@@ -343,6 +343,29 @@ export const useUnlinkDeviceUser = () => {
 	});
 };
 
+export const useCopyHikvisionDeviceUserToPeer = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (payload: {
+			sourceDeviceId: string;
+			targetDeviceId: string;
+			employeeNo: string;
+			includeFingerprints?: boolean;
+		}) => {
+			return await devicesService.copyHikvisionDeviceUserToPeer(payload);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users"] });
+			sonnerToast.success("Hikvision device user copied");
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to copy Hikvision device user");
+		},
+	});
+};
+
 export const useResetDeviceEvents = () => {
 	const queryClient = useQueryClient();
 

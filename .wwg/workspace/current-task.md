@@ -2,6 +2,80 @@
 
 Status: COMPLETE
 
+## Latest Task Addendum - 2026-07-10 Hikvision Fast User Delta Path
+
+- Task mode: Local runtime refactor, device-to-device latency reduction, and
+  real-device evidence.
+- User goal:
+  - Reduce the perceived Hikvision cross-device user-copy delay from about
+    60 seconds to about 3-5 seconds in local dev mode.
+- Current-state finding before the refactor:
+  - Live VM listener logs showed generic Hikvision operation-sync callbacks
+    (`OBSERVED_OPERATION_MINOR_112/121/122`) were triggering sequential
+    full-mirror reconciles.
+  - One observed 4-user mirror blocked the single worker from about
+    `07:48:32Z` to `07:50:00Z`, with per-user fingerprint read/write waits
+    dominating the latency.
+- Change:
+  - `vendor/hikvision-linux/hikvision_biometric_service.cpp` now routes
+    generic operation-sync callbacks with no `employeeNo` through a fast
+    inventory-delta path first.
+  - The fast path reads source and peer employee inventories, computes missing
+    employee numbers per peer, and writes only the missing user records
+    immediately, without blocking on fingerprint reads/writes.
+  - Manual full mirror behavior remains available for explicit/manual runs.
+- Runtime proof:
+  - After rebuilding on the VM and restarting
+    `project-truth-hikvision-hot-reload-listener.service`, live callbacks at
+    `07:57:03Z` showed `reconcile_fast_path_inventory_delta` and
+    `reconcile_fast_path_completed` instead of the earlier long-running
+    full-mirror pattern.
+  - A real temp user `9012` was created on source device `AAA`
+    (`10.184.38.86`) by ISAPI.
+  - A one-off real-device reconcile using the patched binary then copied
+    `9012` from `AAA` to `Main Entrance Device` in the same second:
+    `reconcile_queued`, `source_user_read ok=true`, `peer_user_write ok=true`,
+    and `reconcile_completed` all logged at `2026-07-10T07:59:44Z`.
+  - A later live-listener proof with the polling fallback created temp user
+    `9013` on `AAA`; the running service detected the missing peer user at
+    `08:11:37Z`, queued `poll_missing_user`, wrote the peer user at
+    `08:11:38Z`, and completed the reconcile at `08:11:38Z`.
+  - A one-off single-user fingerprint mirror for existing employee `1`
+    completed in about one second: `source_user_read` at `08:11:58Z`,
+    `source_fingerprint_read`, `peer_user_write`, `peer_fingerprint_write`,
+    and `reconcile_completed` all landed by `08:11:59Z`.
+  - Direct current-device truth check for employee `21` then showed:
+    `AAA -> numOfFP=0, numOfFace=0` and
+    `Main Entrance Device A -> numOfFP=1, numOfFace=1, faceURL present`.
+  - A local `POST /api/device/cmpxw13hx002h7zwso7dyedrn/users/sync` refresh
+    updated the saved `DeviceUser` row for vendor user `21` so the API now
+    returns `numOfFP=1`, `numOfFace=1`, and `faceURL` for
+    `Main Entrance Device A`.
+  - Cleanup delete calls for `9012` returned `statusString=OK` on both
+    devices.
+  - Cleanup delete calls for `9013` also returned `statusString=OK` on both
+    devices.
+- Remaining truth:
+  - The user-copy path itself is now fast when driven through the user-only
+    reconcile flow.
+  - The fingerprint copy path itself is now fast when driven through the
+    single-user reconcile flow.
+  - Direct ISAPI create of `9012` on `AAA` still did not produce a usable
+    user-management callback in the next 15 seconds, so automatic propagation
+    for API-created users remains gated by device callback behavior unless the
+    new poll fallback detects the missing peer user.
+- Evidence:
+  - `.runtime/hikvision-fast-path-20260710-155617/listener-fast-path-after-restart.log`
+  - `.runtime/hikvision-fast-path-20260710-155617/temp-create-9012-proof.txt`
+  - `.runtime/hikvision-fast-path-20260710-155617/listener-since-create-9012.log`
+  - `.runtime/hikvision-fast-path-20260710-155617/manual-single-user-9012.jsonl`
+  - `.runtime/hikvision-fast-path-20260710-155617/delete-9012-proof.txt`
+  - `.runtime/hikvision-under5-proof-20260710-161015/auto-create-9013-journal.txt`
+  - `.runtime/hikvision-under5-proof-20260710-161015/fingerprint-single-user-1.jsonl`
+  - `.runtime/hikvision-under5-proof-20260710-161015/delete-9013.txt`
+  - `.runtime/hikvision-ui-truth-20260710-161529/user21-both-devices.json`
+  - `.runtime/hikvision-ui-truth-20260710-161529/main-user21-after-sync.json`
+
 ## Latest Task Addendum - 2026-07-10 VM Static IP 10.184.37.241 Host Route Repair
 
 - Task mode: Runtime/network drift repair with local host evidence.

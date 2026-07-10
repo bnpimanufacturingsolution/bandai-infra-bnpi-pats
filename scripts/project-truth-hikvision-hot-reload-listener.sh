@@ -10,14 +10,42 @@ LOGIN_PASSWORD=${HIKVISION_HOT_RELOAD_LOGIN_PASSWORD:-password123}
 LOGIN_APP_CODE=${HIKVISION_HOT_RELOAD_APP_CODE:-hris}
 SPEC=/run/project-truth/hikvision-hot-reload-device.spec
 PREPARE_ONLY=0
+RUN_ONCE=0
+DEVICE_ID_FILTER=${HIKVISION_DEVICE_ID_FILTER:-}
+PASSTHROUGH_ARGS=()
 
-if [[ "${1:-}" == "--prepare-only" ]]; then
-  PREPARE_ONLY=1
-  shift
-fi
+while [[ $# -gt 0 ]]; do
+  case "${1:-}" in
+    --prepare-only)
+      PREPARE_ONLY=1
+      shift
+      ;;
+    --run-once)
+      RUN_ONCE=1
+      shift
+      ;;
+    --device-id-filter)
+      if [[ $# -lt 2 ]]; then
+        echo "missing value for --device-id-filter" >&2
+        exit 2
+      fi
+      DEVICE_ID_FILTER="$2"
+      shift 2
+      ;;
+    --)
+      shift
+      PASSTHROUGH_ARGS+=("$@")
+      break
+      ;;
+    *)
+      PASSTHROUGH_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
 
-if [[ $# -gt 0 ]]; then
-  echo "unsupported arguments: $*" >&2
+if [[ "$PREPARE_ONLY" == "1" && ${#PASSTHROUGH_ARGS[@]} -gt 0 ]]; then
+  echo "--prepare-only does not accept passthrough runtime arguments" >&2
   exit 2
 fi
 
@@ -89,6 +117,12 @@ trap 'rm -f "$tmp_spec"' EXIT
 while IFS='|' read -r device_id org_id device_name device_addr sdk_port sdk_user sdk_pass; do
   [[ -n "${device_id:-}" ]] || continue
   [[ -n "${sdk_pass:-}" ]] || continue
+  if [[ -n "${DEVICE_ID_FILTER:-}" ]]; then
+    case ",${DEVICE_ID_FILTER}," in
+      *,"${device_id}",*) ;;
+      *) continue ;;
+    esac
+  fi
   printf '%s|%s|%s|%s|%s|%s|%s|true\n' \
     "$device_id" \
     "$org_id" \
@@ -117,7 +151,19 @@ export LD_LIBRARY_PATH="$SDK_ROOT/lib:$SDK_ROOT:$SDK_ROOT/HCNetSDKCom:${LD_LIBRA
 export LOGIN_EMAIL LOGIN_PASSWORD LOGIN_APP_CODE
 export HIKVISION_HRIS_API_TOKEN="$(fetch_hikvision_hris_token)"
 
-exec ./build/hikvision-biometric-service \
-  --device-file "$SPEC" \
-  --hris-api-base "$LOCAL_API_BASE" \
+cmd=(
+  ./build/hikvision-biometric-service
+  --device-file "$SPEC"
+  --hris-api-base "$LOCAL_API_BASE"
   --evidence-jsonl /var/log/project-truth/hikvision-hot-reload-listener.jsonl
+)
+
+if [[ "$RUN_ONCE" == "1" ]]; then
+  cmd+=(--seconds "${HIKVISION_RUN_SECONDS:-1}")
+fi
+
+if [[ ${#PASSTHROUGH_ARGS[@]} -gt 0 ]]; then
+  cmd+=("${PASSTHROUGH_ARGS[@]}")
+fi
+
+exec "${cmd[@]}"

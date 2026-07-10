@@ -28,6 +28,29 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("rawFingerprintTemplateStored: false");
 	});
 
+	it("exposes a scoped admin-only Hikvision peer copy route for real device-user propagation", () => {
+		const router = routerSource();
+		const controller = controllerSource();
+		const wrapper = readFileSync(
+			join(process.cwd(), "../scripts/project-truth-hikvision-hot-reload-listener.sh"),
+			"utf8",
+		);
+
+		expect(router).to.include(
+			'routes.post("/hikvision/copy-user", controller.copyHikvisionDeviceUserToPeer)',
+		);
+		expect(controller).to.include("const copyHikvisionDeviceUserToPeer = async");
+		expect(controller).to.include("const runHikvisionManualCopyOnVm = async");
+		expect(controller).to.include("HIKVISION_VM_WRAPPER_REMOTE_PATH");
+		expect(controller).to.include("HIKVISION_DEVICE_USER_COPY");
+		expect(controller).to.include("sourceDeviceId, targetDeviceId, and employeeNo are required");
+		expect(controller).to.include("Target device does not currently have Hikvision user");
+		expect(controller).to.include("await mirrorDeviceUserLinkToPeer({");
+		expect(wrapper).to.include("--run-once");
+		expect(wrapper).to.include("HIKVISION_DEVICE_ID_FILTER");
+		expect(wrapper).to.include('cmd+=(--seconds "${HIKVISION_RUN_SECONDS:-8}")');
+	});
+
 	it("refreshes per-device Hikvision DeviceUser truth during reconcile and persists derived lifecycle events", () => {
 		const controller = controllerSource();
 
@@ -85,7 +108,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include("MINOR_CLR_FINGER_BY_CARD");
 		expect(service).to.include("is_observed_operation_sync_minor");
 		expect(service).to.include("build_user_setup_payload_from_search_response");
-		expect(service).to.include("read_source_employee_numbers");
+		expect(service).to.include("read_device_employee_numbers");
 		expect(service).to.include("reconcile_full_mirror_completed");
 		expect(service).to.include("reconcile_suppressed_recent_peer_apply");
 		expect(service).to.not.include('"fingerData"');

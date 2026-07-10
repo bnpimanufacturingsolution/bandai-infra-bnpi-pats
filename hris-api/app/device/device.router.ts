@@ -24,6 +24,7 @@ interface IController {
 	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	backfillDeviceUserLifecycleEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
 	reconcileBiometricSync(req: Request, res: Response, next: NextFunction): Promise<void>;
+	copyHikvisionDeviceUserToPeer(req: Request, res: Response, next: NextFunction): Promise<void>;
 	backfillDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	linkDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
 	unlinkDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -60,6 +61,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/:id/users/lifecycle-backfill", controller.backfillDeviceUserLifecycleEvents);
 	routes.post("/:id/users/backfill", controller.backfillDeviceUsers);
 	routes.post("/biometric-sync/reconcile", controller.reconcileBiometricSync);
+	routes.post("/hikvision/copy-user", controller.copyHikvisionDeviceUserToPeer);
 	routes.get("/:id/sync-runs", controller.getDeviceSyncRuns);
 	routes.post("/users/:userId/link", controller.linkDeviceUser);
 	routes.post("/users/:userId/unlink", controller.unlinkDeviceUser);
