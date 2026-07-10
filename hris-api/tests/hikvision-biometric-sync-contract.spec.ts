@@ -64,9 +64,28 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("HIKVISION_HOT_RELOAD_LISTENER_SERVICE");
 		expect(controller).to.include('"project-truth-hikvision-hot-reload-listener.service"');
 		expect(controller).to.include("HIKVISION_LISTENER_CONTROL_ACTIONS.has(action)");
+		expect(controller).to.include("installManagedHikvisionListenerWrapperOnVm");
+		expect(controller).to.include('if (action !== "stop")');
 		expect(controller).to.include("runFixedProcess");
 		expect(controller).to.include("execFile(");
 		expect(controller).to.include('"systemctl"');
 		expect(controller).to.include('"start", "stop", "restart"');
+	});
+
+	it("keeps the VM hot-reload wrapper sourced from all Hikvision device rows instead of one hardcoded device", () => {
+		const controller = controllerSource();
+		const wrapper = readFileSync(
+			join(process.cwd(), "../scripts/project-truth-hikvision-hot-reload-listener.sh"),
+			"utf8",
+		);
+
+		expect(wrapper).to.include('COALESCE(config->>\'vendor\', \'\') = \'Hikvision\'');
+		expect(wrapper).to.include('COALESCE(access->>\'password\', \'\') <> \'\'');
+		expect(wrapper).to.include('--device-file "$SPEC"');
+		expect(wrapper).to.not.include("where name='Main Entrance Device'");
+		expect(controller).to.include("reconcileHikvisionRuntimeAfterDeviceChange");
+		expect(controller).to.include('await reconcileHikvisionRuntimeAfterDeviceChange(device, "device_create")');
+		expect(controller).to.include('await reconcileHikvisionRuntimeAfterDeviceChange(updatedDevice, "device_update")');
+		expect(controller).to.include('await reconcileHikvisionRuntimeAfterDeviceChange(existingDevice, "device_delete")');
 	});
 });

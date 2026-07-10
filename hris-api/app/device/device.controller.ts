@@ -49,6 +49,7 @@ import net from "net";
 import { execFile } from "child_process";
 import { randomUUID } from "crypto";
 import fs from "fs/promises";
+import fsSync from "fs";
 import * as os from "os";
 import path from "path";
 
@@ -100,6 +101,8 @@ const DEVICE_ADDRESS_PORT_CONFLICT_MESSAGE =
 const HIKVISION_HOT_RELOAD_LISTENER_SERVICE =
 	"project-truth-hikvision-hot-reload-listener.service";
 const HIKVISION_LISTENER_CONTROL_ACTIONS = new Set(["start", "stop", "restart"]);
+const HIKVISION_VM_WRAPPER_REMOTE_PATH = "/usr/local/bin/project-truth-hikvision-hot-reload-listener";
+const HIKVISION_VM_WRAPPER_TMP_PATH = "/tmp/project-truth-hikvision-hot-reload-listener.sh";
 
 type DeviceImportJobStatus = "processing" | "completed" | "failed" | "cancelled";
 
@@ -194,6 +197,84 @@ const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) =
 		],
 		{ timeoutMs },
 	);
+};
+
+const runHikvisionListenerVmCopy = (localPath: string, remotePath: string, timeoutMs = 12000) => {
+	const target = getHikvisionListenerVmTarget();
+	return runFixedProcess(
+		process.env.PROJECT_TRUTH_SCP_BIN || "scp",
+		[
+			"-i",
+			target.key,
+			"-o",
+			"BatchMode=yes",
+			"-o",
+			"ConnectTimeout=5",
+			"-o",
+			"StrictHostKeyChecking=accept-new",
+			localPath,
+			`${target.user}@${target.host}:${remotePath}`,
+		],
+		{ timeoutMs },
+	);
+};
+
+const resolveManagedHikvisionListenerWrapperLocalPath = () => {
+	const candidates = [
+		path.resolve(process.cwd(), "../scripts/project-truth-hikvision-hot-reload-listener.sh"),
+		path.resolve(process.cwd(), "scripts/project-truth-hikvision-hot-reload-listener.sh"),
+		path.resolve(__dirname, "../../../scripts/project-truth-hikvision-hot-reload-listener.sh"),
+	];
+	return candidates.find((candidate) => fsSync.existsSync(candidate)) || null;
+};
+
+const installManagedHikvisionListenerWrapperOnVm = async () => {
+	const localPath = resolveManagedHikvisionListenerWrapperLocalPath();
+	if (!localPath) {
+		return {
+			ok: false,
+			error: "Managed Hikvision listener wrapper is missing from the workspace",
+		};
+	}
+
+	const copyResult = await runHikvisionListenerVmCopy(
+		localPath,
+		HIKVISION_VM_WRAPPER_TMP_PATH,
+		12000,
+	);
+	if (copyResult.exitCode !== 0) {
+		return {
+			ok: false,
+			error: copyResult.stderr.trim() || copyResult.stdout.trim() || "Failed to copy listener wrapper",
+		};
+	}
+
+	const installResult = await runHikvisionListenerVmCommand(
+		[
+			"sudo",
+			"install",
+			"-o",
+			"root",
+			"-g",
+			"root",
+			"-m",
+			"0755",
+			HIKVISION_VM_WRAPPER_TMP_PATH,
+			HIKVISION_VM_WRAPPER_REMOTE_PATH,
+		],
+		12000,
+	);
+	if (installResult.exitCode !== 0) {
+		return {
+			ok: false,
+			error:
+				installResult.stderr.trim() ||
+				installResult.stdout.trim() ||
+				"Failed to install listener wrapper",
+		};
+	}
+
+	return { ok: true, localPath };
 };
 
 const parseSystemctlShow = (stdout: string) =>
@@ -2867,6 +2948,19 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			if (action !== "stop") {
+				const managedWrapper = await installManagedHikvisionListenerWrapperOnVm();
+				if (!managedWrapper.ok) {
+					res.status(502).json(
+						buildErrorResponse(
+							managedWrapper.error || "Failed to prepare Hikvision listener runtime",
+							502,
+						),
+					);
+					return;
+				}
+			}
+
 			const result = await runHikvisionListenerVmCommand(
 				[
 					"sudo",
@@ -2909,6 +3003,46 @@ export const controller = (prisma: PrismaClient) => {
 			deviceLogger.error(`Hikvision listener control failed: ${error?.message || error}`);
 			res.status(500).json(buildErrorResponse("Failed to control Hikvision listener", 500));
 		}
+	};
+
+	const reconcileHikvisionRuntimeAfterDeviceChange = async (
+		device: { id?: string; name?: string | null; config?: Prisma.JsonValue | null },
+		reason: string,
+	) => {
+		if (!isHikvisionDevice(device)) return;
+
+		const managedWrapper = await installManagedHikvisionListenerWrapperOnVm();
+		if (!managedWrapper.ok) {
+			deviceLogger.warn(
+				`Hikvision runtime wrapper sync skipped after ${reason} for ${device.id || device.name}: ${
+					managedWrapper.error || "unknown_error"
+				}`,
+			);
+			return;
+		}
+
+		const restartResult = await runHikvisionListenerVmCommand(
+			[
+				"sudo",
+				"systemctl",
+				"restart",
+				HIKVISION_HOT_RELOAD_LISTENER_SERVICE,
+			],
+			15000,
+		);
+
+		if (restartResult.exitCode !== 0) {
+			deviceLogger.warn(
+				`Hikvision listener restart failed after ${reason} for ${device.id || device.name}: ${
+					restartResult.stderr.trim() || restartResult.stdout.trim() || "unknown_error"
+				}`,
+			);
+			return;
+		}
+
+		deviceLogger.info(
+			`Hikvision listener runtime reconciled after ${reason} for ${device.id || device.name}`,
+		);
 	};
 
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
@@ -2958,6 +3092,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			const device = await prisma.device.create({ data: deviceData });
 			deviceLogger.info(`Device created successfully: ${device.id}`);
+			await reconcileHikvisionRuntimeAfterDeviceChange(device, "device_create");
 
 			logActivity(req, {
 				userId: (req as any).user?.id || "unknown",
@@ -3660,6 +3795,7 @@ export const controller = (prisma: PrismaClient) => {
 				where: { id },
 				data: prismaData,
 			});
+			await reconcileHikvisionRuntimeAfterDeviceChange(updatedDevice, "device_update");
 
 			try {
 				await invalidateCache.byPattern(`cache:device:byId:${id}:*`);
@@ -3728,6 +3864,7 @@ export const controller = (prisma: PrismaClient) => {
 					address: buildReleasedDeviceAddress(existingDevice),
 				},
 			});
+			await reconcileHikvisionRuntimeAfterDeviceChange(existingDevice, "device_delete");
 
 			try {
 				await invalidateCache.byPattern(`cache:device:byId:${id}:*`);
