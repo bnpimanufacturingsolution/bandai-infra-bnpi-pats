@@ -209,6 +209,91 @@ describe("device health ZKTeco Linux bridge", () => {
 		expect(queries.join("\n")).to.not.include('de."eventTime" >=');
 	});
 
+	it("includes device runtime config in saved device events so admin drift checks can honor loopback runtime addresses", async () => {
+		const queries: string[] = [];
+		let body: any = null;
+		const prisma = {
+			$queryRaw: async (query: any) => {
+				const sql = Array.isArray(query?.strings) ? query.strings.join("") : String(query);
+				queries.push(sql);
+				if (sql.includes("END AS device")) {
+					return [
+						{
+							id: "event-1",
+							organizationId: "org-1",
+							deviceId: "device-1",
+							deviceUserId: null,
+							employeeId: null,
+							attendanceId: null,
+							eventTime: new Date("2026-07-12T14:08:00.000Z"),
+							receivedAt: new Date("2026-07-12T14:08:01.000Z"),
+							employeeNo: null,
+							source: "EN_HCNETSDK_ALARM",
+							status: "IGNORED",
+							eventCategory: "USER_MANAGEMENT",
+							eventAction: "SYNC_SIGNAL",
+							eventLabel: "Device user or biometric operation",
+							eventConfidence: "INFERRED",
+							eventType: null,
+							major: null,
+							minor: null,
+							doorNo: null,
+							verifyMode: null,
+							dedupeKey: "event-1",
+							payload: { deviceIP: "127.0.0.1" },
+							errorMessage: null,
+							createdAt: new Date("2026-07-12T14:08:01.000Z"),
+							updatedAt: new Date("2026-07-12T14:08:01.000Z"),
+							device: {
+								id: "device-1",
+								name: "Main Entrance Device A",
+								address: "192.168.254.189",
+								port: 443,
+								protocol: "https",
+								config: {
+									hikvisionRuntimeAddress: "127.0.0.1",
+									hikvisionSdkRuntimeAddress: "127.0.0.1",
+								},
+							},
+							deviceUser: null,
+							employee: null,
+						},
+					];
+				}
+				if (sql.includes("COUNT(*)::bigint AS total")) return [{ total: 1 }];
+				return [];
+			},
+			device: { findFirst: async () => null },
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			organizationId: "org-1",
+			query: {
+				source: "EN_HCNETSDK_ALARM",
+				deviceId: "device-1",
+			},
+		};
+		let statusCode = 0;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json(payload: any) {
+				body = payload;
+				return this;
+			},
+		};
+
+		await deviceController.getEvents(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(200);
+		expect(queries.join("\n")).to.include("'config', d.config");
+		expect(body.data.events[0].device.config.hikvisionRuntimeAddress).to.equal("127.0.0.1");
+		expect(body.data.events[0].device.config.hikvisionSdkRuntimeAddress).to.equal("127.0.0.1");
+	});
+
 	it("defaults saved device event sorting to punch eventTime", async () => {
 		const queries: string[] = [];
 		const prisma = {

@@ -4143,7 +4143,7 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const job: DeviceImportJob = {
 				jobId,
-				runId: run?.id || null,
+				runId: run?.id || undefined,
 				status: "processing",
 				organizationId: String(organizationId),
 				deviceId: device.id,
@@ -4163,7 +4163,7 @@ export const controller = (prisma: PrismaClient) => {
 			deviceImportJobs.set(jobId, job);
 			processHikvisionImportJob({
 				jobId,
-				runId: run?.id || null,
+				runId: run?.id || undefined,
 				req,
 				device,
 				totalHint,
@@ -5523,7 +5523,8 @@ export const controller = (prisma: PrismaClient) => {
 							'name', d.name,
 							'address', d.address,
 							'port', d.port,
-							'protocol', d.protocol::text
+							'protocol', d.protocol::text,
+							'config', d.config
 						)
 					END AS device,
 					CASE
