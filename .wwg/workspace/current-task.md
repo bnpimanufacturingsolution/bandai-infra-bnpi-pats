@@ -2,6 +2,58 @@
 
 Status: COMPLETE
 
+## Latest Task Addendum - 2026-07-10 Hikvision Synthetic Fingerprint Tally And Live Device Reachability Blocker
+
+- Task mode: Local API/UI truth repair plus runtime blocker isolation.
+- User goal:
+  - Prove whether fingerprint tally can be tested honestly when a temp
+    Hikvision user has no real template bytes, and keep the Device Users modal
+    truthful instead of pretending a synthetic count is a physical device
+    fingerprint.
+- Confirmed SDK truth:
+  - Local HCNetSDK headers and Hikvision demo code confirm
+    `NET_DVR_FINGER_PRINT_CFG_V50` requires real `dwFingerPrintLen` plus
+    `byFingerData` blob content.
+  - A temp or copied user with `numOfFP=0` cannot honestly become
+    `fingerprintCount=1` at the physical-device truth layer unless a real
+    template is read from a source device and written back through the SDK.
+- Implemented change:
+  - `hris-api/app/device/device.controller.ts` now exposes
+    `POST /api/device/hikvision/mock-fingerprint` for a clearly labeled
+    dev-only synthetic fingerprint tally on an existing HRIS `DeviceUser` row.
+  - The same controller now carries that synthetic tally to the peer HRIS row
+    during `POST /api/device/hikvision/copy-user` only when the source user has
+    no real fingerprint templates to send, so the FE journey can be tested
+    without claiming physical device truth.
+  - `hris-app/app/routes/admin/devices/enroll.tsx`,
+    `hris-app/app/lib/hooks/useDevices.ts`, and
+    `hris-app/app/services/devices.service.ts` now expose the synthetic tally
+    state separately from the real fingerprint truth in the Device Users modal.
+- Proven local UI/API truth:
+  - The exact screenshot row `vendorUserId=9023` on `Main Entrance Device A`
+    was confirmed before the patch as:
+    - `rawPayload.numOfFP=0`
+    - `_hrisDeviceMetadata.credentialSummary.fingerprintCount=0`
+  - After restarting the local API, `POST /api/device/hikvision/mock-fingerprint`
+    with `fingerprintCount=1` wrote only
+    `_hrisDeviceMetadata.syntheticCredentialSummary.fingerprintCount=1` while
+    leaving the physical-device truth at `numOfFP=0`.
+  - Clearing the same synthetic tally removed
+    `_hrisDeviceMetadata.syntheticCredentialSummary` and returned the row to
+    pure zero-truth state.
+- Live blocker isolated with proof:
+  - As of `2026-07-10T09:50Z`, both Hikvision devices were unreachable from
+    the VM on both TCP `80` and `8000`.
+  - The running VM listener journal simultaneously showed repeated
+    `source_user_inventory_read ok=false lastError=7` for both device IDs.
+  - Because of that reachability loss, I could not honestly complete a fresh
+    real temp-user physical copy/delete pass in this slice even though the
+    earlier under-5-second peer-copy proof remains recorded.
+- Evidence:
+  - `.runtime/hikvision-synth-proof-20260710-165311/mock-fingerprint-9023-proof.json`
+  - `.runtime/hikvision-synth-proof-20260710-165311/vm-device-port-check.txt`
+  - `.runtime/hikvision-synth-proof-20260710-165311/listener-device-failures.log`
+
 ## Latest Task Addendum - 2026-07-10 Hikvision FE To SDK Peer Copy Journey Under 5 Seconds
 
 - Task mode: Local frontend/backend/runtime repair with real-device proof.

@@ -2,66 +2,19 @@ const fs = require("fs");
 const net = require("net");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { loadEnvFile, parseDatasourceUrl } = require("./dev-db-runtime.cjs");
 
 const rootDir = path.resolve(__dirname, "..");
 const envPath = path.join(rootDir, ".env");
+const runtimeEnvPath = path.join(rootDir, ".env.development.local");
 const postgresComposeFile = path.join(rootDir, "docker-compose.postgres-rw.yml");
 const postgresSchemaDir = path.join("prisma", "schema-postgres");
 const postgresContainerName = "hris-pg-primary";
 const defaultTimeoutMs = Number(process.env.HRIS_LOCAL_SERVICE_TIMEOUT_MS || 120000);
 
-function loadEnvFile(filePath) {
-	if (!fs.existsSync(filePath)) return;
-
-	const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
-	for (const line of lines) {
-		const trimmed = line.trim();
-		if (!trimmed || trimmed.startsWith("#")) continue;
-
-		const equalsIndex = trimmed.indexOf("=");
-		if (equalsIndex === -1) continue;
-
-		const key = trimmed.slice(0, equalsIndex).trim();
-		let value = trimmed.slice(equalsIndex + 1).trim();
-		if (!key || Object.prototype.hasOwnProperty.call(process.env, key)) continue;
-
-		if (
-			(value.startsWith('"') && value.endsWith('"')) ||
-			(value.startsWith("'") && value.endsWith("'"))
-		) {
-			value = value.slice(1, -1);
-		}
-
-		process.env[key] = value;
-	}
-}
-
 function isLocalHost(hostname) {
 	const normalized = String(hostname || "").toLowerCase();
 	return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
-}
-
-function parseDatasourceUrl() {
-	const raw =
-		process.env.WRITE_DATABASE_URL ||
-		process.env.PG_DATABASE_URL ||
-		process.env.DATABASE_URL ||
-		"";
-	if (!raw.trim()) return null;
-
-	try {
-		const parsed = new URL(raw);
-		const databaseName = decodeURIComponent(parsed.pathname.replace(/^\//, "")) || "";
-		return {
-			raw,
-			protocol: parsed.protocol,
-			hostname: parsed.hostname,
-			port: Number(parsed.port || (parsed.protocol.startsWith("postgres") ? 5432 : 0)),
-			databaseName: databaseName || "<unknown>",
-		};
-	} catch {
-		return null;
-	}
 }
 
 function redactDatasourceUrl(raw) {
@@ -364,7 +317,13 @@ async function main() {
 	}
 
 	loadEnvFile(envPath);
-	const datasource = parseDatasourceUrl();
+	loadEnvFile(runtimeEnvPath, { overwrite: true });
+	const datasource = parseDatasourceUrl(
+		process.env.WRITE_DATABASE_URL ||
+			process.env.PG_DATABASE_URL ||
+			process.env.DATABASE_URL ||
+			"",
+	);
 
 	if (!datasource) {
 		console.warn(
@@ -380,6 +339,9 @@ async function main() {
 		console.log("[local-services] Hikvision watcher is Linux/VM managed and is not started on this host.");
 		return;
 	}
+
+	datasource.databaseName =
+		decodeURIComponent(String(datasource.pathname || "").replace(/^\//, "")) || "<unknown>";
 
 	if (!isLocalHost(datasource.hostname)) {
 		console.log(

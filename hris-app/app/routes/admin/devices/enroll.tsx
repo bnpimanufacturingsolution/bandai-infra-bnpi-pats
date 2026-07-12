@@ -42,7 +42,6 @@ import {
 	useCancelDeviceUserSyncJob,
 	useSyncDeviceUsers,
 	useUnlinkDeviceUser,
-	useCopyHikvisionDeviceUserToPeer,
 	useMockHikvisionFingerprintTally,
 } from "~/lib/hooks/useDevices";
 import { useHikvisionDeviceUsers } from "~/lib/hooks/use-hikvision";
@@ -128,7 +127,22 @@ type CopyDeviceUserState = {
 	open: boolean;
 	sourceDeviceUser: VisibleDeviceUserRow | null;
 	targetDeviceId: string;
+	applyToAllPeers: boolean;
 	includeFingerprints: boolean;
+};
+
+type DeviceUserPeerTallyRow = {
+	deviceId: string;
+	deviceName: string;
+	address: string;
+	isCurrentDevice: boolean;
+	found: boolean;
+	status: string;
+	fingerprintCount: number;
+	cardCount: number;
+	faceCount: number;
+	employeeLabel: string;
+	lastSyncedAt?: string | null;
 };
 
 const DEVICE_USER_SYNC_JOB_STORAGE_KEY = "hris.device-user-sync-job";
@@ -231,7 +245,6 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	} = useHikvisionListenerStatus(activePanel === "overview" || activePanel === "users" || activePanel === "runs");
 	const hikvisionListenerControl = useControlHikvisionListener();
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
-	const copyHikvisionDeviceUserMutation = useCopyHikvisionDeviceUserToPeer();
 	const mockHikvisionFingerprintMutation = useMockHikvisionFingerprintTally();
 	const startDeviceUserSyncJobMutation = useStartDeviceUserSyncJob();
 	const cancelDeviceUserSyncJobMutation = useCancelDeviceUserSyncJob();
@@ -276,14 +289,20 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const [detailsPhotoUrl, setDetailsPhotoUrl] = useState<string | null>(null);
 	const [detailsPhotoState, setDetailsPhotoState] = useState<"idle" | "loading" | "ready" | "error">("idle");
 	const [detailsPhotoError, setDetailsPhotoError] = useState("");
+	const [detailsPeerTallyRows, setDetailsPeerTallyRows] = useState<DeviceUserPeerTallyRow[]>([]);
+	const [detailsPeerTallyState, setDetailsPeerTallyState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+	const [detailsPeerTallyError, setDetailsPeerTallyError] = useState("");
+	const [isListenerDetailsOpen, setIsListenerDetailsOpen] = useState(false);
 	const [linkTarget, setLinkTarget] = useState<VisibleDeviceUserRow | null>(null);
 	const [unlinkTarget, setUnlinkTarget] = useState<VisibleDeviceUserRow | null>(null);
 	const [copyDeviceUserState, setCopyDeviceUserState] = useState<CopyDeviceUserState>({
 		open: false,
 		sourceDeviceUser: null,
 		targetDeviceId: "",
+		applyToAllPeers: false,
 		includeFingerprints: true,
 	});
+	const [isCopyDeviceUserSubmitting, setIsCopyDeviceUserSubmitting] = useState(false);
 	const [selectedEmployeeForLink, setSelectedEmployeeForLink] = useState("");
 
 	const {
@@ -725,7 +744,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		setBulkDeviceUserSyncState({
 			open: true,
 			status: "review",
-			message: "Choose how wide the manual refresh should go, then run it against live device-user truth.",
+			message: "Choose what to refresh, then run it.",
 		});
 	};
 	const getBulkDeviceUserSyncStartFailureMessage = (error: unknown) => {
@@ -762,7 +781,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			setBulkDeviceUserSyncState({
 				open: true,
 				status: "error",
-				message: "Every configured device already looks in sync. Switch to Full source refresh if you still want to reread every device user and biometric summary.",
+				message: "Everything already looks aligned. Switch to All devices if you still want a full reread.",
 			});
 			return;
 		}
@@ -771,8 +790,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			status: "starting",
 			message:
 				bulkDeviceUserSyncMode === "needs_attention_only"
-					? "Starting the needs-attention refresh and waiting for the first progress heartbeat."
-					: "Starting the full source refresh and waiting for the first progress heartbeat.",
+					? "Starting the mismatch refresh."
+					: "Starting the full reread.",
 		});
 		try {
 			const data = await startDeviceUserSyncJobMutation.mutateAsync(request);
@@ -941,7 +960,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	};
 
 	const copyTargetDeviceOptions = useMemo(
-		() =>
+		(): Array<{ value: string; label: string }> =>
 			devices
 				.filter(
 					(device: any) =>
@@ -954,12 +973,21 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				})),
 		[devices, selectedDeviceId],
 	);
+	const hikvisionDeviceOptions = useMemo(
+		() =>
+			devices.filter(
+				(device: any) =>
+					String(device?.config?.vendor || "").trim().toLowerCase() === "hikvision",
+			),
+		[devices],
+	);
 
 	const openCopyDeviceUser = (deviceUser: VisibleDeviceUserRow) => {
 		setCopyDeviceUserState({
 			open: true,
 			sourceDeviceUser: deviceUser,
 			targetDeviceId: copyTargetDeviceOptions[0]?.value || "",
+			applyToAllPeers: false,
 			includeFingerprints: true,
 		});
 	};
@@ -970,27 +998,69 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			toast.error("Select a source device user before copying");
 			return;
 		}
-		if (!copyDeviceUserState.targetDeviceId) {
+		if (!copyDeviceUserState.applyToAllPeers && !copyDeviceUserState.targetDeviceId) {
 			toast.error("Select a target device");
 			return;
 		}
 
 		try {
-			const result = await copyHikvisionDeviceUserMutation.mutateAsync({
-				sourceDeviceId: selectedDeviceId,
-				targetDeviceId: copyDeviceUserState.targetDeviceId,
-				employeeNo: sourceDeviceUser.vendorUserId,
-				includeFingerprints: copyDeviceUserState.includeFingerprints,
-			});
-			if (result?.syntheticFingerprintOverlayApplied?.fingerprintCount > 0) {
+			const targetDeviceIds = copyDeviceUserState.applyToAllPeers
+				? copyTargetDeviceOptions.map((option) => option.value)
+				: [copyDeviceUserState.targetDeviceId];
+			if (targetDeviceIds.length === 0) {
+				toast.error("No Hikvision peer devices are available");
+				return;
+			}
+			setIsCopyDeviceUserSubmitting(true);
+			let successfulCopies = 0;
+			let syntheticPeerCopies = 0;
+			const failedTargets: string[] = [];
+			for (const targetDeviceId of targetDeviceIds) {
+				try {
+					const result = await deviceService.copyHikvisionDeviceUserToPeer({
+						sourceDeviceId: selectedDeviceId,
+						targetDeviceId,
+						employeeNo: sourceDeviceUser.vendorUserId,
+						includeFingerprints: copyDeviceUserState.includeFingerprints,
+					});
+					successfulCopies += 1;
+					if (result?.syntheticFingerprintOverlayApplied?.fingerprintCount > 0) {
+						syntheticPeerCopies += 1;
+					}
+				} catch (error: any) {
+					const targetLabel =
+						copyTargetDeviceOptions.find((option) => option.value === targetDeviceId)?.label ||
+						targetDeviceId;
+					failedTargets.push(error?.message ? `${targetLabel}: ${error.message}` : targetLabel);
+				}
+			}
+			if (successfulCopies === 0) {
+				throw new Error(failedTargets[0] || "Failed to copy device user");
+			}
+			if (failedTargets.length > 0) {
+				toast.warning(
+					`Copied to ${successfulCopies} of ${targetDeviceIds.length} peer devices.`,
+					{
+						description: failedTargets[0],
+					},
+				);
+			} else {
 				toast.success(
-					"Peer copy used a dev-only synthetic fingerprint tally because the source user has no real template bytes.",
+					targetDeviceIds.length > 1
+						? `Copied to ${targetDeviceIds.length} peer devices`
+						: "Copied to peer device",
+				);
+			}
+			if (syntheticPeerCopies > 0) {
+				toast.success(
+					"Some peer copies used a dev-only synthetic fingerprint tally because no real source templates were available.",
 				);
 			}
 			setCopyDeviceUserState({
 				open: false,
 				sourceDeviceUser: null,
 				targetDeviceId: "",
+				applyToAllPeers: false,
 				includeFingerprints: true,
 			});
 			await Promise.allSettled([
@@ -1004,6 +1074,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			]);
 		} catch (error: any) {
 			toast.error(error?.message || "Failed to copy device user");
+		} finally {
+			setIsCopyDeviceUserSubmitting(false);
 		}
 	};
 
@@ -1243,7 +1315,6 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const hikvisionListenerRunning = Boolean(hikvisionListenerStatus?.running);
 	const hikvisionSdkState = String(hikvisionListenerStatus?.sdk?.state || "unknown").trim();
 	const hikvisionSdkReceiving = Boolean(hikvisionListenerStatus?.sdk?.receivingCallbacks);
-	const hikvisionSdkPosting = Boolean(hikvisionListenerStatus?.sdk?.postingToHris);
 	const hikvisionSdkArmed = Boolean(hikvisionListenerStatus?.sdk?.armed);
 	const hikvisionListenerToneClass =
 		hikvisionSdkReceiving || hikvisionSdkArmed
@@ -1252,32 +1323,20 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				? "border-red-200 bg-red-50 text-red-950"
 				: "border-amber-200 bg-amber-50 text-amber-950";
 	const hikvisionListenerTitle = isLoadingHikvisionListenerStatus
-		? "Checking Hikvision listener"
+		? "Checking"
 		: hikvisionSdkReceiving
-			? "SDK listener receiving callbacks"
+			? "Live"
 			: hikvisionSdkState === "posting_failed"
-				? "SDK listener cannot post back to HRIS"
+				? "Can't reach HRIS"
 				: hikvisionSdkState === "login_failed"
-					? "SDK listener login failed"
+					? "Sign-in failed"
 					: hikvisionSdkArmed
-						? "SDK listener armed"
+						? "Ready"
 						: hikvisionListenerRunning
-							? "VM listener running without fresh callback proof"
-							: "VM listener stopped";
-	const hikvisionListenerSummary = hikvisionListenerStatusError
-		? "Listener status is unavailable right now."
-		: hikvisionSdkReceiving
-			? "Callbacks are reaching the VM and the listener is actively receiving device events."
-			: hikvisionSdkPosting
-				? "The listener is posting to HRIS, but a fresh callback has not been observed in this window."
-				: hikvisionListenerRunning
-					? "The VM service is up, but there is no fresh callback proof yet."
-					: "Start or restart the VM listener before testing device-to-device biometric sync.";
+							? "No signal yet"
+							: "Stopped";
 	const formatSyncCenterTime = (value?: string | null) => (value ? formatDateTime(value) : "-");
 	const hikvisionRecentLogs = hikvisionListenerStatus?.logs?.recent || [];
-	const hikvisionLatestLog = hikvisionRecentLogs.length
-		? hikvisionRecentLogs[hikvisionRecentLogs.length - 1]
-		: "";
 	const runSyncCenterListenerAction = (action: "start" | "restart") => {
 		hikvisionListenerControl.mutate(action, {
 			onSuccess: () => {
@@ -1472,7 +1531,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 						? deviceUserSyncJobCancelRequested
 							? "Cancelling device-user refresh"
 							: deviceUserSyncJobMode === "needs_attention_only"
-								? "Refreshing devices that need attention"
+								? "Refreshing mismatches"
 								: "Refreshing all device users"
 						: "Device-user sync status";
 	const bulkDeviceUserSyncSummaryItems = [
@@ -1486,8 +1545,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		deviceUserSyncJobProgress
 			? `${
 					deviceUserSyncJobMode === "needs_attention_only"
-						? "Needs-attention scope"
-						: "Full source refresh"
+						? "Mismatch refresh"
+						: "All devices"
 				}: ${metricValue(deviceUserSyncJobProgress.successfulDevices)} devices synced, ${metricValue(deviceUserSyncJobProgress.failedDevices)} need attention.`
 			: "";
 	const bulkDeviceUserSyncToneClass =
@@ -1501,14 +1560,14 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			? "Sync could not start"
 			: bulkDeviceUserSyncState.status === "starting"
 				? "Starting device-user sync"
-				: bulkDeviceUserSyncState.message || "Run a manual device-user refresh across configured devices.";
+				: bulkDeviceUserSyncState.message || "Reread live device users across your configured devices.";
 	const bulkDeviceUserSyncModeDescription =
 		bulkDeviceUserSyncMode === "needs_attention_only"
-			? "Refresh only devices with a count mismatch, unresolved links, conflicts, or an existing attention flag."
-			: "Default and recommended. Reread every source user for each configured device and refresh saved biometric summaries even when the visible gap is zero.";
+			? "Refresh only devices with count gaps, open links, conflicts, or errors."
+			: "Reread every configured device user and refresh saved biometric counts.";
 	const bulkDeviceUserSyncScopeItems = [
-		["Full refresh scope", syncCenterDevices.length],
-		["Needs-attention scope", needsAttentionSyncCenterDevices.length],
+		["All devices", syncCenterDevices.length],
+		["Only mismatches", needsAttentionSyncCenterDevices.length],
 	] as const;
 	const devicesByVendor = syncCenterDevices.reduce<Record<string, SyncCenterDeviceItem[]>>(
 		(groups, item) => {
@@ -1633,6 +1692,87 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		};
 	}, [detailsDeviceUser]);
 
+	useEffect(() => {
+		let cancelled = false;
+
+		const vendorUserId = String(detailsDeviceUser?.vendorUserId || "").trim();
+		if (!vendorUserId) {
+			setDetailsPeerTallyRows([]);
+			setDetailsPeerTallyState("idle");
+			setDetailsPeerTallyError("");
+			return;
+		}
+		if (hikvisionDeviceOptions.length === 0) {
+			setDetailsPeerTallyRows([]);
+			setDetailsPeerTallyState("error");
+			setDetailsPeerTallyError("No Hikvision devices are configured.");
+			return;
+		}
+
+		setDetailsPeerTallyState("loading");
+		setDetailsPeerTallyError("");
+		const buildRow = (
+			device: any,
+			deviceUser?: VisibleDeviceUserRow | DeviceUser | null,
+			options: { isCurrentDevice?: boolean } = {},
+		): DeviceUserPeerTallyRow => {
+			const summary = getDeviceUserCredentialSummary(deviceUser || null);
+			return {
+				deviceId: String(device.id || ""),
+				deviceName: device.name || "Unnamed device",
+				address: `${device.address || "-"}:${device.port || "-"}`,
+				isCurrentDevice: Boolean(options.isCurrentDevice),
+				found: Boolean(deviceUser),
+				status: deviceUser?.status || "Missing",
+				fingerprintCount: summary.fingerprintCount,
+				cardCount: summary.cardCount,
+				faceCount: summary.faceCount,
+				employeeLabel: deviceUser?.employee?.employeeId || "Not linked",
+				lastSyncedAt: deviceUser?.lastSyncedAt || null,
+			};
+		};
+
+		void Promise.all(
+			hikvisionDeviceOptions.map(async (device: any) => {
+				const isCurrentDevice = String(device.id || "") === String(selectedDeviceId || "");
+				if (isCurrentDevice && detailsDeviceUser) {
+					return buildRow(device, detailsDeviceUser, { isCurrentDevice: true });
+				}
+				try {
+					const response = await deviceService.getDeviceUsers(String(device.id || ""), {
+						limit: 5,
+						vendorUserId,
+					});
+					const matchedDeviceUser =
+						response.deviceUsers.find(
+							(deviceUser) => String(deviceUser.vendorUserId || "").trim() === vendorUserId,
+						) || null;
+					return buildRow(device, matchedDeviceUser, { isCurrentDevice });
+				} catch {
+					return {
+						...buildRow(device, null, { isCurrentDevice }),
+						status: "Needs refresh",
+					};
+				}
+			}),
+		)
+			.then((rows) => {
+				if (cancelled) return;
+				setDetailsPeerTallyRows(rows);
+				setDetailsPeerTallyState("ready");
+			})
+			.catch((error: any) => {
+				if (cancelled) return;
+				setDetailsPeerTallyRows([]);
+				setDetailsPeerTallyState("error");
+				setDetailsPeerTallyError(error?.message || "Failed to compare this user across Hikvision devices.");
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [detailsDeviceUser, hikvisionDeviceOptions, selectedDeviceId]);
+
 	return (
 		<div className="space-y-6">
 			{!embedded && (
@@ -1666,121 +1806,52 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				</TabsList>
 
 				{syncCenterHasHikvisionDevices ? (
-					<section className={`rounded-xl border p-4 ${hikvisionListenerToneClass}`}>
-						<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-							<div className="flex min-w-0 gap-3">
-								<div
-									className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-										hikvisionSdkReceiving || hikvisionSdkArmed
-											? "bg-emerald-100 text-emerald-700"
-											: hikvisionListenerStatusError
-												? "bg-red-100 text-red-700"
-												: "bg-amber-100 text-amber-700"
-									}`}>
-									{isLoadingHikvisionListenerStatus ? (
-										<Loader2 className="h-4 w-4 animate-spin" />
-									) : hikvisionSdkReceiving ? (
-										<Wifi className="h-4 w-4" />
-									) : hikvisionListenerStatusError ? (
-										<AlertTriangle className="h-4 w-4" />
-									) : (
-										<WifiOff className="h-4 w-4" />
-									)}
-								</div>
-								<div className="min-w-0">
-									<div className="flex flex-wrap items-center gap-2">
-										<p className="text-sm font-semibold">{hikvisionListenerTitle}</p>
-										<Badge
-											variant={
-												hikvisionSdkReceiving || hikvisionSdkArmed
-													? "success"
-													: hikvisionListenerStatusError
-														? "destructive"
-														: "warning"
-											}>
-											{hikvisionSdkState.replace(/_/g, " ")}
-										</Badge>
-									</div>
-									<p className="mt-1 text-sm opacity-90">{hikvisionListenerSummary}</p>
-								</div>
-							</div>
-							<div className="flex flex-wrap gap-2">
-								<Button
-									type="button"
-									variant="outline"
-									className="h-9 px-3"
-									disabled={hikvisionListenerControl.isPending || isLoadingHikvisionListenerStatus}
-									onClick={() => void refetchHikvisionListenerStatus()}>
-									<RefreshCw className="h-4 w-4" />
-									Check listener
-								</Button>
-								<Button
-									type="button"
-									variant="outline"
-									className="h-9 px-3"
-									disabled={hikvisionListenerControl.isPending}
-									onClick={() =>
-										runSyncCenterListenerAction(hikvisionListenerRunning ? "restart" : "start")
-									}>
-									{hikvisionListenerControl.isPending ? (
-										<Loader2 className="h-4 w-4 animate-spin" />
-									) : hikvisionListenerRunning ? (
-										<RefreshCw className="h-4 w-4" />
-									) : (
-										<Power className="h-4 w-4" />
-									)}
-									{hikvisionListenerRunning ? "Restart listener" : "Start listener"}
-								</Button>
-							</div>
-						</div>
-
-						<div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-							{[
-								["VM service", hikvisionListenerRunning ? "Running" : "Stopped"],
-								["Last callback", formatSyncCenterTime(hikvisionListenerStatus?.sdk?.lastAlarmAt)],
-								["Last HRIS post", formatSyncCenterTime(hikvisionListenerStatus?.sdk?.lastPostAt)],
-								["Last login", formatSyncCenterTime(hikvisionListenerStatus?.sdk?.lastLoginAt)],
-								["Checked", formatSyncCenterTime(hikvisionListenerStatus?.checkedAt)],
-							].map(([label, value]) => (
-								<div key={label} className="rounded-lg border border-current/10 bg-white/70 px-3 py-2">
-									<p className="text-[11px] font-medium uppercase tracking-wide opacity-70">{label}</p>
-									<p className="mt-1 text-sm font-semibold text-slate-950">{value}</p>
-								</div>
-							))}
-						</div>
-
-						{hikvisionListenerStatus?.sdk?.lastError ? (
-							<p className="mt-3 rounded-lg border border-current/15 bg-white/70 px-3 py-2 text-sm text-slate-900">
-								{hikvisionListenerStatus.sdk.lastError}
-							</p>
-						) : null}
-
-						<div className="mt-4 rounded-lg border border-current/10 bg-slate-950 p-3 text-slate-100">
-							<div className="flex items-center justify-between gap-3">
-								<p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
-									Recent listener log
-								</p>
-								<Badge variant="secondary">
-									{hikvisionRecentLogs.length ? `${hikvisionRecentLogs.length} lines` : "No log tail"}
-								</Badge>
-							</div>
-							<div className="mt-3 max-h-48 overflow-y-auto rounded-md bg-black/20 p-3">
-								{hikvisionRecentLogs.length ? (
-									<pre className="whitespace-pre-wrap break-words text-xs leading-5 text-slate-100">
-										{hikvisionRecentLogs.join("\n")}
-									</pre>
+					<section className={`rounded-xl border p-2.5 ${hikvisionListenerToneClass}`}>
+						<button
+							type="button"
+							onClick={() => setIsListenerDetailsOpen(true)}
+							className="flex w-full min-w-0 items-center gap-3 rounded-lg bg-white/80 px-3 py-2 text-left transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300">
+							<div
+								className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+									hikvisionSdkReceiving || hikvisionSdkArmed
+										? "bg-emerald-100 text-emerald-700"
+										: hikvisionListenerStatusError
+											? "bg-red-100 text-red-700"
+											: "bg-amber-100 text-amber-700"
+								}`}>
+								{isLoadingHikvisionListenerStatus ? (
+									<Loader2 className="h-4 w-4 animate-spin" />
+								) : hikvisionSdkReceiving ? (
+									<Wifi className="h-4 w-4" />
+								) : hikvisionListenerStatusError ? (
+									<AlertTriangle className="h-4 w-4" />
 								) : (
-									<p className="text-xs text-slate-300">
-										{hikvisionListenerStatus?.logs?.error || "No listener log lines returned by the VM status check."}
-									</p>
+									<WifiOff className="h-4 w-4" />
 								)}
 							</div>
-							{hikvisionLatestLog ? (
-								<p className="mt-2 truncate text-xs text-slate-400">
-									Latest log line: {hikvisionLatestLog}
-								</p>
-							) : null}
-						</div>
+							<div className="min-w-0 flex-1">
+								<div className="flex min-w-0 flex-wrap items-center gap-2">
+									<p className="truncate text-sm font-semibold text-slate-950">Listener</p>
+									<Badge
+										variant={
+											hikvisionSdkReceiving || hikvisionSdkArmed
+												? "success"
+												: hikvisionListenerStatusError
+													? "destructive"
+													: "warning"
+										}
+										className="max-w-full rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.12em]">
+										{hikvisionListenerTitle}
+									</Badge>
+								</div>
+								<div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+									<span className="truncate">{hikvisionListenerRunning ? "VM running" : "VM stopped"}</span>
+									<span className="opacity-40">•</span>
+									<span className="truncate">Checked {formatSyncCenterTime(hikvisionListenerStatus?.checkedAt)}</span>
+								</div>
+							</div>
+							<span className="shrink-0 text-xs font-medium text-slate-500">Open</span>
+						</button>
 					</section>
 				) : null}
 
@@ -1813,16 +1884,25 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									<AccordionItem
 										key={vendor}
 										value={vendor}
-										className="rounded-md border border-slate-200 bg-white px-3">
+										className="rounded-xl border border-slate-200 bg-white px-3">
 										<AccordionTrigger className="py-2 hover:no-underline">
 											<div className="flex w-full items-center justify-between gap-3 pr-3 text-left">
 												<div className="min-w-0">
 													<p className="text-sm font-semibold text-slate-950">{vendor}</p>
-													<p className="mt-0.5 text-xs text-slate-500">
-														Source users: {metricValue(groupUserTotal)}. Saved in HRIS: {metricValue(groupHrisUserTotal)}.
-													</p>
+													<div className="mt-1 flex flex-wrap gap-2">
+														<Badge
+															variant="outline"
+															className="rounded-full border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+															{metricValue(groupUserTotal)} source
+														</Badge>
+														<Badge
+															variant="outline"
+															className="rounded-full border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+															{metricValue(groupHrisUserTotal)} saved
+														</Badge>
+													</div>
 												</div>
-												<Badge variant={attentionCount ? "warning" : "success"}>
+												<Badge variant={attentionCount ? "warning" : "success"} className="rounded-full px-2.5 py-1">
 													{attentionCount ? `${attentionCount}/${group.length} review` : `${group.length}/${group.length} synced`}
 												</Badge>
 											</div>
@@ -2609,7 +2689,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 							</p>
 						) : (
 							<p className="mt-2 text-xs text-orange-900/80">
-								Use this when a device user, face count, card count, fingerprint count, or employee link may have changed and you want HRIS to reread the source truth.
+								Use this when user counts, fingerprints, faces, cards, or links may be stale.
 							</p>
 						)}
 						<div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -2624,9 +2704,9 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 							<div className="mt-4 rounded-xl border border-white/80 bg-white/70 p-3">
 								<div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
 									<div className="space-y-1">
-										<p className="text-sm font-semibold text-slate-950">Refresh scope</p>
+										<p className="text-sm font-semibold text-slate-950">What to refresh</p>
 										<p className="text-xs text-slate-600">
-											Full refresh is the default because a zero visible gap can still hide stale biometric summaries or unresolved device-user truth.
+											Start small with mismatches, or reread everything when you want a full recount.
 										</p>
 									</div>
 									<div className="grid gap-2 sm:grid-cols-2 lg:min-w-[420px]">
@@ -2639,11 +2719,11 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 													: "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
 											}`}>
 											<div className="flex items-center justify-between gap-3">
-												<span className="text-sm font-semibold">Full source refresh</span>
+												<span className="text-sm font-semibold">All devices</span>
 												<Badge variant="success">Default</Badge>
 											</div>
 											<p className="mt-1 text-xs text-current/80">
-												Reread every saved source user on every configured device and refresh HRIS metadata for cards, faces, and fingerprint counts.
+												Reread every configured device user and refresh HRIS biometric counts.
 											</p>
 										</button>
 										<button
@@ -2655,11 +2735,11 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 													: "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
 											}`}>
 											<div className="flex items-center justify-between gap-3">
-												<span className="text-sm font-semibold">Needs attention only</span>
+												<span className="text-sm font-semibold">Only mismatches</span>
 												<Badge variant="secondary">{metricValue(needsAttentionSyncCenterDevices.length)} devices</Badge>
 											</div>
 											<p className="mt-1 text-xs text-current/80">
-												Only refresh devices whose current summary shows a mismatch, open links, conflicts, or an attention flag.
+												Only refresh devices with count gaps, missing links, conflicts, or errors.
 											</p>
 										</button>
 									</div>
@@ -2825,8 +2905,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								{startDeviceUserSyncJobMutation.isPending
 									? "Starting..."
 									: bulkDeviceUserSyncMode === "needs_attention_only"
-										? "Refresh needs-attention devices"
-										: "Refresh all device users"}
+										? "Refresh mismatches"
+										: "Refresh all devices"}
 							</Button>
 						) : null}
 						{!activeDeviceUserSyncJob && bulkDeviceUserSyncState.status === "error" ? (
@@ -2848,6 +2928,140 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			</Modal>
 
 			<Modal
+				open={isListenerDetailsOpen}
+				onOpenChange={setIsListenerDetailsOpen}
+				title="Hikvision listener"
+				description="Quick health and recent listener activity."
+				className="max-w-4xl">
+				<div className="space-y-4">
+					<div className={`rounded-2xl border p-4 md:p-5 ${hikvisionListenerToneClass}`}>
+						<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+							<div className="flex min-w-0 gap-3">
+								<div
+									className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+										hikvisionSdkReceiving || hikvisionSdkArmed
+											? "bg-emerald-100 text-emerald-700"
+											: hikvisionListenerStatusError
+												? "bg-red-100 text-red-700"
+												: "bg-amber-100 text-amber-700"
+									}`}>
+									{isLoadingHikvisionListenerStatus ? (
+										<Loader2 className="h-4 w-4 animate-spin" />
+									) : hikvisionSdkReceiving ? (
+										<Wifi className="h-4 w-4" />
+									) : hikvisionListenerStatusError ? (
+										<AlertTriangle className="h-4 w-4" />
+									) : (
+										<WifiOff className="h-4 w-4" />
+									)}
+								</div>
+								<div className="min-w-0 space-y-2">
+									<div className="flex flex-wrap items-center gap-2">
+										<p className="text-sm font-semibold text-slate-950">Listener</p>
+										<Badge
+											variant={
+												hikvisionSdkReceiving || hikvisionSdkArmed
+													? "success"
+													: hikvisionListenerStatusError
+														? "destructive"
+														: "warning"
+											}
+											className="max-w-full rounded-full px-2.5 py-1 uppercase tracking-[0.12em]">
+											{hikvisionListenerTitle}
+										</Badge>
+									</div>
+									<p className="text-sm text-slate-700">
+										{hikvisionSdkReceiving
+											? "Events are coming in."
+											: hikvisionListenerRunning
+												? "The service is up, but we have not seen a fresh device event yet."
+												: "The VM listener is not running."}
+									</p>
+								</div>
+							</div>
+							<div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+								<Button
+									type="button"
+									variant="outline"
+									className="h-10 min-w-[140px] justify-center border-current/15 bg-white/90 px-4"
+									disabled={hikvisionListenerControl.isPending || isLoadingHikvisionListenerStatus}
+									onClick={() => void refetchHikvisionListenerStatus()}>
+									<RefreshCw className="h-4 w-4" />
+									Refresh
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									className="h-10 min-w-[140px] justify-center border-current/15 bg-white px-4"
+									disabled={hikvisionListenerControl.isPending}
+									onClick={() =>
+										runSyncCenterListenerAction(hikvisionListenerRunning ? "restart" : "start")
+									}>
+									{hikvisionListenerControl.isPending ? (
+										<Loader2 className="h-4 w-4 animate-spin" />
+									) : hikvisionListenerRunning ? (
+										<RefreshCw className="h-4 w-4" />
+									) : (
+										<Power className="h-4 w-4" />
+									)}
+									{hikvisionListenerRunning ? "Restart" : "Start"}
+								</Button>
+							</div>
+						</div>
+
+						<div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+							{[
+								["VM", hikvisionListenerRunning ? "Running" : "Stopped"],
+								["Last event", formatSyncCenterTime(hikvisionListenerStatus?.sdk?.lastAlarmAt)],
+								["Last post", formatSyncCenterTime(hikvisionListenerStatus?.sdk?.lastPostAt)],
+								["Last sign-in", formatSyncCenterTime(hikvisionListenerStatus?.sdk?.lastLoginAt)],
+								["Checked", formatSyncCenterTime(hikvisionListenerStatus?.checkedAt)],
+							].map(([label, value]) => (
+								<div
+									key={label}
+									className="min-w-0 rounded-xl border border-current/10 bg-white/80 px-3 py-2.5">
+									<p className="text-[10px] font-semibold uppercase tracking-[0.16em] opacity-60">
+										{label}
+									</p>
+									<p className="mt-1 break-words text-sm font-semibold leading-5 text-slate-950">
+										{value}
+									</p>
+								</div>
+							))}
+						</div>
+
+						{hikvisionListenerStatus?.sdk?.lastError ? (
+							<p className="mt-3 rounded-xl border border-current/15 bg-white/80 px-3 py-2 text-sm break-words text-slate-900">
+								{hikvisionListenerStatus.sdk.lastError}
+							</p>
+						) : null}
+					</div>
+
+					<details className="rounded-xl border border-slate-200 bg-white">
+						<summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900">
+							<span>Recent log</span>
+							<Badge variant="outline" className="rounded-full border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700">
+								{hikvisionRecentLogs.length ? `${hikvisionRecentLogs.length} lines` : "No log tail"}
+							</Badge>
+						</summary>
+						<div className="border-t border-slate-200 bg-slate-950 p-3 text-slate-100">
+							<div className="max-h-64 overflow-auto rounded-md bg-black/20 p-3">
+								{hikvisionRecentLogs.length ? (
+									<pre className="whitespace-pre-wrap break-all text-xs leading-5 text-slate-100">
+										{hikvisionRecentLogs.join("\n")}
+									</pre>
+								) : (
+									<p className="text-xs text-slate-300">
+										{hikvisionListenerStatus?.logs?.error || "No listener log lines returned by the VM status check."}
+									</p>
+								)}
+							</div>
+						</div>
+					</details>
+				</div>
+			</Modal>
+
+			<Modal
 				open={Boolean(detailsDeviceUser)}
 				onOpenChange={(open) => {
 					if (!open) setDetailsDeviceUser(null);
@@ -2863,7 +3077,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 										{detailsPhotoState === "ready" && detailsPhotoUrl ? (
 											<img
 												src={detailsPhotoUrl}
-												alt={`${getDeviceUserDisplayName(detailsDeviceUser)} face photo`}
+												alt={`${getDeviceUserDisplayName(detailsDeviceUser)} face`}
 												className="h-full w-full object-cover"
 											/>
 										) : (
@@ -2960,9 +3174,9 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									</p>
 								</div>
 							<div className="grid gap-x-4 gap-y-2 text-sm md:grid-cols-2">
-							{[
-								["Vendor user ID", detailsDeviceUser.vendorUserId],
-								["Device", detailsDeviceUser.hrisDeviceUser?.device?.name || selectedDevice?.name || "-"],
+								{[
+									["Vendor user ID", detailsDeviceUser.vendorUserId],
+									["Device", detailsDeviceUser.hrisDeviceUser?.device?.name || selectedDevice?.name || "-"],
 								["Source", getDeviceUserSourceLabel(detailsDeviceUser)],
 								["Status", detailsDeviceUser.status],
 								["Employee link", detailsDeviceUser.employee?.employeeId || "Not linked"],
@@ -2973,6 +3187,61 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									<span className="min-w-0 truncate font-semibold text-slate-950">{value}</span>
 								</div>
 							))}
+								</div>
+								<div className="rounded-2xl border border-slate-200 bg-white p-4">
+									<div className="flex items-center justify-between gap-3">
+										<div>
+											<p className="text-sm font-semibold text-slate-950">Across Hikvision devices</p>
+											<p className="mt-1 text-xs text-slate-500">
+												Best saved tally for this user across configured Hikvision devices.
+											</p>
+										</div>
+										<Badge variant="secondary">{detailsPeerTallyRows.length || hikvisionDeviceOptions.length} devices</Badge>
+									</div>
+									{detailsPeerTallyState === "loading" ? (
+										<div className="mt-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600">
+											<Loader2 className="h-4 w-4 animate-spin" />
+											Comparing device-user tallies...
+										</div>
+									) : detailsPeerTallyState === "error" ? (
+										<div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+											{detailsPeerTallyError || "Comparison is not available right now."}
+										</div>
+									) : (
+										<div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
+											<div className="grid grid-cols-[minmax(150px,1.4fr)_92px_72px_72px_72px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+												<span>Device</span>
+												<span>Status</span>
+												<span>FP</span>
+												<span>Card</span>
+												<span>Face</span>
+											</div>
+											{detailsPeerTallyRows.map((row) => (
+												<div
+													key={row.deviceId}
+													className={`grid grid-cols-[minmax(150px,1.4fr)_92px_72px_72px_72px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 ${
+														row.isCurrentDevice ? "bg-orange-50/50" : "bg-white"
+													}`}>
+													<div className="min-w-0">
+														<p className="truncate font-medium text-slate-950">
+															{row.deviceName}
+															{row.isCurrentDevice ? " (selected)" : ""}
+														</p>
+														<p className="truncate text-xs text-slate-500">{row.address}</p>
+													</div>
+													<div className="text-xs text-slate-700">
+														<p className="font-semibold text-slate-950">
+															{row.found ? row.status : "Missing"}
+														</p>
+														<p className="truncate text-slate-500">{row.employeeLabel}</p>
+													</div>
+													<div className="font-semibold text-slate-950">{row.fingerprintCount}</div>
+													<div className="font-semibold text-slate-950">{row.cardCount}</div>
+													<div className="font-semibold text-slate-950">{row.faceCount}</div>
+												</div>
+											))}
+										</div>
+									)}
 								</div>
 								{getDeviceUserFaceUrl(detailsDeviceUser) ? (
 									<div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
@@ -3070,20 +3339,21 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			<Modal
 				open={copyDeviceUserState.open}
 				onOpenChange={(open) => {
-					if (!open && !copyHikvisionDeviceUserMutation.isPending) {
+					if (!open && !isCopyDeviceUserSubmitting) {
 						setCopyDeviceUserState({
 							open: false,
 							sourceDeviceUser: null,
 							targetDeviceId: "",
+							applyToAllPeers: false,
 							includeFingerprints: true,
 						});
 					}
 				}}
 				title="Copy device user to peer"
-				description="Run the Hikvision SDK fast path and refresh HRIS truth after the peer write. If the source user only has a dev mock fingerprint tally, the peer copy can mirror that synthetic tally for UI testing while keeping real device truth separate."
+				description="Copy this Hikvision user to one peer or every peer, then refresh HRIS truth."
 				className="max-w-lg"
-				showCloseButton={!copyHikvisionDeviceUserMutation.isPending}
-				closeOnBackdropClick={!copyHikvisionDeviceUserMutation.isPending}>
+				showCloseButton={!isCopyDeviceUserSubmitting}
+				closeOnBackdropClick={!isCopyDeviceUserSubmitting}>
 				<div className="space-y-4">
 					{copyDeviceUserState.sourceDeviceUser ? (
 						<div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
@@ -3107,22 +3377,54 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 							</div>
 						</div>
 					) : null}
-					<div className="space-y-2">
-						<div className="text-sm font-medium text-slate-700">Target device</div>
-						<Select
-							options={copyTargetDeviceOptions}
-							value={copyDeviceUserState.targetDeviceId}
-							onChange={(value) =>
+					<div className="flex items-start gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+						<input
+							type="checkbox"
+							className="mt-1 h-4 w-4 rounded border-slate-300"
+							checked={copyDeviceUserState.applyToAllPeers}
+							onChange={(event) =>
 								setCopyDeviceUserState((current) => ({
 									...current,
-									targetDeviceId: value,
+									applyToAllPeers: event.target.checked,
+									targetDeviceId: event.target.checked ? "" : copyTargetDeviceOptions[0]?.value || "",
 								}))
 							}
-							placeholder="Select target device"
-							disabled={!copyTargetDeviceOptions.length}
+							disabled={isCopyDeviceUserSubmitting || !copyTargetDeviceOptions.length}
 						/>
+						<span>
+							<span className="block font-medium text-slate-950">Copy to all peer devices</span>
+							<span className="block text-xs text-slate-500">
+								Use this when one selected source device should become the baseline for every other Hikvision device.
+							</span>
+						</span>
 					</div>
-					<label className="flex items-start gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+					{copyDeviceUserState.applyToAllPeers ? (
+						<div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+							<div className="font-medium text-slate-950">Target scope</div>
+							<p className="mt-1 text-xs text-slate-500">
+								{copyTargetDeviceOptions.length
+									? `${copyTargetDeviceOptions.length} Hikvision peer devices will receive this user.`
+									: "No Hikvision peer devices are available."}
+							</p>
+						</div>
+					) : (
+						<div className="space-y-2">
+							<div className="text-sm font-medium text-slate-700">Target device</div>
+							<Select
+								options={copyTargetDeviceOptions}
+								value={copyDeviceUserState.targetDeviceId}
+								onChange={(value) =>
+									setCopyDeviceUserState((current) => ({
+										...current,
+										targetDeviceId: value,
+									}))
+								}
+								placeholder="Select target device"
+								disabled={!copyTargetDeviceOptions.length}
+							/>
+						</div>
+					)}
+					<div className="flex items-start gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
 						<input
 							type="checkbox"
 							className="mt-1 h-4 w-4 rounded border-slate-300"
@@ -3133,7 +3435,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									includeFingerprints: event.target.checked,
 								}))
 							}
-							disabled={copyHikvisionDeviceUserMutation.isPending}
+							disabled={isCopyDeviceUserSubmitting}
 						/>
 						<span>
 							<span className="block font-medium text-slate-950">Include fingerprints</span>
@@ -3141,17 +3443,18 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								Keep this on for the normal journey so the peer receives the same biometric user state when templates are available.
 							</span>
 						</span>
-					</label>
+					</div>
 					<div className="flex justify-end gap-2 border-t pt-3">
 						<Button
 							type="button"
 							variant="outline"
-							disabled={copyHikvisionDeviceUserMutation.isPending}
+							disabled={isCopyDeviceUserSubmitting}
 							onClick={() =>
 								setCopyDeviceUserState({
 									open: false,
 									sourceDeviceUser: null,
 									targetDeviceId: "",
+									applyToAllPeers: false,
 									includeFingerprints: true,
 								})
 							}>
@@ -3160,17 +3463,21 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 						<Button
 							type="button"
 							disabled={
-								copyHikvisionDeviceUserMutation.isPending ||
-								!copyDeviceUserState.targetDeviceId ||
+								isCopyDeviceUserSubmitting ||
+								(!copyDeviceUserState.applyToAllPeers && !copyDeviceUserState.targetDeviceId) ||
 								!copyDeviceUserState.sourceDeviceUser?.vendorUserId
 							}
 							onClick={submitCopyDeviceUser}>
-							{copyHikvisionDeviceUserMutation.isPending ? (
+							{isCopyDeviceUserSubmitting ? (
 								<Loader2 className="h-4 w-4 animate-spin" />
 							) : (
 								<RefreshCw className="h-4 w-4" />
 							)}
-							{copyHikvisionDeviceUserMutation.isPending ? "Copying..." : "Copy to peer"}
+							{isCopyDeviceUserSubmitting
+								? "Copying..."
+								: copyDeviceUserState.applyToAllPeers
+									? "Copy to all peers"
+									: "Copy to peer"}
 						</Button>
 					</div>
 				</div>
