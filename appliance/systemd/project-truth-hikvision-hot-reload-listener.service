@@ -1,0 +1,22 @@
+[Unit]
+Description=Project Truth Hikvision hot reload listener
+Wants=network-online.target docker.service
+After=network-online.target docker.service project-truth-hris.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=HIKVISION_HOT_RELOAD_API_BASE=http://localhost:3101
+Environment=HIKVISION_POSTGRES_CONTAINER=hris-postgres-dev
+Environment=HIKVISION_HOT_RELOAD_LOGIN_EMAIL=admin@bandai.local
+Environment=HIKVISION_HOT_RELOAD_LOGIN_PASSWORD=password123
+Environment=HIKVISION_HOT_RELOAD_LOGIN_APP_CODE=hris
+ExecStart=/usr/local/bin/project-truth-hikvision-hot-reload-daemon
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

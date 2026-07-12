@@ -42,6 +42,7 @@
       - project-truth-lan-config.service
       - project-truth-lan-summary.service
       - project-truth-clean-console.service
+      - project-truth-hikvision-hot-reload-listener.service
       - project-truth-trycloudflare.service
       - project-truth-ansible-pull.service
       - project-truth-ansible-pull.timer
@@ -52,6 +53,7 @@
       - project-truth-lan-config.service
       - project-truth-lan-summary.service
       - project-truth-clean-console.service
+      - project-truth-hikvision-hot-reload-listener.service
   tasks:
     - name: Ensure Project Truth state directory exists
       ansible.builtin.file:
@@ -162,6 +164,18 @@
         dest: /usr/local/bin/project-truth-tunnel-gateway
         remote_src: true
         mode: "0755"
+
+    - name: Install managed Hikvision listener scripts
+      ansible.builtin.copy:
+        src: "{{ project_truth_install_root }}/scripts/{{ item.src }}"
+        dest: "/usr/local/bin/{{ item.dest }}"
+        remote_src: true
+        mode: "0755"
+      loop:
+        - src: project-truth-hikvision-hot-reload-listener.sh
+          dest: project-truth-hikvision-hot-reload-listener
+        - src: project-truth-hikvision-hot-reload-daemon.sh
+          dest: project-truth-hikvision-hot-reload-daemon
 
     - name: Install Project Truth systemd units
       ansible.builtin.copy:

@@ -2514,7 +2514,7 @@ export default function DeviceEventsPage() {
 								<div className="flex min-w-0 justify-between gap-3">
 									<dt className="text-slate-500">VM</dt>
 									<dd className="truncate font-semibold text-slate-900">
-										{hikvisionListenerStatus?.vm?.host || "10.184.37.241"}
+										{hikvisionListenerStatus?.vm?.host || "10.184.37.19"}
 									</dd>
 								</div>
 								<div className="flex min-w-0 justify-between gap-3">

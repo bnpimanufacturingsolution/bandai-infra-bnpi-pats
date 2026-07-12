@@ -146,6 +146,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include('"project-truth-hikvision-hot-reload-listener.service"');
 		expect(controller).to.include("HIKVISION_LISTENER_CONTROL_ACTIONS.has(action)");
 		expect(controller).to.include("installManagedHikvisionListenerWrapperOnVm");
+		expect(controller).to.include('process.platform === "linux"');
+		expect(controller).to.include('"10.184.37.19"');
+		expect(controller).to.include("project-truth-hikvision-hot-reload-daemon");
 		expect(controller).to.include('if (action !== "stop")');
 		expect(controller).to.include("runFixedProcess");
 		expect(controller).to.include("execFile(");
@@ -162,6 +165,8 @@ describe("Hikvision biometric sync contract", () => {
 
 		expect(wrapper).to.include('COALESCE(config->>\'vendor\', \'\') = \'Hikvision\'');
 		expect(wrapper).to.include('COALESCE(access->>\'password\', \'\') <> \'\'');
+		expect(wrapper).to.include('LOCAL_API_BASE=${HIKVISION_HOT_RELOAD_API_BASE:-http://localhost:3101}');
+		expect(wrapper).to.include("ensure_work_tree()");
 		expect(wrapper).to.include('--device-file "$SPEC"');
 		expect(wrapper).to.include('fetch_hikvision_hris_token()');
 		expect(wrapper).to.include('/api/auth/login');

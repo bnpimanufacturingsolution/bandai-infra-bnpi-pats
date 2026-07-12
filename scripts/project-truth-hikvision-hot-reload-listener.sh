@@ -3,7 +3,8 @@ set -euo pipefail
 
 WORK=/home/infra/project-truth-hikvision-biometric-service
 SDK_ROOT=/home/infra/project-truth-hcnetsdk/EN-HCNetSDKV6.1.9.48_build20230410_linux64
-LOCAL_API_BASE=${HIKVISION_HOT_RELOAD_API_BASE:-http://10.184.37.250:3001}
+SOURCE_ROOT=${HIKVISION_HOT_RELOAD_SOURCE_ROOT:-/opt/project-truth/vendor/hikvision-linux}
+LOCAL_API_BASE=${HIKVISION_HOT_RELOAD_API_BASE:-http://localhost:3101}
 POSTGRES_CONTAINER=${HIKVISION_POSTGRES_CONTAINER:-hris-postgres-dev}
 LOGIN_EMAIL=${HIKVISION_HOT_RELOAD_LOGIN_EMAIL:-admin@bandai.local}
 LOGIN_PASSWORD=${HIKVISION_HOT_RELOAD_LOGIN_PASSWORD:-password123}
@@ -50,6 +51,27 @@ if [[ "$PREPARE_ONLY" == "1" && ${#PASSTHROUGH_ARGS[@]} -gt 0 ]]; then
 fi
 
 mkdir -p /run/project-truth /var/log/project-truth
+
+ensure_work_tree() {
+  local build_script="$WORK/scripts/build-hikvision-biometric-service.sh"
+  local source_file="$WORK/hikvision_biometric_service.cpp"
+  local binary="$WORK/build/hikvision-biometric-service"
+
+  if [[ ! -f "$source_file" || ! -f "$build_script" ]]; then
+    mkdir -p "$WORK/scripts"
+    cp "$SOURCE_ROOT/hikvision_biometric_service.cpp" "$source_file"
+    cp "$SOURCE_ROOT/scripts/build-hikvision-biometric-service.sh" "$build_script"
+    chmod 0755 "$build_script"
+  fi
+
+  if [[ ! -x "$binary" || "$SOURCE_ROOT/hikvision_biometric_service.cpp" -nt "$source_file" ]]; then
+    cp "$SOURCE_ROOT/hikvision_biometric_service.cpp" "$source_file"
+  fi
+
+  if [[ ! -x "$binary" || "$source_file" -nt "$binary" || "$build_script" -nt "$binary" ]]; then
+    HIKVISION_LINUX_SDK_ROOT="$SDK_ROOT" bash "$build_script" >/dev/null
+  fi
+}
 
 fetch_hikvision_hris_token() {
   local login_url="${LOCAL_API_BASE%/}/api/auth/login"
@@ -144,6 +166,8 @@ install -m 600 "$tmp_spec" "$SPEC"
 if [[ "$PREPARE_ONLY" == "1" ]]; then
   exit 0
 fi
+
+ensure_work_tree
 
 cd "$WORK"
 export HIKVISION_LINUX_SDK_ROOT="$SDK_ROOT"

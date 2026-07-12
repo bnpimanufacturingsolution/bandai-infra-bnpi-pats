@@ -61,6 +61,24 @@ async function main() {
 		canConnect,
 	});
 	if (!resolution.selectedDatasource) return;
+	const selectedHost = resolution.selectedDatasource.hostname;
+	const selectedPort = resolution.selectedDatasource.port;
+	const selectedReachable = await canConnect(selectedPort, selectedHost);
+
+	if (
+		selectedReachable &&
+		(resolution.resolution === "configured-localhost" ||
+			resolution.resolution === "existing-local-forward" ||
+			resolution.resolution === "configured-remote")
+	) {
+		if (fs.existsSync(runtimeEnvPath)) {
+			fs.unlinkSync(runtimeEnvPath);
+		}
+		console.log(
+			`[bnpi-db-access] Using reachable datasource ${selectedHost}:${selectedPort}.`,
+		);
+		return;
+	}
 
 	if (resolution.needsBnpiForward) {
 		if (!fs.existsSync(projectTruthScript)) {
@@ -90,9 +108,9 @@ async function main() {
 		}
 	}
 
-	if (!(await canConnect(resolution.selectedDatasource.port, resolution.selectedDatasource.hostname))) {
+	if (!(await canConnect(selectedPort, selectedHost))) {
 		throw new Error(
-			`Resolved datasource ${resolution.selectedDatasource.hostname}:${resolution.selectedDatasource.port} is still unreachable after bootstrap.`,
+			`Resolved datasource ${selectedHost}:${selectedPort} is still unreachable after bootstrap.`,
 		);
 	}
 

@@ -54,8 +54,8 @@ RUN npm run build \
 # Production image, copy all the files and run the app
 FROM base AS runner
 
-# Install system dependencies for Prisma and database backups.
-RUN apk add --no-cache libc6-compat openssl postgresql16-client
+# Install system dependencies for Prisma, database backups, and host SSH access.
+RUN apk add --no-cache libc6-compat openssl openssh-client postgresql16-client
 
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs

@@ -105,7 +105,13 @@ const HIKVISION_HOT_RELOAD_LISTENER_SERVICE =
 	"project-truth-hikvision-hot-reload-listener.service";
 const HIKVISION_LISTENER_CONTROL_ACTIONS = new Set(["start", "stop", "restart"]);
 const HIKVISION_VM_WRAPPER_REMOTE_PATH = "/usr/local/bin/project-truth-hikvision-hot-reload-listener";
+const HIKVISION_VM_DAEMON_REMOTE_PATH = "/usr/local/bin/project-truth-hikvision-hot-reload-daemon";
 const HIKVISION_VM_WRAPPER_TMP_PATH = "/tmp/project-truth-hikvision-hot-reload-listener.sh";
+const HIKVISION_VM_DAEMON_TMP_PATH = "/tmp/project-truth-hikvision-hot-reload-daemon.sh";
+const HIKVISION_VM_SERVICE_REMOTE_PATH =
+	`/etc/systemd/system/${HIKVISION_HOT_RELOAD_LISTENER_SERVICE}`;
+const HIKVISION_VM_SERVICE_TMP_PATH =
+	`/tmp/${HIKVISION_HOT_RELOAD_LISTENER_SERVICE}`;
 
 type DeviceImportJobStatus = "processing" | "completed" | "failed" | "cancelled";
 
@@ -225,16 +231,28 @@ const runFixedProcess = (
 		);
 	});
 
-const getHikvisionListenerVmTarget = () => ({
-	host: process.env.PROJECT_TRUTH_VM_HOST || "10.184.37.241",
-	user: process.env.PROJECT_TRUTH_VM_USER || "infra",
-	key:
-		process.env.PROJECT_TRUTH_VM_SSH_KEY ||
-		path.join(os.homedir(), ".ssh", "node-health-appliance_ed25519"),
-});
+const getHikvisionListenerVmTarget = () => {
+	const configuredHost = String(process.env.PROJECT_TRUTH_VM_HOST || "").trim();
+	const isLinuxRuntime = process.platform === "linux";
+	return {
+		mode: configuredHost || !isLinuxRuntime ? "ssh" : "local",
+		host: configuredHost || "10.184.37.19",
+		user: process.env.PROJECT_TRUTH_VM_USER || "infra",
+		key:
+			process.env.PROJECT_TRUTH_VM_SSH_KEY ||
+			path.join(os.homedir(), ".ssh", "node-health-appliance_ed25519"),
+	};
+};
 
 const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) => {
 	const target = getHikvisionListenerVmTarget();
+	if (target.mode === "local") {
+		return runFixedProcess(
+			remoteArgs[0] || "true",
+			remoteArgs.slice(1),
+			{ timeoutMs },
+		);
+	}
 	return runFixedProcess(
 		process.env.PROJECT_TRUTH_SSH_BIN || "ssh",
 		[
@@ -255,6 +273,18 @@ const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) =
 
 const runHikvisionListenerVmCopy = (localPath: string, remotePath: string, timeoutMs = 12000) => {
 	const target = getHikvisionListenerVmTarget();
+	if (target.mode === "local") {
+		try {
+			fsSync.copyFileSync(localPath, remotePath);
+			return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+		} catch (error: any) {
+			return Promise.resolve({
+				exitCode: 1,
+				stdout: "",
+				stderr: error?.message || "Failed to copy listener runtime locally",
+			});
+		}
+	}
 	return runFixedProcess(
 		process.env.PROJECT_TRUTH_SCP_BIN || "scp",
 		[
@@ -282,42 +312,69 @@ const resolveManagedHikvisionListenerWrapperLocalPath = () => {
 	return candidates.find((candidate) => fsSync.existsSync(candidate)) || null;
 };
 
+const resolveManagedHikvisionListenerDaemonLocalPath = () => {
+	const candidates = [
+		path.resolve(process.cwd(), "../scripts/project-truth-hikvision-hot-reload-daemon.sh"),
+		path.resolve(process.cwd(), "scripts/project-truth-hikvision-hot-reload-daemon.sh"),
+		path.resolve(__dirname, "../../../scripts/project-truth-hikvision-hot-reload-daemon.sh"),
+	];
+	return candidates.find((candidate) => fsSync.existsSync(candidate)) || null;
+};
+
+const resolveManagedHikvisionListenerServiceLocalPath = () => {
+	const candidates = [
+		path.resolve(process.cwd(), "../appliance/systemd/project-truth-hikvision-hot-reload-listener.service"),
+		path.resolve(process.cwd(), "appliance/systemd/project-truth-hikvision-hot-reload-listener.service"),
+		path.resolve(__dirname, "../../../appliance/systemd/project-truth-hikvision-hot-reload-listener.service"),
+	];
+	return candidates.find((candidate) => fsSync.existsSync(candidate)) || null;
+};
+
 const installManagedHikvisionListenerWrapperOnVm = async () => {
-	const localPath = resolveManagedHikvisionListenerWrapperLocalPath();
-	if (!localPath) {
+	const wrapperLocalPath = resolveManagedHikvisionListenerWrapperLocalPath();
+	const daemonLocalPath = resolveManagedHikvisionListenerDaemonLocalPath();
+	const serviceLocalPath = resolveManagedHikvisionListenerServiceLocalPath();
+	if (!wrapperLocalPath || !daemonLocalPath || !serviceLocalPath) {
 		return {
 			ok: false,
-			error: "Managed Hikvision listener wrapper is missing from the workspace",
+			error: "Managed Hikvision listener runtime files are missing from the workspace",
 		};
 	}
 
-	const copyResult = await runHikvisionListenerVmCopy(
-		localPath,
-		HIKVISION_VM_WRAPPER_TMP_PATH,
-		12000,
-	);
-	if (copyResult.exitCode !== 0) {
-		return {
-			ok: false,
-			error: copyResult.stderr.trim() || copyResult.stdout.trim() || "Failed to copy listener wrapper",
-		};
+	for (const [localPath, remotePath] of [
+		[wrapperLocalPath, HIKVISION_VM_WRAPPER_TMP_PATH],
+		[daemonLocalPath, HIKVISION_VM_DAEMON_TMP_PATH],
+		[serviceLocalPath, HIKVISION_VM_SERVICE_TMP_PATH],
+	] as const) {
+		const copyResult = await runHikvisionListenerVmCopy(localPath, remotePath, 12000);
+		if (copyResult.exitCode !== 0) {
+			return {
+				ok: false,
+				error:
+					copyResult.stderr.trim() ||
+					copyResult.stdout.trim() ||
+					`Failed to copy listener runtime ${path.basename(localPath)}`,
+			};
+		}
 	}
 
-	const installResult = await runHikvisionListenerVmCommand(
+	const installResult = await runHikvisionListenerVmCommand([
+		"sudo",
+		"bash",
+		"-lc",
 		[
-			"sudo",
-			"install",
-			"-o",
-			"root",
-			"-g",
-			"root",
-			"-m",
-			"0755",
+			"install -o root -g root -m 0755",
 			HIKVISION_VM_WRAPPER_TMP_PATH,
 			HIKVISION_VM_WRAPPER_REMOTE_PATH,
-		],
-		12000,
-	);
+			"&& install -o root -g root -m 0755",
+			HIKVISION_VM_DAEMON_TMP_PATH,
+			HIKVISION_VM_DAEMON_REMOTE_PATH,
+			"&& install -o root -g root -m 0644",
+			HIKVISION_VM_SERVICE_TMP_PATH,
+			HIKVISION_VM_SERVICE_REMOTE_PATH,
+			"&& systemctl daemon-reload",
+		].join(" "),
+	], 12000);
 	if (installResult.exitCode !== 0) {
 		return {
 			ok: false,
@@ -328,7 +385,7 @@ const installManagedHikvisionListenerWrapperOnVm = async () => {
 		};
 	}
 
-	return { ok: true, localPath };
+	return { ok: true, localPath: wrapperLocalPath };
 };
 
 const parseSystemctlShow = (stdout: string) =>
@@ -1440,6 +1497,37 @@ export const controller = (prisma: PrismaClient) => {
 			record?.meta?.modelName === "DeviceSyncRun" ||
 			(message.includes("device_sync_runs") && message.includes("does not exist"))
 		);
+	};
+
+	const isMissingDeviceUserTableError = (error: unknown) => {
+		const record = error as {
+			code?: string;
+			message?: string;
+			meta?: { table?: string; modelName?: string };
+		};
+		const message = String(record?.message || "").toLowerCase();
+		return (
+			record?.code === "P2021" ||
+			record?.code === "42P01" ||
+			record?.meta?.table === "public.device_users" ||
+			record?.meta?.modelName === "DeviceUser" ||
+			(message.includes("device_users") && message.includes("does not exist")) ||
+			(message.includes('relation "device_users"') && message.includes("does not exist"))
+		);
+	};
+
+	const hasDeviceUserTable = async () => {
+		try {
+			const rows = (await prisma.$queryRaw<
+				Array<{ device_users?: string | null }>
+			>`SELECT to_regclass('public.device_users')::text AS device_users`) || [];
+			return Boolean(rows[0]?.device_users);
+		} catch (error) {
+			if (isMissingDeviceUserTableError(error)) {
+				return false;
+			}
+			throw error;
+		}
 	};
 
 	const findLatestCompletedDeviceLogRun = async (

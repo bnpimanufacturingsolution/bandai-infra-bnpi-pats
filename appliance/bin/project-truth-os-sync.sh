@@ -246,6 +246,8 @@ install_commands_and_services() {
   as_root install -m 0755 "${bin_dir}/project-truth-console-session-hook.sh" /usr/local/bin/project-truth-console-session-hook
   as_root install -m 0755 "${bin_dir}/project-truth-trycloudflare-start.sh" /usr/local/bin/project-truth-trycloudflare-start
   as_root install -m 0755 "${bin_dir}/project-truth-tunnel-gateway.py" /usr/local/bin/project-truth-tunnel-gateway
+  as_root install -m 0755 "${install_root}/scripts/project-truth-hikvision-hot-reload-listener.sh" /usr/local/bin/project-truth-hikvision-hot-reload-listener
+  as_root install -m 0755 "${install_root}/scripts/project-truth-hikvision-hot-reload-daemon.sh" /usr/local/bin/project-truth-hikvision-hot-reload-daemon
   if [ -f "${bin_dir}/project-truth-ansible-pull.sh" ]; then
     as_root install -m 0755 "${bin_dir}/project-truth-ansible-pull.sh" /usr/local/bin/project-truth-ansible-pull
   fi
@@ -255,6 +257,7 @@ install_commands_and_services() {
   as_root install -m 0644 "${systemd_dir}/project-truth-lan-summary.service" /etc/systemd/system/project-truth-lan-summary.service
   as_root install -m 0644 "${systemd_dir}/project-truth-clean-console.service" /etc/systemd/system/project-truth-clean-console.service
   as_root install -m 0644 "${systemd_dir}/project-truth-trycloudflare.service" /etc/systemd/system/project-truth-trycloudflare.service
+  as_root install -m 0644 "${systemd_dir}/project-truth-hikvision-hot-reload-listener.service" /etc/systemd/system/project-truth-hikvision-hot-reload-listener.service
   if [ -f "${systemd_dir}/project-truth-ansible-pull.service" ]; then
     as_root install -m 0644 "${systemd_dir}/project-truth-ansible-pull.service" /etc/systemd/system/project-truth-ansible-pull.service
   fi
@@ -271,6 +274,8 @@ install_commands_and_services() {
   as_root systemctl enable project-truth-hris.service
   as_root systemctl enable project-truth-lan-summary.service
   as_root systemctl enable project-truth-clean-console.service
+  as_root systemctl enable project-truth-hikvision-hot-reload-listener.service
+  as_root systemctl restart project-truth-hikvision-hot-reload-listener.service >/dev/null 2>&1 || true
   as_root systemctl disable --now project-truth-trycloudflare.service >/dev/null 2>&1 || true
   if [ -f /etc/systemd/system/project-truth-ansible-pull.timer ]; then
     as_root systemctl enable project-truth-ansible-pull.timer
