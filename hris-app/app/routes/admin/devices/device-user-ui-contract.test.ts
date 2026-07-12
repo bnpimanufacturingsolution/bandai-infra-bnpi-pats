@@ -36,6 +36,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("<span>HRIS users</span>");
 		expect(enroll).toContain("From device");
 		expect(enroll).toContain("Gap");
+		expect(enroll).toContain("Needs match");
 		expect(enroll).toContain("Saved in HRIS");
 		expect(enroll).toContain("Needs link");
 		expect(enroll).toContain("source");
@@ -84,6 +85,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Refresh all devices");
 		expect(enroll).toContain("Make devices match");
 		expect(enroll).toContain("Refresh mismatches");
+		expect(enroll).toContain("Best truth:");
 		expect(enroll).toContain("Read from device");
 		expect(enroll).toContain("Current view");
 		expect(enroll).toContain("HRIS records");

@@ -749,7 +749,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		await Promise.allSettled([refetchSyncPreview(), refetchSyncRuns()]);
 	};
 	const openBulkDeviceUserSyncReview = () => {
-		if (activeDeviceUserSyncJob) {
+		if (activeDeviceUserSyncJob || bulkDeviceUserSyncState.lastProgress) {
 			setBulkDeviceUserSyncState((current) => ({
 				...current,
 				open: true,
@@ -764,6 +764,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			open: true,
 			status: "review",
 			message: "Choose what to refresh, then run it.",
+			lastProgress: null,
 		});
 	};
 	const getBulkDeviceUserSyncStartFailureMessage = (error: unknown) => {
@@ -805,6 +806,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				open: true,
 				status: "error",
 				message: "Everything already looks aligned. Switch to All devices if you still want a full reread.",
+				lastProgress: null,
 			});
 			return;
 		}
@@ -815,8 +817,9 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				bulkDeviceUserSyncMode === "needs_attention_only"
 					? "Starting the mismatch refresh."
 					: bulkDeviceUserSyncMode === "peer_converge"
-						? "Starting cross-device convergence."
+					? "Starting cross-device convergence."
 					: "Starting the full reread.",
+			lastProgress: null,
 		});
 		try {
 			const data = await startDeviceUserSyncJobMutation.mutateAsync(request);
@@ -826,6 +829,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 					open: true,
 					status: "idle",
 					message: data.progress?.message || "",
+					lastProgress: null,
 				});
 				return;
 			}
@@ -833,6 +837,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				open: true,
 				status: "error",
 				message: "Device-user sync did not return a job ID, so progress cannot be tracked yet.",
+				lastProgress: null,
 			});
 		} catch (error: unknown) {
 			setActiveDeviceUserSyncJob(null);
@@ -840,6 +845,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				open: true,
 				status: "error",
 				message: getBulkDeviceUserSyncStartFailureMessage(error),
+				lastProgress: null,
 			});
 		}
 	};
@@ -1360,12 +1366,14 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		const hrisCount = item.preview?.hrisUserCount;
 		const openCount = item.preview?.openUserCount;
 		const conflictCount = item.preview?.conflictUserCount;
+		const peerDriftCount = item.preview?.peerDriftTotalCount;
 		const hasCountMismatch =
 			typeof sourceCount === "number" &&
 			typeof hrisCount === "number" &&
 			sourceCount !== hrisCount;
 		return (
 			hasCountMismatch ||
+			Number(peerDriftCount || 0) > 0 ||
 			Number(openCount || 0) > 0 ||
 			Number(conflictCount || 0) > 0 ||
 			item.status === "needs_attention"
@@ -1574,6 +1582,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		activeDeviceUserSyncJob && deviceUserSyncJobProgress
 			? deviceUserSyncJobProgress
 			: bulkDeviceUserSyncState.lastProgress || null;
+	const hasEffectiveDeviceUserSyncJobProgress = Boolean(effectiveDeviceUserSyncJobProgress);
 	const effectiveDeviceUserSyncJobStatus = effectiveDeviceUserSyncJobProgress?.status;
 	const deviceUserSyncJobProcessed = Number(effectiveDeviceUserSyncJobProgress?.processedDevices || 0);
 	const deviceUserSyncJobTotal = Math.max(
@@ -1650,7 +1659,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				: bulkDeviceUserSyncState.message || "Reread live device users across your configured devices.";
 	const bulkDeviceUserSyncModeDescription =
 		bulkDeviceUserSyncMode === "needs_attention_only"
-			? "Refresh only devices with count gaps, open links, conflicts, or errors."
+			? "Refresh only devices with count gaps, peer drift, open links, conflicts, or errors."
 			: bulkDeviceUserSyncMode === "peer_converge"
 				? "Refresh all devices, pick the richest source device, then copy missing peer users with retries."
 			: "Reread every configured device user and refresh saved biometric counts.";
@@ -2741,7 +2750,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				}}
 				title="Sync device users"
 				description={
-					activeDeviceUserSyncJob
+					hasEffectiveDeviceUserSyncJobProgress
 						? "You can close this window and reopen status from Sync device users."
 						: "Choose the manual refresh scope, then reread live device-user truth."
 				}
@@ -2750,19 +2759,19 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				closeOnBackdropClick={!deviceUserSyncJobIsProcessing}>
 				<div className="space-y-4">
 					<div
-						className={`rounded-lg border p-4 ${activeDeviceUserSyncJob ? deviceUserSyncJobToneClass : bulkDeviceUserSyncToneClass}`}>
+						className={`rounded-lg border p-4 ${hasEffectiveDeviceUserSyncJobProgress ? deviceUserSyncJobToneClass : bulkDeviceUserSyncToneClass}`}>
 						<div className="flex items-center gap-2 text-sm font-medium text-slate-950">
 							{deviceUserSyncJobIsProcessing || bulkDeviceUserSyncState.status === "starting" ? (
 								<Loader2 className="h-4 w-4 animate-spin" />
 							) : null}
-							{activeDeviceUserSyncJob
+							{hasEffectiveDeviceUserSyncJobProgress
 								? deviceUserSyncJobTitle
 								: bulkDeviceUserSyncTitle}
 						</div>
-						{activeDeviceUserSyncJob ? (
+						{hasEffectiveDeviceUserSyncJobProgress ? (
 							<>
 								<div className="mt-2 flex items-center justify-between gap-3 text-sm">
-									<span className="min-w-0">{deviceUserSyncJobProgress?.message || "Loading device-user sync status..."}</span>
+									<span className="min-w-0">{effectiveDeviceUserSyncJobProgress?.message || "Loading device-user sync status..."}</span>
 									<span className="shrink-0 font-semibold">{deviceUserSyncJobPercent}%</span>
 								</div>
 								<div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
@@ -2796,7 +2805,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								</div>
 							))}
 						</div>
-						{!activeDeviceUserSyncJob ? (
+						{!deviceUserSyncJobIsProcessing ? (
 							<div className="mt-4 rounded-xl border border-white/80 bg-white/70 p-3">
 								<div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
 									<div className="space-y-1">
@@ -2872,17 +2881,19 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 					</div>
 
 					<div className="overflow-hidden rounded-md border border-slate-200">
-						<div className="grid grid-cols-[minmax(180px,1.4fr)_120px_120px_120px_120px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+						<div className="grid grid-cols-[minmax(180px,1.4fr)_110px_110px_90px_110px_110px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-500">
 							<span>Device</span>
 							<span>From device</span>
 							<span>Saved in HRIS</span>
 							<span>Gap</span>
+							<span>Needs match</span>
 							<span>Needs link</span>
 						</div>
 						{syncCenterDevices.map(({ device, preview }) => {
 							const sourceCount = preview?.vendorUserCount;
 							const hrisCount = preview?.hrisUserCount;
 							const openCount = preview?.openUserCount;
+							const peerDriftCount = preview?.peerDriftTotalCount;
 							const gapCount =
 								typeof sourceCount === "number" && typeof hrisCount === "number"
 									? Math.max(sourceCount - hrisCount, 0)
@@ -2891,10 +2902,15 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 							return (
 								<div
 									key={device.id}
-									className="grid gap-3 border-b border-slate-100 px-3 py-3 text-sm last:border-b-0 lg:grid-cols-[minmax(180px,1.4fr)_120px_120px_120px_120px] lg:items-center">
+									className="grid gap-3 border-b border-slate-100 px-3 py-3 text-sm last:border-b-0 lg:grid-cols-[minmax(180px,1.4fr)_110px_110px_90px_110px_110px] lg:items-center">
 									<div className="min-w-0">
 										<p className="truncate font-medium text-slate-950">{device.name || "Unnamed device"}</p>
 										<p className="truncate text-xs text-slate-500">{device.address || "-"}:{device.port || "-"}</p>
+										{Number(peerDriftCount || 0) > 0 && preview?.peerBaselineDeviceName ? (
+											<p className="mt-1 truncate text-xs text-emerald-700">
+												Best truth: {preview.peerBaselineDeviceName}
+											</p>
+										) : null}
 										{result ? (
 											<Badge
 												variant={result.status === "success" ? "success" : result.status === "cancelled" ? "secondary" : "warning"}
@@ -2910,6 +2926,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									<div className="font-semibold text-slate-950">{metricValue(sourceCount)}</div>
 									<div className="font-semibold text-slate-950">{metricValue(hrisCount)}</div>
 									<div className="font-semibold text-slate-950">{metricValue(gapCount)}</div>
+									<div className="font-semibold text-slate-950">{metricValue(peerDriftCount)}</div>
 									<div className="font-semibold text-slate-950">{metricValue(openCount)}</div>
 								</div>
 							);
@@ -2976,7 +2993,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 										: "Cancel sync"}
 							</Button>
 						) : null}
-						{activeDeviceUserSyncJob && !deviceUserSyncJobIsProcessing ? (
+						{hasEffectiveDeviceUserSyncJobProgress && !deviceUserSyncJobIsProcessing ? (
 							<Button
 								type="button"
 								className="gap-2 bg-orange-500 text-white hover:bg-orange-600"
@@ -2990,18 +3007,22 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								{startDeviceUserSyncJobMutation.isPending ? "Starting..." : "Run another refresh"}
 							</Button>
 						) : null}
-						{activeDeviceUserSyncJob && !deviceUserSyncJobIsProcessing ? (
+						{hasEffectiveDeviceUserSyncJobProgress && !deviceUserSyncJobIsProcessing ? (
 							<Button
 								type="button"
 								variant="outline"
 								onClick={() => {
 									setActiveDeviceUserSyncJob(null);
-									setBulkDeviceUserSyncState((current) => ({ ...current, open: false }));
+									setBulkDeviceUserSyncState((current) => ({
+										...current,
+										open: false,
+										lastProgress: null,
+									}));
 								}}>
 								Dismiss status
 							</Button>
 						) : null}
-						{!activeDeviceUserSyncJob ? (
+						{!deviceUserSyncJobIsProcessing ? (
 							<Button
 								type="button"
 								className="gap-2 bg-orange-500 text-white hover:bg-orange-600"
@@ -3025,7 +3046,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 										: "Refresh all devices"}
 							</Button>
 						) : null}
-						{!activeDeviceUserSyncJob && bulkDeviceUserSyncState.status === "error" ? (
+						{!deviceUserSyncJobIsProcessing && bulkDeviceUserSyncState.status === "error" ? (
 							<Button
 								type="button"
 								variant="outline"
@@ -3034,6 +3055,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 										open: false,
 										status: "idle",
 										message: "",
+										lastProgress: null,
 									})
 								}>
 								Dismiss error

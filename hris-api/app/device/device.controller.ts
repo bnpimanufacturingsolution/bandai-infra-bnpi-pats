@@ -551,6 +551,106 @@ const buildEffectiveHikvisionCredentialSummary = (rawPayload: any) => {
 	};
 };
 
+type SavedDeviceUserTruthRow = {
+	deviceId?: string | null;
+	vendorUserId?: string | null;
+	rawPayload?: any;
+	status?: string | null;
+	employeeId?: string | null;
+};
+
+const summarizeSavedDeviceUserTruth = (deviceUsers: SavedDeviceUserTruthRow[]) => {
+	const uniqueUsers = new Map<string, SavedDeviceUserTruthRow>();
+	for (const deviceUser of deviceUsers || []) {
+		const vendorUserId = String(deviceUser?.vendorUserId || "").trim();
+		if (!vendorUserId || uniqueUsers.has(vendorUserId)) continue;
+		uniqueUsers.set(vendorUserId, deviceUser);
+	}
+	return Array.from(uniqueUsers.values()).reduce(
+		(summary, deviceUser) => {
+			const credentialSummary = buildEffectiveHikvisionCredentialSummary(deviceUser?.rawPayload || {});
+			return {
+				userCount: summary.userCount + 1,
+				fingerprintCount: summary.fingerprintCount + Number(credentialSummary.fingerprintCount || 0),
+				faceCount: summary.faceCount + Number(credentialSummary.faceCount || 0),
+				cardCount: summary.cardCount + Number(credentialSummary.cardCount || 0),
+			};
+		},
+		{
+			userCount: 0,
+			fingerprintCount: 0,
+			faceCount: 0,
+			cardCount: 0,
+		},
+	);
+};
+
+const compareSavedDeviceUserTruth = (
+	baselineUsers: SavedDeviceUserTruthRow[],
+	targetUsers: SavedDeviceUserTruthRow[],
+) => {
+	const baselineByVendorUserId = new Map<string, SavedDeviceUserTruthRow>();
+	for (const deviceUser of baselineUsers || []) {
+		const vendorUserId = String(deviceUser?.vendorUserId || "").trim();
+		if (!vendorUserId || baselineByVendorUserId.has(vendorUserId)) continue;
+		baselineByVendorUserId.set(vendorUserId, deviceUser);
+	}
+	const targetByVendorUserId = new Map<string, SavedDeviceUserTruthRow>();
+	for (const deviceUser of targetUsers || []) {
+		const vendorUserId = String(deviceUser?.vendorUserId || "").trim();
+		if (!vendorUserId || targetByVendorUserId.has(vendorUserId)) continue;
+		targetByVendorUserId.set(vendorUserId, deviceUser);
+	}
+
+	let missingUsers = 0;
+	let staleUsers = 0;
+	let missingFingerprintCount = 0;
+	let missingFaceCount = 0;
+	let missingCardCount = 0;
+
+	for (const [vendorUserId, baselineUser] of baselineByVendorUserId.entries()) {
+		const baselineSummary = buildEffectiveHikvisionCredentialSummary(baselineUser?.rawPayload || {});
+		const targetUser = targetByVendorUserId.get(vendorUserId) || null;
+		if (!targetUser) {
+			missingUsers += 1;
+			missingFingerprintCount += Number(baselineSummary.fingerprintCount || 0);
+			missingFaceCount += Number(baselineSummary.faceCount || 0);
+			missingCardCount += Number(baselineSummary.cardCount || 0);
+			continue;
+		}
+
+		const targetSummary = buildEffectiveHikvisionCredentialSummary(targetUser?.rawPayload || {});
+		const fingerprintGap = Math.max(
+			Number(baselineSummary.fingerprintCount || 0) - Number(targetSummary.fingerprintCount || 0),
+			0,
+		);
+		const faceGap = Math.max(
+			Number(baselineSummary.faceCount || 0) - Number(targetSummary.faceCount || 0),
+			0,
+		);
+		const cardGap = Math.max(
+			Number(baselineSummary.cardCount || 0) - Number(targetSummary.cardCount || 0),
+			0,
+		);
+		if (fingerprintGap > 0 || faceGap > 0 || cardGap > 0) {
+			staleUsers += 1;
+			missingFingerprintCount += fingerprintGap;
+			missingFaceCount += faceGap;
+			missingCardCount += cardGap;
+		}
+	}
+
+	return {
+		missingUsers,
+		staleUsers,
+		missingFingerprintCount,
+		missingFaceCount,
+		missingCardCount,
+		totalCredentialGapCount: missingFingerprintCount + missingFaceCount + missingCardCount,
+		totalNeedsMatchCount: missingUsers + staleUsers,
+	};
+};
+
 export const controller = (prisma: PrismaClient) => {
 	// Initialize employee helpers for auth service communication
 	const helpers = createEmployeeHelpers(prisma, deviceLogger);
@@ -3731,6 +3831,25 @@ export const controller = (prisma: PrismaClient) => {
 		return false;
 	};
 
+	const summarizeDeviceUserTruth = (deviceUsers: any[]) =>
+		deviceUsers.reduce(
+			(summary, deviceUser) => {
+				const credentialSummary = buildEffectiveHikvisionCredentialSummary(deviceUser?.rawPayload || {});
+				return {
+					userCount: summary.userCount + 1,
+					fingerprintCount: summary.fingerprintCount + Number(credentialSummary.fingerprintCount || 0),
+					faceCount: summary.faceCount + Number(credentialSummary.faceCount || 0),
+					cardCount: summary.cardCount + Number(credentialSummary.cardCount || 0),
+				};
+			},
+			{
+				userCount: 0,
+				fingerprintCount: 0,
+				faceCount: 0,
+				cardCount: 0,
+			},
+		);
+
 	const processBulkDeviceUserSyncJob = async (params: {
 		jobId: string;
 		req: Request;
@@ -3815,7 +3934,41 @@ export const controller = (prisma: PrismaClient) => {
 
 		if (params.syncMode === "peer_converge" && successfulDevices > 1) {
 			const successfulResults = results.filter((result) => result.status === "success");
+			const savedDeviceUsers = await (prisma as any).deviceUser.findMany({
+				where: {
+					organizationId: params.organizationId,
+					deviceId: { in: successfulResults.map((result) => result.deviceId) },
+				},
+				select: {
+					id: true,
+					deviceId: true,
+					vendorUserId: true,
+					employeeId: true,
+					status: true,
+					lastSyncedAt: true,
+					rawPayload: true,
+				},
+			});
+			const deviceTruthByDeviceId = savedDeviceUsers.reduce(
+				(groups: Map<string, any[]>, deviceUser: any) => {
+					const deviceId = String(deviceUser.deviceId || "").trim();
+					if (!deviceId) return groups;
+					const bucket = groups.get(deviceId) || [];
+					bucket.push(deviceUser);
+					groups.set(deviceId, bucket);
+					return groups;
+				},
+				new Map<string, any[]>(),
+			);
 			const sourceResult = [...successfulResults].sort((left, right) => {
+				const leftTruth = summarizeDeviceUserTruth(deviceTruthByDeviceId.get(left.deviceId) || []);
+				const rightTruth = summarizeDeviceUserTruth(deviceTruthByDeviceId.get(right.deviceId) || []);
+				if (leftTruth.userCount !== rightTruth.userCount) return rightTruth.userCount - leftTruth.userCount;
+				if (leftTruth.fingerprintCount !== rightTruth.fingerprintCount) {
+					return rightTruth.fingerprintCount - leftTruth.fingerprintCount;
+				}
+				if (leftTruth.faceCount !== rightTruth.faceCount) return rightTruth.faceCount - leftTruth.faceCount;
+				if (leftTruth.cardCount !== rightTruth.cardCount) return rightTruth.cardCount - leftTruth.cardCount;
 				const leftImportable = Number(left.summary?.importableRecords || 0);
 				const rightImportable = Number(right.summary?.importableRecords || 0);
 				if (leftImportable !== rightImportable) return rightImportable - leftImportable;
@@ -3825,21 +3978,6 @@ export const controller = (prisma: PrismaClient) => {
 			})[0];
 			const sourceDevice = params.devices.find((device) => device.id === sourceResult?.deviceId) || null;
 			if (sourceDevice?.id) {
-				const savedDeviceUsers = await (prisma as any).deviceUser.findMany({
-					where: {
-						organizationId: params.organizationId,
-						deviceId: { in: successfulResults.map((result) => result.deviceId) },
-					},
-					select: {
-						id: true,
-						deviceId: true,
-						vendorUserId: true,
-						employeeId: true,
-						status: true,
-						lastSyncedAt: true,
-						rawPayload: true,
-					},
-				});
 				const deviceUserMap = savedDeviceUsers.reduce(
 					(groups: Map<string, Map<string, any>>, deviceUser: any) => {
 						const deviceId = String(deviceUser.deviceId || "").trim();
@@ -5129,24 +5267,23 @@ export const controller = (prisma: PrismaClient) => {
 						},
 						select: {
 							deviceId: true,
+							vendorUserId: true,
 							status: true,
 							employeeId: true,
+							rawPayload: true,
 						},
-					})) as Array<{ deviceId?: string | null; status?: string | null; employeeId?: string | null }>)
+					})) as SavedDeviceUserTruthRow[])
 				: [];
 			const deviceUserRowsByDeviceId = deviceUserRows.reduce(
-				(
-					groups: Map<string, Array<{ status?: string | null; employeeId?: string | null }>>,
-					row,
-				) => {
+				(groups: Map<string, SavedDeviceUserTruthRow[]>, row) => {
 					const deviceId = String(row.deviceId || "").trim();
 					if (!deviceId) return groups;
 					const bucket = groups.get(deviceId) || [];
-					bucket.push({ status: row.status, employeeId: row.employeeId });
+					bucket.push(row);
 					groups.set(deviceId, bucket);
 					return groups;
 				},
-				new Map(),
+				new Map<string, SavedDeviceUserTruthRow[]>(),
 			);
 			const deviceUserSummaryByDeviceId = new Map<
 				string,
@@ -5157,6 +5294,49 @@ export const controller = (prisma: PrismaClient) => {
 					device.id,
 					summarizeDeviceUserStatuses(deviceUserRowsByDeviceId.get(device.id) || []),
 				);
+			}
+			const peerBaselineByVendor = new Map<
+				string,
+				{
+					deviceId: string;
+					deviceName: string;
+					rows: SavedDeviceUserTruthRow[];
+					summary: ReturnType<typeof summarizeSavedDeviceUserTruth>;
+				}
+			>();
+			for (const [vendor, vendorDevices] of syncDevices.reduce<
+				Map<string, Array<(typeof syncDevices)[number]>>
+			>((groups, device) => {
+				const bucket = groups.get(device.vendor) || [];
+				bucket.push(device);
+				groups.set(device.vendor, bucket);
+				return groups;
+			}, new Map<string, Array<(typeof syncDevices)[number]>>()).entries()) {
+				const rankedDevices = vendorDevices
+					.map((device) => ({
+						deviceId: device.id,
+						deviceName: String(device.name || "").trim() || "Unnamed device",
+						rows: deviceUserRowsByDeviceId.get(device.id) || [],
+						summary: summarizeSavedDeviceUserTruth(deviceUserRowsByDeviceId.get(device.id) || []),
+					}))
+					.sort((left, right) => {
+						if (right.summary.userCount !== left.summary.userCount) {
+							return right.summary.userCount - left.summary.userCount;
+						}
+						if (right.summary.fingerprintCount !== left.summary.fingerprintCount) {
+							return right.summary.fingerprintCount - left.summary.fingerprintCount;
+						}
+						if (right.summary.faceCount !== left.summary.faceCount) {
+							return right.summary.faceCount - left.summary.faceCount;
+						}
+						if (right.summary.cardCount !== left.summary.cardCount) {
+							return right.summary.cardCount - left.summary.cardCount;
+						}
+						return left.deviceName.localeCompare(right.deviceName);
+					});
+				if (rankedDevices[0]) {
+					peerBaselineByVendor.set(vendor, rankedDevices[0]);
+				}
 			}
 
 			const zktecoDevices = syncDevices.filter((device) => device.vendor === "ZKTeco");
@@ -5208,6 +5388,22 @@ export const controller = (prisma: PrismaClient) => {
 					device.vendor === "ZKTeco"
 						? zktecoPreviewByIp.get(String(device.address || "").trim())
 						: hikvisionTotals.get(device.id);
+				const peerBaseline = peerBaselineByVendor.get(device.vendor) || null;
+				const peerDrift =
+					peerBaseline && peerBaseline.deviceId !== device.id
+						? compareSavedDeviceUserTruth(
+								peerBaseline.rows,
+								deviceUserRowsByDeviceId.get(device.id) || [],
+							)
+						: {
+								missingUsers: 0,
+								staleUsers: 0,
+								missingFingerprintCount: 0,
+								missingFaceCount: 0,
+								missingCardCount: 0,
+								totalCredentialGapCount: 0,
+								totalNeedsMatchCount: 0,
+							};
 				const totalEvents =
 					device.vendor === "ZKTeco"
 						? sourcePreview?.totalEvents ?? null
@@ -5266,6 +5462,15 @@ export const controller = (prisma: PrismaClient) => {
 					openUserCount: deviceUserSummary.unmatched,
 					conflictUserCount: deviceUserSummary.conflict,
 					disabledUserCount: deviceUserSummary.disabled,
+					peerBaselineDeviceId: peerBaseline?.deviceId || null,
+					peerBaselineDeviceName: peerBaseline?.deviceName || null,
+					peerMissingUserCount: peerDrift.missingUsers,
+					peerStaleUserCount: peerDrift.staleUsers,
+					peerMissingFingerprintCount: peerDrift.missingFingerprintCount,
+					peerMissingFaceCount: peerDrift.missingFaceCount,
+					peerMissingCardCount: peerDrift.missingCardCount,
+					peerDriftTotalCount: peerDrift.totalNeedsMatchCount,
+					peerCredentialGapCount: peerDrift.totalCredentialGapCount,
 					knownSkippedEventCount: knownSkippedEvents,
 					totalUnsavedEventCount: totalUnsavedEvents,
 					importableIfSkipMissingEmployeeNo: needsSyncEvents,

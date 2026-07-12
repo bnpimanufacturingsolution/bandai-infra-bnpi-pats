@@ -60,6 +60,10 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("findExistingHikvisionDeviceEvent");
 		expect(controller).to.include("cancelRequested");
 		expect(controller).to.include("knownSkippedEventCount");
+		expect(controller).to.include("peerBaselineDeviceName");
+		expect(controller).to.include("peerDriftTotalCount");
+		expect(controller).to.include("compareSavedDeviceUserTruth");
+		expect(controller).to.include("summarizeSavedDeviceUserTruth");
 		expect(controller).to.include("totalUnsavedEventCount");
 		expect(controller).to.include("importableIfSkipMissingEmployeeNo");
 		expect(controller).to.include("importableIfSaveMissingEmployeeNo");

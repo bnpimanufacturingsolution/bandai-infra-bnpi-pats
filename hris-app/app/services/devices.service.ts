@@ -213,6 +213,15 @@ export interface DeviceSyncPreviewRow {
 	openUserCount?: number;
 	conflictUserCount?: number;
 	disabledUserCount?: number;
+	peerBaselineDeviceId?: string | null;
+	peerBaselineDeviceName?: string | null;
+	peerMissingUserCount?: number;
+	peerStaleUserCount?: number;
+	peerMissingFingerprintCount?: number;
+	peerMissingFaceCount?: number;
+	peerMissingCardCount?: number;
+	peerDriftTotalCount?: number;
+	peerCredentialGapCount?: number;
 	knownSkippedEventCount?: number;
 	totalUnsavedEventCount?: number | null;
 	importableIfSkipMissingEmployeeNo?: number | null;
