@@ -10,7 +10,7 @@ DEVICE_SOURCE=${HIKVISION_HOT_RELOAD_DEVICE_SOURCE:-postgres}
 DEVICE_FETCH_LIMIT=${HIKVISION_HOT_RELOAD_DEVICE_FETCH_LIMIT:-200}
 LOGIN_EMAIL=${HIKVISION_HOT_RELOAD_LOGIN_EMAIL:-admin@bandai.local}
 LOGIN_PASSWORD=${HIKVISION_HOT_RELOAD_LOGIN_PASSWORD:-password123}
-LOGIN_APP_CODE=${HIKVISION_HOT_RELOAD_APP_CODE:-hris}
+LOGIN_APP_CODE=${HIKVISION_HOT_RELOAD_LOGIN_APP_CODE:-hris}
 SPEC=/run/project-truth/hikvision-hot-reload-device.spec
 PREPARE_ONLY=0
 RUN_ONCE=0
@@ -180,6 +180,7 @@ PY
 }
 
 hris_token=""
+export LOGIN_EMAIL LOGIN_PASSWORD LOGIN_APP_CODE
 case "$DEVICE_SOURCE" in
   postgres)
     rows="$(fetch_hikvision_device_rows_from_postgres)"
@@ -238,7 +239,6 @@ ensure_work_tree
 cd "$WORK"
 export HIKVISION_LINUX_SDK_ROOT="$SDK_ROOT"
 export LD_LIBRARY_PATH="$SDK_ROOT/lib:$SDK_ROOT:$SDK_ROOT/HCNetSDKCom:${LD_LIBRARY_PATH:-}"
-export LOGIN_EMAIL LOGIN_PASSWORD LOGIN_APP_CODE
 if [[ -z "${hris_token:-}" ]]; then
   hris_token="$(fetch_hikvision_hris_token)"
 fi

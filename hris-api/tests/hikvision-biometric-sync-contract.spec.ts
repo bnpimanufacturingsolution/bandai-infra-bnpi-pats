@@ -178,6 +178,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(wrapper).to.include('--device-file "$SPEC"');
 		expect(wrapper).to.include('fetch_hikvision_hris_token()');
 		expect(wrapper).to.include('/api/auth/login');
+		expect(wrapper).to.include('LOGIN_APP_CODE=${HIKVISION_HOT_RELOAD_LOGIN_APP_CODE:-hris}');
+		expect(wrapper).to.include('export LOGIN_EMAIL LOGIN_PASSWORD LOGIN_APP_CODE');
 		expect(wrapper).to.include('export HIKVISION_HRIS_API_TOKEN="$hris_token"');
 		expect(wrapper).to.not.include("where name='Main Entrance Device'");
 		expect(controller).to.include("reconcileHikvisionRuntimeAfterDeviceChange");
