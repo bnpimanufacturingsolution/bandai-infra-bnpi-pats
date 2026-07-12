@@ -3101,12 +3101,46 @@ export const controller = (prisma: PrismaClient) => {
 				rawPayload: true,
 			},
 		});
-		const copyResult = await runHikvisionManualCopyOnVm({
-			sourceDeviceId,
-			targetDeviceId,
-			employeeNo,
-			includeFingerprints: params.includeFingerprints,
+		const existingTargetDeviceUser = await (prisma as any).deviceUser.findUnique({
+			where: {
+				organizationId_deviceId_vendorUserId: {
+					organizationId: params.organizationId,
+					deviceId: targetDeviceId,
+					vendorUserId: employeeNo,
+				},
+			},
+			select: {
+				id: true,
+				vendorUserId: true,
+				employeeId: true,
+				status: true,
+				lastSyncedAt: true,
+				rawPayload: true,
+			},
 		});
+		const copyResult =
+			sourceDeviceUser?.id &&
+			!shouldConvergeDeviceUserToPeer(sourceDeviceUser, existingTargetDeviceUser)
+				? {
+						waitSeconds: 0,
+						strategy: "noop_already_synced",
+						stdout: "",
+						stderr: "",
+						events: [
+							{
+								event: "peer_copy_noop_already_synced",
+								sourceDeviceId,
+								targetDeviceId,
+								employeeNo,
+							},
+						],
+					}
+				: await runHikvisionManualCopyOnVm({
+						sourceDeviceId,
+						targetDeviceId,
+						employeeNo,
+						includeFingerprints: params.includeFingerprints,
+					});
 		const { summary: targetSummary } = await syncSingleHikvisionDeviceUserFromSource({
 			req: params.req,
 			organizationId: params.organizationId,
