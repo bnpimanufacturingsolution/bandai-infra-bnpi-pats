@@ -2,6 +2,7 @@ param(
   [ValidateSet('start', 'stop', 'status')]
   [string]$Action = 'start',
   [string]$DeviceIp = '192.168.254.194',
+  [string[]]$DeviceIps = @(),
   [int]$HttpDevicePort = 80,
   [int]$SdkDevicePort = 8000,
   [int]$HttpListenPort = 58080,
@@ -42,6 +43,15 @@ if ($Action -eq 'status') {
 }
 
 Stop-ExistingBridge
+
+$targetDeviceIps = @($DeviceIps)
+if (-not [string]::IsNullOrWhiteSpace($DeviceIp)) {
+  $targetDeviceIps += $DeviceIp
+}
+$targetDeviceIps = @($targetDeviceIps | ForEach-Object { "$_".Trim() } | Where-Object { $_ } | Select-Object -Unique)
+if ($targetDeviceIps.Count -eq 0) {
+  throw 'Pass -DeviceIp or -DeviceIps with at least one Hikvision device address.'
+}
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $runRoot = Join-Path $runtimeRoot $stamp
@@ -109,31 +119,39 @@ $bridges = @(
 )
 
 $records = @()
-foreach ($bridge in $bridges) {
-  $logPath = Join-Path $runRoot "$($bridge.Name).log"
-  $proc = Start-Process -FilePath 'powershell.exe' `
-    -ArgumentList @(
-      '-NoProfile',
-      '-ExecutionPolicy', 'Bypass',
-      '-File', $bridgeScriptPath,
-      '-ListenPort', $bridge.ListenPort,
-      '-TargetHost', $DeviceIp,
-      '-TargetPort', $bridge.TargetPort,
-      '-LogPath', $logPath
-    ) `
-    -WindowStyle Hidden `
-    -PassThru
+for ($deviceIndex = 0; $deviceIndex -lt $targetDeviceIps.Count; $deviceIndex++) {
+  $targetDeviceIp = $targetDeviceIps[$deviceIndex]
+  $portOffset = $deviceIndex * 100
 
-  $records += [pscustomobject]@{
-    Name = $bridge.Name
-    ProcessId = $proc.Id
-    ListenPort = $bridge.ListenPort
-    TargetHost = $DeviceIp
-    TargetPort = $bridge.TargetPort
-    LogPath = $logPath
+  foreach ($bridge in $bridges) {
+    $listenPort = $bridge.ListenPort + $portOffset
+    $safeIp = $targetDeviceIp -replace '[^0-9A-Za-z\-]', '-'
+    $logPath = Join-Path $runRoot "$safeIp-$($bridge.Name).log"
+    $proc = Start-Process -FilePath 'powershell.exe' `
+      -ArgumentList @(
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', $bridgeScriptPath,
+        '-ListenPort', $listenPort,
+        '-TargetHost', $targetDeviceIp,
+        '-TargetPort', $bridge.TargetPort,
+        '-LogPath', $logPath
+      ) `
+      -WindowStyle Hidden `
+      -PassThru
+
+    $records += [pscustomobject]@{
+      Name = "$($bridge.Name)-$safeIp"
+      DeviceIp = $targetDeviceIp
+      ProcessId = $proc.Id
+      ListenPort = $listenPort
+      TargetHost = $targetDeviceIp
+      TargetPort = $bridge.TargetPort
+      LogPath = $logPath
+    }
   }
 }
 
 $records | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $pidFile -Encoding UTF8
-Write-Host "Host Hikvision VM bridge started for $DeviceIp"
+Write-Host "Host Hikvision VM bridge started for $($targetDeviceIps -join ', ')"
 $records | Format-Table -AutoSize

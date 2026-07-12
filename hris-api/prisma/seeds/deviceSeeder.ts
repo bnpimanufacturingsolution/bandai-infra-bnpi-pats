@@ -22,9 +22,28 @@ export interface DeviceDefinition {
 	};
 }
 
+type DeviceSeedEnv = Record<string, string | undefined>;
+
+type HikvisionSeedDeviceInput = {
+	name?: string;
+	address?: string;
+	port?: number | string;
+	protocol?: string;
+	sdkPort?: number | string;
+	sdkProtocol?: string;
+	webhookPath?: string;
+	username?: string;
+	password?: string;
+};
+
 const optionalEnv = (name: string) => {
 	const value = process.env[name];
 	return value && value.trim() ? value.trim() : undefined;
+};
+
+const optionalEnvValue = (env: DeviceSeedEnv, name: string) => {
+	const value = env[name];
+	return value && String(value).trim() ? String(value).trim() : undefined;
 };
 
 const optionalProtocol = (
@@ -36,82 +55,142 @@ const optionalProtocol = (
 	return undefined;
 };
 
-// Customize these devices according to your organization's biometric devices
-export const DEVICE_DEFINITIONS: DeviceDefinition[] = [
-	{
-		name: "Main Entrance Device",
-		address: optionalEnv("HIKVISION_SEED_ADDRESS") || "10.184.37.139",
-		port: Number(optionalEnv("HIKVISION_SEED_PORT") || 80),
-		protocol: optionalProtocol(optionalEnv("HIKVISION_SEED_PROTOCOL")) || "http",
-		config: {
+const buildSeedManagedConfig = (config?: Record<string, any>) => ({
+	...(config || {}),
+	seedManaged: true,
+});
+
+const buildHikvisionSeedDevice = (
+	input: HikvisionSeedDeviceInput,
+	fallbackName: string,
+): DeviceDefinition | null => {
+	const name = String(input.name || fallbackName).trim();
+	const address = String(input.address || "").trim();
+	const protocol = optionalProtocol(String(input.protocol || "").trim()) || "http";
+	const port = Number(input.port || 80);
+	const sdkPort = Number(input.sdkPort || 8000);
+	const sdkProtocol = optionalProtocol(String(input.sdkProtocol || "").trim()) || "tcp";
+	const webhookPath = String(input.webhookPath || "/api/hikvision/callback").trim();
+	const username = String(input.username || "").trim();
+	const password = String(input.password || "").trim();
+
+	if (!name || !address || !Number.isFinite(port) || !Number.isFinite(sdkPort)) {
+		return null;
+	}
+
+	return {
+		name,
+		address,
+		port,
+		protocol,
+		config: buildSeedManagedConfig({
 			vendor: "Hikvision",
 			source: "vendor/hikvision-linux",
-			sdkPort: Number(optionalEnv("HIKVISION_SEED_SDK_PORT") || 8000),
-			webhookPath: "/api/hikvision/callback",
-		},
+			sdkPort,
+			sdkProtocol,
+			webhookPath,
+		}),
 		access: {
-			...(optionalEnv("HIKVISION_SEED_USERNAME")
-				? { username: optionalEnv("HIKVISION_SEED_USERNAME") }
-				: {}),
-			...(optionalEnv("HIKVISION_SEED_PASSWORD")
-				? { password: optionalEnv("HIKVISION_SEED_PASSWORD") }
-				: {}),
+			...(username ? { username } : {}),
+			...(password ? { password } : {}),
 		},
-	},
-	{
-		name: "ZKTeco Device 10.184.38.10",
-		address: "10.184.38.10",
-		port: 4370,
-		protocol: "tcp",
-		config: {
-			vendor: "ZKTeco",
-			source: "vendor/zkteco-linux",
-			webhookPath: "/api/zkteco/events",
+	};
+};
+
+const parseHikvisionSeedDevicesJson = (env: DeviceSeedEnv) => {
+	const raw = String(env.HIKVISION_SEED_DEVICES_JSON || "").trim();
+	if (!raw) return [];
+
+	try {
+		const parsed = JSON.parse(raw);
+		if (!Array.isArray(parsed)) {
+			throw new Error("HIKVISION_SEED_DEVICES_JSON must be a JSON array");
+		}
+
+		return parsed
+			.map((item, index) =>
+				buildHikvisionSeedDevice((item || {}) as HikvisionSeedDeviceInput, `Hikvision Device ${index + 1}`),
+			)
+			.filter(Boolean) as DeviceDefinition[];
+	} catch (error: any) {
+		throw new Error(error?.message || "Invalid HIKVISION_SEED_DEVICES_JSON");
+	}
+};
+
+const buildDefaultHikvisionSeedDevices = (env: DeviceSeedEnv) => {
+	const configuredDevices = parseHikvisionSeedDevicesJson(env);
+	if (configuredDevices.length > 0) return configuredDevices;
+
+	const fallback = buildHikvisionSeedDevice(
+		{
+			name: "Main Entrance Device",
+			address: env.HIKVISION_SEED_ADDRESS || "10.184.37.139",
+			port: env.HIKVISION_SEED_PORT || 80,
+			protocol: env.HIKVISION_SEED_PROTOCOL || "http",
+			sdkPort: env.HIKVISION_SEED_SDK_PORT || 8000,
+			username: optionalEnvValue(env, "HIKVISION_SEED_USERNAME"),
+			password: optionalEnvValue(env, "HIKVISION_SEED_PASSWORD"),
 		},
-	},
-	{
-		name: "ZKTeco Device 10.184.38.234",
-		address: "10.184.38.234",
-		port: 4370,
-		protocol: "tcp",
-		config: {
-			vendor: "ZKTeco",
-			source: "vendor/zkteco-linux",
-			webhookPath: "/api/zkteco/events",
+		"Main Entrance Device",
+	);
+
+	return fallback ? [fallback] : [];
+};
+
+export const getDeviceDefinitions = (env: DeviceSeedEnv = process.env): DeviceDefinition[] => {
+	const hikvisionDevices = buildDefaultHikvisionSeedDevices(env);
+
+	return [
+		...hikvisionDevices,
+		{
+			name: "ZKTeco Device 10.184.38.10",
+			address: "10.184.38.10",
+			port: 4370,
+			protocol: "tcp",
+			config: buildSeedManagedConfig({
+				vendor: "ZKTeco",
+				source: "vendor/zkteco-linux",
+				webhookPath: "/api/zkteco/events",
+			}),
 		},
-	},
-	{
-		name: "ZKTeco Device 10.184.38.235",
-		address: "10.184.38.235",
-		port: 4370,
-		protocol: "tcp",
-		config: {
-			vendor: "ZKTeco",
-			source: "vendor/zkteco-linux",
-			webhookPath: "/api/zkteco/events",
+		{
+			name: "ZKTeco Device 10.184.38.234",
+			address: "10.184.38.234",
+			port: 4370,
+			protocol: "tcp",
+			config: buildSeedManagedConfig({
+				vendor: "ZKTeco",
+				source: "vendor/zkteco-linux",
+				webhookPath: "/api/zkteco/events",
+			}),
 		},
-	},
-	{
-		name: "ZKTeco Device 10.184.38.9",
-		address: "10.184.38.9",
-		port: 4370,
-		protocol: "tcp",
-		config: {
-			vendor: "ZKTeco",
-			source: "vendor/zkteco-linux",
-			webhookPath: "/api/zkteco/events",
+		{
+			name: "ZKTeco Device 10.184.38.235",
+			address: "10.184.38.235",
+			port: 4370,
+			protocol: "tcp",
+			config: buildSeedManagedConfig({
+				vendor: "ZKTeco",
+				source: "vendor/zkteco-linux",
+				webhookPath: "/api/zkteco/events",
+			}),
 		},
-	},
-	// Add more devices as needed
-	// {
-	//   name: "Back Entrance Device",
-	//   address: "192.168.110.25",
-	//   port: 80,
-	//   protocol: "https",
-	//   config: { vendor: "Hikvision" },
-	//   access: {},
-	// },
-];
+		{
+			name: "ZKTeco Device 10.184.38.9",
+			address: "10.184.38.9",
+			port: 4370,
+			protocol: "tcp",
+			config: buildSeedManagedConfig({
+				vendor: "ZKTeco",
+				source: "vendor/zkteco-linux",
+				webhookPath: "/api/zkteco/events",
+			}),
+		},
+	];
+};
+
+// Customize these devices according to your organization's biometric devices
+export const DEVICE_DEFINITIONS: DeviceDefinition[] = getDeviceDefinitions();
 
 export async function ensureDevices(
 	organizationId?: string,
@@ -187,6 +266,10 @@ export async function ensureDevices(
 		where: {
 			organizationId: resolvedOrganizationId,
 			isDeleted: false,
+			config: {
+				path: ["seedManaged"],
+				equals: true,
+			},
 			NOT: {
 				OR: activeDeviceKeys,
 			},
