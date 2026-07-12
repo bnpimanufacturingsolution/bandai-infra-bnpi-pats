@@ -4273,9 +4273,37 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			const hasDeviceEventColumns = await getDeviceEventColumnPresence();
 			const events = await prisma.deviceEvent.findMany({
 				where,
 				orderBy: [{ receivedAt: "desc" }, { createdAt: "desc" }],
+				select: {
+					id: true,
+					organizationId: true,
+					deviceId: true,
+					deviceUserId: hasDeviceEventColumns.deviceUserId,
+					employeeId: true,
+					attendanceId: true,
+					eventTime: true,
+					receivedAt: true,
+					employeeNo: true,
+					source: true,
+					status: true,
+					eventCategory: hasDeviceEventColumns.eventCategory,
+					eventAction: hasDeviceEventColumns.eventAction,
+					eventLabel: hasDeviceEventColumns.eventLabel,
+					eventConfidence: hasDeviceEventColumns.eventConfidence,
+					eventType: true,
+					major: true,
+					minor: true,
+					doorNo: true,
+					verifyMode: true,
+					dedupeKey: true,
+					payload: true,
+					errorMessage: true,
+					createdAt: true,
+					updatedAt: true,
+				},
 			});
 			const deviceIds = [...new Set(events.map((event) => event.deviceId).filter(Boolean))];
 			const attendanceIds = [

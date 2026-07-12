@@ -166,11 +166,17 @@ describe("Hikvision biometric sync contract", () => {
 		expect(wrapper).to.include('COALESCE(config->>\'vendor\', \'\') = \'Hikvision\'');
 		expect(wrapper).to.include('COALESCE(access->>\'password\', \'\') <> \'\'');
 		expect(wrapper).to.include('LOCAL_API_BASE=${HIKVISION_HOT_RELOAD_API_BASE:-http://localhost:3101}');
+		expect(wrapper).to.include('DEVICE_SOURCE=${HIKVISION_HOT_RELOAD_DEVICE_SOURCE:-postgres}');
+		expect(wrapper).to.include('fetch_hikvision_device_rows_from_api()');
+		expect(wrapper).to.include('/api/device?page=1&limit=${DEVICE_FETCH_LIMIT}&document=true');
+		expect(wrapper).to.include('Authorization: Bearer $token');
+		expect(wrapper).to.include('case "$DEVICE_SOURCE" in');
+		expect(wrapper).to.include('rows="$(fetch_hikvision_device_rows_from_api "$hris_token")"');
 		expect(wrapper).to.include("ensure_work_tree()");
 		expect(wrapper).to.include('--device-file "$SPEC"');
 		expect(wrapper).to.include('fetch_hikvision_hris_token()');
 		expect(wrapper).to.include('/api/auth/login');
-		expect(wrapper).to.include('export HIKVISION_HRIS_API_TOKEN="$(fetch_hikvision_hris_token)"');
+		expect(wrapper).to.include('export HIKVISION_HRIS_API_TOKEN="$hris_token"');
 		expect(wrapper).to.not.include("where name='Main Entrance Device'");
 		expect(controller).to.include("reconcileHikvisionRuntimeAfterDeviceChange");
 		expect(controller).to.include('await reconcileHikvisionRuntimeAfterDeviceChange(device, "device_create")');

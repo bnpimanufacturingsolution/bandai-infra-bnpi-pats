@@ -92,6 +92,45 @@ callback receipt, saved-row socket delivery, and browser live-row proof remain
 unproven until a Linux runtime that can reach `10.184.37.139:8000` is available
 and valid Hikvision device credentials are supplied at runtime.
 
+## Remote-Site Agent Direction
+
+For a deployment where the HRIS browser/admin user is not on the same LAN as the
+physical Hikvision terminal, Project Truth should not assume the central VM can
+directly reach the device over SDK or ISAPI.
+
+The preferred runtime shape is:
+
+```text
+remote Linux host on the device LAN
+  -> runs project-truth-hikvision-hot-reload-listener
+  -> reads Hikvision device rows from HRIS API
+  -> arms HCNetSDK locally against the nearby device
+  -> posts attendance callbacks back to public HRIS API
+```
+
+The hot-reload listener wrapper now supports that mode through:
+
+```text
+HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api
+```
+
+In `api` mode, the wrapper authenticates to the configured HRIS API base, fetches
+active Hikvision `Device` rows plus access credentials, prepares the local SDK
+spec file, and reuses the same callback-post pipeline. This allows the same
+listener binary/runtime to be used either:
+
+- on the central VM with DB-local device sourcing (`postgres` mode), or
+- on a remote site agent beside the device (`api` mode).
+
+Boundary:
+
+- Tap ingestion can work over different networks when the site agent has local
+  LAN reachability to the device and outbound HTTPS reachability to the HRIS
+  API.
+- Device-user sync, live SDK login, and other direct device operations still
+  require some runtime on the device LAN unless Hikvision cloud/gateway
+  integration is deliberately adopted.
+
 ## Active Runtime Direction
 
 Project Truth now treats `vendor/hikvision-linux` as the only active Hikvision

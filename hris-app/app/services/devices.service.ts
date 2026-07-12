@@ -389,6 +389,9 @@ export interface HikvisionListenerStatus {
 		lastLoginOk?: boolean | null;
 		lastLoginError?: string | null;
 		lastError?: string | null;
+		lastTargetHost?: string | null;
+		lastFailureReason?: string | null;
+		diagnosis?: string | null;
 		state: "receiving" | "armed" | "login_failed" | "posting_failed" | "idle" | "unknown" | string;
 	};
 	activeState: string;

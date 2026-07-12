@@ -6,6 +6,8 @@ SDK_ROOT=/home/infra/project-truth-hcnetsdk/EN-HCNetSDKV6.1.9.48_build20230410_l
 SOURCE_ROOT=${HIKVISION_HOT_RELOAD_SOURCE_ROOT:-/opt/project-truth/vendor/hikvision-linux}
 LOCAL_API_BASE=${HIKVISION_HOT_RELOAD_API_BASE:-http://localhost:3101}
 POSTGRES_CONTAINER=${HIKVISION_POSTGRES_CONTAINER:-hris-postgres-dev}
+DEVICE_SOURCE=${HIKVISION_HOT_RELOAD_DEVICE_SOURCE:-postgres}
+DEVICE_FETCH_LIMIT=${HIKVISION_HOT_RELOAD_DEVICE_FETCH_LIMIT:-200}
 LOGIN_EMAIL=${HIKVISION_HOT_RELOAD_LOGIN_EMAIL:-admin@bandai.local}
 LOGIN_PASSWORD=${HIKVISION_HOT_RELOAD_LOGIN_PASSWORD:-password123}
 LOGIN_APP_CODE=${HIKVISION_HOT_RELOAD_APP_CODE:-hris}
@@ -104,7 +106,9 @@ print(token)
 PY
 }
 
-query=$(cat <<'SQL'
+fetch_hikvision_device_rows_from_postgres() {
+  local query
+  query=$(cat <<'SQL'
 COPY (
   SELECT
     id,
@@ -123,13 +127,75 @@ COPY (
 SQL
 )
 
-rows=$(
   docker exec -i "$POSTGRES_CONTAINER" \
     psql -U postgres -d hris -v ON_ERROR_STOP=1 -qAt -c "$query" | tr -d '\r'
-)
+}
+
+fetch_hikvision_device_rows_from_api() {
+  local token="$1"
+  local device_url="${LOCAL_API_BASE%/}/api/device?page=1&limit=${DEVICE_FETCH_LIMIT}&document=true"
+  local response
+  response=$(curl --fail --silent --show-error \
+    -H "Authorization: Bearer $token" \
+    "$device_url")
+
+  HIKVISION_DEVICE_FILTER="$DEVICE_ID_FILTER" API_RESPONSE="$response" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["API_RESPONSE"])
+devices = (((payload or {}).get("data") or {}).get("devices") or [])
+device_filter = {item.strip() for item in os.environ.get("HIKVISION_DEVICE_FILTER", "").split(",") if item.strip()}
+
+def clean(value):
+    text = "" if value is None else str(value)
+    return text.replace("\r", " ").replace("\n", " ").replace("|", " ").strip()
+
+for device in devices:
+    config = device.get("config") or {}
+    access = device.get("access") or {}
+    device_id = clean(device.get("id"))
+    if not device_id:
+      continue
+    if device_filter and device_id not in device_filter:
+      continue
+    if device.get("isDeleted") is True:
+      continue
+    if clean(config.get("vendor")) != "Hikvision":
+      continue
+    password = clean(access.get("password"))
+    if not password:
+      continue
+    row = [
+      device_id,
+      clean(device.get("organizationId")),
+      clean(device.get("name")),
+      clean(device.get("address")),
+      clean(config.get("sdkPort") or "8000"),
+      clean(access.get("username")),
+      password,
+    ]
+    print("|".join(row))
+PY
+}
+
+hris_token=""
+case "$DEVICE_SOURCE" in
+  postgres)
+    rows="$(fetch_hikvision_device_rows_from_postgres)"
+    ;;
+  api)
+    hris_token="$(fetch_hikvision_hris_token)"
+    rows="$(fetch_hikvision_device_rows_from_api "$hris_token")"
+    ;;
+  *)
+    echo "unsupported HIKVISION_HOT_RELOAD_DEVICE_SOURCE: $DEVICE_SOURCE" >&2
+    exit 2
+    ;;
+esac
 
 if [[ -z "${rows:-}" ]]; then
-  echo "missing Hikvision device rows or credentials" >&2
+  echo "missing Hikvision device rows or credentials from ${DEVICE_SOURCE}" >&2
   exit 2
 fi
 
@@ -173,7 +239,10 @@ cd "$WORK"
 export HIKVISION_LINUX_SDK_ROOT="$SDK_ROOT"
 export LD_LIBRARY_PATH="$SDK_ROOT/lib:$SDK_ROOT:$SDK_ROOT/HCNetSDKCom:${LD_LIBRARY_PATH:-}"
 export LOGIN_EMAIL LOGIN_PASSWORD LOGIN_APP_CODE
-export HIKVISION_HRIS_API_TOKEN="$(fetch_hikvision_hris_token)"
+if [[ -z "${hris_token:-}" ]]; then
+  hris_token="$(fetch_hikvision_hris_token)"
+fi
+export HIKVISION_HRIS_API_TOKEN="$hris_token"
 
 cmd=(
   ./build/hikvision-biometric-service

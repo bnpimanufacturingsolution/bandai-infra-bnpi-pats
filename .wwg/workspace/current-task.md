@@ -1213,3 +1213,75 @@ Status: COMPLETE
     - VM-managed listener service is running,
     - but VM-to-device network reachability still blocks real device user/tap
       acquisition.
+
+## Latest Task Addendum - 2026-07-12 Dev Reset and VM Device Target Alignment
+
+- Task mode: Live dev cleanup plus VM listener target correction while the user
+  validates Hikvision LAN behavior before on-site work.
+- User-requested cleanup completed:
+  - Executed full saved device-event reset through the admin endpoint with
+    built-in backup export.
+  - Result:
+    - `deleted.deviceEvents=173744`
+    - `deleted.linkedAttendance=12`
+    - `countsAfter.deviceEvents=0`
+    - `countsAfter.linkedAttendance=0`
+  - Backup evidence directory:
+    - `.runtime/backups/device-events-reset-2026-07-12T08-15-43-135Z`
+- Local host runtime corrected:
+  - Local device row now uses the SADP-discovered address `10.184.38.137`
+    instead of stale `10.184.37.137`.
+  - Post-reset local proof now shows:
+    - `GET /api/device/events?...` => `total=0`
+    - `GET /api/device/sync-preview` => device address `10.184.38.137`,
+      `hrisSavedCount=0`, `status=source_unavailable`
+- VM listener truth corrected:
+  - The VM runtime had a separate source of truth and was still targeting
+    `10.184.37.139`.
+  - Updated the VM-side `hris-postgres-dev` device row to
+    `10.184.38.137`, verified `/run/project-truth/hikvision-hot-reload-device.spec`
+    reflects that address, and restarted
+    `project-truth-hikvision-hot-reload-listener.service`.
+  - Live listener logs now show the listener attempting:
+    - `sdk_login host=10.184.38.137`
+    - `lastError=7`
+    - `service_start_failed reason=no_armed_devices`
+- Current final truth:
+  - App/browser -> local API -> VM listener control path is working.
+  - Local dev saved device events are cleared.
+  - Local device configuration and VM listener target are aligned on
+    `10.184.38.137`.
+  - The remaining blocker is physical Hikvision reachability/auth behavior from
+    the VM to the actual device LAN target, not stale app state or stale
+    listener target selection.
+
+## Latest Task Addendum - 2026-07-12 Cross-Network Hikvision Agent Mode
+
+- Task mode: Architecture repair for deployments where the browser/admin user
+  and central HRIS runtime are not on the same LAN as the Hikvision terminal.
+- Research-backed conclusion:
+  - For direct HCNetSDK/ISAPI control, some runtime still needs LAN adjacency
+    to the physical device.
+  - The correct cross-network pattern is not "make the browser share the
+    device LAN"; it is "run an outbound agent on the device LAN and let that
+    agent post back to HRIS."
+- Implemented runtime change:
+  - `scripts/project-truth-hikvision-hot-reload-listener.sh` now supports:
+    - `HIKVISION_HOT_RELOAD_DEVICE_SOURCE=postgres` for the VM-local mode
+      already in use
+    - `HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api` for a remote site-agent mode
+  - In `api` mode, the wrapper:
+    - authenticates to the configured HRIS API base,
+    - fetches active Hikvision `Device` rows and credentials from
+      `/api/device?...document=true`,
+    - prepares the SDK spec locally on the site host,
+    - then runs the same HCNetSDK listener and callback-post pipeline.
+  - Added `scripts/hikvision-remote-site-agent.env.example` as the minimal env
+    example for that mode.
+- Proven contract:
+  - `hris-api` Hikvision biometric sync contract tests still pass after the
+    wrapper change.
+- Architectural implication:
+  - This enables the same Project Truth Hikvision listener runtime to be placed
+    beside the remote device tomorrow, while still using central/public HRIS
+    as the source of truth and callback sink.

@@ -1573,6 +1573,11 @@ export default function DeviceEventsPage() {
 			: "Status check has not completed";
 	const hikvisionListenerLastLog =
 		hikvisionListenerStatus?.logs?.recent?.[hikvisionListenerStatus.logs.recent.length - 1] || "";
+	const hikvisionListenerDiagnosis =
+		hikvisionListenerStatus?.sdk?.diagnosis ||
+		(hikvisionListenerStatus?.sdk?.lastError
+			? `SDK login failed${hikvisionListenerStatus.sdk.lastTargetHost ? ` against ${hikvisionListenerStatus.sdk.lastTargetHost}` : ""}.`
+			: "");
 	const realtimePanelIsLive = isSdkAlarmSavedScope
 		? isLatestSdkSavedFresh || hikvisionSdkReceiving
 		: realtimeStatus.isListening;
@@ -2543,6 +2548,12 @@ export default function DeviceEventsPage() {
 									</dd>
 								</div>
 								<div className="flex min-w-0 justify-between gap-3">
+									<dt className="text-slate-500">SDK target</dt>
+									<dd className="truncate font-semibold text-slate-900">
+										{hikvisionListenerStatus?.sdk?.lastTargetHost || "-"}
+									</dd>
+								</div>
+								<div className="flex min-w-0 justify-between gap-3">
 									<dt className="text-slate-500">Last callback</dt>
 									<dd className="truncate font-semibold text-slate-900">
 										{formatEventTime(hikvisionListenerStatus?.sdk?.lastAlarmAt)}
@@ -2558,9 +2569,9 @@ export default function DeviceEventsPage() {
 						</div>
 					</div>
 
-					{hikvisionListenerStatus?.sdk?.lastError ? (
+					{hikvisionListenerDiagnosis ? (
 						<div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-							{hikvisionListenerStatus.sdk.lastError}
+							{hikvisionListenerDiagnosis}
 						</div>
 					) : null}
 
