@@ -1,0 +1,4 @@
+[submodule "hris-emp-app"]
+	path = hris-emp-app
+	url = https://github.com/hrisworkforcesystem-coder/hris-emp-app.git
+	branch = develop
