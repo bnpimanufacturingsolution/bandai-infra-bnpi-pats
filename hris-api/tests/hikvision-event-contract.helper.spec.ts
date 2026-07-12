@@ -82,6 +82,15 @@ describe("hikvision event contract helper", () => {
 			),
 		).to.equal(false);
 		expect(
+			hikvisionEventMatchesConfiguredDevice(
+				{ deviceIP: "10.184.37.250" },
+				{
+					address: "192.168.1.40",
+					config: { hikvisionSdkRuntimeAddress: "10.184.37.250" },
+				},
+			),
+		).to.equal(true);
+		expect(
 			hikvisionEventMatchesConfiguredDevice({ deviceIP: undefined }, { address: "192.168.1.40" }),
 		).to.equal(true);
 	});

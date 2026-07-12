@@ -149,11 +149,24 @@ export const getHikvisionObservedDeviceIp = (payload: Record<string, any>): stri
 
 export const hikvisionEventMatchesConfiguredDevice = (
 	event: Pick<NormalizedHikvisionEvent, "deviceIP">,
-	device: { address?: string | null },
+	device: { address?: string | null; config?: unknown },
 ) => {
 	const observedAddress = normalizeHikvisionAddress(event.deviceIP);
 	if (!observedAddress) return true;
-	return observedAddress === normalizeHikvisionAddress(device.address);
+
+	const config = device.config && typeof device.config === "object" ? (device.config as any) : {};
+	const configuredAddresses = [
+		device.address,
+		config.hikvisionRuntimeAddress,
+		config.hikvisionSdkRuntimeAddress,
+		config.runtimeAddress,
+	]
+		.map((value) => normalizeHikvisionAddress(value))
+		.filter(Boolean);
+
+	return configuredAddresses.length === 0
+		? true
+		: configuredAddresses.includes(observedAddress);
 };
 
 export const isHikvisionAttendancePunchEvent = (

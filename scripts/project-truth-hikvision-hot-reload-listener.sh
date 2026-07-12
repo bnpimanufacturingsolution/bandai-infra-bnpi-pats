@@ -114,8 +114,8 @@ COPY (
     id,
     "organizationId",
     regexp_replace(name, E'[\\r\\n|]+', ' ', 'g'),
-    address,
-    COALESCE(config->>'sdkPort', '8000'),
+    COALESCE(NULLIF(config->>'hikvisionSdkRuntimeAddress', ''), address),
+    COALESCE(NULLIF(config->>'hikvisionSdkRuntimePort', ''), NULLIF(config->>'sdkPort', ''), '8000'),
     COALESCE(access->>'username', ''),
     COALESCE(access->>'password', '')
   FROM "Device"
@@ -170,8 +170,8 @@ for device in devices:
       device_id,
       clean(device.get("organizationId")),
       clean(device.get("name")),
-      clean(device.get("address")),
-      clean(config.get("sdkPort") or "8000"),
+      clean(config.get("hikvisionSdkRuntimeAddress") or device.get("address")),
+      clean(config.get("hikvisionSdkRuntimePort") or config.get("sdkPort") or "8000"),
       clean(access.get("username")),
       password,
     ]

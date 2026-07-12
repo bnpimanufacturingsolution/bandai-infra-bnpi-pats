@@ -165,6 +165,8 @@ describe("Hikvision biometric sync contract", () => {
 
 		expect(wrapper).to.include('COALESCE(config->>\'vendor\', \'\') = \'Hikvision\'');
 		expect(wrapper).to.include('COALESCE(access->>\'password\', \'\') <> \'\'');
+		expect(wrapper).to.include("hikvisionSdkRuntimeAddress");
+		expect(wrapper).to.include("hikvisionSdkRuntimePort");
 		expect(wrapper).to.include('LOCAL_API_BASE=${HIKVISION_HOT_RELOAD_API_BASE:-http://localhost:3101}');
 		expect(wrapper).to.include('DEVICE_SOURCE=${HIKVISION_HOT_RELOAD_DEVICE_SOURCE:-postgres}');
 		expect(wrapper).to.include('fetch_hikvision_device_rows_from_api()');
