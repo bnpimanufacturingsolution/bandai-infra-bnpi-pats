@@ -271,7 +271,7 @@ class HikvisionClient {
 				typeof body === "string" ? body : JSON.stringify(body);
 		}
 
-		// For HTTPS with self-signed certificates, we need to configure the agent
+		// For HTTPS with self-signed certificates, we need to configure the agent.
 		if (url.startsWith("https")) {
 			const httpsAgent = new https.Agent({
 				rejectUnauthorized: false,
@@ -280,7 +280,11 @@ class HikvisionClient {
 			fetchOptions.agent = httpsAgent;
 		}
 
+		const previousTlsBypass = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
 		try {
+			if (url.startsWith("https")) {
+				process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+			}
 			const client = await this.createClient(connection.username, connection.password);
 			const response = await client.fetch(url, fetchOptions);
 
@@ -327,6 +331,10 @@ class HikvisionClient {
 				},
 			};
 		} finally {
+			if (url.startsWith("https")) {
+				if (previousTlsBypass === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+				else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTlsBypass;
+			}
 			clearTimeout(timeout);
 		}
 	}
@@ -363,7 +371,11 @@ class HikvisionClient {
 			fetchOptions.agent = httpsAgent;
 		}
 
+		const previousTlsBypass = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
 		try {
+			if (url.startsWith("https")) {
+				process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+			}
 			const client = await this.createClient(connection.username, connection.password);
 			const response = await client.fetch(url, fetchOptions);
 
@@ -405,6 +417,10 @@ class HikvisionClient {
 				},
 			};
 		} finally {
+			if (url.startsWith("https")) {
+				if (previousTlsBypass === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+				else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTlsBypass;
+			}
 			clearTimeout(timeout);
 		}
 	}
