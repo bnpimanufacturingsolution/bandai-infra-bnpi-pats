@@ -131,6 +131,40 @@ Boundary:
   require some runtime on the device LAN unless Hikvision cloud/gateway
   integration is deliberately adopted.
 
+## Temporary Remote-Dev Tunnel Path
+
+When the local Windows dev API/UI must be exercised from a remote device-side
+site agent, the additive temporary path is:
+
+```text
+Windows local dev API/app
+  -> temporary trycloudflare HTTP URLs
+  -> remote Linux site agent on the device LAN
+  -> local HCNetSDK login/alarm arm against nearby device
+  -> callbacks posted back to the tunneled dev API
+```
+
+This repo now includes:
+
+```text
+scripts/start-local-hikvision-remote-test.ps1
+```
+
+That helper:
+
+- verifies local `http://127.0.0.1:3001/health`
+- verifies local `http://127.0.0.1:5175/auth/login`
+- starts additive temporary trycloudflare tunnels for both
+- writes a ready-to-use remote site-agent env file under
+  `.runtime/local-hikvision-remote-test/<stamp>/hikvision-remote-site-agent.env`
+
+Boundary:
+
+- This is only for temporary development proof.
+- Quick tunnels rotate and are not production architecture.
+- The preferred durable architecture remains a stable Linux site agent beside
+  the device, pointed at a stable public HRIS API host.
+
 ## Active Runtime Direction
 
 Project Truth now treats `vendor/hikvision-linux` as the only active Hikvision

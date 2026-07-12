@@ -43,6 +43,7 @@ export default defineConfig(({ mode }) => {
 		},
 		server: {
 			port: 5175,
+			allowedHosts: ["127.0.0.1", "localhost", ".trycloudflare.com"],
 			hmr: {
 				overlay: false, // Disable error overlay to reduce network requests
 			},

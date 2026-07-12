@@ -1761,6 +1761,13 @@ export const controller = (prisma: PrismaClient) => {
 				buildSuccessResponse("Device sync runs retrieved", { syncRuns: rows }, 200),
 			);
 		} catch (error: any) {
+			if (isMissingDeviceSyncRunTableError(error)) {
+				deviceLogger.warn("Device sync run history table is missing; returning an empty sync run list");
+				res.status(200).json(
+					buildSuccessResponse("Device sync runs retrieved", { syncRuns: [] }, 200),
+				);
+				return;
+			}
 			res.status(500).json(buildErrorResponse(error?.message || "Failed to retrieve device sync runs", 500));
 		}
 	};
@@ -4099,33 +4106,44 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 			const jobId = randomUUID();
-			const run = await (prisma as any).deviceSyncRun.create({
-				data: {
-					organizationId: String(organizationId),
-					deviceId: device.id,
-					runType: "DEVICE_LOGS",
-					status: "PROCESSING",
-					source: "HIKVISION_CALLBACK",
-					startedByUserId: (req as any).userId || null,
-					totalSourceRecords: totalHint,
-					importableRecords: targetImportCount,
-					rawSummary: {
-						totalHint,
-						savedEvents,
-						knownSkippedEvents,
-						estimatedUnsaved,
-						serverEstimatedTargetImportCount,
-						requestedTargetImportCount: hasRequestedTargetImportCount
-							? Math.max(Math.floor(requestedTargetImportCount), 0)
-							: null,
-						targetImportCount,
-						targetedLatestScan: targetImportCount !== null,
+			let run: { id: string } | null = null;
+			try {
+				run = await (prisma as any).deviceSyncRun.create({
+					data: {
+						organizationId: String(organizationId),
+						deviceId: device.id,
+						runType: "DEVICE_LOGS",
+						status: "PROCESSING",
+						source: "HIKVISION_CALLBACK",
+						startedByUserId: (req as any).userId || null,
+						totalSourceRecords: totalHint,
+						importableRecords: targetImportCount,
+						rawSummary: {
+							totalHint,
+							savedEvents,
+							knownSkippedEvents,
+							estimatedUnsaved,
+							serverEstimatedTargetImportCount,
+							requestedTargetImportCount: hasRequestedTargetImportCount
+								? Math.max(Math.floor(requestedTargetImportCount), 0)
+								: null,
+							targetImportCount,
+							targetedLatestScan: targetImportCount !== null,
+						},
 					},
-				},
-			});
+				});
+			} catch (error) {
+				if (isMissingDeviceSyncRunTableError(error)) {
+					deviceLogger.warn(
+						`Device sync run history table is missing; starting Hikvision import without durable run journal for device ${device.id}`,
+					);
+				} else {
+					throw error;
+				}
+			}
 			const job: DeviceImportJob = {
 				jobId,
-				runId: run.id,
+				runId: run?.id || null,
 				status: "processing",
 				organizationId: String(organizationId),
 				deviceId: device.id,
@@ -4145,7 +4163,7 @@ export const controller = (prisma: PrismaClient) => {
 			deviceImportJobs.set(jobId, job);
 			processHikvisionImportJob({
 				jobId,
-				runId: run.id,
+				runId: run?.id || null,
 				req,
 				device,
 				totalHint,

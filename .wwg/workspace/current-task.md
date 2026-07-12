@@ -2,6 +2,57 @@
 
 Status: COMPLETE
 
+## Latest Task Addendum - 2026-07-12 Hikvision Remote-Site Agent And Local Dev Tunnel Proof
+
+- Task mode: Cross-network Hikvision runtime repair plus local-dev remote test path.
+- User goal:
+  - Keep the listener truth accurate while making the currently running local
+    dev stack reachable from a remote device-side network for tomorrow's test.
+- Confirmed listener/runtime truth:
+  - Local `GET /api/device/hikvision/listener` now returns truthful diagnosis
+    fields from the live VM log:
+    - `sdk.lastTargetHost=10.184.38.137`
+    - `sdk.lastLoginError=7`
+    - `sdk.lastFailureReason=no_armed_devices`
+    - diagnosis text explicitly says the VM is healthy but device login/network
+      reachability is still failing.
+  - Live browser proof in the separate headed Chrome window, after reload, now
+    shows the same truthful state in the Hikvision listener modal instead of
+    the earlier stale "status check has not completed" view.
+- Cross-network architecture hardening:
+  - `appliance/systemd/project-truth-hikvision-hot-reload-listener.service`
+    now reads optional override env from
+    `/etc/project-truth/hikvision-hot-reload.env`, so a Linux host beside the
+    devices can run the same managed listener in site-agent mode without
+    editing the unit itself.
+  - Added `scripts/start-local-hikvision-remote-test.ps1` to expose the local
+    dev API/app through additive temporary trycloudflare URLs and generate a
+    ready-to-use remote site-agent env file.
+  - `docs/HIKVISION_RUNTIME_TRUTH.md` now documents the temporary remote-dev
+    tunnel path as a dev-only bridge, with the Linux site agent beside the
+    device remaining the durable architecture.
+- Proven remote-dev tunnel path:
+  - Temporary public API URL:
+    `https://trim-attached-hiring-hart.trycloudflare.com`
+  - Temporary public app URL:
+    `https://constant-scholar-handbook-learners.trycloudflare.com`
+  - Public API health returned HTTP 200.
+  - Public app `/auth/login` returned HTTP 200 after allowing
+    `*.trycloudflare.com` in `hris-app/vite.config.ts`.
+  - Public API login with `admin@bandai.local` / `password123` succeeded and a
+    subsequent public `GET /api/device?page=1&limit=10&document=true` returned
+    the live local `Main Entrance Device` row, proving the exact remote
+    site-agent fetch path against the user's current local dev API.
+- Remaining truth:
+  - The remote path for tomorrow is now viable:
+    remote Linux site agent on the device LAN -> public tunneled local API.
+  - The central VM still cannot directly reach `10.184.38.137:80` or `:8000`,
+    so direct central-VM HCNetSDK login remains blocked by device-side
+    reachability/network path, not by the local browser/API plumbing.
+- Evidence:
+  - `.runtime/listener-proof-20260712-163353/`
+  - `.runtime/local-hikvision-remote-test/20260712-163759/`
+
 ## Latest Task Addendum - 2026-07-10 Hikvision Synthetic Fingerprint Tally And Live Device Reachability Blocker
 
 - Task mode: Local API/UI truth repair plus runtime blocker isolation.
