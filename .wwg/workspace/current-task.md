@@ -1043,3 +1043,173 @@ Status: COMPLETE
   appliance profile or tune K3s memory/capacity until Argo/K3s health matches
   the actually served HRIS app/API.
 - Resolve existing WWG generated-report validation findings before release/commit claims that require a fully green WWG gate.
+
+## Latest Task Addendum - 2026-07-12 Hikvision Listener VM Runtime Reachability And Live DEV Status Repair
+
+- Task mode: VM listener/runtime repair, K3s DEV API promotion, and live
+  endpoint proof.
+- User goal:
+  - Fix the Hikvision Linux listener path so the managed VM service is running
+    and so the DEV API/UI can read truthful listener status from the same VM.
+- Current-state finding before the fix:
+  - The VM service could be started manually over `ssh project-truth-hris`,
+    but the live DEV `hris-api` pod still used stale listener code that pointed
+    at `10.184.37.241`.
+  - After the first controller patch, the live DEV API still could not expose
+    status/control because it ran inside a container without `ssh`, without a
+    mounted VM key, and therefore could not reach the host-managed systemd
+    service honestly.
+- Implemented repair:
+  - `scripts/project-truth-hikvision-hot-reload-listener.sh` now rebuilds from
+    `/opt/project-truth/vendor/hikvision-linux` and defaults HRIS posts to
+    `http://localhost:3101`.
+  - Added managed VM daemon wrapper
+    `scripts/project-truth-hikvision-hot-reload-daemon.sh` and managed unit
+    `appliance/systemd/project-truth-hikvision-hot-reload-listener.service`.
+  - `hris-api/app/device/device.controller.ts` now installs the wrapper,
+    daemon, and systemd unit together and exposes corrected VM target logic for
+    the managed listener controls.
+  - `ansible/project-truth-pull.yml` and
+    `appliance/bin/project-truth-os-sync.sh` now install the managed listener
+    scripts/unit so the repair survives VM self-heal.
+  - `hris-api/Dockerfile` now installs `openssh-client`, and
+    `gitops/runtime-k8s/overlays/dev/runtime.yaml` now mounts
+    `/var/lib/project-truth/ssh` plus `PROJECT_TRUTH_VM_HOST`,
+    `PROJECT_TRUTH_VM_USER`, and `PROJECT_TRUTH_VM_SSH_KEY` env so the DEV API
+    pod can SSH back to the VM host truthfully.
+  - Provisioned VM-local SSH key
+    `/var/lib/project-truth/ssh/node-health-appliance_ed25519`, authorized it
+    for `infra`, rebuilt `hris-api-local:develop`, imported it into K3s, and
+    rolled the DEV `hris-api` deployment after temporarily pausing
+    `project-truth-ansible-pull.timer` to avoid stale checkout drift during the
+    rebuild. The timer was restarted after the rollout.
+- Proven live truth:
+  - VM systemd now reports
+    `project-truth-hikvision-hot-reload-listener.service` as
+    `ActiveState=active`, `SubState=running`, `Result=success`.
+  - The live DEV authenticated endpoint
+    `GET /api/device/hikvision/listener` now returns:
+    - `vm.host=10.184.37.19`
+    - `running=true`
+    - `status=running`
+    - `control.available=true`
+    - `logs.available=true`
+    - `sdk.state=login_failed`
+    - `lastLoginError=7`
+  - The DEV pod now has `/usr/bin/ssh` and mounted key files at
+    `/var/run/project-truth/ssh/node-health-appliance_ed25519`.
+- Remaining blocker:
+  - The listener runtime and API/UI visibility are repaired, but the physical
+    device itself is still not armable from the VM today. Journals and live API
+    logs show repeated `sdk_login host=10.184.37.139 lastError=7 ok=false` and
+    `service_start_failed reason=no_armed_devices`, so endpoint truth now
+    accurately reports a real device/network/credential failure instead of an
+    opaque unknown state.
+
+## Latest Task Addendum - 2026-07-12 Local Postgres Device Tables Drift Fallback Repair
+
+- Task mode: Local API regression repair while the user exercises admin device
+  journeys.
+- User goal:
+  - Stop local admin device pages from throwing repeated 500s while the current
+    localhost runtime uses an older Postgres shape without `device_users` and
+    without newer `device_events` taxonomy columns.
+- Current-state finding before repair:
+  - Local `localhost:3001` returned 500 for
+    `GET /api/device/events?page=1&limit=10&sort=eventTime&order=desc&dateField=eventTime`
+    because the raw SQL assumed:
+    - `public.device_users` exists,
+    - `device_events.deviceUserId` exists,
+    - and taxonomy columns `eventCategory`, `eventAction`, `eventLabel`,
+      `eventConfidence` exist.
+  - The same local runtime returned 500 for `GET /api/device/sync-preview`
+    because it called `prisma.deviceUser.findMany()` directly while
+    `public.device_users` was absent.
+- Implemented repair:
+  - `hris-api/app/device/device.controller.ts` now detects local
+    `device_events` column presence through `information_schema` and degrades
+    raw SQL to safe defaults when older columns are missing.
+  - The device-events query now:
+    - avoids joining `device_users` when either the table or the
+      `device_events.deviceUserId` column is missing,
+    - substitutes safe fallback values for missing taxonomy columns,
+    - and keeps response shape stable for the frontend.
+  - `GET /api/device/sync-preview` now treats missing `device_users` as an
+    empty per-device user inventory instead of crashing.
+  - Device-user list retrieval now returns an empty success payload with
+    `migrationState=device_users_table_missing` instead of a 500 when the table
+    is absent.
+  - `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` now includes the
+    contract coverage for these fallback paths.
+- Proven local truth:
+  - After restarting the local `tsx watch` API process, direct authenticated
+    local endpoint proof succeeded:
+    - `GET /api/device/events?...dateField=eventTime` returned HTTP 200 with
+      populated saved-event rows.
+    - `GET /api/device/sync-preview` returned HTTP 200 with device preview data
+      and zeroed user summary values where `device_users` truth is unavailable.
+  - The local DB truth probe showed the current `device_events` table is
+    missing:
+    - `deviceUserId`
+    - `eventCategory`
+    - `eventAction`
+    - `eventLabel`
+    - `eventConfidence`
+  - Current behavior is now truthful: older local DB shape still works for read
+    journeys, but richer device-user features remain naturally empty until the
+    table is migrated.
+
+## Latest Task Addendum - 2026-07-12 Listener Fallback and Cross-LAN Truth
+
+- Task mode: Device listener runtime truth repair while the user continues the
+  admin Sync Center journey from a host that is not currently on the VM's
+  direct LAN path.
+- Current-state finding before repair:
+  - Local `GET /api/device/hikvision/listener` still returned HTTP 200 but with
+    misleading degraded truth:
+    - `running=false`
+    - `status=unknown`
+    - `control.available=false`
+    - `error=ssh: connect to host 10.184.37.19 port 22: Connection timed out`
+  - The admin Sync Center therefore rendered `VM stopped` even though the VM
+    listener service was actually healthy when reached through the prepared
+    Cloudflare SSH alias.
+- Implemented repair:
+  - `hris-api/app/device/device.controller.ts` now tries Hikvision VM commands
+    against multiple targets in order:
+    - direct LAN SSH to `infra@10.184.37.19`
+    - fallback SSH alias `project-truth-hris`
+  - The same fallback logic now applies to remote command execution and file
+    copy operations used by listener status/control/runtime install flows.
+  - Listener status payloads now expose the resolved path through
+    `vm.path`, for example `alias:project-truth-hris`.
+  - `hris-app/app/routes/admin/devices/enroll.tsx` now distinguishes
+    `status unreachable` from `VM stopped` so the Sync Center stops claiming a
+    healthy remote listener is down when only the local LAN probe failed.
+  - `hris-app/app/routes/admin/devices/events.tsx` now treats
+    `control.available=false` and endpoint-level listener errors as status
+    unavailability, not just transport exceptions.
+- Proven local truth after restart:
+  - After restarting the local `tsx watch` API runtime, direct authenticated
+    local endpoint proof now returns:
+    - `running=true`
+    - `status=running`
+    - `control.available=true`
+    - `vm.path=alias:project-truth-hris`
+    - `sdk.state=login_failed`
+    - `sdk.lastLoginError=7`
+  - This confirms the cross-LAN admin/browser path is now repaired: the host
+    can interrogate the VM listener through the prepared fallback route even
+    when direct LAN SSH to `10.184.37.19` is unavailable from the workstation.
+- Remaining blocker now isolated:
+  - From the VM itself, direct probes show the physical device path is broken:
+    - `10.184.37.139:8000` -> `No route to host`
+    - `10.184.37.137:80` -> timed out
+  - `GET /api/device/sync-preview` therefore still correctly reports
+    `status=source_unavailable` with
+    `error=Hikvision event total unavailable (code 20)`.
+  - Current truth:
+    - remote admin-to-VM listener visibility is repaired,
+    - VM-managed listener service is running,
+    - but VM-to-device network reachability still blocks real device user/tap
+      acquisition.

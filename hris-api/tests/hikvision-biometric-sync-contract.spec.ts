@@ -187,4 +187,20 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("startedByUserId: (req as any).userId || null");
 		expect(controller).to.include('if (isHikvisionDevice(device) && String((device as any)?.access?.password || "").trim())');
 	});
+
+	it("keeps the device events page working when device_users has not been migrated yet", () => {
+		const controller = controllerSource();
+
+		expect(controller).to.include("const hasDeviceUsersTable = await hasDeviceUserTable()");
+		expect(controller).to.include("const hasDeviceEventColumns = await getDeviceEventColumnPresence()");
+		expect(controller).to.include('const hasDeviceUserReference = hasDeviceUsersTable && hasDeviceEventColumns.deviceUserId');
+		expect(controller).to.include('LEFT JOIN LATERAL (');
+		expect(controller).to.include('NULL::text AS \"vendorUserId\"');
+		expect(controller).to.include('${deviceUserJoinSql}');
+		expect(controller).to.include('NULL::text');
+		expect(controller).to.include("'UNKNOWN_VENDOR'::text");
+		expect(controller).to.include("GROUP BY 1");
+		expect(controller).to.include('migrationState: "device_users_table_missing"');
+		expect(controller).to.include("const deviceUserRows = (await hasDeviceUserTable())");
+	});
 });

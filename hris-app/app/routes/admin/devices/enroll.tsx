@@ -1316,10 +1316,16 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const hikvisionSdkState = String(hikvisionListenerStatus?.sdk?.state || "unknown").trim();
 	const hikvisionSdkReceiving = Boolean(hikvisionListenerStatus?.sdk?.receivingCallbacks);
 	const hikvisionSdkArmed = Boolean(hikvisionListenerStatus?.sdk?.armed);
+	const hikvisionListenerUnavailable = Boolean(
+		!isLoadingHikvisionListenerStatus &&
+			(hikvisionListenerStatusError ||
+				!hikvisionListenerStatus?.control?.available ||
+				hikvisionListenerStatus?.error),
+	);
 	const hikvisionListenerToneClass =
 		hikvisionSdkReceiving || hikvisionSdkArmed
 			? "border-emerald-200 bg-emerald-50 text-emerald-950"
-			: hikvisionListenerStatusError
+			: hikvisionListenerUnavailable
 				? "border-red-200 bg-red-50 text-red-950"
 				: "border-amber-200 bg-amber-50 text-amber-950";
 	const hikvisionListenerTitle = isLoadingHikvisionListenerStatus
@@ -1330,6 +1336,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				? "Can't reach HRIS"
 				: hikvisionSdkState === "login_failed"
 					? "Sign-in failed"
+					: hikvisionListenerUnavailable
+						? "Status unreachable"
 					: hikvisionSdkArmed
 						? "Ready"
 						: hikvisionListenerRunning
@@ -1815,7 +1823,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
 									hikvisionSdkReceiving || hikvisionSdkArmed
 										? "bg-emerald-100 text-emerald-700"
-										: hikvisionListenerStatusError
+										: hikvisionListenerUnavailable
 											? "bg-red-100 text-red-700"
 											: "bg-amber-100 text-amber-700"
 								}`}>
@@ -1823,7 +1831,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									<Loader2 className="h-4 w-4 animate-spin" />
 								) : hikvisionSdkReceiving ? (
 									<Wifi className="h-4 w-4" />
-								) : hikvisionListenerStatusError ? (
+								) : hikvisionListenerUnavailable ? (
 									<AlertTriangle className="h-4 w-4" />
 								) : (
 									<WifiOff className="h-4 w-4" />
@@ -1836,7 +1844,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 										variant={
 											hikvisionSdkReceiving || hikvisionSdkArmed
 												? "success"
-												: hikvisionListenerStatusError
+												: hikvisionListenerUnavailable
 													? "destructive"
 													: "warning"
 										}
@@ -1845,7 +1853,13 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									</Badge>
 								</div>
 								<div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
-									<span className="truncate">{hikvisionListenerRunning ? "VM running" : "VM stopped"}</span>
+									<span className="truncate">
+										{hikvisionListenerUnavailable
+											? "VM status unreachable"
+											: hikvisionListenerRunning
+												? "VM running"
+												: "VM stopped"}
+									</span>
 									<span className="opacity-40">•</span>
 									<span className="truncate">Checked {formatSyncCenterTime(hikvisionListenerStatus?.checkedAt)}</span>
 								</div>
@@ -2941,7 +2955,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
 										hikvisionSdkReceiving || hikvisionSdkArmed
 											? "bg-emerald-100 text-emerald-700"
-											: hikvisionListenerStatusError
+											: hikvisionListenerUnavailable
 												? "bg-red-100 text-red-700"
 												: "bg-amber-100 text-amber-700"
 									}`}>
@@ -2949,7 +2963,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 										<Loader2 className="h-4 w-4 animate-spin" />
 									) : hikvisionSdkReceiving ? (
 										<Wifi className="h-4 w-4" />
-									) : hikvisionListenerStatusError ? (
+									) : hikvisionListenerUnavailable ? (
 										<AlertTriangle className="h-4 w-4" />
 									) : (
 										<WifiOff className="h-4 w-4" />
@@ -2962,7 +2976,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 											variant={
 												hikvisionSdkReceiving || hikvisionSdkArmed
 													? "success"
-													: hikvisionListenerStatusError
+													: hikvisionListenerUnavailable
 														? "destructive"
 														: "warning"
 											}
@@ -2973,6 +2987,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									<p className="text-sm text-slate-700">
 										{hikvisionSdkReceiving
 											? "Events are coming in."
+											: hikvisionListenerUnavailable
+												? "The VM listener status probe could not reach the server. The listener may still be running through the remote tunnel path."
 											: hikvisionListenerRunning
 												? "The service is up, but we have not seen a fresh device event yet."
 												: "The VM listener is not running."}
@@ -3011,7 +3027,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 
 						<div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
 							{[
-								["VM", hikvisionListenerRunning ? "Running" : "Stopped"],
+								["VM", hikvisionListenerUnavailable ? "Status unreachable" : hikvisionListenerRunning ? "Running" : "Stopped"],
+								["Path", hikvisionListenerStatus?.vm?.path || "-"],
 								["Last event", formatSyncCenterTime(hikvisionListenerStatus?.sdk?.lastAlarmAt)],
 								["Last post", formatSyncCenterTime(hikvisionListenerStatus?.sdk?.lastPostAt)],
 								["Last sign-in", formatSyncCenterTime(hikvisionListenerStatus?.sdk?.lastLoginAt)],

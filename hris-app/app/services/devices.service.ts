@@ -375,6 +375,7 @@ export interface HikvisionListenerStatus {
 	vm: {
 		host: string;
 		user: string;
+		path?: string;
 	};
 	running: boolean;
 	status: "running" | "stopped" | "inactive" | "failed" | "unknown" | string;

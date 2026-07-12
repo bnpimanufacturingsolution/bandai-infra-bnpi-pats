@@ -231,76 +231,158 @@ const runFixedProcess = (
 		);
 	});
 
-const getHikvisionListenerVmTarget = () => {
+type HikvisionListenerVmTarget = {
+	mode: "local" | "ssh";
+	host: string;
+	user: string;
+	key: string;
+	destination: string;
+	label: string;
+};
+
+const getHikvisionListenerVmTargets = (): HikvisionListenerVmTarget[] => {
 	const configuredHost = String(process.env.PROJECT_TRUTH_VM_HOST || "").trim();
+	const configuredAlias = String(
+		process.env.PROJECT_TRUTH_VM_SSH_ALIAS || "project-truth-hris",
+	).trim();
 	const isLinuxRuntime = process.platform === "linux";
-	return {
-		mode: configuredHost || !isLinuxRuntime ? "ssh" : "local",
-		host: configuredHost || "10.184.37.19",
-		user: process.env.PROJECT_TRUTH_VM_USER || "infra",
-		key:
-			process.env.PROJECT_TRUTH_VM_SSH_KEY ||
-			path.join(os.homedir(), ".ssh", "node-health-appliance_ed25519"),
-	};
+	const host = configuredHost || "10.184.37.19";
+	const user = process.env.PROJECT_TRUTH_VM_USER || "infra";
+	const key =
+		process.env.PROJECT_TRUTH_VM_SSH_KEY ||
+		path.join(os.homedir(), ".ssh", "node-health-appliance_ed25519");
+	if (!configuredHost && isLinuxRuntime) {
+		return [
+			{
+				mode: "local",
+				host,
+				user,
+				key,
+				destination: "local",
+				label: "local",
+			},
+		];
+	}
+	const targets: HikvisionListenerVmTarget[] = [
+		{
+			mode: "ssh",
+			host,
+			user,
+			key,
+			destination: `${user}@${host}`,
+			label: `lan:${host}`,
+		},
+	];
+	if (configuredAlias && configuredAlias !== host && configuredAlias !== `${user}@${host}`) {
+		targets.push({
+			mode: "ssh",
+			host,
+			user,
+			key,
+			destination: configuredAlias,
+			label: `alias:${configuredAlias}`,
+		});
+	}
+	return targets;
 };
 
 const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) => {
-	const target = getHikvisionListenerVmTarget();
-	if (target.mode === "local") {
-		return runFixedProcess(
-			remoteArgs[0] || "true",
-			remoteArgs.slice(1),
-			{ timeoutMs },
-		);
-	}
-	return runFixedProcess(
-		process.env.PROJECT_TRUTH_SSH_BIN || "ssh",
-		[
-			"-i",
-			target.key,
+	const targets = getHikvisionListenerVmTargets();
+	const runAgainstTarget = async (target: HikvisionListenerVmTarget) => {
+		if (target.mode === "local") {
+			const result = await runFixedProcess(remoteArgs[0] || "true", remoteArgs.slice(1), {
+				timeoutMs,
+			});
+			return { ...result, target };
+		}
+		const sshArgs = [
 			"-o",
 			"BatchMode=yes",
 			"-o",
 			"ConnectTimeout=5",
 			"-o",
 			"StrictHostKeyChecking=accept-new",
-			`${target.user}@${target.host}`,
-			...remoteArgs,
-		],
-		{ timeoutMs },
-	);
+		];
+		if (target.destination.includes("@")) {
+			sshArgs.unshift(target.key);
+			sshArgs.unshift("-i");
+		}
+		const result = await runFixedProcess(
+			process.env.PROJECT_TRUTH_SSH_BIN || "ssh",
+			[...sshArgs, target.destination, ...remoteArgs],
+			{ timeoutMs },
+		);
+		return { ...result, target };
+	};
+	return (async () => {
+		let lastResult: Awaited<ReturnType<typeof runAgainstTarget>> | null = null;
+		for (const target of targets) {
+			const result = await runAgainstTarget(target);
+			if (result.exitCode === 0) return result;
+			lastResult = result;
+		}
+		return (
+			lastResult || {
+				exitCode: 1,
+				stdout: "",
+				stderr: "No Hikvision VM target configured",
+				target: targets[0],
+			}
+		);
+	})();
 };
 
 const runHikvisionListenerVmCopy = (localPath: string, remotePath: string, timeoutMs = 12000) => {
-	const target = getHikvisionListenerVmTarget();
-	if (target.mode === "local") {
-		try {
-			fsSync.copyFileSync(localPath, remotePath);
-			return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
-		} catch (error: any) {
-			return Promise.resolve({
-				exitCode: 1,
-				stdout: "",
-				stderr: error?.message || "Failed to copy listener runtime locally",
-			});
+	const targets = getHikvisionListenerVmTargets();
+	const runAgainstTarget = async (target: HikvisionListenerVmTarget) => {
+		if (target.mode === "local") {
+			try {
+				fsSync.copyFileSync(localPath, remotePath);
+				return { exitCode: 0, stdout: "", stderr: "", target };
+			} catch (error: any) {
+				return {
+					exitCode: 1,
+					stdout: "",
+					stderr: error?.message || "Failed to copy listener runtime locally",
+					target,
+				};
+			}
 		}
-	}
-	return runFixedProcess(
-		process.env.PROJECT_TRUTH_SCP_BIN || "scp",
-		[
-			"-i",
-			target.key,
+		const scpArgs = [
 			"-o",
 			"BatchMode=yes",
 			"-o",
 			"ConnectTimeout=5",
 			"-o",
 			"StrictHostKeyChecking=accept-new",
-			localPath,
-			`${target.user}@${target.host}:${remotePath}`,
-		],
-		{ timeoutMs },
-	);
+		];
+		if (target.destination.includes("@")) {
+			scpArgs.unshift(target.key);
+			scpArgs.unshift("-i");
+		}
+		const result = await runFixedProcess(
+			process.env.PROJECT_TRUTH_SCP_BIN || "scp",
+			[...scpArgs, localPath, `${target.destination}:${remotePath}`],
+			{ timeoutMs },
+		);
+		return { ...result, target };
+	};
+	return (async () => {
+		let lastResult: Awaited<ReturnType<typeof runAgainstTarget>> | null = null;
+		for (const target of targets) {
+			const result = await runAgainstTarget(target);
+			if (result.exitCode === 0) return result;
+			lastResult = result;
+		}
+		return (
+			lastResult || {
+				exitCode: 1,
+				stdout: "",
+				stderr: "No Hikvision VM target configured",
+				target: targets[0],
+			}
+		);
+	})();
 };
 
 const resolveManagedHikvisionListenerWrapperLocalPath = () => {
@@ -1426,6 +1508,29 @@ export const controller = (prisma: PrismaClient) => {
 					: {}),
 			};
 
+			if (!(await hasDeviceUserTable())) {
+				res.status(200).json(
+					buildSuccessResponse(
+						"Device users retrieved",
+						{
+							deviceUsers: [],
+							summary: {
+								total: 0,
+								active: 0,
+								matched: 0,
+								unmatched: 0,
+								conflict: 0,
+								disabled: 0,
+							},
+							pagination: buildPagination(0, page, limit),
+							migrationState: "device_users_table_missing",
+						},
+						200,
+					),
+				);
+				return;
+			}
+
 			const [rows, total, allRows] = await Promise.all([
 				(prisma as any).deviceUser.findMany({
 					where,
@@ -1528,6 +1633,62 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			throw error;
 		}
+	};
+
+	const getDeviceEventColumnPresence = async () => {
+		const rows = (await prisma.$queryRaw<
+			Array<{
+				deviceUserId?: boolean | null;
+				eventCategory?: boolean | null;
+				eventAction?: boolean | null;
+				eventLabel?: boolean | null;
+				eventConfidence?: boolean | null;
+			}>
+		>`
+			SELECT
+				EXISTS (
+					SELECT 1
+					FROM information_schema.columns
+					WHERE table_schema = 'public'
+						AND table_name = 'device_events'
+						AND column_name = 'deviceUserId'
+				) AS "deviceUserId",
+				EXISTS (
+					SELECT 1
+					FROM information_schema.columns
+					WHERE table_schema = 'public'
+						AND table_name = 'device_events'
+						AND column_name = 'eventCategory'
+				) AS "eventCategory",
+				EXISTS (
+					SELECT 1
+					FROM information_schema.columns
+					WHERE table_schema = 'public'
+						AND table_name = 'device_events'
+						AND column_name = 'eventAction'
+				) AS "eventAction",
+				EXISTS (
+					SELECT 1
+					FROM information_schema.columns
+					WHERE table_schema = 'public'
+						AND table_name = 'device_events'
+						AND column_name = 'eventLabel'
+				) AS "eventLabel",
+				EXISTS (
+					SELECT 1
+					FROM information_schema.columns
+					WHERE table_schema = 'public'
+						AND table_name = 'device_events'
+						AND column_name = 'eventConfidence'
+				) AS "eventConfidence"
+		`) || [];
+		return {
+			deviceUserId: rows[0]?.deviceUserId === true,
+			eventCategory: rows[0]?.eventCategory === true,
+			eventAction: rows[0]?.eventAction === true,
+			eventLabel: rows[0]?.eventLabel === true,
+			eventConfidence: rows[0]?.eventConfidence === true,
+		};
 	};
 
 	const findLatestCompletedDeviceLogRun = async (
@@ -4316,17 +4477,19 @@ export const controller = (prisma: PrismaClient) => {
 					Number(row?._count?._all || 0),
 				);
 			}
-			const deviceUserRows = (await (prisma as any).deviceUser.findMany({
-				where: {
-					organizationId: String(organizationId),
-					deviceId: { in: syncDevices.map((device) => device.id) },
-				},
-				select: {
-					deviceId: true,
-					status: true,
-					employeeId: true,
-				},
-			})) as Array<{ deviceId?: string | null; status?: string | null; employeeId?: string | null }>;
+			const deviceUserRows = (await hasDeviceUserTable())
+				? ((await (prisma as any).deviceUser.findMany({
+						where: {
+							organizationId: String(organizationId),
+							deviceId: { in: syncDevices.map((device) => device.id) },
+						},
+						select: {
+							deviceId: true,
+							status: true,
+							employeeId: true,
+						},
+					})) as Array<{ deviceId?: string | null; status?: string | null; employeeId?: string | null }>)
+				: [];
 			const deviceUserRowsByDeviceId = deviceUserRows.reduce(
 				(
 					groups: Map<string, Array<{ status?: string | null; employeeId?: string | null }>>,
@@ -4705,7 +4868,7 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const readHikvisionListenerStatus = async () => {
-		const target = getHikvisionListenerVmTarget();
+		const fallbackTarget = getHikvisionListenerVmTargets()[0];
 		const [activeResult, showResult, tailResult] = await Promise.all([
 			runHikvisionListenerVmCommand(
 				["systemctl", "is-active", HIKVISION_HOT_RELOAD_LISTENER_SERVICE],
@@ -4744,12 +4907,26 @@ export const controller = (prisma: PrismaClient) => {
 			.filter(Boolean)
 			.slice(-80);
 		const sdk = summarizeHikvisionListenerLogs(recentLogLines);
+		const resolvedTarget = activeResult.exitCode === 0
+			? activeResult.target
+			: showResult.exitCode === 0
+				? showResult.target
+				: tailResult.exitCode === 0
+					? tailResult.target
+					: fallbackTarget;
+		const controlAvailable =
+			showResult.exitCode === 0 || activeResult.exitCode === 0 || Boolean(activeText);
+		const statusError =
+			showResult.exitCode === 0
+				? null
+				: showResult.stderr.trim() || activeResult.stderr.trim() || null;
 
 		return {
 			service: HIKVISION_HOT_RELOAD_LISTENER_SERVICE,
 			vm: {
-				host: target.host,
-				user: target.user,
+				host: resolvedTarget?.host || fallbackTarget?.host || "unknown",
+				user: resolvedTarget?.user || fallbackTarget?.user || "infra",
+				path: resolvedTarget?.label || fallbackTarget?.label || "unknown",
 			},
 			running,
 			status: running ? "running" : activeState === "inactive" ? "stopped" : activeState,
@@ -4762,7 +4939,7 @@ export const controller = (prisma: PrismaClient) => {
 			result: show.Result || null,
 			checkedAt: new Date().toISOString(),
 			control: {
-				available: showResult.exitCode === 0 || activeResult.exitCode === 0 || Boolean(activeText),
+				available: controlAvailable,
 				actions: ["start", "stop", "restart"],
 			},
 			logs: {
@@ -4770,10 +4947,7 @@ export const controller = (prisma: PrismaClient) => {
 				recent: recentLogLines,
 				error: tailResult.exitCode === 0 ? null : tailResult.stderr.trim() || tailResult.stdout.trim() || null,
 			},
-			error:
-				showResult.exitCode === 0
-					? null
-					: showResult.stderr.trim() || activeResult.stderr.trim() || null,
+			error: statusError,
 		};
 	};
 
@@ -5060,10 +5234,24 @@ export const controller = (prisma: PrismaClient) => {
 			if (source && source !== "all" && DEVICE_EVENT_SOURCES.has(source)) {
 				whereConditions.push(Prisma.sql`de."source" = ${source}::"DeviceEventSource"`);
 			}
-			if (eventCategory && eventCategory !== "ALL" && DEVICE_EVENT_CATEGORIES.has(eventCategory)) {
+			const hasDeviceEventColumns = await getDeviceEventColumnPresence();
+			const hasDeviceUsersTable = await hasDeviceUserTable();
+			const hasDeviceUserReference = hasDeviceUsersTable && hasDeviceEventColumns.deviceUserId;
+
+			if (
+				eventCategory &&
+				eventCategory !== "ALL" &&
+				DEVICE_EVENT_CATEGORIES.has(eventCategory) &&
+				hasDeviceEventColumns.eventCategory
+			) {
 				whereConditions.push(Prisma.sql`de."eventCategory" = ${eventCategory}::"DeviceEventCategory"`);
 			}
-			if (eventAction && eventAction !== "ALL" && DEVICE_EVENT_ACTIONS.has(eventAction)) {
+			if (
+				eventAction &&
+				eventAction !== "ALL" &&
+				DEVICE_EVENT_ACTIONS.has(eventAction) &&
+				hasDeviceEventColumns.eventAction
+			) {
 				whereConditions.push(Prisma.sql`de."eventAction" = ${eventAction}::"DeviceEventAction"`);
 			}
 
@@ -5072,11 +5260,11 @@ export const controller = (prisma: PrismaClient) => {
 					const fromDate = parseHikvisionBusinessDateBound(from);
 					if (fromDate) whereConditions.push(Prisma.sql`${dateColumnSql} >= ${fromDate}`);
 				}
-				if (to) {
-					const toDate = parseHikvisionBusinessDateBound(to, true);
-					if (toDate) whereConditions.push(Prisma.sql`${dateColumnSql} <= ${toDate}`);
-				}
+			if (to) {
+				const toDate = parseHikvisionBusinessDateBound(to, true);
+				if (toDate) whereConditions.push(Prisma.sql`${dateColumnSql} <= ${toDate}`);
 			}
+		}
 
 			const hasQuery = Boolean(query);
 			if (hasQuery) {
@@ -5090,7 +5278,9 @@ export const controller = (prisma: PrismaClient) => {
 				whereConditions.push(Prisma.sql`(
 					de."employeeNo" ILIKE ${queryLike}
 					OR de."eventType" ILIKE ${queryLike}
-					OR de."eventLabel" ILIKE ${queryLike}
+					${hasDeviceEventColumns.eventLabel
+						? Prisma.sql`OR de."eventLabel" ILIKE ${queryLike}`
+						: Prisma.sql``}
 					OR de."doorNo" ILIKE ${queryLike}
 					OR d."name" ILIKE ${queryLike}
 					OR d."address" ILIKE ${queryLike}
@@ -5121,10 +5311,38 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const whereSql = Prisma.sql`WHERE ${Prisma.join(whereConditions, " AND ")}`;
+			const deviceUserIdSql = hasDeviceEventColumns.deviceUserId
+				? Prisma.sql`de."deviceUserId"`
+				: Prisma.sql`NULL::text`;
+			const eventCategorySql = hasDeviceEventColumns.eventCategory
+				? Prisma.sql`de."eventCategory"::text`
+				: Prisma.sql`'UNKNOWN_VENDOR'::text`;
+			const eventActionSql = hasDeviceEventColumns.eventAction
+				? Prisma.sql`de."eventAction"::text`
+				: Prisma.sql`'UNKNOWN'::text`;
+			const eventLabelSql = hasDeviceEventColumns.eventLabel
+				? Prisma.sql`de."eventLabel"`
+				: Prisma.sql`COALESCE(de."eventType", 'Device event')`;
+			const eventConfidenceSql = hasDeviceEventColumns.eventConfidence
+				? Prisma.sql`de."eventConfidence"::text`
+				: Prisma.sql`'UNKNOWN'::text`;
+			const deviceUserJoinSql = hasDeviceUserReference
+				? Prisma.sql`LEFT JOIN device_users du ON du.id = ${deviceUserIdSql}`
+				: Prisma.sql`
+					LEFT JOIN LATERAL (
+						SELECT
+							NULL::text AS id,
+							NULL::text AS "vendorUserId",
+							NULL::text AS "employeeNo",
+							NULL::text AS "displayName",
+							NULL::text AS status,
+							NULL::text AS "employeeId"
+					) du ON true
+				`;
 			const baseFromSql = Prisma.sql`
 				FROM device_events de
 				LEFT JOIN "Device" d ON d.id = de."deviceId"
-				LEFT JOIN device_users du ON du.id = de."deviceUserId"
+				${deviceUserJoinSql}
 			`;
 			const employeeJoinSql = Prisma.sql`
 				LEFT JOIN LATERAL (
@@ -5206,8 +5424,12 @@ export const controller = (prisma: PrismaClient) => {
 				updatedAt: Prisma.sql`de."updatedAt"`,
 				status: Prisma.sql`de."status"`,
 				source: Prisma.sql`de."source"`,
-				eventCategory: Prisma.sql`de."eventCategory"`,
-				eventAction: Prisma.sql`de."eventAction"`,
+				eventCategory: hasDeviceEventColumns.eventCategory
+					? Prisma.sql`de."eventCategory"`
+					: Prisma.sql`de."receivedAt"`,
+				eventAction: hasDeviceEventColumns.eventAction
+					? Prisma.sql`de."eventAction"`
+					: Prisma.sql`de."receivedAt"`,
 				employeeNo: Prisma.sql`de."employeeNo"`,
 				doorNo: Prisma.sql`de."doorNo"`,
 			};
@@ -5226,7 +5448,7 @@ export const controller = (prisma: PrismaClient) => {
 					de.id,
 					de."organizationId",
 					de."deviceId",
-					de."deviceUserId",
+					${deviceUserIdSql} AS "deviceUserId",
 					de."employeeId",
 					de."attendanceId",
 					de."eventTime",
@@ -5234,10 +5456,10 @@ export const controller = (prisma: PrismaClient) => {
 					de."employeeNo",
 					de.source::text AS source,
 					de.status::text AS status,
-					de."eventCategory"::text AS "eventCategory",
-					de."eventAction"::text AS "eventAction",
-					de."eventLabel",
-					de."eventConfidence"::text AS "eventConfidence",
+					${eventCategorySql} AS "eventCategory",
+					${eventActionSql} AS "eventAction",
+					${eventLabelSql} AS "eventLabel",
+					${eventConfidenceSql} AS "eventConfidence",
 					de."eventType",
 					de.major,
 					de.minor,
@@ -5313,16 +5535,16 @@ export const controller = (prisma: PrismaClient) => {
 				GROUP BY de.source
 			`;
 			const categoryGroupsSql = Prisma.sql`
-				SELECT de."eventCategory"::text AS "eventCategory", COUNT(*)::bigint AS count
+				SELECT ${eventCategorySql} AS "eventCategory", COUNT(*)::bigint AS count
 				${aggregateFromSql}
 				${whereSql}
-				GROUP BY de."eventCategory"
+				GROUP BY 1
 			`;
 			const actionGroupsSql = Prisma.sql`
-				SELECT de."eventAction"::text AS "eventAction", COUNT(*)::bigint AS count
+				SELECT ${eventActionSql} AS "eventAction", COUNT(*)::bigint AS count
 				${aggregateFromSql}
 				${whereSql}
-				GROUP BY de."eventAction"
+				GROUP BY 1
 			`;
 
 			const [events, totalRows, statusGroups, sourceGroups, categoryGroups, actionGroups] = await Promise.all([

@@ -1535,7 +1535,13 @@ export default function DeviceEventsPage() {
 	const hikvisionSdkArmed = Boolean(hikvisionListenerStatus?.sdk?.armed);
 	const hikvisionListenerUnavailable =
 		isSdkAlarmSavedScope &&
-		Boolean(!isLoadingHikvisionListenerStatus && (!hikvisionListenerStatus || hikvisionListenerStatusError));
+		Boolean(
+			!isLoadingHikvisionListenerStatus &&
+				(!hikvisionListenerStatus ||
+					hikvisionListenerStatusError ||
+					!hikvisionListenerStatus.control?.available ||
+					hikvisionListenerStatus.error),
+		);
 	const hikvisionListenerStatusLabel = isSdkAlarmSavedScope
 		? isLoadingHikvisionListenerStatus
 			? "Checking VM listener"
