@@ -44,6 +44,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("const copyHikvisionUserToPeerWithRetry = async");
 		expect(controller).to.include("const runHikvisionManualCopyOnVm = async");
 		expect(controller).to.include("peer_copy_noop_already_synced");
+		expect(controller).to.include("peer_copy_noop_overlay_only");
+		expect(controller).to.include("strategy: \"noop_overlay_only\"");
 		expect(controller).to.include("!shouldConvergeDeviceUserToPeer(sourceDeviceUser, existingTargetDeviceUser)");
 		expect(controller).to.include("const isMissingHikvisionListenerRuntimeError =");
 		expect(controller).to.include("const runManualCopy = (extraEnv: string[] = []) =>");

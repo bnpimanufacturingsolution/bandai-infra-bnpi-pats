@@ -3118,9 +3118,30 @@ export const controller = (prisma: PrismaClient) => {
 				rawPayload: true,
 			},
 		});
+		const alreadyConverged =
+			Boolean(sourceDeviceUser?.id) &&
+			!shouldConvergeDeviceUserToPeer(sourceDeviceUser, existingTargetDeviceUser);
+		const requiresPhysicalPeerCopy =
+			!sourceDeviceUser?.id ||
+			!existingTargetDeviceUser?.id ||
+			(() => {
+				const sourcePhysicalSummary = extractHikvisionCredentialSummary(
+					sourceDeviceUser?.rawPayload || {},
+				);
+				const targetPhysicalSummary = extractHikvisionCredentialSummary(
+					existingTargetDeviceUser?.rawPayload || {},
+				);
+				if (targetPhysicalSummary.cardCount < sourcePhysicalSummary.cardCount) return true;
+				if (
+					params.includeFingerprints &&
+					targetPhysicalSummary.fingerprintCount < sourcePhysicalSummary.fingerprintCount
+				) {
+					return true;
+				}
+				return false;
+			})();
 		const copyResult =
-			sourceDeviceUser?.id &&
-			!shouldConvergeDeviceUserToPeer(sourceDeviceUser, existingTargetDeviceUser)
+			alreadyConverged
 				? {
 						waitSeconds: 0,
 						strategy: "noop_already_synced",
@@ -3135,7 +3156,22 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						],
 					}
-				: await runHikvisionManualCopyOnVm({
+				: !requiresPhysicalPeerCopy
+					? {
+							waitSeconds: 0,
+							strategy: "noop_overlay_only",
+							stdout: "",
+							stderr: "",
+							events: [
+								{
+									event: "peer_copy_noop_overlay_only",
+									sourceDeviceId,
+									targetDeviceId,
+									employeeNo,
+								},
+							],
+						}
+					: await runHikvisionManualCopyOnVm({
 						sourceDeviceId,
 						targetDeviceId,
 						employeeNo,
