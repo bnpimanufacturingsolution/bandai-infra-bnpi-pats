@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { hikvisionObservedAddressMatchesDevice } from "../../../lib/hikvision-device-address";
 import { Badge } from "~/components/atoms/Badge";
 import { Button } from "~/components/atoms/Button";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
@@ -453,21 +454,6 @@ const getVerifyModeFromPayload = (payload: any) =>
 	payload?.AccessControllerEvent?.verifyMode ||
 	null;
 
-const normalizeAddressForCompare = (value?: string | null) => {
-	const text = String(value || "").trim();
-	if (!text) return "";
-	try {
-		return new URL(text).hostname.toLowerCase();
-	} catch {
-		return text
-			.replace(/^https?:\/\//i, "")
-			.split("/")[0]
-			.split(":")[0]
-			.trim()
-			.toLowerCase();
-	}
-};
-
 const getObservedDeviceAddress = (payload: any) =>
 	String(
 		payload?.deviceIP ||
@@ -537,8 +523,7 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 	const observedDeviceAddress = getObservedDeviceAddress(payload);
 	const hasDeviceAddressDrift =
 		Boolean(observedDeviceAddress) &&
-		normalizeAddressForCompare(observedDeviceAddress) !==
-			normalizeAddressForCompare(event.device?.address);
+		!hikvisionObservedAddressMatchesDevice(observedDeviceAddress, event.device);
 	return {
 		id: event.id,
 		origin: "saved",

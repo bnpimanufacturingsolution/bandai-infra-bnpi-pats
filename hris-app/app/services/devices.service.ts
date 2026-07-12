@@ -60,7 +60,7 @@ export interface DeviceEvent {
 	id: string;
 	organizationId: string;
 	deviceId: string;
-	device?: Pick<Device, "id" | "name" | "address" | "port" | "protocol">;
+	device?: Pick<Device, "id" | "name" | "address" | "port" | "protocol" | "config">;
 	deviceUserId?: string | null;
 	deviceUser?: {
 		id: string;

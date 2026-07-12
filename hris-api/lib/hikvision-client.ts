@@ -26,6 +26,11 @@ type HikvisionDeviceConnection = {
 	password: string;
 };
 
+type HikvisionEndpointResolutionOptions = {
+	allowLoopbackRuntime?: boolean;
+	runtimePlatform?: string;
+};
+
 const getRequestOrganizationId = (request?: Request) =>
 	String((request as any)?.organizationId || (request as any)?.userOrganizationId || "").trim();
 
@@ -59,12 +64,38 @@ export const getHikvisionDeviceHttpPort = (device: {
 	return Number(device.port);
 };
 
+const normalizeRuntimeHost = (value: string) => {
+	const text = String(value || "").trim();
+	if (!text) return "";
+	try {
+		return new URL(text).hostname.toLowerCase();
+	} catch {
+		return text
+			.replace(/^https?:\/\//i, "")
+			.split("/")[0]
+			.split(":")[0]
+			.trim()
+			.toLowerCase();
+	}
+};
+
+const isLoopbackRuntimeHost = (value: string) => {
+	const host = normalizeRuntimeHost(value);
+	return host === "127.0.0.1" || host === "localhost" || host === "::1";
+};
+
+const shouldUseLoopbackRuntimeEndpoint = (options?: HikvisionEndpointResolutionOptions) => {
+	if (options?.allowLoopbackRuntime) return true;
+	if (process.env.PROJECT_TRUTH_ALLOW_LOOPBACK_HIKVISION_RUNTIME === "1") return true;
+	return String(options?.runtimePlatform || process.platform).trim().toLowerCase() === "linux";
+};
+
 const getHikvisionRuntimeEndpoint = (device: {
 	address: string;
 	port: number;
 	protocol: string;
 	config?: unknown;
-}) => {
+}, options?: HikvisionEndpointResolutionOptions) => {
 	const config = device.config && typeof device.config === "object" ? (device.config as any) : {};
 	const runtimeBaseUrl = String(
 		config.hikvisionRuntimeBaseUrl ||
@@ -72,7 +103,11 @@ const getHikvisionRuntimeEndpoint = (device: {
 			config.runtimeBaseUrl ||
 			"",
 	).trim();
-	if (runtimeBaseUrl) return runtimeBaseUrl.replace(/\/$/, "");
+	if (runtimeBaseUrl) {
+		if (!isLoopbackRuntimeHost(runtimeBaseUrl) || shouldUseLoopbackRuntimeEndpoint(options)) {
+			return runtimeBaseUrl.replace(/\/$/, "");
+		}
+	}
 
 	const runtimeAddress = String(
 		config.hikvisionRuntimeAddress ||
@@ -81,6 +116,9 @@ const getHikvisionRuntimeEndpoint = (device: {
 			"",
 	).trim();
 	if (!runtimeAddress) return "";
+	if (isLoopbackRuntimeHost(runtimeAddress) && !shouldUseLoopbackRuntimeEndpoint(options)) {
+		return "";
+	}
 
 	const runtimePort = Number(
 		config.hikvisionRuntimePort ||
@@ -112,8 +150,8 @@ export const buildHikvisionDeviceBaseUrl = (device: {
 	port: number;
 	protocol: string;
 	config?: unknown;
-}) => {
-	const runtimeEndpoint = getHikvisionRuntimeEndpoint(device);
+}, options?: HikvisionEndpointResolutionOptions) => {
+	const runtimeEndpoint = getHikvisionRuntimeEndpoint(device, options);
 	if (runtimeEndpoint) return runtimeEndpoint;
 
 	const address = String(device.address || "").trim();
