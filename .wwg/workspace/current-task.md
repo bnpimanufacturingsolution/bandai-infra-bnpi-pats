@@ -21,6 +21,7 @@ Status: COMPLETE
   - Extended image staging/import and verification scripts so Project Truth now treats `hris-emp-app` as part of the runtime surface, not an orphan checkout.
 - Truth/docs sync:
   - Updated Project Truth summary, Project Truth wiki, README verification targets, and local port config to include `hris-emp-app`.
+  - Reserved employee-app public hostnames `emp.bnpi-hris.tech`, `dev-emp.bnpi-hris.tech`, and `uat-emp.bnpi-hris.tech` in both host-managed and VM-managed tunnel configs plus runtime CORS surfaces.
 - Validation target:
   - Focused config verification only in this pass; runtime bring-up/probe is still required before claiming live VM proof for the new employee-app ports.
 

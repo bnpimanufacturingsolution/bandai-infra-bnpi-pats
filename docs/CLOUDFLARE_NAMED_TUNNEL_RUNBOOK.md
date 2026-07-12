@@ -9,12 +9,12 @@ Bootstrap or repair:
   Windows host cloudflared
   -> cloudflared-bnpi-hris.yml
   -> Hyper-V VM LAN IP
-  -> HRIS app/API/dev/uat/Grafana ports
+  -> HRIS app/API/dev/uat/employee/Grafana ports
   -> bnpi-hris.tech public hostnames
 
 Preferred BNPI runtime:
   Linux VM cloudflared
-  -> localhost app/API/dev/uat/Grafana/SSH services
+  -> localhost app/API/dev/uat/employee/Grafana/SSH services
   -> bnpi-hris.tech public hostnames
 ```
 
@@ -74,10 +74,13 @@ https://bnpi-hris.tech/auth/login
 https://www.bnpi-hris.tech/auth/login
 https://app.bnpi-hris.tech/auth/login
 https://api.bnpi-hris.tech/health
+https://emp.bnpi-hris.tech/auth/login
 https://dev.bnpi-hris.tech/auth/login
 https://dev-api.bnpi-hris.tech/health
+https://dev-emp.bnpi-hris.tech/auth/login
 https://uat.bnpi-hris.tech/auth/login
 https://uat-api.bnpi-hris.tech/health
+https://uat-emp.bnpi-hris.tech/auth/login
 https://grafana.bnpi-hris.tech/api/health
 ```
 
@@ -190,6 +193,8 @@ ingress:
     service: http://localhost:3000
   - hostname: api.bnpi-hris.tech
     service: http://localhost:3001
+  - hostname: emp.bnpi-hris.tech
+    service: http://localhost:3300
   - hostname: grafana.bnpi-hris.tech
     service: http://localhost:53000
 ```

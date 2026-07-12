@@ -63,6 +63,15 @@ ingress:
   - hostname: uat.bnpi-hris.tech
     path: /api/.*
     service: http://localhost:3201
+  - hostname: emp.bnpi-hris.tech
+    path: /api/.*
+    service: http://localhost:3001
+  - hostname: dev-emp.bnpi-hris.tech
+    path: /api/.*
+    service: http://localhost:3101
+  - hostname: uat-emp.bnpi-hris.tech
+    path: /api/.*
+    service: http://localhost:3201
   - hostname: bnpi-hris.tech
     service: http://localhost:3000
   - hostname: www.bnpi-hris.tech
@@ -81,6 +90,12 @@ ingress:
     service: http://localhost:3200
   - hostname: uat-api.bnpi-hris.tech
     service: http://localhost:3201
+  - hostname: emp.bnpi-hris.tech
+    service: http://localhost:3300
+  - hostname: dev-emp.bnpi-hris.tech
+    service: http://localhost:3310
+  - hostname: uat-emp.bnpi-hris.tech
+    service: http://localhost:3320
   - hostname: grafana.bnpi-hris.tech
     service: http://localhost:53000
   - hostname: ssh.bnpi-hris.tech

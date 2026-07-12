@@ -190,6 +190,9 @@ Public Cloudflare:
   https://api.bnpi-hris.tech/health
   https://dev.bnpi-hris.tech/auth/login
   https://uat.bnpi-hris.tech/auth/login
+  https://emp.bnpi-hris.tech/auth/login
+  https://dev-emp.bnpi-hris.tech/auth/login
+  https://uat-emp.bnpi-hris.tech/auth/login
   https://grafana.bnpi-hris.tech/api/health
 ```
 

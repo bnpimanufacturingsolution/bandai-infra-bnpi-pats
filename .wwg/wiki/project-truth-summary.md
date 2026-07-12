@@ -111,6 +111,7 @@ Last updated: 2026-07-06
 
 - VM/GitOps/runtime work is admin / `hris-admin` operational work.
 - Current local/VM employee-app runtime integration ports are `3300` (PROD), `3310` (DEV), and `3320` (UAT), each proxying browser `/api` and `socket.io` traffic back to the paired `hris-api` service.
+- Employee-app public endpoint targets are `https://emp.bnpi-hris.tech/auth/login`, `https://dev-emp.bnpi-hris.tech/auth/login`, and `https://uat-emp.bnpi-hris.tech/auth/login`, mapped to the same per-environment API origins used by Project Truth app/API routing.
 - From the Windows host, host-local VM, LAN, device, DB, GitOps, and runtime
   drift checks should collect direct LAN evidence through
   `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19`

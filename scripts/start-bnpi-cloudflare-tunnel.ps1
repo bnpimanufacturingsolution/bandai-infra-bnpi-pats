@@ -140,6 +140,9 @@ function Write-TunnelConfig {
   $targets += [pscustomobject]@{ Hostname = 'dev-api.bnpi-hris.tech'; Service = "http://${GuestIp}:3101" }
   $targets += [pscustomobject]@{ Hostname = 'uat.bnpi-hris.tech'; Service = "http://${GuestIp}:3200" }
   $targets += [pscustomobject]@{ Hostname = 'uat-api.bnpi-hris.tech'; Service = "http://${GuestIp}:3201" }
+  $targets += [pscustomobject]@{ Hostname = 'emp.bnpi-hris.tech'; Service = "http://${GuestIp}:3300" }
+  $targets += [pscustomobject]@{ Hostname = 'dev-emp.bnpi-hris.tech'; Service = "http://${GuestIp}:3310" }
+  $targets += [pscustomobject]@{ Hostname = 'uat-emp.bnpi-hris.tech'; Service = "http://${GuestIp}:3320" }
   $targets += [pscustomobject]@{ Hostname = 'grafana.bnpi-hris.tech'; Service = "http://${GuestIp}:53000" }
   $targets += [pscustomobject]@{ Hostname = $SshHostname; Service = "ssh://${GuestIp}:22" }
   $targets += [pscustomobject]@{ Hostname = $ProdDbHostname; Service = "tcp://${GuestIp}:15432" }
@@ -172,6 +175,24 @@ function Write-TunnelConfig {
   $lines += '    path: /api/.*'
   $lines += "    service: http://${GuestIp}:3201"
   $lines += '  - hostname: uat.bnpi-hris.tech'
+  $lines += '    path: /socket.io/.*'
+  $lines += "    service: http://${GuestIp}:3201"
+  $lines += '  - hostname: emp.bnpi-hris.tech'
+  $lines += '    path: /api/.*'
+  $lines += "    service: http://${GuestIp}:3001"
+  $lines += '  - hostname: emp.bnpi-hris.tech'
+  $lines += '    path: /socket.io/.*'
+  $lines += "    service: http://${GuestIp}:3001"
+  $lines += '  - hostname: dev-emp.bnpi-hris.tech'
+  $lines += '    path: /api/.*'
+  $lines += "    service: http://${GuestIp}:3101"
+  $lines += '  - hostname: dev-emp.bnpi-hris.tech'
+  $lines += '    path: /socket.io/.*'
+  $lines += "    service: http://${GuestIp}:3101"
+  $lines += '  - hostname: uat-emp.bnpi-hris.tech'
+  $lines += '    path: /api/.*'
+  $lines += "    service: http://${GuestIp}:3201"
+  $lines += '  - hostname: uat-emp.bnpi-hris.tech'
   $lines += '    path: /socket.io/.*'
   $lines += "    service: http://${GuestIp}:3201"
 
@@ -258,6 +279,9 @@ function Invoke-DnsProvisioning {
     'dev-api.bnpi-hris.tech',
     'uat.bnpi-hris.tech',
     'uat-api.bnpi-hris.tech',
+    'emp.bnpi-hris.tech',
+    'dev-emp.bnpi-hris.tech',
+    'uat-emp.bnpi-hris.tech',
     'grafana.bnpi-hris.tech',
     $SshHostname,
     $ProdDbHostname,
@@ -294,6 +318,9 @@ function Invoke-PublicChecks {
     @{ Name = 'dev-api'; Url = 'https://dev-api.bnpi-hris.tech/health' },
     @{ Name = 'uat-app'; Url = 'https://uat.bnpi-hris.tech/auth/login' },
     @{ Name = 'uat-api'; Url = 'https://uat-api.bnpi-hris.tech/health' },
+    @{ Name = 'prod-emp-app'; Url = 'https://emp.bnpi-hris.tech/auth/login' },
+    @{ Name = 'dev-emp-app'; Url = 'https://dev-emp.bnpi-hris.tech/auth/login' },
+    @{ Name = 'uat-emp-app'; Url = 'https://uat-emp.bnpi-hris.tech/auth/login' },
     @{ Name = 'grafana'; Url = 'https://grafana.bnpi-hris.tech/api/health' }
   )
 

@@ -17,6 +17,9 @@ describe("CORS origin contract", () => {
 		expect(config.cors.isAllowedOrigin("https://app.bnpi-hris.tech")).to.equal(true);
 		expect(config.cors.isAllowedOrigin("https://dev.bnpi-hris.tech")).to.equal(true);
 		expect(config.cors.isAllowedOrigin("https://uat.bnpi-hris.tech")).to.equal(true);
+		expect(config.cors.isAllowedOrigin("https://emp.bnpi-hris.tech")).to.equal(true);
+		expect(config.cors.isAllowedOrigin("https://dev-emp.bnpi-hris.tech")).to.equal(true);
+		expect(config.cors.isAllowedOrigin("https://uat-emp.bnpi-hris.tech")).to.equal(true);
 	});
 
 	it("rejects unrelated origins", () => {

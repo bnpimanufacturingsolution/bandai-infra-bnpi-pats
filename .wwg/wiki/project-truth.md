@@ -99,6 +99,9 @@ Accepted or observed architecture:
 - Item: Local/VM employee self-service runtime now uses dedicated frontend ports `3300` (PROD), `3310` (DEV), and `3320` (UAT), while proxying browser `/api` and `socket.io` traffic to the paired `hris-api` ports.
   - Status: IMPLEMENTED_FROM_USER_REQUEST
   - Evidence: `appliance/dockerfiles/hris-emp-app.nginx.conf.template`; `appliance/docker-compose.yml`; `appliance/docker-compose.environments.yml`; `scripts/configure.ps1`; `scripts/verify-host-health.ps1`; `scripts/verify-lan-health.ps1`.
+- Item: Employee-app public Cloudflare targets are `emp.bnpi-hris.tech`, `dev-emp.bnpi-hris.tech`, and `uat-emp.bnpi-hris.tech`, each serving the employee frontend while same-host `/api` and `/socket.io` routes stay pinned to the paired per-environment API origin.
+  - Status: IMPLEMENTED_FROM_USER_REQUEST
+  - Evidence: `cloudflared-bnpi-hris.yml`; `scripts/start-bnpi-cloudflare-tunnel.ps1`; `appliance/bin/project-truth-cloudflare-vm-tunnel.sh`; `appliance/env/hris-api.env`.
 - Item: ZKTeco runtime is now Linux-first through `vendor/zkteco-linux`; Windows COM SDK and Node bridge paths are retired from the active repo/runtime path.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: On 2026-07-01, VM root storage was expanded to a 491 GB filesystem, `vendor/zkteco-linux` tests passed locally and in the VM, all four physical terminals at `10.184.38.9`, `10.184.38.235`, `10.184.38.234`, and `10.184.38.10` passed TCP from the VM, and the repo Docker Compose now defines Linux bridge services `zkteco-linux-bridge`, `zkteco-linux-bridge-dev`, and `zkteco-linux-bridge-uat` using image `project-truth-zkteco-linux:develop`. The old `vendor/zkteco-sdk` submodule and `appliance/zkteco-standalone-sdk` Windows implementation were removed from the repo.
