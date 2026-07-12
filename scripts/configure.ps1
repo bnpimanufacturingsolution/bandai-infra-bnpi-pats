@@ -52,6 +52,9 @@ $config = [ordered]@{
     devApi = 3101
     uatApp = 3200
     uatApi = 3201
+    prodEmployeeApp = 3300
+    devEmployeeApp = 3310
+    uatEmployeeApp = 3320
     ssh = 22
   }
   gitops = [ordered]@{

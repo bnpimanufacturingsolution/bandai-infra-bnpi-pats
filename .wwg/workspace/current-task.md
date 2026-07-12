@@ -4,6 +4,26 @@ Status: COMPLETE
 
 ## Latest Task Addendum - 2026-07-12 Hikvision Remote-Site Agent And Local Dev Tunnel Proof
 
+## Latest Task Addendum - 2026-07-12 HRIS Employee App Submodule And Runtime Integration
+
+- Task mode: Mixed repo-structure integration plus runtime/GitOps sync.
+- User goal:
+  - Bring `https://github.com/hrisworkforcesystem-coder/hris-emp-app/tree/develop` into this Project Truth workspace as a visible/editable root folder while preserving the upstream repo relationship.
+  - Align it with the existing `hris-api` / `hris-app` repo shape and extend Project Truth runtime/GitOps evidence so DEV/UAT/PROD are not implicit.
+- Implemented integration:
+  - Added root git submodule `hris-emp-app` on upstream branch `develop`.
+  - Added parent-owned container wrapper `appliance/dockerfiles/hris-emp-app.Dockerfile` plus Nginx proxy template so the employee app can stay a clean upstream checkout while runtime-specific `/api` and `socket.io` proxy behavior lives in Project Truth.
+  - Added Compose services:
+    - PROD `hris-emp-app` on port `3300`
+    - DEV `hris-emp-app-dev` on port `3310`
+    - UAT `hris-emp-app-uat` on port `3320`
+  - Added matching K3s runtime Deployments/Services in `gitops/runtime-k8s/overlays/{prod,dev,uat}/runtime.yaml`.
+  - Extended image staging/import and verification scripts so Project Truth now treats `hris-emp-app` as part of the runtime surface, not an orphan checkout.
+- Truth/docs sync:
+  - Updated Project Truth summary, Project Truth wiki, README verification targets, and local port config to include `hris-emp-app`.
+- Validation target:
+  - Focused config verification only in this pass; runtime bring-up/probe is still required before claiming live VM proof for the new employee-app ports.
+
 - Task mode: Cross-network Hikvision runtime repair plus local-dev remote test path.
 - User goal:
   - Keep the listener truth accurate while making the currently running local

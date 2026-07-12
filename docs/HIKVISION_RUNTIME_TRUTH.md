@@ -148,6 +148,7 @@ This repo now includes:
 
 ```text
 scripts/start-local-hikvision-remote-test.ps1
+scripts/run-remote-hikvision-sdk-matrix.ps1
 ```
 
 That helper:
@@ -157,6 +158,9 @@ That helper:
 - starts additive temporary trycloudflare tunnels for both
 - writes a ready-to-use remote site-agent env file under
   `.runtime/local-hikvision-remote-test/<stamp>/hikvision-remote-site-agent.env`
+- can also run a Linux HCNetSDK login matrix over SSH on the remote
+  device-side host and save the proof under
+  `.runtime/hikvision-remote-sdk-matrix/<stamp>/`
 
 Boundary:
 

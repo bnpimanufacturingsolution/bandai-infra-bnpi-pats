@@ -103,10 +103,13 @@ try {
 Write-Host 'Runtime URLs:'
 Write-Host '  PROD app: http://127.0.0.1:3000/auth/login'
 Write-Host '  PROD API: http://127.0.0.1:3001/health'
+Write-Host '  PROD employee app: http://127.0.0.1:3300/auth/login'
 Write-Host '  DEV app:  http://127.0.0.1:3100/auth/login'
 Write-Host '  DEV API:  http://127.0.0.1:3101/health'
+Write-Host '  DEV employee app: http://127.0.0.1:3310/auth/login'
 Write-Host '  UAT app:  http://127.0.0.1:3200/auth/login'
 Write-Host '  UAT API:  http://127.0.0.1:3201/health'
+Write-Host '  UAT employee app: http://127.0.0.1:3320/auth/login'
 Write-Host "Log: $log"
 
 if (-not $SkipVerify) {

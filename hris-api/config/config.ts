@@ -9,6 +9,12 @@ const ALWAYS_ALLOWED_ORIGINS = [
 	"http://127.0.0.1:3100",
 	"http://localhost:3200",
 	"http://127.0.0.1:3200",
+	"http://localhost:3300",
+	"http://127.0.0.1:3300",
+	"http://localhost:3310",
+	"http://127.0.0.1:3310",
+	"http://localhost:3320",
+	"http://127.0.0.1:3320",
 	"http://localhost:5173",
 	"http://localhost:3001",
 	"http://localhost:4173",
@@ -41,7 +47,7 @@ const MERGED_CORS_ORIGINS = Array.from(
 );
 
 const PRIVATE_LAN_APP_ORIGIN =
-	/^http:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}):(3000|3100|3200)$/;
+	/^http:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}):(3000|3100|3200|3300|3310|3320)$/;
 
 const isLanCorsEnabled = process.env.ALLOW_LAN_CORS !== "false";
 

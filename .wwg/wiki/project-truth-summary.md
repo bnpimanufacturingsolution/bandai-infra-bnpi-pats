@@ -5,6 +5,7 @@ Last updated: 2026-07-06
 ## Current Runtime Truth
 
 - Hyper-V is available from the elevated Windows host context.
+- Repo source shape now includes `hris-api`, `hris-app`, and `hris-emp-app`, with `hris-emp-app` tracked as a git submodule rooted in this workspace and intended to remain visible/editable beside the other HRIS surfaces.
 - The current discovered Hyper-V proof VM is `project-truth-local-vhdx-proof`.
 - The VM is attached to the `ProjectTruth-External` switch.
 - The VM boots from `C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx`.
@@ -109,6 +110,7 @@ Last updated: 2026-07-06
 ## Operating Notes
 
 - VM/GitOps/runtime work is admin / `hris-admin` operational work.
+- Current local/VM employee-app runtime integration ports are `3300` (PROD), `3310` (DEV), and `3320` (UAT), each proxying browser `/api` and `socket.io` traffic back to the paired `hris-api` service.
 - From the Windows host, host-local VM, LAN, device, DB, GitOps, and runtime
   drift checks should collect direct LAN evidence through
   `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19`

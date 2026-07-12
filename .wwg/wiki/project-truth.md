@@ -93,6 +93,12 @@ Accepted or observed architecture:
 - Item: source folders: app
   - Status: INFERRED
   - Evidence: source/config (folders and package metadata)
+- Item: Current workspace source shape includes `hris-api`, `hris-app`, and `hris-emp-app`, with `hris-emp-app` vendored into the repo root as a git submodule on the upstream `develop` branch and integrated through parent-owned Compose/K3s runtime wrappers.
+  - Status: IMPLEMENTED_FROM_USER_REQUEST
+  - Evidence: `.gitmodules`; `hris-emp-app`; `appliance/docker-compose.yml`; `appliance/docker-compose.environments.yml`; `gitops/runtime-k8s/overlays/dev/runtime.yaml`; `gitops/runtime-k8s/overlays/uat/runtime.yaml`; `gitops/runtime-k8s/overlays/prod/runtime.yaml`.
+- Item: Local/VM employee self-service runtime now uses dedicated frontend ports `3300` (PROD), `3310` (DEV), and `3320` (UAT), while proxying browser `/api` and `socket.io` traffic to the paired `hris-api` ports.
+  - Status: IMPLEMENTED_FROM_USER_REQUEST
+  - Evidence: `appliance/dockerfiles/hris-emp-app.nginx.conf.template`; `appliance/docker-compose.yml`; `appliance/docker-compose.environments.yml`; `scripts/configure.ps1`; `scripts/verify-host-health.ps1`; `scripts/verify-lan-health.ps1`.
 - Item: ZKTeco runtime is now Linux-first through `vendor/zkteco-linux`; Windows COM SDK and Node bridge paths are retired from the active repo/runtime path.
   - Status: CONFIRMED_RUNTIME_EVIDENCE
   - Evidence: On 2026-07-01, VM root storage was expanded to a 491 GB filesystem, `vendor/zkteco-linux` tests passed locally and in the VM, all four physical terminals at `10.184.38.9`, `10.184.38.235`, `10.184.38.234`, and `10.184.38.10` passed TCP from the VM, and the repo Docker Compose now defines Linux bridge services `zkteco-linux-bridge`, `zkteco-linux-bridge-dev`, and `zkteco-linux-bridge-uat` using image `project-truth-zkteco-linux:develop`. The old `vendor/zkteco-sdk` submodule and `appliance/zkteco-standalone-sdk` Windows implementation were removed from the repo.

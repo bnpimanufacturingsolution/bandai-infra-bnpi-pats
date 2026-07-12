@@ -121,6 +121,9 @@ app/
 gitops/
 terraform-hyperv/
 image-factory/
+hris-api/
+hris-app/
+hris-emp-app/
 scripts/
 docs/
 .github/workflows/
@@ -154,18 +157,24 @@ The final verifier must prove:
 Host-local health:
   http://127.0.0.1:3000/auth/login
   http://127.0.0.1:3001/health
+  http://127.0.0.1:3300/auth/login
   http://127.0.0.1:3100/auth/login
   http://127.0.0.1:3101/health
+  http://127.0.0.1:3310/auth/login
   http://127.0.0.1:3200/auth/login
   http://127.0.0.1:3201/health
+  http://127.0.0.1:3320/auth/login
 
 LAN health:
   http://<guest-lan-ip>:3000/auth/login
   http://<guest-lan-ip>:3001/health
+  http://<guest-lan-ip>:3300/auth/login
   http://<guest-lan-ip>:3100/auth/login
   http://<guest-lan-ip>:3101/health
+  http://<guest-lan-ip>:3310/auth/login
   http://<guest-lan-ip>:3200/auth/login
   http://<guest-lan-ip>:3201/health
+  http://<guest-lan-ip>:3320/auth/login
 
 Inside VM:
   hostname

@@ -28,10 +28,13 @@ function Test-HealthUrl {
 $checks = @(
   (Test-HealthUrl 'host-local-prod-app' 'http://127.0.0.1:3000/auth/login' 'html'),
   (Test-HealthUrl 'host-local-prod-api' 'http://127.0.0.1:3001/health'),
+  (Test-HealthUrl 'host-local-prod-emp-app' 'http://127.0.0.1:3300/auth/login' 'html'),
   (Test-HealthUrl 'host-local-dev-app' 'http://127.0.0.1:3100/auth/login' 'html'),
   (Test-HealthUrl 'host-local-dev-api' 'http://127.0.0.1:3101/health'),
+  (Test-HealthUrl 'host-local-dev-emp-app' 'http://127.0.0.1:3310/auth/login' 'html'),
   (Test-HealthUrl 'host-local-uat-app' 'http://127.0.0.1:3200/auth/login' 'html'),
-  (Test-HealthUrl 'host-local-uat-api' 'http://127.0.0.1:3201/health')
+  (Test-HealthUrl 'host-local-uat-api' 'http://127.0.0.1:3201/health'),
+  (Test-HealthUrl 'host-local-uat-emp-app' 'http://127.0.0.1:3320/auth/login' 'html')
 )
 
 if ($GuestIp) {

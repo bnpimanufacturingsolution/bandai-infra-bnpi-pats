@@ -9,10 +9,13 @@ $ErrorActionPreference = 'Continue'
 $targets = @(
   [pscustomobject]@{ Environment = 'prod'; Name = 'app'; Url = 'http://127.0.0.1:3000/auth/login' },
   [pscustomobject]@{ Environment = 'prod'; Name = 'api'; Url = 'http://127.0.0.1:3001/health' },
+  [pscustomobject]@{ Environment = 'prod'; Name = 'emp-app'; Url = 'http://127.0.0.1:3300/auth/login' },
   [pscustomobject]@{ Environment = 'dev'; Name = 'app'; Url = 'http://127.0.0.1:3100/auth/login' },
   [pscustomobject]@{ Environment = 'dev'; Name = 'api'; Url = 'http://127.0.0.1:3101/health' },
+  [pscustomobject]@{ Environment = 'dev'; Name = 'emp-app'; Url = 'http://127.0.0.1:3310/auth/login' },
   [pscustomobject]@{ Environment = 'uat'; Name = 'app'; Url = 'http://127.0.0.1:3200/auth/login' },
-  [pscustomobject]@{ Environment = 'uat'; Name = 'api'; Url = 'http://127.0.0.1:3201/health' }
+  [pscustomobject]@{ Environment = 'uat'; Name = 'api'; Url = 'http://127.0.0.1:3201/health' },
+  [pscustomobject]@{ Environment = 'uat'; Name = 'emp-app'; Url = 'http://127.0.0.1:3320/auth/login' }
 )
 
 if ($Environment -ne 'all') {
