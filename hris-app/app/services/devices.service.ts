@@ -555,6 +555,16 @@ export interface DeviceUserSyncResponse {
 		unmatched: number;
 		conflict: number;
 		disabled: number;
+		pruned?: number;
+		mode?: DeviceUserSyncMode;
+		sourceDeviceId?: string;
+		sourceDeviceName?: string;
+		convergenceSource?: boolean;
+		copiedUsers?: number;
+		retryCount?: number;
+		skippedUsers?: number;
+		failedCopies?: number;
+		syntheticFaceMirrors?: number;
 	};
 }
 

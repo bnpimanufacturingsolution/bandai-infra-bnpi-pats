@@ -66,6 +66,7 @@ import deviceService, {
 	type DeviceSyncPreviewRow,
 	type DeviceUser,
 	type DeviceUserCredentialSummary,
+	type DeviceUserSyncJobProgress,
 	type DeviceUserSyncMode,
 } from "~/services/devices.service";
 import type { Employee } from "~/services/employees.service";
@@ -118,6 +119,7 @@ type BulkDeviceUserSyncState = {
 	open: boolean;
 	status: "idle" | "review" | "starting" | "error";
 	message: string;
+	lastProgress?: DeviceUserSyncJobProgress | null;
 };
 
 type ActiveDeviceUserSyncJob = {
@@ -266,6 +268,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		open: false,
 		status: "idle",
 		message: "",
+		lastProgress: null,
 	});
 	const [bulkDeviceUserSyncMode, setBulkDeviceUserSyncMode] = useState<DeviceUserSyncMode>(
 		DEFAULT_BULK_DEVICE_USER_SYNC_MODE,
@@ -381,6 +384,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			status: "error",
 			message:
 				"Previous device-user sync status expired after an API restart or cleanup. You can rerun the refresh safely; per-device sync is retryable and durable Sync Runs remain available below.",
+			lastProgress: null,
 		});
 		toast.warning("Previous device-user sync status expired", {
 			id: "device-user-sync-progress",
@@ -516,6 +520,18 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	}, [sourceMatchedDeviceUsersData?.deviceUsers]);
 	useEffect(() => {
 		if (!deviceUserSyncJobStatus || deviceUserSyncJobStatus === "processing") return;
+		if (deviceUserSyncJobProgress) {
+			setBulkDeviceUserSyncState((current) => ({
+				...current,
+				open: true,
+				status: "review",
+				message: deviceUserSyncJobProgress.message || current.message,
+				lastProgress: deviceUserSyncJobProgress,
+			}));
+		}
+		if (activeDeviceUserSyncJob) {
+			setActiveDeviceUserSyncJob(null);
+		}
 		void Promise.allSettled([
 			refetchSyncPreview(),
 			refetchSyncRuns(),
@@ -551,6 +567,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		refetchSourceMatchedDeviceUsers,
 		refetchSyncPreview,
 		refetchSyncRuns,
+		activeDeviceUserSyncJob,
 		selectedDeviceId,
 	]);
 	const deviceUserOptions = useMemo(() => {
@@ -1553,36 +1570,45 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		["Needs review", deviceUserSyncState.summary?.conflict],
 		["Skipped/off", (deviceUserSyncState.summary?.skipped || 0) + (deviceUserSyncState.summary?.disabled || 0)],
 	] as const;
-	const deviceUserSyncJobProcessed = Number(deviceUserSyncJobProgress?.processedDevices || 0);
-	const deviceUserSyncJobTotal = Math.max(Number(deviceUserSyncJobProgress?.totalDevices || syncCenterDevices.length || 1), 1);
-	const deviceUserSyncJobMode = deviceUserSyncJobProgress?.syncMode || DEFAULT_BULK_DEVICE_USER_SYNC_MODE;
-	const deviceUserSyncJobPercent = deviceUserSyncJobProgress
+	const effectiveDeviceUserSyncJobProgress =
+		activeDeviceUserSyncJob && deviceUserSyncJobProgress
+			? deviceUserSyncJobProgress
+			: bulkDeviceUserSyncState.lastProgress || null;
+	const effectiveDeviceUserSyncJobStatus = effectiveDeviceUserSyncJobProgress?.status;
+	const deviceUserSyncJobProcessed = Number(effectiveDeviceUserSyncJobProgress?.processedDevices || 0);
+	const deviceUserSyncJobTotal = Math.max(
+		Number(effectiveDeviceUserSyncJobProgress?.totalDevices || syncCenterDevices.length || 1),
+		1,
+	);
+	const deviceUserSyncJobMode =
+		effectiveDeviceUserSyncJobProgress?.syncMode || DEFAULT_BULK_DEVICE_USER_SYNC_MODE;
+	const deviceUserSyncJobPercent = effectiveDeviceUserSyncJobProgress
 		? Math.min(100, Math.round((deviceUserSyncJobProcessed / deviceUserSyncJobTotal) * 100))
 		: 0;
-	const deviceUserSyncJobIsProcessing = deviceUserSyncJobStatus === "processing";
-	const deviceUserSyncJobCancelRequested = Boolean(deviceUserSyncJobProgress?.cancelRequested);
+	const deviceUserSyncJobIsProcessing = effectiveDeviceUserSyncJobStatus === "processing";
+	const deviceUserSyncJobCancelRequested = Boolean(effectiveDeviceUserSyncJobProgress?.cancelRequested);
 	const deviceUserSyncJobToneClass =
-		deviceUserSyncJobStatus === "failed"
+		effectiveDeviceUserSyncJobStatus === "failed"
 			? "border-red-200 bg-red-50 text-red-950"
-			: deviceUserSyncJobStatus === "cancelled"
+			: effectiveDeviceUserSyncJobStatus === "cancelled"
 				? "border-amber-200 bg-amber-50 text-amber-950"
-				: deviceUserSyncJobStatus === "completed"
+				: effectiveDeviceUserSyncJobStatus === "completed"
 					? "border-emerald-200 bg-emerald-50 text-emerald-950"
 					: "border-orange-200 bg-orange-50 text-orange-950";
 	const deviceUserSyncJobFillClass =
-		deviceUserSyncJobStatus === "failed"
+		effectiveDeviceUserSyncJobStatus === "failed"
 			? "bg-red-600"
-			: deviceUserSyncJobStatus === "cancelled"
+			: effectiveDeviceUserSyncJobStatus === "cancelled"
 				? "bg-amber-600"
-				: deviceUserSyncJobStatus === "completed"
+				: effectiveDeviceUserSyncJobStatus === "completed"
 					? "bg-emerald-600"
 					: "bg-orange-600";
 	const deviceUserSyncJobTitle =
-		deviceUserSyncJobStatus === "cancelled"
+		effectiveDeviceUserSyncJobStatus === "cancelled"
 			? "Sync cancelled"
-			: deviceUserSyncJobStatus === "failed"
+			: effectiveDeviceUserSyncJobStatus === "failed"
 				? "Sync needs attention"
-				: deviceUserSyncJobStatus === "completed"
+				: effectiveDeviceUserSyncJobStatus === "completed"
 					? "Sync finished"
 					: deviceUserSyncJobIsProcessing
 						? deviceUserSyncJobCancelRequested
@@ -1594,21 +1620,21 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								: "Refreshing all device users"
 						: "Device-user sync status";
 	const bulkDeviceUserSyncSummaryItems = [
-		["Configured devices", deviceUserSyncJobProgress?.totalDevices ?? syncCenterDevices.length],
-		["Completed", deviceUserSyncJobProgress?.processedDevices ?? 0],
-		["Synced", deviceUserSyncJobProgress?.successfulDevices ?? 0],
-		["Needs attention", deviceUserSyncJobProgress?.failedDevices ?? 0],
+		["Configured devices", effectiveDeviceUserSyncJobProgress?.totalDevices ?? syncCenterDevices.length],
+		["Completed", effectiveDeviceUserSyncJobProgress?.processedDevices ?? 0],
+		["Synced", effectiveDeviceUserSyncJobProgress?.successfulDevices ?? 0],
+		["Needs attention", effectiveDeviceUserSyncJobProgress?.failedDevices ?? 0],
 	] as const;
-	const bulkDeviceUserSyncResults = deviceUserSyncJobProgress?.results || [];
+	const bulkDeviceUserSyncResults = effectiveDeviceUserSyncJobProgress?.results || [];
 	const deviceUserSyncJobSummary =
-		deviceUserSyncJobProgress
+		effectiveDeviceUserSyncJobProgress
 				? `${
 					deviceUserSyncJobMode === "needs_attention_only"
 						? "Mismatch refresh"
 						: deviceUserSyncJobMode === "peer_converge"
 							? "Best-truth converge"
 						: "All devices"
-				}: ${metricValue(deviceUserSyncJobProgress.successfulDevices)} devices synced, ${metricValue(deviceUserSyncJobProgress.failedDevices)} need attention.`
+				}: ${metricValue(effectiveDeviceUserSyncJobProgress.successfulDevices)} devices synced, ${metricValue(effectiveDeviceUserSyncJobProgress.failedDevices)} need attention.`
 			: "";
 	const bulkDeviceUserSyncToneClass =
 		bulkDeviceUserSyncState.status === "error"
