@@ -78,9 +78,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Sync device users");
 		expect(enroll).toContain('title="Sync device users"');
 		expect(enroll).toContain("All devices");
+		expect(enroll).toContain("Make peers match");
 		expect(enroll).toContain("Only mismatches");
 		expect(enroll).toContain("Start small with mismatches");
 		expect(enroll).toContain("Refresh all devices");
+		expect(enroll).toContain("Make devices match");
 		expect(enroll).toContain("Refresh mismatches");
 		expect(enroll).toContain("Read from device");
 		expect(enroll).toContain("Current view");
@@ -102,6 +104,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Historical HRIS backfill");
 		expect(enroll).toContain("Loading enrolled face photo");
 		expect(enroll).toContain("Fingerprint truth");
+		expect(enroll).toContain("Mock 1 face");
 		expect(enroll).toContain("Raw fingerprint template blobs are not shown in this normal record");
 		expect(enroll).toContain("dev mock tallies are kept separate from physical device truth");
 		expect(enroll).toContain("Across Hikvision devices");

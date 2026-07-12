@@ -389,6 +389,29 @@ export const useMockHikvisionFingerprintTally = () => {
 	});
 };
 
+export const useMockHikvisionFaceTally = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (payload: {
+			deviceId: string;
+			vendorUserId: string;
+			faceCount: number;
+			targetDeviceId?: string;
+		}) => {
+			return await devicesService.mockHikvisionFaceTally(payload);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users"] });
+			sonnerToast.success("Synthetic face tally updated");
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to update synthetic face tally");
+		},
+	});
+};
+
 export const useResetDeviceEvents = () => {
 	const queryClient = useQueryClient();
 

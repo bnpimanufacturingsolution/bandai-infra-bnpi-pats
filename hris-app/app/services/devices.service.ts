@@ -292,7 +292,7 @@ export interface DeviceImportJobProgress {
 	completedAt?: string;
 }
 
-export type DeviceUserSyncMode = "full_refresh" | "needs_attention_only";
+export type DeviceUserSyncMode = "full_refresh" | "needs_attention_only" | "peer_converge";
 
 export interface DeviceUserSyncJobStartRequest {
 	mode?: DeviceUserSyncMode;
@@ -478,6 +478,13 @@ export interface HikvisionMockFingerprintRequest {
 	deviceId: string;
 	vendorUserId: string;
 	fingerprintCount: number;
+	targetDeviceId?: string;
+}
+
+export interface HikvisionMockFaceRequest {
+	deviceId: string;
+	vendorUserId: string;
+	faceCount: number;
 	targetDeviceId?: string;
 }
 
@@ -1048,6 +1055,23 @@ class DevicesService extends APIService {
 				error.data?.errors?.[0]?.message ||
 					error.message ||
 					"Error applying synthetic fingerprint tally",
+			);
+		}
+	}
+
+	async mockHikvisionFaceTally(payload: HikvisionMockFaceRequest): Promise<any> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/hikvision/mock-face", payload);
+			if (!response.data) {
+				throw new Error("Failed to apply synthetic face tally");
+			}
+			return response.data?.data || response.data;
+		} catch (error: any) {
+			console.error("Error applying synthetic face tally:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error applying synthetic face tally",
 			);
 		}
 	}

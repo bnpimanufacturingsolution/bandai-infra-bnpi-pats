@@ -35,9 +35,12 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("hikvisionFetchBinary");
 		expect(controller).to.include("readDeviceUserFaceUrl");
 		expect(controller).to.include("Device user face photo host does not match the configured device");
-		expect(controller).to.include('type DeviceUserSyncMode = "full_refresh" | "needs_attention_only"');
+		expect(controller).to.include('type DeviceUserSyncMode = "full_refresh" | "needs_attention_only" | "peer_converge"');
 		expect(controller).to.include('const requestedMode = String((req.body as any)?.mode || "").trim().toLowerCase()');
 		expect(controller).to.include('syncMode === "needs_attention_only"');
+		expect(controller).to.include('requestedMode === "peer_converge"');
+		expect(controller).to.include("Cross-device convergence queued");
+		expect(controller).to.include("shouldConvergeDeviceUserToPeer");
 		expect(controller).to.include("deviceIds");
 	});
 
@@ -66,7 +69,7 @@ describe("DeviceUser API contract", () => {
 
 	it("prunes stale Hikvision device-user rows when the source snapshot no longer contains them", () => {
 		const controller = controllerSource();
-		expect(controller).to.include('if (params.source === "hikvision")');
+		expect(controller).to.include('if (params.source === "hikvision" && params.pruneMissing !== false)');
 		expect(controller).to.include("currentVendorUserIds");
 		expect(controller).to.include("deviceUser.deleteMany");
 		expect(controller).to.include("vendorUserId: {");

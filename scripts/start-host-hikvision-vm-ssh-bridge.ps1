@@ -4,6 +4,8 @@ param(
   [string]$DeviceIp = '',
   [string[]]$DeviceIps = @(),
   [string]$VmSshTarget = 'project-truth-hris',
+  [int]$ApiLocalPort = 3001,
+  [int]$ApiRemotePort = 53001,
   [int]$HttpDevicePort = 443,
   [int]$SdkDevicePort = 8000,
   [int]$HttpListenPort = 58080,
@@ -79,6 +81,9 @@ foreach ($arg in @(
   $forwardArgs.Add([string]$arg) | Out-Null
 }
 
+$forwardArgs.Add('-R')
+$forwardArgs.Add("${ApiRemotePort}:127.0.0.1:${ApiLocalPort}")
+
 $records = New-Object System.Collections.Generic.List[object]
 $runtimeProtocol = if ($HttpDevicePort -eq 443) { 'https' } else { 'http' }
 
@@ -129,6 +134,7 @@ $verifyPorts = @($records | ForEach-Object {
   $_.RuntimeConfigHint.hikvisionRuntimePort
   $_.RuntimeConfigHint.hikvisionSdkRuntimePort
 } | Sort-Object -Unique)
+$verifyPorts += $ApiRemotePort
 $verifyPattern = ($verifyPorts | ForEach-Object { [string]$_ }) -join '|'
 $verifyOutput = ssh $VmSshTarget "ss -ltn | grep -E ':($verifyPattern)[[:space:]]'" 2>&1
 if ($LASTEXITCODE -ne 0) {
@@ -142,6 +148,11 @@ $state = [pscustomobject]@{
   vmSshTarget = $VmSshTarget
   processId = $proc.Id
   deviceIps = $targetDeviceIps
+  apiRuntimeHint = [pscustomobject]@{
+    hrisApiBase = "http://127.0.0.1:$ApiRemotePort"
+    localApiPort = $ApiLocalPort
+    remoteApiPort = $ApiRemotePort
+  }
   bridges = $records
   evidenceDir = $runRoot
   stopCommand = '.\scripts\project-truth.ps1 start-host-hikvision-vm-ssh-bridge stop'

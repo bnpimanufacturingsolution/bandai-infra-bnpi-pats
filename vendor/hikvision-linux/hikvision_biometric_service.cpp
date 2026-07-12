@@ -1615,7 +1615,7 @@ bool process_fast_user_delta_reconcile(DeviceSession &source, const ReconcileJob
     int missing_total = 0;
 
     for (auto &target : sessions) {
-        if (target.config.host == source.config.host || !target.config.biometric_peer) {
+        if (target.config.hris_device_id == source.config.hris_device_id || !target.config.biometric_peer) {
             continue;
         }
 
@@ -1701,7 +1701,7 @@ void polling_loop() {
             }
 
             for (auto &target : sessions) {
-                if (target.config.host == source.config.host || !target.config.biometric_peer) {
+                if (target.config.hris_device_id == source.config.hris_device_id || !target.config.biometric_peer) {
                     continue;
                 }
 
@@ -1740,7 +1740,7 @@ void polling_loop() {
                 }
 
                 for (auto &target : sessions) {
-                    if (target.config.host == source.config.host || !target.config.biometric_peer) {
+                    if (target.config.hris_device_id == source.config.hris_device_id || !target.config.biometric_peer) {
                         continue;
                     }
                     const int target_template_count =
@@ -1847,7 +1847,7 @@ void process_reconcile_job(const ReconcileJob &job) {
             : std::vector<NET_DVR_FINGER_PRINT_CFG_V50>{};
 
     for (auto &target : sessions) {
-        if (target.config.host == source->config.host || !target.config.biometric_peer) {
+        if (target.config.hris_device_id == source->config.hris_device_id || !target.config.biometric_peer) {
             continue;
         }
         peer_count += 1;

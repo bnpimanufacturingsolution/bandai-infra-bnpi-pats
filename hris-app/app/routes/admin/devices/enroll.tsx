@@ -43,6 +43,7 @@ import {
 	useSyncDeviceUsers,
 	useUnlinkDeviceUser,
 	useMockHikvisionFingerprintTally,
+	useMockHikvisionFaceTally,
 } from "~/lib/hooks/useDevices";
 import { useHikvisionDeviceUsers } from "~/lib/hooks/use-hikvision";
 import { useQueryClient } from "@tanstack/react-query";
@@ -246,6 +247,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const hikvisionListenerControl = useControlHikvisionListener();
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
 	const mockHikvisionFingerprintMutation = useMockHikvisionFingerprintTally();
+	const mockHikvisionFaceMutation = useMockHikvisionFaceTally();
 	const startDeviceUserSyncJobMutation = useStartDeviceUserSyncJob();
 	const cancelDeviceUserSyncJobMutation = useCancelDeviceUserSyncJob();
 	const linkDeviceUserMutation = useLinkDeviceUser();
@@ -770,10 +772,14 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				? {
 						mode: "needs_attention_only" as const,
 						deviceIds: needsAttentionDeviceIds,
-					}
+				  }
+				: bulkDeviceUserSyncMode === "peer_converge"
+					? {
+							mode: "peer_converge" as const,
+					  }
 				: {
 						mode: "full_refresh" as const,
-					};
+				  };
 		if (
 			bulkDeviceUserSyncMode === "needs_attention_only" &&
 			needsAttentionDeviceIds.length === 0
@@ -791,6 +797,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			message:
 				bulkDeviceUserSyncMode === "needs_attention_only"
 					? "Starting the mismatch refresh."
+					: bulkDeviceUserSyncMode === "peer_converge"
+						? "Starting cross-device convergence."
 					: "Starting the full reread.",
 		});
 		try {
@@ -1117,6 +1125,44 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		}
 	};
 
+	const applyMockFaceToDetails = async (faceCount: number) => {
+		if (!selectedDeviceId || !detailsDeviceUser?.vendorUserId) {
+			toast.error("Open a device user record before changing synthetic face tally");
+			return;
+		}
+		try {
+			const result = await mockHikvisionFaceMutation.mutateAsync({
+				deviceId: selectedDeviceId,
+				vendorUserId: detailsDeviceUser.vendorUserId,
+				faceCount,
+			});
+			const nextRawPayload = result?.sourceDeviceUser?.rawPayload;
+			if (nextRawPayload) {
+				setDetailsDeviceUser((current) =>
+					current
+						? {
+								...current,
+								rawPayload: nextRawPayload,
+								hrisDeviceUser: current.hrisDeviceUser
+									? { ...current.hrisDeviceUser, rawPayload: nextRawPayload }
+									: current.hrisDeviceUser,
+						  }
+						: current,
+				);
+			}
+			await Promise.allSettled([
+				refetchSourceDeviceUsers(),
+				refetchDbDeviceUsers(),
+				refetchOpenDbDeviceUsers(),
+				refetchDeviceUserSummary(),
+				refetchSourceMatchedDeviceUsers(),
+				refetchSyncPreview(),
+			]);
+		} catch (error: any) {
+			toast.error(error?.message || "Failed to update synthetic face tally");
+		}
+	};
+
 	const openEnroll = (employee: Employee) => {
 		reset({
 			deviceId: "",
@@ -1378,13 +1424,16 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			hasFace: Boolean(metaSummary.hasFace ?? faceCount > 0),
 		};
 	};
-	const getDeviceUserSyntheticFingerprintSummary = (deviceUser?: { rawPayload?: any } | null) => {
+	const getDeviceUserSyntheticCredentialSummary = (deviceUser?: { rawPayload?: any } | null) => {
 		const raw = (deviceUser?.rawPayload || {}) as any;
 		const synthetic = raw?._hrisDeviceMetadata?.syntheticCredentialSummary || {};
 		const fingerprintCount = Math.max(0, Number(synthetic.fingerprintCount ?? 0) || 0);
+		const faceCount = Math.max(0, Number(synthetic.faceCount ?? 0) || 0);
 		return {
 			fingerprintCount,
+			faceCount,
 			hasFingerprint: Boolean(synthetic.hasFingerprint ?? fingerprintCount > 0),
+			hasFace: Boolean(synthetic.hasFace ?? faceCount > 0),
 			updatedAt: String(synthetic.updatedAt || "").trim() || null,
 			copiedFromVendorUserId: String(synthetic.copiedFromVendorUserId || "").trim() || null,
 		};
@@ -1540,6 +1589,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 							? "Cancelling device-user refresh"
 							: deviceUserSyncJobMode === "needs_attention_only"
 								? "Refreshing mismatches"
+								: deviceUserSyncJobMode === "peer_converge"
+									? "Making peers match best truth"
 								: "Refreshing all device users"
 						: "Device-user sync status";
 	const bulkDeviceUserSyncSummaryItems = [
@@ -1551,9 +1602,11 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const bulkDeviceUserSyncResults = deviceUserSyncJobProgress?.results || [];
 	const deviceUserSyncJobSummary =
 		deviceUserSyncJobProgress
-			? `${
+				? `${
 					deviceUserSyncJobMode === "needs_attention_only"
 						? "Mismatch refresh"
+						: deviceUserSyncJobMode === "peer_converge"
+							? "Best-truth converge"
 						: "All devices"
 				}: ${metricValue(deviceUserSyncJobProgress.successfulDevices)} devices synced, ${metricValue(deviceUserSyncJobProgress.failedDevices)} need attention.`
 			: "";
@@ -1572,10 +1625,13 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const bulkDeviceUserSyncModeDescription =
 		bulkDeviceUserSyncMode === "needs_attention_only"
 			? "Refresh only devices with count gaps, open links, conflicts, or errors."
+			: bulkDeviceUserSyncMode === "peer_converge"
+				? "Refresh all devices, pick the richest source device, then copy missing peer users with retries."
 			: "Reread every configured device user and refresh saved biometric counts.";
 	const bulkDeviceUserSyncScopeItems = [
 		["All devices", syncCenterDevices.length],
 		["Only mismatches", needsAttentionSyncCenterDevices.length],
+		["Best-truth converge", syncCenterDevices.length],
 	] as const;
 	const devicesByVendor = syncCenterDevices.reduce<Record<string, SyncCenterDeviceItem[]>>(
 		(groups, item) => {
@@ -2720,10 +2776,10 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									<div className="space-y-1">
 										<p className="text-sm font-semibold text-slate-950">What to refresh</p>
 										<p className="text-xs text-slate-600">
-											Start small with mismatches, or reread everything when you want a full recount.
+											Start small with mismatches, reread everything for a fresh count, or make every device match the richest current truth.
 										</p>
 									</div>
-									<div className="grid gap-2 sm:grid-cols-2 lg:min-w-[420px]">
+									<div className="grid gap-2 sm:grid-cols-3 lg:min-w-[640px]">
 										<button
 											type="button"
 											onClick={() => setBulkDeviceUserSyncMode("full_refresh")}
@@ -2738,6 +2794,22 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 											</div>
 											<p className="mt-1 text-xs text-current/80">
 												Reread every configured device user and refresh HRIS biometric counts.
+											</p>
+										</button>
+										<button
+											type="button"
+											onClick={() => setBulkDeviceUserSyncMode("peer_converge")}
+											className={`rounded-xl border px-4 py-3 text-left transition ${
+												bulkDeviceUserSyncMode === "peer_converge"
+													? "border-emerald-300 bg-emerald-50 text-emerald-950 shadow-sm"
+													: "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+											}`}>
+											<div className="flex items-center justify-between gap-3">
+												<span className="text-sm font-semibold">Make peers match</span>
+												<Badge variant="outline">Best truth</Badge>
+											</div>
+											<p className="mt-1 text-xs text-current/80">
+												Use the highest current device-user truth as the baseline, then copy missing peer users with retry logic.
 											</p>
 										</button>
 										<button
@@ -2760,7 +2832,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								</div>
 								<div className="mt-3 flex flex-col gap-3 border-t border-slate-200/80 pt-3 sm:flex-row sm:items-center sm:justify-between">
 									<p className="text-xs text-slate-600">{bulkDeviceUserSyncModeDescription}</p>
-									<div className="grid grid-cols-2 gap-2 sm:min-w-[260px]">
+									<div className="grid grid-cols-3 gap-2 sm:min-w-[380px]">
 										{bulkDeviceUserSyncScopeItems.map(([label, value]) => (
 											<div key={label} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
 												<p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</p>
@@ -2840,7 +2912,9 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									</div>
 									<p className="text-sm text-slate-600">
 										{result.status === "success"
-											? `${metricValue(result.summary?.created)} created, ${metricValue(result.summary?.updated)} updated, ${metricValue(result.summary?.unmatched)} need link.`
+											? result.summary?.mode === "peer_converge"
+												? `${metricValue(result.summary?.copiedUsers)} copied, ${metricValue(result.summary?.retryCount)} retries, ${metricValue(result.summary?.failedCopies)} failed, ${metricValue(result.summary?.syntheticFaceMirrors)} mock-face mirrors.`
+												: `${metricValue(result.summary?.created)} created, ${metricValue(result.summary?.updated)} updated, ${metricValue(result.summary?.unmatched)} need link.`
 											: result.status === "cancelled"
 												? "Sync was cancelled before this device was completed."
 											: result.error || "Sync failed."}
@@ -2920,6 +2994,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									? "Starting..."
 									: bulkDeviceUserSyncMode === "needs_attention_only"
 										? "Refresh mismatches"
+										: bulkDeviceUserSyncMode === "peer_converge"
+											? "Make devices match"
 										: "Refresh all devices"}
 							</Button>
 						) : null}
@@ -3149,22 +3225,50 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 											onClick={() => applyMockFingerprintToDetails(0)}>
 											Clear mock tally
 										</Button>
+										<Button
+											type="button"
+											size="sm"
+											variant="outline"
+											disabled={mockHikvisionFaceMutation.isPending}
+											onClick={() => applyMockFaceToDetails(1)}>
+											Mock 1 face
+										</Button>
+										<Button
+											type="button"
+											size="sm"
+											variant="outline"
+											disabled={mockHikvisionFaceMutation.isPending}
+											onClick={() => applyMockFaceToDetails(0)}>
+											Clear mock face
+										</Button>
 									</div>
-									{getDeviceUserSyntheticFingerprintSummary(detailsDeviceUser).fingerprintCount > 0 ? (
+									{getDeviceUserSyntheticCredentialSummary(detailsDeviceUser).fingerprintCount > 0 ? (
 										<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
 											<p className="font-semibold uppercase tracking-wide">Dev mock fingerprint tally</p>
 											<p className="mt-2 text-2xl font-semibold">
-												{String(getDeviceUserSyntheticFingerprintSummary(detailsDeviceUser).fingerprintCount)}
+												{String(getDeviceUserSyntheticCredentialSummary(detailsDeviceUser).fingerprintCount)}
 											</p>
 											<p className="mt-2 leading-5 text-amber-900">
 												This is synthetic UI test state only. The physical device fingerprint truth above stays
 												{` ${String(getDeviceUserCredentialSummary(detailsDeviceUser).fingerprintCount)}`}.
 											</p>
-											{getDeviceUserSyntheticFingerprintSummary(detailsDeviceUser).updatedAt ? (
+											{getDeviceUserSyntheticCredentialSummary(detailsDeviceUser).updatedAt ? (
 												<p className="mt-2 text-[11px] text-amber-900">
-													Updated {formatDateTime(getDeviceUserSyntheticFingerprintSummary(detailsDeviceUser).updatedAt || "")}
+													Updated {formatDateTime(getDeviceUserSyntheticCredentialSummary(detailsDeviceUser).updatedAt || "")}
 												</p>
 											) : null}
+										</div>
+									) : null}
+									{getDeviceUserSyntheticCredentialSummary(detailsDeviceUser).faceCount > 0 ? (
+										<div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs text-sky-950">
+											<p className="font-semibold uppercase tracking-wide">Dev mock face tally</p>
+											<p className="mt-2 text-2xl font-semibold">
+												{String(getDeviceUserSyntheticCredentialSummary(detailsDeviceUser).faceCount)}
+											</p>
+											<p className="mt-2 leading-5 text-sky-900">
+												This is synthetic UI test state only. The physical device face truth above stays
+												{` ${String(getDeviceUserCredentialSummary(detailsDeviceUser).faceCount)}`}.
+											</p>
 										</div>
 									) : null}
 									<div className="mt-3 grid grid-cols-2 gap-2">

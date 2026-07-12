@@ -40,15 +40,18 @@ describe("Hikvision biometric sync contract", () => {
 			'routes.post("/hikvision/copy-user", controller.copyHikvisionDeviceUserToPeer)',
 		);
 		expect(controller).to.include("const copyHikvisionDeviceUserToPeer = async");
+		expect(controller).to.include("const executeHikvisionDeviceUserPeerCopy = async");
+		expect(controller).to.include("const copyHikvisionUserToPeerWithRetry = async");
 		expect(controller).to.include("const runHikvisionManualCopyOnVm = async");
 		expect(controller).to.include("const isMissingHikvisionListenerRuntimeError =");
-		expect(controller).to.include("const runManualCopy = () =>");
+		expect(controller).to.include("const runManualCopy = (extraEnv: string[] = []) =>");
 		expect(controller).to.include("if (result.exitCode !== 0 && isMissingHikvisionListenerRuntimeError(firstAttemptDetail))");
+		expect(controller).to.include("HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api");
+		expect(controller).to.include("HIKVISION_VM_LOCAL_API_BASE");
 		expect(controller).to.include("HIKVISION_VM_WRAPPER_REMOTE_PATH");
 		expect(controller).to.include("HIKVISION_DEVICE_USER_COPY");
 		expect(controller).to.include("sourceDeviceId, targetDeviceId, and employeeNo are required");
-		expect(controller).to.include("Target device does not currently have Hikvision user");
-		expect(controller).to.include("syntheticFingerprintOverlayApplied");
+		expect(controller).to.include("syntheticCredentialOverlayApplied");
 		expect(controller).to.include("await mirrorDeviceUserLinkToPeer({");
 		expect(wrapper).to.include("--run-once");
 		expect(wrapper).to.include("HIKVISION_DEVICE_ID_FILTER");
@@ -67,6 +70,18 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("Source device must be Hikvision");
 		expect(controller).to.include("syntheticCredentialSummary");
 		expect(controller).to.include("Applied as dev-only synthetic fingerprint tally for UI verification");
+	});
+
+	it("exposes a dev-safe synthetic face tally route for cross-device verification", () => {
+		const router = routerSource();
+		const controller = controllerSource();
+
+		expect(router).to.include(
+			'routes.post("/hikvision/mock-face", controller.mockHikvisionFaceTally)',
+		);
+		expect(controller).to.include("const mockHikvisionFaceTally = async");
+		expect(controller).to.include("Applied as dev-only synthetic face tally for UI verification");
+		expect(controller).to.include("Copied as dev-only synthetic face tally for peer verification");
 	});
 
 	it("refreshes per-device Hikvision DeviceUser truth during reconcile and persists derived lifecycle events", () => {
@@ -129,6 +144,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include("read_device_employee_numbers");
 		expect(service).to.include("reconcile_full_mirror_completed");
 		expect(service).to.include("reconcile_suppressed_recent_peer_apply");
+		expect(service).to.include("target.config.hris_device_id == source.config.hris_device_id");
+		expect(service).to.include("target.config.hris_device_id == source->config.hris_device_id");
 		expect(service).to.not.include('"fingerData"');
 	});
 

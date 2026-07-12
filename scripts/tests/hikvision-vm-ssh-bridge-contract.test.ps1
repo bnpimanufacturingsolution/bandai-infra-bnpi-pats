@@ -23,6 +23,7 @@ Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'ServerAliveInterval=30' -Message 'SSH bridge must keep the remote forward session alive'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern '58080' -Message 'SSH bridge must preserve the default forwarded HTTPS port base'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern '58000' -Message 'SSH bridge must preserve the default forwarded SDK port base'
+Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern '53001' -Message 'SSH bridge must expose the host-local HRIS API inside the VM for truth-based peer copy'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'hikvisionRuntimeAddress = ''127\.0\.0\.1''' -Message 'SSH bridge must emit localhost runtime hints for the VM listener'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'hikvisionSdkRuntimeAddress = ''127\.0\.0\.1''' -Message 'SSH bridge must emit localhost SDK hints for the VM listener'
 Assert-Contains -Path 'scripts/project-truth.ps1' -Pattern 'start-host-hikvision-vm-ssh-bridge' -Message 'Main CLI must expose the SSH-based Hikvision VM bridge helper'
