@@ -492,6 +492,9 @@ const parseJsonLines = (stdout: string) =>
 			}
 		});
 
+const isMissingHikvisionListenerRuntimeError = (detail: string) =>
+	/no such file|not found|command not found/i.test(String(detail || ""));
+
 type HikvisionManualCopyParams = {
 	sourceDeviceId: string;
 	targetDeviceId: string;
@@ -540,16 +543,10 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const runHikvisionManualCopyOnVm = async (params: HikvisionManualCopyParams) => {
-		const installResult = await installManagedHikvisionListenerWrapperOnVm();
-		if (!installResult.ok) {
-			throw new Error(
-				installResult.error || "Failed to prepare Hikvision listener runtime for manual copy",
-			);
-		}
-
 		const waitSeconds = Math.max(1, Math.min(Number(params.waitSeconds || 1), 8));
 		const filter = `${params.sourceDeviceId},${params.targetDeviceId}`;
-		const result = await runHikvisionListenerVmCommand(
+		const runManualCopy = () =>
+			runHikvisionListenerVmCommand(
 			[
 				"sudo",
 				"env",
@@ -565,6 +562,17 @@ export const controller = (prisma: PrismaClient) => {
 			],
 			Math.max(waitSeconds * 1000 + 6000, 14000),
 		);
+		let result = await runManualCopy();
+		const firstAttemptDetail = result.stderr.trim() || result.stdout.trim();
+		if (result.exitCode !== 0 && isMissingHikvisionListenerRuntimeError(firstAttemptDetail)) {
+			const installResult = await installManagedHikvisionListenerWrapperOnVm();
+			if (!installResult.ok) {
+				throw new Error(
+					installResult.error || "Failed to prepare Hikvision listener runtime for manual copy",
+				);
+			}
+			result = await runManualCopy();
+		}
 		const events = parseJsonLines(result.stdout);
 		const peerUserWriteOk = events.some(
 			(event) =>

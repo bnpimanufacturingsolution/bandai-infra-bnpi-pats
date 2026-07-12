@@ -41,6 +41,9 @@ describe("Hikvision biometric sync contract", () => {
 		);
 		expect(controller).to.include("const copyHikvisionDeviceUserToPeer = async");
 		expect(controller).to.include("const runHikvisionManualCopyOnVm = async");
+		expect(controller).to.include("const isMissingHikvisionListenerRuntimeError =");
+		expect(controller).to.include("const runManualCopy = () =>");
+		expect(controller).to.include("if (result.exitCode !== 0 && isMissingHikvisionListenerRuntimeError(firstAttemptDetail))");
 		expect(controller).to.include("HIKVISION_VM_WRAPPER_REMOTE_PATH");
 		expect(controller).to.include("HIKVISION_DEVICE_USER_COPY");
 		expect(controller).to.include("sourceDeviceId, targetDeviceId, and employeeNo are required");
