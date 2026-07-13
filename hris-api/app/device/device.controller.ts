@@ -3679,7 +3679,8 @@ export const controller = (prisma: PrismaClient) => {
 				"sudo",
 				"env",
 				"HIKVISION_DEVICE_SPEC_OVERRIDE=/etc/project-truth/hikvision-live-device.spec",
-				"HIKVISION_RUN_SECONDS=2",
+				"HIKVISION_SKIP_SPOOL_REPLAY=1",
+				"HIKVISION_RUN_SECONDS=8",
 				HIKVISION_VM_WRAPPER_REMOTE_PATH,
 				"--run-once",
 				"--mirror-face-source-device-id",
@@ -3687,7 +3688,7 @@ export const controller = (prisma: PrismaClient) => {
 				"--mirror-face-employee-no",
 				employeeNo,
 			],
-				16000,
+				30000,
 			);
 			const events = parseJsonLines(result.stdout);
 			if (result.exitCode !== 0) {

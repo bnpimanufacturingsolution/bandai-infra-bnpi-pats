@@ -2645,8 +2645,9 @@ void polling_loop() {
                 }
             }
 
-            const std::vector<std::string> recent_employees =
-                get_recent_employee_candidates_for_host(source.config.host);
+            // Poll the full small device inventory so face enrollment is found even
+            // when this firmware rejects the SDK alarm channel with 1924.
+            const std::vector<std::string> recent_employees = source_employee_numbers;
             for (const auto &employee_no : recent_employees) {
                 ReconcileJob fingerprint_job;
                 fingerprint_job.source_host = source.config.host;
@@ -3176,7 +3177,9 @@ int main(int argc, char **argv) {
         return 1;
     }
     emit_json({{"event", "sdk_callback_register"}, {"ok", "true"}});
-    replay_pending_hris_contract_posts();
+    if (std::getenv("HIKVISION_SKIP_SPOOL_REPLAY") == nullptr) {
+        replay_pending_hris_contract_posts();
+    }
 
     for (const auto &config : configs) {
         DeviceSession session;
