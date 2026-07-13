@@ -2,6 +2,37 @@
 
 Status: COMPLETE
 
+## Latest Task Addendum - 2026-07-13 Device User Vendor Metadata Tooltip
+
+- Task mode: Meaningful feature with additive persistence and admin UI display.
+- User goal:
+  - Add a non-destructive `DeviceUser` metadata field for vendor SDK/ISAPI
+    user payloads, including fingerprint/image-related vendor metadata when
+    available, so HR/admin journeys can recover per-device user context.
+  - Make the saved value visible in the Sync Center device-user row details
+    modal through a tooltip/preview without replacing the raw source payload.
+- Implemented local behavior:
+  - Added additive `DeviceUser.vendorMetadata` JSON/JSONB schema support while
+    preserving existing `rawPayload`.
+  - Hikvision user sync now prepares structured vendor metadata from
+    `UserInfo/Search` payloads and the API guards selects/writes so older local
+    databases do not fail before the migration is applied.
+  - Sync Center user details now shows a `Vendor metadata` preview with a
+    tooltip plus an expandable `Vendor metadata JSON` section; raw source
+    payload remains available separately.
+- Validation:
+  - Local migration was applied and Prisma Client regenerated.
+  - Local API endpoint proof for a real device-user list showed
+    `vendorMetadata` in the response, falling back from `rawPayload` for rows
+    synced before the new column existed.
+  - Focused backend sync/API contract tests and the Sync Center UI contract
+    test passed.
+- Boundary:
+  - Existing rows may show fallback vendor metadata from `rawPayload` until a
+    fresh user sync persists structured `vendorMetadata`.
+  - This does not approve raw biometric template custody beyond the existing
+    admin device-user/vendor metadata surface.
+
 ## Latest Task Addendum - 2026-07-12 Hikvision Remote-Site Agent And Local Dev Tunnel Proof
 
 ## Latest Task Addendum - 2026-07-12 HRIS Employee App Submodule And Runtime Integration
