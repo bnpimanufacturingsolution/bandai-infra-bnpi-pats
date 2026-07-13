@@ -64,6 +64,21 @@ const stable = (value: unknown) => {
 const credentials = (record: DeviceUserMergeRecord) =>
 	extractHikvisionCredentialSummary((record.rawPayload || {}) as any);
 
+const sourceScore = (record: DeviceUserMergeRecord) => {
+	const summary = credentials(record);
+	const populatedFields = DEVICE_USER_MERGE_FIELDS.filter((field) => {
+		if (field === "face" || field === "fingerprint" || field === "card") return false;
+		const value = valueFor(record, field);
+		return value !== null && value !== undefined && stable(value) !== "";
+	}).length;
+	return (
+		populatedFields +
+		summary.fingerprintCount * 4 +
+		summary.faceCount * 3 +
+		summary.cardCount * 2
+	);
+};
+
 const valueFor = (record: DeviceUserMergeRecord, field: DeviceUserMergeField): unknown => {
 	if (field === "face") return credentials(record).faceCount;
 	if (field === "fingerprint") return credentials(record).fingerprintCount;
@@ -76,7 +91,8 @@ const identityKey = (record: DeviceUserMergeRecord) => {
 	if (text(record.vendorUserId)) return `vendor:${text(record.vendorUserId)}`;
 	if (text(record.employeeNo)) return `employee-no:${text(record.employeeNo)}`;
 	if (text(record.employeeId)) return `employee:${text(record.employeeId)}`;
-	if (text(record.identityName)) return `identity:${text(record.identityName).toLocaleLowerCase()}`;
+	if (text(record.identityName))
+		return `identity:${text(record.identityName).toLocaleLowerCase()}`;
 	return `unmatched:${text(record.deviceId)}:${text(record.vendorUserId)}`;
 };
 
@@ -101,14 +117,28 @@ export const buildDeviceUserMergePlan = (params: {
 	const users: DeviceUserMergeGroup[] = [];
 	for (const [key, records] of groups) {
 		const ordered = [...records].sort((a, b) => a.deviceId.localeCompare(b.deviceId));
-		const first = ordered[0];
+		const source =
+			[...ordered].sort((a, b) => {
+				const score = sourceScore(b) - sourceScore(a);
+				return score || a.deviceId.localeCompare(b.deviceId);
+			})[0] || ordered[0];
 		const conflicts: DeviceUserMergeConflict[] = [];
 		for (const field of DEVICE_USER_MERGE_FIELDS) {
-			const populated = ordered.filter((record) => valueFor(record, field) !== null && valueFor(record, field) !== undefined && stable(valueFor(record, field)) !== "");
-			const distinct = [...new Set(populated.map((record) => stable(valueFor(record, field))))];
+			const populated = ordered.filter(
+				(record) =>
+					valueFor(record, field) !== null &&
+					valueFor(record, field) !== undefined &&
+					stable(valueFor(record, field)) !== "",
+			);
+			const distinct = [
+				...new Set(populated.map((record) => stable(valueFor(record, field)))),
+			];
 			if (distinct.length < 2) continue;
 			const a = populated[0];
-			const b = populated.find((record) => stable(valueFor(record, field)) !== stable(valueFor(a, field))) || populated[1];
+			const b =
+				populated.find(
+					(record) => stable(valueFor(record, field)) !== stable(valueFor(a, field)),
+				) || populated[1];
 			conflicts.push({
 				field,
 				choice: null,
@@ -121,10 +151,12 @@ export const buildDeviceUserMergePlan = (params: {
 			key,
 			employeeId: ordered.find((record) => text(record.employeeId))?.employeeId || null,
 			employee: null,
-			vendorUserIds: [...new Set(ordered.map((record) => text(record.vendorUserId)).filter(Boolean))],
+			vendorUserIds: [
+				...new Set(ordered.map((record) => text(record.vendorUserId)).filter(Boolean)),
+			],
 			records: ordered,
-			sourceDeviceId: first.deviceId,
-			targetDeviceIds: params.deviceIds.filter((id) => id !== first.deviceId),
+			sourceDeviceId: source.deviceId,
+			targetDeviceIds: params.deviceIds.filter((id) => id !== source.deviceId),
 			conflicts,
 			missingOnDeviceIds: params.deviceIds.filter((id) => !deviceIds.has(id)),
 		});
@@ -152,15 +184,19 @@ export const buildDeviceUserMergePlan = (params: {
 	};
 };
 
-export const applyMergeChoices = (plan: ReturnType<typeof buildDeviceUserMergePlan>, params: {
-	choices?: Record<string, Record<DeviceUserMergeField, MergeChoice>>;
-	applyAll?: MergeChoice;
-} = {}) => {
+export const applyMergeChoices = (
+	plan: ReturnType<typeof buildDeviceUserMergePlan>,
+	params: {
+		choices?: Record<string, Record<DeviceUserMergeField, MergeChoice>>;
+		applyAll?: MergeChoice;
+	} = {},
+) => {
 	const unresolved: Array<{ key: string; field: DeviceUserMergeField }> = [];
 	const resolved = plan.users.map((user) => ({
 		...user,
 		conflicts: user.conflicts.map((conflict) => {
-			const choice = params.choices?.[user.key]?.[conflict.field] || params.applyAll || conflict.choice;
+			const choice =
+				params.choices?.[user.key]?.[conflict.field] || params.applyAll || conflict.choice;
 			if (!choice) unresolved.push({ key: user.key, field: conflict.field });
 			return { ...conflict, choice: choice || null };
 		}),
@@ -177,5 +213,10 @@ export const applyMergeChoices = (plan: ReturnType<typeof buildDeviceUserMergePl
 	};
 };
 
-export const shouldPreserveBiometricValue = (source: unknown, target: unknown, field: "face" | "fingerprint" | "card") =>
-	Number(valueFor({ rawPayload: source } as DeviceUserMergeRecord, field)) >= Number(valueFor({ rawPayload: target } as DeviceUserMergeRecord, field));
+export const shouldPreserveBiometricValue = (
+	source: unknown,
+	target: unknown,
+	field: "face" | "fingerprint" | "card",
+) =>
+	Number(valueFor({ rawPayload: source } as DeviceUserMergeRecord, field)) >=
+	Number(valueFor({ rawPayload: target } as DeviceUserMergeRecord, field));
