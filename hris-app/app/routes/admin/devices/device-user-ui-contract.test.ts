@@ -10,10 +10,11 @@ describe("admin device user and log sync UI contract", () => {
 		const enroll = readAppFile("app/routes/admin/devices/enroll.tsx");
 		const events = readAppFile("app/routes/admin/devices/events.tsx");
 
+		expect(enroll).toContain("Merge users");
 		expect(manage).toContain("Sync Center");
 		expect(manage).toContain("View Device Users");
 		expect(manage).toContain("View Device Events");
-		expect(manage).toContain('title="Sync Center"');
+		expect(enroll).toContain('title="Merge device users"');
 		expect(manage).toContain('data-field-path="config.vendor"');
 		expect(manage).toContain("Device vendor");
 		expect(manage).toContain("HRIS applies the correct runtime settings automatically.");
@@ -79,16 +80,15 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Sync Runs");
 		expect(enroll).toContain("Review log sync");
 		expect(enroll).toContain("Review sync");
-		expect(enroll).toContain("Sync device users");
-		expect(enroll).toContain('title="Sync device users"');
-		expect(enroll).toContain("All devices");
-		expect(enroll).toContain("Make peers match");
-		expect(enroll).toContain("Only mismatches");
-		expect(enroll).toContain("Start small with mismatches");
-		expect(enroll).toContain("Refresh all devices");
-		expect(enroll).toContain("Make devices match");
-		expect(enroll).toContain("Refresh mismatches");
-		expect(enroll).toContain("Best truth:");
+		expect(enroll).toContain("Merge SDK users");
+		expect(enroll).toContain("Select Hikvision terminals to compare.");
+		expect(enroll).toContain("Read live users");
+		expect(enroll).toContain("Apply A to all");
+		expect(enroll).toContain("Apply B to all");
+		expect(enroll).toContain("Keep");
+		expect(enroll).toContain("Clear");
+		expect(enroll).toContain("sdkMergeDeviceIds.length < 2");
+		expect(enroll).toContain("counts.ambiguous");
 		expect(enroll).toContain("Read from device");
 		expect(enroll).toContain("Current view");
 		expect(enroll).toContain("HRIS records");

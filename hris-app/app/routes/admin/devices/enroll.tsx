@@ -57,12 +57,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import {
-	Accordion,
-	AccordionContent,
-	AccordionItem,
-	AccordionTrigger,
-} from "~/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { HikvisionUserInfo } from "~/types/hikvision";
 import deviceService, {
@@ -82,7 +76,7 @@ interface EnrollFormData {
 
 interface DeviceEnrollmentPanelProps {
 	embedded?: boolean;
-	mode?: "sync-review" | "device-users";
+	mode?: "sync-review" | "device-users" | "sdk-merge";
 }
 
 type SyncCenterDeviceItem = {
@@ -124,6 +118,38 @@ type BulkDeviceUserSyncState = {
 	status: "idle" | "review" | "starting" | "error";
 	message: string;
 	lastProgress?: DeviceUserSyncJobProgress | null;
+};
+
+const mergeFieldLabel = (field: string) =>
+	({
+		vendorUserId: "User ID",
+		employeeNo: "Employee number",
+		employeeId: "HRIS employee",
+		displayName: "Name",
+		status: "Status",
+		validFrom: "Valid from",
+		validTo: "Valid to",
+		doorRight: "Door access",
+		accessPlan: "Access plan",
+		face: "Face data",
+		fingerprint: "Fingerprint data",
+		card: "Card data",
+	} as Record<string, string>)[field] || field;
+
+const mergeCredentialCount = (record: any, kind: "fingerprint" | "face" | "card") => {
+	const raw = record?.rawPayload || {};
+	const keys =
+		kind === "fingerprint"
+			? ["numOfFP", "fingerprintCount", "fingerprints"]
+			: kind === "face"
+				? ["numOfFace", "faceCount", "faces"]
+				: ["numOfCard", "cardCount", "cards"];
+	for (const key of keys) {
+		const value = raw[key];
+		if (Array.isArray(value)) return value.length;
+		if (Number.isFinite(Number(value))) return Number(value);
+	}
+	return 0;
 };
 
 type ActiveDeviceUserSyncJob = {
@@ -286,7 +312,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		status: "idle" | "loading" | "review" | "applying" | "done" | "error";
 		message: string;
 		data?: DeviceUserMergePlanResponse;
-		choices: Record<string, Record<string, "A" | "B">>;
+		choices: Record<string, Record<string, "A" | "B" | "KEEP">>;
 		applyAll?: "A" | "B";
 	}>({ open: false, status: "idle", message: "", choices: {} });
 	const [activeDeviceUserSyncJob, setActiveDeviceUserSyncJob] = useState<ActiveDeviceUserSyncJob | null>(() => {
@@ -785,12 +811,12 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		});
 	};
 	const openSdkUserMerge = async () => {
-		const deviceIds = syncCenterDevices.map(({ device }) => String(device.id || "").trim()).filter(Boolean);
+		const deviceIds = hikvisionDeviceOptions.map((device: any) => String(device.id || "").trim()).filter(Boolean);
 		if (deviceIds.length < 2) {
-			toast.error("Select at least two Hikvision devices");
+			toast.error("Merge needs at least two configured Hikvision devices");
 			return;
 		}
-		setSdkMergeState({ open: true, status: "loading", message: "Refresh live users.", choices: {} });
+		setSdkMergeState({ open: true, status: "loading", message: "Reading live users from the selected Hikvision devices.", choices: {} });
 		try {
 			const data = await planHikvisionSdkUserMergeMutation.mutateAsync({ deviceIds });
 			setSdkMergeState({ open: true, status: "review", message: "Review conflicts.", data, choices: {} });
@@ -798,9 +824,10 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			setSdkMergeState({ open: true, status: "error", message: error?.message || "Could not read live users.", choices: {} });
 		}
 	};
-	const setSdkMergeChoice = (key: string, field: string, choice: "A" | "B") => {
+	const setSdkMergeChoice = (key: string, field: string, choice: "A" | "B" | "KEEP") => {
 		setSdkMergeState((current) => ({
 			...current,
+			applyAll: undefined,
 			choices: { ...current.choices, [key]: { ...(current.choices[key] || {}), [field]: choice } },
 		}));
 	};
@@ -809,8 +836,10 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		(count, user) => count + user.conflicts.filter((conflict) => Boolean(sdkMergeState.applyAll || sdkMergeState.choices[user.key]?.[conflict.field])).length,
 		0,
 	) || 0;
+	const sdkMergeBlockingCount = (sdkMergeState.data?.plan.errors?.length || 0) + (sdkMergeState.data?.plan.ambiguousMatches?.length || 0);
+	const sdkMergeCanApply = sdkMergeResolvedCount >= sdkMergeConflictCount && sdkMergeBlockingCount === 0;
 	const applySdkUserMerge = async () => {
-		if (!sdkMergeState.data || sdkMergeResolvedCount < sdkMergeConflictCount) return;
+		if (!sdkMergeState.data || !sdkMergeCanApply) return;
 		setSdkMergeState((current) => ({ ...current, status: "applying", message: "Apply merge and reread devices." }));
 		try {
 			const result = await applyHikvisionSdkUserMergeMutation.mutateAsync({
@@ -1754,18 +1783,6 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		["Only mismatches", needsAttentionSyncCenterDevices.length],
 		["Best-truth converge", syncCenterDevices.length],
 	] as const;
-	const devicesByVendor = syncCenterDevices.reduce<Record<string, SyncCenterDeviceItem[]>>(
-		(groups, item) => {
-			const vendor = item.vendor || "Unclassified";
-			groups[vendor] = groups[vendor] || [];
-			groups[vendor].push(item);
-			return groups;
-		},
-		{},
-	);
-	const vendorGroups = Object.entries(devicesByVendor).sort(([left], [right]) =>
-		left.localeCompare(right),
-	);
 	const getSyncStatusLabel = (status: string) => {
 		if (status === "synced") return "Synced";
 		if (status === "needs_sync") return "Needs sync";
@@ -1799,6 +1816,22 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			next.set("action", "device-users");
 			next.set("deviceUserView", "source");
 			next.delete("deviceUserStatus");
+			next.delete("deviceUserSearch");
+			next.set("deviceUserPage", "1");
+		});
+	};
+	const openDeviceUserCount = (
+		deviceId: string,
+		view: "source" | "shown" | "hris" | "linked" | "open",
+	) => {
+		updateSearchParams((next) => {
+			next.set("deviceId", deviceId);
+			next.set("syncPanel", "users");
+			next.set("action", "device-users");
+			if (view === "shown") next.delete("deviceUserView");
+			else next.set("deviceUserView", view);
+			if (view === "open") next.set("deviceUserStatus", "UNMATCHED");
+			else next.delete("deviceUserStatus");
 			next.delete("deviceUserSearch");
 			next.set("deviceUserPage", "1");
 		});
@@ -2052,181 +2085,170 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 							<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
 							Loading device sync...
 						</div>
-					) : vendorGroups.length === 0 ? (
+					) : syncCenterDevices.length === 0 ? (
 						<div className="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
 							No configured physical devices found.
 						</div>
 					) : (
-						<Accordion
-							type="multiple"
-							defaultValue={vendorGroups.map(([vendor]) => vendor)}
-							className="space-y-2">
-							{vendorGroups.map(([vendor, group]) => {
-								const attentionCount = group.filter((item) => item.status !== "synced").length;
-								const groupUserTotal = group.reduce((total, item) => {
-									const count = item.preview?.vendorUserCount;
-									return total + (typeof count === "number" && Number.isFinite(count) ? count : 0);
-								}, 0);
-								const groupHrisUserTotal = group.reduce((total, item) => {
-									const count = item.preview?.hrisUserCount;
-									return total + (typeof count === "number" && Number.isFinite(count) ? count : 0);
-								}, 0);
-								return (
-									<AccordionItem
-										key={vendor}
-										value={vendor}
-										className="rounded-xl border border-slate-200 bg-white px-3">
-										<AccordionTrigger className="py-2 hover:no-underline">
-											<div className="flex w-full items-center justify-between gap-3 pr-3 text-left">
-												<div className="min-w-0">
-													<p className="text-sm font-semibold text-slate-950">{vendor}</p>
-													<div className="mt-1 flex flex-wrap gap-2">
-														<Badge
-															variant="outline"
-															className="rounded-full border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-															{metricValue(groupUserTotal)} source
-														</Badge>
-														<Badge
-															variant="outline"
-															className="rounded-full border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-															{metricValue(groupHrisUserTotal)} saved
-														</Badge>
-													</div>
+						<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+							<div className="hidden grid-cols-[minmax(190px,1.45fr)_124px_128px_150px_156px_112px_96px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 xl:grid">
+								<span>Device</span>
+								<span>Address</span>
+								<span>Status</span>
+								<span>Source users</span>
+								<span>HRIS users</span>
+								<span>Last sync</span>
+								<span className="text-right">Actions</span>
+							</div>
+							{syncCenterDevices
+								.slice()
+								.sort((left, right) => {
+									const leftAttention = left.status === "synced" ? 1 : 0;
+									const rightAttention = right.status === "synced" ? 1 : 0;
+									if (leftAttention !== rightAttention) return leftAttention - rightAttention;
+									return String(left.device.name || "").localeCompare(String(right.device.name || ""));
+								})
+								.map(({ device, preview, status, vendor }) => {
+									const isSelected = device.id === selectedDeviceId;
+									const sourceUserTotal = preview?.vendorUserCount;
+									const hrisUserTotal = preview?.hrisUserCount;
+									const openUserTotal = preview?.openUserCount;
+									const userGap =
+										typeof sourceUserTotal === "number" && typeof hrisUserTotal === "number"
+											? Math.max(sourceUserTotal - hrisUserTotal, 0)
+											: null;
+									const lastSyncAt =
+										device.id === selectedDeviceId
+											? latestUserSync?.completedAt ||
+												latestLogSync?.completedAt ||
+												latestUserSync?.startedAt ||
+												latestLogSync?.startedAt
+											: preview?.lastSourceEventAt;
+									return (
+										<div
+											key={device.id}
+											className={`grid gap-3 border-b border-slate-100 px-3 py-3 text-sm last:border-b-0 xl:grid-cols-[minmax(190px,1.45fr)_124px_128px_150px_156px_112px_96px] xl:items-center ${isSelected ? "bg-orange-50/40" : "bg-white"}`}>
+											<div className="min-w-0">
+												<div className="flex min-w-0 flex-wrap items-center gap-2">
+													<p className="truncate font-medium text-slate-950">
+														{device.name || "Unnamed device"}
+													</p>
+													<span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
+														{vendor}
+													</span>
 												</div>
-												<Badge variant={attentionCount ? "warning" : "success"} className="rounded-full px-2.5 py-1">
-													{attentionCount ? `${attentionCount}/${group.length} review` : `${group.length}/${group.length} synced`}
+												{preview?.error ? (
+													<p className="mt-1 line-clamp-2 text-xs text-red-600">{preview.error}</p>
+												) : null}
+											</div>
+											<div className="min-w-0 font-mono text-xs text-slate-700">
+												<span className="mr-1 font-sans text-slate-500 xl:hidden">Address</span>
+												{device.address || "-"}:{device.port || "-"}
+											</div>
+											<div>
+												<span className="mr-1 text-slate-500 xl:hidden">Status</span>
+												<Badge
+													variant={getSyncStatusBadge(status) as any}
+													className="inline-flex min-h-6 max-w-full items-center whitespace-normal break-words border border-current/20 px-2 py-0.5 text-left leading-4">
+													{getSyncStatusLabel(status)}
 												</Badge>
 											</div>
-										</AccordionTrigger>
-										<AccordionContent className="pb-3">
-											<div className="overflow-hidden rounded-md border border-slate-200">
-												<div className="hidden grid-cols-[minmax(180px,1.35fr)_132px_118px_132px_132px_108px_96px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 xl:grid">
-													<span>Device</span>
-													<span>Address</span>
-													<span>Status</span>
-													<span>Source / gap</span>
-													<span>HRIS users</span>
-													<span>Last sync</span>
-													<span className="text-right">Actions</span>
+											<div className="min-w-0 space-y-1">
+												<div className="flex items-center justify-between gap-2 xl:block">
+													<span className="text-xs text-slate-500">Read from device</span>
+													<Button
+														type="button"
+														variant="ghost"
+														className="h-auto min-h-7 px-1 text-sm font-semibold text-slate-950 hover:bg-slate-100"
+														disabled={typeof sourceUserTotal !== "number"}
+														onClick={() => openDeviceUserCount(device.id, "source")}
+														title="Open users read from this device">
+														{metricValue(sourceUserTotal)}
+													</Button>
 												</div>
-												{group.map(({ device, preview, status }) => {
-													const isSelected = device.id === selectedDeviceId;
-													const sourceUserTotal = preview?.vendorUserCount;
-													const hrisUserTotal = preview?.hrisUserCount;
-													const openUserTotal = preview?.openUserCount;
-													const userGap =
-														typeof sourceUserTotal === "number" && typeof hrisUserTotal === "number"
-															? Math.max(sourceUserTotal - hrisUserTotal, 0)
-															: null;
-													const lastSyncAt =
-														device.id === selectedDeviceId
-															? latestUserSync?.completedAt ||
-																latestLogSync?.completedAt ||
-																latestUserSync?.startedAt ||
-																latestLogSync?.startedAt
-															: preview?.lastSourceEventAt;
-													return (
-														<div
-															key={device.id}
-															className={`grid gap-3 border-b border-slate-100 px-3 py-3 text-sm last:border-b-0 xl:grid-cols-[minmax(180px,1.35fr)_132px_118px_132px_132px_108px_96px] xl:items-center ${isSelected ? "bg-orange-50/40" : "bg-white"}`}>
-															<div className="min-w-0">
-																<p className="truncate font-medium text-slate-950">
-																	{device.name || "Unnamed device"}
-																</p>
-																{preview?.error ? (
-																	<p className="line-clamp-2 text-xs text-red-600">{preview.error}</p>
-																) : null}
-															</div>
-															<div className="min-w-0 font-mono text-xs text-slate-700">
-																<span className="mr-1 font-sans text-slate-500 xl:hidden">Address</span>
-																{device.address || "-"}:{device.port || "-"}
-															</div>
-															<div>
-																<span className="mr-1 text-slate-500 xl:hidden">Status</span>
-																<Badge
-																	variant={getSyncStatusBadge(status) as any}
-																	className="inline-flex min-h-6 max-w-full items-center whitespace-normal break-words border border-current/20 px-2 py-0.5 text-left leading-4">
-																	{getSyncStatusLabel(status)}
-																</Badge>
-															</div>
-															<div className="min-w-0 space-y-1">
-																<div className="flex items-center justify-between gap-2 xl:block">
-																	<span className="text-xs text-slate-500">From device</span>
-																	<Button
-																		type="button"
-																		variant="ghost"
-																		className="h-auto min-h-7 px-1 text-sm font-semibold text-slate-950 hover:bg-slate-100"
-																		disabled={typeof sourceUserTotal !== "number"}
-																		onClick={() => openPhysicalDeviceUsers(device.id)}
-																		title="Open physical device users">
-																		{metricValue(sourceUserTotal)}
-																	</Button>
-																</div>
-																<div className="flex items-center justify-between gap-2 xl:block">
-																	<span className="text-xs text-slate-500">Gap</span>
-																	<span className="font-semibold text-slate-950">{metricValue(userGap)}</span>
-																</div>
-															</div>
-															<div className="min-w-0 space-y-1">
-																<div className="flex items-center justify-between gap-2 xl:block">
-																	<span className="text-xs text-slate-500">Saved in HRIS</span>
-																	<span className="font-semibold text-slate-950">{metricValue(hrisUserTotal)}</span>
-																</div>
-																<div className="flex items-center justify-between gap-2 xl:block">
-																	<span className="text-xs text-slate-500">Needs link</span>
-																	<span className="font-semibold text-slate-950">{metricValue(openUserTotal)}</span>
-																</div>
-															</div>
-															<div className="text-xs text-slate-600">
-																<span className="mr-1 text-slate-500 xl:hidden">Last sync</span>
-																{lastSyncAt ? formatDateTime(lastSyncAt) : "-"}
-															</div>
-															<div className="flex justify-end">
-																<DropdownMenu>
-																	<DropdownMenuTrigger asChild>
-																		<Button
-																			type="button"
-																			variant="outline"
-																			size="sm"
-																			className="h-8 w-8 bg-white p-0"
-																			aria-label={`More actions for ${device.name || "device"}`}>
-																			<MoreVertical className="h-4 w-4" />
-																		</Button>
-																	</DropdownMenuTrigger>
-																	<DropdownMenuContent align="end" className="w-48">
-																		<DropdownMenuItem onClick={() => openDevicePanel(device.id, "users")}>
-																			<UserPlus className="mr-2 h-4 w-4" />
-																			Device users
-																		</DropdownMenuItem>
-																		<DropdownMenuItem onClick={() => openDeviceUserSyncReview(device.id)}>
-																			<RefreshCw className="mr-2 h-4 w-4" />
-																			Review user sync
-																		</DropdownMenuItem>
-																		<DropdownMenuSeparator />
-																		<DropdownMenuItem
-																			onClick={() => {
-																				setSelectedDeviceId(device.id);
-																				navigate(`/admin/configuration/devices/events?deviceId=${encodeURIComponent(device.id)}&view=saved`);
-																			}}>
-																			<Activity className="mr-2 h-4 w-4" />
-																			Device logs
-																		</DropdownMenuItem>
-																		<DropdownMenuItem onClick={() => openDevicePanel(device.id, "runs")}>
-																			<Clock3 className="mr-2 h-4 w-4" />
-																			Sync runs
-																		</DropdownMenuItem>
-																	</DropdownMenuContent>
-																</DropdownMenu>
-															</div>
-														</div>
-													);
-												})}
+												<div className="flex items-center justify-between gap-2 xl:block">
+													<span className="text-xs text-slate-500">Gap</span>
+													<Button
+														type="button"
+														variant="ghost"
+														className="h-auto min-h-7 px-1 text-sm font-semibold text-slate-950 hover:bg-slate-100"
+														disabled={!userGap}
+														onClick={() => openDeviceUserCount(device.id, "open")}
+														title="Open device users that need an employee link">
+														{metricValue(userGap)}
+													</Button>
+												</div>
 											</div>
-										</AccordionContent>
-									</AccordionItem>
-								);
-							})}
-						</Accordion>
+											<div className="min-w-0 space-y-1">
+												<div className="flex items-center justify-between gap-2 xl:block">
+													<span className="text-xs text-slate-500">Saved in HRIS</span>
+													<Button
+														type="button"
+														variant="ghost"
+														className="h-auto min-h-7 px-1 text-sm font-semibold text-slate-950 hover:bg-slate-100"
+														disabled={typeof hrisUserTotal !== "number"}
+														onClick={() => openDeviceUserCount(device.id, "hris")}
+														title="Open saved HRIS device users">
+														{metricValue(hrisUserTotal)}
+													</Button>
+												</div>
+												<div className="flex items-center justify-between gap-2 xl:block">
+													<span className="text-xs text-slate-500">Needs link</span>
+													<Button
+														type="button"
+														variant="ghost"
+														className="h-auto min-h-7 px-1 text-sm font-semibold text-slate-950 hover:bg-slate-100"
+														disabled={!openUserTotal}
+														onClick={() => openDeviceUserCount(device.id, "open")}
+														title="Open users that need an employee link">
+														{metricValue(openUserTotal)}
+													</Button>
+												</div>
+											</div>
+											<div className="text-xs text-slate-600">
+												<span className="mr-1 text-slate-500 xl:hidden">Last sync</span>
+												{lastSyncAt ? formatDateTime(lastSyncAt) : "-"}
+											</div>
+											<div className="flex justify-end">
+												<DropdownMenu>
+													<DropdownMenuTrigger asChild>
+														<Button
+															type="button"
+															variant="outline"
+															size="sm"
+															className="h-8 w-8 bg-white p-0"
+															aria-label={`More actions for ${device.name || "device"}`}>
+															<MoreVertical className="h-4 w-4" />
+														</Button>
+													</DropdownMenuTrigger>
+													<DropdownMenuContent align="end" className="w-48">
+														<DropdownMenuItem onClick={() => openDevicePanel(device.id, "users")}>
+															<UserPlus className="mr-2 h-4 w-4" />
+															Device users
+														</DropdownMenuItem>
+														<DropdownMenuItem onClick={() => openDeviceUserSyncReview(device.id)}>
+															<RefreshCw className="mr-2 h-4 w-4" />
+															Review user sync
+														</DropdownMenuItem>
+														<DropdownMenuSeparator />
+														<DropdownMenuItem
+															onClick={() =>
+																navigate(`/admin/configuration/devices/events?deviceId=${encodeURIComponent(device.id)}&view=saved`)
+															}>
+															<Activity className="mr-2 h-4 w-4" />
+															Device events
+														</DropdownMenuItem>
+														<DropdownMenuItem onClick={() => openDevicePanel(device.id, "runs")}>
+															<Clock3 className="mr-2 h-4 w-4" />
+															Sync runs
+														</DropdownMenuItem>
+													</DropdownMenuContent>
+												</DropdownMenu>
+											</div>
+										</div>
+									);
+								})}
+						</div>
 					)}
 				</TabsContent>
 
@@ -2245,10 +2267,10 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								<Button
 									type="button"
 									className="h-8 px-3"
-									disabled={startDeviceUserSyncJobMutation.isPending || (!activeDeviceUserSyncJob && syncCenterDevices.length === 0)}
-									onClick={openBulkDeviceUserSyncReview}>
-									<RefreshCw className="h-4 w-4" />
-									{activeDeviceUserSyncJob ? "Sync status" : "Sync device users"}
+									disabled={planHikvisionSdkUserMergeMutation.isPending || hikvisionDeviceOptions.length < 2}
+									onClick={() => void openSdkUserMerge()}>
+									{planHikvisionSdkUserMergeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+									Merge users
 								</Button>
 							</div>
 						</div>
@@ -3165,47 +3187,65 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				open={sdkMergeState.open}
 				onOpenChange={(open) => setSdkMergeState((current) => ({ ...current, open }))}
 				title="Merge device users"
-				className="max-w-5xl"
+				className="max-w-4xl"
 				showCloseButton={sdkMergeState.status !== "applying"}
 				closeOnBackdropClick={sdkMergeState.status !== "applying"}>
-				<div className="space-y-4">
+				<div className="space-y-3">
 					<div className={`rounded-xl border p-3 ${sdkMergeState.status === "error" ? "border-red-200 bg-red-50 text-red-950" : sdkMergeState.status === "done" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-slate-200 bg-slate-50 text-slate-950"}`}>
 						<div className="flex items-center gap-2 text-sm font-medium">
 							{sdkMergeState.status === "loading" || sdkMergeState.status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
 							{sdkMergeState.message || "Review conflicts"}
 						</div>
 						{sdkMergeState.data ? (
-							<div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-								{[["Users", sdkMergeState.data.plan.counts.unionUsers], ["Conflicts", sdkMergeConflictCount], ["Missing", sdkMergeState.data.plan.counts.missing]].map(([label, value]) => (
-									<div key={String(label)} className="rounded-lg border border-white bg-white px-3 py-2"><span className="block text-slate-700">{label}</span><span className="font-semibold">{value}</span></div>
+							<div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+								{[["People found", sdkMergeState.data.plan.counts.unionUsers], ["Needs a decision", sdkMergeConflictCount], ["Missing from a device", sdkMergeState.data.plan.counts.missing]].map(([label, value]) => (
+									<div key={String(label)} className="rounded-lg border border-white bg-white px-3 py-2"><span className="block text-slate-800">{label}</span><span className="font-semibold">{value}</span></div>
 								))}
+							</div>
+						) : null}
+						{sdkMergeState.data ? (
+							<div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-3">
+								{sdkMergeState.data.plan.devices.map((device) => {
+									const deviceRecords = sdkMergeState.data?.plan.users.flatMap((user) => user.records.filter((record: any) => record.deviceId === device.id)) || [];
+									const missingCount = sdkMergeState.data?.plan.users.filter((user) => user.missingOnDeviceIds.includes(device.id)).length || 0;
+									const deviceConflictCount = sdkMergeState.data?.plan.users.reduce((total, user) => total + user.conflicts.filter((conflict) => conflict.deviceA.id === device.id || conflict.deviceB.id === device.id).length, 0) || 0;
+									const credentialGaps = (kind: "fingerprint" | "face" | "card") => sdkMergeState.data?.plan.users.filter((user) => {
+										const current = user.records.find((record: any) => record.deviceId === device.id);
+										const strongest = Math.max(...user.records.map((record: any) => mergeCredentialCount(record, kind)), 0);
+										return current && strongest > mergeCredentialCount(current, kind);
+									}).length || 0;
+									return <div key={device.id} className="rounded-lg border border-slate-200 bg-white px-3 py-2"><div className="truncate font-medium text-slate-950">{device.name || device.address || device.id}</div><div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-slate-700"><span>{deviceRecords.length} users read</span><span>{missingCount} missing</span><span>{deviceConflictCount} differences</span></div><div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-amber-800"><span>Attention:</span><span>{credentialGaps("fingerprint")} fingerprint gaps</span><span>{credentialGaps("face")} face gaps</span><span>{credentialGaps("card")} card gaps</span></div></div>;
+								})}
 							</div>
 						) : null}
 					</div>
 					{sdkMergeState.status === "review" && sdkMergeState.data ? (
 						<>
-							<div className="flex flex-wrap justify-end gap-2">
+							<div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+								<p className="text-xs text-slate-800">Review only the differences. Choose Device A, Device B, or Keep for each field. Already-aligned users are ready.</p>
+								<div className="flex flex-wrap justify-end gap-2">
 								<Button type="button" variant="outline" onClick={() => setSdkMergeState((current) => ({ ...current, applyAll: "A" }))}>Apply A to all</Button>
 								<Button type="button" variant="outline" onClick={() => setSdkMergeState((current) => ({ ...current, applyAll: "B" }))}>Apply B to all</Button>
-								{sdkMergeState.applyAll ? <Button type="button" variant="outline" onClick={() => setSdkMergeState((current) => ({ ...current, applyAll: undefined }))}>Clear all</Button> : null}
+								{sdkMergeState.applyAll || Object.keys(sdkMergeState.choices).length ? <Button type="button" variant="outline" onClick={() => setSdkMergeState((current) => ({ ...current, applyAll: undefined, choices: {} }))}>Clear all</Button> : null}
+								</div>
 							</div>
-							<div className="max-h-[52vh] space-y-3 overflow-y-auto pr-1">
+			<div className="max-h-[48vh] space-y-2 overflow-y-auto pr-1">
 								{sdkMergeState.data.plan.users.map((user) => (
-									<div key={user.key} className="rounded-xl border border-slate-200 bg-white p-3">
-										<div className="flex items-center justify-between gap-3"><span className="truncate text-sm font-semibold text-slate-950">{user.employee?.fullName || user.employee?.employeeId || `User ${user.vendorUserIds.join(", ")}`}</span><Badge variant={user.conflicts.length ? "warning" : "success"}>{user.conflicts.length ? `${user.conflicts.length} conflicts` : "Ready"}</Badge></div>
-										<div className="mt-1 text-[11px] text-slate-500">Source {user.sourceDeviceId} · Targets {user.targetDeviceIds.join(", ") || "-"}</div>
+									<details key={user.key} className="group rounded-xl border border-slate-200 bg-white">
+										<summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 [&::-webkit-details-marker]:hidden"><span className="min-w-0"><span className="block truncate text-sm font-semibold text-slate-950">{user.employee?.fullName || user.employee?.employeeId || `User ${user.vendorUserIds.join(", ")}`}</span><span className="mt-1 block text-[11px] text-slate-600">{user.conflicts.length ? "Review differences for this person" : "All selected fields already match"}</span></span><span className="flex shrink-0 items-center gap-2"><Badge variant={user.conflicts.length ? "warning" : "success"}>{user.conflicts.length ? `${user.conflicts.length} differences` : "Ready"}</Badge><span className="text-slate-500 transition-transform group-open:rotate-180">⌄</span></span></summary>
+										<div className="mt-1 truncate text-[11px] text-slate-600">Source {user.sourceDeviceId} · Targets {user.targetDeviceIds.join(", ") || "-"}</div>
 										{user.conflicts.length ? <div className="mt-3 space-y-2">{user.conflicts.map((conflict) => {
 											const selected = sdkMergeState.choices[user.key]?.[conflict.field] || sdkMergeState.applyAll;
-											return <div key={conflict.field} className="grid gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2 md:grid-cols-[120px_1fr_1fr_88px] md:items-center"><span className="text-xs font-medium capitalize text-slate-700">{conflict.field}</span><button type="button" onClick={() => setSdkMergeChoice(user.key, conflict.field, "A")} className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "A" ? "border-orange-400 bg-orange-50" : "border-slate-200 bg-white"}`}><span className="block truncate font-medium">{conflict.deviceA.name}</span><span className="block break-words text-slate-700">{String(conflict.deviceA.value ?? "-")}</span></button><button type="button" onClick={() => setSdkMergeChoice(user.key, conflict.field, "B")} className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "B" ? "border-orange-400 bg-orange-50" : "border-slate-200 bg-white"}`}><span className="block truncate font-medium">{conflict.deviceB.name}</span><span className="block break-words text-slate-700">{String(conflict.deviceB.value ?? "-")}</span></button><Badge variant={selected ? "success" : "warning"}>{selected || "Choose"}</Badge></div>;
+											return <div key={conflict.field} className="grid gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2 md:grid-cols-[110px_minmax(0,1fr)_minmax(0,1fr)_84px_72px] md:items-center"><span className="text-xs font-medium capitalize text-slate-700">{conflict.field}</span><button aria-label={`Choose ${conflict.field} from ${conflict.deviceA.name}`} type="button" onClick={() => setSdkMergeChoice(user.key, conflict.field, "A")} className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "A" ? "border-orange-400 bg-orange-50 text-orange-950" : "border-slate-200 bg-white text-slate-800"}`}><span className="block truncate font-medium">{conflict.deviceA.name}</span><span className="block break-words">{String(conflict.deviceA.value ?? "-")}</span></button><button aria-label={`Choose ${conflict.field} from ${conflict.deviceB.name}`} type="button" onClick={() => setSdkMergeChoice(user.key, conflict.field, "B")} className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "B" ? "border-orange-400 bg-orange-50 text-orange-950" : "border-slate-200 bg-white text-slate-800"}`}><span className="block truncate font-medium">{conflict.deviceB.name}</span><span className="block break-words">{String(conflict.deviceB.value ?? "-")}</span></button><button type="button" onClick={() => setSdkMergeChoice(user.key, conflict.field, "KEEP")} className={`rounded-md border px-2 py-2 text-xs font-medium ${selected === "KEEP" ? "border-emerald-400 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700"}`}>Keep</button><Badge variant={selected ? "success" : "warning"}>{selected || "Choose"}</Badge></div>;
 										})}</div> : null}
-									</div>
+									</details>
 								))}
 							</div>
 						</>
 					) : null}
 					<div className="flex justify-end gap-2 border-t pt-3">
 						<Button type="button" variant="outline" disabled={sdkMergeState.status === "applying"} onClick={() => setSdkMergeState((current) => ({ ...current, open: false }))}>Close</Button>
-						{sdkMergeState.status === "review" ? <Button type="button" disabled={sdkMergeResolvedCount < sdkMergeConflictCount || applyHikvisionSdkUserMergeMutation.isPending} onClick={() => void applySdkUserMerge()}>{applyHikvisionSdkUserMergeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}Apply merge</Button> : null}
+						{sdkMergeState.status === "review" ? <Button type="button" disabled={!sdkMergeCanApply || applyHikvisionSdkUserMergeMutation.isPending} onClick={() => void applySdkUserMerge()}>{applyHikvisionSdkUserMergeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}{sdkMergeBlockingCount ? `Resolve ${sdkMergeBlockingCount} read issue${sdkMergeBlockingCount === 1 ? "" : "s"}` : sdkMergeResolvedCount < sdkMergeConflictCount ? `Choose ${sdkMergeConflictCount - sdkMergeResolvedCount} more` : "Apply merge"}</Button> : null}
 					</div>
 				</div>
 			</Modal>

@@ -26,12 +26,6 @@ import { Button } from "~/components/atoms/Button";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
 import { Modal } from "~/components/atoms/Modal";
 import { Select, type SelectOption } from "~/components/atoms/Select";
-import {
-	Accordion,
-	AccordionContent,
-	AccordionItem,
-	AccordionTrigger,
-} from "~/components/ui/accordion";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Switch } from "~/components/ui/switch";
 import {
@@ -2674,24 +2668,15 @@ export default function DeviceEventsPage() {
 						{showSyncPreviewSkeleton ? (
 							<SyncDeviceDetailsSkeleton />
 						) : syncVendorSections.length ? (
-							<Accordion
-								type="multiple"
-								defaultValue={syncVendorSections.map((section) => section.vendor)}
-								className="divide-y divide-slate-100">
+							<div className="divide-y divide-slate-100">
 								{syncVendorSections.map((section) => (
-									<AccordionItem
-										key={section.vendor}
-										value={section.vendor}
-										className="border-b-0">
-										<AccordionTrigger className="px-3 py-2.5 hover:no-underline">
-											<div className="flex flex-1 items-center justify-between gap-3 pr-3">
-												<span className="text-sm font-semibold text-slate-950">{section.vendor}</span>
-												<span className="text-xs text-slate-500">{formatCount(section.rows.length)} device{section.rows.length === 1 ? "" : "s"}</span>
-											</div>
-										</AccordionTrigger>
-										<AccordionContent className="pb-0">
-											<div className="divide-y divide-slate-100">
-												{section.rows.map((device) => {
+									<div key={section.vendor}>
+										<div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-3 py-2">
+											<span className="text-sm font-semibold text-slate-950">{section.vendor}</span>
+											<span className="text-xs text-slate-500">{formatCount(section.rows.length)} device{section.rows.length === 1 ? "" : "s"}</span>
+										</div>
+										<div className="divide-y divide-slate-100">
+											{section.rows.map((device) => {
 									const sourceEvents = device.vendorEventCount ?? device.totalEvents;
 									const sourceUsers = device.vendorUserCount;
 									const hrisSaved = device.hrisSavedCount ?? device.syncedEvents;
@@ -2795,11 +2780,10 @@ export default function DeviceEventsPage() {
 										</div>
 									);
 								})}
-							</div>
-										</AccordionContent>
-									</AccordionItem>
+										</div>
+									</div>
 								))}
-							</Accordion>
+							</div>
 						) : (
 							<div className="px-3 py-3 text-sm text-slate-500">No device preview rows returned.</div>
 						)}
@@ -3083,7 +3067,7 @@ export default function DeviceEventsPage() {
 								<div className="mt-2 space-y-1 text-xs text-slate-500">
 									<p>Event category: {formatEventTaxonomyToken(activeEvent.eventCategory || "UNKNOWN_VENDOR")}</p>
 									<p>Event action: {formatEventTaxonomyToken(activeEvent.eventAction || "UNKNOWN")}</p>
-									<p>Event confidence: {formatEventTaxonomyToken(activeEvent.eventConfidence || "UNKNOWN")}</p>
+									<p>Event confidence: {formatEventTaxonomyToken(activeEvent.capabilityConfidence || "UNKNOWN")}</p>
 								</div>
 							</div>
 							<div className="rounded-lg border border-slate-200 bg-white p-3">

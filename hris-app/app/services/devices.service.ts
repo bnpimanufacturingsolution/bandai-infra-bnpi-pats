@@ -304,6 +304,8 @@ export interface DeviceImportJobProgress {
 export type DeviceUserSyncMode = "full_refresh" | "needs_attention_only" | "peer_converge";
 
 export type DeviceUserMergeField =
+	| "vendorUserId"
+	| "employeeNo"
 	| "employeeId"
 	| "displayName"
 	| "status"
@@ -322,6 +324,8 @@ export type DeviceUserMergePlanResponse = {
 		devices: Array<{ id: string; name?: string | null; address?: string | null; port?: number | null }>;
 		users: Array<{
 			key: string;
+			sourceDeviceId: string;
+			targetDeviceIds: string[];
 			employeeId?: string | null;
 			employee?: { id?: string; employeeId?: string | null; fullName?: string | null } | null;
 			vendorUserIds: string[];
@@ -329,13 +333,14 @@ export type DeviceUserMergePlanResponse = {
 			missingOnDeviceIds: string[];
 			conflicts: Array<{
 				field: DeviceUserMergeField;
-				choice: "A" | "B" | null;
+				choice: "A" | "B" | "KEEP" | null;
 				deviceA: { id: string; name: string; value: unknown };
 				deviceB: { id: string; name: string; value: unknown };
 			}>;
 		}>;
-		counts: { unionUsers: number; conflicts: number; missing: number };
+		counts: { unionUsers: number; conflicts: number; missing: number; ambiguous?: number; missingHrisLinks?: number };
 		errors: Array<{ deviceId: string; deviceName: string; error: string }>;
+		ambiguousMatches?: Array<{ deviceId?: string; deviceName?: string; candidates?: string[] }>;
 	};
 };
 
@@ -936,7 +941,7 @@ class DevicesService extends APIService {
 
 	async applyHikvisionSdkUserMerge(payload: {
 		planId: string;
-		choices?: Record<string, Partial<Record<DeviceUserMergeField, "A" | "B">>>;
+		choices?: Record<string, Partial<Record<DeviceUserMergeField, "A" | "B" | "KEEP">>>;
 		applyAll?: "A" | "B";
 	}): Promise<any> {
 		try {

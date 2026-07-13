@@ -46,4 +46,44 @@ describe("device user union merge", () => {
 		const second = buildDeviceUserMergePlan({ deviceIds: ["a", "b"], records });
 		expect(second).to.deep.equal(first);
 	});
+
+	it("surfaces ambiguous identity candidates without merging them", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [record("a", { employeeId: null, identityCandidates: ["employee-1", "employee-2"] })],
+		});
+		expect(plan.counts.ambiguous).to.equal(1);
+		expect(plan.users).to.have.length(0);
+		expect(applyMergeChoices(plan).executable).to.equal(false);
+	});
+
+	it("preserves an approved manual link ahead of automatic identity matching", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", { vendorUserId: "vendor-a", employeeId: "employee-1", manualLink: true }),
+				record("b", { vendorUserId: "vendor-b", employeeId: "employee-1", manualLink: true, displayName: "Changed" }),
+			],
+		});
+		expect(plan.users).to.have.length(1);
+		expect(plan.users[0].employeeId).to.equal("employee-1");
+		expect(plan.users[0].vendorUserIds).to.have.members(["vendor-a", "vendor-b"]);
+	});
+
+	it("supports keep-existing and clear-choice semantics", () => {
+		const plan = buildDeviceUserMergePlan({ deviceIds: ["a", "b"], records: [record("a"), record("b", { displayName: "E. Ramos" })] });
+		expect(applyMergeChoices(plan, { choices: { [plan.users[0].key]: { displayName: "KEEP" } as any } }).executable).to.equal(true);
+		expect(applyMergeChoices(plan, { choices: { [plan.users[0].key]: {} as any } }).executable).to.equal(false);
+	});
+
+	it("compares access, validity, card, face, and fingerprint fields", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", { validFrom: "2026-01-01", validTo: "2026-12-31", doorRight: "1", accessPlan: [{ doorNo: 1 }], rawPayload: { numOfFP: 2, numOfFace: 1, numOfCard: 1 } }),
+				record("b", { validFrom: "2027-01-01", validTo: "2027-12-31", doorRight: "2", accessPlan: [{ doorNo: 2 }], rawPayload: { numOfFP: 1, numOfFace: 2, numOfCard: 2 } }),
+			],
+		});
+		expect(plan.users[0].conflicts.map((conflict) => conflict.field)).to.include.members(["validFrom", "validTo", "doorRight", "accessPlan", "face", "fingerprint", "card"]);
+	});
 });

@@ -207,7 +207,7 @@ export const useApplyHikvisionSdkUserMerge = () => {
 	return useMutation({
 		mutationFn: (payload: {
 			planId: string;
-			choices?: Record<string, Record<string, "A" | "B">>;
+			choices?: Record<string, Record<string, "A" | "B" | "KEEP">>;
 			applyAll?: "A" | "B";
 		}) => devicesService.applyHikvisionSdkUserMerge(payload),
 		onSuccess: () => {

@@ -1,6 +1,8 @@
 import { extractHikvisionCredentialSummary } from "./device-user-sync.helper";
 
 export const DEVICE_USER_MERGE_FIELDS = [
+	"vendorUserId",
+	"employeeNo",
 	"employeeId",
 	"displayName",
 	"status",
@@ -14,7 +16,7 @@ export const DEVICE_USER_MERGE_FIELDS = [
 ] as const;
 
 export type DeviceUserMergeField = (typeof DEVICE_USER_MERGE_FIELDS)[number];
-export type MergeChoice = "A" | "B";
+export type MergeChoice = "A" | "B" | "KEEP";
 
 export type DeviceUserMergeRecord = {
 	deviceId: string;
@@ -30,6 +32,8 @@ export type DeviceUserMergeRecord = {
 	accessPlan?: unknown;
 	rawPayload?: unknown;
 	manualLink?: boolean;
+	identityName?: string | null;
+	identityCandidates?: string[];
 };
 
 export type DeviceUserMergeConflict = {
@@ -68,8 +72,12 @@ const valueFor = (record: DeviceUserMergeRecord, field: DeviceUserMergeField): u
 };
 
 const identityKey = (record: DeviceUserMergeRecord) => {
+	if (record.manualLink && text(record.employeeId)) return `manual:${text(record.employeeId)}`;
+	if (text(record.vendorUserId)) return `vendor:${text(record.vendorUserId)}`;
+	if (text(record.employeeNo)) return `employee-no:${text(record.employeeNo)}`;
 	if (text(record.employeeId)) return `employee:${text(record.employeeId)}`;
-	return `vendor:${text(record.vendorUserId || record.employeeNo)}`;
+	if (text(record.identityName)) return `identity:${text(record.identityName).toLocaleLowerCase()}`;
+	return `unmatched:${text(record.deviceId)}:${text(record.vendorUserId)}`;
 };
 
 export const buildDeviceUserMergePlan = (params: {
@@ -77,7 +85,12 @@ export const buildDeviceUserMergePlan = (params: {
 	deviceIds: string[];
 }) => {
 	const groups = new Map<string, DeviceUserMergeRecord[]>();
+	const ambiguousMatches: Array<{ record: DeviceUserMergeRecord; candidates: string[] }> = [];
 	for (const record of params.records) {
+		if ((record.identityCandidates || []).length > 1) {
+			ambiguousMatches.push({ record, candidates: [...(record.identityCandidates || [])] });
+			continue;
+		}
 		const key = identityKey(record);
 		if (!text(key)) continue;
 		const group = groups.get(key) || [];
@@ -119,10 +132,22 @@ export const buildDeviceUserMergePlan = (params: {
 	return {
 		deviceIds: params.deviceIds,
 		users,
+		unionUsers: users,
+		onlyOnOneDevice: users.filter((user) => user.missingOnDeviceIds.length > 0),
+		ambiguousMatches,
+		missingHrisLinks: users.filter((user) => !user.employeeId),
+		unreachableDevices: [],
+		sdkErrors: [],
+		plannedWrites: users.flatMap((user) =>
+			user.targetDeviceIds.map((targetDeviceId) => ({ userKey: user.key, targetDeviceId })),
+		),
+		unresolvedDecisions: [],
 		counts: {
 			unionUsers: users.length,
 			conflicts: users.reduce((sum, user) => sum + user.conflicts.length, 0),
 			missing: users.reduce((sum, user) => sum + user.missingOnDeviceIds.length, 0),
+			ambiguous: ambiguousMatches.length,
+			missingHrisLinks: users.filter((user) => !user.employeeId).length,
 		},
 	};
 };
@@ -140,7 +165,16 @@ export const applyMergeChoices = (plan: ReturnType<typeof buildDeviceUserMergePl
 			return { ...conflict, choice: choice || null };
 		}),
 	}));
-	return { ...plan, users: resolved, unresolved, executable: unresolved.length === 0 };
+	return {
+		...plan,
+		users: resolved,
+		unresolved,
+		unresolvedDecisions: unresolved,
+		executable:
+			unresolved.length === 0 &&
+			plan.ambiguousMatches.length === 0 &&
+			((plan as any).errors || []).length === 0,
+	};
 };
 
 export const shouldPreserveBiometricValue = (source: unknown, target: unknown, field: "face" | "fingerprint" | "card") =>

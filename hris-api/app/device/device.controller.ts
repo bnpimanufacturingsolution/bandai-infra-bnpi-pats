@@ -3252,7 +3252,13 @@ export const controller = (prisma: PrismaClient) => {
 			}
 		}
 		const plan: any = buildDeviceUserMergePlan({ records, deviceIds: params.deviceIds as string[] });
-		return { ...plan, errors, devices: devices.map((device) => ({ id: device.id, name: device.name, address: device.address, port: device.port })) };
+		return {
+			...plan,
+			errors,
+			sdkErrors: errors,
+			unreachableDevices: errors.map((error) => ({ deviceId: error.deviceId, deviceName: error.deviceName, error: error.error })),
+			devices: devices.map((device) => ({ id: device.id, name: device.name, address: device.address, port: device.port })),
+		};
 	};
 
 	const planHikvisionSdkUserMerge = async (req: Request, res: Response, _next: NextFunction) => {
@@ -3290,7 +3296,12 @@ export const controller = (prisma: PrismaClient) => {
 				applyAll: req.body?.applyAll === "A" || req.body?.applyAll === "B" ? req.body.applyAll : undefined,
 			});
 			if (!appliedPlan.executable) {
-				res.status(409).json(buildErrorResponse("Resolve every SDK user conflict before applying the merge", 409));
+				const reason = appliedPlan.ambiguousMatches?.length
+					? "Resolve ambiguous SDK user identities before applying the merge"
+					: (appliedPlan as any).errors?.length
+						? "Resolve unreachable or failed SDK reads before applying the merge"
+						: "Resolve every SDK user conflict before applying the merge";
+				res.status(409).json(buildErrorResponse(reason, 409));
 				return;
 			}
 
@@ -3340,11 +3351,12 @@ export const controller = (prisma: PrismaClient) => {
 					}
 					const targetRow = await (prisma as any).deviceUser.findFirst({
 						where: { organizationId: String(admin.organizationId), deviceId: targetDeviceId, vendorUserId: sourceRecord.vendorUserId },
-						select: { id: true, employeeId: true, rawPayload: true },
+						select: { id: true, employeeId: true, employeeNo: true, displayName: true, status: true, validFrom: true, validTo: true, doorRight: true, accessPlan: true, rawPayload: true },
 					});
 					if (targetRow?.id) {
 						const selectedRecordFor = (field: string) => {
 							const conflict = user.conflicts.find((item: any) => item.field === field);
+							if (conflict?.choice === "KEEP") return null;
 							if (!conflict?.choice) return sourceRecord;
 							const selectedDeviceId = conflict.choice === "B" ? conflict.deviceB.id : conflict.deviceA.id;
 							return user.records.find((record: any) => record.deviceId === selectedDeviceId) || sourceRecord;
@@ -3352,9 +3364,11 @@ export const controller = (prisma: PrismaClient) => {
 						const employeeRecord = selectedRecordFor("employeeId");
 						const nameRecord = selectedRecordFor("displayName");
 						const statusRecord = selectedRecordFor("status");
-						const validityRecord = selectedRecordFor("validFrom");
+						const validityFromRecord = selectedRecordFor("validFrom");
+						const validityToRecord = selectedRecordFor("validTo");
 						const accessRecord = selectedRecordFor("doorRight");
-						const selectedRaw = selectedRecordFor("fingerprint").rawPayload as any;
+						const selectedRawRecord = selectedRecordFor("fingerprint") || sourceRecord;
+						const selectedRaw = selectedRawRecord.rawPayload as any;
 						const targetCredentials = extractHikvisionCredentialSummary(targetRow.rawPayload || {});
 						const selectedCredentials = extractHikvisionCredentialSummary(selectedRaw || {});
 						const preserveBiometricRaw =
@@ -3364,13 +3378,13 @@ export const controller = (prisma: PrismaClient) => {
 						await (prisma as any).deviceUser.update({
 							where: { id: targetRow.id },
 							data: {
-								employeeId: targetRow.employeeId && !user.conflicts.some((item: any) => item.field === "employeeId" && item.choice) ? targetRow.employeeId : employeeRecord.employeeId || user.employeeId || null,
-								displayName: nameRecord.displayName,
-								status: statusRecord.status,
-								validFrom: validityRecord.validFrom ? new Date(validityRecord.validFrom) : null,
-								validTo: validityRecord.validTo ? new Date(validityRecord.validTo) : null,
-								doorRight: accessRecord.doorRight,
-								accessPlan: accessRecord.accessPlan,
+								employeeId: employeeRecord ? employeeRecord.employeeId || user.employeeId || null : targetRow.employeeId,
+								displayName: nameRecord ? nameRecord.displayName : targetRow.displayName,
+								status: statusRecord ? statusRecord.status : targetRow.status,
+								validFrom: validityFromRecord ? (validityFromRecord.validFrom ? new Date(validityFromRecord.validFrom) : null) : targetRow.validFrom,
+								validTo: validityToRecord ? (validityToRecord.validTo ? new Date(validityToRecord.validTo) : null) : targetRow.validTo,
+								doorRight: accessRecord ? accessRecord.doorRight : targetRow.doorRight,
+								accessPlan: accessRecord ? accessRecord.accessPlan : targetRow.accessPlan,
 								rawPayload: { ...(targetRow.rawPayload || {}), ...(preserveBiometricRaw ? {} : (selectedRaw || {})), hrisMerge: { reviewed: true, decisions: user.conflicts } },
 							},
 						});
