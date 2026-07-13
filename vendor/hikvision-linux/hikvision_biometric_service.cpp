@@ -880,9 +880,12 @@ void CALLBACK fingerprint_callback(DWORD type, void *buffer, DWORD buffer_length
             DWORD status = 0;
             std::memcpy(&status, buffer, sizeof(status));
             ctx->status_packets += 1;
-            if (status == NET_SDK_REMOTE_CONFIG_STATUS_SUCCESS) {
+            if (status == NET_SDK_CALLBACK_STATUS_SUCCESS ||
+                status == NET_SDK_REMOTE_CONFIG_STATUS_SUCCESS) {
                 ctx->done = true;
-            } else if (status == NET_SDK_REMOTE_CONFIG_STATUS_FAILED) {
+            } else if (status == NET_SDK_CALLBACK_STATUS_FAILED ||
+                status == NET_SDK_CALLBACK_STATUS_EXCEPTION ||
+                status == NET_SDK_REMOTE_CONFIG_STATUS_FAILED) {
                 ctx->failed = true;
                 ctx->done = true;
             }
@@ -914,10 +917,13 @@ void CALLBACK fingerprint_capture_callback(DWORD type, void *buffer, DWORD buffe
         buffer_length >= sizeof(DWORD)) {
         DWORD status = 0;
         std::memcpy(&status, buffer, sizeof(status));
-        if (status == NET_SDK_REMOTE_CONFIG_STATUS_SUCCESS) {
+        if (status == NET_SDK_CALLBACK_STATUS_SUCCESS ||
+            status == NET_SDK_REMOTE_CONFIG_STATUS_SUCCESS) {
             ctx->ok = ctx->has_data;
             ctx->done = true;
-        } else if (status == NET_SDK_REMOTE_CONFIG_STATUS_FAILED) {
+        } else if (status == NET_SDK_CALLBACK_STATUS_FAILED ||
+            status == NET_SDK_CALLBACK_STATUS_EXCEPTION ||
+            status == NET_SDK_REMOTE_CONFIG_STATUS_FAILED) {
             ctx->ok = false;
             ctx->done = true;
             if (buffer_length >= sizeof(DWORD) * 2) {
@@ -956,7 +962,8 @@ bool wait_for_fingerprint_remote_config(
 
 bool wait_for_fingerprint_capture(
     FingerprintCaptureContext &ctx,
-    std::chrono::milliseconds total_timeout) {
+    std::chrono::milliseconds total_timeout,
+    std::chrono::milliseconds settle_timeout) {
     const auto deadline = std::chrono::steady_clock::now() + total_timeout;
     std::unique_lock<std::mutex> lock(ctx.mutex);
     while (true) {
@@ -965,7 +972,11 @@ bool wait_for_fingerprint_capture(
         }
         const auto now = std::chrono::steady_clock::now();
         if (now >= deadline) {
-            return false;
+            return ctx.has_data;
+        }
+        const auto idle = now - ctx.last_activity;
+        if (ctx.has_data && idle >= settle_timeout) {
+            return true;
         }
         const auto remaining = deadline - now;
         const auto wait_time = remaining < std::chrono::milliseconds(200)
@@ -1010,7 +1021,10 @@ bool capture_fingerprint_template(
         return false;
     }
 
-    const bool wait_ok = wait_for_fingerprint_capture(ctx, total_timeout);
+    const bool wait_ok = wait_for_fingerprint_capture(
+        ctx,
+        total_timeout,
+        std::chrono::milliseconds(500));
     NET_DVR_StopRemoteConfig(handle);
     sdk_lock.unlock();
 
