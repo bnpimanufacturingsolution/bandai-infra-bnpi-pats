@@ -1055,7 +1055,10 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 						includeFingerprints: copyDeviceUserState.includeFingerprints,
 					});
 					successfulCopies += 1;
-					if (result?.syntheticFingerprintOverlayApplied?.fingerprintCount > 0) {
+					if (
+						Number(result?.syntheticCredentialOverlayApplied?.fingerprintCount || 0) > 0 ||
+						Number(result?.syntheticCredentialOverlayApplied?.faceCount || 0) > 0
+					) {
 						syntheticPeerCopies += 1;
 					}
 				} catch (error: any) {
@@ -1084,7 +1087,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			}
 			if (syntheticPeerCopies > 0) {
 				toast.success(
-					"Some peer copies used a dev-only synthetic fingerprint tally because no real source templates were available.",
+					"Some peer copies used dev-only synthetic biometric tallies for verification.",
 				);
 			}
 			setCopyDeviceUserState({
