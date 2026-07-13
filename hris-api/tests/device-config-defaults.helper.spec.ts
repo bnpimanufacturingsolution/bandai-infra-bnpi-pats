@@ -19,6 +19,10 @@ describe("device runtime config defaults", () => {
 			sdkPort: 8000,
 			sdkProtocol: "tcp",
 			webhookPath: "/api/hikvision/callback",
+			employeeKioskLoginEnabled: false,
+			employeeKioskLoginWindowSeconds: 12,
+			employeeKioskLoginAppCode: "hris",
+			employeeKioskLoginAudience: "employee-portal",
 		});
 	});
 
@@ -36,6 +40,10 @@ describe("device runtime config defaults", () => {
 			sdkPort: 4370,
 			sdkProtocol: "tcp",
 			webhookPath: "/api/zkteco/events",
+			employeeKioskLoginEnabled: false,
+			employeeKioskLoginWindowSeconds: 12,
+			employeeKioskLoginAppCode: "hris",
+			employeeKioskLoginAudience: "employee-portal",
 		});
 	});
 
@@ -56,6 +64,7 @@ describe("device runtime config defaults", () => {
 			source: "vendor/hikvision-linux",
 			sdkPort: 8000,
 			webhookPath: "/api/hikvision/callback",
+			employeeKioskLoginEnabled: false,
 		});
 	});
 
@@ -79,6 +88,26 @@ describe("device runtime config defaults", () => {
 		});
 	});
 
+	it("preserves explicit kiosk login settings while keeping default shape", () => {
+		const config = buildDeviceRuntimeConfig({
+			config: {
+				vendor: "Hikvision",
+				employeeKioskLoginEnabled: true,
+				employeeKioskLoginWindowSeconds: 18,
+			},
+			name: "Main Entrance Device",
+			protocol: "http",
+			port: 80,
+		});
+
+		expect(config).to.deep.include({
+			employeeKioskLoginEnabled: true,
+			employeeKioskLoginWindowSeconds: 18,
+			employeeKioskLoginAppCode: "hris",
+			employeeKioskLoginAudience: "employee-portal",
+		});
+	});
+
 	it("can infer ZKTeco from protocol and port when the vendor hint is missing", () => {
 		expect(
 			resolveDeviceRuntimeVendor({
@@ -90,4 +119,3 @@ describe("device runtime config defaults", () => {
 		).to.equal("ZKTeco");
 	});
 });
-

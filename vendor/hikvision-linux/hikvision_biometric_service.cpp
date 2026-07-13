@@ -381,6 +381,24 @@ void enable_default_card_reader(BYTE *readers, size_t count) {
     readers[0] = 1;
 }
 
+std::string base64_encode(const BYTE *data, size_t length) {
+    static constexpr char alphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    encoded.reserve(((length + 2) / 3) * 4);
+    for (size_t i = 0; i < length; i += 3) {
+        const size_t remaining = length - i;
+        const unsigned int a = data[i];
+        const unsigned int b = remaining > 1 ? data[i + 1] : 0;
+        const unsigned int c = remaining > 2 ? data[i + 2] : 0;
+        encoded.push_back(alphabet[(a >> 2) & 0x3f]);
+        encoded.push_back(alphabet[((a << 4) | (b >> 4)) & 0x3f]);
+        encoded.push_back(remaining > 1 ? alphabet[((b << 2) | (c >> 6)) & 0x3f] : '=');
+        encoded.push_back(remaining > 2 ? alphabet[c & 0x3f] : '=');
+    }
+    return encoded;
+}
+
 DeviceSession *find_session_by_host(const std::string &host) {
     for (auto &session : sessions) {
         if (session.config.host == host) {
@@ -921,7 +939,8 @@ void CALLBACK fingerprint_callback(DWORD type, void *buffer, DWORD buffer_length
         const bool reader_failed =
             status.dwCardReaderNo < MAX_CARD_READER_NUM_512 &&
             status.byCardReaderRecvStatus[status.dwCardReaderNo] != 0 &&
-            status.byCardReaderRecvStatus[status.dwCardReaderNo] != 1;
+            status.byCardReaderRecvStatus[status.dwCardReaderNo] != 1 &&
+            status.byCardReaderRecvStatus[status.dwCardReaderNo] != 8;
         emit_json({
             {"event", "fingerprint_remote_status"},
             {"targetDeviceId", ctx->device_id},
@@ -1234,6 +1253,66 @@ bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::
     return ok;
 }
 
+bool write_fingerprint_via_isapi(
+    DeviceSession &target,
+    const ReconcileJob &job,
+    const NET_DVR_FINGER_PRINT_CFG_V50 &record) {
+    const std::string finger_data = base64_encode(record.byFingerData, record.dwFingerPrintLen);
+    std::ostringstream setup;
+    setup << "{\"FingerPrintCfg\":{";
+    setup << "\"employeeNo\":\"" << json_escape(job.employee_no) << "\",";
+    setup << "\"enableCardReader\":[1],";
+    setup << "\"fingerPrintID\":" << static_cast<int>(record.byFingerPrintID) << ",";
+    setup << "\"fingerType\":\"normalFP\",";
+    setup << "\"fingerData\":\"" << finger_data << "\"}}";
+
+    std::string setup_response;
+    const bool setup_ok = stdxml_json_request(
+        target,
+        "POST /ISAPI/AccessControl/FingerPrintDownload?format=json",
+        setup.str(),
+        &setup_response);
+
+    std::string progress_response;
+    const bool progress_ok = stdxml_json_request(
+        target,
+        "GET /ISAPI/AccessControl/FingerPrintProgress?format=json",
+        "",
+        &progress_response);
+
+    std::ostringstream query;
+    query << "{\"FingerPrintCond\":{";
+    query << "\"searchID\":\"pt-fingerprint-" << json_escape(job.employee_no) << "\",";
+    query << "\"employeeNo\":\"" << json_escape(job.employee_no) << "\",";
+    query << "\"cardReaderNo\":1,";
+    query << "\"fingerPrintID\":" << static_cast<int>(record.byFingerPrintID) << "}}";
+    std::string query_response;
+    const bool query_ok = stdxml_json_request(
+        target,
+        "POST /ISAPI/AccessControl/FingerPrintUpload?format=json",
+        query.str(),
+        &query_response);
+    const bool verified = query_ok &&
+        query_response.find("\"status\"") != std::string::npos &&
+        query_response.find("OK") != std::string::npos &&
+        query_response.find("FingerPrintList") != std::string::npos;
+
+    emit_json({
+        {"event", "peer_fingerprint_write_isapi"},
+        {"targetDeviceId", target.config.hris_device_id},
+        {"employeeNo", job.employee_no},
+        {"fingerPrintId", std::to_string(record.byFingerPrintID)},
+        {"setupOk", setup_ok ? "true" : "false"},
+        {"progressOk", progress_ok ? "true" : "false"},
+        {"progressResponse", progress_response.substr(0, 1200)},
+        {"queryOk", query_ok ? "true" : "false"},
+        {"verified", verified ? "true" : "false"},
+        {"setupResponse", setup_response.substr(0, 1200)},
+        {"queryResponse", query_response.substr(0, 1200)}
+    });
+    return verified;
+}
+
 bool write_peer_fingerprints(
     DeviceSession &target,
     const ReconcileJob &job,
@@ -1537,7 +1616,8 @@ bool capture_and_sync_fingerprint_for_employee(
         if (!target.config.biometric_peer && target.config.hris_device_id != source.config.hris_device_id) {
             continue;
         }
-        const bool wrote = write_peer_fingerprints(target, job, records);
+        const bool isapi_wrote = execute_mode && write_fingerprint_via_isapi(target, job, record);
+        const bool wrote = isapi_wrote || write_peer_fingerprints(target, job, records);
         if (wrote) {
             target_writes += 1;
         }

@@ -15,6 +15,7 @@ import { AuthRequest } from "../../middleware/verifyToken";
 import { logAudit } from "../../utils/auditLogger";
 import jwt from "jsonwebtoken";
 import { getLogger } from "../../helper/logger.helper";
+import { redisClient } from "../../config/redis";
 
 const DEFAULT_ME_MESSAGE = "User profile retrieved successfully";
 const DEFAULT_LOGIN_MESSAGE = "Login successful";
@@ -32,6 +33,12 @@ const logger = getLogger().child({ module: "auth" });
 type AnyRecord = Record<string, any>;
 type AuthRoleSource = "local" | "idp";
 type LocalUserStatus = "active" | "inactive" | "suspended" | "archived";
+type EmployeeKioskLoginConfig = {
+	enabled: boolean;
+	windowSeconds: number;
+	appCode: string;
+	audience: string;
+};
 type UnifiedAuthRole = {
 	id: string;
 	name: string;
@@ -734,6 +741,66 @@ const buildLoginTokenPayload = (params: { profile: AnyRecord }): Record<string, 
 	};
 };
 
+const EMPLOYEE_KIOSK_LOGIN_DEFAULT_WINDOW_SECONDS = 12;
+const EMPLOYEE_KIOSK_LOGIN_MIN_WINDOW_SECONDS = 3;
+const EMPLOYEE_KIOSK_LOGIN_MAX_WINDOW_SECONDS = 120;
+const EMPLOYEE_KIOSK_LOGIN_DEFAULT_APP_CODE = "hris";
+const EMPLOYEE_KIOSK_LOGIN_DEFAULT_AUDIENCE = "employee-portal";
+
+const asJsonRecord = (value: unknown): Record<string, any> =>
+	value && typeof value === "object" && !Array.isArray(value) ? { ...(value as Record<string, any>) } : {};
+
+export const normalizeEmployeeKioskLoginConfig = (config: unknown): EmployeeKioskLoginConfig => {
+	const record = asJsonRecord(config);
+	const parsedWindowSeconds = Number(record.employeeKioskLoginWindowSeconds);
+	const windowSeconds = Number.isFinite(parsedWindowSeconds)
+		? Math.min(
+				EMPLOYEE_KIOSK_LOGIN_MAX_WINDOW_SECONDS,
+				Math.max(EMPLOYEE_KIOSK_LOGIN_MIN_WINDOW_SECONDS, Math.floor(parsedWindowSeconds)),
+			)
+		: EMPLOYEE_KIOSK_LOGIN_DEFAULT_WINDOW_SECONDS;
+	return {
+		enabled: record.employeeKioskLoginEnabled === true,
+		windowSeconds,
+		appCode:
+			String(record.employeeKioskLoginAppCode || "").trim() ||
+			EMPLOYEE_KIOSK_LOGIN_DEFAULT_APP_CODE,
+		audience:
+			String(record.employeeKioskLoginAudience || "").trim() ||
+			EMPLOYEE_KIOSK_LOGIN_DEFAULT_AUDIENCE,
+	};
+};
+
+export const isClaimableEmployeeKioskLoginEvent = (params: {
+	event: {
+		eventTime?: Date | string | null;
+		eventCategory?: string | null;
+		eventAction?: string | null;
+		status?: string | null;
+		employeeId?: string | null;
+	} | null | undefined;
+	now?: Date;
+	windowSeconds?: number;
+}): boolean => {
+	const event = params.event;
+	if (!event?.employeeId) return false;
+	if (String(event.eventCategory || "").trim().toUpperCase() !== "ATTENDANCE") return false;
+	if (String(event.eventAction || "").trim().toUpperCase() !== "TAP") return false;
+	const status = String(event.status || "").trim().toUpperCase();
+	if (!["MATCHED", "ATTENDANCE_CREATED", "ATTENDANCE_UPDATED"].includes(status)) return false;
+	const eventTime = event.eventTime ? new Date(event.eventTime) : null;
+	if (!eventTime || Number.isNaN(eventTime.getTime())) return false;
+	const now = params.now || new Date();
+	const windowSeconds = Math.max(
+		EMPLOYEE_KIOSK_LOGIN_MIN_WINDOW_SECONDS,
+		Math.floor(params.windowSeconds || EMPLOYEE_KIOSK_LOGIN_DEFAULT_WINDOW_SECONDS),
+	);
+	return now.getTime() - eventTime.getTime() <= windowSeconds * 1000;
+};
+
+export const buildEmployeeKioskLoginClaimKey = (eventId: string) =>
+	`kiosk-login-claim:${String(eventId || "").trim()}`;
+
 type LocalLoginUser = {
 	id: string;
 	email: string;
@@ -996,6 +1063,72 @@ const logAuthEvent = async (params: {
 };
 
 export const controller = (prisma: PrismaClient) => {
+	const issueAuthenticatedSession = async (params: {
+		req: AuthRequest;
+		res: Response;
+		profile: AnyRecord;
+		message?: string;
+	}): Promise<string> => {
+		const jwtSecret = String(process.env.JWT_SECRET || "").trim();
+		if (!jwtSecret) {
+			throw Object.assign(new Error("JWT_SECRET is not configured"), { statusCode: 500 });
+		}
+
+		const token = jwt.sign(buildLoginTokenPayload({ profile: params.profile }), jwtSecret, {
+			expiresIn: "24h",
+		});
+
+		params.res.cookie("token", token, buildAuthCookieOptions(params.req));
+		params.res.status(200).json(
+			buildSuccessResponse(params.message || DEFAULT_LOGIN_MESSAGE, { ...params.profile, token }, 200),
+		);
+		return token;
+	};
+
+	const claimEmployeeKioskLoginEvent = async (params: {
+		eventId: string;
+		deviceId: string;
+		payload: unknown;
+		now: Date;
+		windowSeconds: number;
+	}): Promise<"claimed" | "duplicate"> => {
+		const claimKey = buildEmployeeKioskLoginClaimKey(params.eventId);
+		if (redisClient.isClientConnected()) {
+			const result = await redisClient.set(
+				claimKey,
+				JSON.stringify({
+					eventId: params.eventId,
+					deviceId: params.deviceId,
+					claimedAt: params.now.toISOString(),
+				}),
+				{ ttl: Math.max(params.windowSeconds * 10, 120), nx: true },
+			);
+			return result === "OK" ? "claimed" : "duplicate";
+		}
+
+		const payloadRecord = asJsonRecord(params.payload);
+		const kioskLogin = asJsonRecord(payloadRecord.kioskLogin);
+		if (kioskLogin.claimedAt) {
+			return "duplicate";
+		}
+
+		await (prisma as any).deviceEvent.update({
+			where: { id: params.eventId },
+			data: {
+				payload: {
+					...payloadRecord,
+					kioskLogin: {
+						...kioskLogin,
+						claimedAt: params.now.toISOString(),
+						deviceId: params.deviceId,
+						audience: EMPLOYEE_KIOSK_LOGIN_DEFAULT_AUDIENCE,
+					},
+				},
+			},
+		});
+		return "claimed";
+	};
+
 	const login = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		try {
 			const rawIdentifier =
@@ -1111,29 +1244,194 @@ export const controller = (prisma: PrismaClient) => {
 				profile,
 			});
 
-			const jwtSecret = String(process.env.JWT_SECRET || "").trim();
-			if (!jwtSecret) {
+			try {
+				await issueAuthenticatedSession({
+					req,
+					res,
+					profile,
+					message: DEFAULT_LOGIN_MESSAGE,
+				});
+			} catch (sessionError: any) {
 				logLoginFailure(req, {
 					identifier,
 					reason: "jwt_secret_missing",
-					statusCode: 500,
+					statusCode: sessionError?.statusCode || 500,
 					userId: localUser.id,
 				});
-				res.status(500).json(buildErrorResponse("JWT_SECRET is not configured", 500));
+				throw sessionError;
+			}
+		} catch (error: any) {
+			const statusCode =
+				typeof error?.statusCode === "number" && error.statusCode >= 400
+					? error.statusCode
+					: 500;
+			res.status(statusCode).json(buildErrorResponse(error?.message || "Failed to login", statusCode));
+		}
+	};
+
+	const claimBiometricKioskLogin = async (
+		req: AuthRequest,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const deviceId = String((req.body as AnyRecord)?.deviceId || "").trim();
+			const appCode = String((req.body as AnyRecord)?.appCode || "").trim() || "hris";
+			if (!deviceId) {
+				res.status(400).json(buildErrorResponse("deviceId is required", 400));
 				return;
 			}
 
-			const token = jwt.sign(buildLoginTokenPayload({ profile }), jwtSecret, {
-				expiresIn: "24h",
+			const device = await prisma.device.findFirst({
+				where: {
+					id: deviceId,
+					isDeleted: false,
+				},
+				select: {
+					id: true,
+					organizationId: true,
+					name: true,
+					config: true,
+				},
 			});
 
-			res.cookie("token", token, buildAuthCookieOptions(req));
+			if (!device) {
+				res.status(404).json(buildErrorResponse("Device not found", 404));
+				return;
+			}
 
-			res.status(200).json(
-				buildSuccessResponse(DEFAULT_LOGIN_MESSAGE, { ...profile, token }, 200),
-			);
+			const kioskConfig = normalizeEmployeeKioskLoginConfig(device.config);
+			if (!kioskConfig.enabled) {
+				res.status(403).json(buildErrorResponse("Employee kiosk biometric login is disabled for this device", 403));
+				return;
+			}
+			if (appCode !== kioskConfig.appCode) {
+				res.status(403).json(buildErrorResponse("App code is not allowed for this kiosk biometric login device", 403));
+				return;
+			}
+
+			const now = new Date();
+			const threshold = new Date(now.getTime() - kioskConfig.windowSeconds * 1000);
+			const eventRecord = await (prisma as any).deviceEvent.findFirst({
+				where: {
+					organizationId: device.organizationId,
+					deviceId: device.id,
+					eventCategory: "ATTENDANCE",
+					eventAction: "TAP",
+					status: {
+						in: ["MATCHED", "ATTENDANCE_CREATED", "ATTENDANCE_UPDATED"],
+					},
+					employeeId: {
+						not: null,
+					},
+					eventTime: {
+						gte: threshold,
+					},
+				},
+				orderBy: [
+					{ eventTime: "desc" },
+					{ updatedAt: "desc" },
+				],
+				select: {
+					id: true,
+					organizationId: true,
+					deviceId: true,
+					employeeId: true,
+					eventTime: true,
+					eventCategory: true,
+					eventAction: true,
+					status: true,
+					payload: true,
+				},
+			});
+
+			if (
+				!isClaimableEmployeeKioskLoginEvent({
+					event: eventRecord,
+					now,
+					windowSeconds: kioskConfig.windowSeconds,
+				})
+			) {
+				res.status(404).json(buildErrorResponse("No fresh biometric kiosk login tap is available", 404));
+				return;
+			}
+
+			const claimResult = await claimEmployeeKioskLoginEvent({
+				eventId: eventRecord.id,
+				deviceId: device.id,
+				payload: eventRecord.payload,
+				now,
+				windowSeconds: kioskConfig.windowSeconds,
+			});
+			if (claimResult === "duplicate") {
+				res.status(409).json(buildErrorResponse("This biometric tap has already been used for kiosk login", 409));
+				return;
+			}
+
+			const employee = await prisma.employee.findFirst({
+				where: {
+					id: String(eventRecord.employeeId || ""),
+					isDeleted: false,
+					organizationId: device.organizationId,
+				},
+				select: {
+					id: true,
+					userId: true,
+				},
+			});
+			const userId = String(employee?.userId || "").trim();
+			if (!employee?.id || !userId) {
+				res.status(404).json(buildErrorResponse("No user account is linked to the tapped employee", 404));
+				return;
+			}
+
+			const localUser = await prisma.user.findFirst({
+				where: {
+					id: userId,
+					isDeleted: false,
+				},
+				select: selectLocalLoginUser,
+			});
+			if (!localUser) {
+				res.status(404).json(buildErrorResponse("User not found", 404));
+				return;
+			}
+			if (String(localUser.status || "").toLowerCase() !== "active") {
+				res.status(403).json(buildErrorResponse("Account is not active", 403));
+				return;
+			}
+
+			await prisma.user.update({
+				where: { id: localUser.id },
+				data: { lastLogin: now },
+			});
+
+			const localReq = { ...req, userId: localUser.id } as AuthRequest;
+			const profile = normalizeProfile(await loadLocalUserProfile(prisma, localReq));
+			await logAuthEvent({
+				prisma,
+				req: localReq,
+				action: "LOGIN",
+				description: `Employee kiosk biometric login succeeded via device ${device.name || device.id}`,
+				email: localUser.email,
+				userId: localUser.id,
+				profile,
+			});
+
+			await issueAuthenticatedSession({
+				req,
+				res,
+				profile,
+				message: "Biometric kiosk login successful",
+			});
 		} catch (error: any) {
-			res.status(500).json(buildErrorResponse(error?.message || "Failed to login", 500));
+			const statusCode =
+				typeof error?.statusCode === "number" && error.statusCode >= 400
+					? error.statusCode
+					: 500;
+			res.status(statusCode).json(
+				buildErrorResponse(error?.message || "Failed to claim biometric kiosk login", statusCode),
+			);
 		}
 	};
 
@@ -1903,6 +2201,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	return {
 		login,
+		claimBiometricKioskLogin,
 		logout,
 		changePassword,
 		resetUserPassword,

@@ -19,6 +19,10 @@ const DEVICE_RUNTIME_DEFAULTS: Record<DeviceRuntimeVendor, Record<string, unknow
 		sdkPort: 8000,
 		sdkProtocol: "tcp",
 		webhookPath: "/api/hikvision/callback",
+		employeeKioskLoginEnabled: false,
+		employeeKioskLoginWindowSeconds: 12,
+		employeeKioskLoginAppCode: "hris",
+		employeeKioskLoginAudience: "employee-portal",
 	},
 	ZKTeco: {
 		vendor: "ZKTeco",
@@ -26,6 +30,10 @@ const DEVICE_RUNTIME_DEFAULTS: Record<DeviceRuntimeVendor, Record<string, unknow
 		sdkPort: 4370,
 		sdkProtocol: "tcp",
 		webhookPath: "/api/zkteco/events",
+		employeeKioskLoginEnabled: false,
+		employeeKioskLoginWindowSeconds: 12,
+		employeeKioskLoginAppCode: "hris",
+		employeeKioskLoginAudience: "employee-portal",
 	},
 };
 
@@ -86,9 +94,31 @@ export const buildDeviceRuntimeConfig = ({
 
 	if (!vendor) return merged as Prisma.InputJsonObject;
 
+	const runtimeDefaults = DEVICE_RUNTIME_DEFAULTS[vendor];
 	return {
+		...runtimeDefaults,
 		...merged,
-		...DEVICE_RUNTIME_DEFAULTS[vendor],
+		source: runtimeDefaults.source,
+		sdkPort: runtimeDefaults.sdkPort,
+		sdkProtocol: runtimeDefaults.sdkProtocol,
+		webhookPath: runtimeDefaults.webhookPath,
+		employeeKioskLoginEnabled:
+			typeof merged.employeeKioskLoginEnabled === "boolean"
+				? merged.employeeKioskLoginEnabled
+				: runtimeDefaults.employeeKioskLoginEnabled,
+		employeeKioskLoginWindowSeconds:
+			Number.isFinite(Number(merged.employeeKioskLoginWindowSeconds))
+				? Number(merged.employeeKioskLoginWindowSeconds)
+				: runtimeDefaults.employeeKioskLoginWindowSeconds,
+		employeeKioskLoginAppCode:
+			typeof merged.employeeKioskLoginAppCode === "string" &&
+			String(merged.employeeKioskLoginAppCode).trim()
+				? String(merged.employeeKioskLoginAppCode).trim()
+				: runtimeDefaults.employeeKioskLoginAppCode,
+		employeeKioskLoginAudience:
+			typeof merged.employeeKioskLoginAudience === "string" &&
+			String(merged.employeeKioskLoginAudience).trim()
+				? String(merged.employeeKioskLoginAudience).trim()
+				: runtimeDefaults.employeeKioskLoginAudience,
 	} as Prisma.InputJsonObject;
 };
-
