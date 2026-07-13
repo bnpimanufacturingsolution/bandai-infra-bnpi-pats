@@ -765,6 +765,15 @@ std::set<std::string> extract_employee_numbers_from_search_response(const std::s
     return employee_numbers;
 }
 
+std::string extract_string_field_from_json(const std::string &json, const std::string &field_name) {
+    const std::regex field_regex("\"" + field_name + "\"\\s*:\\s*\"([^\"]*)\"");
+    std::smatch match;
+    if (std::regex_search(json, match, field_regex) && match.size() > 1) {
+        return match[1].str();
+    }
+    return "";
+}
+
 std::vector<std::string> read_device_employee_numbers(DeviceSession &device) {
     constexpr int page_size = 64;
     std::set<std::string> employee_numbers;
@@ -1065,6 +1074,7 @@ bool capture_fingerprint_template(
 NET_DVR_FINGER_PRINT_CFG_V50 build_fingerprint_record(
     const NET_DVR_CAPTURE_FINGERPRINT_CFG &capture,
     const std::string &employee_no,
+    const std::string &card_no,
     BYTE finger_type) {
     NET_DVR_FINGER_PRINT_CFG_V50 record{};
     record.dwSize = sizeof(record);
@@ -1076,6 +1086,9 @@ NET_DVR_FINGER_PRINT_CFG_V50 build_fingerprint_record(
     record.byFingerPrintID = capture.byFingerNo;
     record.byFingerType = finger_type;
     std::strncpy(reinterpret_cast<char *>(record.byEmployeeNo), employee_no.c_str(), NET_SDK_EMPLOYEE_NO_LEN - 1);
+    if (!card_no.empty()) {
+        std::strncpy(reinterpret_cast<char *>(record.byCardNo), card_no.c_str(), ACS_CARD_NO_LEN - 1);
+    }
     enable_default_card_reader(record.byEnableCardReader, sizeof(record.byEnableCardReader));
     return record;
 }
@@ -1356,11 +1369,20 @@ bool capture_and_sync_fingerprint_for_employee(
     const std::string &employee_no,
     BYTE finger_no,
     BYTE finger_type) {
+    ReconcileJob source_user_job;
+    source_user_job.source_host = source.config.host;
+    source_user_job.source_device_id = source.config.hris_device_id;
+    source_user_job.employee_no = employee_no;
+    std::string source_user_json;
+    read_source_user(source, source_user_job, &source_user_json);
+    const std::string card_no = extract_string_field_from_json(source_user_json, "cardNo");
+
     NET_DVR_CAPTURE_FINGERPRINT_CFG capture{};
     emit_json({
         {"event", "manual_fingerprint_capture_sync_started"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
+        {"cardNo", card_no},
         {"fingerNo", std::to_string(finger_no)},
         {"fingerType", std::to_string(finger_type)},
         {"mode", execute_mode ? "execute" : "dry-run"}
@@ -1377,7 +1399,7 @@ bool capture_and_sync_fingerprint_for_employee(
         return false;
     }
 
-    const NET_DVR_FINGER_PRINT_CFG_V50 record = build_fingerprint_record(capture, employee_no, finger_type);
+    const NET_DVR_FINGER_PRINT_CFG_V50 record = build_fingerprint_record(capture, employee_no, card_no, finger_type);
     const std::vector<NET_DVR_FINGER_PRINT_CFG_V50> records{record};
     bool ok = true;
     int target_writes = 0;
@@ -1386,6 +1408,7 @@ bool capture_and_sync_fingerprint_for_employee(
     job.source_host = source.config.host;
     job.source_device_id = source.config.hris_device_id;
     job.employee_no = employee_no;
+    job.card_no = card_no;
     job.include_fingerprints = true;
     job.event_kind = "manual_fingerprint_capture_sync";
 
