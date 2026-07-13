@@ -4675,7 +4675,7 @@ export function DeviceEnrollmentPanel({
 										}`}>
 										<span>{item.label}</span>
 										<span
-											className={`rounded border px-1.5 py-0.5 text-xs ${sdkMergeFilter === item.value ? "border-orange-200 bg-white text-orange-950" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
+											className={`rounded border px-1.5 py-0.5 text-xs ${sdkMergeFilter === item.value ? "border-orange-200 bg-white text-orange-950" : "border-slate-200 bg-white text-slate-700"}`}>
 											{item.count}
 										</span>
 									</button>
@@ -4770,7 +4770,7 @@ export function DeviceEnrollmentPanel({
 											return (
 												<div
 													key={row.id}
-													className={`border-b border-slate-100 px-3 py-3 last:border-b-0 ${isSelected ? "bg-orange-50/60" : "bg-white"}`}>
+													className={`border-b border-slate-100 px-3 py-3 last:border-b-0 ${isSelected ? "bg-white ring-1 ring-inset ring-orange-200" : "bg-white"}`}>
 													<div className="grid gap-3 lg:grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_minmax(180px,1fr)_auto] lg:items-start">
 														<div className="min-w-0">
 															<p className="truncate text-sm font-semibold text-slate-950">
