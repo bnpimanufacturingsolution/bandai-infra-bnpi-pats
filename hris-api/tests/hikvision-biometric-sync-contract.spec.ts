@@ -23,6 +23,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("const admin = assertDeviceUserAdmin(req, res)");
 		expect(controller).to.include("const execute = body.execute === true");
 		expect(controller).to.include("Biometric sync reconcile dry-run completed");
+		expect(controller).to.include("Biometric sync reconcile job accepted");
+		expect(controller).to.include("res.status(202).json");
+		expect(controller).to.include("jobId: reconcileRunId");
+		expect(controller).to.include("setImmediate(() =>");
+		expect(controller).to.include("body.synchronous === true");
 		expect(controller).to.include("upsertDeviceUsersFromCandidates");
 		expect(controller).to.include("biometricSync: biometricSyncPayload");
 		expect(controller).to.include("rawFingerprintTemplateStored: false");
@@ -81,6 +86,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("BIOMETRIC_TEMPLATE_KEY_PATTERN");
 		expect(controller).to.include("[redacted-biometric-template]");
 		expect(controller).to.include("sanitizeDeviceUserPortableValue");
+		expect(controller).to.include("buildDeviceUserImportResultRow");
+		expect(controller).to.include("summarizeDeviceUserImportTarget");
+		expect(controller).to.include("waitForDelayedHikvisionPeerCopy");
+		expect(controller).to.include("HIKVISION_PEER_COPY_COMPLETION_WAIT_MS");
 		expect(controller).to.include("raw fingerprint and face template bytes are never exported in normal JSON");
 		expect(controller).to.include("encrypted_bundle_required_or_sdk_peer_copy");
 		expect(controller).to.include("const buildDeviceUserImportPreviewToken =");
@@ -91,10 +100,13 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("const sanitizeDeviceUserImportPayloadForBackup =");
 		expect(controller).to.include("[encrypted-bundle-redacted]");
 		expect(controller).to.include("plaintextBiometricExposed: false");
+		expect(controller).to.include("rows: planRows.map(({ rawUser: _rawUser, ...row }: any) => row)");
 		expect(controller).to.include("copyHikvisionUserToPeerWithRetry({");
+		expect(controller).to.include('strategy: "delayed_target_reread"');
 		expect(controller).to.include("Conflict requires manual review before additive import");
 		expect(controller).to.include("target-device-users-before.json");
 		expect(controller).to.include("target-device-users-after.json");
+		expect(controller).to.include('"http://127.0.0.1:3101"');
 		expect(controller).to.not.include("fingerprintTemplate: user");
 		expect(controller).to.not.include("faceTemplate: user");
 	});
@@ -133,6 +145,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("const finalizeBiometricLifecycleSyncRun = async");
 		expect(controller).to.include("const persistDerivedBiometricLifecycleEvent = async");
 		expect(controller).to.include("const persistDeviceUserLifecycleBackfill = async");
+		expect(controller).to.include("const runBiometricLifecycleReconcileWork = async");
 		expect(controller).to.include("const allowsSourceWideRefresh =");
 		expect(controller).to.include('kind: "biometric_lifecycle_reconcile"');
 		expect(controller).to.include("await finalizeBiometricLifecycleSyncRun(reconcileRunId");

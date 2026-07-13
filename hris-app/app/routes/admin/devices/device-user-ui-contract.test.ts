@@ -56,7 +56,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Back to device summary");
 		expect(enroll).toContain("Refresh summary");
 		expect(enroll).toContain("Recent saved activity");
-		expect(enroll).toContain("Shows callback, reconcile, and backfill rows saved for this device.");
+		expect(enroll).toContain("Shows callback, reconcile, and backfill rows saved for this");
+		expect(enroll).toContain("device.");
 		expect(enroll).toContain("Refresh activity");
 		expect(enroll).toContain("formatActivityOrigin");
 		expect(enroll).toContain("formatActivityDetail");
@@ -144,7 +145,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Historical HRIS backfill");
 		expect(enroll).toContain("Loading enrolled face photo");
 		expect(enroll).toContain("Fingerprint truth");
-		expect(enroll).toContain("Mock 1 face");
+		expect(enroll).not.toContain("Mock 1 fingerprint");
+		expect(enroll).not.toContain("Clear mock tally");
+		expect(enroll).not.toContain("Mock 1 face");
+		expect(enroll).not.toContain("Clear mock face");
+		expect(enroll).not.toContain("Sync real face to peers");
 		expect(enroll).toContain("fingerprint template blobs are not shown in this normal");
 		expect(enroll).toContain("dev mock tallies are kept separate from physical");
 		expect(enroll).toContain("Across Hikvision devices");

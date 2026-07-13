@@ -54,9 +54,6 @@ import {
 	usePreviewDeviceUserImport,
 	useExecuteDeviceUserImport,
 	useUnlinkDeviceUser,
-	useMockHikvisionFingerprintTally,
-	useMockHikvisionFaceTally,
-	useMirrorHikvisionFaceToPeers,
 } from "~/lib/hooks/useDevices";
 import { useHikvisionDeviceUsers } from "~/lib/hooks/use-hikvision";
 import { useQueryClient } from "@tanstack/react-query";
@@ -279,6 +276,7 @@ type CopyDeviceUserState = {
 	applyToAllPeers: boolean;
 	includeFingerprints: boolean;
 	includeFaceRecognition: boolean;
+	failedTargets: Array<{ id: string; label: string; error: string }>;
 };
 
 type DeviceUserPeerTallyRow = {
@@ -427,9 +425,6 @@ export function DeviceEnrollmentPanel({
 	const exportDeviceUsersMutation = useExportDeviceUsers();
 	const previewDeviceUserImportMutation = usePreviewDeviceUserImport();
 	const executeDeviceUserImportMutation = useExecuteDeviceUserImport();
-	const mockHikvisionFingerprintMutation = useMockHikvisionFingerprintTally();
-	const mockHikvisionFaceMutation = useMockHikvisionFaceTally();
-	const mirrorHikvisionFaceMutation = useMirrorHikvisionFaceToPeers();
 	const startDeviceUserSyncJobMutation = useStartDeviceUserSyncJob();
 	const cancelDeviceUserSyncJobMutation = useCancelDeviceUserSyncJob();
 	const planHikvisionSdkUserMergeMutation = usePlanHikvisionSdkUserMerge();
@@ -511,6 +506,7 @@ export function DeviceEnrollmentPanel({
 		applyToAllPeers: false,
 		includeFingerprints: true,
 		includeFaceRecognition: true,
+		failedTargets: [],
 	});
 	const [deviceUserExportState, setDeviceUserExportState] = useState<{
 		open: boolean;
@@ -1891,7 +1887,23 @@ export function DeviceEnrollmentPanel({
 			applyToAllPeers: false,
 			includeFingerprints: true,
 			includeFaceRecognition: true,
+			failedTargets: [],
 		});
+	};
+
+	const describeCopyError = (error: any) => {
+		const message = String(error?.message || error || "").trim();
+		if (
+			/forcibly closed|ECONNRESET|socket|unknown port|network error|unable to connect/i.test(
+				message,
+			)
+		) {
+			return "The target device is not reachable right now. Check that it is powered on and on the VM LAN, then retry this device.";
+		}
+		if (/timed out|timeout|408/i.test(message)) {
+			return "The target device took too long to respond. Check its network connection, then retry.";
+		}
+		return message || "The target device could not be updated. Retry when it is reachable.";
 	};
 
 	const submitCopyDeviceUser = async () => {
@@ -1906,9 +1918,11 @@ export function DeviceEnrollmentPanel({
 		}
 
 		try {
-			const targetDeviceIds = copyDeviceUserState.applyToAllPeers
-				? copyTargetDeviceOptions.map((option) => option.value)
-				: [copyDeviceUserState.targetDeviceId];
+			const targetDeviceIds = copyDeviceUserState.failedTargets.length
+				? copyDeviceUserState.failedTargets.map((target) => target.id)
+				: copyDeviceUserState.applyToAllPeers
+					? copyTargetDeviceOptions.map((option) => option.value)
+					: [copyDeviceUserState.targetDeviceId];
 			if (targetDeviceIds.length === 0) {
 				toast.error("No Hikvision peer devices are available");
 				return;
@@ -1938,15 +1952,70 @@ export function DeviceEnrollmentPanel({
 					const targetLabel =
 						copyTargetDeviceOptions.find((option) => option.value === targetDeviceId)
 							?.label || targetDeviceId;
-					failedTargets.push(
-						error?.message ? `${targetLabel}: ${error.message}` : targetLabel,
-					);
+					failedTargets.push(`${targetLabel}: ${describeCopyError(error)}`);
 				}
 			}
 			if (successfulCopies === 0) {
+				setCopyDeviceUserState((current) => ({
+					...current,
+					open: true,
+					applyToAllPeers: false,
+					targetDeviceId: targetDeviceIds[0] || current.targetDeviceId,
+					failedTargets: targetDeviceIds.map((id) => ({
+						id,
+						label:
+							copyTargetDeviceOptions.find((option) => option.value === id)?.label ||
+							id,
+						error:
+							failedTargets.find((failure) =>
+								failure.startsWith(
+									(copyTargetDeviceOptions.find((option) => option.value === id)
+										?.label || id) + ":",
+								),
+							) || "Target device could not be updated. Retry when it is reachable.",
+					})),
+				}));
 				throw new Error(failedTargets[0] || "Failed to copy device user");
 			}
 			if (failedTargets.length > 0) {
+				setCopyDeviceUserState((current) => ({
+					...current,
+					open: true,
+					applyToAllPeers: false,
+					targetDeviceId:
+						targetDeviceIds.find((id) =>
+							failedTargets.some((failure) =>
+								failure.startsWith(
+									(copyTargetDeviceOptions.find((option) => option.value === id)
+										?.label || id) + ":",
+								),
+							),
+						) || current.targetDeviceId,
+					failedTargets: targetDeviceIds
+						.filter((id) =>
+							failedTargets.some((failure) =>
+								failure.startsWith(
+									(copyTargetDeviceOptions.find((option) => option.value === id)
+										?.label || id) + ":",
+								),
+							),
+						)
+						.map((id) => ({
+							id,
+							label:
+								copyTargetDeviceOptions.find((option) => option.value === id)
+									?.label || id,
+							error:
+								failedTargets.find((failure) =>
+									failure.startsWith(
+										(copyTargetDeviceOptions.find(
+											(option) => option.value === id,
+										)?.label || id) + ":",
+									),
+								) ||
+								"Target device could not be updated. Retry when it is reachable.",
+						})),
+				}));
 				toast.warning(
 					`Copied to ${successfulCopies} of ${targetDeviceIds.length} peer devices.`,
 					{
@@ -1972,6 +2041,7 @@ export function DeviceEnrollmentPanel({
 				applyToAllPeers: false,
 				includeFingerprints: true,
 				includeFaceRecognition: true,
+				failedTargets: [],
 			});
 			await Promise.allSettled([
 				refetchSourceDeviceUsers(),
@@ -1986,105 +2056,6 @@ export function DeviceEnrollmentPanel({
 			toast.error(error?.message || "Failed to copy device user");
 		} finally {
 			setIsCopyDeviceUserSubmitting(false);
-		}
-	};
-
-	const applyMockFingerprintToDetails = async (fingerprintCount: number) => {
-		if (!selectedDeviceId || !detailsDeviceUser?.vendorUserId) {
-			toast.error("Open a device user record before changing synthetic fingerprint tally");
-			return;
-		}
-		try {
-			const result = await mockHikvisionFingerprintMutation.mutateAsync({
-				deviceId: selectedDeviceId,
-				vendorUserId: detailsDeviceUser.vendorUserId,
-				fingerprintCount,
-			});
-			const nextRawPayload = result?.sourceDeviceUser?.rawPayload;
-			if (nextRawPayload) {
-				setDetailsDeviceUser((current) =>
-					current
-						? {
-								...current,
-								rawPayload: nextRawPayload,
-								hrisDeviceUser: current.hrisDeviceUser
-									? { ...current.hrisDeviceUser, rawPayload: nextRawPayload }
-									: current.hrisDeviceUser,
-							}
-						: current,
-				);
-			}
-			await Promise.allSettled([
-				refetchSourceDeviceUsers(),
-				refetchDbDeviceUsers(),
-				refetchOpenDbDeviceUsers(),
-				refetchDeviceUserSummary(),
-				refetchSourceMatchedDeviceUsers(),
-				refetchSyncPreview(),
-			]);
-		} catch (error: any) {
-			toast.error(error?.message || "Failed to update synthetic fingerprint tally");
-		}
-	};
-
-	const applyMockFaceToDetails = async (faceCount: number) => {
-		if (!selectedDeviceId || !detailsDeviceUser?.vendorUserId) {
-			toast.error("Open a device user record before changing synthetic face tally");
-			return;
-		}
-		try {
-			const result = await mockHikvisionFaceMutation.mutateAsync({
-				deviceId: selectedDeviceId,
-				vendorUserId: detailsDeviceUser.vendorUserId,
-				faceCount,
-			});
-			const nextRawPayload = result?.sourceDeviceUser?.rawPayload;
-			if (nextRawPayload) {
-				setDetailsDeviceUser((current) =>
-					current
-						? {
-								...current,
-								rawPayload: nextRawPayload,
-								hrisDeviceUser: current.hrisDeviceUser
-									? { ...current.hrisDeviceUser, rawPayload: nextRawPayload }
-									: current.hrisDeviceUser,
-							}
-						: current,
-				);
-			}
-			await Promise.allSettled([
-				refetchSourceDeviceUsers(),
-				refetchDbDeviceUsers(),
-				refetchOpenDbDeviceUsers(),
-				refetchDeviceUserSummary(),
-				refetchSourceMatchedDeviceUsers(),
-				refetchSyncPreview(),
-			]);
-		} catch (error: any) {
-			toast.error(error?.message || "Failed to update synthetic face tally");
-		}
-	};
-
-	const mirrorRealFaceToPeers = async () => {
-		if (!selectedDeviceId || !detailsDeviceUser?.vendorUserId) {
-			toast.error("Open a device user record before mirroring its enrolled face");
-			return;
-		}
-		try {
-			await mirrorHikvisionFaceMutation.mutateAsync({
-				sourceDeviceId: selectedDeviceId,
-				employeeNo: detailsDeviceUser.vendorUserId,
-			});
-			await Promise.allSettled([
-				refetchSourceDeviceUsers(),
-				refetchDbDeviceUsers(),
-				refetchOpenDbDeviceUsers(),
-				refetchDeviceUserSummary(),
-				refetchSourceMatchedDeviceUsers(),
-				refetchSyncPreview(),
-			]);
-		} catch (error: any) {
-			toast.error(error?.message || "Failed to mirror the real enrolled face");
 		}
 	};
 
@@ -2236,7 +2207,8 @@ export function DeviceEnrollmentPanel({
 		if (detail) return detail;
 		if (row.origin === "sdk_alarm_callback") return "Real SDK callback path";
 		if (row.origin === "biometric_reconcile") return "Reconcile wrote this saved row";
-		if (row.origin === "device_user_state_backfill") return "Backfilled from saved device-user state";
+		if (row.origin === "device_user_state_backfill")
+			return "Backfilled from saved device-user state";
 		return row.source || "-";
 	};
 	const selectedLogPreview =
@@ -2847,8 +2819,7 @@ export function DeviceEnrollmentPanel({
 			confirmation: deviceUserImportState.confirmation,
 			execute: true,
 			biometricTransferMode: deviceUserImportState.biometricTransferMode,
-			biometricBundlePassphrase:
-				deviceUserImportState.biometricBundlePassphrase || undefined,
+			biometricBundlePassphrase: deviceUserImportState.biometricBundlePassphrase || undefined,
 		});
 		setDeviceUserImportState((current) => ({ ...current, result }));
 		await Promise.allSettled([
@@ -3630,7 +3601,6 @@ export function DeviceEnrollmentPanel({
 								))}
 							</div>
 
-
 							{deviceUserView === "source" ? (
 								<div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-950">
 									Showing the users read directly through{" "}
@@ -3995,7 +3965,8 @@ export function DeviceEnrollmentPanel({
 										Recent saved activity
 									</h3>
 									<p className="text-xs text-slate-600">
-										Shows callback, reconcile, and backfill rows saved for this device.
+										Shows callback, reconcile, and backfill rows saved for this
+										device.
 									</p>
 								</div>
 								<Button
@@ -4033,20 +4004,26 @@ export function DeviceEnrollmentPanel({
 									<tbody className="divide-y divide-slate-100 bg-white">
 										{!selectedDeviceId ? (
 											<tr>
-												<td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+												<td
+													colSpan={5}
+													className="px-3 py-8 text-center text-slate-500">
 													Select a device to inspect saved activity.
 												</td>
 											</tr>
 										) : isLoadingDeviceActivity ? (
 											<tr>
-												<td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+												<td
+													colSpan={5}
+													className="px-3 py-8 text-center text-slate-500">
 													<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
 													Loading saved activity...
 												</td>
 											</tr>
 										) : recentDeviceActivity.length === 0 ? (
 											<tr>
-												<td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+												<td
+													colSpan={5}
+													className="px-3 py-8 text-center text-slate-500">
 													No saved activity rows for this device yet.
 												</td>
 											</tr>
@@ -4069,7 +4046,8 @@ export function DeviceEnrollmentPanel({
 															{row.eventLabel || row.action || "-"}
 														</p>
 														<p className="text-xs text-slate-500">
-															{row.eventCategory || "-"} / {row.eventAction || "-"}
+															{row.eventCategory || "-"} /{" "}
+															{row.eventAction || "-"}
 														</p>
 													</td>
 													<td className="px-3 py-2">
@@ -4077,7 +4055,8 @@ export function DeviceEnrollmentPanel({
 															{row.rawId || "-"}
 														</p>
 														<p className="text-xs text-slate-500">
-															{row.employeeMatch?.label || "No HRIS employee link"}
+															{row.employeeMatch?.label ||
+																"No HRIS employee link"}
 														</p>
 													</td>
 													<td className="px-3 py-2">
@@ -4085,7 +4064,9 @@ export function DeviceEnrollmentPanel({
 															{row.correlationId || row.id}
 														</p>
 														{row.message ? (
-															<p className="mt-1 text-xs text-red-700">{row.message}</p>
+															<p className="mt-1 text-xs text-red-700">
+																{row.message}
+															</p>
 														) : null}
 													</td>
 												</tr>
@@ -5527,50 +5508,6 @@ export function DeviceEnrollmentPanel({
 											copy verification.
 										</p>
 									</div>
-									<div className="mt-3 flex flex-wrap gap-2">
-										<Button
-											type="button"
-											size="sm"
-											variant="outline"
-											disabled={mockHikvisionFingerprintMutation.isPending}
-											onClick={() => applyMockFingerprintToDetails(1)}>
-											Mock 1 fingerprint
-										</Button>
-										<Button
-											type="button"
-											size="sm"
-											variant="outline"
-											disabled={mockHikvisionFingerprintMutation.isPending}
-											onClick={() => applyMockFingerprintToDetails(0)}>
-											Clear mock tally
-										</Button>
-										<Button
-											type="button"
-											size="sm"
-											variant="outline"
-											disabled={mockHikvisionFaceMutation.isPending}
-											onClick={() => applyMockFaceToDetails(1)}>
-											Mock 1 face
-										</Button>
-										<Button
-											type="button"
-											size="sm"
-											variant="outline"
-											disabled={mockHikvisionFaceMutation.isPending}
-											onClick={() => applyMockFaceToDetails(0)}>
-											Clear mock face
-										</Button>
-										<Button
-											type="button"
-											size="sm"
-											variant="default"
-											disabled={mirrorHikvisionFaceMutation.isPending}
-											onClick={mirrorRealFaceToPeers}>
-											{mirrorHikvisionFaceMutation.isPending
-												? "Mirroring real face..."
-												: "Sync real face to peers"}
-										</Button>
-									</div>
 									{getDeviceUserSyntheticCredentialSummary(detailsDeviceUser)
 										.fingerprintCount > 0 ? (
 										<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
@@ -5877,9 +5814,17 @@ export function DeviceEnrollmentPanel({
 					</div>
 					<div className="grid gap-2 sm:grid-cols-4">
 						{[
-							["currentPage", "Current page", `${pagedExportVendorUserIds.length} rows`],
+							[
+								"currentPage",
+								"Current page",
+								`${pagedExportVendorUserIds.length} rows`,
+							],
 							["filtered", "Current filter", `${shownDeviceUserCount} rows`],
-							["selectedRows", "Selected rows", `${selectedExportVendorUserIds.length} rows`],
+							[
+								"selectedRows",
+								"Selected rows",
+								`${selectedExportVendorUserIds.length} rows`,
+							],
 							["all", "All device users", "Full selected device"],
 						].map(([value, label, hint]) => (
 							<button
@@ -5914,8 +5859,8 @@ export function DeviceEnrollmentPanel({
 						<p className="font-semibold">Biometric handling</p>
 						<p className="mt-1 text-cyan-900">
 							Use SDK peer copy when both devices are reachable. Use an encrypted
-							bundle only for portable template payloads; the passphrase is entered
-							at import time and is not stored.
+							bundle only for portable template payloads; the passphrase is entered at
+							import time and is not stored.
 						</p>
 					</div>
 					<div className="grid gap-2 text-sm sm:grid-cols-3">
@@ -6135,22 +6080,25 @@ export function DeviceEnrollmentPanel({
 										</tr>
 									</thead>
 									<tbody className="divide-y divide-slate-100 bg-white">
-										{deviceUserImportState.preview.plan.slice(0, 12).map((row) => (
-											<tr key={`${row.sourceDeviceId || "file"}:${row.vendorUserId}`}>
-												<td className="px-3 py-2 font-medium text-slate-950">
-													{row.vendorUserId}
-												</td>
-												<td className="px-3 py-2 text-slate-700">
-													{row.action}
-												</td>
-												<td className="px-3 py-2 text-slate-700">
-													{row.sourceDeviceName || "-"}
-												</td>
-												<td className="px-3 py-2 text-slate-700">
-													{row.transferMode || "metadataOnly"}
-												</td>
-											</tr>
-										))}
+										{deviceUserImportState.preview.plan
+											.slice(0, 12)
+											.map((row) => (
+												<tr
+													key={`${row.sourceDeviceId || "file"}:${row.vendorUserId}`}>
+													<td className="px-3 py-2 font-medium text-slate-950">
+														{row.vendorUserId}
+													</td>
+													<td className="px-3 py-2 text-slate-700">
+														{row.action}
+													</td>
+													<td className="px-3 py-2 text-slate-700">
+														{row.sourceDeviceName || "-"}
+													</td>
+													<td className="px-3 py-2 text-slate-700">
+														{row.transferMode || "metadataOnly"}
+													</td>
+												</tr>
+											))}
 									</tbody>
 								</table>
 							</div>
@@ -6214,8 +6162,9 @@ export function DeviceEnrollmentPanel({
 					{deviceUserImportState.result ? (
 						<div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
 							<p className="font-semibold">
-								Imported {metricValue(deviceUserImportState.result.counts.imported)} of{" "}
-								{metricValue(deviceUserImportState.result.counts.planned)} planned rows
+								Imported {metricValue(deviceUserImportState.result.counts.imported)}{" "}
+								of {metricValue(deviceUserImportState.result.counts.planned)}{" "}
+								planned rows
 							</p>
 							<p className="mt-1 break-all text-xs text-emerald-900">
 								Backup: {deviceUserImportState.result.backupDir}
@@ -6353,15 +6302,33 @@ export function DeviceEnrollmentPanel({
 							applyToAllPeers: false,
 							includeFingerprints: true,
 							includeFaceRecognition: true,
+							failedTargets: [],
 						});
 					}
 				}}
 				title="Copy device user to peer"
-				description="Copy this Hikvision user to one peer or every peer, then refresh HRIS truth."
+				description="Copy this Hikvision user to one peer or every peer. If a device is offline, it stays here for retry."
 				className="max-w-lg"
 				showCloseButton={!isCopyDeviceUserSubmitting}
 				closeOnBackdropClick={!isCopyDeviceUserSubmitting}>
 				<div className="space-y-4">
+					{copyDeviceUserState.failedTargets.length ? (
+						<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+							<p className="font-semibold">Some peer devices still need attention</p>
+							<p className="mt-1 text-xs text-amber-800">
+								Successful copies are kept. Retry only the devices below after they
+								come back online.
+							</p>
+							<ul className="mt-2 space-y-1 text-xs text-amber-900">
+								{copyDeviceUserState.failedTargets.map((target) => (
+									<li key={target.id}>
+										<span className="font-semibold">{target.label}:</span>{" "}
+										{target.error}
+									</li>
+								))}
+							</ul>
+						</div>
+					) : null}
 					{copyDeviceUserState.sourceDeviceUser ? (
 						<div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
 							<p className="font-semibold text-slate-950">
@@ -6495,6 +6462,7 @@ export function DeviceEnrollmentPanel({
 									applyToAllPeers: false,
 									includeFingerprints: true,
 									includeFaceRecognition: true,
+									failedTargets: [],
 								})
 							}>
 							Cancel
@@ -6516,7 +6484,9 @@ export function DeviceEnrollmentPanel({
 							{isCopyDeviceUserSubmitting
 								? "Copying..."
 								: copyDeviceUserState.applyToAllPeers
-									? "Copy to all peers"
+									? copyDeviceUserState.failedTargets.length
+										? "Retry failed devices"
+										: "Copy to all peers"
 									: "Copy to peer"}
 						</Button>
 					</div>

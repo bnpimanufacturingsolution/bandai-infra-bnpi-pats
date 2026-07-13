@@ -12,5 +12,9 @@ describe("device user copy UI contract", () => {
 		expect(enroll).toContain("syntheticCredentialOverlayApplied");
 		expect(enroll).not.toContain("syntheticFingerprintOverlayApplied?.fingerprintCount");
 		expect(enroll).toContain("dev-only synthetic biometric tallies for verification");
+		expect(enroll).toContain("failedTargets");
+		expect(enroll).toContain("Retry failed devices");
+		expect(enroll).toContain("The target device is not reachable right now");
+		expect(enroll).toContain("Successful copies are kept");
 	});
 });
