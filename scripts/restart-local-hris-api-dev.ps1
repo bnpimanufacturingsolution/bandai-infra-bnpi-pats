@@ -46,6 +46,23 @@ function Stop-RepoApiProcesses {
 	}
 }
 
+function Clear-LogFileWithRetry {
+	param(
+		[string]$Path,
+		[int]$Attempts = 20
+	)
+
+	for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+		try {
+			Set-Content -Path $Path -Value ""
+			return
+		} catch {
+			if ($attempt -eq $Attempts) { throw }
+			Start-Sleep -Milliseconds 500
+		}
+	}
+}
+
 function Wait-ForApiHealth {
 	$deadline = (Get-Date).AddSeconds($WaitSeconds)
 	while ((Get-Date) -lt $deadline) {
@@ -62,7 +79,7 @@ function Wait-ForApiHealth {
 }
 
 Stop-RepoApiProcesses
-Set-Content -Path $logPath -Value ""
+Clear-LogFileWithRetry -Path $logPath
 
 if (-not (Test-Path $ensureDbAccessScript)) {
 	throw "Missing DB access preflight script at $ensureDbAccessScript"

@@ -16,7 +16,7 @@ const environmentPortMap = new Map([
 
 const localForwardPortMap = {
 	prod: [55432, 56532],
-	dev: [55433, 56533],
+	dev: [55435, 55433, 56533],
 	uat: [55434, 56534],
 };
 const preferredLocalForwardHost = "127.0.0.1";

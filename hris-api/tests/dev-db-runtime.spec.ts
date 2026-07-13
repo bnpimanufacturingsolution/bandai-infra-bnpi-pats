@@ -40,7 +40,7 @@ describe("dev DB runtime resolver", () => {
 
 		expect(result.resolution).to.equal("start-local-forward");
 		expect(result.selectedDatasource.raw).to.equal(
-			"postgresql://postgres:postgres@localhost:55433/hris?schema=public",
+			"postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public",
 		);
 		expect(result.needsBnpiForward).to.equal(true);
 	});

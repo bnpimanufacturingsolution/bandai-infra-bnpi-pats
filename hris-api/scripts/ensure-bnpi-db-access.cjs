@@ -7,6 +7,7 @@ const {
 	parseDatasourceUrl,
 	renderRuntimeOverride,
 	resolvePreferredDatasource,
+	inferEnvironment,
 } = require("./dev-db-runtime.cjs");
 
 const apiRoot = path.resolve(__dirname, "..");
@@ -14,6 +15,7 @@ const repoRoot = path.resolve(apiRoot, "..");
 const envPath = path.join(apiRoot, ".env");
 const runtimeEnvPath = path.join(apiRoot, ".env.development.local");
 const projectTruthScript = path.join(repoRoot, "scripts", "project-truth.ps1");
+const k8sDevDbScript = path.join(repoRoot, "scripts", "start-k8s-dev-db-access.ps1");
 
 function canConnect(port, host) {
 	return new Promise((resolve) => {
@@ -54,6 +56,68 @@ async function main() {
 			"",
 	);
 	if (!datasource || !datasource.protocol.startsWith("postgres")) return;
+	const environment = inferEnvironment(datasource);
+	const preferredDevK8sPort = Number(process.env.PROJECT_TRUTH_DEV_K8S_DB_LOCAL_PORT || 55435);
+
+	if (
+		environment === "dev" &&
+		process.env.PROJECT_TRUTH_DEV_DB_MODE !== "docker-dev-db"
+	) {
+		if (!(await canConnect(preferredDevK8sPort, "127.0.0.1"))) {
+			if (!fs.existsSync(k8sDevDbScript)) {
+				throw new Error(`Missing ${path.relative(repoRoot, k8sDevDbScript)}.`);
+			}
+
+			console.log(
+				`[bnpi-db-access] Starting DEV K3s DB forward for localhost:${preferredDevK8sPort}...`,
+			);
+			const result = runPowerShell([
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				k8sDevDbScript,
+				"-LocalPort",
+				String(preferredDevK8sPort),
+			]);
+
+			if (result.status !== 0) {
+				throw new Error(
+					"Could not start the K3s DEV DB forward. Confirm direct LAN SSH to 10.184.37.19 works from this workstation.",
+				);
+			}
+		}
+
+		if (!(await canConnect(preferredDevK8sPort, "127.0.0.1"))) {
+			throw new Error(
+				`K3s DEV DB forward localhost:${preferredDevK8sPort} is still unreachable after bootstrap.`,
+			);
+		}
+
+		const devK8sDatasource = {
+			...datasource,
+			hostname: "127.0.0.1",
+			port: preferredDevK8sPort,
+			raw: new URL(
+				`postgresql://${datasource.username}:${datasource.password}@127.0.0.1:${preferredDevK8sPort}${datasource.pathname}${datasource.search}${datasource.hash}`,
+			).toString(),
+		};
+		fs.writeFileSync(
+			runtimeEnvPath,
+			renderRuntimeOverride({
+				environment,
+				resolution: "local-k8s-dev-forward",
+				selectedDatasource: devK8sDatasource,
+				selectedVmHost: null,
+				needsBnpiForward: false,
+			}),
+			"utf8",
+		);
+		console.log(
+			`[bnpi-db-access] Resolved DEV datasource to shared K3s runtime at 127.0.0.1:${preferredDevK8sPort}.`,
+		);
+		return;
+	}
 
 	const resolution = await resolvePreferredDatasource({
 		datasource,
