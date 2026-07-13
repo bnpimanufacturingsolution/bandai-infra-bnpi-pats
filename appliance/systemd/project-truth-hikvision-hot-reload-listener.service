@@ -12,7 +12,6 @@ Environment=HIKVISION_POSTGRES_CONTAINER=hris-postgres-dev
 Environment=HIKVISION_HOT_RELOAD_LOGIN_EMAIL=admin@bandai.local
 Environment=HIKVISION_HOT_RELOAD_LOGIN_PASSWORD=password123
 Environment=HIKVISION_HOT_RELOAD_LOGIN_APP_CODE=hris
-Environment=HIKVISION_DEVICE_SPEC_OVERRIDE=/etc/project-truth/hikvision-live-device.spec
 EnvironmentFile=-/etc/project-truth/hikvision-hot-reload.env
 ExecStart=/usr/local/bin/project-truth-hikvision-hot-reload-daemon
 Restart=always

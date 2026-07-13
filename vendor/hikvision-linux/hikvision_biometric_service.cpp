@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
+#include <functional>
 
 #include <dirent.h>
 #include <sys/stat.h>
@@ -62,6 +63,13 @@ struct ReconcileJob {
     std::string sdk_time;
     bool include_fingerprints = false;
 };
+
+template <typename Operation>
+bool retry_peer_operation(
+    const std::string &operation,
+    DeviceSession &target,
+    const std::string &employee_no,
+    Operation operation_fn);
 
 std::mutex queue_mutex;
 std::condition_variable queue_cv;
@@ -1920,11 +1928,13 @@ bool capture_and_sync_fingerprint_for_employee(
     job.event_kind = "manual_fingerprint_capture_sync";
 
     for (auto &target : sessions) {
-        if (!target.config.biometric_peer && target.config.hris_device_id != source.config.hris_device_id) {
+        if (target.config.hris_device_id == source.config.hris_device_id) {
             continue;
         }
-        const bool isapi_wrote = execute_mode && write_fingerprint_via_isapi(target, job, record);
-        const bool wrote = isapi_wrote || write_peer_fingerprints(target, job, records);
+        const bool wrote = retry_peer_operation("fingerprint", target, employee_no, [&]() {
+            const bool isapi_wrote = execute_mode && write_fingerprint_via_isapi(target, job, record);
+            return isapi_wrote || write_peer_fingerprints(target, job, records);
+        });
         if (wrote) {
             target_writes += 1;
         }
@@ -1990,9 +2000,10 @@ bool capture_and_sync_face_for_employee(
     bool ok = true;
     int target_writes = 0;
     for (auto &target : sessions) {
-        if (!target.config.biometric_peer && target.config.hris_device_id != source.config.hris_device_id) continue;
-        const bool wrote = write_face_and_template(
-            target, employee_no, card_no, face_template, face_picture);
+        if (target.config.hris_device_id == source.config.hris_device_id) continue;
+        const bool wrote = retry_peer_operation("face", target, employee_no, [&]() {
+            return write_face_and_template(target, employee_no, card_no, face_template, face_picture);
+        });
         if (wrote) target_writes += 1;
         ok = wrote && ok;
     }
@@ -2057,9 +2068,10 @@ bool mirror_face_for_employee(
     bool ok = true;
     int target_writes = 0;
     for (auto &target : sessions) {
-        if (!target.config.biometric_peer && target.config.hris_device_id != source.config.hris_device_id) continue;
-        const bool wrote = write_face_and_template(
-            target, employee_no, card_no, face_template, face_picture);
+        if (target.config.hris_device_id == source.config.hris_device_id) continue;
+        const bool wrote = retry_peer_operation("face", target, employee_no, [&]() {
+            return write_face_and_template(target, employee_no, card_no, face_template, face_picture);
+        });
         if (wrote) target_writes += 1;
         ok = wrote && ok;
     }
@@ -2571,7 +2583,7 @@ bool process_fast_user_delta_reconcile(DeviceSession &source, const ReconcileJob
     int missing_total = 0;
 
     for (auto &target : sessions) {
-        if (target.config.hris_device_id == source.config.hris_device_id || !target.config.biometric_peer) {
+        if (target.config.hris_device_id == source.config.hris_device_id) {
             continue;
         }
 
@@ -2599,7 +2611,9 @@ bool process_fast_user_delta_reconcile(DeviceSession &source, const ReconcileJob
             if (!read_source_user(source, mirror_job, &mirror_user_json)) {
                 continue;
             }
-            if (write_peer_user(target, mirror_job, mirror_user_json)) {
+            if (retry_peer_operation("user", target, mirror_job.employee_no, [&]() {
+                    return write_peer_user(target, mirror_job, mirror_user_json);
+                })) {
                 peer_write_count += 1;
             }
         }
@@ -2647,17 +2661,13 @@ void polling_loop() {
         }
 
         for (auto &source : sessions) {
-            if (!source.config.biometric_peer) {
-                continue;
-            }
-
             const std::vector<std::string> source_employee_numbers = read_device_employee_numbers(source);
             if (source_employee_numbers.empty()) {
                 continue;
             }
 
             for (auto &target : sessions) {
-                if (target.config.hris_device_id == source.config.hris_device_id || !target.config.biometric_peer) {
+                if (target.config.hris_device_id == source.config.hris_device_id) {
                     continue;
                 }
 
@@ -2697,7 +2707,7 @@ void polling_loop() {
                 }
 
                 for (auto &target : sessions) {
-                    if (target.config.hris_device_id == source.config.hris_device_id || !target.config.biometric_peer) {
+                    if (target.config.hris_device_id == source.config.hris_device_id) {
                         continue;
                     }
                     const int target_template_count =
@@ -2719,8 +2729,7 @@ void polling_loop() {
                         &source_face_template, &source_face_picture);
                     if (source_has_face) {
                         for (auto &target : sessions) {
-                            if (target.config.hris_device_id == source.config.hris_device_id ||
-                                !target.config.biometric_peer) {
+                            if (target.config.hris_device_id == source.config.hris_device_id) {
                                 continue;
                             }
                             std::vector<char> target_face_template;
@@ -2738,6 +2747,43 @@ void polling_loop() {
             }
         }
     }
+}
+
+template <typename Operation>
+bool retry_peer_operation(
+    const std::string &operation,
+    DeviceSession &target,
+    const std::string &employee_no,
+    Operation operation_fn) {
+    constexpr int max_attempts = 3;
+    for (int attempt = 1; attempt <= max_attempts; ++attempt) {
+        const bool ok = operation_fn();
+        emit_json({
+            {"event", "peer_sync_attempt"},
+            {"operation", operation},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"targetHost", target.config.host},
+            {"employeeNo", employee_no},
+            {"attempt", std::to_string(attempt)},
+            {"maxAttempts", std::to_string(max_attempts)},
+            {"ok", ok ? "true" : "false"}
+        });
+        if (ok) {
+            return true;
+        }
+        if (attempt < max_attempts) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(350 * attempt));
+        }
+    }
+    emit_json({
+        {"event", "peer_sync_failed_after_retries"},
+        {"operation", operation},
+        {"targetDeviceId", target.config.hris_device_id},
+        {"targetHost", target.config.host},
+        {"employeeNo", employee_no},
+        {"attempts", std::to_string(max_attempts)}
+    });
+    return false;
 }
 
 void process_reconcile_job(const ReconcileJob &job) {
@@ -2808,17 +2854,21 @@ void process_reconcile_job(const ReconcileJob &job) {
                     &mirror_face_template, &mirror_face_picture);
 
             for (auto &target : sessions) {
-                if (target.config.host == source->config.host || !target.config.biometric_peer) {
+                if (target.config.host == source->config.host) {
                     continue;
                 }
                 peer_count += 1;
                 if (write_peer_user(target, mirror_job, mirror_user_json)) {
                     peer_write_count += 1;
                 }
-                write_peer_fingerprints(target, mirror_job, mirror_fingerprints);
+                retry_peer_operation("fingerprint", target, mirror_job.employee_no, [&]() {
+                    return write_peer_fingerprints(target, mirror_job, mirror_fingerprints);
+                });
                 if (mirror_face_available) {
-                    write_face_and_template(target, employee_no, mirror_card_no,
-                        mirror_face_template, mirror_face_picture);
+                    retry_peer_operation("face", target, employee_no, [&]() {
+                        return write_face_and_template(target, employee_no, mirror_card_no,
+                            mirror_face_template, mirror_face_picture);
+                    });
                 }
             }
             mirrored_users += 1;
@@ -2869,23 +2919,27 @@ void process_reconcile_job(const ReconcileJob &job) {
     }
 
     for (auto &target : sessions) {
-        if (target.config.hris_device_id == source->config.hris_device_id || !target.config.biometric_peer) {
+        if (target.config.hris_device_id == source->config.hris_device_id) {
             continue;
         }
         peer_count += 1;
-        if (user_delete ? delete_peer_user(target, job) : (user_ok && write_peer_user(target, job, user_json))) {
+        if (retry_peer_operation("user", target, job.employee_no, [&]() {
+                return user_delete ? delete_peer_user(target, job) : (user_ok && write_peer_user(target, job, user_json));
+            })) {
             peer_write_count += 1;
         }
         if (!user_delete && !card_no.empty()) {
             add_sync_card(target, job.employee_no, card_no);
         }
-        if (fingerprint_delete) {
-            delete_peer_fingerprints(target, job);
-        } else if (job.include_fingerprints) {
-            write_peer_fingerprints(target, job, fingerprints);
+        if (fingerprint_delete || job.include_fingerprints) {
+            retry_peer_operation("fingerprint", target, job.employee_no, [&]() {
+                return fingerprint_delete ? delete_peer_fingerprints(target, job) : write_peer_fingerprints(target, job, fingerprints);
+            });
         }
         if (face_available) {
-            write_face_and_template(target, job.employee_no, card_no, face_template, face_picture);
+            retry_peer_operation("face", target, job.employee_no, [&]() {
+                return write_face_and_template(target, job.employee_no, card_no, face_template, face_picture);
+            });
         }
     }
 
@@ -3233,14 +3287,44 @@ int main(int argc, char **argv) {
     }
 
     for (const auto &config : configs) {
-        DeviceSession session;
-        session.config = config;
-        if (login_device(session)) {
-            if (arm_alarm(session) || manual_reconcile_mode) {
+        emit_json({
+            {"event", "device_config_loaded"},
+            {"deviceId", config.hris_device_id},
+            {"name", config.name},
+            {"host", config.host},
+            {"sdkPort", std::to_string(config.sdk_port)},
+            {"peerFlag", config.biometric_peer ? "true" : "false"},
+            {"peerPolicy", "all_armed_devices"}
+        });
+
+        bool armed = false;
+        for (int attempt = 1; attempt <= 3 && !armed; ++attempt) {
+            DeviceSession session;
+            session.config = config;
+            if (login_device(session) && (arm_alarm(session) || manual_reconcile_mode)) {
                 sessions.push_back(session);
+                armed = true;
+                emit_json({
+                    {"event", "device_armed"},
+                    {"deviceId", config.hris_device_id},
+                    {"host", config.host},
+                    {"attempt", std::to_string(attempt)},
+                    {"peerEnabled", "true"}
+                });
             } else if (session.user_id >= 0) {
                 NET_DVR_Logout_V30(session.user_id);
             }
+            if (!armed && attempt < 3) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500 * attempt));
+            }
+        }
+        if (!armed) {
+            emit_json({
+                {"event", "device_arming_failed_after_retries"},
+                {"deviceId", config.hris_device_id},
+                {"host", config.host},
+                {"attempts", "3"}
+            });
         }
     }
 

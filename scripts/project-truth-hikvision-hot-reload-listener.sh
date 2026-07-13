@@ -13,6 +13,7 @@ LOGIN_PASSWORD=${HIKVISION_HOT_RELOAD_LOGIN_PASSWORD:-password123}
 LOGIN_APP_CODE=${HIKVISION_HOT_RELOAD_LOGIN_APP_CODE:-hris}
 SPEC=/run/project-truth/hikvision-hot-reload-device.spec
 SPEC_OVERRIDE=${HIKVISION_DEVICE_SPEC_OVERRIDE:-}
+ALLOW_STATIC_SPEC_OVERRIDE=${HIKVISION_ALLOW_STATIC_DEVICE_SPEC:-0}
 PREPARE_ONLY=0
 RUN_ONCE=0
 DEVICE_ID_FILTER=${HIKVISION_DEVICE_ID_FILTER:-}
@@ -122,7 +123,6 @@ COPY (
   FROM "Device"
   WHERE "isDeleted" = false
     AND COALESCE(config->>'vendor', '') = 'Hikvision'
-    AND COALESCE(access->>'password', '') <> ''
   ORDER BY name, id
 ) TO STDOUT WITH DELIMITER '|'
 SQL
@@ -164,7 +164,8 @@ for device in devices:
       continue
     if clean(config.get("vendor")) != "Hikvision":
       continue
-    password = clean(access.get("password"))
+    username = clean(access.get("username")) or clean(os.environ.get("HIKVISION_USERNAME"))
+    password = clean(access.get("password")) or clean(os.environ.get("HIKVISION_PASSWORD"))
     if not password:
       continue
     row = [
@@ -173,7 +174,7 @@ for device in devices:
       clean(device.get("name")),
       clean(config.get("hikvisionSdkRuntimeAddress") or device.get("address")),
       clean(config.get("hikvisionSdkRuntimePort") or config.get("sdkPort") or "8000"),
-      clean(access.get("username")),
+      username,
       password,
     ]
     print("|".join(row))
@@ -185,7 +186,7 @@ export LOGIN_EMAIL LOGIN_PASSWORD LOGIN_APP_CODE
 tmp_spec=$(mktemp /tmp/project-truth-hikvision-device.XXXXXX)
 trap 'rm -f "$tmp_spec"' EXIT
 
-if [[ -n "$SPEC_OVERRIDE" && -s "$SPEC_OVERRIDE" ]]; then
+if [[ "$ALLOW_STATIC_SPEC_OVERRIDE" == "1" && -n "$SPEC_OVERRIDE" && -s "$SPEC_OVERRIDE" ]]; then
   cp "$SPEC_OVERRIDE" "$tmp_spec"
 else
   case "$DEVICE_SOURCE" in
@@ -209,6 +210,8 @@ else
 
   while IFS='|' read -r device_id org_id device_name device_addr sdk_port sdk_user sdk_pass; do
   [[ -n "${device_id:-}" ]] || continue
+  sdk_user="${sdk_user:-${HIKVISION_USERNAME:-}}"
+  sdk_pass="${sdk_pass:-${HIKVISION_PASSWORD:-}}"
   [[ -n "${sdk_pass:-}" ]] || continue
   if [[ -n "${DEVICE_ID_FILTER:-}" ]]; then
     case ",${DEVICE_ID_FILTER}," in
