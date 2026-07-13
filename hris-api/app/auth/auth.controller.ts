@@ -1285,19 +1285,17 @@ export const controller = (prisma: PrismaClient) => {
 			const device = await prisma.device.findFirst({
 				where: {
 					id: deviceId,
-					// Older device rows may have a nullable deletion marker; only an
-					// explicit true value means the device is deleted.
-					isDeleted: { not: true },
 				},
 				select: {
 					id: true,
 					organizationId: true,
 					name: true,
 					config: true,
+					isDeleted: true,
 				},
 			});
 
-			if (!device) {
+			if (!device || device.isDeleted === true) {
 				res.status(404).json(buildErrorResponse("Device not found", 404));
 				return;
 			}
