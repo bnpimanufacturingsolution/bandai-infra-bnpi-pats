@@ -36,6 +36,7 @@ import {
 	useDevices,
 	useDeviceSyncPreview,
 	useDeviceSyncRuns,
+	useDeviceActivity,
 	useDeviceUsers,
 	useImportDeviceEnrollment,
 	useHikvisionListenerStatus,
@@ -399,6 +400,16 @@ export function DeviceEnrollmentPanel({
 		isLoading: isLoadingSyncRuns,
 		refetch: refetchSyncRuns,
 	} = useDeviceSyncRuns(selectedDeviceId, { limit: 12 }, Boolean(selectedDeviceId));
+	const {
+		data: deviceActivity,
+		isLoading: isLoadingDeviceActivity,
+		refetch: refetchDeviceActivity,
+	} = useDeviceActivity(
+		selectedDeviceId,
+		{ limit: 12 },
+		Boolean(selectedDeviceId) && (activePanel === "logs" || activePanel === "runs"),
+		{ refetchInterval: activePanel === "logs" || activePanel === "runs" ? 5000 : false },
+	);
 	const {
 		data: hikvisionListenerStatus,
 		isLoading: isLoadingHikvisionListenerStatus,
@@ -2200,6 +2211,17 @@ export function DeviceEnrollmentPanel({
 	const syncRuns = syncRunsData?.syncRuns || [];
 	const latestUserSync = syncRuns.find((run) => run.runType === "DEVICE_USERS");
 	const latestLogSync = syncRuns.find((run) => run.runType === "DEVICE_LOGS");
+	const recentDeviceActivity = deviceActivity?.events || [];
+	const formatActivityOrigin = (row: (typeof recentDeviceActivity)[number]) =>
+		row.originLabel || row.origin || row.source || "Saved device event";
+	const formatActivityDetail = (row: (typeof recentDeviceActivity)[number]) => {
+		const detail = String(row.originDetail || row.correlationId || "").trim();
+		if (detail) return detail;
+		if (row.origin === "sdk_alarm_callback") return "Real SDK callback path";
+		if (row.origin === "biometric_reconcile") return "Reconcile wrote this saved row";
+		if (row.origin === "device_user_state_backfill") return "Backfilled from saved device-user state";
+		return row.source || "-";
+	};
 	const selectedLogPreview =
 		(syncPreview?.devices || []).find(
 			(row: DeviceSyncPreviewRow) => row.deviceId === selectedDeviceId,
@@ -3518,11 +3540,6 @@ export function DeviceEnrollmentPanel({
 								))}
 							</div>
 
-							<p className="text-xs text-slate-500">
-								Read from device comes from the fastest available source count for
-								the selected device. HRIS records, linked employees, and needs link
-								come from saved device-user summary truth for that device.
-							</p>
 
 							{deviceUserView === "source" ? (
 								<div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-950">
@@ -3850,6 +3867,118 @@ export function DeviceEnrollmentPanel({
 									</p>
 								</div>
 							))}
+						</div>
+						<div className="rounded-md border border-slate-200">
+							<div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+								<div className="min-w-0">
+									<h3 className="text-sm font-semibold text-slate-950">
+										Recent saved activity
+									</h3>
+									<p className="text-xs text-slate-600">
+										Shows callback, reconcile, and backfill rows saved for this device.
+									</p>
+								</div>
+								<Button
+									type="button"
+									variant="outline"
+									className="h-8 px-3"
+									disabled={!selectedDeviceId || isLoadingDeviceActivity}
+									onClick={() => void refetchDeviceActivity()}>
+									{isLoadingDeviceActivity ? (
+										<Loader2 className="h-4 w-4 animate-spin" />
+									) : (
+										<RefreshCw className="h-4 w-4" />
+									)}
+									Refresh activity
+								</Button>
+							</div>
+							<div className="overflow-x-auto">
+								<table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
+									<colgroup>
+										<col className="w-[180px]" />
+										<col className="w-[210px]" />
+										<col className="w-[170px]" />
+										<col className="w-[140px]" />
+										<col />
+									</colgroup>
+									<thead className="bg-white text-left text-xs font-semibold uppercase text-slate-500">
+										<tr>
+											<th className="px-3 py-2">Saved at</th>
+											<th className="px-3 py-2">Origin</th>
+											<th className="px-3 py-2">Event</th>
+											<th className="px-3 py-2">User</th>
+											<th className="px-3 py-2">Trace</th>
+										</tr>
+									</thead>
+									<tbody className="divide-y divide-slate-100 bg-white">
+										{!selectedDeviceId ? (
+											<tr>
+												<td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+													Select a device to inspect saved activity.
+												</td>
+											</tr>
+										) : isLoadingDeviceActivity ? (
+											<tr>
+												<td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+													<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
+													Loading saved activity...
+												</td>
+											</tr>
+										) : recentDeviceActivity.length === 0 ? (
+											<tr>
+												<td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+													No saved activity rows for this device yet.
+												</td>
+											</tr>
+										) : (
+											recentDeviceActivity.map((row) => (
+												<tr key={row.id} className="align-top">
+													<td className="px-3 py-2 text-slate-700">
+														{formatDateTime(row.receivedAt)}
+													</td>
+													<td className="px-3 py-2">
+														<p className="font-medium text-slate-950">
+															{formatActivityOrigin(row)}
+														</p>
+														<p className="mt-0.5 break-words text-xs text-slate-500">
+															{formatActivityDetail(row)}
+														</p>
+													</td>
+													<td className="px-3 py-2">
+														<p className="font-medium text-slate-950">
+															{row.eventLabel || row.action || "-"}
+														</p>
+														<p className="text-xs text-slate-500">
+															{row.eventCategory || "-"} / {row.eventAction || "-"}
+														</p>
+													</td>
+													<td className="px-3 py-2">
+														<p className="font-medium text-slate-950">
+															{row.rawId || "-"}
+														</p>
+														<p className="text-xs text-slate-500">
+															{row.employeeMatch?.label || "No HRIS employee link"}
+														</p>
+													</td>
+													<td className="px-3 py-2">
+														<p className="break-all font-mono text-xs text-slate-600">
+															{row.correlationId || row.id}
+														</p>
+														{row.message ? (
+															<p className="mt-1 text-xs text-red-700">{row.message}</p>
+														) : null}
+													</td>
+												</tr>
+											))
+										)}
+									</tbody>
+								</table>
+							</div>
+							{deviceActivity?.rawSdkPersistence?.message ? (
+								<div className="border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+									{deviceActivity.rawSdkPersistence.message}
+								</div>
+							) : null}
 						</div>
 					</section>
 				</TabsContent>

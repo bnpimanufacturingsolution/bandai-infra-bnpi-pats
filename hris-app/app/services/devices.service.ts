@@ -277,6 +277,64 @@ export interface DeviceSyncRunsResponse {
 	syncRuns: DeviceSyncRun[];
 }
 
+export interface DeviceActivityEventRow {
+	id: string;
+	receivedAt: string;
+	deviceEventTime?: string | null;
+	source: string;
+	eventCategory?: string | null;
+	eventAction?: string | null;
+	eventLabel?: string | null;
+	origin?: string | null;
+	originLabel?: string | null;
+	originDetail?: string | null;
+	rawId?: string | null;
+	employeeMatch?: { employeeId?: string | null; label?: string | null } | null;
+	hrisStatus: string;
+	action?: string | null;
+	message?: string | null;
+	runId?: string | null;
+	correlationId?: string | null;
+	payload?: Record<string, unknown> | null;
+}
+
+export interface DeviceActivityResponse {
+	generatedAt: string;
+	device: {
+		id: string;
+		name?: string | null;
+		address?: string | null;
+		port?: number | null;
+		protocol?: string | null;
+		config?: Record<string, unknown> | null;
+	};
+	status: "idle" | "listening" | "reconciling" | "importing" | "adjusting" | "failed" | "completed" | "running" | string;
+	activeRun?: DeviceSyncRun | null;
+	activeJob?: Record<string, unknown> | null;
+	lastRun?: DeviceSyncRun | null;
+	counts: {
+		sdkReceived: number;
+		parsed: number;
+		savedInHris: number;
+		skipped: number;
+		failed: number;
+		needsLink: number;
+		gap: number;
+	};
+	filters: {
+		status: string;
+		source: string;
+		runId?: string | null;
+		search?: string;
+		limit: number;
+	};
+	events: DeviceActivityEventRow[];
+	rawSdkPersistence?: {
+		persisted: boolean;
+		message?: string | null;
+	};
+}
+
 export interface DeviceImportJobProgress {
 	jobId: string;
 	status: "processing" | "completed" | "failed" | "cancelled";
@@ -1318,6 +1376,39 @@ class DevicesService extends APIService {
 				error.data?.errors?.[0]?.message ||
 					error.message ||
 					"Error loading device sync runs",
+			);
+		}
+	}
+
+	async getDeviceActivity(
+		deviceId: string,
+		params: {
+			limit?: number;
+			status?: string;
+			source?: string;
+			runId?: string;
+			search?: string;
+		} = {},
+	): Promise<DeviceActivityResponse> {
+		try {
+			if (!String(deviceId || "").trim()) throw new Error("Device is required");
+			const query = new URLSearchParams();
+			if (params.limit) query.set("limit", String(params.limit));
+			if (params.status && params.status !== "all") query.set("status", params.status);
+			if (params.source && params.source !== "all") query.set("source", params.source);
+			if (params.runId && params.runId !== "all") query.set("runId", params.runId);
+			if (params.search) query.set("search", params.search);
+			const endpoint = `/api/device/${deviceId}/activity${query.toString() ? `?${query.toString()}` : ""}`;
+			const response = await hrisApiClient.get<any>(endpoint);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to load device activity");
+			return data as DeviceActivityResponse;
+		} catch (error: any) {
+			console.error("Error loading device activity:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error loading device activity",
 			);
 		}
 	}

@@ -49,7 +49,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("!shouldConvergeDeviceUserToPeer(sourceDeviceUser, existingTargetDeviceUser)");
 		expect(controller).to.include("const isMissingHikvisionListenerRuntimeError =");
 		expect(controller).to.include("const runManualCopy = (extraEnv: string[] = []) =>");
-		expect(controller).to.include("if (result.exitCode !== 0 && isMissingHikvisionListenerRuntimeError(firstAttemptDetail))");
+		expect(controller).to.include("result.exitCode !== 0");
+		expect(controller).to.include("isMissingHikvisionListenerRuntimeError(firstAttemptDetail)");
 		expect(controller).to.include("HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api");
 		expect(controller).to.include("HIKVISION_VM_LOCAL_API_BASE");
 		expect(controller).to.include("HIKVISION_VM_WRAPPER_REMOTE_PATH");
@@ -221,7 +222,29 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("await syncHikvisionDeviceUsersFromSource({");
 		expect(controller).to.include("Post-create Hikvision device users synced");
 		expect(controller).to.include("startedByUserId: (req as any).userId || null");
-		expect(controller).to.include('if (isHikvisionDevice(device) && String((device as any)?.access?.password || "").trim())');
+		expect(controller).to.include("isHikvisionDevice(device)");
+		expect(controller).to.include('String((device as any)?.access?.password || "").trim()');
+	});
+
+	it("exposes selected-device activity for Sync Center observability without mutating devices", () => {
+		const router = routerSource();
+		const controller = controllerSource();
+
+		expect(router).to.include('routes.get("/:id/activity", controller.getDeviceActivity)');
+		expect(controller).to.include("const getDeviceActivity = async");
+		expect(controller).to.include("Device activity retrieved");
+		expect(controller).to.include("getActiveDeviceUserSyncJobForDevice");
+		expect(controller).to.include("rawSdkPersistence");
+		expect(controller).to.include("Raw SDK source reads are not persisted as a separate stream yet");
+		expect(controller).to.include("readActivityRowValue");
+		expect(controller).to.include('readActivityRowValue(event, "eventCategory")');
+		expect(controller).to.include("originLabel:");
+		expect(controller).to.include("Derived from current device-user state");
+		expect(controller).to.include("Created by biometric reconcile");
+		expect(controller).to.include("Received from SDK alarm listener");
+		expect(controller).to.include("activeRun");
+		expect(controller).to.include("activeJob");
+		expect(controller).to.include("sdkReceived");
 	});
 
 	it("keeps the device events page working when device_users has not been migrated yet", () => {
@@ -229,7 +252,8 @@ describe("Hikvision biometric sync contract", () => {
 
 		expect(controller).to.include("const hasDeviceUsersTable = await hasDeviceUserTable()");
 		expect(controller).to.include("const hasDeviceEventColumns = await getDeviceEventColumnPresence()");
-		expect(controller).to.include('const hasDeviceUserReference = hasDeviceUsersTable && hasDeviceEventColumns.deviceUserId');
+		expect(controller).to.include("const hasDeviceUserReference =");
+		expect(controller).to.include("hasDeviceUsersTable && hasDeviceEventColumns.deviceUserId");
 		expect(controller).to.include('LEFT JOIN LATERAL (');
 		expect(controller).to.include('NULL::text AS \"vendorUserId\"');
 		expect(controller).to.include('${deviceUserJoinSql}');

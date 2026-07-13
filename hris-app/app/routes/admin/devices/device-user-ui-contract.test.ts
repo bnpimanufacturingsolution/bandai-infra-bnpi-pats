@@ -55,6 +55,14 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Choose a device first");
 		expect(enroll).toContain("Back to device summary");
 		expect(enroll).toContain("Refresh summary");
+		expect(enroll).toContain("Recent saved activity");
+		expect(enroll).toContain("Shows callback, reconcile, and backfill rows saved for this device.");
+		expect(enroll).toContain("Refresh activity");
+		expect(enroll).toContain("formatActivityOrigin");
+		expect(enroll).toContain("formatActivityDetail");
+		expect(enroll).toContain("rawSdkPersistence");
+		expect(enroll).toContain("useDeviceActivity");
+		expect(enroll).toContain("Device-user sync");
 		expect(enroll).toContain("Review user sync");
 		expect(enroll).not.toContain("Sync first");
 		expect(enroll).toContain("Change employee link");

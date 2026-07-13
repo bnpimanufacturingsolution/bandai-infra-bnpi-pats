@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
 	ArrowLeft,
@@ -177,11 +177,6 @@ const getAsyncErrorMessage = (error: unknown, fallback: string) => {
 	return fallback;
 };
 
-const viewOptions: SelectOption[] = [
-	{ value: "saved", label: "Saved" },
-	{ value: "live", label: "Live" },
-];
-
 const timeWindowOptions: SelectOption[] = [
 	{ value: "today", label: "Today" },
 	{ value: "yesterday", label: "Yesterday" },
@@ -242,6 +237,19 @@ const eventActionOptions: SelectOption[] = [
 
 const compactSelectClassName = "h-7 text-xs";
 const compactSelectDropdownClassName = "rounded-md shadow-md";
+
+const FilterField = ({
+	label,
+	children,
+}: {
+	label: string;
+	children: ReactNode;
+}) => (
+	<label className="block min-w-0 space-y-1">
+		<span className="block truncate text-[11px] font-semibold text-slate-500">{label}</span>
+		{children}
+	</label>
+);
 
 const getDateKey = (date: Date) => {
 	const parts = new Intl.DateTimeFormat("en-CA", {
@@ -2000,91 +2008,76 @@ export default function DeviceEventsPage() {
 				<div
 					className={
 						viewMode === "live"
-							? "grid gap-2 border-b border-slate-200 p-2 md:grid-cols-[minmax(96px,0.55fr)_minmax(180px,1fr)_minmax(110px,0.55fr)]"
-							: "grid gap-2 border-b border-slate-200 p-2 md:grid-cols-[minmax(96px,0.55fr)_minmax(170px,1fr)_minmax(110px,0.55fr)_minmax(120px,0.6fr)_minmax(120px,0.6fr)]"
+							? "grid gap-2 border-b border-slate-200 p-2 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1fr)_150px]"
+							: "grid gap-2 border-b border-slate-200 p-2 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_150px_minmax(180px,0.85fr)_minmax(190px,0.9fr)]"
 					}>
-					<Select
-						options={viewOptions}
-						value={viewMode}
-						onChange={(value) =>
-							updateSearchParams((next) => {
-								next.set("view", value);
-								next.set("page", "1");
-								if (value === "live") {
-									next.delete("status");
-									next.delete("source");
-									next.delete("eventCategory");
-									next.delete("eventAction");
-									next.delete("query");
-									next.set("window", "today");
-									if (
-										(next.get("deviceId") || "all") === "all" &&
-										latestSavedEvent?.deviceId
-									) {
-										next.set("deviceId", latestSavedEvent.deviceId);
-									}
-								}
-							})
-						}
-						placeholder="Saved"
-						className={compactSelectClassName}
-						dropdownClassName={compactSelectDropdownClassName}
-					/>
-					<Select
-						options={deviceOptions}
-						value={deviceId}
-						onChange={(value) => setFilter("deviceId", value)}
-						placeholder="All devices"
-						className={compactSelectClassName}
-						dropdownClassName={compactSelectDropdownClassName}
-					/>
-					<Select
-						options={timeWindowOptions}
-						value={timeWindow}
-						onChange={(value) => setFilter("window", value)}
-						placeholder="Today"
-						className={compactSelectClassName}
-						dropdownClassName={compactSelectDropdownClassName}
-					/>
+					<FilterField label="Device">
+						<Select
+							options={deviceOptions}
+							value={deviceId}
+							onChange={(value) => setFilter("deviceId", value)}
+							placeholder="All devices"
+							className={compactSelectClassName}
+							dropdownClassName={compactSelectDropdownClassName}
+						/>
+					</FilterField>
+					<FilterField label="Time">
+						<Select
+							options={timeWindowOptions}
+							value={timeWindow}
+							onChange={(value) => setFilter("window", value)}
+							placeholder="Today"
+							className={compactSelectClassName}
+							dropdownClassName={compactSelectDropdownClassName}
+						/>
+					</FilterField>
 					{viewMode === "saved" && (
 						<>
-							<Select
-								options={eventCategoryOptions}
-								value={eventCategory}
-								onChange={(value) => setFilter("eventCategory", value)}
-								placeholder="Any event category"
-								className={compactSelectClassName}
-								dropdownClassName={compactSelectDropdownClassName}
-							/>
-							<Select
-								options={eventActionOptions}
-								value={eventAction}
-								onChange={(value) => setFilter("eventAction", value)}
-								placeholder="Any event action"
-								className={compactSelectClassName}
-								dropdownClassName={compactSelectDropdownClassName}
-							/>
+							<FilterField label="Category">
+								<Select
+									options={eventCategoryOptions}
+									value={eventCategory}
+									onChange={(value) => setFilter("eventCategory", value)}
+									placeholder="Any event category"
+									className={compactSelectClassName}
+									dropdownClassName={compactSelectDropdownClassName}
+								/>
+							</FilterField>
+							<FilterField label="Action">
+								<Select
+									options={eventActionOptions}
+									value={eventAction}
+									onChange={(value) => setFilter("eventAction", value)}
+									placeholder="Any event action"
+									className={compactSelectClassName}
+									dropdownClassName={compactSelectDropdownClassName}
+								/>
+							</FilterField>
 						</>
 					)}
 				</div>
 				{viewMode === "saved" && isSyncLogsDebugView ? (
 					<div className="grid gap-2 border-b border-slate-200 bg-slate-50 p-2 md:grid-cols-2">
-						<Select
-							options={sourceOptions}
-							value={source}
-							onChange={(value) => setFilter("source", value)}
-							placeholder="Runtime path"
-							className={compactSelectClassName}
-							dropdownClassName={compactSelectDropdownClassName}
-						/>
-						<Select
-							options={savedStatusOptions}
-							value={status}
-							onChange={(value) => setFilter("status", value)}
-							placeholder="HRIS result"
-							className={compactSelectClassName}
-							dropdownClassName={compactSelectDropdownClassName}
-						/>
+						<FilterField label="Runtime path">
+							<Select
+								options={sourceOptions}
+								value={source}
+								onChange={(value) => setFilter("source", value)}
+								placeholder="Runtime path"
+								className={compactSelectClassName}
+								dropdownClassName={compactSelectDropdownClassName}
+							/>
+						</FilterField>
+						<FilterField label="HRIS result">
+							<Select
+								options={savedStatusOptions}
+								value={status}
+								onChange={(value) => setFilter("status", value)}
+								placeholder="HRIS result"
+								className={compactSelectClassName}
+								dropdownClassName={compactSelectDropdownClassName}
+							/>
+						</FilterField>
 					</div>
 				) : null}
 
@@ -2266,7 +2259,7 @@ export default function DeviceEventsPage() {
 					showExport={false}
 					noCard
 					searchPlaceholder="Search employee or device..."
-					searchWidth="w-full sm:w-72"
+					searchWidth="w-full sm:w-[290px]"
 					searchValue={viewMode === "saved" ? query : ""}
 					onSearch={(value) => setFilter("query", value)}
 					onSort={(key, direction) => {
@@ -2300,6 +2293,7 @@ export default function DeviceEventsPage() {
 							? "bg-emerald-50/80 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-50"
 							: ""
 					}
+					containedScroll
 				/>
 			</div>
 

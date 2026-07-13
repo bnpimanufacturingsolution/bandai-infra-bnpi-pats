@@ -11,6 +11,7 @@ interface IController {
 	controlHikvisionListener(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceSyncPreview(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceSyncRuns(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceActivity(req: Request, res: Response, next: NextFunction): Promise<void>;
 	resetDeviceEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
 	triggerZktecoAttendanceSync(req: Request, res: Response, next: NextFunction): Promise<void>;
 	triggerHikvisionAttendanceImport(
@@ -93,6 +94,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/hikvision/mirror-face", controller.mirrorHikvisionFaceToPeers);
 	routes.post("/hikvision/mock-fingerprint", controller.mockHikvisionFingerprintTally);
 	routes.post("/hikvision/mock-face", controller.mockHikvisionFaceTally);
+	routes.get("/:id/activity", controller.getDeviceActivity);
 	routes.get("/:id/sync-runs", controller.getDeviceSyncRuns);
 	routes.post("/users/:userId/link", controller.linkDeviceUser);
 	routes.post("/users/:userId/unlink", controller.unlinkDeviceUser);

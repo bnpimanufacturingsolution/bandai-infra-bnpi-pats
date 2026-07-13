@@ -2183,6 +2183,368 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const normalizeDeviceActivityStatus = (
+		run?: { status?: string | null; runType?: string | null } | null,
+	) => {
+		const status = String(run?.status || "").toUpperCase();
+		const runType = String(run?.runType || "").toUpperCase();
+		if (status === "PROCESSING") {
+			if (runType === "DEVICE_USERS") return "reconciling";
+			if (runType === "DEVICE_LOGS") return "importing";
+			return "running";
+		}
+		if (status === "FAILED") return "failed";
+		if (status === "COMPLETED") return "completed";
+		return "idle";
+	};
+
+	const getActiveDeviceUserSyncJobForDevice = (
+		organizationId: string,
+		deviceId: string,
+	) => {
+		cleanupDeviceUserSyncJobs();
+		for (const job of deviceUserSyncJobs.values()) {
+			if (job.organizationId !== organizationId || job.status !== "processing") continue;
+			const result = job.results.find((item) => item.deviceId === deviceId);
+			const isPendingDevice =
+				!result &&
+				job.processedDevices < job.totalDevices &&
+				(job.syncMode === "full_refresh" ||
+					job.syncMode === "needs_attention_only" ||
+					job.syncMode === "peer_converge");
+			if (result || isPendingDevice) {
+				return {
+					jobId: job.jobId,
+					status: job.status,
+					syncMode: job.syncMode,
+					totalDevices: job.totalDevices,
+					processedDevices: job.processedDevices,
+					successfulDevices: job.successfulDevices,
+					failedDevices: job.failedDevices,
+					message: job.message,
+					result: result || null,
+					startedAt: job.startedAt,
+					completedAt: job.completedAt || null,
+				};
+			}
+		}
+		return null;
+	};
+
+	const getDeviceActivity = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+			const organizationId = String((req as any).organizationId || "").trim();
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("Organization ID not found", 400));
+				return;
+			}
+			const deviceId = String(req.params.id || "").trim();
+			if (!deviceId) {
+				res.status(400).json(buildErrorResponse("Device is required", 400));
+				return;
+			}
+
+			const statusFilter = String(req.query.status || "all").trim();
+			const sourceFilter = String(req.query.source || "all").trim();
+			const runId = String(req.query.runId || "").trim();
+			const search = String(req.query.search || req.query.query || "").trim();
+			const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 100);
+
+			const device = await prisma.device.findFirst({
+				where: { id: deviceId, organizationId, isDeleted: false },
+				select: {
+					id: true,
+					name: true,
+					address: true,
+					port: true,
+					protocol: true,
+					config: true,
+				},
+			});
+			if (!device) {
+				res.status(404).json(buildErrorResponse("Device not found", 404));
+				return;
+			}
+
+			const [syncRuns, hasDeviceEventColumns, hasDeviceUsersTable] = await Promise.all([
+				(prisma as any).deviceSyncRun
+					.findMany({
+						where: { organizationId, deviceId },
+						orderBy: [{ startedAt: "desc" }, { createdAt: "desc" }],
+						take: 12,
+						select: {
+							id: true,
+							deviceId: true,
+							runType: true,
+							status: true,
+							source: true,
+							totalSourceRecords: true,
+							importableRecords: true,
+							savedRecords: true,
+							skippedRecords: true,
+							failedRecords: true,
+							missingRecords: true,
+							skipSummary: true,
+							failureSummary: true,
+							rawSummary: true,
+							startedAt: true,
+							completedAt: true,
+							createdAt: true,
+							updatedAt: true,
+						},
+					})
+					.catch((error: unknown) => {
+						if (isMissingDeviceSyncRunTableError(error)) return [];
+						throw error;
+					}),
+				getDeviceEventColumnPresence(),
+				hasDeviceUserTable(),
+			]);
+
+			const activeRun =
+				syncRuns.find((run: any) => String(run.status || "").toUpperCase() === "PROCESSING") ||
+				null;
+			const lastRun = syncRuns[0] || null;
+			const activeJob = getActiveDeviceUserSyncJobForDevice(organizationId, deviceId);
+			const currentStatus = activeJob
+				? "reconciling"
+				: normalizeDeviceActivityStatus(activeRun || lastRun);
+
+			const whereConditions: Prisma.Sql[] = [
+				Prisma.sql`de."organizationId" = ${organizationId}`,
+				Prisma.sql`de."deviceId" = ${deviceId}`,
+			];
+			if (statusFilter && statusFilter !== "all" && DEVICE_EVENT_STATUSES.has(statusFilter)) {
+				whereConditions.push(
+					Prisma.sql`de."status" = ${statusFilter}::"DeviceEventStatus"`,
+				);
+			}
+			if (sourceFilter && sourceFilter !== "all" && DEVICE_EVENT_SOURCES.has(sourceFilter)) {
+				whereConditions.push(
+					Prisma.sql`de."source" = ${sourceFilter}::"DeviceEventSource"`,
+				);
+			}
+			if (search) {
+				const searchLike = `%${search}%`;
+				whereConditions.push(Prisma.sql`(
+					de."employeeNo" ILIKE ${searchLike}
+					OR de."eventType" ILIKE ${searchLike}
+					OR de."errorMessage" ILIKE ${searchLike}
+					OR de."dedupeKey" ILIKE ${searchLike}
+					OR CAST(de.payload AS text) ILIKE ${searchLike}
+					${
+						hasDeviceEventColumns.eventLabel
+							? Prisma.sql`OR de."eventLabel" ILIKE ${searchLike}`
+							: Prisma.sql``
+					}
+				)`);
+			}
+			void runId;
+
+			const deviceUserIdSql = hasDeviceEventColumns.deviceUserId
+				? Prisma.sql`de."deviceUserId"`
+				: Prisma.sql`NULL::text`;
+			const eventActionSql = hasDeviceEventColumns.eventAction
+				? Prisma.sql`de."eventAction"::text`
+				: Prisma.sql`'UNKNOWN'::text`;
+			const eventLabelSql = hasDeviceEventColumns.eventLabel
+				? Prisma.sql`de."eventLabel"`
+				: Prisma.sql`COALESCE(de."eventType", 'Device event')`;
+			const deviceUserJoinSql = hasDeviceUsersTable && hasDeviceEventColumns.deviceUserId
+				? Prisma.sql`LEFT JOIN device_users du ON du.id = ${deviceUserIdSql}`
+				: Prisma.sql`
+					LEFT JOIN LATERAL (
+						SELECT NULL::text AS id, NULL::text AS "vendorUserId", NULL::text AS "displayName", NULL::text AS "employeeId"
+					) du ON true
+				`;
+			const whereSql = Prisma.sql`WHERE ${Prisma.join(whereConditions, " AND ")}`;
+			const eventRows = await prisma.$queryRaw<any[]>(Prisma.sql`
+				SELECT
+					de.id,
+					de."receivedAt",
+					de."eventTime",
+					de.source::text AS source,
+					de.status::text AS status,
+					${
+						hasDeviceEventColumns.eventCategory
+							? Prisma.sql`de."eventCategory"::text`
+							: Prisma.sql`'UNKNOWN_VENDOR'::text`
+					} AS "eventCategory",
+					${eventActionSql} AS "eventAction",
+					${eventLabelSql} AS "eventLabel",
+					de."employeeNo",
+					de."eventType",
+					de."dedupeKey",
+					de.payload,
+					de."errorMessage",
+					CASE
+						WHEN du.id IS NULL THEN NULL
+						ELSE JSON_BUILD_OBJECT(
+							'id', du.id,
+							'vendorUserId', du."vendorUserId",
+							'displayName', du."displayName",
+							'employeeId', du."employeeId"
+						)
+					END AS "deviceUser"
+				FROM device_events de
+				${deviceUserJoinSql}
+				${whereSql}
+				ORDER BY de."receivedAt" DESC, de."createdAt" DESC
+				LIMIT ${limit}
+			`);
+
+			const deviceUserWhere: any = { organizationId, deviceId };
+			const [deviceUserCounts, savedCounts] = await Promise.all([
+				hasDeviceUsersTable
+					? (prisma as any).deviceUser
+							.groupBy({
+								by: ["status"],
+								where: deviceUserWhere,
+								_count: { _all: true },
+							})
+							.catch((error: unknown) => {
+								if (isMissingDeviceUserTableError(error)) return [];
+								throw error;
+							})
+					: [],
+				prisma.deviceEvent
+					.groupBy({
+						by: ["status"],
+						where: { organizationId, deviceId } as any,
+						_count: { _all: true },
+					})
+					.catch(() => []),
+			]);
+			const deviceUserCountMap = new Map(
+				(deviceUserCounts || []).map((row: any) => [
+					String(row.status || ""),
+					Number(row._count?._all || 0),
+				]),
+			);
+			const savedEventCountMap = new Map(
+				(savedCounts || []).map((row: any) => [
+					String(row.status || ""),
+					Number(row._count?._all || 0),
+				]),
+			);
+
+			const activeCounts = activeRun || lastRun || {};
+			const counts = {
+				sdkReceived: Number(activeCounts.totalSourceRecords || 0),
+				parsed: Number(activeCounts.importableRecords || 0),
+				savedInHris:
+					Number(activeCounts.savedRecords || 0) ||
+					Number(savedEventCountMap.get("ATTENDANCE_CREATED") || 0) +
+						Number(savedEventCountMap.get("MATCHED") || 0),
+				skipped: Number(activeCounts.skippedRecords || 0),
+				failed:
+					Number(activeCounts.failedRecords || 0) ||
+					Number(savedEventCountMap.get("FAILED") || 0),
+				needsLink: Number(deviceUserCountMap.get("UNMATCHED") || 0),
+				gap: Number(activeCounts.missingRecords || 0),
+			};
+
+			const readActivityRowValue = (event: any, key: string) =>
+				event?.[key] ?? event?.[key.toLowerCase()] ?? null;
+
+			const events = eventRows.map((event) => {
+				const payload = event.payload && typeof event.payload === "object" ? event.payload : null;
+				const deviceUser = event.deviceUser || null;
+				const eventCategory = readActivityRowValue(event, "eventCategory");
+				const eventAction = readActivityRowValue(event, "eventAction");
+				const eventLabel = readActivityRowValue(event, "eventLabel");
+				const rawId =
+					String(deviceUser?.vendorUserId || event.employeeNo || "").trim() ||
+					String(payload?.employeeNoString || payload?.employeeNo || payload?.cardNo || "").trim() ||
+					null;
+				const origin =
+					payload?.derivedFromCurrentDeviceState
+						? "device_user_state_backfill"
+						: payload?.derivedFromReconcile
+							? "biometric_reconcile"
+							: event.source === "EN_HCNETSDK_ALARM"
+								? "sdk_alarm_callback"
+								: event.source === "HIKVISION_CALLBACK"
+									? "hikvision_callback"
+									: event.source === "ZKTECO_EVENT"
+										? "zkteco_bridge"
+										: "device_event";
+				const originLabel =
+					payload?.derivedFromCurrentDeviceState
+						? "Derived from current device-user state"
+						: payload?.derivedFromReconcile
+							? "Created by biometric reconcile"
+							: event.source === "EN_HCNETSDK_ALARM"
+								? "Received from SDK alarm listener"
+								: event.source === "HIKVISION_CALLBACK"
+									? "Received from Hikvision callback"
+									: event.source === "ZKTECO_EVENT"
+										? "Received from ZKTeco bridge"
+										: "Saved device event";
+				return {
+					id: event.id,
+					receivedAt: event.receivedAt,
+					deviceEventTime: event.eventTime,
+					source: event.source,
+					eventCategory,
+					eventAction,
+					eventLabel,
+					rawId,
+					employeeMatch: deviceUser?.employeeId
+						? { employeeId: deviceUser.employeeId, label: deviceUser.displayName || rawId }
+						: null,
+					hrisStatus: event.status,
+					action: eventLabel || eventAction || event.eventType || "-",
+					origin,
+					originLabel,
+					originDetail:
+						String(payload?.backfillReason || payload?.eventKind || payload?.actionCode || "").trim() ||
+						null,
+					message: event.errorMessage || null,
+					runId: runId || null,
+					correlationId: event.dedupeKey,
+					payload,
+				};
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"Device activity retrieved",
+					{
+						generatedAt: new Date().toISOString(),
+						device,
+						status: currentStatus,
+						activeRun,
+						activeJob,
+						lastRun,
+						counts,
+						filters: {
+							status: statusFilter || "all",
+							source: sourceFilter || "all",
+							runId: runId || null,
+							search,
+							limit,
+						},
+						events,
+						rawSdkPersistence: {
+							persisted: false,
+							message:
+								"Raw SDK source reads are not persisted as a separate stream yet; this table uses saved DeviceEvent rows and linked DeviceUser payloads.",
+						},
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			deviceLogger.error(`Device activity failed: ${error?.message || error}`);
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Failed to retrieve device activity", 500),
+			);
+		}
+	};
+
 	const fetchAllHikvisionDeviceUsers = async (req: Request, device: any) => {
 		const pageSize = Math.max(
 			1,
@@ -9266,6 +9628,7 @@ export const controller = (prisma: PrismaClient) => {
 		controlHikvisionListener,
 		getDeviceSyncPreview,
 		getDeviceSyncRuns,
+		getDeviceActivity,
 		listDeviceUsers,
 		getDeviceUserPhoto,
 		syncDeviceUsers,

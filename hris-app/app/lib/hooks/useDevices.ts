@@ -5,6 +5,7 @@ import devicesService, {
 	type DeviceHealthResponse,
 	type DeviceSyncPreviewResponse,
 	type DeviceSyncRunsResponse,
+	type DeviceActivityResponse,
 	type DeviceImportJobProgress,
 	type DeviceUserSyncJobStartRequest,
 	type DeviceUserSyncJobProgress,
@@ -53,6 +54,16 @@ export const queryKeys = {
 		) => [...queryKeys.devices.all, "employee-users", employeeId, { params }] as const,
 		syncRuns: (deviceId?: string, params?: { limit?: number }) =>
 			[...queryKeys.devices.all, "sync-runs", deviceId, { params }] as const,
+		activity: (
+			deviceId?: string,
+			params?: {
+				limit?: number;
+				status?: string;
+				source?: string;
+				runId?: string;
+				search?: string;
+			},
+		) => [...queryKeys.devices.all, "activity", deviceId, { params }] as const,
 	},
 };
 
@@ -412,6 +423,28 @@ export const usePreviewDeviceUserExport = () => {
 		onError: (error: any) => {
 			sonnerToast.error(error?.message || "Failed to preview device-user export");
 		},
+	});
+};
+
+export const useDeviceActivity = (
+	deviceId?: string,
+	params: {
+		limit?: number;
+		status?: string;
+		source?: string;
+		runId?: string;
+		search?: string;
+	} = {},
+	enabled = true,
+	options: { refetchInterval?: number | false } = {},
+) => {
+	return useQuery<DeviceActivityResponse>({
+		queryKey: queryKeys.devices.activity(deviceId, params),
+		queryFn: () => devicesService.getDeviceActivity(deviceId || "", params),
+		enabled: Boolean(deviceId) && enabled,
+		staleTime: 10 * 1000,
+		refetchInterval: options.refetchInterval ?? false,
+		retry: 1,
 	});
 };
 
