@@ -55,7 +55,7 @@ import { summarizeHikvisionListenerLogs } from "../../helper/hikvision-listener-
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
 import net from "net";
 import { execFile } from "child_process";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import fs from "fs/promises";
 import fsSync from "fs";
 import * as os from "os";
@@ -124,6 +124,7 @@ const HIKVISION_PEER_COPY_RETRY_LIMIT = Math.max(
 );
 const DEVICE_USER_EXPORT_SCHEMA_VERSION = "project-truth.hikvision-device-users.v1";
 const DEVICE_USER_IMPORT_CONFIRMATION = "IMPORT DEVICE USERS";
+const DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM = "aes-256-gcm";
 
 type DeviceImportJobStatus = "processing" | "completed" | "failed" | "cancelled";
 
@@ -3569,6 +3570,181 @@ export const controller = (prisma: PrismaClient) => {
 		return rows.map(decorateDeviceUser);
 	};
 
+	const normalizeDeviceUserExportSelection = (value: unknown) => {
+		const selection = String(value || "all").trim();
+		return ["all", "filtered", "currentPage", "selectedRows"].includes(selection)
+			? selection
+			: "all";
+	};
+
+	const normalizeDeviceUserExportVendorIds = (value: unknown) =>
+		Array.from(
+			new Set(
+				[]
+					.concat(value as any)
+					.flatMap((item) => String(item || "").split(","))
+					.map((item) => item.trim())
+					.filter(Boolean),
+			),
+		).slice(0, 500);
+
+	const filterDeviceUserExportRows = (
+		rows: any[],
+		options: {
+			selection?: string;
+			status?: string;
+			query?: string;
+			page?: number;
+			limit?: number;
+			vendorUserIds?: string[];
+		},
+	) => {
+		const selection = normalizeDeviceUserExportSelection(options.selection);
+		const vendorUserIds = normalizeDeviceUserExportVendorIds(options.vendorUserIds);
+		const vendorUserIdSet = new Set(vendorUserIds);
+		const status = String(options.status || "all").trim();
+		const query = String(options.query || "").trim().toLowerCase();
+		let selectedRows = rows;
+		if (vendorUserIdSet.size > 0) {
+			selectedRows = rows
+				.filter((row) => vendorUserIdSet.has(String(row.vendorUserId || "").trim()))
+				.sort(
+					(left, right) =>
+						vendorUserIds.indexOf(String(left.vendorUserId || "").trim()) -
+						vendorUserIds.indexOf(String(right.vendorUserId || "").trim()),
+				);
+		} else if (selection === "filtered" || selection === "currentPage") {
+			selectedRows = rows.filter((row) => {
+				const rowStatus = String(row.status || "").trim();
+				const statusMatch =
+					!status ||
+					status === "all" ||
+					rowStatus === status ||
+					(status === "UNMATCHED" && rowStatus === "SOURCE_ONLY");
+				if (!statusMatch) return false;
+				if (!query) return true;
+				return [
+					row.vendorUserId,
+					row.employeeNo,
+					row.displayName,
+					row.userType,
+					row.hrisDeviceUser?.employee?.employeeId,
+					row.hrisDeviceUser?.employee?.fullName,
+				]
+					.filter(Boolean)
+					.some((value) => String(value).toLowerCase().includes(query));
+			});
+			if (selection === "currentPage") {
+				const page = Math.max(Number(options.page || 1), 1);
+				const limit = Math.min(Math.max(Number(options.limit || 25), 1), 500);
+				selectedRows = selectedRows.slice((page - 1) * limit, page * limit);
+			}
+		}
+		return {
+			rows: selectedRows,
+			selection: {
+				mode: selection,
+				status,
+				query,
+				page:
+					selection === "currentPage" && vendorUserIds.length === 0
+						? Math.max(Number(options.page || 1), 1)
+						: null,
+				limit:
+					selection === "currentPage" && vendorUserIds.length === 0
+						? Math.min(Math.max(Number(options.limit || 25), 1), 500)
+						: null,
+				vendorUserIds,
+				matchedRows: selectedRows.length,
+				totalRowsBeforeSelection: rows.length,
+			},
+		};
+	};
+
+	const buildDeviceUserImportPreviewToken = (params: {
+		organizationId: string;
+		targetDeviceId: string;
+		payload: any;
+		planRows: any[];
+	}) =>
+		createHash("sha256")
+			.update(
+				JSON.stringify({
+					organizationId: params.organizationId,
+					targetDeviceId: params.targetDeviceId,
+					schemaVersion: params.payload?.schemaVersion || null,
+					exportedAt: params.payload?.exportedAt || null,
+					sourceDevices: (params.payload?.devices || []).map((device: any) => ({
+						id: device?.device?.id || null,
+						name: device?.device?.name || null,
+					})),
+					users: params.planRows.map((row) => ({
+						vendorUserId: row.vendorUserId,
+						action: row.action,
+						sourceDeviceId: row.sourceDeviceId || null,
+						conflictFields: row.conflictFields || [],
+					})),
+				}),
+			)
+			.digest("hex");
+
+	const BIOMETRIC_TEMPLATE_KEY_PATTERN =
+		/(finger.*(template|data|payload|bytes)|fp.*(template|data|payload|bytes)|face.*(template|data|payload|bytes)|templateData|templateBytes|byFingerData|fingerData|faceData|imageData|photoData|biometric.*(template|data|payload|bytes))/i;
+
+	const sanitizeDeviceUserPortableValue = (value: any, key = ""): any => {
+		if (value == null) return value;
+		if (BIOMETRIC_TEMPLATE_KEY_PATTERN.test(key)) {
+			return "[redacted-biometric-template]";
+		}
+		if (Buffer.isBuffer(value)) return "[redacted-binary-value]";
+		if (Array.isArray(value)) {
+			return value.map((item) => sanitizeDeviceUserPortableValue(item));
+		}
+		if (typeof value === "object") {
+			return Object.fromEntries(
+				Object.entries(value).map(([entryKey, entryValue]) => [
+					entryKey,
+					sanitizeDeviceUserPortableValue(entryValue, entryKey),
+				]),
+			);
+		}
+		return value;
+	};
+
+	const sanitizeDeviceUserImportPayloadForBackup = (payload: any) => ({
+		schemaVersion: payload?.schemaVersion || null,
+		exportedAt: payload?.exportedAt || null,
+		scope: payload?.scope || null,
+		policy: payload?.policy || null,
+		biometricBundle: payload?.biometricBundle
+			? {
+					...payload.biometricBundle,
+					ciphertext: payload.biometricBundle.ciphertext
+						? "[encrypted-bundle-redacted]"
+						: undefined,
+				}
+			: null,
+		summary: payload?.summary || null,
+		devices: (Array.isArray(payload?.devices) ? payload.devices : []).map((device: any) => ({
+			device: device?.device || null,
+			sourceRead: device?.sourceRead || null,
+			capabilities: device?.capabilities || null,
+			summary: device?.summary || null,
+			userCount: Array.isArray(device?.users) ? device.users.length : 0,
+			users: (Array.isArray(device?.users) ? device.users : []).map((user: any) => ({
+				vendorUserId: user?.vendorUserId || null,
+				employeeNo: user?.employeeNo || null,
+				displayName: user?.displayName || null,
+				status: user?.status || null,
+				sourceDeviceId: user?.sourceDeviceId || null,
+				credentialSummary:
+					user?.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
+					user?.vendorMetadata?.credentialSummary ||
+					null,
+			})),
+		})),
+	});
+
 	const buildDeviceUserExportPayload = async (
 		req: Request,
 		options: {
@@ -3579,6 +3755,13 @@ export const controller = (prisma: PrismaClient) => {
 			includeCards?: boolean;
 			includeFingerprints?: boolean;
 			includeFaces?: boolean;
+			encryptedBiometricBundle?: boolean;
+			selection?: string;
+			status?: string;
+			query?: string;
+			page?: number;
+			limit?: number;
+			vendorUserIds?: string[];
 		},
 	) => {
 		const requestedScope = options.scope || "currentDevice";
@@ -3646,6 +3829,19 @@ export const controller = (prisma: PrismaClient) => {
 			const rows = allVendorUserIds.map((vendorUserId) => {
 				const saved = savedByVendorUserId.get(vendorUserId) as any;
 				const source = sourceByVendorUserId.get(vendorUserId);
+				const rawPayload = sanitizeDeviceUserPortableValue(
+					saved?.rawPayload || source?.rawPayload || null,
+				);
+				const vendorMetadata = sanitizeDeviceUserPortableValue(
+					saved?.vendorMetadata ||
+						source?.vendorMetadata ||
+						(rawPayload
+							? {
+									source: "rawPayload",
+									rawVendorPayload: rawPayload,
+								}
+							: null),
+				);
 				return {
 					vendorUserId,
 					employeeNo: saved?.employeeNo || source?.employeeNo || vendorUserId,
@@ -3662,26 +3858,30 @@ export const controller = (prisma: PrismaClient) => {
 								employeeId: saved.employeeId || null,
 								lastSyncedAt: saved.lastSyncedAt || null,
 								employee: saved.employee || null,
-							}
+						}
 						: null,
-					rawPayload: saved?.rawPayload || source?.rawPayload || null,
-					vendorMetadata:
-						saved?.vendorMetadata ||
-						source?.vendorMetadata ||
-						(saved?.rawPayload || source?.rawPayload
-							? {
-									source: "rawPayload",
-									rawVendorPayload: saved?.rawPayload || source?.rawPayload,
-								}
-							: null),
+					rawPayload,
+					vendorMetadata,
 				};
 			});
-			const linked = rows.filter((row) => row.hrisDeviceUser?.employeeId).length;
+			const selected = filterDeviceUserExportRows(rows, {
+				selection: options.selection,
+				status: options.status,
+				query: options.query,
+				page: options.page,
+				limit: options.limit,
+				vendorUserIds: options.vendorUserIds,
+			});
+			const exportRows = selected.rows;
+			const linked = exportRows.filter((row) => row.hrisDeviceUser?.employeeId).length;
 			const capabilitySummary = await discoverHikvisionUserExportCapabilities(req, device, {
 				includeCards: options.includeCards,
 				includeFingerprints: options.includeFingerprints,
 				includeFaces: options.includeFaces,
 			});
+			const sensitiveCredentialRequested =
+				Boolean(options.includeFingerprints || options.includeFaces) &&
+				Boolean(options.encryptedBiometricBundle);
 			exportDevices.push({
 				device: {
 					id: device.id,
@@ -3696,24 +3896,29 @@ export const controller = (prisma: PrismaClient) => {
 				sourceRead,
 				capabilities: capabilitySummary,
 				summary: {
-					totalUsers: rows.length,
+					totalUsers: exportRows.length,
 					readFromDevice: sourceSnapshot.rawUsers.length,
 					savedInHris: savedUsers.length,
 					linked,
-					unlinked: Math.max(rows.length - linked, 0),
+					unlinked: Math.max(exportRows.length - linked, 0),
+					selection: selected.selection,
 					credentialTypes: {
 						users: "included",
 						hrisLinks: "included",
 						cards: capabilitySummary.support.cardExport ? "supported" : "unsupported_or_not_requested",
 						fingerprints: capabilitySummary.support.fingerprintExport
-							? "supported_but_template_export_blocked_by_policy"
+							? sensitiveCredentialRequested
+								? "encrypted_bundle_required_or_sdk_peer_copy"
+								: "supported_but_template_export_blocked_by_policy"
 							: "unsupported_or_not_requested",
 						faces: capabilitySummary.support.faceImportExport
-							? "supported_by_probe"
+							? sensitiveCredentialRequested
+								? "encrypted_bundle_required_or_sdk_peer_copy"
+								: "supported_by_probe"
 							: "unsupported_or_not_requested",
 					},
 				},
-				users: options.includeRecords ? rows : [],
+				users: options.includeRecords ? exportRows : [],
 			});
 		}
 
@@ -3724,12 +3929,36 @@ export const controller = (prisma: PrismaClient) => {
 				type: requestedScope,
 				deviceId: options.deviceId || null,
 				sourceEndpoint: "POST /ISAPI/AccessControl/UserInfo/Search?format=json",
+				selection: normalizeDeviceUserExportSelection(options.selection),
+				status: options.status || "all",
+				query: options.query || "",
+				page: options.page || null,
+				limit: options.limit || null,
 			},
 			policy: {
 				mutating: false,
 				fingerprintTemplateCustody:
-					"raw fingerprint templates are not exported by this normal JSON path",
+					"raw fingerprint and face template bytes are never exported in normal JSON",
+				biometricTransferModes: ["sdkPeerCopy", "encryptedBundle"],
 			},
+			biometricBundle: options.encryptedBiometricBundle
+				? {
+						present: false,
+						requiredForPortableTemplateImport: Boolean(
+							options.includeFingerprints || options.includeFaces,
+						),
+						algorithm: DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM,
+						status: "not_created_by_json_export",
+						reason:
+							"Normal JSON export carries only metadata. Template bytes must be captured into a separate encrypted bundle or copied device-to-device through the SDK peer-copy path.",
+						plaintextPolicy:
+							"Do not write raw biometric template bytes to JSON, logs, screenshots, or reports.",
+					}
+				: {
+						present: false,
+						requiredForPortableTemplateImport: false,
+						status: "not_requested",
+					},
 			devices: exportDevices,
 			summary: {
 				devices: exportDevices.length,
@@ -3754,6 +3983,13 @@ export const controller = (prisma: PrismaClient) => {
 				includeCards: body.includeCards === true,
 				includeFingerprints: body.includeFingerprints === true,
 				includeFaces: body.includeFaces === true,
+				encryptedBiometricBundle: body.encryptedBiometricBundle === true,
+				selection: body.selection,
+				status: body.status,
+				query: body.query,
+				page: Number(body.page || 0) || undefined,
+				limit: Number(body.limit || 0) || undefined,
+				vendorUserIds: normalizeDeviceUserExportVendorIds(body.vendorUserIds),
 			});
 			res.status(200).json(buildSuccessResponse("Device user export preview built", payload, 200));
 		} catch (error: any) {
@@ -3778,6 +4014,13 @@ export const controller = (prisma: PrismaClient) => {
 				includeCards: body.includeCards === true,
 				includeFingerprints: body.includeFingerprints === true,
 				includeFaces: body.includeFaces === true,
+				encryptedBiometricBundle: body.encryptedBiometricBundle === true,
+				selection: body.selection,
+				status: body.status,
+				query: body.query,
+				page: Number(body.page || 0) || undefined,
+				limit: Number(body.limit || 0) || undefined,
+				vendorUserIds: normalizeDeviceUserExportVendorIds(body.vendorUserIds),
 			});
 			res.status(200).json(buildSuccessResponse("Device users exported", payload, 200));
 		} catch (error: any) {
@@ -3871,6 +4114,17 @@ export const controller = (prisma: PrismaClient) => {
 					conflictFields,
 					missingEmployee: employeeNo ? !employeeKeys.has(employeeNo) : true,
 					currentDeviceUserId: current?.id || null,
+					credentialGap: {
+						card: false,
+						fingerprint: false,
+						face: false,
+					},
+					transferMode:
+						user.sourceDeviceId && user.sourceDeviceId !== targetDevice.id
+							? "sdkPeerCopy"
+							: payload?.biometricBundle?.present
+								? "encryptedBundle"
+								: "metadataOnly",
 				};
 			});
 			const unsupportedCredentialTypes = Array.from(
@@ -3904,10 +4158,37 @@ export const controller = (prisma: PrismaClient) => {
 					missingHrisEmployees: planRows.filter((row: any) => row.missingEmployee).length,
 				},
 				unsupportedCredentialTypes,
+				biometricBundle: {
+					present: Boolean(payload?.biometricBundle?.present),
+					requiredForPortableTemplateImport: Boolean(
+						payload?.biometricBundle?.requiredForPortableTemplateImport,
+					),
+					algorithm: payload?.biometricBundle?.algorithm || null,
+					status: payload?.biometricBundle?.status || "not_present",
+					unlockable: false,
+					plaintextExposed: false,
+					transferModes: Array.from(
+						new Set(planRows.map((row: any) => row.transferMode).filter(Boolean)),
+					),
+				},
+				previewToken: buildDeviceUserImportPreviewToken({
+					organizationId: gate.organizationId,
+					targetDeviceId: targetDevice.id,
+					payload,
+					planRows,
+				}),
 				plan: planRows.slice(0, 500),
-				executeAvailable: false,
+				executeAvailable: planRows.length > 0,
 				executeBlockedReason:
-					"Import execute is disabled until a safe Hikvision user-write plan is reviewed with backup/recovery evidence.",
+					planRows.length > 0
+						? null
+						: "Import file contains no users for the selected target.",
+				executeRequirements: [
+					`confirmation="${DEVICE_USER_IMPORT_CONFIRMATION}"`,
+					"previewToken from this preview response",
+					"biometricTransferMode=sdkPeerCopy or an encrypted bundle passphrase when importing portable template payloads",
+					"additive create/update only",
+				],
 			};
 			res.status(200).json(buildSuccessResponse("Device user import preview built", preview, 200));
 		} catch (error: any) {
@@ -3930,12 +4211,257 @@ export const controller = (prisma: PrismaClient) => {
 			);
 			return;
 		}
-		res.status(409).json(
-			buildErrorResponse(
-				"Device-user import execute is not enabled yet; run import preview and implement a reviewed safe write path first.",
-				409,
-			),
-		);
+		try {
+			const payload = getImportPayloadFromRequest(body);
+			const targetDeviceId = String(body.targetDeviceId || body.deviceId || "").trim();
+			const previewToken = String(body.previewToken || "").trim();
+			const biometricTransferMode = String(
+				body.biometricTransferMode || "sdkPeerCopy",
+			).trim();
+			const passphraseProvided = Boolean(
+				String(body.biometricBundlePassphrase || body.encryptionPassphrase || "").trim(),
+			);
+
+			if (!payload || payload.schemaVersion !== DEVICE_USER_EXPORT_SCHEMA_VERSION) {
+				res.status(400).json(
+					buildErrorResponse("Import file schema is not a supported device-user export", 400),
+				);
+				return;
+			}
+			const targetDevice = await getDeviceForUserSync(gate.organizationId, targetDeviceId);
+			if (!targetDevice || !isHikvisionDevice(targetDevice)) {
+				res.status(400).json(
+					buildErrorResponse("Select a Hikvision target device before import execute", 400),
+				);
+				return;
+			}
+
+			const importedUsers = (Array.isArray(payload.devices) ? payload.devices : []).flatMap(
+				(device: any) =>
+					(Array.isArray(device?.users) ? device.users : []).map((user: any) => ({
+						...user,
+						sourceDeviceId: device?.device?.id || user?.sourceDeviceId || null,
+						sourceDeviceName: device?.device?.name || user?.sourceDeviceName || null,
+					})),
+			);
+			const currentUsers = await loadDeviceUsersForExport(gate.organizationId, targetDevice.id);
+			const currentByVendorUserId = new Map(
+				currentUsers.map((user: any) => [String(user.vendorUserId || "").trim(), user]),
+			);
+			const planRows = importedUsers.map((user: any) => {
+				const vendorUserId = String(user.vendorUserId || "").trim();
+				const current = currentByVendorUserId.get(vendorUserId) as any;
+				const conflictFields = current
+					? (["displayName", "employeeNo", "userType"] as const).filter(
+							(field) =>
+								String(current?.[field] || "").trim() !==
+								String(user?.[field] || "").trim(),
+						)
+					: [];
+				return {
+					vendorUserId,
+					employeeNo: String(user.employeeNo || vendorUserId).trim(),
+					sourceDeviceId: user.sourceDeviceId || null,
+					sourceDeviceName: user.sourceDeviceName || null,
+					action: current ? (conflictFields.length ? "review_conflict" : "match") : "create_preview",
+					conflictFields,
+					currentDeviceUserId: current?.id || null,
+					rawUser: user,
+				};
+			});
+			const expectedPreviewToken = buildDeviceUserImportPreviewToken({
+				organizationId: gate.organizationId,
+				targetDeviceId: targetDevice.id,
+				payload,
+				planRows,
+			});
+			if (!previewToken || previewToken !== expectedPreviewToken) {
+				res.status(400).json(
+					buildErrorResponse(
+						"Import execute requires a fresh previewToken from import preview",
+						400,
+					),
+				);
+				return;
+			}
+			if (payload?.biometricBundle?.present && !passphraseProvided) {
+				res.status(400).json(
+					buildErrorResponse(
+						"Encrypted biometric bundle import requires a passphrase for this request",
+						400,
+					),
+				);
+				return;
+			}
+			if (
+				payload?.biometricBundle?.requiredForPortableTemplateImport &&
+				biometricTransferMode !== "sdkPeerCopy" &&
+				!passphraseProvided
+			) {
+				res.status(400).json(
+					buildErrorResponse(
+						"Portable biometric import requires an encrypted bundle passphrase; use sdkPeerCopy only when the source device is reachable",
+						400,
+					),
+				);
+				return;
+			}
+			if (!["sdkPeerCopy", "metadataOnly", "encryptedBundle"].includes(biometricTransferMode)) {
+				res.status(400).json(buildErrorResponse("Unsupported biometric transfer mode", 400));
+				return;
+			}
+
+			const backupDir = path.join(
+				process.cwd(),
+				"..",
+				".runtime",
+				"backups",
+				`device-user-import-${new Date().toISOString().replace(/[:.]/g, "-")}`,
+			);
+			await fs.mkdir(backupDir, { recursive: true });
+			await Promise.all([
+				writeJsonFile(path.join(backupDir, "target-device-users-before.json"), currentUsers),
+				writeJsonFile(
+					path.join(backupDir, "import-package-manifest.json"),
+					sanitizeDeviceUserImportPayloadForBackup(payload),
+				),
+				writeJsonFile(path.join(backupDir, "plan.json"), {
+					targetDeviceId: targetDevice.id,
+					previewToken,
+					biometricTransferMode,
+					rows: planRows.map(({ rawUser: _rawUser, ...row }: any) => row),
+				}),
+			]);
+
+			const devices = await prisma.device.findMany({
+				where: {
+					organizationId: gate.organizationId,
+					isDeleted: false,
+					id: {
+						in: Array.from(
+							new Set(
+								planRows
+									.map((row: any) => row.sourceDeviceId)
+									.concat(targetDevice.id)
+									.filter(Boolean),
+							),
+						),
+					},
+				},
+			});
+			const deviceById = new Map(devices.map((device) => [device.id, device]));
+			const results = [];
+			for (const row of planRows) {
+				if (!row.vendorUserId) {
+					results.push({ ...row, status: "skipped", error: "Missing vendor user ID" });
+					continue;
+				}
+				if (row.conflictFields.length > 0) {
+					results.push({
+						...row,
+						status: "skipped_conflict",
+						error: "Conflict requires manual review before additive import",
+					});
+					continue;
+				}
+				if (
+					biometricTransferMode === "sdkPeerCopy" &&
+					row.sourceDeviceId &&
+					row.sourceDeviceId !== targetDevice.id
+				) {
+					const sourceDevice = deviceById.get(row.sourceDeviceId);
+					if (!sourceDevice || !isHikvisionDevice(sourceDevice)) {
+						results.push({
+							...row,
+							status: "failed",
+							error: "Source Hikvision device was not found for SDK peer copy",
+						});
+						continue;
+					}
+					try {
+						const copyData = await copyHikvisionUserToPeerWithRetry({
+							req,
+							organizationId: gate.organizationId,
+							sourceDevice,
+							targetDevice,
+							employeeNo: row.vendorUserId,
+							includeFingerprints: true,
+							includeFaceRecognition: true,
+						});
+						results.push({
+							...row,
+							status: "imported",
+							method: "sdkPeerCopy",
+							vmCopy: copyData.vmCopy,
+							targetSyncSummary: copyData.targetSyncSummary,
+							targetDeviceUser: copyData.targetDeviceUser,
+						});
+					} catch (error: any) {
+						results.push({
+							...row,
+							status: "failed",
+							method: "sdkPeerCopy",
+							error: error?.message || "SDK peer copy failed",
+						});
+					}
+					continue;
+				}
+				results.push({
+					...row,
+					status: row.currentDeviceUserId ? "matched_metadata_only" : "skipped_no_source_copy",
+					method: "metadataOnly",
+					error: row.currentDeviceUserId
+						? null
+						: "No encrypted bundle execute path is implemented for offline user creation yet; use SDK peer copy while source device is reachable.",
+				});
+			}
+
+			const targetAfter = await loadDeviceUsersForExport(gate.organizationId, targetDevice.id);
+			await writeJsonFile(path.join(backupDir, "target-device-users-after.json"), targetAfter);
+			const imported = results.filter((row: any) => row.status === "imported").length;
+			const failed = results.filter((row: any) => row.status === "failed").length;
+			const skipped = results.length - imported - failed;
+
+			logActivity(req, {
+				userId: String((req as any).userId || "unknown"),
+				action: "DEVICE_USER_IMPORT_EXECUTE",
+				description: `Imported ${imported} device users to ${targetDevice.name || targetDevice.id}`,
+				page: { url: req.originalUrl, title: "Device Users" },
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					failed > 0 && imported === 0
+						? "Device-user import could not write target users"
+						: "Device-user import executed",
+					{
+						mode: "executed",
+						targetDevice: {
+							id: targetDevice.id,
+							name: targetDevice.name,
+							address: targetDevice.address,
+							port: targetDevice.port,
+						},
+						backupDir,
+						biometricTransferMode,
+						plaintextBiometricExposed: false,
+						counts: {
+							planned: planRows.length,
+							imported,
+							failed,
+							skipped,
+							targetUsersAfter: targetAfter.length,
+						},
+						results,
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Failed to execute device-user import", 500),
+			);
+		}
 	};
 
 	const reconcileBiometricSync = async (req: Request, res: Response, _next: NextFunction) => {

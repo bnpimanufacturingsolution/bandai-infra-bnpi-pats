@@ -63,6 +63,42 @@ describe("Hikvision biometric sync contract", () => {
 		expect(wrapper).to.include('cmd+=(--seconds "${HIKVISION_RUN_SECONDS:-1}")');
 	});
 
+	it("supports scoped device-user export and gated import execute without plaintext biometric custody", () => {
+		const router = routerSource();
+		const controller = controllerSource();
+
+		expect(router).to.include('routes.post("/users/export/preview", controller.previewDeviceUserExport)');
+		expect(router).to.include('routes.post("/users/export", controller.exportDeviceUsers)');
+		expect(router).to.include('routes.post("/users/import/preview", controller.previewDeviceUserImport)');
+		expect(router).to.include('routes.post("/users/import/execute", controller.executeDeviceUserImport)');
+		expect(controller).to.include("const normalizeDeviceUserExportSelection =");
+		expect(controller).to.include('"currentPage", "selectedRows"');
+		expect(controller).to.include("const filterDeviceUserExportRows =");
+		expect(controller).to.include("vendorUserIds");
+		expect(controller).to.include("encryptedBiometricBundle");
+		expect(controller).to.include("DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM");
+		expect(controller).to.include('"aes-256-gcm"');
+		expect(controller).to.include("BIOMETRIC_TEMPLATE_KEY_PATTERN");
+		expect(controller).to.include("[redacted-biometric-template]");
+		expect(controller).to.include("sanitizeDeviceUserPortableValue");
+		expect(controller).to.include("raw fingerprint and face template bytes are never exported in normal JSON");
+		expect(controller).to.include("encrypted_bundle_required_or_sdk_peer_copy");
+		expect(controller).to.include("const buildDeviceUserImportPreviewToken =");
+		expect(controller).to.include("previewToken from this preview response");
+		expect(controller).to.include("Import execute requires a fresh previewToken from import preview");
+		expect(controller).to.include("Encrypted biometric bundle import requires a passphrase");
+		expect(controller).to.include("Portable biometric import requires an encrypted bundle passphrase");
+		expect(controller).to.include("const sanitizeDeviceUserImportPayloadForBackup =");
+		expect(controller).to.include("[encrypted-bundle-redacted]");
+		expect(controller).to.include("plaintextBiometricExposed: false");
+		expect(controller).to.include("copyHikvisionUserToPeerWithRetry({");
+		expect(controller).to.include("Conflict requires manual review before additive import");
+		expect(controller).to.include("target-device-users-before.json");
+		expect(controller).to.include("target-device-users-after.json");
+		expect(controller).to.not.include("fingerprintTemplate: user");
+		expect(controller).to.not.include("faceTemplate: user");
+	});
+
 	it("exposes a dev-safe synthetic fingerprint tally route without claiming physical device truth", () => {
 		const router = routerSource();
 		const controller = controllerSource();
@@ -238,7 +274,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("Raw SDK source reads are not persisted as a separate stream yet");
 		expect(controller).to.include("readActivityRowValue");
 		expect(controller).to.include('readActivityRowValue(event, "eventCategory")');
-		expect(controller).to.include("originLabel:");
+		expect(controller).to.include("const originLabel =");
 		expect(controller).to.include("Derived from current device-user state");
 		expect(controller).to.include("Created by biometric reconcile");
 		expect(controller).to.include("Received from SDK alarm listener");

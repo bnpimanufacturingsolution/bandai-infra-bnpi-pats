@@ -12,6 +12,7 @@ import devicesService, {
 	type DeviceUserMergeJobProgress,
 	type DeviceUserExportRequest,
 	type DeviceUserImportPreviewRequest,
+	type DeviceUserImportExecuteRequest,
 	type DeviceUsersResponse,
 	type DeviceEventsResetScope,
 	type HikvisionListenerAction,
@@ -466,6 +467,23 @@ export const usePreviewDeviceUserImport = () => {
 		},
 		onError: (error: any) => {
 			sonnerToast.error(error?.message || "Failed to preview device-user import");
+		},
+	});
+};
+
+export const useExecuteDeviceUserImport = () => {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: async (payload: DeviceUserImportExecuteRequest) => {
+			return await devicesService.executeDeviceUserImport(payload);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users"] });
+			sonnerToast.success("Device-user import executed");
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to execute device-user import");
 		},
 	});
 };

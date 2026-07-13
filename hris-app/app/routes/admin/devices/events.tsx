@@ -10,6 +10,7 @@ import {
 	MapPin,
 	Power,
 	RefreshCw,
+	Search,
 	Server,
 	Trash2,
 	UploadCloud,
@@ -24,6 +25,7 @@ import { hikvisionObservedAddressMatchesDevice } from "../../../lib/hikvision-de
 import { Badge } from "~/components/atoms/Badge";
 import { Button } from "~/components/atoms/Button";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
+import { Input } from "~/components/atoms/Input";
 import { Modal } from "~/components/atoms/Modal";
 import { Select, type SelectOption } from "~/components/atoms/Select";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -335,6 +337,9 @@ const formatEventTaxonomyToken = (value?: string | null) => {
 		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
 		.join(" ");
 };
+
+const getOptionLabel = (options: SelectOption[], value: string) =>
+	options.find((option) => option.value === value)?.label || formatEventTaxonomyToken(value);
 
 const getEmployeeRecordUrl = (employeeProfileId?: string | null) =>
 	employeeProfileId
@@ -758,6 +763,20 @@ export default function DeviceEventsPage() {
 	} = useDeviceEvents(savedQueryParams, {
 		refetchInterval: savedEventsRefetchInterval,
 	});
+	const { data: latestSdkEventData } = useDeviceEvents(
+		{
+			page: 1,
+			limit: 1,
+			deviceId: deviceId === "all" ? undefined : deviceId,
+			source: "EN_HCNETSDK_ALARM",
+			sort: "eventTime",
+			order: "desc",
+			dateField: "eventTime",
+			from,
+			to,
+		},
+		{ refetchInterval: isSdkAlarmSavedScope ? 5 * 1000 : false },
+	);
 	const {
 		data: liveData,
 		isLoading: isLoadingLive,
@@ -1054,6 +1073,11 @@ export default function DeviceEventsPage() {
 		viewMode === "saved"
 			? rows.find((event) => event.source === "EN_HCNETSDK_ALARM")
 			: undefined;
+	const latestSdkProbeEvent =
+		viewMode === "saved" && latestSdkEventData?.events?.[0]
+			? normalizeSavedEvent(latestSdkEventData.events[0])
+			: undefined;
+	const latestSdkEvidenceEvent = latestSdkSavedEvent || latestSdkProbeEvent;
 	const latestSavedReceivedAt = latestSavedEvent?.receivedAt
 		? new Date(latestSavedEvent.receivedAt)
 		: null;
@@ -1216,6 +1240,22 @@ export default function DeviceEventsPage() {
 			next.set("window", "all");
 			if (latestSavedEvent.deviceId) next.set("deviceId", latestSavedEvent.deviceId);
 			if (latestSavedEvent.source) next.set("source", latestSavedEvent.source);
+			next.delete("status");
+			next.delete("query");
+			next.set("sort", "eventTime");
+			next.set("order", "desc");
+		});
+	};
+	const focusLatestSdkEvidenceEvent = () => {
+		if (!latestSdkEvidenceEvent) return;
+		updateSearchParams((next) => {
+			next.set("view", "saved");
+			next.set("page", "1");
+			next.set("window", "all");
+			if (latestSdkEvidenceEvent.deviceId) next.set("deviceId", latestSdkEvidenceEvent.deviceId);
+			if (latestSdkEvidenceEvent.source) next.set("source", latestSdkEvidenceEvent.source);
+			if (latestSdkEvidenceEvent.eventCategory) next.set("eventCategory", latestSdkEvidenceEvent.eventCategory);
+			if (latestSdkEvidenceEvent.eventAction) next.set("eventAction", latestSdkEvidenceEvent.eventAction);
 			next.delete("status");
 			next.delete("query");
 			next.set("sort", "eventTime");
@@ -1487,8 +1527,8 @@ export default function DeviceEventsPage() {
 	});
 	const realtimeStatusDetail = lastRealtimeEvent
 		? `Last saved-row socket event ${formatEventTime(lastRealtimeEvent.emittedAt)}`
-		: isSdkAlarmSavedScope && latestSdkSavedEvent
-			? `Last SDK alarm row ${formatEventTime(latestSdkSavedEvent.receivedAt || latestSdkSavedEvent.eventTime)}`
+		: isSdkAlarmSavedScope && latestSdkEvidenceEvent
+			? `Last SDK alarm row ${formatEventTime(latestSdkEvidenceEvent.receivedAt || latestSdkEvidenceEvent.eventTime)}`
 			: isSdkAlarmSavedScope
 				? "No recent SDK alarm rows in this saved-events scope"
 			: latestSavedEvent
@@ -1589,9 +1629,55 @@ export default function DeviceEventsPage() {
 				: hikvisionSdkReceiving
 					? "SDK callbacks are reaching HRIS"
 					: hikvisionListenerRunning
-						? "VM service is running; waiting for SDK tap proof"
-						: "Waiting for SDK listener"
+					? "VM service is running; waiting for SDK tap proof"
+					: "Waiting for SDK listener"
 		: realtimeStatus.rowUpdateLabel;
+	const activeSavedFilterLabels = [
+		deviceId !== "all" ? getOptionLabel(deviceOptions, deviceId) : null,
+		timeWindow !== "all" ? getOptionLabel(timeWindowOptions, timeWindow) : null,
+		eventCategory !== "all" ? getOptionLabel(eventCategoryOptions, eventCategory) : null,
+		eventAction !== "all" ? getOptionLabel(eventActionOptions, eventAction) : null,
+		source !== "all" ? getOptionLabel(sourceOptions, source) : null,
+		status !== "all" ? getOptionLabel(savedStatusOptions, status) : null,
+		query ? `Search: ${query}` : null,
+	].filter(Boolean) as string[];
+	const hasScopedSavedFilters = viewMode === "saved" && activeSavedFilterLabels.length > 0;
+	const latestSdkActionLabel = latestSdkEvidenceEvent?.eventAction
+		? getOptionLabel(eventActionOptions, latestSdkEvidenceEvent.eventAction)
+		: null;
+	const latestSdkCategoryLabel = latestSdkEvidenceEvent?.eventCategory
+		? getOptionLabel(eventCategoryOptions, latestSdkEvidenceEvent.eventCategory)
+		: null;
+	const socketTruthLabel = isConnected
+		? "Socket connected"
+		: shouldPollSavedEvents
+			? "Socket polling fallback"
+			: "Socket not connected";
+	const savedEmptyMessage =
+		viewMode === "live"
+			? "No device events found"
+			: hasScopedSavedFilters
+				? "No saved rows match this filter"
+				: "No saved events found";
+	const savedEmptyDescription =
+		viewMode === "live"
+			? ""
+			: hasScopedSavedFilters
+				? `The saved-events endpoint returned 0 rows for ${activeSavedFilterLabels.join(" / ")}.`
+				: "No HRIS device-event rows are saved for the current scope.";
+	const clearSavedFilters = () => {
+		updateSearchParams((next) => {
+			next.set("view", "saved");
+			next.set("page", "1");
+			next.set("window", "all");
+			next.delete("deviceId");
+			next.delete("eventCategory");
+			next.delete("eventAction");
+			next.delete("source");
+			next.delete("status");
+			next.delete("query");
+		});
+	};
 	const runHikvisionListenerControl = (action: "start" | "stop" | "restart") => {
 		hikvisionListenerControl.mutate(action, {
 			onSuccess: () => {
@@ -2237,13 +2323,29 @@ export default function DeviceEventsPage() {
 				</button>
 			)}
 
-			<div className="rounded-md border border-slate-200 bg-white p-2.5">
+			<div className="rounded-md border border-slate-200 bg-white p-2">
 				<div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
 					<div className="min-w-0">
 						<h2 className="truncate text-sm font-semibold text-slate-950">
 							{viewMode === "live" ? "Live events" : "Saved events"}
 						</h2>
+						<p className="mt-0.5 truncate text-xs text-slate-500">
+							{viewMode === "saved"
+								? `${formatCount(totalItems)} saved row${totalItems === 1 ? "" : "s"} for this filter`
+								: `${formatCount(liveEvents.length)} live row${liveEvents.length === 1 ? "" : "s"} in view`}
+						</p>
 					</div>
+					{viewMode === "saved" ? (
+						<div className="relative w-full min-w-0 md:w-[320px]">
+							<Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+							<Input
+								placeholder="Search employee or device..."
+								value={query}
+								onChange={(event) => setFilter("query", event.target.value)}
+								className="h-8 rounded-md border-slate-200 bg-white pl-8 pr-3 text-sm shadow-none focus:ring-2 focus:ring-primary/10"
+							/>
+						</div>
+					) : null}
 				</div>
 				<DataTable<UnifiedDeviceEventRow>
 					title={viewMode === "live" ? "Events" : "Saved events"}
@@ -2251,17 +2353,62 @@ export default function DeviceEventsPage() {
 					data={rows}
 					columns={columns}
 					isLoading={isEventLoading}
-					emptyMessage={viewMode === "live" ? "No device events found" : "No saved events found"}
-					emptyDescription=""
-					showSearch={viewMode === "saved"}
+					emptyMessage={savedEmptyMessage}
+					emptyDescription={savedEmptyDescription}
+					emptyActions={
+						viewMode === "saved" ? (
+							<div className="mx-auto grid max-w-3xl gap-2 text-left sm:grid-cols-3">
+								<div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+									<p className="text-[11px] font-semibold uppercase text-slate-500">Listener</p>
+									<p className="mt-1 text-xs font-semibold text-slate-950">
+										{hikvisionListenerStatusLabel || "Not in SDK scope"}
+									</p>
+									<p className="mt-0.5 text-[11px] text-slate-500">
+										{hikvisionSdkReceiving || hikvisionSdkArmed
+											? "VM listener has SDK callback evidence."
+											: hikvisionListenerDetail}
+									</p>
+								</div>
+								<div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+									<p className="text-[11px] font-semibold uppercase text-slate-500">Latest SDK row</p>
+									<p className="mt-1 text-xs font-semibold text-slate-950">
+										{latestSdkActionLabel || "No SDK row in scope"}
+									</p>
+									<p className="mt-0.5 text-[11px] text-slate-500">
+										{latestSdkEvidenceEvent
+											? `${latestSdkCategoryLabel || "Event"} at ${formatEventTime(latestSdkEvidenceEvent.receivedAt || latestSdkEvidenceEvent.eventTime)}`
+											: "No saved SDK listener row was returned by the latest probe."}
+									</p>
+								</div>
+								<div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+									<p className="text-[11px] font-semibold uppercase text-slate-500">Browser path</p>
+									<p className="mt-1 text-xs font-semibold text-slate-950">{socketTruthLabel}</p>
+									<p className="mt-0.5 text-[11px] text-slate-500">
+										{isConnected
+											? "Saved rows can arrive through the socket."
+											: "The page continues with saved-event polling."}
+									</p>
+								</div>
+								{hasScopedSavedFilters ? (
+									<div className="sm:col-span-3 flex flex-wrap items-center justify-center gap-2 pt-1">
+										<Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={clearSavedFilters}>
+											Show all saved events
+										</Button>
+										{latestSdkEvidenceEvent ? (
+											<Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={focusLatestSdkEvidenceEvent}>
+												Show latest saved row
+											</Button>
+										) : null}
+									</div>
+								) : null}
+							</div>
+						) : null
+					}
+					showSearch={false}
 					showFilters={false}
 					showPagination
 					showExport={false}
 					noCard
-					searchPlaceholder="Search employee or device..."
-					searchWidth="w-full sm:w-[290px]"
-					searchValue={viewMode === "saved" ? query : ""}
-					onSearch={(value) => setFilter("query", value)}
 					onSort={(key, direction) => {
 						updateSearchParams((next) => {
 							next.set("sort", key === "deviceId" ? "deviceName" : key);
@@ -2294,6 +2441,8 @@ export default function DeviceEventsPage() {
 							: ""
 					}
 					containedScroll
+					containedBodyClassName="min-h-[7.5rem] max-h-[calc(100vh-33rem)]"
+					emptyStateClassName="rounded-md border border-slate-200 bg-slate-50 px-4 py-5"
 				/>
 			</div>
 

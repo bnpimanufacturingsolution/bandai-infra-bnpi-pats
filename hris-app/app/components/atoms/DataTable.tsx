@@ -138,6 +138,8 @@ export interface DataTableProps<T> {
 	searchValue?: string; // Controlled search value for server-side search
 	containedScroll?: boolean; // Keep dense admin tables scrolling inside the table shell.
 	toolbarAlign?: "left" | "right";
+	emptyStateClassName?: string;
+	containedBodyClassName?: string;
 }
 
 const DataTable = <T extends Record<string, any>>({
@@ -200,6 +202,8 @@ const DataTable = <T extends Record<string, any>>({
 	searchValue,
 	containedScroll = false,
 	toolbarAlign = "left",
+	emptyStateClassName,
+	containedBodyClassName,
 }: DataTableProps<T>) => {
 	const getDefaultColumnVisibility = React.useCallback(
 		() =>
@@ -372,8 +376,10 @@ const DataTable = <T extends Record<string, any>>({
 		"hidden overflow-hidden rounded-lg border border-neutral-200 bg-white md:block";
 	const containedTableHeaderViewportClassName =
 		"overflow-hidden border-b border-neutral-200 bg-neutral-100";
-	const containedTableBodyViewportClassName =
-		"max-h-[calc(100vh-31rem)] min-h-[12rem] overflow-auto overscroll-contain modern-scroll [scrollbar-gutter:stable]";
+	const containedTableBodyViewportClassName = cn(
+		"max-h-[calc(100vh-31rem)] min-h-[12rem] overflow-auto overscroll-contain modern-scroll [scrollbar-gutter:stable]",
+		containedBodyClassName,
+	);
 	const mobileListViewportClassName = cn(
 		"md:hidden space-y-3 mt-6",
 		containedScroll &&
@@ -703,7 +709,7 @@ const DataTable = <T extends Record<string, any>>({
 	};
 
 	const renderEmptyState = () => (
-		<div className="text-center py-12">
+		<div className={cn("text-center py-12", emptyStateClassName)}>
 			<div className="mx-auto w-12 h-12 text-gray-400 mb-4 flex items-center justify-center">
 				<Search className="w-8 h-8" />
 			</div>

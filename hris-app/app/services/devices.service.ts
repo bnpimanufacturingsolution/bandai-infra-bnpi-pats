@@ -732,13 +732,21 @@ export interface DeviceUserSyncResponse {
 }
 
 export type DeviceUserTransferScope = "currentDevice" | "allHikvisionDevices";
+export type DeviceUserExportSelection = "all" | "filtered" | "currentPage" | "selectedRows";
 
 export interface DeviceUserExportRequest {
 	deviceId: string;
 	scope?: DeviceUserTransferScope;
+	selection?: DeviceUserExportSelection;
+	query?: string;
+	status?: string;
+	page?: number;
+	limit?: number;
+	vendorUserIds?: string[];
 	includeCards?: boolean;
 	includeFingerprints?: boolean;
 	includeFaces?: boolean;
+	encryptedBiometricBundle?: boolean;
 }
 
 export interface DeviceUserExportPayload {
@@ -748,8 +756,21 @@ export interface DeviceUserExportPayload {
 		type: DeviceUserTransferScope | string;
 		deviceId?: string | null;
 		sourceEndpoint?: string;
+		selection?: DeviceUserExportSelection | string;
+		status?: string;
+		query?: string;
+		page?: number | null;
+		limit?: number | null;
 	};
 	policy?: Record<string, unknown>;
+	biometricBundle?: {
+		present: boolean;
+		requiredForPortableTemplateImport?: boolean;
+		algorithm?: string | null;
+		status?: string;
+		reason?: string;
+		plaintextPolicy?: string;
+	};
 	devices: Array<{
 		device: Pick<Device, "id" | "name" | "address" | "port" | "protocol"> & {
 			model?: string | null;
@@ -785,6 +806,16 @@ export interface DeviceUserExportPayload {
 			linked: number;
 			unlinked: number;
 			credentialTypes?: Record<string, string>;
+			selection?: {
+				mode: DeviceUserExportSelection | string;
+				status?: string;
+				query?: string;
+				page?: number | null;
+				limit?: number | null;
+				vendorUserIds?: string[];
+				matchedRows?: number;
+				totalRowsBeforeSelection?: number;
+			};
 		};
 		users?: DeviceUser[];
 	}>;
@@ -818,6 +849,16 @@ export interface DeviceUserImportPreviewResponse {
 		missingHrisEmployees: number;
 	};
 	unsupportedCredentialTypes: string[];
+	biometricBundle?: {
+		present: boolean;
+		requiredForPortableTemplateImport?: boolean;
+		algorithm?: string | null;
+		status?: string;
+		unlockable?: boolean;
+		plaintextExposed?: boolean;
+		transferModes?: string[];
+	};
+	previewToken?: string;
 	plan: Array<{
 		vendorUserId: string;
 		employeeNo?: string | null;
@@ -827,9 +868,36 @@ export interface DeviceUserImportPreviewResponse {
 		conflictFields: string[];
 		missingEmployee: boolean;
 		currentDeviceUserId?: string | null;
+		transferMode?: string;
 	}>;
 	executeAvailable: boolean;
 	executeBlockedReason?: string;
+	executeRequirements?: string[];
+}
+
+export interface DeviceUserImportExecuteRequest {
+	targetDeviceId: string;
+	payload: DeviceUserExportPayload;
+	previewToken: string;
+	confirmation: string;
+	execute: true;
+	biometricTransferMode?: "sdkPeerCopy" | "metadataOnly" | "encryptedBundle";
+	biometricBundlePassphrase?: string;
+}
+
+export interface DeviceUserImportExecuteResponse {
+	mode: "executed";
+	backupDir: string;
+	biometricTransferMode: string;
+	plaintextBiometricExposed: false;
+	counts: {
+		planned: number;
+		imported: number;
+		failed: number;
+		skipped: number;
+		targetUsersAfter: number;
+	};
+	results: Array<Record<string, unknown>>;
 }
 
 export interface DevicesResponse {
@@ -1217,6 +1285,33 @@ class DevicesService extends APIService {
 				error.data?.errors?.[0]?.message ||
 					error.message ||
 					"Error previewing device-user import",
+			);
+		}
+	}
+
+	async executeDeviceUserImport(
+		payload: DeviceUserImportExecuteRequest,
+	): Promise<DeviceUserImportExecuteResponse> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/users/import/execute", {
+				targetDeviceId: payload.targetDeviceId,
+				payload: payload.payload,
+				previewToken: payload.previewToken,
+				confirmation: payload.confirmation,
+				execute: true,
+				biometricTransferMode: payload.biometricTransferMode || "sdkPeerCopy",
+				...(payload.biometricBundlePassphrase
+					? { biometricBundlePassphrase: payload.biometricBundlePassphrase }
+					: {}),
+			});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to execute device-user import");
+			return data as DeviceUserImportExecuteResponse;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error executing device-user import",
 			);
 		}
 	}

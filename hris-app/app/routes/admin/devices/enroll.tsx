@@ -52,6 +52,7 @@ import {
 	usePreviewDeviceUserExport,
 	useExportDeviceUsers,
 	usePreviewDeviceUserImport,
+	useExecuteDeviceUserImport,
 	useUnlinkDeviceUser,
 	useMockHikvisionFingerprintTally,
 	useMockHikvisionFaceTally,
@@ -79,7 +80,9 @@ import deviceService, {
 	type DeviceUserMergeField,
 	type DeviceUserMergePlanResponse,
 	type DeviceUserExportPayload,
+	type DeviceUserExportSelection,
 	type DeviceUserImportPreviewResponse,
+	type DeviceUserImportExecuteResponse,
 } from "~/services/devices.service";
 import type { Employee } from "~/services/employees.service";
 
@@ -423,6 +426,7 @@ export function DeviceEnrollmentPanel({
 	const previewDeviceUserExportMutation = usePreviewDeviceUserExport();
 	const exportDeviceUsersMutation = useExportDeviceUsers();
 	const previewDeviceUserImportMutation = usePreviewDeviceUserImport();
+	const executeDeviceUserImportMutation = useExecuteDeviceUserImport();
 	const mockHikvisionFingerprintMutation = useMockHikvisionFingerprintTally();
 	const mockHikvisionFaceMutation = useMockHikvisionFaceTally();
 	const mirrorHikvisionFaceMutation = useMirrorHikvisionFaceToPeers();
@@ -510,16 +514,20 @@ export function DeviceEnrollmentPanel({
 	});
 	const [deviceUserExportState, setDeviceUserExportState] = useState<{
 		open: boolean;
+		selection: DeviceUserExportSelection;
 		includeCards: boolean;
 		includeFingerprints: boolean;
 		includeFaces: boolean;
+		encryptedBiometricBundle: boolean;
 		preview: DeviceUserExportPayload | null;
 		result: DeviceUserExportPayload | null;
 	}>({
 		open: false,
+		selection: "currentPage",
 		includeCards: true,
 		includeFingerprints: true,
 		includeFaces: true,
+		encryptedBiometricBundle: true,
 		preview: null,
 		result: null,
 	});
@@ -529,13 +537,22 @@ export function DeviceEnrollmentPanel({
 		payload: DeviceUserExportPayload | null;
 		parseError: string;
 		preview: DeviceUserImportPreviewResponse | null;
+		result: DeviceUserImportExecuteResponse | null;
+		confirmation: string;
+		biometricTransferMode: "sdkPeerCopy" | "metadataOnly" | "encryptedBundle";
+		biometricBundlePassphrase: string;
 	}>({
 		open: false,
 		rawText: "",
 		payload: null,
 		parseError: "",
 		preview: null,
+		result: null,
+		confirmation: "",
+		biometricTransferMode: "sdkPeerCopy",
+		biometricBundlePassphrase: "",
 	});
+	const [selectedExportVendorUserIds, setSelectedExportVendorUserIds] = useState<string[]>([]);
 	const [isCopyDeviceUserSubmitting, setIsCopyDeviceUserSubmitting] = useState(false);
 	const [selectedEmployeeForLink, setSelectedEmployeeForLink] = useState("");
 
@@ -2505,6 +2522,28 @@ export function DeviceEnrollmentPanel({
 		(safeDeviceUserPage - 1) * deviceUserLimit,
 		safeDeviceUserPage * deviceUserLimit,
 	);
+	const selectedExportVendorUserIdSet = new Set(selectedExportVendorUserIds);
+	const allPagedRowsSelected =
+		pagedDeviceUserRows.length > 0 &&
+		pagedDeviceUserRows.every((row) => selectedExportVendorUserIdSet.has(row.vendorUserId));
+	const toggleExportVendorUserId = (vendorUserId: string, selected: boolean) => {
+		setSelectedExportVendorUserIds((current) => {
+			const next = new Set(current);
+			if (selected) next.add(vendorUserId);
+			else next.delete(vendorUserId);
+			return Array.from(next);
+		});
+	};
+	const togglePagedExportVendorUserIds = (selected: boolean) => {
+		setSelectedExportVendorUserIds((current) => {
+			const next = new Set(current);
+			for (const row of pagedDeviceUserRows) {
+				if (selected) next.add(row.vendorUserId);
+				else next.delete(row.vendorUserId);
+			}
+			return Array.from(next);
+		});
+	};
 	const deviceUserSummary = deviceUserSummaryData?.summary;
 	const physicalSourceCount =
 		selectedSyncCenterItem?.preview?.vendorUserCount ?? sourceDeviceUserRows.length;
@@ -2692,18 +2731,43 @@ export function DeviceEnrollmentPanel({
 			`/admin/configuration/devices/events?deviceId=${encodeURIComponent(selectedDeviceId)}&view=${view}`,
 		);
 	};
+	const pagedExportVendorUserIds = pagedDeviceUserRows
+		.map((row) => String(row.vendorUserId || "").trim())
+		.filter(Boolean);
+	const buildDeviceUserExportRequest = () => ({
+		deviceId: selectedDeviceId,
+		scope: "currentDevice" as const,
+		selection: deviceUserExportState.selection,
+		status: deviceUserStatus,
+		query: deviceUserSearch,
+		page: safeDeviceUserPage,
+		limit: deviceUserLimit,
+		vendorUserIds:
+			deviceUserExportState.selection === "selectedRows"
+				? selectedExportVendorUserIds
+				: deviceUserExportState.selection === "currentPage"
+					? pagedExportVendorUserIds
+					: undefined,
+		includeCards: deviceUserExportState.includeCards,
+		includeFingerprints: deviceUserExportState.includeFingerprints,
+		includeFaces: deviceUserExportState.includeFaces,
+		encryptedBiometricBundle: deviceUserExportState.encryptedBiometricBundle,
+	});
 	const previewDeviceUserExport = async () => {
 		if (!selectedDeviceId) {
 			toast.error("Select a device before exporting users");
 			return;
 		}
-		const preview = await previewDeviceUserExportMutation.mutateAsync({
-			deviceId: selectedDeviceId,
-			scope: "currentDevice",
-			includeCards: deviceUserExportState.includeCards,
-			includeFingerprints: deviceUserExportState.includeFingerprints,
-			includeFaces: deviceUserExportState.includeFaces,
-		});
+		if (
+			deviceUserExportState.selection === "selectedRows" &&
+			selectedExportVendorUserIds.length === 0
+		) {
+			toast.error("Select at least one row before exporting selected rows");
+			return;
+		}
+		const preview = await previewDeviceUserExportMutation.mutateAsync(
+			buildDeviceUserExportRequest(),
+		);
 		setDeviceUserExportState((current) => ({ ...current, preview, result: null }));
 	};
 	const exportDeviceUserFile = async () => {
@@ -2711,13 +2775,14 @@ export function DeviceEnrollmentPanel({
 			toast.error("Select a device before exporting users");
 			return;
 		}
-		const result = await exportDeviceUsersMutation.mutateAsync({
-			deviceId: selectedDeviceId,
-			scope: "currentDevice",
-			includeCards: deviceUserExportState.includeCards,
-			includeFingerprints: deviceUserExportState.includeFingerprints,
-			includeFaces: deviceUserExportState.includeFaces,
-		});
+		if (
+			deviceUserExportState.selection === "selectedRows" &&
+			selectedExportVendorUserIds.length === 0
+		) {
+			toast.error("Select at least one row before exporting selected rows");
+			return;
+		}
+		const result = await exportDeviceUsersMutation.mutateAsync(buildDeviceUserExportRequest());
 		const blob = new Blob([JSON.stringify(result, null, 2)], {
 			type: "application/json",
 		});
@@ -2765,7 +2830,32 @@ export function DeviceEnrollmentPanel({
 			payload,
 			parseError: "",
 			preview,
+			result: null,
 		}));
+	};
+	const executeDeviceUserImport = async () => {
+		const payload = deviceUserImportState.payload;
+		const preview = deviceUserImportState.preview;
+		if (!selectedDeviceId || !payload || !preview?.previewToken) {
+			toast.error("Run import preview before execute");
+			return;
+		}
+		const result = await executeDeviceUserImportMutation.mutateAsync({
+			targetDeviceId: selectedDeviceId,
+			payload,
+			previewToken: preview.previewToken,
+			confirmation: deviceUserImportState.confirmation,
+			execute: true,
+			biometricTransferMode: deviceUserImportState.biometricTransferMode,
+			biometricBundlePassphrase:
+				deviceUserImportState.biometricBundlePassphrase || undefined,
+		});
+		setDeviceUserImportState((current) => ({ ...current, result }));
+		await Promise.allSettled([
+			refetchDbDeviceUsers(),
+			refetchDeviceUserSummary(),
+			refetchSourceDeviceUsers(),
+		]);
 	};
 	const openLogSyncReview = () => {
 		if (!selectedDeviceId) {
@@ -3555,14 +3645,28 @@ export function DeviceEnrollmentPanel({
 							<div className="overflow-hidden rounded-lg border border-slate-200">
 								<table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
 									<colgroup>
-										<col className="w-[26%]" />
-										<col className="w-[26%]" />
+										<col className="w-[44px]" />
+										<col className="w-[25%]" />
+										<col className="w-[25%]" />
 										<col className="w-[14%]" />
 										<col className="w-[22%]" />
 										<col className="w-[88px]" />
 									</colgroup>
 									<thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500">
 										<tr>
+											<th className="px-3 py-2">
+												<input
+													type="checkbox"
+													aria-label="Select current page device users"
+													className="h-4 w-4 rounded border-slate-300"
+													checked={allPagedRowsSelected}
+													onChange={(event) =>
+														togglePagedExportVendorUserIds(
+															event.target.checked,
+														)
+													}
+												/>
+											</th>
 											<th className="px-3 py-2">Device user</th>
 											<th className="px-3 py-2">Employee</th>
 											<th className="px-3 py-2">Status</th>
@@ -3574,7 +3678,7 @@ export function DeviceEnrollmentPanel({
 										{isLoadingDbDeviceUsers || isLoadingOpenDbDeviceUsers ? (
 											<tr>
 												<td
-													colSpan={5}
+													colSpan={6}
 													className="px-3 py-8 text-center text-slate-500">
 													<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
 													Loading device users...
@@ -3584,7 +3688,7 @@ export function DeviceEnrollmentPanel({
 										  mergedDeviceUserRows.length === 0 ? (
 											<tr>
 												<td
-													colSpan={5}
+													colSpan={6}
 													className="px-3 py-8 text-center text-slate-500">
 													<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
 													Reading source users from the physical device...
@@ -3593,7 +3697,7 @@ export function DeviceEnrollmentPanel({
 										) : visibleDeviceUserRows.length === 0 ? (
 											<tr>
 												<td
-													colSpan={5}
+													colSpan={6}
 													className="px-3 py-8 text-center text-slate-500">
 													No device users found for this view.
 												</td>
@@ -3601,6 +3705,22 @@ export function DeviceEnrollmentPanel({
 										) : (
 											pagedDeviceUserRows.map((deviceUser) => (
 												<tr key={deviceUser.key} className="align-middle">
+													<td className="px-3 py-2">
+														<input
+															type="checkbox"
+															aria-label={`Select device user ${deviceUser.vendorUserId}`}
+															className="h-4 w-4 rounded border-slate-300"
+															checked={selectedExportVendorUserIdSet.has(
+																deviceUser.vendorUserId,
+															)}
+															onChange={(event) =>
+																toggleExportVendorUserId(
+																	deviceUser.vendorUserId,
+																	event.target.checked,
+																)
+															}
+														/>
+													</td>
 													<td className="px-3 py-2">
 														<p className="font-medium leading-5 text-slate-950">
 															{deviceUser.displayName ||
@@ -5739,13 +5859,63 @@ export function DeviceEnrollmentPanel({
 				description="Preview the selected Hikvision device before creating a JSON export. This does not change the device.">
 				<div className="space-y-4">
 					<div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-						<p className="font-semibold text-slate-950">
-							{selectedDevice?.name || "Selected device"}
-						</p>
-						<p className="mt-1 text-xs text-slate-600">
-							JSON includes device users, raw source fields, and HRIS link
-							metadata. Fingerprint template blobs stay blocked by biometric
-							custody policy.
+						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+							<div className="min-w-0">
+								<p className="truncate font-semibold text-slate-950">
+									{selectedDevice?.name || "Selected device"}
+								</p>
+								<p className="mt-1 text-xs text-slate-600">
+									JSON includes identity metadata, HRIS links, hashes, counts, and
+									capability evidence. Biometric template bytes are never written
+									to plain JSON.
+								</p>
+							</div>
+							<Badge variant="secondary" className="self-start">
+								{selectedExportVendorUserIds.length} selected
+							</Badge>
+						</div>
+					</div>
+					<div className="grid gap-2 sm:grid-cols-4">
+						{[
+							["currentPage", "Current page", `${pagedExportVendorUserIds.length} rows`],
+							["filtered", "Current filter", `${shownDeviceUserCount} rows`],
+							["selectedRows", "Selected rows", `${selectedExportVendorUserIds.length} rows`],
+							["all", "All device users", "Full selected device"],
+						].map(([value, label, hint]) => (
+							<button
+								key={value}
+								type="button"
+								className={`rounded-md border px-3 py-2 text-left transition-colors ${
+									deviceUserExportState.selection === value
+										? "border-orange-300 bg-orange-50 text-orange-950"
+										: "border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+								}`}
+								onClick={() =>
+									setDeviceUserExportState((current) => ({
+										...current,
+										selection: value as DeviceUserExportSelection,
+										preview: null,
+										result: null,
+									}))
+								}>
+								<span className="block text-sm font-semibold">{label}</span>
+								<span
+									className={`mt-0.5 block text-xs ${
+										deviceUserExportState.selection === value
+											? "text-orange-800"
+											: "text-slate-500"
+									}`}>
+									{hint}
+								</span>
+							</button>
+						))}
+					</div>
+					<div className="rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-950">
+						<p className="font-semibold">Biometric handling</p>
+						<p className="mt-1 text-cyan-900">
+							Use SDK peer copy when both devices are reachable. Use an encrypted
+							bundle only for portable template payloads; the passphrase is entered
+							at import time and is not stored.
 						</p>
 					</div>
 					<div className="grid gap-2 text-sm sm:grid-cols-3">
@@ -5753,6 +5923,7 @@ export function DeviceEnrollmentPanel({
 							["includeCards", "Cards"],
 							["includeFingerprints", "Fingerprints"],
 							["includeFaces", "Faces"],
+							["encryptedBiometricBundle", "Encrypted bundle contract"],
 						].map(([key, label]) => (
 							<label
 								key={key}
@@ -5795,11 +5966,19 @@ export function DeviceEnrollmentPanel({
 					) : null}
 					{deviceUserExportState.preview?.devices?.[0]?.capabilities ? (
 						<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-							Fingerprint export:{" "}
-							{deviceUserExportState.preview.devices[0].capabilities.support
-								?.fingerprintExport
-								? "device probe responded, template export still blocked by policy"
-								: "not supported by current probe or not reachable"}
+							<p className="font-semibold">Credential capability</p>
+							<p className="mt-1 text-amber-900">
+								Fingerprint export:{" "}
+								{deviceUserExportState.preview.devices[0].capabilities.support
+									?.fingerprintExport
+									? "device probe responded; transfer must use SDK peer copy or encrypted bundle"
+									: "not supported by current probe or not reachable"}
+							</p>
+							<p className="mt-1 text-amber-900">
+								Bundle status:{" "}
+								{deviceUserExportState.preview.biometricBundle?.status ||
+									"not requested"}
+							</p>
 						</div>
 					) : null}
 					{deviceUserExportState.result ? (
@@ -5852,6 +6031,38 @@ export function DeviceEnrollmentPanel({
 							matches, conflicts, and missing HRIS employees.
 						</p>
 					</div>
+					<div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+						<label className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+							<span className="block font-medium text-slate-800">
+								Import JSON file
+							</span>
+							<input
+								type="file"
+								accept="application/json,.json"
+								className="mt-2 block w-full text-xs text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-700"
+								onChange={(event) => {
+									const file = event.target.files?.[0];
+									if (!file) return;
+									void file.text().then((text) =>
+										setDeviceUserImportState((current) => ({
+											...current,
+											rawText: text,
+											payload: null,
+											parseError: "",
+											preview: null,
+											result: null,
+										})),
+									);
+								}}
+							/>
+						</label>
+						<div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
+							<p className="font-semibold">Preview first</p>
+							<p className="mt-1 text-emerald-900">
+								No target device write happens until confirmation and execute.
+							</p>
+						</div>
+					</div>
 					<textarea
 						value={deviceUserImportState.rawText}
 						onChange={(event) =>
@@ -5861,6 +6072,7 @@ export function DeviceEnrollmentPanel({
 								payload: null,
 								parseError: "",
 								preview: null,
+								result: null,
 							}))
 						}
 						className="min-h-[160px] w-full rounded-md border border-slate-200 bg-white p-3 font-mono text-xs text-slate-900 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200"
@@ -5896,8 +6108,122 @@ export function DeviceEnrollmentPanel({
 								))}
 							</div>
 							<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-								{deviceUserImportState.preview.executeBlockedReason}
+								<p className="font-semibold">Transfer proof</p>
+								<p className="mt-1 text-amber-900">
+									{deviceUserImportState.preview.executeBlockedReason ||
+										"Execute is available after typed confirmation. SDK peer copy transfers templates device-to-device without exposing raw bytes."}
+								</p>
+								<p className="mt-1 text-amber-900">
+									Bundle:{" "}
+									{deviceUserImportState.preview.biometricBundle?.present
+										? "encrypted bundle present"
+										: "no encrypted bundle in JSON package"}
+									{" / "}
+									{deviceUserImportState.preview.biometricBundle?.transferModes?.join(
+										", ",
+									) || "metadataOnly"}
+								</p>
 							</div>
+							<div className="max-h-[220px] overflow-auto rounded-md border border-slate-200">
+								<table className="min-w-full divide-y divide-slate-200 text-xs">
+									<thead className="bg-slate-50 text-left font-semibold text-slate-600">
+										<tr>
+											<th className="px-3 py-2">User</th>
+											<th className="px-3 py-2">Action</th>
+											<th className="px-3 py-2">Source</th>
+											<th className="px-3 py-2">Transfer</th>
+										</tr>
+									</thead>
+									<tbody className="divide-y divide-slate-100 bg-white">
+										{deviceUserImportState.preview.plan.slice(0, 12).map((row) => (
+											<tr key={`${row.sourceDeviceId || "file"}:${row.vendorUserId}`}>
+												<td className="px-3 py-2 font-medium text-slate-950">
+													{row.vendorUserId}
+												</td>
+												<td className="px-3 py-2 text-slate-700">
+													{row.action}
+												</td>
+												<td className="px-3 py-2 text-slate-700">
+													{row.sourceDeviceName || "-"}
+												</td>
+												<td className="px-3 py-2 text-slate-700">
+													{row.transferMode || "metadataOnly"}
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						</div>
+					) : null}
+					{deviceUserImportState.preview ? (
+						<div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
+							<label className="space-y-1 text-sm">
+								<span className="font-medium text-slate-800">Transfer mode</span>
+								<select
+									value={deviceUserImportState.biometricTransferMode}
+									onChange={(event) =>
+										setDeviceUserImportState((current) => ({
+											...current,
+											biometricTransferMode: event.target.value as
+												| "sdkPeerCopy"
+												| "metadataOnly"
+												| "encryptedBundle",
+										}))
+									}
+									className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200">
+									<option value="sdkPeerCopy">SDK peer copy</option>
+									<option value="encryptedBundle">Encrypted bundle</option>
+									<option value="metadataOnly">Metadata only</option>
+								</select>
+							</label>
+							<label className="space-y-1 text-sm">
+								<span className="font-medium text-slate-800">
+									Encrypted bundle passphrase
+								</span>
+								<input
+									type="password"
+									value={deviceUserImportState.biometricBundlePassphrase}
+									onChange={(event) =>
+										setDeviceUserImportState((current) => ({
+											...current,
+											biometricBundlePassphrase: event.target.value,
+										}))
+									}
+									placeholder="Only needed for encrypted bundles"
+									className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200"
+								/>
+							</label>
+							<label className="space-y-1 text-sm sm:col-span-2">
+								<span className="font-medium text-slate-800">
+									Type IMPORT DEVICE USERS
+								</span>
+								<input
+									value={deviceUserImportState.confirmation}
+									onChange={(event) =>
+										setDeviceUserImportState((current) => ({
+											...current,
+											confirmation: event.target.value,
+										}))
+									}
+									className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200"
+								/>
+							</label>
+						</div>
+					) : null}
+					{deviceUserImportState.result ? (
+						<div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+							<p className="font-semibold">
+								Imported {metricValue(deviceUserImportState.result.counts.imported)} of{" "}
+								{metricValue(deviceUserImportState.result.counts.planned)} planned rows
+							</p>
+							<p className="mt-1 break-all text-xs text-emerald-900">
+								Backup: {deviceUserImportState.result.backupDir}
+							</p>
+							<p className="mt-1 text-xs text-emerald-900">
+								Plain biometric exposed:{" "}
+								{String(deviceUserImportState.result.plaintextBiometricExposed)}
+							</p>
 						</div>
 					) : null}
 					<div className="flex justify-end gap-2">
@@ -5916,10 +6242,19 @@ export function DeviceEnrollmentPanel({
 						<Button
 							type="button"
 							variant="outline"
-							disabled
-							className="border-slate-200 bg-slate-100 text-slate-500"
-							title="Disabled until previewed write safety is implemented">
-							<Lock className="h-4 w-4" />
+							disabled={
+								!deviceUserImportState.preview?.previewToken ||
+								deviceUserImportState.confirmation !== "IMPORT DEVICE USERS" ||
+								executeDeviceUserImportMutation.isPending
+							}
+							className="border-orange-200 bg-orange-50 text-orange-950 hover:bg-orange-100"
+							title="Requires preview token and typed confirmation"
+							onClick={() => void executeDeviceUserImport()}>
+							{executeDeviceUserImportMutation.isPending ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<Lock className="h-4 w-4" />
+							)}
 							Execute
 						</Button>
 					</div>
