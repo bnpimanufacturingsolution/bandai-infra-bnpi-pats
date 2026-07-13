@@ -54,8 +54,12 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("!shouldConvergeDeviceUserToPeer(sourceDeviceUser, existingTargetDeviceUser)");
 		expect(controller).to.include("const isMissingHikvisionListenerRuntimeError =");
 		expect(controller).to.include("const runManualCopy = (extraEnv: string[] = []) =>");
+		expect(controller).to.include("Math.max(waitSeconds * 1000 + 45000, 60000)");
 		expect(controller).to.include("result.exitCode !== 0");
 		expect(controller).to.include("isMissingHikvisionListenerRuntimeError(firstAttemptDetail)");
+		expect(controller.indexOf('name: "postgres"')).to.be.lessThan(
+			controller.indexOf('name: "api"'),
+		);
 		expect(controller).to.include("HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api");
 		expect(controller).to.include("HIKVISION_VM_LOCAL_API_BASE");
 		expect(controller).to.include("HIKVISION_VM_WRAPPER_REMOTE_PATH");
@@ -76,6 +80,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(router).to.include('routes.post("/users/export", controller.exportDeviceUsers)');
 		expect(router).to.include('routes.post("/users/import/preview", controller.previewDeviceUserImport)');
 		expect(router).to.include('routes.post("/users/import/execute", controller.executeDeviceUserImport)');
+		expect(router).to.include('routes.get("/users/import/jobs/:jobId", controller.getDeviceUserImportJob)');
 		expect(controller).to.include("const normalizeDeviceUserExportSelection =");
 		expect(controller).to.include('"currentPage", "selectedRows"');
 		expect(controller).to.include("const filterDeviceUserExportRows =");
@@ -103,6 +108,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("rows: planRows.map(({ rawUser: _rawUser, ...row }: any) => row)");
 		expect(controller).to.include("copyHikvisionUserToPeerWithRetry({");
 		expect(controller).to.include('strategy: "delayed_target_reread"');
+		expect(controller).to.include("const runDeviceUserImportExecuteWork = async");
+		expect(controller).to.include("const getDeviceUserImportJob = async");
+		expect(controller).to.include("Device-user import job accepted");
+		expect(controller).to.include("runAsJob");
+		expect(controller).to.include("pollUrl: `/api/device/users/import/jobs/${jobId}`");
 		expect(controller).to.include("Conflict requires manual review before additive import");
 		expect(controller).to.include("target-device-users-before.json");
 		expect(controller).to.include("target-device-users-after.json");

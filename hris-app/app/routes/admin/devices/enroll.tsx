@@ -537,6 +537,7 @@ export function DeviceEnrollmentPanel({
 		confirmation: string;
 		biometricTransferMode: "sdkPeerCopy" | "metadataOnly" | "encryptedBundle";
 		biometricBundlePassphrase: string;
+		runAsJob: boolean;
 	}>({
 		open: false,
 		rawText: "",
@@ -547,6 +548,7 @@ export function DeviceEnrollmentPanel({
 		confirmation: "",
 		biometricTransferMode: "sdkPeerCopy",
 		biometricBundlePassphrase: "",
+		runAsJob: true,
 	});
 	const [selectedExportVendorUserIds, setSelectedExportVendorUserIds] = useState<string[]>([]);
 	const [isCopyDeviceUserSubmitting, setIsCopyDeviceUserSubmitting] = useState(false);
@@ -2820,6 +2822,7 @@ export function DeviceEnrollmentPanel({
 			execute: true,
 			biometricTransferMode: deviceUserImportState.biometricTransferMode,
 			biometricBundlePassphrase: deviceUserImportState.biometricBundlePassphrase || undefined,
+			runAsJob: deviceUserImportState.runAsJob,
 		});
 		setDeviceUserImportState((current) => ({ ...current, result }));
 		await Promise.allSettled([
@@ -6157,18 +6160,54 @@ export function DeviceEnrollmentPanel({
 									className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200"
 								/>
 							</label>
+							<label className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm sm:col-span-2">
+								<input
+									type="checkbox"
+									checked={deviceUserImportState.runAsJob}
+									onChange={(event) =>
+										setDeviceUserImportState((current) => ({
+											...current,
+											runAsJob: event.target.checked,
+										}))
+									}
+									className="mt-0.5 h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+								/>
+								<span className="min-w-0">
+									<span className="block font-medium text-slate-800">
+										Run execute as background job
+									</span>
+									<span className="block text-xs text-slate-600">
+										Recommended for biometric peer copy batches; preview and typed
+										confirmation are still required.
+									</span>
+								</span>
+							</label>
 						</div>
 					) : null}
 					{deviceUserImportState.result ? (
 						<div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
-							<p className="font-semibold">
-								Imported {metricValue(deviceUserImportState.result.counts.imported)}{" "}
-								of {metricValue(deviceUserImportState.result.counts.planned)}{" "}
-								planned rows
-							</p>
-							<p className="mt-1 break-all text-xs text-emerald-900">
-								Backup: {deviceUserImportState.result.backupDir}
-							</p>
+							{deviceUserImportState.result.mode === "job" ? (
+								<>
+									<p className="font-semibold">
+										Import job queued: {deviceUserImportState.result.jobId}
+									</p>
+									<p className="mt-1 break-all text-xs text-emerald-900">
+										Poll: {deviceUserImportState.result.pollUrl}
+									</p>
+								</>
+							) : (
+								<>
+									<p className="font-semibold">
+										Imported{" "}
+										{metricValue(deviceUserImportState.result.counts?.imported)}{" "}
+										of {metricValue(deviceUserImportState.result.counts?.planned)}{" "}
+										planned rows
+									</p>
+									<p className="mt-1 break-all text-xs text-emerald-900">
+										Backup: {deviceUserImportState.result.backupDir}
+									</p>
+								</>
+							)}
 							<p className="mt-1 text-xs text-emerald-900">
 								Plain biometric exposed:{" "}
 								{String(deviceUserImportState.result.plaintextBiometricExposed)}

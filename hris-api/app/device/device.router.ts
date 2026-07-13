@@ -28,6 +28,7 @@ interface IController {
 	exportDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	previewDeviceUserImport(req: Request, res: Response, next: NextFunction): Promise<void>;
 	executeDeviceUserImport(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceUserImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	listDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceUserPhoto(req: Request, res: Response, next: NextFunction): Promise<void>;
 	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -80,6 +81,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/users/export", controller.exportDeviceUsers);
 	routes.post("/users/import/preview", controller.previewDeviceUserImport);
 	routes.post("/users/import/execute", controller.executeDeviceUserImport);
+	routes.get("/users/import/jobs/:jobId", controller.getDeviceUserImportJob);
 	routes.get("/:id/users", controller.listDeviceUsers);
 	routes.get("/users/:userId/photo", controller.getDeviceUserPhoto);
 	routes.post("/:id/users/sync", controller.syncDeviceUsers);

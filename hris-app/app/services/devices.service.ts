@@ -883,21 +883,44 @@ export interface DeviceUserImportExecuteRequest {
 	execute: true;
 	biometricTransferMode?: "sdkPeerCopy" | "metadataOnly" | "encryptedBundle";
 	biometricBundlePassphrase?: string;
+	runAsJob?: boolean;
 }
 
 export interface DeviceUserImportExecuteResponse {
-	mode: "executed";
-	backupDir: string;
-	biometricTransferMode: string;
+	mode: "executed" | "job";
+	jobId?: string | null;
+	status?: "processing" | "completed" | "failed" | string;
+	pollUrl?: string;
+	message?: string;
+	backupDir?: string | null;
+	biometricTransferMode?: string;
 	plaintextBiometricExposed: false;
-	counts: {
+	counts?: {
 		planned: number;
 		imported: number;
 		failed: number;
 		skipped: number;
 		targetUsersAfter: number;
 	};
+	results?: Array<Record<string, unknown>>;
+}
+
+export interface DeviceUserImportJobResponse {
+	jobId: string;
+	status: "processing" | "completed" | "failed" | string;
+	targetDeviceId?: string | null;
+	targetDeviceName?: string | null;
+	planned: number;
+	imported: number;
+	failed: number;
+	skipped: number;
+	message: string;
+	backupDir?: string | null;
+	plaintextBiometricExposed: false;
 	results: Array<Record<string, unknown>>;
+	error?: string | null;
+	startedAt: string;
+	completedAt?: string | null;
 }
 
 export interface DevicesResponse {
@@ -1300,6 +1323,7 @@ class DevicesService extends APIService {
 				confirmation: payload.confirmation,
 				execute: true,
 				biometricTransferMode: payload.biometricTransferMode || "sdkPeerCopy",
+				runAsJob: payload.runAsJob === true,
 				...(payload.biometricBundlePassphrase
 					? { biometricBundlePassphrase: payload.biometricBundlePassphrase }
 					: {}),
@@ -1312,6 +1336,23 @@ class DevicesService extends APIService {
 				error.data?.errors?.[0]?.message ||
 					error.message ||
 					"Error executing device-user import",
+			);
+		}
+	}
+
+	async getDeviceUserImportJob(jobId: string): Promise<DeviceUserImportJobResponse> {
+		try {
+			const response = await hrisApiClient.get<any>(
+				`/api/device/users/import/jobs/${encodeURIComponent(jobId)}`,
+			);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to retrieve device-user import job");
+			return data as DeviceUserImportJobResponse;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error retrieving device-user import job",
 			);
 		}
 	}

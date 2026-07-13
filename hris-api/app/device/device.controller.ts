@@ -160,6 +160,29 @@ type DeviceImportJob = {
 
 const deviceImportJobs = new Map<string, DeviceImportJob>();
 
+type DeviceUserPackageImportJobStatus = "processing" | "completed" | "failed";
+
+type DeviceUserPackageImportJob = {
+	jobId: string;
+	status: DeviceUserPackageImportJobStatus;
+	organizationId: string;
+	targetDeviceId?: string | null;
+	targetDeviceName?: string | null;
+	planned: number;
+	imported: number;
+	failed: number;
+	skipped: number;
+	message: string;
+	backupDir?: string | null;
+	plaintextBiometricExposed: false;
+	results: any[];
+	error?: string | null;
+	startedAt: Date;
+	completedAt?: Date;
+};
+
+const deviceUserPackageImportJobs = new Map<string, DeviceUserPackageImportJob>();
+
 type DeviceUserSyncJobStatus = "processing" | "completed" | "failed" | "cancelled";
 type DeviceUserSyncMode = "full_refresh" | "needs_attention_only" | "peer_converge";
 
@@ -232,6 +255,13 @@ const cleanupDeviceImportJobs = () => {
 	}
 };
 
+const cleanupDeviceUserPackageImportJobs = () => {
+	const cutoff = Date.now() - 60 * 60 * 1000;
+	for (const [jobId, job] of deviceUserPackageImportJobs.entries()) {
+		if (job.startedAt.getTime() < cutoff) deviceUserPackageImportJobs.delete(jobId);
+	}
+};
+
 const cleanupDeviceUserSyncJobs = () => {
 	const cutoff = Date.now() - 60 * 60 * 1000;
 	for (const [jobId, job] of deviceUserSyncJobs.entries()) {
@@ -250,6 +280,19 @@ const updateDeviceImportJob = (jobId: string, patch: Partial<Omit<DeviceImportJo
 	const job = deviceImportJobs.get(jobId);
 	if (!job) return;
 	deviceImportJobs.set(jobId, { ...job, ...patch });
+};
+
+const updateDeviceUserPackageImportJob = (
+	jobId: string,
+	patch: Partial<Omit<DeviceUserPackageImportJob, "jobId" | "results">> & { results?: any[] },
+) => {
+	const job = deviceUserPackageImportJobs.get(jobId);
+	if (!job) return;
+	deviceUserPackageImportJobs.set(jobId, {
+		...job,
+		...patch,
+		results: patch.results || job.results,
+	});
 };
 
 const updateDeviceUserSyncJob = (
@@ -809,19 +852,19 @@ export const controller = (prisma: PrismaClient) => {
 					...(params.includeFingerprints ? ["--manual-include-fingerprints"] : []),
 					...(params.includeFaceRecognition ? [] : ["--manual-exclude-face"]),
 				],
-				Math.max(waitSeconds * 1000 + 6000, 14000),
+				Math.max(waitSeconds * 1000 + 45000, 60000),
 			);
 		const strategies = [
+			{
+				name: "postgres",
+				extraEnv: [] as string[],
+			},
 			{
 				name: "api",
 				extraEnv: [
 					"HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api",
 					`HIKVISION_HOT_RELOAD_API_BASE=${HIKVISION_VM_LOCAL_API_BASE}`,
 				],
-			},
-			{
-				name: "postgres",
-				extraEnv: [] as string[],
 			},
 		];
 		const failures: string[] = [];
@@ -4274,193 +4317,173 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const executeDeviceUserImport = async (req: Request, res: Response, _next: NextFunction) => {
-		const gate = assertDeviceUserAdmin(req, res);
-		if (!gate) return;
-		const body = (req.body || {}) as Record<string, any>;
-		if (body.execute !== true || body.confirmation !== DEVICE_USER_IMPORT_CONFIRMATION) {
-			res.status(400).json(
-				buildErrorResponse(
-					`Import execute requires execute=true and confirmation="${DEVICE_USER_IMPORT_CONFIRMATION}"`,
-					400,
-				),
+	const deviceUserImportRequestError = (message: string, statusCode = 400) =>
+		Object.assign(new Error(message), { statusCode });
+
+	const runDeviceUserImportExecuteWork = async (params: {
+		req: Request;
+		gate: { organizationId: string };
+		body: Record<string, any>;
+		jobId?: string;
+	}) => {
+		const { req, gate, body, jobId } = params;
+		const payload = getImportPayloadFromRequest(body);
+		const targetDeviceId = String(body.targetDeviceId || body.deviceId || "").trim();
+		const previewToken = String(body.previewToken || "").trim();
+		const biometricTransferMode = String(body.biometricTransferMode || "sdkPeerCopy").trim();
+		const passphraseProvided = Boolean(
+			String(body.biometricBundlePassphrase || body.encryptionPassphrase || "").trim(),
+		);
+
+		if (!payload || payload.schemaVersion !== DEVICE_USER_EXPORT_SCHEMA_VERSION) {
+			throw deviceUserImportRequestError(
+				"Import file schema is not a supported device-user export",
 			);
-			return;
 		}
-		try {
-			const payload = getImportPayloadFromRequest(body);
-			const targetDeviceId = String(body.targetDeviceId || body.deviceId || "").trim();
-			const previewToken = String(body.previewToken || "").trim();
-			const biometricTransferMode = String(
-				body.biometricTransferMode || "sdkPeerCopy",
-			).trim();
-			const passphraseProvided = Boolean(
-				String(body.biometricBundlePassphrase || body.encryptionPassphrase || "").trim(),
-			);
+		const targetDevice = await getDeviceForUserSync(gate.organizationId, targetDeviceId);
+		if (!targetDevice || !isHikvisionDevice(targetDevice)) {
+			throw deviceUserImportRequestError("Select a Hikvision target device before import execute");
+		}
 
-			if (!payload || payload.schemaVersion !== DEVICE_USER_EXPORT_SCHEMA_VERSION) {
-				res.status(400).json(
-					buildErrorResponse("Import file schema is not a supported device-user export", 400),
-				);
-				return;
-			}
-			const targetDevice = await getDeviceForUserSync(gate.organizationId, targetDeviceId);
-			if (!targetDevice || !isHikvisionDevice(targetDevice)) {
-				res.status(400).json(
-					buildErrorResponse("Select a Hikvision target device before import execute", 400),
-				);
-				return;
-			}
+		const importedUsers = (Array.isArray(payload.devices) ? payload.devices : []).flatMap(
+			(device: any) =>
+				(Array.isArray(device?.users) ? device.users : []).map((user: any) => ({
+					...user,
+					sourceDeviceId: device?.device?.id || user?.sourceDeviceId || null,
+					sourceDeviceName: device?.device?.name || user?.sourceDeviceName || null,
+				})),
+		);
+		const currentUsers = await loadDeviceUsersForExport(gate.organizationId, targetDevice.id);
+		const currentByVendorUserId = new Map(
+			currentUsers.map((user: any) => [String(user.vendorUserId || "").trim(), user]),
+		);
+		const planRows = importedUsers.map((user: any) => {
+			const vendorUserId = String(user.vendorUserId || "").trim();
+			const current = currentByVendorUserId.get(vendorUserId) as any;
+			const conflictFields = current
+				? (["displayName", "employeeNo", "userType"] as const).filter(
+						(field) =>
+							String(current?.[field] || "").trim() !== String(user?.[field] || "").trim(),
+					)
+				: [];
+			return {
+				vendorUserId,
+				employeeNo: String(user.employeeNo || vendorUserId).trim(),
+				sourceDeviceId: user.sourceDeviceId || null,
+				sourceDeviceName: user.sourceDeviceName || null,
+				action: current ? (conflictFields.length ? "review_conflict" : "match") : "create_preview",
+				conflictFields,
+				currentDeviceUserId: current?.id || null,
+				rawUser: user,
+			};
+		});
+		const expectedPreviewToken = buildDeviceUserImportPreviewToken({
+			organizationId: gate.organizationId,
+			targetDeviceId: targetDevice.id,
+			payload,
+			planRows,
+		});
+		if (!previewToken || previewToken !== expectedPreviewToken) {
+			throw deviceUserImportRequestError(
+				"Import execute requires a fresh previewToken from import preview",
+			);
+		}
+		if (payload?.biometricBundle?.present && !passphraseProvided) {
+			throw deviceUserImportRequestError(
+				"Encrypted biometric bundle import requires a passphrase for this request",
+			);
+		}
+		if (
+			payload?.biometricBundle?.requiredForPortableTemplateImport &&
+			biometricTransferMode !== "sdkPeerCopy" &&
+			!passphraseProvided
+		) {
+			throw deviceUserImportRequestError(
+				"Portable biometric import requires an encrypted bundle passphrase; use sdkPeerCopy only when the source device is reachable",
+			);
+		}
+		if (!["sdkPeerCopy", "metadataOnly", "encryptedBundle"].includes(biometricTransferMode)) {
+			throw deviceUserImportRequestError("Unsupported biometric transfer mode");
+		}
 
-			const importedUsers = (Array.isArray(payload.devices) ? payload.devices : []).flatMap(
-				(device: any) =>
-					(Array.isArray(device?.users) ? device.users : []).map((user: any) => ({
-						...user,
-						sourceDeviceId: device?.device?.id || user?.sourceDeviceId || null,
-						sourceDeviceName: device?.device?.name || user?.sourceDeviceName || null,
-					})),
-			);
-			const currentUsers = await loadDeviceUsersForExport(gate.organizationId, targetDevice.id);
-			const currentByVendorUserId = new Map(
-				currentUsers.map((user: any) => [String(user.vendorUserId || "").trim(), user]),
-			);
-			const planRows = importedUsers.map((user: any) => {
-				const vendorUserId = String(user.vendorUserId || "").trim();
-				const current = currentByVendorUserId.get(vendorUserId) as any;
-				const conflictFields = current
-					? (["displayName", "employeeNo", "userType"] as const).filter(
-							(field) =>
-								String(current?.[field] || "").trim() !==
-								String(user?.[field] || "").trim(),
-						)
-					: [];
-				return {
-					vendorUserId,
-					employeeNo: String(user.employeeNo || vendorUserId).trim(),
-					sourceDeviceId: user.sourceDeviceId || null,
-					sourceDeviceName: user.sourceDeviceName || null,
-					action: current ? (conflictFields.length ? "review_conflict" : "match") : "create_preview",
-					conflictFields,
-					currentDeviceUserId: current?.id || null,
-					rawUser: user,
-				};
-			});
-			const expectedPreviewToken = buildDeviceUserImportPreviewToken({
-				organizationId: gate.organizationId,
+		if (jobId) {
+			updateDeviceUserPackageImportJob(jobId, {
 				targetDeviceId: targetDevice.id,
-				payload,
-				planRows,
+				targetDeviceName: targetDevice.name || targetDevice.id,
+				planned: planRows.length,
+				message: `Importing ${planRows.length} device users to ${targetDevice.name || targetDevice.id}`,
 			});
-			if (!previewToken || previewToken !== expectedPreviewToken) {
-				res.status(400).json(
-					buildErrorResponse(
-						"Import execute requires a fresh previewToken from import preview",
-						400,
-					),
-				);
-				return;
-			}
-			if (payload?.biometricBundle?.present && !passphraseProvided) {
-				res.status(400).json(
-					buildErrorResponse(
-						"Encrypted biometric bundle import requires a passphrase for this request",
-						400,
-					),
-				);
-				return;
-			}
-			if (
-				payload?.biometricBundle?.requiredForPortableTemplateImport &&
-				biometricTransferMode !== "sdkPeerCopy" &&
-				!passphraseProvided
-			) {
-				res.status(400).json(
-					buildErrorResponse(
-						"Portable biometric import requires an encrypted bundle passphrase; use sdkPeerCopy only when the source device is reachable",
-						400,
-					),
-				);
-				return;
-			}
-			if (!["sdkPeerCopy", "metadataOnly", "encryptedBundle"].includes(biometricTransferMode)) {
-				res.status(400).json(buildErrorResponse("Unsupported biometric transfer mode", 400));
-				return;
-			}
+		}
 
-			const backupDir = path.join(
-				process.cwd(),
-				"..",
-				".runtime",
-				"backups",
-				`device-user-import-${new Date().toISOString().replace(/[:.]/g, "-")}`,
-			);
-			await fs.mkdir(backupDir, { recursive: true });
-			await Promise.all([
-				writeJsonFile(path.join(backupDir, "target-device-users-before.json"), currentUsers),
-				writeJsonFile(
-					path.join(backupDir, "import-package-manifest.json"),
-					sanitizeDeviceUserImportPayloadForBackup(payload),
-				),
-				writeJsonFile(path.join(backupDir, "plan.json"), {
-					targetDeviceId: targetDevice.id,
-					previewToken,
-					biometricTransferMode,
-					rows: planRows.map(({ rawUser: _rawUser, ...row }: any) => row),
-				}),
-			]);
+		const backupDir = path.join(
+			process.cwd(),
+			"..",
+			".runtime",
+			"backups",
+			`device-user-import-${new Date().toISOString().replace(/[:.]/g, "-")}`,
+		);
+		await fs.mkdir(backupDir, { recursive: true });
+		await Promise.all([
+			writeJsonFile(path.join(backupDir, "target-device-users-before.json"), currentUsers),
+			writeJsonFile(
+				path.join(backupDir, "import-package-manifest.json"),
+				sanitizeDeviceUserImportPayloadForBackup(payload),
+			),
+			writeJsonFile(path.join(backupDir, "plan.json"), {
+				targetDeviceId: targetDevice.id,
+				previewToken,
+				biometricTransferMode,
+				rows: planRows.map(({ rawUser: _rawUser, ...row }: any) => row),
+			}),
+		]);
 
-			const devices = await prisma.device.findMany({
-				where: {
-					organizationId: gate.organizationId,
-					isDeleted: false,
-					id: {
-						in: Array.from(
-							new Set(
-								planRows
-									.map((row: any) => row.sourceDeviceId)
-									.concat(targetDevice.id)
-									.filter(Boolean),
-							),
+		const devices = await prisma.device.findMany({
+			where: {
+				organizationId: gate.organizationId,
+				isDeleted: false,
+				id: {
+					in: Array.from(
+						new Set(
+							planRows
+								.map((row: any) => row.sourceDeviceId)
+								.concat(targetDevice.id)
+								.filter(Boolean),
 						),
-					},
+					),
 				},
-			});
-			const deviceById = new Map(devices.map((device) => [device.id, device]));
-			const results = [];
-			for (const row of planRows) {
-				if (!row.vendorUserId) {
+			},
+		});
+		const deviceById = new Map(devices.map((device) => [device.id, device]));
+		const results = [];
+		for (const row of planRows) {
+			if (!row.vendorUserId) {
+				results.push(
+					buildDeviceUserImportResultRow(row, {
+						status: "skipped",
+						error: "Missing vendor user ID",
+					}),
+				);
+			} else if (row.conflictFields.length > 0) {
+				results.push(
+					buildDeviceUserImportResultRow(row, {
+						status: "skipped_conflict",
+						error: "Conflict requires manual review before additive import",
+					}),
+				);
+			} else if (
+				biometricTransferMode === "sdkPeerCopy" &&
+				row.sourceDeviceId &&
+				row.sourceDeviceId !== targetDevice.id
+			) {
+				const sourceDevice = deviceById.get(row.sourceDeviceId);
+				if (!sourceDevice || !isHikvisionDevice(sourceDevice)) {
 					results.push(
 						buildDeviceUserImportResultRow(row, {
-							status: "skipped",
-							error: "Missing vendor user ID",
+							status: "failed",
+							error: "Source Hikvision device was not found for SDK peer copy",
 						}),
 					);
-					continue;
-				}
-				if (row.conflictFields.length > 0) {
-					results.push(
-						buildDeviceUserImportResultRow(row, {
-							status: "skipped_conflict",
-							error: "Conflict requires manual review before additive import",
-						}),
-					);
-					continue;
-				}
-				if (
-					biometricTransferMode === "sdkPeerCopy" &&
-					row.sourceDeviceId &&
-					row.sourceDeviceId !== targetDevice.id
-				) {
-					const sourceDevice = deviceById.get(row.sourceDeviceId);
-					if (!sourceDevice || !isHikvisionDevice(sourceDevice)) {
-						results.push(
-							buildDeviceUserImportResultRow(row, {
-								status: "failed",
-								error: "Source Hikvision device was not found for SDK peer copy",
-							}),
-						);
-						continue;
-					}
+				} else {
 					try {
 						const copyData = await copyHikvisionUserToPeerWithRetry({
 							req,
@@ -4515,8 +4538,8 @@ export const controller = (prisma: PrismaClient) => {
 							);
 						}
 					}
-					continue;
 				}
+			} else {
 				results.push(
 					buildDeviceUserImportResultRow(row, {
 						status: row.currentDeviceUserId ? "matched_metadata_only" : "skipped_no_source_copy",
@@ -4528,52 +4551,171 @@ export const controller = (prisma: PrismaClient) => {
 				);
 			}
 
-			const targetAfter = await loadDeviceUsersForExport(gate.organizationId, targetDevice.id);
-			await writeJsonFile(path.join(backupDir, "target-device-users-after.json"), targetAfter);
-			const imported = results.filter((row: any) => row.status === "imported").length;
-			const failed = results.filter((row: any) => row.status === "failed").length;
-			const skipped = results.length - imported - failed;
+			if (jobId) {
+				const imported = results.filter((item: any) => item.status === "imported").length;
+				const failed = results.filter((item: any) => item.status === "failed").length;
+				updateDeviceUserPackageImportJob(jobId, {
+					imported,
+					failed,
+					skipped: results.length - imported - failed,
+					message: `Processed ${results.length} of ${planRows.length} device users`,
+					results,
+				});
+			}
+		}
 
-			logActivity(req, {
-				userId: String((req as any).userId || "unknown"),
-				action: "DEVICE_USER_IMPORT_EXECUTE",
-				description: `Imported ${imported} device users to ${targetDevice.name || targetDevice.id}`,
-				page: { url: req.originalUrl, title: "Device Users" },
-			});
+		const targetAfter = await loadDeviceUsersForExport(gate.organizationId, targetDevice.id);
+		await writeJsonFile(path.join(backupDir, "target-device-users-after.json"), targetAfter);
+		const imported = results.filter((row: any) => row.status === "imported").length;
+		const failed = results.filter((row: any) => row.status === "failed").length;
+		const skipped = results.length - imported - failed;
 
-			res.status(200).json(
-				buildSuccessResponse(
-					failed > 0 && imported === 0
-						? "Device-user import could not write target users"
-						: "Device-user import executed",
-					{
-						mode: "executed",
-						targetDevice: {
-							id: targetDevice.id,
-							name: targetDevice.name,
-							address: targetDevice.address,
-							port: targetDevice.port,
-						},
-						backupDir,
-						biometricTransferMode,
-						plaintextBiometricExposed: false,
-						counts: {
-							planned: planRows.length,
-							imported,
-							failed,
-							skipped,
-							targetUsersAfter: targetAfter.length,
-						},
-						results,
-					},
-					200,
+		logActivity(req, {
+			userId: String((req as any).userId || "unknown"),
+			action: "DEVICE_USER_IMPORT_EXECUTE",
+			description: `Imported ${imported} device users to ${targetDevice.name || targetDevice.id}`,
+			page: { url: req.originalUrl, title: "Device Users" },
+		});
+
+		const message =
+			failed > 0 && imported === 0
+				? "Device-user import could not write target users"
+				: "Device-user import executed";
+		return {
+			message,
+			data: {
+				mode: jobId ? "job" : "executed",
+				jobId: jobId || null,
+				targetDevice: {
+					id: targetDevice.id,
+					name: targetDevice.name,
+					address: targetDevice.address,
+					port: targetDevice.port,
+				},
+				backupDir,
+				biometricTransferMode,
+				plaintextBiometricExposed: false,
+				counts: {
+					planned: planRows.length,
+					imported,
+					failed,
+					skipped,
+					targetUsersAfter: targetAfter.length,
+				},
+				results,
+			},
+		};
+	};
+
+	const executeDeviceUserImport = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		const body = (req.body || {}) as Record<string, any>;
+		if (body.execute !== true || body.confirmation !== DEVICE_USER_IMPORT_CONFIRMATION) {
+			res.status(400).json(
+				buildErrorResponse(
+					`Import execute requires execute=true and confirmation="${DEVICE_USER_IMPORT_CONFIRMATION}"`,
+					400,
 				),
 			);
+			return;
+		}
+
+		const runAsJob = body.runAsJob === true || body.jobMode === "background" || body.async === true;
+		if (runAsJob) {
+			cleanupDeviceUserPackageImportJobs();
+			const jobId = randomUUID();
+			deviceUserPackageImportJobs.set(jobId, {
+				jobId,
+				status: "processing",
+				organizationId: gate.organizationId,
+				targetDeviceId: String(body.targetDeviceId || body.deviceId || "").trim() || null,
+				planned: 0,
+				imported: 0,
+				failed: 0,
+				skipped: 0,
+				message: "Device-user import job queued",
+				plaintextBiometricExposed: false,
+				results: [],
+				startedAt: new Date(),
+			});
+			setImmediate(async () => {
+				try {
+					const result = await runDeviceUserImportExecuteWork({ req, gate, body, jobId });
+					updateDeviceUserPackageImportJob(jobId, {
+						status: "completed",
+						message: result.message,
+						backupDir: result.data.backupDir,
+						planned: result.data.counts.planned,
+						imported: result.data.counts.imported,
+						failed: result.data.counts.failed,
+						skipped: result.data.counts.skipped,
+						targetDeviceId: result.data.targetDevice.id,
+						targetDeviceName: result.data.targetDevice.name || result.data.targetDevice.id,
+						results: result.data.results,
+						completedAt: new Date(),
+					});
+				} catch (error: any) {
+					updateDeviceUserPackageImportJob(jobId, {
+						status: "failed",
+						message: error?.message || "Device-user import job failed",
+						error: error?.message || "Device-user import job failed",
+						failed: 1,
+						completedAt: new Date(),
+					});
+					deviceLogger.error(`Device-user import job ${jobId} failed: ${error}`);
+				}
+			});
+			res.status(202).json(
+				buildSuccessResponse(
+					"Device-user import job accepted",
+					{
+						mode: "job",
+						jobId,
+						status: "processing",
+						pollUrl: `/api/device/users/import/jobs/${jobId}`,
+						plaintextBiometricExposed: false,
+						message: "Device-user import is running in the background.",
+					},
+					202,
+				),
+			);
+			return;
+		}
+
+		try {
+			const result = await runDeviceUserImportExecuteWork({ req, gate, body });
+			res.status(200).json(buildSuccessResponse(result.message, result.data, 200));
 		} catch (error: any) {
-			res.status(500).json(
-				buildErrorResponse(error?.message || "Failed to execute device-user import", 500),
+			res.status(error?.statusCode || 500).json(
+				buildErrorResponse(
+					error?.message || "Failed to execute device-user import",
+					error?.statusCode || 500,
+				),
 			);
 		}
+	};
+
+	const getDeviceUserImportJob = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		cleanupDeviceUserPackageImportJobs();
+		const jobId = String(req.params.jobId || "").trim();
+		const job = deviceUserPackageImportJobs.get(jobId);
+		if (!job || job.organizationId !== gate.organizationId) {
+			res.status(404).json(buildErrorResponse("Device-user import job was not found", 404));
+			return;
+		}
+		res.status(200).json(
+			buildSuccessResponse(
+				"Device-user import job retrieved",
+				{
+					...job,
+					plaintextBiometricExposed: false,
+				},
+				200,
+			),
+		);
 	};
 
 	const reconcileBiometricSync = async (req: Request, res: Response, _next: NextFunction) => {
@@ -10315,6 +10457,7 @@ export const controller = (prisma: PrismaClient) => {
 		exportDeviceUsers,
 		previewDeviceUserImport,
 		executeDeviceUserImport,
+		getDeviceUserImportJob,
 		backfillDeviceUserLifecycleEvents,
 		reconcileBiometricSync,
 		copyHikvisionDeviceUserToPeer,

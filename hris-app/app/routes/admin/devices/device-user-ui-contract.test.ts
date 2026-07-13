@@ -126,6 +126,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("SDK peer copy");
 		expect(enroll).toContain("Encrypted bundle passphrase");
 		expect(enroll).toContain("Type IMPORT DEVICE USERS");
+		expect(enroll).toContain("Run execute as background job");
+		expect(enroll).toContain("Import job queued");
+		expect(enroll).toContain("Poll:");
 		expect(enroll).toContain("executeDeviceUserImport");
 		expect(enroll).toContain("previewToken");
 		expect(enroll).toContain("Plain biometric exposed");
