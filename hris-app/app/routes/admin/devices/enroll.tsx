@@ -790,12 +790,12 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			toast.error("Select at least two Hikvision devices");
 			return;
 		}
-		setSdkMergeState({ open: true, status: "loading", message: "Reading live SDK users.", choices: {} });
+		setSdkMergeState({ open: true, status: "loading", message: "Refresh live users.", choices: {} });
 		try {
 			const data = await planHikvisionSdkUserMergeMutation.mutateAsync({ deviceIds });
-			setSdkMergeState({ open: true, status: "review", message: "Review SDK user conflicts.", data, choices: {} });
+			setSdkMergeState({ open: true, status: "review", message: "Review conflicts.", data, choices: {} });
 		} catch (error: any) {
-			setSdkMergeState({ open: true, status: "error", message: error?.message || "Could not read SDK users.", choices: {} });
+			setSdkMergeState({ open: true, status: "error", message: error?.message || "Could not read live users.", choices: {} });
 		}
 	};
 	const setSdkMergeChoice = (key: string, field: string, choice: "A" | "B") => {
@@ -811,17 +811,17 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	) || 0;
 	const applySdkUserMerge = async () => {
 		if (!sdkMergeState.data || sdkMergeResolvedCount < sdkMergeConflictCount) return;
-		setSdkMergeState((current) => ({ ...current, status: "applying", message: "Applying selected SDK users and rereading targets." }));
+		setSdkMergeState((current) => ({ ...current, status: "applying", message: "Apply merge and reread devices." }));
 		try {
 			const result = await applyHikvisionSdkUserMergeMutation.mutateAsync({
 				planId: sdkMergeState.data.planId,
 				choices: sdkMergeState.choices,
 				applyAll: sdkMergeState.applyAll,
 			});
-			setSdkMergeState((current) => ({ ...current, status: "done", message: result?.attention ? "Merge completed with attention items." : "SDK user merge completed." }));
+			setSdkMergeState((current) => ({ ...current, status: "done", message: result?.attention ? "Merge completed with attention items." : "Merge completed." }));
 			await Promise.allSettled([refetchSyncPreview(), selectedDeviceId ? refetchSourceDeviceUsers() : Promise.resolve()]);
 		} catch (error: any) {
-			setSdkMergeState((current) => ({ ...current, status: "error", message: error?.message || "SDK user merge failed." }));
+			setSdkMergeState((current) => ({ ...current, status: "error", message: error?.message || "Merge failed." }));
 		}
 	};
 	const getBulkDeviceUserSyncStartFailureMessage = (error: unknown) => {
@@ -3172,12 +3172,12 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 					<div className={`rounded-xl border p-3 ${sdkMergeState.status === "error" ? "border-red-200 bg-red-50 text-red-950" : sdkMergeState.status === "done" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-slate-200 bg-slate-50 text-slate-950"}`}>
 						<div className="flex items-center gap-2 text-sm font-medium">
 							{sdkMergeState.status === "loading" || sdkMergeState.status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-							{sdkMergeState.message || "Review SDK users"}
+							{sdkMergeState.message || "Review conflicts"}
 						</div>
 						{sdkMergeState.data ? (
 							<div className="mt-3 grid grid-cols-3 gap-2 text-xs">
 								{[["Users", sdkMergeState.data.plan.counts.unionUsers], ["Conflicts", sdkMergeConflictCount], ["Missing", sdkMergeState.data.plan.counts.missing]].map(([label, value]) => (
-									<div key={String(label)} className="rounded-lg border border-white bg-white px-3 py-2"><span className="block text-slate-500">{label}</span><span className="font-semibold">{value}</span></div>
+									<div key={String(label)} className="rounded-lg border border-white bg-white px-3 py-2"><span className="block text-slate-700">{label}</span><span className="font-semibold">{value}</span></div>
 								))}
 							</div>
 						) : null}
@@ -3196,7 +3196,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 										<div className="mt-1 text-[11px] text-slate-500">Source {user.sourceDeviceId} · Targets {user.targetDeviceIds.join(", ") || "-"}</div>
 										{user.conflicts.length ? <div className="mt-3 space-y-2">{user.conflicts.map((conflict) => {
 											const selected = sdkMergeState.choices[user.key]?.[conflict.field] || sdkMergeState.applyAll;
-											return <div key={conflict.field} className="grid gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2 md:grid-cols-[120px_1fr_1fr_88px] md:items-center"><span className="text-xs font-medium capitalize text-slate-600">{conflict.field}</span><button type="button" onClick={() => setSdkMergeChoice(user.key, conflict.field, "A")} className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "A" ? "border-orange-400 bg-orange-50" : "border-slate-200 bg-white"}`}><span className="block truncate font-medium">{conflict.deviceA.name}</span><span className="block break-words text-slate-600">{String(conflict.deviceA.value ?? "-")}</span></button><button type="button" onClick={() => setSdkMergeChoice(user.key, conflict.field, "B")} className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "B" ? "border-orange-400 bg-orange-50" : "border-slate-200 bg-white"}`}><span className="block truncate font-medium">{conflict.deviceB.name}</span><span className="block break-words text-slate-600">{String(conflict.deviceB.value ?? "-")}</span></button><Badge variant={selected ? "success" : "warning"}>{selected || "Choose"}</Badge></div>;
+											return <div key={conflict.field} className="grid gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2 md:grid-cols-[120px_1fr_1fr_88px] md:items-center"><span className="text-xs font-medium capitalize text-slate-700">{conflict.field}</span><button type="button" onClick={() => setSdkMergeChoice(user.key, conflict.field, "A")} className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "A" ? "border-orange-400 bg-orange-50" : "border-slate-200 bg-white"}`}><span className="block truncate font-medium">{conflict.deviceA.name}</span><span className="block break-words text-slate-700">{String(conflict.deviceA.value ?? "-")}</span></button><button type="button" onClick={() => setSdkMergeChoice(user.key, conflict.field, "B")} className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "B" ? "border-orange-400 bg-orange-50" : "border-slate-200 bg-white"}`}><span className="block truncate font-medium">{conflict.deviceB.name}</span><span className="block break-words text-slate-700">{String(conflict.deviceB.value ?? "-")}</span></button><Badge variant={selected ? "success" : "warning"}>{selected || "Choose"}</Badge></div>;
 										})}</div> : null}
 									</div>
 								))}
