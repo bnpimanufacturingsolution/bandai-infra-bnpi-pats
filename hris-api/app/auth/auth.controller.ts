@@ -784,8 +784,8 @@ export const isClaimableEmployeeKioskLoginEvent = (params: {
 }): boolean => {
 	const event = params.event;
 	if (!event?.employeeId) return false;
-	if (String(event.eventCategory || "").trim().toUpperCase() !== "ATTENDANCE") return false;
-	if (String(event.eventAction || "").trim().toUpperCase() !== "TAP") return false;
+	if (!['ATTENDANCE', 'ACCESS_CONTROL'].includes(String(event.eventCategory || "").trim().toUpperCase())) return false;
+	if (!['TAP', 'UNKNOWN'].includes(String(event.eventAction || "").trim().toUpperCase())) return false;
 	const status = String(event.status || "").trim().toUpperCase();
 	if (!["MATCHED", "ATTENDANCE_CREATED", "ATTENDANCE_UPDATED"].includes(status)) return false;
 	const eventTime = event.eventTime ? new Date(event.eventTime) : null;
@@ -1298,8 +1298,8 @@ export const controller = (prisma: PrismaClient) => {
 			const eventRecord = await (prisma as any).deviceEvent.findFirst({
 				where: {
 					...(deviceId ? { deviceId } : {}),
-					eventCategory: "ATTENDANCE",
-					eventAction: "TAP",
+					eventCategory: { in: ["ATTENDANCE", "ACCESS_CONTROL"] },
+					eventAction: { in: ["TAP", "UNKNOWN"] },
 					status: {
 						in: ["MATCHED", "ATTENDANCE_CREATED", "ATTENDANCE_UPDATED"],
 					},
