@@ -833,6 +833,9 @@ struct FingerprintReadContext {
     bool saw_failure = false;
     int status_packets = 0;
     int records = 0;
+    std::string device_id;
+    std::string employee_no;
+    std::string operation;
     std::chrono::steady_clock::time_point last_activity = std::chrono::steady_clock::now();
     std::vector<NET_DVR_FINGER_PRINT_CFG_V50> templates;
 };
@@ -872,6 +875,19 @@ void CALLBACK fingerprint_callback(DWORD type, void *buffer, DWORD buffer_length
             status.dwCardReaderNo < MAX_CARD_READER_NUM_512 &&
             status.byCardReaderRecvStatus[status.dwCardReaderNo] != 0 &&
             status.byCardReaderRecvStatus[status.dwCardReaderNo] != 1;
+        emit_json({
+            {"event", "fingerprint_remote_status"},
+            {"targetDeviceId", ctx->device_id},
+            {"employeeNo", ctx->employee_no},
+            {"operation", ctx->operation},
+            {"recvStatus", std::to_string(status.byRecvStatus)},
+            {"readerRecvStatus", status.dwCardReaderNo < MAX_CARD_READER_NUM_512
+                ? std::to_string(status.byCardReaderRecvStatus[status.dwCardReaderNo])
+                : "out_of_range"},
+            {"fingerPrintId", std::to_string(status.byFingerPrintID)},
+            {"fingerType", std::to_string(status.byFingerType)},
+            {"cardReaderNo", std::to_string(status.dwCardReaderNo)}
+        });
         if (status.byRecvStatus != 0 || reader_failed) {
             ctx->saw_failure = true;
         }
@@ -1083,6 +1099,9 @@ std::vector<NET_DVR_FINGER_PRINT_CFG_V50> read_source_fingerprints(DeviceSession
     enable_default_card_reader(cond.byEnableCardReader, sizeof(cond.byEnableCardReader));
 
     FingerprintReadContext ctx;
+    ctx.device_id = source.config.hris_device_id;
+    ctx.employee_no = job.employee_no;
+    ctx.operation = "read";
     std::unique_lock<std::mutex> sdk_lock(sdk_request_mutex);
     const LONG handle = NET_DVR_StartRemoteConfig(
         source.user_id,
@@ -1197,6 +1216,9 @@ bool write_peer_fingerprints(
     enable_default_card_reader(cond.byEnableCardReader, sizeof(cond.byEnableCardReader));
 
     FingerprintReadContext ctx;
+    ctx.device_id = target.config.hris_device_id;
+    ctx.employee_no = job.employee_no;
+    ctx.operation = "write";
     std::unique_lock<std::mutex> sdk_lock(sdk_request_mutex);
     const LONG handle = NET_DVR_StartRemoteConfig(
         target.user_id,
