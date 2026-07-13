@@ -44,6 +44,7 @@ import {
 	useUnlinkDeviceUser,
 	useMockHikvisionFingerprintTally,
 	useMockHikvisionFaceTally,
+	useMirrorHikvisionFaceToPeers,
 } from "~/lib/hooks/useDevices";
 import { useHikvisionDeviceUsers } from "~/lib/hooks/use-hikvision";
 import { useQueryClient } from "@tanstack/react-query";
@@ -250,6 +251,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
 	const mockHikvisionFingerprintMutation = useMockHikvisionFingerprintTally();
 	const mockHikvisionFaceMutation = useMockHikvisionFaceTally();
+	const mirrorHikvisionFaceMutation = useMirrorHikvisionFaceToPeers();
 	const startDeviceUserSyncJobMutation = useStartDeviceUserSyncJob();
 	const cancelDeviceUserSyncJobMutation = useCancelDeviceUserSyncJob();
 	const linkDeviceUserMutation = useLinkDeviceUser();

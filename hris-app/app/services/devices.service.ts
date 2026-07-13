@@ -483,6 +483,11 @@ export interface HikvisionCopyUserRequest {
 	includeFingerprints?: boolean;
 }
 
+export interface HikvisionMirrorFaceRequest {
+	sourceDeviceId: string;
+	employeeNo: string;
+}
+
 export interface HikvisionMockFingerprintRequest {
 	deviceId: string;
 	vendorUserId: string;
@@ -1058,6 +1063,16 @@ class DevicesService extends APIService {
 					error.message ||
 					"Error copying Hikvision device user",
 			);
+		}
+	}
+
+	async mirrorHikvisionFaceToPeers(payload: HikvisionMirrorFaceRequest): Promise<any> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/hikvision/mirror-face", payload);
+			if (!response.data) throw new Error("Failed to mirror Hikvision face");
+			return response.data?.data || response.data;
+		} catch (error: any) {
+			throw new Error(error.data?.errors?.[0]?.message || error.message || "Failed to mirror Hikvision face");
 		}
 	}
 

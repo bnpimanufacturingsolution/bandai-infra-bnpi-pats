@@ -3654,6 +3654,66 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const mirrorHikvisionFaceToPeers = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+			const sourceDeviceId = String(req.body?.sourceDeviceId || "").trim();
+			const employeeNo = String(req.body?.employeeNo || req.body?.vendorUserId || "").trim();
+			if (!sourceDeviceId || !employeeNo) {
+				res.status(400).json(buildErrorResponse("sourceDeviceId and employeeNo are required", 400));
+				return;
+			}
+			const sourceDevice = await prisma.device.findFirst({
+				where: { id: sourceDeviceId, organizationId: String(admin.organizationId), isDeleted: false },
+			});
+			if (!sourceDevice || !isHikvisionDevice(sourceDevice)) {
+				res.status(404).json(buildErrorResponse("Hikvision source device was not found", 404));
+				return;
+			}
+			const result = await runHikvisionListenerVmCommand([
+				"sudo",
+				"env",
+				"HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api",
+				`HIKVISION_HOT_RELOAD_API_BASE=${HIKVISION_VM_LOCAL_API_BASE}`,
+				"HIKVISION_RUN_SECONDS=2",
+				HIKVISION_VM_WRAPPER_REMOTE_PATH,
+				"--run-once",
+				"--mirror-face-source-device-id",
+				sourceDeviceId,
+				"--mirror-face-employee-no",
+				employeeNo,
+			],
+				16000,
+			);
+			const events = parseJsonLines(result.stdout);
+			if (result.exitCode !== 0) {
+				res.status(502).json(buildErrorResponse(result.stderr.trim() || result.stdout.trim() || "Hikvision face mirror failed", 502));
+				return;
+			}
+			const completed = events.find((event) => event.event === "manual_face_mirror_completed") || null;
+			logActivity(req, {
+				userId: String((req as any).userId || "unknown"),
+				action: "HIKVISION_FACE_MIRROR",
+				description: `Mirrored Hikvision face for ${employeeNo} from ${sourceDevice.name} to peers`,
+				page: { url: req.originalUrl, title: "Device Users" },
+			});
+			res.status(200).json(buildSuccessResponse("Hikvision face mirror completed", {
+				sourceDeviceId,
+				employeeNo,
+				completed,
+				events,
+			}, 200));
+		} catch (error: any) {
+			deviceLogger.error(`Hikvision face mirror failed: ${error?.message || error}`);
+			res.status(500).json(buildErrorResponse(error?.message || "Failed to mirror Hikvision face", 500));
+		}
+	};
+
 	const mockHikvisionFaceTally = async (
 		req: Request,
 		res: Response,
@@ -7328,6 +7388,7 @@ export const controller = (prisma: PrismaClient) => {
 		backfillDeviceUserLifecycleEvents,
 		reconcileBiometricSync,
 		copyHikvisionDeviceUserToPeer,
+		mirrorHikvisionFaceToPeers,
 		mockHikvisionFingerprintTally,
 		mockHikvisionFaceTally,
 		backfillDeviceUsers,

@@ -366,6 +366,20 @@ export const useCopyHikvisionDeviceUserToPeer = () => {
 	});
 };
 
+export const useMirrorHikvisionFaceToPeers = () => {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (payload: { sourceDeviceId: string; employeeNo: string }) =>
+			devicesService.mirrorHikvisionFaceToPeers(payload),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users"] });
+			sonnerToast.success("Real face mirror requested for peer devices");
+		},
+		onError: (error: any) => sonnerToast.error(error?.message || "Failed to mirror Hikvision face"),
+	});
+};
+
 export const useMockHikvisionFingerprintTally = () => {
 	const queryClient = useQueryClient();
 

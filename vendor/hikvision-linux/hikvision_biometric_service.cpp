@@ -933,6 +933,16 @@ struct FaceWriteContext {
     bool ok = false;
 };
 
+struct FaceReadContext {
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool done = false;
+    bool failed = false;
+    DWORD sdk_error = 0;
+    std::vector<char> face_template;
+    std::vector<char> face_picture;
+};
+
 void CALLBACK face_capture_callback(DWORD type, void *buffer, DWORD buffer_length, void *user_data) {
     auto *ctx = reinterpret_cast<FaceCaptureContext *>(user_data);
     if (ctx == nullptr) return;
@@ -977,6 +987,43 @@ void CALLBACK face_write_callback(DWORD type, void *buffer, DWORD buffer_length,
         auto *status = reinterpret_cast<NET_DVR_FACE_AND_TEMPLATE_STATUS *>(buffer);
         ctx->ok = status->byRecvStatus == 1;
         ctx->done = true;
+    }
+    ctx->cv.notify_all();
+}
+
+void CALLBACK face_read_callback(DWORD type, void *buffer, DWORD buffer_length, void *user_data) {
+    auto *ctx = reinterpret_cast<FaceReadContext *>(user_data);
+    if (ctx == nullptr) return;
+    std::lock_guard<std::mutex> lock(ctx->mutex);
+    if (type == NET_SDK_CALLBACK_TYPE_DATA && buffer != nullptr &&
+        buffer_length >= sizeof(NET_DVR_FACE_AND_TEMPLATE_CFG)) {
+        auto *record = reinterpret_cast<NET_DVR_FACE_AND_TEMPLATE_CFG *>(buffer);
+        if (record->pFaceTemplateBuffer != nullptr && record->dwFaceTemplateLen > 0) {
+            ctx->face_template.assign(
+                record->pFaceTemplateBuffer,
+                record->pFaceTemplateBuffer + record->dwFaceTemplateLen);
+        }
+        if (record->pFaceBuffer != nullptr && record->dwFaceLen > 0) {
+            ctx->face_picture.assign(
+                record->pFaceBuffer,
+                record->pFaceBuffer + record->dwFaceLen);
+        }
+    } else if (type == NET_SDK_CALLBACK_TYPE_STATUS && buffer != nullptr &&
+               buffer_length >= sizeof(DWORD)) {
+        DWORD status = 0;
+        std::memcpy(&status, buffer, sizeof(status));
+        if (status == NET_SDK_CALLBACK_STATUS_SUCCESS) {
+            ctx->done = true;
+        } else if (status == NET_SDK_CALLBACK_STATUS_FAILED ||
+                   status == NET_SDK_CALLBACK_STATUS_EXCEPTION) {
+            ctx->failed = true;
+            ctx->done = true;
+            if (buffer_length >= sizeof(DWORD) * 2) {
+                std::memcpy(&ctx->sdk_error,
+                            reinterpret_cast<const char *>(buffer) + sizeof(DWORD),
+                            sizeof(DWORD));
+            }
+        }
     }
     ctx->cv.notify_all();
 }
@@ -1297,6 +1344,60 @@ bool write_face_and_template(
         {"templateSize", std::to_string(face_template.size())},
         {"pictureSize", std::to_string(face_picture.size())},
         {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
+    });
+    return ok;
+}
+
+bool read_face_and_template(
+    DeviceSession &source,
+    const std::string &employee_no,
+    const std::string &card_no,
+    std::vector<char> *face_template,
+    std::vector<char> *face_picture) {
+    NET_DVR_FACE_AND_TEMPLATE_COND cond{};
+    cond.dwSize = sizeof(cond);
+    cond.dwFaceNum = 1;
+    std::strncpy(reinterpret_cast<char *>(cond.byCardNo), card_no.c_str(), ACS_CARD_NO_LEN - 1);
+    FaceReadContext ctx;
+    std::unique_lock<std::mutex> sdk_lock(sdk_request_mutex);
+    const LONG handle = NET_DVR_StartRemoteConfig(
+        source.user_id,
+        NET_DVR_GET_FACE_AND_TEMPLATE,
+        &cond,
+        sizeof(cond),
+        face_read_callback,
+        &ctx);
+    if (handle < 0) {
+        emit_json({
+            {"event", "source_face_read"},
+            {"sourceDeviceId", source.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"cardNo", card_no},
+            {"ok", "false"},
+            {"lastError", std::to_string(NET_DVR_GetLastError())}
+        });
+        return false;
+    }
+    {
+        std::unique_lock<std::mutex> lock(ctx.mutex);
+        ctx.cv.wait_for(lock, std::chrono::seconds(10), [&ctx] { return ctx.done; });
+    }
+    NET_DVR_StopRemoteConfig(handle);
+    sdk_lock.unlock();
+    const bool ok = !ctx.failed && !ctx.face_template.empty() && !ctx.face_picture.empty();
+    if (ok) {
+        *face_template = ctx.face_template;
+        *face_picture = ctx.face_picture;
+    }
+    emit_json({
+        {"event", "source_face_read"},
+        {"sourceDeviceId", source.config.hris_device_id},
+        {"employeeNo", employee_no},
+        {"cardNo", card_no},
+        {"ok", ok ? "true" : "false"},
+        {"templateSize", std::to_string(ctx.face_template.size())},
+        {"pictureSize", std::to_string(ctx.face_picture.size())},
+        {"lastError", ok ? "0" : std::to_string(ctx.sdk_error ? ctx.sdk_error : NET_DVR_GetLastError())}
     });
     return ok;
 }
@@ -1864,6 +1965,73 @@ bool capture_and_sync_face_for_employee(
     }
     emit_json({
         {"event", "manual_face_capture_sync_completed"},
+        {"sourceDeviceId", source.config.hris_device_id},
+        {"employeeNo", employee_no},
+        {"ok", ok ? "true" : "false"},
+        {"targetWrites", std::to_string(target_writes)},
+        {"templateSize", std::to_string(face_template.size())},
+        {"pictureSize", std::to_string(face_picture.size())}
+    });
+    return ok;
+}
+
+bool mirror_face_for_employee(
+    DeviceSession &source,
+    const std::string &employee_no) {
+    ReconcileJob job;
+    job.source_host = source.config.host;
+    job.source_device_id = source.config.hris_device_id;
+    job.employee_no = employee_no;
+    std::string user_json;
+    std::string card_json;
+    read_source_user(source, job, &user_json);
+    read_source_card(source, job, &card_json);
+    std::string card_no = extract_string_field_from_json(card_json, "cardNo");
+    if (card_no.empty()) card_no = extract_string_field_from_json(user_json, "cardNo");
+
+    emit_json({
+        {"event", "manual_face_mirror_started"},
+        {"sourceDeviceId", source.config.hris_device_id},
+        {"employeeNo", employee_no},
+        {"cardNo", card_no},
+        {"mode", execute_mode ? "execute" : "dry-run"}
+    });
+    if (card_no.empty()) {
+        emit_json({
+            {"event", "manual_face_mirror_completed"},
+            {"sourceDeviceId", source.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"ok", "false"},
+            {"reason", "card_required_by_face_sdk"}
+        });
+        return false;
+    }
+    if (!execute_mode) return true;
+
+    std::vector<char> face_template;
+    std::vector<char> face_picture;
+    if (!read_face_and_template(source, employee_no, card_no, &face_template, &face_picture)) {
+        emit_json({
+            {"event", "manual_face_mirror_completed"},
+            {"sourceDeviceId", source.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"ok", "false"},
+            {"reason", "source_face_not_read"}
+        });
+        return false;
+    }
+
+    bool ok = true;
+    int target_writes = 0;
+    for (auto &target : sessions) {
+        if (!target.config.biometric_peer && target.config.hris_device_id != source.config.hris_device_id) continue;
+        const bool wrote = write_face_and_template(
+            target, employee_no, card_no, face_template, face_picture);
+        if (wrote) target_writes += 1;
+        ok = wrote && ok;
+    }
+    emit_json({
+        {"event", "manual_face_mirror_completed"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
         {"ok", ok ? "true" : "false"},
@@ -2753,7 +2921,8 @@ void usage(const char *program) {
         << "[--manual-target-employee-no employeeNo] "
         << "[--capture-fingerprint-employee-no employeeNo] [--capture-fingerprint-source-device-id id] "
         << "[--finger-no n] [--finger-type n] "
-        << "[--capture-face-employee-no employeeNo] [--capture-face-source-device-id id]\n";
+        << "[--capture-face-employee-no employeeNo] [--capture-face-source-device-id id] "
+        << "[--mirror-face-employee-no employeeNo] [--mirror-face-source-device-id id]\n";
 }
 
 }  // namespace
@@ -2775,6 +2944,8 @@ int main(int argc, char **argv) {
     int capture_finger_type = 0;
     std::string capture_face_employee_no;
     std::string capture_face_source_device_id;
+    std::string mirror_face_employee_no;
+    std::string mirror_face_source_device_id;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -2855,6 +3026,10 @@ int main(int argc, char **argv) {
             if (!next(&capture_face_employee_no)) return 2;
         } else if (arg == "--capture-face-source-device-id") {
             if (!next(&capture_face_source_device_id)) return 2;
+        } else if (arg == "--mirror-face-employee-no") {
+            if (!next(&mirror_face_employee_no)) return 2;
+        } else if (arg == "--mirror-face-source-device-id") {
+            if (!next(&mirror_face_source_device_id)) return 2;
         } else if (arg == "--min-sdk-time") {
             if (!next(&min_sdk_time)) return 2;
         } else if (arg == "--execute") {
@@ -2907,11 +3082,13 @@ int main(int argc, char **argv) {
         !capture_fingerprint_employee_no.empty() && !capture_fingerprint_source_device_id.empty();
     const bool manual_face_capture_mode =
         !capture_face_employee_no.empty() && !capture_face_source_device_id.empty();
+    const bool manual_face_mirror_mode =
+        !mirror_face_employee_no.empty() && !mirror_face_source_device_id.empty();
     const bool manual_reconcile_queue_mode =
         !manual_full_mirror_source_device_id.empty() && !manual_fingerprint_clone_mode;
     const bool manual_reconcile_mode =
         manual_reconcile_queue_mode || !manual_employee_no.empty() || manual_fingerprint_clone_mode ||
-        manual_fingerprint_capture_mode || manual_face_capture_mode;
+        manual_fingerprint_capture_mode || manual_face_capture_mode || manual_face_mirror_mode;
 
     if (configs.empty()) {
         usage(argv[0]);
@@ -3039,6 +3216,24 @@ int main(int argc, char **argv) {
             });
         } else {
             capture_and_sync_face_for_employee(*capture_source, capture_face_employee_no);
+        }
+    }
+    if (manual_face_mirror_mode) {
+        DeviceSession *mirror_source = nullptr;
+        for (auto &session : sessions) {
+            if (session.config.hris_device_id == mirror_face_source_device_id) {
+                mirror_source = &session;
+                break;
+            }
+        }
+        if (mirror_source == nullptr) {
+            emit_json({
+                {"event", "manual_face_mirror_failed"},
+                {"reason", "source_device_not_armed"},
+                {"sourceDeviceId", mirror_face_source_device_id}
+            });
+        } else {
+            mirror_face_for_employee(*mirror_source, mirror_face_employee_no);
         }
     }
     if (manual_reconcile_queue_mode) {
