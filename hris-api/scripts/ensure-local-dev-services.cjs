@@ -316,7 +316,7 @@ async function main() {
 		return;
 	}
 
-	loadEnvFile(envPath);
+	loadEnvFile(envPath, { overwrite: true });
 	loadEnvFile(runtimeEnvPath, { overwrite: true });
 	const datasource = parseDatasourceUrl(
 		process.env.WRITE_DATABASE_URL ||

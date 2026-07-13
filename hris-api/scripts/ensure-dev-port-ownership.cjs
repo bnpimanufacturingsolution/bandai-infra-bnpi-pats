@@ -247,6 +247,19 @@ async function main() {
 	const hasExistingListener =
 		(await canConnect(apiPort, "127.0.0.1")) || (await canConnect(apiPort, "::1"));
 	if (!hasExistingListener) {
+		if (process.platform === "win32") {
+			const staleRepoDevProcesses = getWindowsRepoDevProcesses();
+			if (staleRepoDevProcesses.length > 0) {
+				console.log(
+					`[dev-port-check] Found stale hris-api watcher processes even though port ${apiPort} is currently free. Stopping them before startup.`,
+				);
+				for (const listener of staleRepoDevProcesses) {
+					console.log(`[dev-port-check] stopping ${formatListener(listener)}`);
+					stopWindowsProcessTree(listener.pid);
+				}
+				await new Promise((resolve) => setTimeout(resolve, 750));
+			}
+		}
 		console.log(
 			`[dev-port-check] Port ${apiPort} is available for the Windows hris-api dev server. Docker app host port is ${appHostPort}.`,
 		);

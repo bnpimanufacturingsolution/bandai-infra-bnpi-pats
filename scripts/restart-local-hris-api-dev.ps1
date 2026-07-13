@@ -1,6 +1,6 @@
 param(
 	[int]$Port = 3001,
-	[int]$WaitSeconds = 45
+	[int]$WaitSeconds = 90
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,6 +10,9 @@ $apiDir = Join-Path $repoRoot "hris-api"
 $runtimeDir = Join-Path $repoRoot ".runtime\local-api-watch"
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
 $logPath = Join-Path $runtimeDir "latest.log"
+$dotenvCli = Join-Path $apiDir "node_modules\dotenv-cli\cli.js"
+$nodeBinary = (Get-Command node.exe).Source
+$ensureDbAccessScript = Join-Path $apiDir "scripts\ensure-bnpi-db-access.cjs"
 
 function Get-RepoApiProcesses {
 	$connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
@@ -61,12 +64,19 @@ function Wait-ForApiHealth {
 Stop-RepoApiProcesses
 Set-Content -Path $logPath -Value ""
 
+if (-not (Test-Path $ensureDbAccessScript)) {
+	throw "Missing DB access preflight script at $ensureDbAccessScript"
+}
+
+Write-Host "[local-api-restart] Running DB access preflight"
+& $nodeBinary $ensureDbAccessScript
+
 $launchScript = @"
 Set-Location '$apiDir'
 `$env:CHOKIDAR_USEPOLLING='true'
 `$env:CHOKIDAR_INTERVAL='150'
 `$env:WATCHPACK_POLLING='true'
-npm run dev:api-only *>&1 | Tee-Object -FilePath '$logPath'
+& '$nodeBinary' '$dotenvCli' -o -e .env -e .env.development.local -- node scripts/run-dev-api-watch.cjs *> '$logPath'
 "@
 
 $process = Start-Process powershell `

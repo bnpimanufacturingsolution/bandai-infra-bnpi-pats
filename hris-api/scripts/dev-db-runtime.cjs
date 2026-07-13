@@ -19,6 +19,7 @@ const localForwardPortMap = {
 	dev: [55433, 56533],
 	uat: [55434, 56534],
 };
+const preferredLocalForwardHost = "127.0.0.1";
 
 function loadEnvFile(filePath, options = {}) {
 	if (!fs.existsSync(filePath)) return;
@@ -199,9 +200,9 @@ async function resolvePreferredDatasource({
 				resolution: "existing-local-forward",
 				selectedDatasource: {
 					...datasource,
-					hostname: "localhost",
+					hostname: preferredLocalForwardHost,
 					port: localPort,
-					raw: buildDatasourceUrl(datasource, "localhost", localPort),
+					raw: buildDatasourceUrl(datasource, preferredLocalForwardHost, localPort),
 				},
 				selectedVmHost: null,
 				needsBnpiForward: false,
@@ -225,9 +226,9 @@ async function resolvePreferredDatasource({
 		resolution: "start-local-forward",
 		selectedDatasource: {
 			...datasource,
-			hostname: "localhost",
+			hostname: preferredLocalForwardHost,
 			port: preferredLocalPort,
-			raw: buildDatasourceUrl(datasource, "localhost", preferredLocalPort),
+			raw: buildDatasourceUrl(datasource, preferredLocalForwardHost, preferredLocalPort),
 		},
 		selectedVmHost: null,
 		needsBnpiForward: true,
