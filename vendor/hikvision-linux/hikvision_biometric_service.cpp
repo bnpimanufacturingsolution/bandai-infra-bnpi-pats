@@ -703,6 +703,44 @@ bool read_source_user(DeviceSession &source, const ReconcileJob &job, std::strin
     return ok;
 }
 
+bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::string *card_json) {
+    if (job.employee_no.empty()) {
+        emit_json({
+            {"event", "source_card_read_skipped"},
+            {"reason", "missing_employee_no"},
+            {"sourceDeviceId", source.config.hris_device_id}
+        });
+        return false;
+    }
+
+    std::ostringstream body;
+    body << "{\"CardInfoSearchCond\":{\"searchID\":\"pt-card-"
+         << json_escape(job.employee_no)
+         << "\",\"searchResultPosition\":0,\"maxResults\":10,\"EmployeeNoList\":[{\"employeeNo\":\""
+         << json_escape(job.employee_no)
+         << "\"}]}}";
+
+    std::string response;
+    const bool ok = stdxml_json_request(
+        source,
+        "POST /ISAPI/AccessControl/CardInfo/Search?format=json",
+        body.str(),
+        &response);
+
+    emit_json({
+        {"event", "source_card_read"},
+        {"sourceDeviceId", source.config.hris_device_id},
+        {"employeeNo", job.employee_no},
+        {"ok", ok ? "true" : "false"},
+        {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
+    });
+
+    if (ok && card_json != nullptr) {
+        *card_json = response;
+    }
+    return ok;
+}
+
 std::string extract_first_object_for_key(const std::string &json, const std::string &key) {
     const size_t key_pos = json.find(key);
     if (key_pos == std::string::npos) {
@@ -1297,10 +1335,88 @@ bool write_peer_fingerprints(
         }
     }
 
+    if (!ok && !job.card_no.empty()) {
+        emit_json({
+            {"event", "peer_fingerprint_write_legacy_attempt"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", job.employee_no},
+            {"cardNo", job.card_no},
+            {"templateCount", std::to_string(templates.size())}
+        });
+
+        NET_DVR_FINGERPRINT_COND legacy_cond{};
+        legacy_cond.dwSize = sizeof(legacy_cond);
+        legacy_cond.dwFingerprintNum = static_cast<DWORD>(templates.size());
+        legacy_cond.dwEnableReaderNo = 1;
+        std::strncpy(reinterpret_cast<char *>(legacy_cond.byCardNo), job.card_no.c_str(), ACS_CARD_NO_LEN - 1);
+
+        FingerprintReadContext legacy_ctx;
+        legacy_ctx.device_id = target.config.hris_device_id;
+        legacy_ctx.employee_no = job.employee_no;
+        legacy_ctx.operation = "legacy_write";
+
+        std::unique_lock<std::mutex> legacy_sdk_lock(sdk_request_mutex);
+        const LONG legacy_handle = NET_DVR_StartRemoteConfig(
+            target.user_id,
+            NET_DVR_SET_FINGERPRINT,
+            &legacy_cond,
+            sizeof(legacy_cond),
+            fingerprint_callback,
+            &legacy_ctx);
+        if (legacy_handle >= 0) {
+            bool legacy_send_ok = true;
+            for (const auto &record : templates) {
+                NET_DVR_FINGERPRINT_RECORD legacy_record{};
+                legacy_record.dwSize = sizeof(legacy_record);
+                legacy_record.dwFingerPrintLen = record.dwFingerPrintLen;
+                legacy_record.dwEnableReaderNo = 1;
+                legacy_record.byFingerPrintID = record.byFingerPrintID;
+                legacy_record.byFingerType = record.byFingerType;
+                std::strncpy(reinterpret_cast<char *>(legacy_record.byCardNo), job.card_no.c_str(), ACS_CARD_NO_LEN - 1);
+                std::memcpy(legacy_record.byFingerData, record.byFingerData, record.dwFingerPrintLen);
+                const BOOL send_ok = NET_DVR_SendRemoteConfig(
+                    legacy_handle,
+                    3,
+                    reinterpret_cast<char *>(&legacy_record),
+                    sizeof(legacy_record));
+                if (send_ok != TRUE) {
+                    legacy_send_ok = false;
+                    emit_json({
+                        {"event", "peer_fingerprint_write_legacy_send_failed"},
+                        {"targetDeviceId", target.config.hris_device_id},
+                        {"employeeNo", job.employee_no},
+                        {"cardNo", job.card_no},
+                        {"lastError", std::to_string(NET_DVR_GetLastError())}
+                    });
+                    break;
+                }
+            }
+            const bool legacy_wait_ok = legacy_send_ok && wait_for_fingerprint_remote_config(
+                legacy_ctx,
+                std::chrono::milliseconds(2500),
+                std::chrono::milliseconds(350));
+            NET_DVR_StopRemoteConfig(legacy_handle);
+            legacy_sdk_lock.unlock();
+            if (legacy_send_ok && legacy_wait_ok && !legacy_ctx.failed && !legacy_ctx.saw_failure) {
+                ok = true;
+            }
+        } else {
+            legacy_sdk_lock.unlock();
+            emit_json({
+                {"event", "peer_fingerprint_write_legacy_start_failed"},
+                {"targetDeviceId", target.config.hris_device_id},
+                {"employeeNo", job.employee_no},
+                {"cardNo", job.card_no},
+                {"lastError", std::to_string(NET_DVR_GetLastError())}
+            });
+        }
+    }
+
     emit_json({
         {"event", "peer_fingerprint_write"},
         {"targetDeviceId", target.config.hris_device_id},
         {"employeeNo", job.employee_no},
+        {"cardNo", job.card_no},
         {"ok", ok ? "true" : "false"},
         {"templateCount", std::to_string(templates.size())},
         {"rawFingerprintTemplateStored", "false"},
@@ -1375,7 +1491,12 @@ bool capture_and_sync_fingerprint_for_employee(
     source_user_job.employee_no = employee_no;
     std::string source_user_json;
     read_source_user(source, source_user_job, &source_user_json);
-    const std::string card_no = extract_string_field_from_json(source_user_json, "cardNo");
+    std::string source_card_json;
+    read_source_card(source, source_user_job, &source_card_json);
+    std::string card_no = extract_string_field_from_json(source_card_json, "cardNo");
+    if (card_no.empty()) {
+        card_no = extract_string_field_from_json(source_user_json, "cardNo");
+    }
 
     NET_DVR_CAPTURE_FINGERPRINT_CFG capture{};
     emit_json({
