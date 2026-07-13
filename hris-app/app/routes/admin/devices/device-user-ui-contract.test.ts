@@ -17,6 +17,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(manage).toContain('data-field-path="config.vendor"');
 		expect(manage).toContain("Device vendor");
 		expect(manage).toContain("HRIS applies the correct runtime settings automatically.");
+		expect(manage).toContain('data-field-path="config.employeeKioskLoginEnabled"');
+		expect(manage).toContain("Enable biometric kiosk login");
+		expect(manage).toContain("sign in the employee kiosk automatically");
 		expect(manage).not.toContain('data-field-path="config.source"');
 		expect(manage).not.toContain('data-field-path="config.sdkPort"');
 		expect(manage).not.toContain('data-field-path="config.webhookPath"');

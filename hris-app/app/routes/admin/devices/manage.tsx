@@ -4,6 +4,7 @@ import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
 import { Modal } from "~/components/atoms/Modal";
 import { Badge } from "~/components/atoms/Badge";
+import { Checkbox } from "~/components/atoms/Checkbox";
 import { Select, type SelectOption } from "~/components/atoms/Select";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
 import { ConfigurationEmptyGuide } from "~/components/molecules/ConfigurationEmptyGuide";
@@ -86,20 +87,67 @@ const getDeviceConfigRecord = (config: unknown): DeviceConfigRecord =>
 const buildDeviceConfigPreset = (vendor: string): DeviceConfigRecord => {
 	const normalized = vendor.toLowerCase();
 	if (normalized.includes("hikvision")) {
-		return { vendor: "Hikvision" };
+		return {
+			vendor: "Hikvision",
+			employeeKioskLoginEnabled: false,
+			employeeKioskLoginWindowSeconds: 12,
+			employeeKioskLoginAppCode: "hris",
+			employeeKioskLoginAudience: "employee-portal",
+		};
 	}
 	if (normalized.includes("zkteco") || normalized.includes("zk")) {
-		return { vendor: "ZKTeco" };
+		return {
+			vendor: "ZKTeco",
+			employeeKioskLoginEnabled: false,
+			employeeKioskLoginWindowSeconds: 12,
+			employeeKioskLoginAppCode: "hris",
+			employeeKioskLoginAudience: "employee-portal",
+		};
 	}
-	return { vendor: "Hikvision" };
+	return {
+		vendor: "Hikvision",
+		employeeKioskLoginEnabled: false,
+		employeeKioskLoginWindowSeconds: 12,
+		employeeKioskLoginAppCode: "hris",
+		employeeKioskLoginAudience: "employee-portal",
+	};
 };
 
 const getDefaultDeviceConfig = () => buildDeviceConfigPreset("Hikvision");
 
-const normalizeDeviceConfigForSubmit = (config: unknown): DeviceConfigRecord => {
+const normalizeDeviceConfigForSubmit = (
+	config: unknown,
+	existingConfig?: unknown,
+): DeviceConfigRecord => {
 	const next = getDeviceConfigRecord(config);
-	const vendor = String(next.vendor || "").trim();
-	return buildDeviceConfigPreset(vendor || "Hikvision");
+	const existing = getDeviceConfigRecord(existingConfig);
+	const vendor = String(next.vendor || existing.vendor || "").trim();
+	const preset = buildDeviceConfigPreset(vendor || "Hikvision");
+	return {
+		...existing,
+		...preset,
+		...next,
+		vendor: preset.vendor,
+		employeeKioskLoginEnabled:
+			next.employeeKioskLoginEnabled === true || next.employeeKioskLoginEnabled === false
+				? next.employeeKioskLoginEnabled
+				: existing.employeeKioskLoginEnabled === true,
+		employeeKioskLoginWindowSeconds:
+			typeof next.employeeKioskLoginWindowSeconds === "number"
+				? next.employeeKioskLoginWindowSeconds
+				: typeof existing.employeeKioskLoginWindowSeconds === "number"
+					? existing.employeeKioskLoginWindowSeconds
+					: preset.employeeKioskLoginWindowSeconds,
+		employeeKioskLoginAppCode:
+			String(next.employeeKioskLoginAppCode || existing.employeeKioskLoginAppCode || preset.employeeKioskLoginAppCode).trim() ||
+			"hris",
+		employeeKioskLoginAudience:
+			String(
+				next.employeeKioskLoginAudience ||
+					existing.employeeKioskLoginAudience ||
+					preset.employeeKioskLoginAudience,
+			).trim() || "employee-portal",
+	};
 };
 
 const normalizeAccessForSubmit = (access: DeviceFormData["access"]) => {
@@ -689,11 +737,17 @@ export default function DevicesManagePage() {
 	});
 
 	const watchedProtocol = watch("protocol");
-	const watchedVendor = String((watch("config") as DeviceConfigRecord | undefined)?.vendor || "Hikvision");
+	const watchedConfig = (watch("config") as DeviceConfigRecord | undefined) || getDefaultDeviceConfig();
+	const watchedVendor = String(watchedConfig.vendor || "Hikvision");
+	const watchedEmployeeKioskLoginEnabled = watchedConfig.employeeKioskLoginEnabled === true;
 
 	const applyVendorPreset = (vendor: string) => {
 		const defaults = getVendorConnectionDefaults(vendor);
-		const preset = buildDeviceConfigPreset(vendor);
+		const preset = {
+			...buildDeviceConfigPreset(vendor),
+			...getDeviceConfigRecord(watchedConfig),
+			vendor: buildDeviceConfigPreset(vendor).vendor,
+		};
 		setValue("config", preset, { shouldDirty: true, shouldValidate: true });
 		setValue("protocol", defaults.protocol, { shouldDirty: true, shouldValidate: true });
 		setValue("port", defaults.port, { shouldDirty: true, shouldValidate: true });
@@ -711,6 +765,7 @@ export default function DevicesManagePage() {
 				protocol: activeDevice.protocol,
 				config: {
 					...buildDeviceConfigPreset(String(activeConfig.vendor || "Hikvision")),
+					...activeConfig,
 				},
 				access: activeDevice.access || {
 					username: "",
@@ -820,7 +875,10 @@ export default function DevicesManagePage() {
 	const onSubmit = (data: DeviceFormData) => {
 		// Check if we're editing by looking at search params
 		const isEditing = action === "edit";
-		const normalizedConfig = normalizeDeviceConfigForSubmit(data.config);
+		const normalizedConfig = normalizeDeviceConfigForSubmit(
+			data.config,
+			isEditing ? activeDevice?.config : undefined,
+		);
 
 		if (isEditing && activeDevice) {
 			const normalizedAccess = normalizeAccessForSubmit(data.access);
@@ -1156,6 +1214,37 @@ export default function DevicesManagePage() {
 							</div>
 						</div>
 
+						<div
+							data-field-path="config.employeeKioskLoginEnabled"
+							className="rounded-md border border-slate-200 bg-white p-4">
+							<label
+								htmlFor="employeeKioskLoginEnabled"
+								className="flex items-start gap-3">
+								<Checkbox
+									id="employeeKioskLoginEnabled"
+									checked={watchedEmployeeKioskLoginEnabled}
+									onCheckedChange={(checked) =>
+										setValue(
+											"config",
+											{
+												...getDeviceConfigRecord(watchedConfig),
+												employeeKioskLoginEnabled: checked === true,
+											},
+											{ shouldDirty: true, shouldValidate: true },
+										)
+									}
+								/>
+								<span className="space-y-1">
+									<span className="block text-sm font-medium text-gray-700">
+										Enable biometric kiosk login
+									</span>
+									<span className="block text-xs text-slate-500">
+										Allow a fresh attendance tap from this device to sign in the employee kiosk automatically.
+									</span>
+								</span>
+							</label>
+						</div>
+
 						<div className="grid gap-4 md:grid-cols-2">
 							<div>
 								<div className="block text-sm font-medium text-gray-700 mb-1">
@@ -1281,6 +1370,26 @@ export default function DevicesManagePage() {
 								</div>
 							</div>
 						)}
+						<div className="grid grid-cols-2 gap-4">
+							<div>
+								<p className="block text-sm font-medium text-gray-700 mb-1">
+									Biometric kiosk login
+								</p>
+								<div className="p-3 bg-gray-50 rounded-md border">
+									{getDeviceConfigRecord(activeDevice.config).employeeKioskLoginEnabled === true
+										? "Enabled"
+										: "Disabled"}
+								</div>
+							</div>
+							<div>
+								<p className="block text-sm font-medium text-gray-700 mb-1">
+									Vendor
+								</p>
+								<div className="p-3 bg-gray-50 rounded-md border">
+									{String(getDeviceConfigRecord(activeDevice.config).vendor || "-")}
+								</div>
+							</div>
+						</div>
 						<DeviceHealthPanel deviceId={activeDevice.id} />
 						<div className="flex justify-end gap-3 pt-4">
 							<Button
