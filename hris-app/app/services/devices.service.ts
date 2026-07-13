@@ -481,6 +481,7 @@ export interface HikvisionCopyUserRequest {
 	targetDeviceId: string;
 	employeeNo: string;
 	includeFingerprints?: boolean;
+	includeFaceRecognition?: boolean;
 }
 
 export interface HikvisionMirrorFaceRequest {

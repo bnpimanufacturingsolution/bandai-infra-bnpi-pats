@@ -133,6 +133,7 @@ type CopyDeviceUserState = {
 	targetDeviceId: string;
 	applyToAllPeers: boolean;
 	includeFingerprints: boolean;
+	includeFaceRecognition: boolean;
 };
 
 type DeviceUserPeerTallyRow = {
@@ -308,6 +309,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		targetDeviceId: "",
 		applyToAllPeers: false,
 		includeFingerprints: true,
+		includeFaceRecognition: true,
 	});
 	const [isCopyDeviceUserSubmitting, setIsCopyDeviceUserSubmitting] = useState(false);
 	const [selectedEmployeeForLink, setSelectedEmployeeForLink] = useState("");
@@ -1022,6 +1024,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			targetDeviceId: copyTargetDeviceOptions[0]?.value || "",
 			applyToAllPeers: false,
 			includeFingerprints: true,
+			includeFaceRecognition: true,
 		});
 	};
 
@@ -1055,6 +1058,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 						targetDeviceId,
 						employeeNo: sourceDeviceUser.vendorUserId,
 						includeFingerprints: copyDeviceUserState.includeFingerprints,
+						includeFaceRecognition: copyDeviceUserState.includeFaceRecognition,
 					});
 					successfulCopies += 1;
 					if (
@@ -1098,6 +1102,7 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 				targetDeviceId: "",
 				applyToAllPeers: false,
 				includeFingerprints: true,
+				includeFaceRecognition: true,
 			});
 			await Promise.allSettled([
 				refetchSourceDeviceUsers(),
@@ -3550,7 +3555,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 							sourceDeviceUser: null,
 							targetDeviceId: "",
 							applyToAllPeers: false,
-							includeFingerprints: true,
+										includeFingerprints: true,
+										includeFaceRecognition: true,
 						});
 					}
 				}}
@@ -3649,6 +3655,26 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 							</span>
 						</span>
 					</div>
+					<div className="flex items-start gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+						<input
+							type="checkbox"
+							className="mt-1 h-4 w-4 rounded border-slate-300"
+							checked={copyDeviceUserState.includeFaceRecognition}
+							onChange={(event) =>
+								setCopyDeviceUserState((current) => ({
+									...current,
+									includeFaceRecognition: event.target.checked,
+								}))
+							}
+							disabled={isCopyDeviceUserSubmitting}
+						/>
+						<span>
+							<span className="block font-medium text-slate-950">Include face recognition</span>
+							<span className="block text-xs text-slate-500">
+								Copy the enrolled face when the source device exposes a usable face template.
+							</span>
+						</span>
+					</div>
 					<div className="flex justify-end gap-2 border-t pt-3">
 						<Button
 							type="button"
@@ -3660,8 +3686,9 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 									sourceDeviceUser: null,
 									targetDeviceId: "",
 									applyToAllPeers: false,
-									includeFingerprints: true,
-								})
+																		includeFingerprints: true,
+																		includeFaceRecognition: true,
+																	})
 							}>
 							Cancel
 						</Button>

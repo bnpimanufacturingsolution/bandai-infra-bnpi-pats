@@ -62,6 +62,7 @@ struct ReconcileJob {
     std::string event_kind;
     std::string sdk_time;
     bool include_fingerprints = false;
+    bool include_face_recognition = true;
 };
 
 template <typename Operation>
@@ -2864,7 +2865,7 @@ void process_reconcile_job(const ReconcileJob &job) {
                 retry_peer_operation("fingerprint", target, mirror_job.employee_no, [&]() {
                     return write_peer_fingerprints(target, mirror_job, mirror_fingerprints);
                 });
-                if (mirror_face_available) {
+                if (mirror_face_available && mirror_job.include_face_recognition) {
                     retry_peer_operation("face", target, employee_no, [&]() {
                         return write_face_and_template(target, employee_no, mirror_card_no,
                             mirror_face_template, mirror_face_picture);
@@ -2936,7 +2937,7 @@ void process_reconcile_job(const ReconcileJob &job) {
                 return fingerprint_delete ? delete_peer_fingerprints(target, job) : write_peer_fingerprints(target, job, fingerprints);
             });
         }
-        if (face_available) {
+        if (face_available && job.include_face_recognition) {
             retry_peer_operation("face", target, job.employee_no, [&]() {
                 return write_face_and_template(target, job.employee_no, card_no, face_template, face_picture);
             });
@@ -3079,6 +3080,7 @@ void usage(const char *program) {
         << "[--replay-spool-only] [--post-contract-file path] "
         << "[--manual-full-mirror-source-device-id id] "
         << "[--manual-employee-no employeeNo] [--manual-include-fingerprints] "
+        << "[--manual-exclude-face] "
         << "[--manual-source-employee-no employeeNo] [--manual-target-device-id id] "
         << "[--manual-target-employee-no employeeNo] "
         << "[--capture-fingerprint-employee-no employeeNo] [--capture-fingerprint-source-device-id id] "
@@ -3097,6 +3099,7 @@ int main(int argc, char **argv) {
     std::string manual_full_mirror_source_device_id;
     std::string manual_employee_no;
     bool manual_include_fingerprints = false;
+    bool manual_include_face_recognition = true;
     std::string manual_source_employee_no;
     std::string manual_target_device_id;
     std::string manual_target_employee_no;
@@ -3166,6 +3169,8 @@ int main(int argc, char **argv) {
             if (!next(&manual_employee_no)) return 2;
         } else if (arg == "--manual-include-fingerprints") {
             manual_include_fingerprints = true;
+        } else if (arg == "--manual-exclude-face") {
+            manual_include_face_recognition = false;
         } else if (arg == "--manual-source-employee-no") {
             if (!next(&manual_source_employee_no)) return 2;
         } else if (arg == "--manual-target-device-id") {
@@ -3455,6 +3460,7 @@ int main(int argc, char **argv) {
                 ? "manual_full_mirror"
                 : "manual_single_user_reconcile";
             manual_job.include_fingerprints = manual_include_fingerprints || manual_employee_no.empty();
+            manual_job.include_face_recognition = manual_include_face_recognition;
             queue_reconcile(manual_job);
             emit_json({
                 {"event", "manual_reconcile_queued"},

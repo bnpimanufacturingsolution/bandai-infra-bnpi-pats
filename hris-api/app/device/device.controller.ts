@@ -535,6 +535,7 @@ type HikvisionManualCopyParams = {
 	targetDeviceId: string;
 	employeeNo: string;
 	includeFingerprints: boolean;
+	includeFaceRecognition: boolean;
 	waitSeconds?: number;
 };
 
@@ -724,6 +725,7 @@ export const controller = (prisma: PrismaClient) => {
 				"--manual-employee-no",
 				params.employeeNo,
 				...(params.includeFingerprints ? ["--manual-include-fingerprints"] : []),
+				...(params.includeFaceRecognition ? [] : ["--manual-exclude-face"]),
 			],
 			Math.max(waitSeconds * 1000 + 6000, 14000),
 		);
@@ -3204,6 +3206,7 @@ export const controller = (prisma: PrismaClient) => {
 		targetDevice: any;
 		employeeNo: string;
 		includeFingerprints: boolean;
+		includeFaceRecognition: boolean;
 	}) => {
 		const sourceDeviceId = String(params.sourceDevice?.id || "").trim();
 		const targetDeviceId = String(params.targetDevice?.id || "").trim();
@@ -3299,7 +3302,8 @@ export const controller = (prisma: PrismaClient) => {
 						sourceDeviceId,
 						targetDeviceId,
 						employeeNo,
-						includeFingerprints: params.includeFingerprints,
+					includeFingerprints: params.includeFingerprints,
+					includeFaceRecognition: params.includeFaceRecognition,
 					});
 		const { summary: targetSummary } = await syncSingleHikvisionDeviceUserFromSource({
 			req: params.req,
@@ -3410,6 +3414,7 @@ export const controller = (prisma: PrismaClient) => {
 		targetDevice: any;
 		employeeNo: string;
 		includeFingerprints: boolean;
+		includeFaceRecognition: boolean;
 		retryLimit?: number;
 	}) => {
 		let lastError: any = null;
@@ -3444,6 +3449,7 @@ export const controller = (prisma: PrismaClient) => {
 			const targetDeviceId = String(req.body?.targetDeviceId || "").trim();
 			const employeeNo = String(req.body?.employeeNo || req.body?.vendorUserId || "").trim();
 			const includeFingerprints = req.body?.includeFingerprints !== false;
+			const includeFaceRecognition = req.body?.includeFaceRecognition !== false;
 
 			if (!sourceDeviceId || !targetDeviceId || !employeeNo) {
 				res.status(400).json(
@@ -3487,6 +3493,7 @@ export const controller = (prisma: PrismaClient) => {
 				targetDevice,
 				employeeNo,
 				includeFingerprints,
+				includeFaceRecognition,
 			});
 
 			logActivity(req, {
@@ -3513,6 +3520,7 @@ export const controller = (prisma: PrismaClient) => {
 						},
 						employeeNo,
 						includeFingerprints,
+						includeFaceRecognition,
 						vmCopy: copyData.vmCopy,
 						retry: {
 							attempt: copyData.attempt,
@@ -4123,6 +4131,7 @@ export const controller = (prisma: PrismaClient) => {
 								targetDevice,
 								employeeNo: vendorUserId,
 								includeFingerprints: true,
+								includeFaceRecognition: true,
 							});
 							targetUsers.set(vendorUserId, copyResult.targetDeviceUser);
 							copiedUsers += 1;
@@ -7050,8 +7059,9 @@ export const controller = (prisma: PrismaClient) => {
 					await runHikvisionManualCopyOnVm({
 						sourceDeviceId: String(sourceDeviceUser.deviceId),
 						targetDeviceId: String(device.id),
-						employeeNo: normalizedDeviceEmpId,
-						includeFingerprints: true,
+							employeeNo: normalizedDeviceEmpId,
+							includeFingerprints: true,
+							includeFaceRecognition: true,
 					});
 					await syncSingleHikvisionDeviceUserFromSource({
 						req,

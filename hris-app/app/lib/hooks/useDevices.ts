@@ -350,8 +350,9 @@ export const useCopyHikvisionDeviceUserToPeer = () => {
 		mutationFn: async (payload: {
 			sourceDeviceId: string;
 			targetDeviceId: string;
-			employeeNo: string;
-			includeFingerprints?: boolean;
+				employeeNo: string;
+				includeFingerprints?: boolean;
+				includeFaceRecognition?: boolean;
 		}) => {
 			return await devicesService.copyHikvisionDeviceUserToPeer(payload);
 		},
