@@ -10,6 +10,7 @@ describe("DeviceUser API contract", () => {
 	it("exposes admin-only device user sync and manual link routes", () => {
 		const router = routerSource();
 		const controller = controllerSource();
+		expect(router).to.include('routes.get("/users", controller.listDeviceUsers)');
 		expect(router).to.include('routes.get("/:id/users", controller.listDeviceUsers)');
 		expect(router).to.include('routes.get("/users/:userId/photo", controller.getDeviceUserPhoto)');
 		expect(router).to.include('routes.post("/:id/users/sync", controller.syncDeviceUsers)');
@@ -23,6 +24,8 @@ describe("DeviceUser API contract", () => {
 		expect(router).to.include('routes.post("/users/:userId/unlink", controller.unlinkDeviceUser)');
 		expect(controller).to.include('req.query.vendorUserId');
 		expect(controller).to.include('req.query.vendorUserIds');
+		expect(controller).to.include("req.query.employeeId");
+		expect(controller).to.include("...(employeeId ? { employeeId } : {})");
 		expect(controller).to.include("? { vendorUserId }");
 		expect(controller).to.include('vendorUserId: { in: vendorUserIds }');
 		expect(controller).to.include("DEVICE_USER_ADMIN_ROLES");
@@ -36,7 +39,9 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("readDeviceUserFaceUrl");
 		expect(controller).to.include("Device user face photo host does not match the configured device");
 		expect(controller).to.include('type DeviceUserSyncMode = "full_refresh" | "needs_attention_only" | "peer_converge"');
-		expect(controller).to.include('const requestedMode = String((req.body as any)?.mode || "").trim().toLowerCase()');
+		expect(controller).to.include('const requestedMode = String((req.body as any)?.mode || "")');
+		expect(controller).to.include(".trim()");
+		expect(controller).to.include(".toLowerCase()");
 		expect(controller).to.include('syncMode === "needs_attention_only"');
 		expect(controller).to.include('requestedMode === "peer_converge"');
 		expect(controller).to.include("Cross-device convergence queued");

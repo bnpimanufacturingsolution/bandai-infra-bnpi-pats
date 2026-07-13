@@ -13,7 +13,11 @@ interface IController {
 	getDeviceSyncRuns(req: Request, res: Response, next: NextFunction): Promise<void>;
 	resetDeviceEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
 	triggerZktecoAttendanceSync(req: Request, res: Response, next: NextFunction): Promise<void>;
-	triggerHikvisionAttendanceImport(req: Request, res: Response, next: NextFunction): Promise<void>;
+	triggerHikvisionAttendanceImport(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
 	getDeviceImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	cancelDeviceImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	startDeviceUserSyncJob(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -22,11 +26,17 @@ interface IController {
 	listDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceUserPhoto(req: Request, res: Response, next: NextFunction): Promise<void>;
 	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
-	backfillDeviceUserLifecycleEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
+	backfillDeviceUserLifecycleEvents(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
 	reconcileBiometricSync(req: Request, res: Response, next: NextFunction): Promise<void>;
 	copyHikvisionDeviceUserToPeer(req: Request, res: Response, next: NextFunction): Promise<void>;
 	planHikvisionSdkUserMerge(req: Request, res: Response, next: NextFunction): Promise<void>;
 	applyHikvisionSdkUserMerge(req: Request, res: Response, next: NextFunction): Promise<void>;
+	startHikvisionSdkUserMergeJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getHikvisionSdkUserMergeJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	mirrorHikvisionFaceToPeers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	mockHikvisionFingerprintTally(req: Request, res: Response, next: NextFunction): Promise<void>;
 	mockHikvisionFaceTally(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -60,6 +70,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get("/:id/health", controller.getDeviceHealth);
 	routes.get("/hikvision/listener", controller.getHikvisionListenerStatus);
 	routes.post("/hikvision/listener", controller.controlHikvisionListener);
+	routes.get("/users", controller.listDeviceUsers);
 	routes.get("/:id/users", controller.listDeviceUsers);
 	routes.get("/users/:userId/photo", controller.getDeviceUserPhoto);
 	routes.post("/:id/users/sync", controller.syncDeviceUsers);
@@ -69,6 +80,8 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/hikvision/copy-user", controller.copyHikvisionDeviceUserToPeer);
 	routes.post("/hikvision/sdk-users/merge/plan", controller.planHikvisionSdkUserMerge);
 	routes.post("/hikvision/sdk-users/merge/apply", controller.applyHikvisionSdkUserMerge);
+	routes.post("/hikvision/sdk-users/merge/jobs", controller.startHikvisionSdkUserMergeJob);
+	routes.get("/hikvision/sdk-users/merge/jobs/:jobId", controller.getHikvisionSdkUserMergeJob);
 	routes.post("/hikvision/mirror-face", controller.mirrorHikvisionFaceToPeers);
 	routes.post("/hikvision/mock-fingerprint", controller.mockHikvisionFingerprintTally);
 	routes.post("/hikvision/mock-face", controller.mockHikvisionFaceTally);

@@ -8,6 +8,7 @@ import devicesService, {
 	type DeviceImportJobProgress,
 	type DeviceUserSyncJobStartRequest,
 	type DeviceUserSyncJobProgress,
+	type DeviceUserMergeJobProgress,
 	type DeviceUsersResponse,
 	type DeviceEventsResetScope,
 	type HikvisionListenerAction,
@@ -27,14 +28,27 @@ export const queryKeys = {
 		list: (params?: ApiQueryParams) => [...queryKeys.devices.lists(), { params }] as const,
 		details: () => [...queryKeys.devices.all, "detail"] as const,
 		detail: (id: string) => [...queryKeys.devices.details(), id] as const,
-		events: (params?: ApiQueryParams) => [...queryKeys.devices.all, "events", { params }] as const,
+		events: (params?: ApiQueryParams) =>
+			[...queryKeys.devices.all, "events", { params }] as const,
 		health: (id?: string) => [...queryKeys.devices.all, "health", id] as const,
 		hikvisionListener: () => [...queryKeys.devices.all, "hikvision-listener"] as const,
 		syncPreview: (params?: { deviceId?: string; source?: string }) =>
 			[...queryKeys.devices.all, "sync-preview", { params }] as const,
 		importJob: (jobId?: string) => [...queryKeys.devices.all, "import-job", jobId] as const,
-		users: (deviceId?: string, params?: { page?: number; limit?: number; query?: string; status?: string }) =>
-			[...queryKeys.devices.all, "users", deviceId, { params }] as const,
+		users: (
+			deviceId?: string,
+			params?: {
+				page?: number;
+				limit?: number;
+				query?: string;
+				status?: string;
+				employeeId?: string;
+			},
+		) => [...queryKeys.devices.all, "users", deviceId, { params }] as const,
+		employeeUsers: (
+			employeeId?: string,
+			params?: { page?: number; limit?: number; query?: string; status?: string },
+		) => [...queryKeys.devices.all, "employee-users", employeeId, { params }] as const,
 		syncRuns: (deviceId?: string, params?: { limit?: number }) =>
 			[...queryKeys.devices.all, "sync-runs", deviceId, { params }] as const,
 	},
@@ -198,7 +212,8 @@ export const useStartDeviceUserSyncJob = () => {
 
 export const usePlanHikvisionSdkUserMerge = () => {
 	return useMutation({
-		mutationFn: (payload: { deviceIds: string[] }) => devicesService.planHikvisionSdkUserMerge(payload),
+		mutationFn: (payload: { deviceIds: string[] }) =>
+			devicesService.planHikvisionSdkUserMerge(payload),
 	});
 };
 
@@ -214,6 +229,32 @@ export const useApplyHikvisionSdkUserMerge = () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
 			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users"] });
 		},
+	});
+};
+
+export const useStartHikvisionSdkUserMergeJob = () => {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (payload: {
+			planId: string;
+			choices?: Record<string, Record<string, "A" | "B" | "KEEP">>;
+			applyAll?: "A" | "B";
+		}) => devicesService.startHikvisionSdkUserMergeJob(payload),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users"] });
+		},
+	});
+};
+
+export const useHikvisionSdkUserMergeJob = (jobId?: string | null, enabled = true) => {
+	return useQuery<DeviceUserMergeJobProgress>({
+		queryKey: ["hikvision", "sdk-user-merge-job", jobId],
+		queryFn: () => devicesService.getHikvisionSdkUserMergeJob(jobId || ""),
+		enabled: Boolean(jobId) && enabled,
+		refetchInterval: (query) => (query.state.data?.status === "processing" ? 1500 : false),
+		refetchIntervalInBackground: true,
+		retry: false,
 	});
 };
 
@@ -271,7 +312,11 @@ export const useTriggerHikvisionAttendanceImport = () => {
 	const queryClient = useQueryClient();
 
 	return useMutation({
-		mutationFn: async (payload: { deviceId: string; skipMissingEmployeeNo?: boolean; targetImportCount?: number | null }) => {
+		mutationFn: async (payload: {
+			deviceId: string;
+			skipMissingEmployeeNo?: boolean;
+			targetImportCount?: number | null;
+		}) => {
 			return await devicesService.triggerHikvisionAttendanceImport(payload);
 		},
 		onSuccess: () => {
@@ -286,13 +331,40 @@ export const useTriggerHikvisionAttendanceImport = () => {
 
 export const useDeviceUsers = (
 	deviceId?: string,
-	params: { page?: number; limit?: number; query?: string; status?: string; vendorUserId?: string; vendorUserIds?: string[] } = {},
+	params: {
+		page?: number;
+		limit?: number;
+		query?: string;
+		status?: string;
+		vendorUserId?: string;
+		vendorUserIds?: string[];
+		employeeId?: string;
+	} = {},
 	enabled = true,
 ) => {
 	return useQuery<DeviceUsersResponse>({
 		queryKey: queryKeys.devices.users(deviceId, params),
 		queryFn: () => devicesService.getDeviceUsers(deviceId || "", params),
 		enabled: Boolean(deviceId) && enabled,
+		staleTime: 15 * 1000,
+		retry: 1,
+	});
+};
+
+export const useEmployeeDeviceUsers = (
+	employeeId?: string,
+	params: {
+		page?: number;
+		limit?: number;
+		query?: string;
+		status?: string;
+	} = {},
+	enabled = true,
+) => {
+	return useQuery<DeviceUsersResponse>({
+		queryKey: queryKeys.devices.employeeUsers(employeeId, params),
+		queryFn: () => devicesService.getEmployeeDeviceUsers(employeeId || "", params),
+		enabled: Boolean(employeeId) && enabled,
 		staleTime: 15 * 1000,
 		retry: 1,
 	});
@@ -334,7 +406,13 @@ export const useLinkDeviceUser = () => {
 	const queryClient = useQueryClient();
 
 	return useMutation({
-		mutationFn: async ({ deviceUserId, employeeId }: { deviceUserId: string; employeeId: string }) => {
+		mutationFn: async ({
+			deviceUserId,
+			employeeId,
+		}: {
+			deviceUserId: string;
+			employeeId: string;
+		}) => {
 			return await devicesService.linkDeviceUser(deviceUserId, employeeId);
 		},
 		onSuccess: () => {
@@ -371,9 +449,9 @@ export const useCopyHikvisionDeviceUserToPeer = () => {
 		mutationFn: async (payload: {
 			sourceDeviceId: string;
 			targetDeviceId: string;
-				employeeNo: string;
-				includeFingerprints?: boolean;
-				includeFaceRecognition?: boolean;
+			employeeNo: string;
+			includeFingerprints?: boolean;
+			includeFaceRecognition?: boolean;
 		}) => {
 			return await devicesService.copyHikvisionDeviceUserToPeer(payload);
 		},
@@ -398,7 +476,8 @@ export const useMirrorHikvisionFaceToPeers = () => {
 			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users"] });
 			sonnerToast.success("Real face mirror requested for peer devices");
 		},
-		onError: (error: any) => sonnerToast.error(error?.message || "Failed to mirror Hikvision face"),
+		onError: (error: any) =>
+			sonnerToast.error(error?.message || "Failed to mirror Hikvision face"),
 	});
 };
 
@@ -529,4 +608,3 @@ export const useImportDeviceEnrollment = () => {
 		},
 	});
 };
-

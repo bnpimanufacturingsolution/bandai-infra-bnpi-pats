@@ -41,7 +41,8 @@ import {
 	useDeviceUserSyncJob,
 	useCancelDeviceUserSyncJob,
 	usePlanHikvisionSdkUserMerge,
-	useApplyHikvisionSdkUserMerge,
+	useStartHikvisionSdkUserMergeJob,
+	useHikvisionSdkUserMergeJob,
 	useSyncDeviceUsers,
 	useUnlinkDeviceUser,
 	useMockHikvisionFingerprintTally,
@@ -64,6 +65,7 @@ import deviceService, {
 	type DeviceUser,
 	type DeviceUserCredentialSummary,
 	type DeviceUserSyncJobProgress,
+	type DeviceUserMergeJobProgress,
 	type DeviceUserSyncMode,
 	type DeviceUserMergeField,
 	type DeviceUserMergePlanResponse,
@@ -241,6 +243,13 @@ const mergeFieldValueLabel = (value: unknown) => {
 	return String(value);
 };
 
+const mergeMetricValue = (value: unknown) => {
+	if (value === null || value === undefined || value === "") return "-";
+	const numberValue = Number(value);
+	if (Number.isFinite(numberValue)) return numberValue.toLocaleString();
+	return String(value);
+};
+
 const mergeDefinedDeviceIds = (deviceIds: Array<string | undefined>) =>
 	deviceIds.filter((deviceId): deviceId is string => Boolean(deviceId));
 
@@ -365,6 +374,7 @@ export function DeviceEnrollmentPanel({
 		: "all";
 	const selectedMergeDeviceId = searchParams.get("mergeDeviceId") || "all";
 	const selectedMergeUserKey = searchParams.get("mergeUser") || "";
+	const sdkMergeJobIdParam = searchParams.get("mergeJobId") || "";
 	const {
 		data: syncPreview,
 		isLoading: isLoadingSyncPreview,
@@ -394,7 +404,7 @@ export function DeviceEnrollmentPanel({
 	const startDeviceUserSyncJobMutation = useStartDeviceUserSyncJob();
 	const cancelDeviceUserSyncJobMutation = useCancelDeviceUserSyncJob();
 	const planHikvisionSdkUserMergeMutation = usePlanHikvisionSdkUserMerge();
-	const applyHikvisionSdkUserMergeMutation = useApplyHikvisionSdkUserMerge();
+	const startHikvisionSdkUserMergeJobMutation = useStartHikvisionSdkUserMergeJob();
 	const linkDeviceUserMutation = useLinkDeviceUser();
 	const unlinkDeviceUserMutation = useUnlinkDeviceUser();
 	const [deviceUserSyncState, setDeviceUserSyncState] = useState<{
@@ -420,13 +430,16 @@ export function DeviceEnrollmentPanel({
 	);
 	const [sdkMergeState, setSdkMergeState] = useState<{
 		open: boolean;
-		status: "idle" | "loading" | "review" | "applying" | "done" | "error";
+		status: "idle" | "loading" | "review" | "done" | "error";
 		message: string;
 		data?: DeviceUserMergePlanResponse;
 		choices: Record<string, Record<string, "A" | "B" | "KEEP">>;
 		applyAll?: "A" | "B";
 	}>({ open: false, status: "idle", message: "", choices: {} });
 	const [sdkMergePendingRowId, setSdkMergePendingRowId] = useState<string | null>(null);
+	const [sdkMergeJobId, setSdkMergeJobId] = useState<string | null>(sdkMergeJobIdParam || null);
+	const [sdkMergeLastJob, setSdkMergeLastJob] = useState<DeviceUserMergeJobProgress | null>(null);
+	const [sdkMergeHandledJobId, setSdkMergeHandledJobId] = useState<string | null>(null);
 	const [activeDeviceUserSyncJob, setActiveDeviceUserSyncJob] =
 		useState<ActiveDeviceUserSyncJob | null>(() => {
 			try {
@@ -442,6 +455,10 @@ export function DeviceEnrollmentPanel({
 			activeDeviceUserSyncJob?.jobId,
 			Boolean(activeDeviceUserSyncJob?.jobId),
 		);
+	const { data: sdkMergeJobProgress, isError: isSdkMergeJobError } = useHikvisionSdkUserMergeJob(
+		sdkMergeJobId,
+		Boolean(sdkMergeJobId),
+	);
 	const deviceUserSyncJobStatus = deviceUserSyncJobProgress?.status;
 	const [detailsDeviceUser, setDetailsDeviceUser] = useState<VisibleDeviceUserRow | null>(null);
 	const [detailsPhotoUrl, setDetailsPhotoUrl] = useState<string | null>(null);
@@ -674,6 +691,99 @@ export function DeviceEnrollmentPanel({
 		}
 		return nextMatches;
 	}, [sourceMatchedDeviceUsersData?.deviceUsers]);
+	useEffect(() => {
+		if (!sdkMergeJobIdParam || sdkMergeJobIdParam === sdkMergeJobId) return;
+		setSdkMergeJobId(sdkMergeJobIdParam);
+	}, [sdkMergeJobId, sdkMergeJobIdParam]);
+	useEffect(() => {
+		if (!sdkMergeJobId || !isSdkMergeJobError) return;
+		setSdkMergeLastJob((current) =>
+			current && current.jobId === sdkMergeJobId
+				? {
+						...current,
+						status: "failed",
+						message:
+							"Merge job status expired after an API restart or cleanup. Refresh the merge plan, then retry.",
+						error: "Merge job status expired.",
+						completedAt: current.completedAt || new Date().toISOString(),
+					}
+				: current,
+		);
+		setSdkMergeJobId(null);
+		setSearchParams((previous) => {
+			const next = new URLSearchParams(previous);
+			next.delete("mergeJobId");
+			return next;
+		});
+		toast.warning("Merge job status expired", {
+			description: "Refresh the merge plan before retrying.",
+		});
+	}, [isSdkMergeJobError, sdkMergeJobId]);
+	useEffect(() => {
+		if (!sdkMergeJobProgress) return;
+		setSdkMergeLastJob(sdkMergeJobProgress);
+		setSdkMergeState((current) => ({
+			...current,
+			open: true,
+			status:
+				sdkMergeJobProgress.status === "completed"
+					? "done"
+					: sdkMergeJobProgress.status === "failed"
+						? "error"
+						: "review",
+			message: sdkMergeJobProgress.message || current.message,
+		}));
+		if (sdkMergeJobProgress.status === "processing") return;
+		if (sdkMergeHandledJobId === sdkMergeJobProgress.jobId) return;
+		setSdkMergeHandledJobId(sdkMergeJobProgress.jobId);
+		void Promise.allSettled([
+			refetchSyncPreview(),
+			selectedDeviceId ? refetchSyncRuns() : Promise.resolve(),
+			selectedDeviceId ? refetchSourceDeviceUsers() : Promise.resolve(),
+			selectedDeviceId ? refetchDbDeviceUsers() : Promise.resolve(),
+			selectedDeviceId ? refetchOpenDbDeviceUsers() : Promise.resolve(),
+			selectedDeviceId ? refetchDeviceUserSummary() : Promise.resolve(),
+			selectedDeviceId ? refetchSourceMatchedDeviceUsers() : Promise.resolve(),
+		]);
+		const deviceIds = sdkMergeState.data?.plan.deviceIds || [];
+		if (deviceIds.length >= 2) {
+			void planHikvisionSdkUserMergeMutation
+				.mutateAsync({ deviceIds })
+				.then((data) => {
+					setSdkMergeState((current) => ({
+						...current,
+						data,
+						status: sdkMergeJobProgress.status === "completed" ? "done" : "error",
+						choices: {},
+						applyAll: undefined,
+					}));
+				})
+				.catch(() => undefined);
+		}
+		if (sdkMergeJobProgress.status === "completed") {
+			toast.success("Device-user merge finished", {
+				description: sdkMergeJobProgress.message || "Devices were reread after the merge.",
+			});
+		} else {
+			toast.error("Device-user merge needs attention", {
+				description:
+					sdkMergeJobProgress.message ||
+					"Review the failed rows, then retry from the refreshed plan.",
+			});
+		}
+	}, [
+		refetchDbDeviceUsers,
+		refetchDeviceUserSummary,
+		refetchOpenDbDeviceUsers,
+		refetchSourceDeviceUsers,
+		refetchSourceMatchedDeviceUsers,
+		refetchSyncPreview,
+		refetchSyncRuns,
+		sdkMergeHandledJobId,
+		sdkMergeJobProgress,
+		sdkMergeState.data?.plan.deviceIds,
+		selectedDeviceId,
+	]);
 	useEffect(() => {
 		if (!deviceUserSyncJobStatus || deviceUserSyncJobStatus === "processing") return;
 		if (deviceUserSyncJobProgress) {
@@ -1226,6 +1336,49 @@ export function DeviceEnrollmentPanel({
 		(sdkMergeState.data?.plan.ambiguousMatches?.length || 0);
 	const sdkMergeCanApply =
 		sdkMergeResolvedCount >= sdkMergeConflictCount && sdkMergeBlockingCount === 0;
+	const effectiveSdkMergeJob = sdkMergeJobId
+		? sdkMergeJobProgress || sdkMergeLastJob
+		: sdkMergeLastJob;
+	const hasSdkMergeJob = Boolean(effectiveSdkMergeJob);
+	const sdkMergeJobIsProcessing = effectiveSdkMergeJob?.status === "processing";
+	const sdkMergeJobProcessed = Number(effectiveSdkMergeJob?.processedWrites || 0);
+	const sdkMergeJobTotal = Math.max(Number(effectiveSdkMergeJob?.totalWrites || 1), 1);
+	const sdkMergeJobPercent = Math.min(
+		100,
+		Math.round((sdkMergeJobProcessed / sdkMergeJobTotal) * 100),
+	);
+	const sdkMergeJobToneClass =
+		effectiveSdkMergeJob?.status === "failed"
+			? "border-red-200 bg-red-50 text-red-950"
+			: effectiveSdkMergeJob?.status === "completed"
+				? "border-emerald-200 bg-emerald-50 text-emerald-950"
+				: "border-orange-200 bg-orange-50 text-orange-950";
+	const sdkMergeJobFillClass =
+		effectiveSdkMergeJob?.status === "failed"
+			? "bg-red-600"
+			: effectiveSdkMergeJob?.status === "completed"
+				? "bg-emerald-600"
+				: "bg-orange-600";
+	const sdkMergeJobTitle =
+		effectiveSdkMergeJob?.status === "failed"
+			? "Merge needs attention"
+			: effectiveSdkMergeJob?.status === "completed"
+				? "Merge finished"
+				: sdkMergeJobIsProcessing
+					? "Merge job running"
+					: "Merge job status";
+	const sdkMergeJobSummaryItems = [
+		["Planned writes", effectiveSdkMergeJob?.totalWrites ?? sdkMergeRows.length],
+		["Completed", effectiveSdkMergeJob?.processedWrites ?? 0],
+		["Applied", effectiveSdkMergeJob?.successfulWrites ?? 0],
+		["Needs attention", effectiveSdkMergeJob?.failedWrites ?? 0],
+	] as const;
+	const sdkMergeJobResults = effectiveSdkMergeJob?.results || [];
+	const sdkMergeJobSummary = effectiveSdkMergeJob
+		? `${mergeMetricValue(effectiveSdkMergeJob.successfulWrites)} writes applied, ${mergeMetricValue(
+				effectiveSdkMergeJob.failedWrites,
+			)} need attention.`
+		: "";
 	const chooseSdkMergeRichestSource = (row: SdkMergeIssueRow) => {
 		if (!row.conflictField || !row.richestRecord?.deviceId) return;
 		const conflict = row.user.conflicts.find((item) => item.field === row.conflictField);
@@ -1262,9 +1415,7 @@ export function DeviceEnrollmentPanel({
 			},
 		}));
 	};
-	const autoResolveSdkMergeFromRichest = () => {
-		const plan = sdkMergeState.data?.plan;
-		if (!plan || sdkMergeBlockingCount > 0) return;
+	const buildSdkMergeRichestChoices = (plan: DeviceUserMergePlanResponse["plan"]) => {
 		const choices: Record<string, Record<string, "A" | "B" | "KEEP">> = {};
 		for (const user of plan.users) {
 			const richestRecord = [...user.records].sort(
@@ -1282,6 +1433,12 @@ export function DeviceEnrollmentPanel({
 				choices[user.key] = { ...(choices[user.key] || {}), [conflict.field]: choice };
 			}
 		}
+		return choices;
+	};
+	const autoResolveSdkMergeFromRichest = () => {
+		const plan = sdkMergeState.data?.plan;
+		if (!plan || sdkMergeBlockingCount > 0) return;
+		const choices = buildSdkMergeRichestChoices(plan);
 		setSdkMergeState((current) => ({
 			...current,
 			applyAll: undefined,
@@ -1335,37 +1492,69 @@ export function DeviceEnrollmentPanel({
 			setSdkMergePendingRowId(null);
 		}
 	};
-	const applySdkUserMerge = async () => {
-		if (!sdkMergeState.data || !sdkMergeCanApply) return;
+	const applySdkUserMerge = async (
+		overrideChoices?: Record<string, Record<string, "A" | "B" | "KEEP">>,
+	) => {
+		if (!sdkMergeState.data) return;
+		const choices = overrideChoices || sdkMergeState.choices;
+		const resolvedCount = sdkMergeState.data.plan.users.reduce(
+			(count, user) =>
+				count +
+				user.conflicts.filter((conflict) =>
+					Boolean(sdkMergeState.applyAll || choices[user.key]?.[conflict.field]),
+				).length,
+			0,
+		);
+		if (resolvedCount < sdkMergeConflictCount || sdkMergeBlockingCount > 0) return;
 		setSdkMergeState((current) => ({
 			...current,
-			status: "applying",
-			message: "Apply merge and reread devices.",
+			status: "review",
+			message: "Starting merge job.",
+			choices,
 		}));
 		try {
-			const result = await applyHikvisionSdkUserMergeMutation.mutateAsync({
+			const result = await startHikvisionSdkUserMergeJobMutation.mutateAsync({
 				planId: sdkMergeState.data.planId,
-				choices: sdkMergeState.choices,
+				choices,
 				applyAll: sdkMergeState.applyAll,
+			});
+			setSdkMergeJobId(result.jobId);
+			setSdkMergeLastJob(result.progress);
+			setSdkMergeHandledJobId(null);
+			updateSearchParams((next) => {
+				next.set("mergeJobId", result.jobId);
 			});
 			setSdkMergeState((current) => ({
 				...current,
-				status: "done",
-				message: result?.attention
-					? "Merge completed with attention items."
-					: "Merge completed.",
+				status: "review",
+				message: result.progress?.message || "Merge job started.",
 			}));
-			await Promise.allSettled([
-				refetchSyncPreview(),
-				selectedDeviceId ? refetchSourceDeviceUsers() : Promise.resolve(),
-			]);
 		} catch (error: any) {
 			setSdkMergeState((current) => ({
 				...current,
 				status: "error",
-				message: error?.message || "Merge failed.",
+				message: error?.message || "Merge job could not start.",
 			}));
 		}
+	};
+	const retrySdkUserMergeJob = async () => {
+		if (!sdkMergeState.data || sdkMergeBlockingCount > 0) return;
+		const choices =
+			sdkMergeCanApply && Object.keys(sdkMergeState.choices).length
+				? sdkMergeState.choices
+				: buildSdkMergeRichestChoices(sdkMergeState.data.plan);
+		await applySdkUserMerge(choices);
+	};
+	const dismissSdkUserMergeJob = () => {
+		setSdkMergeJobId(null);
+		setSdkMergeLastJob(null);
+		setSdkMergeHandledJobId(null);
+		updateSearchParams((next) => next.delete("mergeJobId"));
+		setSdkMergeState((current) => ({
+			...current,
+			status: current.data ? "review" : "idle",
+			message: current.data ? "Review conflicts." : "",
+		}));
 	};
 	const getBulkDeviceUserSyncStartFailureMessage = (error: unknown) => {
 		const message =
@@ -4117,8 +4306,8 @@ export function DeviceEnrollmentPanel({
 				onOpenChange={(open) => setSdkMergeState((current) => ({ ...current, open }))}
 				title="Merge device users"
 				className="max-w-5xl"
-				showCloseButton={sdkMergeState.status !== "applying"}
-				closeOnBackdropClick={sdkMergeState.status !== "applying"}>
+				showCloseButton={!sdkMergeJobIsProcessing}
+				closeOnBackdropClick={!sdkMergeJobIsProcessing}>
 				<div className="space-y-3">
 					<div
 						className={`rounded-md border px-3 py-2 ${
@@ -4130,8 +4319,7 @@ export function DeviceEnrollmentPanel({
 						}`}>
 						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 							<div className="flex min-w-0 items-center gap-2 text-sm font-medium">
-								{sdkMergeState.status === "loading" ||
-								sdkMergeState.status === "applying" ? (
+								{sdkMergeState.status === "loading" || sdkMergeJobIsProcessing ? (
 									<Loader2 className="h-4 w-4 shrink-0 animate-spin" />
 								) : null}
 								<span className="truncate">
@@ -4141,7 +4329,100 @@ export function DeviceEnrollmentPanel({
 						</div>
 					</div>
 
-					{sdkMergeState.status === "review" && sdkMergeState.data ? (
+					{hasSdkMergeJob ? (
+						<div className={`rounded-lg border p-4 ${sdkMergeJobToneClass}`}>
+							<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+								<div className="min-w-0">
+									<div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
+										{sdkMergeJobIsProcessing ? (
+											<Loader2 className="h-4 w-4 animate-spin text-orange-700" />
+										) : null}
+										<span>{sdkMergeJobTitle}</span>
+									</div>
+									<p className="mt-1 text-sm opacity-90">
+										{effectiveSdkMergeJob?.message ||
+											"Loading merge job status..."}
+									</p>
+								</div>
+								<div className="shrink-0 text-right text-sm font-semibold">
+									{sdkMergeJobPercent}%
+								</div>
+							</div>
+							<div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
+								<div
+									className={`h-full rounded-full transition-all ${sdkMergeJobFillClass}`}
+									style={{ width: `${sdkMergeJobPercent}%` }}
+								/>
+							</div>
+							<div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+								{sdkMergeJobSummaryItems.map(([label, value]) => (
+									<div
+										key={String(label)}
+										className="rounded-md border border-white/80 bg-white/80 px-3 py-2">
+										<p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+											{label}
+										</p>
+										<p className="mt-1 text-base font-semibold text-slate-950">
+											{mergeMetricValue(value)}
+										</p>
+									</div>
+								))}
+							</div>
+							<p className="mt-3 text-xs opacity-90">
+								{sdkMergeJobSummary ||
+									"HRIS is applying the reviewed richest-source plan, copying credentials, then rereading devices."}
+							</p>
+							{effectiveSdkMergeJob?.error ? (
+								<p className="mt-2 text-xs text-red-800">
+									{effectiveSdkMergeJob.error}
+								</p>
+							) : null}
+							{sdkMergeJobResults.length > 0 ? (
+								<div className="mt-3 overflow-hidden rounded-md border border-white/80 bg-white">
+									<div className="grid grid-cols-[minmax(150px,1fr)_110px_minmax(0,1.2fr)] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+										<span>User</span>
+										<span>Result</span>
+										<span>Target / note</span>
+									</div>
+									{sdkMergeJobResults.slice(0, 8).map((result, index) => (
+										<div
+											key={`${result.userKey || index}:${result.targetDeviceId || ""}`}
+											className="grid gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 lg:grid-cols-[minmax(150px,1fr)_110px_minmax(0,1.2fr)] lg:items-center">
+											<div className="min-w-0">
+												<p className="truncate font-medium text-slate-950">
+													{result.userKey || "Device user"}
+												</p>
+												<p className="truncate text-xs text-slate-500">
+													{result.sourceDeviceId || "-"}
+												</p>
+											</div>
+											<Badge
+												variant={
+													result.status === "success"
+														? "success"
+														: "warning"
+												}>
+												{result.status === "success" ? "Applied" : "Retry"}
+											</Badge>
+											<p className="min-w-0 break-words text-sm text-slate-700">
+												{result.status === "success"
+													? `${result.targetDeviceId || "Target device"}${result.strategy ? ` / ${result.strategy}` : ""}`
+													: result.error ||
+														"Copy failed for this target."}
+											</p>
+										</div>
+									))}
+									{sdkMergeJobResults.length > 8 ? (
+										<div className="px-3 py-2 text-xs text-slate-500">
+											Showing 8 of {sdkMergeJobResults.length} job rows.
+										</div>
+									) : null}
+								</div>
+							) : null}
+						</div>
+					) : null}
+
+					{sdkMergeState.data && sdkMergeState.status !== "loading" ? (
 						<>
 							<div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
 								<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -4151,15 +4432,23 @@ export function DeviceEnrollmentPanel({
 										</p>
 										<p className="text-xs text-slate-700">
 											Preview selects the device with the most complete user,
-											fingerprint, face, card, and field data. Apply writes
-											only after every required decision is chosen.
+											fingerprint, face, card, and field data. Start writes as
+											a tracked job after every required decision is chosen.
 										</p>
+										{sdkMergeBlockingCount > 0 ? (
+											<p className="mt-1 text-xs font-medium text-amber-700">
+												Resolve {sdkMergeBlockingCount} device read issue
+												{sdkMergeBlockingCount === 1 ? "" : "s"} before
+												starting the merge job.
+											</p>
+										) : null}
 									</div>
 									<div className="flex flex-wrap justify-end gap-2">
 										<Button
 											type="button"
 											onClick={autoResolveSdkMergeFromRichest}
 											disabled={
+												sdkMergeJobIsProcessing ||
 												sdkMergeBlockingCount > 0 ||
 												sdkMergeConflictCount === 0
 											}>
@@ -4497,21 +4786,51 @@ export function DeviceEnrollmentPanel({
 						<Button
 							type="button"
 							variant="outline"
-							disabled={sdkMergeState.status === "applying"}
+							disabled={sdkMergeJobIsProcessing}
 							onClick={() =>
 								setSdkMergeState((current) => ({ ...current, open: false }))
 							}>
 							Close
 						</Button>
+						{hasSdkMergeJob && !sdkMergeJobIsProcessing ? (
+							<Button
+								type="button"
+								variant="outline"
+								onClick={dismissSdkUserMergeJob}>
+								Dismiss status
+							</Button>
+						) : null}
+						{effectiveSdkMergeJob?.status === "failed" ? (
+							<Button
+								type="button"
+								className="gap-2 bg-orange-500 text-white hover:bg-orange-600"
+								disabled={
+									startHikvisionSdkUserMergeJobMutation.isPending ||
+									sdkMergeBlockingCount > 0 ||
+									!sdkMergeState.data
+								}
+								onClick={() => void retrySdkUserMergeJob()}>
+								{startHikvisionSdkUserMergeJobMutation.isPending ? (
+									<Loader2 className="h-4 w-4 animate-spin" />
+								) : (
+									<RefreshCw className="h-4 w-4" />
+								)}
+								{startHikvisionSdkUserMergeJobMutation.isPending
+									? "Starting..."
+									: "Retry merge job"}
+							</Button>
+						) : null}
 						{sdkMergeState.status === "review" ? (
 							<Button
 								type="button"
 								disabled={
 									!sdkMergeCanApply ||
-									applyHikvisionSdkUserMergeMutation.isPending
+									sdkMergeJobIsProcessing ||
+									startHikvisionSdkUserMergeJobMutation.isPending
 								}
 								onClick={() => void applySdkUserMerge()}>
-								{applyHikvisionSdkUserMergeMutation.isPending ? (
+								{startHikvisionSdkUserMergeJobMutation.isPending ||
+								sdkMergeJobIsProcessing ? (
 									<Loader2 className="h-4 w-4 animate-spin" />
 								) : (
 									<Link2 className="h-4 w-4" />
@@ -4520,7 +4839,9 @@ export function DeviceEnrollmentPanel({
 									? `Resolve ${sdkMergeBlockingCount} read issue${sdkMergeBlockingCount === 1 ? "" : "s"}`
 									: sdkMergeResolvedCount < sdkMergeConflictCount
 										? `Preview ${sdkMergeConflictCount - sdkMergeResolvedCount} more`
-										: "Apply previewed merge"}
+										: sdkMergeJobIsProcessing
+											? "Merge job running"
+											: "Start merge job"}
 							</Button>
 						) : null}
 					</div>

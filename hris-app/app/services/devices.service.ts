@@ -321,7 +321,12 @@ export type DeviceUserMergePlanResponse = {
 	planId: string;
 	plan: {
 		deviceIds: string[];
-		devices: Array<{ id: string; name?: string | null; address?: string | null; port?: number | null }>;
+		devices: Array<{
+			id: string;
+			name?: string | null;
+			address?: string | null;
+			port?: number | null;
+		}>;
 		users: Array<{
 			key: string;
 			sourceDeviceId: string;
@@ -338,7 +343,13 @@ export type DeviceUserMergePlanResponse = {
 				deviceB: { id: string; name: string; value: unknown };
 			}>;
 		}>;
-		counts: { unionUsers: number; conflicts: number; missing: number; ambiguous?: number; missingHrisLinks?: number };
+		counts: {
+			unionUsers: number;
+			conflicts: number;
+			missing: number;
+			ambiguous?: number;
+			missingHrisLinks?: number;
+		};
 		errors: Array<{ deviceId: string; deviceName: string; error: string }>;
 		ambiguousMatches?: Array<{ deviceId?: string; deviceName?: string; candidates?: string[] }>;
 	};
@@ -347,6 +358,32 @@ export type DeviceUserMergePlanResponse = {
 export type DeviceUserMergeRequest = {
 	deviceIds: string[];
 };
+
+export interface DeviceUserMergeJobProgress {
+	jobId: string;
+	planId: string;
+	retryPlanId?: string;
+	status: "processing" | "completed" | "failed";
+	totalWrites: number;
+	processedWrites: number;
+	successfulWrites: number;
+	failedWrites: number;
+	message: string;
+	results: Array<{
+		userKey?: string;
+		sourceDeviceId?: string;
+		targetDeviceId?: string;
+		status: "success" | "error" | string;
+		strategy?: string | null;
+		error?: string | null;
+	}>;
+	remainingConflicts?: number;
+	remainingMissing?: number;
+	attention?: number;
+	error?: string | null;
+	startedAt: string;
+	completedAt?: string;
+}
 
 export interface DeviceUserSyncJobStartRequest {
 	mode?: DeviceUserSyncMode;
@@ -446,7 +483,14 @@ export interface HikvisionListenerStatus {
 		lastTargetHost?: string | null;
 		lastFailureReason?: string | null;
 		diagnosis?: string | null;
-		state: "receiving" | "armed" | "login_failed" | "posting_failed" | "idle" | "unknown" | string;
+		state:
+			| "receiving"
+			| "armed"
+			| "login_failed"
+			| "posting_failed"
+			| "idle"
+			| "unknown"
+			| string;
 	};
 	activeState: string;
 	subState: string;
@@ -752,7 +796,6 @@ class DevicesService extends APIService {
 	 */
 	async getDeviceById(deviceId: string): Promise<Device> {
 		try {
-
 			const endpoint = `/api/device/${deviceId}`;
 			const response = await hrisApiClient.get<any>(endpoint);
 
@@ -846,10 +889,13 @@ class DevicesService extends APIService {
 		}
 	}
 
-	async getDeviceSyncPreview(params: { deviceId?: string; source?: string } = {}): Promise<DeviceSyncPreviewResponse> {
+	async getDeviceSyncPreview(
+		params: { deviceId?: string; source?: string } = {},
+	): Promise<DeviceSyncPreviewResponse> {
 		try {
 			const query = new URLSearchParams();
-			if (params.deviceId && params.deviceId !== "all") query.set("deviceId", params.deviceId);
+			if (params.deviceId && params.deviceId !== "all")
+				query.set("deviceId", params.deviceId);
 			if (params.source && params.source !== "all") query.set("source", params.source);
 			const endpoint = `/api/device/sync-preview${query.toString() ? `?${query.toString()}` : ""}`;
 			const response = await hrisApiClient.get<any>(endpoint);
@@ -861,14 +907,24 @@ class DevicesService extends APIService {
 		} catch (error: any) {
 			console.error("Error building device sync preview:", error);
 			throw new Error(
-				error.data?.errors?.[0]?.message || error.message || "Error building device sync preview",
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error building device sync preview",
 			);
 		}
 	}
 
 	async getDeviceUsers(
 		deviceId: string,
-		params: { page?: number; limit?: number; query?: string; status?: string; vendorUserId?: string; vendorUserIds?: string[] } = {},
+		params: {
+			page?: number;
+			limit?: number;
+			query?: string;
+			status?: string;
+			vendorUserId?: string;
+			vendorUserIds?: string[];
+			employeeId?: string;
+		} = {},
 	): Promise<DeviceUsersResponse> {
 		try {
 			if (!String(deviceId || "").trim()) throw new Error("Device is required");
@@ -877,11 +933,15 @@ class DevicesService extends APIService {
 			if (params.limit) query.set("limit", String(params.limit));
 			if (params.query) query.set("query", params.query);
 			if (params.status && params.status !== "all") query.set("status", params.status);
+			if (params.employeeId) query.set("employeeId", params.employeeId);
 			if (params.vendorUserId) query.set("vendorUserId", params.vendorUserId);
 			if (params.vendorUserIds?.length) {
 				query.set(
 					"vendorUserIds",
-					params.vendorUserIds.map((vendorUserId) => String(vendorUserId).trim()).filter(Boolean).join(","),
+					params.vendorUserIds
+						.map((vendorUserId) => String(vendorUserId).trim())
+						.filter(Boolean)
+						.join(","),
 				);
 			}
 			const endpoint = `/api/device/${deviceId}/users${query.toString() ? `?${query.toString()}` : ""}`;
@@ -897,10 +957,45 @@ class DevicesService extends APIService {
 		}
 	}
 
+	async getEmployeeDeviceUsers(
+		employeeId: string,
+		params: {
+			page?: number;
+			limit?: number;
+			query?: string;
+			status?: string;
+		} = {},
+	): Promise<DeviceUsersResponse> {
+		try {
+			if (!String(employeeId || "").trim()) throw new Error("Employee is required");
+			const query = new URLSearchParams();
+			query.set("employeeId", employeeId);
+			if (params.page) query.set("page", String(params.page));
+			if (params.limit) query.set("limit", String(params.limit));
+			if (params.query) query.set("query", params.query);
+			if (params.status && params.status !== "all") query.set("status", params.status);
+			const endpoint = `/api/device/users?${query.toString()}`;
+			const response = await hrisApiClient.get<any>(endpoint);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to load employee device users");
+			return data as DeviceUsersResponse;
+		} catch (error: any) {
+			console.error("Error loading employee device users:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error loading employee device users",
+			);
+		}
+	}
+
 	async syncDeviceUsers(deviceId: string): Promise<DeviceUserSyncResponse> {
 		try {
 			if (!String(deviceId || "").trim()) throw new Error("Device is required");
-			const response = await hrisApiClient.post<any>(`/api/device/${deviceId}/users/sync`, {});
+			const response = await hrisApiClient.post<any>(
+				`/api/device/${deviceId}/users/sync`,
+				{},
+			);
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Failed to sync device users");
 			return data as DeviceUserSyncResponse;
@@ -923,19 +1018,31 @@ class DevicesService extends APIService {
 		} catch (error: any) {
 			console.error("Error starting device-user sync job:", error);
 			throw new Error(
-				error.data?.errors?.[0]?.message || error.message || "Error starting device-user sync job",
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error starting device-user sync job",
 			);
 		}
 	}
 
-	async planHikvisionSdkUserMerge(payload: DeviceUserMergeRequest): Promise<DeviceUserMergePlanResponse> {
+	async planHikvisionSdkUserMerge(
+		payload: DeviceUserMergeRequest,
+	): Promise<DeviceUserMergePlanResponse> {
 		try {
-			const response = await hrisApiClient.post<any>("/api/device/hikvision/sdk-users/merge/plan", payload);
+			const response = await hrisApiClient.post<any>(
+				"/api/device/hikvision/sdk-users/merge/plan",
+				payload,
+			);
 			const data = response.data?.data || response.data;
-			if (!data?.planId || !data?.plan) throw new Error("Failed to build SDK user merge plan");
+			if (!data?.planId || !data?.plan)
+				throw new Error("Failed to build SDK user merge plan");
 			return data as DeviceUserMergePlanResponse;
 		} catch (error: any) {
-			throw new Error(error.data?.errors?.[0]?.message || error.message || "Failed to build SDK user merge plan");
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Failed to build SDK user merge plan",
+			);
 		}
 	}
 
@@ -945,10 +1052,57 @@ class DevicesService extends APIService {
 		applyAll?: "A" | "B";
 	}): Promise<any> {
 		try {
-			const response = await hrisApiClient.post<any>("/api/device/hikvision/sdk-users/merge/apply", payload);
+			const response = await hrisApiClient.post<any>(
+				"/api/device/hikvision/sdk-users/merge/apply",
+				payload,
+			);
 			return response.data?.data || response.data;
 		} catch (error: any) {
-			throw new Error(error.data?.errors?.[0]?.message || error.message || "Failed to apply SDK user merge");
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Failed to apply SDK user merge",
+			);
+		}
+	}
+
+	async startHikvisionSdkUserMergeJob(payload: {
+		planId: string;
+		choices?: Record<string, Partial<Record<DeviceUserMergeField, "A" | "B" | "KEEP">>>;
+		applyAll?: "A" | "B";
+	}): Promise<{ jobId: string; progress: DeviceUserMergeJobProgress }> {
+		try {
+			const response = await hrisApiClient.post<any>(
+				"/api/device/hikvision/sdk-users/merge/jobs",
+				payload,
+			);
+			const data = response.data?.data || response.data;
+			if (!data?.jobId) throw new Error("Failed to start SDK user merge job");
+			return data as { jobId: string; progress: DeviceUserMergeJobProgress };
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Failed to start SDK user merge job",
+			);
+		}
+	}
+
+	async getHikvisionSdkUserMergeJob(jobId: string): Promise<DeviceUserMergeJobProgress> {
+		try {
+			if (!String(jobId || "").trim()) throw new Error("SDK user merge job is required");
+			const response = await hrisApiClient.get<any>(
+				`/api/device/hikvision/sdk-users/merge/jobs/${jobId}`,
+			);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("SDK user merge job was not found");
+			return data as DeviceUserMergeJobProgress;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"SDK user merge job was not found",
+			);
 		}
 	}
 
@@ -962,7 +1116,9 @@ class DevicesService extends APIService {
 		} catch (error: any) {
 			console.error("Error loading device-user sync job:", error);
 			throw new Error(
-				error.data?.errors?.[0]?.message || error.message || "Error loading device-user sync job",
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error loading device-user sync job",
 			);
 		}
 	}
@@ -970,14 +1126,19 @@ class DevicesService extends APIService {
 	async cancelDeviceUserSyncJob(jobId: string): Promise<DeviceUserSyncJobProgress> {
 		try {
 			if (!String(jobId || "").trim()) throw new Error("Device-user sync job is required");
-			const response = await hrisApiClient.post<any>(`/api/device/users/sync-jobs/${jobId}/cancel`, {});
+			const response = await hrisApiClient.post<any>(
+				`/api/device/users/sync-jobs/${jobId}/cancel`,
+				{},
+			);
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Device-user sync job was not found");
 			return data as DeviceUserSyncJobProgress;
 		} catch (error: any) {
 			console.error("Error cancelling device-user sync job:", error);
 			throw new Error(
-				error.data?.errors?.[0]?.message || error.message || "Error cancelling device-user sync job",
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error cancelling device-user sync job",
 			);
 		}
 	}
@@ -998,7 +1159,9 @@ class DevicesService extends APIService {
 		} catch (error: any) {
 			console.error("Error loading device sync runs:", error);
 			throw new Error(
-				error.data?.errors?.[0]?.message || error.message || "Error loading device sync runs",
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error loading device sync runs",
 			);
 		}
 	}
@@ -1006,21 +1169,29 @@ class DevicesService extends APIService {
 	async backfillDeviceUsers(deviceId: string): Promise<any> {
 		try {
 			if (!String(deviceId || "").trim()) throw new Error("Device is required");
-			const response = await hrisApiClient.post<any>(`/api/device/${deviceId}/users/backfill`, {});
+			const response = await hrisApiClient.post<any>(
+				`/api/device/${deviceId}/users/backfill`,
+				{},
+			);
 			return response.data?.data || response.data;
 		} catch (error: any) {
 			console.error("Error backfilling device users:", error);
 			throw new Error(
-				error.data?.errors?.[0]?.message || error.message || "Error backfilling device users",
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error backfilling device users",
 			);
 		}
 	}
 
 	async linkDeviceUser(deviceUserId: string, employeeId: string): Promise<DeviceUser> {
 		try {
-			const response = await hrisApiClient.post<any>(`/api/device/users/${deviceUserId}/link`, {
-				employeeId,
-			});
+			const response = await hrisApiClient.post<any>(
+				`/api/device/users/${deviceUserId}/link`,
+				{
+					employeeId,
+				},
+			);
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Failed to link device user");
 			return data as DeviceUser;
@@ -1034,7 +1205,10 @@ class DevicesService extends APIService {
 
 	async unlinkDeviceUser(deviceUserId: string): Promise<DeviceUser> {
 		try {
-			const response = await hrisApiClient.post<any>(`/api/device/users/${deviceUserId}/unlink`, {});
+			const response = await hrisApiClient.post<any>(
+				`/api/device/users/${deviceUserId}/unlink`,
+				{},
+			);
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Failed to unlink device user");
 			return data as DeviceUser;
@@ -1071,7 +1245,9 @@ class DevicesService extends APIService {
 		} catch (error: any) {
 			console.error("Error loading device user photo:", error);
 			throw new Error(
-				error.data?.errors?.[0]?.message || error.message || "Error loading device user photo",
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error loading device user photo",
 			);
 		}
 	}
@@ -1114,14 +1290,19 @@ class DevicesService extends APIService {
 		} catch (error: any) {
 			console.error("Error enrolling user to device:", error);
 			throw new Error(
-				error.data?.errors?.[0]?.message || error.message || "Error enrolling user to device",
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error enrolling user to device",
 			);
 		}
 	}
 
 	async copyHikvisionDeviceUserToPeer(payload: HikvisionCopyUserRequest): Promise<any> {
 		try {
-			const response = await hrisApiClient.post<any>("/api/device/hikvision/copy-user", payload);
+			const response = await hrisApiClient.post<any>(
+				"/api/device/hikvision/copy-user",
+				payload,
+			);
 			if (!response.data) {
 				throw new Error("Failed to copy Hikvision device user");
 			}
@@ -1138,17 +1319,27 @@ class DevicesService extends APIService {
 
 	async mirrorHikvisionFaceToPeers(payload: HikvisionMirrorFaceRequest): Promise<any> {
 		try {
-			const response = await hrisApiClient.post<any>("/api/device/hikvision/mirror-face", payload);
+			const response = await hrisApiClient.post<any>(
+				"/api/device/hikvision/mirror-face",
+				payload,
+			);
 			if (!response.data) throw new Error("Failed to mirror Hikvision face");
 			return response.data?.data || response.data;
 		} catch (error: any) {
-			throw new Error(error.data?.errors?.[0]?.message || error.message || "Failed to mirror Hikvision face");
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Failed to mirror Hikvision face",
+			);
 		}
 	}
 
 	async mockHikvisionFingerprintTally(payload: HikvisionMockFingerprintRequest): Promise<any> {
 		try {
-			const response = await hrisApiClient.post<any>("/api/device/hikvision/mock-fingerprint", payload);
+			const response = await hrisApiClient.post<any>(
+				"/api/device/hikvision/mock-fingerprint",
+				payload,
+			);
 			if (!response.data) {
 				throw new Error("Failed to apply synthetic fingerprint tally");
 			}
@@ -1165,7 +1356,10 @@ class DevicesService extends APIService {
 
 	async mockHikvisionFaceTally(payload: HikvisionMockFaceRequest): Promise<any> {
 		try {
-			const response = await hrisApiClient.post<any>("/api/device/hikvision/mock-face", payload);
+			const response = await hrisApiClient.post<any>(
+				"/api/device/hikvision/mock-face",
+				payload,
+			);
 			if (!response.data) {
 				throw new Error("Failed to apply synthetic face tally");
 			}
@@ -1209,7 +1403,9 @@ class DevicesService extends APIService {
 		} catch (error: any) {
 			console.error("Error starting Hikvision sync:", error);
 			throw new Error(
-				error.data?.errors?.[0]?.message || error.message || "Error starting device log sync",
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error starting device log sync",
 			);
 		}
 	}
@@ -1224,7 +1420,9 @@ class DevicesService extends APIService {
 		} catch (error: any) {
 			console.error("Error loading device import job:", error);
 			throw new Error(
-				error.data?.errors?.[0]?.message || error.message || "Error loading import progress",
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error loading import progress",
 			);
 		}
 	}
@@ -1232,7 +1430,10 @@ class DevicesService extends APIService {
 	async cancelDeviceImportJob(jobId: string): Promise<DeviceImportJobProgress> {
 		try {
 			if (!String(jobId || "").trim()) throw new Error("Import job is required");
-			const response = await hrisApiClient.post<any>(`/api/device/import-jobs/${jobId}/cancel`, {});
+			const response = await hrisApiClient.post<any>(
+				`/api/device/import-jobs/${jobId}/cancel`,
+				{},
+			);
 			const progress = response.data?.data || response.data;
 			if (!progress) throw new Error("Import job was not found");
 			return progress as DeviceImportJobProgress;
@@ -1253,7 +1454,9 @@ class DevicesService extends APIService {
 		} catch (error: any) {
 			console.error("Error resetting device events:", error);
 			throw new Error(
-				error.data?.errors?.[0]?.message || error.message || "Error resetting saved device events",
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error resetting saved device events",
 			);
 		}
 	}
@@ -1301,7 +1504,6 @@ class DevicesService extends APIService {
 	 */
 	async importDeviceEnrollment(file: File): Promise<any> {
 		try {
-
 			const formData = new FormData();
 			formData.append("file", file);
 
@@ -1314,7 +1516,9 @@ class DevicesService extends APIService {
 		} catch (error: any) {
 			console.error("Error importing device enrollment:", error);
 			throw new Error(
-				error.data?.errors?.[0]?.message || error.message || "Error importing device enrollment",
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error importing device enrollment",
 			);
 		}
 	}
@@ -1324,4 +1528,3 @@ class DevicesService extends APIService {
 const devicesService = new DevicesService();
 
 export default devicesService;
-

@@ -3432,6 +3432,7 @@ export function EmployeeForm({ presentation = "page", onRequestClose }: Employee
 				return (
 					<SystemAccessForm
 						form={form}
+						employeeRecordId={id}
 						isEditMode={isEditMode}
 						showDefaultPassword={shouldShowEditDefaultPassword}
 					/>
