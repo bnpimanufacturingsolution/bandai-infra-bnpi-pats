@@ -1778,7 +1778,7 @@ export function EmployeeForm({ presentation = "page", onRequestClose }: Employee
 			const selectedAgencyId = form.getValues("employee.agencyId");
 			const selectedEmploymentType = form.getValues("employee.employmentType");
 			const probationEndDate = form.getValues("employee.probationEndDate");
-			if (selectedEmploymentType === "PROBATIONARY" && !probationEndDate) {
+			if (!isEditMode && selectedEmploymentType === "PROBATIONARY" && !probationEndDate) {
 				form.setError("employee.probationEndDate", {
 					type: "required",
 					message: "Probation end date is required for probationary hires",

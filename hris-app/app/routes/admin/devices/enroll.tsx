@@ -4797,7 +4797,7 @@ export function DeviceEnrollmentPanel({
 								type="button"
 								variant="outline"
 								onClick={dismissSdkUserMergeJob}>
-								Dismiss status
+								Dismiss merge status
 							</Button>
 						) : null}
 						{effectiveSdkMergeJob?.status === "failed" ? (
