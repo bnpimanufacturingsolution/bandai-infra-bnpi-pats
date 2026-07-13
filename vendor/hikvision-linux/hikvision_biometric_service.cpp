@@ -1119,6 +1119,58 @@ bool write_peer_fingerprints(
     return ok;
 }
 
+bool clone_fingerprints_between_users(
+    DeviceSession &source,
+    const std::string &source_employee_no,
+    DeviceSession &target,
+    const std::string &target_employee_no) {
+    ReconcileJob read_job;
+    read_job.source_host = source.config.host;
+    read_job.source_device_id = source.config.hris_device_id;
+    read_job.employee_no = source_employee_no;
+    read_job.include_fingerprints = true;
+    read_job.event_kind = "manual_fingerprint_clone_read";
+
+    emit_json({
+        {"event", "manual_fingerprint_clone_started"},
+        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceEmployeeNo", source_employee_no},
+        {"targetDeviceId", target.config.hris_device_id},
+        {"targetEmployeeNo", target_employee_no},
+        {"mode", execute_mode ? "execute" : "dry-run"}
+    });
+
+    const std::vector<NET_DVR_FINGER_PRINT_CFG_V50> templates =
+        read_source_fingerprints(source, read_job);
+    if (templates.empty()) {
+        emit_json({
+            {"event", "manual_fingerprint_clone_completed"},
+            {"ok", "false"},
+            {"reason", "no_source_templates"},
+            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceEmployeeNo", source_employee_no},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"targetEmployeeNo", target_employee_no}
+        });
+        return false;
+    }
+
+    ReconcileJob write_job = read_job;
+    write_job.employee_no = target_employee_no;
+    write_job.event_kind = "manual_fingerprint_clone_write";
+    const bool ok = write_peer_fingerprints(target, write_job, templates);
+    emit_json({
+        {"event", "manual_fingerprint_clone_completed"},
+        {"ok", ok ? "true" : "false"},
+        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceEmployeeNo", source_employee_no},
+        {"targetDeviceId", target.config.hris_device_id},
+        {"targetEmployeeNo", target_employee_no},
+        {"templateCount", std::to_string(templates.size())}
+    });
+    return ok;
+}
+
 bool delete_peer_user(DeviceSession &target, const ReconcileJob &job) {
     if (job.employee_no.empty()) {
         emit_json({
@@ -1993,7 +2045,9 @@ void usage(const char *program) {
         << "[--min-sdk-time YYYY-MM-DDTHH:MM:SS] [--execute|--dry-run] [--seconds n] "
         << "[--replay-spool-only] [--post-contract-file path] "
         << "[--manual-full-mirror-source-device-id id] "
-        << "[--manual-employee-no employeeNo] [--manual-include-fingerprints]\n";
+        << "[--manual-employee-no employeeNo] [--manual-include-fingerprints] "
+        << "[--manual-source-employee-no employeeNo] [--manual-target-device-id id] "
+        << "[--manual-target-employee-no employeeNo]\n";
 }
 
 }  // namespace
@@ -2006,6 +2060,9 @@ int main(int argc, char **argv) {
     std::string manual_full_mirror_source_device_id;
     std::string manual_employee_no;
     bool manual_include_fingerprints = false;
+    std::string manual_source_employee_no;
+    std::string manual_target_device_id;
+    std::string manual_target_employee_no;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -2064,6 +2121,12 @@ int main(int argc, char **argv) {
             if (!next(&manual_employee_no)) return 2;
         } else if (arg == "--manual-include-fingerprints") {
             manual_include_fingerprints = true;
+        } else if (arg == "--manual-source-employee-no") {
+            if (!next(&manual_source_employee_no)) return 2;
+        } else if (arg == "--manual-target-device-id") {
+            if (!next(&manual_target_device_id)) return 2;
+        } else if (arg == "--manual-target-employee-no") {
+            if (!next(&manual_target_employee_no)) return 2;
         } else if (arg == "--min-sdk-time") {
             if (!next(&min_sdk_time)) return 2;
         } else if (arg == "--execute") {
@@ -2108,8 +2171,14 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    const bool manual_fingerprint_clone_mode =
+        !manual_full_mirror_source_device_id.empty() &&
+        !manual_source_employee_no.empty() &&
+        !manual_target_employee_no.empty();
+    const bool manual_reconcile_queue_mode =
+        !manual_full_mirror_source_device_id.empty() && !manual_fingerprint_clone_mode;
     const bool manual_reconcile_mode =
-        !manual_full_mirror_source_device_id.empty() || !manual_employee_no.empty();
+        manual_reconcile_queue_mode || !manual_employee_no.empty() || manual_fingerprint_clone_mode;
 
     if (configs.empty()) {
         usage(argv[0]);
@@ -2163,7 +2232,43 @@ int main(int argc, char **argv) {
 
     std::thread worker(worker_loop);
     std::thread poller(polling_loop);
-    if (!manual_full_mirror_source_device_id.empty()) {
+    if (manual_fingerprint_clone_mode) {
+        DeviceSession *manual_source = nullptr;
+        DeviceSession *manual_target = nullptr;
+        for (auto &session : sessions) {
+            if (session.config.hris_device_id == manual_full_mirror_source_device_id) {
+                manual_source = &session;
+            }
+            if (!manual_target_device_id.empty() && session.config.hris_device_id == manual_target_device_id) {
+                manual_target = &session;
+            }
+        }
+        if (manual_source == nullptr) {
+            emit_json({
+                {"event", "manual_fingerprint_clone_failed"},
+                {"reason", "source_device_not_armed"},
+                {"sourceDeviceId", manual_full_mirror_source_device_id}
+            });
+        } else {
+            if (manual_target == nullptr) {
+                manual_target = manual_target_device_id.empty() ? manual_source : nullptr;
+            }
+            if (manual_target == nullptr) {
+                emit_json({
+                    {"event", "manual_fingerprint_clone_failed"},
+                    {"reason", "target_device_not_armed"},
+                    {"targetDeviceId", manual_target_device_id}
+                });
+            } else {
+                clone_fingerprints_between_users(
+                    *manual_source,
+                    manual_source_employee_no,
+                    *manual_target,
+                    manual_target_employee_no);
+            }
+        }
+    }
+    if (manual_reconcile_queue_mode) {
         DeviceSession *manual_source = nullptr;
         for (auto &session : sessions) {
             if (session.config.hris_device_id == manual_full_mirror_source_device_id) {
