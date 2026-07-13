@@ -21,6 +21,7 @@ describe("DeviceUser sync helper", () => {
 		expect(schema).to.include("model DeviceUser");
 		expect(schema).to.include("employee       Employee?");
 		expect(schema).to.include("employeeId     String?");
+		expect(schema).to.include("vendorMetadata Json?");
 		expect(schema).to.include("@@unique([organizationId, deviceId, vendorUserId])");
 		expect(schema).to.include("deviceUserId   String?");
 	});
@@ -44,6 +45,8 @@ describe("DeviceUser sync helper", () => {
 		expect(normalized?.status).to.equal("UNMATCHED");
 		expect(normalized?.validFrom).to.be.instanceOf(Date);
 		expect(normalized?.rawPayload?._hrisDeviceMetadata?.credentialSummary?.fingerprintCount).to.equal(2);
+		expect(normalized?.vendorMetadata?.rawVendorPayload?.employeeNo).to.equal("1360");
+		expect(normalized?.vendorMetadata?.credentialSummary?.fingerprintCount).to.equal(2);
 	});
 
 	it("extracts Hikvision credential counts for device-user metadata", () => {

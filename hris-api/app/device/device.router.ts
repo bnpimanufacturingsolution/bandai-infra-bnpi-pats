@@ -23,6 +23,10 @@ interface IController {
 	startDeviceUserSyncJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceUserSyncJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	cancelDeviceUserSyncJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	previewDeviceUserExport(req: Request, res: Response, next: NextFunction): Promise<void>;
+	exportDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	previewDeviceUserImport(req: Request, res: Response, next: NextFunction): Promise<void>;
+	executeDeviceUserImport(req: Request, res: Response, next: NextFunction): Promise<void>;
 	listDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceUserPhoto(req: Request, res: Response, next: NextFunction): Promise<void>;
 	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -71,6 +75,10 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get("/hikvision/listener", controller.getHikvisionListenerStatus);
 	routes.post("/hikvision/listener", controller.controlHikvisionListener);
 	routes.get("/users", controller.listDeviceUsers);
+	routes.post("/users/export/preview", controller.previewDeviceUserExport);
+	routes.post("/users/export", controller.exportDeviceUsers);
+	routes.post("/users/import/preview", controller.previewDeviceUserImport);
+	routes.post("/users/import/execute", controller.executeDeviceUserImport);
 	routes.get("/:id/users", controller.listDeviceUsers);
 	routes.get("/users/:userId/photo", controller.getDeviceUserPhoto);
 	routes.post("/:id/users/sync", controller.syncDeviceUsers);

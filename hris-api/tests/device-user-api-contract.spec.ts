@@ -13,6 +13,10 @@ describe("DeviceUser API contract", () => {
 		expect(router).to.include('routes.get("/users", controller.listDeviceUsers)');
 		expect(router).to.include('routes.get("/:id/users", controller.listDeviceUsers)');
 		expect(router).to.include('routes.get("/users/:userId/photo", controller.getDeviceUserPhoto)');
+		expect(router).to.include('routes.post("/users/export/preview", controller.previewDeviceUserExport)');
+		expect(router).to.include('routes.post("/users/export", controller.exportDeviceUsers)');
+		expect(router).to.include('routes.post("/users/import/preview", controller.previewDeviceUserImport)');
+		expect(router).to.include('routes.post("/users/import/execute", controller.executeDeviceUserImport)');
 		expect(router).to.include('routes.post("/:id/users/sync", controller.syncDeviceUsers)');
 		expect(router).to.include('routes.post("/users/sync-jobs", controller.startDeviceUserSyncJob)');
 		expect(router).to.include('routes.get("/users/sync-jobs/:jobId", controller.getDeviceUserSyncJob)');
@@ -31,7 +35,17 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("DEVICE_USER_ADMIN_ROLES");
 		expect(controller).to.include('"hris-admin"');
 		expect(controller).to.include("assertDeviceUserAdmin(req, res)");
+		expect(controller).to.include("hasDeviceUserVendorMetadataColumn");
+		expect(controller).to.include("vendorMetadata: true");
+		expect(controller).to.include("rawVendorPayload");
 		expect(controller).to.include("const getDeviceUserPhoto = async");
+		expect(controller).to.include("DEVICE_USER_EXPORT_SCHEMA_VERSION");
+		expect(controller).to.include("discoverHikvisionUserExportCapabilities");
+		expect(controller).to.include("fingerprintTemplateExport");
+		expect(controller).to.include("blocked_until_encrypted_biometric_custody_design_is_approved");
+		expect(controller).to.include("const previewDeviceUserImport = async");
+		expect(controller).to.include("executeAvailable: false");
+		expect(controller).to.include("DEVICE_USER_IMPORT_CONFIRMATION");
 		expect(controller).to.include("const backfillDeviceUserLifecycleEvents = async");
 		expect(controller).to.include("persistDeviceUserLifecycleBackfill");
 		expect(controller).to.include("manual_device_user_lifecycle_backfill");

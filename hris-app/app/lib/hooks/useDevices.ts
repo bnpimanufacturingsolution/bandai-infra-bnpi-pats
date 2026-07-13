@@ -9,6 +9,8 @@ import devicesService, {
 	type DeviceUserSyncJobStartRequest,
 	type DeviceUserSyncJobProgress,
 	type DeviceUserMergeJobProgress,
+	type DeviceUserExportRequest,
+	type DeviceUserImportPreviewRequest,
 	type DeviceUsersResponse,
 	type DeviceEventsResetScope,
 	type HikvisionListenerAction,
@@ -398,6 +400,39 @@ export const useSyncDeviceUsers = () => {
 		},
 		onError: (error: any) => {
 			sonnerToast.error(error?.message || "Failed to sync device users");
+		},
+	});
+};
+
+export const usePreviewDeviceUserExport = () => {
+	return useMutation({
+		mutationFn: async (payload: DeviceUserExportRequest) => {
+			return await devicesService.previewDeviceUserExport(payload);
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to preview device-user export");
+		},
+	});
+};
+
+export const useExportDeviceUsers = () => {
+	return useMutation({
+		mutationFn: async (payload: DeviceUserExportRequest) => {
+			return await devicesService.exportDeviceUsers(payload);
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to export device users");
+		},
+	});
+};
+
+export const usePreviewDeviceUserImport = () => {
+	return useMutation({
+		mutationFn: async (payload: DeviceUserImportPreviewRequest) => {
+			return await devicesService.previewDeviceUserImport(payload);
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to preview device-user import");
 		},
 	});
 };

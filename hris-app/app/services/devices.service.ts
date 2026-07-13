@@ -609,6 +609,7 @@ export interface DeviceUser {
 	doorRight?: string | null;
 	accessPlan?: any;
 	rawPayload?: any;
+	vendorMetadata?: any;
 	lastSyncedAt?: string | null;
 	createdAt?: string;
 	updatedAt?: string;
@@ -670,6 +671,107 @@ export interface DeviceUserSyncResponse {
 		failedCopies?: number;
 		syntheticFaceMirrors?: number;
 	};
+}
+
+export type DeviceUserTransferScope = "currentDevice" | "allHikvisionDevices";
+
+export interface DeviceUserExportRequest {
+	deviceId: string;
+	scope?: DeviceUserTransferScope;
+	includeCards?: boolean;
+	includeFingerprints?: boolean;
+	includeFaces?: boolean;
+}
+
+export interface DeviceUserExportPayload {
+	schemaVersion: "project-truth.hikvision-device-users.v1" | string;
+	exportedAt: string;
+	scope: {
+		type: DeviceUserTransferScope | string;
+		deviceId?: string | null;
+		sourceEndpoint?: string;
+	};
+	policy?: Record<string, unknown>;
+	devices: Array<{
+		device: Pick<Device, "id" | "name" | "address" | "port" | "protocol"> & {
+			model?: string | null;
+			serialNumber?: string | null;
+		};
+		sourceRead?: {
+			status: string;
+			endpoint?: string;
+			total?: number;
+			error?: string;
+		};
+		capabilities?: {
+			support?: {
+				userExport?: boolean;
+				cardExport?: boolean;
+				fingerprintExport?: boolean;
+				fingerprintImport?: boolean;
+				faceImportExport?: boolean;
+			};
+			probes?: Array<{
+				name: string;
+				endpoint: string;
+				method: string;
+				status: string;
+				error?: string;
+			}>;
+			policy?: Record<string, unknown>;
+		};
+		summary: {
+			totalUsers: number;
+			readFromDevice: number;
+			savedInHris: number;
+			linked: number;
+			unlinked: number;
+			credentialTypes?: Record<string, string>;
+		};
+		users?: DeviceUser[];
+	}>;
+	summary: {
+		devices: number;
+		totalUsers: number;
+		linked: number;
+		unlinked: number;
+	};
+}
+
+export interface DeviceUserImportPreviewRequest {
+	targetDeviceId: string;
+	payload: DeviceUserExportPayload;
+}
+
+export interface DeviceUserImportPreviewResponse {
+	execute: false;
+	dryRun: true;
+	targetDevice: Pick<Device, "id" | "name" | "address" | "port">;
+	file: {
+		schemaVersion: string;
+		exportedAt?: string | null;
+		sourceDevices: number;
+		users: number;
+	};
+	counts: {
+		newUsers: number;
+		matchingUsers: number;
+		conflicts: number;
+		missingHrisEmployees: number;
+	};
+	unsupportedCredentialTypes: string[];
+	plan: Array<{
+		vendorUserId: string;
+		employeeNo?: string | null;
+		sourceDeviceId?: string | null;
+		sourceDeviceName?: string | null;
+		action: string;
+		conflictFields: string[];
+		missingEmployee: boolean;
+		currentDeviceUserId?: string | null;
+	}>;
+	executeAvailable: boolean;
+	executeBlockedReason?: string;
 }
 
 export interface DevicesResponse {
@@ -1003,6 +1105,60 @@ class DevicesService extends APIService {
 			console.error("Error syncing device users:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error syncing device users",
+			);
+		}
+	}
+
+	async previewDeviceUserExport(
+		payload: DeviceUserExportRequest,
+	): Promise<DeviceUserExportPayload> {
+		try {
+			const response = await hrisApiClient.post<any>(
+				"/api/device/users/export/preview",
+				payload,
+			);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to preview device-user export");
+			return data as DeviceUserExportPayload;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error previewing device-user export",
+			);
+		}
+	}
+
+	async exportDeviceUsers(payload: DeviceUserExportRequest): Promise<DeviceUserExportPayload> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/users/export", payload);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to export device users");
+			return data as DeviceUserExportPayload;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error exporting device users",
+			);
+		}
+	}
+
+	async previewDeviceUserImport(
+		payload: DeviceUserImportPreviewRequest,
+	): Promise<DeviceUserImportPreviewResponse> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/users/import/preview", {
+				targetDeviceId: payload.targetDeviceId,
+				payload: payload.payload,
+				execute: false,
+			});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to preview device-user import");
+			return data as DeviceUserImportPreviewResponse;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error previewing device-user import",
 			);
 		}
 	}

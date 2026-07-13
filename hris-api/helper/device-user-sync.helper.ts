@@ -11,6 +11,7 @@ export type DeviceUserCandidate = {
 	doorRight: string | null;
 	accessPlan: unknown;
 	rawPayload: unknown;
+	vendorMetadata?: unknown;
 };
 
 export type EmployeeMatchCandidate = {
@@ -135,6 +136,15 @@ export const normalizeHikvisionDeviceUser = (rawUser: any): DeviceUserCandidate 
 				source: "UserInfo/Search",
 				credentialSummary,
 			},
+		},
+		vendorMetadata: {
+			vendor: "Hikvision",
+			source: "UserInfo/Search",
+			vendorUserId,
+			employeeNo: vendorUserId,
+			capturedAt: new Date().toISOString(),
+			credentialSummary,
+			rawVendorPayload: rawUser || {},
 		},
 	};
 };

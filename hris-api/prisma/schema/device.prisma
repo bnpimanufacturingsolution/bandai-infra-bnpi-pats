@@ -164,6 +164,7 @@ model DeviceUser {
   doorRight      String?
   accessPlan     Json?
   rawPayload     Json?
+  vendorMetadata Json?
   lastSyncedAt   DateTime?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt

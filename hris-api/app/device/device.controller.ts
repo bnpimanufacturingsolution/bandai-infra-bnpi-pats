@@ -122,6 +122,8 @@ const HIKVISION_PEER_COPY_RETRY_LIMIT = Math.max(
 	1,
 	Math.min(Number(process.env.HIKVISION_PEER_COPY_RETRY_LIMIT || 2), 4),
 );
+const DEVICE_USER_EXPORT_SCHEMA_VERSION = "project-truth.hikvision-device-users.v1";
+const DEVICE_USER_IMPORT_CONFIRMATION = "IMPORT DEVICE USERS";
 
 type DeviceImportJobStatus = "processing" | "completed" | "failed" | "cancelled";
 
@@ -181,6 +183,13 @@ type DeviceUserSyncJob = {
 	startedAt: Date;
 	completedAt?: Date;
 };
+
+type HikvisionCapabilityStatus =
+	| "supported"
+	| "notSupported"
+	| "methodNotAllowed"
+	| "authFailed"
+	| "unknown";
 
 type DeviceUserMergeJobStatus = "processing" | "completed" | "failed";
 
@@ -1629,7 +1638,7 @@ export const controller = (prisma: PrismaClient) => {
 		});
 	};
 
-	const buildDeviceUserSelect = () => ({
+	const buildDeviceUserSelect = (options: { includeVendorMetadata?: boolean } = {}) => ({
 		id: true,
 		organizationId: true,
 		deviceId: true,
@@ -1644,6 +1653,7 @@ export const controller = (prisma: PrismaClient) => {
 		doorRight: true,
 		accessPlan: true,
 		rawPayload: true,
+		...(options.includeVendorMetadata ? { vendorMetadata: true } : {}),
 		lastSyncedAt: true,
 		createdAt: true,
 		updatedAt: true,
@@ -1668,8 +1678,17 @@ export const controller = (prisma: PrismaClient) => {
 
 	const decorateDeviceUser = (row: any) => {
 		const employee = row?.employee;
+		const vendorMetadata =
+			row?.vendorMetadata ||
+			(row?.rawPayload
+				? {
+						source: "rawPayload",
+						rawVendorPayload: row.rawPayload,
+					}
+				: null);
 		return {
 			...row,
+			vendorMetadata,
 			employee: employee
 				? {
 						id: employee.id,
@@ -1889,10 +1908,11 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			const includeVendorMetadata = await hasDeviceUserVendorMetadataColumn();
 			const [rows, total, allRows] = await Promise.all([
 				(prisma as any).deviceUser.findMany({
 					where,
-					select: buildDeviceUserSelect(),
+					select: buildDeviceUserSelect({ includeVendorMetadata }),
 					orderBy: [{ status: "asc" }, { vendorUserId: "asc" }],
 					skip: (page - 1) * limit,
 					take: limit,
@@ -2004,6 +2024,21 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			throw error;
 		}
+	};
+
+	const hasDeviceUserVendorMetadataColumn = async () => {
+		if (!(await hasDeviceUserTable())) return false;
+		const rows =
+			(await prisma.$queryRaw<Array<{ vendorMetadata?: boolean | null }>>`
+			SELECT EXISTS (
+				SELECT 1
+				FROM information_schema.columns
+				WHERE table_schema = 'public'
+					AND table_name = 'device_users'
+					AND column_name = 'vendorMetadata'
+			) AS "vendorMetadata"
+		`) || [];
+		return Boolean(rows[0]?.vendorMetadata);
 	};
 
 	const getDeviceEventColumnPresence = async () => {
@@ -2249,6 +2284,7 @@ export const controller = (prisma: PrismaClient) => {
 		let conflict = 0;
 		let disabled = 0;
 		let pruned = 0;
+		const canPersistVendorMetadata = await hasDeviceUserVendorMetadataColumn();
 		const currentVendorUserIds = new Set(
 			candidates
 				.map((candidate) => String(candidate.vendorUserId || "").trim())
@@ -2279,7 +2315,7 @@ export const controller = (prisma: PrismaClient) => {
 			else if (status === "DISABLED") disabled += 1;
 			else unmatched += 1;
 
-			const data = {
+			const data: any = {
 				employeeId,
 				employeeNo: candidate.employeeNo,
 				displayName: candidate.displayName,
@@ -2301,6 +2337,19 @@ export const controller = (prisma: PrismaClient) => {
 				},
 				lastSyncedAt: now,
 			};
+			if (canPersistVendorMetadata) {
+				data.vendorMetadata = {
+					...((candidate.vendorMetadata as any) || {}),
+					hrisSync: {
+						source: params.source,
+						matchReason: preserveManualEmployee
+							? "manual_existing"
+							: decision.matchReason,
+						matchCount: decision.matchCount,
+						lastSyncedAt: now.toISOString(),
+					},
+				};
+			}
 			if (existing?.id) {
 				await (prisma as any).deviceUser.update({ where: { id: existing.id }, data });
 				updated += 1;
@@ -2355,6 +2404,13 @@ export const controller = (prisma: PrismaClient) => {
 				accessPlan: null,
 				rawPayload: {
 					source: "Employee.deviceEmpId",
+					employeeId: employee.employeeId,
+					employeeDbId: employee.id,
+				},
+				vendorMetadata: {
+					vendor: "legacy",
+					source: "Employee.deviceEmpId",
+					vendorUserId,
 					employeeId: employee.employeeId,
 					employeeDbId: employee.id,
 				},
@@ -2971,6 +3027,553 @@ export const controller = (prisma: PrismaClient) => {
 				buildErrorResponse(error?.message || "Failed to sync device users", 500),
 			);
 		}
+	};
+
+	const classifyHikvisionProbeError = (error: any): HikvisionCapabilityStatus => {
+		const status = Number(error?.status || 0);
+		const text = JSON.stringify(error?.data || error || {}).toLowerCase();
+		if (status === 401 || status === 403) return "authFailed";
+		if (status === 405 || text.includes("methodnotallowed") || text.includes("method not allowed")) {
+			return "methodNotAllowed";
+		}
+		if (
+			status === 404 ||
+			text.includes("notsupport") ||
+			text.includes("not support") ||
+			text.includes("not_supported")
+		) {
+			return "notSupported";
+		}
+		return "unknown";
+	};
+
+	const probeHikvisionCapability = async (params: {
+		req: Request;
+		deviceId: string;
+		name: string;
+		endpoint: string;
+		method?: "GET" | "POST" | "PUT";
+		body?: Record<string, any>;
+	}) => {
+		const startedAt = Date.now();
+		try {
+			const data = await hikvisionFetch(params.endpoint, {
+				method: params.method || "GET",
+				deviceId: params.deviceId,
+				prisma,
+				request: params.req,
+				timeoutMs: 6000,
+				headers: { "Content-Type": "application/json" },
+				...(params.body ? { body: params.body } : {}),
+			});
+			return {
+				name: params.name,
+				endpoint: params.endpoint,
+				method: params.method || "GET",
+				status: "supported" as HikvisionCapabilityStatus,
+				durationMs: Date.now() - startedAt,
+				evidence: {
+					responseKeys: data && typeof data === "object" ? Object.keys(data).slice(0, 8) : [],
+					statusString:
+						data?.statusString ||
+						data?.ResponseStatus?.statusString ||
+						data?.UserInfoSearch?.responseStatusStrg ||
+						null,
+				},
+			};
+		} catch (error: any) {
+			return {
+				name: params.name,
+				endpoint: params.endpoint,
+				method: params.method || "GET",
+				status: classifyHikvisionProbeError(error),
+				durationMs: Date.now() - startedAt,
+				error: error?.message || error?.data?.message || "Capability probe failed",
+				rawStatus: error?.status || null,
+				raw: error?.data || null,
+			};
+		}
+	};
+
+	const discoverHikvisionUserExportCapabilities = async (
+		req: Request,
+		device: { id: string; name?: string | null },
+		options: { includeCards?: boolean; includeFingerprints?: boolean; includeFaces?: boolean } = {},
+	) => {
+		const probes = [
+			await probeHikvisionCapability({
+				req,
+				deviceId: device.id,
+				name: "userCount",
+				endpoint: hikvisionEndpoint.accessControl.userInfo.count,
+			}),
+			await probeHikvisionCapability({
+				req,
+				deviceId: device.id,
+				name: "userSearch",
+				endpoint: hikvisionEndpoint.accessControl.userInfo.search,
+				method: "POST",
+				body: {
+					UserInfoSearchCond: {
+						searchID: `export-capability-${Date.now()}`,
+						searchResultPosition: 0,
+						maxResults: 1,
+					},
+				},
+			}),
+		];
+		if (options.includeCards) {
+			probes.push(
+				await probeHikvisionCapability({
+					req,
+					deviceId: device.id,
+					name: "cardSearch",
+					endpoint: "/ISAPI/AccessControl/CardInfo/Search",
+					method: "POST",
+					body: {
+						CardInfoSearchCond: {
+							searchID: `card-export-capability-${Date.now()}`,
+							searchResultPosition: 0,
+							maxResults: 1,
+						},
+					},
+				}),
+			);
+		}
+		if (options.includeFingerprints) {
+			probes.push(
+				await probeHikvisionCapability({
+					req,
+					deviceId: device.id,
+					name: "fingerprintSearch",
+					endpoint: "/ISAPI/AccessControl/FingerPrintUpload",
+					method: "POST",
+					body: {
+						FingerPrintCond: {
+							searchID: `fingerprint-export-capability-${Date.now()}`,
+							searchResultPosition: 0,
+							maxResults: 1,
+						},
+					},
+				}),
+				await probeHikvisionCapability({
+					req,
+					deviceId: device.id,
+					name: "fingerprintImportSetup",
+					endpoint: "/ISAPI/AccessControl/FingerPrint/SetUp/capabilities",
+				}),
+			);
+		}
+		if (options.includeFaces) {
+			probes.push(
+				await probeHikvisionCapability({
+					req,
+					deviceId: device.id,
+					name: "faceDataRecord",
+					endpoint: "/ISAPI/Intelligent/FDLib/FaceDataRecord/capabilities",
+				}),
+			);
+		}
+		const byName = Object.fromEntries(probes.map((probe) => [probe.name, probe]));
+		return {
+			deviceId: device.id,
+			deviceName: device.name || null,
+			probedAt: new Date().toISOString(),
+			probes,
+			support: {
+				userExport: byName.userSearch?.status === "supported",
+				cardExport: byName.cardSearch?.status === "supported",
+				fingerprintExport: byName.fingerprintSearch?.status === "supported",
+				fingerprintImport: byName.fingerprintImportSetup?.status === "supported",
+				faceImportExport: byName.faceDataRecord?.status === "supported",
+			},
+			policy: {
+				fingerprintTemplateExport:
+					"blocked_until_encrypted_biometric_custody_design_is_approved",
+				fingerprintTemplateImport:
+					"blocked_until_encrypted_biometric_custody_design_is_approved",
+			},
+		};
+	};
+
+	const loadDeviceUsersForExport = async (organizationId: string, deviceId: string) => {
+		if (!(await hasDeviceUserTable())) return [];
+		const includeVendorMetadata = await hasDeviceUserVendorMetadataColumn();
+		const rows = await (prisma as any).deviceUser.findMany({
+			where: { organizationId, deviceId },
+			select: buildDeviceUserSelect({ includeVendorMetadata }),
+			orderBy: [{ vendorUserId: "asc" }],
+		});
+		return rows.map(decorateDeviceUser);
+	};
+
+	const buildDeviceUserExportPayload = async (
+		req: Request,
+		options: {
+			organizationId: string;
+			deviceId?: string;
+			scope?: "currentDevice" | "allHikvisionDevices";
+			includeRecords: boolean;
+			includeCards?: boolean;
+			includeFingerprints?: boolean;
+			includeFaces?: boolean;
+		},
+	) => {
+		const requestedScope = options.scope || "currentDevice";
+		const devices = await prisma.device.findMany({
+			where: {
+				organizationId: options.organizationId,
+				isDeleted: false,
+				...(requestedScope === "currentDevice" ? { id: options.deviceId || "" } : {}),
+			},
+			select: {
+				id: true,
+				name: true,
+				address: true,
+				port: true,
+				protocol: true,
+				config: true,
+			},
+			orderBy: { name: "asc" },
+		});
+		const hikvisionDevices = devices.filter((device) => isHikvisionDevice(device));
+		if (requestedScope === "currentDevice" && !hikvisionDevices.length) {
+			throw { status: 400, message: "Select a Hikvision device before exporting users" };
+		}
+
+		const exportDevices = [];
+		for (const device of hikvisionDevices) {
+			let sourceSnapshot: { rawUsers: any[]; candidates: DeviceUserCandidate[] } = {
+				rawUsers: [],
+				candidates: [],
+			};
+			let sourceRead: Record<string, any> = { status: "unknown" };
+			try {
+				sourceSnapshot = await loadHikvisionDeviceUserSnapshot(req, device);
+				sourceRead = {
+					status: "supported",
+					endpoint: "POST /ISAPI/AccessControl/UserInfo/Search?format=json",
+					total: sourceSnapshot.rawUsers.length,
+				};
+			} catch (error: any) {
+				sourceRead = {
+					status: classifyHikvisionProbeError(error),
+					endpoint: "POST /ISAPI/AccessControl/UserInfo/Search?format=json",
+					error: error?.message || "Source user read failed",
+					rawStatus: error?.status || null,
+				};
+			}
+
+			const savedUsers = await loadDeviceUsersForExport(options.organizationId, device.id);
+			const savedByVendorUserId = new Map(
+				savedUsers.map((row: any) => [String(row.vendorUserId || "").trim(), row]),
+			);
+			const sourceByVendorUserId = new Map(
+				sourceSnapshot.candidates.map((candidate) => [
+					String(candidate.vendorUserId || "").trim(),
+					candidate,
+				]),
+			);
+			const allVendorUserIds: string[] = Array.from(
+				new Set<string>(
+					[...savedByVendorUserId.keys(), ...sourceByVendorUserId.keys()]
+						.map((value) => String(value || "").trim())
+						.filter(Boolean),
+				),
+			).sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+			const rows = allVendorUserIds.map((vendorUserId) => {
+				const saved = savedByVendorUserId.get(vendorUserId) as any;
+				const source = sourceByVendorUserId.get(vendorUserId);
+				return {
+					vendorUserId,
+					employeeNo: saved?.employeeNo || source?.employeeNo || vendorUserId,
+					displayName: saved?.displayName || source?.displayName || null,
+					userType: saved?.userType || source?.userType || null,
+					status: saved?.status || "SOURCE_ONLY",
+					validFrom: saved?.validFrom || source?.validFrom || null,
+					validTo: saved?.validTo || source?.validTo || null,
+					doorRight: saved?.doorRight || source?.doorRight || null,
+					accessPlan: saved?.accessPlan || source?.accessPlan || null,
+					hrisDeviceUser: saved
+						? {
+								id: saved.id,
+								employeeId: saved.employeeId || null,
+								lastSyncedAt: saved.lastSyncedAt || null,
+								employee: saved.employee || null,
+							}
+						: null,
+					rawPayload: saved?.rawPayload || source?.rawPayload || null,
+					vendorMetadata:
+						saved?.vendorMetadata ||
+						source?.vendorMetadata ||
+						(saved?.rawPayload || source?.rawPayload
+							? {
+									source: "rawPayload",
+									rawVendorPayload: saved?.rawPayload || source?.rawPayload,
+								}
+							: null),
+				};
+			});
+			const linked = rows.filter((row) => row.hrisDeviceUser?.employeeId).length;
+			const capabilitySummary = await discoverHikvisionUserExportCapabilities(req, device, {
+				includeCards: options.includeCards,
+				includeFingerprints: options.includeFingerprints,
+				includeFaces: options.includeFaces,
+			});
+			exportDevices.push({
+				device: {
+					id: device.id,
+					name: device.name,
+					address: device.address,
+					port: device.port,
+					protocol: device.protocol,
+					model: (device.config as any)?.model || (device.config as any)?.deviceModel || null,
+					serialNumber:
+						(device.config as any)?.serialNumber || (device.config as any)?.serial || null,
+				},
+				sourceRead,
+				capabilities: capabilitySummary,
+				summary: {
+					totalUsers: rows.length,
+					readFromDevice: sourceSnapshot.rawUsers.length,
+					savedInHris: savedUsers.length,
+					linked,
+					unlinked: Math.max(rows.length - linked, 0),
+					credentialTypes: {
+						users: "included",
+						hrisLinks: "included",
+						cards: capabilitySummary.support.cardExport ? "supported" : "unsupported_or_not_requested",
+						fingerprints: capabilitySummary.support.fingerprintExport
+							? "supported_but_template_export_blocked_by_policy"
+							: "unsupported_or_not_requested",
+						faces: capabilitySummary.support.faceImportExport
+							? "supported_by_probe"
+							: "unsupported_or_not_requested",
+					},
+				},
+				users: options.includeRecords ? rows : [],
+			});
+		}
+
+		return {
+			schemaVersion: DEVICE_USER_EXPORT_SCHEMA_VERSION,
+			exportedAt: new Date().toISOString(),
+			scope: {
+				type: requestedScope,
+				deviceId: options.deviceId || null,
+				sourceEndpoint: "POST /ISAPI/AccessControl/UserInfo/Search?format=json",
+			},
+			policy: {
+				mutating: false,
+				fingerprintTemplateCustody:
+					"raw fingerprint templates are not exported by this normal JSON path",
+			},
+			devices: exportDevices,
+			summary: {
+				devices: exportDevices.length,
+				totalUsers: exportDevices.reduce((sum, item) => sum + item.summary.totalUsers, 0),
+				linked: exportDevices.reduce((sum, item) => sum + item.summary.linked, 0),
+				unlinked: exportDevices.reduce((sum, item) => sum + item.summary.unlinked, 0),
+			},
+		};
+	};
+
+	const previewDeviceUserExport = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			const body = (req.body || {}) as Record<string, any>;
+			const payload = await buildDeviceUserExportPayload(req, {
+				organizationId: gate.organizationId,
+				deviceId: String(body.deviceId || body.targetDeviceId || "").trim(),
+				scope:
+					body.scope === "allHikvisionDevices" ? "allHikvisionDevices" : "currentDevice",
+				includeRecords: false,
+				includeCards: body.includeCards === true,
+				includeFingerprints: body.includeFingerprints === true,
+				includeFaces: body.includeFaces === true,
+			});
+			res.status(200).json(buildSuccessResponse("Device user export preview built", payload, 200));
+		} catch (error: any) {
+			const status = Number(error?.status || 500);
+			res.status(status).json(
+				buildErrorResponse(error?.message || "Failed to preview device user export", status),
+			);
+		}
+	};
+
+	const exportDeviceUsers = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			const body = (req.body || {}) as Record<string, any>;
+			const payload = await buildDeviceUserExportPayload(req, {
+				organizationId: gate.organizationId,
+				deviceId: String(body.deviceId || body.targetDeviceId || "").trim(),
+				scope:
+					body.scope === "allHikvisionDevices" ? "allHikvisionDevices" : "currentDevice",
+				includeRecords: true,
+				includeCards: body.includeCards === true,
+				includeFingerprints: body.includeFingerprints === true,
+				includeFaces: body.includeFaces === true,
+			});
+			res.status(200).json(buildSuccessResponse("Device users exported", payload, 200));
+		} catch (error: any) {
+			const status = Number(error?.status || 500);
+			res.status(status).json(
+				buildErrorResponse(error?.message || "Failed to export device users", status),
+			);
+		}
+	};
+
+	const getImportPayloadFromRequest = (body: Record<string, any>) => {
+		const payload = body.exportFile || body.importFile || body.payload || body;
+		return payload && typeof payload === "object" ? payload : null;
+	};
+
+	const previewDeviceUserImport = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			const body = (req.body || {}) as Record<string, any>;
+			const payload = getImportPayloadFromRequest(body);
+			const targetDeviceId = String(body.targetDeviceId || body.deviceId || "").trim();
+			if (!payload || payload.schemaVersion !== DEVICE_USER_EXPORT_SCHEMA_VERSION) {
+				res.status(400).json(
+					buildErrorResponse("Import file schema is not a supported device-user export", 400),
+				);
+				return;
+			}
+			const targetDevice = await getDeviceForUserSync(gate.organizationId, targetDeviceId);
+			if (!targetDevice || !isHikvisionDevice(targetDevice)) {
+				res.status(400).json(
+					buildErrorResponse("Select a Hikvision target device before import preview", 400),
+				);
+				return;
+			}
+			const importedUsers = (Array.isArray(payload.devices) ? payload.devices : []).flatMap(
+				(device: any) =>
+					(Array.isArray(device?.users) ? device.users : []).map((user: any) => ({
+						...user,
+						sourceDeviceId: device?.device?.id || null,
+						sourceDeviceName: device?.device?.name || null,
+					})),
+			);
+			const currentUsers = await loadDeviceUsersForExport(gate.organizationId, targetDevice.id);
+			const currentByVendorUserId = new Map(
+				currentUsers.map((user: any) => [String(user.vendorUserId || "").trim(), user]),
+			);
+			const importedEmployeeNos: string[] = Array.from(
+				new Set<string>(
+					importedUsers
+						.map((user: any) => String(user.employeeNo || user.vendorUserId || "").trim())
+						.filter(Boolean),
+				),
+			);
+			const employees = importedEmployeeNos.length
+				? await prisma.employee.findMany({
+						where: {
+							organizationId: gate.organizationId,
+							isDeleted: false,
+							OR: [
+								{ employeeId: { in: importedEmployeeNos } },
+								{ deviceEmpId: { in: importedEmployeeNos } },
+							],
+						},
+						select: { id: true, employeeId: true, deviceEmpId: true },
+					})
+				: [];
+			const employeeKeys = new Set(
+				employees.flatMap((employee) => [
+					String(employee.employeeId || "").trim(),
+					String(employee.deviceEmpId || "").trim(),
+				]),
+			);
+			const planRows = importedUsers.map((user: any) => {
+				const vendorUserId = String(user.vendorUserId || "").trim();
+				const current = currentByVendorUserId.get(vendorUserId) as any;
+				const employeeNo = String(user.employeeNo || vendorUserId).trim();
+				const conflictFields = current
+					? (["displayName", "employeeNo", "userType"] as const).filter(
+							(field) =>
+								String(current?.[field] || "").trim() !==
+								String(user?.[field] || "").trim(),
+						)
+					: [];
+				return {
+					vendorUserId,
+					employeeNo,
+					sourceDeviceId: user.sourceDeviceId,
+					sourceDeviceName: user.sourceDeviceName,
+					action: current ? (conflictFields.length ? "review_conflict" : "match") : "create_preview",
+					conflictFields,
+					missingEmployee: employeeNo ? !employeeKeys.has(employeeNo) : true,
+					currentDeviceUserId: current?.id || null,
+				};
+			});
+			const unsupportedCredentialTypes = Array.from(
+				new Set(
+					(Array.isArray(payload.devices) ? payload.devices : []).flatMap((device: any) =>
+						Object.entries(device?.summary?.credentialTypes || {})
+							.filter(([, value]) => String(value).includes("blocked") || String(value).includes("unsupported"))
+							.map(([key]) => key),
+					),
+				),
+			);
+			const preview = {
+				execute: false,
+				dryRun: true,
+				targetDevice: {
+					id: targetDevice.id,
+					name: targetDevice.name,
+					address: targetDevice.address,
+					port: targetDevice.port,
+				},
+				file: {
+					schemaVersion: payload.schemaVersion,
+					exportedAt: payload.exportedAt || null,
+					sourceDevices: Array.isArray(payload.devices) ? payload.devices.length : 0,
+					users: importedUsers.length,
+				},
+				counts: {
+					newUsers: planRows.filter((row: any) => row.action === "create_preview").length,
+					matchingUsers: planRows.filter((row: any) => row.action === "match").length,
+					conflicts: planRows.filter((row: any) => row.action === "review_conflict").length,
+					missingHrisEmployees: planRows.filter((row: any) => row.missingEmployee).length,
+				},
+				unsupportedCredentialTypes,
+				plan: planRows.slice(0, 500),
+				executeAvailable: false,
+				executeBlockedReason:
+					"Import execute is disabled until a safe Hikvision user-write plan is reviewed with backup/recovery evidence.",
+			};
+			res.status(200).json(buildSuccessResponse("Device user import preview built", preview, 200));
+		} catch (error: any) {
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Failed to preview device user import", 500),
+			);
+		}
+	};
+
+	const executeDeviceUserImport = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		const body = (req.body || {}) as Record<string, any>;
+		if (body.execute !== true || body.confirmation !== DEVICE_USER_IMPORT_CONFIRMATION) {
+			res.status(400).json(
+				buildErrorResponse(
+					`Import execute requires execute=true and confirmation="${DEVICE_USER_IMPORT_CONFIRMATION}"`,
+					400,
+				),
+			);
+			return;
+		}
+		res.status(409).json(
+			buildErrorResponse(
+				"Device-user import execute is not enabled yet; run import preview and implement a reviewed safe write path first.",
+				409,
+			),
+		);
 	};
 
 	const reconcileBiometricSync = async (req: Request, res: Response, _next: NextFunction) => {
@@ -3779,7 +4382,7 @@ export const controller = (prisma: PrismaClient) => {
 		choices?: Record<string, any>;
 		applyAll?: "A" | "B";
 	}) => {
-		const originalBody = req.body;
+		const originalBody = params.req.body;
 		let statusCode = 200;
 		let responsePayload: any = null;
 		const fakeRes = {
@@ -3793,14 +4396,14 @@ export const controller = (prisma: PrismaClient) => {
 			},
 		} as unknown as Response;
 		try {
-			(req as any).body = {
+			(params.req as any).body = {
 				planId: params.planId,
 				choices: params.choices || {},
 				applyAll: params.applyAll,
 			};
-			await applyHikvisionSdkUserMerge(req, fakeRes, (() => undefined) as NextFunction);
+			await applyHikvisionSdkUserMerge(params.req, fakeRes, (() => undefined) as NextFunction);
 		} finally {
-			(req as any).body = originalBody;
+			(params.req as any).body = originalBody;
 		}
 		if (statusCode >= 400) {
 			const message =
@@ -5626,7 +6229,9 @@ export const controller = (prisma: PrismaClient) => {
 			const updated = await (prisma as any).deviceUser.update({
 				where: { id: deviceUserId },
 				data: { employeeId: employee.id, status: "ACTIVE" },
-				select: buildDeviceUserSelect(),
+				select: buildDeviceUserSelect({
+					includeVendorMetadata: await hasDeviceUserVendorMetadataColumn(),
+				}),
 			});
 			res.status(200).json(
 				buildSuccessResponse("Device user linked", decorateDeviceUser(updated), 200),
@@ -5656,7 +6261,9 @@ export const controller = (prisma: PrismaClient) => {
 					employeeId: null,
 					status: deviceUser.status === "DISABLED" ? "DISABLED" : "UNMATCHED",
 				},
-				select: buildDeviceUserSelect(),
+				select: buildDeviceUserSelect({
+					includeVendorMetadata: await hasDeviceUserVendorMetadataColumn(),
+				}),
 			});
 			res.status(200).json(
 				buildSuccessResponse("Device user unlinked", decorateDeviceUser(updated), 200),
@@ -8662,6 +9269,10 @@ export const controller = (prisma: PrismaClient) => {
 		listDeviceUsers,
 		getDeviceUserPhoto,
 		syncDeviceUsers,
+		previewDeviceUserExport,
+		exportDeviceUsers,
+		previewDeviceUserImport,
+		executeDeviceUserImport,
 		backfillDeviceUserLifecycleEvents,
 		reconcileBiometricSync,
 		copyHikvisionDeviceUserToPeer,

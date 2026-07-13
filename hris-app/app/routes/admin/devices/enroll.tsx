@@ -15,6 +15,8 @@ import {
 	Link2,
 	Unlink,
 	FileJson,
+	Download,
+	Upload,
 	Loader2,
 	Activity,
 	Clock3,
@@ -23,6 +25,7 @@ import {
 	Wifi,
 	WifiOff,
 	AlertTriangle,
+	HelpCircle,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -44,6 +47,9 @@ import {
 	useStartHikvisionSdkUserMergeJob,
 	useHikvisionSdkUserMergeJob,
 	useSyncDeviceUsers,
+	usePreviewDeviceUserExport,
+	useExportDeviceUsers,
+	usePreviewDeviceUserImport,
 	useUnlinkDeviceUser,
 	useMockHikvisionFingerprintTally,
 	useMockHikvisionFaceTally,
@@ -59,6 +65,7 @@ import {
 	DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
 import type { HikvisionUserInfo } from "~/types/hikvision";
 import deviceService, {
 	type DeviceSyncPreviewRow,
@@ -69,6 +76,8 @@ import deviceService, {
 	type DeviceUserSyncMode,
 	type DeviceUserMergeField,
 	type DeviceUserMergePlanResponse,
+	type DeviceUserExportPayload,
+	type DeviceUserImportPreviewResponse,
 } from "~/services/devices.service";
 import type { Employee } from "~/services/employees.service";
 
@@ -99,6 +108,7 @@ type VisibleDeviceUserRow = {
 	employee?: DeviceUser["employee"];
 	lastSyncedAt?: string | null;
 	rawPayload?: any;
+	vendorMetadata?: any;
 	hrisDeviceUser?: DeviceUser;
 	sourceUser?: HikvisionUserInfo;
 };
@@ -398,6 +408,9 @@ export function DeviceEnrollmentPanel({
 	);
 	const hikvisionListenerControl = useControlHikvisionListener();
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
+	const previewDeviceUserExportMutation = usePreviewDeviceUserExport();
+	const exportDeviceUsersMutation = useExportDeviceUsers();
+	const previewDeviceUserImportMutation = usePreviewDeviceUserImport();
 	const mockHikvisionFingerprintMutation = useMockHikvisionFingerprintTally();
 	const mockHikvisionFaceMutation = useMockHikvisionFaceTally();
 	const mirrorHikvisionFaceMutation = useMirrorHikvisionFaceToPeers();
@@ -482,6 +495,34 @@ export function DeviceEnrollmentPanel({
 		applyToAllPeers: false,
 		includeFingerprints: true,
 		includeFaceRecognition: true,
+	});
+	const [deviceUserExportState, setDeviceUserExportState] = useState<{
+		open: boolean;
+		includeCards: boolean;
+		includeFingerprints: boolean;
+		includeFaces: boolean;
+		preview: DeviceUserExportPayload | null;
+		result: DeviceUserExportPayload | null;
+	}>({
+		open: false,
+		includeCards: true,
+		includeFingerprints: true,
+		includeFaces: true,
+		preview: null,
+		result: null,
+	});
+	const [deviceUserImportState, setDeviceUserImportState] = useState<{
+		open: boolean;
+		rawText: string;
+		payload: DeviceUserExportPayload | null;
+		parseError: string;
+		preview: DeviceUserImportPreviewResponse | null;
+	}>({
+		open: false,
+		rawText: "",
+		payload: null,
+		parseError: "",
+		preview: null,
 	});
 	const [isCopyDeviceUserSubmitting, setIsCopyDeviceUserSubmitting] = useState(false);
 	const [selectedEmployeeForLink, setSelectedEmployeeForLink] = useState("");
@@ -2272,6 +2313,23 @@ export function DeviceEnrollmentPanel({
 		getDeviceUserSource(deviceUser) === "historical"
 			? "Historical HRIS backfill"
 			: "Physical device";
+	const getDeviceUserVendorMetadata = (
+		deviceUser?: { vendorMetadata?: any; rawPayload?: any; hrisDeviceUser?: DeviceUser } | null,
+	) =>
+		deviceUser?.vendorMetadata ||
+		deviceUser?.hrisDeviceUser?.vendorMetadata ||
+		(deviceUser?.rawPayload
+			? {
+					source: "rawPayload",
+					rawVendorPayload: deviceUser.rawPayload,
+				}
+			: null);
+	const formatMetadataPreview = (value: any, maxLength = 220) => {
+		if (!value) return "No vendor metadata saved";
+		const text =
+			typeof value === "string" ? value : JSON.stringify(value, null, 2) || String(value);
+		return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+	};
 	const getDeviceUserCredentialSummary = (
 		deviceUser?: { rawPayload?: any } | null,
 	): DeviceUserCredentialSummary => {
@@ -2352,6 +2410,19 @@ export function DeviceEnrollmentPanel({
 				employee: hrisDeviceUser?.employee || null,
 				lastSyncedAt: hrisDeviceUser?.lastSyncedAt || null,
 				rawPayload: hrisDeviceUser?.rawPayload || { UserInfo: user },
+				vendorMetadata:
+					hrisDeviceUser?.vendorMetadata ||
+					(hrisDeviceUser?.rawPayload
+						? {
+								source: "rawPayload",
+								rawVendorPayload: hrisDeviceUser.rawPayload,
+							}
+						: {
+								vendor: "Hikvision",
+								source: "live_source_user",
+								vendorUserId,
+								rawVendorPayload: user,
+							}),
 				hrisDeviceUser,
 				sourceUser: user,
 			};
@@ -2369,6 +2440,7 @@ export function DeviceEnrollmentPanel({
 			employee: deviceUser.employee,
 			lastSyncedAt: deviceUser.lastSyncedAt,
 			rawPayload: deviceUser.rawPayload,
+			vendorMetadata: deviceUser.vendorMetadata,
 			hrisDeviceUser: deviceUser,
 		}));
 	const mergedDeviceUserRows = sourceDeviceUserRows.length
@@ -2596,6 +2668,81 @@ export function DeviceEnrollmentPanel({
 		navigate(
 			`/admin/configuration/devices/events?deviceId=${encodeURIComponent(selectedDeviceId)}&view=${view}`,
 		);
+	};
+	const previewDeviceUserExport = async () => {
+		if (!selectedDeviceId) {
+			toast.error("Select a device before exporting users");
+			return;
+		}
+		const preview = await previewDeviceUserExportMutation.mutateAsync({
+			deviceId: selectedDeviceId,
+			scope: "currentDevice",
+			includeCards: deviceUserExportState.includeCards,
+			includeFingerprints: deviceUserExportState.includeFingerprints,
+			includeFaces: deviceUserExportState.includeFaces,
+		});
+		setDeviceUserExportState((current) => ({ ...current, preview, result: null }));
+	};
+	const exportDeviceUserFile = async () => {
+		if (!selectedDeviceId) {
+			toast.error("Select a device before exporting users");
+			return;
+		}
+		const result = await exportDeviceUsersMutation.mutateAsync({
+			deviceId: selectedDeviceId,
+			scope: "currentDevice",
+			includeCards: deviceUserExportState.includeCards,
+			includeFingerprints: deviceUserExportState.includeFingerprints,
+			includeFaces: deviceUserExportState.includeFaces,
+		});
+		const blob = new Blob([JSON.stringify(result, null, 2)], {
+			type: "application/json",
+		});
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement("a");
+		const deviceSlug = (selectedDevice?.name || selectedDeviceId || "device")
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-|-$/g, "");
+		link.href = url;
+		link.download = `device-users-${deviceSlug || "export"}-${new Date()
+			.toISOString()
+			.slice(0, 10)}.json`;
+		document.body.appendChild(link);
+		link.click();
+		link.remove();
+		URL.revokeObjectURL(url);
+		setDeviceUserExportState((current) => ({ ...current, result }));
+		toast.success("Device-user export created");
+	};
+	const previewDeviceUserImport = async () => {
+		if (!selectedDeviceId) {
+			toast.error("Select a target device before importing users");
+			return;
+		}
+		let payload = deviceUserImportState.payload;
+		try {
+			if (!payload) {
+				payload = JSON.parse(deviceUserImportState.rawText) as DeviceUserExportPayload;
+			}
+		} catch {
+			setDeviceUserImportState((current) => ({
+				...current,
+				parseError: "Paste a valid JSON export before previewing import.",
+				preview: null,
+			}));
+			return;
+		}
+		const preview = await previewDeviceUserImportMutation.mutateAsync({
+			targetDeviceId: selectedDeviceId,
+			payload,
+		});
+		setDeviceUserImportState((current) => ({
+			...current,
+			payload,
+			parseError: "",
+			preview,
+		}));
 	};
 	const openLogSyncReview = () => {
 		if (!selectedDeviceId) {
@@ -3227,6 +3374,40 @@ export function DeviceEnrollmentPanel({
 									</div>
 								</div>
 								<div className="flex flex-wrap gap-2">
+									<Button
+										type="button"
+										variant="outline"
+										className="h-8 w-8 bg-white p-0"
+										disabled={!selectedDeviceId}
+										aria-label="Export device users"
+										title="Export device users"
+										onClick={() =>
+											setDeviceUserExportState((current) => ({
+												...current,
+												open: true,
+												preview: null,
+												result: null,
+											}))
+										}>
+										<Download className="h-4 w-4" />
+									</Button>
+									<Button
+										type="button"
+										variant="outline"
+										className="h-8 w-8 bg-white p-0"
+										disabled={!selectedDeviceId}
+										aria-label="Import device users"
+										title="Import device users"
+										onClick={() =>
+											setDeviceUserImportState((current) => ({
+												...current,
+												open: true,
+												parseError: "",
+												preview: null,
+											}))
+										}>
+										<Upload className="h-4 w-4" />
+									</Button>
 									<Button
 										type="button"
 										variant="outline"
@@ -4542,7 +4723,7 @@ export function DeviceEnrollmentPanel({
 												onClick={() =>
 													setSdkMergeDeviceFilter(device.id, filter)
 												}
-												className={`rounded border px-2 py-1 text-left text-xs font-semibold transition ${selectedMergeDeviceId === device.id && sdkMergeFilter === filter ? "border-orange-300 bg-orange-50 text-orange-950" : count > 0 ? "border-amber-200 bg-amber-50 text-amber-950 hover:border-amber-300" : "border-slate-200 bg-white text-slate-500"}`}>
+												className={`rounded border px-2 py-1 text-left text-xs font-semibold transition ${selectedMergeDeviceId === device.id && sdkMergeFilter === filter ? "border-orange-300 bg-orange-50 text-orange-950" : count > 0 ? "border-amber-200 bg-amber-50 text-amber-950 hover:border-amber-300" : "border-slate-200 bg-white text-slate-950"}`}>
 												{count}
 											</button>
 										))}
@@ -4719,7 +4900,7 @@ export function DeviceEnrollmentPanel({
 																					"A",
 																				)
 																			}
-																			className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "A" ? "border-orange-400 bg-orange-50 text-orange-950" : "border-slate-200 bg-white text-slate-800"}`}>
+																			className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "A" ? "border-orange-400 bg-orange-50 text-orange-950" : "border-slate-200 bg-white text-slate-950"}`}>
 																			<span className="block truncate font-medium">
 																				{
 																					conflict.deviceA
@@ -4742,7 +4923,7 @@ export function DeviceEnrollmentPanel({
 																					"B",
 																				)
 																			}
-																			className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "B" ? "border-orange-400 bg-orange-50 text-orange-950" : "border-slate-200 bg-white text-slate-800"}`}>
+																			className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "B" ? "border-orange-400 bg-orange-50 text-orange-950" : "border-slate-200 bg-white text-slate-950"}`}>
 																			<span className="block truncate font-medium">
 																				{
 																					conflict.deviceB
@@ -4765,7 +4946,7 @@ export function DeviceEnrollmentPanel({
 																					"KEEP",
 																				)
 																			}
-																			className={`rounded-md border px-2 py-2 text-xs font-medium ${selected === "KEEP" ? "border-emerald-400 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700"}`}>
+																			className={`rounded-md border px-2 py-2 text-xs font-medium ${selected === "KEEP" ? "border-emerald-400 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-950"}`}>
 																			Keep
 																		</button>
 																		<Badge
@@ -5270,6 +5451,44 @@ export function DeviceEnrollmentPanel({
 										</div>
 									))}
 								</div>
+								<div className="rounded-md border border-slate-200 bg-white p-3">
+									<div className="flex items-start justify-between gap-3">
+										<div className="min-w-0">
+											<p className="text-sm font-semibold text-slate-950">
+												Vendor metadata
+											</p>
+											<p className="mt-1 line-clamp-2 break-all text-xs text-slate-600">
+												{formatMetadataPreview(
+													getDeviceUserVendorMetadata(detailsDeviceUser),
+												)}
+											</p>
+										</div>
+										<div className="h-7 w-7 shrink-0">
+											<TooltipProvider>
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<button
+															type="button"
+															className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+															aria-label="Preview vendor metadata">
+															<HelpCircle className="h-4 w-4" />
+														</button>
+													</TooltipTrigger>
+													<TooltipContent
+														side="left"
+														className="max-w-[420px] whitespace-pre-wrap break-all text-xs leading-5 text-slate-700">
+														{formatMetadataPreview(
+															getDeviceUserVendorMetadata(
+																detailsDeviceUser,
+															),
+															900,
+														)}
+													</TooltipContent>
+												</Tooltip>
+											</TooltipProvider>
+										</div>
+									</div>
+								</div>
 								<div className="rounded-2xl border border-slate-200 bg-white p-4">
 									<div className="flex items-center justify-between gap-3">
 										<div>
@@ -5359,7 +5578,19 @@ export function DeviceEnrollmentPanel({
 						</div>
 						<details className="rounded-md border border-slate-200">
 							<summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700">
-								Raw
+								Vendor metadata JSON
+							</summary>
+							<pre className="max-h-[260px] overflow-auto border-t border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">
+								{JSON.stringify(
+									getDeviceUserVendorMetadata(detailsDeviceUser) || {},
+									null,
+									2,
+								)}
+							</pre>
+						</details>
+						<details className="rounded-md border border-slate-200">
+							<summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700">
+								Raw source payload
 							</summary>
 							<pre className="max-h-[260px] overflow-auto border-t border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">
 								{JSON.stringify(detailsDeviceUser.rawPayload || {}, null, 2)}
@@ -5367,6 +5598,197 @@ export function DeviceEnrollmentPanel({
 						</details>
 					</div>
 				) : null}
+			</Modal>
+
+			<Modal
+				open={deviceUserExportState.open}
+				onOpenChange={(open) =>
+					setDeviceUserExportState((current) => ({ ...current, open }))
+				}
+				title="Export device users"
+				description="Preview the selected Hikvision device before creating a JSON export. This does not change the device.">
+				<div className="space-y-4">
+					<div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+						<p className="font-semibold text-slate-950">
+							{selectedDevice?.name || "Selected device"}
+						</p>
+						<p className="mt-1 text-xs text-slate-600">
+							JSON includes device users, raw source fields, and HRIS link
+							metadata. Fingerprint template blobs stay blocked by biometric
+							custody policy.
+						</p>
+					</div>
+					<div className="grid gap-2 text-sm sm:grid-cols-3">
+						{[
+							["includeCards", "Cards"],
+							["includeFingerprints", "Fingerprints"],
+							["includeFaces", "Faces"],
+						].map(([key, label]) => (
+							<label
+								key={key}
+								className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+								<input
+									type="checkbox"
+									className="h-4 w-4 rounded border-slate-300"
+									checked={Boolean((deviceUserExportState as any)[key])}
+									onChange={(event) =>
+										setDeviceUserExportState((current) => ({
+											...current,
+											[key]: event.target.checked,
+											preview: null,
+											result: null,
+										}))
+									}
+								/>
+								<span>{label}</span>
+							</label>
+						))}
+					</div>
+					{deviceUserExportState.preview ? (
+						<div className="grid gap-2 sm:grid-cols-4">
+							{[
+								["Users", deviceUserExportState.preview.summary.totalUsers],
+								["Linked", deviceUserExportState.preview.summary.linked],
+								["Unlinked", deviceUserExportState.preview.summary.unlinked],
+								["Devices", deviceUserExportState.preview.summary.devices],
+							].map(([label, value]) => (
+								<div
+									key={String(label)}
+									className="rounded-md border border-slate-200 bg-white px-3 py-2">
+									<p className="text-xs font-medium text-slate-600">{label}</p>
+									<p className="text-lg font-semibold text-slate-950">
+										{metricValue(value)}
+									</p>
+								</div>
+							))}
+						</div>
+					) : null}
+					{deviceUserExportState.preview?.devices?.[0]?.capabilities ? (
+						<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+							Fingerprint export:{" "}
+							{deviceUserExportState.preview.devices[0].capabilities.support
+								?.fingerprintExport
+								? "device probe responded, template export still blocked by policy"
+								: "not supported by current probe or not reachable"}
+						</div>
+					) : null}
+					{deviceUserExportState.result ? (
+						<div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+							Export file created. No device mutation was performed.
+						</div>
+					) : null}
+					<div className="flex justify-end gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							disabled={previewDeviceUserExportMutation.isPending}
+							onClick={() => void previewDeviceUserExport()}>
+							{previewDeviceUserExportMutation.isPending ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<Eye className="h-4 w-4" />
+							)}
+							Preview
+						</Button>
+						<Button
+							type="button"
+							disabled={exportDeviceUsersMutation.isPending}
+							onClick={() => void exportDeviceUserFile()}>
+							{exportDeviceUsersMutation.isPending ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<Download className="h-4 w-4" />
+							)}
+							Export JSON
+						</Button>
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
+				open={deviceUserImportState.open}
+				onOpenChange={(open) =>
+					setDeviceUserImportState((current) => ({ ...current, open }))
+				}
+				title="Import device users"
+				description="Validate an export against the selected target device. Preview is non-mutating; execute is disabled until a safe write path is approved.">
+				<div className="space-y-4">
+					<div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+						<p className="font-semibold text-slate-950">
+							Target: {selectedDevice?.name || "Select device"}
+						</p>
+						<p className="mt-1 text-xs text-slate-600">
+							Paste a Project Truth device-user export JSON to compare creates,
+							matches, conflicts, and missing HRIS employees.
+						</p>
+					</div>
+					<textarea
+						value={deviceUserImportState.rawText}
+						onChange={(event) =>
+							setDeviceUserImportState((current) => ({
+								...current,
+								rawText: event.target.value,
+								payload: null,
+								parseError: "",
+								preview: null,
+							}))
+						}
+						className="min-h-[160px] w-full rounded-md border border-slate-200 bg-white p-3 font-mono text-xs text-slate-900 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200"
+						placeholder="{ ... device user export JSON ... }"
+					/>
+					{deviceUserImportState.parseError ? (
+						<div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-950">
+							{deviceUserImportState.parseError}
+						</div>
+					) : null}
+					{deviceUserImportState.preview ? (
+						<div className="space-y-3">
+							<div className="grid gap-2 sm:grid-cols-4">
+								{[
+									["New", deviceUserImportState.preview.counts.newUsers],
+									["Matches", deviceUserImportState.preview.counts.matchingUsers],
+									["Conflicts", deviceUserImportState.preview.counts.conflicts],
+									[
+										"Missing HRIS",
+										deviceUserImportState.preview.counts.missingHrisEmployees,
+									],
+								].map(([label, value]) => (
+									<div
+										key={String(label)}
+										className="rounded-md border border-slate-200 bg-white px-3 py-2">
+										<p className="text-xs font-medium text-slate-600">
+											{label}
+										</p>
+										<p className="text-lg font-semibold text-slate-950">
+											{metricValue(value)}
+										</p>
+									</div>
+								))}
+							</div>
+							<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+								{deviceUserImportState.preview.executeBlockedReason}
+							</div>
+						</div>
+					) : null}
+					<div className="flex justify-end gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							disabled={previewDeviceUserImportMutation.isPending}
+							onClick={() => void previewDeviceUserImport()}>
+							{previewDeviceUserImportMutation.isPending ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<Eye className="h-4 w-4" />
+							)}
+							Preview import
+						</Button>
+						<Button type="button" disabled title="Disabled until previewed write safety is implemented">
+							<Upload className="h-4 w-4" />
+							Execute
+						</Button>
+					</div>
+				</div>
 			</Modal>
 
 			<Modal
