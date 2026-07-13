@@ -760,6 +760,38 @@ bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::strin
     return ok;
 }
 
+std::string build_sync_card_no(const std::string &employee_no) {
+    std::string digits;
+    for (const char c : employee_no) {
+        if (c >= '0' && c <= '9') digits.push_back(c);
+    }
+    if (digits.empty()) digits = "1";
+    if (digits.size() > 10) digits = digits.substr(digits.size() - 10);
+    return "98" + digits;
+}
+
+bool add_sync_card(DeviceSession &target, const std::string &employee_no, const std::string &card_no) {
+    std::ostringstream body;
+    body << "{\"CardInfo\":{\"employeeNo\":\"" << json_escape(employee_no)
+         << "\",\"cardNo\":\"" << json_escape(card_no)
+         << "\",\"cardType\":\"normalCard\",\"checkCardNo\":true}}";
+    std::string response;
+    const bool ok = stdxml_json_request(
+        target,
+        "POST /ISAPI/AccessControl/CardInfo/Record?format=json",
+        body.str(),
+        &response);
+    emit_json({
+        {"event", "peer_sync_card"},
+        {"targetDeviceId", target.config.hris_device_id},
+        {"employeeNo", employee_no},
+        {"cardNo", card_no},
+        {"ok", ok ? "true" : "false"},
+        {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
+    });
+    return ok;
+}
+
 std::string extract_first_object_for_key(const std::string &json, const std::string &key) {
     const size_t key_pos = json.find(key);
     if (key_pos == std::string::npos) {
@@ -2820,6 +2852,22 @@ void process_reconcile_job(const ReconcileJob &job) {
         !(card_no = extract_string_field_from_json(card_json, "cardNo")).empty() &&
         read_face_and_template(*source, job.employee_no, card_no, &face_template, &face_picture);
 
+    const bool new_user_sync = job.event_kind == "poll_missing_user" ||
+        job.event_kind == "biometric_user_management";
+    if (!user_delete && user_ok && card_no.empty() && new_user_sync) {
+        card_no = build_sync_card_no(job.employee_no);
+        if (add_sync_card(*source, job.employee_no, card_no)) {
+            emit_json({
+                {"event", "source_sync_card_created"},
+                {"sourceDeviceId", source->config.hris_device_id},
+                {"employeeNo", job.employee_no},
+                {"cardNo", card_no}
+            });
+        } else {
+            card_no.clear();
+        }
+    }
+
     for (auto &target : sessions) {
         if (target.config.hris_device_id == source->config.hris_device_id || !target.config.biometric_peer) {
             continue;
@@ -2827,6 +2875,9 @@ void process_reconcile_job(const ReconcileJob &job) {
         peer_count += 1;
         if (user_delete ? delete_peer_user(target, job) : (user_ok && write_peer_user(target, job, user_json))) {
             peer_write_count += 1;
+        }
+        if (!user_delete && !card_no.empty()) {
+            add_sync_card(target, job.employee_no, card_no);
         }
         if (fingerprint_delete) {
             delete_peer_fingerprints(target, job);

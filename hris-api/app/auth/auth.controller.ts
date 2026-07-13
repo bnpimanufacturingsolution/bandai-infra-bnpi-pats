@@ -1285,7 +1285,9 @@ export const controller = (prisma: PrismaClient) => {
 			const device = await prisma.device.findFirst({
 				where: {
 					id: deviceId,
-					isDeleted: false,
+					// Older device rows may have a nullable deletion marker; only an
+					// explicit true value means the device is deleted.
+					isDeleted: { not: true },
 				},
 				select: {
 					id: true,
