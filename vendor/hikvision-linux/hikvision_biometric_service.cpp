@@ -584,7 +584,8 @@ void CALLBACK alarm_callback(
         return;
     }
 
-    job.include_fingerprints = is_fingerprint_management_minor(acs->dwMinor);
+    job.include_fingerprints = is_fingerprint_management_minor(acs->dwMinor) ||
+        is_user_management_minor(acs->dwMinor) || is_card_management_minor(acs->dwMinor);
     if (!job.employee_no.empty()) {
         mark_recent_employee_candidate(job.source_host, job.employee_no);
     }
@@ -2672,6 +2673,35 @@ void polling_loop() {
                         maybe_queue_polled_reconcile(fingerprint_job, "fingerprint_delta");
                     }
                 }
+
+                ReconcileJob face_job = fingerprint_job;
+                std::string source_card_json;
+                read_source_card(source, face_job, &source_card_json);
+                const std::string source_card_no = extract_string_field_from_json(source_card_json, "cardNo");
+                if (!source_card_no.empty()) {
+                    std::vector<char> source_face_template;
+                    std::vector<char> source_face_picture;
+                    const bool source_has_face = read_face_and_template(
+                        source, employee_no, source_card_no,
+                        &source_face_template, &source_face_picture);
+                    if (source_has_face) {
+                        for (auto &target : sessions) {
+                            if (target.config.hris_device_id == source.config.hris_device_id ||
+                                !target.config.biometric_peer) {
+                                continue;
+                            }
+                            std::vector<char> target_face_template;
+                            std::vector<char> target_face_picture;
+                            const bool target_has_face = read_face_and_template(
+                                target, employee_no, source_card_no,
+                                &target_face_template, &target_face_picture);
+                            if (!target_has_face) {
+                                maybe_queue_polled_reconcile(face_job, "face_delta");
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -2735,6 +2765,14 @@ void process_reconcile_job(const ReconcileJob &job) {
             }
             const std::vector<NET_DVR_FINGER_PRINT_CFG_V50> mirror_fingerprints =
                 read_source_fingerprints(*source, mirror_job);
+            std::vector<char> mirror_face_template;
+            std::vector<char> mirror_face_picture;
+            std::string mirror_card_json;
+            read_source_card(*source, mirror_job, &mirror_card_json);
+            const std::string mirror_card_no = extract_string_field_from_json(mirror_card_json, "cardNo");
+            const bool mirror_face_available = !mirror_card_no.empty() &&
+                read_face_and_template(*source, employee_no, mirror_card_no,
+                    &mirror_face_template, &mirror_face_picture);
 
             for (auto &target : sessions) {
                 if (target.config.host == source->config.host || !target.config.biometric_peer) {
@@ -2745,6 +2783,10 @@ void process_reconcile_job(const ReconcileJob &job) {
                     peer_write_count += 1;
                 }
                 write_peer_fingerprints(target, mirror_job, mirror_fingerprints);
+                if (mirror_face_available) {
+                    write_face_and_template(target, employee_no, mirror_card_no,
+                        mirror_face_template, mirror_face_picture);
+                }
             }
             mirrored_users += 1;
         }
@@ -2768,6 +2810,14 @@ void process_reconcile_job(const ReconcileJob &job) {
         job.include_fingerprints && !fingerprint_delete
             ? read_source_fingerprints(*source, job)
             : std::vector<NET_DVR_FINGER_PRINT_CFG_V50>{};
+    std::vector<char> face_template;
+    std::vector<char> face_picture;
+    std::string card_json;
+    std::string card_no;
+    const bool face_available = !user_delete && user_ok &&
+        read_source_card(*source, job, &card_json) &&
+        !(card_no = extract_string_field_from_json(card_json, "cardNo")).empty() &&
+        read_face_and_template(*source, job.employee_no, card_no, &face_template, &face_picture);
 
     for (auto &target : sessions) {
         if (target.config.hris_device_id == source->config.hris_device_id || !target.config.biometric_peer) {
@@ -2782,6 +2832,9 @@ void process_reconcile_job(const ReconcileJob &job) {
         } else if (job.include_fingerprints) {
             write_peer_fingerprints(target, job, fingerprints);
         }
+        if (face_available) {
+            write_face_and_template(target, job.employee_no, card_no, face_template, face_picture);
+        }
     }
 
     post_hris_contract(job, user_delete ? "deleted" : user_ok ? "reviewed" : "source-user-read-failed");
@@ -2792,6 +2845,9 @@ void process_reconcile_job(const ReconcileJob &job) {
         {"peerDevices", std::to_string(peer_count)},
         {"peerUserWrites", std::to_string(peer_write_count)},
         {"sourceTemplateCount", std::to_string(fingerprints.size())},
+        {"sourceFaceAvailable", face_available ? "true" : "false"},
+        {"sourceFaceTemplateSize", std::to_string(face_template.size())},
+        {"sourceFacePictureSize", std::to_string(face_picture.size())},
         {"mode", execute_mode ? "execute" : "dry-run"}
     });
 }

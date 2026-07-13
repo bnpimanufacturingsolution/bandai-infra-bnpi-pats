@@ -3678,8 +3678,7 @@ export const controller = (prisma: PrismaClient) => {
 			const result = await runHikvisionListenerVmCommand([
 				"sudo",
 				"env",
-				"HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api",
-				`HIKVISION_HOT_RELOAD_API_BASE=${HIKVISION_VM_LOCAL_API_BASE}`,
+				"HIKVISION_DEVICE_SPEC_OVERRIDE=/etc/project-truth/hikvision-live-device.spec",
 				"HIKVISION_RUN_SECONDS=2",
 				HIKVISION_VM_WRAPPER_REMOTE_PATH,
 				"--run-once",

@@ -12,6 +12,7 @@ LOGIN_EMAIL=${HIKVISION_HOT_RELOAD_LOGIN_EMAIL:-admin@bandai.local}
 LOGIN_PASSWORD=${HIKVISION_HOT_RELOAD_LOGIN_PASSWORD:-password123}
 LOGIN_APP_CODE=${HIKVISION_HOT_RELOAD_LOGIN_APP_CODE:-hris}
 SPEC=/run/project-truth/hikvision-hot-reload-device.spec
+SPEC_OVERRIDE=${HIKVISION_DEVICE_SPEC_OVERRIDE:-}
 PREPARE_ONLY=0
 RUN_ONCE=0
 DEVICE_ID_FILTER=${HIKVISION_DEVICE_ID_FILTER:-}
@@ -181,29 +182,32 @@ PY
 
 hris_token=""
 export LOGIN_EMAIL LOGIN_PASSWORD LOGIN_APP_CODE
-case "$DEVICE_SOURCE" in
-  postgres)
-    rows="$(fetch_hikvision_device_rows_from_postgres)"
-    ;;
-  api)
-    hris_token="$(fetch_hikvision_hris_token)"
-    rows="$(fetch_hikvision_device_rows_from_api "$hris_token")"
-    ;;
-  *)
-    echo "unsupported HIKVISION_HOT_RELOAD_DEVICE_SOURCE: $DEVICE_SOURCE" >&2
-    exit 2
-    ;;
-esac
-
-if [[ -z "${rows:-}" ]]; then
-  echo "missing Hikvision device rows or credentials from ${DEVICE_SOURCE}" >&2
-  exit 2
-fi
-
 tmp_spec=$(mktemp /tmp/project-truth-hikvision-device.XXXXXX)
 trap 'rm -f "$tmp_spec"' EXIT
 
-while IFS='|' read -r device_id org_id device_name device_addr sdk_port sdk_user sdk_pass; do
+if [[ -n "$SPEC_OVERRIDE" && -s "$SPEC_OVERRIDE" ]]; then
+  cp "$SPEC_OVERRIDE" "$tmp_spec"
+else
+  case "$DEVICE_SOURCE" in
+    postgres)
+      rows="$(fetch_hikvision_device_rows_from_postgres)"
+      ;;
+    api)
+      hris_token="$(fetch_hikvision_hris_token)"
+      rows="$(fetch_hikvision_device_rows_from_api "$hris_token")"
+      ;;
+    *)
+      echo "unsupported HIKVISION_HOT_RELOAD_DEVICE_SOURCE: $DEVICE_SOURCE" >&2
+      exit 2
+      ;;
+  esac
+
+  if [[ -z "${rows:-}" ]]; then
+    echo "missing Hikvision device rows or credentials from ${DEVICE_SOURCE}" >&2
+    exit 2
+  fi
+
+  while IFS='|' read -r device_id org_id device_name device_addr sdk_port sdk_user sdk_pass; do
   [[ -n "${device_id:-}" ]] || continue
   [[ -n "${sdk_pass:-}" ]] || continue
   if [[ -n "${DEVICE_ID_FILTER:-}" ]]; then
@@ -221,6 +225,7 @@ while IFS='|' read -r device_id org_id device_name device_addr sdk_port sdk_user
     "$sdk_user" \
     "$sdk_pass" >> "$tmp_spec"
 done <<< "$rows"
+fi
 
 if [[ ! -s "$tmp_spec" ]]; then
   echo "no Hikvision device rows with usable credentials were prepared" >&2
@@ -239,7 +244,7 @@ ensure_work_tree
 cd "$WORK"
 export HIKVISION_LINUX_SDK_ROOT="$SDK_ROOT"
 export LD_LIBRARY_PATH="$SDK_ROOT/lib:$SDK_ROOT:$SDK_ROOT/HCNetSDKCom:${LD_LIBRARY_PATH:-}"
-if [[ -z "${hris_token:-}" ]]; then
+if [[ "$DEVICE_SOURCE" == "api" && -z "${hris_token:-}" ]]; then
   hris_token="$(fetch_hikvision_hris_token)"
 fi
 export HIKVISION_HRIS_API_TOKEN="$hris_token"

@@ -1191,6 +1191,29 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 		}
 	};
 
+	const mirrorRealFaceToPeers = async () => {
+		if (!selectedDeviceId || !detailsDeviceUser?.vendorUserId) {
+			toast.error("Open a device user record before mirroring its enrolled face");
+			return;
+		}
+		try {
+			await mirrorHikvisionFaceMutation.mutateAsync({
+				sourceDeviceId: selectedDeviceId,
+				employeeNo: detailsDeviceUser.vendorUserId,
+			});
+			await Promise.allSettled([
+				refetchSourceDeviceUsers(),
+				refetchDbDeviceUsers(),
+				refetchOpenDbDeviceUsers(),
+				refetchDeviceUserSummary(),
+				refetchSourceMatchedDeviceUsers(),
+				refetchSyncPreview(),
+			]);
+		} catch (error: any) {
+			toast.error(error?.message || "Failed to mirror the real enrolled face");
+		}
+	};
+
 	const openEnroll = (employee: Employee) => {
 		reset({
 			deviceId: "",
@@ -3293,6 +3316,14 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 											disabled={mockHikvisionFaceMutation.isPending}
 											onClick={() => applyMockFaceToDetails(0)}>
 											Clear mock face
+										</Button>
+										<Button
+											type="button"
+											size="sm"
+											variant="default"
+											disabled={mirrorHikvisionFaceMutation.isPending}
+											onClick={mirrorRealFaceToPeers}>
+											{mirrorHikvisionFaceMutation.isPending ? "Mirroring real face..." : "Sync real face to peers"}
 										</Button>
 									</div>
 									{getDeviceUserSyntheticCredentialSummary(detailsDeviceUser).fingerprintCount > 0 ? (
