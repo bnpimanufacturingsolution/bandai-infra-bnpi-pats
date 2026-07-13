@@ -303,6 +303,46 @@ export interface DeviceImportJobProgress {
 
 export type DeviceUserSyncMode = "full_refresh" | "needs_attention_only" | "peer_converge";
 
+export type DeviceUserMergeField =
+	| "employeeId"
+	| "displayName"
+	| "status"
+	| "validFrom"
+	| "validTo"
+	| "doorRight"
+	| "accessPlan"
+	| "face"
+	| "fingerprint"
+	| "card";
+
+export type DeviceUserMergePlanResponse = {
+	planId: string;
+	plan: {
+		deviceIds: string[];
+		devices: Array<{ id: string; name?: string | null; address?: string | null; port?: number | null }>;
+		users: Array<{
+			key: string;
+			employeeId?: string | null;
+			employee?: { id?: string; employeeId?: string | null; fullName?: string | null } | null;
+			vendorUserIds: string[];
+			records: any[];
+			missingOnDeviceIds: string[];
+			conflicts: Array<{
+				field: DeviceUserMergeField;
+				choice: "A" | "B" | null;
+				deviceA: { id: string; name: string; value: unknown };
+				deviceB: { id: string; name: string; value: unknown };
+			}>;
+		}>;
+		counts: { unionUsers: number; conflicts: number; missing: number };
+		errors: Array<{ deviceId: string; deviceName: string; error: string }>;
+	};
+};
+
+export type DeviceUserMergeRequest = {
+	deviceIds: string[];
+};
+
 export interface DeviceUserSyncJobStartRequest {
 	mode?: DeviceUserSyncMode;
 	deviceIds?: string[];
@@ -880,6 +920,30 @@ class DevicesService extends APIService {
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error starting device-user sync job",
 			);
+		}
+	}
+
+	async planHikvisionSdkUserMerge(payload: DeviceUserMergeRequest): Promise<DeviceUserMergePlanResponse> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/hikvision/sdk-users/merge/plan", payload);
+			const data = response.data?.data || response.data;
+			if (!data?.planId || !data?.plan) throw new Error("Failed to build SDK user merge plan");
+			return data as DeviceUserMergePlanResponse;
+		} catch (error: any) {
+			throw new Error(error.data?.errors?.[0]?.message || error.message || "Failed to build SDK user merge plan");
+		}
+	}
+
+	async applyHikvisionSdkUserMerge(payload: {
+		planId: string;
+		choices?: Record<string, Partial<Record<DeviceUserMergeField, "A" | "B">>>;
+		applyAll?: "A" | "B";
+	}): Promise<any> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/hikvision/sdk-users/merge/apply", payload);
+			return response.data?.data || response.data;
+		} catch (error: any) {
+			throw new Error(error.data?.errors?.[0]?.message || error.message || "Failed to apply SDK user merge");
 		}
 	}
 

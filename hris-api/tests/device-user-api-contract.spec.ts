@@ -71,13 +71,10 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("Math.max(totalUnsavedEvents - knownSkippedEvents, 0)");
 	});
 
-	it("prunes stale Hikvision device-user rows when the source snapshot no longer contains them", () => {
+	it("preserves stale and one-device-only Hikvision device-user rows", () => {
 		const controller = controllerSource();
-		expect(controller).to.include('if (params.source === "hikvision" && params.pruneMissing !== false)');
+		expect(controller).to.include("Preserve stale and one-device-only identities");
 		expect(controller).to.include("currentVendorUserIds");
-		expect(controller).to.include("deviceUser.deleteMany");
-		expect(controller).to.include("vendorUserId: {");
-		expect(controller).to.include("notIn: [...currentVendorUserIds]");
-		expect(controller).to.include("pruned = staleRows.length");
+		expect(controller).not.to.include("deviceUser.deleteMany");
 	});
 });

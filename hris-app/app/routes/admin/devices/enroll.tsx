@@ -40,6 +40,8 @@ import {
 	useStartDeviceUserSyncJob,
 	useDeviceUserSyncJob,
 	useCancelDeviceUserSyncJob,
+	usePlanHikvisionSdkUserMerge,
+	useApplyHikvisionSdkUserMerge,
 	useSyncDeviceUsers,
 	useUnlinkDeviceUser,
 	useMockHikvisionFingerprintTally,
@@ -69,6 +71,7 @@ import deviceService, {
 	type DeviceUserCredentialSummary,
 	type DeviceUserSyncJobProgress,
 	type DeviceUserSyncMode,
+	type DeviceUserMergePlanResponse,
 } from "~/services/devices.service";
 import type { Employee } from "~/services/employees.service";
 
@@ -255,6 +258,8 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const mirrorHikvisionFaceMutation = useMirrorHikvisionFaceToPeers();
 	const startDeviceUserSyncJobMutation = useStartDeviceUserSyncJob();
 	const cancelDeviceUserSyncJobMutation = useCancelDeviceUserSyncJob();
+	const planHikvisionSdkUserMergeMutation = usePlanHikvisionSdkUserMerge();
+	const applyHikvisionSdkUserMergeMutation = useApplyHikvisionSdkUserMerge();
 	const linkDeviceUserMutation = useLinkDeviceUser();
 	const unlinkDeviceUserMutation = useUnlinkDeviceUser();
 	const [deviceUserSyncState, setDeviceUserSyncState] = useState<{
@@ -276,6 +281,14 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 	const [bulkDeviceUserSyncMode, setBulkDeviceUserSyncMode] = useState<DeviceUserSyncMode>(
 		DEFAULT_BULK_DEVICE_USER_SYNC_MODE,
 	);
+	const [sdkMergeState, setSdkMergeState] = useState<{
+		open: boolean;
+		status: "idle" | "loading" | "review" | "applying" | "done" | "error";
+		message: string;
+		data?: DeviceUserMergePlanResponse;
+		choices: Record<string, Record<string, "A" | "B">>;
+		applyAll?: "A" | "B";
+	}>({ open: false, status: "idle", message: "", choices: {} });
 	const [activeDeviceUserSyncJob, setActiveDeviceUserSyncJob] = useState<ActiveDeviceUserSyncJob | null>(() => {
 		try {
 			if (typeof window === "undefined") return null;
@@ -770,6 +783,46 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 			message: "Choose what to refresh, then run it.",
 			lastProgress: null,
 		});
+	};
+	const openSdkUserMerge = async () => {
+		const deviceIds = syncCenterDevices.map(({ device }) => String(device.id || "").trim()).filter(Boolean);
+		if (deviceIds.length < 2) {
+			toast.error("Select at least two Hikvision devices");
+			return;
+		}
+		setSdkMergeState({ open: true, status: "loading", message: "Reading live SDK users.", choices: {} });
+		try {
+			const data = await planHikvisionSdkUserMergeMutation.mutateAsync({ deviceIds });
+			setSdkMergeState({ open: true, status: "review", message: "Review SDK user conflicts.", data, choices: {} });
+		} catch (error: any) {
+			setSdkMergeState({ open: true, status: "error", message: error?.message || "Could not read SDK users.", choices: {} });
+		}
+	};
+	const setSdkMergeChoice = (key: string, field: string, choice: "A" | "B") => {
+		setSdkMergeState((current) => ({
+			...current,
+			choices: { ...current.choices, [key]: { ...(current.choices[key] || {}), [field]: choice } },
+		}));
+	};
+	const sdkMergeConflictCount = sdkMergeState.data?.plan.users.reduce((count, user) => count + user.conflicts.length, 0) || 0;
+	const sdkMergeResolvedCount = sdkMergeState.data?.plan.users.reduce(
+		(count, user) => count + user.conflicts.filter((conflict) => Boolean(sdkMergeState.applyAll || sdkMergeState.choices[user.key]?.[conflict.field])).length,
+		0,
+	) || 0;
+	const applySdkUserMerge = async () => {
+		if (!sdkMergeState.data || sdkMergeResolvedCount < sdkMergeConflictCount) return;
+		setSdkMergeState((current) => ({ ...current, status: "applying", message: "Applying selected SDK users and rereading targets." }));
+		try {
+			const result = await applyHikvisionSdkUserMergeMutation.mutateAsync({
+				planId: sdkMergeState.data.planId,
+				choices: sdkMergeState.choices,
+				applyAll: sdkMergeState.applyAll,
+			});
+			setSdkMergeState((current) => ({ ...current, status: "done", message: result?.attention ? "Merge completed with attention items." : "SDK user merge completed." }));
+			await Promise.allSettled([refetchSyncPreview(), selectedDeviceId ? refetchSourceDeviceUsers() : Promise.resolve()]);
+		} catch (error: any) {
+			setSdkMergeState((current) => ({ ...current, status: "error", message: error?.message || "SDK user merge failed." }));
+		}
 	};
 	const getBulkDeviceUserSyncStartFailureMessage = (error: unknown) => {
 		const message =
@@ -3058,6 +3111,16 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 						{!deviceUserSyncJobIsProcessing ? (
 							<Button
 								type="button"
+								variant="outline"
+								disabled={syncCenterDevices.length < 2 || planHikvisionSdkUserMergeMutation.isPending}
+								onClick={() => void openSdkUserMerge()}>
+								{planHikvisionSdkUserMergeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+								Review device-user merge
+							</Button>
+						) : null}
+						{!deviceUserSyncJobIsProcessing ? (
+							<Button
+								type="button"
 								className="gap-2 bg-orange-500 text-white hover:bg-orange-600"
 								disabled={
 									startDeviceUserSyncJobMutation.isPending ||
@@ -3094,6 +3157,55 @@ export function DeviceEnrollmentPanel({ embedded = false, mode = "sync-review" }
 								Dismiss error
 							</Button>
 						) : null}
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
+				open={sdkMergeState.open}
+				onOpenChange={(open) => setSdkMergeState((current) => ({ ...current, open }))}
+				title="Merge device users"
+				className="max-w-5xl"
+				showCloseButton={sdkMergeState.status !== "applying"}
+				closeOnBackdropClick={sdkMergeState.status !== "applying"}>
+				<div className="space-y-4">
+					<div className={`rounded-xl border p-3 ${sdkMergeState.status === "error" ? "border-red-200 bg-red-50 text-red-950" : sdkMergeState.status === "done" ? "border-emerald-200 bg-emerald-50 text-emerald-950" : "border-slate-200 bg-slate-50 text-slate-950"}`}>
+						<div className="flex items-center gap-2 text-sm font-medium">
+							{sdkMergeState.status === "loading" || sdkMergeState.status === "applying" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+							{sdkMergeState.message || "Review SDK users"}
+						</div>
+						{sdkMergeState.data ? (
+							<div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+								{[["Users", sdkMergeState.data.plan.counts.unionUsers], ["Conflicts", sdkMergeConflictCount], ["Missing", sdkMergeState.data.plan.counts.missing]].map(([label, value]) => (
+									<div key={String(label)} className="rounded-lg border border-white bg-white px-3 py-2"><span className="block text-slate-500">{label}</span><span className="font-semibold">{value}</span></div>
+								))}
+							</div>
+						) : null}
+					</div>
+					{sdkMergeState.status === "review" && sdkMergeState.data ? (
+						<>
+							<div className="flex flex-wrap justify-end gap-2">
+								<Button type="button" variant="outline" onClick={() => setSdkMergeState((current) => ({ ...current, applyAll: "A" }))}>Apply A to all</Button>
+								<Button type="button" variant="outline" onClick={() => setSdkMergeState((current) => ({ ...current, applyAll: "B" }))}>Apply B to all</Button>
+								{sdkMergeState.applyAll ? <Button type="button" variant="outline" onClick={() => setSdkMergeState((current) => ({ ...current, applyAll: undefined }))}>Clear all</Button> : null}
+							</div>
+							<div className="max-h-[52vh] space-y-3 overflow-y-auto pr-1">
+								{sdkMergeState.data.plan.users.map((user) => (
+									<div key={user.key} className="rounded-xl border border-slate-200 bg-white p-3">
+										<div className="flex items-center justify-between gap-3"><span className="truncate text-sm font-semibold text-slate-950">{user.employee?.fullName || user.employee?.employeeId || `User ${user.vendorUserIds.join(", ")}`}</span><Badge variant={user.conflicts.length ? "warning" : "success"}>{user.conflicts.length ? `${user.conflicts.length} conflicts` : "Ready"}</Badge></div>
+										<div className="mt-1 text-[11px] text-slate-500">Source {user.sourceDeviceId} · Targets {user.targetDeviceIds.join(", ") || "-"}</div>
+										{user.conflicts.length ? <div className="mt-3 space-y-2">{user.conflicts.map((conflict) => {
+											const selected = sdkMergeState.choices[user.key]?.[conflict.field] || sdkMergeState.applyAll;
+											return <div key={conflict.field} className="grid gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2 md:grid-cols-[120px_1fr_1fr_88px] md:items-center"><span className="text-xs font-medium capitalize text-slate-600">{conflict.field}</span><button type="button" onClick={() => setSdkMergeChoice(user.key, conflict.field, "A")} className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "A" ? "border-orange-400 bg-orange-50" : "border-slate-200 bg-white"}`}><span className="block truncate font-medium">{conflict.deviceA.name}</span><span className="block break-words text-slate-600">{String(conflict.deviceA.value ?? "-")}</span></button><button type="button" onClick={() => setSdkMergeChoice(user.key, conflict.field, "B")} className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "B" ? "border-orange-400 bg-orange-50" : "border-slate-200 bg-white"}`}><span className="block truncate font-medium">{conflict.deviceB.name}</span><span className="block break-words text-slate-600">{String(conflict.deviceB.value ?? "-")}</span></button><Badge variant={selected ? "success" : "warning"}>{selected || "Choose"}</Badge></div>;
+										})}</div> : null}
+									</div>
+								))}
+							</div>
+						</>
+					) : null}
+					<div className="flex justify-end gap-2 border-t pt-3">
+						<Button type="button" variant="outline" disabled={sdkMergeState.status === "applying"} onClick={() => setSdkMergeState((current) => ({ ...current, open: false }))}>Close</Button>
+						{sdkMergeState.status === "review" ? <Button type="button" disabled={sdkMergeResolvedCount < sdkMergeConflictCount || applyHikvisionSdkUserMergeMutation.isPending} onClick={() => void applySdkUserMerge()}>{applyHikvisionSdkUserMergeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}Apply merge</Button> : null}
 					</div>
 				</div>
 			</Modal>

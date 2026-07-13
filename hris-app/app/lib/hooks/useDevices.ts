@@ -196,6 +196,27 @@ export const useStartDeviceUserSyncJob = () => {
 	});
 };
 
+export const usePlanHikvisionSdkUserMerge = () => {
+	return useMutation({
+		mutationFn: (payload: { deviceIds: string[] }) => devicesService.planHikvisionSdkUserMerge(payload),
+	});
+};
+
+export const useApplyHikvisionSdkUserMerge = () => {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (payload: {
+			planId: string;
+			choices?: Record<string, Record<string, "A" | "B">>;
+			applyAll?: "A" | "B";
+		}) => devicesService.applyHikvisionSdkUserMerge(payload),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users"] });
+		},
+	});
+};
+
 export const useCancelDeviceUserSyncJob = () => {
 	const queryClient = useQueryClient();
 

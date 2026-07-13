@@ -44,6 +44,12 @@ import {
 	summarizeDeviceUserStatuses,
 	type DeviceUserCandidate,
 } from "../../helper/device-user-sync.helper";
+import {
+	applyMergeChoices,
+	buildDeviceUserMergePlan,
+	type DeviceUserMergeField,
+	type DeviceUserMergeRecord,
+} from "../../helper/device-user-merge.helper";
 import { buildDeviceRuntimeConfig } from "../../helper/device-config-defaults.helper";
 import { summarizeHikvisionListenerLogs } from "../../helper/hikvision-listener-status.helper";
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
@@ -179,6 +185,7 @@ type DeviceUserSyncJob = {
 };
 
 const deviceUserSyncJobs = new Map<string, DeviceUserSyncJob>();
+const deviceUserMergePlans = new Map<string, { organizationId: string; plan: any; createdAt: Date; req: Request }>();
 
 const cleanupDeviceImportJobs = () => {
 	const cutoff = Date.now() - 60 * 60 * 1000;
@@ -2166,31 +2173,10 @@ export const controller = (prisma: PrismaClient) => {
 				created += 1;
 			}
 		}
-		if (params.source === "hikvision" && params.pruneMissing !== false) {
-			const staleWhere = {
-				organizationId,
-				deviceId,
-				...(currentVendorUserIds.size > 0
-					? {
-							vendorUserId: {
-								notIn: [...currentVendorUserIds],
-							},
-						}
-					: {}),
-			};
-			const staleRows = await (prisma as any).deviceUser.findMany({
-				where: staleWhere,
-				select: { id: true },
-			});
-			if (staleRows.length > 0) {
-				pruned = staleRows.length;
-				await (prisma as any).deviceUser.deleteMany({
-					where: {
-						id: { in: staleRows.map((row: { id: string }) => row.id) },
-					},
-				});
-			}
-		}
+		// A live device read is not proof that an HRIS/physical user was deleted.
+		// Preserve stale and one-device-only identities for explicit admin review.
+		void currentVendorUserIds;
+		void params.pruneMissing;
 		return { created, updated, linked, unmatched, conflict, disabled, pruned };
 	};
 
@@ -3196,6 +3182,385 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(500).json(
 				buildErrorResponse(error?.message || "Failed to reconcile biometric sync", 500),
 			);
+		}
+	};
+
+	const loadHikvisionSdkMergePlan = async (params: {
+		req: Request;
+		organizationId: string;
+		deviceIds: string[];
+	}) => {
+		const devices = await prisma.device.findMany({
+			where: {
+				organizationId: params.organizationId,
+				isDeleted: false,
+				id: { in: params.deviceIds },
+			},
+			select: { id: true, name: true, address: true, port: true, protocol: true, config: true },
+		});
+		if (devices.length !== params.deviceIds.length) {
+			throw Object.assign(new Error("One or more selected devices were not found"), { statusCode: 404 });
+		}
+		if (devices.some((device) => !isHikvisionDevice(device))) {
+			throw Object.assign(new Error("All selected devices must be Hikvision devices"), { statusCode: 400 });
+		}
+
+		const records: DeviceUserMergeRecord[] = [];
+		const errors: Array<{ deviceId: string; deviceName: string; error: string }> = [];
+		for (const device of devices) {
+			try {
+				const { candidates } = await loadHikvisionDeviceUserSnapshot(params.req, device);
+				const employees = await loadEmployeesForDeviceUserCandidates(params.organizationId, candidates);
+				const vendorUserIds = candidates.map((candidate) => candidate.vendorUserId).filter(Boolean);
+				const savedRows = vendorUserIds.length
+					? await (prisma as any).deviceUser.findMany({
+							where: {
+								organizationId: params.organizationId,
+								deviceId: device.id,
+								vendorUserId: { in: vendorUserIds },
+							},
+							select: { vendorUserId: true, employeeId: true, status: true, rawPayload: true },
+						})
+					: [];
+				const savedByVendorId = new Map<string, any>(savedRows.map((row: any) => [String(row.vendorUserId), row] as [string, any]));
+				for (const candidate of candidates) {
+					const saved = savedByVendorId.get(candidate.vendorUserId);
+					const decision = resolveDeviceUserLinkDecision(candidate, employees);
+					const employeeId = saved?.employeeId || decision.employeeId || null;
+					records.push({
+						deviceId: device.id,
+						deviceName: device.name || device.address || device.id,
+						vendorUserId: candidate.vendorUserId,
+						employeeNo: candidate.employeeNo,
+						employeeId,
+						displayName: candidate.displayName,
+						status: saved?.status || decision.status,
+						validFrom: candidate.validFrom,
+						validTo: candidate.validTo,
+						doorRight: candidate.doorRight,
+						accessPlan: candidate.accessPlan,
+						rawPayload: candidate.rawPayload,
+						manualLink: Boolean(saved?.employeeId || saved?.rawPayload?.hrisSync?.matchReason === "manual_existing"),
+					});
+				}
+			} catch (error: any) {
+				errors.push({
+					deviceId: device.id,
+					deviceName: device.name || device.address || device.id,
+					error: error?.message || "SDK user read failed",
+				});
+			}
+		}
+		const plan: any = buildDeviceUserMergePlan({ records, deviceIds: params.deviceIds as string[] });
+		return { ...plan, errors, devices: devices.map((device) => ({ id: device.id, name: device.name, address: device.address, port: device.port })) };
+	};
+
+	const planHikvisionSdkUserMerge = async (req: Request, res: Response, _next: NextFunction) => {
+		const admin = assertDeviceUserAdmin(req, res);
+		if (!admin) return;
+		try {
+			const deviceIds: string[] = Array.from(new Set(Array.isArray(req.body?.deviceIds)
+				? req.body.deviceIds.map((id: unknown) => String(id || "").trim()).filter(Boolean)
+				: [])) as string[];
+			if (deviceIds.length < 2) {
+				res.status(400).json(buildErrorResponse("Select at least two Hikvision devices", 400));
+				return;
+			}
+			const plan = await loadHikvisionSdkMergePlan({ req, organizationId: String(admin.organizationId), deviceIds });
+			const planId = randomUUID();
+			deviceUserMergePlans.set(planId, { organizationId: String(admin.organizationId), plan, createdAt: new Date(), req });
+			res.status(200).json(buildSuccessResponse("SDK user merge plan ready", { planId, plan }, 200));
+		} catch (error: any) {
+			res.status(error?.statusCode || 500).json(buildErrorResponse(error?.message || "Failed to build SDK user merge plan", error?.statusCode || 500));
+		}
+	};
+
+	const applyHikvisionSdkUserMerge = async (req: Request, res: Response, _next: NextFunction) => {
+		const admin = assertDeviceUserAdmin(req, res);
+		if (!admin) return;
+		try {
+			const planId = String(req.body?.planId || "").trim();
+			const stored = deviceUserMergePlans.get(planId);
+			if (!stored || stored.organizationId !== String(admin.organizationId)) {
+				res.status(404).json(buildErrorResponse("Merge plan not found or expired. Refresh the devices and try again.", 404));
+				return;
+			}
+			const appliedPlan = applyMergeChoices(stored.plan, {
+				choices: req.body?.choices || {},
+				applyAll: req.body?.applyAll === "A" || req.body?.applyAll === "B" ? req.body.applyAll : undefined,
+			});
+			if (!appliedPlan.executable) {
+				res.status(409).json(buildErrorResponse("Resolve every SDK user conflict before applying the merge", 409));
+				return;
+			}
+
+			const devices = await prisma.device.findMany({
+				where: { organizationId: String(admin.organizationId), isDeleted: false, id: { in: appliedPlan.deviceIds } },
+				select: { id: true, name: true, address: true, port: true, protocol: true, config: true },
+			});
+			for (const device of devices) {
+				const { candidates } = await loadHikvisionDeviceUserSnapshot(req, device);
+				await upsertDeviceUsersFromCandidates({
+					organizationId: String(admin.organizationId),
+					deviceId: device.id,
+					candidates,
+					source: "hikvision",
+					pruneMissing: false,
+				});
+			}
+			const results: any[] = [];
+			for (const user of appliedPlan.users) {
+				const selectedConflict = user.conflicts.find((conflict: any) => conflict.choice);
+				const sourceDeviceId = selectedConflict?.choice === "B"
+					? selectedConflict.deviceB.id
+					: selectedConflict?.choice === "A"
+						? selectedConflict.deviceA.id
+						: user.sourceDeviceId;
+				const sourceDevice = devices.find((device) => device.id === sourceDeviceId) || devices.find((device) => device.id === user.sourceDeviceId);
+				if (!sourceDevice) continue;
+				const sourceRecord = user.records.find((record) => record.deviceId === sourceDevice.id);
+				if (!sourceRecord) continue;
+				for (const targetDeviceId of user.targetDeviceIds) {
+					if (targetDeviceId === sourceDevice.id) continue;
+					const targetDevice = devices.find((device) => device.id === targetDeviceId);
+					if (!targetDevice) continue;
+					try {
+						const copy = await copyHikvisionUserToPeerWithRetry({
+							req,
+							organizationId: String(admin.organizationId),
+							sourceDevice,
+							targetDevice,
+							employeeNo: sourceRecord.vendorUserId,
+							includeFingerprints: true,
+							includeFaceRecognition: true,
+						});
+						results.push({ userKey: user.key, sourceDeviceId: sourceDevice.id, targetDeviceId, status: "success", strategy: copy.vmCopy?.strategy || null });
+					} catch (error: any) {
+						results.push({ userKey: user.key, sourceDeviceId: sourceDevice.id, targetDeviceId, status: "error", error: error?.message || "SDK user copy failed" });
+					}
+					const targetRow = await (prisma as any).deviceUser.findFirst({
+						where: { organizationId: String(admin.organizationId), deviceId: targetDeviceId, vendorUserId: sourceRecord.vendorUserId },
+						select: { id: true, employeeId: true, rawPayload: true },
+					});
+					if (targetRow?.id) {
+						const selectedRecordFor = (field: string) => {
+							const conflict = user.conflicts.find((item: any) => item.field === field);
+							if (!conflict?.choice) return sourceRecord;
+							const selectedDeviceId = conflict.choice === "B" ? conflict.deviceB.id : conflict.deviceA.id;
+							return user.records.find((record: any) => record.deviceId === selectedDeviceId) || sourceRecord;
+						};
+						const employeeRecord = selectedRecordFor("employeeId");
+						const nameRecord = selectedRecordFor("displayName");
+						const statusRecord = selectedRecordFor("status");
+						const validityRecord = selectedRecordFor("validFrom");
+						const accessRecord = selectedRecordFor("doorRight");
+						const selectedRaw = selectedRecordFor("fingerprint").rawPayload as any;
+						const targetCredentials = extractHikvisionCredentialSummary(targetRow.rawPayload || {});
+						const selectedCredentials = extractHikvisionCredentialSummary(selectedRaw || {});
+						const preserveBiometricRaw =
+							targetCredentials.fingerprintCount > selectedCredentials.fingerprintCount ||
+							targetCredentials.faceCount > selectedCredentials.faceCount ||
+							targetCredentials.cardCount > selectedCredentials.cardCount;
+						await (prisma as any).deviceUser.update({
+							where: { id: targetRow.id },
+							data: {
+								employeeId: targetRow.employeeId && !user.conflicts.some((item: any) => item.field === "employeeId" && item.choice) ? targetRow.employeeId : employeeRecord.employeeId || user.employeeId || null,
+								displayName: nameRecord.displayName,
+								status: statusRecord.status,
+								validFrom: validityRecord.validFrom ? new Date(validityRecord.validFrom) : null,
+								validTo: validityRecord.validTo ? new Date(validityRecord.validTo) : null,
+								doorRight: accessRecord.doorRight,
+								accessPlan: accessRecord.accessPlan,
+								rawPayload: { ...(targetRow.rawPayload || {}), ...(preserveBiometricRaw ? {} : (selectedRaw || {})), hrisMerge: { reviewed: true, decisions: user.conflicts } },
+							},
+						});
+					}
+				}
+				const decisions = user.conflicts.map((conflict: any) => ({
+					field: conflict.field,
+					choice: conflict.choice,
+					selectedDeviceId: conflict.choice === "B" ? conflict.deviceB.id : conflict.deviceA.id,
+				}));
+				await logAudit(req, {
+					userId: String((req as any).userId || "unknown"),
+					action: config.AUDIT_LOG.ACTIONS.UPDATE,
+					resource: config.AUDIT_LOG.RESOURCES.DEVICE,
+					severity: config.AUDIT_LOG.SEVERITY.HIGH,
+					entityType: config.AUDIT_LOG.ENTITY_TYPES.DEVICE,
+					entityId: user.key,
+					changesBefore: null,
+					changesAfter: { employeeId: user.employeeId, sourceDeviceId: sourceDevice.id, targetDeviceIds: user.targetDeviceIds, decisions },
+					description: "Applied reviewed Hikvision device-user merge decisions",
+					organizationId: String(admin.organizationId),
+				});
+			}
+			const reread = await loadHikvisionSdkMergePlan({
+				req,
+				organizationId: String(admin.organizationId),
+				deviceIds: appliedPlan.deviceIds,
+			});
+			logActivity(req, { userId: String((req as any).userId || "unknown"), action: "HIKVISION_SDK_USER_MERGE", description: `Applied Hikvision SDK user merge plan ${planId}`, page: { url: req.originalUrl, title: "Hikvision SDK User Merge" } });
+			await invalidateCache.byPattern("cache:device:*").catch(() => undefined);
+			deviceUserMergePlans.delete(planId);
+			res.status(200).json(buildSuccessResponse("SDK user merge applied", { planId, results, reread, remainingConflicts: reread.plan.counts.conflicts, remainingMissing: reread.plan.counts.missing, attention: results.filter((result) => result.status === "error").length }, 200));
+		} catch (error: any) {
+			res.status(error?.statusCode || 500).json(buildErrorResponse(error?.message || "Failed to apply SDK user merge", error?.statusCode || 500));
+		}
+	};
+
+	const getHikvisionMergeDevices = async (organizationId: string, requestedIds: unknown) => {
+		const ids = Array.isArray(requestedIds)
+			? [...new Set(requestedIds.map((id) => String(id || "").trim()).filter(Boolean))]
+			: [];
+		const devices = await prisma.device.findMany({
+			where: {
+				organizationId,
+				isDeleted: false,
+				...(ids.length ? { id: { in: ids } } : {}),
+			},
+			select: { id: true, organizationId: true, name: true, address: true, port: true, protocol: true, config: true },
+			orderBy: { createdAt: "asc" },
+		});
+		const hikvisionDevices = devices.filter((device) => isHikvisionDevice(device));
+		if (ids.length && hikvisionDevices.length !== ids.length) {
+			throw Object.assign(new Error("Every selected device must be a configured Hikvision device"), { statusCode: 400 });
+		}
+		if (hikvisionDevices.length < 2) {
+			throw Object.assign(new Error("Select at least two configured Hikvision devices"), { statusCode: 400 });
+		}
+		return hikvisionDevices;
+	};
+
+	const buildLiveDeviceUserMergePlan = async (params: { req: Request; organizationId: string; deviceIds?: unknown[] }) => {
+		const devices = await getHikvisionMergeDevices(params.organizationId, params.deviceIds);
+		const records: DeviceUserMergeRecord[] = [];
+		for (const device of devices) {
+			const snapshot = await loadHikvisionDeviceUserSnapshot(params.req, device);
+			const savedRows = await (prisma as any).deviceUser.findMany({
+				where: { organizationId: params.organizationId, deviceId: device.id },
+				select: { vendorUserId: true, employeeId: true, rawPayload: true },
+			});
+			const savedByVendor = new Map<string, any>(savedRows.map((row: any) => [String(row.vendorUserId || "").trim(), row] as [string, any]));
+			for (const candidate of snapshot.candidates) {
+				const saved = savedByVendor.get(String(candidate.vendorUserId).trim());
+				records.push({
+					deviceId: device.id,
+					deviceName: device.name || device.address,
+					vendorUserId: candidate.vendorUserId,
+					employeeNo: candidate.employeeNo,
+					employeeId: saved?.employeeId || null,
+					displayName: candidate.displayName,
+					status: candidate.status,
+					validFrom: candidate.validFrom,
+					validTo: candidate.validTo,
+					doorRight: candidate.doorRight,
+					accessPlan: candidate.accessPlan,
+					rawPayload: candidate.rawPayload,
+					manualLink: String(saved?.rawPayload?.hrisSync?.matchReason || "") === "manual_existing",
+				});
+			}
+		}
+			const plan: any = buildDeviceUserMergePlan({ records, deviceIds: devices.map((device) => device.id) });
+		const employeeIds = [...new Set(plan.users.map((user: any) => user.employeeId).filter(Boolean))];
+		const employees = employeeIds.length
+			? await prisma.employee.findMany({
+					where: { organizationId: params.organizationId, id: { in: employeeIds as string[] }, isDeleted: false },
+					select: { id: true, employeeId: true, deviceEmpId: true, person: { select: { personalInfo: true } } },
+				})
+			: [];
+		const employeeById = new Map(employees.map((employee: any) => [employee.id, employee]));
+		return {
+			...plan,
+			devices: devices.map(({ config: _config, ...device }) => device),
+			users: plan.users.map((user: any) => ({ ...user, employee: employeeById.get(user.employeeId || "") || null })),
+		};
+	};
+
+	const createDeviceUserMergePlan = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+			const plan = await buildLiveDeviceUserMergePlan({
+				req,
+				organizationId: admin.organizationId,
+				deviceIds: (req.body as any)?.deviceIds,
+			});
+			const planId = randomUUID();
+			deviceUserMergePlans.set(planId, { organizationId: admin.organizationId, plan, createdAt: new Date(), req });
+			res.status(200).json(buildSuccessResponse("Device-user merge plan ready", { planId, ...plan }, 200));
+		} catch (error: any) {
+			res.status(error?.statusCode || 500).json(buildErrorResponse(error?.message || "Failed to build device-user merge plan", error?.statusCode || 500));
+		}
+	};
+
+	const applyDeviceUserMergePlan = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+			const planId = String((req.body as any)?.planId || "").trim();
+			const stored = deviceUserMergePlans.get(planId);
+			if (!stored || stored.organizationId !== admin.organizationId) {
+				res.status(404).json(buildErrorResponse("Merge plan not found or expired", 404));
+				return;
+			}
+			const reviewed = applyMergeChoices(stored.plan, {
+				choices: (req.body as any)?.choices,
+				applyAll: (req.body as any)?.applyAll,
+			});
+			if (!reviewed.executable) {
+				res.status(409).json(buildErrorResponse("Resolve every merge conflict before applying", 409, reviewed.unresolved.map((item: any) => ({ field: `${item.key}:${item.field}`, message: "Selection required" }))));
+				return;
+			}
+			const results: any[] = [];
+			for (const user of reviewed.users) {
+				const source = user.records[0];
+				const sourceDevice = user.records.find((record) => record.deviceId === user.sourceDeviceId) || source;
+				for (const targetDeviceId of user.targetDeviceIds) {
+					const existing = await (prisma as any).deviceUser.findFirst({
+						where: { organizationId: admin.organizationId, deviceId: targetDeviceId, vendorUserId: source.vendorUserId },
+						select: { id: true, employeeId: true, rawPayload: true },
+					});
+					let copy: any = null;
+					if (!existing?.id) {
+						const sourceDeviceRow = (stored.plan.devices || []).find((device: any) => device.id === sourceDevice.deviceId);
+						const targetDeviceRow = (stored.plan.devices || []).find((device: any) => device.id === targetDeviceId);
+						if (sourceDeviceRow && targetDeviceRow) {
+							try {
+								copy = await copyHikvisionUserToPeerWithRetry({ req, organizationId: admin.organizationId, sourceDevice: sourceDeviceRow, targetDevice: targetDeviceRow, employeeNo: source.vendorUserId, includeFingerprints: true, includeFaceRecognition: true });
+							} catch (error: any) {
+								results.push({ key: user.key, targetDeviceId, status: "copy_failed", error: error?.message || "Target-device copy failed" });
+								continue;
+							}
+						}
+					}
+					const target = await (prisma as any).deviceUser.findFirst({
+						where: { organizationId: admin.organizationId, deviceId: targetDeviceId, vendorUserId: source.vendorUserId },
+						select: { id: true, employeeId: true, rawPayload: true },
+					});
+					const data: any = {
+						employeeId: target?.employeeId || user.employeeId || null,
+						employeeNo: source.employeeNo || source.vendorUserId,
+						displayName: source.displayName,
+						status: source.status,
+						validFrom: source.validFrom ? new Date(source.validFrom) : null,
+						validTo: source.validTo ? new Date(source.validTo) : null,
+						doorRight: source.doorRight,
+						accessPlan: source.accessPlan,
+						rawPayload: source.rawPayload,
+						lastSyncedAt: new Date(),
+					};
+					if (target?.id) await (prisma as any).deviceUser.update({ where: { id: target.id }, data });
+					else await (prisma as any).deviceUser.create({ data: { organizationId: admin.organizationId, deviceId: targetDeviceId, vendorUserId: source.vendorUserId, ...data } });
+					results.push({ key: user.key, targetDeviceId, status: "applied", copyAttempt: copy?.attempt || 0 });
+				}
+				await logAudit(req, { userId: (req as any).userId || "unknown", action: config.AUDIT_LOG.ACTIONS.UPDATE, resource: config.AUDIT_LOG.RESOURCES.DEVICE, severity: config.AUDIT_LOG.SEVERITY.HIGH, entityType: config.AUDIT_LOG.ENTITY_TYPES.DEVICE, entityId: user.key, changesBefore: null, changesAfter: { merge: user, decisions: user.conflicts }, description: "Applied reviewed Hikvision device-user union merge", organizationId: admin.organizationId });
+			}
+			const reread = await buildLiveDeviceUserMergePlan({ req, organizationId: admin.organizationId, deviceIds: stored.plan.deviceIds });
+			deviceUserMergePlans.delete(planId);
+			await invalidateCache.byPattern("cache:device:*").catch(() => undefined);
+			res.status(200).json(buildSuccessResponse("Device-user merge applied", { planId, results, reread, remainingConflicts: reread.counts.conflicts, remainingMissing: reread.counts.missing }, 200));
+		} catch (error: any) {
+			res.status(error?.statusCode || 500).json(buildErrorResponse(error?.message || "Failed to apply device-user merge", error?.statusCode || 500));
 		}
 	};
 
@@ -7398,6 +7763,8 @@ export const controller = (prisma: PrismaClient) => {
 		backfillDeviceUserLifecycleEvents,
 		reconcileBiometricSync,
 		copyHikvisionDeviceUserToPeer,
+		planHikvisionSdkUserMerge,
+		applyHikvisionSdkUserMerge,
 		mirrorHikvisionFaceToPeers,
 		mockHikvisionFingerprintTally,
 		mockHikvisionFaceTally,
