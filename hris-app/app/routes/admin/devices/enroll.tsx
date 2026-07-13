@@ -17,6 +17,7 @@ import {
 	FileJson,
 	Download,
 	Upload,
+	Lock,
 	Loader2,
 	Activity,
 	Clock3,
@@ -5783,8 +5784,13 @@ export function DeviceEnrollmentPanel({
 							)}
 							Preview import
 						</Button>
-						<Button type="button" disabled title="Disabled until previewed write safety is implemented">
-							<Upload className="h-4 w-4" />
+						<Button
+							type="button"
+							variant="outline"
+							disabled
+							className="border-slate-200 bg-slate-100 text-slate-500"
+							title="Disabled until previewed write safety is implemented">
+							<Lock className="h-4 w-4" />
 							Execute
 						</Button>
 					</div>
