@@ -446,31 +446,55 @@ const installManagedHikvisionListenerWrapperOnVm = async () => {
 		}
 	}
 
-	const installResult = await runHikvisionListenerVmCommand([
-		"sudo",
-		"bash",
-		"-lc",
+	for (const remoteArgs of [
 		[
-			"install -o root -g root -m 0755",
+			"sudo",
+			"install",
+			"-o",
+			"root",
+			"-g",
+			"root",
+			"-m",
+			"0755",
 			HIKVISION_VM_WRAPPER_TMP_PATH,
 			HIKVISION_VM_WRAPPER_REMOTE_PATH,
-			"&& install -o root -g root -m 0755",
+		],
+		[
+			"sudo",
+			"install",
+			"-o",
+			"root",
+			"-g",
+			"root",
+			"-m",
+			"0755",
 			HIKVISION_VM_DAEMON_TMP_PATH,
 			HIKVISION_VM_DAEMON_REMOTE_PATH,
-			"&& install -o root -g root -m 0644",
+		],
+		[
+			"sudo",
+			"install",
+			"-o",
+			"root",
+			"-g",
+			"root",
+			"-m",
+			"0644",
 			HIKVISION_VM_SERVICE_TMP_PATH,
 			HIKVISION_VM_SERVICE_REMOTE_PATH,
-			"&& systemctl daemon-reload",
-		].join(" "),
-	], 12000);
-	if (installResult.exitCode !== 0) {
-		return {
-			ok: false,
-			error:
-				installResult.stderr.trim() ||
-				installResult.stdout.trim() ||
-				"Failed to install listener wrapper",
-		};
+		],
+		["sudo", "systemctl", "daemon-reload"],
+	] as const) {
+		const installResult = await runHikvisionListenerVmCommand([...remoteArgs], 12000);
+		if (installResult.exitCode !== 0) {
+			return {
+				ok: false,
+				error:
+					installResult.stderr.trim() ||
+					installResult.stdout.trim() ||
+					"Failed to install listener wrapper",
+			};
+		}
 	}
 
 	return { ok: true, localPath: wrapperLocalPath };

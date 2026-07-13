@@ -173,6 +173,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include('process.platform === "linux"');
 		expect(controller).to.include('"10.184.37.19"');
 		expect(controller).to.include("project-truth-hikvision-hot-reload-daemon");
+		expect(controller).to.include('["sudo", "systemctl", "daemon-reload"]');
+		expect(controller).to.not.include('"sudo",\n\t\t"bash",\n\t\t"-lc"');
 		expect(controller).to.include('if (action !== "stop")');
 		expect(controller).to.include("runFixedProcess");
 		expect(controller).to.include("execFile(");
