@@ -48,6 +48,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("const executeHikvisionDeviceUserPeerCopy = async");
 		expect(controller).to.include("const copyHikvisionUserToPeerWithRetry = async");
 		expect(controller).to.include("const runHikvisionManualCopyOnVm = async");
+		expect(controller).to.include("const writeHikvisionManualCopySpec =");
+		expect(controller).to.include("HIKVISION_ALLOW_STATIC_DEVICE_SPEC=1");
+		expect(controller).to.include("HIKVISION_DEVICE_SPEC_OVERRIDE=");
+		expect(controller).to.include('name: "static_spec"');
 		expect(controller).to.include("peer_copy_noop_already_synced");
 		expect(controller).to.include("peer_copy_noop_overlay_only");
 		expect(controller).to.include("strategy: \"noop_overlay_only\"");
@@ -55,6 +59,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("const isMissingHikvisionListenerRuntimeError =");
 		expect(controller).to.include("const runManualCopy = (extraEnv: string[] = []) =>");
 		expect(controller).to.include("Math.max(waitSeconds * 1000 + 45000, 60000)");
+		expect(controller).to.include("maxBuffer: 5 * 1024 * 1024");
 		expect(controller).to.include("result.exitCode !== 0");
 		expect(controller).to.include("isMissingHikvisionListenerRuntimeError(firstAttemptDetail)");
 		expect(controller.indexOf('name: "postgres"')).to.be.lessThan(
@@ -113,6 +118,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("Device-user import job accepted");
 		expect(controller).to.include("runAsJob");
 		expect(controller).to.include("pollUrl: `/api/device/users/import/jobs/${jobId}`");
+		expect(controller).to.include("DEVICE_USER_PACKAGE_IMPORT_JOB_DIR");
+		expect(controller).to.include("persistDeviceUserPackageImportJob(job)");
+		expect(controller).to.include("readDeviceUserPackageImportJob(jobId)");
+		expect(controller).to.include("interrupted_by_api_restart");
 		expect(controller).to.include("Conflict requires manual review before additive import");
 		expect(controller).to.include("target-device-users-before.json");
 		expect(controller).to.include("target-device-users-after.json");

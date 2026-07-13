@@ -129,6 +129,12 @@ const HIKVISION_PEER_COPY_COMPLETION_WAIT_MS = Math.max(
 const DEVICE_USER_EXPORT_SCHEMA_VERSION = "project-truth.hikvision-device-users.v1";
 const DEVICE_USER_IMPORT_CONFIRMATION = "IMPORT DEVICE USERS";
 const DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM = "aes-256-gcm";
+const DEVICE_USER_PACKAGE_IMPORT_JOB_DIR = path.join(
+	process.cwd(),
+	"..",
+	".runtime",
+	"device-user-import-jobs",
+);
 
 type DeviceImportJobStatus = "processing" | "completed" | "failed" | "cancelled";
 
@@ -182,6 +188,43 @@ type DeviceUserPackageImportJob = {
 };
 
 const deviceUserPackageImportJobs = new Map<string, DeviceUserPackageImportJob>();
+
+const serializeDeviceUserPackageImportJob = (job: DeviceUserPackageImportJob) => ({
+	...job,
+	startedAt: job.startedAt instanceof Date ? job.startedAt.toISOString() : job.startedAt,
+	completedAt: job.completedAt instanceof Date ? job.completedAt.toISOString() : job.completedAt || null,
+	plaintextBiometricExposed: false,
+});
+
+const persistDeviceUserPackageImportJob = (job: DeviceUserPackageImportJob) => {
+	try {
+		fsSync.mkdirSync(DEVICE_USER_PACKAGE_IMPORT_JOB_DIR, { recursive: true });
+		fsSync.writeFileSync(
+			path.join(DEVICE_USER_PACKAGE_IMPORT_JOB_DIR, `${job.jobId}.json`),
+			JSON.stringify(serializeDeviceUserPackageImportJob(job), null, 2),
+		);
+	} catch (error) {
+		deviceLogger.warn(`Failed to persist device-user import job snapshot: ${error}`);
+	}
+};
+
+const readDeviceUserPackageImportJob = (jobId: string): DeviceUserPackageImportJob | null => {
+	try {
+		const filePath = path.join(DEVICE_USER_PACKAGE_IMPORT_JOB_DIR, `${jobId}.json`);
+		if (!fsSync.existsSync(filePath)) return null;
+		const parsed = JSON.parse(fsSync.readFileSync(filePath, "utf8"));
+		return {
+			...parsed,
+			startedAt: parsed.startedAt ? new Date(parsed.startedAt) : new Date(),
+			completedAt: parsed.completedAt ? new Date(parsed.completedAt) : undefined,
+			plaintextBiometricExposed: false,
+			results: Array.isArray(parsed.results) ? parsed.results : [],
+		};
+	} catch (error) {
+		deviceLogger.warn(`Failed to read device-user import job snapshot: ${error}`);
+		return null;
+	}
+};
 
 type DeviceUserSyncJobStatus = "processing" | "completed" | "failed" | "cancelled";
 type DeviceUserSyncMode = "full_refresh" | "needs_attention_only" | "peer_converge";
@@ -288,11 +331,13 @@ const updateDeviceUserPackageImportJob = (
 ) => {
 	const job = deviceUserPackageImportJobs.get(jobId);
 	if (!job) return;
-	deviceUserPackageImportJobs.set(jobId, {
+	const nextJob = {
 		...job,
 		...patch,
 		results: patch.results || job.results,
-	});
+	};
+	deviceUserPackageImportJobs.set(jobId, nextJob);
+	persistDeviceUserPackageImportJob(nextJob);
 };
 
 const updateDeviceUserSyncJob = (
@@ -335,7 +380,7 @@ const runFixedProcess = (
 			{
 				timeout: options.timeoutMs ?? 7000,
 				windowsHide: true,
-				maxBuffer: 128 * 1024,
+				maxBuffer: 5 * 1024 * 1024,
 			},
 			(error: any, stdout, stderr) => {
 				resolve({
@@ -644,12 +689,64 @@ const parseJsonLines = (stdout: string) =>
 const isMissingHikvisionListenerRuntimeError = (detail: string) =>
 	/no such file|not found|command not found/i.test(String(detail || ""));
 
+const hikvisionDeviceLabel = (device: any) =>
+	String(device?.name || device?.address || device?.id || "device").trim();
+
+const buildHikvisionManualCopySdkFailureMessage = (params: {
+	events: Record<string, any>[];
+	sourceDevice: any;
+	targetDevice: any;
+	employeeNo: string;
+}) => {
+	const sourceDeviceId = String(params.sourceDevice?.id || "").trim();
+	const targetDeviceId = String(params.targetDevice?.id || "").trim();
+	const sourceFailure = params.events.find(
+		(event) =>
+			event?.event === "manual_reconcile_queue_failed" &&
+			String(event?.sourceDeviceId || "").trim() === sourceDeviceId,
+	);
+	const failedLogin = params.events.find(
+		(event) =>
+			event?.event === "sdk_login" &&
+			String(event?.ok || "").trim().toLowerCase() === "false" &&
+			(!event?.deviceId || String(event.deviceId).trim() === sourceDeviceId),
+	);
+	if (sourceFailure || failedLogin) {
+		const sourceName = hikvisionDeviceLabel(params.sourceDevice);
+		const targetName = hikvisionDeviceLabel(params.targetDevice);
+		const reason = String(sourceFailure?.reason || "source SDK login failed").trim();
+		const lastError = failedLogin?.lastError
+			? `; SDK login lastError ${failedLogin.lastError}`
+			: "";
+		const host = failedLogin?.host
+			? ` on ${failedLogin.host}${failedLogin.sdkPort ? `:${failedLogin.sdkPort}` : ""}`
+			: "";
+		return `${sourceName} cannot be used as the SDK copy source for employee ${params.employeeNo} right now (${reason}${lastError}${host}). ${targetName} was not the device reported by the SDK failure.`;
+	}
+	const targetFailure = params.events.find(
+		(event) =>
+			event?.event === "sdk_login" &&
+			String(event?.ok || "").trim().toLowerCase() === "false" &&
+			String(event?.deviceId || "").trim() === targetDeviceId,
+	);
+	if (targetFailure) {
+		const targetName = hikvisionDeviceLabel(params.targetDevice);
+		const host = targetFailure.host
+			? ` on ${targetFailure.host}${targetFailure.sdkPort ? `:${targetFailure.sdkPort}` : ""}`
+			: "";
+		return `${targetName} cannot be used as the SDK copy target for employee ${params.employeeNo} right now (SDK login lastError ${targetFailure.lastError || "unknown"}${host}).`;
+	}
+	return "";
+};
+
 const sleep = (ms: number) =>
 	new Promise((resolve) => {
 		setTimeout(resolve, Math.max(0, Math.floor(ms)));
 	});
 
 type HikvisionManualCopyParams = {
+	sourceDevice: any;
+	targetDevice: any;
 	sourceDeviceId: string;
 	targetDeviceId: string;
 	employeeNo: string;
@@ -832,29 +929,103 @@ export const controller = (prisma: PrismaClient) => {
 		});
 	};
 
+	const cleanHikvisionDeviceSpecValue = (value: any) =>
+		String(value ?? "")
+			.replace(/[\r\n|]+/g, " ")
+			.trim();
+
+	const buildHikvisionManualCopySpecLine = (device: any) => {
+		const config = device?.config || {};
+		const access = device?.access || {};
+		const sdkHost = cleanHikvisionDeviceSpecValue(
+			config.hikvisionSdkRuntimeAddress || device?.address,
+		);
+		const sdkPort = cleanHikvisionDeviceSpecValue(
+			config.hikvisionSdkRuntimePort || config.sdkPort || "8000",
+		);
+		const username = cleanHikvisionDeviceSpecValue(
+			access.username || process.env.HIKVISION_USERNAME,
+		);
+		const password = cleanHikvisionDeviceSpecValue(
+			access.password || process.env.HIKVISION_PASSWORD,
+		);
+		if (!device?.id || !device?.organizationId || !sdkHost || !sdkPort || !username || !password) {
+			throw new Error(
+				`Hikvision manual copy cannot prepare SDK spec for ${
+					device?.name || device?.id || "unknown device"
+				}`,
+			);
+		}
+		return [
+			cleanHikvisionDeviceSpecValue(device.id),
+			cleanHikvisionDeviceSpecValue(device.organizationId),
+			cleanHikvisionDeviceSpecValue(device.name || device.id),
+			sdkHost,
+			sdkPort,
+			username,
+			password,
+			"true",
+		].join("|");
+	};
+
+	const writeHikvisionManualCopySpec = (params: HikvisionManualCopyParams) => {
+		const specText = [
+			buildHikvisionManualCopySpecLine(params.sourceDevice),
+			buildHikvisionManualCopySpecLine(params.targetDevice),
+		].join("\n");
+		const localPath = path.join(
+			os.tmpdir(),
+			`project-truth-hikvision-manual-copy-${Date.now()}-${Math.random()
+				.toString(16)
+				.slice(2)}.spec`,
+		);
+		fsSync.writeFileSync(localPath, `${specText}\n`, { mode: 0o600 });
+		return localPath;
+	};
+
 	const runHikvisionManualCopyOnVm = async (params: HikvisionManualCopyParams) => {
 		const waitSeconds = Math.max(1, Math.min(Number(params.waitSeconds || 1), 8));
-		const filter = `${params.sourceDeviceId},${params.targetDeviceId}`;
-		const runManualCopy = (extraEnv: string[] = []) =>
-			runHikvisionListenerVmCommand(
-				[
-					"sudo",
-					"env",
-					...extraEnv,
-					`HIKVISION_DEVICE_ID_FILTER=${filter}`,
-					`HIKVISION_RUN_SECONDS=${waitSeconds}`,
-					HIKVISION_VM_WRAPPER_REMOTE_PATH,
-					"--run-once",
-					"--manual-full-mirror-source-device-id",
-					params.sourceDeviceId,
-					"--manual-employee-no",
-					params.employeeNo,
-					...(params.includeFingerprints ? ["--manual-include-fingerprints"] : []),
-					...(params.includeFaceRecognition ? [] : ["--manual-exclude-face"]),
-				],
-				Math.max(waitSeconds * 1000 + 45000, 60000),
+		const localSpecPath = writeHikvisionManualCopySpec(params);
+		const remoteSpecPath = `/tmp/project-truth-hikvision-manual-copy-${Date.now()}.spec`;
+		try {
+			const copySpecResult = await runHikvisionListenerVmCopy(
+				localSpecPath,
+				remoteSpecPath,
+				12000,
 			);
+			if (copySpecResult.exitCode !== 0) {
+				throw new Error(
+					copySpecResult.stderr.trim() ||
+						copySpecResult.stdout.trim() ||
+						"Failed to copy Hikvision manual peer-copy spec to the VM",
+				);
+			}
+
+			const runManualCopy = (extraEnv: string[] = []) =>
+				runHikvisionListenerVmCommand(
+					[
+						"sudo",
+						"env",
+						...extraEnv,
+						"HIKVISION_ALLOW_STATIC_DEVICE_SPEC=1",
+						`HIKVISION_DEVICE_SPEC_OVERRIDE=${remoteSpecPath}`,
+						`HIKVISION_RUN_SECONDS=${waitSeconds}`,
+						HIKVISION_VM_WRAPPER_REMOTE_PATH,
+						"--run-once",
+						"--manual-full-mirror-source-device-id",
+						params.sourceDeviceId,
+						"--manual-employee-no",
+						params.employeeNo,
+						...(params.includeFingerprints ? ["--manual-include-fingerprints"] : []),
+						...(params.includeFaceRecognition ? [] : ["--manual-exclude-face"]),
+					],
+					Math.max(waitSeconds * 1000 + 45000, 60000),
+				);
 		const strategies = [
+			{
+				name: "static_spec",
+				extraEnv: [] as string[],
+			},
 			{
 				name: "postgres",
 				extraEnv: [] as string[],
@@ -922,8 +1093,15 @@ export const controller = (prisma: PrismaClient) => {
 					events,
 				};
 			}
+			const sdkFailureMessage = buildHikvisionManualCopySdkFailureMessage({
+				events,
+				sourceDevice: params.sourceDevice,
+				targetDevice: params.targetDevice,
+				employeeNo: params.employeeNo,
+			});
 			failures.push(
 				`${strategy.name}: ${
+					sdkFailureMessage ||
 					result.stderr.trim() ||
 					result.stdout.trim() ||
 					"Scoped Hikvision user copy did not report a completed peer write"
@@ -931,6 +1109,14 @@ export const controller = (prisma: PrismaClient) => {
 			);
 		}
 		throw new Error(failures.join(" | "));
+		} finally {
+			try {
+				fsSync.unlinkSync(localSpecPath);
+			} catch {}
+			await runHikvisionListenerVmCommand(["sudo", "rm", "-f", remoteSpecPath], 7000).catch(
+				() => undefined,
+			);
+		}
 	};
 
 	const updateHikvisionSyntheticCredentialTally = async (params: {
@@ -4625,7 +4811,7 @@ export const controller = (prisma: PrismaClient) => {
 		if (runAsJob) {
 			cleanupDeviceUserPackageImportJobs();
 			const jobId = randomUUID();
-			deviceUserPackageImportJobs.set(jobId, {
+			const job: DeviceUserPackageImportJob = {
 				jobId,
 				status: "processing",
 				organizationId: gate.organizationId,
@@ -4638,7 +4824,9 @@ export const controller = (prisma: PrismaClient) => {
 				plaintextBiometricExposed: false,
 				results: [],
 				startedAt: new Date(),
-			});
+			};
+			deviceUserPackageImportJobs.set(jobId, job);
+			persistDeviceUserPackageImportJob(job);
 			setImmediate(async () => {
 				try {
 					const result = await runDeviceUserImportExecuteWork({ req, gate, body, jobId });
@@ -4701,7 +4889,18 @@ export const controller = (prisma: PrismaClient) => {
 		if (!gate) return;
 		cleanupDeviceUserPackageImportJobs();
 		const jobId = String(req.params.jobId || "").trim();
-		const job = deviceUserPackageImportJobs.get(jobId);
+		let job = deviceUserPackageImportJobs.get(jobId) || readDeviceUserPackageImportJob(jobId);
+		if (job && !deviceUserPackageImportJobs.has(jobId) && job.status === "processing") {
+			job = {
+				...job,
+				status: "failed",
+				message: "Device-user import job was interrupted before completion; rerun from preview.",
+				error: "interrupted_by_api_restart",
+				failed: Math.max(1, job.failed || 0),
+				completedAt: new Date(),
+			};
+			persistDeviceUserPackageImportJob(job);
+		}
 		if (!job || job.organizationId !== gate.organizationId) {
 			res.status(404).json(buildErrorResponse("Device-user import job was not found", 404));
 			return;
@@ -6151,6 +6350,8 @@ export const controller = (prisma: PrismaClient) => {
 						],
 					}
 				: await runHikvisionManualCopyOnVm({
+						sourceDevice: params.sourceDevice,
+						targetDevice: params.targetDevice,
 						sourceDeviceId,
 						targetDeviceId,
 						employeeNo,
@@ -10091,7 +10292,13 @@ export const controller = (prisma: PrismaClient) => {
 							device: {
 								select: {
 									id: true,
+									organizationId: true,
+									name: true,
+									address: true,
+									port: true,
+									protocol: true,
 									config: true,
+									access: true,
 									isDeleted: true,
 								},
 							},
@@ -10112,6 +10319,8 @@ export const controller = (prisma: PrismaClient) => {
 					}
 
 					await runHikvisionManualCopyOnVm({
+						sourceDevice: sourceDeviceUser.device,
+						targetDevice: device,
 						sourceDeviceId: String(sourceDeviceUser.deviceId),
 						targetDeviceId: String(device.id),
 						employeeNo: normalizedDeviceEmpId,
