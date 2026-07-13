@@ -268,10 +268,13 @@ export function SystemAccessForm({
 
 			<div className="space-y-5">
 				<div data-field-path="user.email">
-					<label className="block text-sm font-normal text-muted-foreground/70 mb-1.5">
+					<label
+						htmlFor="system-access-email"
+						className="block text-sm font-normal text-muted-foreground/70 mb-1.5">
 						Email Address
 					</label>
 					<input
+						id="system-access-email"
 						type="email"
 						disabled
 						className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
@@ -283,10 +286,13 @@ export function SystemAccessForm({
 				</div>
 
 				<div data-field-path="employee.role">
-					<label className="block text-sm font-normal text-muted-foreground/70 mb-1.5">
+					<label
+						htmlFor="system-access-role"
+						className="block text-sm font-normal text-muted-foreground/70 mb-1.5">
 						Role
 					</label>
 					<input
+						id="system-access-role"
 						type="text"
 						disabled
 						value={roleDisplayValue}
@@ -295,10 +301,13 @@ export function SystemAccessForm({
 				</div>
 
 				<div data-field-path="employee.deviceEmpId">
-					<label className="block text-sm font-normal text-muted-foreground/70 mb-1.5">
+					<label
+						htmlFor="system-access-device-emp-id"
+						className="block text-sm font-normal text-muted-foreground/70 mb-1.5">
 						Biometric User ID
 					</label>
 					<input
+						id="system-access-device-emp-id"
 						type="text"
 						className="w-full rounded-md border border-gray-200 bg-background px-3 py-2 text-sm text-gray-900"
 						placeholder={employeeId || "Same as Employee ID"}

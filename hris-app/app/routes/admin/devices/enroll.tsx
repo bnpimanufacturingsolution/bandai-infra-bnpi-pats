@@ -440,6 +440,7 @@ export function DeviceEnrollmentPanel({
 	const [sdkMergeJobId, setSdkMergeJobId] = useState<string | null>(sdkMergeJobIdParam || null);
 	const [sdkMergeLastJob, setSdkMergeLastJob] = useState<DeviceUserMergeJobProgress | null>(null);
 	const [sdkMergeHandledJobId, setSdkMergeHandledJobId] = useState<string | null>(null);
+	const [sdkMergeDismissedJobId, setSdkMergeDismissedJobId] = useState<string | null>(null);
 	const [activeDeviceUserSyncJob, setActiveDeviceUserSyncJob] =
 		useState<ActiveDeviceUserSyncJob | null>(() => {
 			try {
@@ -1336,9 +1337,13 @@ export function DeviceEnrollmentPanel({
 		(sdkMergeState.data?.plan.ambiguousMatches?.length || 0);
 	const sdkMergeCanApply =
 		sdkMergeResolvedCount >= sdkMergeConflictCount && sdkMergeBlockingCount === 0;
-	const effectiveSdkMergeJob = sdkMergeJobId
+	const visibleSdkMergeJob = sdkMergeJobId
 		? sdkMergeJobProgress || sdkMergeLastJob
 		: sdkMergeLastJob;
+	const effectiveSdkMergeJob =
+		visibleSdkMergeJob?.jobId && visibleSdkMergeJob.jobId === sdkMergeDismissedJobId
+			? null
+			: visibleSdkMergeJob;
 	const hasSdkMergeJob = Boolean(effectiveSdkMergeJob);
 	const sdkMergeJobIsProcessing = effectiveSdkMergeJob?.status === "processing";
 	const sdkMergeJobProcessed = Number(effectiveSdkMergeJob?.processedWrites || 0);
@@ -1521,6 +1526,7 @@ export function DeviceEnrollmentPanel({
 			setSdkMergeJobId(result.jobId);
 			setSdkMergeLastJob(result.progress);
 			setSdkMergeHandledJobId(null);
+			setSdkMergeDismissedJobId(null);
 			updateSearchParams((next) => {
 				next.set("mergeJobId", result.jobId);
 			});
@@ -1546,6 +1552,7 @@ export function DeviceEnrollmentPanel({
 		await applySdkUserMerge(choices);
 	};
 	const dismissSdkUserMergeJob = () => {
+		setSdkMergeDismissedJobId(effectiveSdkMergeJob?.jobId || sdkMergeJobId || null);
 		setSdkMergeJobId(null);
 		setSdkMergeLastJob(null);
 		setSdkMergeHandledJobId(null);
@@ -4820,7 +4827,7 @@ export function DeviceEnrollmentPanel({
 									: "Retry merge job"}
 							</Button>
 						) : null}
-						{sdkMergeState.status === "review" ? (
+						{sdkMergeState.data && !hasSdkMergeJob ? (
 							<Button
 								type="button"
 								disabled={
