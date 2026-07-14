@@ -89,7 +89,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("HIKVISION_VM_LOCAL_API_BASE");
 		expect(controller).to.include("HIKVISION_VM_WRAPPER_REMOTE_PATH");
 		expect(controller).to.include("HIKVISION_DEVICE_USER_COPY");
-		expect(controller).to.include("sourceDeviceId, targetDeviceId, and employeeNo are required");
+		expect(controller).to.include(
+			"sourceDeviceId, targetDeviceId or targetDeviceIds, and employeeNo are required",
+		);
 		expect(controller).to.include("syntheticCredentialOverlayApplied");
 		expect(controller).to.include("refreshed target truth still shows");
 		expect(controller).to.include("Treat this as not copied yet");
@@ -150,6 +152,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("rawUser?: unknown");
 		expect(controller).to.include("copyHikvisionUserToPeerWithRetry({");
 		expect(controller).to.include('strategy: "delayed_target_reread"');
+		expect(controller).to.include("const copyHikvisionUserToPeersBatch = async");
+		expect(controller).to.include("targetDeviceIds");
+		expect(controller).to.include("targetDevices: reachableTargets");
+		expect(controller).to.include("vmSessionCount: sharedVmCopyResult ? 1 : 0");
+		expect(controller).to.include("const settled = await Promise.allSettled(");
 		expect(controller).to.include("const runDeviceUserImportExecuteWork = async");
 		expect(controller).to.include("const getDeviceUserImportJob = async");
 		expect(controller).to.include("Device-user import job accepted");

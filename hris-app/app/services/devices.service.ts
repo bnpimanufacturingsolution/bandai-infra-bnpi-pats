@@ -642,7 +642,8 @@ export interface EnrollDeviceUserRequest {
 
 export interface HikvisionCopyUserRequest {
 	sourceDeviceId: string;
-	targetDeviceId: string;
+	targetDeviceId?: string;
+	targetDeviceIds?: string[];
 	employeeNo: string;
 	includeFingerprints?: boolean;
 	includeFaceRecognition?: boolean;

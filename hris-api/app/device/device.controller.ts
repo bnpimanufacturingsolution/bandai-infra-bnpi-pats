@@ -771,13 +771,15 @@ const withDeviceUserImportTimeout = async <T>(
 
 type HikvisionManualCopyParams = {
 	sourceDevice: any;
-	targetDevice: any;
+	targetDevice?: any;
+	targetDevices?: any[];
 	sourceDeviceId: string;
-	targetDeviceId: string;
+	targetDeviceId?: string;
 	employeeNo: string;
 	includeFingerprints: boolean;
 	includeFaceRecognition: boolean;
 	waitSeconds?: number;
+	skipPreflight?: boolean;
 };
 
 const readStoredHikvisionSyntheticCredentialSummary = (rawPayload: any) => {
@@ -999,9 +1001,14 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const writeHikvisionManualCopySpec = (params: HikvisionManualCopyParams) => {
+		const targetDevices = params.targetDevices?.length
+			? params.targetDevices
+			: params.targetDevice
+				? [params.targetDevice]
+				: [];
 		const specText = [
 			buildHikvisionManualCopySpecLine(params.sourceDevice),
-			buildHikvisionManualCopySpecLine(params.targetDevice),
+			...targetDevices.map(buildHikvisionManualCopySpecLine),
 		].join("\n");
 		const localPath = path.join(
 			os.tmpdir(),
@@ -1042,16 +1049,30 @@ export const controller = (prisma: PrismaClient) => {
 
 	const runHikvisionManualCopyOnVm = async (params: HikvisionManualCopyParams) => {
 		const waitSeconds = Math.max(1, Math.min(Number(params.waitSeconds || 1), 8));
-		await preflightHikvisionManualCopyEndpoint(
-			params.sourceDevice,
-			"source",
-			params.employeeNo,
-		);
-		await preflightHikvisionManualCopyEndpoint(
-			params.targetDevice,
-			"target",
-			params.employeeNo,
-		);
+		const targetDevices = params.targetDevices?.length
+			? params.targetDevices
+			: params.targetDevice
+				? [params.targetDevice]
+				: [];
+		if (!targetDevices.length) {
+			throw new Error("At least one Hikvision target device is required for peer copy");
+		}
+		if (!params.skipPreflight) {
+			await preflightHikvisionManualCopyEndpoint(
+				params.sourceDevice,
+				"source",
+				params.employeeNo,
+			);
+			await Promise.all(
+				targetDevices.map((targetDevice) =>
+					preflightHikvisionManualCopyEndpoint(
+						targetDevice,
+						"target",
+						params.employeeNo,
+					),
+				),
+			);
+		}
 		const localSpecPath = writeHikvisionManualCopySpec(params);
 		const remoteSpecPath = `/tmp/project-truth-hikvision-manual-copy-${Date.now()}.spec`;
 		try {
@@ -1124,28 +1145,28 @@ export const controller = (prisma: PrismaClient) => {
 				result = await runManualCopy(strategy.extraEnv);
 			}
 			const events = parseJsonLines(result.stdout);
-			const peerUserWriteOk = events.some(
-				(event) =>
-					event?.event === "peer_user_write" &&
-					String(event?.employeeNo || "").trim() === params.employeeNo &&
-					String(event?.ok || "")
-						.trim()
-						.toLowerCase() === "true",
+			const successfulTargetIds = new Set(
+				events
+					.filter(
+						(event) =>
+							event?.event === "peer_user_write" &&
+							String(event?.employeeNo || "").trim() === params.employeeNo &&
+							String(event?.ok || "").trim().toLowerCase() === "true",
+					)
+					.map((event) => String(event?.targetDeviceId || "").trim())
+					.filter(Boolean),
+			);
+			const peerUserWriteOk = targetDevices.some((targetDevice) =>
+				successfulTargetIds.has(String(targetDevice?.id || "").trim()),
 			);
 			const fingerprintWriteOk =
 				!params.includeFingerprints ||
 				events.some(
 					(event) =>
-						event?.event === "peer_fingerprint_write" &&
 						String(event?.employeeNo || "").trim() === params.employeeNo &&
-						String(event?.ok || "")
-							.trim()
-							.toLowerCase() === "true",
-				) ||
-				events.some(
-					(event) =>
-						event?.event === "peer_fingerprint_write_skipped" &&
-						String(event?.employeeNo || "").trim() === params.employeeNo,
+						((event?.event === "peer_fingerprint_write" &&
+							String(event?.ok || "").trim().toLowerCase() === "true") ||
+							event?.event === "peer_fingerprint_write_skipped"),
 				);
 			const completed = events.some(
 				(event) =>
@@ -1161,12 +1182,16 @@ export const controller = (prisma: PrismaClient) => {
 					events,
 				};
 			}
-			const sdkFailureMessage = buildHikvisionManualCopySdkFailureMessage({
-				events,
-				sourceDevice: params.sourceDevice,
-				targetDevice: params.targetDevice,
-				employeeNo: params.employeeNo,
-			});
+			const sdkFailureMessage = targetDevices
+				.map((targetDevice) =>
+					buildHikvisionManualCopySdkFailureMessage({
+						events,
+						sourceDevice: params.sourceDevice,
+						targetDevice,
+						employeeNo: params.employeeNo,
+					}),
+				)
+				.find(Boolean) || "";
 			if (sdkFailureMessage && isDeterministicHikvisionManualCopySdkFailure(sdkFailureMessage)) {
 				throw new Error(sdkFailureMessage);
 			}
@@ -4540,6 +4565,32 @@ export const controller = (prisma: PrismaClient) => {
 		return value;
 	};
 
+	const compactPortableDeviceUserBiometricMetadata = (row: any) => {
+		const biometricExport = row?.rawPayload?._hrisDeviceMetadata?.biometricExport;
+		if (biometricExport && typeof biometricExport === "object") {
+			for (const key of [
+				"encryptedBiometricTemplate",
+				"encryptedBiometricTemplateCiphertext",
+				"encryptedFingerprintTemplate",
+				"encryptedFaceTemplate",
+			]) {
+				delete biometricExport[key];
+			}
+		}
+		const biometricBundle = row?.vendorMetadata?.biometricBundle;
+		if (biometricBundle && typeof biometricBundle === "object") {
+			for (const key of [
+				"encryptedBiometricTemplate",
+				"encryptedBiometricTemplateCiphertext",
+				"encryptedFingerprintTemplate",
+				"encryptedFaceTemplate",
+			]) {
+				delete biometricBundle[key];
+			}
+		}
+		return row;
+	};
+
 	const sanitizeDeviceUserImportPayloadForBackup = (payload: any) => ({
 		schemaVersion: payload?.schemaVersion || null,
 		exportedAt: payload?.exportedAt || null,
@@ -4914,6 +4965,7 @@ export const controller = (prisma: PrismaClient) => {
 					}
 				}
 			}
+			exportRows.forEach(compactPortableDeviceUserBiometricMetadata);
 			exportDevices.push({
 				device: {
 					id: device.id,
@@ -7299,6 +7351,7 @@ export const controller = (prisma: PrismaClient) => {
 		employeeNo: string;
 		includeFingerprints: boolean;
 		includeFaceRecognition: boolean;
+		preparedVmCopyResult?: Awaited<ReturnType<typeof runHikvisionManualCopyOnVm>>;
 	}) => {
 		const sourceDeviceId = String(params.sourceDevice?.id || "").trim();
 		const targetDeviceId = String(params.targetDevice?.id || "").trim();
@@ -7403,7 +7456,8 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						],
 					}
-				: await timePhase("vmManualCopyMs", () => runHikvisionManualCopyOnVm({
+				: params.preparedVmCopyResult ||
+					await timePhase("vmManualCopyMs", () => runHikvisionManualCopyOnVm({
 						sourceDevice: params.sourceDevice,
 						targetDevice: params.targetDevice,
 						sourceDeviceId,
@@ -7586,6 +7640,192 @@ export const controller = (prisma: PrismaClient) => {
 		throw lastError || new Error("Hikvision peer copy failed");
 	};
 
+	const copyHikvisionUserToPeersBatch = async (params: {
+		req: Request;
+		organizationId: string;
+		sourceDevice: any;
+		targetDevices: any[];
+		employeeNo: string;
+		includeFingerprints: boolean;
+		includeFaceRecognition: boolean;
+	}) => {
+		const startedAt = Date.now();
+		const sourceDeviceId = String(params.sourceDevice.id);
+		const targetDeviceIds = params.targetDevices.map((device) => String(device.id));
+		const savedUsers = await (prisma as any).deviceUser.findMany({
+			where: {
+				organizationId: params.organizationId,
+				deviceId: { in: [sourceDeviceId, ...targetDeviceIds] },
+				vendorUserId: params.employeeNo,
+			},
+			select: {
+				id: true,
+				deviceId: true,
+				vendorUserId: true,
+				employeeId: true,
+				status: true,
+				lastSyncedAt: true,
+				rawPayload: true,
+			},
+		});
+		const savedUserByDeviceId = new Map(
+			savedUsers.map((deviceUser: any) => [String(deviceUser.deviceId), deviceUser]),
+		);
+		const sourceDeviceUser: any = savedUserByDeviceId.get(sourceDeviceId) || null;
+		const sourcePhysicalSummary = extractHikvisionCredentialSummary(
+			sourceDeviceUser?.rawPayload || {},
+		);
+		const plans = params.targetDevices.map((targetDevice) => {
+			const targetDeviceUser: any = savedUserByDeviceId.get(String(targetDevice.id)) || null;
+			const targetPhysicalSummary = extractHikvisionCredentialSummary(
+				targetDeviceUser?.rawPayload || {},
+			);
+			const alreadyConverged =
+				Boolean(sourceDeviceUser?.id) &&
+				!shouldConvergeDeviceUserToPeer(sourceDeviceUser, targetDeviceUser);
+			const requiresPhysicalPeerCopy =
+				!sourceDeviceUser?.id ||
+				!targetDeviceUser?.id ||
+				targetPhysicalSummary.cardCount < sourcePhysicalSummary.cardCount ||
+				(params.includeFingerprints &&
+					targetPhysicalSummary.fingerprintCount < sourcePhysicalSummary.fingerprintCount);
+			return { targetDevice, alreadyConverged, requiresPhysicalPeerCopy };
+		});
+
+		const physicalPlans = plans.filter(
+			(plan) => !plan.alreadyConverged && plan.requiresPhysicalPeerCopy,
+		);
+		const preflightFailures = new Map<string, string>();
+		let sharedVmCopyResult: Awaited<ReturnType<typeof runHikvisionManualCopyOnVm>> | undefined;
+		let sharedVmCopyError = "";
+		let vmAttempt = 0;
+		const preflightStartedAt = Date.now();
+		if (physicalPlans.length) {
+			try {
+				await preflightHikvisionManualCopyEndpoint(
+					params.sourceDevice,
+					"source",
+					params.employeeNo,
+				);
+			} catch (error: any) {
+				sharedVmCopyError = error?.message || "The Hikvision source device is unavailable";
+			}
+			if (!sharedVmCopyError) {
+				await Promise.all(
+					physicalPlans.map(async ({ targetDevice }) => {
+						try {
+							await preflightHikvisionManualCopyEndpoint(
+								targetDevice,
+								"target",
+								params.employeeNo,
+							);
+						} catch (error: any) {
+							preflightFailures.set(
+								String(targetDevice.id),
+								error?.message || "The Hikvision target device is unavailable",
+							);
+						}
+					}),
+				);
+				const reachableTargets = physicalPlans
+					.map((plan) => plan.targetDevice)
+					.filter((targetDevice) => !preflightFailures.has(String(targetDevice.id)));
+				if (reachableTargets.length) {
+					for (vmAttempt = 1; vmAttempt <= HIKVISION_PEER_COPY_RETRY_LIMIT; vmAttempt += 1) {
+						try {
+							sharedVmCopyResult = await runHikvisionManualCopyOnVm({
+								sourceDevice: params.sourceDevice,
+								targetDevices: reachableTargets,
+								sourceDeviceId,
+								employeeNo: params.employeeNo,
+								includeFingerprints: params.includeFingerprints,
+								includeFaceRecognition: params.includeFaceRecognition,
+								skipPreflight: true,
+							});
+							break;
+						} catch (error: any) {
+							sharedVmCopyError = error?.message || "The coordinated VM SDK copy failed";
+							if (vmAttempt < HIKVISION_PEER_COPY_RETRY_LIMIT) await sleep(600 * vmAttempt);
+						}
+					}
+				}
+			}
+		}
+		const preflightMs = Date.now() - preflightStartedAt;
+
+		const verificationStartedAt = Date.now();
+		const settled = await Promise.allSettled(
+			plans.map(async (plan) => {
+				const targetDeviceId = String(plan.targetDevice.id);
+				const preflightError = preflightFailures.get(targetDeviceId);
+				if (preflightError) throw new Error(preflightError);
+				if (
+					!plan.alreadyConverged &&
+					plan.requiresPhysicalPeerCopy &&
+					!sharedVmCopyResult
+				) {
+					throw new Error(sharedVmCopyError || "The coordinated VM SDK copy did not start");
+				}
+				const copy = await executeHikvisionDeviceUserPeerCopy({
+					req: params.req,
+					organizationId: params.organizationId,
+					sourceDevice: params.sourceDevice,
+					targetDevice: plan.targetDevice,
+					employeeNo: params.employeeNo,
+					includeFingerprints: params.includeFingerprints,
+					includeFaceRecognition: params.includeFaceRecognition,
+					preparedVmCopyResult: sharedVmCopyResult,
+				});
+				return { plan, copy };
+			}),
+		);
+		const verificationMs = Date.now() - verificationStartedAt;
+		const results = settled.map((result, index) => {
+			const plan = plans[index];
+			const targetDevice = plan.targetDevice;
+			if (result.status === "rejected") {
+				return {
+					targetDevice: { id: targetDevice.id, name: targetDevice.name },
+					status: "failed",
+					alreadyConverged: plan.alreadyConverged,
+					requiresPhysicalPeerCopy: plan.requiresPhysicalPeerCopy,
+					error: result.reason?.message || "Target verification failed",
+				};
+			}
+			return {
+				targetDevice: { id: targetDevice.id, name: targetDevice.name },
+				status: "success",
+				alreadyConverged: plan.alreadyConverged,
+				requiresPhysicalPeerCopy: plan.requiresPhysicalPeerCopy,
+				vmCopy: result.value.copy.vmCopy,
+				targetSyncSummary: result.value.copy.targetSyncSummary,
+				targetDeviceUser: result.value.copy.targetDeviceUser,
+				timings: result.value.copy.timings,
+				syntheticCredentialOverlayApplied:
+					result.value.copy.syntheticCredentialOverlayApplied,
+			};
+		});
+		const successful = results.filter((result) => result.status === "success").length;
+		return {
+			results,
+			summary: {
+				totalTargets: results.length,
+				successfulTargets: successful,
+				failedTargets: results.length - successful,
+				alreadyConvergedTargets: plans.filter((plan) => plan.alreadyConverged).length,
+				physicalCopyTargets: physicalPlans.length,
+				vmSessionCount: sharedVmCopyResult ? 1 : 0,
+				vmAttempt,
+			},
+			timings: {
+				preflightMs,
+				vmManualCopyMs: sharedVmCopyResult ? Date.now() - startedAt - verificationMs : 0,
+				verificationMs,
+				totalMs: Date.now() - startedAt,
+			},
+		};
+	};
+
 	const copyHikvisionDeviceUserToPeer = async (
 		req: Request,
 		res: Response,
@@ -7596,25 +7836,31 @@ export const controller = (prisma: PrismaClient) => {
 			if (!admin) return;
 
 			const sourceDeviceId = String(req.body?.sourceDeviceId || "").trim();
-			const targetDeviceId = String(req.body?.targetDeviceId || "").trim();
+			const legacyTargetDeviceId = String(req.body?.targetDeviceId || "").trim();
+			const requestedTargetDeviceIds = Array.isArray(req.body?.targetDeviceIds)
+				? req.body.targetDeviceIds.map((value: any) => String(value || "").trim())
+				: [];
+			const targetDeviceIds = Array.from(
+				new Set([legacyTargetDeviceId, ...requestedTargetDeviceIds].filter(Boolean)),
+			).filter((deviceId) => deviceId !== sourceDeviceId);
 			const employeeNo = String(req.body?.employeeNo || req.body?.vendorUserId || "").trim();
 			const includeFingerprints = req.body?.includeFingerprints !== false;
 			const includeFaceRecognition = req.body?.includeFaceRecognition !== false;
 			const isDryRun = req.body?.dryRun === true || req.body?.execute === false;
 			const requestStartedAt = Date.now();
 
-			if (!sourceDeviceId || !targetDeviceId || !employeeNo) {
+			if (!sourceDeviceId || !targetDeviceIds.length || !employeeNo) {
 				res.status(400).json(
 					buildErrorResponse(
-						"sourceDeviceId, targetDeviceId, and employeeNo are required",
+						"sourceDeviceId, targetDeviceId or targetDeviceIds, and employeeNo are required",
 						400,
 					),
 				);
 				return;
 			}
-			if (sourceDeviceId === targetDeviceId) {
+			if (targetDeviceIds.length > 25) {
 				res.status(400).json(
-					buildErrorResponse("Source and target devices must be different", 400),
+					buildErrorResponse("A peer-copy request can include at most 25 target devices", 400),
 				);
 				return;
 			}
@@ -7623,21 +7869,23 @@ export const controller = (prisma: PrismaClient) => {
 				where: {
 					organizationId: String(admin.organizationId),
 					isDeleted: false,
-					id: { in: [sourceDeviceId, targetDeviceId] },
+					id: { in: [sourceDeviceId, ...targetDeviceIds] },
 				},
 			});
 			const sourceDevice = devices.find((device) => device.id === sourceDeviceId);
-			const targetDevice = devices.find((device) => device.id === targetDeviceId);
-			if (!sourceDevice || !targetDevice) {
+			const targetDevices = targetDeviceIds
+				.map((targetDeviceId) => devices.find((device) => device.id === targetDeviceId))
+				.filter(Boolean) as any[];
+			if (!sourceDevice || targetDevices.length !== targetDeviceIds.length) {
 				res.status(404).json(
-					buildErrorResponse("Source or target device was not found", 404),
+					buildErrorResponse("Source or one or more target devices were not found", 404),
 				);
 				return;
 			}
-			if (!isHikvisionDevice(sourceDevice) || !isHikvisionDevice(targetDevice)) {
+			if (!isHikvisionDevice(sourceDevice) || targetDevices.some((device) => !isHikvisionDevice(device))) {
 				res.status(400).json(
 					buildErrorResponse(
-						"Both source and target devices must be Hikvision devices",
+						"The source and every target device must be Hikvision devices",
 						400,
 					),
 				);
@@ -7661,16 +7909,18 @@ export const controller = (prisma: PrismaClient) => {
 						rawPayload: true,
 					},
 				});
-				const targetDeviceUser = await (prisma as any).deviceUser.findUnique({
+				const sourcePhysicalSummary = extractHikvisionCredentialSummary(
+					sourceDeviceUser?.rawPayload || {},
+				);
+				const targetDeviceUsers = await (prisma as any).deviceUser.findMany({
 					where: {
-						organizationId_deviceId_vendorUserId: {
-							organizationId: String(admin.organizationId),
-							deviceId: targetDeviceId,
-							vendorUserId: employeeNo,
-						},
+						organizationId: String(admin.organizationId),
+						deviceId: { in: targetDeviceIds },
+						vendorUserId: employeeNo,
 					},
 					select: {
 						id: true,
+						deviceId: true,
 						vendorUserId: true,
 						employeeId: true,
 						status: true,
@@ -7678,32 +7928,43 @@ export const controller = (prisma: PrismaClient) => {
 						rawPayload: true,
 					},
 				});
-				const alreadyConverged =
-					Boolean(sourceDeviceUser?.id) &&
-					!shouldConvergeDeviceUserToPeer(sourceDeviceUser, targetDeviceUser);
-				const sourcePhysicalSummary = extractHikvisionCredentialSummary(
-					sourceDeviceUser?.rawPayload || {},
+				const targetUserByDeviceId = new Map(
+					targetDeviceUsers.map((deviceUser: any) => [String(deviceUser.deviceId), deviceUser]),
 				);
-				const targetPhysicalSummary = extractHikvisionCredentialSummary(
-					targetDeviceUser?.rawPayload || {},
-				);
-				const requiresPhysicalPeerCopy =
-					!sourceDeviceUser?.id ||
-					!targetDeviceUser?.id ||
-					targetPhysicalSummary.cardCount < sourcePhysicalSummary.cardCount ||
-					(includeFingerprints &&
-						targetPhysicalSummary.fingerprintCount <
-							sourcePhysicalSummary.fingerprintCount);
-				const plannedStages = alreadyConverged
-					? ["noop_already_synced"]
-					: !requiresPhysicalPeerCopy
-						? ["noop_overlay_only", "target_single_user_refresh", "peer_link_mirror"]
-						: [
-								"vm_manual_copy",
-								"target_single_user_refresh",
-								"peer_link_mirror",
-								"credential_verification",
-							];
+				const plans = targetDevices.map((targetDevice) => {
+					const targetDeviceUser: any = targetUserByDeviceId.get(String(targetDevice.id)) || null;
+					const alreadyConverged =
+						Boolean(sourceDeviceUser?.id) &&
+						!shouldConvergeDeviceUserToPeer(sourceDeviceUser, targetDeviceUser);
+					const targetPhysicalSummary = extractHikvisionCredentialSummary(
+						targetDeviceUser?.rawPayload || {},
+					);
+					const requiresPhysicalPeerCopy =
+						!sourceDeviceUser?.id ||
+						!targetDeviceUser?.id ||
+						targetPhysicalSummary.cardCount < sourcePhysicalSummary.cardCount ||
+						(includeFingerprints &&
+							targetPhysicalSummary.fingerprintCount <
+								sourcePhysicalSummary.fingerprintCount);
+					return {
+						targetDevice: { id: targetDevice.id, name: targetDevice.name },
+						alreadyConverged,
+						requiresPhysicalPeerCopy,
+						plannedStages: alreadyConverged
+							? ["noop_already_synced"]
+							: !requiresPhysicalPeerCopy
+								? ["noop_overlay_only", "target_single_user_refresh", "peer_link_mirror"]
+								: [
+										"vm_manual_copy",
+										"target_single_user_refresh",
+										"peer_link_mirror",
+										"credential_verification",
+									],
+						targetCredentialSummary: targetPhysicalSummary,
+						targetDeviceUserFound: Boolean(targetDeviceUser?.id),
+					};
+				});
+				const firstPlan = plans[0];
 				res.status(200).json(
 					buildSuccessResponse(
 						"Dry run only; no Hikvision device or HRIS records were changed",
@@ -7714,20 +7975,19 @@ export const controller = (prisma: PrismaClient) => {
 								id: sourceDevice.id,
 								name: sourceDevice.name,
 							},
-							targetDevice: {
-								id: targetDevice.id,
-								name: targetDevice.name,
-							},
+							targetDevice: firstPlan.targetDevice,
+							targetDevices: plans.map((plan) => plan.targetDevice),
+							plans,
 							employeeNo,
 							includeFingerprints,
 							includeFaceRecognition,
-							alreadyConverged,
-							requiresPhysicalPeerCopy,
-							plannedStages,
+							alreadyConverged: firstPlan.alreadyConverged,
+							requiresPhysicalPeerCopy: firstPlan.requiresPhysicalPeerCopy,
+							plannedStages: firstPlan.plannedStages,
 							sourceCredentialSummary: sourcePhysicalSummary,
-							targetCredentialSummary: targetPhysicalSummary,
+							targetCredentialSummary: firstPlan.targetCredentialSummary,
 							sourceDeviceUserFound: Boolean(sourceDeviceUser?.id),
-							targetDeviceUserFound: Boolean(targetDeviceUser?.id),
+							targetDeviceUserFound: firstPlan.targetDeviceUserFound,
 							timings: {
 								totalMs: Date.now() - requestStartedAt,
 							},
@@ -7737,6 +7997,34 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				return;
 			}
+			if (targetDevices.length > 1 || requestedTargetDeviceIds.length > 0) {
+				const batchData = await copyHikvisionUserToPeersBatch({
+					req,
+					organizationId: String(admin.organizationId),
+					sourceDevice,
+					targetDevices,
+					employeeNo,
+					includeFingerprints,
+					includeFaceRecognition,
+				});
+				logActivity(req, {
+					userId: String((req as any).userId || "unknown"),
+					action: "HIKVISION_DEVICE_USER_COPY_BATCH",
+					description: `Copied Hikvision device user ${employeeNo} from ${sourceDevice.name} to ${batchData.summary.successfulTargets}/${batchData.summary.totalTargets} peer devices`,
+					page: { url: req.originalUrl, title: "Device Users" },
+				});
+				res.status(200).json(
+					buildSuccessResponse("Hikvision device user peer copy batch completed", {
+						sourceDevice: { id: sourceDevice.id, name: sourceDevice.name },
+						employeeNo,
+						includeFingerprints,
+						includeFaceRecognition,
+						...batchData,
+					}, 200),
+				);
+				return;
+			}
+			const targetDevice = targetDevices[0];
 			const copyData = await copyHikvisionUserToPeerWithRetry({
 				req,
 				organizationId: String(admin.organizationId),

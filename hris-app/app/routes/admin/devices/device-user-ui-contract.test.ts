@@ -189,6 +189,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("getDeviceUserVendorMetadata");
 		expect(enroll).toContain("formatMetadataPreview");
 		expect(enroll).toContain("Copy to all peer devices");
+		expect(enroll).toContain("targetDeviceIds,");
+		expect(enroll).toContain("one coordinated VM session");
+		expect(enroll).not.toContain("for (let index = 0; index < targetDeviceIds.length");
 		expect(enroll).toContain(".getDeviceUserPhoto(");
 		expect(enroll).toContain("Photo source");
 		expect(enroll).toContain("<summary");

@@ -534,7 +534,8 @@ export const useCopyHikvisionDeviceUserToPeer = () => {
 	return useMutation({
 		mutationFn: async (payload: {
 			sourceDeviceId: string;
-			targetDeviceId: string;
+			targetDeviceId?: string;
+			targetDeviceIds?: string[];
 			employeeNo: string;
 			includeFingerprints?: boolean;
 			includeFaceRecognition?: boolean;

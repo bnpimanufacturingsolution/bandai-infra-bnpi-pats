@@ -1966,54 +1966,40 @@ export function DeviceEnrollmentPanel({
 			setIsCopyDeviceUserSubmitting(true);
 			setCopyDeviceUserStatusMessage(
 				copyDeviceUserState.applyToAllPeers
-					? `Copying to ${targetDeviceIds.length} peer devices through the VM. Keep this open until HRIS verifies each target.`
+					? `Copying to ${targetDeviceIds.length} peer devices in one coordinated VM session. Keep this open until HRIS verifies each target.`
 					: "Copying through the VM. Keep this open until HRIS verifies the target device.",
 			);
 			const successfulTargets: Array<{ id: string; label: string }> = [];
 			let syntheticPeerCopies = 0;
 			const failedTargets: Array<{ id: string; label: string; error: string }> = [];
-			for (let index = 0; index < targetDeviceIds.length; index += 1) {
-				const targetDeviceId = targetDeviceIds[index];
+			const result = await deviceService.copyHikvisionDeviceUserToPeer({
+				sourceDeviceId: selectedDeviceId,
+				targetDeviceIds,
+				employeeNo: sourceDeviceUser.vendorUserId,
+				includeFingerprints: copyDeviceUserState.includeFingerprints,
+				includeFaceRecognition: copyDeviceUserState.includeFaceRecognition,
+			});
+			for (const targetResult of result?.results || []) {
+				const targetDeviceId = String(targetResult?.targetDevice?.id || "");
 				const targetLabel =
 					copyTargetDeviceOptions.find((option) => option.value === targetDeviceId)
-						?.label || targetDeviceId;
-				try {
-					const result = await deviceService.copyHikvisionDeviceUserToPeer({
-						sourceDeviceId: selectedDeviceId,
-						targetDeviceId,
-						employeeNo: sourceDeviceUser.vendorUserId,
-						includeFingerprints: copyDeviceUserState.includeFingerprints,
-						includeFaceRecognition: copyDeviceUserState.includeFaceRecognition,
-					});
+						?.label || targetResult?.targetDevice?.name || targetDeviceId;
+				if (targetResult?.status === "success") {
 					successfulTargets.push({ id: targetDeviceId, label: targetLabel });
 					if (
-						Number(result?.syntheticCredentialOverlayApplied?.fingerprintCount || 0) >
-							0 ||
-						Number(result?.syntheticCredentialOverlayApplied?.faceCount || 0) > 0
+						Number(
+							targetResult?.syntheticCredentialOverlayApplied?.fingerprintCount || 0,
+						) > 0 ||
+						Number(targetResult?.syntheticCredentialOverlayApplied?.faceCount || 0) > 0
 					) {
 						syntheticPeerCopies += 1;
 					}
-				} catch (error: any) {
-					const errorMessage = describeCopyError(error);
+				} else {
 					failedTargets.push({
 						id: targetDeviceId,
 						label: targetLabel,
-						error: errorMessage,
+						error: describeCopyError(targetResult?.error),
 					});
-					if (/SDK copy source|copy source/i.test(errorMessage)) {
-						for (const skippedTargetDeviceId of targetDeviceIds.slice(index + 1)) {
-							failedTargets.push({
-								id: skippedTargetDeviceId,
-								label:
-									copyTargetDeviceOptions.find(
-										(option) => option.value === skippedTargetDeviceId,
-									)?.label || skippedTargetDeviceId,
-								error:
-									"Skipped because the source device became unreachable during this run. Retry this target after the source SDK path is back online.",
-							});
-						}
-						break;
-					}
 				}
 			}
 			if (successfulTargets.length === 0) {
