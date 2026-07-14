@@ -76,17 +76,19 @@ describe("auth biometric kiosk login", () => {
 				}),
 			},
 			deviceEvent: {
-				findFirst: async () => ({
-					id: "event-1",
-					organizationId: "org-1",
-					deviceId: "device-1",
-					employeeId: "emp-1",
-					eventTime: new Date(),
-					eventCategory: "ATTENDANCE",
-					eventAction: "TAP",
-					status: "MATCHED",
-					payload: {},
-				}),
+				findMany: async () => [
+					{
+						id: "event-1",
+						organizationId: "org-1",
+						deviceId: "device-1",
+						employeeId: "emp-1",
+						eventTime: new Date(),
+						eventCategory: "ATTENDANCE",
+						eventAction: "TAP",
+						status: "MATCHED",
+						payload: {},
+					},
+				],
 			},
 			employee: {
 				findFirst: async () => ({ id: "emp-1", userId: "user-1", organizationId: "org-1" }),
@@ -154,6 +156,97 @@ describe("auth biometric kiosk login", () => {
 		expect(response.headers["set-cookie"]).to.exist;
 	});
 
+	it("claims the latest fresh tap from enabled kiosk devices without a hardcoded device id", async () => {
+		process.env.JWT_SECRET = "test-secret";
+		(redisClient.isClientConnected as any) = () => true;
+		(redisClient.set as any) = async (key: string) => {
+			expect(key).to.equal(buildEmployeeKioskLoginClaimKey("event-enabled"));
+			return "OK";
+		};
+
+		const app = buildApp({
+			device: {
+				findMany: async () => [
+					{
+						id: "device-disabled",
+						organizationId: "org-1",
+						name: "Main Entrance Device",
+						config: { employeeKioskLoginEnabled: false },
+						isDeleted: false,
+					},
+					{
+						id: "device-enabled",
+						organizationId: "org-1",
+						name: "Login A",
+						config: { employeeKioskLoginEnabled: true, employeeKioskLoginWindowSeconds: 12 },
+						isDeleted: false,
+					},
+				],
+			},
+			deviceEvent: {
+				findMany: async (args: any) => {
+					expect(args.where.deviceId.in).to.deep.equal(["device-enabled"]);
+					return [
+						{
+							id: "event-enabled",
+							organizationId: "org-1",
+							deviceId: "device-enabled",
+							employeeId: "emp-1",
+							eventTime: new Date(),
+							eventCategory: "ATTENDANCE",
+							eventAction: "TAP",
+							status: "MATCHED",
+							payload: {},
+						},
+					];
+				},
+			},
+			employee: {
+				findFirst: async () => ({ id: "emp-1", userId: "user-1", organizationId: "org-1" }),
+			},
+			user: {
+				findUnique: async () => ({
+					id: "user-1",
+					email: "employee@bandai.local",
+					userName: "employee",
+					status: "active",
+					lastLogin: null,
+					loginMethod: "email",
+					createdAt: new Date(),
+					updatedAt: new Date(),
+					organizationId: "org-1",
+					role: "hris-employee",
+					metadata: {},
+				}),
+				findFirst: async () => ({
+					id: "user-1",
+					email: "employee@bandai.local",
+					password: null,
+					status: "active",
+					userName: "employee",
+					role: "hris-employee",
+					organizationId: "org-1",
+					metadata: {},
+				}),
+				update: async () => ({ id: "user-1" }),
+			},
+			organization: {
+				findUnique: async () => ({ id: "org-1", name: "Bandai", code: "BND", branding: {} }),
+			},
+			person: {
+				findMany: async () => [],
+			},
+		});
+
+		const response = await request(app)
+			.post("/auth/biometric/kiosk-login/claim")
+			.send({ appCode: "hris" })
+			.expect(200);
+
+		expect(response.body.status).to.equal("success");
+		expect(response.body.data.email).to.equal("employee@bandai.local");
+	});
+
 	it("rejects biometric kiosk claim when the device is disabled", async () => {
 		const app = buildApp({
 			device: {
@@ -185,17 +278,19 @@ describe("auth biometric kiosk login", () => {
 				}),
 			},
 			deviceEvent: {
-				findFirst: async () => ({
-					id: "event-1",
-					organizationId: "org-1",
-					deviceId: "device-1",
-					employeeId: "emp-1",
-					eventTime: new Date(Date.now() - 60_000),
-					eventCategory: "ATTENDANCE",
-					eventAction: "TAP",
-					status: "MATCHED",
-					payload: {},
-				}),
+				findMany: async () => [
+					{
+						id: "event-1",
+						organizationId: "org-1",
+						deviceId: "device-1",
+						employeeId: "emp-1",
+						eventTime: new Date(Date.now() - 60_000),
+						eventCategory: "ATTENDANCE",
+						eventAction: "TAP",
+						status: "MATCHED",
+						payload: {},
+					},
+				],
 			},
 		});
 
@@ -221,17 +316,19 @@ describe("auth biometric kiosk login", () => {
 				}),
 			},
 			deviceEvent: {
-				findFirst: async () => ({
-					id: "event-1",
-					organizationId: "org-1",
-					deviceId: "device-1",
-					employeeId: "emp-1",
-					eventTime: new Date(),
-					eventCategory: "ATTENDANCE",
-					eventAction: "TAP",
-					status: "MATCHED",
-					payload: {},
-				}),
+				findMany: async () => [
+					{
+						id: "event-1",
+						organizationId: "org-1",
+						deviceId: "device-1",
+						employeeId: "emp-1",
+						eventTime: new Date(),
+						eventCategory: "ATTENDANCE",
+						eventAction: "TAP",
+						status: "MATCHED",
+						payload: {},
+					},
+				],
 			},
 		});
 

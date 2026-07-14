@@ -1278,6 +1278,13 @@ export const controller = (prisma: PrismaClient) => {
 			const deviceId = String((req.body as AnyRecord)?.deviceId || "").trim();
 			const appCode = String((req.body as AnyRecord)?.appCode || "").trim() || "hris";
 			const now = new Date();
+			let enabledKioskDevices: Array<{
+				id: string;
+				organizationId: string;
+				name: string;
+				config: any;
+				isDeleted: boolean;
+			}> = [];
 			let device = deviceId
 				? await prisma.device.findFirst({
 						where: { id: deviceId },
@@ -1294,10 +1301,24 @@ export const controller = (prisma: PrismaClient) => {
 					res.status(403).json(buildErrorResponse("Employee kiosk biometric login is disabled for this device", 403));
 					return;
 				}
+				enabledKioskDevices = [device];
+			} else {
+				const candidateDevices = await prisma.device.findMany({
+					where: { isDeleted: false },
+					select: { id: true, organizationId: true, name: true, config: true, isDeleted: true },
+				});
+				enabledKioskDevices = candidateDevices.filter((candidate) => {
+					const candidateConfig = normalizeEmployeeKioskLoginConfig(candidate.config);
+					return candidateConfig.enabled && appCode === candidateConfig.appCode;
+				});
+				if (enabledKioskDevices.length === 0) {
+					res.status(404).json(buildErrorResponse("No enabled kiosk device has a fresh biometric tap", 404));
+					return;
+				}
 			}
-			const eventRecord = await (prisma as any).deviceEvent.findFirst({
+			const eventRecords = await (prisma as any).deviceEvent.findMany({
 				where: {
-					...(deviceId ? { deviceId } : {}),
+					deviceId: { in: enabledKioskDevices.map((candidate) => candidate.id) },
 					eventCategory: { in: ["ATTENDANCE", "ACCESS_CONTROL"] },
 					eventAction: { in: ["TAP", "UNKNOWN"] },
 					status: {
@@ -1312,6 +1333,7 @@ export const controller = (prisma: PrismaClient) => {
 					{ eventTime: "desc" },
 					{ updatedAt: "desc" },
 				],
+				take: 25,
 				select: {
 					id: true,
 					organizationId: true,
@@ -1324,12 +1346,22 @@ export const controller = (prisma: PrismaClient) => {
 					payload: true,
 				},
 			});
-			device = device || (eventRecord
-				? await prisma.device.findFirst({
-						where: { id: String(eventRecord.deviceId || "") },
-						select: { id: true, organizationId: true, name: true, config: true, isDeleted: true },
+			const enabledDevicesById = new Map(
+				enabledKioskDevices.map((candidate) => [candidate.id, candidate]),
+			);
+			const eventRecord = eventRecords.find((candidate: any) => {
+				const candidateDevice = enabledDevicesById.get(String(candidate.deviceId || ""));
+				const candidateConfig = normalizeEmployeeKioskLoginConfig(candidateDevice?.config);
+				return (
+					Boolean(candidateDevice) &&
+					isClaimableEmployeeKioskLoginEvent({
+						event: candidate,
+						now,
+						windowSeconds: candidateConfig.windowSeconds,
 					})
-				: null);
+				);
+			});
+			device = device || (eventRecord ? enabledDevicesById.get(String(eventRecord.deviceId || "")) || null : null);
 			if (!device || device.isDeleted === true) {
 				res.status(404).json(buildErrorResponse("No enabled kiosk device has a fresh biometric tap", 404));
 				return;

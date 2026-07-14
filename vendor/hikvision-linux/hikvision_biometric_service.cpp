@@ -1528,6 +1528,72 @@ std::vector<NET_DVR_FINGER_PRINT_CFG_V50> read_source_fingerprints(DeviceSession
     return ctx.templates;
 }
 
+bool export_biometric_templates_for_employee(
+    DeviceSession &source,
+    const std::string &employee_no,
+    bool include_fingerprints,
+    bool include_face) {
+    ReconcileJob job;
+    job.source_host = source.config.host;
+    job.source_device_id = source.config.hris_device_id;
+    job.employee_no = employee_no;
+    job.include_fingerprints = include_fingerprints;
+    job.include_face_recognition = include_face;
+    job.event_kind = "manual_biometric_export";
+
+    std::string user_json;
+    std::string card_json;
+    read_source_user(source, job, &user_json);
+    read_source_card(source, job, &card_json);
+    std::string card_no = extract_string_field_from_json(card_json, "cardNo");
+    if (card_no.empty()) {
+        card_no = extract_string_field_from_json(user_json, "cardNo");
+    }
+
+    std::vector<NET_DVR_FINGER_PRINT_CFG_V50> fingerprints;
+    if (include_fingerprints) {
+        fingerprints = read_source_fingerprints(source, job);
+    }
+
+    std::vector<char> face_template;
+    std::vector<char> face_picture;
+    bool face_ok = false;
+    if (include_face && !card_no.empty()) {
+        face_ok = read_face_and_template(source, employee_no, card_no, &face_template, &face_picture);
+    }
+
+    std::ostringstream fingerprint_json;
+    fingerprint_json << "[";
+    for (size_t index = 0; index < fingerprints.size(); ++index) {
+        const auto &record = fingerprints[index];
+        if (index > 0) fingerprint_json << ",";
+        fingerprint_json
+            << "{\"fingerPrintId\":" << static_cast<int>(record.byFingerPrintID)
+            << ",\"fingerType\":" << static_cast<int>(record.byFingerType)
+            << ",\"length\":" << record.dwFingerPrintLen
+            << ",\"data\":\""
+            << base64_encode(record.byFingerData, record.dwFingerPrintLen)
+            << "\"}";
+    }
+    fingerprint_json << "]";
+
+    emit_json({
+        {"event", "manual_biometric_export_completed"},
+        {"sourceDeviceId", source.config.hris_device_id},
+        {"employeeNo", employee_no},
+        {"cardNo", card_no},
+        {"ok", (!include_fingerprints || !fingerprints.empty() || !include_face || face_ok) ? "true" : "false"},
+        {"fingerprintCount", std::to_string(fingerprints.size())},
+        {"faceTemplateSize", std::to_string(face_template.size())},
+        {"facePictureSize", std::to_string(face_picture.size())},
+        {"fingerprints", fingerprint_json.str()},
+        {"faceTemplate", face_template.empty() ? "" : base64_encode(reinterpret_cast<const BYTE *>(face_template.data()), face_template.size())},
+        {"facePicture", face_picture.empty() ? "" : base64_encode(reinterpret_cast<const BYTE *>(face_picture.data()), face_picture.size())}
+    });
+
+    return !fingerprints.empty() || !face_template.empty() || !face_picture.empty();
+}
+
 bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::string &user_json) {
     const std::string setup_payload = build_user_setup_payload_from_search_response(user_json);
     if (setup_payload.empty()) {
@@ -3116,7 +3182,9 @@ void usage(const char *program) {
         << "[--capture-fingerprint-employee-no employeeNo] [--capture-fingerprint-source-device-id id] "
         << "[--finger-no n] [--finger-type n] "
         << "[--capture-face-employee-no employeeNo] [--capture-face-source-device-id id] "
-        << "[--mirror-face-employee-no employeeNo] [--mirror-face-source-device-id id]\n";
+        << "[--mirror-face-employee-no employeeNo] [--mirror-face-source-device-id id] "
+        << "[--export-biometric-employee-no employeeNo] [--export-biometric-source-device-id id] "
+        << "[--export-biometric-no-fingerprints] [--export-biometric-no-face]\n";
 }
 
 }  // namespace
@@ -3141,6 +3209,10 @@ int main(int argc, char **argv) {
     std::string capture_face_source_device_id;
     std::string mirror_face_employee_no;
     std::string mirror_face_source_device_id;
+    std::string export_biometric_employee_no;
+    std::string export_biometric_source_device_id;
+    bool export_biometric_include_fingerprints = true;
+    bool export_biometric_include_face = true;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -3227,6 +3299,14 @@ int main(int argc, char **argv) {
             if (!next(&mirror_face_employee_no)) return 2;
         } else if (arg == "--mirror-face-source-device-id") {
             if (!next(&mirror_face_source_device_id)) return 2;
+        } else if (arg == "--export-biometric-employee-no") {
+            if (!next(&export_biometric_employee_no)) return 2;
+        } else if (arg == "--export-biometric-source-device-id") {
+            if (!next(&export_biometric_source_device_id)) return 2;
+        } else if (arg == "--export-biometric-no-fingerprints") {
+            export_biometric_include_fingerprints = false;
+        } else if (arg == "--export-biometric-no-face") {
+            export_biometric_include_face = false;
         } else if (arg == "--min-sdk-time") {
             if (!next(&min_sdk_time)) return 2;
         } else if (arg == "--execute") {
@@ -3281,11 +3361,14 @@ int main(int argc, char **argv) {
         !capture_face_employee_no.empty() && !capture_face_source_device_id.empty();
     const bool manual_face_mirror_mode =
         !mirror_face_employee_no.empty() && !mirror_face_source_device_id.empty();
+    const bool manual_biometric_export_mode =
+        !export_biometric_employee_no.empty() && !export_biometric_source_device_id.empty();
     const bool manual_reconcile_queue_mode =
         !manual_full_mirror_source_device_id.empty() && !manual_fingerprint_clone_mode;
     const bool manual_reconcile_mode =
         manual_reconcile_queue_mode || !manual_employee_no.empty() || manual_fingerprint_clone_mode ||
-        manual_fingerprint_capture_mode || manual_face_capture_mode || manual_face_mirror_mode;
+        manual_fingerprint_capture_mode || manual_face_capture_mode || manual_face_mirror_mode ||
+        manual_biometric_export_mode;
 
     if (configs.empty()) {
         usage(argv[0]);
@@ -3499,6 +3582,29 @@ int main(int argc, char **argv) {
             });
         } else {
             mirror_face_for_employee(*mirror_source, mirror_face_employee_no);
+        }
+    }
+    if (manual_biometric_export_mode) {
+        DeviceSession *export_source = nullptr;
+        for (auto &session : sessions) {
+            if (session.config.hris_device_id == export_biometric_source_device_id) {
+                export_source = &session;
+                break;
+            }
+        }
+        if (export_source == nullptr) {
+            emit_json({
+                {"event", "manual_biometric_export_failed"},
+                {"reason", "source_device_not_armed"},
+                {"sourceDeviceId", export_biometric_source_device_id},
+                {"employeeNo", export_biometric_employee_no}
+            });
+        } else {
+            export_biometric_templates_for_employee(
+                *export_source,
+                export_biometric_employee_no,
+                export_biometric_include_fingerprints,
+                export_biometric_include_face);
         }
     }
     if (manual_reconcile_queue_mode) {

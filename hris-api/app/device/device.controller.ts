@@ -55,7 +55,7 @@ import { summarizeHikvisionListenerLogs } from "../../helper/hikvision-listener-
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
 import net from "net";
 import { execFile } from "child_process";
-import { createHash, randomUUID } from "crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "crypto";
 import fs from "fs/promises";
 import fsSync from "fs";
 import * as os from "os";
@@ -1027,7 +1027,7 @@ export const controller = (prisma: PrismaClient) => {
 			[
 				"bash",
 				"-lc",
-				`timeout 3 bash -c '</dev/tcp/${host}/${port}'`,
+				`timeout 4 nc -z ${host} ${port}`,
 			],
 			7000,
 		);
@@ -1178,6 +1178,221 @@ export const controller = (prisma: PrismaClient) => {
 			);
 		}
 		throw new Error(failures.join(" | "));
+		} finally {
+			try {
+				fsSync.unlinkSync(localSpecPath);
+			} catch {}
+			await runHikvisionListenerVmCommand(["sudo", "rm", "-f", remoteSpecPath], 7000).catch(
+				() => undefined,
+			);
+		}
+	};
+
+	const getDeviceUserBiometricBundleSecret = (organizationId: string, deviceId: string) => {
+		const configured = String(process.env.DEVICE_USER_BIOMETRIC_BUNDLE_KEY || "").trim();
+		if (configured) return { secret: configured, source: "DEVICE_USER_BIOMETRIC_BUNDLE_KEY" };
+		return {
+			secret: `project-truth-dev-biometric-bundle:${organizationId}:${deviceId}`,
+			source: "development-derived-context-key",
+		};
+	};
+
+	const encryptDeviceUserBiometricPayload = (params: {
+		organizationId: string;
+		deviceId: string;
+		vendorUserId: string;
+		payload: Record<string, any>;
+	}) => {
+		const { secret, source } = getDeviceUserBiometricBundleSecret(
+			params.organizationId,
+			params.deviceId,
+		);
+		const salt = randomBytes(16);
+		const iv = randomBytes(12);
+		const key = createHash("sha256").update(secret).update(salt).digest();
+		const cipher = createCipheriv("aes-256-gcm", key, iv);
+		const plaintext = Buffer.from(JSON.stringify(params.payload), "utf8");
+		const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+		const authTag = cipher.getAuthTag();
+		return {
+			format: "project-truth.hikvision-biometric-template.v1",
+			algorithm: DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM,
+			keySource: source,
+			deviceId: params.deviceId,
+			vendorUserId: params.vendorUserId,
+			salt: salt.toString("base64"),
+			iv: iv.toString("base64"),
+			authTag: authTag.toString("base64"),
+			ciphertext: ciphertext.toString("base64"),
+			plaintextSha256: createHash("sha256").update(plaintext).digest("hex"),
+			createdAt: new Date().toISOString(),
+		};
+	};
+
+	const decryptDeviceUserBiometricPayload = (params: {
+		organizationId: string;
+		deviceId: string;
+		encrypted: any;
+	}) => {
+		const encrypted = params.encrypted || {};
+		const { secret } = getDeviceUserBiometricBundleSecret(params.organizationId, params.deviceId);
+		const salt = Buffer.from(String(encrypted.salt || ""), "base64");
+		const iv = Buffer.from(String(encrypted.iv || ""), "base64");
+		const authTag = Buffer.from(String(encrypted.authTag || ""), "base64");
+		const ciphertext = Buffer.from(String(encrypted.ciphertext || ""), "base64");
+		const key = createHash("sha256").update(secret).update(salt).digest();
+		const decipher = createDecipheriv("aes-256-gcm", key, iv);
+		decipher.setAuthTag(authTag);
+		const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+		const plaintextSha256 = createHash("sha256").update(plaintext).digest("hex");
+		if (encrypted.plaintextSha256 && encrypted.plaintextSha256 !== plaintextSha256) {
+			throw new Error("Encrypted biometric bundle hash mismatch");
+		}
+		return JSON.parse(plaintext.toString("utf8"));
+	};
+
+	const parseImportedEncryptedBiometricTemplate = (row: any) => {
+		const candidates = [
+			row?.vendorMetadata?.biometricBundle?.fingerprintRawTemplateBlob,
+			row?.vendorMetadata?.biometricBundle?.faceRawTemplateBlob,
+			row?.vendorMetadata?.biometricBundle?.encryptedBiometricTemplate,
+			row?.rawPayload?._hrisDeviceMetadata?.biometricExport?.encryptedBiometricTemplate,
+			row?.rawPayload?._hrisDeviceMetadata?.biometricCsvColumns?.fingerprintRawTemplateBlob,
+			row?.rawPayload?._hrisDeviceMetadata?.biometricCsvColumns?.faceRawTemplateBlob,
+		];
+		for (const candidate of candidates) {
+			if (!candidate || typeof candidate !== "string") continue;
+			const trimmed = candidate.trim();
+			if (!trimmed.startsWith("{")) continue;
+			try {
+				const parsed = JSON.parse(trimmed);
+				if (parsed?.ciphertext && parsed?.algorithm === DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM) {
+					return parsed;
+				}
+			} catch {}
+		}
+		return null;
+	};
+
+	const buildHikvisionBiometricExportSpec = (device: any) => {
+		const specText = `${buildHikvisionManualCopySpecLine(device)}\n`;
+		const localPath = path.join(
+			os.tmpdir(),
+			`project-truth-hikvision-biometric-export-${Date.now()}-${Math.random()
+				.toString(16)
+				.slice(2)}.spec`,
+		);
+		fsSync.writeFileSync(localPath, specText, { mode: 0o600 });
+		return localPath;
+	};
+
+	const runHikvisionBiometricExportOnVm = async (params: {
+		device: any;
+		organizationId: string;
+		vendorUserId: string;
+		includeFingerprints: boolean;
+		includeFaces: boolean;
+	}) => {
+		await preflightHikvisionManualCopyEndpoint(params.device, "source", params.vendorUserId);
+		const localSpecPath = buildHikvisionBiometricExportSpec(params.device);
+		const remoteSpecPath = `/tmp/project-truth-hikvision-biometric-export-${Date.now()}.spec`;
+		try {
+			const copySpecResult = await runHikvisionListenerVmCopy(localSpecPath, remoteSpecPath, 12000);
+			if (copySpecResult.exitCode !== 0) {
+				throw new Error(
+					copySpecResult.stderr.trim() ||
+						copySpecResult.stdout.trim() ||
+						"Failed to copy Hikvision biometric export spec to the VM",
+				);
+			}
+			const runExport = (extraEnv: string[] = []) =>
+				runHikvisionListenerVmCommand(
+					[
+						"sudo",
+						"env",
+						...extraEnv,
+						"HIKVISION_ALLOW_STATIC_DEVICE_SPEC=1",
+						"HIKVISION_SKIP_SPOOL_REPLAY=1",
+						`HIKVISION_DEVICE_SPEC_OVERRIDE=${remoteSpecPath}`,
+						"HIKVISION_RUN_SECONDS=1",
+						HIKVISION_VM_WRAPPER_REMOTE_PATH,
+						"--run-once",
+						"--export-biometric-source-device-id",
+						params.device.id,
+						"--export-biometric-employee-no",
+						params.vendorUserId,
+						...(params.includeFingerprints ? [] : ["--export-biometric-no-fingerprints"]),
+						...(params.includeFaces ? [] : ["--export-biometric-no-face"]),
+					],
+					90000,
+				);
+			const result = await runExport();
+			if (
+				result.exitCode !== 0 &&
+				isMissingHikvisionListenerRuntimeError(result.stderr || result.stdout)
+			) {
+				const installResult = await installManagedHikvisionListenerWrapperOnVm();
+				if (!installResult.ok) {
+					throw new Error(
+						installResult.error ||
+							"Failed to prepare Hikvision listener runtime for biometric export",
+					);
+				}
+			}
+			const finalResult =
+				result.exitCode === 0 || !isMissingHikvisionListenerRuntimeError(result.stderr || result.stdout)
+					? result
+					: await runExport();
+			const events = parseJsonLines(finalResult.stdout);
+			const exportEvent = events.find(
+				(event) =>
+					event?.event === "manual_biometric_export_completed" &&
+					String(event?.employeeNo || "").trim() === params.vendorUserId,
+			);
+			if (!exportEvent) {
+				throw new Error(
+					finalResult.stderr.trim() ||
+						finalResult.stdout.trim() ||
+						"No biometric export event returned from Hikvision SDK service",
+				);
+			}
+			const fingerprints =
+				typeof exportEvent.fingerprints === "string"
+					? JSON.parse(exportEvent.fingerprints || "[]")
+					: exportEvent.fingerprints || [];
+			const rawPayload = {
+				sourceDeviceId: params.device.id,
+				sourceDeviceName: params.device.name || params.device.id,
+				vendorUserId: params.vendorUserId,
+				cardNo: exportEvent.cardNo || "",
+				fingerprints,
+				faceTemplate: exportEvent.faceTemplate || "",
+				facePicture: exportEvent.facePicture || "",
+				exportedAt: new Date().toISOString(),
+			};
+			const encrypted = encryptDeviceUserBiometricPayload({
+				organizationId: params.organizationId,
+				deviceId: params.device.id,
+				vendorUserId: params.vendorUserId,
+				payload: rawPayload,
+			});
+			return {
+				encrypted,
+				fingerprintCount: Array.isArray(fingerprints) ? fingerprints.length : 0,
+				faceTemplateSize: Number(exportEvent.faceTemplateSize || 0),
+				facePictureSize: Number(exportEvent.facePictureSize || 0),
+				cardNo: exportEvent.cardNo || "",
+				events: events.map((event) =>
+					event?.event === "manual_biometric_export_completed"
+						? {
+								...event,
+								fingerprints: "[encrypted-before-api-response]",
+								faceTemplate: event.faceTemplate ? "[encrypted-before-api-response]" : "",
+								facePicture: event.facePicture ? "[encrypted-before-api-response]" : "",
+							}
+						: event,
+				),
+			};
 		} finally {
 			try {
 				fsSync.unlinkSync(localSpecPath);
@@ -4140,6 +4355,8 @@ export const controller = (prisma: PrismaClient) => {
 		},
 	) => {
 		const requestedScope = options.scope || "currentDevice";
+		const encryptedBiometricExports: any[] = [];
+		const encryptedBiometricExportErrors: any[] = [];
 		const devices = await prisma.device.findMany({
 			where: {
 				organizationId: options.organizationId,
@@ -4257,6 +4474,77 @@ export const controller = (prisma: PrismaClient) => {
 			const sensitiveCredentialRequested =
 				Boolean(options.includeFingerprints || options.includeFaces) &&
 				Boolean(options.encryptedBiometricBundle);
+			if (sensitiveCredentialRequested && sourceRead.status === "supported") {
+				for (const row of exportRows as any[]) {
+					const credentialSummary =
+						row.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
+						row.vendorMetadata?.credentialSummary ||
+						extractHikvisionCredentialSummary(row.rawPayload || {});
+					const shouldExportBiometric =
+						(options.includeFingerprints && credentialSummary.fingerprintCount > 0) ||
+						(options.includeFaces && credentialSummary.faceCount > 0);
+					if (!shouldExportBiometric) continue;
+					try {
+						const biometricExport = await runHikvisionBiometricExportOnVm({
+							device,
+							organizationId: options.organizationId,
+							vendorUserId: String(row.vendorUserId || row.employeeNo || "").trim(),
+							includeFingerprints: Boolean(options.includeFingerprints),
+							includeFaces: Boolean(options.includeFaces),
+						});
+						const encryptedValue = JSON.stringify(biometricExport.encrypted);
+						const metadata = {
+							encryptedBiometricTemplate: biometricExport.encrypted,
+							encryptedBiometricTemplateCiphertext: biometricExport.encrypted.ciphertext,
+							encryptedBiometricTemplateSha256:
+								biometricExport.encrypted.plaintextSha256,
+							encryptedBiometricTemplateKeySource: biometricExport.encrypted.keySource,
+							fingerprintTemplateCount: biometricExport.fingerprintCount,
+							faceTemplateSize: biometricExport.faceTemplateSize,
+							facePictureSize: biometricExport.facePictureSize,
+							cardNo: biometricExport.cardNo,
+						};
+						row.rawPayload = {
+							...(row.rawPayload || {}),
+							_hrisDeviceMetadata: {
+								...(row.rawPayload?._hrisDeviceMetadata || {}),
+								biometricExport: metadata,
+							},
+						};
+						row.vendorMetadata = {
+							...(row.vendorMetadata || {}),
+							biometricBundle: {
+								...(row.vendorMetadata?.biometricBundle || {}),
+								present: true,
+								algorithm: DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM,
+								fingerprintRawTemplateBlob: encryptedValue,
+								faceRawTemplateBlob: encryptedValue,
+								encryptedBiometricTemplateCiphertext:
+									biometricExport.encrypted.ciphertext,
+								encryptedBiometricTemplateSha256:
+									biometricExport.encrypted.plaintextSha256,
+								keySource: biometricExport.encrypted.keySource,
+							},
+						};
+						encryptedBiometricExports.push({
+							sourceDeviceId: device.id,
+							vendorUserId: row.vendorUserId,
+							fingerprintCount: biometricExport.fingerprintCount,
+							faceTemplateSize: biometricExport.faceTemplateSize,
+							facePictureSize: biometricExport.facePictureSize,
+							plaintextSha256: biometricExport.encrypted.plaintextSha256,
+							ciphertextLength: biometricExport.encrypted.ciphertext.length,
+							keySource: biometricExport.encrypted.keySource,
+						});
+					} catch (error: any) {
+						encryptedBiometricExportErrors.push({
+							sourceDeviceId: device.id,
+							vendorUserId: row.vendorUserId,
+							error: error?.message || "Biometric SDK export failed",
+						});
+					}
+				}
+			}
 			exportDevices.push({
 				device: {
 					id: device.id,
@@ -4318,16 +4606,23 @@ export const controller = (prisma: PrismaClient) => {
 			},
 			biometricBundle: options.encryptedBiometricBundle
 				? {
-						present: false,
+						present: encryptedBiometricExports.length > 0,
 						requiredForPortableTemplateImport: Boolean(
 							options.includeFingerprints || options.includeFaces,
 						),
 						algorithm: DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM,
-						status: "not_created_by_json_export",
-						reason:
-							"Normal JSON export carries only metadata. Template bytes must be captured into a separate encrypted bundle or copied device-to-device through the SDK peer-copy path.",
+						status: encryptedBiometricExports.length
+							? "created_from_hikvision_sdk"
+							: encryptedBiometricExportErrors.length
+								? "sdk_export_failed"
+								: "not_created_no_biometric_rows",
+						reason: encryptedBiometricExports.length
+							? "Hikvision SDK returned biometric template bytes and HRIS encrypted them before writing export files."
+							: "No SDK biometric template bytes were encrypted for this export. Check biometricExportErrors for device/SDK failures.",
 						plaintextPolicy:
 							"Do not write raw biometric template bytes to JSON, logs, screenshots, or reports.",
+						users: encryptedBiometricExports,
+						errors: encryptedBiometricExportErrors,
 					}
 				: {
 						present: false,
@@ -4540,7 +4835,9 @@ export const controller = (prisma: PrismaClient) => {
 					),
 					algorithm: payload?.biometricBundle?.algorithm || null,
 					status: payload?.biometricBundle?.status || "not_present",
-					unlockable: false,
+					unlockable:
+						Boolean(payload?.biometricBundle?.present) &&
+						importedUsers.some((user: any) => parseImportedEncryptedBiometricTemplate(user)),
 					plaintextExposed: false,
 					transferModes: Array.from(
 						new Set(planRows.map((row: any) => row.transferMode).filter(Boolean)),
@@ -4806,6 +5103,51 @@ export const controller = (prisma: PrismaClient) => {
 								}),
 							);
 						}
+					}
+				}
+			} else if (biometricTransferMode === "encryptedBundle") {
+				const encryptedTemplate = parseImportedEncryptedBiometricTemplate(row.rawUser);
+				if (!encryptedTemplate) {
+					results.push(
+						buildDeviceUserImportResultRow(row, {
+							status: "failed",
+							method: "encryptedBundle",
+							error: "No encrypted biometric template value was found on this import row",
+						}),
+					);
+				} else {
+					try {
+						const decrypted = decryptDeviceUserBiometricPayload({
+							organizationId: gate.organizationId,
+							deviceId: row.sourceDeviceId || targetDevice.id,
+							encrypted: encryptedTemplate,
+						});
+						results.push(
+							buildDeviceUserImportResultRow(row, {
+								status: "decrypted_bundle_ready",
+								method: "encryptedBundle",
+								error:
+									"Encrypted biometric bundle decrypted successfully, but offline SDK write-from-bundle is not implemented yet. Use SDK peer copy for device writes until the bundle writer is added.",
+								biometricBundle: {
+									fingerprintCount: Array.isArray(decrypted?.fingerprints)
+										? decrypted.fingerprints.length
+										: 0,
+									faceTemplatePresent: Boolean(decrypted?.faceTemplate),
+									facePicturePresent: Boolean(decrypted?.facePicture),
+									plaintextSha256: encryptedTemplate.plaintextSha256 || null,
+								},
+							}),
+						);
+					} catch (error: any) {
+						results.push(
+							buildDeviceUserImportResultRow(row, {
+								status: "failed",
+								method: "encryptedBundle",
+								error:
+									error?.message ||
+									"Encrypted biometric bundle could not be decrypted with the configured key",
+							}),
+						);
 					}
 				}
 			} else {
