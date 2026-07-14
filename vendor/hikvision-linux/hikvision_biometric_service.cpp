@@ -47,6 +47,7 @@ struct DeviceSession {
     DeviceConfig config;
     LONG user_id = -1;
     LONG alarm_handle = -1;
+    DWORD last_login_error = 0;
 };
 
 struct ReconcileJob {
@@ -3026,6 +3027,7 @@ bool login_device(DeviceSession &session) {
     std::strncpy(login_info.sPassword, session.config.password.c_str(), NAME_LEN - 1);
 
     session.user_id = NET_DVR_Login_V40(&login_info, &device_info);
+    session.last_login_error = session.user_id >= 0 ? 0 : NET_DVR_GetLastError();
     emit_json({
         {"event", "sdk_login"},
         {"deviceId", session.config.hris_device_id},
@@ -3033,7 +3035,7 @@ bool login_device(DeviceSession &session) {
         {"host", session.config.host},
         {"sdkPort", std::to_string(session.config.sdk_port)},
         {"ok", session.user_id >= 0 ? "true" : "false"},
-        {"lastError", session.user_id >= 0 ? "0" : std::to_string(NET_DVR_GetLastError())}
+        {"lastError", session.user_id >= 0 ? "0" : std::to_string(session.last_login_error)}
     });
     return session.user_id >= 0;
 }
@@ -3318,6 +3320,16 @@ int main(int argc, char **argv) {
                 });
             } else if (session.user_id >= 0) {
                 NET_DVR_Logout_V30(session.user_id);
+            }
+            if (!armed && session.last_login_error == NET_DVR_USER_LOCKED) {
+                emit_json({
+                    {"event", "device_login_locked_backoff"},
+                    {"deviceId", config.hris_device_id},
+                    {"host", config.host},
+                    {"lastError", std::to_string(session.last_login_error)},
+                    {"attempt", std::to_string(attempt)}
+                });
+                break;
             }
             if (!armed && attempt < 3) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(500 * attempt));

@@ -59,4 +59,17 @@ describe("hikvision-listener-status helper", () => {
 		expect(deviceB?.state).to.equal("login_failed");
 		expect(deviceB?.lastLoginError).to.equal("7");
 	});
+
+	it("surfaces Hikvision locked-user backoff per device", () => {
+		const status = summarizeHikvisionListenerLogs([
+			'{"ts":"2026-07-14T02:30:00Z","deviceId":"device-a","event":"device_config_loaded","host":"192.168.18.41","name":"Test A","sdkPort":"8000"}',
+			'{"ts":"2026-07-14T02:30:01Z","deviceId":"device-a","deviceName":"Test A","event":"sdk_login","host":"192.168.18.41","lastError":"153","ok":"false","sdkPort":"8000"}',
+			'{"ts":"2026-07-14T02:30:01Z","deviceId":"device-a","event":"device_login_locked_backoff","host":"192.168.18.41","lastError":"153","attempt":"1"}',
+		]);
+
+		expect(status.lastFailureReason).to.equal("device_login_locked_backoff");
+		expect(status.lastError).to.equal("153");
+		expect(status.devices[0]?.lastFailureReason).to.equal("device_login_locked_backoff");
+		expect(status.devices[0]?.lastLoginError).to.equal("153");
+	});
 });

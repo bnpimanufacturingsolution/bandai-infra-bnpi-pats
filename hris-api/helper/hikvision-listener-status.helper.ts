@@ -155,6 +155,13 @@ export const summarizeHikvisionListenerLogs = (
 				"device_arming_failed_after_retries";
 		}
 
+		if (event === "device_login_locked_backoff" && device) {
+			const lockReason = "device_login_locked_backoff";
+			device.lastFailureReason = lockReason;
+			lastFailureReason = lockReason;
+			lastError = String(entry.lastError || "153").trim();
+		}
+
 		if (event === "sdk_callback_register" && ok !== false) {
 			sawCallbackRegisterOk = true;
 		}
