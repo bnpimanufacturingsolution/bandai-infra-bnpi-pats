@@ -1203,6 +1203,7 @@ export const controller = (prisma: PrismaClient) => {
 		organizationId: string;
 		deviceId: string;
 		vendorUserId: string;
+		modality?: "fingerprint" | "face" | "combined";
 		payload: Record<string, any>;
 	}) => {
 		const { secret, source } = getDeviceUserBiometricBundleSecret(
@@ -1222,6 +1223,7 @@ export const controller = (prisma: PrismaClient) => {
 			keySource: source,
 			deviceId: params.deviceId,
 			vendorUserId: params.vendorUserId,
+			modality: params.modality || "combined",
 			salt: salt.toString("base64"),
 			iv: iv.toString("base64"),
 			authTag: authTag.toString("base64"),
@@ -1253,21 +1255,12 @@ export const controller = (prisma: PrismaClient) => {
 		return JSON.parse(plaintext.toString("utf8"));
 	};
 
-	const parseImportedEncryptedBiometricTemplate = (row: any) => {
-		const candidates = [
-			row?.vendorMetadata?.biometricBundle?.fingerprintRawTemplateBlob,
-			row?.vendorMetadata?.biometricBundle?.faceRawTemplateBlob,
-			row?.vendorMetadata?.biometricBundle?.encryptedBiometricTemplate,
-			row?.rawPayload?._hrisDeviceMetadata?.biometricExport?.encryptedBiometricTemplate,
-			row?.rawPayload?._hrisDeviceMetadata?.biometricCsvColumns?.fingerprintRawTemplateBlob,
-			row?.rawPayload?._hrisDeviceMetadata?.biometricCsvColumns?.faceRawTemplateBlob,
-		];
-		for (const candidate of candidates) {
-			if (!candidate || typeof candidate !== "string") continue;
-			const trimmed = candidate.trim();
-			if (!trimmed.startsWith("{")) continue;
+	const parseEncryptedDeviceUserBiometricTemplate = (...candidates: any[]) => {
+		for (const candidate of candidates.flat()) {
+			if (!candidate) continue;
 			try {
-				const parsed = JSON.parse(trimmed);
+				const parsed =
+					typeof candidate === "string" ? JSON.parse(candidate.trim()) : candidate;
 				if (parsed?.ciphertext && parsed?.algorithm === DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM) {
 					return parsed;
 				}
@@ -1275,41 +1268,69 @@ export const controller = (prisma: PrismaClient) => {
 		}
 		return null;
 	};
+	const parseEncryptedDeviceUserBiometricModality = (
+		modality: "fingerprint" | "face",
+		...candidates: any[]
+	) => {
+		const parsed = parseEncryptedDeviceUserBiometricTemplate(...candidates);
+		return parsed?.modality === modality ? parsed : null;
+	};
 
-	const parseCachedDeviceUserBiometricTemplate = (row: any) => {
-		const candidates = [
-			row?.rawPayload?._hrisDeviceMetadata?.biometricExport?.encryptedBiometricTemplate,
-			row?.vendorMetadata?.biometricBundle?.encryptedBiometricTemplate,
+	const parseImportedEncryptedBiometricTemplates = (row: any) => {
+		const fingerprintCandidate = parseEncryptedDeviceUserBiometricTemplate(
 			row?.vendorMetadata?.biometricBundle?.fingerprintRawTemplateBlob,
+			row?.rawPayload?._hrisDeviceMetadata?.biometricCsvColumns?.fingerprintRawTemplateBlob,
+		);
+		const faceCandidate = parseEncryptedDeviceUserBiometricTemplate(
 			row?.vendorMetadata?.biometricBundle?.faceRawTemplateBlob,
-		];
-		for (const candidate of candidates) {
-			const parsed =
-				typeof candidate === "string"
-					? (() => {
-							try {
-								return JSON.parse(candidate);
-							} catch {
-								return null;
-							}
-						})()
-					: candidate;
-			if (parsed?.ciphertext && parsed?.algorithm === DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM) {
-				return parsed;
-			}
-		}
-		return null;
+			row?.rawPayload?._hrisDeviceMetadata?.biometricCsvColumns?.faceRawTemplateBlob,
+		);
+		return {
+			fingerprint: fingerprintCandidate?.modality === "fingerprint" ? fingerprintCandidate : null,
+			face: faceCandidate?.modality === "face" ? faceCandidate : null,
+			legacy: parseEncryptedDeviceUserBiometricTemplate(
+				row?.vendorMetadata?.biometricBundle?.encryptedBiometricTemplate,
+				row?.rawPayload?._hrisDeviceMetadata?.biometricExport?.encryptedBiometricTemplate,
+				...(!fingerprintCandidate?.modality ? [fingerprintCandidate] : []),
+				...(!faceCandidate?.modality ? [faceCandidate] : []),
+			),
+		};
+	};
+
+	const parseCachedDeviceUserBiometricTemplates = (row: any) => {
+		const biometricExport = row?.rawPayload?._hrisDeviceMetadata?.biometricExport || {};
+		const biometricBundle = row?.vendorMetadata?.biometricBundle || {};
+		return {
+			fingerprint: parseEncryptedDeviceUserBiometricModality(
+				"fingerprint",
+				biometricExport.encryptedFingerprintTemplate,
+				biometricBundle.encryptedFingerprintTemplate,
+				biometricBundle.fingerprintRawTemplateBlob,
+			),
+			face: parseEncryptedDeviceUserBiometricModality(
+				"face",
+				biometricExport.encryptedFaceTemplate,
+				biometricBundle.encryptedFaceTemplate,
+				biometricBundle.faceRawTemplateBlob,
+			),
+			legacy: parseEncryptedDeviceUserBiometricTemplate(
+				biometricExport.encryptedBiometricTemplate,
+				biometricBundle.encryptedBiometricTemplate,
+			),
+		};
 	};
 
 	const buildDeviceUserBiometricMetadata = (biometricExport: any, source = "hikvision_sdk_live_read") => {
-		const encryptedValue = JSON.stringify(biometricExport.encrypted);
+		const fingerprintEncrypted = biometricExport.encryptedFingerprint || null;
+		const faceEncrypted = biometricExport.encryptedFace || null;
+		const fingerprintEncryptedValue = fingerprintEncrypted
+			? JSON.stringify(fingerprintEncrypted)
+			: "";
+		const faceEncryptedValue = faceEncrypted ? JSON.stringify(faceEncrypted) : "";
 		return {
-			encryptedValue,
 			rawPayloadMetadata: {
-				encryptedBiometricTemplate: biometricExport.encrypted,
-				encryptedBiometricTemplateCiphertext: biometricExport.encrypted.ciphertext,
-				encryptedBiometricTemplateSha256: biometricExport.encrypted.plaintextSha256,
-				encryptedBiometricTemplateKeySource: biometricExport.encrypted.keySource,
+				encryptedFingerprintTemplate: fingerprintEncrypted,
+				encryptedFaceTemplate: faceEncrypted,
 				fingerprintTemplateCount: biometricExport.fingerprintCount,
 				faceTemplateSize: biometricExport.faceTemplateSize,
 				facePictureSize: biometricExport.facePictureSize,
@@ -1318,14 +1339,18 @@ export const controller = (prisma: PrismaClient) => {
 				capturedAt: new Date().toISOString(),
 			},
 			vendorMetadata: {
-				present: true,
+				present: Boolean(fingerprintEncrypted || faceEncrypted),
 				algorithm: DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM,
-				fingerprintRawTemplateBlob: encryptedValue,
-				faceRawTemplateBlob: encryptedValue,
-				encryptedBiometricTemplate: biometricExport.encrypted,
-				encryptedBiometricTemplateCiphertext: biometricExport.encrypted.ciphertext,
-				encryptedBiometricTemplateSha256: biometricExport.encrypted.plaintextSha256,
-				keySource: biometricExport.encrypted.keySource,
+				fingerprintPresent: Boolean(fingerprintEncrypted),
+				facePresent: Boolean(faceEncrypted),
+				fingerprintRawTemplateBlob: fingerprintEncryptedValue,
+				faceRawTemplateBlob: faceEncryptedValue,
+				encryptedFingerprintTemplate: fingerprintEncrypted,
+				encryptedFaceTemplate: faceEncrypted,
+				fingerprintTemplateKeySource: fingerprintEncrypted?.keySource || null,
+				faceTemplateKeySource: faceEncrypted?.keySource || null,
+				fingerprintTemplateSha256: fingerprintEncrypted?.plaintextSha256 || null,
+				faceTemplateSha256: faceEncrypted?.plaintextSha256 || null,
 				source,
 				capturedAt: new Date().toISOString(),
 			},
@@ -1333,15 +1358,32 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const applyDeviceUserBiometricMetadataToRow = (row: any, metadata: any) => {
+		const fingerprintCount = Number(metadata.rawPayloadMetadata?.fingerprintTemplateCount || 0);
+		const faceCount =
+			Number(metadata.rawPayloadMetadata?.faceTemplateSize || 0) > 0 ||
+			Number(metadata.rawPayloadMetadata?.facePictureSize || 0) > 0
+				? 1
+				: 0;
+		const credentialSummary = {
+			...(row.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
+				row.vendorMetadata?.credentialSummary ||
+				{}),
+			fingerprintCount,
+			faceCount,
+			hasFingerprint: fingerprintCount > 0,
+			hasFace: faceCount > 0,
+		};
 		row.rawPayload = {
 			...(row.rawPayload || {}),
 			_hrisDeviceMetadata: {
 				...(row.rawPayload?._hrisDeviceMetadata || {}),
+				credentialSummary,
 				biometricExport: metadata.rawPayloadMetadata,
 			},
 		};
 		row.vendorMetadata = {
 			...(row.vendorMetadata || {}),
+			credentialSummary,
 			biometricBundle: {
 				...(row.vendorMetadata?.biometricBundle || {}),
 				...metadata.vendorMetadata,
@@ -1561,24 +1603,44 @@ export const controller = (prisma: PrismaClient) => {
 				typeof exportEvent.fingerprints === "string"
 					? JSON.parse(exportEvent.fingerprints || "[]")
 					: exportEvent.fingerprints || [];
-			const rawPayload = {
+			const sharedPayload = {
 				sourceDeviceId: params.device.id,
 				sourceDeviceName: params.device.name || params.device.id,
 				vendorUserId: params.vendorUserId,
 				cardNo: exportEvent.cardNo || "",
-				fingerprints,
-				faceTemplate: exportEvent.faceTemplate || "",
-				facePicture: exportEvent.facePicture || "",
 				exportedAt: new Date().toISOString(),
 			};
-			const encrypted = encryptDeviceUserBiometricPayload({
-				organizationId: params.organizationId,
-				deviceId: params.device.id,
-				vendorUserId: params.vendorUserId,
-				payload: rawPayload,
-			});
+			const encryptedFingerprint = Array.isArray(fingerprints) && fingerprints.length
+				? encryptDeviceUserBiometricPayload({
+						organizationId: params.organizationId,
+						deviceId: params.device.id,
+						vendorUserId: params.vendorUserId,
+						modality: "fingerprint",
+						payload: { ...sharedPayload, fingerprints },
+					})
+				: null;
+			const encryptedFace = exportEvent.faceTemplate || exportEvent.facePicture
+				? encryptDeviceUserBiometricPayload({
+						organizationId: params.organizationId,
+						deviceId: params.device.id,
+						vendorUserId: params.vendorUserId,
+						modality: "face",
+						payload: {
+							...sharedPayload,
+							faceTemplate: exportEvent.faceTemplate || "",
+							facePicture: exportEvent.facePicture || "",
+						},
+					})
+				: null;
+			if (!encryptedFingerprint && !encryptedFace) {
+				throw new Error(
+					`Hikvision SDK returned no fingerprint or face template bytes for device user ${params.vendorUserId}`,
+				);
+			}
 			return {
-				encrypted,
+				encrypted: encryptedFingerprint || encryptedFace,
+				encryptedFingerprint,
+				encryptedFace,
 				fingerprintCount: Array.isArray(fingerprints) ? fingerprints.length : 0,
 				faceTemplateSize: Number(exportEvent.faceTemplateSize || 0),
 				facePictureSize: Number(exportEvent.facePictureSize || 0),
@@ -4745,21 +4807,37 @@ export const controller = (prisma: PrismaClient) => {
 						(options.includeFingerprints && credentialSummary.fingerprintCount > 0) ||
 						(options.includeFaces && credentialSummary.faceCount > 0);
 					if (!shouldExportBiometric) continue;
-					const cachedTemplate = parseCachedDeviceUserBiometricTemplate(row);
-					if (cachedTemplate && options.refreshBiometricBundle !== true) {
-						const encryptedValue = JSON.stringify(cachedTemplate);
+					const cachedTemplates = parseCachedDeviceUserBiometricTemplates(row);
+					const fingerprintCount = Number(credentialSummary.fingerprintCount || 0);
+					const faceCount = Number(credentialSummary.faceCount || 0);
+					const cachedFingerprint =
+						cachedTemplates.fingerprint ||
+						(fingerprintCount > 0 && faceCount === 0 ? cachedTemplates.legacy : null);
+					const cachedFace =
+						cachedTemplates.face ||
+						(faceCount > 0 && fingerprintCount === 0 ? cachedTemplates.legacy : null);
+					const requestedFingerprint = Boolean(options.includeFingerprints && fingerprintCount > 0);
+					const requestedFace = Boolean(options.includeFaces && faceCount > 0);
+					const requestedModalitiesCached =
+						(!requestedFingerprint || Boolean(cachedFingerprint)) &&
+						(!requestedFace || Boolean(cachedFace));
+					if (requestedModalitiesCached && options.refreshBiometricBundle !== true) {
 						row.vendorMetadata = {
 							...(row.vendorMetadata || {}),
 							biometricBundle: {
 								...(row.vendorMetadata?.biometricBundle || {}),
 								present: true,
 								algorithm: DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM,
-								fingerprintRawTemplateBlob: encryptedValue,
-								faceRawTemplateBlob: encryptedValue,
-								encryptedBiometricTemplate: cachedTemplate,
-								encryptedBiometricTemplateCiphertext: cachedTemplate.ciphertext,
-								encryptedBiometricTemplateSha256: cachedTemplate.plaintextSha256,
-								keySource: cachedTemplate.keySource,
+								fingerprintPresent: Boolean(cachedFingerprint),
+								facePresent: Boolean(cachedFace),
+								fingerprintRawTemplateBlob: cachedFingerprint
+									? JSON.stringify(cachedFingerprint)
+									: "",
+								faceRawTemplateBlob: cachedFace ? JSON.stringify(cachedFace) : "",
+								encryptedFingerprintTemplate: cachedFingerprint,
+								encryptedFaceTemplate: cachedFace,
+								fingerprintTemplateKeySource: cachedFingerprint?.keySource || null,
+								faceTemplateKeySource: cachedFace?.keySource || null,
 								source: "device_user_metadata_cache",
 							},
 						};
@@ -4767,9 +4845,12 @@ export const controller = (prisma: PrismaClient) => {
 							sourceDeviceId: device.id,
 							vendorUserId: row.vendorUserId,
 							source: "device_user_metadata_cache",
-							plaintextSha256: cachedTemplate.plaintextSha256 || null,
-							ciphertextLength: String(cachedTemplate.ciphertext || "").length,
-							keySource: cachedTemplate.keySource || null,
+							fingerprintPlaintextSha256: cachedFingerprint?.plaintextSha256 || null,
+							fingerprintCiphertextLength: String(cachedFingerprint?.ciphertext || "").length,
+							fingerprintKeySource: cachedFingerprint?.keySource || null,
+							facePlaintextSha256: cachedFace?.plaintextSha256 || null,
+							faceCiphertextLength: String(cachedFace?.ciphertext || "").length,
+							faceKeySource: cachedFace?.keySource || null,
 						});
 						continue;
 					}
@@ -4811,9 +4892,18 @@ export const controller = (prisma: PrismaClient) => {
 							fingerprintCount: biometricExport.fingerprintCount,
 							faceTemplateSize: biometricExport.faceTemplateSize,
 							facePictureSize: biometricExport.facePictureSize,
-							plaintextSha256: biometricExport.encrypted.plaintextSha256,
-							ciphertextLength: biometricExport.encrypted.ciphertext.length,
-							keySource: biometricExport.encrypted.keySource,
+							fingerprintPlaintextSha256:
+								biometricExport.encryptedFingerprint?.plaintextSha256 || null,
+							fingerprintCiphertextLength: String(
+								biometricExport.encryptedFingerprint?.ciphertext || "",
+							).length,
+							fingerprintKeySource:
+								biometricExport.encryptedFingerprint?.keySource || null,
+							facePlaintextSha256: biometricExport.encryptedFace?.plaintextSha256 || null,
+							faceCiphertextLength: String(
+								biometricExport.encryptedFace?.ciphertext || "",
+							).length,
+							faceKeySource: biometricExport.encryptedFace?.keySource || null,
 						});
 					} catch (error: any) {
 						encryptedBiometricExportErrors.push({
@@ -5031,7 +5121,20 @@ export const controller = (prisma: PrismaClient) => {
 				const hasCredential =
 					(body.includeFingerprints !== false && Number(credentialSummary.fingerprintCount || 0) > 0) ||
 					(body.includeFaces === true && Number(credentialSummary.faceCount || 0) > 0);
-				const cachedTemplate = parseCachedDeviceUserBiometricTemplate(row);
+				const cachedTemplates = parseCachedDeviceUserBiometricTemplates(row);
+				const fingerprintCount = Number(credentialSummary.fingerprintCount || 0);
+				const faceCount = Number(credentialSummary.faceCount || 0);
+				const cachedFingerprint =
+					cachedTemplates.fingerprint ||
+					(fingerprintCount > 0 && faceCount === 0 ? cachedTemplates.legacy : null);
+				const cachedFace =
+					cachedTemplates.face ||
+					(faceCount > 0 && fingerprintCount === 0 ? cachedTemplates.legacy : null);
+				const requestedFingerprint = body.includeFingerprints !== false && fingerprintCount > 0;
+				const requestedFace = body.includeFaces === true && faceCount > 0;
+				const requestedModalitiesCached =
+					(!requestedFingerprint || Boolean(cachedFingerprint)) &&
+					(!requestedFace || Boolean(cachedFace));
 				const eventSummary = await summarizeDeviceUserBiometricEvents({
 					organizationId: gate.organizationId,
 					deviceId: device.id,
@@ -5043,21 +5146,24 @@ export const controller = (prisma: PrismaClient) => {
 						vendorUserId: row.vendorUserId,
 						employeeNo: row.employeeNo,
 						status: "skipped_no_biometric_count",
-						cached: Boolean(cachedTemplate),
+						cached: Boolean(cachedFingerprint || cachedFace),
 						credentialSummary,
 						relatedEvents: eventSummary,
 					});
 					continue;
 				}
-				if (cachedTemplate && body.refreshBiometricBundle !== true) {
+				if (requestedModalitiesCached && body.refreshBiometricBundle !== true) {
 					results.push({
 						vendorUserId: row.vendorUserId,
 						employeeNo: row.employeeNo,
 						status: "already_cached",
 						cached: true,
-						plaintextSha256: cachedTemplate.plaintextSha256 || null,
-						ciphertextLength: String(cachedTemplate.ciphertext || "").length,
-						keySource: cachedTemplate.keySource || null,
+						fingerprintPlaintextSha256: cachedFingerprint?.plaintextSha256 || null,
+						fingerprintCiphertextLength: String(cachedFingerprint?.ciphertext || "").length,
+						fingerprintKeySource: cachedFingerprint?.keySource || null,
+						facePlaintextSha256: cachedFace?.plaintextSha256 || null,
+						faceCiphertextLength: String(cachedFace?.ciphertext || "").length,
+						faceKeySource: cachedFace?.keySource || null,
 						credentialSummary,
 						relatedEvents: eventSummary,
 					});
@@ -5067,8 +5173,8 @@ export const controller = (prisma: PrismaClient) => {
 					results.push({
 						vendorUserId: row.vendorUserId,
 						employeeNo: row.employeeNo,
-						status: cachedTemplate ? "would_refresh" : "would_backfill",
-						cached: Boolean(cachedTemplate),
+						status: cachedFingerprint || cachedFace ? "would_refresh" : "would_backfill",
+						cached: Boolean(cachedFingerprint || cachedFace),
 						credentialSummary,
 						relatedEvents: eventSummary,
 					});
@@ -5103,9 +5209,18 @@ export const controller = (prisma: PrismaClient) => {
 						fingerprintCount: biometricExport.fingerprintCount,
 						faceTemplateSize: biometricExport.faceTemplateSize,
 						facePictureSize: biometricExport.facePictureSize,
-						plaintextSha256: biometricExport.encrypted.plaintextSha256,
-						ciphertextLength: biometricExport.encrypted.ciphertext.length,
-						keySource: biometricExport.encrypted.keySource,
+						fingerprintPlaintextSha256:
+							biometricExport.encryptedFingerprint?.plaintextSha256 || null,
+						fingerprintCiphertextLength: String(
+							biometricExport.encryptedFingerprint?.ciphertext || "",
+						).length,
+						fingerprintKeySource:
+							biometricExport.encryptedFingerprint?.keySource || null,
+						facePlaintextSha256: biometricExport.encryptedFace?.plaintextSha256 || null,
+						faceCiphertextLength: String(
+							biometricExport.encryptedFace?.ciphertext || "",
+						).length,
+						faceKeySource: biometricExport.encryptedFace?.keySource || null,
 						relatedEvents: eventSummary,
 					});
 				} catch (error: any) {
@@ -5297,7 +5412,9 @@ export const controller = (prisma: PrismaClient) => {
 					status: payload?.biometricBundle?.status || "not_present",
 					unlockable:
 						Boolean(payload?.biometricBundle?.present) &&
-						importedUsers.some((user: any) => parseImportedEncryptedBiometricTemplate(user)),
+						importedUsers.some((user: any) =>
+							Object.values(parseImportedEncryptedBiometricTemplates(user)).some(Boolean),
+						),
 					plaintextExposed: false,
 					transferModes: Array.from(
 						new Set(planRows.map((row: any) => row.transferMode).filter(Boolean)),
@@ -5566,8 +5683,15 @@ export const controller = (prisma: PrismaClient) => {
 					}
 				}
 			} else if (biometricTransferMode === "encryptedBundle") {
-				const encryptedTemplate = parseImportedEncryptedBiometricTemplate(row.rawUser);
-				if (!encryptedTemplate) {
+				const encryptedTemplates = parseImportedEncryptedBiometricTemplates(row.rawUser);
+				const templatesToDecrypt = [
+					encryptedTemplates.fingerprint,
+					encryptedTemplates.face,
+					...(!encryptedTemplates.fingerprint && !encryptedTemplates.face
+						? [encryptedTemplates.legacy]
+						: []),
+				].filter(Boolean);
+				if (!templatesToDecrypt.length) {
 					results.push(
 						buildDeviceUserImportResultRow(row, {
 							status: "failed",
@@ -5577,11 +5701,27 @@ export const controller = (prisma: PrismaClient) => {
 					);
 				} else {
 					try {
-						const decrypted = decryptDeviceUserBiometricPayload({
-							organizationId: gate.organizationId,
-							deviceId: row.sourceDeviceId || targetDevice.id,
-							encrypted: encryptedTemplate,
-						});
+						const decryptedParts = templatesToDecrypt.map((encrypted) => ({
+							encrypted,
+							payload: decryptDeviceUserBiometricPayload({
+								organizationId: gate.organizationId,
+								deviceId: row.sourceDeviceId || targetDevice.id,
+								encrypted,
+							}),
+						}));
+						const decrypted = decryptedParts.reduce(
+							(merged, part) => ({
+								...merged,
+								...part.payload,
+								fingerprints: [
+									...(Array.isArray(merged.fingerprints) ? merged.fingerprints : []),
+									...(Array.isArray(part.payload?.fingerprints)
+										? part.payload.fingerprints
+										: []),
+								],
+							}),
+							{} as Record<string, any>,
+						);
 						const writeResult = await writeDecryptedBiometricBundleToHikvisionDevice({
 							req,
 							targetDevice,
@@ -5602,7 +5742,9 @@ export const controller = (prisma: PrismaClient) => {
 										: 0,
 									faceTemplatePresent: Boolean(decrypted?.faceTemplate),
 									facePicturePresent: Boolean(decrypted?.facePicture),
-									plaintextSha256: encryptedTemplate.plaintextSha256 || null,
+									plaintextSha256: decryptedParts.map(
+										(part) => part.encrypted.plaintextSha256 || null,
+									),
 									writeResult,
 								},
 							}),

@@ -288,7 +288,9 @@ const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = [
 	"biometricBundleAlgorithm",
 	"biometricBundleRequiredForRawImport",
 	"biometricTransferMode",
+	"fingerprintTemplateKeySource",
 	"fingerprintRawTemplateBlob",
+	"faceTemplateKeySource",
 	"faceRawTemplateBlob",
 	"rawBiometricPlaintextPolicy",
 	"rawBiometricSource",
@@ -2856,6 +2858,12 @@ export function DeviceEnrollmentPanel({
 		if (encryptedCiphertext) return DEVICE_USER_CSV_ENCRYPTED_BUNDLE_AVAILABLE;
 		return DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED;
 	};
+	const getTemplateKeySourceColumnValue = (user: any, key: string) =>
+		String(
+			user?.vendorMetadata?.biometricBundle?.[key] ||
+				user?.rawPayload?._hrisDeviceMetadata?.biometricExport?.[key] ||
+				"",
+		).trim();
 	const getDeviceUserCsvHeaders = () => [
 		"sourceDeviceName",
 		"sourceDeviceId",
@@ -2901,7 +2909,11 @@ export function DeviceEnrollmentPanel({
 					row.biometricBundleRequiredForRawImport,
 				),
 				biometricTransferMode: String(row.biometricTransferMode || "metadataOnly").trim(),
+				fingerprintTemplateKeySource: String(
+					row.fingerprintTemplateKeySource || "",
+				).trim(),
 				fingerprintRawTemplateBlob: getCsvRawTemplateValue(row.fingerprintRawTemplateBlob),
+				faceTemplateKeySource: String(row.faceTemplateKeySource || "").trim(),
 				faceRawTemplateBlob: getCsvRawTemplateValue(row.faceRawTemplateBlob),
 				rawBiometricPlaintextPolicy: String(
 					row.rawBiometricPlaintextPolicy || DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
@@ -3026,7 +3038,9 @@ export function DeviceEnrollmentPanel({
 								biometricBundleRequiredForRawImport:
 									row.biometricBundleRequiredForRawImport,
 								biometricTransferMode: row.biometricTransferMode,
+								fingerprintTemplateKeySource: row.fingerprintTemplateKeySource,
 								fingerprintRawTemplateBlob: row.fingerprintRawTemplateBlob,
+								faceTemplateKeySource: row.faceTemplateKeySource,
 								faceRawTemplateBlob: row.faceRawTemplateBlob,
 								rawBiometricPlaintextPolicy: row.rawBiometricPlaintextPolicy,
 								rawBiometricSource: row.rawBiometricSource,
@@ -3072,7 +3086,9 @@ export function DeviceEnrollmentPanel({
 							? "Yes"
 							: "No",
 					biometricTransferMode: "sdkPeerCopy",
+					fingerprintTemplateKeySource: "",
 					fingerprintRawTemplateBlob: DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
+					faceTemplateKeySource: "",
 					faceRawTemplateBlob: DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
 					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
 					rawBiometricSource: "template",
@@ -3098,7 +3114,9 @@ export function DeviceEnrollmentPanel({
 					biometricBundleAlgorithm: "aes-256-gcm",
 					biometricBundleRequiredForRawImport: "Yes",
 					biometricTransferMode: "sdkPeerCopy",
+					fingerprintTemplateKeySource: "",
 					fingerprintRawTemplateBlob: DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
+					faceTemplateKeySource: "",
 					faceRawTemplateBlob: DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
 					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
 					rawBiometricSource: "template",
@@ -3117,7 +3135,19 @@ export function DeviceEnrollmentPanel({
 					user.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
 					user.vendorMetadata?.credentialSummary ||
 					{};
-				const biometricBundlePresent = Boolean(payload.biometricBundle?.present);
+				const fingerprintRawTemplateBlob = getRawTemplateColumnValue(
+					user,
+					payload,
+					"fingerprintRawTemplateBlob",
+				);
+				const faceRawTemplateBlob = getRawTemplateColumnValue(
+					user,
+					payload,
+					"faceRawTemplateBlob",
+				);
+				const fingerprintBundlePresent = fingerprintRawTemplateBlob.trim().startsWith("{");
+				const faceBundlePresent = faceRawTemplateBlob.trim().startsWith("{");
+				const biometricBundlePresent = fingerprintBundlePresent || faceBundlePresent;
 				const biometricBundleRequired = Boolean(
 					payload.biometricBundle?.requiredForPortableTemplateImport ||
 						Number(credentialSummary.fingerprintCount || 0) > 0 ||
@@ -3146,16 +3176,14 @@ export function DeviceEnrollmentPanel({
 					biometricTransferMode: biometricBundlePresent
 						? "encryptedBundle"
 						: "sdkPeerCopy",
-					fingerprintRawTemplateBlob: getRawTemplateColumnValue(
-						user,
-						payload,
-						"fingerprintRawTemplateBlob",
-					),
-					faceRawTemplateBlob: getRawTemplateColumnValue(
-						user,
-						payload,
-						"faceRawTemplateBlob",
-					),
+					fingerprintTemplateKeySource: fingerprintBundlePresent
+						? getTemplateKeySourceColumnValue(user, "fingerprintTemplateKeySource")
+						: "",
+					fingerprintRawTemplateBlob,
+					faceTemplateKeySource: faceBundlePresent
+						? getTemplateKeySourceColumnValue(user, "faceTemplateKeySource")
+						: "",
+					faceRawTemplateBlob,
 					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
 					rawBiometricSource: device.sourceRead?.status || "hris_saved_metadata",
 					exportedAt: payload.exportedAt || "",
@@ -6419,9 +6447,10 @@ export function DeviceEnrollmentPanel({
 							import time and is not stored.
 						</p>
 						<p className="mt-2 font-mono text-[11px] text-cyan-950">
-							CSV raw columns: fingerprintRawTemplateBlob, faceRawTemplateBlob,
-							biometricBundlePresent, biometricBundleAlgorithm,
-							biometricBundleRequiredForRawImport.
+							Separate custody columns: fingerprintTemplateKeySource +
+							fingerprintRawTemplateBlob, and faceTemplateKeySource +
+							faceRawTemplateBlob. A modality column contains an encrypted value only
+							when real SDK bytes were captured for that user.
 						</p>
 					</div>
 					<div className="grid gap-2 text-sm sm:grid-cols-3">

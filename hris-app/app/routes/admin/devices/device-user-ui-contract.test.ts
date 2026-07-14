@@ -127,7 +127,10 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("togglePagedExportVendorUserIds");
 		expect(enroll).toContain("encryptedBiometricBundle");
 		expect(enroll).toContain("Encrypted bundle contract");
-		expect(enroll).toContain("CSV raw columns: fingerprintRawTemplateBlob");
+		expect(enroll).toContain("Separate custody columns: fingerprintTemplateKeySource");
+		expect(enroll).toContain("faceTemplateKeySource");
+		expect(enroll).toContain("A modality column contains an encrypted value only");
+		expect(enroll).toContain("fingerprintRawTemplateBlob");
 		expect(enroll).toContain("faceRawTemplateBlob");
 		expect(enroll).toContain("biometricBundleRequiredForRawImport");
 		expect(enroll).toContain("DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED");
