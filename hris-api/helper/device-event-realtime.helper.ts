@@ -25,6 +25,10 @@ export type RealtimeDeviceEventRow = {
 	source?: string | null;
 	status?: string | null;
 	eventType?: string | null;
+	eventCategory?: string | null;
+	eventAction?: string | null;
+	eventLabel?: string | null;
+	eventConfidence?: string | null;
 	major?: string | null;
 	minor?: string | null;
 	doorNo?: string | null;
@@ -87,6 +91,10 @@ export const buildRealtimeDeviceEventRow = (eventRecord: any): RealtimeDeviceEve
 		source: eventRecord.source,
 		status: eventRecord.status,
 		eventType: eventRecord.eventType,
+		eventCategory: eventRecord.eventCategory,
+		eventAction: eventRecord.eventAction,
+		eventLabel: eventRecord.eventLabel,
+		eventConfidence: eventRecord.eventConfidence,
 		major: eventRecord.major,
 		minor: eventRecord.minor,
 		doorNo: eventRecord.doorNo,

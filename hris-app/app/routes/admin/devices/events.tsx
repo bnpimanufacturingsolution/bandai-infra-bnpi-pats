@@ -558,7 +558,15 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		businessStatus: event.taxonomy?.processingLabel || formatBusinessStatus(event.status),
 		eventCategory: event.eventCategory || event.taxonomy?.eventCategory || null,
 		eventAction: event.eventAction || event.taxonomy?.eventAction || null,
-		eventLabel: event.eventLabel || event.taxonomy?.eventLabel || event.eventType || payload.eventKind || null,
+		eventLabel:
+			(event.eventAction || event.taxonomy?.eventAction
+				? getOptionLabel(eventActionOptions, event.eventAction || event.taxonomy?.eventAction || "")
+				: null) ||
+			event.eventLabel ||
+			event.taxonomy?.eventLabel ||
+			event.eventType ||
+			payload.eventKind ||
+			null,
 		processingLabel: event.taxonomy?.processingLabel || formatBusinessStatus(event.status),
 		transportLabel: event.taxonomy?.transportLabel || formatEventSource(event.source),
 		capabilityConfidence:

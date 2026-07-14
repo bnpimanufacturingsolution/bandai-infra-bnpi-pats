@@ -55,6 +55,10 @@ describe("device event realtime helper", () => {
 				fullName: "Codex Hikvision Probe",
 			},
 			employeeNo: "1",
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_CREATED",
+			eventLabel: "Device user created",
+			eventConfidence: "INFERRED",
 			payload: { AcsEventInfo: { serialNo: 997 } },
 		});
 
@@ -70,6 +74,12 @@ describe("device event realtime helper", () => {
 			employeeId: "BNPI-001",
 			deviceEmpId: "1",
 			fullName: "Codex Hikvision Probe",
+		});
+		expect(event).to.include({
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_CREATED",
+			eventLabel: "Device user created",
+			eventConfidence: "INFERRED",
 		});
 		expect((event?.device as any)?.access).to.equal(undefined);
 	});

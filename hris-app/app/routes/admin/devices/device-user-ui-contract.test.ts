@@ -231,6 +231,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(events).not.toContain("Missing saved");
 		expect(events).not.toContain("Checking for missing device logs");
 		expect(events).toContain("deviceId: device.deviceId,");
+		expect(events).toContain("getOptionLabel(eventActionOptions, event.eventAction || event.taxonomy?.eventAction || \"\")");
 		expect(events).toContain("skipMissingEmployeeNo,");
 		expect(events).toContain("targetImportCount: device.targetImportCount,");
 	});
