@@ -14,6 +14,7 @@ $sshKey = Join-Path $env:USERPROFILE '.ssh\node-health-appliance_ed25519'
 $sshExe = (Get-Command ssh.exe -ErrorAction Stop).Source
 $vmHost = '10.184.37.19'
 $vmUser = 'infra'
+$sshAlias = 'project-truth-hris'
 $targetHost = '10.43.130.9'
 $targetPort = 5432
 
@@ -51,6 +52,35 @@ New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
 $stdoutPath = Join-Path $runRoot 'dev-k8s-db.stdout.log'
 $stderrPath = Join-Path $runRoot 'dev-k8s-db.stderr.log'
 
+function Test-SshTarget {
+  param([string[]]$Arguments)
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    & $sshExe @Arguments 'true' *> $null
+    return $LASTEXITCODE -eq 0
+  } catch {
+    return $false
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+}
+
+$directProbeArgs = @(
+  '-i', $sshKey,
+  '-o', 'BatchMode=yes',
+  '-o', 'ConnectTimeout=8',
+  '-o', 'StrictHostKeyChecking=accept-new',
+  "${vmUser}@${vmHost}"
+)
+$aliasProbeArgs = @(
+  '-o', 'BatchMode=yes',
+  '-o', 'ConnectTimeout=20',
+  $sshAlias
+)
+
+$selectedPath = 'direct-lan'
+$selectedTarget = "${vmUser}@${vmHost}"
 $argumentList = @(
   '-i', $sshKey,
   '-o', 'ExitOnForwardFailure=yes',
@@ -59,8 +89,24 @@ $argumentList = @(
   '-o', 'StrictHostKeyChecking=accept-new',
   '-N',
   '-L', "${LocalPort}:${targetHost}:${targetPort}",
-  "${vmUser}@${vmHost}"
+  $selectedTarget
 )
+
+if (-not (Test-SshTarget -Arguments $directProbeArgs)) {
+  if (-not (Test-SshTarget -Arguments $aliasProbeArgs)) {
+    throw "Neither direct LAN SSH to ${vmUser}@${vmHost} nor SSH alias $sshAlias is reachable from this workstation."
+  }
+  $selectedPath = "alias:$sshAlias"
+  $selectedTarget = $sshAlias
+  $argumentList = @(
+    '-o', 'ExitOnForwardFailure=yes',
+    '-o', 'ServerAliveInterval=30',
+    '-o', 'ServerAliveCountMax=3',
+    '-N',
+    '-L', "${LocalPort}:${targetHost}:${targetPort}",
+    $selectedTarget
+  )
+}
 
 $process = Start-Process -FilePath $sshExe `
   -ArgumentList $argumentList `
@@ -82,6 +128,8 @@ $record = [pscustomobject]@{
   LocalPort = $LocalPort
   ProcessId = $process.Id
   VmHost = $vmHost
+  SshPath = $selectedPath
+  SshTarget = $selectedTarget
   TargetHost = $targetHost
   TargetPort = $targetPort
   DatabaseUrl = "postgresql://postgres:postgres@127.0.0.1:$LocalPort/hris?schema=public"

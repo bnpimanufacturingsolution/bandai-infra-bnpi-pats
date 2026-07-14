@@ -16,6 +16,11 @@ const envPath = path.join(apiRoot, ".env");
 const runtimeEnvPath = path.join(apiRoot, ".env.development.local");
 const projectTruthScript = path.join(repoRoot, "scripts", "project-truth.ps1");
 const k8sDevDbScript = path.join(repoRoot, "scripts", "start-k8s-dev-db-access.ps1");
+const remoteLanForwardScript = path.join(
+	repoRoot,
+	"scripts",
+	"start-project-truth-remote-lan-forward.ps1",
+);
 
 function canConnect(port, host) {
 	return new Promise((resolve) => {
@@ -42,6 +47,31 @@ function runPowerShell(args) {
 	});
 }
 
+function ensureProjectTruthRemoteLanForward() {
+	if (process.platform !== "win32") return;
+	if (process.env.HRIS_SKIP_PROJECT_TRUTH_REMOTE_LAN_FORWARD === "true") {
+		console.log(
+			"[bnpi-db-access] Project Truth remote LAN forward skipped because HRIS_SKIP_PROJECT_TRUTH_REMOTE_LAN_FORWARD=true.",
+		);
+		return;
+	}
+	if (!fs.existsSync(remoteLanForwardScript)) return;
+
+	console.log("[bnpi-db-access] Ensuring Project Truth remote LAN URLs/DB forwards...");
+	const result = runPowerShell([
+		"-NoProfile",
+		"-ExecutionPolicy",
+		"Bypass",
+		"-File",
+		remoteLanForwardScript,
+	]);
+	if (result.status !== 0) {
+		console.warn(
+			"[bnpi-db-access] Project Truth remote LAN forward was not fully established; continuing with DB-specific bootstrap.",
+		);
+	}
+}
+
 async function main() {
 	if (process.env.HRIS_SKIP_BNPI_DB_ACCESS === "true") {
 		console.log("[bnpi-db-access] Skipped because HRIS_SKIP_BNPI_DB_ACCESS=true.");
@@ -63,6 +93,8 @@ async function main() {
 		environment === "dev" &&
 		process.env.PROJECT_TRUTH_DEV_DB_MODE !== "docker-dev-db"
 	) {
+		ensureProjectTruthRemoteLanForward();
+
 		if (!(await canConnect(preferredDevK8sPort, "127.0.0.1"))) {
 			if (!fs.existsSync(k8sDevDbScript)) {
 				throw new Error(`Missing ${path.relative(repoRoot, k8sDevDbScript)}.`);

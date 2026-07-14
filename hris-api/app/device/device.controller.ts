@@ -6403,6 +6403,30 @@ export const controller = (prisma: PrismaClient) => {
 		const sourceRealCredentialSummary = extractHikvisionCredentialSummary(
 			sourceDeviceUser?.rawPayload || {},
 		);
+		const targetRealCredentialSummary = extractHikvisionCredentialSummary(
+			targetDeviceUser?.rawPayload || {},
+		);
+		if (
+			params.includeFingerprints &&
+			sourceRealCredentialSummary.fingerprintCount > targetRealCredentialSummary.fingerprintCount
+		) {
+			throw new Error(
+				`SDK copy returned, but refreshed target truth still shows ${hikvisionDeviceLabel(
+					params.targetDevice,
+				)} fingerprint count ${targetRealCredentialSummary.fingerprintCount} while ${hikvisionDeviceLabel(
+					params.sourceDevice,
+				)} has ${sourceRealCredentialSummary.fingerprintCount} for employee ${employeeNo}. Treat this as not copied yet and retry after the target device reports the template.`,
+			);
+		}
+		if (sourceRealCredentialSummary.cardCount > targetRealCredentialSummary.cardCount) {
+			throw new Error(
+				`SDK copy returned, but refreshed target truth still shows ${hikvisionDeviceLabel(
+					params.targetDevice,
+				)} card count ${targetRealCredentialSummary.cardCount} while ${hikvisionDeviceLabel(
+					params.sourceDevice,
+				)} has ${sourceRealCredentialSummary.cardCount} for employee ${employeeNo}. Treat this as not copied yet and retry after the target device reports the card.`,
+			);
+		}
 		const fingerprintSkippedNoTemplates = copyResult.events.some(
 			(event) =>
 				event?.event === "peer_fingerprint_write_skipped" &&

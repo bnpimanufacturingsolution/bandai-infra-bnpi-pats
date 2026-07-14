@@ -71,6 +71,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("HIKVISION_DEVICE_USER_COPY");
 		expect(controller).to.include("sourceDeviceId, targetDeviceId, and employeeNo are required");
 		expect(controller).to.include("syntheticCredentialOverlayApplied");
+		expect(controller).to.include("refreshed target truth still shows");
+		expect(controller).to.include("Treat this as not copied yet");
 		expect(controller).to.include("await mirrorDeviceUserLinkToPeer({");
 		expect(wrapper).to.include("--run-once");
 		expect(wrapper).to.include("HIKVISION_DEVICE_ID_FILTER");
