@@ -4093,6 +4093,34 @@ export const controller = (prisma: PrismaClient) => {
 				device,
 				startedByUserId: (req as any).userId || null,
 			});
+			const syncedDeviceUsers = await prisma.deviceUser.findMany({
+				where: {
+					organizationId: gate.organizationId,
+					deviceId: device.id,
+				},
+				orderBy: { vendorUserId: "asc" },
+				select: {
+					id: true,
+					vendorUserId: true,
+					employeeId: true,
+					employeeNo: true,
+					rawPayload: true,
+					lastSyncedAt: true,
+				},
+			});
+			const lifecycleBackfill = await persistDeviceUserLifecycleBackfill({
+				organizationId: gate.organizationId,
+				sourceDevice: {
+					id: device.id,
+					name: device.name,
+					address: device.address,
+				},
+				deviceUsers: syncedDeviceUsers,
+				source: "EN_HCNETSDK_ALARM",
+				reason: "sync_device_users_route",
+				execute: true,
+				minor: "SYNC_ROUTE_BACKFILL",
+			});
 			await invalidateCache.byPattern("cache:device:*").catch(() => undefined);
 			res.status(200).json(
 				buildSuccessResponse(
@@ -4100,6 +4128,7 @@ export const controller = (prisma: PrismaClient) => {
 					{
 						run: updatedRun,
 						summary,
+						lifecycleBackfill,
 					},
 					200,
 				),

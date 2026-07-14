@@ -136,21 +136,6 @@ export const classifyDeviceEvent = (event: {
 		});
 	}
 
-	if (
-		eventKind === "biometric_operation_sync" ||
-		actionCode.startsWith("OBSERVED_OPERATION_MINOR_") ||
-		(source === "EN_HCNETSDK_ALARM" && String(event.major ?? "").trim() === "3")
-	) {
-		return withCompatibilityConfidence({
-			eventCategory: "USER_MANAGEMENT",
-			eventAction: "SYNC_SIGNAL",
-			eventLabel: "Device user or biometric operation",
-			eventConfidence: "INFERRED",
-			processingLabel,
-			transportLabel,
-		});
-	}
-
 	if (actionCode === "MINOR_ADD_FINGER_BY_CARD" || actionCode === "MINOR_ADD_FINGER_BY_EMPLOYEE_NO") {
 		return withCompatibilityConfidence({
 			eventCategory: "ENROLLMENT",
@@ -231,7 +216,8 @@ export const classifyDeviceEvent = (event: {
 			eventCategory: "USER_MANAGEMENT",
 			eventAction: "USER_CREATED",
 			eventLabel: "Device user created",
-			eventConfidence: "SUPPORTED",
+			eventConfidence:
+				eventKind === "poll_inventory_user_created" ? "INFERRED" : "SUPPORTED",
 			processingLabel,
 			transportLabel,
 		});
@@ -254,6 +240,21 @@ export const classifyDeviceEvent = (event: {
 			eventAction: "USER_DELETED",
 			eventLabel: "Device user deleted",
 			eventConfidence: "SUPPORTED",
+			processingLabel,
+			transportLabel,
+		});
+	}
+
+	if (
+		eventKind === "biometric_operation_sync" ||
+		actionCode.startsWith("OBSERVED_OPERATION_MINOR_") ||
+		(source === "EN_HCNETSDK_ALARM" && String(event.major ?? "").trim() === "3")
+	) {
+		return withCompatibilityConfidence({
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "SYNC_SIGNAL",
+			eventLabel: "Device user or biometric operation",
+			eventConfidence: "INFERRED",
 			processingLabel,
 			transportLabel,
 		});

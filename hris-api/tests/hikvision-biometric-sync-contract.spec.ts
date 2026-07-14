@@ -130,6 +130,12 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("refreshBiometricBundle");
 		expect(controller).to.include("backfillDeviceUserBiometricMetadata");
 		expect(controller).to.include("hikvision_sdk_biometric_metadata_backfill");
+		expect(controller).to.include('modality?: "fingerprint" | "face" | "combined"');
+		expect(controller).to.include("encryptedFingerprintTemplate");
+		expect(controller).to.include("encryptedFaceTemplate");
+		expect(controller).to.include("fingerprintTemplateKeySource");
+		expect(controller).to.include("faceTemplateKeySource");
+		expect(controller).to.include("parseImportedEncryptedBiometricTemplates");
 		expect(router).to.include(
 			'/:id/users/biometric-metadata/backfill", controller.backfillDeviceUserBiometricMetadata',
 		);
@@ -218,6 +224,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include("NET_DVR_SetDVRMessageCallBack_V51(0, alarm_callback, nullptr)");
 		expect(service).to.include("NET_DVR_SetupAlarmChan_V50");
 		expect(service).to.include("queue_hris_device_event(job)");
+		expect(service).to.include("observed_employee_numbers_by_host");
+		expect(service).to.include('lifecycle_job.event_kind = "poll_inventory_user_created"');
+		expect(service).to.include("lifecycle_job.sdk_time = now_utc()");
+		expect(service).to.include("queue_hris_device_event(lifecycle_job)");
+		expect(service).to.include('"poll_user_created_detected"');
 		expect(service).to.include('"/api/hikvision/callback"');
 		expect(service).to.include("EN_HCNETSDK_ALARM");
 		expect(service).to.include("queue_reconcile(job)");
@@ -320,6 +331,11 @@ describe("Hikvision biometric sync contract", () => {
 
 		expect(controller).to.include("const syncHikvisionDeviceUsersFromSource = async");
 		expect(controller).to.include("await syncHikvisionDeviceUsersFromSource({");
+		expect(controller).to.include("const syncedDeviceUsers = await prisma.deviceUser.findMany({");
+		expect(controller).to.include("const lifecycleBackfill = await persistDeviceUserLifecycleBackfill({");
+		expect(controller).to.include('reason: "sync_device_users_route"');
+		expect(controller).to.include('minor: "SYNC_ROUTE_BACKFILL"');
+		expect(controller).to.include("lifecycleBackfill,");
 		expect(controller).to.include("Post-create Hikvision device users synced");
 		expect(controller).to.include("startedByUserId: (req as any).userId || null");
 		expect(controller).to.include("isHikvisionDevice(device)");

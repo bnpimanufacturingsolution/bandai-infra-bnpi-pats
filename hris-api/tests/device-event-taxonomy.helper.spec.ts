@@ -162,6 +162,44 @@ describe("Device event taxonomy helper", () => {
 		});
 	});
 
+	it("classifies direct and inventory-detected user creates before the generic operation signal", () => {
+		expect(
+			classifyDeviceEvent({
+				source: "EN_HCNETSDK_ALARM",
+				status: "IGNORED",
+				major: "3",
+				payload: {
+					eventKind: "biometric_user_management",
+					actionCode: "MINOR_ADD_USER_INFO",
+				},
+			}),
+		).to.deep.include({
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_CREATED",
+			eventLabel: "Device user created",
+			eventConfidence: "SUPPORTED",
+			capabilityConfidence: "supported",
+		});
+
+		expect(
+			classifyDeviceEvent({
+				source: "EN_HCNETSDK_ALARM",
+				status: "IGNORED",
+				major: "3",
+				payload: {
+					eventKind: "poll_inventory_user_created",
+					actionCode: "MINOR_ADD_USER_INFO",
+				},
+			}),
+		).to.deep.include({
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_CREATED",
+			eventLabel: "Device user created",
+			eventConfidence: "INFERRED",
+			capabilityConfidence: "inferred",
+		});
+	});
+
 	it("returns only persisted fields from the write-time taxonomy helper", () => {
 		const persisted = buildPersistedDeviceEventTaxonomy({
 			source: "ZKTECO_EVENT",

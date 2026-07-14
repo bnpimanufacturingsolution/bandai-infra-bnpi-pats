@@ -91,6 +91,7 @@ std::map<std::string, std::chrono::steady_clock::time_point> recent_peer_apply_b
 std::map<std::string, unsigned long long> delayed_reconcile_by_host;
 std::map<std::string, std::chrono::steady_clock::time_point> recent_employee_candidates;
 std::map<std::string, std::chrono::steady_clock::time_point> recent_poll_reconcile_by_key;
+std::map<std::string, std::set<std::string>> observed_employee_numbers_by_host;
 std::set<std::string> pending_full_mirror_hosts;
 std::atomic<unsigned long long> delayed_reconcile_token{0};
 bool execute_mode = true;
@@ -2760,6 +2761,43 @@ void polling_loop() {
             const std::vector<std::string> source_employee_numbers = read_device_employee_numbers(source);
             if (source_employee_numbers.empty()) {
                 continue;
+            }
+
+            const std::set<std::string> current_employee_numbers(
+                source_employee_numbers.begin(), source_employee_numbers.end());
+            auto observed = observed_employee_numbers_by_host.find(source.config.host);
+            if (observed == observed_employee_numbers_by_host.end()) {
+                observed_employee_numbers_by_host[source.config.host] = current_employee_numbers;
+                emit_json({
+                    {"event", "poll_user_inventory_baseline"},
+                    {"sourceDeviceId", source.config.hris_device_id},
+                    {"sourceHost", source.config.host},
+                    {"employeeCount", std::to_string(current_employee_numbers.size())}
+                });
+            } else {
+                for (const auto &employee_no : current_employee_numbers) {
+                    if (observed->second.find(employee_no) != observed->second.end()) {
+                        continue;
+                    }
+
+                    ReconcileJob lifecycle_job;
+                    lifecycle_job.source_host = source.config.host;
+                    lifecycle_job.source_device_id = source.config.hris_device_id;
+                    lifecycle_job.employee_no = employee_no;
+                    lifecycle_job.major = MAJOR_OPERATION;
+                    lifecycle_job.minor = MINOR_ADD_USER_INFO;
+                    lifecycle_job.event_kind = "poll_inventory_user_created";
+                    lifecycle_job.sdk_time = now_utc();
+                    queue_hris_device_event(lifecycle_job);
+                    observed->second.insert(employee_no);
+                    emit_json({
+                        {"event", "poll_user_created_detected"},
+                        {"sourceDeviceId", source.config.hris_device_id},
+                        {"sourceHost", source.config.host},
+                        {"employeeNo", employee_no},
+                        {"observedAt", lifecycle_job.sdk_time}
+                    });
+                }
             }
 
             for (auto &target : sessions) {
