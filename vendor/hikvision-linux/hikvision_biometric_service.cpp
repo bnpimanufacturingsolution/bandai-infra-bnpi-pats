@@ -85,6 +85,7 @@ std::mutex peer_apply_guard_mutex;
 std::mutex delayed_reconcile_guard_mutex;
 std::mutex full_mirror_guard_mutex;
 std::mutex reconcile_spool_mutex;
+std::mutex callback_spool_mutex;
 std::mutex recent_employee_candidate_mutex;
 std::mutex poll_reconcile_guard_mutex;
 std::map<std::string, std::chrono::steady_clock::time_point> recent_peer_apply_by_host;
@@ -99,6 +100,7 @@ std::string hris_api_base;
 std::string hris_api_token;
 std::string min_sdk_time;
 std::string reconcile_spool_dir = "/tmp/project-truth-hikvision-reconcile-spool";
+std::string callback_spool_dir = "/tmp/project-truth-hikvision-callback-spool";
 constexpr auto recent_employee_candidate_ttl = std::chrono::seconds(45);
 constexpr auto poll_reconcile_min_interval = std::chrono::seconds(3);
 constexpr auto inventory_poll_interval = std::chrono::seconds(2);
@@ -2375,6 +2377,18 @@ bool ensure_reconcile_spool_dir() {
     return false;
 }
 
+bool ensure_callback_spool_dir() {
+    if (::mkdir(callback_spool_dir.c_str(), 0755) == 0 || errno == EEXIST) {
+        return true;
+    }
+    emit_json({
+        {"event", "hikvision_callback_spool_dir_failed"},
+        {"path", callback_spool_dir},
+        {"errno", std::to_string(errno)}
+    });
+    return false;
+}
+
 std::string build_reconcile_spool_path(const ReconcileJob &job, const std::string &status) {
     std::ostringstream path;
     path << reconcile_spool_dir
@@ -2397,6 +2411,19 @@ std::string build_reconcile_spool_path_from_key(const std::string &spool_key) {
          << unix_time_ms()
          << "_"
          << sanitize_filename_token(spool_key)
+         << ".json";
+    return path.str();
+}
+
+std::string build_callback_spool_path(const ReconcileJob &job) {
+    std::ostringstream path;
+    path << callback_spool_dir
+         << "/"
+         << unix_time_ms()
+         << "_"
+         << sanitize_filename_token(job.source_device_id)
+         << "_"
+         << sanitize_filename_token(job.serial_no)
          << ".json";
     return path.str();
 }
@@ -2434,6 +2461,25 @@ std::vector<std::string> list_reconcile_spool_files() {
             continue;
         }
         paths.push_back(reconcile_spool_dir + "/" + name);
+    }
+    closedir(dir);
+    std::sort(paths.begin(), paths.end());
+    return paths;
+}
+
+std::vector<std::string> list_callback_spool_files() {
+    std::vector<std::string> paths;
+    DIR *dir = opendir(callback_spool_dir.c_str());
+    if (dir == nullptr) {
+        return paths;
+    }
+    struct dirent *entry = nullptr;
+    while ((entry = readdir(dir)) != nullptr) {
+        const std::string name = entry->d_name;
+        if (name.size() < 5 || name.substr(name.size() - 5) != ".json") {
+            continue;
+        }
+        paths.push_back(callback_spool_dir + "/" + name);
     }
     closedir(dir);
     std::sort(paths.begin(), paths.end());
@@ -2493,6 +2539,42 @@ void replay_pending_hris_contract_posts() {
         });
         if (ok) {
             std::remove(path.c_str());
+        }
+    }
+}
+
+void replay_pending_hikvision_callbacks() {
+    if (!execute_mode || hris_api_base.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(callback_spool_mutex);
+    if (!ensure_callback_spool_dir()) {
+        return;
+    }
+    const std::string url = hris_api_base + "/api/hikvision/callback";
+    for (const auto &path : list_callback_spool_files()) {
+        std::string body;
+        if (!read_text_file(path, &body)) {
+            emit_json({{"event", "hikvision_callback_spool_read_failed"}, {"path", path}});
+            continue;
+        }
+        const bool ok = post_json_with_retries(url, body, "hikvision_callback_spool_replay", 3, 1500);
+        emit_json({
+            {"event", "hikvision_callback_spool_replay_result"},
+            {"path", path},
+            {"ok", ok ? "true" : "false"}
+        });
+        if (ok) {
+            std::remove(path.c_str());
+        }
+    }
+}
+
+void callback_spool_replay_loop() {
+    while (keep_running) {
+        replay_pending_hikvision_callbacks();
+        for (int i = 0; i < inventory_poll_interval.count() * 10 && keep_running; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
     }
 }
@@ -2628,8 +2710,22 @@ bool post_hikvision_callback(const ReconcileJob &job) {
         return true;
     }
 
+    std::lock_guard<std::mutex> lock(callback_spool_mutex);
+    std::string spool_path;
+    if (ensure_callback_spool_dir()) {
+        spool_path = build_callback_spool_path(job);
+        const std::string temporary_path = spool_path + ".tmp";
+        if (!write_text_file(temporary_path, body) || std::rename(temporary_path.c_str(), spool_path.c_str()) != 0) {
+            std::remove(temporary_path.c_str());
+            emit_json({{"event", "hikvision_callback_spool_write_failed"}, {"path", spool_path}});
+            spool_path.clear();
+        } else {
+            emit_json({{"event", "hikvision_callback_spool_written"}, {"path", spool_path}});
+        }
+    }
+
     const std::string url = hris_api_base + "/api/hikvision/callback";
-    const bool ok = curl_post_json(url, body, "hikvision_callback_post");
+    const bool ok = post_json_with_retries(url, body, "hikvision_callback_post", 3, 1500);
     emit_json({
         {"event", "hikvision_callback_post_result"},
         {"sourceDeviceId", job.source_device_id},
@@ -2638,6 +2734,10 @@ bool post_hikvision_callback(const ReconcileJob &job) {
         {"serialNo", job.serial_no},
         {"ok", ok ? "true" : "false"}
     });
+    if (ok && !spool_path.empty()) {
+        std::remove(spool_path.c_str());
+        emit_json({{"event", "hikvision_callback_spool_cleared"}, {"path", spool_path}});
+    }
     return ok;
 }
 
@@ -3370,6 +3470,7 @@ int main(int argc, char **argv) {
 
     if (replay_spool_only) {
         replay_pending_hris_contract_posts();
+        replay_pending_hikvision_callbacks();
         return 0;
     }
 
@@ -3440,6 +3541,7 @@ int main(int argc, char **argv) {
     emit_json({{"event", "sdk_callback_register"}, {"ok", "true"}});
     if (std::getenv("HIKVISION_SKIP_SPOOL_REPLAY") == nullptr) {
         replay_pending_hris_contract_posts();
+        replay_pending_hikvision_callbacks();
     }
 
     for (const auto &config : configs) {
@@ -3528,6 +3630,7 @@ int main(int argc, char **argv) {
 
     std::thread worker(worker_loop);
     std::thread poller(polling_loop);
+    std::thread callback_spool_replayer(callback_spool_replay_loop);
     if (manual_fingerprint_clone_mode) {
         DeviceSession *manual_source = nullptr;
         DeviceSession *manual_target = nullptr;
@@ -3704,6 +3807,9 @@ int main(int argc, char **argv) {
     }
     if (poller.joinable()) {
         poller.join();
+    }
+    if (callback_spool_replayer.joinable()) {
+        callback_spool_replayer.join();
     }
     close_sessions();
     NET_DVR_Cleanup();

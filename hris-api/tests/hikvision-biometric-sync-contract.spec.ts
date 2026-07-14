@@ -244,6 +244,12 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include('std::getenv("HIKVISION_HRIS_API_TOKEN")');
 		expect(service).to.include("hris_contract_spool_written");
 		expect(service).to.include("replay_pending_hris_contract_posts();");
+		expect(service).to.include('std::string callback_spool_dir = "/tmp/project-truth-hikvision-callback-spool";');
+		expect(service).to.include("hikvision_callback_spool_written");
+		expect(service).to.include("post_json_with_retries(url, body, \"hikvision_callback_post\", 3, 1500)");
+		expect(service).to.include("replay_pending_hikvision_callbacks();");
+		expect(service).to.include("callback_spool_replay_loop");
+		expect(service).to.include("std::thread callback_spool_replayer(callback_spool_replay_loop)");
 		expect(service).to.include('arg == "--dry-run"');
 		expect(service).to.include('arg == "--device-file"');
 		expect(service).to.include("std::ifstream device_file");
