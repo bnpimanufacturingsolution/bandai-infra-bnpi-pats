@@ -1077,27 +1077,37 @@ export default function DeviceEventsPage() {
 		viewMode === "saved" && latestSdkEventData?.events?.[0]
 			? normalizeSavedEvent(latestSdkEventData.events[0])
 			: undefined;
-	const latestSdkEvidenceEvent = latestSdkSavedEvent || latestSdkProbeEvent;
+	const getEventEvidenceTime = (event?: UnifiedDeviceEventRow) => {
+		const rawTime = event?.receivedAt || event?.eventTime;
+		const parsed = rawTime ? new Date(rawTime).getTime() : Number.NaN;
+		return Number.isNaN(parsed) ? 0 : parsed;
+	};
+	const latestSdkEvidenceEvent =
+		getEventEvidenceTime(latestSdkProbeEvent) > getEventEvidenceTime(latestSdkSavedEvent)
+			? latestSdkProbeEvent
+			: latestSdkSavedEvent || latestSdkProbeEvent;
 	const latestSavedReceivedAt = latestSavedEvent?.receivedAt
 		? new Date(latestSavedEvent.receivedAt)
 		: null;
-	const latestSdkSavedReceivedAt = latestSdkSavedEvent?.receivedAt
-		? new Date(latestSdkSavedEvent.receivedAt)
+	const latestSdkEvidenceReceivedAt = latestSdkEvidenceEvent?.receivedAt
+		? new Date(latestSdkEvidenceEvent.receivedAt)
+		: latestSdkEvidenceEvent?.eventTime
+			? new Date(latestSdkEvidenceEvent.eventTime)
 		: null;
 	const latestSavedAgeMs =
 		latestSavedReceivedAt && !Number.isNaN(latestSavedReceivedAt.getTime())
 			? Date.now() - latestSavedReceivedAt.getTime()
 			: null;
-	const latestSdkSavedAgeMs =
-		latestSdkSavedReceivedAt && !Number.isNaN(latestSdkSavedReceivedAt.getTime())
-			? Date.now() - latestSdkSavedReceivedAt.getTime()
+	const latestSdkEvidenceAgeMs =
+		latestSdkEvidenceReceivedAt && !Number.isNaN(latestSdkEvidenceReceivedAt.getTime())
+			? Date.now() - latestSdkEvidenceReceivedAt.getTime()
 			: null;
 	const isLatestSavedFresh =
 		latestSavedAgeMs !== null && latestSavedAgeMs >= 0 && latestSavedAgeMs <= 2 * 60 * 1000;
 	const isLatestSdkSavedFresh =
-		latestSdkSavedAgeMs !== null &&
-		latestSdkSavedAgeMs >= 0 &&
-		latestSdkSavedAgeMs <= 2 * 60 * 1000;
+		latestSdkEvidenceAgeMs !== null &&
+		latestSdkEvidenceAgeMs >= -60 * 1000 &&
+		latestSdkEvidenceAgeMs <= 2 * 60 * 1000;
 	const latestRealtimeEventId = lastRealtimeEvent?.eventId || null;
 	const highlightedSavedEventId = getHighlightedSavedDeviceEventId({
 		latestSavedEventId: latestSavedEvent?.id,
@@ -1112,6 +1122,19 @@ export default function DeviceEventsPage() {
 				eventTime: latestSavedEvent.eventTime,
 			})
 		: null;
+	const latestSdkActionLabel = latestSdkEvidenceEvent?.eventAction
+		? getOptionLabel(eventActionOptions, latestSdkEvidenceEvent.eventAction)
+		: null;
+	const latestSdkCategoryLabel = latestSdkEvidenceEvent?.eventCategory
+		? getOptionLabel(eventCategoryOptions, latestSdkEvidenceEvent.eventCategory)
+		: null;
+	const latestSdkEvidenceLabel = latestSdkActionLabel || "SDK event";
+	const latestSdkEvidenceIsOperationSignal =
+		latestSdkEvidenceEvent?.eventAction === "SYNC_SIGNAL" ||
+		latestSdkEvidenceEvent?.eventAction === "SYNC_IMPORTED";
+	const latestSdkEvidenceFreshLabel = latestSdkEvidenceIsOperationSignal
+		? "SDK operation signal captured"
+		: `${latestSdkEvidenceLabel} saved`;
 	const syncBridge =
 		(syncPreview?.bridge as ZktecoBridgePreflight | undefined) ||
 		(syncDeviceHealth?.checks?.zktecoBridge as ZktecoBridgePreflight | undefined);
@@ -1528,7 +1551,7 @@ export default function DeviceEventsPage() {
 	const realtimeStatusDetail = lastRealtimeEvent
 		? `Last saved-row socket event ${formatEventTime(lastRealtimeEvent.emittedAt)}`
 		: isSdkAlarmSavedScope && latestSdkEvidenceEvent
-			? `Last SDK alarm row ${formatEventTime(latestSdkEvidenceEvent.receivedAt || latestSdkEvidenceEvent.eventTime)}`
+			? `Last SDK alarm row: ${latestSdkEvidenceLabel} at ${formatEventTime(latestSdkEvidenceEvent.receivedAt || latestSdkEvidenceEvent.eventTime)}`
 			: isSdkAlarmSavedScope
 				? "No recent SDK alarm rows in this saved-events scope"
 			: latestSavedEvent
@@ -1547,9 +1570,9 @@ export default function DeviceEventsPage() {
 				: "secondary";
 	const savedRowsBadgeLabel = isSdkAlarmSavedScope
 		? isLatestSdkSavedFresh
-			? "Recent SDK tap saved"
+			? latestSdkEvidenceFreshLabel
 			: isConnected
-				? "Browser connected; no recent SDK tap"
+				? "Browser connected; no recent SDK event"
 				: "Browser offline; SDK evidence unknown"
 		: isConnected
 			? "Browser updates connected"
@@ -1646,7 +1669,7 @@ export default function DeviceEventsPage() {
 		? isLoadingHikvisionListenerStatus
 			? "Checking VM listener"
 			: isLatestSdkSavedFresh
-				? "SDK tap evidence recent"
+				? "SDK event evidence recent"
 				: hikvisionSdkReceiving
 					? "SDK listener receiving taps"
 					: hikvisionListenerRunning
@@ -1659,12 +1682,12 @@ export default function DeviceEventsPage() {
 		? isLoadingHikvisionListenerStatus
 			? "Checking listener status"
 			: isLatestSdkSavedFresh
-				? "SDK tap row saved recently"
-				: hikvisionSdkReceiving
-					? "SDK callbacks are reaching HRIS"
-					: hikvisionListenerRunning
-					? "VM service is running; waiting for SDK tap proof"
-					: "Waiting for SDK listener"
+				? `${latestSdkEvidenceLabel} saved recently`
+			: hikvisionSdkReceiving
+				? "SDK callbacks are reaching HRIS"
+			: hikvisionListenerRunning
+				? "VM service is running; waiting for SDK event proof"
+				: "Waiting for SDK listener"
 		: realtimeStatus.rowUpdateLabel;
 	const activeSavedFilterLabels = [
 		deviceId !== "all" ? getOptionLabel(deviceOptions, deviceId) : null,
@@ -1676,12 +1699,6 @@ export default function DeviceEventsPage() {
 		query ? `Search: ${query}` : null,
 	].filter(Boolean) as string[];
 	const hasScopedSavedFilters = viewMode === "saved" && activeSavedFilterLabels.length > 0;
-	const latestSdkActionLabel = latestSdkEvidenceEvent?.eventAction
-		? getOptionLabel(eventActionOptions, latestSdkEvidenceEvent.eventAction)
-		: null;
-	const latestSdkCategoryLabel = latestSdkEvidenceEvent?.eventCategory
-		? getOptionLabel(eventCategoryOptions, latestSdkEvidenceEvent.eventCategory)
-		: null;
 	const socketTruthLabel = isConnected
 		? "Socket connected"
 		: shouldPollSavedEvents
@@ -1696,6 +1713,8 @@ export default function DeviceEventsPage() {
 	const savedEmptyDescription =
 		viewMode === "live"
 			? ""
+			: eventAction === "FINGERPRINT_ENROLLED" && latestSdkEvidenceIsOperationSignal
+				? `No fingerprint-enrolled row matches this filter yet, but the latest SDK row is ${latestSdkEvidenceLabel} at ${formatEventTime(latestSdkEvidenceEvent?.receivedAt || latestSdkEvidenceEvent?.eventTime)}. Open it, then run/review device-user reconciliation for the same device.`
 			: hasScopedSavedFilters
 				? `The saved-events endpoint returned 0 rows for ${activeSavedFilterLabels.join(" / ")}.`
 				: "No HRIS device-event rows are saved for the current scope.";
@@ -2591,12 +2610,12 @@ export default function DeviceEventsPage() {
 										{focusedHikvisionStatus || hikvisionListenerDeviceSummary}
 									</p>
 									<p className="mt-2 text-xs text-slate-600">
-										Tap proof:{" "}
+										SDK event proof:{" "}
 										<span className="font-semibold">
 											{isLatestSdkSavedFresh
-												? `fresh row at ${formatEventTime(latestSdkSavedEvent?.receivedAt || latestSdkSavedEvent?.eventTime)}`
-												: latestSdkSavedEvent
-													? `last row at ${formatEventTime(latestSdkSavedEvent.receivedAt || latestSdkSavedEvent.eventTime)}`
+												? `${latestSdkEvidenceLabel} at ${formatEventTime(latestSdkEvidenceEvent?.receivedAt || latestSdkEvidenceEvent?.eventTime)}`
+												: latestSdkEvidenceEvent
+													? `${latestSdkEvidenceLabel} at ${formatEventTime(latestSdkEvidenceEvent.receivedAt || latestSdkEvidenceEvent.eventTime)}`
 													: "no SDK rows in the current scope"}
 										</span>
 									</p>
@@ -2606,10 +2625,10 @@ export default function DeviceEventsPage() {
 								variant={isLatestSdkSavedFresh || hikvisionSdkReceiving ? "success-soft" : "warning-soft"}
 								className="w-fit rounded-md px-2 py-1">
 								{isLatestSdkSavedFresh
-									? "SDK tap saved recently"
+									? latestSdkEvidenceFreshLabel
 									: hikvisionSdkReceiving
 										? "SDK callback received"
-										: "No recent SDK tap saved"}
+										: "No recent SDK event saved"}
 							</Badge>
 						</div>
 					</div>

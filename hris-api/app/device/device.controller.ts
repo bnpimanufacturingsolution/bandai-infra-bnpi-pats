@@ -396,6 +396,8 @@ const runFixedProcess = (
 		);
 	});
 
+const quoteRemoteShellArg = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
+
 type HikvisionListenerVmTarget = {
 	mode: "local" | "ssh";
 	host: string;
@@ -474,7 +476,7 @@ const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) =
 		}
 		const result = await runFixedProcess(
 			process.env.PROJECT_TRUTH_SSH_BIN || "ssh",
-			[...sshArgs, target.destination, ...remoteArgs],
+			[...sshArgs, target.destination, remoteArgs.map(quoteRemoteShellArg).join(" ")],
 			{ timeoutMs },
 		);
 		return { ...result, target };
@@ -1272,6 +1274,205 @@ export const controller = (prisma: PrismaClient) => {
 			} catch {}
 		}
 		return null;
+	};
+
+	const parseCachedDeviceUserBiometricTemplate = (row: any) => {
+		const candidates = [
+			row?.rawPayload?._hrisDeviceMetadata?.biometricExport?.encryptedBiometricTemplate,
+			row?.vendorMetadata?.biometricBundle?.encryptedBiometricTemplate,
+			row?.vendorMetadata?.biometricBundle?.fingerprintRawTemplateBlob,
+			row?.vendorMetadata?.biometricBundle?.faceRawTemplateBlob,
+		];
+		for (const candidate of candidates) {
+			const parsed =
+				typeof candidate === "string"
+					? (() => {
+							try {
+								return JSON.parse(candidate);
+							} catch {
+								return null;
+							}
+						})()
+					: candidate;
+			if (parsed?.ciphertext && parsed?.algorithm === DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM) {
+				return parsed;
+			}
+		}
+		return null;
+	};
+
+	const buildDeviceUserBiometricMetadata = (biometricExport: any, source = "hikvision_sdk_live_read") => {
+		const encryptedValue = JSON.stringify(biometricExport.encrypted);
+		return {
+			encryptedValue,
+			rawPayloadMetadata: {
+				encryptedBiometricTemplate: biometricExport.encrypted,
+				encryptedBiometricTemplateCiphertext: biometricExport.encrypted.ciphertext,
+				encryptedBiometricTemplateSha256: biometricExport.encrypted.plaintextSha256,
+				encryptedBiometricTemplateKeySource: biometricExport.encrypted.keySource,
+				fingerprintTemplateCount: biometricExport.fingerprintCount,
+				faceTemplateSize: biometricExport.faceTemplateSize,
+				facePictureSize: biometricExport.facePictureSize,
+				cardNo: biometricExport.cardNo,
+				source,
+				capturedAt: new Date().toISOString(),
+			},
+			vendorMetadata: {
+				present: true,
+				algorithm: DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM,
+				fingerprintRawTemplateBlob: encryptedValue,
+				faceRawTemplateBlob: encryptedValue,
+				encryptedBiometricTemplate: biometricExport.encrypted,
+				encryptedBiometricTemplateCiphertext: biometricExport.encrypted.ciphertext,
+				encryptedBiometricTemplateSha256: biometricExport.encrypted.plaintextSha256,
+				keySource: biometricExport.encrypted.keySource,
+				source,
+				capturedAt: new Date().toISOString(),
+			},
+		};
+	};
+
+	const applyDeviceUserBiometricMetadataToRow = (row: any, metadata: any) => {
+		row.rawPayload = {
+			...(row.rawPayload || {}),
+			_hrisDeviceMetadata: {
+				...(row.rawPayload?._hrisDeviceMetadata || {}),
+				biometricExport: metadata.rawPayloadMetadata,
+			},
+		};
+		row.vendorMetadata = {
+			...(row.vendorMetadata || {}),
+			biometricBundle: {
+				...(row.vendorMetadata?.biometricBundle || {}),
+				...metadata.vendorMetadata,
+			},
+		};
+	};
+
+	const persistDeviceUserBiometricMetadata = async (params: {
+		organizationId: string;
+		deviceId: string;
+		vendorUserId: string;
+		row: any;
+	}) => {
+		if (!(await hasDeviceUserVendorMetadataColumn())) return null;
+		return (prisma as any).deviceUser.update({
+			where: {
+				organizationId_deviceId_vendorUserId: {
+					organizationId: params.organizationId,
+					deviceId: params.deviceId,
+					vendorUserId: params.vendorUserId,
+				},
+			},
+			data: {
+				rawPayload: params.row.rawPayload || {},
+				vendorMetadata: params.row.vendorMetadata || {},
+				lastSyncedAt: new Date(),
+			},
+			select: { id: true, vendorUserId: true, updatedAt: true },
+		});
+	};
+
+	const summarizeDeviceUserBiometricEvents = async (params: {
+		organizationId: string;
+		deviceId: string;
+		deviceUserId?: string | null;
+		employeeNo?: string | null;
+	}) => {
+		const eventWhere: any = {
+			organizationId: params.organizationId,
+			deviceId: params.deviceId,
+			eventAction: {
+				in: [
+					"USER_CREATED",
+					"USER_UPDATED",
+					"FINGERPRINT_ENROLLED",
+					"FINGERPRINT_UPDATED",
+					"FINGERPRINT_DELETED",
+				],
+			},
+		};
+		if (params.deviceUserId) {
+			eventWhere.deviceUserId = params.deviceUserId;
+		} else if (params.employeeNo) {
+			eventWhere.employeeNo = params.employeeNo;
+		} else {
+			return [];
+		}
+		const events = await (prisma as any).deviceEvent.findMany({
+			where: eventWhere,
+			select: {
+				id: true,
+				eventTime: true,
+				eventAction: true,
+				eventCategory: true,
+				eventConfidence: true,
+				source: true,
+			},
+			orderBy: [{ eventTime: "desc" }],
+			take: 10,
+		});
+		return events.map((event: any) => ({
+			id: event.id,
+			eventTime: event.eventTime,
+			eventAction: event.eventAction,
+			eventCategory: event.eventCategory,
+			eventConfidence: event.eventConfidence,
+			source: event.source,
+		}));
+	};
+
+	const writeDecryptedBiometricBundleToHikvisionDevice = async (params: {
+		req: Request;
+		targetDevice: any;
+		employeeNo: string;
+		decrypted: any;
+	}) => {
+		const fingerprints = Array.isArray(params.decrypted?.fingerprints)
+			? params.decrypted.fingerprints
+			: [];
+		const results = [];
+		for (const fingerprint of fingerprints) {
+			const fingerData = String(fingerprint?.data || "").trim();
+			if (!fingerData) continue;
+			const response = await hikvisionFetch(
+				"/ISAPI/AccessControl/FingerPrintDownload?format=json",
+				{
+					method: "POST",
+					deviceId: params.targetDevice.id,
+					prisma,
+					request: params.req,
+					timeoutMs: 15000,
+					headers: { "Content-Type": "application/json" },
+					body: {
+						FingerPrintCfg: {
+							employeeNo: params.employeeNo,
+							cardReaderNo: 1,
+							fingerPrintID: Number(fingerprint.fingerPrintId || 1),
+							fingerType: Number(fingerprint.fingerType || 0),
+							enableCardReader: [1],
+							fingerData,
+						},
+					},
+				},
+			);
+			results.push({
+				fingerPrintId: Number(fingerprint.fingerPrintId || 1),
+				fingerType: Number(fingerprint.fingerType || 0),
+				responseStatus:
+					response?.ResponseStatus?.statusString ||
+					response?.statusString ||
+					response?.raw ||
+					"accepted",
+			});
+		}
+		return {
+			fingerprintWrites: results,
+			fingerprintWriteCount: results.length,
+			faceWrite: params.decrypted?.faceTemplate
+				? "not_implemented_for_encrypted_bundle"
+				: "not_present",
+		};
 	};
 
 	const buildHikvisionBiometricExportSpec = (device: any) => {
@@ -4209,9 +4410,28 @@ export const controller = (prisma: PrismaClient) => {
 	const BIOMETRIC_TEMPLATE_KEY_PATTERN =
 		/(finger.*(template|data|payload|bytes)|fp.*(template|data|payload|bytes)|face.*(template|data|payload|bytes)|templateData|templateBytes|byFingerData|fingerData|faceData|imageData|photoData|biometric.*(template|data|payload|bytes))/i;
 
+	const isEncryptedDeviceUserBiometricBundleValue = (value: any) => {
+		const parsed =
+			typeof value === "string"
+				? (() => {
+						try {
+							return JSON.parse(value);
+						} catch {
+							return null;
+						}
+					})()
+				: value;
+		return Boolean(
+			parsed?.ciphertext &&
+				parsed?.algorithm === DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM &&
+				parsed?.format === "project-truth.hikvision-biometric-template.v1",
+		);
+	};
+
 	const sanitizeDeviceUserPortableValue = (value: any, key = ""): any => {
 		if (value == null) return value;
 		if (BIOMETRIC_TEMPLATE_KEY_PATTERN.test(key)) {
+			if (isEncryptedDeviceUserBiometricBundleValue(value)) return value;
 			return "[redacted-biometric-template]";
 		}
 		if (Buffer.isBuffer(value)) return "[redacted-binary-value]";
@@ -4346,6 +4566,9 @@ export const controller = (prisma: PrismaClient) => {
 			includeFingerprints?: boolean;
 			includeFaces?: boolean;
 			encryptedBiometricBundle?: boolean;
+			refreshSourceUsers?: boolean;
+			refreshBiometricBundle?: boolean;
+			cacheBiometricMetadata?: boolean;
 			selection?: string;
 			status?: string;
 			query?: string;
@@ -4365,11 +4588,13 @@ export const controller = (prisma: PrismaClient) => {
 			},
 			select: {
 				id: true,
+				organizationId: true,
 				name: true,
 				address: true,
 				port: true,
 				protocol: true,
 				config: true,
+				access: true,
 			},
 			orderBy: { name: "asc" },
 		});
@@ -4384,21 +4609,28 @@ export const controller = (prisma: PrismaClient) => {
 				rawUsers: [],
 				candidates: [],
 			};
-			let sourceRead: Record<string, any> = { status: "unknown" };
-			try {
-				sourceSnapshot = await loadHikvisionDeviceUserSnapshot(req, device);
-				sourceRead = {
-					status: "supported",
-					endpoint: "POST /ISAPI/AccessControl/UserInfo/Search?format=json",
-					total: sourceSnapshot.rawUsers.length,
-				};
-			} catch (error: any) {
-				sourceRead = {
-					status: classifyHikvisionProbeError(error),
-					endpoint: "POST /ISAPI/AccessControl/UserInfo/Search?format=json",
-					error: error?.message || "Source user read failed",
-					rawStatus: error?.status || null,
-				};
+			let sourceRead: Record<string, any> = {
+				status: "skipped_cached_device_user_metadata",
+				endpoint: "DeviceUser table",
+				reason:
+					"Normal export uses saved DeviceUser metadata so CSV generation does not wait for live SDK reads.",
+			};
+			if (options.refreshSourceUsers === true) {
+				try {
+					sourceSnapshot = await loadHikvisionDeviceUserSnapshot(req, device);
+					sourceRead = {
+						status: "supported",
+						endpoint: "POST /ISAPI/AccessControl/UserInfo/Search?format=json",
+						total: sourceSnapshot.rawUsers.length,
+					};
+				} catch (error: any) {
+					sourceRead = {
+						status: classifyHikvisionProbeError(error),
+						endpoint: "POST /ISAPI/AccessControl/UserInfo/Search?format=json",
+						error: error?.message || "Source user read failed",
+						rawStatus: error?.status || null,
+					};
+				}
 			}
 
 			const savedUsers = await loadDeviceUsersForExport(options.organizationId, device.id);
@@ -4474,7 +4706,7 @@ export const controller = (prisma: PrismaClient) => {
 			const sensitiveCredentialRequested =
 				Boolean(options.includeFingerprints || options.includeFaces) &&
 				Boolean(options.encryptedBiometricBundle);
-			if (sensitiveCredentialRequested && sourceRead.status === "supported") {
+			if (sensitiveCredentialRequested) {
 				for (const row of exportRows as any[]) {
 					const credentialSummary =
 						row.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
@@ -4484,33 +4716,9 @@ export const controller = (prisma: PrismaClient) => {
 						(options.includeFingerprints && credentialSummary.fingerprintCount > 0) ||
 						(options.includeFaces && credentialSummary.faceCount > 0);
 					if (!shouldExportBiometric) continue;
-					try {
-						const biometricExport = await runHikvisionBiometricExportOnVm({
-							device,
-							organizationId: options.organizationId,
-							vendorUserId: String(row.vendorUserId || row.employeeNo || "").trim(),
-							includeFingerprints: Boolean(options.includeFingerprints),
-							includeFaces: Boolean(options.includeFaces),
-						});
-						const encryptedValue = JSON.stringify(biometricExport.encrypted);
-						const metadata = {
-							encryptedBiometricTemplate: biometricExport.encrypted,
-							encryptedBiometricTemplateCiphertext: biometricExport.encrypted.ciphertext,
-							encryptedBiometricTemplateSha256:
-								biometricExport.encrypted.plaintextSha256,
-							encryptedBiometricTemplateKeySource: biometricExport.encrypted.keySource,
-							fingerprintTemplateCount: biometricExport.fingerprintCount,
-							faceTemplateSize: biometricExport.faceTemplateSize,
-							facePictureSize: biometricExport.facePictureSize,
-							cardNo: biometricExport.cardNo,
-						};
-						row.rawPayload = {
-							...(row.rawPayload || {}),
-							_hrisDeviceMetadata: {
-								...(row.rawPayload?._hrisDeviceMetadata || {}),
-								biometricExport: metadata,
-							},
-						};
+					const cachedTemplate = parseCachedDeviceUserBiometricTemplate(row);
+					if (cachedTemplate && options.refreshBiometricBundle !== true) {
+						const encryptedValue = JSON.stringify(cachedTemplate);
 						row.vendorMetadata = {
 							...(row.vendorMetadata || {}),
 							biometricBundle: {
@@ -4519,16 +4727,58 @@ export const controller = (prisma: PrismaClient) => {
 								algorithm: DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM,
 								fingerprintRawTemplateBlob: encryptedValue,
 								faceRawTemplateBlob: encryptedValue,
-								encryptedBiometricTemplateCiphertext:
-									biometricExport.encrypted.ciphertext,
-								encryptedBiometricTemplateSha256:
-									biometricExport.encrypted.plaintextSha256,
-								keySource: biometricExport.encrypted.keySource,
+								encryptedBiometricTemplate: cachedTemplate,
+								encryptedBiometricTemplateCiphertext: cachedTemplate.ciphertext,
+								encryptedBiometricTemplateSha256: cachedTemplate.plaintextSha256,
+								keySource: cachedTemplate.keySource,
+								source: "device_user_metadata_cache",
 							},
 						};
 						encryptedBiometricExports.push({
 							sourceDeviceId: device.id,
 							vendorUserId: row.vendorUserId,
+							source: "device_user_metadata_cache",
+							plaintextSha256: cachedTemplate.plaintextSha256 || null,
+							ciphertextLength: String(cachedTemplate.ciphertext || "").length,
+							keySource: cachedTemplate.keySource || null,
+						});
+						continue;
+					}
+					if (options.refreshBiometricBundle !== true) {
+						encryptedBiometricExportErrors.push({
+							sourceDeviceId: device.id,
+							vendorUserId: row.vendorUserId,
+							status: "not_cached",
+							error:
+								"No encrypted biometric metadata is cached on DeviceUser. Run biometric metadata backfill or export with refreshBiometricBundle=true.",
+						});
+						continue;
+					}
+					try {
+						const biometricExport = await runHikvisionBiometricExportOnVm({
+							device,
+							organizationId: options.organizationId,
+							vendorUserId: String(row.vendorUserId || row.employeeNo || "").trim(),
+							includeFingerprints: Boolean(options.includeFingerprints),
+							includeFaces: Boolean(options.includeFaces),
+						});
+						const metadata = buildDeviceUserBiometricMetadata(
+							biometricExport,
+							"hikvision_sdk_export_refresh",
+						);
+						applyDeviceUserBiometricMetadataToRow(row, metadata);
+						if (options.cacheBiometricMetadata !== false && row.hrisDeviceUser?.id) {
+							await persistDeviceUserBiometricMetadata({
+								organizationId: options.organizationId,
+								deviceId: device.id,
+								vendorUserId: String(row.vendorUserId || row.employeeNo || "").trim(),
+								row,
+							}).catch(() => null);
+						}
+						encryptedBiometricExports.push({
+							sourceDeviceId: device.id,
+							vendorUserId: row.vendorUserId,
+							source: "hikvision_sdk_export_refresh",
 							fingerprintCount: biometricExport.fingerprintCount,
 							faceTemplateSize: biometricExport.faceTemplateSize,
 							facePictureSize: biometricExport.facePictureSize,
@@ -4569,16 +4819,20 @@ export const controller = (prisma: PrismaClient) => {
 						users: "included",
 						hrisLinks: "included",
 						cards: capabilitySummary.support.cardExport ? "supported" : "unsupported_or_not_requested",
-						fingerprints: capabilitySummary.support.fingerprintExport
-							? sensitiveCredentialRequested
-								? "encrypted_bundle_required_or_sdk_peer_copy"
-								: "supported_but_template_export_blocked_by_policy"
-							: "unsupported_or_not_requested",
-						faces: capabilitySummary.support.faceImportExport
-							? sensitiveCredentialRequested
-								? "encrypted_bundle_required_or_sdk_peer_copy"
-								: "supported_by_probe"
-							: "unsupported_or_not_requested",
+							fingerprints: capabilitySummary.support.fingerprintExport
+								? sensitiveCredentialRequested
+									? options.refreshBiometricBundle === true
+										? "encrypted_bundle_refreshed_from_sdk"
+										: "encrypted_bundle_from_device_user_metadata"
+									: "supported_but_template_export_blocked_by_policy"
+								: "unsupported_or_not_requested",
+							faces: capabilitySummary.support.faceImportExport
+								? sensitiveCredentialRequested
+									? options.refreshBiometricBundle === true
+										? "encrypted_bundle_refreshed_from_sdk"
+										: "encrypted_bundle_from_device_user_metadata"
+									: "supported_by_probe"
+								: "unsupported_or_not_requested",
 					},
 				},
 				users: options.includeRecords ? exportRows : [],
@@ -4612,12 +4866,16 @@ export const controller = (prisma: PrismaClient) => {
 						),
 						algorithm: DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM,
 						status: encryptedBiometricExports.length
-							? "created_from_hikvision_sdk"
+							? encryptedBiometricExports.some((item) => item.source === "hikvision_sdk_export_refresh")
+								? "refreshed_from_hikvision_sdk_and_cached"
+								: "cached_from_device_user_metadata"
 							: encryptedBiometricExportErrors.length
-								? "sdk_export_failed"
+								? encryptedBiometricExportErrors.every((item) => item.status === "not_cached")
+									? "not_cached_run_biometric_metadata_backfill"
+									: "sdk_export_failed"
 								: "not_created_no_biometric_rows",
 						reason: encryptedBiometricExports.length
-							? "Hikvision SDK returned biometric template bytes and HRIS encrypted them before writing export files."
+							? "Export wrote encrypted biometric bundle values from DeviceUser metadata cache unless refreshBiometricBundle=true was requested."
 							: "No SDK biometric template bytes were encrypted for this export. Check biometricExportErrors for device/SDK failures.",
 						plaintextPolicy:
 							"Do not write raw biometric template bytes to JSON, logs, screenshots, or reports.",
@@ -4654,6 +4912,8 @@ export const controller = (prisma: PrismaClient) => {
 				includeFingerprints: body.includeFingerprints === true,
 				includeFaces: body.includeFaces === true,
 				encryptedBiometricBundle: body.encryptedBiometricBundle === true,
+				refreshSourceUsers: body.refreshSourceUsers === true,
+				refreshBiometricBundle: body.refreshBiometricBundle === true,
 				selection: body.selection,
 				status: body.status,
 				query: body.query,
@@ -4685,6 +4945,8 @@ export const controller = (prisma: PrismaClient) => {
 				includeFingerprints: body.includeFingerprints === true,
 				includeFaces: body.includeFaces === true,
 				encryptedBiometricBundle: body.encryptedBiometricBundle === true,
+				refreshSourceUsers: body.refreshSourceUsers === true,
+				refreshBiometricBundle: body.refreshBiometricBundle === true,
 				selection: body.selection,
 				status: body.status,
 				query: body.query,
@@ -4697,6 +4959,175 @@ export const controller = (prisma: PrismaClient) => {
 			const status = Number(error?.status || 500);
 			res.status(status).json(
 				buildErrorResponse(error?.message || "Failed to export device users", status),
+			);
+		}
+	};
+
+	const backfillDeviceUserBiometricMetadata = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		const startedAt = Date.now();
+		try {
+			const body = (req.body || {}) as Record<string, any>;
+			const deviceId = String(req.params.id || body.deviceId || "").trim();
+			const execute = body.execute === true;
+			const limit = Math.min(Math.max(Number(body.limit || 25), 1), 200);
+			const device = await getDeviceForUserSync(gate.organizationId, deviceId);
+			if (!device || !isHikvisionDevice(device)) {
+				res.status(400).json(
+					buildErrorResponse("Select a Hikvision device before biometric metadata backfill", 400),
+				);
+				return;
+			}
+			const savedUsers = await loadDeviceUsersForExport(gate.organizationId, device.id);
+			const selected = filterDeviceUserExportRows(savedUsers, {
+				selection: body.selection || (body.vendorUserIds ? "selectedRows" : "all"),
+				status: body.status || "all",
+				query: body.query || "",
+				page: Number(body.page || 0) || undefined,
+				limit,
+				vendorUserIds: normalizeDeviceUserExportVendorIds(body.vendorUserIds),
+			});
+			const candidates = selected.rows.slice(0, limit);
+			const results = [];
+			for (const row of candidates as any[]) {
+				const credentialSummary =
+					row.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
+					row.vendorMetadata?.credentialSummary ||
+					extractHikvisionCredentialSummary(row.rawPayload || {});
+				const hasCredential =
+					(body.includeFingerprints !== false && Number(credentialSummary.fingerprintCount || 0) > 0) ||
+					(body.includeFaces === true && Number(credentialSummary.faceCount || 0) > 0);
+				const cachedTemplate = parseCachedDeviceUserBiometricTemplate(row);
+				const eventSummary = await summarizeDeviceUserBiometricEvents({
+					organizationId: gate.organizationId,
+					deviceId: device.id,
+					deviceUserId: row.hrisDeviceUser?.id || row.id || null,
+					employeeNo: String(row.employeeNo || row.vendorUserId || "").trim(),
+				});
+				if (!hasCredential) {
+					results.push({
+						vendorUserId: row.vendorUserId,
+						employeeNo: row.employeeNo,
+						status: "skipped_no_biometric_count",
+						cached: Boolean(cachedTemplate),
+						credentialSummary,
+						relatedEvents: eventSummary,
+					});
+					continue;
+				}
+				if (cachedTemplate && body.refreshBiometricBundle !== true) {
+					results.push({
+						vendorUserId: row.vendorUserId,
+						employeeNo: row.employeeNo,
+						status: "already_cached",
+						cached: true,
+						plaintextSha256: cachedTemplate.plaintextSha256 || null,
+						ciphertextLength: String(cachedTemplate.ciphertext || "").length,
+						keySource: cachedTemplate.keySource || null,
+						credentialSummary,
+						relatedEvents: eventSummary,
+					});
+					continue;
+				}
+				if (!execute) {
+					results.push({
+						vendorUserId: row.vendorUserId,
+						employeeNo: row.employeeNo,
+						status: cachedTemplate ? "would_refresh" : "would_backfill",
+						cached: Boolean(cachedTemplate),
+						credentialSummary,
+						relatedEvents: eventSummary,
+					});
+					continue;
+				}
+				try {
+					const biometricExport = await runHikvisionBiometricExportOnVm({
+						device,
+						organizationId: gate.organizationId,
+						vendorUserId: String(row.vendorUserId || row.employeeNo || "").trim(),
+						includeFingerprints: body.includeFingerprints !== false,
+						includeFaces: body.includeFaces === true,
+					});
+					const metadata = buildDeviceUserBiometricMetadata(
+						biometricExport,
+						"hikvision_sdk_biometric_metadata_backfill",
+					);
+					(metadata.rawPayloadMetadata as any).relatedEnrollmentEvents = eventSummary;
+					(metadata.vendorMetadata as any).relatedEnrollmentEventCount = eventSummary.length;
+					applyDeviceUserBiometricMetadataToRow(row, metadata);
+					const updated = await persistDeviceUserBiometricMetadata({
+						organizationId: gate.organizationId,
+						deviceId: device.id,
+						vendorUserId: String(row.vendorUserId || row.employeeNo || "").trim(),
+						row,
+					});
+					results.push({
+						vendorUserId: row.vendorUserId,
+						employeeNo: row.employeeNo,
+						status: "cached_from_hikvision_sdk",
+						deviceUserId: updated?.id || row.hrisDeviceUser?.id || row.id || null,
+						fingerprintCount: biometricExport.fingerprintCount,
+						faceTemplateSize: biometricExport.faceTemplateSize,
+						facePictureSize: biometricExport.facePictureSize,
+						plaintextSha256: biometricExport.encrypted.plaintextSha256,
+						ciphertextLength: biometricExport.encrypted.ciphertext.length,
+						keySource: biometricExport.encrypted.keySource,
+						relatedEvents: eventSummary,
+					});
+				} catch (error: any) {
+					results.push({
+						vendorUserId: row.vendorUserId,
+						employeeNo: row.employeeNo,
+						status: "failed",
+						error: error?.message || "Biometric metadata backfill failed",
+						credentialSummary,
+						relatedEvents: eventSummary,
+					});
+				}
+			}
+			await invalidateCache.byPattern("cache:device:*").catch(() => undefined);
+			const data = {
+				execute,
+				device: {
+					id: device.id,
+					name: device.name,
+					address: device.address,
+					port: device.port,
+				},
+				selection: selected.selection,
+				elapsedMs: Date.now() - startedAt,
+				counts: {
+					candidates: candidates.length,
+					cached: results.filter((row: any) =>
+						["cached_from_hikvision_sdk", "already_cached"].includes(row.status),
+					).length,
+					failed: results.filter((row: any) => row.status === "failed").length,
+					skipped: results.filter((row: any) => String(row.status).startsWith("skipped")).length,
+				},
+				plaintextBiometricExposed: false,
+				results,
+			};
+			res.status(200).json(
+				buildSuccessResponse(
+					execute
+						? "Device user biometric metadata backfill executed"
+						: "Device user biometric metadata backfill preview built",
+					data,
+					200,
+				),
+			);
+		} catch (error: any) {
+			const status = Number(error?.status || 500);
+			res.status(status).json(
+				buildErrorResponse(
+					error?.message || "Failed to backfill device user biometric metadata",
+					status,
+				),
 			);
 		}
 	};
@@ -5122,12 +5553,20 @@ export const controller = (prisma: PrismaClient) => {
 							deviceId: row.sourceDeviceId || targetDevice.id,
 							encrypted: encryptedTemplate,
 						});
+						const writeResult = await writeDecryptedBiometricBundleToHikvisionDevice({
+							req,
+							targetDevice,
+							employeeNo: row.employeeNo || row.vendorUserId,
+							decrypted,
+						});
 						results.push(
 							buildDeviceUserImportResultRow(row, {
-								status: "decrypted_bundle_ready",
+								status: writeResult.fingerprintWriteCount > 0 ? "imported" : "decrypted_bundle_ready",
 								method: "encryptedBundle",
 								error:
-									"Encrypted biometric bundle decrypted successfully, but offline SDK write-from-bundle is not implemented yet. Use SDK peer copy for device writes until the bundle writer is added.",
+									writeResult.fingerprintWriteCount > 0
+										? null
+										: "Encrypted biometric bundle decrypted successfully, but no writable fingerprint template was present.",
 								biometricBundle: {
 									fingerprintCount: Array.isArray(decrypted?.fingerprints)
 										? decrypted.fingerprints.length
@@ -5135,6 +5574,7 @@ export const controller = (prisma: PrismaClient) => {
 									faceTemplatePresent: Boolean(decrypted?.faceTemplate),
 									facePicturePresent: Boolean(decrypted?.facePicture),
 									plaintextSha256: encryptedTemplate.plaintextSha256 || null,
+									writeResult,
 								},
 							}),
 						);
@@ -11329,6 +11769,7 @@ export const controller = (prisma: PrismaClient) => {
 		executeDeviceUserImport,
 		getDeviceUserImportJob,
 		backfillDeviceUserLifecycleEvents,
+		backfillDeviceUserBiometricMetadata,
 		reconcileBiometricSync,
 		copyHikvisionDeviceUserToPeer,
 		planHikvisionSdkUserMerge,

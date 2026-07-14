@@ -8,6 +8,8 @@ Type=simple
 User=root
 Group=root
 Environment=HIKVISION_HOT_RELOAD_API_BASE=http://localhost:3101
+Environment=HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api
+Environment=HIKVISION_HOT_RELOAD_DEVICE_FETCH_LIMIT=200
 Environment=HIKVISION_POSTGRES_CONTAINER=hris-postgres-dev
 Environment=HIKVISION_HOT_RELOAD_LOGIN_EMAIL=admin@bandai.local
 Environment=HIKVISION_HOT_RELOAD_LOGIN_PASSWORD=password123

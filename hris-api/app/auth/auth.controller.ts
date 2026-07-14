@@ -1363,7 +1363,14 @@ export const controller = (prisma: PrismaClient) => {
 			});
 			device = device || (eventRecord ? enabledDevicesById.get(String(eventRecord.deviceId || "")) || null : null);
 			if (!device || device.isDeleted === true) {
-				res.status(404).json(buildErrorResponse("No enabled kiosk device has a fresh biometric tap", 404));
+				res.status(404).json(
+					buildErrorResponse(
+						enabledKioskDevices.length > 0
+							? "No fresh biometric kiosk login tap is available"
+							: "No enabled kiosk device has a fresh biometric tap",
+						404,
+					),
+				);
 				return;
 			}
 			const kioskConfig = normalizeEmployeeKioskLoginConfig(device.config);

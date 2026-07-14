@@ -247,6 +247,32 @@ describe("auth biometric kiosk login", () => {
 		expect(response.body.data.email).to.equal("employee@bandai.local");
 	});
 
+	it("reports waiting for a fresh tap when kiosk devices are enabled but no event is fresh", async () => {
+		const app = buildApp({
+			device: {
+				findMany: async () => [
+					{
+						id: "device-enabled",
+						organizationId: "org-1",
+						name: "Login A",
+						config: { employeeKioskLoginEnabled: true },
+						isDeleted: false,
+					},
+				],
+			},
+			deviceEvent: {
+				findMany: async () => [],
+			},
+		});
+
+		const response = await request(app)
+			.post("/auth/biometric/kiosk-login/claim")
+			.send({ appCode: "hris" })
+			.expect(404);
+
+		expect(response.body.message).to.equal("No fresh biometric kiosk login tap is available");
+	});
+
 	it("rejects biometric kiosk claim when the device is disabled", async () => {
 		const app = buildApp({
 			device: {

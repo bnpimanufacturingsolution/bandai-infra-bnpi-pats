@@ -205,6 +205,13 @@ describe("admin device user and log sync UI contract", () => {
 
 		expect(events).toContain("Sync logs");
 		expect(events).toContain("Sync device logs");
+		expect(events).toContain("latestSdkEvidenceAgeMs");
+		expect(events).toContain("getEventEvidenceTime(latestSdkProbeEvent) > getEventEvidenceTime(latestSdkSavedEvent)");
+		expect(events).toContain("latestSdkEvidenceIsOperationSignal");
+		expect(events).toContain("SDK operation signal captured");
+		expect(events).toContain("Open it, then run/review device-user reconciliation for the same device.");
+		expect(events).toContain("SDK event proof");
+		expect(events).not.toContain("Browser connected; no recent SDK tap");
 		expect(events).toContain("knownSkippedEventCount");
 		expect(events).toContain("missingEventCount");
 		expect(events).toContain("getSyncProjectedSaveCount");

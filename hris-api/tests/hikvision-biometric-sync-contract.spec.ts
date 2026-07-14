@@ -64,7 +64,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include('name: "static_spec"');
 		expect(controller).to.include("const preflightHikvisionManualCopyEndpoint = async");
 		expect(controller).to.include("VM cannot reach");
-		expect(controller).to.include("/dev/tcp/");
+		expect(controller).to.include("quoteRemoteShellArg");
+		expect(controller).to.include("remoteArgs.map(quoteRemoteShellArg).join");
 		expect(controller).to.include("peer_copy_noop_already_synced");
 		expect(controller).to.include("peer_copy_noop_overlay_only");
 		expect(controller).to.include("strategy: \"noop_overlay_only\"");
@@ -125,7 +126,13 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("withDeviceUserImportTimeout");
 		expect(controller).to.include("Timed out copying device user");
 		expect(controller).to.include("raw fingerprint and face template bytes are never exported in normal JSON");
-		expect(controller).to.include("encrypted_bundle_required_or_sdk_peer_copy");
+		expect(controller).to.include("cached_from_device_user_metadata");
+		expect(controller).to.include("refreshBiometricBundle");
+		expect(controller).to.include("backfillDeviceUserBiometricMetadata");
+		expect(controller).to.include("hikvision_sdk_biometric_metadata_backfill");
+		expect(router).to.include(
+			'/:id/users/biometric-metadata/backfill", controller.backfillDeviceUserBiometricMetadata',
+		);
 		expect(controller).to.include("const buildDeviceUserImportPreviewToken =");
 		expect(controller).to.include("previewToken from this preview response");
 		expect(controller).to.include("Import execute requires a fresh previewToken from import preview");

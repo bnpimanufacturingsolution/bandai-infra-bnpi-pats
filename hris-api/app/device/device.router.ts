@@ -39,6 +39,11 @@ interface IController {
 		res: Response,
 		next: NextFunction,
 	): Promise<void>;
+	backfillDeviceUserBiometricMetadata(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
 	reconcileBiometricSync(req: Request, res: Response, next: NextFunction): Promise<void>;
 	copyHikvisionDeviceUserToPeer(req: Request, res: Response, next: NextFunction): Promise<void>;
 	planHikvisionSdkUserMerge(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -88,6 +93,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get("/users/:userId/photo", controller.getDeviceUserPhoto);
 	routes.post("/:id/users/sync", controller.syncDeviceUsers);
 	routes.post("/:id/users/lifecycle-backfill", controller.backfillDeviceUserLifecycleEvents);
+	routes.post("/:id/users/biometric-metadata/backfill", controller.backfillDeviceUserBiometricMetadata);
 	routes.post("/:id/users/backfill", controller.backfillDeviceUsers);
 	routes.post("/biometric-sync/reconcile", controller.reconcileBiometricSync);
 	routes.post(
