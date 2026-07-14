@@ -126,6 +126,10 @@ const HIKVISION_PEER_COPY_COMPLETION_WAIT_MS = Math.max(
 	0,
 	Math.min(Number(process.env.HIKVISION_PEER_COPY_COMPLETION_WAIT_MS || 90000), 180000),
 );
+const DEVICE_USER_IMPORT_ROW_TIMEOUT_MS = Math.max(
+	30000,
+	Math.min(Number(process.env.DEVICE_USER_IMPORT_ROW_TIMEOUT_MS || 90000), 180000),
+);
 const DEVICE_USER_EXPORT_SCHEMA_VERSION = "project-truth.hikvision-device-users.v1";
 const DEVICE_USER_IMPORT_CONFIRMATION = "IMPORT DEVICE USERS";
 const DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM = "aes-256-gcm";
@@ -739,10 +743,29 @@ const buildHikvisionManualCopySdkFailureMessage = (params: {
 	return "";
 };
 
+const isDeterministicHikvisionManualCopySdkFailure = (message: string) =>
+	/cannot be used as the SDK copy (source|target)/i.test(String(message || ""));
+
 const sleep = (ms: number) =>
 	new Promise((resolve) => {
 		setTimeout(resolve, Math.max(0, Math.floor(ms)));
 	});
+
+const withDeviceUserImportTimeout = async <T>(
+	promise: Promise<T>,
+	timeoutMs: number,
+	message: string,
+): Promise<T> => {
+	let timer: NodeJS.Timeout | undefined;
+	const timeout = new Promise<never>((_resolve, reject) => {
+		timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+	});
+	try {
+		return await Promise.race([promise, timeout]);
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+};
 
 type HikvisionManualCopyParams = {
 	sourceDevice: any;
@@ -934,15 +957,20 @@ export const controller = (prisma: PrismaClient) => {
 			.replace(/[\r\n|]+/g, " ")
 			.trim();
 
+	const getHikvisionSdkEndpoint = (device: any) => {
+		const config = device?.config || {};
+		return {
+			host: cleanHikvisionDeviceSpecValue(config.hikvisionSdkRuntimeAddress || device?.address),
+			port: cleanHikvisionDeviceSpecValue(
+				config.hikvisionSdkRuntimePort || config.sdkPort || "8000",
+			),
+		};
+	};
+
 	const buildHikvisionManualCopySpecLine = (device: any) => {
 		const config = device?.config || {};
 		const access = device?.access || {};
-		const sdkHost = cleanHikvisionDeviceSpecValue(
-			config.hikvisionSdkRuntimeAddress || device?.address,
-		);
-		const sdkPort = cleanHikvisionDeviceSpecValue(
-			config.hikvisionSdkRuntimePort || config.sdkPort || "8000",
-		);
+		const { host: sdkHost, port: sdkPort } = getHikvisionSdkEndpoint(device);
 		const username = cleanHikvisionDeviceSpecValue(
 			access.username || process.env.HIKVISION_USERNAME,
 		);
@@ -983,8 +1011,45 @@ export const controller = (prisma: PrismaClient) => {
 		return localPath;
 	};
 
+	const preflightHikvisionManualCopyEndpoint = async (
+		device: any,
+		role: "source" | "target",
+		employeeNo: string,
+	) => {
+		const { host, port } = getHikvisionSdkEndpoint(device);
+		const label = hikvisionDeviceLabel(device);
+		if (!/^[A-Za-z0-9_.-]+$/.test(host) || !/^\d+$/.test(port)) {
+			throw new Error(
+				`${label} cannot be used as the SDK copy ${role} for employee ${employeeNo} because its SDK endpoint is invalid (${host || "missing"}:${port || "missing"}).`,
+			);
+		}
+		const result = await runHikvisionListenerVmCommand(
+			[
+				"bash",
+				"-lc",
+				`timeout 3 bash -c '</dev/tcp/${host}/${port}'`,
+			],
+			7000,
+		);
+		if (result.exitCode !== 0) {
+			throw new Error(
+				`${label} cannot be used as the SDK copy ${role} for employee ${employeeNo} right now (VM cannot reach ${host}:${port} before SDK login).`,
+			);
+		}
+	};
+
 	const runHikvisionManualCopyOnVm = async (params: HikvisionManualCopyParams) => {
 		const waitSeconds = Math.max(1, Math.min(Number(params.waitSeconds || 1), 8));
+		await preflightHikvisionManualCopyEndpoint(
+			params.sourceDevice,
+			"source",
+			params.employeeNo,
+		);
+		await preflightHikvisionManualCopyEndpoint(
+			params.targetDevice,
+			"target",
+			params.employeeNo,
+		);
 		const localSpecPath = writeHikvisionManualCopySpec(params);
 		const remoteSpecPath = `/tmp/project-truth-hikvision-manual-copy-${Date.now()}.spec`;
 		try {
@@ -1008,6 +1073,7 @@ export const controller = (prisma: PrismaClient) => {
 						"env",
 						...extraEnv,
 						"HIKVISION_ALLOW_STATIC_DEVICE_SPEC=1",
+						"HIKVISION_SKIP_SPOOL_REPLAY=1",
 						`HIKVISION_DEVICE_SPEC_OVERRIDE=${remoteSpecPath}`,
 						`HIKVISION_RUN_SECONDS=${waitSeconds}`,
 						HIKVISION_VM_WRAPPER_REMOTE_PATH,
@@ -1099,6 +1165,9 @@ export const controller = (prisma: PrismaClient) => {
 				targetDevice: params.targetDevice,
 				employeeNo: params.employeeNo,
 			});
+			if (sdkFailureMessage && isDeterministicHikvisionManualCopySdkFailure(sdkFailureMessage)) {
+				throw new Error(sdkFailureMessage);
+			}
 			failures.push(
 				`${strategy.name}: ${
 					sdkFailureMessage ||
@@ -1838,6 +1907,7 @@ export const controller = (prisma: PrismaClient) => {
 				port: true,
 				protocol: true,
 				config: true,
+				access: true,
 			},
 		});
 	};
@@ -4676,15 +4746,19 @@ export const controller = (prisma: PrismaClient) => {
 					);
 				} else {
 					try {
-						const copyData = await copyHikvisionUserToPeerWithRetry({
-							req,
-							organizationId: gate.organizationId,
-							sourceDevice,
-							targetDevice,
-							employeeNo: row.vendorUserId,
-							includeFingerprints: true,
-							includeFaceRecognition: true,
-						});
+						const copyData = await withDeviceUserImportTimeout(
+							copyHikvisionUserToPeerWithRetry({
+								req,
+								organizationId: gate.organizationId,
+								sourceDevice,
+								targetDevice,
+								employeeNo: row.vendorUserId,
+								includeFingerprints: true,
+								includeFaceRecognition: true,
+							}),
+							DEVICE_USER_IMPORT_ROW_TIMEOUT_MS,
+							`Timed out copying device user ${row.vendorUserId} after ${DEVICE_USER_IMPORT_ROW_TIMEOUT_MS}ms`,
+						);
 						results.push(
 							buildDeviceUserImportResultRow(row, {
 								status: "imported",
@@ -4695,12 +4769,16 @@ export const controller = (prisma: PrismaClient) => {
 							}),
 						);
 					} catch (error: any) {
-						const delayedCopy = await waitForDelayedHikvisionPeerCopy({
-							req,
-							organizationId: gate.organizationId,
-							targetDevice,
-							employeeNo: row.vendorUserId,
-						}).catch(() => null);
+						const delayedCopy = await withDeviceUserImportTimeout(
+							waitForDelayedHikvisionPeerCopy({
+								req,
+								organizationId: gate.organizationId,
+								targetDevice,
+								employeeNo: row.vendorUserId,
+							}),
+							Math.min(HIKVISION_PEER_COPY_COMPLETION_WAIT_MS + 10000, DEVICE_USER_IMPORT_ROW_TIMEOUT_MS),
+							`Timed out waiting for target device ${targetDevice.name || targetDevice.id} to report copied user ${row.vendorUserId}`,
+						).catch(() => null);
 						if ((delayedCopy as any)?.targetDeviceUser?.id) {
 							results.push(
 								buildDeviceUserImportResultRow(row, {
@@ -4835,8 +4913,12 @@ export const controller = (prisma: PrismaClient) => {
 			setImmediate(async () => {
 				try {
 					const result = await runDeviceUserImportExecuteWork({ req, gate, body, jobId });
+					const terminalStatus =
+						result.data.counts.failed > 0 && result.data.counts.imported === 0
+							? "failed"
+							: "completed";
 					updateDeviceUserPackageImportJob(jobId, {
-						status: "completed",
+						status: terminalStatus,
 						message: result.message,
 						backupDir: result.data.backupDir,
 						planned: result.data.counts.planned,
@@ -6268,7 +6350,18 @@ export const controller = (prisma: PrismaClient) => {
 		const sourceDeviceId = String(params.sourceDevice?.id || "").trim();
 		const targetDeviceId = String(params.targetDevice?.id || "").trim();
 		const employeeNo = String(params.employeeNo || "").trim();
-		const sourceDeviceUser = await (prisma as any).deviceUser.findUnique({
+		const timingStartedAt = Date.now();
+		const timings: Record<string, number> = {};
+		const timePhase = async <T>(name: string, action: () => Promise<T>): Promise<T> => {
+			const startedAt = Date.now();
+			try {
+				return await action();
+			} finally {
+				timings[name] = Date.now() - startedAt;
+			}
+		};
+		const sourceDeviceUser: any = await timePhase("sourceDeviceUserLookupMs", () =>
+			(prisma as any).deviceUser.findUnique({
 			where: {
 				organizationId_deviceId_vendorUserId: {
 					organizationId: params.organizationId,
@@ -6284,8 +6377,10 @@ export const controller = (prisma: PrismaClient) => {
 				lastSyncedAt: true,
 				rawPayload: true,
 			},
-		});
-		const existingTargetDeviceUser = await (prisma as any).deviceUser.findUnique({
+			}),
+		);
+		const existingTargetDeviceUser: any = await timePhase("targetDeviceUserLookupMs", () =>
+			(prisma as any).deviceUser.findUnique({
 			where: {
 				organizationId_deviceId_vendorUserId: {
 					organizationId: params.organizationId,
@@ -6301,7 +6396,8 @@ export const controller = (prisma: PrismaClient) => {
 				lastSyncedAt: true,
 				rawPayload: true,
 			},
-		});
+			}),
+		);
 		const alreadyConverged =
 			Boolean(sourceDeviceUser?.id) &&
 			!shouldConvergeDeviceUserToPeer(sourceDeviceUser, existingTargetDeviceUser);
@@ -6354,7 +6450,7 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						],
 					}
-				: await runHikvisionManualCopyOnVm({
+				: await timePhase("vmManualCopyMs", () => runHikvisionManualCopyOnVm({
 						sourceDevice: params.sourceDevice,
 						targetDevice: params.targetDevice,
 						sourceDeviceId,
@@ -6362,21 +6458,24 @@ export const controller = (prisma: PrismaClient) => {
 						employeeNo,
 						includeFingerprints: params.includeFingerprints,
 						includeFaceRecognition: params.includeFaceRecognition,
-					});
-		const { summary: targetSummary } = await syncSingleHikvisionDeviceUserFromSource({
+					}));
+		const { summary: targetSummary } = await timePhase("targetSingleUserRefreshMs", () =>
+			syncSingleHikvisionDeviceUserFromSource({
 			req: params.req,
 			organizationId: params.organizationId,
 			device: params.targetDevice,
 			employeeNo,
-		});
-		await mirrorDeviceUserLinkToPeer({
+			}),
+		);
+		await timePhase("peerLinkMirrorMs", () => mirrorDeviceUserLinkToPeer({
 			organizationId: params.organizationId,
 			sourceDeviceId,
 			targetDeviceId,
 			vendorUserId: employeeNo,
-		});
+		}));
 
-		let targetDeviceUser = await (prisma as any).deviceUser.findUnique({
+		let targetDeviceUser: any = await timePhase("targetDeviceUserVerifyLookupMs", () =>
+			(prisma as any).deviceUser.findUnique({
 			where: {
 				organizationId_deviceId_vendorUserId: {
 					organizationId: params.organizationId,
@@ -6392,7 +6491,8 @@ export const controller = (prisma: PrismaClient) => {
 				lastSyncedAt: true,
 				rawPayload: true,
 			},
-		});
+			}),
+		);
 		if (!targetDeviceUser?.id) {
 			throw new Error(
 				"Copy completed at the SDK layer, but the target device user did not appear in refreshed HRIS truth",
@@ -6415,6 +6515,14 @@ export const controller = (prisma: PrismaClient) => {
 			params.includeFingerprints &&
 			sourceRealCredentialSummary.fingerprintCount > targetRealCredentialSummary.fingerprintCount
 		) {
+			const fingerprintEvents = copyResult.events.filter((event) =>
+				String(event?.event || "").toLowerCase().includes("fingerprint"),
+			);
+			deviceLogger.warn(
+				`Hikvision peer fingerprint verification mismatch for ${employeeNo}: source=${sourceRealCredentialSummary.fingerprintCount} target=${targetRealCredentialSummary.fingerprintCount} events=${JSON.stringify(
+					fingerprintEvents.slice(-12),
+				)}`,
+			);
 			throw new Error(
 				`SDK copy returned, but refreshed target truth still shows ${hikvisionDeviceLabel(
 					params.targetDevice,
@@ -6485,6 +6593,10 @@ export const controller = (prisma: PrismaClient) => {
 				strategy: copyResult.strategy,
 				events: copyResult.events,
 			},
+			timings: {
+				...timings,
+				totalMs: Date.now() - timingStartedAt,
+			},
 			syntheticCredentialOverlayApplied,
 		};
 	};
@@ -6535,6 +6647,8 @@ export const controller = (prisma: PrismaClient) => {
 			const employeeNo = String(req.body?.employeeNo || req.body?.vendorUserId || "").trim();
 			const includeFingerprints = req.body?.includeFingerprints !== false;
 			const includeFaceRecognition = req.body?.includeFaceRecognition !== false;
+			const isDryRun = req.body?.dryRun === true || req.body?.execute === false;
+			const requestStartedAt = Date.now();
 
 			if (!sourceDeviceId || !targetDeviceId || !employeeNo) {
 				res.status(400).json(
@@ -6572,6 +6686,100 @@ export const controller = (prisma: PrismaClient) => {
 					buildErrorResponse(
 						"Both source and target devices must be Hikvision devices",
 						400,
+					),
+				);
+				return;
+			}
+			if (isDryRun) {
+				const sourceDeviceUser = await (prisma as any).deviceUser.findUnique({
+					where: {
+						organizationId_deviceId_vendorUserId: {
+							organizationId: String(admin.organizationId),
+							deviceId: sourceDeviceId,
+							vendorUserId: employeeNo,
+						},
+					},
+					select: {
+						id: true,
+						vendorUserId: true,
+						employeeId: true,
+						status: true,
+						lastSyncedAt: true,
+						rawPayload: true,
+					},
+				});
+				const targetDeviceUser = await (prisma as any).deviceUser.findUnique({
+					where: {
+						organizationId_deviceId_vendorUserId: {
+							organizationId: String(admin.organizationId),
+							deviceId: targetDeviceId,
+							vendorUserId: employeeNo,
+						},
+					},
+					select: {
+						id: true,
+						vendorUserId: true,
+						employeeId: true,
+						status: true,
+						lastSyncedAt: true,
+						rawPayload: true,
+					},
+				});
+				const alreadyConverged =
+					Boolean(sourceDeviceUser?.id) &&
+					!shouldConvergeDeviceUserToPeer(sourceDeviceUser, targetDeviceUser);
+				const sourcePhysicalSummary = extractHikvisionCredentialSummary(
+					sourceDeviceUser?.rawPayload || {},
+				);
+				const targetPhysicalSummary = extractHikvisionCredentialSummary(
+					targetDeviceUser?.rawPayload || {},
+				);
+				const requiresPhysicalPeerCopy =
+					!sourceDeviceUser?.id ||
+					!targetDeviceUser?.id ||
+					targetPhysicalSummary.cardCount < sourcePhysicalSummary.cardCount ||
+					(includeFingerprints &&
+						targetPhysicalSummary.fingerprintCount <
+							sourcePhysicalSummary.fingerprintCount);
+				const plannedStages = alreadyConverged
+					? ["noop_already_synced"]
+					: !requiresPhysicalPeerCopy
+						? ["noop_overlay_only", "target_single_user_refresh", "peer_link_mirror"]
+						: [
+								"vm_manual_copy",
+								"target_single_user_refresh",
+								"peer_link_mirror",
+								"credential_verification",
+							];
+				res.status(200).json(
+					buildSuccessResponse(
+						"Dry run only; no Hikvision device or HRIS records were changed",
+						{
+							dryRun: true,
+							execute: false,
+							sourceDevice: {
+								id: sourceDevice.id,
+								name: sourceDevice.name,
+							},
+							targetDevice: {
+								id: targetDevice.id,
+								name: targetDevice.name,
+							},
+							employeeNo,
+							includeFingerprints,
+							includeFaceRecognition,
+							alreadyConverged,
+							requiresPhysicalPeerCopy,
+							plannedStages,
+							sourceCredentialSummary: sourcePhysicalSummary,
+							targetCredentialSummary: targetPhysicalSummary,
+							sourceDeviceUserFound: Boolean(sourceDeviceUser?.id),
+							targetDeviceUserFound: Boolean(targetDeviceUser?.id),
+							timings: {
+								totalMs: Date.now() - requestStartedAt,
+							},
+						},
+						200,
 					),
 				);
 				return;
@@ -6620,6 +6828,10 @@ export const controller = (prisma: PrismaClient) => {
 							copyData.syntheticCredentialOverlayApplied,
 						targetSyncSummary: copyData.targetSyncSummary,
 						targetDeviceUser: copyData.targetDeviceUser,
+						timings: {
+							...copyData.timings,
+							requestTotalMs: Date.now() - requestStartedAt,
+						},
 					},
 					200,
 				),
@@ -10300,9 +10512,10 @@ export const controller = (prisma: PrismaClient) => {
 			const currentMetadata = (targetUser.metadata as any) || {};
 			const currentDevice = currentMetadata.device || {};
 			const normalizedDeviceEmpId = String(deviceUserId).trim();
+			let enrolledDeviceUser: any = null;
 
 			if (isHikvisionDevice(device)) {
-				const existingTargetDeviceUser = await (prisma as any).deviceUser.findUnique({
+				let existingTargetDeviceUser = await (prisma as any).deviceUser.findUnique({
 					where: {
 						organizationId_deviceId_vendorUserId: {
 							organizationId: String(organizationId),
@@ -10312,6 +10525,28 @@ export const controller = (prisma: PrismaClient) => {
 					},
 					select: { id: true, employeeId: true },
 				});
+				if (!existingTargetDeviceUser?.id) {
+					await syncSingleHikvisionDeviceUserFromSource({
+						req,
+						organizationId: String(organizationId),
+						device,
+						employeeNo: normalizedDeviceEmpId,
+					}).catch((error: any) => {
+						deviceLogger.warn(
+							`Target single-user sync before enroll did not complete for ${device.id}/${normalizedDeviceEmpId}: ${error?.message || error}`,
+						);
+					});
+					existingTargetDeviceUser = await (prisma as any).deviceUser.findUnique({
+						where: {
+							organizationId_deviceId_vendorUserId: {
+								organizationId: String(organizationId),
+								deviceId: String(device.id),
+								vendorUserId: normalizedDeviceEmpId,
+							},
+						},
+						select: { id: true, employeeId: true },
+					});
+				}
 				if (!existingTargetDeviceUser?.id) {
 					const sourceDeviceCandidates = await (prisma as any).deviceUser.findMany({
 						where: {
@@ -10434,6 +10669,53 @@ export const controller = (prisma: PrismaClient) => {
 					deviceId: String(deviceId),
 				},
 			});
+			if (await hasDeviceUserTable()) {
+				enrolledDeviceUser = await (prisma as any).deviceUser.upsert({
+					where: {
+						organizationId_deviceId_vendorUserId: {
+							organizationId: String(organizationId),
+							deviceId: String(device.id),
+							vendorUserId: normalizedDeviceEmpId,
+						},
+					},
+					create: {
+						organizationId: String(organizationId),
+						deviceId: String(device.id),
+						vendorUserId: normalizedDeviceEmpId,
+						employeeNo: normalizedDeviceEmpId,
+						displayName:
+							(employee as any)?.person?.personalInfo?.fullName ||
+							(employee as any)?.employeeId ||
+							normalizedDeviceEmpId,
+						status: "ACTIVE",
+						employeeId: employee.id,
+						rawPayload: {
+							hrisEnrollment: {
+								source: "enroll_endpoint",
+								enrolledAt: new Date().toISOString(),
+								userId: String(targetUser.id),
+							},
+						},
+						lastSyncedAt: new Date(),
+					},
+					update: {
+						employeeId: employee.id,
+						employeeNo: normalizedDeviceEmpId,
+						status: "ACTIVE",
+						rawPayload: {
+							hrisEnrollment: {
+								source: "enroll_endpoint",
+								enrolledAt: new Date().toISOString(),
+								userId: String(targetUser.id),
+							},
+						},
+						lastSyncedAt: new Date(),
+					},
+					select: buildDeviceUserSelect({
+						includeVendorMetadata: await hasDeviceUserVendorMetadataColumn(),
+					}),
+				});
+			}
 
 			logActivity(req, {
 				userId: actorUserId || "unknown",
@@ -10453,6 +10735,8 @@ export const controller = (prisma: PrismaClient) => {
 						employeeId: employee.id,
 						deviceId: device.id,
 						deviceUserId: normalizedDeviceEmpId,
+						deviceUser: enrolledDeviceUser ? decorateDeviceUser(enrolledDeviceUser) : null,
+						deviceUserLinked: Boolean(enrolledDeviceUser?.employeeId),
 					},
 					200,
 				),

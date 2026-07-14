@@ -1,6 +1,6 @@
 # Project Truth Summary
 
-Last updated: 2026-07-06
+Last updated: 2026-07-14
 
 ## Current Runtime Truth
 
@@ -111,6 +111,38 @@ Last updated: 2026-07-06
 
 - VM/GitOps/runtime work is admin / `hris-admin` operational work.
 - Current local/VM employee-app runtime integration ports are `3300` (PROD), `3310` (DEV), and `3320` (UAT), each proxying browser `/api` and `socket.io` traffic back to the paired `hris-api` service.
+- Current verified LAN access summary for `10.184.37.19` from 2026-07-14:
+  - SSH: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19`
+  - PROD HRIS app/API: `http://10.184.37.19:3000/auth/login`,
+    `http://10.184.37.19:3001/health`
+  - PROD employee portal: `http://10.184.37.19:3300/auth/login`
+  - DEV HRIS app/API: `http://10.184.37.19:3100/auth/login`,
+    `http://10.184.37.19:3101/health`
+  - DEV employee portal: `http://10.184.37.19:3310/auth/login`
+  - UAT HRIS app/API: `http://10.184.37.19:3200/auth/login`,
+    `http://10.184.37.19:3201/health`
+  - UAT employee portal: `http://10.184.37.19:3320/auth/login`
+  - Grafana: `http://10.184.37.19:53000/` and health
+    `http://10.184.37.19:53000/api/health`
+  - Observability health/metrics: Prometheus
+    `http://10.184.37.19:9091/-/healthy`, Loki
+    `http://10.184.37.19:3110/ready`, Tempo
+    `http://10.184.37.19:3202/ready`, Alertmanager
+    `http://10.184.37.19:9093/-/healthy`, node exporter
+    `http://10.184.37.19:9110/metrics`, cAdvisor
+    `http://10.184.37.19:8088/metrics`, Blackbox exporter
+    `http://10.184.37.19:9115/-/healthy`, OTEL collector metrics
+    `http://10.184.37.19:8889/metrics`
+  - ZKTeco bridge health: PROD `http://10.184.37.19:4371/health`, DEV
+    `http://10.184.37.19:4372/health`, UAT
+    `http://10.184.37.19:4373/health`
+  - Verified TCP endpoints, not browser URLs: PROD DB `10.184.37.19:15432`,
+    DEV DB `10.184.37.19:15433`, UAT DB `10.184.37.19:15434`,
+    observability DB `10.184.37.19:15435`, OTEL gRPC/HTTP
+    `10.184.37.19:4317` and `10.184.37.19:4318`
+  - Host-side HTTP checks returned 200 for the listed app/API/portal,
+    observability, and ZKTeco health URLs; TCP probes passed for SSH, DB, and
+    OTEL ports. The VM-managed Cloudflare Tunnel was active during verification.
 - Employee-app public endpoint targets are `https://emp.bnpi-hris.tech/auth/login`, `https://dev-emp.bnpi-hris.tech/auth/login`, and `https://uat-emp.bnpi-hris.tech/auth/login`, mapped to the same per-environment API origins used by Project Truth app/API routing.
 - From the Windows host, host-local VM, LAN, device, DB, GitOps, and runtime
   drift checks should collect direct LAN evidence through

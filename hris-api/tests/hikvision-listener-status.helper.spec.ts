@@ -72,4 +72,18 @@ describe("hikvision-listener-status helper", () => {
 		expect(status.devices[0]?.lastFailureReason).to.equal("device_login_locked_backoff");
 		expect(status.devices[0]?.lastLoginError).to.equal("153");
 	});
+
+	it("backs off per device when Hikvision SDK credentials are rejected", () => {
+		const status = summarizeHikvisionListenerLogs([
+			'{"ts":"2026-07-14T03:02:42Z","deviceId":"device-a","event":"device_config_loaded","host":"192.168.18.41","name":"Test A","sdkPort":"8000"}',
+			'{"ts":"2026-07-14T03:02:43Z","deviceId":"device-a","deviceName":"Test A","event":"sdk_login","host":"192.168.18.41","lastError":"1","ok":"false","sdkPort":"8000"}',
+			'{"ts":"2026-07-14T03:02:43Z","deviceId":"device-a","event":"device_login_auth_failed_backoff","host":"192.168.18.41","lastError":"1","attempt":"1"}',
+		]);
+
+		expect(status.lastFailureReason).to.equal("device_login_auth_failed_backoff");
+		expect(status.lastError).to.equal("1");
+		expect(status.diagnosis).to.contain("backing off");
+		expect(status.devices[0]?.lastFailureReason).to.equal("device_login_auth_failed_backoff");
+		expect(status.devices[0]?.lastLoginError).to.equal("1");
+	});
 });

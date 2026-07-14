@@ -277,10 +277,26 @@ type CopyDeviceUserState = {
 	applyToAllPeers: boolean;
 	includeFingerprints: boolean;
 	includeFaceRecognition: boolean;
+	successfulTargets: Array<{ id: string; label: string }>;
 	failedTargets: Array<{ id: string; label: string; error: string }>;
 };
 
 type DeviceUserExportFormat = "csv" | "excel" | "json";
+type DeviceUserImportFormat = "csv" | "json";
+const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = [
+	"biometricBundlePresent",
+	"biometricBundleAlgorithm",
+	"biometricBundleRequiredForRawImport",
+	"biometricTransferMode",
+	"fingerprintRawTemplateBlob",
+	"faceRawTemplateBlob",
+	"rawBiometricPlaintextPolicy",
+	"rawBiometricSource",
+] as const;
+const DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED =
+	"not_exported_plaintext_use_encrypted_bundle_or_sdk_peer_copy";
+const DEVICE_USER_CSV_ENCRYPTED_BUNDLE_AVAILABLE = "encrypted_bundle_available";
+const DEVICE_USER_CSV_NO_PLAINTEXT_POLICY = "no_plaintext_biometric_templates";
 
 type DeviceUserPeerTallyRow = {
 	deviceId: string;
@@ -509,6 +525,7 @@ export function DeviceEnrollmentPanel({
 		applyToAllPeers: false,
 		includeFingerprints: true,
 		includeFaceRecognition: true,
+		successfulTargets: [],
 		failedTargets: [],
 	});
 	const [deviceUserExportState, setDeviceUserExportState] = useState<{
@@ -534,6 +551,8 @@ export function DeviceEnrollmentPanel({
 	});
 	const [deviceUserImportState, setDeviceUserImportState] = useState<{
 		open: boolean;
+		format: DeviceUserImportFormat;
+		fileName: string;
 		rawText: string;
 		payload: DeviceUserExportPayload | null;
 		parseError: string;
@@ -545,6 +564,8 @@ export function DeviceEnrollmentPanel({
 		runAsJob: boolean;
 	}>({
 		open: false,
+		format: "csv",
+		fileName: "",
 		rawText: "",
 		payload: null,
 		parseError: "",
@@ -557,6 +578,7 @@ export function DeviceEnrollmentPanel({
 	});
 	const [selectedExportVendorUserIds, setSelectedExportVendorUserIds] = useState<string[]>([]);
 	const [isCopyDeviceUserSubmitting, setIsCopyDeviceUserSubmitting] = useState(false);
+	const [copyDeviceUserStatusMessage, setCopyDeviceUserStatusMessage] = useState("");
 	const [selectedEmployeeForLink, setSelectedEmployeeForLink] = useState("");
 
 	const {
@@ -1887,6 +1909,7 @@ export function DeviceEnrollmentPanel({
 	);
 
 	const openCopyDeviceUser = (deviceUser: VisibleDeviceUserRow) => {
+		setCopyDeviceUserStatusMessage("");
 		setCopyDeviceUserState({
 			open: true,
 			sourceDeviceUser: deviceUser,
@@ -1894,12 +1917,16 @@ export function DeviceEnrollmentPanel({
 			applyToAllPeers: false,
 			includeFingerprints: true,
 			includeFaceRecognition: true,
+			successfulTargets: [],
 			failedTargets: [],
 		});
 	};
 
 	const describeCopyError = (error: any) => {
 		const message = String(error?.message || error || "").trim();
+		if (/SDK copy source|copy source|before SDK login/i.test(message)) {
+			return message;
+		}
 		if (
 			/forcibly closed|ECONNRESET|socket|unknown port|network error|unable to connect/i.test(
 				message,
@@ -1935,10 +1962,19 @@ export function DeviceEnrollmentPanel({
 				return;
 			}
 			setIsCopyDeviceUserSubmitting(true);
-			let successfulCopies = 0;
+			setCopyDeviceUserStatusMessage(
+				copyDeviceUserState.applyToAllPeers
+					? `Copying to ${targetDeviceIds.length} peer devices through the VM. Keep this open until HRIS verifies each target.`
+					: "Copying through the VM. Keep this open until HRIS verifies the target device.",
+			);
+			const successfulTargets: Array<{ id: string; label: string }> = [];
 			let syntheticPeerCopies = 0;
-			const failedTargets: string[] = [];
-			for (const targetDeviceId of targetDeviceIds) {
+			const failedTargets: Array<{ id: string; label: string; error: string }> = [];
+			for (let index = 0; index < targetDeviceIds.length; index += 1) {
+				const targetDeviceId = targetDeviceIds[index];
+				const targetLabel =
+					copyTargetDeviceOptions.find((option) => option.value === targetDeviceId)
+						?.label || targetDeviceId;
 				try {
 					const result = await deviceService.copyHikvisionDeviceUserToPeer({
 						sourceDeviceId: selectedDeviceId,
@@ -1947,7 +1983,7 @@ export function DeviceEnrollmentPanel({
 						includeFingerprints: copyDeviceUserState.includeFingerprints,
 						includeFaceRecognition: copyDeviceUserState.includeFaceRecognition,
 					});
-					successfulCopies += 1;
+					successfulTargets.push({ id: targetDeviceId, label: targetLabel });
 					if (
 						Number(result?.syntheticCredentialOverlayApplied?.fingerprintCount || 0) >
 							0 ||
@@ -1956,85 +1992,77 @@ export function DeviceEnrollmentPanel({
 						syntheticPeerCopies += 1;
 					}
 				} catch (error: any) {
-					const targetLabel =
-						copyTargetDeviceOptions.find((option) => option.value === targetDeviceId)
-							?.label || targetDeviceId;
-					failedTargets.push(`${targetLabel}: ${describeCopyError(error)}`);
+					const errorMessage = describeCopyError(error);
+					failedTargets.push({
+						id: targetDeviceId,
+						label: targetLabel,
+						error: errorMessage,
+					});
+					if (/SDK copy source|copy source/i.test(errorMessage)) {
+						for (const skippedTargetDeviceId of targetDeviceIds.slice(index + 1)) {
+							failedTargets.push({
+								id: skippedTargetDeviceId,
+								label:
+									copyTargetDeviceOptions.find(
+										(option) => option.value === skippedTargetDeviceId,
+									)?.label || skippedTargetDeviceId,
+								error:
+									"Skipped because the source device became unreachable during this run. Retry this target after the source SDK path is back online.",
+							});
+						}
+						break;
+					}
 				}
 			}
-			if (successfulCopies === 0) {
+			if (successfulTargets.length === 0) {
 				setCopyDeviceUserState((current) => ({
 					...current,
 					open: true,
 					applyToAllPeers: false,
 					targetDeviceId: targetDeviceIds[0] || current.targetDeviceId,
-					failedTargets: targetDeviceIds.map((id) => ({
-						id,
-						label:
-							copyTargetDeviceOptions.find((option) => option.value === id)?.label ||
-							id,
-						error:
-							failedTargets.find((failure) =>
-								failure.startsWith(
-									(copyTargetDeviceOptions.find((option) => option.value === id)
-										?.label || id) + ":",
-								),
-							) || "Target device could not be updated. Retry when it is reachable.",
-					})),
+					successfulTargets,
+					failedTargets,
 				}));
-				throw new Error(failedTargets[0] || "Failed to copy device user");
+				setCopyDeviceUserStatusMessage(
+					"No peer copy finished. The source or selected targets are not reachable through the VM SDK path right now.",
+				);
+				throw new Error(failedTargets[0]?.error || "Failed to copy device user");
 			}
 			if (failedTargets.length > 0) {
 				setCopyDeviceUserState((current) => ({
 					...current,
 					open: true,
 					applyToAllPeers: false,
-					targetDeviceId:
-						targetDeviceIds.find((id) =>
-							failedTargets.some((failure) =>
-								failure.startsWith(
-									(copyTargetDeviceOptions.find((option) => option.value === id)
-										?.label || id) + ":",
-								),
-							),
-						) || current.targetDeviceId,
-					failedTargets: targetDeviceIds
-						.filter((id) =>
-							failedTargets.some((failure) =>
-								failure.startsWith(
-									(copyTargetDeviceOptions.find((option) => option.value === id)
-										?.label || id) + ":",
-								),
-							),
-						)
-						.map((id) => ({
-							id,
-							label:
-								copyTargetDeviceOptions.find((option) => option.value === id)
-									?.label || id,
-							error:
-								failedTargets.find((failure) =>
-									failure.startsWith(
-										(copyTargetDeviceOptions.find(
-											(option) => option.value === id,
-										)?.label || id) + ":",
-									),
-								) ||
-								"Target device could not be updated. Retry when it is reachable.",
-						})),
+					targetDeviceId: failedTargets[0]?.id || current.targetDeviceId,
+					successfulTargets,
+					failedTargets,
 				}));
 				toast.warning(
-					`Copied to ${successfulCopies} of ${targetDeviceIds.length} peer devices.`,
+					`Copied to ${successfulTargets.length} of ${targetDeviceIds.length} peer devices.`,
 					{
-						description: failedTargets[0],
+						description: `${failedTargets[0]?.label}: ${failedTargets[0]?.error}`,
 					},
 				);
+				setCopyDeviceUserStatusMessage(
+					`Copied to ${successfulTargets.length} of ${targetDeviceIds.length} peer devices. Retry the failed targets below.`,
+				);
+				await Promise.allSettled([
+					refetchSourceDeviceUsers(),
+					refetchDbDeviceUsers(),
+					refetchOpenDbDeviceUsers(),
+					refetchDeviceUserSummary(),
+					refetchSourceMatchedDeviceUsers(),
+					refetchSyncPreview(),
+					refetchSyncRuns(),
+				]);
+				return;
 			} else {
 				toast.success(
 					targetDeviceIds.length > 1
 						? `Copied to ${targetDeviceIds.length} peer devices`
 						: "Copied to peer device",
 				);
+				setCopyDeviceUserStatusMessage("");
 			}
 			if (syntheticPeerCopies > 0) {
 				toast.success(
@@ -2048,6 +2076,7 @@ export function DeviceEnrollmentPanel({
 				applyToAllPeers: false,
 				includeFingerprints: true,
 				includeFaceRecognition: true,
+				successfulTargets: [],
 				failedTargets: [],
 			});
 			await Promise.allSettled([
@@ -2060,6 +2089,10 @@ export function DeviceEnrollmentPanel({
 				refetchSyncRuns(),
 			]);
 		} catch (error: any) {
+			setCopyDeviceUserStatusMessage(
+				error?.message ||
+					"Copy did not verify on the target device. Keep this modal open to retry, or close it after noting the failed target.",
+			);
 			toast.error(error?.message || "Failed to copy device user");
 		} finally {
 			setIsCopyDeviceUserSubmitting(false);
@@ -2739,6 +2772,343 @@ export function DeviceEnrollmentPanel({
 			.replace(/</g, "&lt;")
 			.replace(/>/g, "&gt;")
 			.replace(/"/g, "&quot;");
+	const getSdkMergeCountButtonClass = (isActive: boolean, count: number) => {
+		const base = "rounded border px-2 py-1 text-left text-xs font-semibold transition";
+		if (isActive) return `${base} border-orange-300 bg-orange-50 text-orange-950`;
+		if (count > 0) return `${base} border-amber-200 bg-amber-50 text-amber-950 hover:border-amber-300`;
+		return `${base} border-slate-200 bg-white text-slate-950`;
+	};
+	const getSdkMergeChoiceButtonClass = (
+		isActive: boolean,
+		tone: "orange" | "emerald" = "orange",
+	) => {
+		const base = "rounded-md border px-2 py-2 text-xs";
+		if (!isActive) return `${base} border-slate-200 bg-white text-slate-950`;
+		return tone === "emerald"
+			? `${base} border-emerald-400 bg-emerald-50 text-emerald-950`
+			: `${base} border-orange-400 bg-orange-50 text-orange-950`;
+	};
+	const parseDeviceUserCsvText = (text: string) => {
+		const rows: string[][] = [];
+		let cell = "";
+		let row: string[] = [];
+		let inQuotes = false;
+		const normalizedText = text.replace(/^\uFEFF/, "");
+		for (let index = 0; index < normalizedText.length; index += 1) {
+			const char = normalizedText[index];
+			const nextChar = normalizedText[index + 1];
+			if (char === '"' && inQuotes && nextChar === '"') {
+				cell += '"';
+				index += 1;
+			} else if (char === '"') {
+				inQuotes = !inQuotes;
+			} else if (char === "," && !inQuotes) {
+				row.push(cell);
+				cell = "";
+			} else if ((char === "\n" || char === "\r") && !inQuotes) {
+				if (char === "\r" && nextChar === "\n") index += 1;
+				row.push(cell);
+				if (row.some((value) => value.trim())) rows.push(row);
+				row = [];
+				cell = "";
+			} else {
+				cell += char;
+			}
+		}
+		row.push(cell);
+		if (row.some((value) => value.trim())) rows.push(row);
+		if (rows.length < 2) return [];
+		const headers = rows[0].map((header) => header.trim());
+		return rows.slice(1).map((values) =>
+			Object.fromEntries(headers.map((header, index) => [header, values[index] || ""])),
+		);
+	};
+	const parseCsvNumber = (value: unknown) => {
+		const numberValue = Number(value);
+		return Number.isFinite(numberValue) ? numberValue : 0;
+	};
+	const parseCsvBoolean = (value: unknown) => {
+		const normalized = String(value || "").trim().toLowerCase();
+		return ["true", "yes", "1", "present", DEVICE_USER_CSV_ENCRYPTED_BUNDLE_AVAILABLE].includes(
+			normalized,
+		);
+	};
+	const getCsvRawTemplateValue = (
+		value: unknown,
+		fallback = DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
+	) => String(value || "").trim() || fallback;
+	const getEncryptedBundleCiphertextForCsv = (payload: DeviceUserExportPayload) =>
+		String(
+			(payload.biometricBundle as any)?.ciphertext ||
+				(payload.biometricBundle as any)?.encryptedPayload ||
+				(payload.biometricBundle as any)?.encryptedBlob ||
+				"",
+		).trim();
+	const getRawTemplateColumnValue = (user: any, payload: DeviceUserExportPayload, key: string) => {
+		const directValue =
+			user?.[key] ||
+			user?.rawPayload?.[key] ||
+			user?.vendorMetadata?.[key] ||
+			user?.rawPayload?._hrisDeviceMetadata?.[key] ||
+			user?.vendorMetadata?.biometricBundle?.[key];
+		if (directValue) return String(directValue);
+		const encryptedCiphertext = getEncryptedBundleCiphertextForCsv(payload);
+		if (encryptedCiphertext) return DEVICE_USER_CSV_ENCRYPTED_BUNDLE_AVAILABLE;
+		return DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED;
+	};
+	const getDeviceUserCsvHeaders = () => [
+		"sourceDeviceName",
+		"sourceDeviceId",
+		"vendorUserId",
+		"employeeNo",
+		"displayName",
+		"hrisEmployeeId",
+		"employeeName",
+		"status",
+		"userType",
+		"linkedToHris",
+		"cardCount",
+		"fingerprintCount",
+		"faceCount",
+		"biometricBundleStatus",
+		"biometricPlaintextExposed",
+		...DEVICE_USER_BIOMETRIC_CSV_COLUMNS,
+		"exportedAt",
+	];
+	const buildDeviceUserImportPayloadFromCsv = (
+		text: string,
+		fileName = "device-users.csv",
+	): DeviceUserExportPayload => {
+		const rows = parseDeviceUserCsvText(text);
+		const importRows = rows
+			.map((row) => ({
+				sourceDeviceName: String(row.sourceDeviceName || "CSV import").trim(),
+				sourceDeviceId: String(row.sourceDeviceId || "csv-import").trim(),
+				vendorUserId: String(row.vendorUserId || "").trim(),
+				employeeNo: String(row.employeeNo || row.vendorUserId || "").trim(),
+				displayName: String(row.displayName || "").trim(),
+				hrisEmployeeId: String(row.hrisEmployeeId || "").trim(),
+				employeeName: String(row.employeeName || "").trim(),
+				status: String(row.status || "UNMATCHED").trim(),
+				userType: String(row.userType || "").trim(),
+				cardCount: parseCsvNumber(row.cardCount),
+				fingerprintCount: parseCsvNumber(row.fingerprintCount),
+				faceCount: parseCsvNumber(row.faceCount),
+				biometricBundleStatus: String(row.biometricBundleStatus || "not_present").trim(),
+				biometricBundlePresent: parseCsvBoolean(row.biometricBundlePresent),
+				biometricBundleAlgorithm: String(row.biometricBundleAlgorithm || "").trim(),
+				biometricBundleRequiredForRawImport: parseCsvBoolean(
+					row.biometricBundleRequiredForRawImport,
+				),
+				biometricTransferMode: String(row.biometricTransferMode || "metadataOnly").trim(),
+				fingerprintRawTemplateBlob: getCsvRawTemplateValue(row.fingerprintRawTemplateBlob),
+				faceRawTemplateBlob: getCsvRawTemplateValue(row.faceRawTemplateBlob),
+				rawBiometricPlaintextPolicy: String(
+					row.rawBiometricPlaintextPolicy || DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
+				).trim(),
+				rawBiometricSource: String(row.rawBiometricSource || "csv_import").trim(),
+			}))
+			.filter((row) => row.vendorUserId);
+		if (!importRows.length) {
+			throw new Error("CSV must include at least one row with vendorUserId.");
+		}
+		const devicesById = new Map<string, typeof importRows>();
+		for (const row of importRows) {
+			const sourceDeviceId = row.sourceDeviceId || "csv-import";
+			devicesById.set(sourceDeviceId, [...(devicesById.get(sourceDeviceId) || []), row]);
+		}
+		const exportedAt = new Date().toISOString();
+		return {
+			schemaVersion: "project-truth.hikvision-device-users.v1",
+			exportedAt,
+			scope: {
+				type: "currentDevice",
+				sourceEndpoint: fileName,
+				selection: "currentPage",
+				status: "all",
+			},
+			policy: {
+				importedFrom: "csv",
+				plaintextBiometricExposed: false,
+				note: "CSV import carries identity, credential counts, and explicit raw-template custody columns. Plaintext biometric bytes are not accepted; encrypted bundle values must be unlocked through the guarded import path.",
+				rawTemplateColumns: DEVICE_USER_BIOMETRIC_CSV_COLUMNS,
+			},
+			biometricBundle: {
+				present: importRows.some((row) => row.biometricBundlePresent),
+				requiredForPortableTemplateImport: importRows.some(
+					(row) => row.biometricBundleRequiredForRawImport,
+				),
+				algorithm:
+					importRows.find((row) => row.biometricBundleAlgorithm)?.biometricBundleAlgorithm ||
+					null,
+				status:
+					importRows.find((row) => row.biometricBundleStatus)?.biometricBundleStatus ||
+					"not_present",
+				reason:
+					"CSV import preserves raw-template custody columns. Plaintext raw biometric bytes are not imported from spreadsheet cells.",
+				plaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
+			},
+			devices: Array.from(devicesById.entries()).map(([sourceDeviceId, deviceRows]) => ({
+				device: {
+					id: sourceDeviceId,
+					name: deviceRows[0]?.sourceDeviceName || "CSV import",
+					address: "",
+					port: 0,
+					protocol: "https",
+				},
+				sourceRead: {
+					status: "csv_import",
+					endpoint: fileName,
+					total: deviceRows.length,
+				},
+				capabilities: {
+					support: {
+						userExport: true,
+						cardExport: true,
+						fingerprintExport: false,
+						fingerprintImport: true,
+						faceImportExport: true,
+					},
+					policy: {
+						rawBiometricTemplateBytes: "explicit_csv_columns_no_plaintext",
+					},
+				},
+				summary: {
+					totalUsers: deviceRows.length,
+					readFromDevice: deviceRows.length,
+					savedInHris: deviceRows.length,
+					linked: deviceRows.filter((row) => row.hrisEmployeeId).length,
+					unlinked: deviceRows.filter((row) => !row.hrisEmployeeId).length,
+					credentialTypes: {
+						card: "count_only",
+						fingerprint: "count_only_requires_sdk_peer_copy",
+						face: "count_only_requires_sdk_peer_copy",
+					},
+					selection: {
+						mode: "currentPage",
+						matchedRows: deviceRows.length,
+						totalRowsBeforeSelection: deviceRows.length,
+					},
+				},
+				users: deviceRows.map((row) => ({
+					id: `${sourceDeviceId}:${row.vendorUserId}`,
+					organizationId: "",
+					deviceId: sourceDeviceId,
+					vendorUserId: row.vendorUserId,
+					employeeNo: row.employeeNo || row.vendorUserId,
+					displayName: row.displayName,
+					userType: row.userType,
+					status: row.status === "ACTIVE" ? "ACTIVE" : "UNMATCHED",
+					employeeId: row.hrisEmployeeId || null,
+					employee: row.hrisEmployeeId
+						? {
+								id: row.hrisEmployeeId,
+								employeeId: row.hrisEmployeeId,
+								fullName: row.employeeName || null,
+							}
+						: null,
+					rawPayload: {
+						_hrisDeviceMetadata: {
+							source: "csv_import",
+							credentialSummary: {
+								cardCount: row.cardCount,
+								fingerprintCount: row.fingerprintCount,
+								faceCount: row.faceCount,
+								hasCard: row.cardCount > 0,
+								hasFingerprint: row.fingerprintCount > 0,
+								hasFace: row.faceCount > 0,
+							},
+							plaintextBiometricExposed: false,
+							biometricCsvColumns: {
+								biometricBundleStatus: row.biometricBundleStatus,
+								biometricBundlePresent: row.biometricBundlePresent,
+								biometricBundleAlgorithm: row.biometricBundleAlgorithm || null,
+								biometricBundleRequiredForRawImport:
+									row.biometricBundleRequiredForRawImport,
+								biometricTransferMode: row.biometricTransferMode,
+								fingerprintRawTemplateBlob: row.fingerprintRawTemplateBlob,
+								faceRawTemplateBlob: row.faceRawTemplateBlob,
+								rawBiometricPlaintextPolicy: row.rawBiometricPlaintextPolicy,
+								rawBiometricSource: row.rawBiometricSource,
+							},
+						},
+					},
+				})),
+			})),
+			summary: {
+				devices: devicesById.size,
+				totalUsers: importRows.length,
+				linked: importRows.filter((row) => row.hrisEmployeeId).length,
+				unlinked: importRows.filter((row) => !row.hrisEmployeeId).length,
+			},
+		};
+	};
+	const buildDeviceUserCsvTemplate = () => {
+		const headers = getDeviceUserCsvHeaders();
+		const sourceRow = pagedDeviceUserRows[0];
+		const sampleCredentialSummary = getDeviceUserCredentialSummary(sourceRow);
+		const sampleRow = sourceRow
+			? {
+					sourceDeviceName: selectedDevice?.name || "",
+					sourceDeviceId: selectedDeviceId || "",
+					vendorUserId: sourceRow.vendorUserId || "",
+					employeeNo: sourceRow.vendorUserId || "",
+					displayName: sourceRow.displayName || "",
+					hrisEmployeeId: sourceRow.employee?.employeeId || "",
+					employeeName: sourceRow.employee?.fullName || "",
+					status: sourceRow.status || "",
+					userType: sourceRow.userType || "",
+					linkedToHris: sourceRow.employeeId ? "Yes" : "No",
+					cardCount: sampleCredentialSummary.cardCount,
+					fingerprintCount: sampleCredentialSummary.fingerprintCount,
+					faceCount: sampleCredentialSummary.faceCount,
+					biometricBundleStatus: "not_present",
+					biometricPlaintextExposed: "No",
+					biometricBundlePresent: "No",
+					biometricBundleAlgorithm: "aes-256-gcm",
+					biometricBundleRequiredForRawImport:
+						sampleCredentialSummary.fingerprintCount > 0 ||
+						sampleCredentialSummary.faceCount > 0
+							? "Yes"
+							: "No",
+					biometricTransferMode: "sdkPeerCopy",
+					fingerprintRawTemplateBlob: DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
+					faceRawTemplateBlob: DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
+					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
+					rawBiometricSource: "template",
+					exportedAt: new Date().toISOString(),
+				}
+			: {
+					sourceDeviceName: selectedDevice?.name || "Source device",
+					sourceDeviceId: selectedDeviceId || "source-device-id",
+					vendorUserId: "1001",
+					employeeNo: "1001",
+					displayName: "Sample Device User",
+					hrisEmployeeId: "EMP-1001",
+					employeeName: "Sample Employee",
+					status: "ACTIVE",
+					userType: "normal",
+					linkedToHris: "Yes",
+					cardCount: 1,
+					fingerprintCount: 1,
+					faceCount: 0,
+					biometricBundleStatus: "not_present",
+					biometricPlaintextExposed: "No",
+					biometricBundlePresent: "No",
+					biometricBundleAlgorithm: "aes-256-gcm",
+					biometricBundleRequiredForRawImport: "Yes",
+					biometricTransferMode: "sdkPeerCopy",
+					fingerprintRawTemplateBlob: DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
+					faceRawTemplateBlob: DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
+					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
+					rawBiometricSource: "template",
+					exportedAt: new Date().toISOString(),
+				};
+		return [
+			headers.join(","),
+			headers.map((header) => escapeCsvValue((sampleRow as any)[header])).join(","),
+		].join("\r\n");
+	};
 	const buildDeviceUserExportRows = (payload: DeviceUserExportPayload) =>
 		(payload.devices || []).flatMap((device: any) =>
 			(device.users || []).map((user: any) => {
@@ -2747,6 +3117,12 @@ export function DeviceEnrollmentPanel({
 					user.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
 					user.vendorMetadata?.credentialSummary ||
 					{};
+				const biometricBundlePresent = Boolean(payload.biometricBundle?.present);
+				const biometricBundleRequired = Boolean(
+					payload.biometricBundle?.requiredForPortableTemplateImport ||
+						Number(credentialSummary.fingerprintCount || 0) > 0 ||
+						Number(credentialSummary.faceCount || 0) > 0,
+				);
 				return {
 					sourceDeviceName: device.device?.name || "",
 					sourceDeviceId: device.device?.id || "",
@@ -2763,6 +3139,25 @@ export function DeviceEnrollmentPanel({
 					faceCount: Number(credentialSummary.faceCount || 0),
 					biometricBundleStatus: payload.biometricBundle?.status || "not_requested",
 					biometricPlaintextExposed: "No",
+					biometricBundlePresent: biometricBundlePresent ? "Yes" : "No",
+					biometricBundleAlgorithm:
+						payload.biometricBundle?.algorithm || "aes-256-gcm",
+					biometricBundleRequiredForRawImport: biometricBundleRequired ? "Yes" : "No",
+					biometricTransferMode: biometricBundlePresent
+						? "encryptedBundle"
+						: "sdkPeerCopy",
+					fingerprintRawTemplateBlob: getRawTemplateColumnValue(
+						user,
+						payload,
+						"fingerprintRawTemplateBlob",
+					),
+					faceRawTemplateBlob: getRawTemplateColumnValue(
+						user,
+						payload,
+						"faceRawTemplateBlob",
+					),
+					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
+					rawBiometricSource: device.sourceRead?.status || "hris_saved_metadata",
 					exportedAt: payload.exportedAt || "",
 				};
 			}),
@@ -2781,24 +3176,7 @@ export function DeviceEnrollmentPanel({
 			});
 			extension = "json";
 		} else {
-			const headers = [
-				"sourceDeviceName",
-				"sourceDeviceId",
-				"vendorUserId",
-				"employeeNo",
-				"displayName",
-				"hrisEmployeeId",
-				"employeeName",
-				"status",
-				"userType",
-				"linkedToHris",
-				"cardCount",
-				"fingerprintCount",
-				"faceCount",
-				"biometricBundleStatus",
-				"biometricPlaintextExposed",
-				"exportedAt",
-			];
+			const headers = getDeviceUserCsvHeaders();
 			if (format === "csv") {
 				const csv = [
 					headers.join(","),
@@ -2904,12 +3282,22 @@ export function DeviceEnrollmentPanel({
 		let payload = deviceUserImportState.payload;
 		try {
 			if (!payload) {
-				payload = JSON.parse(deviceUserImportState.rawText) as DeviceUserExportPayload;
+				payload =
+					deviceUserImportState.format === "csv"
+						? buildDeviceUserImportPayloadFromCsv(
+								deviceUserImportState.rawText,
+								deviceUserImportState.fileName || "device-users.csv",
+							)
+						: (JSON.parse(deviceUserImportState.rawText) as DeviceUserExportPayload);
 			}
-		} catch {
+		} catch (error: any) {
 			setDeviceUserImportState((current) => ({
 				...current,
-				parseError: "Paste a valid JSON export before previewing import.",
+				parseError:
+					error?.message ||
+					(deviceUserImportState.format === "csv"
+						? "Choose a valid device-user CSV export before previewing import."
+						: "Choose a valid package JSON export before previewing import."),
 				preview: null,
 			}));
 			return;
@@ -5036,7 +5424,7 @@ export function DeviceEnrollmentPanel({
 							</div>
 
 							<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
-								<div className="grid gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-500 lg:grid-cols-[minmax(180px,1fr)_70px_repeat(5,92px)]">
+								<div className="grid gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-700 lg:grid-cols-[minmax(180px,1fr)_70px_repeat(5,92px)]">
 									<span>Device</span>
 									<span>Read</span>
 									<span>Missing</span>
@@ -5056,7 +5444,8 @@ export function DeviceEnrollmentPanel({
 											<span className="block truncate">
 												{device.name || device.address || device.id}
 											</span>
-											<span className="block truncate text-xs font-normal text-slate-500">
+											<span
+												className={`block truncate text-xs font-normal ${selectedMergeDeviceId === device.id ? "text-orange-900" : "text-slate-700"}`}>
 												{device.address || device.id}
 											</span>
 										</button>
@@ -5076,7 +5465,11 @@ export function DeviceEnrollmentPanel({
 												onClick={() =>
 													setSdkMergeDeviceFilter(device.id, filter)
 												}
-												className={`rounded border px-2 py-1 text-left text-xs font-semibold transition ${selectedMergeDeviceId === device.id && sdkMergeFilter === filter ? "border-orange-300 bg-orange-50 text-orange-950" : count > 0 ? "border-amber-200 bg-amber-50 text-amber-950 hover:border-amber-300" : "border-slate-200 bg-white text-slate-950"}`}>
+												className={getSdkMergeCountButtonClass(
+													selectedMergeDeviceId === device.id &&
+														sdkMergeFilter === filter,
+													count,
+												)}>
 												{count}
 											</button>
 										))}
@@ -5253,7 +5646,7 @@ export function DeviceEnrollmentPanel({
 																					"A",
 																				)
 																			}
-																			className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "A" ? "border-orange-400 bg-orange-50 text-orange-950" : "border-slate-200 bg-white text-slate-950"}`}>
+																			className={`min-w-0 text-left ${getSdkMergeChoiceButtonClass(selected === "A")}`}>
 																			<span className="block truncate font-medium">
 																				{
 																					conflict.deviceA
@@ -5276,7 +5669,7 @@ export function DeviceEnrollmentPanel({
 																					"B",
 																				)
 																			}
-																			className={`min-w-0 rounded-md border px-2 py-2 text-left text-xs ${selected === "B" ? "border-orange-400 bg-orange-50 text-orange-950" : "border-slate-200 bg-white text-slate-950"}`}>
+																			className={`min-w-0 text-left ${getSdkMergeChoiceButtonClass(selected === "B")}`}>
 																			<span className="block truncate font-medium">
 																				{
 																					conflict.deviceB
@@ -5299,7 +5692,7 @@ export function DeviceEnrollmentPanel({
 																					"KEEP",
 																				)
 																			}
-																			className={`rounded-md border px-2 py-2 text-xs font-medium ${selected === "KEEP" ? "border-emerald-400 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-950"}`}>
+																			className={`font-medium ${getSdkMergeChoiceButtonClass(selected === "KEEP", "emerald")}`}>
 																			Keep
 																		</button>
 																		<Badge
@@ -5924,10 +6317,10 @@ export function DeviceEnrollmentPanel({
 									{selectedDevice?.name || "Selected device"}
 								</p>
 								<p className="mt-1 text-xs text-slate-600">
-									CSV and Excel export clean audit rows. Package JSON is the
-									re-importable sync file with metadata, hashes, counts, and
-									capability evidence. Raw biometric template bytes are never written
-									to plain exports.
+									CSV and Excel export identity rows plus explicit raw-template
+									custody columns. Package JSON is the re-importable sync file with
+									metadata, hashes, counts, and capability evidence. Plaintext
+									biometric bytes are never written to spreadsheet cells.
 								</p>
 							</div>
 							<Badge variant="secondary" className="self-start">
@@ -5980,7 +6373,7 @@ export function DeviceEnrollmentPanel({
 					</div>
 					<div className="grid gap-2 sm:grid-cols-3">
 						{[
-							["csv", "CSV", "Spreadsheet audit rows"],
+							["csv", "CSV", "Spreadsheet custody rows"],
 							["excel", "Excel", "Excel-readable .xls"],
 							["json", "Package JSON", "Re-importable sync package"],
 						].map(([value, label, hint]) => (
@@ -6024,6 +6417,11 @@ export function DeviceEnrollmentPanel({
 							Use SDK peer copy when both devices are reachable. Use an encrypted
 							bundle only for portable template payloads; the passphrase is entered at
 							import time and is not stored.
+						</p>
+						<p className="mt-2 font-mono text-[11px] text-cyan-950">
+							CSV raw columns: fingerprintRawTemplateBlob, faceRawTemplateBlob,
+							biometricBundlePresent, biometricBundleAlgorithm,
+							biometricBundleRequiredForRawImport.
 						</p>
 					</div>
 					<div className="grid gap-2 text-sm sm:grid-cols-3">
@@ -6136,25 +6534,69 @@ export function DeviceEnrollmentPanel({
 					setDeviceUserImportState((current) => ({ ...current, open }))
 				}
 				title="Import device users"
-				description="Validate an export against the selected target device. Preview is non-mutating; execute is disabled until a safe write path is approved.">
+				description="Import a CSV or package export to a selected target device. Preview is non-mutating; execute is disabled until confirmation.">
 				<div className="space-y-4">
 					<div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
 						<p className="font-semibold text-slate-950">
 							Target: {selectedDevice?.name || "Select device"}
 						</p>
 						<p className="mt-1 text-xs text-slate-600">
-							Paste a Project Truth device-user export JSON to compare creates,
-							matches, conflicts, and missing HRIS employees.
+							Use the CSV export from another Hikvision device to compare users,
+							matches, conflicts, missing HRIS employees, and raw-template custody
+							status. Package JSON remains the full encrypted sync bundle format.
 						</p>
+					</div>
+					<div className="grid gap-2 sm:grid-cols-2">
+						{[
+							["csv", "CSV", "Default import with custody columns"],
+							["json", "Package JSON", "Advanced encrypted bundle import"],
+						].map(([value, label, description]) => (
+							<button
+								key={value}
+								type="button"
+								onClick={() =>
+									setDeviceUserImportState((current) => ({
+										...current,
+										format: value as DeviceUserImportFormat,
+										rawText: "",
+										fileName: "",
+										payload: null,
+										parseError: "",
+										preview: null,
+										result: null,
+									}))
+								}
+								className={`flex min-w-0 items-start gap-2 rounded-md border px-3 py-2 text-left text-sm transition ${
+									deviceUserImportState.format === value
+										? "border-orange-300 bg-orange-50 text-orange-950"
+										: "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+								}`}>
+								{value === "csv" ? (
+									<FileSpreadsheet className="mt-0.5 h-4 w-4 shrink-0" />
+								) : (
+									<FileJson className="mt-0.5 h-4 w-4 shrink-0" />
+								)}
+								<span className="min-w-0">
+									<span className="block font-semibold">{label}</span>
+									<span className="block text-xs opacity-80">{description}</span>
+								</span>
+							</button>
+						))}
 					</div>
 					<div className="grid gap-2 sm:grid-cols-[1fr_auto]">
 						<label className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
 							<span className="block font-medium text-slate-800">
-								Import JSON file
+								{deviceUserImportState.format === "csv"
+									? "Import CSV file"
+									: "Import package JSON file"}
 							</span>
 							<input
 								type="file"
-								accept="application/json,.json"
+								accept={
+									deviceUserImportState.format === "csv"
+										? "text/csv,.csv"
+										: "application/json,.json"
+								}
 								className="mt-2 block w-full text-xs text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-700"
 								onChange={(event) => {
 									const file = event.target.files?.[0];
@@ -6163,6 +6605,7 @@ export function DeviceEnrollmentPanel({
 										setDeviceUserImportState((current) => ({
 											...current,
 											rawText: text,
+											fileName: file.name,
 											payload: null,
 											parseError: "",
 											preview: null,
@@ -6172,28 +6615,55 @@ export function DeviceEnrollmentPanel({
 								}}
 							/>
 						</label>
-						<div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
+						<div className="flex flex-col gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
 							<p className="font-semibold">Preview first</p>
-							<p className="mt-1 text-emerald-900">
+							<p className="text-emerald-900">
 								No target device write happens until confirmation and execute.
 							</p>
+							<Button
+								type="button"
+								variant="outline"
+								className="h-8 border-emerald-200 bg-white px-2 text-xs text-emerald-950 hover:bg-emerald-100"
+								onClick={() => {
+									const blob = new Blob([`\uFEFF${buildDeviceUserCsvTemplate()}`], {
+										type: "text/csv;charset=utf-8",
+									});
+									const url = URL.createObjectURL(blob);
+									const link = document.createElement("a");
+									link.href = url;
+									link.download = "device-users-import-template.csv";
+									document.body.appendChild(link);
+									link.click();
+									link.remove();
+									URL.revokeObjectURL(url);
+								}}>
+								<Download className="h-3.5 w-3.5" />
+								CSV template
+							</Button>
 						</div>
 					</div>
-					<textarea
-						value={deviceUserImportState.rawText}
-						onChange={(event) =>
-							setDeviceUserImportState((current) => ({
-								...current,
-								rawText: event.target.value,
-								payload: null,
-								parseError: "",
-								preview: null,
-								result: null,
-							}))
-						}
-						className="min-h-[160px] w-full rounded-md border border-slate-200 bg-white p-3 font-mono text-xs text-slate-900 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200"
-						placeholder="{ ... device user export JSON ... }"
-					/>
+					{deviceUserImportState.format === "json" ? (
+						<textarea
+							value={deviceUserImportState.rawText}
+							onChange={(event) =>
+								setDeviceUserImportState((current) => ({
+									...current,
+									rawText: event.target.value,
+									payload: null,
+									parseError: "",
+									preview: null,
+									result: null,
+								}))
+							}
+							className="min-h-[140px] w-full rounded-md border border-slate-200 bg-white p-3 font-mono text-xs text-slate-900 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200"
+							placeholder="{ ... encrypted package export ... }"
+						/>
+					) : deviceUserImportState.fileName ? (
+						<div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800">
+							<span className="font-medium">Loaded CSV:</span>{" "}
+							<span className="break-all">{deviceUserImportState.fileName}</span>
+						</div>
+					) : null}
 					{deviceUserImportState.parseError ? (
 						<div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-950">
 							{deviceUserImportState.parseError}
@@ -6502,6 +6972,7 @@ export function DeviceEnrollmentPanel({
 				open={copyDeviceUserState.open}
 				onOpenChange={(open) => {
 					if (!open && !isCopyDeviceUserSubmitting) {
+						setCopyDeviceUserStatusMessage("");
 						setCopyDeviceUserState({
 							open: false,
 							sourceDeviceUser: null,
@@ -6509,6 +6980,7 @@ export function DeviceEnrollmentPanel({
 							applyToAllPeers: false,
 							includeFingerprints: true,
 							includeFaceRecognition: true,
+							successfulTargets: [],
 							failedTargets: [],
 						});
 					}
@@ -6519,6 +6991,46 @@ export function DeviceEnrollmentPanel({
 				showCloseButton={!isCopyDeviceUserSubmitting}
 				closeOnBackdropClick={!isCopyDeviceUserSubmitting}>
 				<div className="space-y-4">
+					{copyDeviceUserStatusMessage ? (
+						<div
+							className={`rounded-md border px-3 py-3 text-sm ${
+								isCopyDeviceUserSubmitting
+									? "border-blue-200 bg-blue-50 text-blue-950"
+									: copyDeviceUserState.failedTargets.length
+										? "border-amber-200 bg-amber-50 text-amber-950"
+										: copyDeviceUserState.successfulTargets.length
+											? "border-emerald-200 bg-emerald-50 text-emerald-950"
+											: "border-slate-200 bg-slate-50 text-slate-800"
+							}`}>
+							<div className="flex items-start gap-2">
+								{isCopyDeviceUserSubmitting ? (
+									<Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+								) : copyDeviceUserState.failedTargets.length ? (
+									<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+								) : (
+									<Link2 className="mt-0.5 h-4 w-4 shrink-0" />
+								)}
+								<p className="min-w-0 leading-5">{copyDeviceUserStatusMessage}</p>
+							</div>
+						</div>
+					) : null}
+					{copyDeviceUserState.successfulTargets.length ? (
+						<div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-950">
+							<p className="font-semibold">Copied to peer devices</p>
+							<p className="mt-1 text-xs text-emerald-800">
+								These copies were accepted and kept. Failed devices below can be
+								retried separately.
+							</p>
+							<ul className="mt-2 space-y-1 text-xs text-emerald-900">
+								{copyDeviceUserState.successfulTargets.map((target) => (
+									<li key={target.id}>
+										<span className="font-semibold">{target.label}:</span>{" "}
+										Copied
+									</li>
+								))}
+							</ul>
+						</div>
+					) : null}
 					{copyDeviceUserState.failedTargets.length ? (
 						<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
 							<p className="font-semibold">Some peer devices still need attention</p>
@@ -6661,7 +7173,8 @@ export function DeviceEnrollmentPanel({
 							type="button"
 							variant="outline"
 							disabled={isCopyDeviceUserSubmitting}
-							onClick={() =>
+							onClick={() => {
+								setCopyDeviceUserStatusMessage("");
 								setCopyDeviceUserState({
 									open: false,
 									sourceDeviceUser: null,
@@ -6669,9 +7182,10 @@ export function DeviceEnrollmentPanel({
 									applyToAllPeers: false,
 									includeFingerprints: true,
 									includeFaceRecognition: true,
+									successfulTargets: [],
 									failedTargets: [],
-								})
-							}>
+								});
+							}}>
 							Cancel
 						</Button>
 						<Button
@@ -6690,11 +7204,11 @@ export function DeviceEnrollmentPanel({
 							)}
 							{isCopyDeviceUserSubmitting
 								? "Copying..."
-								: copyDeviceUserState.applyToAllPeers
-									? copyDeviceUserState.failedTargets.length
-										? "Retry failed devices"
-										: "Copy to all peers"
-									: "Copy to peer"}
+								: copyDeviceUserState.failedTargets.length
+									? "Retry failed devices"
+									: copyDeviceUserState.applyToAllPeers
+										? "Copy to all peers"
+										: "Copy to peer"}
 						</Button>
 					</div>
 				</div>

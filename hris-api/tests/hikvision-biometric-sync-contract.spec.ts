@@ -42,27 +42,45 @@ describe("Hikvision biometric sync contract", () => {
 			"utf8",
 		);
 
-		expect(router).to.include(
-			'routes.post("/hikvision/copy-user", controller.copyHikvisionDeviceUserToPeer)',
-		);
+		expect(router).to.include('routes.post(\n\t\t"/hikvision/copy-user"');
+		expect(router).to.include("requestTimeout({");
+		expect(router).to.include('label: "hikvision-copy-user"');
+		expect(router).to.include("controller.copyHikvisionDeviceUserToPeer");
 		expect(controller).to.include("const copyHikvisionDeviceUserToPeer = async");
 		expect(controller).to.include("const executeHikvisionDeviceUserPeerCopy = async");
 		expect(controller).to.include("const copyHikvisionUserToPeerWithRetry = async");
 		expect(controller).to.include("const runHikvisionManualCopyOnVm = async");
+		expect(controller).to.include("const isDryRun = req.body?.dryRun === true || req.body?.execute === false");
+		expect(controller).to.include("Dry run only; no Hikvision device or HRIS records were changed");
+		expect(controller).to.include("plannedStages");
+		expect(controller).to.include("requiresPhysicalPeerCopy");
+		expect(controller).to.include("sourceCredentialSummary");
+		expect(controller).to.include("targetCredentialSummary");
+		expect(controller).to.include("targetSingleUserRefreshMs");
+		expect(controller).to.include("requestTotalMs");
 		expect(controller).to.include("const writeHikvisionManualCopySpec =");
 		expect(controller).to.include("HIKVISION_ALLOW_STATIC_DEVICE_SPEC=1");
 		expect(controller).to.include("HIKVISION_DEVICE_SPEC_OVERRIDE=");
 		expect(controller).to.include('name: "static_spec"');
+		expect(controller).to.include("const preflightHikvisionManualCopyEndpoint = async");
+		expect(controller).to.include("VM cannot reach");
+		expect(controller).to.include("/dev/tcp/");
 		expect(controller).to.include("peer_copy_noop_already_synced");
 		expect(controller).to.include("peer_copy_noop_overlay_only");
 		expect(controller).to.include("strategy: \"noop_overlay_only\"");
 		expect(controller).to.include("!shouldConvergeDeviceUserToPeer(sourceDeviceUser, existingTargetDeviceUser)");
 		expect(controller).to.include("const isMissingHikvisionListenerRuntimeError =");
+		expect(controller).to.include(
+			"const isDeterministicHikvisionManualCopySdkFailure =",
+		);
 		expect(controller).to.include("const runManualCopy = (extraEnv: string[] = []) =>");
 		expect(controller).to.include("Math.max(waitSeconds * 1000 + 45000, 60000)");
 		expect(controller).to.include("maxBuffer: 5 * 1024 * 1024");
 		expect(controller).to.include("result.exitCode !== 0");
 		expect(controller).to.include("isMissingHikvisionListenerRuntimeError(firstAttemptDetail)");
+		expect(controller).to.include(
+			"isDeterministicHikvisionManualCopySdkFailure(sdkFailureMessage)",
+		);
 		expect(controller.indexOf('name: "postgres"')).to.be.lessThan(
 			controller.indexOf('name: "api"'),
 		);
@@ -103,6 +121,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("summarizeDeviceUserImportTarget");
 		expect(controller).to.include("waitForDelayedHikvisionPeerCopy");
 		expect(controller).to.include("HIKVISION_PEER_COPY_COMPLETION_WAIT_MS");
+		expect(controller).to.include("DEVICE_USER_IMPORT_ROW_TIMEOUT_MS");
+		expect(controller).to.include("withDeviceUserImportTimeout");
+		expect(controller).to.include("Timed out copying device user");
 		expect(controller).to.include("raw fingerprint and face template bytes are never exported in normal JSON");
 		expect(controller).to.include("encrypted_bundle_required_or_sdk_peer_copy");
 		expect(controller).to.include("const buildDeviceUserImportPreviewToken =");
@@ -119,6 +140,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("const runDeviceUserImportExecuteWork = async");
 		expect(controller).to.include("const getDeviceUserImportJob = async");
 		expect(controller).to.include("Device-user import job accepted");
+		expect(controller).to.include("const terminalStatus =");
 		expect(controller).to.include("runAsJob");
 		expect(controller).to.include("pollUrl: `/api/device/users/import/jobs/${jobId}`");
 		expect(controller).to.include("DEVICE_USER_PACKAGE_IMPORT_JOB_DIR");
@@ -295,6 +317,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("startedByUserId: (req as any).userId || null");
 		expect(controller).to.include("isHikvisionDevice(device)");
 		expect(controller).to.include('String((device as any)?.access?.password || "").trim()');
+		expect(controller).to.include("Target single-user sync before enroll did not complete");
+		expect(controller).to.include("deviceUser.upsert");
+		expect(controller).to.include("deviceUserLinked");
 	});
 
 	it("exposes selected-device activity for Sync Center observability without mutating devices", () => {

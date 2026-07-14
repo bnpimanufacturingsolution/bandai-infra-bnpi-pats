@@ -37,6 +37,35 @@ $summaryContent = Get-Content -Raw -LiteralPath $summaryPath
 if ($summaryContent -notmatch 'PROJECT_TRUTH_LAN_IP:-10\.184\.37\.19') {
   throw 'LAN summary must prefer 10.184.37.19 as the canonical runtime/client IP.'
 }
+foreach ($pattern in @(
+    'PROD"\s+"emp"\s+"\$ip_addr"\s+"3300"',
+    'DEV"\s+"emp"\s+"\$ip_addr"\s+"3310"',
+    'UAT"\s+"emp"\s+"\$ip_addr"\s+"3320"',
+    'OTEL metrics'
+  )) {
+  if ($summaryContent -notmatch $pattern) {
+    throw "LAN summary must display verified employee portal and observability URLs. Missing pattern: $pattern"
+  }
+}
+if ($summaryContent -match '"Gateway"\s+"\$ip_addr"\s+"38080"') {
+  throw 'LAN summary must not advertise the stale Gateway :38080 URL after host-side verification failed.'
+}
+
+$loginHelpPath = Join-Path $repoRoot 'appliance/profile.d/project-truth-hris-help.sh'
+$loginHelpContent = Get-Content -Raw -LiteralPath $loginHelpPath
+foreach ($pattern in @(
+    'PROD"\s+"\$lan_ip"\s+"3300"',
+    'DEV"\s+"\$lan_ip"\s+"3310"',
+    'UAT"\s+"\$lan_ip"\s+"3320"',
+    'OTEL metrics'
+  )) {
+  if ($loginHelpContent -notmatch $pattern) {
+    throw "SSH login help must display verified employee portal and observability URLs. Missing pattern: $pattern"
+  }
+}
+if ($loginHelpContent -match '"Gateway"\s+"\$lan_ip"\s+"38080"') {
+  throw 'SSH login help must not advertise the stale Gateway :38080 URL after host-side verification failed.'
+}
 
 $agentsContent = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'AGENTS.md')
 if ($agentsContent -notmatch 'Host-Local VM First Rule') {

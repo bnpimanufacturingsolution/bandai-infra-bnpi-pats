@@ -1655,6 +1655,34 @@ bool write_peer_fingerprints(
         return true;
     }
 
+    bool isapi_all_ok = true;
+    int isapi_ok_count = 0;
+    for (const auto &record : templates) {
+        const bool record_ok = write_fingerprint_via_isapi(target, job, record);
+        if (record_ok) {
+            isapi_ok_count += 1;
+        } else {
+            isapi_all_ok = false;
+        }
+    }
+    const std::vector<NET_DVR_FINGER_PRINT_CFG_V50> isapi_verified_templates =
+        read_source_fingerprints(target, job);
+    const bool isapi_count_verified =
+        isapi_verified_templates.size() >= templates.size() && !isapi_verified_templates.empty();
+    emit_json({
+        {"event", "peer_fingerprint_write_isapi_summary"},
+        {"targetDeviceId", target.config.hris_device_id},
+        {"employeeNo", job.employee_no},
+        {"templateCount", std::to_string(templates.size())},
+        {"isapiOkCount", std::to_string(isapi_ok_count)},
+        {"verifiedTemplateCount", std::to_string(isapi_verified_templates.size())},
+        {"ok", (isapi_all_ok && isapi_count_verified) ? "true" : "false"}
+    });
+    if (isapi_all_ok && isapi_count_verified) {
+        mark_recent_peer_apply(target.config.host);
+        return true;
+    }
+
     NET_DVR_FINGER_PRINT_INFO_COND_V50 cond{};
     cond.dwSize = sizeof(cond);
     cond.dwFingerPrintNum = static_cast<DWORD>(templates.size());
@@ -3305,7 +3333,11 @@ int main(int argc, char **argv) {
         });
 
         bool armed = false;
-        for (int attempt = 1; attempt <= 3 && !armed; ++attempt) {
+        int attempts_performed = 0;
+        bool backed_off = false;
+        static constexpr int max_login_attempts = 3;
+        for (int attempt = 1; attempt <= max_login_attempts && !armed; ++attempt) {
+            attempts_performed = attempt;
             DeviceSession session;
             session.config = config;
             if (login_device(session) && (arm_alarm(session) || manual_reconcile_mode)) {
@@ -3327,11 +3359,29 @@ int main(int argc, char **argv) {
                     {"deviceId", config.hris_device_id},
                     {"host", config.host},
                     {"lastError", std::to_string(session.last_login_error)},
-                    {"attempt", std::to_string(attempt)}
+                    {"attempt", std::to_string(attempt)},
+                    {"attemptsRemaining", "0"},
+                    {"attemptsSkipped", std::to_string(max_login_attempts - attempt)},
+                    {"attemptCounterSource", "hris_backoff_guard"}
                 });
+                backed_off = true;
                 break;
             }
-            if (!armed && attempt < 3) {
+            if (!armed && session.last_login_error == NET_DVR_PASSWORD_ERROR) {
+                emit_json({
+                    {"event", "device_login_auth_failed_backoff"},
+                    {"deviceId", config.hris_device_id},
+                    {"host", config.host},
+                    {"lastError", std::to_string(session.last_login_error)},
+                    {"attempt", std::to_string(attempt)},
+                    {"attemptsRemaining", "0"},
+                    {"attemptsSkipped", std::to_string(max_login_attempts - attempt)},
+                    {"attemptCounterSource", "hris_backoff_guard"}
+                });
+                backed_off = true;
+                break;
+            }
+            if (!armed && attempt < max_login_attempts) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(500 * attempt));
             }
         }
@@ -3340,7 +3390,11 @@ int main(int argc, char **argv) {
                 {"event", "device_arming_failed_after_retries"},
                 {"deviceId", config.hris_device_id},
                 {"host", config.host},
-                {"attempts", "3"}
+                {"attempts", std::to_string(attempts_performed)},
+                {"maxAttempts", std::to_string(max_login_attempts)},
+                {"backedOff", backed_off ? "true" : "false"},
+                {"attemptsSkipped", backed_off ? std::to_string(max_login_attempts - attempts_performed) : "0"},
+                {"attemptCounterSource", "hris_backoff_guard"}
             });
         }
     }

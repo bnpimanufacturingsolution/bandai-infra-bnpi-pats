@@ -91,18 +91,27 @@ emit_hris_rows() {
   local ip_addr="$1"
   printf '  %-5s %-5s http://%s:%s/auth/login\n' "PROD" "login" "$ip_addr" "3000"
   printf '  %-5s %-5s http://%s:%s/health\n' "PROD" "api" "$ip_addr" "3001"
+  printf '  %-5s %-5s http://%s:%s/auth/login\n' "PROD" "emp" "$ip_addr" "3300"
   printf '  %-5s %-5s http://%s:%s/auth/login\n' "DEV" "login" "$ip_addr" "3100"
   printf '  %-5s %-5s http://%s:%s/health\n' "DEV" "api" "$ip_addr" "3101"
+  printf '  %-5s %-5s http://%s:%s/auth/login\n' "DEV" "emp" "$ip_addr" "3310"
   printf '  %-5s %-5s http://%s:%s/auth/login\n' "UAT" "login" "$ip_addr" "3200"
   printf '  %-5s %-5s http://%s:%s/health\n' "UAT" "api" "$ip_addr" "3201"
+  printf '  %-5s %-5s http://%s:%s/auth/login\n' "UAT" "emp" "$ip_addr" "3320"
 }
 
 emit_observability_rows() {
   local ip_addr="$1"
-  printf '  %-10s http://%s:%s\n' "Grafana" "$ip_addr" "53000"
-  printf '  %-10s http://%s:%s\n' "Prometheus" "$ip_addr" "9091"
-  printf '  %-10s http://%s:%s\n' "Loki" "$ip_addr" "3110"
-  printf '  %-10s http://%s:%s\n' "Gateway" "$ip_addr" "38080"
+  printf '  %-18s http://%s:%s\n' "Grafana" "$ip_addr" "53000"
+  printf '  %-18s http://%s:%s/api/health\n' "Grafana health" "$ip_addr" "53000"
+  printf '  %-18s http://%s:%s/-/healthy\n' "Prometheus" "$ip_addr" "9091"
+  printf '  %-18s http://%s:%s/ready\n' "Loki" "$ip_addr" "3110"
+  printf '  %-18s http://%s:%s/ready\n' "Tempo" "$ip_addr" "3202"
+  printf '  %-18s http://%s:%s/-/healthy\n' "Alertmanager" "$ip_addr" "9093"
+  printf '  %-18s http://%s:%s/metrics\n' "Node exporter" "$ip_addr" "9110"
+  printf '  %-18s http://%s:%s/metrics\n' "cAdvisor" "$ip_addr" "8088"
+  printf '  %-18s http://%s:%s/-/healthy\n' "Blackbox exporter" "$ip_addr" "9115"
+  printf '  %-18s http://%s:%s/metrics\n' "OTEL metrics" "$ip_addr" "8889"
 }
 
 emit_database_lan_rows() {
@@ -499,6 +508,7 @@ fi
   if [ -n "$ip_addr" ]; then
     echo "LAN IP: ${ip_addr}"
     echo "Open: http://${ip_addr}:3000/auth/login"
+    echo "Employee: http://${ip_addr}:3300/auth/login"
     echo "Cloudflare: https://bnpi-hris.tech/auth/login"
     echo "Tunnel: $(cloudflare_tunnel_mode) bnpi-hris -> http://${ip_addr}:3000"
     echo "SSH: ssh infra@${ip_addr}"

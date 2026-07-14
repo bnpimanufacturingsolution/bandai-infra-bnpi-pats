@@ -1,6 +1,8 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { cache, cacheShort, cacheMedium, cacheUser } from "../../middleware/cache";
 import { uploadImportFile } from "../../middleware/upload";
+import { requestTimeout } from "../../middleware/requestTimeout";
+import { config } from "../../config/config";
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -88,7 +90,14 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/:id/users/lifecycle-backfill", controller.backfillDeviceUserLifecycleEvents);
 	routes.post("/:id/users/backfill", controller.backfillDeviceUsers);
 	routes.post("/biometric-sync/reconcile", controller.reconcileBiometricSync);
-	routes.post("/hikvision/copy-user", controller.copyHikvisionDeviceUserToPeer);
+	routes.post(
+		"/hikvision/copy-user",
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "hikvision-copy-user",
+		}),
+		controller.copyHikvisionDeviceUserToPeer,
+	);
 	routes.post("/hikvision/sdk-users/merge/plan", controller.planHikvisionSdkUserMerge);
 	routes.post("/hikvision/sdk-users/merge/apply", controller.applyHikvisionSdkUserMerge);
 	routes.post("/hikvision/sdk-users/merge/jobs", controller.startHikvisionSdkUserMergeJob);

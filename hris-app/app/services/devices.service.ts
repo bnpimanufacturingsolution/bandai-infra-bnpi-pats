@@ -787,6 +787,9 @@ export interface DeviceUserExportPayload {
 		status?: string;
 		reason?: string;
 		plaintextPolicy?: string;
+		ciphertext?: string;
+		encryptedPayload?: string;
+		encryptedBlob?: string;
 	};
 	devices: Array<{
 		device: Pick<Device, "id" | "name" | "address" | "port" | "protocol"> & {

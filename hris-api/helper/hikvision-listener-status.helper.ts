@@ -162,6 +162,13 @@ export const summarizeHikvisionListenerLogs = (
 			lastError = String(entry.lastError || "153").trim();
 		}
 
+		if (event === "device_login_auth_failed_backoff" && device) {
+			const authReason = "device_login_auth_failed_backoff";
+			device.lastFailureReason = authReason;
+			lastFailureReason = authReason;
+			lastError = String(entry.lastError || "1").trim();
+		}
+
 		if (event === "sdk_callback_register" && ok !== false) {
 			sawCallbackRegisterOk = true;
 		}
@@ -215,6 +222,8 @@ export const summarizeHikvisionListenerLogs = (
 				? lastFailureReason === "no_armed_devices"
 					? `SDK login to ${lastTargetHost || "the configured device"} is failing with code 7, so the listener never arms a device. Likely device-LAN reachability or device-side login/network state is still failing. If the central VM is off-LAN, use a Linux site agent beside the device with HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api.`
 					: `SDK login to ${lastTargetHost || "the configured device"} is failing with code 7. Likely device-LAN reachability or device-side login/network state is still failing.`
+				: lastLoginError === "1"
+					? `SDK login to ${lastTargetHost || "the configured device"} is failing with code 1, so HRIS is backing off to avoid locking the device account. Verify the device admin credential and DEV_MANAGE/SDK access on the terminal.`
 				: `SDK login to ${lastTargetHost || "the configured device"} failed${lastLoginError ? ` with code ${lastLoginError}` : ""}.`
 			: sawPostFailure
 				? "The listener is receiving device-side signals, but posting back to HRIS is failing."

@@ -47,6 +47,20 @@ function runPowerShell(args) {
 	});
 }
 
+async function findReachableDevK8sForwardHost({
+	port,
+	remoteLanHost,
+	connect = canConnect,
+}) {
+	const candidates = ["127.0.0.1", remoteLanHost].filter(
+		(host, index, hosts) => host && hosts.indexOf(host) === index,
+	);
+	for (const host of candidates) {
+		if (await connect(port, host)) return host;
+	}
+	return null;
+}
+
 function ensureProjectTruthRemoteLanForward() {
 	if (process.platform !== "win32") return;
 	if (process.env.HRIS_SKIP_PROJECT_TRUTH_REMOTE_LAN_FORWARD === "true") {
@@ -88,14 +102,19 @@ async function main() {
 	if (!datasource || !datasource.protocol.startsWith("postgres")) return;
 	const environment = inferEnvironment(datasource);
 	const preferredDevK8sPort = Number(process.env.PROJECT_TRUTH_DEV_K8S_DB_LOCAL_PORT || 55435);
+	const remoteLanHost = process.env.PROJECT_TRUTH_LAN_IP || "10.184.37.19";
 
 	if (
 		environment === "dev" &&
 		process.env.PROJECT_TRUTH_DEV_DB_MODE !== "docker-dev-db"
 	) {
 		ensureProjectTruthRemoteLanForward();
+		let devK8sForwardHost = await findReachableDevK8sForwardHost({
+			port: preferredDevK8sPort,
+			remoteLanHost,
+		});
 
-		if (!(await canConnect(preferredDevK8sPort, "127.0.0.1"))) {
+		if (!devK8sForwardHost) {
 			if (!fs.existsSync(k8sDevDbScript)) {
 				throw new Error(`Missing ${path.relative(repoRoot, k8sDevDbScript)}.`);
 			}
@@ -115,23 +134,27 @@ async function main() {
 
 			if (result.status !== 0) {
 				throw new Error(
-					"Could not start the K3s DEV DB forward. Confirm direct LAN SSH to 10.184.37.19 works from this workstation.",
+					`Could not start the K3s DEV DB forward. Confirm direct LAN SSH to ${remoteLanHost} or the project-truth-hris SSH alias works from this workstation.`,
 				);
 			}
+			devK8sForwardHost = await findReachableDevK8sForwardHost({
+				port: preferredDevK8sPort,
+				remoteLanHost,
+			});
 		}
 
-		if (!(await canConnect(preferredDevK8sPort, "127.0.0.1"))) {
+		if (!devK8sForwardHost) {
 			throw new Error(
-				`K3s DEV DB forward localhost:${preferredDevK8sPort} is still unreachable after bootstrap.`,
+				`K3s DEV DB forward is still unreachable on 127.0.0.1:${preferredDevK8sPort} and ${remoteLanHost}:${preferredDevK8sPort} after bootstrap.`,
 			);
 		}
 
 		const devK8sDatasource = {
 			...datasource,
-			hostname: "127.0.0.1",
+			hostname: devK8sForwardHost,
 			port: preferredDevK8sPort,
 			raw: new URL(
-				`postgresql://${datasource.username}:${datasource.password}@127.0.0.1:${preferredDevK8sPort}${datasource.pathname}${datasource.search}${datasource.hash}`,
+				`postgresql://${datasource.username}:${datasource.password}@${devK8sForwardHost}:${preferredDevK8sPort}${datasource.pathname}${datasource.search}${datasource.hash}`,
 			).toString(),
 		};
 		fs.writeFileSync(
@@ -146,7 +169,7 @@ async function main() {
 			"utf8",
 		);
 		console.log(
-			`[bnpi-db-access] Resolved DEV datasource to shared K3s runtime at 127.0.0.1:${preferredDevK8sPort}.`,
+			`[bnpi-db-access] Resolved DEV datasource to shared K3s runtime at ${devK8sForwardHost}:${preferredDevK8sPort}.`,
 		);
 		return;
 	}
@@ -227,7 +250,11 @@ async function main() {
 	);
 }
 
-main().catch((error) => {
-	console.error(`[bnpi-db-access] ${error instanceof Error ? error.message : String(error)}`);
-	process.exit(1);
-});
+if (require.main === module) {
+	main().catch((error) => {
+		console.error(`[bnpi-db-access] ${error instanceof Error ? error.message : String(error)}`);
+		process.exit(1);
+	});
+}
+
+module.exports = { findReachableDevK8sForwardHost };
