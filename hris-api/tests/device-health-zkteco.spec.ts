@@ -764,6 +764,52 @@ describe("device health ZKTeco Linux bridge", () => {
 		expect(JSON.stringify(body)).to.include("port");
 	});
 
+	it("returns a conflict instead of a 500 when creating a device for an endpoint that already exists", async () => {
+		const prisma = {
+			device: {
+				create: async () => {
+					const error: any = new Error("Unique constraint failed");
+					error.code = "P2002";
+					error.meta = { target: ["organizationId", "address", "port"] };
+					throw error;
+				},
+			},
+			employee: { findFirst: async () => null },
+		};
+		const deviceController = controller(prisma as any);
+		const req = {
+			organizationId: "org-1",
+			get: () => "application/json",
+			body: {
+				name: "Lobby",
+				address: "192.168.8.195",
+				port: 80,
+				protocol: "http",
+				config: { vendor: "Hikvision" },
+				access: { username: "admin", password: "password" },
+			},
+		};
+		let statusCode = 0;
+		let body: any = null;
+		const res = {
+			status(code: number) {
+				statusCode = code;
+				return this;
+			},
+			json(payload: any) {
+				body = payload;
+				return this;
+			},
+		};
+
+		await deviceController.create(req as any, res as any, (() => undefined) as any);
+
+		expect(statusCode).to.equal(409);
+		expect(body.message).to.equal("Another device already uses this address and port.");
+		expect(JSON.stringify(body)).to.include("address");
+		expect(JSON.stringify(body)).to.include("port");
+	});
+
 	it("soft-deletes devices so historical device events remain queryable", async () => {
 		const calls: any[] = [];
 		const prisma = {

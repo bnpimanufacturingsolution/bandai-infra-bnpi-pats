@@ -15,6 +15,7 @@ import {
 	Link2,
 	Unlink,
 	FileJson,
+	FileSpreadsheet,
 	Download,
 	Upload,
 	Lock,
@@ -279,6 +280,8 @@ type CopyDeviceUserState = {
 	failedTargets: Array<{ id: string; label: string; error: string }>;
 };
 
+type DeviceUserExportFormat = "csv" | "excel" | "json";
+
 type DeviceUserPeerTallyRow = {
 	deviceId: string;
 	deviceName: string;
@@ -515,6 +518,7 @@ export function DeviceEnrollmentPanel({
 		includeFingerprints: boolean;
 		includeFaces: boolean;
 		encryptedBiometricBundle: boolean;
+		format: DeviceUserExportFormat;
 		preview: DeviceUserExportPayload | null;
 		result: DeviceUserExportPayload | null;
 	}>({
@@ -524,6 +528,7 @@ export function DeviceEnrollmentPanel({
 		includeFingerprints: true,
 		includeFaces: true,
 		encryptedBiometricBundle: true,
+		format: "csv",
 		preview: null,
 		result: null,
 	});
@@ -2708,6 +2713,125 @@ export function DeviceEnrollmentPanel({
 	const pagedExportVendorUserIds = pagedDeviceUserRows
 		.map((row) => String(row.vendorUserId || "").trim())
 		.filter(Boolean);
+	const deviceUserExportScopeCount =
+		deviceUserExportState.selection === "selectedRows"
+			? selectedExportVendorUserIds.length
+			: deviceUserExportState.selection === "currentPage"
+				? pagedExportVendorUserIds.length
+				: deviceUserExportState.selection === "filtered"
+					? shownDeviceUserCount
+					: mergedDeviceUserRows.length;
+	const deviceUserExportScopeLabel =
+		deviceUserExportState.selection === "selectedRows"
+			? "Selected rows"
+			: deviceUserExportState.selection === "currentPage"
+				? "Current page"
+				: deviceUserExportState.selection === "filtered"
+					? "Current filter"
+					: "All device users";
+	const escapeCsvValue = (value: unknown) => {
+		const text = value === null || value === undefined ? "" : String(value);
+		return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+	};
+	const escapeHtmlValue = (value: unknown) =>
+		(value === null || value === undefined ? "" : String(value))
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;");
+	const buildDeviceUserExportRows = (payload: DeviceUserExportPayload) =>
+		(payload.devices || []).flatMap((device: any) =>
+			(device.users || []).map((user: any) => {
+				const credentialSummary =
+					user.credentialSummary ||
+					user.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
+					user.vendorMetadata?.credentialSummary ||
+					{};
+				return {
+					sourceDeviceName: device.device?.name || "",
+					sourceDeviceId: device.device?.id || "",
+					vendorUserId: user.vendorUserId || "",
+					employeeNo: user.employeeNo || "",
+					displayName: user.displayName || "",
+					hrisEmployeeId: user.employee?.employeeId || user.employeeId || "",
+					employeeName: user.employee?.fullName || "",
+					status: user.status || "",
+					userType: user.userType || "",
+					linkedToHris: user.employeeId || user.employee?.id ? "Yes" : "No",
+					cardCount: Number(credentialSummary.cardCount || 0),
+					fingerprintCount: Number(credentialSummary.fingerprintCount || 0),
+					faceCount: Number(credentialSummary.faceCount || 0),
+					biometricBundleStatus: payload.biometricBundle?.status || "not_requested",
+					biometricPlaintextExposed: "No",
+					exportedAt: payload.exportedAt || "",
+				};
+			}),
+		);
+	const downloadDeviceUserExport = (
+		payload: DeviceUserExportPayload,
+		format: DeviceUserExportFormat,
+		fileBaseName: string,
+	) => {
+		const rows = buildDeviceUserExportRows(payload);
+		let blob: Blob;
+		let extension: string;
+		if (format === "json") {
+			blob = new Blob([JSON.stringify(payload, null, 2)], {
+				type: "application/json;charset=utf-8",
+			});
+			extension = "json";
+		} else {
+			const headers = [
+				"sourceDeviceName",
+				"sourceDeviceId",
+				"vendorUserId",
+				"employeeNo",
+				"displayName",
+				"hrisEmployeeId",
+				"employeeName",
+				"status",
+				"userType",
+				"linkedToHris",
+				"cardCount",
+				"fingerprintCount",
+				"faceCount",
+				"biometricBundleStatus",
+				"biometricPlaintextExposed",
+				"exportedAt",
+			];
+			if (format === "csv") {
+				const csv = [
+					headers.join(","),
+					...rows.map((row) => headers.map((header) => escapeCsvValue((row as any)[header])).join(",")),
+				].join("\r\n");
+				blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+				extension = "csv";
+			} else {
+				const headerCells = headers
+					.map((header) => `<th>${escapeHtmlValue(header)}</th>`)
+					.join("");
+				const bodyRows = rows
+					.map(
+						(row) =>
+							`<tr>${headers
+								.map((header) => `<td>${escapeHtmlValue((row as any)[header])}</td>`)
+								.join("")}</tr>`,
+					)
+					.join("");
+				const html = `<!doctype html><html><head><meta charset="utf-8" /></head><body><table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
+				blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+				extension = "xls";
+			}
+		}
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement("a");
+		link.href = url;
+		link.download = `${fileBaseName}.${extension}`;
+		document.body.appendChild(link);
+		link.click();
+		link.remove();
+		URL.revokeObjectURL(url);
+	};
 	const buildDeviceUserExportRequest = () => ({
 		deviceId: selectedDeviceId,
 		scope: "currentDevice" as const,
@@ -2757,25 +2881,20 @@ export function DeviceEnrollmentPanel({
 			return;
 		}
 		const result = await exportDeviceUsersMutation.mutateAsync(buildDeviceUserExportRequest());
-		const blob = new Blob([JSON.stringify(result, null, 2)], {
-			type: "application/json",
-		});
-		const url = URL.createObjectURL(blob);
-		const link = document.createElement("a");
 		const deviceSlug = (selectedDevice?.name || selectedDeviceId || "device")
 			.toLowerCase()
 			.replace(/[^a-z0-9]+/g, "-")
 			.replace(/^-|-$/g, "");
-		link.href = url;
-		link.download = `device-users-${deviceSlug || "export"}-${new Date()
-			.toISOString()
-			.slice(0, 10)}.json`;
-		document.body.appendChild(link);
-		link.click();
-		link.remove();
-		URL.revokeObjectURL(url);
+		const datePart = new Date().toISOString().slice(0, 10);
+		downloadDeviceUserExport(
+			result,
+			deviceUserExportState.format,
+			`device-users-${deviceSlug || "export"}-${datePart}`,
+		);
 		setDeviceUserExportState((current) => ({ ...current, result }));
-		toast.success("Device-user export created");
+		toast.success(
+			`Device-user ${deviceUserExportState.format === "json" ? "package" : deviceUserExportState.format} export created`,
+		);
 	};
 	const previewDeviceUserImport = async () => {
 		if (!selectedDeviceId) {
@@ -5796,7 +5915,7 @@ export function DeviceEnrollmentPanel({
 					setDeviceUserExportState((current) => ({ ...current, open }))
 				}
 				title="Export device users"
-				description="Preview the selected Hikvision device before creating a JSON export. This does not change the device.">
+				description="Preview the selected Hikvision device before creating a CSV, Excel, or re-importable package export. This does not change the device.">
 				<div className="space-y-4">
 					<div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
 						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -5805,13 +5924,14 @@ export function DeviceEnrollmentPanel({
 									{selectedDevice?.name || "Selected device"}
 								</p>
 								<p className="mt-1 text-xs text-slate-600">
-									JSON includes identity metadata, HRIS links, hashes, counts, and
-									capability evidence. Biometric template bytes are never written
-									to plain JSON.
+									CSV and Excel export clean audit rows. Package JSON is the
+									re-importable sync file with metadata, hashes, counts, and
+									capability evidence. Raw biometric template bytes are never written
+									to plain exports.
 								</p>
 							</div>
 							<Badge variant="secondary" className="self-start">
-								{selectedExportVendorUserIds.length} selected
+								{deviceUserExportScopeLabel}: {deviceUserExportScopeCount} rows
 							</Badge>
 						</div>
 					</div>
@@ -5828,7 +5948,7 @@ export function DeviceEnrollmentPanel({
 								"Selected rows",
 								`${selectedExportVendorUserIds.length} rows`,
 							],
-							["all", "All device users", "Full selected device"],
+							["all", "All device users", `${mergedDeviceUserRows.length} rows`],
 						].map(([value, label, hint]) => (
 							<button
 								key={value}
@@ -5850,6 +5970,46 @@ export function DeviceEnrollmentPanel({
 								<span
 									className={`mt-0.5 block text-xs ${
 										deviceUserExportState.selection === value
+											? "text-orange-800"
+											: "text-slate-500"
+									}`}>
+									{hint}
+								</span>
+							</button>
+						))}
+					</div>
+					<div className="grid gap-2 sm:grid-cols-3">
+						{[
+							["csv", "CSV", "Spreadsheet audit rows"],
+							["excel", "Excel", "Excel-readable .xls"],
+							["json", "Package JSON", "Re-importable sync package"],
+						].map(([value, label, hint]) => (
+							<button
+								key={value}
+								type="button"
+								className={`rounded-md border px-3 py-2 text-left transition-colors ${
+									deviceUserExportState.format === value
+										? "border-orange-300 bg-orange-50 text-orange-950"
+										: "border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+								}`}
+								onClick={() =>
+									setDeviceUserExportState((current) => ({
+										...current,
+										format: value as DeviceUserExportFormat,
+										result: null,
+									}))
+								}>
+								<span className="flex items-center gap-2 text-sm font-semibold">
+									{value === "json" ? (
+										<FileJson className="h-4 w-4" />
+									) : (
+										<FileSpreadsheet className="h-4 w-4" />
+									)}
+									{label}
+								</span>
+								<span
+									className={`mt-0.5 block text-xs ${
+										deviceUserExportState.format === value
 											? "text-orange-800"
 											: "text-slate-500"
 									}`}>
@@ -5931,7 +6091,10 @@ export function DeviceEnrollmentPanel({
 					) : null}
 					{deviceUserExportState.result ? (
 						<div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
-							Export file created. No device mutation was performed.
+							{deviceUserExportState.format === "json"
+								? "Package JSON created for import preview or execute."
+								: `${deviceUserExportState.format === "csv" ? "CSV" : "Excel"} export created for audit/review.`}{" "}
+							No device mutation was performed.
 						</div>
 					) : null}
 					<div className="flex justify-end gap-2">
@@ -5956,7 +6119,12 @@ export function DeviceEnrollmentPanel({
 							) : (
 								<Download className="h-4 w-4" />
 							)}
-							Export JSON
+							Export{" "}
+							{deviceUserExportState.format === "json"
+								? "Package"
+								: deviceUserExportState.format === "excel"
+									? "Excel"
+									: "CSV"}
 						</Button>
 					</div>
 				</div>

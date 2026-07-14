@@ -36,4 +36,27 @@ describe("hikvision-listener-status helper", () => {
 		expect(status.lastLoginOk).to.equal(false);
 		expect(status.lastError).to.equal("7");
 	});
+
+	it("keeps listener evidence separated per Hikvision device", () => {
+		const now = new Date("2026-07-14T01:45:00.000Z");
+		const status = summarizeHikvisionListenerLogs(
+			[
+				'{"ts":"2026-07-14T01:40:01Z","deviceId":"device-a","event":"device_config_loaded","host":"10.184.38.136","name":"Main Entrance Device A","sdkPort":"8000"}',
+				'{"ts":"2026-07-14T01:40:02Z","deviceId":"device-a","deviceName":"Main Entrance Device A","event":"sdk_login","host":"10.184.38.136","lastError":"0","ok":"true","sdkPort":"8000"}',
+				'{"ts":"2026-07-14T01:40:03Z","deviceId":"device-a","event":"sdk_alarm_arm","host":"10.184.38.136","ok":"true"}',
+				'{"ts":"2026-07-14T01:40:04Z","deviceId":"device-b","event":"device_config_loaded","host":"10.184.38.139","name":"Main Entrance Device B","sdkPort":"8000"}',
+				'{"ts":"2026-07-14T01:40:05Z","deviceId":"device-b","deviceName":"Main Entrance Device B","event":"sdk_login","host":"10.184.38.139","lastError":"7","ok":"false","sdkPort":"8000"}',
+			],
+			now,
+		);
+
+		const deviceA = status.devices.find((device) => device.deviceId === "device-a");
+		const deviceB = status.devices.find((device) => device.deviceId === "device-b");
+
+		expect(status.devices).to.have.length(2);
+		expect(deviceA?.state).to.equal("armed");
+		expect(deviceA?.armed).to.equal(true);
+		expect(deviceB?.state).to.equal("login_failed");
+		expect(deviceB?.lastLoginError).to.equal("7");
+	});
 });

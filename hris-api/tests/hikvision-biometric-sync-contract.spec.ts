@@ -1,6 +1,7 @@
 import { expect } from "chai";
-import { readFileSync } from "fs";
-import { join } from "path";
+import { describe, it } from "mocha";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 describe("Hikvision biometric sync contract", () => {
 	const controllerSource = () =>
@@ -112,7 +113,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("const sanitizeDeviceUserImportPayloadForBackup =");
 		expect(controller).to.include("[encrypted-bundle-redacted]");
 		expect(controller).to.include("plaintextBiometricExposed: false");
-		expect(controller).to.include("rows: planRows.map(({ rawUser: _rawUser, ...row }: any) => row)");
+		expect(controller).to.include("rawUser?: unknown");
 		expect(controller).to.include("copyHikvisionUserToPeerWithRetry({");
 		expect(controller).to.include('strategy: "delayed_target_reread"');
 		expect(controller).to.include("const runDeviceUserImportExecuteWork = async");

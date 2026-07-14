@@ -1605,6 +1605,40 @@ export default function DeviceEventsPage() {
 		(hikvisionListenerStatus?.sdk?.lastError
 			? `SDK login failed${hikvisionListenerStatus.sdk.lastTargetHost ? ` against ${hikvisionListenerStatus.sdk.lastTargetHost}` : ""}.`
 			: "");
+	const hikvisionListenerDevices = useMemo(() => {
+		const devices = hikvisionListenerStatus?.sdk?.devices || [];
+		const selectedId = deviceId !== "all" ? deviceId : "";
+		return [...devices].sort((a, b) => {
+			if (selectedId && a.deviceId === selectedId) return -1;
+			if (selectedId && b.deviceId === selectedId) return 1;
+			const aLive = a.receivingCallbacks ? 0 : a.armed ? 1 : a.state === "login_failed" ? 2 : 3;
+			const bLive = b.receivingCallbacks ? 0 : b.armed ? 1 : b.state === "login_failed" ? 2 : 3;
+			if (aLive !== bLive) return aLive - bLive;
+			return String(a.name || a.host || "").localeCompare(String(b.name || b.host || ""));
+		});
+	}, [deviceId, hikvisionListenerStatus?.sdk?.devices]);
+	const selectedHikvisionListenerDevice =
+		deviceId !== "all"
+			? hikvisionListenerDevices.find((device) => device.deviceId === deviceId) || null
+			: null;
+	const hikvisionListenerDeviceSummary = hikvisionListenerDevices.length
+		? `${hikvisionListenerDevices.filter((device) => device.receivingCallbacks).length} receiving / ${
+				hikvisionListenerDevices.filter((device) => device.armed).length
+			} armed / ${hikvisionListenerDevices.filter((device) => device.state === "login_failed").length} login failed`
+		: "No per-device listener rows";
+	const focusedHikvisionStatus = selectedHikvisionListenerDevice
+		? selectedHikvisionListenerDevice.receivingCallbacks
+			? `${selectedHikvisionListenerDevice.name || selectedHikvisionListenerDevice.host || "Selected device"} is receiving callbacks.`
+			: selectedHikvisionListenerDevice.armed
+				? `${selectedHikvisionListenerDevice.name || selectedHikvisionListenerDevice.host || "Selected device"} is armed; waiting for a tap.`
+				: selectedHikvisionListenerDevice.lastLoginOk === false
+					? `${selectedHikvisionListenerDevice.name || selectedHikvisionListenerDevice.host || "Selected device"} SDK login failed${
+							selectedHikvisionListenerDevice.lastLoginError
+								? ` with code ${selectedHikvisionListenerDevice.lastLoginError}`
+								: ""
+						}.`
+					: `${selectedHikvisionListenerDevice.name || selectedHikvisionListenerDevice.host || "Selected device"} has no recent SDK proof.`
+		: null;
 	const realtimePanelIsLive = isSdkAlarmSavedScope
 		? isLatestSdkSavedFresh || hikvisionSdkReceiving
 		: realtimeStatus.isListening;
@@ -2554,7 +2588,7 @@ export default function DeviceEventsPage() {
 												? "mt-1 break-words text-xs text-emerald-800"
 												: "mt-1 break-words text-xs text-amber-800"
 										}>
-										{hikvisionListenerDetail}
+										{focusedHikvisionStatus || hikvisionListenerDeviceSummary}
 									</p>
 									<p className="mt-2 text-xs text-slate-600">
 										Tap proof:{" "}
@@ -2670,9 +2704,11 @@ export default function DeviceEventsPage() {
 									</dd>
 								</div>
 								<div className="flex min-w-0 justify-between gap-3">
-									<dt className="text-slate-500">SDK target</dt>
+									<dt className="text-slate-500">Watching</dt>
 									<dd className="truncate font-semibold text-slate-900">
-										{hikvisionListenerStatus?.sdk?.lastTargetHost || "-"}
+										{hikvisionListenerDevices.length
+											? `${hikvisionListenerDevices.length} device${hikvisionListenerDevices.length === 1 ? "" : "s"}`
+											: "-"}
 									</dd>
 								</div>
 								<div className="flex min-w-0 justify-between gap-3">
@@ -2688,6 +2724,87 @@ export default function DeviceEventsPage() {
 									</dd>
 								</div>
 							</dl>
+						</div>
+					</div>
+
+					<div className="rounded-lg border border-slate-200 bg-white p-4">
+						<div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<h3 className="text-sm font-semibold text-slate-950">Per-device SDK proof</h3>
+								<p className="mt-0.5 text-xs text-slate-500">
+									{deviceId !== "all"
+										? "Selected terminal is shown first."
+										: "Each terminal reports its own login, arm, and callback state."}
+								</p>
+							</div>
+							<Badge variant={hikvisionSdkReceiving || hikvisionSdkArmed ? "success-soft" : "warning-soft"} className="w-fit rounded-md px-2 py-1">
+								{hikvisionListenerDeviceSummary}
+							</Badge>
+						</div>
+						<div className="mt-3 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-md border border-slate-100">
+							{hikvisionListenerDevices.length ? (
+								hikvisionListenerDevices.map((device) => {
+									const isSelected = deviceId !== "all" && device.deviceId === deviceId;
+									const rowLive = device.receivingCallbacks || device.armed;
+									const rowIconClass = device.receivingCallbacks
+										? "bg-emerald-100 text-emerald-700"
+										: device.armed
+											? "bg-blue-100 text-blue-700"
+											: device.state === "login_failed"
+												? "bg-amber-100 text-amber-700"
+												: "bg-slate-100 text-slate-500";
+									const rowLabel = device.receivingCallbacks
+										? "Receiving callbacks"
+										: device.armed
+											? "Armed, waiting for tap"
+											: device.state === "login_failed"
+												? `Login failed${device.lastLoginError ? ` (${device.lastLoginError})` : ""}`
+												: formatEventTaxonomyToken(device.state || "unknown");
+									return (
+										<div
+											key={device.deviceId || device.host || device.name || rowLabel}
+											className={isSelected ? "bg-orange-50/70 px-3 py-2.5" : "px-3 py-2.5"}>
+											<div className="flex min-w-0 items-start gap-3">
+												<span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${rowIconClass}`}>
+													{device.receivingCallbacks ? (
+														<Wifi className="h-3.5 w-3.5" />
+													) : rowLive ? (
+														<BadgeCheck className="h-3.5 w-3.5" />
+													) : (
+														<WifiOff className="h-3.5 w-3.5" />
+													)}
+												</span>
+												<div className="min-w-0 flex-1">
+													<div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+														<p className="truncate text-sm font-semibold text-slate-950">
+															{device.name || device.host || "Hikvision device"}
+														</p>
+														<Badge variant={rowLive ? "success-soft" : "warning-soft"} className="w-fit rounded-md px-2 py-0.5">
+															{rowLabel}
+														</Badge>
+													</div>
+													<div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+														<span>{device.host || "No host"}</span>
+														<span className="text-slate-300">/</span>
+														<span>SDK {device.sdkPort || "8000"}</span>
+														<span className="text-slate-300">/</span>
+														<span>Last log {formatEventTime(device.lastLogAt)}</span>
+														{isSelected ? (
+															<Badge variant="secondary" className="rounded-md px-1.5 py-0">
+																Selected
+															</Badge>
+														) : null}
+													</div>
+												</div>
+											</div>
+										</div>
+									);
+								})
+							) : (
+								<p className="px-3 py-4 text-sm text-slate-500">
+									No per-device listener proof was returned by the latest status check.
+								</p>
+							)}
 						</div>
 					</div>
 

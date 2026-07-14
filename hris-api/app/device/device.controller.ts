@@ -4619,7 +4619,12 @@ export const controller = (prisma: PrismaClient) => {
 				targetDeviceId: targetDevice.id,
 				previewToken,
 				biometricTransferMode,
-				rows: planRows.map(({ rawUser: _rawUser, ...row }: any) => row),
+				rows: planRows.map(
+					({
+						rawUser: _rawUser,
+						...row
+					}: { rawUser?: unknown } & Record<string, any>) => row,
+				),
 			}),
 		]);
 
@@ -9381,6 +9386,12 @@ export const controller = (prisma: PrismaClient) => {
 			);
 			res.status(201).json(successResponse);
 		} catch (error) {
+			if (isDeviceAddressPortUniqueError(error)) {
+				deviceLogger.warn(`Device endpoint conflict while creating device: ${error}`);
+				res.status(409).json(buildDeviceAddressPortConflictResponse());
+				return;
+			}
+
 			deviceLogger.error(`${config.ERROR.DEVICE.CREATE_FAILED}: ${error}`);
 			const errorResponse = buildErrorResponse(
 				config.ERROR.COMMON.INTERNAL_SERVER_ERROR,

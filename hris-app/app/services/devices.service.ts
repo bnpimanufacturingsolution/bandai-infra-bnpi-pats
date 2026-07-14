@@ -549,6 +549,23 @@ export interface HikvisionListenerStatus {
 			| "idle"
 			| "unknown"
 			| string;
+		devices?: Array<{
+			deviceId?: string | null;
+			name?: string | null;
+			host?: string | null;
+			sdkPort?: string | null;
+			lastLogAt?: string | null;
+			lastLoginAt?: string | null;
+			lastLoginOk?: boolean | null;
+			lastLoginError?: string | null;
+			armed: boolean;
+			receivingCallbacks: boolean;
+			postingToHris: boolean;
+			lastAlarmAt?: string | null;
+			lastPostAt?: string | null;
+			lastFailureReason?: string | null;
+			state: string;
+		}>;
 	};
 	activeState: string;
 	subState: string;
