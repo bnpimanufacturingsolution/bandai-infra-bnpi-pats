@@ -28,6 +28,7 @@ describe("device log sync targeted import contract", () => {
 	});
 
 	it("runs independent ZKTeco and Hikvision availability probes concurrently", () => {
+		expect(controllerSource).to.contain("HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS || 1800");
 		expect(controllerSource).to.contain("const zktecoPreviewPromise =");
 		expect(controllerSource).to.contain("const hikvisionTotalsPromise = Promise.all(");
 		expect(controllerSource).to.contain("const [zktecoPreview] = await Promise.all([");

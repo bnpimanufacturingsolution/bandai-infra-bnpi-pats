@@ -147,7 +147,7 @@ const HIKVISION_VM_LOCAL_API_BASE =
 	String(process.env.HIKVISION_VM_LOCAL_API_BASE || "").trim() || "http://127.0.0.1:3101";
 const HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS = Math.max(
 	1000,
-	Math.min(Number(process.env.HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS || 2500), 10000),
+	Math.min(Number(process.env.HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS || 1800), 10000),
 );
 const HIKVISION_PREVIEW_TOTAL_TIMEOUT_MS = Math.max(
 	750,
