@@ -923,6 +923,7 @@ export interface DeviceUserExportPayload {
 export interface DeviceUserImportPreviewRequest {
 	targetDeviceId: string;
 	payload: DeviceUserExportPayload;
+	biometricBundlePassphrase?: string;
 }
 
 export interface DeviceUserImportPreviewResponse {
@@ -1392,6 +1393,9 @@ class DevicesService extends APIService {
 				targetDeviceId: payload.targetDeviceId,
 				payload: payload.payload,
 				execute: false,
+				...(payload.biometricBundlePassphrase
+					? { biometricBundlePassphrase: payload.biometricBundlePassphrase }
+					: {}),
 			});
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Failed to preview device-user import");
