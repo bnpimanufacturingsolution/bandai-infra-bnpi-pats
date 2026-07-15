@@ -7386,13 +7386,12 @@ export function DeviceEnrollmentPanel({
 					) : null}
 					{deviceUserExportState.preview?.devices?.[0]?.capabilities ? (
 						<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-							<p className="font-semibold">Credential capability</p>
+							<p className="font-semibold">Credential custody</p>
 							<p className="mt-1 text-amber-900">
-								Fingerprint export:{" "}
-								{deviceUserExportState.preview.devices[0].capabilities.support
-									?.fingerprintExport
-									? "device probe responded; transfer must use SDK peer copy or encrypted bundle"
-									: "not supported by current probe or not reachable"}
+								Fingerprint encrypted envelopes: {deviceUserExportState.preview.summary.biometrics?.fingerprintEnvelopesCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.fingerprintCountReported || 0} reported users.
+							</p>
+							<p className="mt-1 text-amber-900">
+								Face encrypted envelopes: {deviceUserExportState.preview.summary.biometrics?.faceEnvelopesCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.faceCountReported || 0} reported users.
 							</p>
 							<p className="mt-1 text-amber-900">
 								Bundle status:{" "}
