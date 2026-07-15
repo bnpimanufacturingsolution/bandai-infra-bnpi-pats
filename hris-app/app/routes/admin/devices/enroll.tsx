@@ -317,6 +317,23 @@ type DeviceUserPeerTallyRow = {
 
 const DEVICE_USER_SYNC_JOB_STORAGE_KEY = "hris.device-user-sync-job";
 const DEFAULT_BULK_DEVICE_USER_SYNC_MODE: DeviceUserSyncMode = "full_refresh";
+const formatDeviceUserSyncJobId = (value?: string | null) => {
+	if (!value) return "No job id";
+	return value.length > 12 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+};
+const formatDeviceUserSyncElapsed = (startedAt?: string | null, completedAt?: string | null) => {
+	if (!startedAt) return "Not recorded";
+	const start = new Date(startedAt).getTime();
+	const end = completedAt ? new Date(completedAt).getTime() : Date.now();
+	if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "Not recorded";
+	const totalSeconds = Math.floor((end - start) / 1000);
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+	if (minutes > 0) return `${minutes}m ${seconds}s`;
+	return `${seconds}s`;
+};
 export function DeviceEnrollmentPanel({
 	embedded = false,
 	mode = "sync-review",
@@ -498,8 +515,11 @@ export function DeviceEnrollmentPanel({
 				return null;
 			}
 		});
-	const { data: deviceUserSyncJobProgress, isError: isDeviceUserSyncJobError } =
-		useDeviceUserSyncJob(
+	const {
+		data: deviceUserSyncJobProgress,
+		dataUpdatedAt: deviceUserSyncJobUpdatedAt,
+		isError: isDeviceUserSyncJobError,
+	} = useDeviceUserSyncJob(
 			activeDeviceUserSyncJob?.jobId,
 			Boolean(activeDeviceUserSyncJob?.jobId),
 		);
@@ -2594,19 +2614,49 @@ export function DeviceEnrollmentPanel({
 	);
 	const deviceUserSyncJobMode =
 		effectiveDeviceUserSyncJobProgress?.syncMode || DEFAULT_BULK_DEVICE_USER_SYNC_MODE;
+	const deviceUserSyncBiometricProcessed = Number(
+		effectiveDeviceUserSyncJobProgress?.biometricProcessed || 0,
+	);
+	const deviceUserSyncBiometricTotal = Number(
+		effectiveDeviceUserSyncJobProgress?.biometricTotal || 0,
+	);
+	const deviceUserSyncBiometricRemaining = Math.max(
+		deviceUserSyncBiometricTotal - deviceUserSyncBiometricProcessed,
+		0,
+	);
 	const deviceUserSyncJobPercent = effectiveDeviceUserSyncJobProgress
-		? effectiveDeviceUserSyncJobProgress.biometricTotal > 0
+		? effectiveDeviceUserSyncJobStatus === "completed"
+			? 100
+			: deviceUserSyncBiometricTotal > 0
 			? Math.min(
 					99,
 					Math.round(
-						(effectiveDeviceUserSyncJobProgress.biometricProcessed /
-							effectiveDeviceUserSyncJobProgress.biometricTotal) *
+						(deviceUserSyncBiometricProcessed / deviceUserSyncBiometricTotal) *
 							100,
 					),
 				)
 			: Math.min(100, Math.round((deviceUserSyncJobProcessed / deviceUserSyncJobTotal) * 100))
 		: 0;
 	const deviceUserSyncJobIsProcessing = effectiveDeviceUserSyncJobStatus === "processing";
+	const deviceUserSyncCurrentModality =
+		effectiveDeviceUserSyncJobProgress?.currentModality === "fingerprint"
+			? "Fingerprint"
+			: effectiveDeviceUserSyncJobProgress?.currentModality === "face"
+				? "Face"
+				: "Preparing";
+	const deviceUserSyncElapsed = formatDeviceUserSyncElapsed(
+		effectiveDeviceUserSyncJobProgress?.startedAt,
+		effectiveDeviceUserSyncJobProgress?.completedAt,
+	);
+	const deviceUserSyncStatusBubble = deviceUserSyncJobIsProcessing
+		? deviceUserSyncBiometricTotal > 0
+			? metricValue(deviceUserSyncBiometricRemaining)
+			: "Live"
+		: hasEffectiveDeviceUserSyncJobProgress
+			? effectiveDeviceUserSyncJobStatus === "completed"
+				? "Done"
+				: metricValue(effectiveDeviceUserSyncJobProgress?.biometricFailed || 0)
+			: null;
 	const deviceUserSyncJobCancelRequested = Boolean(
 		effectiveDeviceUserSyncJobProgress?.cancelRequested,
 	);
@@ -2643,24 +2693,16 @@ export function DeviceEnrollmentPanel({
 									: "Refreshing all device users"
 						: "Device-user sync status";
 	const bulkDeviceUserSyncSummaryItems = [
-		[
-			"Configured devices",
-			effectiveDeviceUserSyncJobProgress?.totalDevices ?? syncCenterDevices.length,
-		],
-		["Completed", effectiveDeviceUserSyncJobProgress?.processedDevices ?? 0],
-		["Synced", effectiveDeviceUserSyncJobProgress?.successfulDevices ?? 0],
-		["Biometric captured", effectiveDeviceUserSyncJobProgress?.biometricCaptured ?? 0],
-		["Biometric missing", effectiveDeviceUserSyncJobProgress?.biometricFailed ?? 0],
+		["Captured", effectiveDeviceUserSyncJobProgress?.biometricCaptured ?? 0],
+		["Failed", effectiveDeviceUserSyncJobProgress?.biometricFailed ?? 0],
+		["Already present", effectiveDeviceUserSyncJobProgress?.biometricCached ?? 0],
+		["Remaining", deviceUserSyncBiometricRemaining],
 	] as const;
 	const bulkDeviceUserSyncResults = effectiveDeviceUserSyncJobProgress?.results || [];
 	const deviceUserSyncJobSummary = effectiveDeviceUserSyncJobProgress
-		? `${
-				deviceUserSyncJobMode === "needs_attention_only"
-					? "Mismatch refresh"
-					: deviceUserSyncJobMode === "peer_converge"
-						? "Best-truth converge"
-						: "All devices"
-			}: ${metricValue(effectiveDeviceUserSyncJobProgress.successfulDevices)} devices synced, ${metricValue(effectiveDeviceUserSyncJobProgress.failedDevices)} need attention.`
+		? deviceUserSyncJobIsProcessing
+			? `${deviceUserSyncCurrentModality} custody for user ${effectiveDeviceUserSyncJobProgress.currentVendorUserId || "—"} on ${effectiveDeviceUserSyncJobProgress.currentDeviceName || "the selected device"}.`
+			: `${metricValue(effectiveDeviceUserSyncJobProgress.biometricCaptured)} encrypted biometric payloads captured; ${metricValue(effectiveDeviceUserSyncJobProgress.biometricFailed)} still need attention.`
 		: "";
 	const bulkDeviceUserSyncToneClass =
 		bulkDeviceUserSyncState.status === "error"
@@ -3885,6 +3927,27 @@ export function DeviceEnrollmentPanel({
 									</h2>
 								</div>
 								<div className="flex gap-2">
+									{hasEffectiveDeviceUserSyncJobProgress ? (
+										<Button
+											type="button"
+											variant="outline"
+											title="Open device-user sync status"
+											aria-label="Open device-user sync status"
+											onClick={openBulkDeviceUserSyncReview}
+											className="relative h-8 gap-2 border-orange-200 bg-orange-50 px-3 text-orange-700 hover:bg-orange-100 hover:text-orange-800">
+											{deviceUserSyncJobIsProcessing ? (
+												<Loader2 className="h-4 w-4 animate-spin" />
+											) : (
+												<RefreshCw className="h-4 w-4" />
+											)}
+											Sync status
+											{deviceUserSyncStatusBubble ? (
+												<span className="ml-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+													{deviceUserSyncStatusBubble}
+												</span>
+											) : null}
+										</Button>
+									) : null}
 									<Button
 										type="button"
 										variant="outline"
@@ -4088,17 +4151,26 @@ export function DeviceEnrollmentPanel({
 									<Button
 										type="button"
 										variant="outline"
-										className="h-8 px-3"
+										className={`relative h-8 gap-2 px-3 ${hasEffectiveDeviceUserSyncJobProgress ? "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800" : ""}`}
 										disabled={
-											!selectedDeviceId || syncDeviceUsersMutation.isPending
+											!selectedDeviceId || startDeviceUserSyncJobMutation.isPending
 										}
-										onClick={() => openDeviceUserSyncReview()}>
-										{syncDeviceUsersMutation.isPending ? (
+										onClick={() =>
+											hasEffectiveDeviceUserSyncJobProgress
+												? openBulkDeviceUserSyncReview()
+												: openDeviceUserSyncReview()
+										}>
+										{deviceUserSyncJobIsProcessing || startDeviceUserSyncJobMutation.isPending ? (
 											<Loader2 className="h-4 w-4 animate-spin" />
 										) : (
 											<RefreshCw className="h-4 w-4" />
 										)}
-										Review sync
+										{hasEffectiveDeviceUserSyncJobProgress ? "Sync status" : "Review sync"}
+										{deviceUserSyncStatusBubble ? (
+											<span className="ml-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+												{deviceUserSyncStatusBubble}
+											</span>
+										) : null}
 									</Button>
 								</div>
 							</div>
@@ -4749,7 +4821,7 @@ export function DeviceEnrollmentPanel({
 			<Modal
 				open={deviceUserSyncState.open}
 				onOpenChange={(open) => setDeviceUserSyncState((current) => ({ ...current, open }))}
-				title="Sync device users"
+				title={hasEffectiveDeviceUserSyncJobProgress ? "Device-user sync status" : "Sync device users"}
 				className="max-w-lg"
 				showCloseButton
 				closeOnBackdropClick>
@@ -4886,45 +4958,45 @@ export function DeviceEnrollmentPanel({
 				onOpenChange={(open) =>
 					setBulkDeviceUserSyncState((current) => ({ ...current, open }))
 				}
-				title="Sync device users"
+				title={hasEffectiveDeviceUserSyncJobProgress ? "Device-user sync status" : "Sync device users"}
 				description={
 					hasEffectiveDeviceUserSyncJobProgress
 						? "You can close this window and reopen status from Sync device users."
 						: "Choose the manual refresh scope, then reread live device-user truth."
 				}
-				className="max-w-4xl"
+				className={hasEffectiveDeviceUserSyncJobProgress ? "max-w-lg" : "max-w-4xl"}
 				showCloseButton
 				closeOnBackdropClick>
 				<div className="space-y-4">
 					<div
 						className={`rounded-lg border p-4 ${hasEffectiveDeviceUserSyncJobProgress ? deviceUserSyncJobToneClass : bulkDeviceUserSyncToneClass}`}>
-						<div className="flex items-center gap-2 text-sm font-medium text-slate-950">
+						<div className="flex items-center justify-between gap-3 text-sm font-medium text-slate-950">
+							<span className="min-w-0">
 							{deviceUserSyncJobIsProcessing ||
 							bulkDeviceUserSyncState.status === "starting" ? (
-								<Loader2 className="h-4 w-4 animate-spin" />
+								<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin align-middle" />
 							) : null}
-							{hasEffectiveDeviceUserSyncJobProgress
-								? deviceUserSyncJobTitle
-								: bulkDeviceUserSyncTitle}
+							{hasEffectiveDeviceUserSyncJobProgress && deviceUserSyncBiometricTotal > 0
+								? `${deviceUserSyncJobIsProcessing ? "Processing" : "Processed"} ${metricValue(deviceUserSyncBiometricProcessed)} of ${metricValue(deviceUserSyncBiometricTotal)} biometric credentials`
+								: hasEffectiveDeviceUserSyncJobProgress
+									? deviceUserSyncJobTitle
+									: bulkDeviceUserSyncTitle}
+							</span>
+							{hasEffectiveDeviceUserSyncJobProgress ? (
+								<span className="shrink-0 font-semibold text-orange-900">
+									{deviceUserSyncJobPercent}%
+								</span>
+							) : null}
 						</div>
 						{hasEffectiveDeviceUserSyncJobProgress ? (
 							<>
-								<div className="mt-2 flex items-center justify-between gap-3 text-sm">
-									<span className="min-w-0">
-										{effectiveDeviceUserSyncJobProgress?.message ||
-											"Loading device-user sync status..."}
-									</span>
-									<span className="shrink-0 font-semibold">
-										{deviceUserSyncJobPercent}%
-									</span>
-								</div>
 								<div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
 									<div
 										className={`h-full rounded-full transition-all ${deviceUserSyncJobFillClass}`}
 										style={{ width: `${deviceUserSyncJobPercent}%` }}
 									/>
 								</div>
-								<p className="mt-3 text-xs opacity-90">
+								<p className="mt-3 text-xs text-orange-900/90">
 									{deviceUserSyncJobSummary ||
 										"HRIS is comparing configured devices against current source-user truth."}
 								</p>
@@ -4957,7 +5029,51 @@ export function DeviceEnrollmentPanel({
 								</div>
 							))}
 						</div>
-						{!deviceUserSyncJobIsProcessing ? (
+						{hasEffectiveDeviceUserSyncJobProgress ? (
+							<>
+								<div className="mt-3 grid grid-cols-2 gap-2 rounded-md border border-orange-100 bg-white/70 px-3 py-2 text-xs text-orange-950">
+									<div>
+										<span className="block text-orange-700">Current device</span>
+										<span className="font-semibold">
+											{effectiveDeviceUserSyncJobProgress?.currentDeviceName || "Preparing device"}
+										</span>
+									</div>
+									<div>
+										<span className="block text-orange-700">Current credential</span>
+										<span className="font-semibold">
+											{deviceUserSyncCurrentModality} · {effectiveDeviceUserSyncJobProgress?.currentVendorUserId || "—"}
+										</span>
+									</div>
+								</div>
+								<div className="mt-3 grid grid-cols-2 gap-2 border-t border-orange-200 pt-3 text-xs text-orange-950">
+									<div>
+										<span className="block text-orange-700">Job ID</span>
+										<span className="font-medium">{formatDeviceUserSyncJobId(effectiveDeviceUserSyncJobProgress?.jobId)}</span>
+									</div>
+									<div>
+										<span className="block text-orange-700">Started</span>
+										<span className="font-medium">{formatDateTime(effectiveDeviceUserSyncJobProgress?.startedAt)}</span>
+									</div>
+									<div>
+										<span className="block text-orange-700">Elapsed</span>
+										<span className="font-medium">{deviceUserSyncElapsed}</span>
+									</div>
+									<div>
+										<span className="block text-orange-700">Last update</span>
+										<span className="font-medium">{deviceUserSyncJobUpdatedAt ? formatDateTime(new Date(deviceUserSyncJobUpdatedAt).toISOString()) : "Waiting for update"}</span>
+									</div>
+									<div>
+										<span className="block text-orange-700">Run state</span>
+										<span className="font-medium capitalize">{effectiveDeviceUserSyncJobProgress?.status || "loading"}</span>
+									</div>
+									<div>
+										<span className="block text-orange-700">Privacy</span>
+										<span className="font-medium">Encrypted custody only</span>
+									</div>
+								</div>
+							</>
+						) : null}
+						{!hasEffectiveDeviceUserSyncJobProgress ? (
 							<div className="mt-4 rounded-xl border border-white/80 bg-white/70 p-3">
 								<div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
 									<div className="space-y-1">
@@ -5065,6 +5181,7 @@ export function DeviceEnrollmentPanel({
 						) : null}
 					</div>
 
+					{!hasEffectiveDeviceUserSyncJobProgress ? (
 					<div className="overflow-hidden rounded-md border border-slate-200">
 						<div className="grid grid-cols-[minmax(180px,1.4fr)_110px_110px_90px_110px_110px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-500">
 							<span>Device</span>
@@ -5140,8 +5257,9 @@ export function DeviceEnrollmentPanel({
 							);
 						})}
 					</div>
+					) : null}
 
-					{bulkDeviceUserSyncResults.length > 0 ? (
+					{bulkDeviceUserSyncResults.length > 0 && !deviceUserSyncJobIsProcessing ? (
 						<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
 							<div className="grid grid-cols-[minmax(160px,1.4fr)_110px_minmax(0,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-500">
 								<span>Device</span>

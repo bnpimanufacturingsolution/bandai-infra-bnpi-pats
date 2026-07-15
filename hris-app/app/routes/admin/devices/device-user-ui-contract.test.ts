@@ -95,8 +95,15 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("missing biometric custody in the background");
 		expect(enroll).toContain("deviceIds: [selectedDeviceId]");
 		expect(enroll).toContain("You can close this window and reopen status");
-		expect(enroll).toContain("Biometric captured");
-		expect(enroll).toContain("Biometric missing");
+		expect(enroll).toContain('["Captured", effectiveDeviceUserSyncJobProgress?.biometricCaptured');
+		expect(enroll).toContain('["Failed", effectiveDeviceUserSyncJobProgress?.biometricFailed');
+		expect(enroll).toContain("Device-user sync status");
+		expect(enroll).toContain("Open device-user sync status");
+		expect(enroll).toContain("biometric credentials");
+		expect(enroll).toContain("Current credential");
+		expect(enroll).toContain("Already present");
+		expect(enroll).toContain("Encrypted custody only");
+		expect(enroll).toContain("deviceUserSyncStatusBubble");
 		expect(enroll).toContain("Merge users");
 		expect(enroll).toContain('title="Merge device users"');
 		expect(enroll).toContain("Reading live users from the selected Hikvision devices.");
