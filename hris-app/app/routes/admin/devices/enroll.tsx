@@ -138,6 +138,7 @@ type BulkDeviceUserSyncState = {
 };
 
 type SdkMergeFilter = "all" | "missing" | "decision" | "fingerprint" | "face" | "card" | "ready";
+type SdkMergeListMode = "unique" | "records" | "review" | "writes" | "issues";
 type SdkMergeRowAction = "copy" | "choose-richest" | "keep" | "details";
 type SdkMergeIssueRow = {
 	id: string;
@@ -263,6 +264,9 @@ const mergeMetricValue = (value: unknown) => {
 	if (Number.isFinite(numberValue)) return numberValue.toLocaleString();
 	return String(value);
 };
+
+const mergePlural = (count: number, singular: string, plural = `${singular}s`) =>
+	`${mergeMetricValue(count)} ${count === 1 ? singular : plural}`;
 
 const mergeDefinedDeviceIds = (deviceIds: Array<string | undefined>) =>
 	deviceIds.filter((deviceId): deviceId is string => Boolean(deviceId));
@@ -427,6 +431,16 @@ export function DeviceEnrollmentPanel({
 	const selectedMergeDeviceId = searchParams.get("mergeDeviceId") || "all";
 	const selectedMergeUserKey = searchParams.get("mergeUser") || "";
 	const sdkMergeJobIdParam = searchParams.get("mergeJobId") || "";
+	const sdkMergeListModeParam = searchParams.get("mergeList") as SdkMergeListMode | null;
+	const sdkMergeListMode: SdkMergeListMode = [
+		"unique",
+		"records",
+		"review",
+		"writes",
+		"issues",
+	].includes(sdkMergeListModeParam || "")
+		? (sdkMergeListModeParam as SdkMergeListMode)
+		: "unique";
 	const {
 		data: syncPreview,
 		isLoading: isLoadingSyncPreview,
@@ -505,6 +519,8 @@ export function DeviceEnrollmentPanel({
 	const [sdkMergeLastJob, setSdkMergeLastJob] = useState<DeviceUserMergeJobProgress | null>(null);
 	const [sdkMergeHandledJobId, setSdkMergeHandledJobId] = useState<string | null>(null);
 	const [sdkMergeDismissedJobId, setSdkMergeDismissedJobId] = useState<string | null>(null);
+	const [sdkMergePreviewOnly, setSdkMergePreviewOnly] = useState(true);
+	const sdkMergePage = Math.max(Number(searchParams.get("mergePage") || 1), 1);
 	const [activeDeviceUserSyncJob, setActiveDeviceUserSyncJob] =
 		useState<ActiveDeviceUserSyncJob | null>(() => {
 			try {
@@ -1171,9 +1187,11 @@ export function DeviceEnrollmentPanel({
 			return;
 		}
 		updateSearchParams((next) => {
+			next.delete("mergeList");
 			next.set("mergeFilter", "all");
 			next.delete("mergeUser");
 		});
+		setSdkMergePreviewOnly(true);
 		setSdkMergeState({
 			open: true,
 			status: "loading",
@@ -1231,17 +1249,47 @@ export function DeviceEnrollmentPanel({
 	};
 	const setSdkMergeFilter = (filter: SdkMergeFilter) => {
 		updateSearchParams((next) => {
+			next.set("mergeList", "issues");
 			if (filter === "all") next.delete("mergeFilter");
 			else next.set("mergeFilter", filter);
 			next.delete("mergeUser");
+			next.set("mergePage", "1");
+		});
+	};
+	const setSdkMergeListMode = (mode: SdkMergeListMode) => {
+		updateSearchParams((next) => {
+			if (mode === "unique") next.delete("mergeList");
+			else next.set("mergeList", mode);
+			next.delete("mergeFilter");
+			next.delete("mergeUser");
+			next.delete("mergeDeviceId");
+			next.set("mergePage", "1");
 		});
 	};
 	const setSdkMergeDeviceFilter = (deviceId: string, filter?: SdkMergeFilter) => {
 		updateSearchParams((next) => {
+			next.set("mergeList", "issues");
 			if (filter && filter !== "all") next.set("mergeFilter", filter);
 			if (deviceId && deviceId !== "all") next.set("mergeDeviceId", deviceId);
 			else next.delete("mergeDeviceId");
 			next.delete("mergeUser");
+			next.set("mergePage", "1");
+		});
+	};
+	const setSdkMergeDeviceListMode = (deviceId: string, mode: SdkMergeListMode) => {
+		updateSearchParams((next) => {
+			if (mode === "unique") next.delete("mergeList");
+			else next.set("mergeList", mode);
+			if (deviceId && deviceId !== "all") next.set("mergeDeviceId", deviceId);
+			else next.delete("mergeDeviceId");
+			next.delete("mergeFilter");
+			next.delete("mergeUser");
+			next.set("mergePage", "1");
+		});
+	};
+	const setSdkMergePage = (page: number) => {
+		updateSearchParams((next) => {
+			next.set("mergePage", String(Math.max(page, 1)));
 		});
 	};
 	const setSelectedMergeUser = (userKey: string) => {
@@ -1399,18 +1447,197 @@ export function DeviceEnrollmentPanel({
 			return rows;
 		});
 	}, [sdkMergeState.data]);
-	const sdkMergeVisibleRows = sdkMergeRows.filter((row) => {
-		if (sdkMergeFilter !== "all" && row.filter !== sdkMergeFilter) return false;
+	const sdkMergeRowMatchesDevice = useCallback((
+		row: SdkMergeIssueRow,
+		deviceId: string,
+		filter: SdkMergeFilter = row.filter,
+	) => {
+		if (deviceId === "all") return true;
+		if (
+			filter === "missing" ||
+			filter === "fingerprint" ||
+			filter === "face" ||
+			filter === "card"
+		) {
+			return row.targetDeviceId === deviceId;
+		}
+		if (filter === "decision") return (row.relatedDeviceIds || []).includes(deviceId);
+		if (filter === "ready") return (row.relatedDeviceIds || []).includes(deviceId);
+		if (
+			row.filter === "missing" ||
+			row.filter === "fingerprint" ||
+			row.filter === "face" ||
+			row.filter === "card"
+		) {
+			return row.targetDeviceId === deviceId;
+		}
+		return (row.relatedDeviceIds || []).includes(deviceId);
+	}, []);
+	const sdkMergeUniqueRows = useMemo<SdkMergeIssueRow[]>(() => {
+		const plan = sdkMergeState.data?.plan;
+		if (!plan) return [];
+		return plan.users.map((user) => {
+			const userRows = sdkMergeRows.filter((row) => row.userKey === user.key);
+			const reviewRows = userRows.filter((row) => row.filter !== "ready");
+			const richestRecord = [...user.records].sort(
+				(left: any, right: any) =>
+					mergeRecordRichnessScore(right) - mergeRecordRichnessScore(left),
+			)[0];
+			const deviceNames = user.records
+				.map((record: any) => mergeDeviceName(plan.devices, record.deviceId))
+				.filter(Boolean);
+			const missingNames = user.missingOnDeviceIds
+				.map((deviceId) => mergeDeviceName(plan.devices, deviceId))
+				.filter(Boolean);
+			return {
+				id: `${user.key}:unique`,
+				filter: reviewRows.length ? reviewRows[0].filter : "ready",
+				userKey: user.key,
+				user,
+				sourceDeviceId: richestRecord?.deviceId || user.sourceDeviceId,
+				sourceDeviceName: mergeDeviceName(
+					plan.devices,
+					richestRecord?.deviceId || user.sourceDeviceId,
+				),
+				relatedDeviceIds: mergeDefinedDeviceIds([
+					...user.records.map((record: any) => record.deviceId),
+					...user.missingOnDeviceIds,
+				]),
+				vendorUserId: mergeVendorUserId(user),
+				personLabel: mergePersonLabel(user),
+				issueLabel: reviewRows.length ? "Needs review" : "Ready / no action",
+				missingLabel: missingNames.length ? missingNames.join(", ") : "All selected devices",
+				dataLabel: `${mergePlural(user.records.length, "device record")} read. Seen on ${deviceNames.join(", ") || "no device"}.`,
+				recommendedAction: reviewRows.length
+					? `${mergePlural(reviewRows.length, "issue row")} to review for this ID.`
+					: "This ID is already aligned across the selected devices.",
+				primaryAction: "details",
+				conflictFields: user.conflicts.map((conflict) => conflict.field),
+				richestRecord,
+			};
+		});
+	}, [sdkMergeRows, sdkMergeState.data]);
+	const sdkMergeRecordRows = useMemo<SdkMergeIssueRow[]>(() => {
+		const plan = sdkMergeState.data?.plan;
+		if (!plan) return [];
+		return plan.users.flatMap((user) =>
+			user.records.map((record: any) => {
+				const deviceName = mergeDeviceName(plan.devices, record.deviceId);
+				const fingerprintCount = mergeCredentialCount(record, "fingerprint");
+				const faceCount = mergeCredentialCount(record, "face");
+				const cardCount = mergeCredentialCount(record, "card");
+				return {
+					id: `${user.key}:record:${record.deviceId}`,
+					filter: "ready" as SdkMergeFilter,
+					userKey: user.key,
+					user,
+					targetDeviceId: record.deviceId,
+					targetDeviceName: deviceName,
+					sourceDeviceId: record.deviceId,
+					sourceDeviceName: deviceName,
+					relatedDeviceIds: [record.deviceId],
+					vendorUserId: mergeVendorUserId(user),
+					personLabel: record.displayName || mergePersonLabel(user),
+					issueLabel: record.employeeId ? "Linked record" : "Needs link",
+					missingLabel: deviceName,
+					dataLabel: `Fingerprint ${fingerprintCount}, face ${faceCount}, card ${cardCount}.`,
+					recommendedAction: record.employeeId
+						? `Connected to HRIS employee ${record.employeeId}.`
+						: "No HRIS employee link is saved for this device record.",
+					primaryAction: "details" as SdkMergeRowAction,
+					richestRecord: record,
+					targetRecord: record,
+				};
+			}),
+		);
+	}, [sdkMergeState.data]);
+	const sdkMergeWriteRows = useMemo<SdkMergeIssueRow[]>(() => {
+		const plan = sdkMergeState.data?.plan;
+		if (!plan) return [];
+		return plan.users.flatMap((user) => {
+			const richestRecord = [...user.records].sort(
+				(left: any, right: any) =>
+					mergeRecordRichnessScore(right) - mergeRecordRichnessScore(left),
+			)[0];
+			return user.targetDeviceIds.map((targetDeviceId) => ({
+				id: `${user.key}:write:${targetDeviceId}`,
+				filter: "missing" as SdkMergeFilter,
+				userKey: user.key,
+				user,
+				targetDeviceId,
+				targetDeviceName: mergeDeviceName(plan.devices, targetDeviceId),
+				sourceDeviceId: richestRecord?.deviceId || user.sourceDeviceId,
+				sourceDeviceName: mergeDeviceName(
+					plan.devices,
+					richestRecord?.deviceId || user.sourceDeviceId,
+				),
+				relatedDeviceIds: mergeDefinedDeviceIds([
+					targetDeviceId,
+					richestRecord?.deviceId || user.sourceDeviceId,
+				]),
+				vendorUserId: mergeVendorUserId(user),
+				personLabel: mergePersonLabel(user),
+				issueLabel: "Potential write",
+				missingLabel: mergeDeviceName(plan.devices, targetDeviceId),
+				dataLabel: "Would copy the selected richest source record to this target device.",
+				recommendedAction: "Dry-run preview only. No write starts from this row.",
+				primaryAction: "details" as SdkMergeRowAction,
+				richestRecord,
+			}));
+		});
+	}, [sdkMergeState.data]);
+	const sdkMergeReviewRows = sdkMergeUniqueRows.filter((row) => row.filter !== "ready");
+	const sdkMergeDisplayRows =
+		sdkMergeListMode === "records"
+			? sdkMergeRecordRows
+			: sdkMergeListMode === "review"
+				? sdkMergeReviewRows
+				: sdkMergeListMode === "writes"
+					? sdkMergeWriteRows
+					: sdkMergeListMode === "issues"
+						? sdkMergeRows
+						: sdkMergeUniqueRows;
+	const sdkMergeVisibleRows = sdkMergeDisplayRows.filter((row) => {
+		if (sdkMergeListMode === "issues" && sdkMergeFilter !== "all" && row.filter !== sdkMergeFilter)
+			return false;
 		if (
 			selectedMergeDeviceId !== "all" &&
-			!(row.relatedDeviceIds || []).includes(selectedMergeDeviceId)
+			!sdkMergeRowMatchesDevice(
+				row,
+				selectedMergeDeviceId,
+				sdkMergeListMode === "issues" ? sdkMergeFilter : row.filter,
+			)
 		)
 			return false;
 		if (selectedMergeUserKey && row.userKey !== selectedMergeUserKey) return false;
 		return true;
 	});
+	const sdkMergeRowsPerPage = 25;
+	const sdkMergeTotalPages = Math.max(
+		1,
+		Math.ceil(sdkMergeVisibleRows.length / sdkMergeRowsPerPage),
+	);
+	const safeSdkMergePage = Math.min(sdkMergePage, sdkMergeTotalPages);
+	const sdkMergePageStart = (safeSdkMergePage - 1) * sdkMergeRowsPerPage;
+	const sdkMergePagedRows = sdkMergeVisibleRows.slice(
+		sdkMergePageStart,
+		sdkMergePageStart + sdkMergeRowsPerPage,
+	);
+	const sdkMergeUniqueIdCount = sdkMergeState.data?.plan.users.length || 0;
+	const sdkMergeDeviceRecordCount =
+		sdkMergeState.data?.plan.users.reduce((count, user) => count + user.records.length, 0) ||
+		0;
+	const sdkMergePotentialWriteCount =
+		sdkMergeWriteRows.length ||
+		sdkMergeState.data?.plan.plannedWrites?.length ||
+		sdkMergeState.data?.plan.users.reduce(
+			(count, user) => count + user.targetDeviceIds.length,
+			0,
+		) ||
+		0;
+	const sdkMergeAttentionRowCount = sdkMergeReviewRows.length;
 	const sdkMergeFilterItems: Array<{ value: SdkMergeFilter; label: string; count: number }> = [
-		{ value: "all", label: "All", count: sdkMergeRows.length },
+		{ value: "all", label: "Issue details", count: sdkMergeRows.length },
 		{
 			value: "missing",
 			label: "Missing from device",
@@ -1443,13 +1670,19 @@ export function DeviceEnrollmentPanel({
 		},
 	];
 	const sdkMergeActiveFilterLabel =
-		sdkMergeFilterItems.find((item) => item.value === sdkMergeFilter)?.label || "All";
+		sdkMergeListMode === "unique"
+			? "Unique IDs"
+			: sdkMergeListMode === "records"
+				? "Device records read"
+				: sdkMergeListMode === "review"
+					? "Needs review"
+					: sdkMergeListMode === "writes"
+						? "Potential writes"
+						: sdkMergeFilterItems.find((item) => item.value === sdkMergeFilter)?.label ||
+							"Issue rows";
 	const sdkMergeDeviceIssueCounts = useMemo(() => {
 		const plan = sdkMergeState.data?.plan;
 		return (plan?.devices || []).map((device) => {
-			const rows = sdkMergeRows.filter((row) =>
-				(row.relatedDeviceIds || []).includes(device.id),
-			);
 			return {
 				device,
 				read:
@@ -1462,16 +1695,30 @@ export function DeviceEnrollmentPanel({
 						0,
 					) || 0,
 				counts: {
-					missing: rows.filter((row) => row.filter === "missing").length,
-					decision: rows.filter((row) => row.filter === "decision").length,
-					fingerprint: rows.filter((row) => row.filter === "fingerprint").length,
-					face: rows.filter((row) => row.filter === "face").length,
-					card: rows.filter((row) => row.filter === "card").length,
-					ready: rows.filter((row) => row.filter === "ready").length,
+					missing: sdkMergeRows.filter(
+						(row) => row.filter === "missing" && sdkMergeRowMatchesDevice(row, device.id, "missing"),
+					).length,
+					decision: sdkMergeRows.filter(
+						(row) => row.filter === "decision" && sdkMergeRowMatchesDevice(row, device.id, "decision"),
+					).length,
+					fingerprint: sdkMergeRows.filter(
+						(row) =>
+							row.filter === "fingerprint" &&
+							sdkMergeRowMatchesDevice(row, device.id, "fingerprint"),
+					).length,
+					face: sdkMergeRows.filter(
+						(row) => row.filter === "face" && sdkMergeRowMatchesDevice(row, device.id, "face"),
+					).length,
+					card: sdkMergeRows.filter(
+						(row) => row.filter === "card" && sdkMergeRowMatchesDevice(row, device.id, "card"),
+					).length,
+					ready: sdkMergeRows.filter(
+						(row) => row.filter === "ready" && sdkMergeRowMatchesDevice(row, device.id, "ready"),
+					).length,
 				},
 			};
 		});
-	}, [sdkMergeRows, sdkMergeState.data]);
+	}, [sdkMergeRowMatchesDevice, sdkMergeRows, sdkMergeState.data]);
 	const sdkMergeConflictCount =
 		sdkMergeState.data?.plan.users.reduce((count, user) => count + user.conflicts.length, 0) ||
 		0;
@@ -1602,7 +1849,8 @@ export function DeviceEnrollmentPanel({
 			...current,
 			applyAll: undefined,
 			choices,
-			message: "Previewing richest-source decisions. Review the rows below before applying.",
+			message:
+				"Previewing richest-source choices. Review the rows below; dry-run mode prevents writes.",
 		}));
 		setSdkMergeFilter("decision");
 	};
@@ -5592,12 +5840,13 @@ export function DeviceEnrollmentPanel({
 								<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 									<div className="min-w-0">
 										<p className="text-sm font-semibold text-slate-950">
-											Resolve from the richest device record
+											Preview merge by unique ID
 										</p>
 										<p className="text-xs text-slate-700">
-											Preview selects the device with the most complete user,
-											fingerprint, face, card, and field data. Start writes as
-											a tracked job after every required decision is chosen.
+											Unique IDs are grouped by vendor user ID across the
+											selected devices. The preview chooses the richest record
+											for each ID, then shows exactly which device records would
+											be copied or kept before any job can write.
 										</p>
 										{sdkMergeBlockingCount > 0 ? (
 											<p className="mt-1 text-xs font-medium text-amber-700">
@@ -5608,6 +5857,16 @@ export function DeviceEnrollmentPanel({
 										) : null}
 									</div>
 									<div className="flex flex-wrap justify-end gap-2">
+										<label className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800">
+											<input
+												type="checkbox"
+												className="h-4 w-4 rounded border-slate-300"
+												checked={sdkMergePreviewOnly}
+												disabled
+												readOnly
+											/>
+											Dry-run only for now
+										</label>
 										<Button
 											type="button"
 											onClick={autoResolveSdkMergeFromRichest}
@@ -5617,7 +5876,7 @@ export function DeviceEnrollmentPanel({
 												sdkMergeConflictCount === 0
 											}>
 											<RefreshCw className="h-4 w-4" />
-											Auto-resolve from richest device
+											Preview richest choices
 										</Button>
 										{sdkMergeState.applyAll ||
 										Object.keys(sdkMergeState.choices).length ? (
@@ -5636,6 +5895,59 @@ export function DeviceEnrollmentPanel({
 										) : null}
 									</div>
 								</div>
+							</div>
+
+							<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+								{[
+									[
+										"unique",
+										"Unique IDs",
+										sdkMergeUniqueIdCount,
+										"Deduped by vendor user ID across devices.",
+									],
+									[
+										"records",
+										"Device records read",
+										sdkMergeDeviceRecordCount,
+										"Raw records returned by the selected devices.",
+									],
+									[
+										"review",
+										"Needs review",
+										sdkMergeAttentionRowCount,
+										"Unique IDs with missing users, conflicts, or credential gaps.",
+									],
+									[
+										"writes",
+										"Potential writes",
+										sdkMergePotentialWriteCount,
+										sdkMergePreviewOnly
+											? "Preview only. No device or HRIS writes will start."
+											: "Starts only after review choices are complete.",
+									],
+								].map(([mode, label, value, description]) => (
+									<button
+										type="button"
+										key={String(label)}
+										onClick={() => setSdkMergeListMode(mode as SdkMergeListMode)}
+										className={`rounded-md border px-3 py-2 text-left ${
+											sdkMergeListMode === mode
+												? "border-orange-300 bg-orange-50"
+												: "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+										}`}>
+										<div className="flex items-baseline justify-between gap-3">
+											<span className="text-xs font-medium text-slate-600">
+												{label}
+											</span>
+											<span className="text-sm font-semibold text-slate-950">
+												{mergeMetricValue(value)}
+											</span>
+										</div>
+										<p className="mt-1 text-xs leading-5 text-slate-600">
+											{description}
+										</p>
+									</button>
+								))}
 							</div>
 
 							<div className="flex flex-wrap gap-2">
@@ -5659,9 +5971,18 @@ export function DeviceEnrollmentPanel({
 							</div>
 
 							<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+								<div className="border-b border-slate-200 bg-white px-3 py-2">
+									<p className="text-sm font-semibold text-slate-950">
+										Per-device impact
+									</p>
+									<p className="text-xs text-slate-600">
+										Read is the unique ID count seen on that device. The other
+										columns show what would need attention for that device.
+									</p>
+								</div>
 								<div className="grid gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-700 lg:grid-cols-[minmax(180px,1fr)_70px_repeat(5,92px)]">
 									<span>Device</span>
-									<span>Read</span>
+									<span>IDs read</span>
 									<span>Missing</span>
 									<span>Decision</span>
 									<span>Finger</span>
@@ -5724,6 +6045,12 @@ export function DeviceEnrollmentPanel({
 											{selectedMergeDeviceId === "all"
 												? "All devices"
 												: `Device scope: ${mergeDeviceName(sdkMergeState.data.plan.devices, selectedMergeDeviceId)}`}
+											{sdkMergePreviewOnly
+												? " / dry-run preview, no writes"
+												: " / writes allowed after review"}
+											{sdkMergeVisibleRows.length > sdkMergeRowsPerPage
+												? ` / ${sdkMergeRowsPerPage} rows per page`
+												: ""}
 										</p>
 									</div>
 									{selectedMergeDeviceId !== "all" || selectedMergeUserKey ? (
@@ -5742,7 +6069,7 @@ export function DeviceEnrollmentPanel({
 											the device scope.
 										</div>
 									) : (
-										sdkMergeVisibleRows.map((row) => {
+										sdkMergePagedRows.map((row) => {
 											const hasConflictFields = Boolean(
 												row.conflictFields?.length || row.conflictField,
 											);
@@ -5801,7 +6128,7 @@ export function DeviceEnrollmentPanel({
 																<Button
 																	type="button"
 																	size="sm"
-																	disabled={isPending}
+																	disabled={isPending || sdkMergePreviewOnly}
 																	onClick={() =>
 																		void copySdkMergeRowToDevice(
 																			row,
@@ -5812,7 +6139,9 @@ export function DeviceEnrollmentPanel({
 																	) : (
 																		<Link2 className="h-4 w-4" />
 																	)}
-																	Copy to selected device
+																	{sdkMergePreviewOnly
+																		? "Dry-run only"
+																		: "Copy now"}
 																</Button>
 															) : null}
 															{row.primaryAction ===
@@ -5948,10 +6277,52 @@ export function DeviceEnrollmentPanel({
 										})
 									)}
 								</div>
+								{sdkMergeVisibleRows.length > sdkMergeRowsPerPage ? (
+									<div className="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+										<p className="text-xs text-slate-600">
+											Showing {mergeMetricValue(sdkMergePageStart + 1)}-
+											{mergeMetricValue(
+												Math.min(
+													sdkMergePageStart + sdkMergeRowsPerPage,
+													sdkMergeVisibleRows.length,
+												),
+											)}{" "}
+											of {mergePlural(sdkMergeVisibleRows.length, "row")}
+										</p>
+										<div className="flex items-center gap-2">
+											<Button
+												type="button"
+												size="sm"
+												variant="outline"
+												disabled={safeSdkMergePage <= 1}
+												onClick={() => setSdkMergePage(safeSdkMergePage - 1)}>
+												Previous
+											</Button>
+											<span className="text-xs font-medium text-slate-700">
+												Page {safeSdkMergePage} of {sdkMergeTotalPages}
+											</span>
+											<Button
+												type="button"
+												size="sm"
+												variant="outline"
+												disabled={safeSdkMergePage >= sdkMergeTotalPages}
+												onClick={() => setSdkMergePage(safeSdkMergePage + 1)}>
+												Next
+											</Button>
+										</div>
+									</div>
+								) : null}
 							</div>
 						</>
 					) : null}
 					<div className="flex justify-end gap-2 border-t pt-3">
+						{sdkMergeState.data && !hasSdkMergeJob ? (
+							<p className="mr-auto max-w-xl text-xs leading-5 text-slate-600">
+								{sdkMergePreviewOnly
+									? `Dry run is on. This screen is only showing ${mergePlural(sdkMergeUniqueIdCount, "unique ID")} and ${mergePlural(sdkMergePotentialWriteCount, "potential write")} for review.`
+									: "Writes are allowed for this review. Starting the job will copy selected records and reread devices."}
+							</p>
+						) : null}
 						<Button
 							type="button"
 							variant="outline"
@@ -5993,6 +6364,7 @@ export function DeviceEnrollmentPanel({
 							<Button
 								type="button"
 								disabled={
+									sdkMergePreviewOnly ||
 									!sdkMergeCanApply ||
 									sdkMergeJobIsProcessing ||
 									startHikvisionSdkUserMergeJobMutation.isPending
@@ -6006,7 +6378,9 @@ export function DeviceEnrollmentPanel({
 								)}
 								{sdkMergeBlockingCount
 									? `Resolve ${sdkMergeBlockingCount} read issue${sdkMergeBlockingCount === 1 ? "" : "s"}`
-									: sdkMergeResolvedCount < sdkMergeConflictCount
+									: sdkMergePreviewOnly
+										? "Dry-run only"
+										: sdkMergeResolvedCount < sdkMergeConflictCount
 										? `Preview ${sdkMergeConflictCount - sdkMergeResolvedCount} more`
 										: sdkMergeJobIsProcessing
 											? "Merge job running"

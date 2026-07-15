@@ -435,6 +435,7 @@ export type DeviceUserMergePlanResponse = {
 			ambiguous?: number;
 			missingHrisLinks?: number;
 		};
+		plannedWrites?: Array<{ userKey: string; targetDeviceId: string }>;
 		errors: Array<{ deviceId: string; deviceName: string; error: string }>;
 		ambiguousMatches?: Array<{ deviceId?: string; deviceName?: string; candidates?: string[] }>;
 	};

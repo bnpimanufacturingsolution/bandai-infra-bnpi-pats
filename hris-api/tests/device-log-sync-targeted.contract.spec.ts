@@ -26,4 +26,12 @@ describe("device log sync targeted import contract", () => {
 		expect(controllerSource).to.contain("No unsaved device logs found in the dry-run estimate");
 		expect(controllerSource).to.contain("processed: 0");
 	});
+
+	it("runs independent ZKTeco and Hikvision availability probes concurrently", () => {
+		expect(controllerSource).to.contain("const zktecoPreviewPromise =");
+		expect(controllerSource).to.contain("const hikvisionTotalsPromise = Promise.all(");
+		expect(controllerSource).to.contain("const [zktecoPreview] = await Promise.all([");
+		expect(controllerSource).to.contain("zktecoPreviewPromise,");
+		expect(controllerSource).to.contain("hikvisionTotalsPromise,");
+	});
 });

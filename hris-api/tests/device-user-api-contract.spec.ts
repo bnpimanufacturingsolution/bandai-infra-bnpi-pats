@@ -96,4 +96,13 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("currentVendorUserIds");
 		expect(controller).not.to.include("deviceUser.deleteMany");
 	});
+
+	it("reads independent Hikvision merge devices concurrently and preserves per-device failures", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("const deviceResults = await Promise.all(");
+		expect(controller).to.include("devices.map(async (device) => {");
+		expect(controller).to.include("records.push(...result.records)");
+		expect(controller).to.include("if (result.error) errors.push(result.error)");
+		expect(controller).to.include("unreachableDevices: errors.map");
+	});
 });

@@ -7168,7 +7168,9 @@ export const controller = (prisma: PrismaClient) => {
 
 		const records: DeviceUserMergeRecord[] = [];
 		const errors: Array<{ deviceId: string; deviceName: string; error: string }> = [];
-		for (const device of devices) {
+		const deviceResults = await Promise.all(
+			devices.map(async (device) => {
+				const deviceRecords: DeviceUserMergeRecord[] = [];
 			try {
 				const { candidates } = await loadHikvisionDeviceUserSnapshot(params.req, device);
 				const employees = await loadEmployeesForDeviceUserCandidates(
@@ -7200,7 +7202,7 @@ export const controller = (prisma: PrismaClient) => {
 					const saved = savedByVendorId.get(candidate.vendorUserId);
 					const decision = resolveDeviceUserLinkDecision(candidate, employees);
 					const employeeId = saved?.employeeId || decision.employeeId || null;
-					records.push({
+					deviceRecords.push({
 						deviceId: device.id,
 						deviceName: device.name || device.address || device.id,
 						vendorUserId: candidate.vendorUserId,
@@ -7219,13 +7221,22 @@ export const controller = (prisma: PrismaClient) => {
 						),
 					});
 				}
+				return { records: deviceRecords, error: null };
 			} catch (error: any) {
-				errors.push({
-					deviceId: device.id,
-					deviceName: device.name || device.address || device.id,
-					error: error?.message || "SDK user read failed",
-				});
+				return {
+					records: deviceRecords,
+					error: {
+						deviceId: device.id,
+						deviceName: device.name || device.address || device.id,
+						error: error?.message || "SDK user read failed",
+					},
+				};
 			}
+			}),
+		);
+		for (const result of deviceResults) {
+			records.push(...result.records);
+			if (result.error) errors.push(result.error);
 		}
 		const plan: any = buildDeviceUserMergePlan({
 			records,
@@ -11329,22 +11340,17 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const zktecoDevices = syncDevices.filter((device) => device.vendor === "ZKTeco");
-			const zktecoPreview =
+			const zktecoPreviewPromise =
 				zktecoDevices.length > 0
 					? zktecoDevices.length === 1
-						? await getZktecoBridgePreview(zktecoDevices[0].address)
-						: await getZktecoBridgeStatus()
-					: null;
-			const zktecoPreviewByIp = new Map<string, any>();
-			for (const item of zktecoPreview?.data?.devices || []) {
-				zktecoPreviewByIp.set(String(item?.ip || "").trim(), item);
-			}
-
+						? getZktecoBridgePreview(zktecoDevices[0].address)
+						: getZktecoBridgeStatus()
+					: Promise.resolve(null);
 			const hikvisionTotals = new Map<
 				string,
 				Awaited<ReturnType<typeof getHikvisionSourceTotal>>
 			>();
-			await Promise.all(
+			const hikvisionTotalsPromise = Promise.all(
 				syncDevices
 					.filter((device) => device.vendor === "Hikvision")
 					.map(async (device) => {
@@ -11354,6 +11360,14 @@ export const controller = (prisma: PrismaClient) => {
 						);
 					}),
 			);
+			const [zktecoPreview] = await Promise.all([
+				zktecoPreviewPromise,
+				hikvisionTotalsPromise,
+			]);
+			const zktecoPreviewByIp = new Map<string, any>();
+			for (const item of zktecoPreview?.data?.devices || []) {
+				zktecoPreviewByIp.set(String(item?.ip || "").trim(), item);
+			}
 			const latestCompletedRuns = await Promise.all(
 				syncDevices.map(async (device) => {
 					const run = await findLatestCompletedDeviceLogRun(
