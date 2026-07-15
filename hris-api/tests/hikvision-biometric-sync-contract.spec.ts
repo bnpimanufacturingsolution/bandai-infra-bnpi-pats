@@ -157,6 +157,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("targetDevices: reachableTargets");
 		expect(controller).to.include("vmSessionCount: sharedVmCopyResult ? 1 : 0");
 		expect(controller).to.include("const settled = await Promise.allSettled(");
+		expect(controller).to.include("preferredHikvisionListenerVmTargetLabel");
+		expect(controller).to.include('"ConnectTimeout=1"');
+		expect(controller).to.include('noOpReason: "already_converged_persisted_truth"');
 		expect(controller).to.include("const runDeviceUserImportExecuteWork = async");
 		expect(controller).to.include("const getDeviceUserImportJob = async");
 		expect(controller).to.include("Device-user import job accepted");

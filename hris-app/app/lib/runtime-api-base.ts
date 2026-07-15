@@ -32,12 +32,36 @@ const isLoopbackHost = (host: string): boolean => host === "localhost" || host =
 
 const isRelativeApiBase = (value: string): boolean => value.startsWith("/");
 
+const readHostnameFromApiBase = (value: string): string | null => {
+	try {
+		return new URL(value).hostname.toLowerCase();
+	} catch {
+		return null;
+	}
+};
+
 export const resolveRuntimeApiBase = (
 	location: RuntimeLocation | undefined,
 	configuredBase?: string,
 ): string => {
 	const envBase = (configuredBase || "").trim();
 	if (envBase) {
+		if (location) {
+			const host = location.hostname.toLowerCase();
+			const apiPort = LAN_APP_TO_API_PORT[location.port];
+			const configuredHost = isRelativeApiBase(envBase)
+				? host
+				: readHostnameFromApiBase(envBase);
+
+			// Keep localhost browser sessions on the paired localhost API even if a stale
+			// dev env file points at a remote VM API.
+			if (isLoopbackHost(host) && configuredHost && !isLoopbackHost(configuredHost)) {
+				return apiPort
+					? `${location.protocol}//${location.hostname}:${apiPort}`
+					: LOCAL_API_BASE;
+			}
+		}
+
 		if (isRelativeApiBase(envBase) && location) {
 			const host = location.hostname.toLowerCase();
 			const apiPort = LAN_APP_TO_API_PORT[location.port];

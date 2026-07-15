@@ -183,14 +183,35 @@ export interface DeviceHealthResponse {
 			host: string;
 			port: number;
 			latencyMs: number | null;
+			source?: "device_address" | "resolved_runtime_endpoint";
+			endpoint?: string | null;
 			error?: string;
 		};
 		deviceApi?: {
 			ok: boolean;
 			status: "online" | "offline";
 			latencyMs: number | null;
+			provenBy?: "systemTime" | "userRead" | "eventHistory";
 			error?: string;
 			time?: unknown;
+		};
+		systemTime?: {
+			ok: boolean;
+			status: "readable" | "unreachable";
+			latencyMs: number | null;
+			error?: string;
+		};
+		userRead?: {
+			ok: boolean;
+			status: "readable" | "unknown";
+			count: number | null;
+			error?: string;
+		};
+		eventHistory?: {
+			ok: boolean;
+			status: "readable" | "unknown";
+			count: number | null;
+			error?: string;
 		};
 	};
 }

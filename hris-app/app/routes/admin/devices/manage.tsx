@@ -61,10 +61,15 @@ import {
 	DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { DeviceEnrollmentPanel } from "./enroll";
+import {
+	buildDeviceConfigPreset,
+	getDefaultDeviceConfig,
+	getDeviceConfigRecord,
+	normalizeDeviceConfigForSubmit,
+} from "./device-config-presets";
 
 const DeviceFormSchema = CreateDeviceSchema;
 type DeviceFormData = CreateDevice;
-type DeviceConfigRecord = Record<string, unknown>;
 type LegacyDevicesResponse = { devices?: Device[]; pagination?: { total?: number } };
 
 const protocolOptions: SelectOption[] = [
@@ -78,77 +83,6 @@ const deviceVendorOptions: SelectOption[] = [
 	{ value: "Hikvision", label: "Hikvision" },
 	{ value: "ZKTeco", label: "ZKTeco" },
 ];
-
-const getDeviceConfigRecord = (config: unknown): DeviceConfigRecord =>
-	config && typeof config === "object" && !Array.isArray(config)
-		? { ...(config as DeviceConfigRecord) }
-		: {};
-
-const buildDeviceConfigPreset = (vendor: string): DeviceConfigRecord => {
-	const normalized = vendor.toLowerCase();
-	if (normalized.includes("hikvision")) {
-		return {
-			vendor: "Hikvision",
-			employeeKioskLoginEnabled: false,
-			employeeKioskLoginWindowSeconds: 12,
-			employeeKioskLoginAppCode: "hris",
-			employeeKioskLoginAudience: "employee-portal",
-		};
-	}
-	if (normalized.includes("zkteco") || normalized.includes("zk")) {
-		return {
-			vendor: "ZKTeco",
-			employeeKioskLoginEnabled: false,
-			employeeKioskLoginWindowSeconds: 12,
-			employeeKioskLoginAppCode: "hris",
-			employeeKioskLoginAudience: "employee-portal",
-		};
-	}
-	return {
-		vendor: "Hikvision",
-		employeeKioskLoginEnabled: false,
-		employeeKioskLoginWindowSeconds: 12,
-		employeeKioskLoginAppCode: "hris",
-		employeeKioskLoginAudience: "employee-portal",
-	};
-};
-
-const getDefaultDeviceConfig = () => buildDeviceConfigPreset("Hikvision");
-
-const normalizeDeviceConfigForSubmit = (
-	config: unknown,
-	existingConfig?: unknown,
-): DeviceConfigRecord => {
-	const next = getDeviceConfigRecord(config);
-	const existing = getDeviceConfigRecord(existingConfig);
-	const vendor = String(next.vendor || existing.vendor || "").trim();
-	const preset = buildDeviceConfigPreset(vendor || "Hikvision");
-	return {
-		...existing,
-		...preset,
-		...next,
-		vendor: preset.vendor,
-		employeeKioskLoginEnabled:
-			next.employeeKioskLoginEnabled === true || next.employeeKioskLoginEnabled === false
-				? next.employeeKioskLoginEnabled
-				: existing.employeeKioskLoginEnabled === true,
-		employeeKioskLoginWindowSeconds:
-			typeof next.employeeKioskLoginWindowSeconds === "number"
-				? next.employeeKioskLoginWindowSeconds
-				: typeof existing.employeeKioskLoginWindowSeconds === "number"
-					? existing.employeeKioskLoginWindowSeconds
-					: preset.employeeKioskLoginWindowSeconds,
-		employeeKioskLoginAppCode:
-			String(next.employeeKioskLoginAppCode || existing.employeeKioskLoginAppCode || preset.employeeKioskLoginAppCode).trim() ||
-			"hris",
-		employeeKioskLoginAudience:
-			String(
-				next.employeeKioskLoginAudience ||
-					existing.employeeKioskLoginAudience ||
-					preset.employeeKioskLoginAudience,
-			).trim() || "employee-portal",
-	};
-};
 
 const normalizeAccessForSubmit = (access: DeviceFormData["access"]) => {
 	const username = String(access?.username || "").trim();
@@ -176,6 +110,21 @@ const getVendorHelperText = (vendor: string) => {
 };
 
 const healthToneClass = (ok: boolean) => (ok ? "text-green-700" : "text-amber-700");
+
+const getDeviceApiDetail = (
+	checks?: {
+		deviceApi?: {
+			provenBy?: "systemTime" | "userRead" | "eventHistory";
+			error?: string;
+		};
+	},
+) => {
+	const provenBy = checks?.deviceApi?.provenBy;
+	if (provenBy === "userRead") return "Proven by Hikvision user read path";
+	if (provenBy === "eventHistory") return "Proven by Hikvision event history read path";
+	if (checks?.deviceApi?.error) return checks.deviceApi.error;
+	return undefined;
+};
 
 function HealthCheckRow({
 	label,
@@ -434,6 +383,13 @@ function DeviceConsolePage({
 	const savedCount = previewRow?.hrisSavedCount ?? previewRow?.syncedEvents ?? null;
 	const skippedCount = previewRow?.knownSkippedEventCount ?? null;
 	const missingCount = previewRow?.missingEventCount ?? previewRow?.needsSyncEvents ?? null;
+	const networkDetail = checks?.network
+		? `${checks.network.host}:${checks.network.port}${checks.network.source === "resolved_runtime_endpoint" ? " (resolved read endpoint)" : ""}`
+		: undefined;
+	const systemTimeReadable =
+		checks?.systemTime?.ok ?? Boolean(checks?.deviceApi?.provenBy === "systemTime");
+	const userReadable = checks?.userRead?.ok ?? Boolean(userCount);
+	const eventHistoryReadable = checks?.eventHistory?.ok ?? Boolean(eventCount);
 
 	if (isLoading) {
 		return (
@@ -534,13 +490,13 @@ function DeviceConsolePage({
 								label="Network port"
 								ok={Boolean(checks?.network?.ok)}
 								value={checks?.network?.status || "unchecked"}
-								detail={checks?.network ? `${checks.network.host}:${checks.network.port}` : undefined}
+								detail={networkDetail}
 							/>
 							<HealthCheckRow
 								label="Device API"
 								ok={Boolean(checks?.deviceApi?.ok)}
 								value={checks?.deviceApi?.status || "unchecked"}
-								detail={checks?.deviceApi?.error}
+								detail={getDeviceApiDetail(checks)}
 							/>
 							<HealthCheckRow
 								label="Latest sync run"
@@ -565,20 +521,20 @@ function DeviceConsolePage({
 					<div className="divide-y divide-slate-200 px-4 py-1 text-sm">
 						<div className="flex items-center justify-between gap-3 py-3">
 							<span className="text-slate-600">System time</span>
-							<Badge variant={checks?.deviceApi?.ok ? "success" : "secondary"}>
-								{checks?.deviceApi?.ok ? "Readable" : "Unchecked"}
+							<Badge variant={systemTimeReadable ? "success" : "secondary"}>
+								{systemTimeReadable ? "Readable" : "Unchecked"}
 							</Badge>
 						</div>
 						<div className="flex items-center justify-between gap-3 py-3">
 							<span className="text-slate-600">Users</span>
-							<Badge variant={userCount ? "success" : "secondary"}>
-								{userCount ? "Readable" : "Unknown"}
+							<Badge variant={userReadable ? "success" : "secondary"}>
+								{userReadable ? "Readable" : "Unknown"}
 							</Badge>
 						</div>
 						<div className="flex items-center justify-between gap-3 py-3">
 							<span className="text-slate-600">ACS event history</span>
-							<Badge variant={eventCount ? "success" : "secondary"}>
-								{eventCount ? "Readable" : "Unknown"}
+							<Badge variant={eventHistoryReadable ? "success" : "secondary"}>
+								{eventHistoryReadable ? "Readable" : "Unknown"}
 							</Badge>
 						</div>
 						<div className="flex items-center justify-between gap-3 py-3">

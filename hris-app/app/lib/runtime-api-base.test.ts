@@ -35,6 +35,15 @@ describe("runtime API base resolver", () => {
 		);
 	});
 
+	it("keeps localhost browser sessions on the paired localhost API when a stale remote env base is set", () => {
+		expect(
+			resolveRuntimeApiBase(
+				locationFor("http://localhost:5175"),
+				"http://10.184.37.19:3101/api",
+			),
+		).toBe("http://localhost:3001");
+	});
+
 	it("honors an explicit non-local API base", () => {
 		expect(
 			resolveRuntimeApiBase(
@@ -44,7 +53,7 @@ describe("runtime API base resolver", () => {
 		).toBe("https://api.example.test");
 	});
 
-	it("ignores relative configured bases for LAN browser sessions", () => {
+	it("maps relative API bases to the paired LAN API port", () => {
 		expect(resolveRuntimeApiBase(locationFor("http://10.184.38.61:3000"), "/api")).toBe(
 			"http://10.184.38.61:3001",
 		);
@@ -69,5 +78,14 @@ describe("runtime API base resolver", () => {
 		expect(resolveRuntimeApiBase(locationFor("https://uat.bnpi-hris.tech/auth/login"))).toBe(
 			"/api",
 		);
+	});
+
+	it("maps relative API bases to the paired LAN API port for direct LAN hosts", () => {
+		expect(
+			resolveRuntimeApiBase(
+				{ protocol: "http:", hostname: "10.184.37.19", port: "3100" },
+				"/api",
+			),
+		).toBe("http://10.184.37.19:3101");
 	});
 });

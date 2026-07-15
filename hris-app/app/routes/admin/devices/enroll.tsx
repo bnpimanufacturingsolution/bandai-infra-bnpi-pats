@@ -412,6 +412,7 @@ export function DeviceEnrollmentPanel({
 	const {
 		data: syncPreview,
 		isLoading: isLoadingSyncPreview,
+		isFetching: isFetchingSyncPreview,
 		refetch: refetchSyncPreview,
 	} = useDeviceSyncPreview(
 		{ deviceId: activePanel === "overview" ? "all" : selectedDeviceId || "all" },
@@ -2260,6 +2261,7 @@ export function DeviceEnrollmentPanel({
 	const previewByDeviceId = new Map(
 		(syncPreview?.devices || []).map((row: DeviceSyncPreviewRow) => [row.deviceId, row]),
 	);
+	const isSyncPreviewPending = (isLoadingSyncPreview || isFetchingSyncPreview) && devices.length > 0;
 	const syncCenterDevices: SyncCenterDeviceItem[] = devices.map((device: any) => {
 		const preview = previewByDeviceId.get(device.id);
 		const vendor = preview?.vendor || getDeviceVendor(device);
@@ -2269,7 +2271,9 @@ export function DeviceEnrollmentPanel({
 		const hasMissing = typeof missingCount === "number" && missingCount > 0;
 		const hasFailed = typeof failedCount === "number" && failedCount > 0;
 		const status = !preview
-			? "not_checked"
+			? isSyncPreviewPending
+				? "checking"
+				: "not_checked"
 			: hasError || hasFailed
 				? "needs_attention"
 				: hasMissing
@@ -2674,6 +2678,7 @@ export function DeviceEnrollmentPanel({
 	] as const;
 	const getSyncStatusLabel = (status: string) => {
 		if (status === "synced") return "Synced";
+		if (status === "checking") return "Checking";
 		if (status === "needs_sync") return "Needs sync";
 		if (status === "needs_attention") return "Needs attention";
 		if (status === "source_total_unavailable") return "Source unavailable";
@@ -2681,6 +2686,7 @@ export function DeviceEnrollmentPanel({
 	};
 	const getSyncStatusBadge = (status: string) => {
 		if (status === "synced") return "success";
+		if (status === "checking") return "secondary";
 		if (status === "needs_attention") return "destructive";
 		if (status === "needs_sync" || status === "source_total_unavailable") return "warning";
 		return "secondary";
@@ -3604,7 +3610,7 @@ export function DeviceEnrollmentPanel({
 				) : null}
 
 				<TabsContent value="overview" className="m-0 space-y-3">
-					{isLoadingDevices || isLoadingSyncPreview ? (
+					{isLoadingDevices && devices.length === 0 ? (
 						<div className="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
 							<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
 							Loading device sync...
@@ -3614,29 +3620,37 @@ export function DeviceEnrollmentPanel({
 							No configured physical devices found.
 						</div>
 					) : (
-						<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
-							<div className="hidden grid-cols-[minmax(190px,1.45fr)_124px_128px_150px_156px_112px_96px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 xl:grid">
-								<span>Device</span>
-								<span>Address</span>
-								<span>Status</span>
-								<span>Source users</span>
-								<span>HRIS users</span>
-								<span>Last sync</span>
-								<span className="text-right">Actions</span>
-							</div>
-							{syncCenterDevices
-								.slice()
-								.sort((left, right) => {
-									const leftAttention = left.status === "synced" ? 1 : 0;
-									const rightAttention = right.status === "synced" ? 1 : 0;
-									if (leftAttention !== rightAttention)
-										return leftAttention - rightAttention;
-									return String(left.device.name || "").localeCompare(
-										String(right.device.name || ""),
-									);
-								})
-								.map(({ device, preview, status, vendor }) => {
+						<>
+							{isSyncPreviewPending ? (
+								<div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+									<Loader2 className="mr-2 inline-block h-3.5 w-3.5 animate-spin" />
+									Showing devices now. Per-device source counts will fill in as each check finishes.
+								</div>
+							) : null}
+							<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+								<div className="hidden grid-cols-[minmax(190px,1.45fr)_124px_128px_150px_156px_112px_96px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 xl:grid">
+									<span>Device</span>
+									<span>Address</span>
+									<span>Status</span>
+									<span>Source users</span>
+									<span>HRIS users</span>
+									<span>Last sync</span>
+									<span className="text-right">Actions</span>
+								</div>
+								{syncCenterDevices
+									.slice()
+									.sort((left, right) => {
+										const leftAttention = left.status === "synced" ? 1 : 0;
+										const rightAttention = right.status === "synced" ? 1 : 0;
+										if (leftAttention !== rightAttention)
+											return leftAttention - rightAttention;
+										return String(left.device.name || "").localeCompare(
+											String(right.device.name || ""),
+										);
+									})
+									.map(({ device, preview, status, vendor }) => {
 									const isSelected = device.id === selectedDeviceId;
+									const isPreviewPending = !preview && isSyncPreviewPending;
 									const sourceUserTotal = preview?.vendorUserCount;
 									const hrisUserTotal = preview?.hrisUserCount;
 									const openUserTotal = preview?.openUserCount;
@@ -3652,6 +3666,16 @@ export function DeviceEnrollmentPanel({
 												latestUserSync?.startedAt ||
 												latestLogSync?.startedAt
 											: preview?.lastSourceEventAt;
+									const sourceUserValue = isPreviewPending
+										? "Checking..."
+										: metricValue(sourceUserTotal);
+									const gapValue = isPreviewPending ? "Checking..." : metricValue(userGap);
+									const hrisUserValue = isPreviewPending
+										? "Checking..."
+										: metricValue(hrisUserTotal);
+									const openUserValue = isPreviewPending
+										? "Checking..."
+										: metricValue(openUserTotal);
 									return (
 										<div
 											key={device.id}
@@ -3697,13 +3721,14 @@ export function DeviceEnrollmentPanel({
 														variant="ghost"
 														className="h-auto min-h-7 px-1 text-sm font-semibold text-slate-950 hover:bg-slate-100"
 														disabled={
+															isPreviewPending ||
 															typeof sourceUserTotal !== "number"
 														}
 														onClick={() =>
 															openDeviceUserCount(device.id, "source")
 														}
 														title="Open users read from this device">
-														{metricValue(sourceUserTotal)}
+														{sourceUserValue}
 													</Button>
 												</div>
 												<div className="flex items-center justify-between gap-2 xl:block">
@@ -3719,7 +3744,7 @@ export function DeviceEnrollmentPanel({
 															openDeviceUserCount(device.id, "open")
 														}
 														title="Open device users that need an employee link">
-														{metricValue(userGap)}
+														{gapValue}
 													</Button>
 												</div>
 											</div>
@@ -3737,7 +3762,7 @@ export function DeviceEnrollmentPanel({
 															openDeviceUserCount(device.id, "hris")
 														}
 														title="Open saved HRIS device users">
-														{metricValue(hrisUserTotal)}
+														{hrisUserValue}
 													</Button>
 												</div>
 												<div className="flex items-center justify-between gap-2 xl:block">
@@ -3753,7 +3778,7 @@ export function DeviceEnrollmentPanel({
 															openDeviceUserCount(device.id, "open")
 														}
 														title="Open users that need an employee link">
-														{metricValue(openUserTotal)}
+														{openUserValue}
 													</Button>
 												</div>
 											</div>
@@ -3761,7 +3786,11 @@ export function DeviceEnrollmentPanel({
 												<span className="mr-1 text-slate-500 xl:hidden">
 													Last sync
 												</span>
-												{lastSyncAt ? formatDateTime(lastSyncAt) : "-"}
+												{isPreviewPending
+													? "Checking..."
+													: lastSyncAt
+														? formatDateTime(lastSyncAt)
+														: "-"}
 											</div>
 											<div className="flex justify-end">
 												<DropdownMenu>
@@ -3814,8 +3843,9 @@ export function DeviceEnrollmentPanel({
 											</div>
 										</div>
 									);
-								})}
-						</div>
+									})}
+							</div>
+						</>
 					)}
 				</TabsContent>
 

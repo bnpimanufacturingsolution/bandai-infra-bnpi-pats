@@ -1388,3 +1388,41 @@ Status: COMPLETE
   - This enables the same Project Truth Hikvision listener runtime to be placed
     beside the remote device tomorrow, while still using central/public HRIS
     as the source of truth and callback sink.
+
+## Latest Task Addendum - 2026-07-14 Multi-User Biometric Export Custody
+
+- Task mode: mixed meaningful feature and regression repair with real-device,
+  API, and Playwright proof.
+- Main Entrance Device E current local snapshot contains 239 DeviceUser rows.
+- Separate encrypted biometric custody is proven:
+  - 217 rows contain a real fingerprint AES-256-GCM envelope.
+  - 103 rows contain a real face AES-256-GCM envelope.
+  - Fingerprint and face use separate envelope/key-source/blob columns.
+  - No row reuses one encrypted ciphertext for both modalities.
+- Twenty rows remained SDK-empty after combined, fingerprint-only, and
+  face-only attempts. They remain explicit export errors/empty cells; no raw or
+  encrypted value was fabricated from stale enrollment counts.
+- Cached export proof through the real admin UI:
+  - CSV download: 3.759 seconds.
+  - Excel download: 3.655 seconds.
+  - Package JSON download: 3.137 seconds.
+  - All export POSTs and downloads were below 10 seconds.
+- Full-package import readiness:
+  - Portable JSON compaction removed duplicate encrypted objects and reduced
+    the 239-user file from 11.9 MB to 4.98 MB without removing the visible
+    fingerprint/face key/blob columns.
+  - Package import preview: 239 matches, zero conflicts, `unlockable=true`,
+    `plaintextExposed=false`.
+  - Playwright CSV import preview: 239 matches, zero conflicts,
+    `unlockable=true`, `plaintextExposed=false`, 2.578 seconds, no console
+    errors.
+- Local testing alignment:
+  - The port 5175 frontend was restarted with a local API override so the
+    current browser testing journey uses `http://localhost:3001/api` rather
+    than the older VM API image.
+  - The VM-managed Cloudflare Tunnel and Hikvision listener remained active.
+- Remaining boundary:
+  - Encrypted export and non-mutating import preview are proven.
+  - Physical offline restore still needs the reviewed C++ SDK write-from-bundle
+    path; direct HTTP write-back is not accepted as complete.
+- Evidence: `.runtime/multi-user-biometric-export-proof-20260714-182917/`.

@@ -53,6 +53,7 @@ import {
 } from "../../helper/device-user-merge.helper";
 import { buildDeviceRuntimeConfig } from "../../helper/device-config-defaults.helper";
 import { summarizeHikvisionListenerLogs } from "../../helper/hikvision-listener-status.helper";
+import { resolveHikvisionDeviceHealthNetworkTarget } from "../../helper/device-health.helper";
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
 import net from "net";
 import { execFile } from "child_process";
@@ -133,6 +134,14 @@ const HIKVISION_VM_SERVICE_REMOTE_PATH = `/etc/systemd/system/${HIKVISION_HOT_RE
 const HIKVISION_VM_SERVICE_TMP_PATH = `/tmp/${HIKVISION_HOT_RELOAD_LISTENER_SERVICE}`;
 const HIKVISION_VM_LOCAL_API_BASE =
 	String(process.env.HIKVISION_VM_LOCAL_API_BASE || "").trim() || "http://127.0.0.1:3101";
+const HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS = Math.max(
+	1000,
+	Math.min(Number(process.env.HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS || 2500), 10000),
+);
+const HIKVISION_PREVIEW_TOTAL_TIMEOUT_MS = Math.max(
+	750,
+	Math.min(Number(process.env.HIKVISION_PREVIEW_TOTAL_TIMEOUT_MS || 1500), 5000),
+);
 const HIKVISION_PEER_COPY_RETRY_LIMIT = Math.max(
 	1,
 	Math.min(Number(process.env.HIKVISION_PEER_COPY_RETRY_LIMIT || 2), 4),
@@ -412,6 +421,11 @@ const runFixedProcess = (
 	});
 
 const quoteRemoteShellArg = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
+
+const isHikvisionTransportFailure = (value: unknown) =>
+	/(timed out|timeout|econnrefused|enetunreach|ehostunreach|no route|network error|fetch failed|socket hang up|aborted)/i.test(
+		String(value || ""),
+	);
 
 type HikvisionListenerVmTarget = {
 	mode: "local" | "ssh";
@@ -2275,7 +2289,7 @@ export const controller = (prisma: PrismaClient) => {
 				deviceId,
 				prisma,
 				request: req,
-				timeoutMs: 10000,
+				timeoutMs: HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS,
 				headers: { "Content-Type": "application/json" },
 				body,
 			});
@@ -2344,6 +2358,16 @@ export const controller = (prisma: PrismaClient) => {
 			totalEvents: eventSearch.count,
 			userCount: userSearch.count,
 			latencyMs: Date.now() - startedAt,
+			userProbe: {
+				ok: userSearch.ok && userSearch.count !== null,
+				count: userSearch.count,
+				error: userSearch.error || null,
+			},
+			eventProbe: {
+				ok: eventSearch.ok && eventSearch.count !== null,
+				count: eventSearch.count,
+				error: eventSearch.error || null,
+			},
 			raw: {
 				userSearch: userSearch.raw,
 				eventSearch: eventSearch.raw,
@@ -2365,6 +2389,14 @@ export const controller = (prisma: PrismaClient) => {
 		) {
 			return directCounts;
 		}
+		if (
+			!directCounts.ok &&
+			directCounts.totalEvents === null &&
+			directCounts.userCount === null &&
+			isHikvisionTransportFailure(directCounts.error)
+		) {
+			return directCounts;
+		}
 
 		try {
 			const data = await hikvisionFetch(
@@ -2374,7 +2406,7 @@ export const controller = (prisma: PrismaClient) => {
 					deviceId,
 					prisma,
 					request: req,
-					timeoutMs: 3500,
+					timeoutMs: HIKVISION_PREVIEW_TOTAL_TIMEOUT_MS,
 				},
 			);
 			return {
@@ -10765,18 +10797,26 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			const isZkteco = isZktecoDevice(device);
 			const parsedAddress = /^https?:\/\//i.test(device.address)
 				? new URL(device.address).hostname
 				: device.address;
-			const isZkteco = isZktecoDevice(device);
+			const hikvisionNetworkTarget = !isZkteco
+				? resolveHikvisionDeviceHealthNetworkTarget(device)
+				: null;
 			const healthPort = isZkteco
 				? Number(device.port || 4370)
-				: getHikvisionDeviceHttpPort(device);
-			const baseUrl = isZkteco ? null : buildHikvisionDeviceBaseUrl(device);
+				: Number(hikvisionNetworkTarget?.port || getHikvisionDeviceHttpPort(device));
+			const healthHost = isZkteco
+				? parsedAddress
+				: String(hikvisionNetworkTarget?.host || parsedAddress);
+			const baseUrl = isZkteco
+				? null
+				: hikvisionNetworkTarget?.endpoint || buildHikvisionDeviceBaseUrl(device);
 			const startedAt = Date.now();
 
-			const [network, zktecoBridge, lastZktecoEvent] = await Promise.all([
-				checkTcpReachability(parsedAddress, healthPort),
+			const [network, zktecoBridge, lastZktecoEvent, hikvisionSourceCounts] = await Promise.all([
+				checkTcpReachability(healthHost, healthPort),
 				isZkteco ? getZktecoBridgeStatus() : Promise.resolve(null),
 				isZkteco
 					? (prisma as any).deviceEvent.findFirst({
@@ -10795,14 +10835,34 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						})
 					: Promise.resolve(null),
+				isZkteco ? Promise.resolve(null) : getHikvisionSourceCounts(req, id),
 			]);
 
 			let deviceApi: {
 				ok: boolean;
 				status: "online" | "offline";
 				latencyMs: number | null;
+				provenBy?: "systemTime" | "userRead" | "eventHistory";
 				error?: string;
 				time?: unknown;
+			} | null = null;
+			let systemTime: {
+				ok: boolean;
+				status: "readable" | "unreachable";
+				latencyMs: number | null;
+				error?: string;
+			} | null = null;
+			let userRead: {
+				ok: boolean;
+				status: "readable" | "unknown";
+				count: number | null;
+				error?: string;
+			} | null = null;
+			let eventHistory: {
+				ok: boolean;
+				status: "readable" | "unknown";
+				count: number | null;
+				error?: string;
 			} | null = null;
 			if (!isZkteco) {
 				const apiStartedAt = Date.now();
@@ -10814,24 +10874,73 @@ export const controller = (prisma: PrismaClient) => {
 						request: req,
 						timeoutMs: 3500,
 					});
+					systemTime = {
+						ok: true,
+						status: "readable",
+						latencyMs: Date.now() - apiStartedAt,
+					};
 					deviceApi = {
 						ok: true,
 						status: "online",
 						latencyMs: Date.now() - apiStartedAt,
+						provenBy: "systemTime",
 						time,
 					};
 				} catch (error: any) {
-					deviceApi = {
+					const systemTimeError =
+						error?.data?.errorCode ||
+						error?.data?.errorCause ||
+						error?.message ||
+						"Device API did not respond";
+					systemTime = {
 						ok: false,
-						status: "offline",
+						status: "unreachable",
 						latencyMs: null,
-						error:
-							error?.data?.errorCode ||
-							error?.data?.errorCause ||
-							error?.message ||
-							"Device API did not respond",
+						error: systemTimeError,
 					};
+					const fallbackProof =
+						hikvisionSourceCounts?.userProbe?.ok
+							? "userRead"
+							: hikvisionSourceCounts?.eventProbe?.ok
+								? "eventHistory"
+								: null;
+					deviceApi = fallbackProof
+						? {
+								ok: true,
+								status: "online",
+								latencyMs: hikvisionSourceCounts?.latencyMs ?? null,
+								provenBy: fallbackProof,
+								error: systemTimeError,
+							}
+						: {
+								ok: false,
+								status: "offline",
+								latencyMs: null,
+								error: systemTimeError,
+							};
 				}
+				userRead = {
+					ok: Boolean(hikvisionSourceCounts?.userProbe?.ok),
+					status: hikvisionSourceCounts?.userProbe?.ok ? "readable" : "unknown",
+					count:
+						hikvisionSourceCounts?.userProbe?.count ??
+						hikvisionSourceCounts?.userCount ??
+						null,
+					...(hikvisionSourceCounts?.userProbe?.error
+						? { error: hikvisionSourceCounts.userProbe.error }
+						: {}),
+				};
+				eventHistory = {
+					ok: Boolean(hikvisionSourceCounts?.eventProbe?.ok),
+					status: hikvisionSourceCounts?.eventProbe?.ok ? "readable" : "unknown",
+					count:
+						hikvisionSourceCounts?.eventProbe?.count ??
+						hikvisionSourceCounts?.totalEvents ??
+						null,
+					...(hikvisionSourceCounts?.eventProbe?.error
+						? { error: hikvisionSourceCounts.eventProbe.error }
+						: {}),
+				};
 			}
 
 			const zktecoWebhook = isZkteco
@@ -10867,9 +10976,12 @@ export const controller = (prisma: PrismaClient) => {
 				network: {
 					ok: network.ok,
 					status: network.ok ? "reachable" : "unreachable",
-					host: parsedAddress,
+					host: healthHost,
 					port: healthPort,
 					latencyMs: network.latencyMs,
+					...(hikvisionNetworkTarget?.source
+						? { source: hikvisionNetworkTarget.source, endpoint: hikvisionNetworkTarget.endpoint }
+						: {}),
 					...(network.error ? { error: network.error } : {}),
 				},
 			};
@@ -10894,6 +11006,9 @@ export const controller = (prisma: PrismaClient) => {
 				responseChecks.lastZktecoEvent = lastZktecoEvent;
 			} else {
 				responseChecks.deviceApi = deviceApi;
+				responseChecks.systemTime = systemTime;
+				responseChecks.userRead = userRead;
+				responseChecks.eventHistory = eventHistory;
 			}
 
 			res.status(200).json(
