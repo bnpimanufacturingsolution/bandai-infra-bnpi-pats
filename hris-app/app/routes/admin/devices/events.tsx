@@ -1203,7 +1203,9 @@ export default function DeviceEventsPage() {
 			: hasNumericCount(syncDryRunEstimate)
 				? `Sync ${formatCount(syncDryRunEstimate)} log${Number(syncDryRunEstimate) === 1 ? "" : "s"}`
 				: "Sync logs";
-	const showSyncPreviewSkeleton = isSyncLogsModalOpen && (isLoadingSyncPreview || isFetchingSyncPreview);
+	const showSyncPreviewSkeleton =
+		isSyncLogsModalOpen &&
+		(isLoadingSyncPreview || (isFetchingSyncPreview && syncPreviewRows.length === 0));
 	const syncVendorSections = useMemo(() => {
 		const order = ["Hikvision", "ZKTeco"];
 		const groups = new Map<string, typeof syncPreviewRows>();

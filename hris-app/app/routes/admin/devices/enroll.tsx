@@ -1163,10 +1163,10 @@ export function DeviceEnrollmentPanel({
 		});
 	};
 	const openSdkUserMerge = async () => {
-		const deviceIds = hikvisionDeviceOptions
+		const configuredDeviceIds: string[] = hikvisionDeviceOptions
 			.map((device: any) => String(device.id || "").trim())
 			.filter(Boolean);
-		if (deviceIds.length < 2) {
+		if (configuredDeviceIds.length < 2) {
 			toast.error("Merge needs at least two configured Hikvision devices");
 			return;
 		}
@@ -1177,15 +1177,46 @@ export function DeviceEnrollmentPanel({
 		setSdkMergeState({
 			open: true,
 			status: "loading",
-			message: "Reading live users from the selected Hikvision devices.",
+			message: "Checking which Hikvision devices are available (up to 5 seconds).",
 			choices: {},
 		});
 		try {
+			const previewRows = syncPreview?.devices?.length
+				? syncPreview.devices
+				: (await refetchSyncPreview()).data?.devices || [];
+			const previewById = new Map(
+				previewRows.map((row: DeviceSyncPreviewRow) => [String(row.deviceId), row]),
+			);
+			const deviceIds = configuredDeviceIds.filter((deviceId) => {
+				const preview = previewById.get(deviceId);
+				return Boolean(
+					preview &&
+						!preview.error &&
+						typeof preview.vendorUserCount === "number" &&
+						Number.isFinite(preview.vendorUserCount),
+				);
+			});
+			const skippedCount = configuredDeviceIds.length - deviceIds.length;
+			if (deviceIds.length < 2) {
+				setSdkMergeState({
+					open: true,
+					status: "error",
+					message: `${deviceIds.length} of ${configuredDeviceIds.length} Hikvision devices are available. ${skippedCount} offline or unavailable device${skippedCount === 1 ? " was" : "s were"} skipped. Merge needs at least two available devices.`,
+					choices: {},
+				});
+				return;
+			}
+			setSdkMergeState({
+				open: true,
+				status: "loading",
+				message: `Reading live users from ${deviceIds.length} available devices; ${skippedCount} offline or unavailable skipped.`,
+				choices: {},
+			});
 			const data = await planHikvisionSdkUserMergeMutation.mutateAsync({ deviceIds });
 			setSdkMergeState({
 				open: true,
 				status: "review",
-				message: "Review conflicts.",
+				message: `Review conflicts from ${deviceIds.length} available devices. ${skippedCount} offline or unavailable skipped.`,
 				data,
 				choices: {},
 			});

@@ -137,7 +137,9 @@ export const useHikvisionListenerStatus = (enabled = true) => {
 		queryFn: () => devicesService.getHikvisionListenerStatus(),
 		enabled,
 		staleTime: 2 * 1000,
-		refetchInterval: enabled ? 5 * 1000 : false,
+		// Keep existing preview rows visible while a quieter background refresh runs.
+		// The preview endpoint already bounds unavailable-device checks to about 5 seconds.
+		refetchInterval: enabled ? 15 * 1000 : false,
 		retry: 1,
 	});
 };

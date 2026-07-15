@@ -9,6 +9,7 @@ describe("admin device user and log sync UI contract", () => {
 		const manage = readAppFile("app/routes/admin/devices/manage.tsx");
 		const enroll = readAppFile("app/routes/admin/devices/enroll.tsx");
 		const events = readAppFile("app/routes/admin/devices/events.tsx");
+		const deviceHooks = readAppFile("app/lib/hooks/useDevices.ts");
 
 		expect(enroll).toContain("Merge users");
 		expect(manage).toContain("Sync Center");
@@ -106,12 +107,15 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("deviceUserSyncStatusBubble");
 		expect(enroll).toContain("Merge users");
 		expect(enroll).toContain('title="Merge device users"');
-		expect(enroll).toContain("Reading live users from the selected Hikvision devices.");
+		expect(enroll).toContain("Checking which Hikvision devices are available (up to 5 seconds).");
+		expect(enroll).toContain("offline or unavailable skipped");
+		expect(enroll).toContain("Merge needs at least two available devices.");
+		expect(enroll).toContain("typeof preview.vendorUserCount === \"number\"");
 		expect(enroll).toContain("Resolve from the richest device record");
 		expect(enroll).toContain("Auto-resolve from richest device");
 		expect(enroll).toContain("Keep");
 		expect(enroll).toContain("Clear");
-		expect(enroll).toContain("hikvisionDeviceOptions.length < 2");
+		expect(enroll).toContain("configuredDeviceIds.length < 2");
 		expect(enroll).toContain("sdkMergeBlockingCount");
 		expect(enroll).toContain("Read from device");
 		expect(enroll).toContain("Current view");
@@ -227,6 +231,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).not.toContain("Link identity");
 		expect(events).not.toContain("Sync logs request accepted");
 		expect(events).toContain("Sync device logs started");
+		expect(events).toContain("isFetchingSyncPreview && syncPreviewRows.length === 0");
+		expect(deviceHooks).toContain("refetchInterval: enabled ? 15 * 1000 : false");
 
 		expect(events).toContain("Sync logs");
 		expect(events).toContain("Sync device logs");
