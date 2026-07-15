@@ -1435,3 +1435,11 @@ Status: COMPLETE
 - Headless Playwright measured merge UI readiness at 3.369 seconds, merge API completion at 2.939 seconds, and sync preview refreshes at 4.406-4.677 seconds, with no console errors and no refresh skeleton replacing rows.
 - CI passed at `f57d45e`. After repairing the npm 10 lockfile contract, VM reconciliation completed with zero failures, DEV Argo CD returned `Synced/Healthy`, new app/API pods were running, LAN app/API returned HTTP 200, and `cloudflared-bnpi-hris.service` remained active. The deployed merge dry-run completed in 3.781 seconds.
 - Evidence: `.runtime/device-preflight-latency-20260715-151721/`, `.runtime/biometric-portability-proof-20260715-114841/playwright-main-c-background/`, and `.runtime/device-user-sync-jobs/d3a6f6f8-d16c-4919-b65e-e0b7a54502be.json`.
+
+## 2026-07-15 Main Entrance Device C Export Accuracy Addendum
+
+- Status: `COMPLETE` for the bounded current-page Excel/Package JSON export and import-preview journey; physical target-device restore remains explicitly unclaimed.
+- The export modal now loads the source page while open, shows `Current page: 8 rows`, validates a separate v2 envelope for each device/user/modality, and refuses to create a biometric file when requested positive-count credentials are missing. The existing resumable background capture job is opened instead.
+- Final headless Playwright downloads contained eight valid fingerprint envelopes for eight reported fingerprint users and seven valid face envelopes for seven reported face users. Vendor user 8 reports no face and correctly exports an empty face field with `not_enrolled` status.
+- The real `.xlsx` had 28 required headers, zero placeholder cells, and safe hash parity with the separately downloaded Package JSON. Correct-passphrase import preview unlocked all 15 envelopes without plaintext exposure; an incorrect passphrase was rejected.
+- Evidence: `.runtime/biometric-excel-proof-20260715-162935/`.

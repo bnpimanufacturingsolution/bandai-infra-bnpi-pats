@@ -573,3 +573,12 @@ Boundary:
   is downloaded, installed, compiled, and callable on the VM.
 - It does not yet prove HCNetSDK login, alarm arming, alarm callback receipt,
   HRIS posting, HRIS DB persistence, attendance, or UI rendering.
+
+## 2026-07-15 Main Entrance Device C Excel Export Proof
+
+- Corrected the export-open source-query gate and loading state so current-page scope resolves to eight real rows instead of a false zero.
+- Removed placeholder/fallback biometric values from raw-template columns and required validated separate v2 device/user/modality envelopes.
+- Added biometric readiness/custody counts and a capture-before-export guard that reuses the persistent background sync job when positive-count modalities are missing.
+- Fixed the `sdkMergeState.data` optional-state TypeScript regression and wired the import passphrase into preview.
+- Headless Playwright captured the actual Excel and Package JSON downloads. Workbook parsing proved 8/8 fingerprint and 7/7 face envelopes, zero placeholder cells, and hash parity with the package. Correct/wrong-passphrase import-preview behavior passed.
+- Focused regression, targeted lint, production build, GitHub validation, and commit delivery passed. Evidence: `.runtime/biometric-excel-proof-20260715-162935/`.
