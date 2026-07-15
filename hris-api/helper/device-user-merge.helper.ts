@@ -189,10 +189,17 @@ export const applyMergeChoices = (
 	params: {
 		choices?: Record<string, Record<DeviceUserMergeField, MergeChoice>>;
 		applyAll?: MergeChoice;
+		selectedUserKeys?: string[];
 	} = {},
 ) => {
 	const unresolved: Array<{ key: string; field: DeviceUserMergeField }> = [];
-	const resolved = plan.users.map((user) => ({
+	const selectedUserKeys = Array.isArray(params.selectedUserKeys)
+		? new Set(params.selectedUserKeys.map((key) => text(key)).filter(Boolean))
+		: null;
+	const selectedUsers = selectedUserKeys
+		? plan.users.filter((user) => selectedUserKeys.has(user.key))
+		: plan.users;
+	const resolved = selectedUsers.map((user) => ({
 		...user,
 		conflicts: user.conflicts.map((conflict) => {
 			const choice =
@@ -201,15 +208,27 @@ export const applyMergeChoices = (
 			return { ...conflict, choice: choice || null };
 		}),
 	}));
+	const plannedWrites = (plan.plannedWrites || []).filter((write) =>
+		selectedUserKeys ? selectedUserKeys.has(write.userKey) : true,
+	);
 	return {
 		...plan,
 		users: resolved,
+		plannedWrites,
 		unresolved,
 		unresolvedDecisions: unresolved,
 		executable:
+			resolved.length > 0 &&
 			unresolved.length === 0 &&
 			plan.ambiguousMatches.length === 0 &&
 			((plan as any).errors || []).length === 0,
+		counts: {
+			...plan.counts,
+			unionUsers: resolved.length,
+			conflicts: resolved.reduce((sum, user) => sum + user.conflicts.length, 0),
+			missing: resolved.reduce((sum, user) => sum + user.missingOnDeviceIds.length, 0),
+			missingHrisLinks: resolved.filter((user) => !user.employeeId).length,
+		},
 	};
 };
 

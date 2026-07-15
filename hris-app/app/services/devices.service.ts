@@ -471,6 +471,13 @@ export interface DeviceUserMergeJobProgress {
 	completedAt?: string;
 }
 
+export type DeviceUserMergeApplyPayload = {
+	planId: string;
+	choices?: Record<string, Partial<Record<DeviceUserMergeField, "A" | "B" | "KEEP">>>;
+	applyAll?: "A" | "B";
+	selectedUserKeys?: string[];
+};
+
 export interface DeviceUserSyncJobStartRequest {
 	mode?: DeviceUserSyncMode;
 	deviceIds?: string[];
@@ -1493,11 +1500,7 @@ class DevicesService extends APIService {
 		}
 	}
 
-	async applyHikvisionSdkUserMerge(payload: {
-		planId: string;
-		choices?: Record<string, Partial<Record<DeviceUserMergeField, "A" | "B" | "KEEP">>>;
-		applyAll?: "A" | "B";
-	}): Promise<any> {
+	async applyHikvisionSdkUserMerge(payload: DeviceUserMergeApplyPayload): Promise<any> {
 		try {
 			const response = await hrisApiClient.post<any>(
 				"/api/device/hikvision/sdk-users/merge/apply",
@@ -1513,11 +1516,9 @@ class DevicesService extends APIService {
 		}
 	}
 
-	async startHikvisionSdkUserMergeJob(payload: {
-		planId: string;
-		choices?: Record<string, Partial<Record<DeviceUserMergeField, "A" | "B" | "KEEP">>>;
-		applyAll?: "A" | "B";
-	}): Promise<{ jobId: string; progress: DeviceUserMergeJobProgress }> {
+	async startHikvisionSdkUserMergeJob(
+		payload: DeviceUserMergeApplyPayload,
+	): Promise<{ jobId: string; progress: DeviceUserMergeJobProgress }> {
 		try {
 			const response = await hrisApiClient.post<any>(
 				"/api/device/hikvision/sdk-users/merge/jobs",

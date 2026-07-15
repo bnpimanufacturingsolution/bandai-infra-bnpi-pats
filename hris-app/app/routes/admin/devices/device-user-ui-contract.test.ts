@@ -113,6 +113,13 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("typeof preview.vendorUserCount === \"number\"");
 		expect(enroll).toContain("Preview merge by unique ID");
 		expect(enroll).toContain("Preview recommended choices");
+		expect(enroll).toContain("selected unique ID");
+		expect(enroll).toContain("selected potential write");
+		expect(enroll).toContain("Deselect all");
+		expect(enroll).toContain("selectedUserKeys");
+		expect(enroll).toContain("mergeCredentialTruth");
+		expect(enroll).toContain("Issue: ${mergePlural(issueCount, \"device\")}");
+		expect(enroll).toContain("Expected active devices");
 		expect(enroll).toContain("Unique IDs");
 		expect(enroll).toContain("Device records read");
 		expect(enroll).toContain("Issue details");
@@ -144,8 +151,10 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("SdkMergeCredentialPickerState");
 		expect(enroll).toContain("Credential source");
 		expect(enroll).toContain("Choose which device should supply this credential.");
-		expect(enroll).toContain("currentCount");
-		expect(enroll).toContain("recommendedCount");
+		expect(enroll).toContain("truth.present");
+		expect(enroll).toContain("truth.expected");
+		expect(enroll).toContain("truth.connectedDevices");
+		expect(enroll).toContain("truth.missingDevices");
 		expect(enroll).toContain("CheckCircle2");
 		expect(enroll).toContain("Review sources");
 		expect(enroll).not.toContain("Hide details");

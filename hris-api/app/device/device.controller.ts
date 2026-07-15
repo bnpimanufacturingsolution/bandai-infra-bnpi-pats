@@ -7324,19 +7324,27 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				return;
 			}
+			const selectedUserKeys = Array.isArray(req.body?.selectedUserKeys)
+				? req.body.selectedUserKeys
+						.map((key: unknown) => String(key || "").trim())
+						.filter(Boolean)
+				: undefined;
 			const appliedPlan = applyMergeChoices(stored.plan, {
 				choices: req.body?.choices || {},
 				applyAll:
 					req.body?.applyAll === "A" || req.body?.applyAll === "B"
 						? req.body.applyAll
 						: undefined,
+				selectedUserKeys,
 			});
 			if (!appliedPlan.executable) {
 				const reason = appliedPlan.ambiguousMatches?.length
 					? "Resolve ambiguous SDK user identities before applying the merge"
 					: (appliedPlan as any).errors?.length
 						? "Resolve unreachable or failed SDK reads before applying the merge"
-						: "Resolve every SDK user conflict before applying the merge";
+						: selectedUserKeys?.length === 0
+							? "Select at least one actionable unique ID before applying the merge"
+							: "Resolve every SDK user conflict before applying the merge";
 				res.status(409).json(buildErrorResponse(reason, 409));
 				return;
 			}
@@ -7567,6 +7575,7 @@ export const controller = (prisma: PrismaClient) => {
 		planId: string;
 		choices?: Record<string, any>;
 		applyAll?: "A" | "B";
+		selectedUserKeys?: string[];
 	}) => {
 		const originalBody = params.req.body;
 		let statusCode = 200;
@@ -7586,6 +7595,7 @@ export const controller = (prisma: PrismaClient) => {
 				planId: params.planId,
 				choices: params.choices || {},
 				applyAll: params.applyAll,
+				selectedUserKeys: params.selectedUserKeys,
 			};
 			await applyHikvisionSdkUserMerge(params.req, fakeRes, (() => undefined) as NextFunction);
 		} finally {
@@ -7608,6 +7618,7 @@ export const controller = (prisma: PrismaClient) => {
 		planId: string;
 		choices?: Record<string, any>;
 		applyAll?: "A" | "B";
+		selectedUserKeys?: string[];
 	}) => {
 		const job = deviceUserMergeJobs.get(params.jobId);
 		if (!job) return;
@@ -7621,6 +7632,7 @@ export const controller = (prisma: PrismaClient) => {
 				planId: params.planId,
 				choices: params.choices,
 				applyAll: params.applyAll,
+				selectedUserKeys: params.selectedUserKeys,
 			});
 			const results = Array.isArray(result?.results) ? result.results : [];
 			const failedWrites = results.filter((item: any) => item.status === "error").length;
@@ -7690,17 +7702,28 @@ export const controller = (prisma: PrismaClient) => {
 				req.body?.applyAll === "A" || req.body?.applyAll === "B"
 					? req.body.applyAll
 					: undefined;
-			const appliedPlan = applyMergeChoices(stored.plan, { choices, applyAll });
-			if (!appliedPlan.executable) {
-				const reason = appliedPlan.ambiguousMatches?.length
+			const selectedUserKeys = Array.isArray(req.body?.selectedUserKeys)
+				? req.body.selectedUserKeys
+						.map((key: unknown) => String(key || "").trim())
+						.filter(Boolean)
+				: undefined;
+			const selectedAppliedPlan = applyMergeChoices(stored.plan, {
+				choices,
+				applyAll,
+				selectedUserKeys,
+			});
+			if (!selectedAppliedPlan.executable) {
+				const reason = selectedAppliedPlan.ambiguousMatches?.length
 					? "Resolve ambiguous SDK user identities before starting the merge job"
-					: (appliedPlan as any).errors?.length
+					: (selectedAppliedPlan as any).errors?.length
 						? "Resolve unreachable or failed SDK reads before starting the merge job"
-						: "Resolve every SDK user conflict before starting the merge job";
+						: selectedUserKeys?.length === 0
+							? "Select at least one actionable unique ID before starting the merge job"
+							: "Resolve every selected SDK user conflict before starting the merge job";
 				res.status(409).json(buildErrorResponse(reason, 409));
 				return;
 			}
-			const totalWrites = Math.max(1, Number(appliedPlan.plannedWrites?.length || 0));
+			const totalWrites = Math.max(1, Number(selectedAppliedPlan.plannedWrites?.length || 0));
 			const jobId = randomUUID();
 			const job: DeviceUserMergeJob = {
 				jobId,
@@ -7724,6 +7747,7 @@ export const controller = (prisma: PrismaClient) => {
 				planId,
 				choices,
 				applyAll,
+				selectedUserKeys,
 			}).catch((error: any) => {
 				deviceLogger.error(`Hikvision SDK user merge job ${jobId} failed: ${error}`);
 				updateDeviceUserMergeJob(jobId, {

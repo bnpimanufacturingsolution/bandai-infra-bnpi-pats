@@ -10,6 +10,7 @@ import devicesService, {
 	type DeviceUserSyncJobStartRequest,
 	type DeviceUserSyncJobProgress,
 	type DeviceUserMergeJobProgress,
+	type DeviceUserMergeApplyPayload,
 	type DeviceUserExportRequest,
 	type DeviceUserImportPreviewRequest,
 	type DeviceUserImportExecuteRequest,
@@ -236,11 +237,8 @@ export const usePlanHikvisionSdkUserMerge = () => {
 export const useApplyHikvisionSdkUserMerge = () => {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: (payload: {
-			planId: string;
-			choices?: Record<string, Record<string, "A" | "B" | "KEEP">>;
-			applyAll?: "A" | "B";
-		}) => devicesService.applyHikvisionSdkUserMerge(payload),
+		mutationFn: (payload: DeviceUserMergeApplyPayload) =>
+			devicesService.applyHikvisionSdkUserMerge(payload),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
 			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users"] });
@@ -251,11 +249,8 @@ export const useApplyHikvisionSdkUserMerge = () => {
 export const useStartHikvisionSdkUserMergeJob = () => {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: (payload: {
-			planId: string;
-			choices?: Record<string, Record<string, "A" | "B" | "KEEP">>;
-			applyAll?: "A" | "B";
-		}) => devicesService.startHikvisionSdkUserMergeJob(payload),
+		mutationFn: (payload: DeviceUserMergeApplyPayload) =>
+			devicesService.startHikvisionSdkUserMergeJob(payload),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
 			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users"] });

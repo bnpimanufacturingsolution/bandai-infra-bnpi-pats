@@ -118,6 +118,27 @@ describe("device user union merge", () => {
 		).to.equal(false);
 	});
 
+	it("applies only selected unique IDs when a merge preview is scoped", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records: [
+				record("a", { vendorUserId: "0001" }),
+				record("b", { vendorUserId: "0001" }),
+				record("a", { vendorUserId: "0002", employeeId: "employee-2" }),
+			],
+		});
+		const selected = plan.users.find((user) => user.vendorUserIds.includes("0002"));
+		const excluded = plan.users.find((user) => user.vendorUserIds.includes("0001"));
+		const applied = applyMergeChoices(plan, { selectedUserKeys: [selected!.key] });
+
+		expect(applied.executable).to.equal(true);
+		expect(applied.users.map((user) => user.key)).to.deep.equal([selected!.key]);
+		expect(applied.plannedWrites.map((write) => write.userKey)).to.not.include(
+			excluded!.key,
+		);
+		expect(applied.counts.unionUsers).to.equal(1);
+	});
+
 	it("compares access, validity, card, face, and fingerprint fields", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],

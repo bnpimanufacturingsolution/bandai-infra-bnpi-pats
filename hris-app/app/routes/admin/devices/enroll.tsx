@@ -172,6 +172,12 @@ type SdkMergeCredentialPickerState = {
 type SdkMergeSourceReviewState = {
 	rowId: string;
 } | null;
+type SdkMergeCredentialTruth = {
+	present: number;
+	expected: number;
+	connectedDevices: string[];
+	missingDevices: string[];
+};
 
 const mergeNaturalCollator = new Intl.Collator(undefined, {
 	numeric: true,
@@ -217,6 +223,36 @@ const mergeRecordValue = (record: any, field: DeviceUserMergeField) => {
 		return mergeCredentialCount(record, field);
 	}
 	return record?.[field];
+};
+
+const mergeCredentialTruth = (
+	user: DeviceUserMergePlanResponse["plan"]["users"][number],
+	devices: DeviceUserMergePlanResponse["plan"]["devices"],
+	kind: SdkMergeCredentialKind,
+): SdkMergeCredentialTruth => {
+	const recordsByDevice = new Map(
+		(user.records || []).map((record: any) => [String(record.deviceId), record]),
+	);
+	const connectedDevices: string[] = [];
+	const missingDevices: string[] = [];
+
+	for (const device of devices || []) {
+		const deviceId = String(device.id || "");
+		const deviceName = device.name || device.address || deviceId;
+		const record = recordsByDevice.get(deviceId);
+		if (record && mergeCredentialCount(record, kind) > 0) {
+			connectedDevices.push(deviceName);
+		} else {
+			missingDevices.push(deviceName);
+		}
+	}
+
+	return {
+		present: connectedDevices.length,
+		expected: (devices || []).length,
+		connectedDevices,
+		missingDevices,
+	};
 };
 
 const mergeValueIsPopulated = (value: unknown) => {
@@ -555,6 +591,9 @@ export function DeviceEnrollmentPanel({
 		useState<SdkMergeCredentialPickerState>(null);
 	const [sdkMergeSourceReview, setSdkMergeSourceReview] =
 		useState<SdkMergeSourceReviewState>(null);
+	const [selectedSdkMergeUserKeys, setSelectedSdkMergeUserKeys] = useState<Record<string, boolean>>(
+		{},
+	);
 	const [sdkMergeJobId, setSdkMergeJobId] = useState<string | null>(sdkMergeJobIdParam || null);
 	const [sdkMergeLastJob, setSdkMergeLastJob] = useState<DeviceUserMergeJobProgress | null>(null);
 	const [sdkMergeHandledJobId, setSdkMergeHandledJobId] = useState<string | null>(null);
@@ -1272,6 +1311,24 @@ export function DeviceEnrollmentPanel({
 				choices: {},
 			});
 			const data = await planHikvisionSdkUserMergeMutation.mutateAsync({ deviceIds });
+			const actionableKeys = Object.fromEntries(
+				(data.plan.users || [])
+					.filter((user) => {
+						const hasCredentialIssue = (["fingerprint", "face", "card"] as const).some(
+							(kind) => {
+								const truth = mergeCredentialTruth(user, data.plan.devices || [], kind);
+								return truth.present < truth.expected;
+							},
+						);
+						return (
+							user.missingOnDeviceIds.length > 0 ||
+							user.conflicts.length > 0 ||
+							hasCredentialIssue
+						);
+					})
+					.map((user) => [user.key, true]),
+			);
+			setSelectedSdkMergeUserKeys(actionableKeys);
 			setSdkMergeState({
 				open: true,
 				status: "review",
@@ -1684,7 +1741,34 @@ export function DeviceEnrollmentPanel({
 				null
 			: null;
 	const sdkMergeUniqueIdCount = sdkMergeState.data?.plan.users.length || 0;
-	const sdkMergePlanDevices = sdkMergeState.data?.plan.devices || [];
+	const sdkMergePlanDevices = useMemo(
+		() => sdkMergeState.data?.plan.devices || [],
+		[sdkMergeState.data],
+	);
+	const sdkMergeActionableUserKeys = useMemo(() => {
+		if (!sdkMergeState.data?.plan) return [];
+		return sdkMergeState.data.plan.users
+			.filter((user) => {
+				const hasCredentialIssue = (["fingerprint", "face", "card"] as const).some(
+					(kind) => {
+						const truth = mergeCredentialTruth(user, sdkMergePlanDevices, kind);
+						return truth.present < truth.expected;
+					},
+				);
+				return (
+					user.missingOnDeviceIds.length > 0 ||
+					user.conflicts.length > 0 ||
+					hasCredentialIssue
+				);
+			})
+			.map((user) => user.key);
+	}, [sdkMergePlanDevices, sdkMergeState.data]);
+	const selectedSdkMergeKeys = sdkMergeActionableUserKeys.filter(
+		(key) => selectedSdkMergeUserKeys[key],
+	);
+	const sdkMergeSelectedUniqueCount = selectedSdkMergeKeys.length;
+	const sdkMergeExcludedActionableCount =
+		sdkMergeActionableUserKeys.length - sdkMergeSelectedUniqueCount;
 	const sdkMergeDeviceRecordCount =
 		sdkMergeState.data?.plan.users.reduce((count, user) => count + user.records.length, 0) ||
 		0;
@@ -1696,6 +1780,12 @@ export function DeviceEnrollmentPanel({
 			0,
 		) ||
 		0;
+	const sdkMergeSelectedPotentialWriteCount =
+		sdkMergeState.data?.plan.users.reduce(
+			(count, user) =>
+				selectedSdkMergeUserKeys[user.key] ? count + user.targetDeviceIds.length : count,
+			0,
+		) || 0;
 	const sdkMergeAttentionRowCount = sdkMergeReviewRows.length;
 	const sdkMergeFilterItems: Array<{ value: SdkMergeFilter; label: string; count: number }> = [
 		{ value: "all", label: "Issue details", count: sdkMergeRows.length },
@@ -1718,11 +1808,6 @@ export function DeviceEnrollmentPanel({
 			value: "face",
 			label: "Face gaps",
 			count: sdkMergeRows.filter((row) => row.filter === "face").length,
-		},
-		{
-			value: "card",
-			label: "Card gaps",
-			count: sdkMergeRows.filter((row) => row.filter === "card").length,
 		},
 		{
 			value: "ready",
@@ -1783,22 +1868,33 @@ export function DeviceEnrollmentPanel({
 	const sdkMergeConflictCount =
 		sdkMergeState.data?.plan.users.reduce((count, user) => count + user.conflicts.length, 0) ||
 		0;
-	const sdkMergeResolvedCount =
+	const sdkMergeSelectedConflictCount =
 		sdkMergeState.data?.plan.users.reduce(
 			(count, user) =>
-				count +
-				user.conflicts.filter((conflict) =>
-					Boolean(
-						sdkMergeState.applyAll || sdkMergeState.choices[user.key]?.[conflict.field],
-					),
-				).length,
+				selectedSdkMergeUserKeys[user.key] ? count + user.conflicts.length : count,
+			0,
+		) || 0;
+	const sdkMergeSelectedResolvedCount =
+		sdkMergeState.data?.plan.users.reduce(
+			(count, user) =>
+				selectedSdkMergeUserKeys[user.key]
+					? count +
+						user.conflicts.filter((conflict) =>
+							Boolean(
+								sdkMergeState.applyAll ||
+									sdkMergeState.choices[user.key]?.[conflict.field],
+							),
+						).length
+					: count,
 			0,
 		) || 0;
 	const sdkMergeBlockingCount =
 		(sdkMergeState.data?.plan.errors?.length || 0) +
 		(sdkMergeState.data?.plan.ambiguousMatches?.length || 0);
 	const sdkMergeCanApply =
-		sdkMergeResolvedCount >= sdkMergeConflictCount && sdkMergeBlockingCount === 0;
+		sdkMergeSelectedUniqueCount > 0 &&
+		sdkMergeSelectedResolvedCount >= sdkMergeSelectedConflictCount &&
+		sdkMergeBlockingCount === 0;
 	const visibleSdkMergeJob = sdkMergeJobId
 		? sdkMergeJobProgress || sdkMergeLastJob
 		: sdkMergeLastJob;
@@ -1910,17 +2006,24 @@ export function DeviceEnrollmentPanel({
 		const choices = overrideChoices || sdkMergeState.choices;
 		const resolvedCount = sdkMergeState.data.plan.users.reduce(
 			(count, user) =>
-				count +
-				user.conflicts.filter((conflict) =>
-					Boolean(sdkMergeState.applyAll || choices[user.key]?.[conflict.field]),
-				).length,
+				selectedSdkMergeUserKeys[user.key]
+					? count +
+						user.conflicts.filter((conflict) =>
+							Boolean(sdkMergeState.applyAll || choices[user.key]?.[conflict.field]),
+						).length
+					: count,
 			0,
 		);
-		if (resolvedCount < sdkMergeConflictCount || sdkMergeBlockingCount > 0) return;
+		if (
+			sdkMergeSelectedUniqueCount === 0 ||
+			resolvedCount < sdkMergeSelectedConflictCount ||
+			sdkMergeBlockingCount > 0
+		)
+			return;
 		setSdkMergeState((current) => ({
 			...current,
 			status: "review",
-			message: "Starting merge job.",
+			message: `Starting merge job for ${mergePlural(sdkMergeSelectedUniqueCount, "selected unique ID")}.`,
 			choices,
 		}));
 		try {
@@ -1928,6 +2031,7 @@ export function DeviceEnrollmentPanel({
 				planId: sdkMergeState.data.planId,
 				choices,
 				applyAll: sdkMergeState.applyAll,
+				selectedUserKeys: selectedSdkMergeKeys,
 			});
 			setSdkMergeJobId(result.jobId);
 			setSdkMergeLastJob(result.progress);
@@ -5946,6 +6050,11 @@ export function DeviceEnrollmentPanel({
 										<p className="text-sm font-semibold text-slate-950">
 											Preview merge by unique ID
 										</p>
+										<p className="mt-1 text-xs text-slate-600">
+											{mergePlural(sdkMergeSelectedUniqueCount, "selected unique ID")} ·{" "}
+											{mergePlural(sdkMergeSelectedPotentialWriteCount, "selected potential write")} ·{" "}
+											{sdkMergeExcludedActionableCount} excluded
+										</p>
 										{sdkMergeBlockingCount > 0 ? (
 											<p className="mt-1 text-xs font-medium text-amber-700">
 												Resolve {sdkMergeBlockingCount} device read issue
@@ -5955,6 +6064,29 @@ export function DeviceEnrollmentPanel({
 										) : null}
 									</div>
 									<div className="flex flex-wrap justify-end gap-2">
+										<Button
+											type="button"
+											variant="outline"
+											onClick={() =>
+												setSelectedSdkMergeUserKeys(
+													Object.fromEntries(
+														sdkMergeActionableUserKeys.map((key) => [
+															key,
+															true,
+														]),
+													),
+												)
+											}
+											disabled={sdkMergeActionableUserKeys.length === 0}>
+											Select all
+										</Button>
+										<Button
+											type="button"
+											variant="outline"
+											onClick={() => setSelectedSdkMergeUserKeys({})}
+											disabled={sdkMergeSelectedUniqueCount === 0}>
+											Deselect all
+										</Button>
 										<Button
 											type="button"
 											onClick={autoResolveSdkMergeFromRichest}
@@ -6040,19 +6172,18 @@ export function DeviceEnrollmentPanel({
 										Per-device impact
 									</p>
 								</div>
-								<div className="grid gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-700 lg:grid-cols-[minmax(180px,1fr)_70px_repeat(5,92px)]">
+								<div className="grid gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-700 lg:grid-cols-[minmax(180px,1fr)_88px_repeat(4,106px)]">
 									<span>Device</span>
 									<span>IDs read</span>
 									<span>Missing</span>
 									<span>Decision</span>
 									<span>Finger</span>
 									<span>Face</span>
-									<span>Card</span>
 								</div>
 								{sdkMergeDeviceIssueCounts.map(({ device, read, counts }) => (
 									<div
 										key={device.id}
-										className="grid gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 lg:grid-cols-[minmax(180px,1fr)_70px_repeat(5,92px)] lg:items-center">
+										className="grid gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 lg:grid-cols-[minmax(180px,1fr)_88px_repeat(4,106px)] lg:items-center">
 										<button
 											type="button"
 											aria-label={`Show unique IDs for ${device.name || device.address || device.id}`}
@@ -6083,7 +6214,6 @@ export function DeviceEnrollmentPanel({
 												["decision", counts.decision],
 												["fingerprint", counts.fingerprint],
 												["face", counts.face],
-												["card", counts.card],
 											] as Array<[SdkMergeFilter, number]>
 										).map(([filter, count]) => (
 											<button
@@ -6133,12 +6263,12 @@ export function DeviceEnrollmentPanel({
 										<>
 											<div
 												role="row"
-												className="sticky top-0 z-10 grid min-w-[1080px] grid-cols-[92px_minmax(170px,1fr)_minmax(150px,0.9fr)_minmax(150px,0.9fr)_minmax(150px,0.9fr)_minmax(220px,1.1fr)_160px] border-b border-slate-200 bg-slate-100 px-3 py-2 text-[11px] font-semibold uppercase text-slate-600">
+												className="sticky top-0 z-10 grid min-w-[1040px] grid-cols-[56px_88px_minmax(180px,1fr)_170px_170px_minmax(220px,1.1fr)_152px] items-center gap-3 border-b border-slate-200 bg-slate-100 px-3 py-2 text-[11px] font-semibold uppercase text-slate-600">
+												<span className="text-center">Select</span>
 												<span>ID</span>
 												<span>User</span>
 												<span>Fingerprint</span>
 												<span>Face</span>
-												<span>Card</span>
 												<span>Recommendation</span>
 												<span className="text-right">Actions</span>
 											</div>
@@ -6147,7 +6277,12 @@ export function DeviceEnrollmentPanel({
 												row.conflictFields?.length || row.conflictField,
 											);
 											const isSelected = selectedMergeUserKey === row.userKey;
-											const rowSeenRecords = row.user.records || [];
+											const isActionable = sdkMergeActionableUserKeys.includes(
+												row.userKey,
+											);
+											const isRowChecked = Boolean(
+												selectedSdkMergeUserKeys[row.userKey],
+											);
 											const recommendationReason = mergeRecommendationReason(row);
 											const rowIssueRows = sdkMergeRows.filter(
 												(issueRow) =>
@@ -6161,44 +6296,22 @@ export function DeviceEnrollmentPanel({
 											const renderCredentialCountCell = (
 												kind: SdkMergeCredentialKind,
 											) => {
-												const recordsByCount = [...rowSeenRecords].sort(
-													(left: any, right: any) =>
-														mergeCredentialCount(right, kind) -
-															mergeCredentialCount(left, kind) ||
-														mergeRecordRichnessScore(right) -
-															mergeRecordRichnessScore(left),
-												);
-												const recommendedRecord = recordsByCount[0];
-												const recommendedCount = mergeCredentialCount(
-													recommendedRecord,
-													kind,
-												);
-												const currentRecord =
-													row.targetRecord ||
-													(selectedMergeDeviceId !== "all"
-														? rowSeenRecords.find(
-																(record: any) =>
-																	record.deviceId === selectedMergeDeviceId,
-															)
-														: recordsByCount[recordsByCount.length - 1]) ||
-													recommendedRecord;
-												const currentCount = mergeCredentialCount(currentRecord, kind);
-												const currentDeviceName = currentRecord?.deviceId
-													? mergeDeviceName(sdkMergePlanDevices, currentRecord.deviceId)
-													: "No current source";
-												const recommendedDeviceName = recommendedRecord?.deviceId
-													? mergeDeviceName(sdkMergePlanDevices, recommendedRecord.deviceId)
-													: "Unavailable";
-												const hasUpgrade = recommendedCount > currentCount;
+												const truth = mergeCredentialTruth(row.user, sdkMergePlanDevices, kind);
+												const hasIssue = truth.present < truth.expected;
+												const issueCount = truth.expected - truth.present;
 												return (
 													<div className="min-w-0 text-xs text-slate-700">
-														<div className="flex min-w-0 items-center gap-1.5">
+														<div className="inline-grid grid-cols-[2.25rem_0.75rem_2.25rem] items-center">
 															<span
-																className="min-w-[1.75rem] rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-center text-sm font-semibold text-slate-950"
-																title={`Current: ${currentDeviceName}`}>
-																{mergeMetricValue(currentCount)}
+																className={`rounded-md border px-1.5 py-0.5 text-center text-sm font-semibold ${
+																	hasIssue
+																		? "border-amber-300 bg-amber-50 text-amber-950"
+																		: "border-emerald-200 bg-emerald-50 text-emerald-800"
+																}`}
+																title={`Connected: ${truth.connectedDevices.join(", ") || "None"}`}>
+																{mergeMetricValue(truth.present)}
 															</span>
-															<span className="text-[11px] font-medium text-slate-400">/</span>
+															<span className="text-center text-[11px] font-medium text-slate-400">/</span>
 															<button
 																type="button"
 																onClick={() =>
@@ -6207,19 +6320,33 @@ export function DeviceEnrollmentPanel({
 																		kind,
 																	})
 																}
-																className={`min-w-[1.75rem] rounded-md border px-1.5 py-0.5 text-center text-sm font-semibold transition-colors ${
-																	hasUpgrade
-																		? "border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100"
-																		: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-																}`}
-																title={`Recommended: ${recommendedDeviceName}`}
-																aria-label={`Choose recommended ${kind} source for vendor user ID ${row.vendorUserId}`}>
-																{mergeMetricValue(recommendedCount)}
+																className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-center text-sm font-semibold text-slate-950 transition-colors hover:bg-slate-50"
+																title={`Expected active devices: ${truth.expected}`}
+																aria-label={`Review ${kind} devices for vendor user ID ${row.vendorUserId}`}>
+																{mergeMetricValue(truth.expected)}
 															</button>
 														</div>
-														<p className="mt-1 truncate text-[11px] text-slate-500">
-															{hasUpgrade ? recommendedDeviceName : currentDeviceName}
-														</p>
+														<button
+															type="button"
+															onClick={() =>
+																setSdkMergeSourceReview({
+																	rowId: row.id,
+																})
+															}
+															className={`mt-1 block max-w-full truncate text-left text-[11px] font-medium ${
+																hasIssue
+																	? "text-amber-700 hover:text-amber-900"
+																	: "text-slate-500 hover:text-slate-700"
+															}`}
+															title={
+																hasIssue
+																	? `Missing: ${truth.missingDevices.join(", ")}`
+																	: `Connected: ${truth.connectedDevices.join(", ")}`
+															}>
+															{hasIssue
+																? `Issue: ${mergePlural(issueCount, "device")}`
+																: "Aligned"}
+														</button>
 													</div>
 												);
 											};
@@ -6227,8 +6354,29 @@ export function DeviceEnrollmentPanel({
 												<div
 													key={row.id}
 													role="row"
-													className={`min-w-[1080px] border-b border-slate-100 px-3 py-3 last:border-b-0 ${isSelected ? "bg-white ring-1 ring-inset ring-orange-200" : "bg-white"}`}>
-													<div className="grid grid-cols-[92px_minmax(170px,1fr)_minmax(150px,0.9fr)_minmax(150px,0.9fr)_minmax(150px,0.9fr)_minmax(220px,1.1fr)_160px] gap-3">
+													className={`min-w-[1040px] border-b border-slate-100 px-3 py-3 last:border-b-0 ${isSelected ? "bg-white ring-1 ring-inset ring-orange-200" : "bg-white"} ${!isActionable ? "text-slate-500" : ""}`}>
+													<div className="grid grid-cols-[56px_88px_minmax(180px,1fr)_170px_170px_minmax(220px,1.1fr)_152px] items-start gap-3">
+														<div className="flex justify-center pt-1">
+															<input
+																type="checkbox"
+																className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+																checked={isRowChecked}
+																disabled={!isActionable}
+																aria-label={`Select vendor user ID ${row.vendorUserId} for merge preview`}
+																title={
+																	isActionable
+																		? "Include this unique ID in the merge preview"
+																		: "Ready rows have no updateable issue"
+																}
+																onChange={(event) => {
+																	const checked = event.target.checked;
+																	setSelectedSdkMergeUserKeys((current) => ({
+																		...current,
+																		[row.userKey]: checked,
+																	}));
+																}}
+															/>
+														</div>
 														<div className="min-w-0">
 															<p className="truncate text-sm font-semibold text-slate-950">
 																{row.vendorUserId}
@@ -6260,7 +6408,6 @@ export function DeviceEnrollmentPanel({
 														</div>
 														{renderCredentialCountCell("fingerprint")}
 														{renderCredentialCountCell("face")}
-														{renderCredentialCountCell("card")}
 														<div className="min-w-0 space-y-1">
 															<Badge
 																variant={
@@ -6372,8 +6519,8 @@ export function DeviceEnrollmentPanel({
 						{sdkMergeState.data && !hasSdkMergeJob ? (
 							<p className="mr-auto max-w-xl text-xs leading-5 text-slate-600">
 								{sdkMergePreviewOnly
-									? `Preview mode is on. This screen is showing ${mergePlural(sdkMergeUniqueIdCount, "unique ID")} and ${mergePlural(sdkMergePotentialWriteCount, "potential write")} for review.`
-									: "Writes are allowed for this review. Starting the job will copy selected records and reread devices."}
+									? `Preview mode is on. ${mergePlural(sdkMergeSelectedUniqueCount, "selected unique ID")} and ${mergePlural(sdkMergeSelectedPotentialWriteCount, "selected potential write")} are included; ${mergePlural(sdkMergeExcludedActionableCount, "actionable ID")} excluded.`
+									: `${mergePlural(sdkMergeSelectedUniqueCount, "selected unique ID")} will be used. Starting the job will copy selected records and reread devices.`}
 							</p>
 						) : null}
 						<Button
@@ -6433,11 +6580,13 @@ export function DeviceEnrollmentPanel({
 									? `Resolve ${sdkMergeBlockingCount} read issue${sdkMergeBlockingCount === 1 ? "" : "s"}`
 									: sdkMergePreviewOnly
 										? "Preview only"
-										: sdkMergeResolvedCount < sdkMergeConflictCount
-										? `Preview ${sdkMergeConflictCount - sdkMergeResolvedCount} more`
+										: sdkMergeSelectedUniqueCount === 0
+										? "Select rows"
+										: sdkMergeSelectedResolvedCount < sdkMergeSelectedConflictCount
+										? `Preview ${sdkMergeSelectedConflictCount - sdkMergeSelectedResolvedCount} more`
 										: sdkMergeJobIsProcessing
 											? "Merge job running"
-											: "Start merge job"}
+											: `Start merge job (${sdkMergeSelectedUniqueCount})`}
 							</Button>
 						) : null}
 					</div>
@@ -6474,12 +6623,48 @@ export function DeviceEnrollmentPanel({
 								{selectedSdkMergeSourceReviewRow.issueLabel}
 							</Badge>
 						</div>
+						<div className="grid gap-2 md:grid-cols-2">
+							{(["fingerprint", "face"] as const).map((kind) => {
+								const truth = mergeCredentialTruth(
+									selectedSdkMergeSourceReviewRow.user,
+									sdkMergePlanDevices,
+									kind,
+								);
+								const issueCount = truth.expected - truth.present;
+								return (
+									<div
+										key={`${selectedSdkMergeSourceReviewRow.id}:truth:${kind}`}
+										className={`min-w-0 rounded-md border px-3 py-2 ${
+											issueCount > 0
+												? "border-amber-200 bg-amber-50"
+												: "border-emerald-200 bg-emerald-50"
+										}`}>
+										<div className="flex items-center justify-between gap-2">
+											<p className="text-xs font-semibold uppercase text-slate-600">
+												{mergeFieldLabel(kind)}
+											</p>
+											<span className="rounded-md border border-white/80 bg-white px-2 py-0.5 text-xs font-semibold text-slate-950">
+												{truth.present} / {truth.expected}
+											</span>
+										</div>
+										<p className="mt-1 truncate text-xs text-slate-700">
+											Connected: {truth.connectedDevices.join(", ") || "None"}
+										</p>
+										<p
+											className={`mt-0.5 truncate text-xs ${
+												issueCount > 0 ? "text-amber-800" : "text-emerald-800"
+											}`}>
+											Missing: {truth.missingDevices.join(", ") || "None"}
+										</p>
+									</div>
+								);
+							})}
+						</div>
 						<div className="overflow-hidden rounded-md border border-slate-200">
-							<div className="grid grid-cols-[minmax(180px,1.4fr)_76px_76px_76px_minmax(140px,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase text-slate-500">
+							<div className="grid grid-cols-[minmax(180px,1.4fr)_76px_76px_minmax(140px,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase text-slate-500">
 								<span>Source</span>
 								<span>Finger</span>
 								<span>Face</span>
-								<span>Card</span>
 								<span>Status</span>
 							</div>
 							<div className="max-h-[320px] overflow-auto bg-white">
@@ -6494,7 +6679,7 @@ export function DeviceEnrollmentPanel({
 									return (
 										<div
 											key={`${selectedSdkMergeSourceReviewRow.id}:source-modal:${record.deviceId}`}
-											className="grid grid-cols-[minmax(180px,1.4fr)_76px_76px_76px_minmax(140px,1fr)] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+											className="grid grid-cols-[minmax(180px,1.4fr)_76px_76px_minmax(140px,1fr)] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
 											<div className="min-w-0">
 												<p className="truncate font-semibold text-slate-950">
 													{deviceName}
@@ -6511,9 +6696,6 @@ export function DeviceEnrollmentPanel({
 											<span className="font-semibold text-slate-950">
 												{mergeMetricValue(mergeCredentialCount(record, "face"))}
 											</span>
-											<span className="font-semibold text-slate-950">
-												{mergeMetricValue(mergeCredentialCount(record, "card"))}
-											</span>
 											<div className="flex min-w-0 flex-wrap gap-1">
 												{isCurrent ? <Badge variant="secondary">Current</Badge> : null}
 												{isRecommended ? <Badge variant="success">Recommended</Badge> : null}
@@ -6527,14 +6709,13 @@ export function DeviceEnrollmentPanel({
 								{(selectedSdkMergeSourceReviewRow.user.missingOnDeviceIds || []).map((deviceId) => (
 									<div
 										key={`${selectedSdkMergeSourceReviewRow.id}:source-modal-missing:${deviceId}`}
-										className="grid grid-cols-[minmax(180px,1.4fr)_76px_76px_76px_minmax(140px,1fr)] gap-3 border-b border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-950 last:border-b-0">
+										className="grid grid-cols-[minmax(180px,1.4fr)_76px_76px_minmax(140px,1fr)] gap-3 border-b border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-950 last:border-b-0">
 										<div className="min-w-0">
 											<p className="truncate font-semibold">
 												{mergeDeviceName(sdkMergePlanDevices, deviceId)}
 											</p>
 											<p className="truncate text-xs">Missing this vendor user ID</p>
 										</div>
-										<span>0</span>
 										<span>0</span>
 										<span>0</span>
 										<Badge variant="warning">Missing</Badge>
