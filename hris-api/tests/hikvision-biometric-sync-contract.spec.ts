@@ -169,6 +169,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include(
 			"DEVICE_USER_BIOMETRIC_BUNDLE_KEY is required for biometric custody in production",
 		);
+		expect(controller).to.include('const appEnvironment = String(process.env.APP_ENV || "")');
+		expect(controller).to.include('appEnvironment === "production" || appEnvironment === "prod"');
 		expect(controller).to.include('noOpReason: "already_converged_persisted_truth"');
 		expect(controller).to.include("const runDeviceUserImportExecuteWork = async");
 		expect(controller).to.include("const getDeviceUserImportJob = async");

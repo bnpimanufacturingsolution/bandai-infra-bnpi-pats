@@ -1401,7 +1401,12 @@ export const controller = (prisma: PrismaClient) => {
 	const getDeviceUserBiometricBundleSecret = (organizationId: string, deviceId: string) => {
 		const configured = String(process.env.DEVICE_USER_BIOMETRIC_BUNDLE_KEY || "").trim();
 		if (configured) return { secret: configured, source: "DEVICE_USER_BIOMETRIC_BUNDLE_KEY" };
-		if (String(process.env.NODE_ENV || "").toLowerCase() === "production") {
+		const appEnvironment = String(process.env.APP_ENV || "").trim().toLowerCase();
+		const nodeEnvironment = String(process.env.NODE_ENV || "").trim().toLowerCase();
+		const isProductionCustodyRuntime = appEnvironment
+			? appEnvironment === "production" || appEnvironment === "prod"
+			: nodeEnvironment === "production";
+		if (isProductionCustodyRuntime) {
 			throw new Error(
 				"DEVICE_USER_BIOMETRIC_BUNDLE_KEY is required for biometric custody in production",
 			);
