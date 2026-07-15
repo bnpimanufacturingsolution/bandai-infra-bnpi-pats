@@ -32,6 +32,7 @@ import {
 import { useForm } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import { useEmployee, useEmployees } from "~/lib/hooks/useEmployees";
 import {
 	useDevices,
@@ -290,13 +291,13 @@ const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = [
 	"biometricTransferMode",
 	"fingerprintTemplateKeySource",
 	"fingerprintRawTemplateBlob",
+	"fingerprintTemplateStatus",
 	"faceTemplateKeySource",
 	"faceRawTemplateBlob",
+	"faceTemplateStatus",
 	"rawBiometricPlaintextPolicy",
 	"rawBiometricSource",
 ] as const;
-const DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED =
-	"not_exported_plaintext_use_encrypted_bundle_or_sdk_peer_copy";
 const DEVICE_USER_CSV_ENCRYPTED_BUNDLE_AVAILABLE = "encrypted_bundle_available";
 const DEVICE_USER_CSV_NO_PLAINTEXT_POLICY = "no_plaintext_biometric_templates";
 
@@ -538,6 +539,8 @@ export function DeviceEnrollmentPanel({
 		includeFingerprints: boolean;
 		includeFaces: boolean;
 		encryptedBiometricBundle: boolean;
+		refreshBiometricBundle: boolean;
+		biometricBundlePassphrase: string;
 		format: DeviceUserExportFormat;
 		preview: DeviceUserExportPayload | null;
 		result: DeviceUserExportPayload | null;
@@ -548,6 +551,8 @@ export function DeviceEnrollmentPanel({
 		includeFingerprints: true,
 		includeFaces: true,
 		encryptedBiometricBundle: true,
+		refreshBiometricBundle: false,
+		biometricBundlePassphrase: "",
 		format: "csv",
 		preview: null,
 		result: null,
@@ -1774,28 +1779,23 @@ export function DeviceEnrollmentPanel({
 			toast.error("Select a device before syncing users");
 			return;
 		}
-		setDeviceUserSyncState({
-			open: true,
+		setDeviceUserSyncState((current) => ({
+			...current,
 			status: "syncing",
-			message: "Reading identity records from the physical device.",
-		});
+			message: "Queuing live users and missing biometric custody in the background.",
+		}));
 		try {
-			const result = await syncDeviceUsersMutation.mutateAsync(selectedDeviceId);
-			const summary = (result.summary || {}) as DeviceUserSyncSummary;
-			await Promise.allSettled([
-				refetchSourceDeviceUsers(),
-				refetchDbDeviceUsers(),
-				refetchOpenDbDeviceUsers(),
-				refetchDeviceUserSummary(),
-				refetchSourceMatchedDeviceUsers(),
-				refetchSyncRuns(),
-				refetchSyncPreview(),
-			]);
-			setDeviceUserSyncState({
+			const result = await startDeviceUserSyncJobMutation.mutateAsync({
+				mode: "full_refresh",
+				deviceIds: [selectedDeviceId],
+			});
+			setActiveDeviceUserSyncJob({ jobId: result.jobId });
+			setDeviceUserSyncState({ open: false, status: "idle", message: "" });
+			setBulkDeviceUserSyncState({
 				open: true,
-				status: "complete",
-				message: "Device users synced from the physical device.",
-				summary,
+				status: "idle",
+				message: result.progress?.message || "Device-user custody job started.",
+				lastProgress: result.progress || null,
 			});
 		} catch (error: any) {
 			setDeviceUserSyncState({
@@ -2595,7 +2595,16 @@ export function DeviceEnrollmentPanel({
 	const deviceUserSyncJobMode =
 		effectiveDeviceUserSyncJobProgress?.syncMode || DEFAULT_BULK_DEVICE_USER_SYNC_MODE;
 	const deviceUserSyncJobPercent = effectiveDeviceUserSyncJobProgress
-		? Math.min(100, Math.round((deviceUserSyncJobProcessed / deviceUserSyncJobTotal) * 100))
+		? effectiveDeviceUserSyncJobProgress.biometricTotal > 0
+			? Math.min(
+					99,
+					Math.round(
+						(effectiveDeviceUserSyncJobProgress.biometricProcessed /
+							effectiveDeviceUserSyncJobProgress.biometricTotal) *
+							100,
+					),
+				)
+			: Math.min(100, Math.round((deviceUserSyncJobProcessed / deviceUserSyncJobTotal) * 100))
 		: 0;
 	const deviceUserSyncJobIsProcessing = effectiveDeviceUserSyncJobStatus === "processing";
 	const deviceUserSyncJobCancelRequested = Boolean(
@@ -2640,7 +2649,8 @@ export function DeviceEnrollmentPanel({
 		],
 		["Completed", effectiveDeviceUserSyncJobProgress?.processedDevices ?? 0],
 		["Synced", effectiveDeviceUserSyncJobProgress?.successfulDevices ?? 0],
-		["Needs attention", effectiveDeviceUserSyncJobProgress?.failedDevices ?? 0],
+		["Biometric captured", effectiveDeviceUserSyncJobProgress?.biometricCaptured ?? 0],
+		["Biometric missing", effectiveDeviceUserSyncJobProgress?.biometricFailed ?? 0],
 	] as const;
 	const bulkDeviceUserSyncResults = effectiveDeviceUserSyncJobProgress?.results || [];
 	const deviceUserSyncJobSummary = effectiveDeviceUserSyncJobProgress
@@ -2760,12 +2770,6 @@ export function DeviceEnrollmentPanel({
 		const text = value === null || value === undefined ? "" : String(value);
 		return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 	};
-	const escapeHtmlValue = (value: unknown) =>
-		(value === null || value === undefined ? "" : String(value))
-			.replace(/&/g, "&amp;")
-			.replace(/</g, "&lt;")
-			.replace(/>/g, "&gt;")
-			.replace(/"/g, "&quot;");
 	const getSdkMergeCountButtonClass = (isActive: boolean, count: number) => {
 		const base = "rounded border px-2 py-1 text-left text-xs font-semibold transition";
 		if (isActive) return `${base} border-orange-300 bg-orange-50 text-orange-950`;
@@ -2827,10 +2831,7 @@ export function DeviceEnrollmentPanel({
 			normalized,
 		);
 	};
-	const getCsvRawTemplateValue = (
-		value: unknown,
-		fallback = DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
-	) => String(value || "").trim() || fallback;
+	const getCsvRawTemplateValue = (value: unknown) => String(value || "").trim();
 	const getEncryptedBundleCiphertextForCsv = (payload: DeviceUserExportPayload) =>
 		String(
 			(payload.biometricBundle as any)?.ciphertext ||
@@ -2848,7 +2849,7 @@ export function DeviceEnrollmentPanel({
 		if (directValue) return String(directValue);
 		const encryptedCiphertext = getEncryptedBundleCiphertextForCsv(payload);
 		if (encryptedCiphertext) return DEVICE_USER_CSV_ENCRYPTED_BUNDLE_AVAILABLE;
-		return DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED;
+		return "";
 	};
 	const getTemplateKeySourceColumnValue = (user: any, key: string) =>
 		String(
@@ -3079,9 +3080,11 @@ export function DeviceEnrollmentPanel({
 							: "No",
 					biometricTransferMode: "sdkPeerCopy",
 					fingerprintTemplateKeySource: "",
-					fingerprintRawTemplateBlob: DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
+					fingerprintRawTemplateBlob: "",
+					fingerprintTemplateStatus: "missing_encrypted_envelope",
 					faceTemplateKeySource: "",
-					faceRawTemplateBlob: DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
+					faceRawTemplateBlob: "",
+					faceTemplateStatus: "missing_encrypted_envelope",
 					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
 					rawBiometricSource: "template",
 					exportedAt: new Date().toISOString(),
@@ -3107,9 +3110,11 @@ export function DeviceEnrollmentPanel({
 					biometricBundleRequiredForRawImport: "Yes",
 					biometricTransferMode: "sdkPeerCopy",
 					fingerprintTemplateKeySource: "",
-					fingerprintRawTemplateBlob: DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
+					fingerprintRawTemplateBlob: "",
+					fingerprintTemplateStatus: "missing_encrypted_envelope",
 					faceTemplateKeySource: "",
-					faceRawTemplateBlob: DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED,
+					faceRawTemplateBlob: "",
+					faceTemplateStatus: "not_enrolled",
 					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
 					rawBiometricSource: "template",
 					exportedAt: new Date().toISOString(),
@@ -3172,10 +3177,20 @@ export function DeviceEnrollmentPanel({
 						? getTemplateKeySourceColumnValue(user, "fingerprintTemplateKeySource")
 						: "",
 					fingerprintRawTemplateBlob,
+					fingerprintTemplateStatus: fingerprintBundlePresent
+						? "encrypted_envelope_present"
+						: Number(credentialSummary.fingerprintCount || 0) > 0
+							? "missing_encrypted_envelope"
+							: "not_enrolled",
 					faceTemplateKeySource: faceBundlePresent
 						? getTemplateKeySourceColumnValue(user, "faceTemplateKeySource")
 						: "",
 					faceRawTemplateBlob,
+					faceTemplateStatus: faceBundlePresent
+						? "encrypted_envelope_present"
+						: Number(credentialSummary.faceCount || 0) > 0
+							? "missing_encrypted_envelope"
+							: "not_enrolled",
 					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
 					rawBiometricSource: device.sourceRead?.status || "hris_saved_metadata",
 					exportedAt: payload.exportedAt || "",
@@ -3205,20 +3220,14 @@ export function DeviceEnrollmentPanel({
 				blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
 				extension = "csv";
 			} else {
-				const headerCells = headers
-					.map((header) => `<th>${escapeHtmlValue(header)}</th>`)
-					.join("");
-				const bodyRows = rows
-					.map(
-						(row) =>
-							`<tr>${headers
-								.map((header) => `<td>${escapeHtmlValue((row as any)[header])}</td>`)
-								.join("")}</tr>`,
-					)
-					.join("");
-				const html = `<!doctype html><html><head><meta charset="utf-8" /></head><body><table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
-				blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
-				extension = "xls";
+				const worksheet = XLSX.utils.json_to_sheet(rows, { header: [...headers] });
+				const workbook = XLSX.utils.book_new();
+				XLSX.utils.book_append_sheet(workbook, worksheet, "Device users");
+				const workbookBytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+				blob = new Blob([workbookBytes], {
+					type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+				});
+				extension = "xlsx";
 			}
 		}
 		const url = URL.createObjectURL(blob);
@@ -3248,6 +3257,8 @@ export function DeviceEnrollmentPanel({
 		includeFingerprints: deviceUserExportState.includeFingerprints,
 		includeFaces: deviceUserExportState.includeFaces,
 		encryptedBiometricBundle: deviceUserExportState.encryptedBiometricBundle,
+		refreshBiometricBundle: deviceUserExportState.refreshBiometricBundle,
+		biometricBundlePassphrase: deviceUserExportState.biometricBundlePassphrase,
 	});
 	const previewDeviceUserExport = async () => {
 		if (!selectedDeviceId) {
@@ -3290,13 +3301,28 @@ export function DeviceEnrollmentPanel({
 			`device-users-${deviceSlug || "export"}-${datePart}`,
 		);
 		setDeviceUserExportState((current) => ({ ...current, result }));
-		toast.success(
-			`Device-user ${deviceUserExportState.format === "json" ? "package" : deviceUserExportState.format} export created`,
-		);
+		const missingBiometricRows = Number(result.biometricBundle?.errors?.length || 0);
+		if (missingBiometricRows > 0) {
+			toast.warning(
+				`Export is partial: ${missingBiometricRows} requested biometric row${missingBiometricRows === 1 ? " is" : "s are"} missing encrypted payloads`,
+			);
+		} else {
+			toast.success(
+				`Device-user ${deviceUserExportState.format === "json" ? "package" : deviceUserExportState.format} export created`,
+			);
+		}
 	};
 	const previewDeviceUserImport = async () => {
 		if (!selectedDeviceId) {
 			toast.error("Select a target device before importing users");
+			return;
+		}
+		if (
+			deviceUserExportState.encryptedBiometricBundle &&
+			(deviceUserExportState.includeFingerprints || deviceUserExportState.includeFaces) &&
+			!deviceUserExportState.biometricBundlePassphrase
+		) {
+			toast.error("Enter a package passphrase before exporting portable biometrics");
 			return;
 		}
 		let payload = deviceUserImportState.payload;
@@ -4725,8 +4751,8 @@ export function DeviceEnrollmentPanel({
 				onOpenChange={(open) => setDeviceUserSyncState((current) => ({ ...current, open }))}
 				title="Sync device users"
 				className="max-w-lg"
-				showCloseButton={deviceUserSyncState.status !== "syncing"}
-				closeOnBackdropClick={deviceUserSyncState.status !== "syncing"}>
+				showCloseButton
+				closeOnBackdropClick>
 				<div className="space-y-3">
 					<div
 						className={
@@ -4782,10 +4808,27 @@ export function DeviceEnrollmentPanel({
 										</div>
 									))}
 								</div>
+								<div className="grid gap-2 sm:grid-cols-2">
+									{[
+										[
+											"Fingerprint raw/encrypted blob",
+											`${metricValue(selectedSyncCenterItem?.preview?.fingerprintEnvelopePresent)} present · ${metricValue(selectedSyncCenterItem?.preview?.fingerprintEnvelopeMissing)} missing`,
+										],
+										[
+											"Face raw/encrypted blob",
+											`${metricValue(selectedSyncCenterItem?.preview?.faceEnvelopePresent)} present · ${metricValue(selectedSyncCenterItem?.preview?.faceEnvelopeMissing)} missing`,
+										],
+									].map(([label, value]) => (
+										<div key={label} className="rounded-md border border-slate-200 px-2 py-1.5">
+											<span className="block text-slate-500">{label}</span>
+											<span className="font-semibold text-slate-950">{value}</span>
+										</div>
+									))}
+								</div>
 								<p className="text-slate-600">
-									This device refresh rereads every source user for the selected
-									device. Existing manual links stay intact, while saved biometric
-									summaries and device-only users are refreshed in HRIS.
+									The background job rereads every source user, then serially captures
+									missing fingerprint and face custody. You can close this window and
+									return while it continues.
 								</p>
 							</div>
 						) : null}
@@ -4814,7 +4857,7 @@ export function DeviceEnrollmentPanel({
 						<Button
 							type="button"
 							variant="outline"
-							disabled={deviceUserSyncState.status === "syncing"}
+							disabled={false}
 							onClick={() =>
 								setDeviceUserSyncState((current) => ({ ...current, open: false }))
 							}>
@@ -4824,9 +4867,9 @@ export function DeviceEnrollmentPanel({
 						deviceUserSyncState.status === "error" ? (
 							<Button
 								type="button"
-								disabled={syncDeviceUsersMutation.isPending || !selectedDeviceId}
+								disabled={startDeviceUserSyncJobMutation.isPending || !selectedDeviceId}
 								onClick={runDeviceUserSync}>
-								{syncDeviceUsersMutation.isPending ? (
+								{startDeviceUserSyncJobMutation.isPending ? (
 									<Loader2 className="h-4 w-4 animate-spin" />
 								) : (
 									<RefreshCw className="h-4 w-4" />
@@ -4840,10 +4883,9 @@ export function DeviceEnrollmentPanel({
 
 			<Modal
 				open={bulkDeviceUserSyncState.open}
-				onOpenChange={(open) => {
-					if (deviceUserSyncJobIsProcessing && !open) return;
-					setBulkDeviceUserSyncState((current) => ({ ...current, open }));
-				}}
+				onOpenChange={(open) =>
+					setBulkDeviceUserSyncState((current) => ({ ...current, open }))
+				}
 				title="Sync device users"
 				description={
 					hasEffectiveDeviceUserSyncJobProgress
@@ -4851,8 +4893,8 @@ export function DeviceEnrollmentPanel({
 						: "Choose the manual refresh scope, then reread live device-user truth."
 				}
 				className="max-w-4xl"
-				showCloseButton={!deviceUserSyncJobIsProcessing}
-				closeOnBackdropClick={!deviceUserSyncJobIsProcessing}>
+				showCloseButton
+				closeOnBackdropClick>
 				<div className="space-y-4">
 					<div
 						className={`rounded-lg border p-4 ${hasEffectiveDeviceUserSyncJobProgress ? deviceUserSyncJobToneClass : bulkDeviceUserSyncToneClass}`}>
@@ -6418,7 +6460,7 @@ export function DeviceEnrollmentPanel({
 					<div className="grid gap-2 sm:grid-cols-3">
 						{[
 							["csv", "CSV", "Spreadsheet custody rows"],
-							["excel", "Excel", "Excel-readable .xls"],
+							["excel", "Excel", "Native Excel .xlsx workbook"],
 							["json", "Package JSON", "Re-importable sync package"],
 						].map(([value, label, hint]) => (
 							<button
@@ -6459,8 +6501,8 @@ export function DeviceEnrollmentPanel({
 						<p className="font-semibold">Biometric handling</p>
 						<p className="mt-1 text-cyan-900">
 							Use SDK peer copy when both devices are reachable. Use an encrypted
-							bundle only for portable template payloads; the passphrase is entered at
-							import time and is not stored.
+							bundle only for portable template payloads; its passphrase encrypts the
+							download and must be entered again at import. It is never stored.
 						</p>
 						<p className="mt-2 font-mono text-[11px] text-cyan-950">
 							Separate custody columns: fingerprintTemplateKeySource +
@@ -6475,6 +6517,7 @@ export function DeviceEnrollmentPanel({
 							["includeFingerprints", "Fingerprints"],
 							["includeFaces", "Faces"],
 							["encryptedBiometricBundle", "Encrypted bundle contract"],
+							["refreshBiometricBundle", "Capture missing templates"],
 						].map(([key, label]) => (
 							<label
 								key={key}
@@ -6496,6 +6539,24 @@ export function DeviceEnrollmentPanel({
 							</label>
 						))}
 					</div>
+					{deviceUserExportState.encryptedBiometricBundle ? (
+						<label className="block space-y-1 text-sm">
+							<span className="font-medium text-slate-800">Package passphrase</span>
+							<input
+								type="password"
+								value={deviceUserExportState.biometricBundlePassphrase}
+								onChange={(event) =>
+									setDeviceUserExportState((current) => ({
+										...current,
+										biometricBundlePassphrase: event.target.value,
+										result: null,
+									}))
+								}
+								placeholder="Required for portable biometric export"
+								className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200"
+							/>
+						</label>
+					) : null}
 					{deviceUserExportState.preview ? (
 						<div className="grid gap-2 sm:grid-cols-4">
 							{[
@@ -6533,7 +6594,17 @@ export function DeviceEnrollmentPanel({
 						</div>
 					) : null}
 					{deviceUserExportState.result ? (
-						<div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+						<div
+							className={`rounded-md border px-3 py-2 text-sm ${
+								deviceUserExportState.result.biometricBundle?.errors?.length
+									? "border-amber-200 bg-amber-50 text-amber-950"
+									: "border-emerald-200 bg-emerald-50 text-emerald-950"
+							}`}>
+							{deviceUserExportState.result.biometricBundle?.errors?.length ? (
+								<p className="font-semibold">
+									Partial export: {deviceUserExportState.result.biometricBundle.errors.length} requested biometric payloads are missing.
+								</p>
+							) : null}
 							{deviceUserExportState.format === "json"
 								? "Package JSON created for import preview or execute."
 								: `${deviceUserExportState.format === "csv" ? "CSV" : "Excel"} export created for audit/review.`}{" "}
@@ -6847,6 +6918,7 @@ export function DeviceEnrollmentPanel({
 								<input
 									type="checkbox"
 									checked={deviceUserImportState.runAsJob}
+									aria-label="Run import execute as background job"
 									onChange={(event) =>
 										setDeviceUserImportState((current) => ({
 											...current,

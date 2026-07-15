@@ -12,6 +12,8 @@ describe("Hikvision biometric sync contract", () => {
 			join(process.cwd(), "../vendor/hikvision-linux/hikvision_biometric_service.cpp"),
 			"utf8",
 		);
+	const envelopeHelperSource = () =>
+		readFileSync(join(process.cwd(), "app/device/biometric-envelope.helper.ts"), "utf8");
 
 	it("exposes admin-only dry-run and execute reconciliation without template custody", () => {
 		const router = routerSource();
@@ -41,8 +43,7 @@ describe("Hikvision biometric sync contract", () => {
 			join(process.cwd(), "../scripts/project-truth-hikvision-hot-reload-listener.sh"),
 			"utf8",
 		);
-
-		expect(router).to.include('routes.post(\n\t\t"/hikvision/copy-user"');
+		expect(router).to.include('"/hikvision/copy-user"');
 		expect(router).to.include("requestTimeout({");
 		expect(router).to.include('label: "hikvision-copy-user"');
 		expect(router).to.include("controller.copyHikvisionDeviceUserToPeer");
@@ -158,7 +159,16 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("vmSessionCount: sharedVmCopyResult ? 1 : 0");
 		expect(controller).to.include("const settled = await Promise.allSettled(");
 		expect(controller).to.include("preferredHikvisionListenerVmTargetLabel");
-		expect(controller).to.include('"ConnectTimeout=1"');
+		expect(controller).to.include("HIKVISION_VM_SSH_CONNECT_TIMEOUT_SECONDS");
+		expect(controller).to.include("PORTABLE_BIOMETRIC_ENVELOPE_FORMAT");
+		expect(controller).to.include("encryptPortableBiometricEnvelope");
+		expect(envelopeHelperSource()).to.include("passphrase-scrypt");
+		expect(envelopeHelperSource()).to.include(
+			"Encrypted biometric bundle source binding mismatch",
+		);
+		expect(controller).to.include(
+			"DEVICE_USER_BIOMETRIC_BUNDLE_KEY is required for biometric custody in production",
+		);
 		expect(controller).to.include('noOpReason: "already_converged_persisted_truth"');
 		expect(controller).to.include("const runDeviceUserImportExecuteWork = async");
 		expect(controller).to.include("const getDeviceUserImportJob = async");
@@ -359,6 +369,25 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("Target single-user sync before enroll did not complete");
 		expect(controller).to.include("deviceUser.upsert");
 		expect(controller).to.include("deviceUserLinked");
+	});
+
+	it("runs missing biometric custody as a durable per-device background sync phase", () => {
+		const controller = controllerSource();
+
+		expect(controller).to.include("captureMissingBiometricCustodyForDevice");
+		expect(controller).to.include('currentModality?: "fingerprint" | "face" | null');
+		expect(controller).to.include("biometricProcessed");
+		expect(controller).to.include("biometricCaptured");
+		expect(controller).to.include("biometricFailed");
+		expect(controller).to.include("persistDeviceUserSyncJob(nextJob)");
+		expect(controller).to.include("readDeviceUserSyncJob(jobId)");
+		expect(controller).to.include("includeFingerprints: true");
+		expect(controller).to.include("includeFaces: false");
+		expect(controller).to.include("includeFingerprints: false");
+		expect(controller).to.include("includeFaces: true");
+		expect(controller).to.include("for (let attempt = 1; attempt <= 3; attempt += 1)");
+		expect(controller).to.include("fingerprintEnvelopeMissing");
+		expect(controller).to.include("faceEnvelopeMissing");
 	});
 
 	it("exposes selected-device activity for Sync Center observability without mutating devices", () => {

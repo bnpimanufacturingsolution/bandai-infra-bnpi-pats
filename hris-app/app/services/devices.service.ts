@@ -232,6 +232,12 @@ export interface DeviceSyncPreviewRow {
 	hrisUserCount?: number;
 	linkedUserCount?: number;
 	openUserCount?: number;
+	fingerprintReported?: number;
+	fingerprintEnvelopePresent?: number;
+	fingerprintEnvelopeMissing?: number;
+	faceReported?: number;
+	faceEnvelopePresent?: number;
+	faceEnvelopeMissing?: number;
 	conflictUserCount?: number;
 	disabledUserCount?: number;
 	peerBaselineDeviceId?: string | null;
@@ -477,6 +483,15 @@ export interface DeviceUserSyncJobProgress {
 	processedDevices: number;
 	successfulDevices: number;
 	failedDevices: number;
+	biometricTotal: number;
+	biometricProcessed: number;
+	biometricCaptured: number;
+	biometricCached: number;
+	biometricFailed: number;
+	currentDeviceId?: string | null;
+	currentDeviceName?: string | null;
+	currentVendorUserId?: string | null;
+	currentModality?: "fingerprint" | "face" | null;
 	message: string;
 	cancelRequested?: boolean;
 	cancelRequestedAt?: string;
@@ -767,6 +782,10 @@ export interface DeviceUserSyncResponse {
 		skippedUsers?: number;
 		failedCopies?: number;
 		syntheticFaceMirrors?: number;
+		biometricTasks?: number;
+		biometricCached?: number;
+		biometricCaptured?: number;
+		biometricFailed?: number;
 	};
 }
 
@@ -786,6 +805,9 @@ export interface DeviceUserExportRequest {
 	includeFingerprints?: boolean;
 	includeFaces?: boolean;
 	encryptedBiometricBundle?: boolean;
+	refreshSourceUsers?: boolean;
+	refreshBiometricBundle?: boolean;
+	biometricBundlePassphrase?: string;
 }
 
 export interface DeviceUserExportPayload {
@@ -812,6 +834,26 @@ export interface DeviceUserExportPayload {
 		ciphertext?: string;
 		encryptedPayload?: string;
 		encryptedBlob?: string;
+		users?: Array<{
+			sourceDeviceId: string;
+			vendorUserId: string;
+			source?: string;
+			fingerprintCount?: number;
+			faceTemplateSize?: number;
+			facePictureSize?: number;
+			fingerprintPlaintextSha256?: string | null;
+			fingerprintCiphertextLength?: number;
+			fingerprintKeySource?: string | null;
+			facePlaintextSha256?: string | null;
+			faceCiphertextLength?: number;
+			faceKeySource?: string | null;
+		}>;
+		errors?: Array<{
+			sourceDeviceId: string;
+			vendorUserId: string;
+			status?: string;
+			error?: string;
+		}>;
 	};
 	devices: Array<{
 		device: Pick<Device, "id" | "name" | "address" | "port" | "protocol"> & {
@@ -866,6 +908,14 @@ export interface DeviceUserExportPayload {
 		totalUsers: number;
 		linked: number;
 		unlinked: number;
+		biometrics?: {
+			fingerprintCountReported: number;
+			fingerprintEnvelopesCaptured: number;
+			faceCountReported: number;
+			faceEnvelopesCaptured: number;
+			captureFailures: number;
+			portableDecryptable: boolean;
+		};
 	};
 }
 

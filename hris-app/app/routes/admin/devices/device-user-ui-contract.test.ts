@@ -90,6 +90,13 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Sync Runs");
 		expect(enroll).toContain("Review log sync");
 		expect(enroll).toContain("Review sync");
+		expect(enroll).toContain("Fingerprint raw/encrypted blob");
+		expect(enroll).toContain("Face raw/encrypted blob");
+		expect(enroll).toContain("missing biometric custody in the background");
+		expect(enroll).toContain("deviceIds: [selectedDeviceId]");
+		expect(enroll).toContain("You can close this window and reopen status");
+		expect(enroll).toContain("Biometric captured");
+		expect(enroll).toContain("Biometric missing");
 		expect(enroll).toContain("Merge users");
 		expect(enroll).toContain('title="Merge device users"');
 		expect(enroll).toContain("Reading live users from the selected Hikvision devices.");
@@ -121,7 +128,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Excel");
 		expect(enroll).toContain("Package JSON");
 		expect(enroll).toContain("Spreadsheet custody rows");
-		expect(enroll).toContain("Excel-readable .xls");
+		expect(enroll).toContain("Native Excel .xlsx workbook");
+		expect(enroll).toContain("XLSX.utils.json_to_sheet");
 		expect(enroll).toContain("downloadDeviceUserExport");
 		expect(enroll).toContain("selectedExportVendorUserIds");
 		expect(enroll).toContain("togglePagedExportVendorUserIds");
@@ -133,7 +141,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("fingerprintRawTemplateBlob");
 		expect(enroll).toContain("faceRawTemplateBlob");
 		expect(enroll).toContain("biometricBundleRequiredForRawImport");
-		expect(enroll).toContain("DEVICE_USER_CSV_RAW_TEMPLATE_NOT_EXPORTED");
+		expect(enroll).toContain('return "";');
+		expect(enroll).toContain("missing_encrypted_envelope");
+		expect(enroll).not.toContain(
+			"not_exported_plaintext_use_encrypted_bundle_or_sdk_peer_copy",
+		);
 		expect(enroll).toContain("DEVICE_USER_BIOMETRIC_CSV_COLUMNS");
 		expect(enroll).toContain("getDeviceUserCsvHeaders");
 		expect(enroll).toContain("buildDeviceUserImportPayloadFromCsv");
