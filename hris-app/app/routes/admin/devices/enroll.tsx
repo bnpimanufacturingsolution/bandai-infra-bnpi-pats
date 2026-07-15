@@ -29,6 +29,7 @@ import {
 	AlertTriangle,
 	HelpCircle,
 	CheckCircle2,
+	Search,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -484,6 +485,7 @@ export function DeviceEnrollmentPanel({
 		: "overview";
 	const deviceUserStatus = searchParams.get("deviceUserStatus") || "all";
 	const deviceUserSearch = searchParams.get("deviceUserSearch") || "";
+	const [summaryDeviceSearch, setSummaryDeviceSearch] = useState("");
 	const deviceUserView = searchParams.get("deviceUserView") || "shown";
 	const deviceUserPage = Math.max(Number(searchParams.get("deviceUserPage") || 1), 1);
 	const deviceUserLimit = Math.min(
@@ -503,6 +505,7 @@ export function DeviceEnrollmentPanel({
 		: "all";
 	const selectedMergeDeviceId = searchParams.get("mergeDeviceId") || "all";
 	const selectedMergeUserKey = searchParams.get("mergeUser") || "";
+	const sdkMergeSearch = searchParams.get("mergeSearch") || "";
 	const sdkMergeJobIdParam = searchParams.get("mergeJobId") || "";
 	const sdkMergeListModeParam = searchParams.get("mergeList") as SdkMergeListMode | null;
 	const sdkMergeListMode: SdkMergeListMode = [
@@ -1258,7 +1261,8 @@ export function DeviceEnrollmentPanel({
 			lastProgress: null,
 		});
 	};
-	const openSdkUserMerge = async () => {
+	const openSdkUserMerge = async (initialSearch = "") => {
+		const searchScope = initialSearch.trim();
 		const configuredDeviceIds: string[] = hikvisionDeviceOptions
 			.map((device: any) => String(device.id || "").trim())
 			.filter(Boolean);
@@ -1268,6 +1272,12 @@ export function DeviceEnrollmentPanel({
 		}
 		updateSearchParams((next) => {
 			next.delete("mergeList");
+			if (searchScope) {
+				next.set("mergeList", "records");
+				next.set("mergeSearch", searchScope);
+			} else {
+				next.delete("mergeSearch");
+			}
 			next.set("mergeFilter", "all");
 			next.delete("mergeUser");
 		});
@@ -1278,10 +1288,24 @@ export function DeviceEnrollmentPanel({
 			message: "Checking which Hikvision devices are available (up to 5 seconds).",
 			choices: {},
 		});
+		// window.setTimeout returns number under DOM; ReturnType can resolve to NodeJS.Timeout when @types/node is loaded.
+		let liveReadSlowTimer: number | undefined;
+		const availabilitySlowTimer = window.setTimeout(() => {
+			setSdkMergeState((current) =>
+				current.open && current.status === "loading"
+					? {
+							...current,
+							message:
+								"Still checking available Hikvision devices. No device-user results have been read yet; offline devices will be skipped once availability returns.",
+						}
+					: current,
+			);
+		}, 5000);
 		try {
 			const previewRows = syncPreview?.devices?.length
 				? syncPreview.devices
 				: (await refetchSyncPreview()).data?.devices || [];
+			window.clearTimeout(availabilitySlowTimer);
 			const previewById = new Map(
 				previewRows.map((row: DeviceSyncPreviewRow) => [String(row.deviceId), row]),
 			);
@@ -1296,10 +1320,36 @@ export function DeviceEnrollmentPanel({
 			});
 			const skippedCount = configuredDeviceIds.length - deviceIds.length;
 			if (deviceIds.length < 2) {
+				if (searchScope && deviceIds.length === 1) {
+					setSdkMergeState({
+						open: false,
+						status: "idle",
+						message: "",
+						choices: {},
+					});
+					updateSearchParams((next) => {
+						next.set("deviceId", deviceIds[0]);
+						next.set("syncPanel", "users");
+						next.set("action", "device-users");
+						next.set("deviceUserView", "shown");
+						next.set("deviceUserSearch", searchScope);
+						next.set("deviceUserPage", "1");
+						next.delete("mergeList");
+						next.delete("mergeSearch");
+						next.delete("mergeFilter");
+						next.delete("mergeUser");
+					});
+					toast.info(
+						`Only 1 of ${configuredDeviceIds.length} Hikvision devices is available. Searching that device; ${skippedCount} offline or unavailable skipped.`,
+					);
+					return;
+				}
 				setSdkMergeState({
 					open: true,
 					status: "error",
-					message: `${deviceIds.length} of ${configuredDeviceIds.length} Hikvision devices are available. ${skippedCount} offline or unavailable device${skippedCount === 1 ? " was" : "s were"} skipped. Merge needs at least two available devices.`,
+					message: searchScope
+						? `${deviceIds.length} of ${configuredDeviceIds.length} Hikvision devices are available. ${skippedCount} offline or unavailable device${skippedCount === 1 ? " was" : "s were"} skipped. No device-user search results can be shown until at least one device is available.`
+						: `${deviceIds.length} of ${configuredDeviceIds.length} Hikvision devices are available. ${skippedCount} offline or unavailable device${skippedCount === 1 ? " was" : "s were"} skipped. Merge needs at least two available devices.`,
 					choices: {},
 				});
 				return;
@@ -1307,14 +1357,29 @@ export function DeviceEnrollmentPanel({
 			setSdkMergeState({
 				open: true,
 				status: "loading",
-				message: `Reading live users from ${deviceIds.length} available devices; ${skippedCount} offline or unavailable skipped.`,
+				message: searchScope
+					? `Searching live users from ${deviceIds.length} available devices; ${skippedCount} offline or unavailable skipped.`
+					: `Reading live users from ${deviceIds.length} available devices; ${skippedCount} offline or unavailable skipped.`,
 				choices: {},
 			});
+			liveReadSlowTimer = window.setTimeout(() => {
+				setSdkMergeState((current) =>
+					current.open && current.status === "loading"
+						? {
+								...current,
+								message: searchScope
+									? `Still searching live users from ${deviceIds.length} available devices. Results are not complete yet; ${skippedCount} offline or unavailable skipped.`
+									: `Still reading live users from ${deviceIds.length} available devices. Results are not complete yet; ${skippedCount} offline or unavailable skipped.`,
+							}
+						: current,
+				);
+			}, 5000);
 			const data = await planHikvisionSdkUserMergeMutation.mutateAsync({ deviceIds });
+			if (liveReadSlowTimer) window.clearTimeout(liveReadSlowTimer);
 			const actionableKeys = Object.fromEntries(
 				(data.plan.users || [])
 					.filter((user) => {
-						const hasCredentialIssue = (["fingerprint", "face", "card"] as const).some(
+						const hasCredentialIssue = (["fingerprint", "face"] as const).some(
 							(kind) => {
 								const truth = mergeCredentialTruth(user, data.plan.devices || [], kind);
 								return truth.present < truth.expected;
@@ -1332,11 +1397,15 @@ export function DeviceEnrollmentPanel({
 			setSdkMergeState({
 				open: true,
 				status: "review",
-				message: `Review conflicts from ${deviceIds.length} available devices. ${skippedCount} offline or unavailable skipped.`,
+				message: searchScope
+					? `Search is scoped to "${searchScope}" across ${deviceIds.length} available devices. ${skippedCount} offline or unavailable skipped.`
+					: `Review conflicts from ${deviceIds.length} available devices. ${skippedCount} offline or unavailable skipped.`,
 				data,
 				choices: {},
 			});
 		} catch (error: any) {
+			window.clearTimeout(availabilitySlowTimer);
+			if (liveReadSlowTimer) window.clearTimeout(liveReadSlowTimer);
 			setSdkMergeState({
 				open: true,
 				status: "error",
@@ -1715,6 +1784,36 @@ export function DeviceEnrollmentPanel({
 			if (!matches) return false;
 		}
 		if (selectedMergeUserKey && row.userKey !== selectedMergeUserKey) return false;
+		const normalizedSdkMergeSearch = sdkMergeSearch.trim().toLowerCase();
+		if (normalizedSdkMergeSearch) {
+			const searchableValues = [
+				row.vendorUserId,
+				row.personLabel,
+				row.userKey,
+				row.issueLabel,
+				row.missingLabel,
+				row.dataLabel,
+				row.sourceDeviceName,
+				row.targetDeviceName,
+				...(row.user?.records || []).flatMap((record: any) => [
+					record.vendorUserId,
+					record.employeeNo,
+					record.employeeId,
+					record.displayName,
+					record.name,
+					mergeDeviceName(sdkMergeState.data?.plan.devices || [], record.deviceId),
+				]),
+			];
+			if (
+				!searchableValues
+					.filter(Boolean)
+					.some((value) =>
+						String(value).toLowerCase().includes(normalizedSdkMergeSearch),
+					)
+			) {
+				return false;
+			}
+		}
 		return true;
 	});
 	const sdkMergeRowsPerPage = 25;
@@ -1749,7 +1848,7 @@ export function DeviceEnrollmentPanel({
 		if (!sdkMergeState.data?.plan) return [];
 		return sdkMergeState.data.plan.users
 			.filter((user) => {
-				const hasCredentialIssue = (["fingerprint", "face", "card"] as const).some(
+				const hasCredentialIssue = (["fingerprint", "face"] as const).some(
 					(kind) => {
 						const truth = mergeCredentialTruth(user, sdkMergePlanDevices, kind);
 						return truth.present < truth.expected;
@@ -1763,12 +1862,18 @@ export function DeviceEnrollmentPanel({
 			})
 			.map((user) => user.key);
 	}, [sdkMergePlanDevices, sdkMergeState.data]);
-	const selectedSdkMergeKeys = sdkMergeActionableUserKeys.filter(
-		(key) => selectedSdkMergeUserKeys[key],
+	const sdkMergeScopedSelectableUserKeys = Array.from(
+		new Set(sdkMergeVisibleRows.map((row) => row.userKey).filter(Boolean)),
 	);
+	const selectedSdkMergeKeys = (sdkMergeState.data?.plan.users || [])
+		.map((user) => user.key)
+		.filter((key) => selectedSdkMergeUserKeys[key]);
+	const sdkMergeScopedSelectedCount = sdkMergeScopedSelectableUserKeys.filter(
+		(key) => selectedSdkMergeUserKeys[key],
+	).length;
 	const sdkMergeSelectedUniqueCount = selectedSdkMergeKeys.length;
 	const sdkMergeExcludedActionableCount =
-		sdkMergeActionableUserKeys.length - sdkMergeSelectedUniqueCount;
+		sdkMergeScopedSelectableUserKeys.length - sdkMergeScopedSelectedCount;
 	const sdkMergeDeviceRecordCount =
 		sdkMergeState.data?.plan.users.reduce((count, user) => count + user.records.length, 0) ||
 		0;
@@ -4407,13 +4512,12 @@ export function DeviceEnrollmentPanel({
 				<TabsContent value="users" className="m-0">
 					{!selectedDeviceId ? (
 						<section className="space-y-4 rounded-md border border-slate-200 bg-white p-4">
-							<div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-								<div className="space-y-1">
-									<h2 className="text-sm font-semibold text-slate-950">
-										Choose a device first
-									</h2>
-								</div>
-								<div className="flex gap-2">
+							{/* Heading on its own row so toolbar controls never squeeze "Choose a device first". */}
+							<div className="space-y-3" data-testid="device-user-summary-toolbar">
+								<h2 className="text-sm font-semibold leading-5 text-slate-950">
+									Choose a device first
+								</h2>
+								<div className="flex min-w-0 flex-wrap items-center gap-2">
 									{hasEffectiveDeviceUserSyncJobProgress ? (
 										<Button
 											type="button"
@@ -4421,42 +4525,93 @@ export function DeviceEnrollmentPanel({
 											title="Open device-user sync status"
 											aria-label="Open device-user sync status"
 											onClick={openBulkDeviceUserSyncReview}
-											className="relative h-8 gap-2 border-orange-200 bg-orange-50 px-3 text-orange-700 hover:bg-orange-100 hover:text-orange-800">
+											className="relative h-8 shrink-0 gap-1.5 border-orange-200 bg-orange-50 px-3 text-orange-700 hover:bg-orange-100 hover:text-orange-800">
 											{deviceUserSyncJobIsProcessing ? (
-												<Loader2 className="h-4 w-4 animate-spin" />
+												<Loader2 className="h-4 w-4 shrink-0 animate-spin" />
 											) : (
-												<RefreshCw className="h-4 w-4" />
+												<RefreshCw className="h-4 w-4 shrink-0" />
 											)}
-											Sync status
+											<span className="whitespace-nowrap">Sync status</span>
 											{deviceUserSyncStatusBubble ? (
-												<span className="ml-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+												<span className="inline-flex shrink-0 items-center rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
 													{deviceUserSyncStatusBubble}
 												</span>
 											) : null}
 										</Button>
 									) : null}
+									<form
+										className="flex min-w-0 max-w-full basis-full gap-1 sm:max-w-xs sm:basis-[18rem] sm:flex-1"
+										onSubmit={(event) => {
+											event.preventDefault();
+											if (!summaryDeviceSearch.trim()) {
+												toast.error("Enter a user ID or name to search devices");
+												return;
+											}
+											void openSdkUserMerge(summaryDeviceSearch);
+										}}>
+										<div className="relative min-w-0 flex-1">
+											<label htmlFor="sync-summary-device-search" className="sr-only">
+												Search device users across available devices
+											</label>
+											<Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+											<input
+												id="sync-summary-device-search"
+												type="text"
+												role="searchbox"
+												autoComplete="off"
+												value={summaryDeviceSearch}
+												onChange={(event) => setSummaryDeviceSearch(event.target.value)}
+												placeholder="Find user on devices"
+												className="h-8 w-full min-w-0 rounded-md border border-slate-200 bg-white py-1.5 pl-8 pr-8 text-sm text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
+											/>
+											{summaryDeviceSearch ? (
+												<button
+													type="button"
+													aria-label="Clear device-user search"
+													title="Clear device-user search"
+													onClick={() => setSummaryDeviceSearch("")}
+													className="absolute right-2 top-1/2 rounded p-0.5 text-slate-400 transition-colors -translate-y-1/2 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-200">
+													<XCircle className="h-3.5 w-3.5" />
+												</button>
+											) : null}
+										</div>
+										<Button
+											type="submit"
+											variant="outline"
+											className="h-8 w-8 shrink-0 px-0"
+											aria-label="Search device users"
+											title="Search device users"
+											disabled={planHikvisionSdkUserMergeMutation.isPending}>
+											{planHikvisionSdkUserMergeMutation.isPending ? (
+												<Loader2 className="h-4 w-4 animate-spin" />
+											) : (
+												<Search className="h-4 w-4" />
+											)}
+											<span className="sr-only">Search device users</span>
+										</Button>
+									</form>
 									<Button
 										type="button"
 										variant="outline"
-										className="h-8 px-3"
+										className="h-8 shrink-0 gap-1.5 px-3"
 										onClick={() => void refreshDeviceUserSummary()}>
-										<RefreshCw className="h-4 w-4" />
-										Refresh summary
+										<RefreshCw className="h-4 w-4 shrink-0" />
+										<span className="whitespace-nowrap">Refresh summary</span>
 									</Button>
 									<Button
 										type="button"
-										className="h-8 px-3"
+										className="h-8 shrink-0 gap-1.5 px-3"
 										disabled={
 											planHikvisionSdkUserMergeMutation.isPending ||
 											hikvisionDeviceOptions.length < 2
 										}
 										onClick={() => void openSdkUserMerge()}>
 										{planHikvisionSdkUserMergeMutation.isPending ? (
-											<Loader2 className="h-4 w-4 animate-spin" />
+											<Loader2 className="h-4 w-4 shrink-0 animate-spin" />
 										) : (
-											<Link2 className="h-4 w-4" />
+											<Link2 className="h-4 w-4 shrink-0" />
 										)}
-										Merge users
+										<span className="whitespace-nowrap">Merge users</span>
 									</Button>
 								</div>
 							</div>
@@ -4551,43 +4706,48 @@ export function DeviceEnrollmentPanel({
 						</section>
 					) : (
 						<section className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
-							<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+							<div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
 								<div className="min-w-0 space-y-2">
-									<Button
-										type="button"
-										variant="ghost"
-										className="h-8 px-0 text-sm text-slate-600 hover:bg-transparent hover:text-slate-900"
-										onClick={goBackToDeviceUserSummary}>
-										<ArrowLeft className="mr-2 h-4 w-4" />
-										Back to device summary
-									</Button>
-									<h2 className="truncate text-sm font-semibold text-slate-950">
-										{selectedDevice?.name || "Device Users"}
-									</h2>
-									<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-										<span>
-											{selectedSyncCenterItem?.vendor ||
-												(selectedDevice
-													? getDeviceVendor(selectedDevice)
-													: "-")}
-										</span>
-										<span>
-											{getSourceReadLabel(
-												selectedSyncCenterItem?.vendor ||
-													(selectedDevice
-														? getDeviceVendor(selectedDevice)
-														: ""),
-											)}
-										</span>
-										<span className="font-semibold text-slate-950">
-											{metricValue(
-												selectedSyncCenterItem?.preview?.vendorUserCount,
-											)}{" "}
-											read from device
-										</span>
+									<div className="flex min-w-0 items-center gap-2">
+										<Button
+											type="button"
+											variant="ghost"
+											className="h-8 w-8 shrink-0 px-0 text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+											aria-label="Back to device summary"
+											title="Back to device summary"
+											onClick={goBackToDeviceUserSummary}>
+											<ArrowLeft className="h-4 w-4" />
+										</Button>
+										<div className="min-w-0">
+											<h2 className="truncate text-sm font-semibold leading-5 text-slate-950">
+												{selectedDevice?.name || "Device Users"}
+											</h2>
+											<div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+												<span className="shrink-0">
+													{selectedSyncCenterItem?.vendor ||
+														(selectedDevice
+															? getDeviceVendor(selectedDevice)
+															: "-")}
+												</span>
+												<span className="shrink-0">
+													{getSourceReadLabel(
+														selectedSyncCenterItem?.vendor ||
+															(selectedDevice
+																? getDeviceVendor(selectedDevice)
+																: ""),
+													)}
+												</span>
+												<span className="shrink-0 font-semibold text-slate-950">
+													{metricValue(
+														selectedSyncCenterItem?.preview?.vendorUserCount,
+													)}{" "}
+													read from device
+												</span>
+											</div>
+										</div>
 									</div>
 								</div>
-								<div className="flex flex-wrap gap-2">
+								<div className="flex flex-wrap items-center justify-start gap-1.5 lg:justify-end">
 									<Button
 										type="button"
 										variant="outline"
@@ -4638,7 +4798,7 @@ export function DeviceEnrollmentPanel({
 									<Button
 										type="button"
 										variant="outline"
-										className={`relative h-8 gap-2 px-3 ${hasEffectiveDeviceUserSyncJobProgress ? "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800" : ""}`}
+										className={`relative h-8 shrink-0 gap-1.5 px-3 ${hasEffectiveDeviceUserSyncJobProgress ? "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800" : ""}`}
 										disabled={
 											!selectedDeviceId || startDeviceUserSyncJobMutation.isPending
 										}
@@ -4648,13 +4808,15 @@ export function DeviceEnrollmentPanel({
 												: openDeviceUserSyncReview()
 										}>
 										{deviceUserSyncJobIsProcessing || startDeviceUserSyncJobMutation.isPending ? (
-											<Loader2 className="h-4 w-4 animate-spin" />
+											<Loader2 className="h-4 w-4 shrink-0 animate-spin" />
 										) : (
-											<RefreshCw className="h-4 w-4" />
+											<RefreshCw className="h-4 w-4 shrink-0" />
 										)}
-										{hasEffectiveDeviceUserSyncJobProgress ? "Sync status" : "Review sync"}
+										<span className="whitespace-nowrap">
+											{hasEffectiveDeviceUserSyncJobProgress ? "Sync status" : "Review sync"}
+										</span>
 										{deviceUserSyncStatusBubble ? (
-											<span className="ml-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+											<span className="inline-flex shrink-0 items-center rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
 												{deviceUserSyncStatusBubble}
 											</span>
 										) : null}
@@ -4699,14 +4861,15 @@ export function DeviceEnrollmentPanel({
 									onChange={setDeviceUserStatus}
 									placeholder="Status"
 								/>
-								<div className="flex min-h-[42px] items-center rounded-md border border-slate-200 px-3">
+								<div className="relative flex min-h-[42px] items-center rounded-md border border-slate-200 bg-white px-3 focus-within:border-orange-300 focus-within:ring-2 focus-within:ring-orange-100">
+									<Search className="mr-2 h-4 w-4 shrink-0 text-slate-400" />
 									<input
 										value={deviceUserSearch}
 										onChange={(event) =>
 											handleDeviceUserSearch(event.target.value)
 										}
 										placeholder="Search user, name, employee..."
-										className="w-full bg-transparent text-sm outline-none"
+										className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
 									/>
 								</div>
 							</div>
@@ -4723,14 +4886,14 @@ export function DeviceEnrollmentPanel({
 										key={String(label)}
 										type="button"
 										aria-label={`${label}: ${metricValue(value)}`}
-										className={`rounded-md border px-3 py-2 text-left transition-colors ${
+										className={`min-w-0 rounded-md border px-3 py-2 text-left transition-colors ${
 											deviceUserView === view ||
 											(view === "shown" && deviceUserView === "shown")
 												? "border-orange-300 bg-orange-50"
 												: "border-slate-200 bg-white hover:bg-slate-50"
 										}`}
 										onClick={() => setDeviceUserView(String(view))}>
-										<span className="block text-xs font-medium text-slate-500">
+										<span className="block truncate text-xs font-medium text-slate-500">
 											{label}
 										</span>
 										<span className="block text-lg font-semibold text-slate-950">
@@ -4741,7 +4904,7 @@ export function DeviceEnrollmentPanel({
 							</div>
 
 							{deviceUserView === "source" ? (
-								<div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-950">
+								<div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
 									Showing the users read directly through{" "}
 									{getSourceReadLabel(
 										selectedSyncCenterItem?.vendor ||
@@ -6070,22 +6233,30 @@ export function DeviceEnrollmentPanel({
 											onClick={() =>
 												setSelectedSdkMergeUserKeys(
 													Object.fromEntries(
-														sdkMergeActionableUserKeys.map((key) => [
+														sdkMergeScopedSelectableUserKeys.map((key) => [
 															key,
 															true,
 														]),
 													),
 												)
 											}
-											disabled={sdkMergeActionableUserKeys.length === 0}>
-											Select all
+											disabled={sdkMergeScopedSelectableUserKeys.length === 0}>
+											Select all in scope
 										</Button>
 										<Button
 											type="button"
 											variant="outline"
-											onClick={() => setSelectedSdkMergeUserKeys({})}
-											disabled={sdkMergeSelectedUniqueCount === 0}>
-											Deselect all
+											onClick={() =>
+												setSelectedSdkMergeUserKeys((current) => {
+													const next = { ...current };
+													for (const key of sdkMergeScopedSelectableUserKeys) {
+														delete next[key];
+													}
+													return next;
+												})
+											}
+											disabled={sdkMergeScopedSelectedCount === 0}>
+											Deselect scope
 										</Button>
 										<Button
 											type="button"
@@ -6244,20 +6415,41 @@ export function DeviceEnrollmentPanel({
 											{sdkMergeVisibleRows.length === 1 ? "" : "s"}
 										</p>
 									</div>
-									{selectedMergeDeviceId !== "all" || selectedMergeUserKey ? (
+									{selectedMergeDeviceId !== "all" ||
+									selectedMergeUserKey ||
+									sdkMergeSearch ? (
 										<Button
 											type="button"
 											variant="outline"
-											onClick={() => setSdkMergeDeviceFilter("all")}>
+											onClick={() =>
+												updateSearchParams((next) => {
+													next.delete("mergeDeviceId");
+													next.delete("mergeUser");
+													next.delete("mergeSearch");
+													next.delete("mergeFilter");
+													next.set("mergePage", "1");
+												})
+											}>
 											Clear scope
 										</Button>
 									) : null}
 								</div>
+								{sdkMergeSearch ? (
+									<div className="border-b border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+										Searching live device-user records for{" "}
+										<span className="font-semibold text-slate-950">
+											{sdkMergeSearch}
+										</span>
+										.
+										Offline or unavailable devices are skipped before results appear.
+									</div>
+								) : null}
 								<div className="max-h-[48vh] overflow-y-auto">
 									{sdkMergeVisibleRows.length === 0 ? (
 										<div className="px-3 py-8 text-center text-sm text-slate-600">
-											No rows match this tally. Choose another count or clear
-											the device scope.
+											{sdkMergeSearch
+												? "No live device-user records matched this search across the devices that were available."
+												: "No rows match this tally. Choose another count or clear the device scope."}
 										</div>
 									) : (
 										<>
@@ -6280,6 +6472,7 @@ export function DeviceEnrollmentPanel({
 											const isActionable = sdkMergeActionableUserKeys.includes(
 												row.userKey,
 											);
+											const isSelectable = Boolean(row.userKey);
 											const isRowChecked = Boolean(
 												selectedSdkMergeUserKeys[row.userKey],
 											);
@@ -6289,6 +6482,10 @@ export function DeviceEnrollmentPanel({
 													issueRow.userKey === row.userKey &&
 													issueRow.filter !== "ready",
 											);
+											const rowIssueSummary = rowIssueRows
+												.slice(0, 3)
+												.map((issueRow) => issueRow.issueLabel)
+												.join(", ");
 											const rowShowsDeviceJourney =
 												sdkMergeListMode === "unique" ||
 												sdkMergeListMode === "review" ||
@@ -6354,19 +6551,21 @@ export function DeviceEnrollmentPanel({
 												<div
 													key={row.id}
 													role="row"
-													className={`min-w-[1040px] border-b border-slate-100 px-3 py-3 last:border-b-0 ${isSelected ? "bg-white ring-1 ring-inset ring-orange-200" : "bg-white"} ${!isActionable ? "text-slate-500" : ""}`}>
+													className={`min-w-[1040px] border-b border-slate-100 px-3 py-3 last:border-b-0 ${isSelected ? "bg-white ring-1 ring-inset ring-orange-200" : "bg-white"} ${!isSelectable ? "text-slate-500" : ""}`}>
 													<div className="grid grid-cols-[56px_88px_minmax(180px,1fr)_170px_170px_minmax(220px,1.1fr)_152px] items-start gap-3">
 														<div className="flex justify-center pt-1">
 															<input
 																type="checkbox"
 																className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
 																checked={isRowChecked}
-																disabled={!isActionable}
+																disabled={!isSelectable}
 																aria-label={`Select vendor user ID ${row.vendorUserId} for merge preview`}
 																title={
-																	isActionable
-																		? "Include this unique ID in the merge preview"
-																		: "Ready rows have no updateable issue"
+																	isSelectable
+																		? isActionable
+																			? "Include this unique ID in the merge preview"
+																			: "Include this aligned unique ID in the preview; no update is expected"
+																		: "This row cannot be selected"
 																}
 																onChange={(event) => {
 																	const checked = event.target.checked;
@@ -6408,7 +6607,20 @@ export function DeviceEnrollmentPanel({
 														</div>
 														{renderCredentialCountCell("fingerprint")}
 														{renderCredentialCountCell("face")}
-														<div className="min-w-0 space-y-1">
+														<button
+															type="button"
+															onClick={() =>
+																setSdkMergeSourceReview({
+																	rowId: row.id,
+																})
+															}
+															className="min-w-0 space-y-1 text-left"
+															title={
+																rowIssueRows.length
+																	? `${rowIssueSummary}${rowIssueRows.length > 3 ? ", ..." : ""}`
+																	: "Aligned across the visible review checks"
+															}
+															aria-label={`Open review journey for vendor user ID ${row.vendorUserId}`}>
 															<Badge
 																variant={
 																	row.filter === "ready"
@@ -6426,7 +6638,7 @@ export function DeviceEnrollmentPanel({
 																		: "Aligned"}
 																</p>
 															) : null}
-														</div>
+														</button>
 														<div className="flex items-center justify-end gap-1.5">
 															<TooltipProvider>
 																{hasConflictFields ? (
@@ -6623,6 +6835,45 @@ export function DeviceEnrollmentPanel({
 								{selectedSdkMergeSourceReviewRow.issueLabel}
 							</Badge>
 						</div>
+						{(() => {
+							const issueRows = sdkMergeRows.filter(
+								(row) =>
+									row.userKey === selectedSdkMergeSourceReviewRow.userKey &&
+									row.filter !== "ready",
+							);
+							return (
+								<div className="rounded-md border border-slate-200 bg-white">
+									<div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+										<p className="text-xs font-semibold uppercase text-slate-600">
+											Review journey
+										</p>
+									</div>
+									{issueRows.length ? (
+										<div className="divide-y divide-slate-100">
+											{issueRows.map((issueRow) => (
+												<div
+													key={`${selectedSdkMergeSourceReviewRow.id}:journey:${issueRow.id}`}
+													className="grid gap-2 px-3 py-2 text-sm sm:grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)]">
+													<p className="font-medium text-slate-950">
+														{issueRow.issueLabel}
+													</p>
+													<p className="min-w-0 truncate text-slate-600">
+														{issueRow.missingLabel}
+													</p>
+													<p className="min-w-0 break-words text-xs text-slate-500">
+														{issueRow.recommendedAction}
+													</p>
+												</div>
+											))}
+										</div>
+									) : (
+										<p className="px-3 py-3 text-sm text-slate-600">
+											No review issues for this ID. Fingerprint and face are aligned across the selected devices.
+										</p>
+									)}
+								</div>
+							);
+						})()}
 						<div className="grid gap-2 md:grid-cols-2">
 							{(["fingerprint", "face"] as const).map((kind) => {
 								const truth = mergeCredentialTruth(
