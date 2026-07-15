@@ -28,6 +28,7 @@ import {
 	WifiOff,
 	AlertTriangle,
 	HelpCircle,
+	CheckCircle2,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -140,6 +141,7 @@ type BulkDeviceUserSyncState = {
 type SdkMergeFilter = "all" | "missing" | "decision" | "fingerprint" | "face" | "card" | "ready";
 type SdkMergeListMode = "unique" | "records" | "review" | "writes" | "issues";
 type SdkMergeRowAction = "copy" | "choose-richest" | "keep" | "details";
+type SdkMergeCredentialKind = "fingerprint" | "face" | "card";
 type SdkMergeIssueRow = {
 	id: string;
 	filter: SdkMergeFilter;
@@ -162,6 +164,19 @@ type SdkMergeIssueRow = {
 	richestRecord?: any;
 	targetRecord?: any;
 };
+
+type SdkMergeCredentialPickerState = {
+	rowId: string;
+	kind: SdkMergeCredentialKind;
+} | null;
+type SdkMergeSourceReviewState = {
+	rowId: string;
+} | null;
+
+const mergeNaturalCollator = new Intl.Collator(undefined, {
+	numeric: true,
+	sensitivity: "base",
+});
 
 const mergeFieldLabel = (field: string) =>
 	(
@@ -271,6 +286,38 @@ const mergePlural = (count: number, singular: string, plural = `${singular}s`) =
 const mergeDefinedDeviceIds = (deviceIds: Array<string | undefined>) =>
 	deviceIds.filter((deviceId): deviceId is string => Boolean(deviceId));
 
+const mergeCredentialSummaryLabel = (record: any) =>
+	`Finger ${mergeMetricValue(mergeCredentialCount(record, "fingerprint"))}, Face ${mergeMetricValue(mergeCredentialCount(record, "face"))}, Card ${mergeMetricValue(mergeCredentialCount(record, "card"))}`;
+
+const mergeRecommendationReason = (row: SdkMergeIssueRow) => {
+	const sourceSummary = mergeCredentialSummaryLabel(row.richestRecord);
+	if (row.filter === "decision") {
+		return `Recommended source: ${row.sourceDeviceName || "selected source"}. It has the strongest combined biometric and identity completeness score for this ID (${sourceSummary}).`;
+	}
+	if (row.filter === "fingerprint" || row.filter === "face" || row.filter === "card") {
+		return `Recommended source: ${row.sourceDeviceName || "selected source"}. It has more ${mergeFieldLabel(row.filter).toLowerCase()} than the compared record (${sourceSummary}).`;
+	}
+	if (row.filter === "missing") {
+		return `Recommended source: ${row.sourceDeviceName || "selected source"}. The target device is missing this user, so copy from the richest available record (${sourceSummary}).`;
+	}
+	return row.recommendedAction;
+};
+
+const compareSdkMergeRowsByVendorId = (left: SdkMergeIssueRow, right: SdkMergeIssueRow) => {
+	const leftId = String(left.vendorUserId || "");
+	const rightId = String(right.vendorUserId || "");
+	const leftNumber = Number(leftId);
+	const rightNumber = Number(rightId);
+	if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber !== rightNumber) {
+		return leftNumber - rightNumber;
+	}
+	const byVendorId = mergeNaturalCollator.compare(leftId, rightId);
+	if (byVendorId !== 0) return byVendorId;
+	const byPerson = mergeNaturalCollator.compare(left.personLabel || "", right.personLabel || "");
+	if (byPerson !== 0) return byPerson;
+	return mergeNaturalCollator.compare(left.id, right.id);
+};
+
 type ActiveDeviceUserSyncJob = {
 	jobId: string;
 };
@@ -289,20 +336,11 @@ type CopyDeviceUserState = {
 type DeviceUserExportFormat = "csv" | "excel" | "json";
 type DeviceUserImportFormat = "csv" | "json";
 const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = [
-	"biometricBundlePresent",
-	"biometricBundleAlgorithm",
-	"biometricBundleRequiredForRawImport",
-	"biometricTransferMode",
-	"fingerprintTemplateKeySource",
-	"fingerprintRawTemplateBlob",
-	"fingerprintTemplateStatus",
-	"faceTemplateKeySource",
-	"faceRawTemplateBlob",
-	"faceTemplateStatus",
-	"rawBiometricPlaintextPolicy",
-	"rawBiometricSource",
+	"fingerprintTemplate",
+	"faceTemplate",
 ] as const;
 const DEVICE_USER_CSV_NO_PLAINTEXT_POLICY = "no_plaintext_biometric_templates";
+const DEVICE_USER_SPREADSHEET_TEMPLATE_PREFIX = "encrypted:v2:";
 
 type DeviceUserPeerTallyRow = {
 	deviceId: string;
@@ -513,7 +551,10 @@ export function DeviceEnrollmentPanel({
 		choices: Record<string, Record<string, "A" | "B" | "KEEP">>;
 		applyAll?: "A" | "B";
 	}>({ open: false, status: "idle", message: "", choices: {} });
-	const [sdkMergePendingRowId, setSdkMergePendingRowId] = useState<string | null>(null);
+	const [sdkMergeCredentialPicker, setSdkMergeCredentialPicker] =
+		useState<SdkMergeCredentialPickerState>(null);
+	const [sdkMergeSourceReview, setSdkMergeSourceReview] =
+		useState<SdkMergeSourceReviewState>(null);
 	const [sdkMergeJobId, setSdkMergeJobId] = useState<string | null>(sdkMergeJobIdParam || null);
 	const [sdkMergeLastJob, setSdkMergeLastJob] = useState<DeviceUserMergeJobProgress | null>(null);
 	const [sdkMergeHandledJobId, setSdkMergeHandledJobId] = useState<string | null>(null);
@@ -1311,7 +1352,7 @@ export function DeviceEnrollmentPanel({
 	const sdkMergeRows = useMemo<SdkMergeIssueRow[]>(() => {
 		const plan = sdkMergeState.data?.plan;
 		if (!plan) return [];
-		return plan.users.flatMap((user) => {
+		const rows = plan.users.flatMap((user) => {
 			const rows: SdkMergeIssueRow[] = [];
 			const richestRecord = [...user.records].sort(
 				(left: any, right: any) =>
@@ -1344,7 +1385,7 @@ export function DeviceEnrollmentPanel({
 					issueLabel: "Missing from device",
 					missingLabel: targetDeviceName,
 					dataLabel: "User record",
-					recommendedAction: `Copy the richest record from ${richestDeviceName} to ${targetDeviceName}.`,
+					recommendedAction: `Copy the recommended record from ${richestDeviceName} to ${targetDeviceName}.`,
 					primaryAction: "copy",
 					richestRecord,
 				});
@@ -1446,6 +1487,7 @@ export function DeviceEnrollmentPanel({
 			}
 			return rows;
 		});
+		return rows.sort(compareSdkMergeRowsByVendorId);
 	}, [sdkMergeState.data]);
 	const sdkMergeRowMatchesDevice = useCallback((
 		row: SdkMergeIssueRow,
@@ -1489,7 +1531,7 @@ export function DeviceEnrollmentPanel({
 			const missingNames = user.missingOnDeviceIds
 				.map((deviceId) => mergeDeviceName(plan.devices, deviceId))
 				.filter(Boolean);
-			return {
+			const uniqueRow: SdkMergeIssueRow = {
 				id: `${user.key}:unique`,
 				filter: reviewRows.length ? reviewRows[0].filter : "ready",
 				userKey: user.key,
@@ -1511,15 +1553,18 @@ export function DeviceEnrollmentPanel({
 					? `${mergePlural(reviewRows.length, "issue row")} to review for this ID.`
 					: "This ID is already aligned across the selected devices.",
 				primaryAction: "details",
-				conflictFields: user.conflicts.map((conflict) => conflict.field),
+				conflictFields: user.conflicts.map(
+					(conflict) => conflict.field as DeviceUserMergeField,
+				),
 				richestRecord,
 			};
-		});
+			return uniqueRow;
+		}).sort(compareSdkMergeRowsByVendorId);
 	}, [sdkMergeRows, sdkMergeState.data]);
 	const sdkMergeRecordRows = useMemo<SdkMergeIssueRow[]>(() => {
 		const plan = sdkMergeState.data?.plan;
 		if (!plan) return [];
-		return plan.users.flatMap((user) =>
+		const rows = plan.users.flatMap((user) =>
 			user.records.map((record: any) => {
 				const deviceName = mergeDeviceName(plan.devices, record.deviceId);
 				const fingerprintCount = mergeCredentialCount(record, "fingerprint");
@@ -1549,11 +1594,12 @@ export function DeviceEnrollmentPanel({
 				};
 			}),
 		);
+		return rows.sort(compareSdkMergeRowsByVendorId);
 	}, [sdkMergeState.data]);
 	const sdkMergeWriteRows = useMemo<SdkMergeIssueRow[]>(() => {
 		const plan = sdkMergeState.data?.plan;
 		if (!plan) return [];
-		return plan.users.flatMap((user) => {
+		const rows = plan.users.flatMap((user) => {
 			const richestRecord = [...user.records].sort(
 				(left: any, right: any) =>
 					mergeRecordRichnessScore(right) - mergeRecordRichnessScore(left),
@@ -1578,12 +1624,13 @@ export function DeviceEnrollmentPanel({
 				personLabel: mergePersonLabel(user),
 				issueLabel: "Potential write",
 				missingLabel: mergeDeviceName(plan.devices, targetDeviceId),
-				dataLabel: "Would copy the selected richest source record to this target device.",
-				recommendedAction: "Dry-run preview only. No write starts from this row.",
+				dataLabel: "Would copy the selected recommended source record to this target device.",
+				recommendedAction: "Preview only. No write starts from this row.",
 				primaryAction: "details" as SdkMergeRowAction,
 				richestRecord,
 			}));
 		});
+		return rows.sort(compareSdkMergeRowsByVendorId);
 	}, [sdkMergeState.data]);
 	const sdkMergeReviewRows = sdkMergeUniqueRows.filter((row) => row.filter !== "ready");
 	const sdkMergeDisplayRows =
@@ -1624,6 +1671,18 @@ export function DeviceEnrollmentPanel({
 		sdkMergePageStart,
 		sdkMergePageStart + sdkMergeRowsPerPage,
 	);
+	const selectedSdkMergeCredentialRow =
+		sdkMergeCredentialPicker
+			? sdkMergeVisibleRows.find((row) => row.id === sdkMergeCredentialPicker.rowId) ||
+				sdkMergeDisplayRows.find((row) => row.id === sdkMergeCredentialPicker.rowId) ||
+				null
+			: null;
+	const selectedSdkMergeSourceReviewRow =
+		sdkMergeSourceReview
+			? sdkMergeVisibleRows.find((row) => row.id === sdkMergeSourceReview.rowId) ||
+				sdkMergeDisplayRows.find((row) => row.id === sdkMergeSourceReview.rowId) ||
+				null
+			: null;
 	const sdkMergeUniqueIdCount = sdkMergeState.data?.plan.users.length || 0;
 	const sdkMergePlanDevices = sdkMergeState.data?.plan.devices || [];
 	const sdkMergeDeviceRecordCount =
@@ -1787,18 +1846,6 @@ export function DeviceEnrollmentPanel({
 				effectiveSdkMergeJob.failedWrites,
 			)} need attention.`
 		: "";
-	const chooseSdkMergeRichestSource = (row: SdkMergeIssueRow) => {
-		if (!row.conflictField || !row.richestRecord?.deviceId) return;
-		const conflict = row.user.conflicts.find((item) => item.field === row.conflictField);
-		const richestDeviceId = String(row.richestRecord.deviceId || "");
-		const choice =
-			conflict?.deviceA.id === richestDeviceId
-				? "A"
-				: conflict?.deviceB.id === richestDeviceId
-					? "B"
-					: "KEEP";
-		setSdkMergeChoice(row.userKey, row.conflictField, choice);
-	};
 	const keepSdkMergeCurrent = (row: SdkMergeIssueRow) => {
 		const fields = row.conflictFields?.length
 			? row.conflictFields
@@ -1852,54 +1899,9 @@ export function DeviceEnrollmentPanel({
 			applyAll: undefined,
 			choices,
 			message:
-				"Previewing richest-source choices. Review the rows below; dry-run mode prevents writes.",
+				"Previewing recommended-source choices. Review the rows below; preview mode prevents writes.",
 		}));
 		setSdkMergeFilter("decision");
-	};
-	const copySdkMergeRowToDevice = async (row: SdkMergeIssueRow) => {
-		if (
-			!row.sourceDeviceId ||
-			!row.targetDeviceId ||
-			!row.vendorUserId ||
-			row.vendorUserId === "-"
-		) {
-			toast.error(
-				"This row does not have enough source and target information to copy safely",
-			);
-			return;
-		}
-		setSdkMergePendingRowId(row.id);
-		try {
-			await deviceService.copyHikvisionDeviceUserToPeer({
-				sourceDeviceId: row.sourceDeviceId,
-				targetDeviceId: row.targetDeviceId,
-				employeeNo: row.vendorUserId,
-				includeFingerprints: row.filter === "fingerprint" || row.filter === "missing",
-				includeFaceRecognition: row.filter === "face" || row.filter === "missing",
-			});
-			toast.success("Device user copy requested", {
-				description: `${row.vendorUserId} from ${row.sourceDeviceName} to ${row.targetDeviceName}`,
-			});
-			if (sdkMergeState.data?.plan.deviceIds?.length) {
-				const data = await planHikvisionSdkUserMergeMutation.mutateAsync({
-					deviceIds: sdkMergeState.data.plan.deviceIds,
-				});
-				setSdkMergeState((current) => ({
-					...current,
-					data,
-					status: "review",
-					message: "Merge plan refreshed after copy.",
-				}));
-			}
-			await Promise.allSettled([
-				refetchSyncPreview(),
-				selectedDeviceId ? refetchSourceDeviceUsers() : Promise.resolve(),
-			]);
-		} catch (error: any) {
-			toast.error(error?.message || "Failed to copy device user");
-		} finally {
-			setSdkMergePendingRowId(null);
-		}
 	};
 	const applySdkUserMerge = async (
 		overrideChoices?: Record<string, Record<string, "A" | "B" | "KEEP">>,
@@ -3002,7 +3004,7 @@ export function DeviceEnrollmentPanel({
 		bulkDeviceUserSyncMode === "needs_attention_only"
 			? "Refresh only devices with count gaps, peer drift, open links, conflicts, or errors."
 			: bulkDeviceUserSyncMode === "peer_converge"
-				? "Refresh all devices, pick the richest source device, then copy missing peer users with retries."
+				? "Refresh all devices, pick the recommended source device, then copy missing peer users with retries."
 				: "Reread every configured device user and refresh saved biometric counts.";
 	const bulkDeviceUserSyncScopeItems = [
 		["All devices", syncCenterDevices.length],
@@ -3164,7 +3166,6 @@ export function DeviceEnrollmentPanel({
 		const normalized = String(value || "").trim().toLowerCase();
 		return ["true", "yes", "1", "present"].includes(normalized);
 	};
-	const getCsvRawTemplateValue = (value: unknown) => String(value || "").trim();
 	const normalizeEncryptedTemplateValue = (value: unknown) => {
 		if (!value) return "";
 		if (typeof value === "string") return value.trim();
@@ -3208,12 +3209,38 @@ export function DeviceEnrollmentPanel({
 			return "";
 		}
 	};
-	const getTemplateKeySourceColumnValue = (user: any, key: string) =>
-		String(
-			user?.vendorMetadata?.biometricBundle?.[key] ||
-				user?.rawPayload?._hrisDeviceMetadata?.biometricExport?.[key] ||
-				"",
-		).trim();
+	const encodeSpreadsheetTemplateValue = (envelopeJson: string) => {
+		if (!envelopeJson) return "";
+		const bytes = new TextEncoder().encode(envelopeJson);
+		let binary = "";
+		for (const byte of bytes) binary += String.fromCharCode(byte);
+		return `${DEVICE_USER_SPREADSHEET_TEMPLATE_PREFIX}${btoa(binary)
+			.replace(/\+/g, "-")
+			.replace(/\//g, "_")
+			.replace(/=+$/g, "")}`;
+	};
+	const decodeSpreadsheetTemplateValue = (value: unknown) => {
+		const raw = String(value || "").trim();
+		if (!raw || raw === "not_enrolled" || raw === "missing_encrypted_template" || raw === "not_requested") {
+			return "";
+		}
+		if (raw.startsWith("{")) return raw;
+		if (!raw.startsWith(DEVICE_USER_SPREADSHEET_TEMPLATE_PREFIX)) return "";
+		try {
+			const encoded = raw.slice(DEVICE_USER_SPREADSHEET_TEMPLATE_PREFIX.length);
+			const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+			const padded = `${base64}${"=".repeat((4 - (base64.length % 4)) % 4)}`;
+			const binary = atob(padded);
+			const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+			return new TextDecoder().decode(bytes);
+		} catch {
+			return "";
+		}
+	};
+	const getSpreadsheetTemplateValue = (envelopeJson: string, credentialCount: number) => {
+		if (envelopeJson) return encodeSpreadsheetTemplateValue(envelopeJson);
+		return credentialCount > 0 ? "missing_encrypted_template" : "not_enrolled";
+	};
 	const getDeviceUserCsvHeaders = () => [
 		"sourceDeviceName",
 		"sourceDeviceId",
@@ -3228,8 +3255,6 @@ export function DeviceEnrollmentPanel({
 		"cardCount",
 		"fingerprintCount",
 		"faceCount",
-		"biometricBundleStatus",
-		"biometricPlaintextExposed",
 		...DEVICE_USER_BIOMETRIC_CSV_COLUMNS,
 		"exportedAt",
 	];
@@ -3239,37 +3264,51 @@ export function DeviceEnrollmentPanel({
 	): DeviceUserExportPayload => {
 		const rows = parseDeviceUserCsvText(text);
 		const importRows = rows
-			.map((row) => ({
-				sourceDeviceName: String(row.sourceDeviceName || "CSV import").trim(),
-				sourceDeviceId: String(row.sourceDeviceId || "csv-import").trim(),
-				vendorUserId: String(row.vendorUserId || "").trim(),
-				employeeNo: String(row.employeeNo || row.vendorUserId || "").trim(),
-				displayName: String(row.displayName || "").trim(),
-				hrisEmployeeId: String(row.hrisEmployeeId || "").trim(),
-				employeeName: String(row.employeeName || "").trim(),
-				status: String(row.status || "UNMATCHED").trim(),
-				userType: String(row.userType || "").trim(),
-				cardCount: parseCsvNumber(row.cardCount),
-				fingerprintCount: parseCsvNumber(row.fingerprintCount),
-				faceCount: parseCsvNumber(row.faceCount),
-				biometricBundleStatus: String(row.biometricBundleStatus || "not_present").trim(),
-				biometricBundlePresent: parseCsvBoolean(row.biometricBundlePresent),
-				biometricBundleAlgorithm: String(row.biometricBundleAlgorithm || "").trim(),
-				biometricBundleRequiredForRawImport: parseCsvBoolean(
-					row.biometricBundleRequiredForRawImport,
-				),
-				biometricTransferMode: String(row.biometricTransferMode || "metadataOnly").trim(),
-				fingerprintTemplateKeySource: String(
-					row.fingerprintTemplateKeySource || "",
-				).trim(),
-				fingerprintRawTemplateBlob: getCsvRawTemplateValue(row.fingerprintRawTemplateBlob),
-				faceTemplateKeySource: String(row.faceTemplateKeySource || "").trim(),
-				faceRawTemplateBlob: getCsvRawTemplateValue(row.faceRawTemplateBlob),
-				rawBiometricPlaintextPolicy: String(
-					row.rawBiometricPlaintextPolicy || DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
-				).trim(),
-				rawBiometricSource: String(row.rawBiometricSource || "csv_import").trim(),
-			}))
+			.map((row) => {
+				const sourceDeviceId = String(row.sourceDeviceId || "csv-import").trim();
+				const vendorUserId = String(row.vendorUserId || "").trim();
+				const fingerprintRawTemplateBlob = decodeSpreadsheetTemplateValue(row.fingerprintTemplate);
+				const faceRawTemplateBlob = decodeSpreadsheetTemplateValue(row.faceTemplate);
+				return {
+					sourceDeviceName: String(row.sourceDeviceName || "CSV import").trim(),
+					sourceDeviceId,
+					vendorUserId,
+					employeeNo: String(row.employeeNo || row.vendorUserId || "").trim(),
+					displayName: String(row.displayName || "").trim(),
+					hrisEmployeeId: String(row.hrisEmployeeId || "").trim(),
+					employeeName: String(row.employeeName || "").trim(),
+					status: String(row.status || "UNMATCHED").trim(),
+					userType: String(row.userType || "").trim(),
+					cardCount: parseCsvNumber(row.cardCount),
+					fingerprintCount: parseCsvNumber(row.fingerprintCount),
+					faceCount: parseCsvNumber(row.faceCount),
+					fingerprintTemplate: String(row.fingerprintTemplate || "not_requested").trim(),
+					faceTemplate: String(row.faceTemplate || "not_requested").trim(),
+					biometricBundleStatus:
+						fingerprintRawTemplateBlob || faceRawTemplateBlob
+							? "spreadsheet_encrypted_templates"
+							: "not_present",
+					biometricBundlePresent: Boolean(fingerprintRawTemplateBlob || faceRawTemplateBlob),
+					biometricBundleAlgorithm:
+						fingerprintRawTemplateBlob || faceRawTemplateBlob ? "aes-256-gcm" : "",
+					biometricBundleRequiredForRawImport: Boolean(
+						fingerprintRawTemplateBlob || faceRawTemplateBlob,
+					),
+					biometricTransferMode: String(
+						row.biometricTransferMode ||
+							(fingerprintRawTemplateBlob || faceRawTemplateBlob
+								? "encryptedBundle"
+								: "metadataOnly"),
+					).trim(),
+					fingerprintRawTemplateBlob,
+					faceRawTemplateBlob,
+					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
+					rawBiometricSource:
+						fingerprintRawTemplateBlob || faceRawTemplateBlob
+							? "csv_compact_encrypted_template"
+							: "csv_review_sheet",
+				};
+			})
 			.filter((row) => row.vendorUserId);
 		if (!importRows.length) {
 			throw new Error("CSV must include at least one row with vendorUserId.");
@@ -3292,22 +3331,28 @@ export function DeviceEnrollmentPanel({
 			policy: {
 				importedFrom: "csv",
 				plaintextBiometricExposed: false,
-				note: "CSV import carries identity, credential counts, and explicit raw-template custody columns. Plaintext biometric bytes are not accepted; encrypted bundle values must be unlocked through the guarded import path.",
+				note: "CSV import carries compact encrypted biometric template values in fingerprintTemplate and faceTemplate. The passphrase is supplied separately during preview/import.",
 				rawTemplateColumns: DEVICE_USER_BIOMETRIC_CSV_COLUMNS,
 			},
 			biometricBundle: {
-				present: importRows.some((row) => row.biometricBundlePresent),
-				requiredForPortableTemplateImport: importRows.some(
-					(row) => row.biometricBundleRequiredForRawImport,
+				present: importRows.some((row) =>
+					Boolean(row.fingerprintRawTemplateBlob || row.faceRawTemplateBlob),
 				),
-				algorithm:
-					importRows.find((row) => row.biometricBundleAlgorithm)?.biometricBundleAlgorithm ||
-					null,
-				status:
-					importRows.find((row) => row.biometricBundleStatus)?.biometricBundleStatus ||
-					"not_present",
+				requiredForPortableTemplateImport: importRows.some((row) =>
+					Boolean(row.fingerprintRawTemplateBlob || row.faceRawTemplateBlob),
+				),
+				algorithm: importRows.some((row) =>
+					Boolean(row.fingerprintRawTemplateBlob || row.faceRawTemplateBlob),
+				)
+					? "aes-256-gcm"
+					: null,
+				status: importRows.some((row) =>
+					Boolean(row.fingerprintRawTemplateBlob || row.faceRawTemplateBlob),
+				)
+					? "spreadsheet_encrypted_templates"
+					: "not_present",
 				reason:
-					"CSV import preserves raw-template custody columns. Plaintext raw biometric bytes are not imported from spreadsheet cells.",
+					"CSV/Excel compact template cells are decoded internally and validated by the guarded encrypted bundle import preview.",
 				plaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
 			},
 			devices: Array.from(devicesById.entries()).map(([sourceDeviceId, deviceRows]) => ({
@@ -3382,15 +3427,15 @@ export function DeviceEnrollmentPanel({
 							},
 							plaintextBiometricExposed: false,
 							biometricCsvColumns: {
+								fingerprintTemplate: row.fingerprintTemplate,
+								faceTemplate: row.faceTemplate,
 								biometricBundleStatus: row.biometricBundleStatus,
 								biometricBundlePresent: row.biometricBundlePresent,
 								biometricBundleAlgorithm: row.biometricBundleAlgorithm || null,
 								biometricBundleRequiredForRawImport:
 									row.biometricBundleRequiredForRawImport,
 								biometricTransferMode: row.biometricTransferMode,
-								fingerprintTemplateKeySource: row.fingerprintTemplateKeySource,
 								fingerprintRawTemplateBlob: row.fingerprintRawTemplateBlob,
-								faceTemplateKeySource: row.faceTemplateKeySource,
 								faceRawTemplateBlob: row.faceRawTemplateBlob,
 								rawBiometricPlaintextPolicy: row.rawBiometricPlaintextPolicy,
 								rawBiometricSource: row.rawBiometricSource,
@@ -3426,24 +3471,14 @@ export function DeviceEnrollmentPanel({
 					cardCount: sampleCredentialSummary.cardCount,
 					fingerprintCount: sampleCredentialSummary.fingerprintCount,
 					faceCount: sampleCredentialSummary.faceCount,
-					biometricBundleStatus: "not_present",
-					biometricPlaintextExposed: "No",
-					biometricBundlePresent: "No",
-					biometricBundleAlgorithm: "aes-256-gcm",
-					biometricBundleRequiredForRawImport:
-						sampleCredentialSummary.fingerprintCount > 0 ||
+					fingerprintTemplate:
+						sampleCredentialSummary.fingerprintCount > 0
+							? "missing_encrypted_template"
+							: "not_enrolled",
+					faceTemplate:
 						sampleCredentialSummary.faceCount > 0
-							? "Yes"
-							: "No",
-					biometricTransferMode: "sdkPeerCopy",
-					fingerprintTemplateKeySource: "",
-					fingerprintRawTemplateBlob: "",
-					fingerprintTemplateStatus: "missing_encrypted_envelope",
-					faceTemplateKeySource: "",
-					faceRawTemplateBlob: "",
-					faceTemplateStatus: "missing_encrypted_envelope",
-					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
-					rawBiometricSource: "template",
+							? "missing_encrypted_template"
+							: "not_enrolled",
 					exportedAt: new Date().toISOString(),
 				}
 			: {
@@ -3460,20 +3495,8 @@ export function DeviceEnrollmentPanel({
 					cardCount: 1,
 					fingerprintCount: 1,
 					faceCount: 0,
-					biometricBundleStatus: "not_present",
-					biometricPlaintextExposed: "No",
-					biometricBundlePresent: "No",
-					biometricBundleAlgorithm: "aes-256-gcm",
-					biometricBundleRequiredForRawImport: "Yes",
-					biometricTransferMode: "sdkPeerCopy",
-					fingerprintTemplateKeySource: "",
-					fingerprintRawTemplateBlob: "",
-					fingerprintTemplateStatus: "missing_encrypted_envelope",
-					faceTemplateKeySource: "",
-					faceRawTemplateBlob: "",
-					faceTemplateStatus: "not_enrolled",
-					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
-					rawBiometricSource: "template",
+					fingerprintTemplate: "missing_encrypted_template",
+					faceTemplate: "not_enrolled",
 					exportedAt: new Date().toISOString(),
 				};
 		return [
@@ -3501,11 +3524,13 @@ export function DeviceEnrollmentPanel({
 				);
 				const fingerprintBundlePresent = fingerprintRawTemplateBlob.trim().startsWith("{");
 				const faceBundlePresent = faceRawTemplateBlob.trim().startsWith("{");
-				const biometricBundlePresent = fingerprintBundlePresent || faceBundlePresent;
-				const biometricBundleRequired = Boolean(
-					payload.biometricBundle?.requiredForPortableTemplateImport ||
-						Number(credentialSummary.fingerprintCount || 0) > 0 ||
-						Number(credentialSummary.faceCount || 0) > 0,
+				const fingerprintTemplate = getSpreadsheetTemplateValue(
+					fingerprintBundlePresent ? fingerprintRawTemplateBlob : "",
+					Number(credentialSummary.fingerprintCount || 0),
+				);
+				const faceTemplate = getSpreadsheetTemplateValue(
+					faceBundlePresent ? faceRawTemplateBlob : "",
+					Number(credentialSummary.faceCount || 0),
 				);
 				return {
 					sourceDeviceName: device.device?.name || "",
@@ -3521,35 +3546,8 @@ export function DeviceEnrollmentPanel({
 					cardCount: Number(credentialSummary.cardCount || 0),
 					fingerprintCount: Number(credentialSummary.fingerprintCount || 0),
 					faceCount: Number(credentialSummary.faceCount || 0),
-					biometricBundleStatus: payload.biometricBundle?.status || "not_requested",
-					biometricPlaintextExposed: "No",
-					biometricBundlePresent: biometricBundlePresent ? "Yes" : "No",
-					biometricBundleAlgorithm:
-						payload.biometricBundle?.algorithm || "aes-256-gcm",
-					biometricBundleRequiredForRawImport: biometricBundleRequired ? "Yes" : "No",
-					biometricTransferMode: biometricBundlePresent
-						? "encryptedBundle"
-						: "sdkPeerCopy",
-					fingerprintTemplateKeySource: fingerprintBundlePresent
-						? getTemplateKeySourceColumnValue(user, "fingerprintTemplateKeySource")
-						: "",
-					fingerprintRawTemplateBlob,
-					fingerprintTemplateStatus: fingerprintBundlePresent
-						? "encrypted_envelope_present"
-						: Number(credentialSummary.fingerprintCount || 0) > 0
-							? "missing_encrypted_envelope"
-							: "not_enrolled",
-					faceTemplateKeySource: faceBundlePresent
-						? getTemplateKeySourceColumnValue(user, "faceTemplateKeySource")
-						: "",
-					faceRawTemplateBlob,
-					faceTemplateStatus: faceBundlePresent
-						? "encrypted_envelope_present"
-						: Number(credentialSummary.faceCount || 0) > 0
-							? "missing_encrypted_envelope"
-							: "not_enrolled",
-					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
-					rawBiometricSource: device.sourceRead?.status || "hris_saved_metadata",
+					fingerprintTemplate,
+					faceTemplate,
 					exportedAt: payload.exportedAt || "",
 				};
 			}),
@@ -5268,11 +5266,11 @@ export function DeviceEnrollmentPanel({
 								<div className="grid gap-2 sm:grid-cols-2">
 									{[
 										[
-											"Fingerprint raw/encrypted blob",
+											"Fingerprint encrypted envelope",
 											`${metricValue(selectedSyncCenterItem?.preview?.fingerprintEnvelopePresent)} present · ${metricValue(selectedSyncCenterItem?.preview?.fingerprintEnvelopeMissing)} missing`,
 										],
 										[
-											"Face raw/encrypted blob",
+											"Face encrypted envelope",
 											`${metricValue(selectedSyncCenterItem?.preview?.faceEnvelopePresent)} present · ${metricValue(selectedSyncCenterItem?.preview?.faceEnvelopeMissing)} missing`,
 										],
 									].map(([label, value]) => (
@@ -5888,7 +5886,7 @@ export function DeviceEnrollmentPanel({
 							</div>
 							<p className="mt-3 text-xs opacity-90">
 								{sdkMergeJobSummary ||
-									"HRIS is applying the reviewed richest-source plan, copying credentials, then rereading devices."}
+									"HRIS is applying the reviewed recommended-source plan, copying credentials, then rereading devices."}
 							</p>
 							{effectiveSdkMergeJob?.error ? (
 								<p className="mt-2 text-xs text-red-800">
@@ -5948,12 +5946,6 @@ export function DeviceEnrollmentPanel({
 										<p className="text-sm font-semibold text-slate-950">
 											Preview merge by unique ID
 										</p>
-										<p className="text-xs text-slate-700">
-											Unique IDs are grouped by vendor user ID across the
-											selected devices. The preview chooses the richest record
-											for each ID, then shows exactly which device records would
-											be copied or kept before any job can write.
-										</p>
 										{sdkMergeBlockingCount > 0 ? (
 											<p className="mt-1 text-xs font-medium text-amber-700">
 												Resolve {sdkMergeBlockingCount} device read issue
@@ -5963,16 +5955,6 @@ export function DeviceEnrollmentPanel({
 										) : null}
 									</div>
 									<div className="flex flex-wrap justify-end gap-2">
-										<label className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800">
-											<input
-												type="checkbox"
-												className="h-4 w-4 rounded border-slate-300"
-												checked={sdkMergePreviewOnly}
-												disabled
-												readOnly
-											/>
-											Dry-run only for now
-										</label>
 										<Button
 											type="button"
 											onClick={autoResolveSdkMergeFromRichest}
@@ -5982,7 +5964,7 @@ export function DeviceEnrollmentPanel({
 												sdkMergeConflictCount === 0
 											}>
 											<RefreshCw className="h-4 w-4" />
-											Preview richest choices
+											Preview recommended choices
 										</Button>
 										{sdkMergeState.applyAll ||
 										Object.keys(sdkMergeState.choices).length ? (
@@ -6005,33 +5987,11 @@ export function DeviceEnrollmentPanel({
 
 							<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
 								{[
-									[
-										"unique",
-										"Unique IDs",
-										sdkMergeUniqueIdCount,
-										"Deduped by vendor user ID across devices.",
-									],
-									[
-										"records",
-										"Device records read",
-										sdkMergeDeviceRecordCount,
-										"Raw records returned by the selected devices.",
-									],
-									[
-										"review",
-										"Needs review",
-										sdkMergeAttentionRowCount,
-										"Unique IDs with missing users, conflicts, or credential gaps.",
-									],
-									[
-										"writes",
-										"Potential writes",
-										sdkMergePotentialWriteCount,
-										sdkMergePreviewOnly
-											? "Preview only. No device or HRIS writes will start."
-											: "Starts only after review choices are complete.",
-									],
-								].map(([mode, label, value, description]) => (
+									["unique", "Unique IDs", sdkMergeUniqueIdCount],
+									["records", "Device records read", sdkMergeDeviceRecordCount],
+									["review", "Needs review", sdkMergeAttentionRowCount],
+									["writes", "Potential writes", sdkMergePotentialWriteCount],
+								].map(([mode, label, value]) => (
 									<button
 										type="button"
 										key={String(label)}
@@ -6050,9 +6010,6 @@ export function DeviceEnrollmentPanel({
 												{mergeMetricValue(value)}
 											</span>
 										</div>
-										<p className="mt-1 text-xs leading-5 text-slate-600">
-											{description}
-										</p>
 									</button>
 								))}
 							</div>
@@ -6081,10 +6038,6 @@ export function DeviceEnrollmentPanel({
 								<div className="border-b border-slate-200 bg-white px-3 py-2">
 									<p className="text-sm font-semibold text-slate-950">
 										Per-device impact
-									</p>
-									<p className="text-xs text-slate-600">
-										Read is the unique ID count seen on that device. The other
-										columns show what would need attention for that device.
 									</p>
 								</div>
 								<div className="grid gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-700 lg:grid-cols-[minmax(180px,1fr)_70px_repeat(5,92px)]">
@@ -6160,17 +6113,6 @@ export function DeviceEnrollmentPanel({
 											{sdkMergeVisibleRows.length} row
 											{sdkMergeVisibleRows.length === 1 ? "" : "s"}
 										</p>
-										<p className="text-xs text-slate-600">
-											{selectedMergeDeviceId === "all"
-												? "All devices"
-												: `Device scope: ${mergeDeviceName(sdkMergePlanDevices, selectedMergeDeviceId)}`}
-											{sdkMergePreviewOnly
-												? " / dry-run preview, no writes"
-												: " / writes allowed after review"}
-											{sdkMergeVisibleRows.length > sdkMergeRowsPerPage
-												? ` / ${sdkMergeRowsPerPage} rows per page`
-												: ""}
-										</p>
 									</div>
 									{selectedMergeDeviceId !== "all" || selectedMergeUserKey ? (
 										<Button
@@ -6188,14 +6130,25 @@ export function DeviceEnrollmentPanel({
 											the device scope.
 										</div>
 									) : (
-										sdkMergePagedRows.map((row) => {
+										<>
+											<div
+												role="row"
+												className="sticky top-0 z-10 grid min-w-[1080px] grid-cols-[92px_minmax(170px,1fr)_minmax(150px,0.9fr)_minmax(150px,0.9fr)_minmax(150px,0.9fr)_minmax(220px,1.1fr)_160px] border-b border-slate-200 bg-slate-100 px-3 py-2 text-[11px] font-semibold uppercase text-slate-600">
+												<span>ID</span>
+												<span>User</span>
+												<span>Fingerprint</span>
+												<span>Face</span>
+												<span>Card</span>
+												<span>Recommendation</span>
+												<span className="text-right">Actions</span>
+											</div>
+											{sdkMergePagedRows.map((row) => {
 											const hasConflictFields = Boolean(
 												row.conflictFields?.length || row.conflictField,
 											);
-											const isPending = sdkMergePendingRowId === row.id;
 											const isSelected = selectedMergeUserKey === row.userKey;
 											const rowSeenRecords = row.user.records || [];
-											const rowMissingDeviceIds = row.user.missingOnDeviceIds || [];
+											const recommendationReason = mergeRecommendationReason(row);
 											const rowIssueRows = sdkMergeRows.filter(
 												(issueRow) =>
 													issueRow.userKey === row.userKey &&
@@ -6205,11 +6158,85 @@ export function DeviceEnrollmentPanel({
 												sdkMergeListMode === "unique" ||
 												sdkMergeListMode === "review" ||
 												sdkMergeListMode === "records";
+											const renderCredentialCountCell = (
+												kind: SdkMergeCredentialKind,
+											) => {
+												const recordsByCount = [...rowSeenRecords].sort(
+													(left: any, right: any) =>
+														mergeCredentialCount(right, kind) -
+															mergeCredentialCount(left, kind) ||
+														mergeRecordRichnessScore(right) -
+															mergeRecordRichnessScore(left),
+												);
+												const recommendedRecord = recordsByCount[0];
+												const recommendedCount = mergeCredentialCount(
+													recommendedRecord,
+													kind,
+												);
+												const currentRecord =
+													row.targetRecord ||
+													(selectedMergeDeviceId !== "all"
+														? rowSeenRecords.find(
+																(record: any) =>
+																	record.deviceId === selectedMergeDeviceId,
+															)
+														: recordsByCount[recordsByCount.length - 1]) ||
+													recommendedRecord;
+												const currentCount = mergeCredentialCount(currentRecord, kind);
+												const currentDeviceName = currentRecord?.deviceId
+													? mergeDeviceName(sdkMergePlanDevices, currentRecord.deviceId)
+													: "No current source";
+												const recommendedDeviceName = recommendedRecord?.deviceId
+													? mergeDeviceName(sdkMergePlanDevices, recommendedRecord.deviceId)
+													: "Unavailable";
+												const hasUpgrade = recommendedCount > currentCount;
+												return (
+													<div className="min-w-0 text-xs text-slate-700">
+														<div className="flex min-w-0 items-center gap-1.5">
+															<span
+																className="min-w-[1.75rem] rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-center text-sm font-semibold text-slate-950"
+																title={`Current: ${currentDeviceName}`}>
+																{mergeMetricValue(currentCount)}
+															</span>
+															<span className="text-[11px] font-medium text-slate-400">/</span>
+															<button
+																type="button"
+																onClick={() =>
+																	setSdkMergeCredentialPicker({
+																		rowId: row.id,
+																		kind,
+																	})
+																}
+																className={`min-w-[1.75rem] rounded-md border px-1.5 py-0.5 text-center text-sm font-semibold transition-colors ${
+																	hasUpgrade
+																		? "border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100"
+																		: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+																}`}
+																title={`Recommended: ${recommendedDeviceName}`}
+																aria-label={`Choose recommended ${kind} source for vendor user ID ${row.vendorUserId}`}>
+																{mergeMetricValue(recommendedCount)}
+															</button>
+														</div>
+														<p className="mt-1 truncate text-[11px] text-slate-500">
+															{hasUpgrade ? recommendedDeviceName : currentDeviceName}
+														</p>
+													</div>
+												);
+											};
 											return (
 												<div
 													key={row.id}
-													className={`border-b border-slate-100 px-3 py-3 last:border-b-0 ${isSelected ? "bg-white ring-1 ring-inset ring-orange-200" : "bg-white"}`}>
-													<div className="grid gap-3 lg:grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_minmax(180px,1fr)_auto] lg:items-start">
+													role="row"
+													className={`min-w-[1080px] border-b border-slate-100 px-3 py-3 last:border-b-0 ${isSelected ? "bg-white ring-1 ring-inset ring-orange-200" : "bg-white"}`}>
+													<div className="grid grid-cols-[92px_minmax(170px,1fr)_minmax(150px,0.9fr)_minmax(150px,0.9fr)_minmax(150px,0.9fr)_minmax(220px,1.1fr)_160px] gap-3">
+														<div className="min-w-0">
+															<p className="truncate text-sm font-semibold text-slate-950">
+																{row.vendorUserId}
+															</p>
+															<p className="mt-0.5 truncate text-[11px] text-slate-500">
+																{row.issueLabel}
+															</p>
+														</div>
 														<div className="min-w-0">
 															<button
 																type="button"
@@ -6221,85 +6248,20 @@ export function DeviceEnrollmentPanel({
 																className="block max-w-full truncate text-left text-sm font-semibold text-slate-950 hover:text-orange-800">
 																{row.personLabel}
 															</button>
-															<p className="mt-0.5 truncate text-xs text-slate-600">
-																Vendor user ID {row.vendorUserId}
-															</p>
 															{row.user.employeeId ? (
 																<p className="mt-0.5 truncate text-xs text-slate-600">
 																	HRIS employee {row.user.employeeId}
 																</p>
-															) : null}
+															) : (
+																<p className="mt-0.5 truncate text-xs text-slate-600">
+																	No HRIS employee link
+																</p>
+															)}
 														</div>
-														<div className="min-w-0 text-xs text-slate-700">
-															<p className="truncate">
-																<span className="font-medium text-slate-900">
-																	Best source:
-																</span>{" "}
-																{row.sourceDeviceName}
-															</p>
-															<p className="truncate">
-																<span className="font-medium text-slate-900">
-																	{row.filter === "decision"
-																		? "Compare:"
-																		: "Target:"}
-																</span>{" "}
-																{row.missingLabel}
-															</p>
-															<p className="mt-1 break-words text-slate-600">
-																{row.dataLabel}
-															</p>
-															{rowShowsDeviceJourney ? (
-																<div className="mt-2 space-y-1">
-																	<div className="flex flex-wrap items-center gap-1.5">
-																		<span className="text-[11px] font-medium text-slate-500">
-																			Connected
-																		</span>
-																		{rowSeenRecords.map((record: any) => (
-																			<button
-																				type="button"
-																				key={`${row.id}:seen:${record.deviceId}`}
-																				onClick={() =>
-																					setSdkMergeDeviceListMode(
-																						record.deviceId,
-																						"records",
-																					)
-																				}
-																				className="max-w-[180px] truncate rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-950 hover:bg-emerald-100">
-																{mergeDeviceName(
-																	sdkMergePlanDevices,
-																	record.deviceId,
-																				)}
-																			</button>
-																		))}
-																	</div>
-																	{rowMissingDeviceIds.length ? (
-																		<div className="flex flex-wrap items-center gap-1.5">
-																			<span className="text-[11px] font-medium text-slate-500">
-																				Missing
-																			</span>
-																			{rowMissingDeviceIds.map((deviceId) => (
-																				<button
-																					type="button"
-																					key={`${row.id}:missing:${deviceId}`}
-																					onClick={() =>
-																						setSdkMergeDeviceFilter(
-																							deviceId,
-																							"missing",
-																						)
-																					}
-																					className="max-w-[180px] truncate rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-950 hover:bg-amber-100">
-																	{mergeDeviceName(
-																		sdkMergePlanDevices,
-																		deviceId,
-																					)}
-																				</button>
-																			))}
-																		</div>
-																	) : null}
-																</div>
-															) : null}
-														</div>
-														<div className="min-w-0">
+														{renderCredentialCountCell("fingerprint")}
+														{renderCredentialCountCell("face")}
+														{renderCredentialCountCell("card")}
+														<div className="min-w-0 space-y-1">
 															<Badge
 																variant={
 																	row.filter === "ready"
@@ -6310,248 +6272,62 @@ export function DeviceEnrollmentPanel({
 																}>
 																{row.issueLabel}
 															</Badge>
-															<p className="mt-1 text-xs leading-5 text-slate-700">
-																{row.recommendedAction}
-															</p>
 															{rowShowsDeviceJourney ? (
-																<p className="mt-1 text-xs text-slate-500">
+																<p className="truncate text-[11px] text-slate-500">
 																	{rowIssueRows.length
 																		? `${mergePlural(rowIssueRows.length, "issue")} for this ID`
-																		: "No issue rows for this ID"}
+																		: "Aligned"}
 																</p>
 															) : null}
 														</div>
-														<div className="flex flex-wrap justify-start gap-2 lg:justify-end">
-															{row.primaryAction === "copy" &&
-															row.targetDeviceId ? (
-																<Button
-																	type="button"
-																	size="sm"
-																	disabled={isPending || sdkMergePreviewOnly}
-																	onClick={() =>
-																		void copySdkMergeRowToDevice(
-																			row,
-																		)
-																	}>
-																	{isPending ? (
-																		<Loader2 className="h-4 w-4 animate-spin" />
-																	) : (
-																		<Link2 className="h-4 w-4" />
-																	)}
-																	{sdkMergePreviewOnly
-																		? "Dry-run only"
-																		: "Copy now"}
-																</Button>
-															) : null}
-															{row.primaryAction ===
-																"choose-richest" &&
-															row.conflictField ? (
-																<Button
-																	type="button"
-																	size="sm"
-																	onClick={() =>
-																		chooseSdkMergeRichestSource(
-																			row,
-																		)
-																	}>
-																	Use richest source
-																</Button>
-															) : null}
-															{hasConflictFields ? (
-																<Button
-																	type="button"
-																	size="sm"
-																	variant="outline"
-																	onClick={() =>
-																		keepSdkMergeCurrent(row)
-																	}>
-																	Keep current
-																</Button>
-															) : null}
-															<Button
-																type="button"
-																size="sm"
-																variant="outline"
-																onClick={() =>
-																	setSelectedMergeUser(
-																		row.userKey,
-																	)
-																}>
-																{isSelected
-																	? "Hide details"
-																	: "Open"}
-															</Button>
+														<div className="flex items-center justify-end gap-1.5">
+															<TooltipProvider>
+																{hasConflictFields ? (
+																	<Tooltip>
+																		<TooltipTrigger asChild>
+																			<Button
+																				type="button"
+																				size="sm"
+																				variant="outline"
+																				className="h-8 w-8 bg-white p-0"
+																				aria-label={`Keep current values for vendor user ID ${row.vendorUserId}`}
+																				onClick={() => keepSdkMergeCurrent(row)}>
+																				<CheckCircle2 className="h-4 w-4" />
+																			</Button>
+																		</TooltipTrigger>
+																		<TooltipContent className="text-xs">
+																			Keep current values
+																		</TooltipContent>
+																	</Tooltip>
+																) : null}
+																<Tooltip>
+																	<TooltipTrigger asChild>
+																		<Button
+																			type="button"
+																			size="sm"
+																			variant="outline"
+																			className="h-8 w-8 bg-white p-0"
+																			aria-label={`Review sources for vendor user ID ${row.vendorUserId}`}
+																			onClick={() =>
+																				setSdkMergeSourceReview({
+																					rowId: row.id,
+																				})
+																			}>
+																			<Eye className="h-4 w-4" />
+																		</Button>
+																	</TooltipTrigger>
+																	<TooltipContent className="max-w-xs text-xs">
+																		<p className="font-semibold">Review sources</p>
+																		<p className="mt-1">{recommendationReason}</p>
+																	</TooltipContent>
+																</Tooltip>
+															</TooltipProvider>
 														</div>
 													</div>
-													{isSelected ? (
-														<div className="mt-3 border-t border-slate-200 pt-3">
-															<div className="grid gap-2 md:grid-cols-2">
-																{rowSeenRecords.map((record: any) => {
-															const deviceName = mergeDeviceName(
-																sdkMergePlanDevices,
-																record.deviceId,
-																	);
-																	return (
-																		<div
-																			key={`${row.id}:detail:${record.deviceId}`}
-																			className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-																			<div className="flex items-start justify-between gap-2">
-																				<div className="min-w-0">
-																					<p className="truncate font-semibold text-slate-950">
-																						{deviceName}
-																					</p>
-																					<p className="mt-0.5 truncate text-slate-600">
-																						{record.employeeId
-																							? `Linked to HRIS employee ${record.employeeId}`
-																							: "No HRIS employee link on this record"}
-																					</p>
-																				</div>
-																				<Badge
-																					variant={
-																						record.employeeId
-																							? "success"
-																							: "warning"
-																					}>
-																					{record.employeeId
-																						? "Connected"
-																						: "Needs link"}
-																				</Badge>
-																			</div>
-																			<p className="mt-2 text-slate-600">
-																				Fingerprints{" "}
-																				{mergeMetricValue(
-																					mergeCredentialCount(
-																						record,
-																						"fingerprint",
-																					),
-																				)}
-																				, face{" "}
-																				{mergeMetricValue(
-																					mergeCredentialCount(record, "face"),
-																				)}
-																				, cards{" "}
-																				{mergeMetricValue(
-																					mergeCredentialCount(record, "card"),
-																				)}
-																			</p>
-																		</div>
-																	);
-																})}
-																{rowMissingDeviceIds.map((deviceId) => (
-																	<div
-																		key={`${row.id}:detail-missing:${deviceId}`}
-																		className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-																		<div className="flex items-start justify-between gap-2">
-																			<div className="min-w-0">
-																				<p className="truncate font-semibold">
-																	{mergeDeviceName(
-																		sdkMergePlanDevices,
-																		deviceId,
-																					)}
-																				</p>
-																				<p className="mt-0.5">
-																					This selected device has no record for
-																					vendor user ID {row.vendorUserId}.
-																				</p>
-																			</div>
-																			<Badge variant="warning">Missing</Badge>
-																		</div>
-																	</div>
-																))}
-															</div>
-														</div>
-													) : null}
-													{isSelected && row.user.conflicts.length ? (
-														<div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
-															{row.user.conflicts.map((conflict) => {
-																const selected =
-																	sdkMergeState.choices[
-																		row.userKey
-																	]?.[conflict.field] ||
-																	sdkMergeState.applyAll;
-																return (
-																	<div
-																		key={conflict.field}
-																		className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-2 md:grid-cols-[120px_minmax(0,1fr)_minmax(0,1fr)_80px_72px] md:items-center">
-																		<span className="text-xs font-medium text-slate-700">
-																			{mergeFieldLabel(
-																				conflict.field,
-																			)}
-																		</span>
-																		<button
-																			type="button"
-																			onClick={() =>
-																				setSdkMergeChoice(
-																					row.userKey,
-																					conflict.field,
-																					"A",
-																				)
-																			}
-																			className={`min-w-0 text-left ${getSdkMergeChoiceButtonClass(selected === "A")}`}>
-																			<span className="block truncate font-medium">
-																				{
-																					conflict.deviceA
-																						.name
-																				}
-																			</span>
-																			<span className="block break-words">
-																				{mergeFieldValueLabel(
-																					conflict.deviceA
-																						.value,
-																				)}
-																			</span>
-																		</button>
-																		<button
-																			type="button"
-																			onClick={() =>
-																				setSdkMergeChoice(
-																					row.userKey,
-																					conflict.field,
-																					"B",
-																				)
-																			}
-																			className={`min-w-0 text-left ${getSdkMergeChoiceButtonClass(selected === "B")}`}>
-																			<span className="block truncate font-medium">
-																				{
-																					conflict.deviceB
-																						.name
-																				}
-																			</span>
-																			<span className="block break-words">
-																				{mergeFieldValueLabel(
-																					conflict.deviceB
-																						.value,
-																				)}
-																			</span>
-																		</button>
-																		<button
-																			type="button"
-																			onClick={() =>
-																				setSdkMergeChoice(
-																					row.userKey,
-																					conflict.field,
-																					"KEEP",
-																				)
-																			}
-																			className={`font-medium ${getSdkMergeChoiceButtonClass(selected === "KEEP", "emerald")}`}>
-																			Keep
-																		</button>
-																		<Badge
-																			variant={
-																				selected
-																					? "success"
-																					: "warning"
-																			}>
-																			{selected || "Choose"}
-																		</Badge>
-																	</div>
-																);
-															})}
-														</div>
-													) : null}
 												</div>
 											);
-										})
+										})}
+										</>
 									)}
 								</div>
 								{sdkMergeVisibleRows.length > sdkMergeRowsPerPage ? (
@@ -6596,7 +6372,7 @@ export function DeviceEnrollmentPanel({
 						{sdkMergeState.data && !hasSdkMergeJob ? (
 							<p className="mr-auto max-w-xl text-xs leading-5 text-slate-600">
 								{sdkMergePreviewOnly
-									? `Dry run is on. This screen is only showing ${mergePlural(sdkMergeUniqueIdCount, "unique ID")} and ${mergePlural(sdkMergePotentialWriteCount, "potential write")} for review.`
+									? `Preview mode is on. This screen is showing ${mergePlural(sdkMergeUniqueIdCount, "unique ID")} and ${mergePlural(sdkMergePotentialWriteCount, "potential write")} for review.`
 									: "Writes are allowed for this review. Starting the job will copy selected records and reread devices."}
 							</p>
 						) : null}
@@ -6656,7 +6432,7 @@ export function DeviceEnrollmentPanel({
 								{sdkMergeBlockingCount
 									? `Resolve ${sdkMergeBlockingCount} read issue${sdkMergeBlockingCount === 1 ? "" : "s"}`
 									: sdkMergePreviewOnly
-										? "Dry-run only"
+										? "Preview only"
 										: sdkMergeResolvedCount < sdkMergeConflictCount
 										? `Preview ${sdkMergeConflictCount - sdkMergeResolvedCount} more`
 										: sdkMergeJobIsProcessing
@@ -6666,6 +6442,316 @@ export function DeviceEnrollmentPanel({
 						) : null}
 					</div>
 				</div>
+			</Modal>
+
+			<Modal
+				open={Boolean(sdkMergeSourceReview && selectedSdkMergeSourceReviewRow)}
+				onOpenChange={(open) => {
+					if (!open) setSdkMergeSourceReview(null);
+				}}
+				title="Review sources"
+				description="Compare the current device truth against available source records."
+				className="max-w-3xl">
+				{selectedSdkMergeSourceReviewRow ? (
+					<div className="space-y-4">
+						<div className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+							<div className="min-w-0">
+								<p className="truncate text-sm font-semibold text-slate-950">
+									{selectedSdkMergeSourceReviewRow.personLabel}
+								</p>
+								<p className="mt-0.5 truncate text-xs text-slate-600">
+									ID {selectedSdkMergeSourceReviewRow.vendorUserId}
+								</p>
+							</div>
+							<Badge
+								variant={
+									selectedSdkMergeSourceReviewRow.filter === "ready"
+										? "success"
+										: selectedSdkMergeSourceReviewRow.filter === "decision"
+											? "warning"
+											: "secondary"
+								}>
+								{selectedSdkMergeSourceReviewRow.issueLabel}
+							</Badge>
+						</div>
+						<div className="overflow-hidden rounded-md border border-slate-200">
+							<div className="grid grid-cols-[minmax(180px,1.4fr)_76px_76px_76px_minmax(140px,1fr)] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase text-slate-500">
+								<span>Source</span>
+								<span>Finger</span>
+								<span>Face</span>
+								<span>Card</span>
+								<span>Status</span>
+							</div>
+							<div className="max-h-[320px] overflow-auto bg-white">
+								{(selectedSdkMergeSourceReviewRow.user.records || []).map((record: any) => {
+									const deviceName = mergeDeviceName(sdkMergePlanDevices, record.deviceId);
+									const isRecommended =
+										record.deviceId === selectedSdkMergeSourceReviewRow.sourceDeviceId;
+									const isCurrent =
+										record.deviceId === selectedSdkMergeSourceReviewRow.targetDeviceId ||
+										(selectedMergeDeviceId !== "all" &&
+											record.deviceId === selectedMergeDeviceId);
+									return (
+										<div
+											key={`${selectedSdkMergeSourceReviewRow.id}:source-modal:${record.deviceId}`}
+											className="grid grid-cols-[minmax(180px,1.4fr)_76px_76px_76px_minmax(140px,1fr)] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+											<div className="min-w-0">
+												<p className="truncate font-semibold text-slate-950">
+													{deviceName}
+												</p>
+												<p className="truncate text-xs text-slate-500">
+													{record.employeeId
+														? `HRIS ${record.employeeId}`
+														: "No HRIS link"}
+												</p>
+											</div>
+											<span className="font-semibold text-slate-950">
+												{mergeMetricValue(mergeCredentialCount(record, "fingerprint"))}
+											</span>
+											<span className="font-semibold text-slate-950">
+												{mergeMetricValue(mergeCredentialCount(record, "face"))}
+											</span>
+											<span className="font-semibold text-slate-950">
+												{mergeMetricValue(mergeCredentialCount(record, "card"))}
+											</span>
+											<div className="flex min-w-0 flex-wrap gap-1">
+												{isCurrent ? <Badge variant="secondary">Current</Badge> : null}
+												{isRecommended ? <Badge variant="success">Recommended</Badge> : null}
+												{!isCurrent && !isRecommended ? (
+													<span className="truncate text-xs text-slate-500">Available</span>
+												) : null}
+											</div>
+										</div>
+									);
+								})}
+								{(selectedSdkMergeSourceReviewRow.user.missingOnDeviceIds || []).map((deviceId) => (
+									<div
+										key={`${selectedSdkMergeSourceReviewRow.id}:source-modal-missing:${deviceId}`}
+										className="grid grid-cols-[minmax(180px,1.4fr)_76px_76px_76px_minmax(140px,1fr)] gap-3 border-b border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-950 last:border-b-0">
+										<div className="min-w-0">
+											<p className="truncate font-semibold">
+												{mergeDeviceName(sdkMergePlanDevices, deviceId)}
+											</p>
+											<p className="truncate text-xs">Missing this vendor user ID</p>
+										</div>
+										<span>0</span>
+										<span>0</span>
+										<span>0</span>
+										<Badge variant="warning">Missing</Badge>
+									</div>
+								))}
+							</div>
+						</div>
+						{selectedSdkMergeSourceReviewRow.user.conflicts.length ? (
+							<div className="space-y-2">
+								<p className="text-xs font-semibold uppercase text-slate-500">
+									Decisions
+								</p>
+								{selectedSdkMergeSourceReviewRow.user.conflicts.map((conflict) => {
+									const selected =
+										sdkMergeState.choices[selectedSdkMergeSourceReviewRow.userKey]?.[
+											conflict.field
+										] || sdkMergeState.applyAll;
+									return (
+										<div
+											key={`${selectedSdkMergeSourceReviewRow.id}:modal-conflict:${conflict.field}`}
+											className="grid gap-2 rounded-md border border-slate-200 bg-white p-2 md:grid-cols-[120px_minmax(0,1fr)_minmax(0,1fr)_76px] md:items-center">
+											<span className="text-xs font-medium text-slate-700">
+												{mergeFieldLabel(conflict.field)}
+											</span>
+											<button
+												type="button"
+												onClick={() =>
+													setSdkMergeChoice(
+														selectedSdkMergeSourceReviewRow.userKey,
+														conflict.field,
+														"A",
+													)
+												}
+												className={`min-w-0 text-left ${getSdkMergeChoiceButtonClass(selected === "A")}`}>
+												<span className="block truncate font-medium">
+													{conflict.deviceA.name}
+												</span>
+												<span className="block break-words">
+													{mergeFieldValueLabel(conflict.deviceA.value)}
+												</span>
+											</button>
+											<button
+												type="button"
+												onClick={() =>
+													setSdkMergeChoice(
+														selectedSdkMergeSourceReviewRow.userKey,
+														conflict.field,
+														"B",
+													)
+												}
+												className={`min-w-0 text-left ${getSdkMergeChoiceButtonClass(selected === "B")}`}>
+												<span className="block truncate font-medium">
+													{conflict.deviceB.name}
+												</span>
+												<span className="block break-words">
+													{mergeFieldValueLabel(conflict.deviceB.value)}
+												</span>
+											</button>
+											<Button
+												type="button"
+												size="sm"
+												variant="outline"
+												onClick={() =>
+													setSdkMergeChoice(
+														selectedSdkMergeSourceReviewRow.userKey,
+														conflict.field,
+														"KEEP",
+													)
+												}>
+												Keep
+											</Button>
+										</div>
+									);
+								})}
+							</div>
+						) : null}
+						<div className="flex justify-end border-t border-slate-200 pt-3">
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => setSdkMergeSourceReview(null)}>
+								Close
+							</Button>
+						</div>
+					</div>
+				) : null}
+			</Modal>
+
+			<Modal
+				open={Boolean(sdkMergeCredentialPicker && selectedSdkMergeCredentialRow)}
+				onOpenChange={(open) => {
+					if (!open) setSdkMergeCredentialPicker(null);
+				}}
+				title={
+					sdkMergeCredentialPicker
+						? `${mergeFieldLabel(sdkMergeCredentialPicker.kind)} source`
+						: "Credential source"
+				}
+				description="Choose which device should supply this credential."
+				className="max-w-xl">
+				{sdkMergeCredentialPicker && selectedSdkMergeCredentialRow ? (
+					<div className="space-y-3">
+						<div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+							<p className="text-sm font-semibold text-slate-950">
+								{selectedSdkMergeCredentialRow.personLabel}
+							</p>
+							<p className="text-xs text-slate-600">
+								ID {selectedSdkMergeCredentialRow.vendorUserId}
+							</p>
+						</div>
+						<div className="space-y-2">
+							{[...(selectedSdkMergeCredentialRow.user.records || [])]
+								.sort(
+									(left: any, right: any) =>
+										mergeCredentialCount(right, sdkMergeCredentialPicker.kind) -
+											mergeCredentialCount(left, sdkMergeCredentialPicker.kind) ||
+										mergeRecordRichnessScore(right) - mergeRecordRichnessScore(left),
+								)
+								.map((record: any, index: number) => {
+									const count = mergeCredentialCount(record, sdkMergeCredentialPicker.kind);
+									const deviceName = mergeDeviceName(sdkMergePlanDevices, record.deviceId);
+									const conflict = selectedSdkMergeCredentialRow.user.conflicts.find(
+										(item) => item.field === sdkMergeCredentialPicker.kind,
+									);
+									const isChoiceSource =
+										conflict?.deviceA.id === record.deviceId ||
+										conflict?.deviceB.id === record.deviceId;
+									const selectedChoice =
+										sdkMergeState.choices[selectedSdkMergeCredentialRow.userKey]?.[
+											sdkMergeCredentialPicker.kind
+										] || sdkMergeState.applyAll;
+									const selectedDeviceId =
+										selectedChoice === "A"
+											? conflict?.deviceA.id
+											: selectedChoice === "B"
+												? conflict?.deviceB.id
+												: selectedChoice === "KEEP"
+													? undefined
+													: [...(selectedSdkMergeCredentialRow.user.records || [])].sort(
+															(left: any, right: any) =>
+																mergeCredentialCount(
+																	right,
+																	sdkMergeCredentialPicker.kind,
+																) -
+																	mergeCredentialCount(
+																		left,
+																		sdkMergeCredentialPicker.kind,
+																	),
+														)[0]?.deviceId;
+									const isChosen = record.deviceId === selectedDeviceId;
+									const chooseRecord = () => {
+										if (conflict?.deviceA.id === record.deviceId) {
+											setSdkMergeChoice(
+												selectedSdkMergeCredentialRow.userKey,
+												sdkMergeCredentialPicker.kind,
+												"A",
+											);
+											setSdkMergeCredentialPicker(null);
+										} else if (conflict?.deviceB.id === record.deviceId) {
+											setSdkMergeChoice(
+												selectedSdkMergeCredentialRow.userKey,
+												sdkMergeCredentialPicker.kind,
+												"B",
+											);
+											setSdkMergeCredentialPicker(null);
+										}
+									};
+									return (
+										<button
+											type="button"
+											key={`${selectedSdkMergeCredentialRow.id}:picker:${record.deviceId}`}
+											onClick={chooseRecord}
+											disabled={!isChoiceSource}
+											className={`flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors disabled:cursor-default ${
+												isChosen
+													? "border-orange-300 bg-orange-50"
+													: isChoiceSource
+														? "border-slate-200 bg-white hover:bg-slate-50"
+														: "border-slate-200 bg-slate-50 text-slate-500"
+											}`}>
+											<span
+												className={`h-3.5 w-3.5 shrink-0 rounded-full border ${
+													isChosen
+														? "border-orange-500 bg-orange-500"
+														: "border-slate-300 bg-white"
+												}`}
+												aria-hidden="true"
+											/>
+											<div className="min-w-0 flex-1">
+												<p className="truncate text-sm font-medium text-slate-950">
+													{deviceName}
+												</p>
+												<p className="text-xs text-slate-600">
+													{index === 0
+														? "Recommended source"
+														: isChoiceSource
+															? "Selectable source"
+															: "Available for review"}
+												</p>
+											</div>
+											<span className="rounded-md border border-slate-200 bg-white px-2 py-1 font-mono text-sm font-semibold text-slate-950">
+												{mergeMetricValue(count)}
+											</span>
+										</button>
+									);
+								})}
+						</div>
+						<div className="flex justify-end gap-2 border-t border-slate-200 pt-3">
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => setSdkMergeCredentialPicker(null)}>
+								Close
+							</Button>
+						</div>
+					</div>
+				) : null}
 			</Modal>
 
 			<Modal
@@ -7203,10 +7289,10 @@ export function DeviceEnrollmentPanel({
 									{selectedDevice?.name || "Selected device"}
 								</p>
 								<p className="mt-1 text-xs text-slate-600">
-									CSV and Excel export identity rows plus explicit raw-template
-									custody columns. Package JSON is the re-importable sync file with
-									metadata, hashes, counts, and capability evidence. Plaintext
-									biometric bytes are never written to spreadsheet cells.
+									CSV and Excel use two biometric template columns with compact
+									encrypted values or clear empty states. The passphrase is entered
+									separately. Plaintext biometric bytes are never written to
+									spreadsheet cells.
 								</p>
 							</div>
 							<Badge variant="secondary" className="self-start">
@@ -7305,10 +7391,9 @@ export function DeviceEnrollmentPanel({
 							download and must be entered again at import. It is never stored.
 						</p>
 						<p className="mt-2 font-mono text-[11px] text-cyan-950">
-							Separate custody columns: fingerprintTemplateKeySource +
-							fingerprintRawTemplateBlob, and faceTemplateKeySource +
-							faceRawTemplateBlob. A modality column contains an encrypted value only
-							when real SDK bytes were captured for that user.
+							Spreadsheet template columns: fingerprintTemplate and faceTemplate.
+							They contain encrypted:v2 compact values when templates are available,
+							or not_enrolled / missing_encrypted_template when they are not.
 						</p>
 					</div>
 					<div className="grid gap-2 text-sm sm:grid-cols-3">
@@ -7469,14 +7554,14 @@ export function DeviceEnrollmentPanel({
 							Target: {selectedDevice?.name || "Select device"}
 						</p>
 						<p className="mt-1 text-xs text-slate-600">
-							Use the CSV export from another Hikvision device to compare users,
-							matches, conflicts, missing HRIS employees, and raw-template custody
-							status. Package JSON remains the full encrypted sync bundle format.
+							Use the CSV export from another Hikvision device to compare users and
+							preview encrypted biometric templates without writing to the device.
+							The passphrase is entered separately for validation.
 						</p>
 					</div>
 					<div className="grid gap-2 sm:grid-cols-2">
 						{[
-							["csv", "CSV", "Default import with custody columns"],
+							["csv", "CSV", "Two template columns"],
 							["json", "Package JSON", "Advanced encrypted bundle import"],
 						].map(([value, label, description]) => (
 							<button
