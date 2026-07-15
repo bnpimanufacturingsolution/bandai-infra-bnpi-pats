@@ -19,6 +19,8 @@ enum DeviceEventSource {
   HIKVISION_CALLBACK
   EN_HCNETSDK_ALARM
   ZKTECO_EVENT
+  // Labeled admin-injected offline kiosk proof; not physical device truth.
+  EN_SYNTHETIC_KIOSK_TAP
 }
 
 enum DeviceEventCategory {

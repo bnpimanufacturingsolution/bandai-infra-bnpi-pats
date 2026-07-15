@@ -20,6 +20,7 @@ import { config } from "../../config/constant";
 import { config as appConfig } from "../../config/config";
 import { redisClient } from "../../config/redis";
 import { invalidateCache } from "../../middleware/cache";
+import { emitDeviceEventSaved } from "../../helper/device-event-realtime.helper";
 import { createEmployeeHelpers } from "../../helper/employee.helper";
 import {
 	buildHikvisionDeviceEventDedupeKey,
@@ -72,7 +73,21 @@ const DEVICE_EVENT_STATUSES = new Set([
 	"UNMATCHED",
 	"FAILED",
 ]);
-const DEVICE_EVENT_SOURCES = new Set(["HIKVISION_CALLBACK", "EN_HCNETSDK_ALARM", "ZKTECO_EVENT"]);
+const DEVICE_EVENT_SOURCES = new Set([
+	"HIKVISION_CALLBACK",
+	"EN_HCNETSDK_ALARM",
+	"ZKTECO_EVENT",
+	// Logical label only until DB enum + Prisma client include this value.
+	"EN_SYNTHETIC_KIOSK_TAP",
+]);
+/** Public/logical synthetic label for API + payload. */
+const SYNTHETIC_KIOSK_TAP_SOURCE = "EN_SYNTHETIC_KIOSK_TAP";
+/**
+ * Persisted Prisma/DB source value. Current deployed DeviceEventSource enums
+ * only accept HIKVISION_CALLBACK | EN_HCNETSDK_ALARM | ZKTECO_EVENT. Synthetic
+ * truth is still explicit in payload/eventLabel/API response.
+ */
+const SYNTHETIC_KIOSK_TAP_PERSISTED_SOURCE = "EN_HCNETSDK_ALARM";
 const DEVICE_EVENT_CATEGORIES = new Set([
 	"ATTENDANCE",
 	"ENROLLMENT",
@@ -453,8 +468,20 @@ const getHikvisionListenerVmTargets = (): HikvisionListenerVmTarget[] => {
 	return targets;
 };
 
-const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) => {
+let preferredHikvisionListenerVmTargetLabel = "";
+
+const prioritizeHikvisionListenerVmTargets = () => {
 	const targets = getHikvisionListenerVmTargets();
+	if (!preferredHikvisionListenerVmTargetLabel) return targets;
+	return [...targets].sort((left, right) => {
+		if (left.label === preferredHikvisionListenerVmTargetLabel) return -1;
+		if (right.label === preferredHikvisionListenerVmTargetLabel) return 1;
+		return 0;
+	});
+};
+
+const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) => {
+	const targets = prioritizeHikvisionListenerVmTargets();
 	const runAgainstTarget = async (target: HikvisionListenerVmTarget) => {
 		if (target.mode === "local") {
 			const result = await runFixedProcess(remoteArgs[0] || "true", remoteArgs.slice(1), {
@@ -466,7 +493,7 @@ const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) =
 			"-o",
 			"BatchMode=yes",
 			"-o",
-			"ConnectTimeout=5",
+			"ConnectTimeout=1",
 			"-o",
 			"StrictHostKeyChecking=accept-new",
 		];
@@ -485,7 +512,13 @@ const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) =
 		let lastResult: Awaited<ReturnType<typeof runAgainstTarget>> | null = null;
 		for (const target of targets) {
 			const result = await runAgainstTarget(target);
-			if (result.exitCode === 0) return result;
+			if (result.exitCode === 0) {
+				preferredHikvisionListenerVmTargetLabel = target.label;
+				return result;
+			}
+			if (target.label === preferredHikvisionListenerVmTargetLabel) {
+				preferredHikvisionListenerVmTargetLabel = "";
+			}
 			lastResult = result;
 		}
 		return (
@@ -500,7 +533,7 @@ const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) =
 };
 
 const runHikvisionListenerVmCopy = (localPath: string, remotePath: string, timeoutMs = 12000) => {
-	const targets = getHikvisionListenerVmTargets();
+	const targets = prioritizeHikvisionListenerVmTargets();
 	const runAgainstTarget = async (target: HikvisionListenerVmTarget) => {
 		if (target.mode === "local") {
 			try {
@@ -519,7 +552,7 @@ const runHikvisionListenerVmCopy = (localPath: string, remotePath: string, timeo
 			"-o",
 			"BatchMode=yes",
 			"-o",
-			"ConnectTimeout=5",
+			"ConnectTimeout=1",
 			"-o",
 			"StrictHostKeyChecking=accept-new",
 		];
@@ -538,7 +571,13 @@ const runHikvisionListenerVmCopy = (localPath: string, remotePath: string, timeo
 		let lastResult: Awaited<ReturnType<typeof runAgainstTarget>> | null = null;
 		for (const target of targets) {
 			const result = await runAgainstTarget(target);
-			if (result.exitCode === 0) return result;
+			if (result.exitCode === 0) {
+				preferredHikvisionListenerVmTargetLabel = target.label;
+				return result;
+			}
+			if (target.label === preferredHikvisionListenerVmTargetLabel) {
+				preferredHikvisionListenerVmTargetLabel = "";
+			}
 			lastResult = result;
 		}
 		return (
@@ -1045,6 +1084,50 @@ export const controller = (prisma: PrismaClient) => {
 				`${label} cannot be used as the SDK copy ${role} for employee ${employeeNo} right now (VM cannot reach ${host}:${port} before SDK login).`,
 			);
 		}
+	};
+
+	const preflightHikvisionManualCopyEndpoints = async (
+		devices: Array<{ device: any; role: "source" | "target" }>,
+		employeeNo: string,
+	) => {
+		const probes = devices.map(({ device, role }) => {
+			const { host, port } = getHikvisionSdkEndpoint(device);
+			const deviceId = String(device?.id || "").trim();
+			if (
+				!/^[A-Za-z0-9_.-]+$/.test(deviceId) ||
+				!/^[A-Za-z0-9_.-]+$/.test(host) ||
+				!/^\d+$/.test(port)
+			) {
+				throw new Error(
+					`${hikvisionDeviceLabel(device)} cannot be used as the SDK copy ${role} for employee ${employeeNo} because its SDK endpoint is invalid (${host || "missing"}:${port || "missing"}).`,
+				);
+			}
+			return { device, deviceId, host, port, role };
+		});
+		const script = [
+			...probes.map(
+				(probe) =>
+					`(if timeout 2 nc -z ${probe.host} ${probe.port} >/dev/null 2>&1; then echo '${probe.deviceId}|${probe.role}|ok'; else echo '${probe.deviceId}|${probe.role}|failed'; fi) &`,
+			),
+			"wait",
+		].join(" ");
+		const result = await runHikvisionListenerVmCommand(["bash", "-lc", script], 7000);
+		if (result.exitCode !== 0 && !result.stdout.trim()) {
+			throw new Error(
+				result.stderr.trim() || "The VM could not run the Hikvision SDK reachability preflight",
+			);
+		}
+		const statusByDeviceId = new Map(
+			result.stdout
+				.split(/\r?\n/)
+				.map((line) => line.trim().split("|"))
+				.filter((parts) => parts.length === 3)
+				.map((parts) => [parts[0], parts[2]]),
+		);
+		return probes.map((probe) => ({
+			...probe,
+			ok: statusByDeviceId.get(probe.deviceId) === "ok",
+		}));
 	};
 
 	const runHikvisionManualCopyOnVm = async (params: HikvisionManualCopyParams) => {
@@ -4298,14 +4381,14 @@ export const controller = (prisma: PrismaClient) => {
 		device: { id: string; name?: string | null },
 		options: { includeCards?: boolean; includeFingerprints?: boolean; includeFaces?: boolean } = {},
 	) => {
-		const probes = [
-			await probeHikvisionCapability({
+		const probeRequests = [
+			probeHikvisionCapability({
 				req,
 				deviceId: device.id,
 				name: "userCount",
 				endpoint: hikvisionEndpoint.accessControl.userInfo.count,
 			}),
-			await probeHikvisionCapability({
+			probeHikvisionCapability({
 				req,
 				deviceId: device.id,
 				name: "userSearch",
@@ -4321,8 +4404,8 @@ export const controller = (prisma: PrismaClient) => {
 			}),
 		];
 		if (options.includeCards) {
-			probes.push(
-				await probeHikvisionCapability({
+			probeRequests.push(
+				probeHikvisionCapability({
 					req,
 					deviceId: device.id,
 					name: "cardSearch",
@@ -4339,8 +4422,8 @@ export const controller = (prisma: PrismaClient) => {
 			);
 		}
 		if (options.includeFingerprints) {
-			probes.push(
-				await probeHikvisionCapability({
+			probeRequests.push(
+				probeHikvisionCapability({
 					req,
 					deviceId: device.id,
 					name: "fingerprintSearch",
@@ -4354,7 +4437,7 @@ export const controller = (prisma: PrismaClient) => {
 						},
 					},
 				}),
-				await probeHikvisionCapability({
+				probeHikvisionCapability({
 					req,
 					deviceId: device.id,
 					name: "fingerprintImportSetup",
@@ -4363,8 +4446,8 @@ export const controller = (prisma: PrismaClient) => {
 			);
 		}
 		if (options.includeFaces) {
-			probes.push(
-				await probeHikvisionCapability({
+			probeRequests.push(
+				probeHikvisionCapability({
 					req,
 					deviceId: device.id,
 					name: "faceDataRecord",
@@ -4372,6 +4455,7 @@ export const controller = (prisma: PrismaClient) => {
 				}),
 			);
 		}
+		const probes = await Promise.all(probeRequests);
 		const byName = Object.fromEntries(probes.map((probe) => [probe.name, probe]));
 		return {
 			deviceId: device.id,
@@ -7466,6 +7550,34 @@ export const controller = (prisma: PrismaClient) => {
 						includeFingerprints: params.includeFingerprints,
 						includeFaceRecognition: params.includeFaceRecognition,
 					}));
+		if (alreadyConverged) {
+			return {
+				sourceDeviceUser,
+				targetDeviceUser: existingTargetDeviceUser,
+				targetSyncSummary: {
+					totalSourceRecords: 1,
+					importableRecords: 1,
+					created: 0,
+					updated: 0,
+					linked: 0,
+					unmatched: 0,
+					conflict: 0,
+					disabled: 0,
+					pruned: 0,
+					noOpReason: "already_converged_persisted_truth",
+				},
+				vmCopy: {
+					waitSeconds: copyResult.waitSeconds,
+					strategy: copyResult.strategy,
+					events: copyResult.events,
+				},
+				timings: {
+					...timings,
+					totalMs: Date.now() - timingStartedAt,
+				},
+				syntheticCredentialOverlayApplied: null,
+			};
+		}
 		const { summary: targetSummary } = await timePhase("targetSingleUserRefreshMs", () =>
 			syncSingleHikvisionDeviceUserFromSource({
 			req: params.req,
@@ -7652,6 +7764,14 @@ export const controller = (prisma: PrismaClient) => {
 		const startedAt = Date.now();
 		const sourceDeviceId = String(params.sourceDevice.id);
 		const targetDeviceIds = params.targetDevices.map((device) => String(device.id));
+		const sourceRefreshStartedAt = Date.now();
+		await syncSingleHikvisionDeviceUserFromSource({
+			req: params.req,
+			organizationId: params.organizationId,
+			device: params.sourceDevice,
+			employeeNo: params.employeeNo,
+		});
+		const sourceRefreshMs = Date.now() - sourceRefreshStartedAt;
 		const savedUsers = await (prisma as any).deviceUser.findMany({
 			where: {
 				organizationId: params.organizationId,
@@ -7699,39 +7819,44 @@ export const controller = (prisma: PrismaClient) => {
 		let sharedVmCopyResult: Awaited<ReturnType<typeof runHikvisionManualCopyOnVm>> | undefined;
 		let sharedVmCopyError = "";
 		let vmAttempt = 0;
+		let vmManualCopyMs = 0;
 		const preflightStartedAt = Date.now();
 		if (physicalPlans.length) {
 			try {
-				await preflightHikvisionManualCopyEndpoint(
-					params.sourceDevice,
-					"source",
+				const preflightResults = await preflightHikvisionManualCopyEndpoints(
+					[
+						{ device: params.sourceDevice, role: "source" },
+						...physicalPlans.map(({ targetDevice }) => ({
+							device: targetDevice,
+							role: "target" as const,
+						})),
+					],
 					params.employeeNo,
 				);
+				const sourcePreflight = preflightResults.find((result) => result.role === "source");
+				if (!sourcePreflight?.ok) {
+					throw new Error(
+						`${hikvisionDeviceLabel(params.sourceDevice)} cannot be used as the SDK copy source for employee ${params.employeeNo} right now (VM cannot reach ${sourcePreflight?.host}:${sourcePreflight?.port} before SDK login).`,
+					);
+				}
+				for (const targetPreflight of preflightResults.filter(
+					(result) => result.role === "target" && !result.ok,
+				)) {
+					preflightFailures.set(
+						targetPreflight.deviceId,
+						`${hikvisionDeviceLabel(targetPreflight.device)} cannot be used as the SDK copy target for employee ${params.employeeNo} right now (VM cannot reach ${targetPreflight.host}:${targetPreflight.port} before SDK login).`,
+					);
+				}
 			} catch (error: any) {
 				sharedVmCopyError = error?.message || "The Hikvision source device is unavailable";
 			}
 			if (!sharedVmCopyError) {
-				await Promise.all(
-					physicalPlans.map(async ({ targetDevice }) => {
-						try {
-							await preflightHikvisionManualCopyEndpoint(
-								targetDevice,
-								"target",
-								params.employeeNo,
-							);
-						} catch (error: any) {
-							preflightFailures.set(
-								String(targetDevice.id),
-								error?.message || "The Hikvision target device is unavailable",
-							);
-						}
-					}),
-				);
 				const reachableTargets = physicalPlans
 					.map((plan) => plan.targetDevice)
 					.filter((targetDevice) => !preflightFailures.has(String(targetDevice.id)));
 				if (reachableTargets.length) {
 					for (vmAttempt = 1; vmAttempt <= HIKVISION_PEER_COPY_RETRY_LIMIT; vmAttempt += 1) {
+						const vmCopyStartedAt = Date.now();
 						try {
 							sharedVmCopyResult = await runHikvisionManualCopyOnVm({
 								sourceDevice: params.sourceDevice,
@@ -7742,8 +7867,10 @@ export const controller = (prisma: PrismaClient) => {
 								includeFaceRecognition: params.includeFaceRecognition,
 								skipPreflight: true,
 							});
+							vmManualCopyMs += Date.now() - vmCopyStartedAt;
 							break;
 						} catch (error: any) {
+							vmManualCopyMs += Date.now() - vmCopyStartedAt;
 							sharedVmCopyError = error?.message || "The coordinated VM SDK copy failed";
 							if (vmAttempt < HIKVISION_PEER_COPY_RETRY_LIMIT) await sleep(600 * vmAttempt);
 						}
@@ -7818,8 +7945,9 @@ export const controller = (prisma: PrismaClient) => {
 				vmAttempt,
 			},
 			timings: {
+				sourceRefreshMs,
 				preflightMs,
-				vmManualCopyMs: sharedVmCopyResult ? Date.now() - startedAt - verificationMs : 0,
+				vmManualCopyMs,
 				verificationMs,
 				totalMs: Date.now() - startedAt,
 			},
@@ -8081,6 +8209,275 @@ export const controller = (prisma: PrismaClient) => {
 			deviceLogger.error(`Hikvision peer copy failed: ${error?.message || error}`);
 			res.status(500).json(
 				buildErrorResponse(error?.message || "Failed to copy Hikvision device user", 500),
+			);
+		}
+	};
+
+	/**
+	 * Admin-only labeled synthetic kiosk biometric tap.
+	 * Creates a claimable DeviceEvent without physical-device reachability so
+	 * employee-portal claim, Playwright, and admin saved-event/realtime can be
+	 * proven offline. Payload and source are explicitly synthetic.
+	 */
+	const createSyntheticKioskLoginTap = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+
+			const deviceId = String(req.body?.deviceId || "").trim();
+			const employeeId = String(req.body?.employeeId || "").trim();
+			const employeeNo = String(req.body?.employeeNo || req.body?.vendorUserId || "").trim();
+			const note = String(req.body?.note || "").trim();
+			if (!deviceId) {
+				res.status(400).json(buildErrorResponse("deviceId is required", 400));
+				return;
+			}
+
+			const device = await prisma.device.findFirst({
+				where: {
+					id: deviceId,
+					organizationId: admin.organizationId,
+					isDeleted: false,
+				},
+				select: {
+					id: true,
+					organizationId: true,
+					name: true,
+					address: true,
+					port: true,
+					protocol: true,
+					config: true,
+				},
+			});
+			if (!device) {
+				res.status(404).json(buildErrorResponse("Device not found", 404));
+				return;
+			}
+
+			const kioskConfig = (() => {
+				const cfg =
+					device.config && typeof device.config === "object" && !Array.isArray(device.config)
+						? (device.config as Record<string, any>)
+						: {};
+				return {
+					enabled: cfg.employeeKioskLoginEnabled === true,
+					windowSeconds: Number(cfg.employeeKioskLoginWindowSeconds) || 12,
+					appCode: String(cfg.employeeKioskLoginAppCode || "hris").trim() || "hris",
+				};
+			})();
+			if (!kioskConfig.enabled) {
+				res.status(400).json(
+					buildErrorResponse(
+						"Device does not have employeeKioskLoginEnabled=true; enable kiosk login before injecting a synthetic tap",
+						400,
+					),
+				);
+				return;
+			}
+
+			let resolvedEmployee: {
+				id: string;
+				userId: string | null;
+				employeeId: string | null;
+				deviceEmpId: string | null;
+				organizationId: string;
+			} | null = null;
+			if (employeeId) {
+				resolvedEmployee = await prisma.employee.findFirst({
+					where: {
+						id: employeeId,
+						organizationId: admin.organizationId,
+						isDeleted: false,
+					},
+					select: {
+						id: true,
+						userId: true,
+						employeeId: true,
+						deviceEmpId: true,
+						organizationId: true,
+					},
+				});
+			} else if (employeeNo) {
+				const candidates = await prisma.employee.findMany({
+					where: {
+						organizationId: admin.organizationId,
+						isDeleted: false,
+						OR: [
+							{ deviceEmpId: employeeNo },
+							{ employeeId: employeeNo },
+						],
+					},
+					select: {
+						id: true,
+						userId: true,
+						employeeId: true,
+						deviceEmpId: true,
+						organizationId: true,
+					},
+					take: 5,
+				});
+				resolvedEmployee = candidates[0] || null;
+			} else {
+				// Prefer a DeviceUser already linked to an employee on this device.
+				const linkedUser = await (prisma as any).deviceUser.findFirst({
+					where: {
+						deviceId: device.id,
+						organizationId: admin.organizationId,
+						isDeleted: false,
+						employeeId: { not: null },
+					},
+					orderBy: { updatedAt: "desc" },
+					select: {
+						employeeId: true,
+						employeeNo: true,
+						vendorUserId: true,
+					},
+				});
+				if (linkedUser?.employeeId) {
+					resolvedEmployee = await prisma.employee.findFirst({
+						where: {
+							id: String(linkedUser.employeeId),
+							organizationId: admin.organizationId,
+							isDeleted: false,
+						},
+						select: {
+							id: true,
+							userId: true,
+							employeeId: true,
+							deviceEmpId: true,
+							organizationId: true,
+						},
+					});
+				}
+			}
+
+			if (!resolvedEmployee?.id) {
+				res.status(404).json(
+					buildErrorResponse(
+						"No linked employee found for synthetic kiosk tap. Pass employeeId or employeeNo for a user with an HRIS account link.",
+						404,
+					),
+				);
+				return;
+			}
+			if (!resolvedEmployee.userId) {
+				res.status(400).json(
+					buildErrorResponse(
+						"Employee has no linked user account; kiosk claim cannot issue a session",
+						400,
+					),
+				);
+				return;
+			}
+
+			const now = new Date();
+			const resolvedEmployeeNo =
+				employeeNo ||
+				String(resolvedEmployee.deviceEmpId || resolvedEmployee.employeeId || "").trim() ||
+				null;
+			const dedupeKey = [
+				"synthetic-kiosk-tap",
+				device.id,
+				resolvedEmployee.id,
+				now.toISOString(),
+				randomUUID(),
+			].join(":");
+
+			const eventRecord = await (prisma as any).deviceEvent.create({
+				data: {
+					organizationId: admin.organizationId,
+					deviceId: device.id,
+					employeeId: resolvedEmployee.id,
+					eventTime: now,
+					receivedAt: now,
+					employeeNo: resolvedEmployeeNo,
+					// Persist a currently-valid enum value; synthetic flag lives in payload/label.
+					source: SYNTHETIC_KIOSK_TAP_PERSISTED_SOURCE,
+					status: "MATCHED",
+					eventCategory: "ATTENDANCE",
+					eventAction: "TAP",
+					eventLabel: "Synthetic kiosk login tap (not a physical device event)",
+					eventConfidence: "INFERRED",
+					eventType: "SyntheticKioskLoginTap",
+					dedupeKey,
+					payload: {
+						synthetic: true,
+						syntheticKind: "kiosk-login-tap",
+						syntheticSource: SYNTHETIC_KIOSK_TAP_SOURCE,
+						physicalDeviceTruth: false,
+						persistedSource: SYNTHETIC_KIOSK_TAP_PERSISTED_SOURCE,
+						note:
+							note ||
+							"Admin-injected synthetic kiosk tap for offline claim/Playwright proof",
+						deviceId: device.id,
+						deviceName: device.name,
+						deviceIP: device.address,
+						employeeId: resolvedEmployee.id,
+						employeeNo: resolvedEmployeeNo,
+						userId: resolvedEmployee.userId,
+						kioskWindowSeconds: kioskConfig.windowSeconds,
+						appCode: kioskConfig.appCode,
+						injectedByRole: admin.role,
+						injectedAt: now.toISOString(),
+					},
+				},
+			});
+
+			await invalidateCache.byPattern("cache:device:events:*").catch(() => undefined);
+
+			const realtimeRow = {
+				...eventRecord,
+				device: {
+					id: device.id,
+					name: device.name,
+					address: device.address,
+					port: device.port,
+					protocol: device.protocol,
+				},
+				employee: {
+					id: resolvedEmployee.id,
+					employeeId: resolvedEmployee.employeeId,
+					deviceEmpId: resolvedEmployee.deviceEmpId,
+				},
+			};
+			const realtimePayload = emitDeviceEventSaved((req as any).io, realtimeRow);
+
+			res.status(201).json(
+				buildSuccessResponse(
+					"Synthetic kiosk login tap created (not physical device truth)",
+					{
+						synthetic: true,
+						physicalDeviceTruth: false,
+						source: SYNTHETIC_KIOSK_TAP_SOURCE,
+						persistedSource: SYNTHETIC_KIOSK_TAP_PERSISTED_SOURCE,
+						eventId: eventRecord.id,
+						deviceId: device.id,
+						deviceName: device.name,
+						employeeId: resolvedEmployee.id,
+						userId: resolvedEmployee.userId,
+						employeeNo: resolvedEmployeeNo,
+						eventTime: eventRecord.eventTime,
+						status: eventRecord.status,
+						eventCategory: eventRecord.eventCategory,
+						eventAction: eventRecord.eventAction,
+						kioskWindowSeconds: kioskConfig.windowSeconds,
+						claimableUntil: new Date(
+							now.getTime() + Math.max(3, kioskConfig.windowSeconds) * 1000,
+						).toISOString(),
+						realtimeEmitted: Boolean(realtimePayload),
+						claimPath: "POST /api/auth/biometric/kiosk-login/claim",
+					},
+					201,
+				),
+			);
+		} catch (error: any) {
+			deviceLogger.error(`createSyntheticKioskLoginTap failed: ${error?.message || error}`);
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Failed to create synthetic kiosk tap", 500),
 			);
 		}
 	};
@@ -12236,6 +12633,7 @@ export const controller = (prisma: PrismaClient) => {
 		startHikvisionSdkUserMergeJob,
 		getHikvisionSdkUserMergeJob,
 		mirrorHikvisionFaceToPeers,
+		createSyntheticKioskLoginTap,
 		mockHikvisionFingerprintTally,
 		mockHikvisionFaceTally,
 		backfillDeviceUsers,

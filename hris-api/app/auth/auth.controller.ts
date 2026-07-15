@@ -1469,6 +1469,190 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	/**
+	 * Public kiosk wait-state diagnosis for employee portal / Playwright.
+	 * Does not claim a tap. Returns structured classification so UIs can show
+	 * "waiting for tap" without treating 404 claim polls as hard failures.
+	 */
+	const getBiometricKioskLoginStatus = async (
+		req: AuthRequest,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const deviceId = String((req.query as AnyRecord)?.deviceId || "").trim();
+			const appCode =
+				String((req.query as AnyRecord)?.appCode || "").trim() || EMPLOYEE_KIOSK_LOGIN_DEFAULT_APP_CODE;
+			const now = new Date();
+
+			let enabledKioskDevices: Array<{
+				id: string;
+				organizationId: string;
+				name: string;
+				config: any;
+				isDeleted: boolean;
+			}> = [];
+
+			if (deviceId) {
+				const device = await prisma.device.findFirst({
+					where: { id: deviceId },
+					select: { id: true, organizationId: true, name: true, config: true, isDeleted: true },
+				});
+				if (!device || device.isDeleted === true) {
+					res.status(404).json(buildErrorResponse("Device not found", 404));
+					return;
+				}
+				const requestedConfig = normalizeEmployeeKioskLoginConfig(device.config);
+				if (requestedConfig.enabled && appCode === requestedConfig.appCode) {
+					enabledKioskDevices = [device];
+				}
+			} else {
+				const candidateDevices = await prisma.device.findMany({
+					where: { isDeleted: false },
+					select: { id: true, organizationId: true, name: true, config: true, isDeleted: true },
+				});
+				enabledKioskDevices = candidateDevices.filter((candidate) => {
+					const candidateConfig = normalizeEmployeeKioskLoginConfig(candidate.config);
+					return candidateConfig.enabled && appCode === candidateConfig.appCode;
+				});
+			}
+
+			if (enabledKioskDevices.length === 0) {
+				res.status(200).json(
+					buildSuccessResponse("No enabled kiosk devices for biometric login", {
+						waiting: true,
+						freshTapAvailable: false,
+						classification: "NO_ENABLED_KIOSK_DEVICE",
+						appCode,
+						enabledKioskDeviceCount: 0,
+						enabledKioskDevices: [],
+						newestFreshCandidate: null,
+						newestRelatedTap: null,
+						syntheticTapSupported: true,
+						syntheticTapPath: "POST /api/device/kiosk/synthetic-tap",
+						claimPath: "POST /api/auth/biometric/kiosk-login/claim",
+					}),
+				);
+				return;
+			}
+
+			const enabledDevicesById = new Map(
+				enabledKioskDevices.map((candidate) => [candidate.id, candidate]),
+			);
+			const maxWindowSeconds = Math.max(
+				...enabledKioskDevices.map(
+					(candidate) => normalizeEmployeeKioskLoginConfig(candidate.config).windowSeconds,
+				),
+				EMPLOYEE_KIOSK_LOGIN_DEFAULT_WINDOW_SECONDS,
+			);
+			// Look beyond the claim window so operators can see "stale but related" taps.
+			const lookbackSeconds = Math.max(maxWindowSeconds * 30, 3600);
+			const eventRecords = await (prisma as any).deviceEvent.findMany({
+				where: {
+					deviceId: { in: enabledKioskDevices.map((candidate) => candidate.id) },
+					eventCategory: { in: ["ATTENDANCE", "ACCESS_CONTROL"] },
+					eventAction: { in: ["TAP", "UNKNOWN"] },
+					status: {
+						in: ["MATCHED", "ATTENDANCE_CREATED", "ATTENDANCE_UPDATED"],
+					},
+					employeeId: { not: null },
+					eventTime: { gte: new Date(now.getTime() - lookbackSeconds * 1000) },
+				},
+				orderBy: [{ eventTime: "desc" }, { updatedAt: "desc" }],
+				take: 25,
+				select: {
+					id: true,
+					deviceId: true,
+					employeeId: true,
+					employeeNo: true,
+					eventTime: true,
+					eventCategory: true,
+					eventAction: true,
+					status: true,
+					source: true,
+					payload: true,
+				},
+			});
+
+			const summarizeEvent = (event: any, windowSeconds: number) => {
+				const eventTime = event?.eventTime ? new Date(event.eventTime) : null;
+				const ageSeconds =
+					eventTime && !Number.isNaN(eventTime.getTime())
+						? Math.max(0, Math.round((now.getTime() - eventTime.getTime()) / 1000))
+						: null;
+				const payload = asJsonRecord(event?.payload);
+				return {
+					eventId: event.id,
+					deviceId: event.deviceId,
+					employeeId: event.employeeId,
+					employeeNo: event.employeeNo,
+					eventTime: event.eventTime,
+					eventCategory: event.eventCategory,
+					eventAction: event.eventAction,
+					status: event.status,
+					source: event.source,
+					ageSeconds,
+					windowSeconds,
+					withinWindow: isClaimableEmployeeKioskLoginEvent({
+						event,
+						now,
+						windowSeconds,
+					}),
+					synthetic: payload.synthetic === true || String(event.source || "") === "EN_SYNTHETIC_KIOSK_TAP",
+					physicalDeviceTruth: payload.physicalDeviceTruth !== false && payload.synthetic !== true,
+				};
+			};
+
+			let newestFreshCandidate: ReturnType<typeof summarizeEvent> | null = null;
+			let newestRelatedTap: ReturnType<typeof summarizeEvent> | null = null;
+			for (const event of eventRecords) {
+				const device = enabledDevicesById.get(String(event.deviceId || ""));
+				const windowSeconds = normalizeEmployeeKioskLoginConfig(device?.config).windowSeconds;
+				const summary = summarizeEvent(event, windowSeconds);
+				if (!newestRelatedTap) newestRelatedTap = summary;
+				if (!newestFreshCandidate && summary.withinWindow) {
+					newestFreshCandidate = summary;
+					break;
+				}
+			}
+
+			const classification = newestFreshCandidate
+				? "FRESH_TAP_AVAILABLE"
+				: newestRelatedTap
+					? "NO_FRESH_TAP_STALE_ONLY"
+					: "NO_FRESH_TAP";
+
+			res.status(200).json(
+				buildSuccessResponse("Biometric kiosk login status loaded", {
+					waiting: !newestFreshCandidate,
+					freshTapAvailable: Boolean(newestFreshCandidate),
+					classification,
+					appCode,
+					enabledKioskDeviceCount: enabledKioskDevices.length,
+					enabledKioskDevices: enabledKioskDevices.map((device) => {
+						const cfg = normalizeEmployeeKioskLoginConfig(device.config);
+						return {
+							id: device.id,
+							name: device.name,
+							windowSeconds: cfg.windowSeconds,
+							appCode: cfg.appCode,
+						};
+					}),
+					newestFreshCandidate,
+					newestRelatedTap,
+					syntheticTapSupported: true,
+					syntheticTapPath: "POST /api/device/kiosk/synthetic-tap",
+					claimPath: "POST /api/auth/biometric/kiosk-login/claim",
+					checkedAt: now.toISOString(),
+				}),
+			);
+		} catch (error: any) {
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Failed to load biometric kiosk login status", 500),
+			);
+		}
+	};
+
 	const logout = async (_req: AuthRequest, res: Response, _next: NextFunction) => {
 		try {
 			const auditReq = buildAuditRequestFromToken(_req);
@@ -2236,6 +2420,7 @@ export const controller = (prisma: PrismaClient) => {
 	return {
 		login,
 		claimBiometricKioskLogin,
+		getBiometricKioskLoginStatus,
 		logout,
 		changePassword,
 		resetUserPassword,

@@ -5,6 +5,7 @@ import { uploadUserFiles } from "../../middleware/upload";
 interface IAuthController {
 	login(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 	claimBiometricKioskLogin(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
+	getBiometricKioskLoginStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 	logout(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 	changePassword(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 	resetUserPassword(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
@@ -25,6 +26,7 @@ export const router = (route: Router, controller: IAuthController): Router => {
 
 	routes.post("/login", controller.login);
 	routes.post("/biometric/kiosk-login/claim", controller.claimBiometricKioskLogin);
+	routes.get("/biometric/kiosk-login/status", controller.getBiometricKioskLoginStatus);
 	routes.post("/logout", controller.logout);
 	routes.patch("/change-password", verifyToken, controller.changePassword);
 	routes.patch("/update-password", verifyToken, controller.changePassword);

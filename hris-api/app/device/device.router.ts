@@ -111,6 +111,8 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/hikvision/mirror-face", controller.mirrorHikvisionFaceToPeers);
 	routes.post("/hikvision/mock-fingerprint", controller.mockHikvisionFingerprintTally);
 	routes.post("/hikvision/mock-face", controller.mockHikvisionFaceTally);
+	// Admin-only labeled offline kiosk tap inject (not physical device truth).
+	routes.post("/kiosk/synthetic-tap", controller.createSyntheticKioskLoginTap);
 	routes.get("/:id/activity", controller.getDeviceActivity);
 	routes.get("/:id/sync-runs", controller.getDeviceSyncRuns);
 	routes.post("/users/:userId/link", controller.linkDeviceUser);

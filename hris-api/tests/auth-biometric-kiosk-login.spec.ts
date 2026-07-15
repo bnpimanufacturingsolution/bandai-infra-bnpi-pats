@@ -365,4 +365,57 @@ describe("auth biometric kiosk login", () => {
 
 		expect(response.body.message).to.contain("already been used");
 	});
+
+	it("reports structured kiosk wait status without claiming a tap", async () => {
+		const app = express();
+		const authController = controller({
+			device: {
+				findMany: async () => [
+					{
+						id: "device-enabled",
+						organizationId: "org-1",
+						name: "Login A",
+						config: {
+							employeeKioskLoginEnabled: true,
+							employeeKioskLoginWindowSeconds: 12,
+						},
+						isDeleted: false,
+					},
+				],
+			},
+			deviceEvent: {
+				findMany: async () => [
+					{
+						id: "event-stale",
+						deviceId: "device-enabled",
+						employeeId: "emp-1",
+						employeeNo: "1",
+						eventTime: new Date(Date.now() - 60_000),
+						eventCategory: "ATTENDANCE",
+						eventAction: "TAP",
+						status: "MATCHED",
+						source: "EN_HCNETSDK_ALARM",
+						payload: {},
+					},
+				],
+			},
+		} as any);
+		app.use(express.json());
+		app.get("/auth/biometric/kiosk-login/status", (req, res, next) =>
+			authController.getBiometricKioskLoginStatus(req as any, res, next),
+		);
+
+		const response = await request(app)
+			.get("/auth/biometric/kiosk-login/status?appCode=hris")
+			.expect(200);
+
+		expect(response.body.status).to.equal("success");
+		expect(response.body.data.waiting).to.equal(true);
+		expect(response.body.data.freshTapAvailable).to.equal(false);
+		expect(response.body.data.classification).to.equal("NO_FRESH_TAP_STALE_ONLY");
+		expect(response.body.data.enabledKioskDeviceCount).to.equal(1);
+		expect(response.body.data.newestRelatedTap.eventId).to.equal("event-stale");
+		expect(response.body.data.syntheticTapSupported).to.equal(true);
+		expect(response.body.data.syntheticTapPath).to.contain("/device/kiosk/synthetic-tap");
+	});
 });
