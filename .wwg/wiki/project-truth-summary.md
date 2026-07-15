@@ -1,6 +1,6 @@
 # Project Truth Summary
 
-Last updated: 2026-07-14
+Last updated: 2026-07-15
 
 ## Current Runtime Truth
 
@@ -153,4 +153,6 @@ Last updated: 2026-07-14
 - Host-local Docker health is diagnostic only; the finish line remains VM LAN, GitOps, K3s/Argo CD, and HRIS app/API proof.
 - Keep the running VM-managed `bnpi-hris` Cloudflare Tunnel active during normal work. Do not implement "cloud mode off" as a default for the live server, because public HRIS and `ssh project-truth-hris` depend on it.
 - Treat runtime IPs as evidence snapshots unless persisted through Project Truth configuration or static addressing.
+- Long-running device-user biometric extraction is a persistent background job: the admin can close and reopen an orange progress surface without cancelling work. Reported counts are not equivalent to captured biometric envelopes.
+- Multi-device merge/preflight must use bounded concurrent reads and skip unavailable devices instead of serially consuming the full device timeout. Refreshing Sync Logs must preserve already loaded rows.
 - For historical `10.184.38.138:3100` / `10.184.38.138:3101` evidence, the serving path pointed to K3s DEV hostPort traffic. Current 2026-07-03 operator/LAN access should use pure static address `10.184.37.19`, and agents should not assume Docker Compose app/API or local feature-branch code is being served without image digest and pod evidence.

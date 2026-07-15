@@ -303,3 +303,11 @@ Update this file when:
 - high-risk behavior, production claims, approval requirements, or verification expectations change
 
 For adopted projects, do not treat inferred truth as final confirmed truth until reviewed.
+
+## Device Sync Progress And Availability Boundaries
+
+- Status: CONFIRMED by source, direct API timing, and headless Playwright on 2026-07-15.
+- Biometric extraction may outlive a modal. Its job state must remain visible and reopenable, with processed, captured, failed, cached, remaining, current item, elapsed time, and last-update evidence. Closing the modal does not cancel the job.
+- A credential count is inventory evidence only. Failed or missing SDK bytes remain a failed modality and must not be promoted into a portable envelope.
+- Device merge and log previews use bounded concurrent availability checks. Offline/unavailable devices are identified and skipped; they must not block available devices. Background refetch preserves the last usable rows rather than replacing the table with a full loading skeleton.
+- Evidence: `.runtime/device-preflight-latency-20260715-151721/` and `.runtime/biometric-portability-proof-20260715-114841/playwright-main-c-background/`.

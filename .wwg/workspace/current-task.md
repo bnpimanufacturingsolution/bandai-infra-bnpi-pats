@@ -1426,3 +1426,12 @@ Status: COMPLETE
   - Physical offline restore still needs the reviewed C++ SDK write-from-bundle
     path; direct HTTP write-back is not accepted as complete.
 - Evidence: `.runtime/multi-user-biometric-export-proof-20260714-182917/`.
+
+## 2026-07-15 Device Sync Progress And Bounded Preflight Addendum
+
+- Status: `IN_PROGRESS` for the wider biometric portability finish line; the requested background-progress and bounded offline-device UX is implemented and locally proven.
+- Device-user biometric capture is resumable and visible through an orange status modal and reopenable status badge. Main Entrance Device C job `d3a6f6f8-d16c-4919-b65e-e0b7a54502be` completed 537 modality tasks: 531 captured, 22 already present/cached, and 6 failed. The six failures remain explicit and are not treated as portable credentials.
+- Merge preview reads independent devices concurrently and excludes devices that the bounded availability preview marks unavailable. Sync Logs preserves its last usable rows while its 15-second quiet refresh runs.
+- Headless Playwright measured merge UI readiness at 3.369 seconds, merge API completion at 2.939 seconds, and sync preview refreshes at 4.406-4.677 seconds, with no console errors and no refresh skeleton replacing rows.
+- CI passed at `f57d45e`. After repairing the npm 10 lockfile contract, VM reconciliation completed with zero failures, DEV Argo CD returned `Synced/Healthy`, new app/API pods were running, LAN app/API returned HTTP 200, and `cloudflared-bnpi-hris.service` remained active. The deployed merge dry-run completed in 3.781 seconds.
+- Evidence: `.runtime/device-preflight-latency-20260715-151721/`, `.runtime/biometric-portability-proof-20260715-114841/playwright-main-c-background/`, and `.runtime/device-user-sync-jobs/d3a6f6f8-d16c-4919-b65e-e0b7a54502be.json`.
