@@ -1,67 +1,120 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
+import { expect, test, type Page } from "@playwright/test";
 
-const adminEmail = "admin@bandai.local";
-const adminPassword = "password123";
+const routeReadyTimeoutMs = 30_000;
+const timestamp = "2026-07-16T15:00:00.000Z";
+
+const adminUser = {
+	id: "user-admin",
+	email: "admin@example.test",
+	name: "Admin User",
+	role: "hris-admin",
+	subRole: "hris-admin",
+	organizationId: "org-1",
+	organization: {
+		id: "org-1",
+		name: "Test Organization",
+		code: "TEST",
+		branding: { colors: {} },
+	},
+	token: "smoke-token",
+};
+
+const readyProvisioningStatus = {
+	mode: "READY",
+	canManageSetup: true,
+	currentStep: "admin-account",
+	isProvisioned: true,
+	initializationStatus: "COMPLETED",
+	provisionedAt: timestamp,
+	provisionedBy: "user-admin",
+	previewAvailable: true,
+	steps: [],
+	summary: {
+		hasAdmin: true,
+		isActivated: true,
+		hasHrSettings: true,
+		hasTimesheetConfig: true,
+		hasPayrollCycleConfig: true,
+		hasOpenPayrollPeriod: true,
+		hasLeavePolicies: true,
+		hasDefaultCalculator: true,
+		isProvisioned: true,
+		initializationStatus: "COMPLETED",
+		previewAvailable: true,
+	},
+	organization: {
+		id: "org-1",
+		name: "Test Organization",
+		code: "TEST",
+	},
+};
 
 const devices = [
 	{
 		id: "device-online-1",
+		organizationId: "org-1",
 		name: "TEST A",
 		address: "192.168.254.189",
 		port: 443,
 		protocol: "https",
 		config: { vendor: "Hikvision" },
 		access: { username: "admin" },
+		createdAt: timestamp,
+		updatedAt: timestamp,
 	},
 	{
 		id: "device-offline-2",
+		organizationId: "org-1",
 		name: "Main Entrance Device E",
 		address: "10.184.38.168",
 		port: 443,
 		protocol: "https",
 		config: { vendor: "Hikvision" },
 		access: { username: "admin" },
+		createdAt: timestamp,
+		updatedAt: timestamp,
 	},
 ];
 
-const fulfillJson = async (route: Route, body: unknown, status = 200) => {
-	await route.fulfill({
-		status,
-		contentType: "application/json",
-		body: JSON.stringify(body),
+const json = (data: unknown, status = 200) => ({
+	status,
+	contentType: "application/json",
+	body: JSON.stringify({
+		success: true,
+		message: "ok",
+		data,
+	}),
+});
+
+const installAuth = async (page: Page) => {
+	await page.addInitScript(() => {
+		window.localStorage.setItem("authToken", "smoke-token");
+		window.localStorage.setItem("userRole", "hris-admin");
+		window.localStorage.setItem("userSubRole", "hris-admin");
 	});
 };
 
-const installDeviceReachabilityMocks = async (page: Page) => {
+const installApiMocks = async (page: Page) => {
 	await page.route("**/api/**", async (route) => {
-		const request = route.request();
-		const method = request.method().toUpperCase();
-		const url = new URL(request.url());
-		const path = url.pathname;
+		const path = new URL(route.request().url()).pathname;
 
-		if (method === "POST" && path.endsWith("/api/auth/login")) {
-			await fulfillJson(route, {
-				success: true,
-				message: "ok",
-				data: {
-					token: "reachability-token",
-					user: {
-						id: "admin-1",
-						email: adminEmail,
-						roles: ["hris-admin"],
-					},
-				},
-			});
+		if (path.endsWith("/auth/me")) {
+			await route.fulfill(json(adminUser));
 			return;
 		}
-
-		if (method === "GET" && /\/api\/device\/[^/]+\/health$/.test(path)) {
-			const deviceId = path.split("/").slice(-2)[0];
+		if (path.endsWith("/system-provisioning/status")) {
+			await route.fulfill(json(readyProvisioningStatus));
+			return;
+		}
+		if (path.includes("/device/") && path.endsWith("/health")) {
+			const parts = path.split("/").filter(Boolean);
+			const healthIndex = parts.lastIndexOf("health");
+			const deviceId = healthIndex > 0 ? parts[healthIndex - 1] : "";
 			const online = deviceId === "device-online-1";
-			await fulfillJson(route, {
-				success: true,
-				message: "Device health checked successfully",
-				data: {
+			await route.fulfill(
+				json({
 					device: {
 						id: deviceId,
 						name: online ? "TEST A" : "Main Entrance Device E",
@@ -72,7 +125,7 @@ const installDeviceReachabilityMocks = async (page: Page) => {
 					},
 					summary: {
 						status: online ? "online" : "offline",
-						checkedAt: new Date().toISOString(),
+						checkedAt: timestamp,
 						durationMs: 120,
 					},
 					checks: {
@@ -90,28 +143,25 @@ const installDeviceReachabilityMocks = async (page: Page) => {
 							latencyMs: online ? 40 : null,
 						},
 					},
-				},
-			});
+				}),
+			);
 			return;
 		}
-
-		if (method === "GET" && path.endsWith("/api/device")) {
-			await fulfillJson(route, {
-				success: true,
-				message: "ok",
-				data: {
+		if (
+			(path.endsWith("/device") || /\/device\?/.test(path) || /\/api\/device$/.test(path)) &&
+			!path.includes("/health")
+		) {
+			await route.fulfill(
+				json({
 					devices,
-					pagination: { total: devices.length, page: 1, limit: 10 },
-				},
-			});
+					pagination: { total: devices.length, page: 1, limit: 100, totalPages: 1 },
+				}),
+			);
 			return;
 		}
-
-		if (method === "GET" && path.includes("/api/device/events")) {
-			await fulfillJson(route, {
-				success: true,
-				message: "ok",
-				data: {
+		if (path.includes("/device/events")) {
+			await route.fulfill(
+				json({
 					events: [],
 					summary: {
 						total: 0,
@@ -122,17 +172,14 @@ const installDeviceReachabilityMocks = async (page: Page) => {
 						byStatus: {},
 						bySource: {},
 					},
-					pagination: { total: 0, page: 1, limit: 20 },
-				},
-			});
+					pagination: { total: 0, page: 1, limit: 25, totalPages: 0 },
+				}),
+			);
 			return;
 		}
-
-		if (method === "GET" && path.includes("/api/device/hikvision/listener")) {
-			await fulfillJson(route, {
-				success: true,
-				message: "ok",
-				data: {
+		if (path.includes("/device/hikvision/listener")) {
+			await route.fulfill(
+				json({
 					service: "project-truth-hikvision-hot-reload-listener.service",
 					vm: { host: "10.184.37.19", user: "infra" },
 					running: true,
@@ -141,7 +188,7 @@ const installDeviceReachabilityMocks = async (page: Page) => {
 					subState: "running",
 					restarts: 0,
 					execMainStatus: 0,
-					checkedAt: new Date().toISOString(),
+					checkedAt: timestamp,
 					control: { available: true, actions: ["start", "stop", "restart"] },
 					sdk: {
 						receivingCallbacks: false,
@@ -151,64 +198,62 @@ const installDeviceReachabilityMocks = async (page: Page) => {
 						devices: [],
 					},
 					logs: { available: true, recent: [] },
-				},
-			});
+				}),
+			);
 			return;
 		}
 
-		if (method === "GET" && path.includes("/api/auth/me")) {
-			await fulfillJson(route, {
-				success: true,
-				message: "ok",
-				data: {
-					id: "admin-1",
-					email: adminEmail,
-					roles: ["hris-admin"],
-				},
-			});
-			return;
-		}
-
-		await fulfillJson(route, { success: true, message: "ok", data: {} });
+		await route.fulfill(json({}));
 	});
-};
-
-const loginAsAdmin = async (page: Page) => {
-	await page.goto("/auth/login");
-	await page.getByLabel(/email/i).fill(adminEmail);
-	await page.getByLabel(/password/i).fill(adminPassword);
-	await page.getByRole("button", { name: /sign in|log in|login/i }).click();
-	await page.waitForURL(/admin|dashboard|configuration/i, { timeout: 30_000 }).catch(() => undefined);
 };
 
 test.describe("admin device reachability status", () => {
 	test("devices table shows Online/Offline status from health checks", async ({ page }) => {
-		await installDeviceReachabilityMocks(page);
-		await loginAsAdmin(page);
+		await installAuth(page);
+		await installApiMocks(page);
 		await page.goto("/admin/configuration/devices");
 
-		const online = page.locator('[data-testid="device-reachability-status"][data-device-id="device-online-1"]');
-		const offline = page.locator(
-			'[data-testid="device-reachability-status"][data-device-id="device-offline-2"]',
-		);
+		// DataTable can render desktop + card layouts, so assert on the first match.
+		const online = page
+			.locator('[data-testid="device-reachability-status"][data-device-id="device-online-1"]')
+			.first();
+		const offline = page
+			.locator('[data-testid="device-reachability-status"][data-device-id="device-offline-2"]')
+			.first();
 
-		await expect(online).toBeVisible({ timeout: 20_000 });
-		await expect(online).toHaveAttribute("data-reachability", "online");
+		await expect(online).toBeVisible({ timeout: routeReadyTimeoutMs });
+		await expect(online).toHaveAttribute("data-reachability", "online", {
+			timeout: routeReadyTimeoutMs,
+		});
 		await expect(online).toContainText(/Online/i);
 
-		await expect(offline).toBeVisible({ timeout: 20_000 });
-		await expect(offline).toHaveAttribute("data-reachability", "offline");
+		await expect(offline).toBeVisible({ timeout: routeReadyTimeoutMs });
+		await expect(offline).toHaveAttribute("data-reachability", "offline", {
+			timeout: routeReadyTimeoutMs,
+		});
 		await expect(offline).toContainText(/Offline/i);
+
+		const screenshotDir = resolve(
+			process.cwd(),
+			"..",
+			".runtime",
+			"device-reachability-proof",
+			"screenshots",
+		);
+		mkdirSync(screenshotDir, { recursive: true });
+		await page.screenshot({
+			path: resolve(screenshotDir, "devices-table-reachability-status.png"),
+			fullPage: true,
+		});
 	});
 
 	test("device events filter shows green/red reachability dots", async ({ page }) => {
-		await installDeviceReachabilityMocks(page);
-		await loginAsAdmin(page);
+		await installAuth(page);
+		await installApiMocks(page);
 		await page.goto("/admin/configuration/devices/events?view=saved");
 
-		// Open the device filter combobox (first select on filters row is Device).
 		const deviceFilter = page.getByRole("combobox").first();
-		await expect(deviceFilter).toBeVisible({ timeout: 20_000 });
+		await expect(deviceFilter).toBeVisible({ timeout: routeReadyTimeoutMs });
 		await deviceFilter.click();
 
 		const onlineDot = page.locator(
@@ -218,9 +263,22 @@ test.describe("admin device reachability status", () => {
 			'[data-testid="device-filter-reachability-dot"][data-device-id="device-offline-2"]',
 		);
 
-		await expect(onlineDot).toBeVisible({ timeout: 15_000 });
+		await expect(onlineDot).toBeVisible({ timeout: routeReadyTimeoutMs });
 		await expect(onlineDot).toHaveAttribute("data-reachability", "online");
 		await expect(offlineDot).toBeVisible();
 		await expect(offlineDot).toHaveAttribute("data-reachability", "offline");
+
+		const screenshotDir = resolve(
+			process.cwd(),
+			"..",
+			".runtime",
+			"device-reachability-proof",
+			"screenshots",
+		);
+		mkdirSync(screenshotDir, { recursive: true });
+		await page.screenshot({
+			path: resolve(screenshotDir, "device-events-filter-reachability-dots.png"),
+			fullPage: true,
+		});
 	});
 });

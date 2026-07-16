@@ -152,16 +152,15 @@ export type DeviceHealthMapEntry = {
  * Source of truth: GET /api/device/:id/health (summary.status online|degraded|offline).
  */
 export const useDeviceHealthMap = (deviceIds: string[], enabled = true) => {
+	// Stabilize identity so parent .map() arrays do not thrash useQueries.
+	const deviceIdsKey = (deviceIds || [])
+		.map((id) => String(id || "").trim())
+		.filter(Boolean)
+		.sort()
+		.join("|");
 	const uniqueIds = useMemo(
-		() =>
-			Array.from(
-				new Set(
-					(deviceIds || [])
-						.map((id) => String(id || "").trim())
-						.filter(Boolean),
-				),
-			),
-		[deviceIds],
+		() => (deviceIdsKey ? deviceIdsKey.split("|") : []),
+		[deviceIdsKey],
 	);
 
 	const queries = useQueries({
