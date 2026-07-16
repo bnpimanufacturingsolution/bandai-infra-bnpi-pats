@@ -548,6 +548,7 @@ export interface DeviceUserSyncJobProgress {
 	message: string;
 	cancelRequested?: boolean;
 	cancelRequestedAt?: string;
+	stale?: boolean;
 	results: Array<{
 		deviceId: string;
 		deviceName: string;
@@ -557,6 +558,7 @@ export interface DeviceUserSyncJobProgress {
 		error?: string | null;
 	}>;
 	startedAt: string;
+	updatedAt?: string;
 	completedAt?: string;
 }
 

@@ -394,10 +394,24 @@ type DeviceUserPeerTallyRow = {
 };
 
 const DEVICE_USER_SYNC_JOB_STORAGE_KEY = "hris.device-user-sync-job";
+const DEVICE_USER_SYNC_PROCESSING_STALE_MS = 30 * 60 * 1000;
 const DEFAULT_BULK_DEVICE_USER_SYNC_MODE: DeviceUserSyncMode = "full_refresh";
 const formatDeviceUserSyncJobId = (value?: string | null) => {
 	if (!value) return "No job id";
 	return value.length > 12 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
+};
+const getDeviceUserSyncProgressTime = (progress?: DeviceUserSyncJobProgress | null) => {
+	const value = progress?.updatedAt || progress?.completedAt || progress?.startedAt || null;
+	if (!value) return null;
+	const time = new Date(value).getTime();
+	return Number.isFinite(time) ? time : null;
+};
+const isDeviceUserSyncProgressFresh = (progress?: DeviceUserSyncJobProgress | null) => {
+	if (progress?.stale) return false;
+	if (!progress || progress.status !== "processing") return true;
+	const lastProgressAt = getDeviceUserSyncProgressTime(progress);
+	if (!lastProgressAt) return false;
+	return Date.now() - lastProgressAt <= DEVICE_USER_SYNC_PROCESSING_STALE_MS;
 };
 const formatDeviceUserSyncElapsed = (startedAt?: string | null, completedAt?: string | null) => {
 	if (!startedAt) return "Not recorded";
@@ -789,6 +803,24 @@ export function DeviceEnrollmentPanel({
 			description: "Open Sync device users again to run the latest device-user refresh.",
 		});
 	}, [activeDeviceUserSyncJob, isDeviceUserSyncJobError]);
+
+	useEffect(() => {
+		if (!activeDeviceUserSyncJob || !deviceUserSyncJobProgress) return;
+		if (isDeviceUserSyncProgressFresh(deviceUserSyncJobProgress)) return;
+		setActiveDeviceUserSyncJob(null);
+		setBulkDeviceUserSyncState((current) => ({
+			...current,
+			open: current.open,
+			status: "error",
+			message:
+				"Previous device-user sync status stopped updating. Start Sync device users again when you want a fresh, triggered run.",
+			lastProgress: null,
+		}));
+		toast.warning("Previous device-user sync status stopped updating", {
+			id: "device-user-sync-progress",
+			description: "No device-user sync is being shown as active until you trigger a fresh run.",
+		});
+	}, [activeDeviceUserSyncJob, deviceUserSyncJobProgress]);
 
 	const fallbackDeviceUserId = String(
 		activeEmployee?.deviceEmpId || activeEmployee?.employeeId || "",
@@ -3092,7 +3124,9 @@ export function DeviceEnrollmentPanel({
 		],
 	] as const;
 	const effectiveDeviceUserSyncJobProgress =
-		activeDeviceUserSyncJob && deviceUserSyncJobProgress
+		activeDeviceUserSyncJob &&
+		deviceUserSyncJobProgress &&
+		isDeviceUserSyncProgressFresh(deviceUserSyncJobProgress)
 			? deviceUserSyncJobProgress
 			: bulkDeviceUserSyncState.lastProgress || null;
 	const hasEffectiveDeviceUserSyncJobProgress = Boolean(effectiveDeviceUserSyncJobProgress);
@@ -3140,6 +3174,11 @@ export function DeviceEnrollmentPanel({
 		effectiveDeviceUserSyncJobProgress?.startedAt,
 		effectiveDeviceUserSyncJobProgress?.completedAt,
 	);
+	const deviceUserSyncLastProgressAt =
+		effectiveDeviceUserSyncJobProgress?.updatedAt ||
+		effectiveDeviceUserSyncJobProgress?.completedAt ||
+		effectiveDeviceUserSyncJobProgress?.startedAt ||
+		null;
 	const deviceUserSyncStatusBubble = deviceUserSyncJobIsProcessing
 		? deviceUserSyncBiometricTotal > 0
 			? metricValue(deviceUserSyncBiometricRemaining)
@@ -5710,7 +5749,13 @@ export function DeviceEnrollmentPanel({
 									</div>
 									<div>
 										<span className="block text-orange-700">Last update</span>
-										<span className="font-medium">{deviceUserSyncJobUpdatedAt ? formatDateTime(new Date(deviceUserSyncJobUpdatedAt).toISOString()) : "Waiting for update"}</span>
+										<span className="font-medium">
+											{deviceUserSyncLastProgressAt
+												? formatDateTime(deviceUserSyncLastProgressAt)
+												: deviceUserSyncJobUpdatedAt
+													? formatDateTime(new Date(deviceUserSyncJobUpdatedAt).toISOString())
+													: "Waiting for update"}
+										</span>
 									</div>
 									<div>
 										<span className="block text-orange-700">Run state</span>

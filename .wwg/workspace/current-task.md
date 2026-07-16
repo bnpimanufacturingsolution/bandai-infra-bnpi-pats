@@ -1,5 +1,25 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-17 Device-user sync stale processing truth
+
+- Task mode: Regression repair + Playwright-first proof + API contract guard.
+- Goal: A 35-hour stale Device-user sync status must not be displayed as live processing after app/dev-server startup. Sync device users remains admin-triggered; persisted status may reopen only when the job has recent progress evidence.
+- Implemented:
+  - `hris-app/app/routes/admin/devices/enroll.tsx` now treats processing sync-job progress without a recent `updatedAt`/progress timestamp as stale and clears the active startup status instead of showing a live Sync status badge/modal.
+  - `hris-api/app/device/device.controller.ts` now stamps device-user sync jobs with `updatedAt`, updates it on progress writes, and marks stale persisted processing snapshots as failed/stopped on job lookup.
+  - `hris-app/app/services/devices.service.ts` exposes optional `updatedAt` on `DeviceUserSyncJobProgress`.
+  - Playwright regression coverage added for stale startup state while preserving the fresh live-status toolbar path.
+- Proof:
+  - Failing-first Playwright reproduced the stale startup bug before the fix.
+  - `npm run test:e2e:smoke -- tests/smoke/admin-device-user-summary-toolbar.spec.ts` passed 2/2 after the fix.
+  - `npx tsx node_modules/mocha/bin/mocha --no-config tests/device-user-api-contract.spec.ts --grep "expires stale processing"` passed 1/1.
+  - `npm run typecheck` in `hris-api` passed.
+- Existing unrelated validation drift:
+  - `npm run typecheck:test` in `hris-app` still fails in `app/routes/employee/dashboard/TimesheetsTab.test.tsx` with a pre-existing `UseQueryResult` mock-shape type error.
+  - `npm test -- tests/device-user-api-contract.spec.ts` in `hris-api` runs the full backend suite because the script already includes `tests/**/*.spec.ts`; that broader run still has unrelated historical failures, and the focused Mocha command above was used for this contract.
+- Truth sync: Project Truth and Project Truth summary now state that processing device-user sync snapshots older than 30 minutes without progress evidence are stale and require a fresh admin-triggered run.
+- Recommendation capture: No new recommendations were identified.
+
 Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim Sync logs, no VM primary jargon)
 
 ## Latest Task Addendum - 2026-07-16 Device admin UX clarity pass

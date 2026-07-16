@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 const timestamp = "2026-07-15T11:53:00.000Z";
+const freshJobTimestamp = new Date().toISOString();
 const evidenceDir = resolve(process.cwd(), "../.runtime/browser-evidence/screenshots");
 const syncJobId = "job-device-user-sync-live";
 
@@ -85,11 +86,19 @@ const liveSyncJobProgress = {
 	biometricTotal: 0,
 	biometricProcessed: 0,
 	biometricFailed: 0,
-	startedAt: timestamp,
+	startedAt: freshJobTimestamp,
+	updatedAt: freshJobTimestamp,
 	completedAt: null,
 	cancelRequested: false,
 	currentModality: null,
 	message: "Refreshing device users",
+};
+
+const staleSyncJobProgress = {
+	...liveSyncJobProgress,
+	startedAt: "2026-07-15T19:53:00.000Z",
+	updatedAt: "2026-07-15T19:53:00.000Z",
+	message: "Stale persisted device-user sync should not be treated as live",
 };
 
 const json = (data: unknown) => ({
@@ -98,7 +107,8 @@ const json = (data: unknown) => ({
 	body: JSON.stringify({ success: true, message: "OK", data }),
 });
 
-async function installMockApi(page: Page) {
+async function installMockApi(page: Page, options?: { job?: typeof liveSyncJobProgress }) {
+	const job = options?.job || liveSyncJobProgress;
 	await page.addInitScript(
 		({ jobId, job }) => {
 			window.localStorage.setItem("authToken", "smoke-token");
@@ -109,7 +119,7 @@ async function installMockApi(page: Page) {
 				JSON.stringify({ jobId, startedAt: job.startedAt }),
 			);
 		},
-		{ jobId: syncJobId, job: liveSyncJobProgress },
+		{ jobId: syncJobId, job },
 	);
 
 	await page.route("**/api/**", async (route) => {
@@ -137,7 +147,7 @@ async function installMockApi(page: Page) {
 		}
 
 		if (path.endsWith(`/device/users/sync-jobs/${syncJobId}`)) {
-			await route.fulfill(json(liveSyncJobProgress));
+			await route.fulfill(json(job));
 			return;
 		}
 
@@ -198,6 +208,23 @@ async function installMockApi(page: Page) {
 		await route.fulfill(json({}));
 	});
 }
+
+test("Device Users does not revive a stale persisted processing job on startup", async ({
+	page,
+}) => {
+	await installMockApi(page, { job: staleSyncJobProgress });
+
+	await page.goto("/admin/configuration/devices?action=device-users", {
+		waitUntil: "domcontentloaded",
+	});
+
+	const dialog = page.getByRole("dialog").filter({ hasText: "Sync Center" });
+	await expect(dialog.getByRole("heading", { name: "Sync Center" })).toBeVisible();
+	await expect(
+		dialog.getByRole("button", { name: /Open device-user sync status|Sync status/i }),
+	).toHaveCount(0);
+	await expect(page.getByText(/Processing \d+ of \d+ biometric credentials/i)).toHaveCount(0);
+});
 
 test("Device Users summary toolbar keeps title and Sync status aligned", async ({ page }) => {
 	mkdirSync(evidenceDir, { recursive: true });

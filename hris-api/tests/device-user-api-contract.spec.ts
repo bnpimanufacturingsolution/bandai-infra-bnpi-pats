@@ -63,6 +63,19 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("deviceIds");
 	});
 
+	it("expires stale processing device-user sync job snapshots instead of reviving them", () => {
+		const controller = controllerSource();
+
+		expect(controller).to.include("DEVICE_USER_SYNC_PROCESSING_STALE_MS");
+		expect(controller).to.include("updatedAt: Date");
+		expect(controller).to.include("updatedAt: new Date()");
+		expect(controller).to.include("stale?: boolean");
+		expect(controller).to.include("stale: true");
+		expect(controller).to.include("isDeviceUserSyncJobStale");
+		expect(controller).to.include("markDeviceUserSyncJobStale");
+		expect(controller).to.include("Device-user sync stopped updating");
+	});
+
 	it("persists log sync run summaries so known skipped rows do not remain forever missing", () => {
 		const controller = controllerSource();
 		expect(controller).to.include("deviceSyncRun.create");

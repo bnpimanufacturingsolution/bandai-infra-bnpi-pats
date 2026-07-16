@@ -48,10 +48,35 @@ describe("sync-logs-event-rows.helper", () => {
 		expect(tap?.filterAfterSync).to.equal("Attendance > Tap");
 
 		expect(unknownOp?.status).to.equal("Needs review");
+		expect(unknownOp?.eventLabel).to.equal("Unclassified operations");
 		expect(unknownOp?.filterAfterSync).to.equal("Unknown > Unknown");
 
 		// Never invent lifecycle rows from DeviceUser inventory — only DeviceEvent already + log sources.
 		expect(rows.every((row) => row.evidenceSource !== "DEVICE_USER_INVENTORY")).to.equal(true);
+	});
+
+	it("does not treat residual unknown volume as ready enroll truth", () => {
+		const alreadyByAction = countAlreadyInHrisByAction([
+			{ eventAction: "TAP", count: 23 },
+		]);
+		const rows = buildHikvisionSyncLogsEventRows({
+			deviceId: "dev-a",
+			alreadyByAction,
+			operationSourceOk: true,
+			operationSourceTotal: 20550,
+			attendanceSourceOk: true,
+			attendanceSourceTotal: 4752,
+			hideSilentZeros: true,
+		});
+		const unknownOp = rows.find((row) => row.eventAction === "UNKNOWN_OPERATION");
+		const fingerprint = rows.find((row) => row.eventAction === "FINGERPRINT_ENROLLED");
+		const userCreated = rows.find((row) => row.eventAction === "USER_CREATED");
+		expect(unknownOp?.willAdd).to.equal(20550);
+		expect(unknownOp?.status).to.equal("Needs review");
+		expect(unknownOp?.eventLabel).to.equal("Unclassified operations");
+		// Without logSearch classification sample, do not invent enroll will-add.
+		expect(fingerprint?.willAdd ?? 0).to.equal(0);
+		expect(userCreated?.willAdd ?? 0).to.equal(0);
 	});
 
 	it("reports dual source checks for Sync logs summary", () => {

@@ -164,7 +164,9 @@ export const SYNC_LOGS_EVENT_CATALOG: CatalogEntry[] = [
 	},
 	{
 		eventAction: "UNKNOWN_OPERATION",
-		eventLabel: "Unknown operation",
+		// Residual logSearch totals that were not classified into enroll/user rows.
+		// Not the same as proven "new enrollments".
+		eventLabel: "Unclassified operations",
 		eventCategory: "UNKNOWN",
 		sourceProof: "Operation logs",
 		readsFrom: "ContentMgmt/logSearch",
@@ -348,15 +350,17 @@ export const buildHikvisionSyncLogsEventRows = (params: {
 		const sourceOk = params.operationSourceOk && !failed;
 		const deviceCount = opDevice.get(entry.eventAction) ?? opDevice.get(actionKey);
 		if (typeof deviceCount === "number" && Number.isFinite(deviceCount)) {
+			// Classified counts from logSearch sample/full for this action.
+			// These are proven observed counts, not residual dump.
 			willAdd = Math.max(0, Number(deviceCount) - alreadyInHris);
 		} else if (entry.eventAction === "UNKNOWN_OPERATION") {
-			// Put unclassified residual on unknown when we only know totals.
+			// Residual that is not classified as enroll/user/card/etc.
+			// This is NOT proof of new enrollments — only unclassified log volume.
 			const residual = operationResidualFromTotal;
 			if (residual === null) {
-				willAdd = sourceOk ? null : null;
+				willAdd = null;
 				needsReview = sourceOk;
 			} else {
-				// Subtract known per-action device will-add if sample provided.
 				const knownWill = Array.from(opDevice.entries())
 					.filter(([action]) => action !== "UNKNOWN_OPERATION" && action !== "UNKNOWN")
 					.reduce((sum, [action, count]) => {
@@ -364,11 +368,13 @@ export const buildHikvisionSyncLogsEventRows = (params: {
 						return sum + Math.max(0, count - alreadyFor);
 					}, 0);
 				willAdd = Math.max(0, residual - knownWill);
-				needsReview = willAdd > 0;
+				// Always needs review: operator must not treat residual as enroll truth.
+				needsReview = true;
 			}
 		} else if (sourceOk && operationResidualFromTotal !== null && operationDeviceTotal === 0) {
-			// Source total known but no per-type breakdown: zero will-add on known types.
+			// Source total known but no per-type breakdown yet: do not invent enroll will-add.
 			willAdd = 0;
+			needsReview = operationResidualFromTotal > 0;
 		} else if (!sourceOk) {
 			willAdd = null;
 		} else {

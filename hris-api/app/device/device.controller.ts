@@ -25,6 +25,7 @@ import { createEmployeeHelpers } from "../../helper/employee.helper";
 import {
 	buildHikvisionDeviceEventDedupeKey,
 	buildHikvisionLogSearchXml,
+	classifyHikvisionLogSearchRow,
 	normalizeHikvisionDeviceEventSource,
 	normalizeHikvisionFutureSkewedEventTime,
 	normalizeHikvisionLogSearchRow,
@@ -200,6 +201,7 @@ const DEVICE_USER_SYNC_JOB_DIR = path.join(
 	".runtime",
 	"device-user-sync-jobs",
 );
+const DEVICE_USER_SYNC_PROCESSING_STALE_MS = 30 * 60 * 1000;
 
 type DeviceImportJobStatus = "processing" | "completed" | "failed" | "cancelled";
 
@@ -324,8 +326,10 @@ type DeviceUserSyncJob = {
 	message: string;
 	cancelRequested?: boolean;
 	cancelRequestedAt?: Date;
+	stale?: boolean;
 	results: DeviceUserSyncJobResult[];
 	startedAt: Date;
+	updatedAt: Date;
 	completedAt?: Date;
 };
 
@@ -425,6 +429,7 @@ const updateDeviceUserSyncJob = (
 	const nextJob = {
 		...job,
 		...patch,
+		updatedAt: new Date(),
 		results: patch.results || job.results,
 	};
 	deviceUserSyncJobs.set(jobId, nextJob);
@@ -434,6 +439,7 @@ const updateDeviceUserSyncJob = (
 const serializeDeviceUserSyncJob = (job: DeviceUserSyncJob) => ({
 	...job,
 	startedAt: job.startedAt instanceof Date ? job.startedAt.toISOString() : job.startedAt,
+	updatedAt: job.updatedAt instanceof Date ? job.updatedAt.toISOString() : job.updatedAt,
 	completedAt:
 		job.completedAt instanceof Date ? job.completedAt.toISOString() : job.completedAt || null,
 });
@@ -455,10 +461,16 @@ const readDeviceUserSyncJob = (jobId: string): DeviceUserSyncJob | null => {
 		const filePath = path.join(DEVICE_USER_SYNC_JOB_DIR, `${jobId}.json`);
 		if (!fsSync.existsSync(filePath)) return null;
 		const parsed = JSON.parse(fsSync.readFileSync(filePath, "utf8"));
+		const startedAt = parsed.startedAt ? new Date(parsed.startedAt) : new Date();
+		const completedAt = parsed.completedAt ? new Date(parsed.completedAt) : undefined;
+		const updatedAt = parsed.updatedAt
+			? new Date(parsed.updatedAt)
+			: completedAt || startedAt;
 		return {
 			...parsed,
-			startedAt: parsed.startedAt ? new Date(parsed.startedAt) : new Date(),
-			completedAt: parsed.completedAt ? new Date(parsed.completedAt) : undefined,
+			startedAt,
+			updatedAt,
+			completedAt,
 			results: Array.isArray(parsed.results) ? parsed.results : [],
 			biometricTotal: Number(parsed.biometricTotal || 0),
 			biometricProcessed: Number(parsed.biometricProcessed || 0),
@@ -470,6 +482,29 @@ const readDeviceUserSyncJob = (jobId: string): DeviceUserSyncJob | null => {
 		deviceLogger.warn(`Failed to read device-user sync job snapshot: ${error}`);
 		return null;
 	}
+};
+
+const isDeviceUserSyncJobStale = (job: DeviceUserSyncJob) => {
+	if (job.status !== "processing") return false;
+	const lastProgressAt = job.updatedAt || job.startedAt;
+	const lastProgressTime = lastProgressAt instanceof Date ? lastProgressAt.getTime() : NaN;
+	return !Number.isFinite(lastProgressTime) || Date.now() - lastProgressTime > DEVICE_USER_SYNC_PROCESSING_STALE_MS;
+};
+
+const markDeviceUserSyncJobStale = (job: DeviceUserSyncJob) => {
+	const now = new Date();
+	const staleJob: DeviceUserSyncJob = {
+		...job,
+		status: "failed",
+		stale: true,
+		message:
+			"Device-user sync stopped updating. Start Sync device users again when you want a fresh, triggered run.",
+		updatedAt: now,
+		completedAt: now,
+	};
+	deviceUserSyncJobs.set(job.jobId, staleJob);
+	persistDeviceUserSyncJob(staleJob);
+	return staleJob;
 };
 
 const updateDeviceUserMergeJob = (
@@ -2558,8 +2593,13 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const getHikvisionLogSearchTotal = async (req: Request, deviceId: string) => {
+	const getHikvisionLogSearchTotal = async (
+		req: Request,
+		deviceId: string,
+		options: { sampleClassify?: boolean } = {},
+	) => {
 		const endTime = formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
+		const sampleClassify = options.sampleClassify === true;
 		try {
 			const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
 				method: "POST",
@@ -2588,9 +2628,58 @@ export const controller = (prisma: PrismaClient) => {
 					: parsed.rows.length > 0
 						? parsed.rows.length
 						: null;
+
+			// Recent sample classification so Sync logs can show User created /
+			// Fingerprint enrolled instead of dumping every residual into Unknown.
+			let byAction: Record<string, number> | null = null;
+			let sampleSize = 0;
+			if (sampleClassify && count !== null && count > 0) {
+				try {
+					const sampleMax = 80;
+					const startPos = Math.max(0, Number(count) - sampleMax);
+					const sampleResponse = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
+						method: "POST",
+						deviceId,
+						prisma,
+						request: req,
+						timeoutMs: HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS,
+						ensureJsonFormat: false,
+						rawResponse: true,
+						headers: {
+							Accept: "application/xml, text/xml, */*",
+							"Content-Type": "application/xml; charset=UTF-8",
+						},
+						body: buildHikvisionLogSearchXml({
+							searchId: `hris-logsearch-sample-${Date.now()}`,
+							startTime: "2000-01-01T00:00:00+08:00",
+							endTime,
+							maxResults: sampleMax,
+							searchResultPosition: startPos,
+						}),
+					});
+					const sampleParsed = parseHikvisionLogSearchResponse(
+						String(sampleResponse?.raw || ""),
+					);
+					const counts = new Map<string, number>();
+					for (const row of sampleParsed.rows || []) {
+						const classified = classifyHikvisionLogSearchRow(row);
+						const action = String(classified?.eventAction || "UNKNOWN_OPERATION").trim();
+						counts.set(action, (counts.get(action) || 0) + 1);
+						sampleSize += 1;
+					}
+					if (counts.size) {
+						byAction = Object.fromEntries(counts.entries());
+					}
+				} catch {
+					// Sample is best-effort; total still usable for residual honesty.
+				}
+			}
+
 			return {
 				ok: count !== null || Boolean(parsed.responseStatus),
 				count,
+				byAction,
+				sampleSize,
 				error: count === null ? "Operation logs total unavailable" : null,
 				raw: { responseStatus: parsed.responseStatus, totalMatches: parsed.totalMatches },
 			};
@@ -2598,6 +2687,8 @@ export const controller = (prisma: PrismaClient) => {
 			return {
 				ok: false,
 				count: null,
+				byAction: null,
+				sampleSize: 0,
 				error:
 					error?.data?.errorCode ||
 					error?.data?.errorCause ||
@@ -2611,10 +2702,11 @@ export const controller = (prisma: PrismaClient) => {
 	const getHikvisionSourceCounts = async (
 		req: Request,
 		deviceId: string,
-		options: { includeDirectUserInventory?: boolean } = {},
+		options: { includeDirectUserInventory?: boolean; sampleOperationClassify?: boolean } = {},
 	) => {
 		const startedAt = Date.now();
 		const includeDirectUserInventory = options.includeDirectUserInventory !== false;
+		const sampleOperationClassify = options.sampleOperationClassify === true;
 		const endTime = formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
 		// Sync logs only needs event + operation totals. Full UserInfo inventory is slow
 		// and must not block the modal when other devices are offline.
@@ -2649,7 +2741,9 @@ export const controller = (prisma: PrismaClient) => {
 				},
 				["totalMatches", "numOfMatches", "totalNum", "totalNumber", "total", "eventTotal"],
 			),
-			getHikvisionLogSearchTotal(req, deviceId),
+			getHikvisionLogSearchTotal(req, deviceId, {
+				sampleClassify: sampleOperationClassify,
+			}),
 			includeDirectUserInventory
 				? fetchAllHikvisionDeviceUsers(req, { id: deviceId }).catch(() => null)
 				: Promise.resolve(null),
@@ -2657,11 +2751,22 @@ export const controller = (prisma: PrismaClient) => {
 		const directCredentialInventory = Array.isArray(directUsers)
 			? directUsers.map((user) => extractHikvisionCredentialSummary(user))
 			: null;
+		const operationDeviceByAction =
+			logSearch.byAction && typeof logSearch.byAction === "object"
+				? new Map(
+						Object.entries(logSearch.byAction).map(([action, count]) => [
+							action,
+							Number(count) || 0,
+						]),
+					)
+				: null;
 
 		return {
 			ok: userSearch.ok || eventSearch.ok || logSearch.ok,
 			totalEvents: eventSearch.count,
 			operationLogTotal: logSearch.count,
+			operationDeviceByAction,
+			operationSampleSize: Number(logSearch.sampleSize || 0) || 0,
 			userCount: userSearch.count,
 			fingerprintUserCount: directCredentialInventory
 				? directCredentialInventory.filter((summary) => summary.fingerprintCount > 0).length
@@ -2714,6 +2819,9 @@ export const controller = (prisma: PrismaClient) => {
 			const directCounts = await getHikvisionSourceCounts(req, deviceId, {
 				// Event-first Sync logs must not wait on full user inventory pages.
 				includeDirectUserInventory: !syncPreviewMode,
+				// Sample recent operation logs so enroll/user-created are not hidden
+				// behind a single residual "Unknown operation" bucket.
+				sampleOperationClassify: syncPreviewMode,
 			});
 			if (
 				directCounts.ok &&
@@ -10537,6 +10645,7 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const jobId = randomUUID();
+			const startedAt = new Date();
 			const job: DeviceUserSyncJob = {
 				jobId,
 				status: "processing",
@@ -10553,7 +10662,8 @@ export const controller = (prisma: PrismaClient) => {
 				biometricFailed: 0,
 				message: getBulkSyncModeQueuedMessage(syncMode),
 				results: [],
-				startedAt: new Date(),
+				startedAt,
+				updatedAt: startedAt,
 			};
 			deviceUserSyncJobs.set(jobId, job);
 			persistDeviceUserSyncJob(job);
@@ -10589,7 +10699,10 @@ export const controller = (prisma: PrismaClient) => {
 		const gate = assertDeviceUserAdmin(req, res);
 		if (!gate) return;
 		const jobId = String(req.params.jobId || "").trim();
-		const job = deviceUserSyncJobs.get(jobId) || readDeviceUserSyncJob(jobId);
+		const foundJob = deviceUserSyncJobs.get(jobId) || readDeviceUserSyncJob(jobId);
+		const job = foundJob && isDeviceUserSyncJobStale(foundJob)
+			? markDeviceUserSyncJobStale(foundJob)
+			: foundJob;
 		if (job && !deviceUserSyncJobs.has(jobId)) deviceUserSyncJobs.set(jobId, job);
 		if (!job || job.organizationId !== gate.organizationId) {
 			res.status(404).json(
@@ -12041,11 +12154,24 @@ export const controller = (prisma: PrismaClient) => {
 									(operationLogTotal !== null && operationLogTotal !== undefined),
 							)
 						: false;
+				const operationDeviceByAction =
+					device.vendor === "Hikvision" && sourcePreview?.operationDeviceByAction instanceof Map
+						? (sourcePreview.operationDeviceByAction as Map<string, number>)
+						: device.vendor === "Hikvision" &&
+							  sourcePreview?.operationDeviceByAction &&
+							  typeof sourcePreview.operationDeviceByAction === "object"
+							? new Map(
+									Object.entries(sourcePreview.operationDeviceByAction).map(
+										([action, count]) => [action, Number(count) || 0],
+									),
+								)
+							: null;
 				const eventRows =
 					device.vendor === "Hikvision"
 						? buildHikvisionSyncLogsEventRows({
 								deviceId: device.id,
 								alreadyByAction,
+								operationDeviceByAction,
 								operationSourceOk: operationOk,
 								operationSourceTotal:
 									operationLogTotal === null || operationLogTotal === undefined
