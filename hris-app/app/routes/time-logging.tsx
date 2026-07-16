@@ -83,7 +83,7 @@ function TimeLogging() {
 
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+	const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 	const timeActionRef = useRef(timeAction);
 	const isProcessingRef = useRef(isProcessing);
 

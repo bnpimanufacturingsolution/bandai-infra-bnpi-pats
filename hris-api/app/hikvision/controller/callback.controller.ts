@@ -28,6 +28,7 @@ import {
 	isHikvisionAttendancePunchEvent,
 	normalizeHikvisionDeviceEventSource,
 	normalizeHikvisionFutureSkewedEventTime,
+	normalizeHikvisionSdkCallbackEvidence,
 	parseHikvisionBodyPayload,
 	parseHikvisionEventTime,
 	selectHikvisionPunchPair,
@@ -347,8 +348,32 @@ export const controller = (prisma: PrismaClient) => {
 				console.log(
 					`[HIKVISION_CALLBACK][CTRL] content-type=${req.get("content-type") || "unknown"}`,
 				);
-				const payload = parseHikvisionBodyPayload(req.body);
+				const rawPayload = parseHikvisionBodyPayload(req.body);
+				const evidence = normalizeHikvisionSdkCallbackEvidence(rawPayload);
+				const payload = {
+					...rawPayload,
+					actionCode: evidence.actionCode || (rawPayload as any).actionCode,
+					evidenceSource: evidence.evidenceSource,
+					directDeviceEvidence: evidence.directDeviceEvidence,
+					vendorAction:
+						evidence.actionCode || evidence.minor || (rawPayload as any).actionCode || null,
+					vendorCode: evidence.actionCode || evidence.minor || null,
+					rawDeviceTime:
+						evidence.time || (rawPayload as any).time || (rawPayload as any).dateTime || null,
+					operator:
+						(rawPayload as any).operator ||
+						(rawPayload as any).userName ||
+						(rawPayload as any).rawAlarm?.operator ||
+						null,
+					remoteHost:
+						(rawPayload as any).remoteHost ||
+						(rawPayload as any).rawAlarm?.remoteHost ||
+						evidence.deviceIP ||
+						null,
+					rawEvidence: rawPayload,
+				};
 				const event = extractHikvisionEventData(payload);
+				event.actionCode = evidence.actionCode;
 				console.log("[HIKVISION_CALLBACK][CTRL] parsed payload:", payload);
 				console.log("[HIKVISION_CALLBACK][CTRL] extracted event:", event);
 

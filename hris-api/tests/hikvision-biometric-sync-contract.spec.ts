@@ -216,7 +216,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("Copied as dev-only synthetic face tally for peer verification");
 	});
 
-	it("refreshes per-device Hikvision DeviceUser truth during reconcile and persists derived lifecycle events", () => {
+	it("refreshes DeviceUser truth while quarantining current-state lifecycle invention", () => {
 		const controller = controllerSource();
 
 		expect(controller).to.include("const loadHikvisionDeviceUserSnapshot = async");
@@ -232,9 +232,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("refreshResults");
 		expect(controller).to.include("sourceLifecycleBackfillResult");
 		expect(controller).to.include("manual_device_user_lifecycle_backfill");
-		expect(controller).to.include("derivedFromCurrentDeviceState: true");
-		expect(controller).to.include('eventAction: "USER_CREATED"');
-		expect(controller).to.include('eventAction: "FINGERPRINT_ENROLLED"');
+		expect(controller).to.include("current DeviceUser row is not evidence");
+		expect(controller).to.include('reason: "current_device_user_state_is_not_lifecycle_evidence"');
+		expect(controller).not.to.include("derivedFromCurrentDeviceState: true");
 		expect(controller).to.include('eventAction: "SYNC_IMPORTED"');
 		expect(controller).to.include('eventType: "BiometricReconcile"');
 		expect(controller).to.include("derivedFromReconcile: true");

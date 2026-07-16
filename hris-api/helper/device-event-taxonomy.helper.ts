@@ -127,7 +127,7 @@ export const classifyDeviceEvent = (event: {
 		eventKind === "attendance_fingerprint_failed"
 	) {
 		return withCompatibilityConfidence({
-			eventCategory: "ACCESS_CONTROL",
+			eventCategory: "ATTENDANCE",
 			eventAction: "TAP_REJECTED",
 			eventLabel: "Rejected tap",
 			eventConfidence: "SUPPORTED",
@@ -251,10 +251,10 @@ export const classifyDeviceEvent = (event: {
 		(source === "EN_HCNETSDK_ALARM" && String(event.major ?? "").trim() === "3")
 	) {
 		return withCompatibilityConfidence({
-			eventCategory: "USER_MANAGEMENT",
+			eventCategory: "RUNTIME",
 			eventAction: "SYNC_SIGNAL",
 			eventLabel: "Device user or biometric operation",
-			eventConfidence: "INFERRED",
+			eventConfidence: "SUPPORTED",
 			processingLabel,
 			transportLabel,
 		});
@@ -262,7 +262,7 @@ export const classifyDeviceEvent = (event: {
 
 	if (event.status === "FAILED" || event.errorMessage) {
 		return withCompatibilityConfidence({
-			eventCategory: eventKind === "acs_event" ? "ACCESS_CONTROL" : "UNKNOWN_VENDOR",
+			eventCategory: "UNKNOWN_VENDOR",
 			eventAction: eventKind === "acs_event" ? "UNKNOWN" : "LISTENER_RECEIVED",
 			eventLabel: eventKind === "acs_event" ? "Access controller event needs review" : "Device event needs review",
 			eventConfidence: "UNKNOWN",
@@ -272,7 +272,7 @@ export const classifyDeviceEvent = (event: {
 	}
 
 	return withCompatibilityConfidence({
-		eventCategory: eventKind === "acs_event" ? "ACCESS_CONTROL" : "UNKNOWN_VENDOR",
+		eventCategory: "UNKNOWN_VENDOR",
 		eventAction: eventKind === "acs_event" ? "UNKNOWN" : "LISTENER_RECEIVED",
 		eventLabel: eventKind === "acs_event" ? "Access controller event" : "Device event",
 		eventConfidence: eventKind === "acs_event" ? "UNKNOWN" : actionCode && actionCode !== "UNKNOWN_MINOR" ? "INFERRED" : "UNKNOWN",

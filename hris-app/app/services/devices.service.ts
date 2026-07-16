@@ -43,6 +43,9 @@ export type DeviceEventAction =
 	| "FINGERPRINT_ENROLLED"
 	| "FINGERPRINT_UPDATED"
 	| "FINGERPRINT_DELETED"
+	| "FACE_ENROLLED"
+	| "FACE_UPDATED"
+	| "FACE_DELETED"
 	| "CARD_ENROLLED"
 	| "CARD_UPDATED"
 	| "CARD_DELETED"
@@ -114,6 +117,15 @@ export interface DeviceEventsResponse {
 		byAction: Partial<Record<DeviceEventAction | string, number>>;
 		byProcessingResult: Partial<Record<DeviceEventStatus | string, number>>;
 		byRuntimePath: Partial<Record<DeviceEventSource | string, number>>;
+		byConfidence: Partial<Record<DeviceEventConfidence | string, number>>;
+		byEvidenceSource: Partial<Record<string, number>>;
+		directEvidence: number;
+		inferredEvidence: number;
+		unknownEvidence: number;
+		matched: number;
+		needsEmployeeMatch: number;
+		ignored: number;
+		failed: number;
 		byStatus: Partial<Record<DeviceEventStatus, number>>;
 		bySource: Partial<Record<DeviceEventSource, number>>;
 	};
@@ -1206,6 +1218,15 @@ class DevicesService extends APIService {
 					byAction: {},
 					byProcessingResult: {},
 					byRuntimePath: {},
+					byConfidence: {},
+					byEvidenceSource: {},
+					directEvidence: 0,
+					inferredEvidence: 0,
+					unknownEvidence: 0,
+					matched: 0,
+					needsEmployeeMatch: 0,
+					ignored: 0,
+					failed: 0,
 					byStatus: {},
 					bySource: {},
 				},

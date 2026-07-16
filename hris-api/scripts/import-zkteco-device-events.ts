@@ -8,6 +8,7 @@ import {
 	parseZktecoEventTime,
 	ZKTECO_DEVICE_EVENT_SOURCE,
 } from "../helper/zkteco-event-contract.helper";
+import { buildPersistedDeviceEventTaxonomy } from "../helper/device-event-taxonomy.helper";
 
 let prisma: PrismaClient;
 
@@ -27,6 +28,10 @@ type PreparedDeviceEvent = {
 	eventTime: Date;
 	employeeNo: string | null;
 	status: "MATCHED" | "UNMATCHED";
+	eventCategory: string;
+	eventAction: string;
+	eventLabel: string;
+	eventConfidence: string;
 	eventType: string | null;
 	verifyMode: string | null;
 	major: string | null;
@@ -205,6 +210,25 @@ function prepareRows(
 			dedupeKey = buildFallbackDedupeKey(dedupeInput);
 		}
 
+		const evidencePayload = {
+			...payload,
+			evidenceSource: "ZKTECO_IMPORT",
+			directDeviceEvidence: true,
+			vendorAction: event.attStateName || event.eventType || event.attState || null,
+			vendorCode: event.attState ?? null,
+			rawDeviceTime: event.eventTime || null,
+			operator: (payload as any).operator || (payload as any).userName || null,
+			remoteHost: (payload as any).remoteHost || (payload as any).deviceIP || null,
+			rawEvidence: payload,
+		};
+		const taxonomy = buildPersistedDeviceEventTaxonomy({
+			source: ZKTECO_DEVICE_EVENT_SOURCE,
+			status,
+			eventType: event.eventType || "AttendanceTransaction",
+			major: event.attState !== undefined ? String(event.attState) : null,
+			minor: event.attStateName || null,
+			payload: evidencePayload,
+		});
 		prepared.push({
 			organizationId: device.organizationId,
 			deviceId: device.id,
@@ -212,12 +236,13 @@ function prepareRows(
 			eventTime,
 			employeeNo,
 			status,
+			...taxonomy,
 			eventType: event.eventType || "AttendanceTransaction",
 			verifyMode: event.verifyMode || null,
 			major: event.attState !== undefined ? String(event.attState) : null,
 			minor: event.attStateName || null,
 			dedupeKey,
-			payload,
+			payload: evidencePayload,
 			errorMessage: employee ? null : "employee_not_found",
 		});
 	}
@@ -262,6 +287,10 @@ async function insertBatch(rows: PreparedDeviceEvent[]) {
 			employeeNo: row.employeeNo,
 			source: ZKTECO_DEVICE_EVENT_SOURCE,
 			status: row.status,
+			eventCategory: row.eventCategory,
+			eventAction: row.eventAction,
+			eventLabel: row.eventLabel,
+			eventConfidence: row.eventConfidence,
 			eventType: row.eventType,
 			verifyMode: row.verifyMode,
 			major: row.major,
@@ -285,6 +314,10 @@ async function insertBatch(rows: PreparedDeviceEvent[]) {
 				"employeeNo",
 				source,
 				status,
+				"eventCategory",
+				"eventAction",
+				"eventLabel",
+				"eventConfidence",
 				"eventType",
 				"verifyMode",
 				major,
@@ -306,6 +339,10 @@ async function insertBatch(rows: PreparedDeviceEvent[]) {
 				nullif(row_data->>'employeeNo', ''),
 				(row_data->>'source')::"DeviceEventSource",
 				(row_data->>'status')::"DeviceEventStatus",
+				(row_data->>'eventCategory')::"DeviceEventCategory",
+				(row_data->>'eventAction')::"DeviceEventAction",
+				nullif(row_data->>'eventLabel', ''),
+				(row_data->>'eventConfidence')::"DeviceEventConfidence",
 				nullif(row_data->>'eventType', ''),
 				nullif(row_data->>'verifyMode', ''),
 				nullif(row_data->>'major', ''),
@@ -322,6 +359,10 @@ async function insertBatch(rows: PreparedDeviceEvent[]) {
 				"employeeId" = excluded."employeeId",
 				"attendanceId" = null,
 				status = excluded.status,
+				"eventCategory" = excluded."eventCategory",
+				"eventAction" = excluded."eventAction",
+				"eventLabel" = excluded."eventLabel",
+				"eventConfidence" = excluded."eventConfidence",
 				payload = excluded.payload,
 				"errorMessage" = excluded."errorMessage",
 				"updatedAt" = now()

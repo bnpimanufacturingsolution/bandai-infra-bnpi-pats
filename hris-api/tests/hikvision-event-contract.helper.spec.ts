@@ -1,6 +1,8 @@
 import { expect } from "chai";
 import {
 	buildHikvisionDeviceEventDedupeKey,
+	buildHikvisionLogSearchXml,
+	classifyHikvisionLogSearchRow,
 	DEFAULT_HIKVISION_MIN_PUNCH_PAIR_GAP_MINUTES,
 	extractHikvisionSystemLocalTime,
 	extractHikvisionEventData,
@@ -14,10 +16,15 @@ import {
 	normalizeHikvisionAddress,
 	normalizeHikvisionDeviceEventSource,
 	normalizeHikvisionFutureSkewedEventTime,
+	normalizeHikvisionLogSearchRow,
+	normalizeHikvisionSdkCallbackEvidence,
+	normalizeHikvisionStateTransitionEvidence,
+	paginateHikvisionLogSearch,
 	parseHikvisionBusinessDateBound,
 	parseHikvisionBodyPayload,
 	parseHikvisionEventTime,
 	selectHikvisionPunchPair,
+	parseHikvisionLogSearchResponse,
 } from "../helper/hikvision-event-contract.helper";
 
 describe("hikvision event contract helper", () => {
@@ -427,5 +434,230 @@ describe("hikvision event contract helper", () => {
 		expect(pair.count).to.equal(3);
 		expect(pair.timeIn?.toISOString()).to.equal("2026-06-08T08:01:00.000Z");
 		expect(pair.timeOut?.toISOString()).to.equal("2026-06-08T17:03:00.000Z");
+	});
+
+	it("normalizes SDK callback evidence without losing the raw payload", () => {
+		const payload = {
+			source: "EN_HCNETSDK_ALARM",
+			actionCode: "MINOR_ADD_FINGER_BY_EMPLOYEE_NO",
+			major: 3,
+			minor: 1055,
+			employeeNo: "42",
+			time: "2026-07-15T10:00:00+08:00",
+		};
+		const event = normalizeHikvisionSdkCallbackEvidence(payload);
+		expect(event).to.deep.include({
+			evidenceSource: "SDK_CALLBACK",
+			directDeviceEvidence: true,
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventConfidence: "SUPPORTED",
+		});
+		expect(event.rawEvidence).to.equal(payload);
+	});
+
+	it("builds native XML logSearch requests with the vendor pagination spelling", () => {
+		const xml = buildHikvisionLogSearchXml({
+			searchId: "search<&>",
+			startTime: "2026-07-15T00:00:00+08:00",
+			endTime: "2026-07-15T23:59:59+08:00",
+			maxResults: 25,
+			searchResultPosition: 50,
+		});
+		expect(xml).to.include("<searchResultPostion>50</searchResultPostion>");
+		expect(xml).to.include("<maxResults>25</maxResults>");
+		expect(xml).to.include("search&lt;&amp;&gt;");
+	});
+
+	it("parses namespaced ISAPI logSearch rows and preserves raw XML", () => {
+		const xml = `<?xml version="1.0" encoding="UTF-8"?>
+			<CMSearchResult xmlns="http://www.hikvision.com/ver20/XMLSchema">
+				<responseStatusStrg>MORE</responseStatusStrg><numOfMatches>2</numOfMatches>
+				<matchList><searchMatchItem><time>2026-07-15T10:01:02+08:00</time>
+				<majorType>Operation</majorType><minorType>Add fingerprint</minorType>
+				<localOrRemote>remote</localOrRemote><remoteHost>10.184.37.19</remoteHost>
+				<parameter>employeeNo=42</parameter><information>Fingerprint enrolled for employee 42</information>
+				<employeeNoString>42</employeeNoString></searchMatchItem></matchList>
+			</CMSearchResult>`;
+		const parsed = parseHikvisionLogSearchResponse(xml);
+		expect(parsed.responseStatus).to.equal("MORE");
+		expect(parsed.totalMatches).to.equal(2);
+		expect(parsed.rows).to.have.length(1);
+		expect(parsed.rows[0]).to.deep.include({
+			majorType: "Operation",
+			minorType: "Add fingerprint",
+			employeeNo: "42",
+			remoteHost: "10.184.37.19",
+		});
+		expect(parsed.rows[0].rawXml).to.include("Fingerprint enrolled");
+	});
+
+	it("paginates logSearch using the returned row count and MORE status", async () => {
+		const calls: Array<[number, number]> = [];
+		const page = (status: string, total: number, label: string) => `
+			<CMSearchResult><responseStatusStrg>${status}</responseStatusStrg><numOfMatches>${total}</numOfMatches>
+			<searchMatchItem><time>2026-07-15T10:00:00+08:00</time><majorType>Operation</majorType>
+			<minorType>${label}</minorType></searchMatchItem></CMSearchResult>`;
+		const result = await paginateHikvisionLogSearch({
+			pageSize: 1,
+			maxRows: 5,
+			fetchPage: async (position, maxResults) => {
+				calls.push([position, maxResults]);
+				return position === 0 ? page("MORE", 2, "Add person") : page("OK", 2, "Add fingerprint");
+			},
+		});
+		expect(calls).to.deep.equal([[0, 1], [1, 1]]);
+		expect(result.rows).to.have.length(2);
+		expect(result.nextSearchResultPosition).to.equal(2);
+	});
+
+	it("maps explicit fingerprint-enrollment log evidence but not Add Person", () => {
+		expect(
+			classifyHikvisionLogSearchRow({
+				majorType: "Operation",
+				minorType: "Add fingerprint",
+				information: "Fingerprint enrolled",
+				parameter: "employeeNo=42",
+			}),
+		).to.deep.include({
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventConfidence: "PROVEN",
+		});
+		expect(
+			classifyHikvisionLogSearchRow({
+				majorType: "Operation",
+				minorType: "Add Person",
+				information: "User created",
+				parameter: "employeeNo=42",
+			}),
+		).to.deep.include({
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_CREATED",
+		});
+	});
+
+	it("maps the exact verified 10.184.38.177 logSearch metaIds", () => {
+		expect(
+			classifyHikvisionLogSearchRow({
+				metaId: "log.hikvision.com/Information/addFpByEmployeeNo",
+				majorType: "Information",
+				minorType: "addFpByEmployeeNo",
+			}),
+		).to.deep.include({
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventConfidence: "PROVEN",
+		});
+		expect(
+			classifyHikvisionLogSearchRow({
+				metaId: "log.hikvision.com/Information/addUserInfo",
+				majorType: "Information",
+				minorType: "addUserInfo",
+			}),
+		).to.deep.include({
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_CREATED",
+			eventConfidence: "PROVEN",
+		});
+	});
+
+	it("normalizes ISAPI rows with direct evidence provenance", () => {
+		const event = normalizeHikvisionLogSearchRow(
+			{
+				index: 7,
+				time: "2026-07-15T10:00:00+08:00",
+				majorType: "Operation",
+				minorType: "Add Person",
+				information: "User created",
+				employeeNo: "42",
+				rawXml: "<searchMatchItem />",
+				raw: {},
+			},
+			{ id: "device-1", address: "10.184.38.177" },
+		);
+		expect(event).to.deep.include({
+			evidenceSource: "ISAPI_LOGSEARCH",
+			directDeviceEvidence: true,
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_CREATED",
+			eventConfidence: "PROVEN",
+		});
+	});
+
+	it("maps explicit face, card, user-update, and rejected-tap evidence", () => {
+		expect(
+			classifyHikvisionLogSearchRow({
+				metaId: "log.hikvision.com/Information/localFaceDataAppend",
+			}),
+		).to.deep.include({
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_ENROLLED",
+			eventConfidence: "PROVEN",
+		});
+		expect(
+			classifyHikvisionLogSearchRow({ minorType: "Update face", information: "Face updated" }),
+		).to.deep.include({ eventAction: "FACE_UPDATED" });
+		expect(
+			classifyHikvisionLogSearchRow({ minorType: "Delete card", information: "Card deleted" }),
+		).to.deep.include({ eventAction: "CARD_DELETED" });
+		expect(
+			classifyHikvisionLogSearchRow({
+				metaId: "log.hikvision.com/Information/modifyUserInfo",
+			}),
+		).to.deep.include({ eventAction: "USER_UPDATED" });
+
+		const rejected = normalizeHikvisionSdkCallbackEvidence({
+			source: "EN_HCNETSDK_ALARM",
+			actionCode: "MINOR_FINGERPRINT_COMPARE_FAIL",
+			eventKind: "attendance_fingerprint_failed",
+		});
+		expect(rejected).to.deep.include({
+			eventCategory: "ATTENDANCE",
+			eventAction: "TAP_REJECTED",
+		});
+	});
+
+	it("refuses lifecycle inference from current state alone", () => {
+		expect(
+			normalizeHikvisionStateTransitionEvidence({
+				afterSnapshot: [{ vendorUserId: "42", fingerprintCount: 1 }],
+				afterCapturedAt: "2026-07-15T10:00:00+08:00",
+			}),
+		).to.deep.equal([]);
+	});
+
+	it("infers only verified user and fingerprint before/after transitions", () => {
+		const events = normalizeHikvisionStateTransitionEvidence({
+			beforeSnapshot: [{ vendorUserId: "41", fingerprintCount: 0 }],
+			afterSnapshot: [
+				{ vendorUserId: "41", fingerprintCount: 1 },
+				{ vendorUserId: "42", fingerprintCount: 2 },
+			],
+			beforeCapturedAt: "2026-07-15T09:00:00+08:00",
+			afterCapturedAt: "2026-07-15T10:00:00+08:00",
+		});
+		expect(events.map((event) => event.eventAction)).to.deep.equal([
+			"FINGERPRINT_ENROLLED",
+			"USER_CREATED",
+		]);
+		expect(events.every((event) => event.eventConfidence === "INFERRED")).to.equal(true);
+		expect(events.every((event) => event.directDeviceEvidence === false)).to.equal(true);
+	});
+
+	it("infers face and card lifecycle only from complete before/after snapshots", () => {
+		const events = normalizeHikvisionStateTransitionEvidence({
+			beforeSnapshot: [{ vendorUserId: "42", faceCount: 0, cardCount: 1 }],
+			afterSnapshot: [{ vendorUserId: "42", faceCount: 1, cardCount: 0 }],
+			beforeCapturedAt: "2026-07-15T09:00:00+08:00",
+			afterCapturedAt: "2026-07-15T10:00:00+08:00",
+		});
+		expect(events.map((event) => event.eventAction)).to.deep.equal([
+			"FACE_ENROLLED",
+			"CARD_DELETED",
+		]);
+		expect(
+			events.every((event) => event.evidenceSource === "STATE_TRANSITION_INFERRED"),
+		).to.equal(true);
 	});
 });

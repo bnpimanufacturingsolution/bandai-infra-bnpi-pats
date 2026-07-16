@@ -24,10 +24,14 @@ import { emitDeviceEventSaved } from "../../helper/device-event-realtime.helper"
 import { createEmployeeHelpers } from "../../helper/employee.helper";
 import {
 	buildHikvisionDeviceEventDedupeKey,
+	buildHikvisionLogSearchXml,
 	normalizeHikvisionDeviceEventSource,
 	normalizeHikvisionFutureSkewedEventTime,
+	normalizeHikvisionLogSearchRow,
+	paginateHikvisionLogSearch,
 	parseHikvisionBusinessDateBound,
 	parseHikvisionEventTime,
+	type NormalizedHikvisionEvidenceEvent,
 } from "../../helper/hikvision-event-contract.helper";
 import { classifyDeviceEvent } from "../../helper/device-event-taxonomy.helper";
 import { hikvisionEndpoint } from "../../config/hikvision.endpoint";
@@ -114,6 +118,9 @@ const DEVICE_EVENT_ACTIONS = new Set([
 	"FINGERPRINT_ENROLLED",
 	"FINGERPRINT_UPDATED",
 	"FINGERPRINT_DELETED",
+	"FACE_ENROLLED",
+	"FACE_UPDATED",
+	"FACE_DELETED",
 	"CARD_ENROLLED",
 	"CARD_UPDATED",
 	"CARD_DELETED",
@@ -126,6 +133,7 @@ const DEVICE_EVENT_ACTIONS = new Set([
 	"LISTENER_RECEIVED",
 	"UNKNOWN",
 ]);
+const DEVICE_EVENT_CONFIDENCES = new Set(["PROVEN", "SUPPORTED", "INFERRED", "UNKNOWN"]);
 const DEVICE_EVENT_RESET_ADMIN_ROLES = new Set([
 	"hris-admin",
 	"admin",
@@ -2403,6 +2411,21 @@ export const controller = (prisma: PrismaClient) => {
 		const deviceId = String(body.deviceId || req.query.deviceId || "").trim();
 		const source = String(body.source || req.query.source || "").trim();
 		const status = String(body.status || req.query.status || "").trim();
+		const eventCategory = String(body.eventCategory || req.query.eventCategory || "")
+			.trim()
+			.toUpperCase();
+		const eventAction = String(body.eventAction || req.query.eventAction || "")
+			.trim()
+			.toUpperCase();
+		const eventConfidence = String(body.eventConfidence || req.query.eventConfidence || "")
+			.trim()
+			.toUpperCase();
+		const evidenceSource = String(body.evidenceSource || req.query.evidenceSource || "")
+			.trim()
+			.toUpperCase();
+		const legacyInferredLifecycleOnly =
+			body.legacyInferredLifecycleOnly === true ||
+			String(req.query.legacyInferredLifecycleOnly || "").toLowerCase() === "true";
 		const from = String(body.from || req.query.from || "").trim();
 		const to = String(body.to || req.query.to || "").trim();
 		const dateField = String(body.dateField || req.query.dateField || "eventTime").trim();
@@ -2416,6 +2439,29 @@ export const controller = (prisma: PrismaClient) => {
 		}
 		if (status && status !== "all" && DEVICE_EVENT_STATUSES.has(status)) {
 			where.status = status as any;
+		}
+		if (eventCategory && eventCategory !== "ALL" && DEVICE_EVENT_CATEGORIES.has(eventCategory)) {
+			where.eventCategory = eventCategory as any;
+		}
+		if (eventAction && eventAction !== "ALL" && DEVICE_EVENT_ACTIONS.has(eventAction)) {
+			where.eventAction = eventAction as any;
+		}
+		if (
+			eventConfidence &&
+			eventConfidence !== "ALL" &&
+			DEVICE_EVENT_CONFIDENCES.has(eventConfidence)
+		) {
+			where.eventConfidence = eventConfidence as any;
+		}
+		if (evidenceSource && evidenceSource !== "ALL") {
+			where.payload = { path: ["evidenceSource"], equals: evidenceSource } as any;
+		}
+		if (legacyInferredLifecycleOnly) {
+			where.AND = [
+				{ eventType: "BiometricStateBackfill" },
+				{ eventConfidence: "INFERRED" as any },
+				{ payload: { path: ["derivedFromCurrentDeviceState"], equals: true } as any },
+			];
 		}
 
 		const eventTimeFilter: Prisma.DateTimeFilter = {};
@@ -2439,6 +2485,11 @@ export const controller = (prisma: PrismaClient) => {
 				deviceId: deviceId || "all",
 				source: source || "all",
 				status: status || "all",
+				eventCategory: eventCategory || "all",
+				eventAction: eventAction || "all",
+				eventConfidence: eventConfidence || "all",
+				evidenceSource: evidenceSource || "all",
+				legacyInferredLifecycleOnly,
 				from: from || null,
 				to: to || null,
 				dateField: dateField === "receivedAt" ? "receivedAt" : "eventTime",
@@ -4035,6 +4086,22 @@ export const controller = (prisma: PrismaClient) => {
 					completedAt: new Date(),
 				},
 			});
+			await persistDeviceRuntimeEvent({
+				req: params.req,
+				organizationId: params.organizationId,
+				deviceId: params.device.id,
+				source: "HIKVISION_CALLBACK",
+				action: "SYNC_IMPORTED",
+				label: "Device users synchronized",
+				correlationId: run.id,
+				payload: {
+					runId: run.id,
+					runType: "DEVICE_USERS",
+					totalSourceRecords: rawUsers.length,
+					importableRecords: candidates.length,
+					...result,
+				},
+			});
 			return { run: updatedRun, summary };
 		} catch (error: any) {
 			await (prisma as any).deviceSyncRun.update({
@@ -4367,50 +4434,11 @@ export const controller = (prisma: PrismaClient) => {
 		}>;
 		existingKeys: Set<string>;
 	}) => {
-		const planned: Array<Record<string, any>> = [];
-		for (const deviceUser of params.deviceUsers) {
-			const employeeNo =
-				String(deviceUser.employeeNo || deviceUser.vendorUserId || "").trim() || null;
-			if (!employeeNo) continue;
-			const credentialSummary = extractHikvisionCredentialSummary(
-				deviceUser.rawPayload || {},
-			);
-			const createdKey = `${deviceUser.id}:USER_CREATED`;
-			if (!params.existingKeys.has(createdKey)) {
-				planned.push({
-					deviceUser,
-					employeeNo,
-					eventAction: "USER_CREATED",
-					eventCategory: "USER_MANAGEMENT",
-					eventLabel: "Device user created",
-					eventConfidence: "INFERRED",
-					eventType: "BiometricStateBackfill",
-					payload: {
-						derivedFromCurrentDeviceState: true,
-						credentialSummary,
-					},
-				});
-			}
-			if (credentialSummary.fingerprintCount > 0) {
-				const fingerprintKey = `${deviceUser.id}:FINGERPRINT_ENROLLED`;
-				if (!params.existingKeys.has(fingerprintKey)) {
-					planned.push({
-						deviceUser,
-						employeeNo,
-						eventAction: "FINGERPRINT_ENROLLED",
-						eventCategory: "ENROLLMENT",
-						eventLabel: "Fingerprint enrolled",
-						eventConfidence: "INFERRED",
-						eventType: "BiometricStateBackfill",
-						payload: {
-							derivedFromCurrentDeviceState: true,
-							credentialSummary,
-						},
-					});
-				}
-			}
-		}
-		return planned;
+		// Quarantined: a current DeviceUser row is not evidence that a user was
+		// created or a fingerprint was enrolled. Lifecycle inference now requires
+		// two complete device snapshots through normalizeHikvisionStateTransitionEvidence.
+		void params;
+		return [] as Array<Record<string, any>>;
 	};
 
 	const persistDeviceUserLifecycleBackfill = async (params: {
@@ -4436,6 +4464,8 @@ export const controller = (prisma: PrismaClient) => {
 		if (!deviceUserIds.length) {
 			return {
 				execute: params.execute,
+				quarantined: true,
+				reason: "current_device_user_state_is_not_lifecycle_evidence",
 				totalDeviceUsers: 0,
 				plannedEvents: [],
 				createdEvents: [],
@@ -4468,6 +4498,8 @@ export const controller = (prisma: PrismaClient) => {
 		if (!params.execute) {
 			return {
 				execute: false,
+				quarantined: true,
+				reason: "current_device_user_state_is_not_lifecycle_evidence",
 				totalDeviceUsers: params.deviceUsers.length,
 				plannedEvents: plannedEvents.map((event) => ({
 					deviceUserId: event.deviceUser.id,
@@ -4543,6 +4575,8 @@ export const controller = (prisma: PrismaClient) => {
 		}
 		return {
 			execute: true,
+			quarantined: true,
+			reason: "current_device_user_state_is_not_lifecycle_evidence",
 			totalDeviceUsers: params.deviceUsers.length,
 			plannedEvents: plannedEvents.map((event) => ({
 				deviceUserId: event.deviceUser.id,
@@ -4553,6 +4587,272 @@ export const controller = (prisma: PrismaClient) => {
 			})),
 			createdEvents,
 		};
+	};
+
+	const persistNormalizedHikvisionEvidence = async (params: {
+		req: Request;
+		organizationId: string;
+		device: { id: string; name: string; address?: string | null };
+		evidence: NormalizedHikvisionEvidenceEvent;
+	}) => {
+		const employeeNo = String(params.evidence.employeeNo || "").trim();
+		const eventTime = parseHikvisionEventTime(params.evidence.time);
+		const rawEvidence = params.evidence.rawEvidence as any;
+		const dedupeKey = createHash("sha256")
+			.update(
+				JSON.stringify({
+					deviceId: params.device.id,
+					evidenceSource: params.evidence.evidenceSource,
+					eventTime: eventTime.toISOString(),
+					employeeNo,
+					eventCategory: params.evidence.eventCategory,
+					eventAction: params.evidence.eventAction,
+					major: params.evidence.major ?? null,
+					minor: params.evidence.minor ?? null,
+					parameter: rawEvidence?.parameter || null,
+					information: rawEvidence?.information || null,
+				}),
+			)
+			.digest("hex");
+		const existing = await (prisma as any).deviceEvent.findFirst({
+			where: { organizationId: params.organizationId, dedupeKey },
+		});
+		if (existing) return { eventRecord: existing, duplicate: true };
+
+		const deviceUser = employeeNo
+			? await (prisma as any).deviceUser.findFirst({
+					where: {
+						organizationId: params.organizationId,
+						deviceId: params.device.id,
+						vendorUserId: employeeNo,
+					},
+					select: { id: true, employeeId: true },
+				})
+			: null;
+		const legacyEmployee =
+			!deviceUser?.employeeId && employeeNo
+				? await prisma.employee.findFirst({
+						where: {
+							organizationId: params.organizationId,
+							isDeleted: false,
+							deviceEmpId: employeeNo,
+						},
+						select: { id: true },
+					})
+				: null;
+		const employeeId = deviceUser?.employeeId || legacyEmployee?.id || null;
+		const payload = {
+			evidenceSource: params.evidence.evidenceSource,
+			directDeviceEvidence: params.evidence.directDeviceEvidence,
+			vendorAction:
+				(rawEvidence?.metaId || rawEvidence?.minorType || params.evidence.actionCode || params.evidence.minor || null),
+			vendorCode: params.evidence.actionCode || params.evidence.minor || null,
+			rawDeviceTime: rawEvidence?.time || params.evidence.time || null,
+			operator: rawEvidence?.operator || rawEvidence?.raw?.operator || null,
+			remoteHost: rawEvidence?.remoteHost || rawEvidence?.raw?.remoteHost || null,
+			rawEvidence: params.evidence.rawEvidence ?? null,
+			deviceId: params.device.id,
+			deviceName: params.device.name,
+			deviceIP: params.device.address || params.evidence.deviceIP || null,
+			employeeNo: employeeNo || null,
+		};
+		const eventRecord = await (prisma as any).deviceEvent.create({
+			data: {
+				organizationId: params.organizationId,
+				deviceId: params.device.id,
+				deviceUserId: deviceUser?.id || null,
+				employeeId,
+				eventTime,
+				employeeNo: employeeNo || null,
+				source: normalizeHikvisionDeviceEventSource(params.evidence.source),
+				status: employeeNo ? (employeeId ? "MATCHED" : "UNMATCHED") : "RECEIVED",
+				eventCategory: params.evidence.eventCategory,
+				eventAction: params.evidence.eventAction,
+				eventLabel: params.evidence.eventLabel,
+				eventConfidence: params.evidence.eventConfidence,
+				eventType: params.evidence.eventType || null,
+				major:
+					params.evidence.major !== undefined && params.evidence.major !== null
+						? String(params.evidence.major)
+						: null,
+				minor:
+					params.evidence.minor !== undefined && params.evidence.minor !== null
+						? String(params.evidence.minor)
+						: null,
+				dedupeKey,
+				payload,
+			},
+		});
+		await invalidateCache.byPattern("cache:device:events:*").catch(() => undefined);
+		emitDeviceEventSaved((params.req as any).io, eventRecord);
+		return { eventRecord, duplicate: false };
+	};
+
+	const persistDeviceRuntimeEvent = async (params: {
+		req: Request;
+		organizationId: string;
+		deviceId: string;
+		source: "HIKVISION_CALLBACK" | "EN_HCNETSDK_ALARM" | "ZKTECO_EVENT";
+		action: "SYNC_IMPORTED" | "SYNC_SIGNAL";
+		label: string;
+		correlationId: string;
+		payload: Record<string, any>;
+	}) => {
+		const dedupeKey = createHash("sha256")
+			.update(
+				[
+					"device-runtime-event",
+					params.organizationId,
+					params.deviceId,
+					params.action,
+					params.correlationId,
+				].join("|"),
+			)
+			.digest("hex");
+		const existing = await (prisma as any).deviceEvent.findFirst({
+			where: { organizationId: params.organizationId, dedupeKey },
+		});
+		if (existing) return existing;
+		const eventTime = new Date();
+		const eventRecord = await (prisma as any).deviceEvent.create({
+			data: {
+				organizationId: params.organizationId,
+				deviceId: params.deviceId,
+				eventTime,
+				source: params.source,
+				status: "RECEIVED",
+				eventCategory: "RUNTIME",
+				eventAction: params.action,
+				eventLabel: params.label,
+				eventConfidence: "PROVEN",
+				eventType: "DeviceSyncRun",
+				dedupeKey,
+				payload: {
+					evidenceSource: "RUNTIME_PROCESS",
+					directDeviceEvidence: false,
+					vendorAction: params.action,
+					vendorCode: params.action,
+					rawDeviceTime: eventTime.toISOString(),
+					operator: (params.req as any).userId || (params.req as any).user?.id || null,
+					remoteHost: params.req.ip || null,
+					correlationId: params.correlationId,
+					...params.payload,
+				},
+			},
+		});
+		await invalidateCache.byPattern("cache:device:events:*").catch(() => undefined);
+		emitDeviceEventSaved((params.req as any).io, eventRecord);
+		return eventRecord;
+	};
+
+	const searchHikvisionDeviceLogs = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			const deviceId = String(req.params.id || (req.body as any)?.deviceId || "").trim();
+			const device = await getDeviceForUserSync(gate.organizationId, deviceId);
+			if (!device || !isHikvisionDevice(device)) {
+				res.status(400).json(buildErrorResponse("Select a Hikvision device", 400));
+				return;
+			}
+			const execute = (req.body as any)?.execute === true;
+			const endTime = String((req.body as any)?.endTime || new Date().toISOString()).trim();
+			const startTime = String(
+				(req.body as any)?.startTime || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+			).trim();
+			const pageSize = Number((req.body as any)?.maxResults || (req.body as any)?.pageSize || 50);
+			const maxRows = Number((req.body as any)?.maxRows || 500);
+			const startPosition = Number((req.body as any)?.searchResultPostion || (req.body as any)?.searchResultPosition || 0);
+			const searchId = String((req.body as any)?.searchId || randomUUID()).trim();
+			const result = await paginateHikvisionLogSearch({
+				startPosition,
+				pageSize,
+				maxRows,
+				fetchPage: async (searchResultPosition, maxResults) => {
+					const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
+						method: "POST",
+						deviceId: device.id,
+						prisma,
+						request: req,
+						timeoutMs: 15000,
+						ensureJsonFormat: false,
+						rawResponse: true,
+						headers: {
+							Accept: "application/xml, text/xml, */*",
+							"Content-Type": "application/xml; charset=UTF-8",
+						},
+						body: buildHikvisionLogSearchXml({
+							searchId,
+							startTime,
+							endTime,
+							maxResults,
+							searchResultPosition,
+						}),
+					});
+					return String(response?.raw || "");
+				},
+			});
+			const normalized = result.rows.map((row) => normalizeHikvisionLogSearchRow(row, device));
+			const countBy = (key: "eventCategory" | "eventAction" | "eventConfidence" | "evidenceSource") =>
+				Object.fromEntries(
+					Array.from(
+						normalized.reduce((counts, event) => {
+							const value = String(event[key] || "UNKNOWN");
+							counts.set(value, (counts.get(value) || 0) + 1);
+							return counts;
+						}, new Map<string, number>()),
+					).sort(([left], [right]) => left.localeCompare(right)),
+				);
+			const summary = {
+				total: normalized.length,
+				mapped: normalized.filter((event) => event.eventAction !== "UNKNOWN").length,
+				unknown: normalized.filter((event) => event.eventAction === "UNKNOWN").length,
+				byCategory: countBy("eventCategory"),
+				byAction: countBy("eventAction"),
+				byConfidence: countBy("eventConfidence"),
+				byEvidenceSource: countBy("evidenceSource"),
+			};
+			const persisted: Array<{ id: string; duplicate: boolean; eventAction: string }> = [];
+			if (execute) {
+				for (const evidence of normalized) {
+					const saved = await persistNormalizedHikvisionEvidence({
+						req,
+						organizationId: gate.organizationId,
+						device,
+						evidence,
+					});
+					persisted.push({
+						id: saved.eventRecord.id,
+						duplicate: saved.duplicate,
+						eventAction: saved.eventRecord.eventAction,
+					});
+				}
+			}
+			res.status(200).json(
+				buildSuccessResponse(
+					execute ? "Hikvision log evidence saved" : "Hikvision log evidence preview ready",
+					{
+						execute,
+						device: { id: device.id, name: device.name, address: device.address },
+						request: { searchId, startTime, endTime, pageSize, maxRows, startPosition },
+						pages: result.pages,
+						summary,
+						normalized,
+						persisted,
+						nextSearchResultPosition: result.nextSearchResultPosition,
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			res.status(Number(error?.status || 500)).json(
+				buildErrorResponse(error?.message || "Failed to search Hikvision device logs", Number(error?.status || 500)),
+			);
+		}
 	};
 
 	const syncDeviceUsers = async (req: Request, res: Response, _next: NextFunction) => {
@@ -10554,7 +10854,12 @@ export const controller = (prisma: PrismaClient) => {
 							let statusCode = 200;
 							const callbackReq = {
 								...req,
-								body: { deviceId: device.id, AcsEventInfo: event },
+								body: {
+									deviceId: device.id,
+									evidenceSource: "ISAPI_LOGSEARCH",
+									directDeviceEvidence: true,
+									AcsEventInfo: event,
+								},
 								query: {},
 								get: () => "application/json",
 							} as any;
@@ -10676,6 +10981,27 @@ export const controller = (prisma: PrismaClient) => {
 					},
 				});
 			}
+			await persistDeviceRuntimeEvent({
+				req,
+				organizationId: String(device.organizationId),
+				deviceId: device.id,
+				source: "HIKVISION_CALLBACK",
+				action: "SYNC_IMPORTED",
+				label: "Device logs synchronized",
+				correlationId: runId || jobId,
+				payload: {
+					runId: runId || null,
+					jobId,
+					runType: "DEVICE_LOGS",
+					processed,
+					imported,
+					skipped,
+					alreadySaved,
+					knownSkipped,
+					failed,
+					cancelled: Boolean(wasCancelled),
+				},
+			});
 			await invalidateCache.byPattern("cache:device:events:*").catch(() => undefined);
 		} catch (error: any) {
 			const job = deviceImportJobs.get(jobId);
@@ -10955,6 +11281,11 @@ export const controller = (prisma: PrismaClient) => {
 					scope.deviceId === "all" &&
 					scope.source === "all" &&
 					scope.status === "all" &&
+					scope.eventCategory === "all" &&
+					scope.eventAction === "all" &&
+					scope.eventConfidence === "all" &&
+					scope.evidenceSource === "all" &&
+					!scope.legacyInferredLifecycleOnly &&
 					!scope.from &&
 					!scope.to;
 				const deviceEventsCount = await prisma.deviceEvent.count({ where });
@@ -12200,6 +12531,12 @@ export const controller = (prisma: PrismaClient) => {
 			const eventAction = String(req.query.eventAction || "")
 				.trim()
 				.toUpperCase();
+			const eventConfidence = String(req.query.eventConfidence || "")
+				.trim()
+				.toUpperCase();
+			const evidenceSource = String(req.query.evidenceSource || "")
+				.trim()
+				.toUpperCase();
 			const query = String(req.query.query || req.query.search || "").trim();
 			const from = String(req.query.from || "").trim();
 			const to = String(req.query.to || "").trim();
@@ -12246,6 +12583,21 @@ export const controller = (prisma: PrismaClient) => {
 			) {
 				whereConditions.push(
 					Prisma.sql`de."eventAction" = ${eventAction}::"DeviceEventAction"`,
+				);
+			}
+			if (
+				eventConfidence &&
+				eventConfidence !== "ALL" &&
+				DEVICE_EVENT_CONFIDENCES.has(eventConfidence) &&
+				hasDeviceEventColumns.eventConfidence
+			) {
+				whereConditions.push(
+					Prisma.sql`de."eventConfidence" = ${eventConfidence}::"DeviceEventConfidence"`,
+				);
+			}
+			if (evidenceSource && evidenceSource !== "ALL") {
+				whereConditions.push(
+					Prisma.sql`UPPER(COALESCE(de.payload->>'evidenceSource', '')) = ${evidenceSource}`,
 				);
 			}
 
@@ -12543,8 +12895,39 @@ export const controller = (prisma: PrismaClient) => {
 				${whereSql}
 				GROUP BY 1
 			`;
+			const confidenceGroupsSql = Prisma.sql`
+				SELECT ${eventConfidenceSql} AS "eventConfidence", COUNT(*)::bigint AS count
+				${aggregateFromSql}
+				${whereSql}
+				GROUP BY 1
+			`;
+			const evidenceGroupsSql = Prisma.sql`
+				SELECT COALESCE(NULLIF(UPPER(de.payload->>'evidenceSource'), ''), 'UNKNOWN') AS "evidenceSource",
+					COUNT(*)::bigint AS count
+				${aggregateFromSql}
+				${whereSql}
+				GROUP BY 1
+			`;
+			const evidenceTotalsSql = Prisma.sql`
+				SELECT
+					COUNT(*) FILTER (WHERE LOWER(COALESCE(de.payload->>'directDeviceEvidence', 'false')) = 'true')::bigint AS direct,
+					COUNT(*) FILTER (WHERE ${eventConfidenceSql} = 'INFERRED')::bigint AS inferred,
+					COUNT(*) FILTER (WHERE ${eventConfidenceSql} = 'UNKNOWN')::bigint AS unknown
+				${aggregateFromSql}
+				${whereSql}
+			`;
 
-			const [events, totalRows, statusGroups, sourceGroups, categoryGroups, actionGroups] =
+			const [
+				events,
+				totalRows,
+				statusGroups,
+				sourceGroups,
+				categoryGroups,
+				actionGroups,
+				confidenceGroups,
+				evidenceGroups,
+				evidenceTotals,
+			] =
 				await Promise.all([
 					prisma.$queryRaw<any[]>(eventsSql),
 					prisma.$queryRaw<Array<{ total: bigint | number }>>(countSql),
@@ -12559,6 +12942,15 @@ export const controller = (prisma: PrismaClient) => {
 					),
 					prisma.$queryRaw<Array<{ eventAction: string; count: bigint | number }>>(
 						actionGroupsSql,
+					),
+					prisma.$queryRaw<Array<{ eventConfidence: string; count: bigint | number }>>(
+						confidenceGroupsSql,
+					),
+					prisma.$queryRaw<Array<{ evidenceSource: string; count: bigint | number }>>(
+						evidenceGroupsSql,
+					),
+					prisma.$queryRaw<Array<{ direct: bigint | number; inferred: bigint | number; unknown: bigint | number }>>(
+						evidenceTotalsSql,
 					),
 				]);
 			const total = Number(totalRows[0]?.total || 0);
@@ -12591,6 +12983,13 @@ export const controller = (prisma: PrismaClient) => {
 			const byAction = Object.fromEntries(
 				actionGroups.map((item: any) => [item.eventAction, Number(item.count || 0)]),
 			);
+			const byConfidence = Object.fromEntries(
+				confidenceGroups.map((item: any) => [item.eventConfidence, Number(item.count || 0)]),
+			);
+			const byEvidenceSource = Object.fromEntries(
+				evidenceGroups.map((item: any) => [item.evidenceSource, Number(item.count || 0)]),
+			);
+			const evidenceTotalsRow = evidenceTotals[0] || { direct: 0, inferred: 0, unknown: 0 };
 
 			const summary = {
 				total,
@@ -12598,6 +12997,18 @@ export const controller = (prisma: PrismaClient) => {
 				byAction,
 				byProcessingResult,
 				byRuntimePath,
+				byConfidence,
+				byEvidenceSource,
+				directEvidence: Number(evidenceTotalsRow.direct || 0),
+				inferredEvidence: Number(evidenceTotalsRow.inferred || 0),
+				unknownEvidence: Number(evidenceTotalsRow.unknown || 0),
+				matched: ["MATCHED", "ATTENDANCE_CREATED", "ATTENDANCE_UPDATED"].reduce(
+					(sum, key) => sum + Number(byProcessingResult[key] || 0),
+					0,
+				),
+				needsEmployeeMatch: Number(byProcessingResult.UNMATCHED || 0),
+				ignored: Number(byProcessingResult.IGNORED || 0),
+				failed: Number(byProcessingResult.FAILED || 0),
 				byStatus: byProcessingResult,
 				bySource: byRuntimePath,
 			};
@@ -13542,6 +13953,7 @@ export const controller = (prisma: PrismaClient) => {
 		getDeviceHealth,
 		getHikvisionListenerStatus,
 		controlHikvisionListener,
+		searchHikvisionDeviceLogs,
 		getDeviceSyncPreview,
 		getDeviceSyncRuns,
 		getDeviceActivity,

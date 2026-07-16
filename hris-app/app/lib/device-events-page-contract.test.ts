@@ -53,7 +53,6 @@ describe("device events page UX contract", () => {
 		expect(routeSource).not.to.contain("Missing saved");
 		expect(routeSource).not.to.contain("Checking for missing device logs");
 		expect(routeSource).to.contain("Ready:");
-		expect(routeSource).to.contain("Accordion");
 		expect(routeSource).to.contain("Sync logs");
 	});
 
@@ -76,8 +75,10 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Employee record");
 	});
 
-	it("keeps runtime details in the event modal instead of the saved events table", () => {
+	it("keeps raw runtime detail in the drawer while exposing operational evidence in the table", () => {
 		expect(routeSource).not.to.contain('label: "Source",');
+		expect(routeSource).to.contain('label: "Evidence"');
+		expect(routeSource).to.contain('label: "Confidence"');
 		expect(routeSource).to.contain('next.set("action", "view-event")');
 		expect(routeSource).to.contain("formatEventSource(activeEvent.source)");
 		expect(routeSource).to.contain("formatEventSourceDetail(activeEvent.source)");
@@ -87,13 +88,14 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Device events");
 		expect(routeSource).to.contain("Any event category");
 		expect(routeSource).to.contain("Any event action");
-		expect(routeSource).to.contain('label: "Event"');
+		expect(routeSource).to.contain('label: "Category"');
+		expect(routeSource).to.contain('label: "Action"');
 		expect(routeSource).to.contain('label: "HRIS result"');
 		expect(routeSource).to.contain("event.taxonomy?.eventLabel");
 		expect(routeSource).to.contain("activeEvent.eventLabel");
 		expect(routeSource).to.contain("activeEvent.eventCategory");
 		expect(routeSource).to.contain("activeEvent.eventAction");
-		expect(routeSource).to.contain("activeEvent.eventConfidence");
+		expect(routeSource).to.contain("activeEvent.capabilityConfidence");
 		expect(routeSource).to.contain("All HRIS results");
 		expect(routeSource).to.contain("All runtime paths");
 		expect(routeSource).to.contain("Hikvision SDK listener");
@@ -126,12 +128,28 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("isSdkAlarmSavedScope");
 		expect(routeSource).to.contain("savedEventsRefetchInterval");
 		expect(routeSource).to.contain("? 2 * 1000");
-		expect(routeSource).to.contain("SDK tap evidence recent");
-		expect(routeSource).to.contain("VM listener running");
-		expect(routeSource).to.contain("Browser connected; no recent SDK tap");
-		expect(routeSource).to.contain("VM service is running; waiting for SDK tap proof");
+		expect(routeSource).to.contain("SDK event evidence recent");
+		expect(routeSource).to.contain("VM listener status unavailable");
+		expect(routeSource).to.contain("Browser connected; no recent SDK event");
+		expect(routeSource).to.contain("VM listener has SDK callback evidence.");
 		expect(routeSource).not.to.contain("Socket connected, SDK idle");
 		expect(routeSource).not.to.contain("Waiting for next tap");
+	});
+
+	it("renders saved DeviceEvent rows only and sends every operational filter to the API", () => {
+		expect(routeSource).to.contain('const viewMode = "saved" as EventViewMode');
+		expect(routeSource).to.contain("The operational ledger renders only persisted DeviceEvent rows");
+		expect(routeSource).to.contain("evidenceSource: evidenceSource !== \"all\"");
+		expect(routeSource).to.contain("eventConfidence: eventConfidence !== \"all\"");
+		expect(routeSource).to.contain('setFilter("source", value)');
+		expect(routeSource).to.contain('setFilter("status", value)');
+		expect(routeSource).to.contain('setFilter("evidenceSource", value)');
+		expect(routeSource).to.contain('setFilter("eventConfidence", value)');
+		expect(routeSource).to.contain("Current inventory");
+		expect(routeSource).to.contain("Activity in selected window");
+		expect(routeSource).to.contain("Raw payload");
+		expect(routeSource).to.contain("FACE_ENROLLED");
+		expect(routeSource).not.to.contain('const viewMode = (searchParams.get("view")');
 	});
 
 	it("lets admin recover the VM Hikvision hot-reload listener from the saved SDK view", () => {
@@ -152,7 +170,7 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain('runHikvisionListenerControl(checked ? "start" : "stop")');
 		expect(routeSource).to.contain("refetchHikvisionListenerStatus");
 		expect(routeSource).to.contain("Recent listener log");
-		expect(routeSource).to.contain("No recent SDK tap saved");
+		expect(routeSource).to.contain("No recent SDK event saved");
 	});
 
 	it("keeps shared modals accessible by their visible title", () => {

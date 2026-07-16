@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { PrismaClient, Prisma } from "../../generated/prisma";
+import fs from "node:fs/promises";
 import { getLogger } from "../../helper/logger.helper";
 import { transformFormDataToObject } from "../../helper/transformObject";
 import { validateQueryParams } from "../../helper/validation-helper";
@@ -31,6 +32,7 @@ import {
 	buildPayslipFilename,
 } from "../../helper/payslip-pdf.helper";
 import { resolveEmployeeActiveSchedule } from "../../helper/employee-schedule.helper";
+import { resolveLocalUploadPath } from "../../helper/local-upload-path.helper";
 
 const logger = getLogger();
 const employeePayrollLogger = logger.child({ module: "employeePayroll" });
@@ -1609,15 +1611,33 @@ export const controller = (prisma: PrismaClient) => {
 				employeePayroll.payrollPeriod.name || employeePayroll.payrollPeriod.id,
 			);
 
-			const payslipFileResponse = await fetch(payslipDocument.fileUrl);
-			if (!payslipFileResponse.ok) {
-				throw new Error(
-					`Failed to fetch payslip file from storage (${payslipFileResponse.status})`,
-				);
-			}
+			let payslipBuffer: Buffer;
+			const localUploadPath = resolveLocalUploadPath(payslipDocument.fileUrl);
+			if (localUploadPath) {
+				try {
+					payslipBuffer = await fs.readFile(localUploadPath);
+				} catch (fileError: any) {
+					if (fileError?.code === "ENOENT") {
+						const errorResponse = buildErrorResponse(
+							"Payslip file is missing from local storage. Please regenerate the payslip.",
+							404,
+						);
+						res.status(404).json(errorResponse);
+						return;
+					}
+					throw fileError;
+				}
+			} else {
+				const payslipFileResponse = await fetch(payslipDocument.fileUrl);
+				if (!payslipFileResponse.ok) {
+					throw new Error(
+						`Failed to fetch payslip file from storage (${payslipFileResponse.status})`,
+					);
+				}
 
-			const payslipArrayBuffer = await payslipFileResponse.arrayBuffer();
-			const payslipBuffer = Buffer.from(payslipArrayBuffer);
+				const payslipArrayBuffer = await payslipFileResponse.arrayBuffer();
+				payslipBuffer = Buffer.from(payslipArrayBuffer);
+			}
 
 			res.setHeader("Content-Type", "application/pdf");
 			res.setHeader("Content-Disposition", `attachment; filename="${downloadFileName}"`);

@@ -96,6 +96,9 @@ type UnifiedDeviceEventRow = {
 	processingLabel?: string | null;
 	transportLabel?: string | null;
 	capabilityConfidence?: string | null;
+	evidenceSource?: string | null;
+	directDeviceEvidence?: boolean;
+	payload?: any;
 };
 
 type DeviceEventSavedPayload = {
@@ -224,6 +227,9 @@ const eventActionOptions: SelectOption[] = [
 	{ value: "FINGERPRINT_ENROLLED", label: "Fingerprint enrolled" },
 	{ value: "FINGERPRINT_UPDATED", label: "Fingerprint updated" },
 	{ value: "FINGERPRINT_DELETED", label: "Fingerprint deleted" },
+	{ value: "FACE_ENROLLED", label: "Face enrolled" },
+	{ value: "FACE_UPDATED", label: "Face updated" },
+	{ value: "FACE_DELETED", label: "Face deleted" },
 	{ value: "CARD_ENROLLED", label: "Card enrolled" },
 	{ value: "CARD_UPDATED", label: "Card updated" },
 	{ value: "CARD_DELETED", label: "Card deleted" },
@@ -234,6 +240,25 @@ const eventActionOptions: SelectOption[] = [
 	{ value: "SYNC_SIGNAL", label: "Sync signal" },
 	{ value: "SYNC_IMPORTED", label: "Sync imported" },
 	{ value: "LISTENER_RECEIVED", label: "Listener received" },
+	{ value: "UNKNOWN", label: "Unknown" },
+];
+
+const evidenceSourceOptions: SelectOption[] = [
+	{ value: "all", label: "All evidence sources" },
+	{ value: "SDK_CALLBACK", label: "SDK callback" },
+	{ value: "ISAPI_LOGSEARCH", label: "ISAPI logSearch" },
+	{ value: "STATE_TRANSITION_INFERRED", label: "Verified state transition" },
+	{ value: "RUNTIME_PROCESS", label: "Runtime process" },
+	{ value: "ZKTECO_CALLBACK", label: "ZKTeco callback" },
+	{ value: "ZKTECO_IMPORT", label: "ZKTeco import" },
+	{ value: "UNKNOWN", label: "Unknown evidence" },
+];
+
+const eventConfidenceOptions: SelectOption[] = [
+	{ value: "all", label: "All confidence levels" },
+	{ value: "PROVEN", label: "Proven" },
+	{ value: "SUPPORTED", label: "Supported" },
+	{ value: "INFERRED", label: "Inferred" },
 	{ value: "UNKNOWN", label: "Unknown" },
 ];
 
@@ -571,6 +596,9 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		transportLabel: event.taxonomy?.transportLabel || formatEventSource(event.source),
 		capabilityConfidence:
 			event.eventConfidence || event.taxonomy?.eventConfidence || event.taxonomy?.capabilityConfidence || null,
+		evidenceSource: payload.evidenceSource || null,
+		directDeviceEvidence: payload.directDeviceEvidence === true,
+		payload,
 		attendanceId: event.attendanceId,
 		doorNo: event.doorNo,
 		verifyMode: event.verifyMode || getVerifyModeFromPayload(payload),
@@ -656,11 +684,15 @@ export default function DeviceEventsPage() {
 	const limitParam = Number(searchParams.get("limit")) || 10;
 	const query = searchParams.get("query") || "";
 	const deviceId = searchParams.get("deviceId") || "all";
-	const viewMode = (searchParams.get("view") || "saved") as EventViewMode;
+	// The operational ledger renders only persisted DeviceEvent rows. Direct
+	// device reads remain source probes and may never become temporary UI history.
+	const viewMode = "saved" as EventViewMode;
 	const eventCategory = searchParams.get("eventCategory") || "all";
 	const eventAction = searchParams.get("eventAction") || "all";
 	const status = searchParams.get("status") || "all";
 	const source = searchParams.get("source") || "all";
+	const evidenceSource = searchParams.get("evidenceSource") || "all";
+	const eventConfidence = searchParams.get("eventConfidence") || "all";
 	const sort = searchParams.get("sort") || "eventTime";
 	const order = searchParams.get("order") === "asc" ? "asc" : "desc";
 	const action = searchParams.get("action");
@@ -755,6 +787,8 @@ export default function DeviceEventsPage() {
 		deviceId: deviceId === "all" ? undefined : deviceId,
 		eventCategory: viewMode === "saved" && eventCategory !== "all" ? eventCategory : undefined,
 		eventAction: viewMode === "saved" && eventAction !== "all" ? eventAction : undefined,
+		evidenceSource: evidenceSource !== "all" ? evidenceSource : undefined,
+		eventConfidence: eventConfidence !== "all" ? eventConfidence : undefined,
 		status: viewMode === "saved" && status !== "all" ? status : undefined,
 		source: viewMode === "saved" && source !== "all" ? source : undefined,
 		sort: viewMode === "saved" ? sort : undefined,
@@ -846,6 +880,18 @@ export default function DeviceEventsPage() {
 			if (source !== "all" && payload.source && payload.source !== source) {
 				return false;
 			}
+			if (
+				evidenceSource !== "all" &&
+				payload.event?.payload?.evidenceSource !== evidenceSource
+			) {
+				return false;
+			}
+			if (
+				eventConfidence !== "all" &&
+				payload.event?.eventConfidence !== eventConfidence
+			) {
+				return false;
+			}
 			return true;
 		};
 
@@ -883,8 +929,10 @@ export default function DeviceEventsPage() {
 		};
 	}, [
 		deviceId,
+		evidenceSource,
 		eventAction,
 		eventCategory,
+		eventConfidence,
 		isConnected,
 		limitParam,
 		organizationId,
@@ -1046,7 +1094,24 @@ export default function DeviceEventsPage() {
 					maxRealtimeRows: limitParam,
 				});
 	const activeEvent = action === "view-event" ? rows.find((row) => row.id === activeEventId) : null;
-	const savedSummary = data?.summary || { total: 0, byStatus: {}, bySource: {} };
+	const savedSummary = data?.summary || {
+		total: 0,
+		byCategory: {},
+		byAction: {},
+		byProcessingResult: {},
+		byRuntimePath: {},
+		byConfidence: {},
+		byEvidenceSource: {},
+		directEvidence: 0,
+		inferredEvidence: 0,
+		unknownEvidence: 0,
+		matched: 0,
+		needsEmployeeMatch: 0,
+		ignored: 0,
+		failed: 0,
+		byStatus: {},
+		bySource: {},
+	};
 	const savedStatusCounts = savedSummary.byStatus || {};
 	const sdkSummary = (selectedDevice as any)?.config?.zktecoSdkSummary || null;
 	const liveTotal = Number(acsEventPayload?.totalMatches || liveEvents.length || 0);
@@ -1706,6 +1771,8 @@ export default function DeviceEventsPage() {
 		eventAction !== "all" ? getOptionLabel(eventActionOptions, eventAction) : null,
 		source !== "all" ? getOptionLabel(sourceOptions, source) : null,
 		status !== "all" ? getOptionLabel(savedStatusOptions, status) : null,
+		evidenceSource !== "all" ? getOptionLabel(evidenceSourceOptions, evidenceSource) : null,
+		eventConfidence !== "all" ? getOptionLabel(eventConfidenceOptions, eventConfidence) : null,
 		query ? `Search: ${query}` : null,
 	].filter(Boolean) as string[];
 	const hasScopedSavedFilters = viewMode === "saved" && activeSavedFilterLabels.length > 0;
@@ -1738,6 +1805,8 @@ export default function DeviceEventsPage() {
 			next.delete("eventAction");
 			next.delete("source");
 			next.delete("status");
+			next.delete("evidenceSource");
+			next.delete("eventConfidence");
 			next.delete("query");
 		});
 	};
@@ -1885,25 +1954,27 @@ export default function DeviceEventsPage() {
 			),
 		},
 		{
-			key: "eventAction",
-			label: "Event",
-			width: "220px",
+			key: "eventCategory",
+			label: "Category",
+			width: "150px",
 			required: true,
-			render: (value, item) => (
+			render: (value) => (
+				<span className="text-xs font-semibold text-slate-700">
+					{formatEventTaxonomyToken(value)}
+				</span>
+			),
+		},
+		{
+			key: "eventAction",
+			label: "Action",
+			width: "200px",
+			required: true,
+			render: (_value, item) => (
 				<div className="min-w-0">
 					<p className="truncate text-sm font-semibold text-slate-950">
-						{item.eventLabel || "Device event"}
+						{formatEventTaxonomyToken(item.eventAction)}
 					</p>
-					<div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-						<span className="truncate text-xs text-slate-500">
-							{formatEventTaxonomyToken(item.eventCategory)}
-						</span>
-						{item.capabilityConfidence && item.capabilityConfidence !== "PROVEN" && item.capabilityConfidence !== "proven" ? (
-							<Badge variant="secondary" className="px-1.5 py-0 text-[11px] font-semibold">
-								{formatEventTaxonomyToken(item.capabilityConfidence)}
-							</Badge>
-						) : null}
-					</div>
+					<p className="truncate text-xs text-slate-500">{item.eventLabel || "Device event"}</p>
 				</div>
 			),
 		},
@@ -1949,7 +2020,7 @@ export default function DeviceEventsPage() {
 		},
 		{
 			key: "deviceId",
-			label: "Terminal",
+			label: "Device",
 			sortable: viewMode === "saved",
 			width: "210px",
 			required: true,
@@ -1969,6 +2040,31 @@ export default function DeviceEventsPage() {
 						</p>
 					) : null}
 				</div>
+			),
+		},
+		{
+			key: "evidenceSource",
+			label: "Evidence",
+			width: "180px",
+			render: (_value, item) => (
+				<div className="min-w-0">
+					<p className="truncate text-sm font-medium text-slate-900">
+						{getOptionLabel(evidenceSourceOptions, item.evidenceSource || "UNKNOWN")}
+					</p>
+					<p className="truncate text-xs text-slate-500">
+						{item.directDeviceEvidence ? "Direct device evidence" : "Indirect/runtime evidence"}
+					</p>
+				</div>
+			),
+		},
+		{
+			key: "capabilityConfidence",
+			label: "Confidence",
+			width: "130px",
+			render: (value) => (
+				<Badge variant={String(value).toUpperCase() === "PROVEN" ? "success-soft" : "secondary"} className="px-2 py-0.5 text-[11px] font-semibold">
+					{formatEventTaxonomyToken(value || "UNKNOWN")}
+				</Badge>
 			),
 		},
 		{
@@ -2005,6 +2101,11 @@ export default function DeviceEventsPage() {
 						<h1 className="truncate text-lg font-semibold text-slate-950">
 							Device events
 						</h1>
+						{selectedDevice ? (
+							<p className="truncate text-xs text-slate-500">
+								{selectedDevice.name} · {selectedDevice.config?.vendor || "Device"} · {selectedDevice.address}
+							</p>
+						) : null}
 					</div>
 				</div>
 				<div className="flex items-center gap-2">
@@ -2158,7 +2259,7 @@ export default function DeviceEventsPage() {
 					className={
 						viewMode === "live"
 							? "grid gap-2 border-b border-slate-200 p-2 sm:grid-cols-2 lg:grid-cols-[minmax(220px,1fr)_150px]"
-							: "grid gap-2 border-b border-slate-200 p-2 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_150px_minmax(180px,0.85fr)_minmax(190px,0.9fr)]"
+							: "grid gap-2 border-b border-slate-200 p-2 sm:grid-cols-2 xl:grid-cols-4"
 					}>
 					<FilterField label="Device">
 						<Select
@@ -2202,35 +2303,56 @@ export default function DeviceEventsPage() {
 									dropdownClassName={compactSelectDropdownClassName}
 								/>
 							</FilterField>
+							<FilterField label="Runtime path">
+								<Select
+									options={sourceOptions}
+									value={source}
+									onChange={(value) => setFilter("source", value)}
+									placeholder="Runtime path"
+									className={compactSelectClassName}
+									dropdownClassName={compactSelectDropdownClassName}
+								/>
+							</FilterField>
+							<FilterField label="HRIS result">
+								<Select
+									options={savedStatusOptions}
+									value={status}
+									onChange={(value) => setFilter("status", value)}
+									placeholder="HRIS result"
+									className={compactSelectClassName}
+									dropdownClassName={compactSelectDropdownClassName}
+								/>
+							</FilterField>
+							<FilterField label="Evidence source">
+								<Select
+									options={evidenceSourceOptions}
+									value={evidenceSource}
+									onChange={(value) => setFilter("evidenceSource", value)}
+									placeholder="Evidence source"
+									className={compactSelectClassName}
+									dropdownClassName={compactSelectDropdownClassName}
+								/>
+							</FilterField>
+							<FilterField label="Confidence">
+								<Select
+									options={eventConfidenceOptions}
+									value={eventConfidence}
+									onChange={(value) => setFilter("eventConfidence", value)}
+									placeholder="Confidence"
+									className={compactSelectClassName}
+									dropdownClassName={compactSelectDropdownClassName}
+								/>
+							</FilterField>
 						</>
 					)}
 				</div>
-				{viewMode === "saved" && isSyncLogsDebugView ? (
-					<div className="grid gap-2 border-b border-slate-200 bg-slate-50 p-2 md:grid-cols-2">
-						<FilterField label="Runtime path">
-							<Select
-								options={sourceOptions}
-								value={source}
-								onChange={(value) => setFilter("source", value)}
-								placeholder="Runtime path"
-								className={compactSelectClassName}
-								dropdownClassName={compactSelectDropdownClassName}
-							/>
-						</FilterField>
-						<FilterField label="HRIS result">
-							<Select
-								options={savedStatusOptions}
-								value={status}
-								onChange={(value) => setFilter("status", value)}
-								placeholder="HRIS result"
-								className={compactSelectClassName}
-								dropdownClassName={compactSelectDropdownClassName}
-							/>
-						</FilterField>
-					</div>
-				) : null}
 
-				<div className="grid grid-cols-3 gap-0 divide-x divide-slate-200">
+				<div className="border-b border-slate-200 px-3 py-2 text-xs text-slate-600">
+					<span className="font-semibold text-slate-900">Current inventory</span>
+					<span className="mx-2 text-slate-300">·</span>
+					Device users, fingerprints, faces, cards, and device log total: <span className="font-semibold text-amber-700">Needs reverify</span>
+				</div>
+				<div className="grid grid-cols-2 gap-0 divide-x divide-y divide-slate-200 sm:grid-cols-3 xl:grid-cols-6">
 					<div
 						className={
 							realtimePanelIsLive
@@ -2282,32 +2404,28 @@ export default function DeviceEventsPage() {
 					</div>
 						{[
 							{
-								label:
-									viewMode === "saved" && sdkSummary
-										? "SDK events"
-										: viewMode === "live"
-											? "Live events"
-											: "Total events",
-								value:
-									viewMode === "saved" && sdkSummary
-										? formatCount(sdkSummary.eventCount)
-										: viewMode === "live"
-											? formatCount(liveEvents.length)
-											: formatCount(totalItems),
+								label: "Saved",
+								value: formatCount(totalItems),
 							},
 							{
-								label: viewMode === "saved" && sdkSummary ? "SDK users" : "Matched",
-								value:
-									viewMode === "saved" && sdkSummary
-										? formatCount(sdkSummary.userCount)
-										: formatCount(matchedCount),
+								label: "Matched",
+								value: formatCount(savedSummary.matched ?? matchedCount),
 							},
 							{
-								label: viewMode === "saved" && sdkSummary ? "Event users" : "Needs match",
-								value:
-									viewMode === "saved" && sdkSummary
-										? formatCount(sdkSummary.uniqueEventUsers)
-										: formatCount(needsEmployeeMatchCount),
+								label: "Needs match",
+								value: formatCount(savedSummary.needsEmployeeMatch ?? needsEmployeeMatchCount),
+							},
+							{
+								label: "Direct evidence",
+								value: formatCount(savedSummary.directEvidence),
+							},
+							{
+								label: "Inferred",
+								value: formatCount(savedSummary.inferredEvidence),
+							},
+							{
+								label: "Unknown",
+								value: formatCount(savedSummary.unknownEvidence),
 							},
 						].map((item) => (
 							<div key={item.label} className="min-w-0 px-3 py-2">
@@ -2315,6 +2433,11 @@ export default function DeviceEventsPage() {
 								<p className="text-base font-semibold text-slate-950">{item.value}</p>
 							</div>
 						))}
+				</div>
+				<div className="border-t border-slate-200 px-3 py-2 text-xs text-slate-600">
+					<span className="font-semibold text-slate-900">Activity in selected window</span>
+					<span className="mx-2 text-slate-300">·</span>
+					Taps {formatCount(savedSummary.byAction?.TAP)} · Rejected {formatCount(savedSummary.byAction?.TAP_REJECTED)} · Fingerprints enrolled {formatCount(savedSummary.byAction?.FINGERPRINT_ENROLLED)} · Users created {formatCount(savedSummary.byAction?.USER_CREATED)} · Sync imports {formatCount(savedSummary.byAction?.SYNC_IMPORTED)} · Unknown {formatCount(savedSummary.byAction?.UNKNOWN)}
 				</div>
 			</div>
 
@@ -3439,6 +3562,13 @@ export default function DeviceEventsPage() {
 										["Door", activeEvent.doorNo || "-"],
 										["Verify", activeEvent.verifyMode || "-"],
 										["Serial", activeEvent.serialNo || "-"],
+										["Evidence", getOptionLabel(evidenceSourceOptions, activeEvent.evidenceSource || "UNKNOWN")],
+										["Direct evidence", activeEvent.directDeviceEvidence ? "Yes" : "No"],
+										["Vendor action", activeEvent.payload?.vendorAction || activeEvent.payload?.actionCode || activeEvent.payload?.minor || "-"],
+										["Raw device time", activeEvent.payload?.rawDeviceTime || activeEvent.payload?.time || activeEvent.payload?.dateTime || "-"],
+										["Operator", activeEvent.payload?.operator || activeEvent.payload?.userName || "-"],
+										["Remote host", activeEvent.payload?.remoteHost || activeEvent.payload?.rawAlarm?.remoteHost || "-"],
+										["Correlation", activeEvent.payload?.correlationId || activeEvent.payload?.runId || activeEvent.payload?.jobId || "-"],
 										["HRIS event", activeEvent.savedEventId || activeEvent.id],
 										["Employee profile", activeEvent.employeeProfileId || "-"],
 									].map(([label, value]) => (
@@ -3449,6 +3579,13 @@ export default function DeviceEventsPage() {
 									))}
 								</div>
 							</div>
+						</div>
+
+						<div className="space-y-2 border-t border-slate-200 pt-4">
+							<h3 className="text-sm font-semibold text-slate-950">Raw payload</h3>
+							<pre className="max-h-72 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-100">
+								{JSON.stringify(activeEvent.payload || {}, null, 2)}
+							</pre>
 						</div>
 					</div>
 				) : (

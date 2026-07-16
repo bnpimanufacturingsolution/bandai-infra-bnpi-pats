@@ -9,6 +9,10 @@ interface HikvisionFetchOptions extends Omit<RequestInit, "body"> {
 	prisma?: PrismaClient;
 	request?: Request;
 	timeoutMs?: number;
+	/** Keep endpoints such as ContentMgmt/logSearch on their native XML contract. */
+	ensureJsonFormat?: boolean;
+	/** Return the response body verbatim instead of attempting JSON parsing. */
+	rawResponse?: boolean;
 }
 
 export type HikvisionBinaryResponse = {
@@ -274,7 +278,7 @@ class HikvisionClient {
 	 */
 	async fetch(endpoint: string, options: HikvisionFetchOptions = {}): Promise<any> {
 		const connection = await this.resolveDeviceConnection(options);
-		const url = this.buildRequestUrl(connection, endpoint, true);
+		const url = this.buildRequestUrl(connection, endpoint, options.ensureJsonFormat !== false);
 
 		// Prepare headers from curl example
 		const headers: Record<string, string> = {
@@ -342,6 +346,9 @@ class HikvisionClient {
 			}
 
 			const responseText = await response.text();
+			if (options.rawResponse) {
+				return { raw: responseText };
+			}
 			try {
 				return responseText ? JSON.parse(responseText) : {};
 			} catch {

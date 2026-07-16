@@ -11,6 +11,7 @@ interface IController {
 	getDeviceHealth(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getHikvisionListenerStatus(req: Request, res: Response, next: NextFunction): Promise<void>;
 	controlHikvisionListener(req: Request, res: Response, next: NextFunction): Promise<void>;
+	searchHikvisionDeviceLogs(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceSyncPreview(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceSyncRuns(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceActivity(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -53,6 +54,7 @@ interface IController {
 	mirrorHikvisionFaceToPeers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	mockHikvisionFingerprintTally(req: Request, res: Response, next: NextFunction): Promise<void>;
 	mockHikvisionFaceTally(req: Request, res: Response, next: NextFunction): Promise<void>;
+	createSyntheticKioskLoginTap(req: Request, res: Response, next: NextFunction): Promise<void>;
 	backfillDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	linkDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
 	unlinkDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -83,6 +85,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.get("/:id/health", controller.getDeviceHealth);
 	routes.get("/hikvision/listener", controller.getHikvisionListenerStatus);
 	routes.post("/hikvision/listener", controller.controlHikvisionListener);
+	routes.post("/:id/hikvision/log-search", controller.searchHikvisionDeviceLogs);
 	routes.get("/users", controller.listDeviceUsers);
 	routes.post("/users/export/preview", controller.previewDeviceUserExport);
 	routes.post("/users/export", controller.exportDeviceUsers);

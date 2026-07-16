@@ -131,7 +131,26 @@ export const controller = (prisma: PrismaClient) => {
 	const handleEvent = async (req: Request, res: Response, _next: NextFunction) => {
 		let savedEventId: string | null = null;
 		try {
-			const payload = req.body && typeof req.body === "object" ? req.body : {};
+			const rawPayload = req.body && typeof req.body === "object" ? req.body : {};
+			const payload = {
+				...rawPayload,
+				evidenceSource: "ZKTECO_CALLBACK",
+				directDeviceEvidence: true,
+				vendorAction:
+					(rawPayload as any).eventType ||
+					(rawPayload as any).attStateName ||
+					(rawPayload as any).attState ||
+					null,
+				vendorCode: (rawPayload as any).attState ?? null,
+				rawDeviceTime:
+					(rawPayload as any).eventTime ||
+					(rawPayload as any).timestamp ||
+					(rawPayload as any).time ||
+					null,
+				operator: (rawPayload as any).operator || (rawPayload as any).userName || null,
+				remoteHost: req.ip || null,
+				rawEvidence: rawPayload,
+			};
 			const event = normalizeZktecoPayload(payload);
 			const device = await resolveDevice(req, event);
 
