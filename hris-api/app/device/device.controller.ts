@@ -2600,6 +2600,9 @@ export const controller = (prisma: PrismaClient) => {
 	) => {
 		const endTime = formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
 		const sampleClassify = options.sampleClassify === true;
+		// One logSearch call: totalMatches + first page sample (device UI order).
+		// Avoids a second round-trip so Sync logs stays near 1-3s.
+		const sampleMax = sampleClassify ? 80 : 1;
 		try {
 			const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
 				method: "POST",
@@ -2614,10 +2617,10 @@ export const controller = (prisma: PrismaClient) => {
 					"Content-Type": "application/xml; charset=UTF-8",
 				},
 				body: buildHikvisionLogSearchXml({
-					searchId: `hris-logsearch-count-${Date.now()}`,
+					searchId: `hris-logsearch-preview-${Date.now()}`,
 					startTime: "2000-01-01T00:00:00+08:00",
 					endTime,
-					maxResults: 1,
+					maxResults: sampleMax,
 					searchResultPosition: 0,
 				}),
 			});
@@ -2629,65 +2632,67 @@ export const controller = (prisma: PrismaClient) => {
 						? parsed.rows.length
 						: null;
 
-			// Recent sample classification so Sync logs can show User created /
-			// Fingerprint enrolled instead of dumping every residual into Unknown.
 			let byAction: Record<string, number> | null = null;
 			let sampleSize = 0;
-			if (sampleClassify && count !== null && count > 0) {
-				try {
-					const sampleMax = 80;
-					const startPos = Math.max(0, Number(count) - sampleMax);
-					const sampleResponse = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
-						method: "POST",
-						deviceId,
-						prisma,
-						request: req,
-						timeoutMs: HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS,
-						ensureJsonFormat: false,
-						rawResponse: true,
-						headers: {
-							Accept: "application/xml, text/xml, */*",
-							"Content-Type": "application/xml; charset=UTF-8",
-						},
-						body: buildHikvisionLogSearchXml({
-							searchId: `hris-logsearch-sample-${Date.now()}`,
-							startTime: "2000-01-01T00:00:00+08:00",
-							endTime,
-							maxResults: sampleMax,
-							searchResultPosition: startPos,
-						}),
-					});
-					const sampleParsed = parseHikvisionLogSearchResponse(
-						String(sampleResponse?.raw || ""),
-					);
-					const counts = new Map<string, number>();
-					for (const row of sampleParsed.rows || []) {
-						const classified = classifyHikvisionLogSearchRow(row);
-						const action = String(classified?.eventAction || "UNKNOWN_OPERATION").trim();
-						counts.set(action, (counts.get(action) || 0) + 1);
-						sampleSize += 1;
+			let extrapolatedByAction: Record<string, number> | null = null;
+			if (sampleClassify && (parsed.rows || []).length > 0) {
+				const sampleCounts = new Map<string, number>();
+				for (const row of parsed.rows || []) {
+					const classified = classifyHikvisionLogSearchRow(row);
+					// Normalize UNKNOWN* into residual bucket; keep proven enroll/user actions.
+					let action = String(classified?.eventAction || "UNKNOWN_OPERATION").trim();
+					if (action === "UNKNOWN" || action === "UNKNOWN_VENDOR") {
+						action = "UNKNOWN_OPERATION";
 					}
-					if (counts.size) {
-						byAction = Object.fromEntries(counts.entries());
+					sampleCounts.set(action, (sampleCounts.get(action) || 0) + 1);
+					sampleSize += 1;
+				}
+				if (sampleCounts.size) {
+					byAction = Object.fromEntries(sampleCounts.entries());
+					// Extrapolate sample proportions to full logSearch total so Sync logs
+					// matches device maintain-log truth (e.g. ~half Add Fingerprint / Add Person).
+					const total = Number(count || sampleSize);
+					if (total > 0 && sampleSize > 0) {
+						const extrapolated = new Map<string, number>();
+						let assigned = 0;
+						for (const [action, sampleCount] of sampleCounts.entries()) {
+							if (action === "UNKNOWN_OPERATION") continue;
+							const estimated = Math.round((Number(sampleCount) / sampleSize) * total);
+							extrapolated.set(action, estimated);
+							assigned += estimated;
+						}
+						const residual = Math.max(0, total - assigned);
+						if (residual > 0) {
+							extrapolated.set(
+								"UNKNOWN_OPERATION",
+								(extrapolated.get("UNKNOWN_OPERATION") || 0) + residual,
+							);
+						}
+						extrapolatedByAction = Object.fromEntries(extrapolated.entries());
 					}
-				} catch {
-					// Sample is best-effort; total still usable for residual honesty.
 				}
 			}
 
 			return {
 				ok: count !== null || Boolean(parsed.responseStatus),
 				count,
-				byAction,
+				// Prefer extrapolated full-device estimates for Sync logs willAdd.
+				byAction: extrapolatedByAction || byAction,
+				sampleByAction: byAction,
 				sampleSize,
 				error: count === null ? "Operation logs total unavailable" : null,
-				raw: { responseStatus: parsed.responseStatus, totalMatches: parsed.totalMatches },
+				raw: {
+					responseStatus: parsed.responseStatus,
+					totalMatches: parsed.totalMatches,
+					sampleRows: (parsed.rows || []).length,
+				},
 			};
 		} catch (error: any) {
 			return {
 				ok: false,
 				count: null,
 				byAction: null,
+				sampleByAction: null,
 				sampleSize: 0,
 				error:
 					error?.data?.errorCode ||

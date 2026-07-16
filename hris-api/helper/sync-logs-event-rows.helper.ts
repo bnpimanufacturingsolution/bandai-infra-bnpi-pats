@@ -350,9 +350,12 @@ export const buildHikvisionSyncLogsEventRows = (params: {
 		const sourceOk = params.operationSourceOk && !failed;
 		const deviceCount = opDevice.get(entry.eventAction) ?? opDevice.get(actionKey);
 		if (typeof deviceCount === "number" && Number.isFinite(deviceCount)) {
-			// Classified counts from logSearch sample/full for this action.
-			// These are proven observed counts, not residual dump.
+			// Classified (or sample-extrapolated) device counts for this action.
+			// Fingerprint enrolled / User created come from logSearch classification,
+			// not from dumping residual totals into Unknown.
 			willAdd = Math.max(0, Number(deviceCount) - alreadyInHris);
+			// Extrapolated estimates stay Ready when willAdd > 0 so operator can sync
+			// the missing enroll/user rows; residual unknown stays Needs review below.
 		} else if (entry.eventAction === "UNKNOWN_OPERATION") {
 			// Residual that is not classified as enroll/user/card/etc.
 			// This is NOT proof of new enrollments — only unclassified log volume.

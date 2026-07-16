@@ -79,6 +79,41 @@ describe("sync-logs-event-rows.helper", () => {
 		expect(userCreated?.willAdd ?? 0).to.equal(0);
 	});
 
+	it("uses classified logSearch estimates for fingerprint enroll and user created willAdd", () => {
+		// Device maintain log shows alternating Add Fingerprint / Add Person (~half each).
+		const alreadyByAction = countAlreadyInHrisByAction([
+			{ eventAction: "FINGERPRINT_ENROLLED", count: 0 },
+			{ eventAction: "USER_CREATED", count: 2 },
+			{ eventAction: "TAP", count: 25 },
+		]);
+		const operationDeviceByAction = new Map<string, number>([
+			["FINGERPRINT_ENROLLED", 10275],
+			["USER_CREATED", 10275],
+		]);
+		const rows = buildHikvisionSyncLogsEventRows({
+			deviceId: "test-a",
+			alreadyByAction,
+			operationDeviceByAction,
+			operationSourceOk: true,
+			operationSourceTotal: 20550,
+			attendanceSourceOk: true,
+			attendanceSourceTotal: 4781,
+			hideSilentZeros: true,
+		});
+		const fingerprint = rows.find((row) => row.eventAction === "FINGERPRINT_ENROLLED");
+		const userCreated = rows.find((row) => row.eventAction === "USER_CREATED");
+		const unknownOp = rows.find((row) => row.eventAction === "UNKNOWN_OPERATION");
+		const tap = rows.find((row) => row.eventAction === "TAP");
+
+		expect(fingerprint?.willAdd).to.equal(10275);
+		expect(fingerprint?.status).to.equal("Ready");
+		expect(userCreated?.willAdd).to.equal(10273);
+		expect(userCreated?.status).to.equal("Ready");
+		// No residual dump when classified estimates cover the operation total.
+		expect(unknownOp?.willAdd ?? 0).to.equal(0);
+		expect(tap?.willAdd).to.equal(4756);
+	});
+
 	it("reports dual source checks for Sync logs summary", () => {
 		const sources = buildHikvisionSourceChecks({
 			operationOk: true,

@@ -423,7 +423,14 @@ export const classifyHikvisionLogSearchRow = (
 		?.trim()
 		.toLowerCase();
 
-	if (vendorAction === "addfpbyemployeeno" || vendorAction === "addfpbycard") {
+	// Device maintain UI labels (Information major): "Add Fingerprint...", "Add Person Inf..."
+	// plus SDK metaIds like addFpByEmployeeNo / addUserInfo.
+	if (
+		vendorAction === "addfpbyemployeeno" ||
+		vendorAction === "addfpbycard" ||
+		/^add\s*finger(print)?s?(\b|\.\.\.|$)/i.test(minor) ||
+		/^addfinger/i.test(vendorAction || "")
+	) {
 		return {
 			eventCategory: "ENROLLMENT",
 			eventAction: "FINGERPRINT_ENROLLED",
@@ -431,7 +438,11 @@ export const classifyHikvisionLogSearchRow = (
 			eventConfidence: "PROVEN",
 		} as const;
 	}
-	if (vendorAction === "adduserinfo") {
+	if (
+		vendorAction === "adduserinfo" ||
+		/^add\s*person(\s*inf(o|ormation)?)?(\b|\.\.\.|$)/i.test(minor) ||
+		/^addperson/i.test(vendorAction || "")
+	) {
 		return {
 			eventCategory: "USER_MANAGEMENT",
 			eventAction: "USER_CREATED",

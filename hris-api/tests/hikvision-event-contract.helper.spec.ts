@@ -537,6 +537,28 @@ describe("hikvision event contract helper", () => {
 		});
 	});
 
+	it("maps device maintain UI Information minor labels used by TEST A", () => {
+		// Live device maintain log: Major=Information, Minor=Add Fingerprint... / Add Person Inf...
+		expect(
+			classifyHikvisionLogSearchRow({
+				majorType: "Information",
+				minorType: "Add Fingerprint...",
+			}),
+		).to.deep.include({
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventCategory: "ENROLLMENT",
+		});
+		expect(
+			classifyHikvisionLogSearchRow({
+				majorType: "Information",
+				minorType: "Add Person Inf...",
+			}),
+		).to.deep.include({
+			eventAction: "USER_CREATED",
+			eventCategory: "USER_MANAGEMENT",
+		});
+	});
+
 	it("maps the exact verified 10.184.38.177 logSearch metaIds", () => {
 		expect(
 			classifyHikvisionLogSearchRow({
