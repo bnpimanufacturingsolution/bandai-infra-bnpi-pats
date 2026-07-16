@@ -40,3 +40,43 @@ No agent can force-file-read without a rule + tool use. We cannot embed the enti
 **auto-load short rules → force tool-read of WWG → ban invention → require evidence.**
 
 That is the same pattern Claude/Codex use with project instructions + memory files: rules are injected; truth packs are opened on demand under instruction.
+
+## Live verification (loop until green)
+
+```powershell
+powershell -File scripts/verify-grok-wwg-bootstrap.ps1 -ProbeCount 2
+```
+
+This runs `grok inspect` + independent headless probes. Evidence lands in `.runtime/grok-bootstrap-verify-<stamp>/`.
+
+### What we already proved (2026-07-16)
+
+| Probe | Prompt style | Result |
+|---|---|---|
+| 1 | Explicit required file list | PASS — opened 3 WWG files |
+| 2 | Natural WWG status question | PASS — opened handoff + current-task + summary |
+| 3 | Minimal “hi” + JSON | PASS — still opened WWG first |
+| 4 | Non-stop multi-check + write proof.json | PASS — 5 turns, proof written, inspect count 3 |
+| Script | 2 more independent probes | Run after each rule change |
+
+### Why a long task still “stops in a minute”
+
+| Cause | Recoverable by agent? | What to do |
+|---|---|---|
+| Permission prompt waiting for you | Yes (config) | Use auto-approve / always-approve / `bypassPermissions` for trusted local work |
+| Headless `--max-turns` too low | Yes | Raise `--max-turns` (e.g. 40–100 for big tasks) |
+| Vague prompt, no checklist | Yes | Paste Sync logs non-stop prompt with acceptance checklist |
+| Model ends after partial success | Partial | Rules + checklist + “do not end until green”; re-run same session with “continue until checklist green” |
+| Real Stop Condition (3 failed recoveries, data risk, missing secrets) | No | Agent must report the blocker with evidence; you supply access/decision |
+
+### Operator checklist for next prompt
+
+1. Start Grok from this repo root (so AGENTS + `.grok/rules` load).
+2. Prefer this starter if you want extra force:
+
+```text
+Bootstrap WWG first (handoff, current-task, project-truth-summary). Current-State Report. Then execute docs/00-product/TASK-sync-logs-event-first-modal-GROK-PROMPT.md without stopping until the acceptance checklist is green or a real AGENTS.md stop condition is proven with 3 recovery attempts. Recover yourself on ports/Docker/VM/PATH/tests. Do not idle.
+```
+
+3. If interactive tools ask permission every step, enable always-approve for this trusted project so the run does not fake-stop.
+4. Re-check anytime: `powershell -File scripts/verify-grok-wwg-bootstrap.ps1`

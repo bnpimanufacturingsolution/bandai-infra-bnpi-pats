@@ -1,4 +1,4 @@
-# Project Truth — Grok always-on bootstrap
+# Project Truth - Grok always-on bootstrap
 
 This file is auto-loaded from `.grok/rules/`. It reinforces root `AGENTS.md`.
 
@@ -19,9 +19,23 @@ This file is auto-loaded from `.grok/rules/`. It reinforces root `AGENTS.md`.
 
 - No inventing DeviceEvent truth, Sync logs counts, filter labels, IPs, or endpoint shapes.
 - No claiming done without evidence (API/runtime/browser as required by `AGENTS.md`).
-- Missing fact → read file or mark `NEEDS_CONFIRMATION`. Never fill gaps with guesses.
+- Missing fact -> read file or mark `NEEDS_CONFIRMATION`. Never fill gaps with guesses.
 - DeviceEvent is saved event truth. DeviceUser is inventory only. Do not invent lifecycle events from inventory.
 
-## Keep going
+## Keep going (non-stop)
 
 Banned fake blockers and real stop conditions are in root `AGENTS.md`. Recover and continue by default.
+
+- Do not end a turn after a short partial success when an acceptance checklist remains open.
+- Recoverable: ports, Docker/VM, PATH, installs, flaky tests, rebuilds, warm-up, GitOps wait - fix yourself.
+- Real blocker only: 3 distinct recovery failures with evidence, irreversible data risk without backup, missing irrecoverable access, or inventing secrets/evidence.
+- If one path blocks, continue all other open paths immediately.
+
+## Verify this machine still loads rules
+
+```powershell
+grok inspect
+powershell -File scripts/verify-grok-wwg-bootstrap.ps1
+```
+
+`grok inspect` must list `Agents.md` / `AGENTS.md`, `Claude.md` / `CLAUDE.md`, and `.grok/rules/00-wwg-session-bootstrap.md`.

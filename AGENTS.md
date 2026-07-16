@@ -2,6 +2,76 @@
 
 This repo is Project Truth. Treat work here as owner-operator engineering, not a passive checklist.
 
+## Session Bootstrap Rule (mandatory every session / every meaningful turn)
+
+Grok auto-loads this `AGENTS.md` file and `.grok/rules/*.md`. It does **not** auto-load WWG wiki content.
+You must **open the files with tools** before planning, coding, diagnosing, or claiming status.
+
+### Hard ban on assumption / hallucination
+
+- Do **not** invent product truth, device counts, filter names, runtime IPs, API shapes, or "done" status from memory.
+- Do **not** answer architecture or Device Events / Sync logs questions from training data alone.
+- If a fact is not in opened WWG, code, config, or `.runtime` evidence, label it `NEEDS_CONFIRMATION` or go read the file.
+- Prefer: **read → quote path → act → prove**. Never: **assume → invent → declare done**.
+
+### Required open order before first substantive action
+
+Use the Read tool (or equivalent). Do not skip because "you already know this project."
+
+1. `.wwg/reports/wwg-agent-handoff.md`
+2. `.wwg/workspace/current-task.md`
+3. `.wwg/wiki/project-truth-summary.md`
+4. `.wwg/wiki/terminology-summary.md` (if present)
+5. `.wwg/wiki/project-truth.md` (sections relevant to the task)
+6. `.wwg/wiki/terminology.md` (terms relevant to the task)
+7. `.wwg/wiki/principles/README.md` and relevant principles when architecture/UX/governance reasoning is involved (especially `evidence-over-assumption.md`)
+8. `.wwg/governance/drift-guard.md`
+9. `Agent-Meta-Prompt-Template.md` for multi-step, drift, device, VM/GitOps, or repair work
+10. Relevant source, tests, and latest `.runtime/*` / `.wwg/reports/*` evidence for the task
+
+After opening, write a short **Current-State Report** (chat or `.runtime` stamp) with:
+
+- what the files say is true now
+- what is `STALE` / `CONFLICTING` / `NEEDS_CONFIRMATION`
+- the finish line for this turn
+- what you will touch and what you will not
+
+Only then plan or edit.
+
+### Layer map (Claude / Codex style)
+
+| Layer | Path | Who loads it | Purpose |
+|---|---|---|---|
+| Behavior rules | `AGENTS.md` (this file) | Auto by Grok | Autonomy, safety, bootstrap, non-stop |
+| Extra Grok rules | `.grok/rules/*.md` | Auto by Grok | Short hard rules, anti-hallucination |
+| Product truth | `.wwg/wiki/*` | Agent must Read | What is true |
+| How to think | `.wwg/wiki/principles/*` | Agent must Read | Durable reasoning |
+| What to do now | `.wwg/workspace/current-task.md` | Agent must Read | Active task |
+| Governance | `.wwg/governance/*` | Agent must Read | Drift / tests / recommendations |
+| Handoff | `.wwg/reports/wwg-agent-handoff.md` | Agent must Read | Latest validation / next actions |
+
+WWG is Project Truth's governed memory pack. Opening it is not optional for meaningful work.
+
+## Non-Stop Execution Rule (no early idle end)
+
+For any task that includes an acceptance checklist, finish line, verification, repair, Sync logs redesign, device truth, VM/GitOps, or “keep going until done”:
+
+1. **Do not end the turn** because a partial step worked, one file was edited, one test passed, or a minute of work elapsed.
+2. Keep looping: discover → plan → implement → prove (API then browser when needed) → fix → re-prove → truth-sync → commit/push when green.
+3. **Recoverable issues are agent-owned.** Examples: Docker/VM off, port down, warm-up, missing PATH tool, failed install, dirty git you can isolate, flaky test, workflow not started, need regenerate/build. Research, fix, retry. At least **3 different plausible recoveries** before labeling that sub-path blocked.
+4. **Only report a real blocker** when Real Stop Conditions below apply (3 failed distinct recoveries with evidence, irreversible data risk without backup, missing irrecoverable credentials/device/network, or would require inventing secrets/evidence).
+5. When blocked on one path, **immediately continue every other unblocked path**. Never sit idle waiting for the user on recoverable work.
+6. Before ending, re-check the acceptance checklist. If any required box is open and not a real blocker, continue.
+7. Headless/long jobs: use enough turns and auto-approve tool execution so permission prompts do not fake-stop the run.
+
+Operator tip: early “stops in seconds” are usually permission prompts waiting for you, headless `--max-turns` too low, or a vague prompt without a checklist. Use a checklist finish line + keep-going wording + auto-approve.
+
+Re-verify bootstrap anytime:
+
+```powershell
+powershell -File scripts/verify-grok-wwg-bootstrap.ps1
+```
+
 ## Autonomy Rule
 
 Do not ask for approval for normal development or operations progress. Recover, repair, commit, push `develop`, watch GitHub Actions, verify VM/GitOps/LAN state, and start tunnels to verified targets when those steps are part of the requested Project Truth goal.
@@ -332,38 +402,6 @@ If a possible principle change is uncertain, record it as a candidate principle 
 ## Task Mode Classification
 
 Classify each meaningful change before implementation as copy-only, docs-only, meaningful feature, bug fix, regression repair, high-risk, non-software, or mixed.
-
-If the request contradicts Project Truth or touches payment, auth, authorization, security, persistence, database/user data, production deployment, destructive actions, or compliance-sensitive behavior, pause and plan before implementation.
-
-## Wiki-First Flow
-
-Use for features, architecture, product decisions, UX standards, governance, and unclear requests.
-
-## Code-Discovery Flow
-
-Use for bugs, regressions, incidents, performance issues, and root-cause analysis.
-
-## Truth Synchronization Rule
-
-Sync code, Wiki, Workspace, Governance, and reports when implementation reveals product truth. Project Truth must not be silently overwritten, terminology changes require terminology docs, and accepted behavior changes require Project Truth or requirements updates.
-
-## Non-Negotiable Close-Out Rule
-
-Do not close out while relevant canonical truth, terminology, mock/demo boundaries, or governance review remain stale.
-
-## Test Enforcement
-
-Meaningful feature behavior requires meaningful tests. Bug fixes require regression tests whenever practical. Removed or weakened tests must be flagged. If no tests are added for meaningful work, document why. Non-software work may use decision logs, manual verification, approval checklists, or Project Truth updates when software tests are not the right evidence.
-
-## Recommendation Capture
-
-Before closing out meaningful work, check whether the task revealed future work outside the approved scope. If yes, add or update `.wwg/governance/recommendation-registry.md`, keep the entry concise and evidence-based, leave status as `Proposed` unless explicitly instructed otherwise, and do not implement it unless it belongs to the current task. If no, state: "No new recommendations were identified." Recommendations are candidate work only; they are not accepted project truth, active Workspace tasks, or commitments until reviewed and promoted.
-
-## Natural Prompt Preference
-
-Users may prompt naturally, for example: "Sync Project Truth with the latest docs and reports.", "Reconcile this implementation back to Project Truth.", "Pause and create a planning review before implementation.", or "Add meaningful regression tests for the fixed bug." CLI commands are backup for technical users.
-<!-- WWG_GENERATED:EXISTING_PROJECT_ADOPTION_RULE:END -->
-
 
 If the request contradicts Project Truth or touches payment, auth, authorization, security, persistence, database/user data, production deployment, destructive actions, or compliance-sensitive behavior, pause and plan before implementation.
 
