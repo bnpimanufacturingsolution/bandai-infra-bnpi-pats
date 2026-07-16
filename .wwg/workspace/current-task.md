@@ -1,6 +1,24 @@
 # Current Task
 
-Status: PARTIAL — event-first Sync logs shipped; live DB preview blocked on VM/SSH
+Status: LIVE PROVEN — event-first Sync logs on public PROD/DEV; Hikvision source path still unavailable
+
+## Latest Task Addendum - 2026-07-16 Sync logs live residual unblocked (Cloudflare)
+
+- Task mode: Runtime proof / residual close-out (no code change).
+- Trigger: operator `ssh project-truth-hris` succeeded after Cloudflare Access browser login; public client screens stayed up.
+- Evidence: `.runtime/vm-sync-logs-continue-20260716-220308/`
+- Proven:
+  - Host LAN to `10.184.37.19` still times out from this agent host; Cloudflare SSH + public origins work.
+  - Argo apps at revision `7309928` (includes event-first `ee42f4a`); PROD/DEV/UAT `hris-api`/`hris-app` Running on `hris-api-local:develop` / app images; tunnel active.
+  - `GET https://api.bnpi-hris.tech/api/device/sync-preview` returns per-device `eventRows[]` + `sources[]` with live ZKTeco Ready rows (e.g. `.235` willAdd `2035` / already `20267`).
+  - `GET https://dev-api.bnpi-hris.tech/api/device/sync-preview` returns Hikvision 16-row event catalogs with already-in-HRIS by action even when sources unavailable.
+  - Public browser: admin login → Device events → Sync logs (`action=sync-logs`); UI shows Event to add / Will add / Already in HRIS / Source proof; network `sync-preview` HTTP 200.
+- Residual still open:
+  - Hikvision TCP from VM fail for configured addresses; PROD Main Entrance Device missing access credentials in preview error.
+  - ZKTeco `.234` preview still source_unavailable while later TCP `4370` OK — investigate bridge/read path, not modal contract.
+  - `project-truth-runtime-dev` Argo app Synced/Degraded.
+  - Per-type operation **willAdd** precision still needs per-action logSearch classification when Hikvision sources are reachable.
+  - ansible-pull commit `e156c70` lags Argo serving revision `7309928`.
 
 ## Latest Task Addendum - 2026-07-16 Sync logs event-first modal
 
@@ -13,10 +31,10 @@ Status: PARTIAL — event-first Sync logs shipped; live DB preview blocked on VM
   - `GET /api/device/sync-preview` now returns `eventRows[]`, `sources[]`, operation log total probe (`ContentMgmt/logSearch`), attendance total (`AccessControl/AcsEvent`), and already-in-HRIS by `eventAction`.
   - UI summary uses Ready source checks X of Y from source probes; per-device table remains Event to add | Will add | Already in HRIS | Source proof | Filter after sync | Status.
   - Focused mocha + vitest + Playwright headless smoke (ZKTeco + Hikvision event-first) with screenshots.
-- Boundary / residual:
-  - Per-type operation **willAdd** is fully precise only when per-action device counts exist (sample/full logSearch classification). Without breakdown, residual operation total lands on Unknown operation (Needs review) while known types show already-in-HRIS accurately.
-  - Full historical ACS serial reconciliation and GitOps promotion still out of scope.
-  - VM LAN SSH was unreachable this session for remote DB forward; local API health still served preview when DB was available.
+- Boundary / residual (updated by live proof above):
+  - Live DB/API preview residual closed via Cloudflare public + CF SSH path.
+  - Per-type operation **willAdd** precision and Hikvision physical source reachability remain open.
+  - Full historical ACS serial reconciliation still out of scope.
 
 ## Latest Task Addendum - 2026-07-16 Hikvision Device Events Source Truth
 
