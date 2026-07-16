@@ -227,10 +227,12 @@ export const useHikvisionListenerStatus = (enabled = true) => {
 		queryFn: () => devicesService.getHikvisionListenerStatus(),
 		enabled,
 		staleTime: 2 * 1000,
-		// Keep existing preview rows visible while a quieter background refresh runs.
-		// The preview endpoint already bounds unavailable-device checks to about 5 seconds.
+		// Listener modal must settle quickly; one failed status should not hang "Checking…".
+		// The API now uses a single SSH status round-trip with a hard budget.
 		refetchInterval: enabled ? 15 * 1000 : false,
-		retry: 1,
+		retry: 0,
+		// Keep last successful snapshot visible while a quieter refresh runs.
+		placeholderData: (previous) => previous,
 	});
 };
 

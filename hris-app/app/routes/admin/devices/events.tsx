@@ -944,10 +944,14 @@ export default function DeviceEventsPage() {
 			: false;
 	const {
 		data: hikvisionListenerStatus,
-		isLoading: isLoadingHikvisionListenerStatus,
+		isLoading: isHikvisionListenerStatusPending,
+		isFetching: isFetchingHikvisionListenerStatus,
 		error: hikvisionListenerStatusError,
 		refetch: refetchHikvisionListenerStatus,
-	} = useHikvisionListenerStatus(isSdkAlarmSavedScope);
+	} = useHikvisionListenerStatus(isSdkAlarmSavedScope || isListenerControlModalOpen);
+	// Only treat as "Checking…" when we have no snapshot yet. Refetch must not blank the modal.
+	const isLoadingHikvisionListenerStatus =
+		isHikvisionListenerStatusPending && !hikvisionListenerStatus;
 	const hikvisionListenerControl = useControlHikvisionListener();
 
 	const savedQueryParams: ApiQueryParams = {
@@ -1976,9 +1980,31 @@ export default function DeviceEventsPage() {
 			? `SDK login failed${hikvisionListenerStatus.sdk.lastTargetHost ? ` against ${hikvisionListenerStatus.sdk.lastTargetHost}` : ""}.`
 			: "");
 	const hikvisionListenerDevices = useMemo(() => {
-		const devices = hikvisionListenerStatus?.sdk?.devices || [];
+		const rows = hikvisionListenerStatus?.sdk?.devices || [];
 		const selectedId = deviceId !== "all" ? deviceId : "";
-		return [...devices].sort((a, b) => {
+		const catalogById = new Map(
+			devices.map((device: any) => [String(device.id || ""), device] as const),
+		);
+		const enriched = rows.map((row) => {
+			const catalog = row.deviceId ? catalogById.get(String(row.deviceId)) : null;
+			const configuredAddress = String(catalog?.address || "").trim() || null;
+			const config =
+				catalog?.config && typeof catalog.config === "object" ? catalog.config : {};
+			const runtimeHost = String(
+				config.hikvisionSdkRuntimeAddress || row.host || "",
+			).trim();
+			const transport = String(config.hikvisionSdkRuntimeTransport || "").trim();
+			const usesReverseTunnel =
+				transport === "ssh-reverse-forward" ||
+				runtimeHost === "127.0.0.1" ||
+				runtimeHost === "localhost";
+			return {
+				...row,
+				configuredAddress,
+				usesReverseTunnel,
+			};
+		});
+		return [...enriched].sort((a, b) => {
 			if (selectedId && a.deviceId === selectedId) return -1;
 			if (selectedId && b.deviceId === selectedId) return 1;
 			const aLive = a.receivingCallbacks ? 0 : a.armed ? 1 : a.state === "login_failed" ? 2 : 3;
@@ -1986,7 +2012,7 @@ export default function DeviceEventsPage() {
 			if (aLive !== bLive) return aLive - bLive;
 			return String(a.name || a.host || "").localeCompare(String(b.name || b.host || ""));
 		});
-	}, [deviceId, hikvisionListenerStatus?.sdk?.devices]);
+	}, [deviceId, devices, hikvisionListenerStatus?.sdk?.devices]);
 	const selectedHikvisionListenerDevice =
 		deviceId !== "all"
 			? hikvisionListenerDevices.find((device) => device.deviceId === deviceId) || null
@@ -3170,7 +3196,19 @@ export default function DeviceEventsPage() {
 														</Badge>
 													</div>
 													<div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-														<span>{device.host || "No host"}</span>
+														{(device as any).configuredAddress ? (
+															<>
+																<span title="Configured device address">
+																	{(device as any).configuredAddress}
+																</span>
+																<span className="text-slate-300">/</span>
+															</>
+														) : null}
+														<span title="SDK login host used by the listener">
+															{(device as any).usesReverseTunnel
+																? `SDK via reverse tunnel ${device.host || "127.0.0.1"}`
+																: device.host || "No host"}
+														</span>
 														<span className="text-slate-300">/</span>
 														<span>SDK {device.sdkPort || "8000"}</span>
 														<span className="text-slate-300">/</span>
@@ -3178,6 +3216,11 @@ export default function DeviceEventsPage() {
 														{isSelected ? (
 															<Badge variant="secondary" className="rounded-md px-1.5 py-0">
 																Selected
+															</Badge>
+														) : null}
+														{isFetchingHikvisionListenerStatus && isSelected ? (
+															<Badge variant="secondary" className="rounded-md px-1.5 py-0">
+																Refreshing…
 															</Badge>
 														) : null}
 													</div>

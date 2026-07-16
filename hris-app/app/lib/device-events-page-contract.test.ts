@@ -189,6 +189,15 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("useControlHikvisionListener");
 		expect(routeSource).to.contain('action === "listener-control"');
 		expect(routeSource).to.contain('next.set("action", "listener-control")');
+		// Listener modal must fetch even when opened, and not blank on refresh.
+		expect(routeSource).to.contain(
+			"useHikvisionListenerStatus(isSdkAlarmSavedScope || isListenerControlModalOpen)",
+		);
+		expect(routeSource).to.contain(
+			"isHikvisionListenerStatusPending && !hikvisionListenerStatus",
+		);
+		expect(routeSource).to.contain("SDK via reverse tunnel");
+		expect(routeSource).to.contain("configuredAddress");
 		expect(routeSource).to.contain('title="Hikvision listener"');
 		expect(routeSource).to.contain("Live capture receiving taps");
 		expect(routeSource).to.contain("Live capture running · waiting for proof");

@@ -512,8 +512,13 @@ const runFixedProcess = (
 const quoteRemoteShellArg = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
 
 const HIKVISION_VM_SSH_CONNECT_TIMEOUT_SECONDS = Math.min(
-	Math.max(Number(process.env.PROJECT_TRUTH_VM_SSH_CONNECT_TIMEOUT_SECONDS || 8), 2),
+	// Keep connect short so status/control never hangs the admin modal on a dead LAN path.
+	Math.max(Number(process.env.PROJECT_TRUTH_VM_SSH_CONNECT_TIMEOUT_SECONDS || 3), 2),
 	30,
+);
+const HIKVISION_LISTENER_STATUS_TIMEOUT_MS = Math.max(
+	2000,
+	Math.min(Number(process.env.HIKVISION_LISTENER_STATUS_TIMEOUT_MS || 4500), 12000),
 );
 
 const isHikvisionTransportFailure = (value: unknown) =>
@@ -558,17 +563,11 @@ const getHikvisionListenerVmTargets = (): HikvisionListenerVmTarget[] => {
 			},
 		];
 	}
-	const targets: HikvisionListenerVmTarget[] = [
-		{
-			mode: "ssh",
-			host,
-			port: configuredPort,
-			user,
-			key,
-			destination: `${user}@${host}`,
-			label: `lan:${host}`,
-		},
-	];
+	// Prefer the SSH alias first on Windows/host operators. Direct LAN
+	// (`10.184.37.19`) often times out from this workstation while
+	// `project-truth-hris` (Cloudflare Access SSH) still works. Trying LAN
+	// first made the Listener modal sit on "Checking…" for many seconds.
+	const targets: HikvisionListenerVmTarget[] = [];
 	if (configuredAlias && configuredAlias !== host && configuredAlias !== `${user}@${host}`) {
 		targets.push({
 			mode: "ssh",
@@ -579,6 +578,15 @@ const getHikvisionListenerVmTargets = (): HikvisionListenerVmTarget[] => {
 			label: `alias:${configuredAlias}`,
 		});
 	}
+	targets.push({
+		mode: "ssh",
+		host,
+		port: configuredPort,
+		user,
+		key,
+		destination: `${user}@${host}`,
+		label: `lan:${host}`,
+	});
 	return targets;
 };
 
@@ -12468,58 +12476,55 @@ export const controller = (prisma: PrismaClient) => {
 
 	const readHikvisionListenerStatus = async () => {
 		const fallbackTarget = getHikvisionListenerVmTargets()[0];
-		const [activeResult, showResult, tailResult] = await Promise.all([
-			runHikvisionListenerVmCommand(
-				["systemctl", "is-active", HIKVISION_HOT_RELOAD_LISTENER_SERVICE],
-				7000,
-			),
-			runHikvisionListenerVmCommand(
+		// One SSH round-trip only. Three parallel SSH sessions previously
+		// stacked ConnectTimeout on a dead LAN target and left the modal on
+		// "Checking live capture…" for a long time.
+		const bundled = await runHikvisionListenerVmCommand(
+			[
+				"bash",
+				"-lc",
 				[
-					"systemctl",
-					"show",
-					HIKVISION_HOT_RELOAD_LISTENER_SERVICE,
-					"--property=ActiveState,SubState,MainPID,NRestarts,ExecMainStatus,Result",
-					"--no-pager",
-				],
-				7000,
-			),
-			runHikvisionListenerVmCommand(
-				[
-					"sudo",
-					"tail",
-					"-n",
-					"80",
-					"/var/log/project-truth/hikvision-hot-reload-listener.jsonl",
-				],
-				7000,
-			),
-		]);
+					`printf 'ACTIVE='`,
+					`systemctl is-active ${HIKVISION_HOT_RELOAD_LISTENER_SERVICE} 2>/dev/null || true`,
+					`printf '\\n'`,
+					`echo '---SHOW---'`,
+					`systemctl show ${HIKVISION_HOT_RELOAD_LISTENER_SERVICE} --property=ActiveState,SubState,MainPID,NRestarts,ExecMainStatus,Result --no-pager 2>/dev/null || true`,
+					`echo '---LOG---'`,
+					`sudo tail -n 80 /var/log/project-truth/hikvision-hot-reload-listener.jsonl 2>/dev/null || true`,
+				].join("; "),
+			],
+			HIKVISION_LISTENER_STATUS_TIMEOUT_MS,
+		);
 
-		const show = parseSystemctlShow(showResult.stdout);
-		const activeText = activeResult.stdout.trim();
+		const raw = String(bundled.stdout || "");
+		const showChunk = raw.includes("---SHOW---")
+			? raw.split("---SHOW---")[1]?.split("---LOG---")[0] || ""
+			: "";
+		const logChunk = raw.includes("---LOG---") ? raw.split("---LOG---").slice(1).join("---LOG---") : "";
+		const activeMatch = raw.match(/ACTIVE=([^\r\n]*)/);
+		const activeText = String(activeMatch?.[1] || "").trim();
+		const show = parseSystemctlShow(showChunk);
 		const activeState = show.ActiveState || activeText || "unknown";
 		const subState = show.SubState || "unknown";
 		const running = activeState === "active" && subState !== "failed";
-		const recentLogLines = tailResult.stdout
+		const recentLogLines = logChunk
 			.split(/\r?\n/)
 			.map((line) => line.trim())
 			.filter(Boolean)
 			.slice(-80);
 		const sdk = summarizeHikvisionListenerLogs(recentLogLines);
-		const resolvedTarget =
-			activeResult.exitCode === 0
-				? activeResult.target
-				: showResult.exitCode === 0
-					? showResult.target
-					: tailResult.exitCode === 0
-						? tailResult.target
-						: fallbackTarget;
+		const resolvedTarget = bundled.exitCode === 0 || recentLogLines.length || activeText
+			? bundled.target
+			: fallbackTarget;
 		const controlAvailable =
-			showResult.exitCode === 0 || activeResult.exitCode === 0 || Boolean(activeText);
+			bundled.exitCode === 0 || Boolean(activeText) || Boolean(show.ActiveState);
 		const statusError =
-			showResult.exitCode === 0
+			bundled.exitCode === 0
 				? null
-				: showResult.stderr.trim() || activeResult.stderr.trim() || null;
+				: bundled.stderr.trim() ||
+					(bundled.exitCode === 124 || /timed out|timeout/i.test(bundled.stderr)
+						? "Listener status check timed out. Reverse tunnel or SSH path may be down."
+						: bundled.stdout.trim() || "Listener status check failed");
 
 		return {
 			service: HIKVISION_HOT_RELOAD_LISTENER_SERVICE,
@@ -12543,12 +12548,12 @@ export const controller = (prisma: PrismaClient) => {
 				actions: ["start", "stop", "restart"],
 			},
 			logs: {
-				available: tailResult.exitCode === 0,
+				available: recentLogLines.length > 0,
 				recent: recentLogLines,
 				error:
-					tailResult.exitCode === 0
+					recentLogLines.length > 0
 						? null
-						: tailResult.stderr.trim() || tailResult.stdout.trim() || null,
+						: statusError || "No listener log lines returned by the VM status check.",
 			},
 			error: statusError,
 		};

@@ -1998,7 +1998,10 @@ class DevicesService extends APIService {
 
 	async getHikvisionListenerStatus(): Promise<HikvisionListenerStatus> {
 		try {
-			const response = await hrisApiClient.get<any>("/api/device/hikvision/listener");
+			// Cap client wait so the Listener modal never spins forever if SSH stalls.
+			const response = await hrisApiClient.get<any>("/api/device/hikvision/listener", {
+				timeoutMs: 8000,
+			});
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Failed to load Hikvision listener status");
 			return data as HikvisionListenerStatus;
