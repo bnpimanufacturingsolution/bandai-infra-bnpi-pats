@@ -1,4 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import devicesService, {
 	type DevicesResponse,
 	type DeviceEventsResponse,
@@ -22,6 +23,10 @@ import devicesService, {
 	type UpdateDeviceRequest,
 	type ZktecoAttendanceSyncRequest,
 } from "../../services/devices.service";
+import {
+	buildDeviceReachabilitySummary,
+	type DeviceReachabilitySummary,
+} from "../device-reachability";
 import { toast as sonnerToast } from "sonner";
 import type { ApiQueryParams } from "~/services/api-service";
 
@@ -130,6 +135,91 @@ export const useDeviceHealth = (deviceId?: string, enabled = true) => {
 		refetchInterval: enabled && deviceId ? 30 * 1000 : false,
 		retry: 1,
 	});
+};
+
+export type DeviceHealthMapEntry = {
+	deviceId: string;
+	health?: DeviceHealthResponse;
+	isLoading: boolean;
+	isFetching: boolean;
+	isError: boolean;
+	errorMessage?: string | null;
+	reachability: DeviceReachabilitySummary;
+};
+
+/**
+ * Parallel per-device health map for admin tables and device filters.
+ * Source of truth: GET /api/device/:id/health (summary.status online|degraded|offline).
+ */
+export const useDeviceHealthMap = (deviceIds: string[], enabled = true) => {
+	const uniqueIds = useMemo(
+		() =>
+			Array.from(
+				new Set(
+					(deviceIds || [])
+						.map((id) => String(id || "").trim())
+						.filter(Boolean),
+				),
+			),
+		[deviceIds],
+	);
+
+	const queries = useQueries({
+		queries: uniqueIds.map((deviceId) => ({
+			queryKey: queryKeys.devices.health(deviceId),
+			queryFn: () => devicesService.getDeviceHealth(deviceId),
+			enabled: enabled && Boolean(deviceId),
+			staleTime: 15 * 1000,
+			refetchInterval: enabled ? 45 * 1000 : false,
+			retry: 1,
+		})),
+	});
+
+	const byId = useMemo(() => {
+		const map = new Map<string, DeviceHealthMapEntry>();
+		uniqueIds.forEach((deviceId, index) => {
+			const query = queries[index];
+			const health = query?.data as DeviceHealthResponse | undefined;
+			const isLoading = Boolean(query?.isLoading || query?.isPending);
+			const isError = Boolean(query?.isError);
+			const errorMessage =
+				isError && query?.error
+					? String((query.error as any)?.message || query.error || "Health check failed")
+					: null;
+			map.set(deviceId, {
+				deviceId,
+				health,
+				isLoading,
+				isFetching: Boolean(query?.isFetching),
+				isError,
+				errorMessage,
+				reachability: buildDeviceReachabilitySummary({
+					isLoading: isLoading && !health,
+					isError: isError && !health,
+					summaryStatus: health?.summary?.status,
+					checkedAt: health?.summary?.checkedAt,
+					networkOk: health?.checks?.network?.ok,
+					deviceApiOk: health?.checks?.deviceApi?.ok,
+					errorMessage,
+				}),
+			});
+		});
+		return map;
+	}, [queries, uniqueIds]);
+
+	const isLoadingAny = queries.some((query) => query.isLoading || query.isPending);
+	const isFetchingAny = queries.some((query) => query.isFetching);
+
+	return {
+		byId,
+		deviceIds: uniqueIds,
+		isLoadingAny,
+		isFetchingAny,
+		get: (deviceId?: string | null) => {
+			if (!deviceId) return undefined;
+			return byId.get(String(deviceId));
+		},
+	};
 };
 
 export const useHikvisionListenerStatus = (enabled = true) => {

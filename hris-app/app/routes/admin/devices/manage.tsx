@@ -43,6 +43,7 @@ import {
 	useDevices,
 	useDevice,
 	useDeviceHealth,
+	useDeviceHealthMap,
 	useDeviceSyncPreview,
 	useDeviceSyncRuns,
 	useDeviceUsers,
@@ -53,6 +54,10 @@ import {
 	useSyncDeviceUsers,
 	useTriggerHikvisionAttendanceImport,
 } from "~/lib/hooks/useDevices";
+import {
+	getDeviceReachabilityBadgeClass,
+	getDeviceReachabilityDotClass,
+} from "~/lib/device-reachability";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -660,6 +665,8 @@ export default function DevicesManagePage() {
 	const items = Array.isArray(devicesData?.data)
 		? devicesData.data
 		: devicesData?.data?.devices || legacyDevicesData?.devices || [];
+	const deviceIdsForHealth = items.map((device) => device.id).filter(Boolean);
+	const deviceHealthMap = useDeviceHealthMap(deviceIdsForHealth, items.length > 0);
 
 	// Deep link URL params
 	const action = searchParams.get("action");
@@ -753,6 +760,38 @@ export default function DevicesManagePage() {
 			required: true,
 			priority: "high",
 			render: (value) => (value ? <AdminConfigCodeChip>{value}</AdminConfigCodeChip> : <AdminConfigMutedDash />),
+		},
+		{
+			// Synthetic key: reachability comes from GET /api/device/:id/health, not a Device column.
+			key: "reachability",
+			label: "Status",
+			width: "140px",
+			required: true,
+			priority: "critical",
+			render: (_value, device) => {
+				const entry = deviceHealthMap.get(device.id);
+				const reachability = entry?.reachability;
+				const status = reachability?.status || "checking";
+				const label = reachability?.label || "Checking…";
+				const title =
+					reachability?.detail ||
+					"Live reachability from HRIS health check (network + device API).";
+				return (
+					<span
+						className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ${getDeviceReachabilityBadgeClass(status)}`}
+						title={title}
+						data-testid="device-reachability-status"
+						data-device-id={device.id}
+						data-reachability={status}
+						aria-label={`${device.name || "Device"} ${label}`}>
+						<span
+							className={`h-2 w-2 shrink-0 rounded-full ${getDeviceReachabilityDotClass(status)}`}
+							aria-hidden="true"
+						/>
+						{label}
+					</span>
+				);
+			},
 		},
 		{
 			key: "config",

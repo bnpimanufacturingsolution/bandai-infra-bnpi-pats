@@ -133,7 +133,7 @@ describe("Device event taxonomy helper", () => {
 		});
 
 		expect(taxonomy).to.deep.include({
-			eventCategory: "ACCESS_CONTROL",
+			eventCategory: "UNKNOWN_VENDOR",
 			eventAction: "UNKNOWN",
 			eventLabel: "Access controller event needs review",
 			eventConfidence: "UNKNOWN",
@@ -154,11 +154,11 @@ describe("Device event taxonomy helper", () => {
 		});
 
 		expect(taxonomy).to.deep.include({
-			eventCategory: "USER_MANAGEMENT",
+			eventCategory: "RUNTIME",
 			eventAction: "SYNC_SIGNAL",
 			eventLabel: "Device user or biometric operation",
-			eventConfidence: "INFERRED",
-			capabilityConfidence: "inferred",
+			eventConfidence: "SUPPORTED",
+			capabilityConfidence: "supported",
 		});
 	});
 

@@ -33,6 +33,7 @@ import { Switch } from "~/components/ui/switch";
 import {
 	useDeviceEvents,
 	useDeviceHealth,
+	useDeviceHealthMap,
 	useDeviceImportJob,
 	useDeviceSyncPreview,
 	useCancelDeviceImportJob,
@@ -44,6 +45,7 @@ import {
 	useTriggerZktecoAttendanceSync,
 	queryKeys,
 } from "~/lib/hooks/useDevices";
+import { getDeviceReachabilityDotClass } from "~/lib/device-reachability";
 import { useAcsEvents } from "~/lib/hooks/use-hikvision";
 import { useAuth } from "~/lib/hooks/use-auth";
 import { useSocket } from "~/contexts/socket-context";
@@ -873,6 +875,10 @@ export default function DeviceEventsPage() {
 
 	const { data: devicesData } = useDevices({ limit: 100, document: true });
 	const devices = useMemo(() => (devicesData as any)?.devices || [], [devicesData]);
+	const deviceHealthMap = useDeviceHealthMap(
+		devices.map((device: any) => String(device?.id || "")).filter(Boolean),
+		devices.length > 0,
+	);
 	const selectedDevice = deviceId === "all" ? undefined : devices.find((device: any) => device.id === deviceId);
 	const zktecoDevices = useMemo(
 		() => devices.filter((device: any) => isZktecoDevice(device)),
@@ -1176,12 +1182,29 @@ export default function DeviceEventsPage() {
 	const deviceOptions: SelectOption[] = useMemo(
 		() => [
 			{ value: "all", label: "All devices" },
-			...devices.map((device: any) => ({
-				value: device.id,
-				label: device.name || `${device.address}:${device.port}`,
-			})),
+			...devices.map((device: any) => {
+				const reachability = deviceHealthMap.get(device.id)?.reachability;
+				const status = reachability?.status || "checking";
+				const statusLabel = reachability?.label || "Checking…";
+				const name = device.name || `${device.address}:${device.port}`;
+				return {
+					value: device.id,
+					// Keep plain label for accessibility; leading dot shows live reachability.
+					label: name,
+					leading: (
+						<span
+							className={`inline-block h-2.5 w-2.5 rounded-full ${getDeviceReachabilityDotClass(status)}`}
+							title={`${name}: ${statusLabel}`}
+							aria-label={statusLabel}
+							data-testid="device-filter-reachability-dot"
+							data-device-id={device.id}
+							data-reachability={status}
+						/>
+					),
+				};
+			}),
 		],
-		[devices],
+		[deviceHealthMap, devices],
 	);
 
 	const savedEvents = useMemo(() => (data?.events || []).map(normalizeSavedEvent), [data?.events]);

@@ -67,6 +67,58 @@ Preview returns request metadata, raw pages, parsed rows, normalized rows,
 summary, next position, elapsed/failure context, and no secrets. Execute
 persists normalized rows with deduplication and returns IDs/duplicate flags.
 
+### `POST /api/device/:id/hikvision/acs-events`
+
+Admin-only. Body: `execute=false` by default, `startTime`, `endTime`,
+`maxResults`, `maxRows`, optional `searchId`, `major=0`, `minor=0`, and
+`timeReverseOrder=true`. It uses stored device credentials through the existing
+Hikvision client and never accepts browser session cookies or `SessionTag`.
+
+Preview returns request metadata, raw pages, normalized ACS rows, source totals,
+summary buckets, elapsed/failure context, and no secrets. Execute persists only
+missing `DeviceEvent` rows with deduplication and returns IDs/duplicate flags.
+
+### `GET /api/device/sync-preview`
+
+For Hikvision devices, preview rows must include source-specific plans instead
+of one ambiguous device total:
+
+```json
+{
+  "deviceId": "device-id",
+  "vendor": "Hikvision",
+  "sources": [
+    {
+      "sourceKey": "hikvision_logsearch",
+      "label": "Operation logs",
+      "endpoint": "ContentMgmt/logSearch",
+      "evidenceSource": "ISAPI_LOGSEARCH",
+      "onDeviceCount": 2478,
+      "savedHrisCount": 0,
+      "canImportCount": 2478,
+      "leaveAloneCount": 0,
+      "failedCount": 0,
+      "status": "ready"
+    },
+    {
+      "sourceKey": "hikvision_acs_events",
+      "label": "Attendance/access events",
+      "endpoint": "AccessControl/AcsEvent",
+      "evidenceSource": "SDK_CALLBACK",
+      "onDeviceCount": 2108,
+      "savedHrisCount": 23,
+      "canImportCount": 2085,
+      "leaveAloneCount": 0,
+      "failedCount": 0,
+      "status": "ready"
+    }
+  ]
+}
+```
+
+Legacy flat count fields may remain temporarily for compatibility, but the UI
+must prefer `sources[]` when present.
+
 ### `POST /api/device/events/reset`
 
 Admin-only and preview-first. Cleanup scope can target the exact legacy
@@ -78,7 +130,8 @@ for this cleanup.
 
 - Endpoint: `POST /ISAPI/ContentMgmt/logSearch`.
 - XML root: `CMSearchDescription` version 2.0.
-- Default `metaId`: `log.std-cgi.com`.
+- Request `metaId`: `log.std-cgi.com`; response rows preserve their exact
+  device-reported `metaId` before normalization.
 - Preserve Hikvision's field spelling `searchResultPostion`.
 - Advance by actual returned row count, continue only for `MORE`, stop at total,
   empty page, or bounded `maxRows`.
@@ -88,26 +141,27 @@ for this cleanup.
 
 | Raw evidence | Category / action | Confidence |
 |---|---|---|
-| SDK attendance pass (`major=5`, `minor=38`, fingerprint compare pass) | `ATTENDANCE/TAP` | `PROVEN` |
-| SDK fingerprint compare fail | `ATTENDANCE/TAP_REJECTED` | `SUPPORTED` |
-| `.../addFpByEmployeeNo`, `.../addFpByCard` | `ENROLLMENT/FINGERPRINT_ENROLLED` | `PROVEN` |
+| SDK attendance pass (`major=5`, observed `minor=38`, `75`, or `104`) | `ATTENDANCE/TAP` | `PROVEN` |
+| SDK fingerprint compare fail (observed numeric `minor=39`) | `ATTENDANCE/TAP_REJECTED` | `SUPPORTED` |
+| `log.hikvision.com/Information/addFpByEmployeeNo` | `ENROLLMENT/FINGERPRINT_ENROLLED` | `PROVEN` |
 | explicit fingerprint modify text/code | `ENROLLMENT/FINGERPRINT_UPDATED` | `PROVEN` log / `SUPPORTED` SDK mapping |
 | explicit fingerprint delete/clear text/code | `ENROLLMENT/FINGERPRINT_DELETED` | `PROVEN` log / `SUPPORTED` SDK mapping |
-| `.../localFaceDataAppend` | `ENROLLMENT/FACE_ENROLLED` | `PROVEN` |
+| `log.hikvision.com/Operation/localfaceDataAppend` | `ENROLLMENT/FACE_ENROLLED` | `PROVEN` |
 | explicit face modify evidence | `ENROLLMENT/FACE_UPDATED` | evidence-dependent |
-| `.../localFaceDataDelete` | `ENROLLMENT/FACE_DELETED` | `PROVEN` |
+| `log.hikvision.com/Operation/localfaceDataDelete` | `ENROLLMENT/FACE_DELETED` | `PROVEN` |
 | `.../addCard` | `ENROLLMENT/CARD_ENROLLED` | `PROVEN` |
 | explicit card modify/delete evidence | `CARD_UPDATED` / `CARD_DELETED` | evidence-dependent |
-| `.../addUserInfo` or explicit Add Person | `USER_MANAGEMENT/USER_CREATED` | `PROVEN` |
+| `log.hikvision.com/Information/addUserInfo` or explicit Add Person | `USER_MANAGEMENT/USER_CREATED` | `PROVEN` |
 | explicit user modify evidence | `USER_MANAGEMENT/USER_UPDATED` | evidence-dependent |
 | `.../clearUserInfo` | `USER_MANAGEMENT/USER_DELETED` | `PROVEN` |
 | bounded sync run completion | `RUNTIME/SYNC_IMPORTED` | `PROVEN` runtime evidence |
 | explicit but not canonical SDK operation callback | `RUNTIME/SYNC_SIGNAL` or `UNKNOWN_VENDOR/UNKNOWN` | `SUPPORTED` or `UNKNOWN` |
-| unmapped vendor row | `UNKNOWN_VENDOR/UNKNOWN` | `UNKNOWN` |
+| `log.hikvision.com/Operation/enterLocalUIBackground` | `UNKNOWN_VENDOR/UNKNOWN` | `UNKNOWN` |
+| other unmapped vendor row | `UNKNOWN_VENDOR/UNKNOWN` | `UNKNOWN` |
 
-Exact `.173` metaIds remain `NEEDS_REVERIFY` until raw pages are captured. Raw
-strings must be stored before any mapping table is promoted as device-proven.
-An Add Person/user row must never map to fingerprint enrollment.
+These `.173` strings are device-proven by the raw XML pages captured on
+2026-07-16. Raw strings are stored before mapping. An Add Person/user row must
+never map to fingerprint enrollment.
 
 ## Deduplication
 
@@ -151,6 +205,24 @@ evidence source/directness, raw code/string, runtime path, result, correlation,
 and formatted raw payload. Use flat borders/dividers and existing primitives;
 avoid nested dashboard cards.
 
+### Sync logs modal
+
+The existing `Sync device logs` modal must place the new behavior here, not on a
+separate page:
+
+- top summary: devices checked, on-device total, already in HRIS, can import
+  now, will leave alone, failed, ready;
+- per Hikvision device: device identity and address;
+- per source family under that device:
+  - `Operation logs` from `ContentMgmt/logSearch`;
+  - `Attendance/access events` from `AccessControl/AcsEvent`;
+  - read state, endpoint family, on-device count, in-HRIS count, can-import
+    count, leave-alone count, failed count, and last read/elapsed time.
+
+The primary action `Sync logs` runs only ready source plans. The UI must not
+show `Device users` as a tile in this modal because identity/user sync is a
+separate admin workflow.
+
 ## States
 
 - Loading: row/table skeletons and stable header dimensions.
@@ -192,4 +264,3 @@ must redact tokens and credentials.
 Rollback keeps raw rows: restore cleanup JSON after dedupe review; roll UI back
 to the compatible event endpoint; do not remove enum values in-place. A failed
 evidence migration is rolled back from the pre-migration table/JSON backup.
-

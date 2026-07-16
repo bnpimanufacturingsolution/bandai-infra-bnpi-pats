@@ -16,21 +16,29 @@ browser state, a current `DeviceUser` list, or a sync preview.
 
 Primary device: `Main Entrance Device A · Hikvision · 10.184.38.173:443`.
 
-- The screen claims 165 users and 2,033 logs. Both are `NEEDS_REVERIFY`.
-- Direct `UserInfo/Search`, ACS search, and `ContentMgmt/logSearch` currently
-  time out. The Windows host is on `10.184.38.170/24` but has an incomplete ARP
-  entry for `.173`; the canonical VM path through `10.184.37.19` also times out.
+- The screen's former 165-user and 2,033-log claims were reverified and are
+  stale. At `2026-07-16T09:16:50Z`, direct `UserInfo/Search` returned 167 users
+  and direct ACS search returned a 2,107-row device log total.
+- Six direct user pages contain 167 unique users: 162 with fingerprints, 161
+  with faces, and 109 with cards. Three ACS pages contain 70 rows in the frozen
+  `2026-07-16T00:00:00+08:00` through `16:46:14+08:00` window.
+- Direct `ContentMgmt/logSearch` returned 23 rows over two XML pages. Exact
+  `.173` metaIds prove two fingerprint enrollments, three face enrollments, two
+  face deletions, two user creates, and fourteen intentionally unknown rows.
 - The VM app/API and named Cloudflare tunnel are healthy; the tunnel service is
   active and was not changed.
 - The HRIS cache has 151 `DeviceUser` rows for this device, including 149 rows
   reporting fingerprints and 147 reporting faces. These are current-state
   cache values, not direct-device counts and not lifecycle-event counts.
-- HRIS has 1,075 saved rows before cleanup. The non-mutating reset preview
+- HRIS had 1,075 saved rows before cleanup. The non-mutating reset preview
   identifies 219 proven legacy fake lifecycle rows: 120 `USER_CREATED` and 99
   `FINGERPRINT_ENROLLED`; none link to attendance.
-- For the Manila business day 2026-07-16 at discovery time, the saved ledger
-  has 62 SDK-listener rows: 5 taps, 5 rejected taps, 29 sync signals, and 23
-  unknown vendor events.
+- Cleanup exported all 219 rows, deleted those rows only, and deleted zero
+  attendance rows. Postcondition preview returns zero remaining fake rows.
+- In the frozen window, 70 ACS serials match 70 saved SDK rows with zero source
+  rows missing. The direct SDK split is 9 taps, 7 rejected taps, 33 sync
+  signals, and 21 unknowns. A further 23 saved logSearch rows bring the frozen
+  saved window to 93 direct-evidence rows, exactly matching API totals.
 
 Evidence is recorded under `.runtime/device-events-sync-center-20260716-160910/`.
 
@@ -98,8 +106,9 @@ summary denominator.
 
 ## Risks and boundaries
 
-- Direct `.173` inventory/logSearch proof is currently blocked by physical
-  reachability and remains `NEEDS_REVERIFY`; cached counts cannot replace it.
+- Device availability was intermittent during discovery; current inventory is
+  direct evidence but must show `Needs reverify` whenever a fresh direct probe
+  fails. Cached counts cannot silently replace it.
 - Existing SDK callback rows prove incoming physical-event evidence but do not
   prove current inventory totals.
 - No biometric template is rendered or introduced by this work.
@@ -116,7 +125,33 @@ summary denominator.
    rows and summaries whose totals agree.
 4. The UI reads saved rows and keeps inventory, window activity, saved HRIS,
    and sync results visually distinct.
-5. Direct device counts and raw logSearch pages are captured when `.173`
-   becomes reachable; until then, the UI and report say `NEEDS_REVERIFY`.
+5. Direct device counts, ACS pages, and raw logSearch pages are captured from
+   `.173`; stale screen counts are replaced only after a successful probe.
 6. API proof precedes Playwright proof; screenshots alone cannot close the task.
 
+## Addendum - Sync logs must be dual-source
+
+The `Sync logs` modal is not one generic counter. For Hikvision, it must support
+two source families in the same admin workflow:
+
+1. Operation/enrollment history from `ContentMgmt/logSearch`.
+2. Attendance/access history from `AccessControl/AcsEvent`.
+
+The business expectation is that an admin can answer:
+
+- which device source was read;
+- whether the source is available;
+- how many rows are on the device for the selected window;
+- how many equivalent rows already exist in HRIS `DeviceEvent`;
+- how many rows can be imported now;
+- how many rows will be left alone because they are known duplicates,
+  employee-less rows, or intentionally unmapped rows.
+
+Fingerprint enrollment, face/card operations, and user-management changes must
+come from explicit operation-log evidence such as logSearch rows. Attendance
+taps and rejected access attempts must come from ACS event evidence. Current
+inventory counts must never be presented as enrollment history.
+
+Browser-captured curl examples are endpoint-shape evidence only. They contain
+session material and must be redacted before storage. Implementation must use
+server-side stored Hikvision credentials and existing HRIS device records.

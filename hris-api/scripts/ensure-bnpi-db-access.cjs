@@ -38,6 +38,34 @@ function canConnect(port, host) {
 	});
 }
 
+/**
+ * TCP-open is not enough for Prisma. A half-dead SSH hop or a LAN-style
+ * loopback alias on 10.184.37.19 can accept TCP then fail under load/routing.
+ * Prefer a short Postgres wire handshake (SSLRequest -> N/S/E).
+ */
+function canConnectPostgres(port, host, timeoutMs = 2500) {
+	return new Promise((resolve) => {
+		const socket = net.createConnection({ port, host });
+		let settled = false;
+		const done = (result) => {
+			if (settled) return;
+			settled = true;
+			socket.removeAllListeners();
+			socket.destroy();
+			resolve(result);
+		};
+
+		socket.setTimeout(timeoutMs);
+		socket.once("connect", () => {
+			// Postgres SSLRequest
+			socket.write(Buffer.from([0, 0, 0, 8, 4, 210, 22, 47]));
+		});
+		socket.once("data", () => done(true));
+		socket.once("timeout", () => done(false));
+		socket.once("error", () => done(false));
+	});
+}
+
 function runPowerShell(args) {
 	const command = process.platform === "win32" ? "powershell.exe" : "pwsh";
 	return spawnSync(command, args, {
@@ -50,13 +78,15 @@ function runPowerShell(args) {
 async function findReachableDevK8sForwardHost({
 	port,
 	remoteLanHost,
-	connect = canConnect,
+	connect = canConnectPostgres,
 }) {
-	const candidates = ["127.0.0.1", remoteLanHost].filter(
-		(host, index, hosts) => host && hosts.indexOf(host) === index,
-	);
-	for (const host of candidates) {
-		if (await connect(port, host)) return host;
+	// Always prefer 127.0.0.1 for Prisma. 10.184.37.19 is only stable when a
+	// temporary loopback alias exists; otherwise Windows routes it to real LAN
+	// and Prisma fails with P1001 even though a CF/LAN forward is healthy.
+	if (await connect(port, "127.0.0.1")) return "127.0.0.1";
+	if (remoteLanHost && (await connect(port, remoteLanHost))) {
+		// Signal that a remote-style listener exists but localhost still needs bootstrapping.
+		return null;
 	}
 	return null;
 }
@@ -114,13 +144,15 @@ async function main() {
 			remoteLanHost,
 		});
 
-		if (!devK8sForwardHost) {
+		// Always bootstrap localhost:55435 when missing, even if 10.184.37.19:55435
+		// already answers (remote-LAN loopback alias). Prisma must use 127.0.0.1.
+		if (devK8sForwardHost !== "127.0.0.1") {
 			if (!fs.existsSync(k8sDevDbScript)) {
 				throw new Error(`Missing ${path.relative(repoRoot, k8sDevDbScript)}.`);
 			}
 
 			console.log(
-				`[bnpi-db-access] Starting DEV K3s DB forward for localhost:${preferredDevK8sPort}...`,
+				`[bnpi-db-access] Starting DEV K3s DB forward for 127.0.0.1:${preferredDevK8sPort}...`,
 			);
 			const result = runPowerShell([
 				"-NoProfile",
@@ -133,8 +165,8 @@ async function main() {
 			]);
 
 			if (result.status !== 0) {
-				throw new Error(
-					`Could not start the K3s DEV DB forward. Confirm direct LAN SSH to ${remoteLanHost} or the project-truth-hris SSH alias works from this workstation.`,
+				console.warn(
+					`[bnpi-db-access] Could not start localhost:${preferredDevK8sPort} K3s forward; will try compose DEV 15433 fallback.`,
 				);
 			}
 			devK8sForwardHost = await findReachableDevK8sForwardHost({
@@ -143,35 +175,74 @@ async function main() {
 			});
 		}
 
-		if (!devK8sForwardHost) {
-			throw new Error(
-				`K3s DEV DB forward is still unreachable on 127.0.0.1:${preferredDevK8sPort} and ${remoteLanHost}:${preferredDevK8sPort} after bootstrap.`,
+		if (devK8sForwardHost === "127.0.0.1") {
+			const devK8sDatasource = {
+				...datasource,
+				hostname: "127.0.0.1",
+				port: preferredDevK8sPort,
+				raw: new URL(
+					`postgresql://${datasource.username}:${datasource.password}@127.0.0.1:${preferredDevK8sPort}${datasource.pathname}${datasource.search}${datasource.hash}`,
+				).toString(),
+			};
+			fs.writeFileSync(
+				runtimeEnvPath,
+				renderRuntimeOverride({
+					environment,
+					resolution: "local-k8s-dev-forward",
+					selectedDatasource: devK8sDatasource,
+					selectedVmHost: null,
+					needsBnpiForward: false,
+				}),
+				"utf8",
 			);
+			console.log(
+				`[bnpi-db-access] Resolved DEV datasource to shared K3s runtime at 127.0.0.1:${preferredDevK8sPort}.`,
+			);
+			return;
 		}
 
-		const devK8sDatasource = {
-			...datasource,
-			hostname: devK8sForwardHost,
-			port: preferredDevK8sPort,
-			raw: new URL(
-				`postgresql://${datasource.username}:${datasource.password}@${devK8sForwardHost}:${preferredDevK8sPort}${datasource.pathname}${datasource.search}${datasource.hash}`,
-			).toString(),
-		};
-		fs.writeFileSync(
-			runtimeEnvPath,
-			renderRuntimeOverride({
-				environment,
-				resolution: "local-k8s-dev-forward",
-				selectedDatasource: devK8sDatasource,
-				selectedVmHost: null,
-				needsBnpiForward: false,
-			}),
-			"utf8",
+		// Fallback: compose-published DEV Postgres on 15433 (LAN alias or localhost).
+		const composeDevPort = Number(process.env.PROJECT_TRUTH_DEV_COMPOSE_DB_PORT || 15433);
+		const composeHosts = ["127.0.0.1", remoteLanHost].filter(Boolean);
+		let composeHost = null;
+		for (const host of composeHosts) {
+			if (await canConnectPostgres(composeDevPort, host)) {
+				// Prefer writing 127.0.0.1 only when that host actually answered.
+				composeHost = host === "127.0.0.1" ? "127.0.0.1" : host;
+				if (host === "127.0.0.1") break;
+			}
+		}
+		if (composeHost) {
+			// If only LAN-style alias works, still write it but warn; prefer starting
+			// a localhost forward next session.
+			const composeDatasource = {
+				...datasource,
+				hostname: composeHost,
+				port: composeDevPort,
+				raw: new URL(
+					`postgresql://${datasource.username}:${datasource.password}@${composeHost}:${composeDevPort}${datasource.pathname}${datasource.search}${datasource.hash}`,
+				).toString(),
+			};
+			fs.writeFileSync(
+				runtimeEnvPath,
+				renderRuntimeOverride({
+					environment,
+					resolution: "compose-dev-db-fallback",
+					selectedDatasource: composeDatasource,
+					selectedVmHost: null,
+					needsBnpiForward: false,
+				}),
+				"utf8",
+			);
+			console.log(
+				`[bnpi-db-access] Resolved DEV datasource to compose Postgres at ${composeHost}:${composeDevPort} (K3s localhost forward unavailable).`,
+			);
+			return;
+		}
+
+		throw new Error(
+			`K3s DEV DB forward is still unreachable on 127.0.0.1:${preferredDevK8sPort} after bootstrap, and compose DEV ${composeDevPort} is also unreachable. Confirm ssh project-truth-hris works (Cloudflare Access) or direct LAN SSH to ${remoteLanHost}.`,
 		);
-		console.log(
-			`[bnpi-db-access] Resolved DEV datasource to shared K3s runtime at ${devK8sForwardHost}:${preferredDevK8sPort}.`,
-		);
-		return;
 	}
 
 	const resolution = await resolvePreferredDatasource({

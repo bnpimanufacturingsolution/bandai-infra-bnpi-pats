@@ -13,6 +13,7 @@ const evidenceDir = path.resolve(
 	process.env.HIKVISION_LOGSEARCH_EVIDENCE_DIR ||
 		path.join(process.cwd(), "..", ".runtime", `device-event-source-truth-${stamp}`, "hikvision-logsearch"),
 );
+const main = async () => {
 await fs.mkdir(evidenceDir, { recursive: true });
 
 const loginResponse = await fetch(`${apiBaseUrl}/api/auth/login`, {
@@ -52,7 +53,21 @@ const completedAt = new Date();
 if (!response.ok) {
 	await fs.writeFile(
 		path.join(evidenceDir, "failure.json"),
-		JSON.stringify({ requestUrl, payload, status: response.status, result }, null, 2),
+		JSON.stringify(
+			{
+				requestUrl,
+				payload,
+				status: response.status,
+				startedAt: startedAt.toISOString(),
+				completedAt: completedAt.toISOString(),
+				elapsedSeconds: Number(
+					((completedAt.getTime() - startedAt.getTime()) / 1000).toFixed(3),
+				),
+				result,
+			},
+			null,
+			2,
+		),
 	);
 	throw new Error(`Hikvision logSearch proof failed with HTTP ${response.status}: ${result?.message || "unknown error"}`);
 }
@@ -80,3 +95,9 @@ const proof = {
 };
 await fs.writeFile(path.join(evidenceDir, "proof.json"), JSON.stringify(proof, null, 2));
 console.log(JSON.stringify({ evidenceDir, ...proof, normalized: undefined }, null, 2));
+};
+
+main().catch((error) => {
+	console.error(error instanceof Error ? error.message : String(error));
+	process.exitCode = 1;
+});

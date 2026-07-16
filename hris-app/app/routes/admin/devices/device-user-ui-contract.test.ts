@@ -11,10 +11,20 @@ describe("admin device user and log sync UI contract", () => {
 		const events = readAppFile("app/routes/admin/devices/events.tsx");
 		const deviceHooks = readAppFile("app/lib/hooks/useDevices.ts");
 
+		expect(deviceHooks).toContain("useDeviceHealthMap");
+		expect(events).toContain("useDeviceHealthMap");
+		expect(events).toContain('data-testid="device-filter-reachability-dot"');
+		expect(events).toContain("getDeviceReachabilityDotClass");
+
 		expect(enroll).toContain("Merge users");
 		expect(manage).toContain("Sync Center");
 		expect(manage).toContain("View Device Users");
 		expect(manage).toContain("View Device Events");
+		// Devices table shows live reachability from GET /api/device/:id/health.
+		expect(manage).toContain("useDeviceHealthMap");
+		expect(manage).toContain('label: "Status"');
+		expect(manage).toContain('data-testid="device-reachability-status"');
+		expect(manage).toContain("getDeviceReachabilityBadgeClass");
 		expect(enroll).toContain('title="Merge device users"');
 		expect(manage).toContain('data-field-path="config.vendor"');
 		expect(manage).toContain("Device vendor");

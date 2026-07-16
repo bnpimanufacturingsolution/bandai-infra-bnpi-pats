@@ -616,6 +616,20 @@ describe("hikvision event contract helper", () => {
 			eventCategory: "ATTENDANCE",
 			eventAction: "TAP_REJECTED",
 		});
+		expect(
+			normalizeHikvisionSdkCallbackEvidence({ major: 2, minor: 39 }),
+		).to.deep.include({
+			eventCategory: "ATTENDANCE",
+			eventAction: "TAP_REJECTED",
+			eventConfidence: "SUPPORTED",
+		});
+		expect(
+			normalizeHikvisionSdkCallbackEvidence({ major: 3, minor: 121 }),
+		).to.deep.include({
+			eventCategory: "RUNTIME",
+			eventAction: "SYNC_SIGNAL",
+			eventConfidence: "SUPPORTED",
+		});
 	});
 
 	it("refuses lifecycle inference from current state alone", () => {

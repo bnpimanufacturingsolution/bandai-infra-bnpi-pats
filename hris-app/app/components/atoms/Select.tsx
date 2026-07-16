@@ -6,6 +6,8 @@ export interface SelectOption {
 	value: string;
 	label: string;
 	disabled?: boolean;
+	/** Optional leading visual (status dot, icon) shown in trigger and menu. */
+	leading?: React.ReactNode;
 }
 
 export interface SelectProps {
@@ -270,7 +272,14 @@ export const Select: React.FC<SelectProps> = ({
 											handleSelect(option);
 										}
 									}}>
-									<span className="truncate">{option.label}</span>
+									<span className="flex min-w-0 items-center gap-2">
+										{option.leading ? (
+											<span className="inline-flex shrink-0 items-center" aria-hidden="true">
+												{option.leading}
+											</span>
+										) : null}
+										<span className="truncate">{option.label}</span>
+									</span>
 									{isSelected && (
 										<Check className="h-4 w-4 text-blue-600 flex-shrink-0" />
 									)}
@@ -305,8 +314,18 @@ export const Select: React.FC<SelectProps> = ({
 				aria-required={required}
 				aria-invalid={error}
 				data-field-invalid={error ? "true" : undefined}>
-				<span className={`truncate ${selectedOption ? "text-gray-900" : "text-gray-500"}`}>
-					{selectedOption ? selectedOption.label : placeholder}
+				<span
+					className={`flex min-w-0 items-center gap-2 truncate ${
+						selectedOption ? "text-gray-900" : "text-gray-500"
+					}`}>
+					{selectedOption?.leading ? (
+						<span className="inline-flex shrink-0 items-center" aria-hidden="true">
+							{selectedOption.leading}
+						</span>
+					) : null}
+					<span className="truncate">
+						{selectedOption ? selectedOption.label : placeholder}
+					</span>
 				</span>
 				{isOpen ? (
 					<ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />

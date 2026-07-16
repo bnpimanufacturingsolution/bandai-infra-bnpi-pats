@@ -67,7 +67,10 @@ function Wait-ForApiHealth {
 	$deadline = (Get-Date).AddSeconds($WaitSeconds)
 	while ((Get-Date) -lt $deadline) {
 		try {
-			$response = Invoke-RestMethod -Method Get "http://localhost:$Port/health" -TimeoutSec 2
+			# The local development stack can take just over two seconds to answer
+			# while Prisma and route modules are warm. A two-second client timeout
+			# repeatedly misclassified an already-listening API as failed.
+			$response = Invoke-RestMethod -Method Get "http://localhost:$Port/health" -TimeoutSec 10
 			if ($response) {
 				return $true
 			}

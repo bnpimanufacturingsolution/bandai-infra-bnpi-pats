@@ -630,15 +630,8 @@ const classifyHikvisionSdkEvidence = (event: NormalizedHikvisionEvent) => {
 	const actionCode = String(event.actionCode || "").trim().toUpperCase();
 	const major = String(event.major ?? "").trim();
 	const minor = String(event.minor ?? "").trim();
-	if (isHikvisionAttendancePunchEvent(event)) {
-		return {
-			eventCategory: "ATTENDANCE",
-			eventAction: "TAP",
-			eventLabel: "Attendance tap",
-			eventConfidence: "PROVEN",
-		} as const;
-	}
 	if (
+		minor === "39" ||
 		actionCode === "MINOR_FINGERPRINT_COMPARE_FAIL" ||
 		actionCode === "MINOR_CARD_FINGERPRINT_VERIFY_FAIL" ||
 		actionCode === "MINOR_FINGERPRINT_INEXISTENCE" ||
@@ -649,6 +642,14 @@ const classifyHikvisionSdkEvidence = (event: NormalizedHikvisionEvent) => {
 			eventAction: "TAP_REJECTED",
 			eventLabel: "Rejected tap",
 			eventConfidence: "SUPPORTED",
+		} as const;
+	}
+	if (isHikvisionAttendancePunchEvent(event)) {
+		return {
+			eventCategory: "ATTENDANCE",
+			eventAction: "TAP",
+			eventLabel: "Attendance tap",
+			eventConfidence: "PROVEN",
 		} as const;
 	}
 	const mappings: Record<
@@ -748,6 +749,14 @@ const classifyHikvisionSdkEvidence = (event: NormalizedHikvisionEvent) => {
 	};
 	if (mappings[actionCode]) {
 		return { ...mappings[actionCode], eventConfidence: "SUPPORTED" as const };
+	}
+	if (major === "3") {
+		return {
+			eventCategory: "RUNTIME",
+			eventAction: "SYNC_SIGNAL",
+			eventLabel: "Device user or biometric operation",
+			eventConfidence: "SUPPORTED",
+		} as const;
 	}
 	return {
 		eventCategory: "UNKNOWN_VENDOR",
