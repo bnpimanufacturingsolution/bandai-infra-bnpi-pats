@@ -241,6 +241,10 @@ export interface DeviceSyncPreviewRow {
 	hrisSavedCount?: number;
 	vendorEventCount?: number | null;
 	vendorUserCount?: number | null;
+	directFingerprintUserCount?: number | null;
+	directFaceUserCount?: number | null;
+	directCardUserCount?: number | null;
+	inventoryEvidenceSource?: "DEVICE_CURRENT_STATE" | string | null;
 	hrisUserCount?: number;
 	linkedUserCount?: number;
 	openUserCount?: number;
@@ -273,6 +277,35 @@ export interface DeviceSyncPreviewRow {
 	status: "synced" | "needs_sync" | "source_total_unavailable" | string;
 	lastSourceEventAt?: string | null;
 	error?: string | null;
+	eventRows?: DeviceSyncPreviewEventRow[];
+	sources?: DeviceSyncPreviewSourceCheck[];
+	readySourceCount?: number;
+	sourceCheckTotal?: number;
+	operationLogTotal?: number | null;
+}
+
+export interface DeviceSyncPreviewSourceCheck {
+	key: string;
+	label: string;
+	readsFrom: string;
+	ok: boolean;
+	total: number | null;
+	error?: string | null;
+	status: string;
+}
+
+export interface DeviceSyncPreviewEventRow {
+	key: string;
+	eventLabel: string;
+	willAdd: number | null;
+	alreadyInHris: number;
+	sourceProof: "Operation logs" | "Attendance/access events" | string;
+	readsFrom: "ContentMgmt/logSearch" | "AccessControl/AcsEvent" | string;
+	filterAfterSync: string;
+	status: "Ready" | "Needs review" | "Unavailable" | "No new rows" | "Partial" | "Failed" | string;
+	eventCategory?: string | null;
+	eventAction?: string | null;
+	evidenceSource?: string | null;
 }
 
 export interface DeviceSyncPreviewResponse {

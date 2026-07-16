@@ -239,15 +239,16 @@ test("admin device events opens sync logs modal with device and saved counts bef
 	const dialog = page.getByRole("dialog");
 	await expect(dialog.getByRole("heading", { name: "Sync device logs" })).toBeVisible();
 	await expect(dialog.getByText("Devices checked (1)", { exact: true })).toBeVisible();
-	await expect(dialog.getByText("Device logs: Unavailable")).toBeVisible();
-	await expect(dialog.getByText("HRIS events: 173,614")).toBeVisible();
-	await expect(dialog.getByText("Estimated unsaved: Unavailable")).toBeVisible();
-	await expect(dialog.getByText("Will skip: 0")).toBeVisible();
-	await expect(dialog.getByText("Ready: 0 of 1")).toBeVisible();
+	await expect(dialog.getByText("Will add to Device Events: Needs device read")).toBeVisible();
+	await expect(dialog.getByText("Already in HRIS: 173,614")).toBeVisible();
+	await expect(dialog.getByText("Needs review: 0")).toBeVisible();
+	await expect(dialog.getByText(/Failed:\s*0/)).toBeVisible();
+	await expect(dialog.getByText("Ready source checks: 0 of 1")).toBeVisible();
 	await expect(dialog.getByText("ZKTeco", { exact: true })).toBeVisible();
 	await expect(dialog.getByText("ZKTeco sidecar", { exact: true }).first()).toBeVisible();
-	await expect(dialog.getByText("Device users", { exact: true })).toBeVisible();
-	await expect(dialog.getByText("Estimated unsaved", { exact: true }).first()).toBeVisible();
+	await expect(dialog.getByText("Device users", { exact: true })).toHaveCount(0);
+	await expect(dialog.getByText("Event to add", { exact: true })).toBeVisible();
+	await expect(dialog.getByText("Will add", { exact: true }).first()).toBeVisible();
 	await expect(dialog.getByText("Unavailable", { exact: true }).first()).toBeVisible();
 	await expect(dialog.getByText("ZKTECO_BRIDGE_STATUS_URL is not configured")).toBeVisible();
 	await expect(dialog.getByRole("button", { name: /Sync logs/i })).toBeDisabled();
@@ -258,5 +259,185 @@ test("admin device events opens sync logs modal with device and saved counts bef
 	await page.screenshot({
 		path: resolve(screenshotDir, "device-events-sync-modal-smoke.png"),
 		fullPage: true,
+	});
+});
+
+test("admin device events sync logs shows Hikvision event-first rows", async ({ page }) => {
+	const hikvisionDevice = {
+		id: "device-hik-1",
+		organizationId: "org-1",
+		name: "Main Entrance Device A",
+		address: "10.184.38.173",
+		port: 443,
+		protocol: "https",
+		config: { vendor: "Hikvision" },
+		access: {},
+		createdAt: timestamp,
+		updatedAt: timestamp,
+	};
+
+	const hikPreview = {
+		generatedAt: timestamp,
+		scope: { deviceId: "all", source: "all" },
+		bridge: null,
+		devices: [
+			{
+				deviceId: hikvisionDevice.id,
+				name: hikvisionDevice.name,
+				address: hikvisionDevice.address,
+				port: hikvisionDevice.port,
+				vendor: "Hikvision",
+				source: "HIKVISION_CALLBACK",
+				syncedEvents: 27,
+				totalEvents: 2112,
+				needsSyncEvents: 2085,
+				hrisSavedCount: 27,
+				vendorEventCount: 2112,
+				operationLogTotal: 70,
+				canStartSync: true,
+				syncAction: "hikvision-import",
+				status: "needs_sync",
+				readySourceCount: 2,
+				sourceCheckTotal: 2,
+				sources: [
+					{
+						key: "operation_logs",
+						label: "Operation logs",
+						readsFrom: "ContentMgmt/logSearch",
+						ok: true,
+						total: 70,
+						status: "ready",
+					},
+					{
+						key: "attendance_access",
+						label: "Attendance/access events",
+						readsFrom: "AccessControl/AcsEvent",
+						ok: true,
+						total: 2112,
+						status: "ready",
+					},
+				],
+				eventRows: [
+					{
+						key: `${hikvisionDevice.id}-FINGERPRINT_ENROLLED`,
+						eventLabel: "Fingerprint enrolled",
+						willAdd: 24,
+						alreadyInHris: 3,
+						sourceProof: "Operation logs",
+						readsFrom: "ContentMgmt/logSearch",
+						filterAfterSync: "Enrollment > Fingerprint enrolled",
+						status: "Ready",
+					},
+					{
+						key: `${hikvisionDevice.id}-USER_CREATED`,
+						eventLabel: "User created",
+						willAdd: 20,
+						alreadyInHris: 0,
+						sourceProof: "Operation logs",
+						readsFrom: "ContentMgmt/logSearch",
+						filterAfterSync: "User Management > User created",
+						status: "Ready",
+					},
+					{
+						key: `${hikvisionDevice.id}-TAP`,
+						eventLabel: "Attendance tap",
+						willAdd: 2085,
+						alreadyInHris: 23,
+						sourceProof: "Attendance/access events",
+						readsFrom: "AccessControl/AcsEvent",
+						filterAfterSync: "Attendance > Tap",
+						status: "Ready",
+					},
+					{
+						key: `${hikvisionDevice.id}-UNKNOWN_OPERATION`,
+						eventLabel: "Unknown operation",
+						willAdd: 14,
+						alreadyInHris: 0,
+						sourceProof: "Operation logs",
+						readsFrom: "ContentMgmt/logSearch",
+						filterAfterSync: "Unknown > Unknown",
+						status: "Needs review",
+					},
+				],
+			},
+		],
+	};
+
+	await page.addInitScript(() => {
+		window.localStorage.setItem("authToken", "smoke-token");
+		window.localStorage.setItem("userRole", "hris-admin");
+		window.localStorage.setItem("userSubRole", "hris-admin");
+	});
+
+	await page.route("**/api/**", async (route) => {
+		const path = new URL(route.request().url()).pathname;
+		if (path.endsWith("/auth/me")) {
+			await route.fulfill(json(adminUser));
+			return;
+		}
+		if (path.endsWith("/system-provisioning/status")) {
+			await route.fulfill(json(readyProvisioningStatus));
+			return;
+		}
+		if (path.endsWith("/device/events")) {
+			await route.fulfill(
+				json({
+					events: [],
+					summary: { total: 0, byStatus: {}, bySource: {} },
+					pagination: { total: 0, page: 1, limit: 25, totalPages: 0 },
+				}),
+			);
+			return;
+		}
+		if (path.endsWith("/device/sync-preview")) {
+			await route.fulfill(json(hikPreview));
+			return;
+		}
+		if (path.endsWith("/device")) {
+			await route.fulfill(
+				json({
+					devices: [hikvisionDevice],
+					pagination: { total: 1, page: 1, limit: 100, totalPages: 1 },
+				}),
+			);
+			return;
+		}
+		await route.fulfill(json({}));
+	});
+
+	await page.goto("/admin/configuration/devices/events?view=saved&action=sync-logs");
+
+	const dialog = page.getByRole("dialog");
+	await expect(dialog.getByRole("heading", { name: "Sync device logs" })).toBeVisible({
+		timeout: routeReadyTimeoutMs,
+	});
+	await expect(dialog.getByText("Devices checked: 1")).toBeVisible();
+	await expect(dialog.getByText(/Will add to Device Events:\s*2,143/)).toBeVisible();
+	await expect(dialog.getByText("Ready source checks: 2 of 2")).toBeVisible();
+	await expect(dialog.getByText(/Hikvision Main Entrance Device A|Main Entrance Device A/)).toBeVisible();
+	await expect(dialog.getByText("10.184.38.173:443")).toBeVisible();
+	await expect(dialog.getByRole("cell", { name: "Fingerprint enrolled", exact: true })).toBeVisible();
+	await expect(dialog.getByRole("cell", { name: "+24", exact: true })).toBeVisible();
+	await expect(dialog.getByRole("cell", { name: "User created", exact: true })).toBeVisible();
+	await expect(dialog.getByRole("cell", { name: "Attendance tap", exact: true })).toBeVisible();
+	await expect(dialog.getByRole("cell", { name: "Operation logs", exact: true }).first()).toBeVisible();
+	await expect(dialog.getByRole("cell", { name: "Attendance/access events", exact: true }).first()).toBeVisible();
+	await expect(dialog.getByRole("cell", { name: "Enrollment > Fingerprint enrolled", exact: true })).toBeVisible();
+	await expect(dialog.getByRole("cell", { name: "Unknown > Unknown", exact: true })).toBeVisible();
+
+	const screenshotDir = resolve(
+		process.cwd(),
+		"..",
+		".runtime",
+		"sync-logs-event-first-proof",
+		"screenshots",
+	);
+	mkdirSync(screenshotDir, { recursive: true });
+	await page.screenshot({
+		path: resolve(screenshotDir, "device-events-sync-modal-event-first-hikvision.png"),
+		fullPage: true,
+	});
+	await dialog.screenshot({
+		path: resolve(screenshotDir, "device-events-sync-modal-event-first-dialog.png"),
 	});
 });

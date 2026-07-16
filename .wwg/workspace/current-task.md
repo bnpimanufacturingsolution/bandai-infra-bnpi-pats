@@ -1,6 +1,32 @@
 # Current Task
 
-Status: COMPLETE
+Status: IN_PROGRESS
+
+## Latest Task Addendum - 2026-07-16 Sync logs event-first modal
+
+- Task mode: Meaningful feature + API contract + UI + tests + Playwright proof.
+- Goal: Sync logs modal is event-first — per Hikvision device show what will be added to Device Events (not inventory-first On device / In HRIS / Can import as the main story).
+- Implemented:
+  - `hris-api/helper/sync-logs-event-rows.helper.ts` catalog + dual-source builders.
+  - `GET /api/device/sync-preview` now returns `eventRows[]`, `sources[]`, operation log total probe (`ContentMgmt/logSearch`), attendance total (`AccessControl/AcsEvent`), and already-in-HRIS by `eventAction`.
+  - UI summary uses Ready source checks X of Y from source probes; per-device table remains Event to add | Will add | Already in HRIS | Source proof | Filter after sync | Status.
+  - Focused mocha + vitest + Playwright headless smoke (ZKTeco + Hikvision event-first) with screenshots.
+- Boundary / residual:
+  - Per-type operation **willAdd** is fully precise only when per-action device counts exist (sample/full logSearch classification). Without breakdown, residual operation total lands on Unknown operation (Needs review) while known types show already-in-HRIS accurately.
+  - Full historical ACS serial reconciliation and GitOps promotion still out of scope.
+  - VM LAN SSH was unreachable this session for remote DB forward; local API health still served preview when DB was available.
+
+## Latest Task Addendum - 2026-07-16 Hikvision Device Events Source Truth
+
+- Task mode: Mixed runtime repair, meaningful feature, persistence cleanup, tests, and UI verification.
+- Completed:
+  - Repaired Windows port 3001 ownership/exclusion drift and the local restart helper's false-negative health timeout.
+  - Directly proved Main Entrance Device A inventory, ACS pagination, logSearch availability/pagination/raw metaIds, and selected-window serial parity.
+  - Enforced the `DeviceEvent` evidence contract, saved-row filters/summaries, SDK/logSearch taxonomy, runtime correlation, and deduplication.
+  - Exported and removed 219 proven fake lifecycle rows with zero attendance deletion.
+  - Refined the saved-only Device Events UI and passed live Playwright ledger/details proof.
+- Evidence: `.wwg/reports/hikvision-device-events-sync-center-current-state-20260716.md` and `.runtime/device-events-sync-center-20260716-160910/`.
+- Boundary: full historical ACS serial reconciliation and GitOps/public promotion were not performed in this local implementation pass.
 
 ## Latest Task Addendum - 2026-07-13 Device User Vendor Metadata Tooltip
 

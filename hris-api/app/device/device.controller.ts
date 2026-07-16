@@ -31,9 +31,16 @@ import {
 	paginateHikvisionLogSearch,
 	parseHikvisionBusinessDateBound,
 	parseHikvisionEventTime,
+	parseHikvisionLogSearchResponse,
 	type NormalizedHikvisionEvidenceEvent,
 } from "../../helper/hikvision-event-contract.helper";
 import { classifyDeviceEvent } from "../../helper/device-event-taxonomy.helper";
+import {
+	buildHikvisionSourceChecks,
+	buildHikvisionSyncLogsEventRows,
+	buildZktecoSyncLogsEventRows,
+	countAlreadyInHrisByAction,
+} from "../../helper/sync-logs-event-rows.helper";
 import { hikvisionEndpoint } from "../../config/hikvision.endpoint";
 import {
 	buildHikvisionDeviceBaseUrl,
@@ -2538,10 +2545,60 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const getHikvisionLogSearchTotal = async (req: Request, deviceId: string) => {
+		const endTime = formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
+		try {
+			const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
+				method: "POST",
+				deviceId,
+				prisma,
+				request: req,
+				timeoutMs: HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS,
+				ensureJsonFormat: false,
+				rawResponse: true,
+				headers: {
+					Accept: "application/xml, text/xml, */*",
+					"Content-Type": "application/xml; charset=UTF-8",
+				},
+				body: buildHikvisionLogSearchXml({
+					searchId: `hris-logsearch-count-${Date.now()}`,
+					startTime: "2000-01-01T00:00:00+08:00",
+					endTime,
+					maxResults: 1,
+					searchResultPosition: 0,
+				}),
+			});
+			const parsed = parseHikvisionLogSearchResponse(String(response?.raw || ""));
+			const count =
+				typeof parsed.totalMatches === "number" && Number.isFinite(parsed.totalMatches)
+					? parsed.totalMatches
+					: parsed.rows.length > 0
+						? parsed.rows.length
+						: null;
+			return {
+				ok: count !== null || Boolean(parsed.responseStatus),
+				count,
+				error: count === null ? "Operation logs total unavailable" : null,
+				raw: { responseStatus: parsed.responseStatus, totalMatches: parsed.totalMatches },
+			};
+		} catch (error: any) {
+			return {
+				ok: false,
+				count: null,
+				error:
+					error?.data?.errorCode ||
+					error?.data?.errorCause ||
+					error?.message ||
+					"Operation logs (logSearch) did not respond",
+				raw: null,
+			};
+		}
+	};
+
 	const getHikvisionSourceCounts = async (req: Request, deviceId: string) => {
 		const startedAt = Date.now();
 		const endTime = formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
-		const [userSearch, eventSearch] = await Promise.all([
+		const [userSearch, eventSearch, logSearch, directUsers] = await Promise.all([
 			getHikvisionCountFromSearch(
 				req,
 				deviceId,
@@ -2572,12 +2629,28 @@ export const controller = (prisma: PrismaClient) => {
 				},
 				["totalMatches", "numOfMatches", "totalNum", "totalNumber", "total", "eventTotal"],
 			),
+			getHikvisionLogSearchTotal(req, deviceId),
+			fetchAllHikvisionDeviceUsers(req, { id: deviceId }).catch(() => null),
 		]);
+		const directCredentialInventory = Array.isArray(directUsers)
+			? directUsers.map((user) => extractHikvisionCredentialSummary(user))
+			: null;
 
 		return {
-			ok: userSearch.ok || eventSearch.ok,
+			ok: userSearch.ok || eventSearch.ok || logSearch.ok,
 			totalEvents: eventSearch.count,
+			operationLogTotal: logSearch.count,
 			userCount: userSearch.count,
+			fingerprintUserCount: directCredentialInventory
+				? directCredentialInventory.filter((summary) => summary.fingerprintCount > 0).length
+				: null,
+			faceUserCount: directCredentialInventory
+				? directCredentialInventory.filter((summary) => summary.faceCount > 0).length
+				: null,
+			cardUserCount: directCredentialInventory
+				? directCredentialInventory.filter((summary) => summary.cardCount > 0).length
+				: null,
+			inventoryEvidenceSource: directCredentialInventory ? "DEVICE_CURRENT_STATE" : null,
 			latencyMs: Date.now() - startedAt,
 			userProbe: {
 				ok: userSearch.ok && userSearch.count !== null,
@@ -2589,15 +2662,22 @@ export const controller = (prisma: PrismaClient) => {
 				count: eventSearch.count,
 				error: eventSearch.error || null,
 			},
+			operationLogProbe: {
+				ok: logSearch.ok && logSearch.count !== null,
+				count: logSearch.count,
+				error: logSearch.error || null,
+			},
 			raw: {
 				userSearch: userSearch.raw,
 				eventSearch: eventSearch.raw,
+				logSearch: logSearch.raw,
 			},
 			error:
-				eventSearch.ok || userSearch.ok
+				eventSearch.ok || userSearch.ok || logSearch.ok
 					? null
 					: eventSearch.error ||
 						userSearch.error ||
+						logSearch.error ||
 						"Hikvision device counts did not respond",
 		};
 	};
@@ -4849,8 +4929,21 @@ export const controller = (prisma: PrismaClient) => {
 				),
 			);
 		} catch (error: any) {
-			res.status(Number(error?.status || 500)).json(
-				buildErrorResponse(error?.message || "Failed to search Hikvision device logs", Number(error?.status || 500)),
+			const status = Number(error?.status || 500);
+			const rawDeviceResponse = String(error?.data?.raw || "").trim();
+			res.status(status).json(
+				buildErrorResponse(
+					error?.message || "Failed to search Hikvision device logs",
+					status,
+					rawDeviceResponse
+						? [
+								{
+									field: "directDeviceResponse",
+									message: rawDeviceResponse.slice(0, 16_384),
+								},
+							]
+						: undefined,
+				),
 			);
 		}
 	};
@@ -11568,7 +11661,7 @@ export const controller = (prisma: PrismaClient) => {
 				where: {
 					organizationId: String(organizationId),
 					deviceId: { in: syncDevices.map((device) => device.id) },
-					source: { in: ["ZKTECO_EVENT", "HIKVISION_CALLBACK"] },
+					source: { in: ["ZKTECO_EVENT", "HIKVISION_CALLBACK", "EN_HCNETSDK_ALARM"] },
 				},
 				_count: { _all: true },
 			});
@@ -11578,6 +11671,36 @@ export const controller = (prisma: PrismaClient) => {
 					`${row.deviceId}|${row.source}`,
 					Number(row?._count?._all || 0),
 				);
+			}
+			// Event-first already-in-HRIS counts for Sync logs modal (DeviceEvent taxonomy).
+			let savedByDeviceAction = new Map<string, Map<string, number>>();
+			try {
+				const actionCounts = await (prisma as any).deviceEvent.groupBy({
+					by: ["deviceId", "eventAction"],
+					where: {
+						organizationId: String(organizationId),
+						deviceId: { in: syncDevices.map((device) => device.id) },
+						source: {
+							in: ["ZKTECO_EVENT", "HIKVISION_CALLBACK", "EN_HCNETSDK_ALARM"],
+						},
+					},
+					_count: { _all: true },
+				});
+				savedByDeviceAction = (actionCounts || []).reduce(
+					(groups: Map<string, Map<string, number>>, row: any) => {
+						const deviceId = String(row.deviceId || "").trim();
+						if (!deviceId) return groups;
+						const bucket = groups.get(deviceId) || new Map<string, number>();
+						const action = String(row.eventAction || "UNKNOWN").trim() || "UNKNOWN";
+						bucket.set(action, Number(row?._count?._all || 0));
+						groups.set(deviceId, bucket);
+						return groups;
+					},
+					new Map<string, Map<string, number>>(),
+				);
+			} catch {
+				// Older DBs without eventAction stay device-total only; UI falls back safely.
+				savedByDeviceAction = new Map();
 			}
 			const deviceUserRows = (await hasDeviceUserTable())
 				? ((await (prisma as any).deviceUser.findMany({
@@ -11741,8 +11864,15 @@ export const controller = (prisma: PrismaClient) => {
 			const latestRunByDeviceId = new Map(latestCompletedRuns);
 
 			const previewRows = syncDevices.map((device) => {
+				const hikvisionSaved =
+					(savedCountByDeviceAndSource.get(`${device.id}|HIKVISION_CALLBACK`) || 0) +
+					(savedCountByDeviceAndSource.get(`${device.id}|EN_HCNETSDK_ALARM`) || 0);
 				const syncedEvents =
-					savedCountByDeviceAndSource.get(`${device.id}|${device.source}`) || 0;
+					device.vendor === "Hikvision"
+						? hikvisionSaved ||
+							savedCountByDeviceAndSource.get(`${device.id}|${device.source}`) ||
+							0
+						: savedCountByDeviceAndSource.get(`${device.id}|${device.source}`) || 0;
 				const deviceUserSummary = deviceUserSummaryByDeviceId.get(device.id) || {
 					total: 0,
 					active: 0,
@@ -11786,6 +11916,12 @@ export const controller = (prisma: PrismaClient) => {
 					device.vendor === "ZKTeco"
 						? (sourcePreview?.totalEvents ?? null)
 						: (sourcePreview?.totalEvents ?? null);
+				const operationLogTotal =
+					device.vendor === "Hikvision"
+						? (sourcePreview?.operationLogTotal ??
+							sourcePreview?.operationLogProbe?.count ??
+							null)
+						: null;
 				const vendorUserCount =
 					device.vendor === "ZKTeco"
 						? firstNumericValueForKeys(sourcePreview, [
@@ -11820,10 +11956,89 @@ export const controller = (prisma: PrismaClient) => {
 					/^\d+$/.test(rawSourceErrorMessage)
 						? `Hikvision event total unavailable (code ${rawSourceErrorMessage})`
 						: rawSourceErrorMessage;
+				const actionMap = savedByDeviceAction.get(device.id) || new Map<string, number>();
+				const alreadyByAction = countAlreadyInHrisByAction(
+					Array.from(actionMap.entries()).map(([eventAction, count]) => ({
+						eventAction,
+						count,
+					})),
+				);
+				const attendanceOk =
+					device.vendor === "Hikvision"
+						? Boolean(sourcePreview?.eventProbe?.ok ?? (totalEvents !== null && !sourceErrorMessage))
+						: Boolean(!sourceErrorMessage && totalEvents !== null);
+				const operationOk =
+					device.vendor === "Hikvision"
+						? Boolean(
+								sourcePreview?.operationLogProbe?.ok ??
+									(operationLogTotal !== null && operationLogTotal !== undefined),
+							)
+						: false;
+				const eventRows =
+					device.vendor === "Hikvision"
+						? buildHikvisionSyncLogsEventRows({
+								deviceId: device.id,
+								alreadyByAction,
+								operationSourceOk: operationOk,
+								operationSourceTotal:
+									operationLogTotal === null || operationLogTotal === undefined
+										? null
+										: Number(operationLogTotal),
+								attendanceSourceOk: attendanceOk,
+								attendanceSourceTotal:
+									totalEvents === null || totalEvents === undefined
+										? null
+										: Number(totalEvents),
+								sourceError: sourceErrorMessage,
+								hideSilentZeros: true,
+							})
+						: buildZktecoSyncLogsEventRows({
+								deviceId: device.id,
+								willAdd: needsSyncEvents,
+								alreadyInHris: syncedEvents,
+								sourceProof: "ZKTeco events",
+								sourceOk: Boolean(zktecoPreview?.ok) && !sourceErrorMessage,
+								error: sourceErrorMessage,
+							});
+				const sources =
+					device.vendor === "Hikvision"
+						? buildHikvisionSourceChecks({
+								operationOk,
+								operationTotal:
+									operationLogTotal === null || operationLogTotal === undefined
+										? null
+										: Number(operationLogTotal),
+								operationError: sourcePreview?.operationLogProbe?.error || null,
+								attendanceOk,
+								attendanceTotal:
+									totalEvents === null || totalEvents === undefined
+										? null
+										: Number(totalEvents),
+								attendanceError: sourcePreview?.eventProbe?.error || sourceErrorMessage,
+							})
+						: [
+								{
+									key: "zkteco_events",
+									label: "ZKTeco events",
+									readsFrom: "ZKTeco bridge",
+									ok: Boolean(zktecoPreview?.ok) && !sourceErrorMessage,
+									total: totalEvents === null ? null : Number(totalEvents),
+									error: sourceErrorMessage,
+									status:
+										Boolean(zktecoPreview?.ok) && !sourceErrorMessage
+											? "ready"
+											: "unavailable",
+								},
+							];
+				const readySourceCount = sources.filter((source) => source.ok).length;
+				const eventWillAddTotal = eventRows.reduce(
+					(sum, row) => sum + (typeof row.willAdd === "number" ? Math.max(0, row.willAdd) : 0),
+					0,
+				);
 				const canStartSync =
 					!sourceErrorMessage &&
-					Number.isFinite(Number(needsSyncEvents)) &&
-					Number(needsSyncEvents) > 0 &&
+					(eventWillAddTotal > 0 ||
+						(Number.isFinite(Number(needsSyncEvents)) && Number(needsSyncEvents) > 0)) &&
 					(device.vendor === "Hikvision" ||
 						(device.vendor === "ZKTeco" && Boolean(zktecoPreview?.ok)));
 				return {
@@ -11838,7 +12053,12 @@ export const controller = (prisma: PrismaClient) => {
 					needsSyncEvents,
 					hrisSavedCount: syncedEvents,
 					vendorEventCount: totalEvents,
+					operationLogTotal,
 					vendorUserCount,
+					directFingerprintUserCount: sourcePreview?.fingerprintUserCount ?? null,
+					directFaceUserCount: sourcePreview?.faceUserCount ?? null,
+					directCardUserCount: sourcePreview?.cardUserCount ?? null,
+					inventoryEvidenceSource: sourcePreview?.inventoryEvidenceSource ?? null,
 					hrisUserCount: deviceUserSummary.total,
 					linkedUserCount: deviceUserSummary.matched,
 					openUserCount: deviceUserSummary.unmatched,
@@ -11869,14 +12089,20 @@ export const controller = (prisma: PrismaClient) => {
 						: null,
 					status: sourceErrorMessage
 						? "source_unavailable"
-						: totalEvents === null
+						: totalEvents === null && operationLogTotal === null
 							? "source_total_unavailable"
 							: needsSyncEvents && needsSyncEvents > 0
 								? "needs_sync"
-								: "synced",
+								: eventWillAddTotal > 0
+									? "needs_sync"
+									: "synced",
 					lastSourceEventAt:
 						device.vendor === "ZKTeco" ? sourcePreview?.lastSelectedAt || null : null,
 					countLatencyMs: sourcePreview?.latencyMs ?? null,
+					eventRows,
+					sources,
+					readySourceCount,
+					sourceCheckTotal: sources.length,
 					...(sourceErrorMessage ? { error: sourceErrorMessage } : {}),
 				};
 			});

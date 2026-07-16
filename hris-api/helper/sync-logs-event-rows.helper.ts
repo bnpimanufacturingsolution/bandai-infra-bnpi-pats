@@ -1,0 +1,482 @@
+/**
+ * Event-first Sync logs preview catalog.
+ * DeviceEvent is saved truth. DeviceUser inventory must never invent lifecycle rows.
+ */
+
+export type SyncLogsSourceProof = "Operation logs" | "Attendance/access events" | string;
+
+export type SyncLogsEventRow = {
+	key: string;
+	eventLabel: string;
+	willAdd: number | null;
+	alreadyInHris: number;
+	sourceProof: SyncLogsSourceProof;
+	readsFrom: "ContentMgmt/logSearch" | "AccessControl/AcsEvent" | string;
+	filterAfterSync: string;
+	status: "Ready" | "Needs review" | "Unavailable" | "No new rows" | "Partial" | "Failed" | string;
+	eventCategory?: string | null;
+	eventAction?: string | null;
+	evidenceSource?: "ISAPI_LOGSEARCH" | "SDK_CALLBACK" | string | null;
+};
+
+export type SyncLogsSourceCheck = {
+	key: "operation_logs" | "attendance_access" | string;
+	label: string;
+	readsFrom: string;
+	ok: boolean;
+	total: number | null;
+	error?: string | null;
+	status: "ready" | "unavailable" | "partial" | "stale" | string;
+};
+
+type CatalogEntry = {
+	eventAction: string;
+	eventLabel: string;
+	eventCategory: string;
+	sourceProof: SyncLogsSourceProof;
+	readsFrom: SyncLogsEventRow["readsFrom"];
+	filterAfterSync: string;
+	evidenceSource: SyncLogsEventRow["evidenceSource"];
+	family: "operation" | "attendance";
+};
+
+/** User-facing Sync logs event groups (required product set). */
+export const SYNC_LOGS_EVENT_CATALOG: CatalogEntry[] = [
+	{
+		eventAction: "FINGERPRINT_ENROLLED",
+		eventLabel: "Fingerprint enrolled",
+		eventCategory: "ENROLLMENT",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Enrollment > Fingerprint enrolled",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "FINGERPRINT_UPDATED",
+		eventLabel: "Fingerprint updated",
+		eventCategory: "ENROLLMENT",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Enrollment > Fingerprint updated",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "FINGERPRINT_DELETED",
+		eventLabel: "Fingerprint deleted",
+		eventCategory: "ENROLLMENT",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Enrollment > Fingerprint deleted",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "FACE_ENROLLED",
+		eventLabel: "Face enrolled",
+		eventCategory: "ENROLLMENT",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Enrollment > Face enrolled",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "FACE_UPDATED",
+		eventLabel: "Face updated",
+		eventCategory: "ENROLLMENT",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Enrollment > Face updated",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "FACE_DELETED",
+		eventLabel: "Face deleted",
+		eventCategory: "ENROLLMENT",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Enrollment > Face deleted",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "CARD_ENROLLED",
+		eventLabel: "Card enrolled",
+		eventCategory: "ENROLLMENT",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Enrollment > Card enrolled",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "CARD_UPDATED",
+		eventLabel: "Card updated",
+		eventCategory: "ENROLLMENT",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Enrollment > Card updated",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "CARD_DELETED",
+		eventLabel: "Card deleted",
+		eventCategory: "ENROLLMENT",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Enrollment > Card deleted",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "USER_CREATED",
+		eventLabel: "User created",
+		eventCategory: "USER_MANAGEMENT",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "User Management > User created",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "USER_UPDATED",
+		eventLabel: "User updated",
+		eventCategory: "USER_MANAGEMENT",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "User Management > User updated",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "USER_DELETED",
+		eventLabel: "User deleted",
+		eventCategory: "USER_MANAGEMENT",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "User Management > User deleted",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "UNKNOWN_OPERATION",
+		eventLabel: "Unknown operation",
+		eventCategory: "UNKNOWN",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Unknown > Unknown",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "TAP",
+		eventLabel: "Attendance tap",
+		eventCategory: "ATTENDANCE",
+		sourceProof: "Attendance/access events",
+		readsFrom: "AccessControl/AcsEvent",
+		filterAfterSync: "Attendance > Tap",
+		evidenceSource: "SDK_CALLBACK",
+		family: "attendance",
+	},
+	{
+		eventAction: "TAP_REJECTED",
+		eventLabel: "Rejected tap",
+		eventCategory: "ATTENDANCE",
+		sourceProof: "Attendance/access events",
+		readsFrom: "AccessControl/AcsEvent",
+		filterAfterSync: "Attendance > Tap rejected",
+		evidenceSource: "SDK_CALLBACK",
+		family: "attendance",
+	},
+	{
+		eventAction: "UNKNOWN_ACCESS",
+		eventLabel: "Unknown access event",
+		eventCategory: "UNKNOWN",
+		sourceProof: "Attendance/access events",
+		readsFrom: "AccessControl/AcsEvent",
+		filterAfterSync: "Unknown > Unknown",
+		evidenceSource: "SDK_CALLBACK",
+		family: "attendance",
+	},
+];
+
+const OPERATION_ACTIONS = new Set(
+	SYNC_LOGS_EVENT_CATALOG.filter((row) => row.family === "operation").map((row) => row.eventAction),
+);
+const ATTENDANCE_ACTIONS = new Set(
+	SYNC_LOGS_EVENT_CATALOG.filter((row) => row.family === "attendance").map((row) => row.eventAction),
+);
+
+const normalizeActionKey = (raw: unknown) => {
+	const value = String(raw || "").trim().toUpperCase();
+	if (!value) return "UNKNOWN";
+	if (value === "UNKNOWN" || value === "LISTENER_RECEIVED") return "UNKNOWN_OPERATION";
+	if (value === "UNKNOWN_ACCESS" || value === "UNKNOWN_ACS") return "UNKNOWN_ACCESS";
+	return value;
+};
+
+export const countAlreadyInHrisByAction = (
+	rows: Array<{ eventAction?: string | null; count?: number | null }>,
+) => {
+	const map = new Map<string, number>();
+	for (const row of rows) {
+		const key = normalizeActionKey(row.eventAction);
+		const next = (map.get(key) || 0) + Math.max(0, Number(row.count || 0));
+		map.set(key, next);
+	}
+	// Map generic UNKNOWN from attendance source rows if taxonomy stored UNKNOWN for ACS
+	return map;
+};
+
+const rowStatus = (params: {
+	willAdd: number | null;
+	alreadyInHris: number;
+	sourceOk: boolean;
+	needsReview?: boolean;
+	failed?: boolean;
+}): SyncLogsEventRow["status"] => {
+	if (params.failed || !params.sourceOk) return "Unavailable";
+	if (params.needsReview) return "Needs review";
+	if (params.willAdd === null) return "Needs review";
+	if (params.willAdd > 0) return "Ready";
+	if (params.alreadyInHris > 0) return "No new rows";
+	return "No new rows";
+};
+
+/**
+ * Build event-first rows for one Hikvision device.
+ * willAdd for attendance uses ACS total residual (assigned primarily to Attendance tap).
+ * willAdd for operations uses optional per-action device counts when provided;
+ * residual logSearch total lands on Unknown operation when breakdown is incomplete.
+ */
+export const buildHikvisionSyncLogsEventRows = (params: {
+	deviceId: string;
+	alreadyByAction: Map<string, number>;
+	/** Optional classified counts from device Operation logs sample/full. */
+	operationDeviceByAction?: Map<string, number> | null;
+	operationSourceOk: boolean;
+	operationSourceTotal: number | null;
+	attendanceSourceOk: boolean;
+	attendanceSourceTotal: number | null;
+	sourceError?: string | null;
+	/** When true, keep silent zero rows out of the main table. */
+	hideSilentZeros?: boolean;
+}): SyncLogsEventRow[] => {
+	const already = params.alreadyByAction;
+	const opDevice = params.operationDeviceByAction || new Map<string, number>();
+	const failed = Boolean(params.sourceError);
+
+	const alreadyOperationTotal = Array.from(already.entries())
+		.filter(([action]) => OPERATION_ACTIONS.has(action) || action === "UNKNOWN")
+		.reduce((sum, [, count]) => sum + count, 0);
+	const alreadyAttendanceTotal = Array.from(already.entries())
+		.filter(([action]) => ATTENDANCE_ACTIONS.has(action) || action === "UNKNOWN")
+		.reduce((sum, [, count]) => sum + count, 0);
+
+	// Prefer explicit UNKNOWN_ACCESS / UNKNOWN_OPERATION buckets; fall back to raw UNKNOWN.
+	const alreadyUnknownOp =
+		(already.get("UNKNOWN_OPERATION") || 0) +
+		(already.get("UNKNOWN") || 0) -
+		// avoid double-count if both set
+		0;
+	const alreadyUnknownAccess = already.get("UNKNOWN_ACCESS") || 0;
+
+	const attendanceResidual =
+		params.attendanceSourceOk && params.attendanceSourceTotal !== null
+			? Math.max(0, Number(params.attendanceSourceTotal) - alreadyAttendanceTotal)
+			: null;
+
+	const operationDeviceTotal = Array.from(opDevice.values()).reduce((a, b) => a + b, 0);
+	const operationResidualFromTotal =
+		params.operationSourceOk && params.operationSourceTotal !== null
+			? Math.max(0, Number(params.operationSourceTotal) - alreadyOperationTotal)
+			: null;
+
+	const rows: SyncLogsEventRow[] = SYNC_LOGS_EVENT_CATALOG.map((entry) => {
+		const actionKey =
+			entry.eventAction === "UNKNOWN_OPERATION"
+				? "UNKNOWN_OPERATION"
+				: entry.eventAction === "UNKNOWN_ACCESS"
+					? "UNKNOWN_ACCESS"
+					: entry.eventAction;
+		let alreadyInHris = already.get(actionKey) || 0;
+		if (entry.eventAction === "UNKNOWN_OPERATION" && alreadyInHris === 0) {
+			alreadyInHris = already.get("UNKNOWN") || alreadyUnknownOp || 0;
+		}
+
+		let willAdd: number | null = null;
+		let needsReview = false;
+
+		if (entry.family === "attendance") {
+			const sourceOk = params.attendanceSourceOk && !failed;
+			if (entry.eventAction === "TAP") {
+				willAdd = sourceOk ? attendanceResidual : null;
+			} else if (entry.eventAction === "TAP_REJECTED") {
+				// Without ACS minor breakdown, do not invent rejected will-add.
+				willAdd = sourceOk ? 0 : null;
+			} else if (entry.eventAction === "UNKNOWN_ACCESS") {
+				willAdd = sourceOk ? 0 : null;
+				if (sourceOk && alreadyInHris > 0) needsReview = true;
+			}
+			const status = rowStatus({
+				willAdd,
+				alreadyInHris,
+				sourceOk,
+				needsReview,
+				failed: failed && !params.attendanceSourceOk,
+			});
+			return {
+				key: `${params.deviceId}-${entry.eventAction}`,
+				eventLabel: entry.eventLabel,
+				willAdd,
+				alreadyInHris,
+				sourceProof: entry.sourceProof,
+				readsFrom: entry.readsFrom,
+				filterAfterSync: entry.filterAfterSync,
+				status,
+				eventCategory: entry.eventCategory,
+				eventAction: entry.eventAction,
+				evidenceSource: entry.evidenceSource,
+			};
+		}
+
+		// Operation logs family
+		const sourceOk = params.operationSourceOk && !failed;
+		const deviceCount = opDevice.get(entry.eventAction) ?? opDevice.get(actionKey);
+		if (typeof deviceCount === "number" && Number.isFinite(deviceCount)) {
+			willAdd = Math.max(0, Number(deviceCount) - alreadyInHris);
+		} else if (entry.eventAction === "UNKNOWN_OPERATION") {
+			// Put unclassified residual on unknown when we only know totals.
+			const residual = operationResidualFromTotal;
+			if (residual === null) {
+				willAdd = sourceOk ? null : null;
+				needsReview = sourceOk;
+			} else {
+				// Subtract known per-action device will-add if sample provided.
+				const knownWill = Array.from(opDevice.entries())
+					.filter(([action]) => action !== "UNKNOWN_OPERATION" && action !== "UNKNOWN")
+					.reduce((sum, [action, count]) => {
+						const alreadyFor = already.get(action) || 0;
+						return sum + Math.max(0, count - alreadyFor);
+					}, 0);
+				willAdd = Math.max(0, residual - knownWill);
+				needsReview = willAdd > 0;
+			}
+		} else if (sourceOk && operationResidualFromTotal !== null && operationDeviceTotal === 0) {
+			// Source total known but no per-type breakdown: zero will-add on known types.
+			willAdd = 0;
+		} else if (!sourceOk) {
+			willAdd = null;
+		} else {
+			willAdd = 0;
+		}
+
+		const status = rowStatus({
+			willAdd,
+			alreadyInHris,
+			sourceOk,
+			needsReview: needsReview || (entry.eventAction === "UNKNOWN_OPERATION" && (willAdd || 0) > 0),
+			failed: failed && !params.operationSourceOk,
+		});
+
+		return {
+			key: `${params.deviceId}-${entry.eventAction}`,
+			eventLabel: entry.eventLabel,
+			willAdd,
+			alreadyInHris,
+			sourceProof: entry.sourceProof,
+			readsFrom: entry.readsFrom,
+			filterAfterSync: entry.filterAfterSync,
+			status,
+			eventCategory: entry.eventCategory,
+			eventAction: entry.eventAction,
+			evidenceSource: entry.evidenceSource,
+		};
+	});
+
+	if (params.hideSilentZeros !== false) {
+		return rows.filter(
+			(row) =>
+				(row.willAdd !== null && row.willAdd > 0) ||
+				row.alreadyInHris > 0 ||
+				row.status === "Needs review" ||
+				row.status === "Unavailable" ||
+				row.status === "Failed" ||
+				row.status === "Partial",
+		);
+	}
+	return rows;
+};
+
+export const buildHikvisionSourceChecks = (params: {
+	operationOk: boolean;
+	operationTotal: number | null;
+	operationError?: string | null;
+	attendanceOk: boolean;
+	attendanceTotal: number | null;
+	attendanceError?: string | null;
+}): SyncLogsSourceCheck[] => [
+	{
+		key: "operation_logs",
+		label: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		ok: params.operationOk,
+		total: params.operationTotal,
+		error: params.operationError || null,
+		status: params.operationOk ? "ready" : "unavailable",
+	},
+	{
+		key: "attendance_access",
+		label: "Attendance/access events",
+		readsFrom: "AccessControl/AcsEvent",
+		ok: params.attendanceOk,
+		total: params.attendanceTotal,
+		error: params.attendanceError || null,
+		status: params.attendanceOk ? "ready" : "unavailable",
+	},
+];
+
+export const buildZktecoSyncLogsEventRows = (params: {
+	deviceId: string;
+	willAdd: number | null;
+	alreadyInHris: number;
+	sourceProof: string;
+	sourceOk: boolean;
+	error?: string | null;
+}): SyncLogsEventRow[] => {
+	const willAdd = params.willAdd;
+	const status = params.error
+		? "Unavailable"
+		: !params.sourceOk
+			? "Unavailable"
+			: willAdd === null
+				? "Needs review"
+				: willAdd > 0
+					? "Ready"
+					: "No new rows";
+	return [
+		{
+			key: `${params.deviceId}-device-events`,
+			eventLabel: "Device events",
+			willAdd,
+			alreadyInHris: params.alreadyInHris,
+			sourceProof: params.sourceProof,
+			readsFrom: params.sourceProof,
+			filterAfterSync: "Device Events",
+			status,
+			eventCategory: "ATTENDANCE",
+			eventAction: "TAP",
+			evidenceSource: "ZKTECO_EVENT",
+		},
+	].filter(
+		(row) =>
+			(row.willAdd !== null && row.willAdd > 0) ||
+			row.alreadyInHris > 0 ||
+			row.status === "Needs review" ||
+			row.status === "Unavailable",
+	);
+};

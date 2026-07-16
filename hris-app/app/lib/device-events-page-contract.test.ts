@@ -32,7 +32,7 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("device-events-sync-preflight");
 		expect(routeSource).to.contain("Sync preflight is unavailable");
 		expect(routeSource).to.contain("Syncing device logs");
-		expect(routeSource).to.contain("sync reads the latest device logs first and stops after the estimate when possible.");
+		expect(routeSource).to.contain("Preview shows what event rows will be added to Device Events");
 		expect(routeSource).to.contain("Sync ${formatCount(syncDryRunEstimate)} log");
 		expect(routeSource).to.contain("targetImportCount: getSyncProjectedSaveCount(startableRow, skipMissingEmployeeNo)");
 		expect(routeSource).to.contain("Syncing estimated unsaved logs");
@@ -43,16 +43,21 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Progress is available from Sync logs.");
 		expect(routeSource).not.to.contain("Progress is shown below the toolbar");
 		expect(routeSource).not.to.contain("Sync in progress");
-		expect(routeSource).to.contain("Device logs");
-		expect(routeSource).to.contain("HRIS events");
-		expect(routeSource).to.contain("Estimated unsaved");
-		expect(routeSource).to.contain("Will skip");
+		expect(routeSource).to.contain("Will add to Device Events");
+		expect(routeSource).to.contain("Event to add");
+		expect(routeSource).to.contain("Already in HRIS");
+		expect(routeSource).to.contain("Source proof");
+		expect(routeSource).to.contain("Filter after sync");
 		expect(routeSource).to.contain("Device logs scanned");
 		expect(routeSource).to.contain("Saved to HRIS");
 		expect(routeSource).to.contain("Sync scans device source logs, then classifies each row against HRIS.");
 		expect(routeSource).not.to.contain("Missing saved");
 		expect(routeSource).not.to.contain("Checking for missing device logs");
-		expect(routeSource).to.contain("Ready:");
+		expect(routeSource).to.contain("Ready source checks");
+		expect(routeSource).to.contain("syncReadySourceChecks");
+		expect(routeSource).to.contain("Fingerprint enrolled");
+		expect(routeSource).to.contain("Operation logs");
+		expect(routeSource).to.contain("Attendance/access events");
 		expect(routeSource).to.contain("Sync logs");
 	});
 
@@ -96,8 +101,10 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("activeEvent.eventCategory");
 		expect(routeSource).to.contain("activeEvent.eventAction");
 		expect(routeSource).to.contain("activeEvent.capabilityConfidence");
-		expect(routeSource).to.contain("All HRIS results");
-		expect(routeSource).to.contain("All runtime paths");
+		// Misleading advanced filters removed from the toolbar (runtime path / HRIS result / evidence / confidence).
+		expect(routeSource).to.not.contain('label: "Runtime path"');
+		expect(routeSource).to.not.contain('label: "Evidence source"');
+		expect(routeSource).to.not.contain('placeholder="Confidence"');
 		expect(routeSource).to.contain("Hikvision SDK listener");
 		expect(routeSource).to.contain("ZKTeco Linux bridge");
 		expect(routeSource).to.contain('title="Device event details"');
@@ -128,24 +135,28 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("isSdkAlarmSavedScope");
 		expect(routeSource).to.contain("savedEventsRefetchInterval");
 		expect(routeSource).to.contain("? 2 * 1000");
-		expect(routeSource).to.contain("SDK event evidence recent");
-		expect(routeSource).to.contain("VM listener status unavailable");
 		expect(routeSource).to.contain("Browser connected; no recent SDK event");
 		expect(routeSource).to.contain("VM listener has SDK callback evidence.");
+		expect(routeSource).to.contain("VM service running, no SDK callback yet");
 		expect(routeSource).not.to.contain("Socket connected, SDK idle");
 		expect(routeSource).not.to.contain("Waiting for next tap");
 	});
 
-	it("renders saved DeviceEvent rows only and sends every operational filter to the API", () => {
+	it("renders saved DeviceEvent rows only and keeps practical toolbar filters only", () => {
 		expect(routeSource).to.contain('const viewMode = "saved" as EventViewMode');
 		expect(routeSource).to.contain("The operational ledger renders only persisted DeviceEvent rows");
-		expect(routeSource).to.contain("evidenceSource: evidenceSource !== \"all\"");
-		expect(routeSource).to.contain("eventConfidence: eventConfidence !== \"all\"");
-		expect(routeSource).to.contain('setFilter("source", value)');
-		expect(routeSource).to.contain('setFilter("status", value)');
-		expect(routeSource).to.contain('setFilter("evidenceSource", value)');
-		expect(routeSource).to.contain('setFilter("eventConfidence", value)');
+		// Practical filters remain available in the toolbar.
+		expect(routeSource).to.contain('setFilter("deviceId", value)');
+		expect(routeSource).to.contain('setFilter("window", value)');
+		expect(routeSource).to.contain('setFilter("eventCategory", value)');
+		expect(routeSource).to.contain('setFilter("eventAction", value)');
+		// Advanced/internal filters were removed from the toolbar because they mislead operators.
+		expect(routeSource).not.to.contain('setFilter("source", value)');
+		expect(routeSource).not.to.contain('setFilter("status", value)');
+		expect(routeSource).not.to.contain('setFilter("evidenceSource", value)');
+		expect(routeSource).not.to.contain('setFilter("eventConfidence", value)');
 		expect(routeSource).to.contain("Current inventory");
+		expect(routeSource).to.contain("Will add to Device Events");
 		expect(routeSource).to.contain("Activity in selected window");
 		expect(routeSource).to.contain("Raw payload");
 		expect(routeSource).to.contain("FACE_ENROLLED");

@@ -69,6 +69,22 @@ This runs `grok inspect` + independent headless probes. Evidence lands in `.runt
 | Model ends after partial success | Partial | Rules + checklist + “do not end until green”; re-run same session with “continue until checklist green” |
 | Real Stop Condition (3 failed recoveries, data risk, missing secrets) | No | Agent must report the blocker with evidence; you supply access/decision |
 
+### Sync logs implementation proof commands
+
+```powershell
+# Unit
+cd hris-api; npx tsx node_modules/mocha/bin/mocha --no-config tests/sync-logs-event-rows.helper.spec.ts; cd ..
+cd hris-app; npx vitest run app/lib/device-events-page-contract.test.ts; cd ..
+
+# Headless Playwright (starts its own Vite via smoke config)
+cd hris-app
+npx playwright test tests/smoke/admin-device-events-sync-modal.spec.ts --config=playwright.smoke.config.ts
+cd ..
+
+# Live API (needs DB: LAN SSH to VM or working 55435 forward)
+# If login fails with 127.0.0.1:55435, recover VM/SSH first — do not claim live preview green.
+```
+
 ### Operator checklist for next prompt
 
 1. Start Grok from this repo root (so AGENTS + `.grok/rules` load).

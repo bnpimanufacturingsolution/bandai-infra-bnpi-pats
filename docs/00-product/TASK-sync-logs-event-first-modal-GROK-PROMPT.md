@@ -263,6 +263,9 @@ PASS E — Implement sync execute path + dedupe + filter destinations
 PASS F — Unit/contract tests
 PASS G — Local API dry-run proof (admin@bandai.local / password123 / appCode hris)
 PASS H — Browser/Playwright proof of Sync logs modal (headless preferred)
+        Use: cd hris-app; npx playwright test tests/smoke/admin-device-events-sync-modal.spec.ts --config=playwright.smoke.config.ts
+        (webServer auto-starts Vite; plain playwright.config.ts expects :5175 and will fail if app is down)
+        Save screenshots under .runtime/sync-logs-event-first-<stamp>/screenshots/
 PASS I — Fix failures; re-run from the failed pass
 PASS J — Truth sync: update current-task, project-truth if behavior changed,
          recommendation-registry if out-of-scope work appears

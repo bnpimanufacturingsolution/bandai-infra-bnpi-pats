@@ -1,0 +1,69 @@
+import { expect } from "chai";
+import {
+	buildHikvisionSourceChecks,
+	buildHikvisionSyncLogsEventRows,
+	countAlreadyInHrisByAction,
+} from "../helper/sync-logs-event-rows.helper";
+
+describe("sync-logs-event-rows.helper", () => {
+	it("builds event-first Hikvision rows with dual source proof and filters", () => {
+		const alreadyByAction = countAlreadyInHrisByAction([
+			{ eventAction: "FINGERPRINT_ENROLLED", count: 3 },
+			{ eventAction: "TAP", count: 23 },
+			{ eventAction: "USER_CREATED", count: 0 },
+		]);
+		const operationDeviceByAction = new Map<string, number>([
+			["FINGERPRINT_ENROLLED", 27],
+			["USER_CREATED", 20],
+			["FACE_ENROLLED", 12],
+		]);
+
+		const rows = buildHikvisionSyncLogsEventRows({
+			deviceId: "dev-a",
+			alreadyByAction,
+			operationDeviceByAction,
+			operationSourceOk: true,
+			operationSourceTotal: 70,
+			attendanceSourceOk: true,
+			attendanceSourceTotal: 2108,
+			hideSilentZeros: true,
+		});
+
+		const fingerprint = rows.find((row) => row.eventAction === "FINGERPRINT_ENROLLED");
+		const userCreated = rows.find((row) => row.eventAction === "USER_CREATED");
+		const tap = rows.find((row) => row.eventAction === "TAP");
+		const unknownOp = rows.find((row) => row.eventAction === "UNKNOWN_OPERATION");
+
+		expect(fingerprint?.willAdd).to.equal(24);
+		expect(fingerprint?.alreadyInHris).to.equal(3);
+		expect(fingerprint?.sourceProof).to.equal("Operation logs");
+		expect(fingerprint?.filterAfterSync).to.equal("Enrollment > Fingerprint enrolled");
+		expect(fingerprint?.status).to.equal("Ready");
+
+		expect(userCreated?.willAdd).to.equal(20);
+		expect(userCreated?.filterAfterSync).to.equal("User Management > User created");
+
+		expect(tap?.willAdd).to.equal(2085);
+		expect(tap?.sourceProof).to.equal("Attendance/access events");
+		expect(tap?.filterAfterSync).to.equal("Attendance > Tap");
+
+		expect(unknownOp?.status).to.equal("Needs review");
+		expect(unknownOp?.filterAfterSync).to.equal("Unknown > Unknown");
+
+		// Never invent lifecycle rows from DeviceUser inventory — only DeviceEvent already + log sources.
+		expect(rows.every((row) => row.evidenceSource !== "DEVICE_USER_INVENTORY")).to.equal(true);
+	});
+
+	it("reports dual source checks for Sync logs summary", () => {
+		const sources = buildHikvisionSourceChecks({
+			operationOk: true,
+			operationTotal: 70,
+			attendanceOk: true,
+			attendanceTotal: 2112,
+		});
+		expect(sources).to.have.length(2);
+		expect(sources.filter((source) => source.ok)).to.have.length(2);
+		expect(sources[0].readsFrom).to.equal("ContentMgmt/logSearch");
+		expect(sources[1].readsFrom).to.equal("AccessControl/AcsEvent");
+	});
+});

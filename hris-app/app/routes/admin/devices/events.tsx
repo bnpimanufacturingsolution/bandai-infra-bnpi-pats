@@ -60,6 +60,7 @@ import type {
 	DeviceEventStatus,
 	DeviceEventsResetResponse,
 	DeviceHealthResponse,
+	DeviceSyncPreviewRow,
 } from "~/services/devices.service";
 import type { ApiQueryParams } from "~/services/api-service";
 import type { AcsEventInfo } from "~/types/hikvision";
@@ -467,6 +468,167 @@ const getSyncDeviceTitle = (vendor?: string | null, name?: string | null, addres
 	if (!nameLabel) return address ? `${vendorLabel} ${address}` : vendorLabel;
 	if (nameLabel.toLowerCase().startsWith(vendorLabel.toLowerCase())) return nameLabel;
 	return `${vendorLabel} ${nameLabel}`;
+};
+
+const eventFilterLabels: Record<string, string> = {
+	FINGERPRINT_ENROLLED: "Enrollment > Fingerprint enrolled",
+	FINGERPRINT_UPDATED: "Enrollment > Fingerprint updated",
+	FINGERPRINT_DELETED: "Enrollment > Fingerprint deleted",
+	FACE_ENROLLED: "Enrollment > Face enrolled",
+	FACE_UPDATED: "Enrollment > Face updated",
+	FACE_DELETED: "Enrollment > Face deleted",
+	CARD_ENROLLED: "Enrollment > Card enrolled",
+	CARD_UPDATED: "Enrollment > Card updated",
+	CARD_DELETED: "Enrollment > Card deleted",
+	USER_CREATED: "User Management > User created",
+	USER_UPDATED: "User Management > User updated",
+	USER_DELETED: "User Management > User deleted",
+	TAP: "Attendance > Tap",
+	TAP_REJECTED: "Attendance > Tap rejected",
+	UNKNOWN: "Unknown > Unknown",
+};
+
+const hikvisionSyncLogsFallbackCatalog: Array<{
+	eventAction: string;
+	eventLabel: string;
+	sourceProof: string;
+	readsFrom: string;
+	filterAfterSync: string;
+	eventCategory: string;
+	evidenceSource: string;
+	family: "operation" | "attendance";
+}> = [
+	{
+		eventAction: "FINGERPRINT_ENROLLED",
+		eventLabel: "Fingerprint enrolled",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Enrollment > Fingerprint enrolled",
+		eventCategory: "ENROLLMENT",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "USER_CREATED",
+		eventLabel: "User created",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "User Management > User created",
+		eventCategory: "USER_MANAGEMENT",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "FACE_ENROLLED",
+		eventLabel: "Face enrolled",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Enrollment > Face enrolled",
+		eventCategory: "ENROLLMENT",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "UNKNOWN_OPERATION",
+		eventLabel: "Unknown operation",
+		sourceProof: "Operation logs",
+		readsFrom: "ContentMgmt/logSearch",
+		filterAfterSync: "Unknown > Unknown",
+		eventCategory: "UNKNOWN",
+		evidenceSource: "ISAPI_LOGSEARCH",
+		family: "operation",
+	},
+	{
+		eventAction: "TAP",
+		eventLabel: "Attendance tap",
+		sourceProof: "Attendance/access events",
+		readsFrom: "AccessControl/AcsEvent",
+		filterAfterSync: "Attendance > Tap",
+		eventCategory: "ATTENDANCE",
+		evidenceSource: "SDK_CALLBACK",
+		family: "attendance",
+	},
+	{
+		eventAction: "TAP_REJECTED",
+		eventLabel: "Rejected tap",
+		sourceProof: "Attendance/access events",
+		readsFrom: "AccessControl/AcsEvent",
+		filterAfterSync: "Attendance > Tap rejected",
+		eventCategory: "ATTENDANCE",
+		evidenceSource: "SDK_CALLBACK",
+		family: "attendance",
+	},
+];
+
+const getFallbackSyncEventRows = (device: DeviceSyncPreviewRow, skipMissingEmployeeNo: boolean) => {
+	if (Array.isArray(device.eventRows) && device.eventRows.length) return device.eventRows;
+	const projectedSaveEvents = getSyncProjectedSaveCount(device, skipMissingEmployeeNo);
+	const hrisSaved = Number(device.hrisSavedCount ?? device.syncedEvents ?? 0);
+	const isUnavailable = Boolean(device.error);
+	const isHikvision = device.vendor === "Hikvision";
+	if (isHikvision) {
+		// Compact fallback when API has not yet returned eventRows (older API / loading edge).
+		return hikvisionSyncLogsFallbackCatalog
+			.map((entry) => {
+				const isAttendance = entry.family === "attendance";
+				const willAdd =
+					entry.eventAction === "TAP"
+						? projectedSaveEvents
+						: isAttendance
+							? isUnavailable
+								? null
+								: 0
+							: null;
+				const alreadyInHris = entry.eventAction === "TAP" ? hrisSaved : 0;
+				const status = isUnavailable
+					? "Unavailable"
+					: willAdd === null
+						? "Needs review"
+						: willAdd > 0
+							? "Ready"
+							: alreadyInHris > 0
+								? "No new rows"
+								: "Needs review";
+				return {
+					key: `${device.deviceId}-${entry.eventAction}`,
+					eventLabel: entry.eventLabel,
+					willAdd,
+					alreadyInHris,
+					sourceProof: entry.sourceProof,
+					readsFrom: entry.readsFrom,
+					filterAfterSync: entry.filterAfterSync,
+					status,
+					eventCategory: entry.eventCategory,
+					eventAction: entry.eventAction,
+					evidenceSource: entry.evidenceSource,
+				};
+			})
+			.filter(
+				(row) =>
+					(row.willAdd !== null && row.willAdd > 0) ||
+					row.alreadyInHris > 0 ||
+					row.status === "Needs review" ||
+					row.status === "Unavailable",
+			);
+	}
+	return [
+		{
+			key: `${device.deviceId}-device-events`,
+			eventLabel: "Device events",
+			willAdd: projectedSaveEvents,
+			alreadyInHris: hrisSaved,
+			sourceProof: formatEventSource(device.source),
+			readsFrom: formatEventSource(device.source),
+			filterAfterSync: "Device Events",
+			status: isUnavailable
+				? "Unavailable"
+				: projectedSaveEvents && projectedSaveEvents > 0
+				? "Ready"
+				: projectedSaveEvents === 0
+				? "No new rows"
+				: "Needs review",
+		},
+	];
 };
 
 const getSerialNoFromPayload = (payload: any) =>
@@ -1244,17 +1406,68 @@ export default function DeviceEventsPage() {
 		(total, row) => total + Number(row.failedEventCount ?? 0),
 		0,
 	);
+	const syncNeedsReviewTotal = useMemo(
+		() =>
+			syncPreviewRows.reduce((total, device) => {
+				const rows = getFallbackSyncEventRows(device, skipMissingEmployeeNo);
+				return (
+					total +
+					rows.reduce(
+						(sum, row) =>
+							sum +
+							(row.status === "Needs review"
+								? hasNumericCount(row.willAdd)
+									? Number(row.willAdd)
+									: 1
+								: 0),
+						0,
+					)
+				);
+			}, 0),
+		[skipMissingEmployeeNo, syncPreviewRows],
+	);
+	const syncReadySourceChecks = useMemo(() => {
+		let ready = 0;
+		let total = 0;
+		for (const device of syncPreviewRows) {
+			if (Array.isArray(device.sources) && device.sources.length) {
+				total += device.sources.length;
+				ready += device.sources.filter((source) => source.ok).length;
+				continue;
+			}
+			// Fallback: one source check per device when API is older.
+			total += 1;
+			if (!device.error && (device.canStartSync || hasNumericCount(device.totalEvents))) ready += 1;
+		}
+		return { ready, total };
+	}, [syncPreviewRows]);
+	const syncEventWillAddTotal = useMemo(
+		() =>
+			syncPreviewRows.reduce((total, device) => {
+				const rows = getFallbackSyncEventRows(device, skipMissingEmployeeNo);
+				return (
+					total +
+					rows.reduce(
+						(sum, row) => sum + (hasNumericCount(row.willAdd) ? Number(row.willAdd) : 0),
+						0,
+					)
+				);
+			}, 0),
+		[skipMissingEmployeeNo, syncPreviewRows],
+	);
 	const syncHasUnknownMissingCount = syncPreviewRows.some(
 		(row) => getSyncProjectedSaveCount(row, skipMissingEmployeeNo) === null,
 	);
 	const syncDryRunEstimate = syncPreviewRows.length
-		? syncHasUnknownMissingCount
-			? null
-			: syncPreviewRows.reduce(
-					(total, row) =>
-						total + Number(getSyncProjectedSaveCount(row, skipMissingEmployeeNo) ?? 0),
-					0,
-				)
+		? syncEventWillAddTotal > 0
+			? syncEventWillAddTotal
+			: syncHasUnknownMissingCount
+				? null
+				: syncPreviewRows.reduce(
+						(total, row) =>
+							total + Number(getSyncProjectedSaveCount(row, skipMissingEmployeeNo) ?? 0),
+						0,
+					)
 		: (
 				syncBridge?.estimatedRowsToSync ??
 				syncBridge?.missingRows ??
@@ -1268,6 +1481,9 @@ export default function DeviceEventsPage() {
 			: hasNumericCount(syncDryRunEstimate)
 				? `Sync ${formatCount(syncDryRunEstimate)} log${Number(syncDryRunEstimate) === 1 ? "" : "s"}`
 				: "Sync logs";
+	const syncMissingLogLabel = hasNumericCount(syncDryRunEstimate)
+		? formatCount(syncDryRunEstimate)
+		: "Needs device read";
 	const showSyncPreviewSkeleton =
 		isSyncLogsModalOpen &&
 		(isLoadingSyncPreview || (isFetchingSyncPreview && syncPreviewRows.length === 0));
@@ -2303,46 +2519,6 @@ export default function DeviceEventsPage() {
 									dropdownClassName={compactSelectDropdownClassName}
 								/>
 							</FilterField>
-							<FilterField label="Runtime path">
-								<Select
-									options={sourceOptions}
-									value={source}
-									onChange={(value) => setFilter("source", value)}
-									placeholder="Runtime path"
-									className={compactSelectClassName}
-									dropdownClassName={compactSelectDropdownClassName}
-								/>
-							</FilterField>
-							<FilterField label="HRIS result">
-								<Select
-									options={savedStatusOptions}
-									value={status}
-									onChange={(value) => setFilter("status", value)}
-									placeholder="HRIS result"
-									className={compactSelectClassName}
-									dropdownClassName={compactSelectDropdownClassName}
-								/>
-							</FilterField>
-							<FilterField label="Evidence source">
-								<Select
-									options={evidenceSourceOptions}
-									value={evidenceSource}
-									onChange={(value) => setFilter("evidenceSource", value)}
-									placeholder="Evidence source"
-									className={compactSelectClassName}
-									dropdownClassName={compactSelectDropdownClassName}
-								/>
-							</FilterField>
-							<FilterField label="Confidence">
-								<Select
-									options={eventConfidenceOptions}
-									value={eventConfidence}
-									onChange={(value) => setFilter("eventConfidence", value)}
-									placeholder="Confidence"
-									className={compactSelectClassName}
-									dropdownClassName={compactSelectDropdownClassName}
-								/>
-							</FilterField>
 						</>
 					)}
 				</div>
@@ -3038,18 +3214,21 @@ export default function DeviceEventsPage() {
 									<SyncPreviewSkeleton />
 								) : syncPreviewRows.length > 0 ? (
 									<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
-										<span>Device logs: {formatOptionalCount(syncVendorEventTotal)}</span>
-										<span>HRIS events: {formatCount(syncHrisSavedTotal)}</span>
-										<span>Estimated unsaved: {formatOptionalCount(syncDryRunEstimate)}</span>
-										<span>Will skip: {formatCount(syncProjectedSkippedTotal)}</span>
+										<span>Devices checked: {formatCount(syncPreviewRows.length)}</span>
+										<span>Will add to Device Events: {syncMissingLogLabel}</span>
+										<span>Already in HRIS: {formatCount(syncHrisSavedTotal)}</span>
+										<span>Needs review: {formatCount(Math.max(syncNeedsReviewTotal, syncProjectedSkippedTotal))}</span>
 										<span>Failed: {formatCount(syncFailedTotal)}</span>
-										<span>Ready: {formatCount(syncStartableRows.length)} of {formatCount(syncPreviewRows.length)}</span>
+										<span>
+											Ready source checks: {formatCount(syncReadySourceChecks.ready)} of{" "}
+											{formatCount(syncReadySourceChecks.total)}
+										</span>
 									</div>
 								) : (
 									<p className="mt-1 text-xs text-amber-700">No sync-capable devices.</p>
 								)}
 								<p className="mt-2 text-xs text-slate-500">
-									Saved rows here update from the watcher/callback path. Sync logs is the backfill tool when that runtime lags.
+									Preview shows what event rows will be added to Device Events before anything is saved.
 								</p>
 							</div>
 							<div className="flex shrink-0 items-center gap-2">
@@ -3089,105 +3268,73 @@ export default function DeviceEventsPage() {
 										</div>
 										<div className="divide-y divide-slate-100">
 											{section.rows.map((device) => {
-									const sourceEvents = device.vendorEventCount ?? device.totalEvents;
-									const sourceUsers = device.vendorUserCount;
-									const hrisSaved = device.hrisSavedCount ?? device.syncedEvents;
-									const knownSkipped = device.knownSkippedEventCount ?? 0;
-									const failedEvents = device.failedEventCount ?? 0;
-									const projectedSaveEvents = getSyncProjectedSaveCount(device, skipMissingEmployeeNo);
-									const projectedSkipEvents = getSyncProjectedSkipCount(device, skipMissingEmployeeNo);
-									const hasProjectedSaveEvents = Boolean(projectedSaveEvents && projectedSaveEvents > 0);
-									const isSourceUnavailable = Boolean(device.error);
-									const hasUnknownSyncCount =
-										!isSourceUnavailable &&
-										(!hasNumericCount(sourceEvents) || projectedSaveEvents === null);
+									const eventRows = getFallbackSyncEventRows(device, skipMissingEmployeeNo);
+									const projectedDeviceAdds = eventRows.reduce(
+										(total, row) => total + (hasNumericCount(row.willAdd) ? Number(row.willAdd) : 0),
+										0,
+									);
+									const deviceHasReadyRows = eventRows.some((row) => row.status === "Ready");
 									return (
-										<div key={device.deviceId} className="flex flex-col gap-3 px-3 py-3 md:flex-row md:items-start md:justify-between">
-											<div className="min-w-0">
-												<p className="truncate text-sm font-semibold text-slate-950">
-													{getSyncDeviceTitle(device.vendor, device.name, device.address)}
-												</p>
-												<p
-													className={
-														isSourceUnavailable
-															? "truncate text-xs text-slate-400 line-through decoration-slate-400"
-															: "truncate text-xs text-slate-500"
-													}>
-													{device.address}:{device.port} / {formatEventSource(device.source)}
-												</p>
-												{device.error ? (
-													<p className="mt-1 text-xs text-red-700">{device.error}</p>
-												) : null}
-											</div>
-											<div className="grid shrink-0 grid-cols-2 gap-2 text-sm sm:grid-cols-3 md:min-w-[660px] lg:grid-cols-[104px_repeat(5,minmax(76px,1fr))]">
-												<div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Read state</p>
+										<div key={device.deviceId} className="px-3 py-3">
+											<div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+												<div className="min-w-0">
+													<p className="truncate text-sm font-semibold text-slate-950">
+														{getSyncDeviceTitle(device.vendor, device.name, device.address)}
+													</p>
+													<p className="truncate text-xs text-slate-500">
+														{device.address}:{device.port}
+													</p>
+													{device.error ? (
+														<p className="mt-1 text-xs text-red-700">{device.error}</p>
+													) : null}
+												</div>
+												<div className="flex shrink-0 items-center gap-2">
+													<span className="text-xs text-slate-500">Will add</span>
+													<span className="text-sm font-bold text-red-700">+{formatCount(projectedDeviceAdds)}</span>
 													<Badge
-														variant={
-															device.canStartSync
-																? "success-soft"
-																: isSourceUnavailable
-																? "secondary"
-																: hasUnknownSyncCount
-																? "warning-soft"
-																: hasProjectedSaveEvents
-																? "warning-soft"
-																: "secondary"
-														}
-														className="mt-1 px-2 py-0.5 font-semibold">
-														{device.canStartSync
-															? "Ready to read"
-															: isSourceUnavailable
-															? "Unavailable"
-															: hasUnknownSyncCount
-															? "Check counts"
-															: hasProjectedSaveEvents
-															? "Needs sync"
-															: "In sync"}
+														variant={deviceHasReadyRows ? "success-soft" : "secondary"}
+														className="rounded-md px-2 py-0.5 font-semibold">
+														{deviceHasReadyRows ? "Ready" : "Needs review"}
 													</Badge>
 												</div>
-												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Device logs</p>
-													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceEvents)}</p>
-												</div>
-												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
-													<p className="text-[11px] font-semibold uppercase text-slate-500">HRIS events</p>
-													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(hrisSaved)}</p>
-												</div>
-												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Device users</p>
-													<p className="text-xs font-semibold text-slate-950">{formatOptionalCount(sourceUsers)}</p>
-												</div>
-												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Will skip</p>
-													<p className="text-xs font-semibold text-slate-950">{formatCount(projectedSkipEvents)}</p>
-													<p className="text-[10px] text-slate-500">
-														{skipMissingEmployeeNo ? "No employee no." : `Known: ${formatCount(knownSkipped)}`}
-													</p>
-												</div>
-												<div className="rounded-md border border-slate-200 bg-white px-2 py-1.5">
-													<p className="text-[11px] font-semibold uppercase text-slate-500">Estimated unsaved</p>
-													{hasProjectedSaveEvents ? (
-														<button
-															type="button"
-															className="text-left text-sm font-bold text-red-700 underline-offset-2 hover:underline"
-															onClick={() => reviewNotImported(device)}
-															title="Review device log rows not stored as HRIS events">
-															{formatOptionalCount(projectedSaveEvents)}
-														</button>
-													) : (
-														<span className="text-xs font-semibold text-slate-500">
-															{formatOptionalCount(projectedSaveEvents)}
-														</span>
-													)}
-												</div>
-												{failedEvents > 0 ? (
-													<div className="col-span-2 sm:col-span-3 lg:col-span-6">
-														<span className="text-xs font-semibold text-red-700">
-															Failed rows: {formatCount(failedEvents)}
-														</span>
-													</div>
-												) : null}
+											</div>
+											<div className="overflow-x-auto rounded-md border border-slate-200">
+												<table className="w-full min-w-[820px] border-collapse text-left text-xs">
+													<thead className="bg-slate-50 text-[11px] font-semibold uppercase text-slate-500">
+														<tr>
+															<th className="px-2 py-2">Event to add</th>
+															<th className="px-2 py-2 text-right">Will add</th>
+															<th className="px-2 py-2 text-right">Already in HRIS</th>
+															<th className="px-2 py-2">Source proof</th>
+															<th className="px-2 py-2">Filter after sync</th>
+															<th className="px-2 py-2">Status</th>
+														</tr>
+													</thead>
+													<tbody className="divide-y divide-slate-100 bg-white">
+														{eventRows.map((row) => (
+															<tr key={row.key}>
+																<td className="px-2 py-2 font-semibold text-slate-950">{row.eventLabel}</td>
+																<td className="px-2 py-2 text-right font-bold text-red-700">
+																	{hasNumericCount(row.willAdd) ? `+${formatCount(row.willAdd)}` : "Needs read"}
+																</td>
+																<td className="px-2 py-2 text-right font-semibold text-slate-700">
+																	{formatCount(row.alreadyInHris)}
+																</td>
+																<td className="px-2 py-2 text-slate-700" title={row.readsFrom || undefined}>
+																	{row.sourceProof}
+																</td>
+																<td className="px-2 py-2 text-slate-700">{row.filterAfterSync}</td>
+																<td className="px-2 py-2">
+																	<Badge
+																		variant={row.status === "Ready" ? "success-soft" : "warning-soft"}
+																		className="rounded-md px-2 py-0.5 font-semibold">
+																		{row.status}
+																	</Badge>
+																</td>
+															</tr>
+														))}
+													</tbody>
+												</table>
 											</div>
 										</div>
 									);
@@ -3228,8 +3375,8 @@ export default function DeviceEventsPage() {
 								<span className="block font-semibold text-slate-950">Skip rows with no employee no.</span>
 								<span className="block text-xs text-slate-600">
 									{skipMissingEmployeeNo
-										? `${formatCount(syncProjectedSkippedTotal)} known employee-less row${syncProjectedSkippedTotal === 1 ? "" : "s"} will stay skipped during the source scan.`
-										: `${formatOptionalCount(syncDryRunEstimate)} estimated unsaved row${Number(syncDryRunEstimate) === 1 ? "" : "s"} from this preview; sync reads the latest device logs first and stops after the estimate when possible.`}
+										? `${formatCount(syncProjectedSkippedTotal)} known employee-less row${syncProjectedSkippedTotal === 1 ? "" : "s"} will stay out of the Device Events import.`
+										: `${syncMissingLogLabel} event row${Number(syncDryRunEstimate) === 1 ? "" : "s"} may be added from this preview; sync reads device evidence first and stops after that target when possible.`}
 								</span>
 							</span>
 						</label>
