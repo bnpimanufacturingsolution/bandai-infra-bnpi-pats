@@ -1,6 +1,19 @@
 # Current Task
 
-Status: LIVE PROVEN — event-first Sync logs on public PROD/DEV; Hikvision source path still unavailable
+Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim Sync logs, no VM primary jargon)
+
+## Latest Task Addendum - 2026-07-16 Device admin UX clarity pass
+
+- Task mode: Meaningful UX feature + contract tests + Playwright journey proof.
+- Goal: Device management / Device events / Sync logs / Sync users journey is admin-friendly, not engineer-verbose; loading is honest; Sync logs not repeated/noisy; no redundant filter columns; no primary VM jargon.
+- Implemented:
+  - `hris-app/app/routes/admin/devices/events.tsx` — Live capture status copy; Saved event ledger strip; Sync logs slim summary + blocked collapse + 4-column table; loading/empty honesty.
+  - `hris-app/app/routes/admin/devices/manage.tsx` — “Checking device connection…” / “Reading users from device…”.
+  - Contract + Playwright smoke (3 tests) updated and green.
+  - Non-stop agent loop prompt: `docs/00-product/AGENT-PROMPT-device-admin-ux-clarity-loop.md`
+- Evidence: `.runtime/device-ux-clarity-20260716-221328/`, screenshots under `.runtime/device-ux-clarity-proof/screenshots/`
+- Proof: vitest 12/12; playwright 3/3.
+- Residual (not UX-contract blockers): physical Hikvision reachability, public GitOps image lag until promote, host LAN SSH timeout from some agent hosts.
 
 ## Latest Task Addendum - 2026-07-16 Sync logs live residual unblocked (Cloudflare)
 

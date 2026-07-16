@@ -186,7 +186,7 @@ function DeviceHealthPanel({ deviceId }: { deviceId?: string }) {
 				</Button>
 			</div>
 			{isLoading ? (
-				<div className="text-sm text-slate-500">Checking...</div>
+				<div className="text-sm text-slate-500">Checking device connection…</div>
 			) : (
 				<div className="grid gap-2 sm:grid-cols-2">
 					<HealthCheckRow label="HRIS API" ok value="Online" />
@@ -560,7 +560,7 @@ function DeviceConsolePage({
 						size="sm"
 						disabled={!hikvision || syncLogsMutation.isPending}
 						onClick={() => syncLogsMutation.mutate({ deviceId: device.id })}>
-						{syncLogsMutation.isPending ? "Starting..." : "Sync logs"}
+						{syncLogsMutation.isPending ? "Starting log sync…" : "Sync logs"}
 					</Button>
 				</CapabilityRow>
 				<CapabilityRow
@@ -574,7 +574,7 @@ function DeviceConsolePage({
 						variant="outline"
 						disabled={!hikvision || syncUsersMutation.isPending}
 						onClick={() => syncUsersMutation.mutate(device.id)}>
-						{syncUsersMutation.isPending ? "Syncing..." : "Sync users"}
+						{syncUsersMutation.isPending ? "Reading users from device…" : "Sync users"}
 					</Button>
 					<Button type="button" size="sm" variant="outline" onClick={() => onDeviceUsers(device)}>
 						Review users

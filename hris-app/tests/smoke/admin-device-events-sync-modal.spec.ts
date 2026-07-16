@@ -238,26 +238,27 @@ test("admin device events opens sync logs modal with device and saved counts bef
 
 	const dialog = page.getByRole("dialog");
 	await expect(dialog.getByRole("heading", { name: "Sync device logs" })).toBeVisible();
-	await expect(dialog.getByText("Devices checked (1)", { exact: true })).toBeVisible();
-	await expect(dialog.getByText("Will add to Device Events: Needs device read")).toBeVisible();
-	await expect(dialog.getByText("Already in HRIS: 173,614")).toBeVisible();
-	await expect(dialog.getByText("Needs review: 0")).toBeVisible();
-	await expect(dialog.getByText(/Failed:\s*0/)).toBeVisible();
-	await expect(dialog.getByText("Ready source checks: 0 of 1")).toBeVisible();
+	await expect(dialog.getByText("Devices (1)", { exact: true })).toBeVisible();
+	await expect(dialog.getByText(/Will add:\s*Needs device read/)).toBeVisible();
+	await expect(dialog.getByText(/Already saved:\s*173,614/)).toBeVisible();
+	await expect(dialog.getByText(/Needs review:\s*0/)).toBeVisible();
+	await expect(dialog.getByText(/Devices ready:\s*0 of\s*1/)).toBeVisible();
 	await expect(dialog.getByText("ZKTeco", { exact: true })).toBeVisible();
 	await expect(dialog.getByText("ZKTeco sidecar", { exact: true }).first()).toBeVisible();
 	await expect(dialog.getByText("Device users", { exact: true })).toHaveCount(0);
-	await expect(dialog.getByText("Event to add", { exact: true })).toBeVisible();
-	await expect(dialog.getByText("Will add", { exact: true }).first()).toBeVisible();
-	await expect(dialog.getByText("Unavailable", { exact: true }).first()).toBeVisible();
-	await expect(dialog.getByText("ZKTECO_BRIDGE_STATUS_URL is not configured")).toBeVisible();
+	// Blocked devices collapse the verbose unavailable catalog.
+	await expect(dialog.getByText(/Can.?t read this device|ZKTECO_BRIDGE_STATUS_URL is not configured/i).first()).toBeVisible();
+	await expect(dialog.getByText("Blocked", { exact: true }).first()).toBeVisible();
+	await expect(dialog.getByText("Event breakdown is hidden until this device can be read")).toBeVisible();
+	await expect(dialog.getByRole("columnheader", { name: "Source proof" })).toHaveCount(0);
+	await expect(dialog.getByRole("columnheader", { name: "Filter after sync" })).toHaveCount(0);
 	await expect(dialog.getByRole("button", { name: /Sync logs/i })).toBeDisabled();
 	expect(api.getSyncPostCount()).toBe(0);
 
-	const screenshotDir = resolve(process.cwd(), "..", ".runtime", "browser-evidence", "screenshots");
+	const screenshotDir = resolve(process.cwd(), "..", ".runtime", "device-ux-clarity-proof", "screenshots");
 	mkdirSync(screenshotDir, { recursive: true });
 	await page.screenshot({
-		path: resolve(screenshotDir, "device-events-sync-modal-smoke.png"),
+		path: resolve(screenshotDir, "sync-logs-blocked-zkteco.png"),
 		fullPage: true,
 	});
 });
@@ -411,33 +412,103 @@ test("admin device events sync logs shows Hikvision event-first rows", async ({ 
 	await expect(dialog.getByRole("heading", { name: "Sync device logs" })).toBeVisible({
 		timeout: routeReadyTimeoutMs,
 	});
-	await expect(dialog.getByText("Devices checked: 1")).toBeVisible();
-	await expect(dialog.getByText(/Will add to Device Events:\s*2,143/)).toBeVisible();
-	await expect(dialog.getByText("Ready source checks: 2 of 2")).toBeVisible();
+	await expect(dialog.getByText("Devices (1)", { exact: true })).toBeVisible();
+	await expect(dialog.getByText(/Will add:\s*2,143/)).toBeVisible();
+	await expect(dialog.getByText(/Devices ready:\s*1 of\s*1/)).toBeVisible();
+	await expect(dialog.getByText("Ready to sync", { exact: true }).first()).toBeVisible();
 	await expect(dialog.getByText(/Hikvision Main Entrance Device A|Main Entrance Device A/)).toBeVisible();
 	await expect(dialog.getByText("10.184.38.173:443")).toBeVisible();
+	await expect(dialog.getByRole("columnheader", { name: "Event", exact: true })).toBeVisible();
+	await expect(dialog.getByRole("columnheader", { name: "Already saved", exact: true })).toBeVisible();
+	await expect(dialog.getByRole("columnheader", { name: "Source proof" })).toHaveCount(0);
+	await expect(dialog.getByRole("columnheader", { name: "Filter after sync" })).toHaveCount(0);
 	await expect(dialog.getByRole("cell", { name: "Fingerprint enrolled", exact: true })).toBeVisible();
 	await expect(dialog.getByRole("cell", { name: "+24", exact: true })).toBeVisible();
 	await expect(dialog.getByRole("cell", { name: "User created", exact: true })).toBeVisible();
 	await expect(dialog.getByRole("cell", { name: "Attendance tap", exact: true })).toBeVisible();
-	await expect(dialog.getByRole("cell", { name: "Operation logs", exact: true }).first()).toBeVisible();
-	await expect(dialog.getByRole("cell", { name: "Attendance/access events", exact: true }).first()).toBeVisible();
-	await expect(dialog.getByRole("cell", { name: "Enrollment > Fingerprint enrolled", exact: true })).toBeVisible();
-	await expect(dialog.getByRole("cell", { name: "Unknown > Unknown", exact: true })).toBeVisible();
+	await expect(dialog.getByText(/After sync, filter Device events/i)).toBeVisible();
+	// No primary VM jargon on the events/sync journey.
+	await expect(page.getByText(/VM listener/i)).toHaveCount(0);
 
 	const screenshotDir = resolve(
 		process.cwd(),
 		"..",
 		".runtime",
-		"sync-logs-event-first-proof",
+		"device-ux-clarity-proof",
 		"screenshots",
 	);
 	mkdirSync(screenshotDir, { recursive: true });
 	await page.screenshot({
-		path: resolve(screenshotDir, "device-events-sync-modal-event-first-hikvision.png"),
+		path: resolve(screenshotDir, "sync-logs-ready-hikvision.png"),
 		fullPage: true,
 	});
 	await dialog.screenshot({
 		path: resolve(screenshotDir, "device-events-sync-modal-event-first-dialog.png"),
+	});
+});
+
+test("admin device events page uses friendly status copy without inventory strip", async ({ page }) => {
+	await page.addInitScript(() => {
+		window.localStorage.setItem("authToken", "smoke-token");
+		window.localStorage.setItem("userRole", "hris-admin");
+		window.localStorage.setItem("userSubRole", "hris-admin");
+	});
+
+	await page.route("**/api/**", async (route) => {
+		const path = new URL(route.request().url()).pathname;
+		if (path.endsWith("/auth/me")) {
+			await route.fulfill(json(adminUser));
+			return;
+		}
+		if (path.endsWith("/system-provisioning/status")) {
+			await route.fulfill(json(readyProvisioningStatus));
+			return;
+		}
+		if (path.endsWith("/device/events")) {
+			await route.fulfill(
+				json({
+					events: [],
+					summary: { total: 0, byStatus: {}, bySource: {} },
+					pagination: { total: 0, page: 1, limit: 25, totalPages: 0 },
+				}),
+			);
+			return;
+		}
+		if (path.endsWith("/device")) {
+			await route.fulfill(
+				json({
+					devices: [zktecoDevice],
+					pagination: { total: 1, page: 1, limit: 100, totalPages: 1 },
+				}),
+			);
+			return;
+		}
+		await route.fulfill(json({}));
+	});
+
+	await page.goto("/admin/configuration/devices/events?view=saved");
+	await expect(page.getByRole("heading", { name: "Device events" })).toBeVisible({
+		timeout: routeReadyTimeoutMs,
+	});
+	await expect(page.getByText("Saved event ledger")).toBeVisible();
+	await expect(page.getByText("Current inventory")).toHaveCount(0);
+	await expect(page.getByText("Needs reverify")).toHaveCount(0);
+	await expect(page.getByText(/VM listener/i)).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Sync logs" })).toBeVisible();
+	await expect(page.getByText("Device", { exact: true })).toBeVisible();
+	await expect(page.getByText("Category", { exact: true })).toBeVisible();
+	await expect(page.getByText("Action", { exact: true })).toBeVisible();
+
+	const screenshotDir = resolve(
+		process.cwd(),
+		"..",
+		".runtime",
+		"device-ux-clarity-proof",
+		"screenshots",
+	);
+	mkdirSync(screenshotDir, { recursive: true });
+	await page.screenshot({
+		path: resolve(screenshotDir, "device-events-page-friendly-status.png"),
+		fullPage: true,
 	});
 });

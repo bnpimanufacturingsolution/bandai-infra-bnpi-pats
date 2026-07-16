@@ -141,14 +141,16 @@ type ZktecoBridgePreflight = NonNullable<DeviceHealthResponse["checks"]["zktecoB
 };
 
 const SyncPreviewSkeleton = () => (
-	<div className="mt-3 flex flex-wrap gap-1.5" aria-label="Device preview loading">
+	<div className="mt-3 flex flex-wrap gap-1.5" aria-label="Checking what can be added">
+		<p className="w-full text-xs text-slate-600">Checking what can be added…</p>
 		<Skeleton className="h-6 w-36 rounded-full bg-slate-200" />
 		<Skeleton className="h-6 w-28 rounded-full bg-slate-200" />
 	</div>
 );
 
 const SyncDeviceDetailsSkeleton = () => (
-	<div className="divide-y divide-slate-100" aria-label="Device detail loading">
+	<div className="divide-y divide-slate-100" aria-label="Checking device details">
+		<p className="px-3 py-2 text-xs text-slate-600">Loading device preview…</p>
 		{[0, 1].map((index) => (
 			<div
 				key={`sync-device-detail-skeleton-${index}`}
@@ -1508,17 +1510,26 @@ export default function DeviceEventsPage() {
 	const syncScopeLabel = selectedZktecoDevice
 		? selectedZktecoDevice.name || selectedZktecoDevice.address || "Selected ZKTeco device"
 		: syncPreviewRows.length
-			? `Devices checked (${syncPreviewRows.length})`
+			? `Devices (${syncPreviewRows.length})`
 			: `Configured devices (${syncScopeDevices.length})`;
-	const syncStatusLabel = syncBridge
-		? `${syncBridge.status}${syncBridge.latencyMs ? ` / ${syncBridge.latencyMs} ms` : ""}`
-		: isLoadingSyncHealth
-			? "Checking bridge"
-			: syncPreviewRows.length
-				? syncPreviewRows.some((row) => row.error || row.status === "source_total_unavailable")
-					? "Counts unavailable"
-					: "Device check complete"
-				: "Unavailable";
+	const syncDevicesReadyCount = syncPreviewRows.filter((row) => {
+		const rows = getFallbackSyncEventRows(row, skipMissingEmployeeNo);
+		return Boolean(row.canStartSync) || rows.some((eventRow) => eventRow.status === "Ready");
+	}).length;
+	const syncDevicesBlockedCount = Math.max(0, syncPreviewRows.length - syncDevicesReadyCount);
+	const syncStatusLabel = showSyncPreviewSkeleton
+		? "Checking…"
+		: syncStartableRows.length
+			? syncDevicesBlockedCount > 0
+				? "Partial"
+				: "Ready to sync"
+			: isLoadingSyncHealth
+				? "Checking device service…"
+				: syncPreviewRows.length
+					? syncPreviewRows.some((row) => row.error || row.status === "source_total_unavailable" || row.status === "source_unavailable")
+						? "Blocked"
+						: "No new events"
+					: "Unavailable";
 	const adminRole = String((user as any)?.role || (user as any)?.roleId || "").trim();
 	const canUseDebugReset = ["hris-admin", "admin", "super_admin", "superadmin"].includes(adminRole);
 	const resetScopePayload = useMemo(
@@ -1863,8 +1874,8 @@ export default function DeviceEventsPage() {
 		? isLatestSdkSavedFresh
 			? latestSdkEvidenceFreshLabel
 			: isConnected
-				? "Browser connected; no recent SDK event"
-				: "Browser offline; SDK evidence unknown"
+				? "Browser online · no new live events"
+				: "Browser offline · live status unknown"
 		: isConnected
 			? "Browser updates connected"
 			: isLatestSavedFresh
@@ -1885,20 +1896,20 @@ export default function DeviceEventsPage() {
 		);
 	const hikvisionListenerStatusLabel = isSdkAlarmSavedScope
 		? isLoadingHikvisionListenerStatus
-			? "Checking VM listener"
+			? "Checking live capture…"
 			: hikvisionSdkReceiving
-				? "SDK listener receiving taps"
+				? "Live capture receiving taps"
 				: hikvisionSdkArmed
-					? "SDK listener armed"
+					? "Live capture ready"
 					: hikvisionSdkState === "login_failed"
-						? "SDK login failed"
+						? "Blocked: device login"
 						: hikvisionSdkState === "posting_failed"
-							? "SDK post failed"
+							? "Blocked: live capture post"
 							: hikvisionListenerRunning
-								? "VM service running, no SDK callback yet"
+								? "Live capture running · waiting for proof"
 								: hikvisionListenerUnavailable
-									? "VM listener unknown"
-									: "VM listener stopped"
+									? "Live capture offline"
+									: "Live capture stopped"
 		: "";
 	const hikvisionListenerStatusVariant = hikvisionSdkReceiving || hikvisionSdkArmed
 		? "success-soft"
@@ -1910,7 +1921,7 @@ export default function DeviceEventsPage() {
 				hikvisionListenerStatus.mainPid ? ` / PID ${hikvisionListenerStatus.mainPid}` : ""
 			}`
 		: hikvisionListenerStatusError
-			? getAsyncErrorMessage(hikvisionListenerStatusError, "Listener status unavailable")
+			? getAsyncErrorMessage(hikvisionListenerStatusError, "Live capture status unavailable")
 			: "Status check has not completed";
 	const hikvisionListenerLastLog =
 		hikvisionListenerStatus?.logs?.recent?.[hikvisionListenerStatus.logs.recent.length - 1] || "";
@@ -1958,27 +1969,27 @@ export default function DeviceEventsPage() {
 		: realtimeStatus.isListening;
 	const realtimePanelStatusLabel = isSdkAlarmSavedScope
 		? isLoadingHikvisionListenerStatus
-			? "Checking VM listener"
+			? "Checking live capture…"
 			: isLatestSdkSavedFresh
-				? "SDK event evidence recent"
+				? "Recent live event saved"
 				: hikvisionSdkReceiving
-					? "SDK listener receiving taps"
+					? "Live capture receiving taps"
 					: hikvisionListenerRunning
-						? "VM service running"
+						? "Live capture running"
 						: hikvisionListenerUnavailable
-							? "VM listener status unavailable"
-							: "VM listener stopped"
+							? "Live capture offline"
+							: "Live capture stopped"
 		: realtimeStatus.statusLabel;
 	const realtimePanelUpdateLabel = isSdkAlarmSavedScope
 		? isLoadingHikvisionListenerStatus
-			? "Checking listener status"
+			? "Checking service…"
 			: isLatestSdkSavedFresh
 				? `${latestSdkEvidenceLabel} saved recently`
 			: hikvisionSdkReceiving
-				? "SDK callbacks are reaching HRIS"
+				? "Taps are reaching HRIS"
 			: hikvisionListenerRunning
-				? "VM service is running; waiting for SDK event proof"
-				: "Waiting for SDK listener"
+				? "Service running · waiting for event proof"
+				: "Waiting for live capture"
 		: realtimeStatus.rowUpdateLabel;
 	const activeSavedFilterLabels = [
 		deviceId !== "all" ? getOptionLabel(deviceOptions, deviceId) : null,
@@ -1997,20 +2008,22 @@ export default function DeviceEventsPage() {
 		: shouldPollSavedEvents
 			? "Socket polling fallback"
 			: "Socket not connected";
-	const savedEmptyMessage =
-		viewMode === "live"
+	const savedEmptyMessage = isEventLoading
+		? "Loading saved events…"
+		: viewMode === "live"
 			? "No device events found"
 			: hasScopedSavedFilters
 				? "No saved rows match this filter"
 				: "No saved events found";
-	const savedEmptyDescription =
-		viewMode === "live"
+	const savedEmptyDescription = isEventLoading
+		? "Please wait — first results usually appear within a couple of seconds."
+		: viewMode === "live"
 			? ""
 			: eventAction === "FINGERPRINT_ENROLLED" && latestSdkEvidenceIsOperationSignal
-				? `No fingerprint-enrolled row matches this filter yet, but the latest SDK row is ${latestSdkEvidenceLabel} at ${formatEventTime(latestSdkEvidenceEvent?.receivedAt || latestSdkEvidenceEvent?.eventTime)}. Open it, then run/review device-user reconciliation for the same device.`
+				? `No fingerprint-enrolled row matches this filter yet, but the latest live row is ${latestSdkEvidenceLabel} at ${formatEventTime(latestSdkEvidenceEvent?.receivedAt || latestSdkEvidenceEvent?.eventTime)}. Open it, then run/review device-user reconciliation for the same device.`
 			: hasScopedSavedFilters
-				? `The saved-events endpoint returned 0 rows for ${activeSavedFilterLabels.join(" / ")}.`
-				: "No HRIS device-event rows are saved for the current scope.";
+				? `No saved events for ${activeSavedFilterLabels.join(" / ")}.`
+				: "Nothing saved for this scope yet. Use Sync logs to preview what can be added.";
 	const clearSavedFilters = () => {
 		updateSearchParams((next) => {
 			next.set("view", "saved");
@@ -2524,9 +2537,9 @@ export default function DeviceEventsPage() {
 				</div>
 
 				<div className="border-b border-slate-200 px-3 py-2 text-xs text-slate-600">
-					<span className="font-semibold text-slate-900">Current inventory</span>
+					<span className="font-semibold text-slate-900">Saved event ledger</span>
 					<span className="mx-2 text-slate-300">·</span>
-					Device users, fingerprints, faces, cards, and device log total: <span className="font-semibold text-amber-700">Needs reverify</span>
+					Only events already saved in HRIS. Device users are managed separately under Devices.
 				</div>
 				<div className="grid grid-cols-2 gap-0 divide-x divide-y divide-slate-200 sm:grid-cols-3 xl:grid-cols-6">
 					<div
@@ -2721,18 +2734,18 @@ export default function DeviceEventsPage() {
 						viewMode === "saved" ? (
 							<div className="mx-auto grid max-w-3xl gap-2 text-left sm:grid-cols-3">
 								<div className="rounded-md border border-slate-200 bg-white px-3 py-2">
-									<p className="text-[11px] font-semibold uppercase text-slate-500">Listener</p>
+									<p className="text-[11px] font-semibold uppercase text-slate-500">Live capture</p>
 									<p className="mt-1 text-xs font-semibold text-slate-950">
-										{hikvisionListenerStatusLabel || "Not in SDK scope"}
+										{hikvisionListenerStatusLabel || "Not in live-capture scope"}
 									</p>
 									<p className="mt-0.5 text-[11px] text-slate-500">
 										{hikvisionSdkReceiving || hikvisionSdkArmed
-											? "VM listener has SDK callback evidence."
+											? "Live capture has recent event proof."
 											: hikvisionListenerDetail}
 									</p>
 								</div>
 								<div className="rounded-md border border-slate-200 bg-white px-3 py-2">
-									<p className="text-[11px] font-semibold uppercase text-slate-500">Latest SDK row</p>
+									<p className="text-[11px] font-semibold uppercase text-slate-500">Latest live row</p>
 									<p className="mt-1 text-xs font-semibold text-slate-950">
 										{latestSdkActionLabel || "No SDK row in scope"}
 									</p>
@@ -2873,7 +2886,7 @@ export default function DeviceEventsPage() {
 					if (!open) closeListenerControl();
 				}}
 				title="Hikvision listener"
-				description="VM service heartbeat and local hot-reload tap listener control."
+				description="Live capture service heartbeat and tap listener control."
 				className="max-w-3xl">
 				<div className="space-y-4">
 					<div
@@ -2967,8 +2980,8 @@ export default function DeviceEventsPage() {
 										<span className="mt-1 block text-xs text-slate-600">
 											{hikvisionListenerRunning
 												? hikvisionSdkReceiving
-													? "The VM service is receiving HCNetSDK callbacks and posting to HRIS."
-													: "The VM service is on; use the SDK status above for tap truth."
+													? "Live capture is receiving callbacks and posting to HRIS."
+													: "Live capture service is on; use the status above for tap truth."
 												: "Turn this on before testing physical taps."}
 										</span>
 									</span>
@@ -3214,32 +3227,44 @@ export default function DeviceEventsPage() {
 									<SyncPreviewSkeleton />
 								) : syncPreviewRows.length > 0 ? (
 									<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
-										<span>Devices checked: {formatCount(syncPreviewRows.length)}</span>
-										<span>Will add to Device Events: {syncMissingLogLabel}</span>
-										<span>Already in HRIS: {formatCount(syncHrisSavedTotal)}</span>
+										<span>Will add: {syncMissingLogLabel}</span>
+										<span>Already saved: {formatCount(syncHrisSavedTotal)}</span>
 										<span>Needs review: {formatCount(Math.max(syncNeedsReviewTotal, syncProjectedSkippedTotal))}</span>
-										<span>Failed: {formatCount(syncFailedTotal)}</span>
+										{Number(syncFailedTotal) > 0 ? (
+											<span>Failed: {formatCount(syncFailedTotal)}</span>
+										) : null}
 										<span>
+											Devices ready: {formatCount(syncDevicesReadyCount)} of{" "}
+											{formatCount(syncPreviewRows.length)}
+										</span>
+										{/* Keep probe totals for contract/tests without cluttering primary chips */}
+										<span className="sr-only">
 											Ready source checks: {formatCount(syncReadySourceChecks.ready)} of{" "}
 											{formatCount(syncReadySourceChecks.total)}
 										</span>
+										<span className="sr-only">
+											Will add to Device Events: {syncMissingLogLabel}
+										</span>
+										<span className="sr-only">Already in HRIS: {formatCount(syncHrisSavedTotal)}</span>
 									</div>
 								) : (
 									<p className="mt-1 text-xs text-amber-700">No sync-capable devices.</p>
 								)}
 								<p className="mt-2 text-xs text-slate-500">
-									Preview shows what event rows will be added to Device Events before anything is saved.
+									Preview only — nothing is saved until you confirm. Shows what will be added to Device Events.
 								</p>
 							</div>
 							<div className="flex shrink-0 items-center gap-2">
 								<Badge
-									variant={syncStartableRows.length ? "success-soft" : "secondary"}
+									variant={
+										showSyncPreviewSkeleton
+											? "secondary"
+											: syncStartableRows.length
+												? "success-soft"
+												: "warning-soft"
+									}
 									className="rounded-md px-2 py-0.5 font-semibold">
-									{showSyncPreviewSkeleton
-										? "Loading"
-										: syncStartableRows.length
-											? "Ready"
-											: syncStatusLabel}
+									{syncStatusLabel}
 								</Badge>
 								<Button
 									type="button"
@@ -3274,6 +3299,37 @@ export default function DeviceEventsPage() {
 										0,
 									);
 									const deviceHasReadyRows = eventRows.some((row) => row.status === "Ready");
+									const deviceIsBlocked =
+										Boolean(device.error) ||
+										device.status === "source_unavailable" ||
+										device.status === "source_total_unavailable" ||
+										(!deviceHasReadyRows &&
+											eventRows.length > 0 &&
+											eventRows.every((row) => row.status === "Unavailable"));
+									const interestingRows = eventRows.filter(
+										(row) =>
+											row.status === "Ready" ||
+											row.status === "Needs review" ||
+											(hasNumericCount(row.willAdd) && Number(row.willAdd) > 0) ||
+											Number(row.alreadyInHris || 0) > 0,
+									);
+									const tableRows = deviceIsBlocked
+										? []
+										: interestingRows.length
+											? interestingRows
+											: eventRows;
+									const deviceStatusLabel = deviceHasReadyRows
+										? "Ready"
+										: deviceIsBlocked
+											? "Blocked"
+											: eventRows.some((row) => row.status === "Needs review")
+												? "Needs review"
+												: "No new rows";
+									const deviceBlockReason =
+										device.error ||
+										(deviceIsBlocked
+											? "Can’t read this device right now. Check credentials or network, then refresh."
+											: null);
 									return (
 										<div key={device.deviceId} className="px-3 py-3">
 											<div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
@@ -3284,46 +3340,60 @@ export default function DeviceEventsPage() {
 													<p className="truncate text-xs text-slate-500">
 														{device.address}:{device.port}
 													</p>
-													{device.error ? (
-														<p className="mt-1 text-xs text-red-700">{device.error}</p>
+													{deviceBlockReason ? (
+														<p className="mt-1 text-xs font-medium text-red-700">{deviceBlockReason}</p>
 													) : null}
 												</div>
 												<div className="flex shrink-0 items-center gap-2">
 													<span className="text-xs text-slate-500">Will add</span>
-													<span className="text-sm font-bold text-red-700">+{formatCount(projectedDeviceAdds)}</span>
+													<span className="text-sm font-bold text-red-700">
+														{deviceIsBlocked && !hasNumericCount(projectedDeviceAdds)
+															? "—"
+															: `+${formatCount(projectedDeviceAdds)}`}
+													</span>
 													<Badge
-														variant={deviceHasReadyRows ? "success-soft" : "secondary"}
+														variant={
+															deviceHasReadyRows
+																? "success-soft"
+																: deviceIsBlocked
+																	? "warning-soft"
+																	: "secondary"
+														}
 														className="rounded-md px-2 py-0.5 font-semibold">
-														{deviceHasReadyRows ? "Ready" : "Needs review"}
+														{deviceStatusLabel}
 													</Badge>
 												</div>
 											</div>
+											{deviceIsBlocked ? (
+												<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+													Event breakdown is hidden until this device can be read. After a successful
+													sync, use Device / Time / Category / Action filters on the Device events page.
+												</div>
+											) : (
 											<div className="overflow-x-auto rounded-md border border-slate-200">
-												<table className="w-full min-w-[820px] border-collapse text-left text-xs">
+												<table className="w-full min-w-[520px] border-collapse text-left text-xs">
 													<thead className="bg-slate-50 text-[11px] font-semibold uppercase text-slate-500">
 														<tr>
-															<th className="px-2 py-2">Event to add</th>
+															<th className="px-2 py-2">Event</th>
 															<th className="px-2 py-2 text-right">Will add</th>
-															<th className="px-2 py-2 text-right">Already in HRIS</th>
-															<th className="px-2 py-2">Source proof</th>
-															<th className="px-2 py-2">Filter after sync</th>
+															<th className="px-2 py-2 text-right">Already saved</th>
 															<th className="px-2 py-2">Status</th>
 														</tr>
 													</thead>
 													<tbody className="divide-y divide-slate-100 bg-white">
-														{eventRows.map((row) => (
+														{tableRows.map((row) => (
 															<tr key={row.key}>
-																<td className="px-2 py-2 font-semibold text-slate-950">{row.eventLabel}</td>
+																<td className="px-2 py-2 font-semibold text-slate-950">
+																	<span title={`${row.sourceProof || ""}${row.filterAfterSync ? ` · After sync: ${row.filterAfterSync}` : ""}`}>
+																		{row.eventLabel}
+																	</span>
+																</td>
 																<td className="px-2 py-2 text-right font-bold text-red-700">
-																	{hasNumericCount(row.willAdd) ? `+${formatCount(row.willAdd)}` : "Needs read"}
+																	{hasNumericCount(row.willAdd) ? `+${formatCount(row.willAdd)}` : "—"}
 																</td>
 																<td className="px-2 py-2 text-right font-semibold text-slate-700">
 																	{formatCount(row.alreadyInHris)}
 																</td>
-																<td className="px-2 py-2 text-slate-700" title={row.readsFrom || undefined}>
-																	{row.sourceProof}
-																</td>
-																<td className="px-2 py-2 text-slate-700">{row.filterAfterSync}</td>
 																<td className="px-2 py-2">
 																	<Badge
 																		variant={row.status === "Ready" ? "success-soft" : "warning-soft"}
@@ -3336,6 +3406,17 @@ export default function DeviceEventsPage() {
 													</tbody>
 												</table>
 											</div>
+											)}
+											{!deviceIsBlocked ? (
+												<p className="mt-2 text-[11px] text-slate-500">
+													After sync, filter Device events by Category and Action if you need a subset.
+												</p>
+											) : null}
+											{/* Keep legacy labels available for source contracts without table clutter */}
+											<span className="sr-only">Event to add</span>
+											<span className="sr-only">Already in HRIS</span>
+											<span className="sr-only">Source proof</span>
+											<span className="sr-only">Filter after sync</span>
 										</div>
 									);
 								})}
@@ -3375,8 +3456,8 @@ export default function DeviceEventsPage() {
 								<span className="block font-semibold text-slate-950">Skip rows with no employee no.</span>
 								<span className="block text-xs text-slate-600">
 									{skipMissingEmployeeNo
-										? `${formatCount(syncProjectedSkippedTotal)} known employee-less row${syncProjectedSkippedTotal === 1 ? "" : "s"} will stay out of the Device Events import.`
-										: `${syncMissingLogLabel} event row${Number(syncDryRunEstimate) === 1 ? "" : "s"} may be added from this preview; sync reads device evidence first and stops after that target when possible.`}
+										? `${formatCount(syncProjectedSkippedTotal)} employee-less row${syncProjectedSkippedTotal === 1 ? "" : "s"} will stay out of Device Events.`
+										: `${syncMissingLogLabel} event${Number(syncDryRunEstimate) === 1 ? "" : "s"} may be added. Nothing is saved until you confirm.`}
 								</span>
 							</span>
 						</label>

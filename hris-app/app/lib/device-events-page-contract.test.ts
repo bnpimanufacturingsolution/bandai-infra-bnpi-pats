@@ -32,7 +32,7 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("device-events-sync-preflight");
 		expect(routeSource).to.contain("Sync preflight is unavailable");
 		expect(routeSource).to.contain("Syncing device logs");
-		expect(routeSource).to.contain("Preview shows what event rows will be added to Device Events");
+		expect(routeSource).to.contain("Preview only — nothing is saved until you confirm");
 		expect(routeSource).to.contain("Sync ${formatCount(syncDryRunEstimate)} log");
 		expect(routeSource).to.contain("targetImportCount: getSyncProjectedSaveCount(startableRow, skipMissingEmployeeNo)");
 		expect(routeSource).to.contain("Syncing estimated unsaved logs");
@@ -55,10 +55,18 @@ describe("device events page UX contract", () => {
 		expect(routeSource).not.to.contain("Checking for missing device logs");
 		expect(routeSource).to.contain("Ready source checks");
 		expect(routeSource).to.contain("syncReadySourceChecks");
+		expect(routeSource).to.contain("Devices ready:");
+		expect(routeSource).to.contain("Already saved:");
+		expect(routeSource).to.contain("deviceIsBlocked");
 		expect(routeSource).to.contain("Fingerprint enrolled");
 		expect(routeSource).to.contain("Operation logs");
 		expect(routeSource).to.contain("Attendance/access events");
 		expect(routeSource).to.contain("Sync logs");
+		// Primary table is slim; full filter/source columns are not permanent grid headers.
+		expect(routeSource).to.contain(">Event</th>");
+		expect(routeSource).to.contain(">Already saved</th>");
+		expect(routeSource).not.to.contain(">Source proof</th>");
+		expect(routeSource).not.to.contain(">Filter after sync</th>");
 	});
 
 	it("exposes the saved event reset only in the admin debug sync view", () => {
@@ -129,17 +137,24 @@ describe("device events page UX contract", () => {
 		expect(manageSource).not.to.contain("Vendor and runtime routing");
 		expect(manageSource).not.to.contain("Source adapter *");
 		expect(manageSource).not.to.contain("Runtime source");
+		expect(manageSource).to.contain("Checking device connection…");
+		expect(manageSource).to.contain("Reading users from device…");
 	});
 
-	it("does not treat a connected socket as proof that the Hikvision SDK listener is receiving taps", () => {
+	it("does not treat a connected socket as proof that live capture is receiving taps", () => {
 		expect(routeSource).to.contain("isSdkAlarmSavedScope");
 		expect(routeSource).to.contain("savedEventsRefetchInterval");
 		expect(routeSource).to.contain("? 2 * 1000");
-		expect(routeSource).to.contain("Browser connected; no recent SDK event");
-		expect(routeSource).to.contain("VM listener has SDK callback evidence.");
-		expect(routeSource).to.contain("VM service running, no SDK callback yet");
+		expect(routeSource).to.contain("Browser online · no new live events");
+		expect(routeSource).to.contain("Live capture has recent event proof.");
+		expect(routeSource).to.contain("Live capture running · waiting for proof");
 		expect(routeSource).not.to.contain("Socket connected, SDK idle");
 		expect(routeSource).not.to.contain("Waiting for next tap");
+		// Primary badges/banners must not lead with VM jargon.
+		expect(routeSource).not.to.contain("VM listener unknown");
+		expect(routeSource).not.to.contain("VM listener stopped");
+		expect(routeSource).not.to.contain("Checking VM listener");
+		expect(routeSource).not.to.contain("VM listener status unavailable");
 	});
 
 	it("renders saved DeviceEvent rows only and keeps practical toolbar filters only", () => {
@@ -155,23 +170,26 @@ describe("device events page UX contract", () => {
 		expect(routeSource).not.to.contain('setFilter("status", value)');
 		expect(routeSource).not.to.contain('setFilter("evidenceSource", value)');
 		expect(routeSource).not.to.contain('setFilter("eventConfidence", value)');
-		expect(routeSource).to.contain("Current inventory");
+		expect(routeSource).to.contain("Saved event ledger");
+		expect(routeSource).not.to.contain("Current inventory");
+		expect(routeSource).not.to.contain("Needs reverify");
 		expect(routeSource).to.contain("Will add to Device Events");
 		expect(routeSource).to.contain("Activity in selected window");
 		expect(routeSource).to.contain("Raw payload");
 		expect(routeSource).to.contain("FACE_ENROLLED");
 		expect(routeSource).not.to.contain('const viewMode = (searchParams.get("view")');
+		expect(routeSource).to.contain("Loading saved events…");
 	});
 
-	it("lets admin recover the VM Hikvision hot-reload listener from the saved SDK view", () => {
+	it("lets admin recover the live capture listener from the saved SDK view", () => {
 		expect(routeSource).to.contain("useHikvisionListenerStatus");
 		expect(routeSource).to.contain("useControlHikvisionListener");
 		expect(routeSource).to.contain('action === "listener-control"');
 		expect(routeSource).to.contain('next.set("action", "listener-control")');
 		expect(routeSource).to.contain('title="Hikvision listener"');
-		expect(routeSource).to.contain("SDK listener receiving taps");
-		expect(routeSource).to.contain("VM service running, no SDK callback yet");
-		expect(routeSource).to.contain("VM listener stopped");
+		expect(routeSource).to.contain("Live capture receiving taps");
+		expect(routeSource).to.contain("Live capture running · waiting for proof");
+		expect(routeSource).to.contain("Live capture stopped");
 		expect(routeSource).to.contain("Service enabled");
 		expect(routeSource).to.contain("SDK state");
 		expect(routeSource).to.contain("Last callback");
