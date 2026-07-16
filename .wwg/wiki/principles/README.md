@@ -27,3 +27,15 @@ last_reviewed: YYYY-MM-DD
 Principles are high-friction mutable guidance. Agents may update them when a user explicitly identifies something as a principle, doctrine, guiding philosophy, or durable design rationale, or when a task clearly changes an existing principle.
 
 If uncertain, agents should create a candidate principle note or mention the possible principle change in a handoff/report rather than rewriting an active principle.
+
+## Active principles
+
+| Principle | Path | Use when |
+|---|---|---|
+| Evidence Over Assumption | `./evidence-over-assumption.md` | Every agent session; any claim about product truth, runtime, Device Events, Sync logs, or “done” |
+
+## Candidate principles
+
+| Principle | Path | Notes |
+|---|---|---|
+| Adopted (inferred) | `./adopted-principles.md` | Review before treating as active |

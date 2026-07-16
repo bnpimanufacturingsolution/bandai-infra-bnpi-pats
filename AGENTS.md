@@ -298,7 +298,11 @@ Developers may prompt naturally. Agents must execute structurally.
 
 ## Required WWG Reading Order
 
-Before modifying code, read compact active surfaces when present, then full canonical sources: `.wwg/wiki/project-truth-summary.md`, `.wwg/wiki/terminology-summary.md`, `.wwg/wiki/project-truth.md`, `.wwg/wiki/terminology.md`, `.wwg/wiki/principles/README.md`, relevant `.wwg/wiki/principles/*.md` files when the task may affect durable reasoning, `.wwg/workspace/current-task.md`, `.wwg/governance/drift-guard.md`, `README.md`, and relevant source files.
+This is required at **session start and before every meaningful plan/edit**, not only “before merge.” See also **Session Bootstrap Rule** at the top of this file.
+
+Read compact active surfaces when present, then full canonical sources: `.wwg/reports/wwg-agent-handoff.md`, `.wwg/workspace/current-task.md`, `.wwg/wiki/project-truth-summary.md`, `.wwg/wiki/terminology-summary.md`, `.wwg/wiki/project-truth.md`, `.wwg/wiki/terminology.md`, `.wwg/wiki/principles/README.md`, relevant `.wwg/wiki/principles/*.md` (especially `evidence-over-assumption.md`), `.wwg/governance/drift-guard.md`, `README.md`, and relevant source files.
+
+Grok auto-loads `AGENTS.md` and `.grok/rules/*.md`. Grok does **not** auto-load `.wwg/wiki/*`. Opening WWG with tools is mandatory so agents do not hallucinate product truth.
 
 ## Principle Management
 
@@ -328,6 +332,38 @@ If a possible principle change is uncertain, record it as a candidate principle 
 ## Task Mode Classification
 
 Classify each meaningful change before implementation as copy-only, docs-only, meaningful feature, bug fix, regression repair, high-risk, non-software, or mixed.
+
+If the request contradicts Project Truth or touches payment, auth, authorization, security, persistence, database/user data, production deployment, destructive actions, or compliance-sensitive behavior, pause and plan before implementation.
+
+## Wiki-First Flow
+
+Use for features, architecture, product decisions, UX standards, governance, and unclear requests.
+
+## Code-Discovery Flow
+
+Use for bugs, regressions, incidents, performance issues, and root-cause analysis.
+
+## Truth Synchronization Rule
+
+Sync code, Wiki, Workspace, Governance, and reports when implementation reveals product truth. Project Truth must not be silently overwritten, terminology changes require terminology docs, and accepted behavior changes require Project Truth or requirements updates.
+
+## Non-Negotiable Close-Out Rule
+
+Do not close out while relevant canonical truth, terminology, mock/demo boundaries, or governance review remain stale.
+
+## Test Enforcement
+
+Meaningful feature behavior requires meaningful tests. Bug fixes require regression tests whenever practical. Removed or weakened tests must be flagged. If no tests are added for meaningful work, document why. Non-software work may use decision logs, manual verification, approval checklists, or Project Truth updates when software tests are not the right evidence.
+
+## Recommendation Capture
+
+Before closing out meaningful work, check whether the task revealed future work outside the approved scope. If yes, add or update `.wwg/governance/recommendation-registry.md`, keep the entry concise and evidence-based, leave status as `Proposed` unless explicitly instructed otherwise, and do not implement it unless it belongs to the current task. If no, state: "No new recommendations were identified." Recommendations are candidate work only; they are not accepted project truth, active Workspace tasks, or commitments until reviewed and promoted.
+
+## Natural Prompt Preference
+
+Users may prompt naturally, for example: "Sync Project Truth with the latest docs and reports.", "Reconcile this implementation back to Project Truth.", "Pause and create a planning review before implementation.", or "Add meaningful regression tests for the fixed bug." CLI commands are backup for technical users.
+<!-- WWG_GENERATED:EXISTING_PROJECT_ADOPTION_RULE:END -->
+
 
 If the request contradicts Project Truth or touches payment, auth, authorization, security, persistence, database/user data, production deployment, destructive actions, or compliance-sensitive behavior, pause and plan before implementation.
 
