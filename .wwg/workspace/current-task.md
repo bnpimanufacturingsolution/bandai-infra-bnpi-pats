@@ -1,10 +1,12 @@
 # Current Task
 
-Status: IN_PROGRESS
+Status: PARTIAL — event-first Sync logs shipped; live DB preview blocked on VM/SSH
 
 ## Latest Task Addendum - 2026-07-16 Sync logs event-first modal
 
 - Task mode: Meaningful feature + API contract + UI + tests + Playwright proof.
+- Commit: `ee42f4a` on `develop`.
+- Evidence: `.runtime/sync-logs-event-first-20260716-215712/`
 - Goal: Sync logs modal is event-first — per Hikvision device show what will be added to Device Events (not inventory-first On device / In HRIS / Can import as the main story).
 - Implemented:
   - `hris-api/helper/sync-logs-event-rows.helper.ts` catalog + dual-source builders.
