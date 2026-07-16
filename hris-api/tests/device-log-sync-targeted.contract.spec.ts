@@ -35,4 +35,21 @@ describe("device log sync targeted import contract", () => {
 		expect(controllerSource).to.contain("zktecoPreviewPromise,");
 		expect(controllerSource).to.contain("hikvisionTotalsPromise,");
 	});
+
+	it("keeps Sync logs preview fast when peers are unreachable", () => {
+		// Modal open budget: no full user inventory, hard per-device race, ZK status only.
+		expect(controllerSource).to.contain("HIKVISION_PREVIEW_DEVICE_BUDGET_MS");
+		expect(controllerSource).to.contain('mode: "sync-preview"');
+		expect(controllerSource).to.contain("includeDirectUserInventory: !syncPreviewMode");
+		expect(controllerSource).to.contain(
+			"zktecoDevices.length > 0 ? getZktecoBridgeStatus() : Promise.resolve(null)",
+		);
+		expect(controllerSource).to.contain(
+			"Can't reach this device right now (preview timed out)",
+		);
+		// Must not use long full-history ZK preview for modal open.
+		expect(controllerSource).not.to.match(
+			/zktecoDevices\.length === 1\s*\?\s*getZktecoBridgePreview/,
+		);
+	});
 });

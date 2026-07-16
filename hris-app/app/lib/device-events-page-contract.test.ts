@@ -27,6 +27,9 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain('title="Sync device logs"');
 		expect(routeSource).to.contain('title="Device sync status"');
 		expect(routeSource).to.contain("useDeviceSyncPreview");
+		// Unreachable peers sort last; partial readiness stays actionable.
+		expect(routeSource).to.contain("Partial — some devices unreachable");
+		expect(routeSource).to.contain("Ready / partial devices first");
 		expect(routeSource).to.contain("setShowImportProgressModal(true)");
 		expect(routeSource).to.contain("Refresh");
 		expect(routeSource).to.contain("device-events-sync-preflight");

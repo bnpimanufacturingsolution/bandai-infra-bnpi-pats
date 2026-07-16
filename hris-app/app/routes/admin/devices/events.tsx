@@ -1514,6 +1514,10 @@ export default function DeviceEventsPage() {
 		(isLoadingSyncPreview || (isFetchingSyncPreview && syncPreviewRows.length === 0));
 	const syncVendorSections = useMemo(() => {
 		const order = ["Hikvision", "ZKTeco"];
+		const isBlockedRow = (row: DeviceSyncPreviewRow) =>
+			Boolean(row.error) ||
+			row.status === "source_unavailable" ||
+			row.status === "source_total_unavailable";
 		const groups = new Map<string, typeof syncPreviewRows>();
 		for (const row of syncPreviewRows) {
 			const key = row.vendor || "Other";
@@ -1528,7 +1532,18 @@ export default function DeviceEventsPage() {
 				}
 				return left.localeCompare(right);
 			})
-			.map(([vendor, rows]) => ({ vendor, rows }));
+			.map(([vendor, rows]) => ({
+				vendor,
+				// Ready / partial devices first so unreachable peers do not dominate the journey.
+				rows: [...rows].sort((left, right) => {
+					const leftBlocked = isBlockedRow(left) ? 1 : 0;
+					const rightBlocked = isBlockedRow(right) ? 1 : 0;
+					if (leftBlocked !== rightBlocked) return leftBlocked - rightBlocked;
+					return String(left.name || left.address || "").localeCompare(
+						String(right.name || right.address || ""),
+					);
+				}),
+			}));
 	}, [syncPreviewRows]);
 	const syncScopeLabel = selectedZktecoDevice
 		? selectedZktecoDevice.name || selectedZktecoDevice.address || "Selected ZKTeco device"
@@ -1544,13 +1559,20 @@ export default function DeviceEventsPage() {
 		? "Checking…"
 		: syncStartableRows.length
 			? syncDevicesBlockedCount > 0
-				? "Partial"
+				? "Partial — some devices unreachable"
 				: "Ready to sync"
 			: isLoadingSyncHealth
 				? "Checking device service…"
 				: syncPreviewRows.length
-					? syncPreviewRows.some((row) => row.error || row.status === "source_total_unavailable" || row.status === "source_unavailable")
-						? "Blocked"
+					? syncPreviewRows.some(
+							(row) =>
+								row.error ||
+								row.status === "source_total_unavailable" ||
+								row.status === "source_unavailable",
+						)
+						? syncDevicesBlockedCount === syncPreviewRows.length
+							? "All devices unreachable"
+							: "Blocked"
 						: "No new events"
 					: "Unavailable";
 	const adminRole = String((user as any)?.role || (user as any)?.roleId || "").trim();

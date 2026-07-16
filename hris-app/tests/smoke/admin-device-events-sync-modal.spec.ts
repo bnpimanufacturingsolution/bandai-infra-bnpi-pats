@@ -447,6 +447,163 @@ test("admin device events sync logs shows Hikvision event-first rows", async ({ 
 	});
 });
 
+test("sync logs modal still opens fast with mixed ready and unreachable devices", async ({ page }) => {
+	const hikvisionDevice = {
+		id: "device-hik-1",
+		organizationId: "org-1",
+		name: "Main Entrance Device A",
+		address: "10.184.38.173",
+		port: 443,
+		protocol: "https",
+		config: { vendor: "Hikvision" },
+		access: {},
+		createdAt: timestamp,
+		updatedAt: timestamp,
+	};
+	const unreachableDevice = {
+		...hikvisionDevice,
+		id: "device-hik-offline",
+		name: "Main Entrance Device Offline",
+		address: "10.184.38.199",
+	};
+
+	await page.addInitScript(() => {
+		window.localStorage.setItem("authToken", "smoke-token");
+		window.localStorage.setItem("userRole", "hris-admin");
+		window.localStorage.setItem("userSubRole", "hris-admin");
+	});
+
+	await page.route("**/api/**", async (route) => {
+		const path = new URL(route.request().url()).pathname;
+		if (path.endsWith("/auth/me")) {
+			await route.fulfill(json(adminUser));
+			return;
+		}
+		if (path.endsWith("/system-provisioning/status")) {
+			await route.fulfill(json(readyProvisioningStatus));
+			return;
+		}
+		if (path.endsWith("/device/events")) {
+			await route.fulfill(
+				json({
+					events: [],
+					summary: { total: 0, byStatus: {}, bySource: {} },
+					pagination: { total: 0, page: 1, limit: 25, totalPages: 0 },
+				}),
+			);
+			return;
+		}
+		if (path.endsWith("/device/sync-preview")) {
+			await route.fulfill(
+				json({
+					generatedAt: timestamp,
+					scope: { deviceId: "all", source: "all" },
+					bridge: null,
+					devices: [
+						{
+							deviceId: hikvisionDevice.id,
+							name: hikvisionDevice.name,
+							address: hikvisionDevice.address,
+							port: hikvisionDevice.port,
+							vendor: "Hikvision",
+							source: "HIKVISION_CALLBACK",
+							syncedEvents: 100,
+							totalEvents: 200,
+							needsSyncEvents: 50,
+							hrisSavedCount: 100,
+							canStartSync: true,
+							status: "needs_sync",
+							eventRows: [
+								{
+									key: `${hikvisionDevice.id}-ATTENDANCE_TAP`,
+									eventLabel: "Attendance tap",
+									willAdd: 50,
+									alreadyInHris: 100,
+									sourceProof: "Attendance logs",
+									status: "Ready",
+								},
+							],
+							sources: [
+								{ key: "attendance", label: "Attendance", ok: true, status: "ready", total: 200 },
+							],
+							readySourceCount: 1,
+							sourceCheckTotal: 1,
+						},
+						{
+							deviceId: unreachableDevice.id,
+							name: unreachableDevice.name,
+							address: unreachableDevice.address,
+							port: unreachableDevice.port,
+							vendor: "Hikvision",
+							source: "HIKVISION_CALLBACK",
+							syncedEvents: 0,
+							totalEvents: null,
+							needsSyncEvents: null,
+							hrisSavedCount: 0,
+							canStartSync: false,
+							status: "source_unavailable",
+							error: "Can't reach this device right now. Other devices can still be reviewed.",
+							eventRows: [],
+							sources: [
+								{
+									key: "attendance",
+									label: "Attendance",
+									ok: false,
+									status: "unavailable",
+									total: null,
+								},
+							],
+							readySourceCount: 0,
+							sourceCheckTotal: 1,
+						},
+					],
+				}),
+			);
+			return;
+		}
+		if (path.endsWith("/device")) {
+			await route.fulfill(
+				json({
+					devices: [hikvisionDevice, unreachableDevice],
+					pagination: { total: 2, page: 1, limit: 100, totalPages: 1 },
+				}),
+			);
+			return;
+		}
+		await route.fulfill(json({}));
+	});
+
+	const startedAt = Date.now();
+	await page.goto("/admin/configuration/devices/events?view=saved&action=sync-logs");
+	const dialog = page.getByRole("dialog");
+	await expect(dialog.getByRole("heading", { name: "Sync device logs" })).toBeVisible({
+		timeout: routeReadyTimeoutMs,
+	});
+	await expect(dialog.getByText(/Partial — some devices unreachable|Partial/i).first()).toBeVisible({
+		timeout: routeReadyTimeoutMs,
+	});
+	await expect(dialog.getByText(/Main Entrance Device A/)).toBeVisible();
+	await expect(dialog.getByText(/Main Entrance Device Offline/)).toBeVisible();
+	await expect(dialog.getByText(/Can.?t reach this device right now/i).first()).toBeVisible();
+	// Ready device stays actionable even when a peer is unreachable.
+	await expect(dialog.getByRole("cell", { name: "Attendance tap", exact: true })).toBeVisible();
+	const elapsedMs = Date.now() - startedAt;
+	expect(elapsedMs).toBeLessThan(8000);
+
+	const screenshotDir = resolve(
+		process.cwd(),
+		"..",
+		".runtime",
+		"device-ux-clarity-proof",
+		"screenshots",
+	);
+	mkdirSync(screenshotDir, { recursive: true });
+	await page.screenshot({
+		path: resolve(screenshotDir, "sync-logs-partial-unreachable-peer.png"),
+		fullPage: true,
+	});
+});
+
 test("admin device events page uses friendly status copy without inventory strip", async ({ page }) => {
 	await page.addInitScript(() => {
 		window.localStorage.setItem("authToken", "smoke-token");
