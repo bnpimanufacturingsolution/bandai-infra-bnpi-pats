@@ -5059,9 +5059,40 @@ export const controller = (prisma: PrismaClient) => {
 				payload,
 			},
 		});
+		// Keep DeviceUser inventory in sync when we learn a plain device person no
+		// (write-time map resolve or already-plain). This is device inventory, not HRIS Employee.
+		if (employeeNo && !isOpaqueLikePersonToken(employeeNo)) {
+			void (async () => {
+				try {
+					const { upsertDeviceUserInventoryStub } = await import(
+						"../../helper/device-person-token.helper"
+					);
+					await upsertDeviceUserInventoryStub(prisma as any, {
+						organizationId: params.organizationId,
+						deviceId: params.device.id,
+						employeeNo,
+						displayName:
+							(resolvedEvidence as any)?.rawEvidence?.resolvedDisplayName ||
+							(payload as any)?.resolvedDisplayName ||
+							null,
+						opaqueToken: opaquePersonToken,
+					});
+				} catch {
+					// never block event save
+				}
+			})();
+		}
 		await invalidateCache.byPattern("cache:device:events:*").catch(() => undefined);
 		emitDeviceEventSaved((params.req as any).io, eventRecord);
 		return { eventRecord, duplicate: false };
+	};
+
+	const isOpaqueLikePersonToken = (value: string) => {
+		const token = String(value || "").trim();
+		if (!token) return false;
+		if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/.test(token) && !/[+/=]/.test(token)) return false;
+		if (/^[A-Za-z0-9+/]{16,}={0,2}$/.test(token) && /[+/=]/.test(token)) return true;
+		return token.length >= 20 && /[+/=]/.test(token);
 	};
 
 	const persistDeviceRuntimeEvent = async (params: {

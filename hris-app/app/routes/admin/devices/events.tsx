@@ -425,6 +425,31 @@ const getEmployeeRecordUrl = (employeeProfileId?: string | null) =>
 		? `/admin/configuration/employees?action=view&id=${encodeURIComponent(employeeProfileId)}`
 		: "";
 
+/**
+ * Open Sync Center → Device users for this physical device, filtered to plain device person no.
+ * This is DEVICE inventory (DeviceUser), not HRIS Employee.
+ */
+const getDeviceUserSyncCenterUrl = (
+	deviceId?: string | null,
+	employeeNo?: string | null,
+) => {
+	const id = String(deviceId || "").trim();
+	if (!id) return "/admin/configuration/devices?action=device-users&syncPanel=users";
+	const params = new URLSearchParams({
+		action: "device-users",
+		deviceId: id,
+		syncPanel: "users",
+		// HRIS DeviceUser inventory (saved stubs), not live "Current view" merge which can be empty
+		// when the person was never imported or was removed from the terminal.
+		deviceUserView: "hris",
+	});
+	const person = String(employeeNo || "").trim();
+	if (person && !/^[A-Za-z0-9+/]{16,}={0,2}$/.test(person)) {
+		params.set("deviceUserSearch", person);
+	}
+	return `/admin/configuration/devices?${params.toString()}`;
+};
+
 /** Device logSearch often stores base64 privacy tokens — not readable employee nos. */
 const isOpaqueDevicePersonToken = (value?: string | null) => {
 	const token = String(value || "").trim();
@@ -2678,7 +2703,15 @@ export default function DeviceEventsPage() {
 			sortable: viewMode === "saved",
 			width: "290px",
 			required: true,
-			render: (value, item) => (
+			render: (value, item) => {
+				const displayNo = getDisplayEmployeeNo(item);
+				const deviceUserUrl =
+					item.deviceId && displayNo && !isOpaqueDevicePersonToken(displayNo)
+						? getDeviceUserSyncCenterUrl(item.deviceId, displayNo)
+						: item.deviceId
+							? getDeviceUserSyncCenterUrl(item.deviceId, null)
+							: "";
+				return (
 				<div className="flex min-w-0 items-center gap-3">
 					<div
 						className={
@@ -2695,36 +2728,53 @@ export default function DeviceEventsPage() {
 								className="block truncate text-sm font-semibold text-slate-950 hover:text-slate-700 hover:underline">
 								{getEmployeeDisplayName(item)}
 							</Link>
+						) : deviceUserUrl ? (
+							<Link
+								to={deviceUserUrl}
+								className="block truncate text-sm font-semibold text-slate-950 hover:text-orange-700 hover:underline"
+								title="Open Sync Center device users for this device">
+								{getEmployeeDisplayName(item)}
+							</Link>
 						) : (
 							<p className="truncate text-sm font-semibold text-slate-800">
 								{getEmployeeDisplayName(item)}
 							</p>
 						)}
 						<div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-							<span
-								className="truncate text-xs text-slate-500"
-								title={
-									isOpaqueDevicePersonToken(getDisplayEmployeeNo(item))
-										? String(item.payload?.opaquePersonToken || item.employeeNo || "")
-										: item.payload?.opaquePersonToken
-											? `Mapped from device token ${item.payload.opaquePersonToken}`
-											: undefined
-								}>
-								{formatDeviceEventPersonRef(null, item)}
-							</span>
+							{deviceUserUrl && !isOpaqueDevicePersonToken(displayNo) ? (
+								<Link
+									to={deviceUserUrl}
+									className="truncate text-xs text-orange-700 hover:underline"
+									title="Device person on this terminal (not HRIS employee)">
+									{formatDeviceEventPersonRef(null, item)} · Device user
+								</Link>
+							) : (
+								<span
+									className="truncate text-xs text-slate-500"
+									title={
+										isOpaqueDevicePersonToken(displayNo)
+											? String(item.payload?.opaquePersonToken || item.employeeNo || "")
+											: item.payload?.opaquePersonToken
+												? `Mapped from device token ${item.payload.opaquePersonToken}`
+												: undefined
+									}>
+									{formatDeviceEventPersonRef(null, item)}
+								</span>
+							)}
 							<Badge
 								variant={item.employeeProfileId ? "success-soft" : "warning-soft"}
 								className="px-1.5 py-0 text-[11px] font-semibold">
 								{item.employeeProfileId
-									? "Matched"
-									: isOpaqueDevicePersonToken(getDisplayEmployeeNo(item))
+									? "Matched HRIS"
+									: isOpaqueDevicePersonToken(displayNo)
 										? "Needs link"
-										: "Needs match"}
+										: "Device user"}
 							</Badge>
 						</div>
 					</div>
 				</div>
-			),
+				);
+			},
 		},
 		{
 			key: "deviceId",
@@ -3294,17 +3344,38 @@ export default function DeviceEventsPage() {
 							next.set("page", String(page));
 						});
 					}}
-					renderActions={(item) => (
-						<Button
-							type="button"
-							variant="outline"
-							size="sm"
-							className="h-8 px-2.5 text-xs"
-							onClick={() => openEventDetails(item)}>
-							<Eye className="h-3.5 w-3.5" />
-							View
-						</Button>
-					)}
+					renderActions={(item) => {
+						const displayNo = getDisplayEmployeeNo(item);
+						const deviceUserUrl =
+							item.deviceId && displayNo && !isOpaqueDevicePersonToken(displayNo)
+								? getDeviceUserSyncCenterUrl(item.deviceId, displayNo)
+								: item.deviceId
+									? getDeviceUserSyncCenterUrl(item.deviceId, null)
+									: "";
+						return (
+							<div className="flex flex-col gap-1">
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="h-8 px-2.5 text-xs"
+									onClick={() => openEventDetails(item)}>
+									<Eye className="h-3.5 w-3.5" />
+									View
+								</Button>
+								{deviceUserUrl ? (
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="h-7 px-2 text-[11px] text-orange-700"
+										onClick={() => navigate(deviceUserUrl)}>
+										Device user
+									</Button>
+								) : null}
+							</div>
+						);
+					}}
 					rowClassName={(item) =>
 						viewMode === "saved" && item.id === highlightedSavedEventId
 							? "bg-emerald-50/80 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-50"

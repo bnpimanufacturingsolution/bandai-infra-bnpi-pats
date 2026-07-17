@@ -68,7 +68,7 @@ export const upsertDevicePersonToken = async (
 		where: { organizationId, deviceId, opaqueToken },
 	});
 	if (existing) {
-		return prisma.devicePersonToken.update({
+		const updated = await prisma.devicePersonToken.update({
 			where: { id: existing.id },
 			data: {
 				employeeNo,
@@ -79,8 +79,16 @@ export const upsertDevicePersonToken = async (
 				lastSeenAt: now,
 			},
 		});
+		await upsertDeviceUserInventoryStub(prisma, {
+			organizationId,
+			deviceId,
+			employeeNo,
+			displayName: input.displayName ?? existing.displayName,
+			opaqueToken,
+		}).catch(() => undefined);
+		return updated;
 	}
-	return prisma.devicePersonToken.create({
+	const tokenRow = await prisma.devicePersonToken.create({
 		data: {
 			organizationId,
 			deviceId,
@@ -92,6 +100,72 @@ export const upsertDevicePersonToken = async (
 			captureEventTime: input.captureEventTime || null,
 			firstSeenAt: now,
 			lastSeenAt: now,
+		},
+	});
+	// Also ensure DeviceUser inventory has this plain device person (not HRIS Employee).
+	await upsertDeviceUserInventoryStub(prisma, {
+		organizationId,
+		deviceId,
+		employeeNo,
+		displayName: input.displayName || null,
+		opaqueToken,
+	}).catch(() => undefined);
+	return tokenRow;
+};
+
+/**
+ * DeviceUser is inventory of people ON THE DEVICE — not HRIS Employee.
+ * Upsert so Sync Center can open the real device user for this device.
+ */
+export const upsertDeviceUserInventoryStub = async (
+	prisma: PrismaClient | any,
+	input: {
+		organizationId: string;
+		deviceId: string;
+		employeeNo: string;
+		displayName?: string | null;
+		opaqueToken?: string | null;
+	},
+) => {
+	const organizationId = String(input.organizationId || "").trim();
+	const deviceId = String(input.deviceId || "").trim();
+	const employeeNo = String(input.employeeNo || "").trim();
+	if (!organizationId || !deviceId || !employeeNo || isOpaqueHikvisionPersonToken(employeeNo)) {
+		return null;
+	}
+	const existing = await prisma.deviceUser.findFirst({
+		where: { organizationId, deviceId, vendorUserId: employeeNo },
+	});
+	const vendorMetadata = {
+		writeTimeCapture: true,
+		opaquePersonToken: input.opaqueToken || null,
+		notHrisEmployee: true,
+		plane: "DEVICE_USER_INVENTORY",
+	};
+	if (existing) {
+		return prisma.deviceUser.update({
+			where: { id: existing.id },
+			data: {
+				employeeNo,
+				displayName: input.displayName ?? existing.displayName,
+				lastSyncedAt: new Date(),
+				vendorMetadata: {
+					...((existing.vendorMetadata as any) || {}),
+					...vendorMetadata,
+				},
+			},
+		});
+	}
+	return prisma.deviceUser.create({
+		data: {
+			organizationId,
+			deviceId,
+			vendorUserId: employeeNo,
+			employeeNo,
+			displayName: input.displayName || null,
+			status: "UNMATCHED",
+			lastSyncedAt: new Date(),
+			vendorMetadata,
 		},
 	});
 };

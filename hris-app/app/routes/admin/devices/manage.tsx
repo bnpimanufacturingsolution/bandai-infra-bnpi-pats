@@ -1415,6 +1415,8 @@ export default function DevicesManagePage() {
 							next.delete("syncPanel");
 							next.delete("enrollmentAction");
 							next.delete("employeeId");
+							next.delete("deviceUserSearch");
+							next.delete("deviceUserView");
 						});
 					}
 				}}
