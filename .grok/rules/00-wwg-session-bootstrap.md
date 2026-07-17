@@ -33,12 +33,15 @@ Banned fake blockers and real stop conditions are in root `AGENTS.md`. Recover a
 
 ## Operator steps are agent steps (hard ban)
 
-Never end with homework for the human when you can run it:
+Also see always-on: `.grok/rules/01-agent-owned-execution.md`.
 
-- FORBIDDEN exit lines: "you should hard-refresh", "restart the API", "open Sync logs and click Sync", "run Playwright yourself", "try again after rebuild".
+Never end with homework for the human when you can run it. The human should
+**not** have to say “continue” or “do it yourself.”
+
+- FORBIDDEN exit lines: "you should hard-refresh", "restart the API", "open Sync logs and click Sync", "run Playwright yourself", "try again after rebuild", "I will continue later".
 - REQUIRED: you restart API/app (`npm.cmd` on Windows), poll `/health`, login, hit the real endpoints, run Playwright, capture `.runtime/` evidence, commit/push when green.
 - Wall time is not a stop: 10 minutes of work is not done. Multi-surface Sync logs / device truth jobs expect **tens of minutes to hours** with heartbeats until acceptance is green.
-- For long Sync logs work, open and obey `docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md` (EXIT GATE + min heartbeats + live process + Playwright).
+- For long Sync logs work, **internally** open and obey `docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md` even if the user only said “fix it” or “continue” (EXIT GATE + min heartbeats + dual-source live proof + Playwright).
 
 ## Verify this machine still loads rules
 
@@ -47,4 +50,5 @@ grok inspect
 powershell -File scripts/verify-grok-wwg-bootstrap.ps1
 ```
 
-`grok inspect` must list `Agents.md` / `AGENTS.md`, `Claude.md` / `CLAUDE.md`, and `.grok/rules/00-wwg-session-bootstrap.md`.
+`grok inspect` must list `Agents.md` / `AGENTS.md`, `Claude.md` / `CLAUDE.md`,
+`.grok/rules/00-wwg-session-bootstrap.md`, and `.grok/rules/01-agent-owned-execution.md`.

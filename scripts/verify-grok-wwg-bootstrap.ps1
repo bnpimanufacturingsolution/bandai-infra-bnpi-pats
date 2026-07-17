@@ -40,7 +40,8 @@ $inspectText = Get-Content $inspectLog -Raw
 
 $requiredInstructionMarkers = @(
   "Agents.md",
-  "00-wwg-session-bootstrap.md"
+  "00-wwg-session-bootstrap.md",
+  "01-agent-owned-execution.md"
 )
 $inspectOk = $true
 foreach ($m in $requiredInstructionMarkers) {

@@ -84,6 +84,20 @@ Do not ask for approval for normal development or operations progress. Recover, 
 
 Keep going by default.
 
+### Agent-owned by default (no user “continue” required)
+
+The human does **not** need to re-prompt “do it yourself” or “continue.” On every
+meaningful task you already own:
+
+- Restarting local API/app (`npm.cmd` on Windows), polling health, fixing PATH/DB ports
+- Hitting real admin endpoints, starting Sync jobs, polling import progress
+- Running Playwright/contract tests and writing `.runtime/` evidence
+- Committing and pushing `develop` when green
+- Opening marathon/nonstop job cards **internally** for multi-surface Sync logs /
+  device truth work without waiting for the user to paste them
+
+Do not end with a “What you should do next” list for recoverable work. Execute it.
+
 ## Running Cloudflare Tunnel Safety Rule
 
 The running Project Truth server depends on the VM-managed named Cloudflare
