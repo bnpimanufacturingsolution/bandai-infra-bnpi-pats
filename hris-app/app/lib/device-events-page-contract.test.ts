@@ -189,7 +189,7 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("? 2 * 1000");
 		expect(routeSource).to.contain("Browser online · no new live events");
 		expect(routeSource).to.contain("Live capture has recent event proof.");
-		expect(routeSource).to.contain("Live capture running · waiting for proof");
+		expect(routeSource).to.contain("Live capture running · waiting for first tap");
 		expect(routeSource).not.to.contain("Socket connected, SDK idle");
 		expect(routeSource).not.to.contain("Waiting for next tap");
 		// Primary badges/banners must not lead with VM jargon.
@@ -240,7 +240,7 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("configuredAddress");
 		expect(routeSource).to.contain('title="Hikvision listener"');
 		expect(routeSource).to.contain("Live capture receiving taps");
-		expect(routeSource).to.contain("Live capture running · waiting for proof");
+		expect(routeSource).to.contain("Live capture running · waiting for first tap");
 		expect(routeSource).to.contain("Live capture stopped");
 		expect(routeSource).to.contain("Service enabled");
 		expect(routeSource).to.contain("SDK state");

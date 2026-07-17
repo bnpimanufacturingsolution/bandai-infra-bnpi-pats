@@ -204,7 +204,16 @@ export const summarizeHikvisionListenerLogs = (
 
 	const receivingCallbacks = isRecent(lastAlarmAt, now);
 	const postingToHris = isRecent(lastPostAt, now);
-	const armed = receivingCallbacks || (lastLoginOk === true && sawCallbackRegisterOk);
+	// "Receiving" requires a fresh alarm (5 min). "Armed" stays sticky after any
+	// proven alarm/post/register in the log sample so a quiet device does not look
+	// broken (0 armed / Idle) while the systemd service is still watching.
+	const provenPathWithoutLoginFailure =
+		lastLoginOk !== false &&
+		(Boolean(lastAlarmAt) || Boolean(lastPostAt) || sawCallbackRegisterOk || lastLoginOk === true);
+	const armed =
+		receivingCallbacks ||
+		(lastLoginOk === true && sawCallbackRegisterOk) ||
+		provenPathWithoutLoginFailure;
 	const state = receivingCallbacks
 		? "receiving"
 		: armed
@@ -232,7 +241,15 @@ export const summarizeHikvisionListenerLogs = (
 		.map((device) => {
 			const deviceReceivingCallbacks = isRecent(device._lastAlarmAt || null, now);
 			const devicePostingToHris = isRecent(device._lastPostAt || null, now);
-			const deviceArmed = deviceReceivingCallbacks || device.armed;
+			const deviceProven =
+				device.lastLoginOk !== false &&
+				(Boolean(device._lastAlarmAt) ||
+					Boolean(device._lastPostAt) ||
+					device.armed ||
+					device.lastLoginOk === true);
+			// Keep armed sticky after a quiet gap so per-device rows do not flip to
+			// "0 armed / Idle" while the VM listener is still watching the terminal.
+			const deviceArmed = deviceReceivingCallbacks || device.armed || deviceProven;
 			const deviceState: HikvisionListenerDeviceEvidence["state"] = deviceReceivingCallbacks
 				? "receiving"
 				: deviceArmed

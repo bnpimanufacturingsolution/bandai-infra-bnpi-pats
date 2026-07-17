@@ -2426,13 +2426,14 @@ export default function DeviceEventsPage() {
 			: hikvisionSdkReceiving
 				? "Live capture receiving taps"
 				: hikvisionSdkArmed
-					? "Live capture ready"
+					? "Live capture ready · quiet (still armed)"
 					: hikvisionSdkState === "login_failed"
 						? "Blocked: device login"
 						: hikvisionSdkState === "posting_failed"
 							? "Blocked: live capture post"
 							: hikvisionListenerRunning
-								? "Live capture running · waiting for proof"
+								? // Service up but log sample has no arm/receive proof yet (cold start).
+									"Live capture running · waiting for first tap"
 								: hikvisionListenerUnavailable
 									? "Live capture offline"
 									: "Live capture stopped"

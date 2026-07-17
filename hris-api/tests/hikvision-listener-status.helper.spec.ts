@@ -86,4 +86,23 @@ describe("hikvision-listener-status helper", () => {
 		expect(status.devices[0]?.lastFailureReason).to.equal("device_login_auth_failed_backoff");
 		expect(status.devices[0]?.lastLoginError).to.equal("1");
 	});
+
+	it("stays armed (not idle) after a quiet gap when the log still proves a successful path", () => {
+		// Same shape as operator screenshot: last proof ~14 min ago, service still up.
+		const now = new Date("2026-07-17T05:40:00.000Z");
+		const status = summarizeHikvisionListenerLogs(
+			[
+				'{"ts":"2026-07-17T05:26:00Z","deviceId":"cmrlgqsjv000oob01165tbd8n","employeeNo":"1","event":"acs_alarm_received","eventKind":"attendance_fingerprint_success","serialNo":"4800","sourceHost":"127.0.0.1"}',
+				'{"ts":"2026-07-17T05:26:01Z","deviceId":"cmrlgqsjv000oob01165tbd8n","event":"hikvision_callback_post_result","ok":"true","serialNo":"4800","sourceHost":"127.0.0.1"}',
+			],
+			now,
+		);
+
+		expect(status.receivingCallbacks).to.equal(false);
+		expect(status.armed).to.equal(true);
+		expect(status.state).to.equal("armed");
+		expect(status.devices[0]?.receivingCallbacks).to.equal(false);
+		expect(status.devices[0]?.armed).to.equal(true);
+		expect(status.devices[0]?.state).to.equal("armed");
+	});
 });
