@@ -629,6 +629,53 @@ export interface DeviceEventsResetResponse {
 
 export type HikvisionListenerAction = "start" | "stop" | "restart";
 
+export type DeviceLiveReadinessLevel = "green" | "yellow" | "red";
+
+export interface DeviceLiveReadinessCheck {
+	id: "database" | "liveCapture" | "eventProof";
+	level: DeviceLiveReadinessLevel;
+	ok: boolean;
+	label: string;
+	detail: string;
+}
+
+/** Truthful RYG for tap + enroll (DB + listener + proof). Armed alone is not green. */
+export interface DeviceLiveReadiness {
+	checkedAt: string;
+	overall: DeviceLiveReadinessLevel;
+	headline: string;
+	safeToTap: boolean;
+	safeToEnroll: boolean;
+	reasons: string[];
+	checks: DeviceLiveReadinessCheck[];
+	database: {
+		ok: boolean;
+		latencyMs: number | null;
+		error: string | null;
+	};
+	listener: {
+		running: boolean;
+		armed: boolean;
+		receiving: boolean;
+		state: string | null;
+		lastAlarmAt: string | null;
+		lastPostAt: string | null;
+	};
+	proof: {
+		lastSdkEventAt: string | null;
+		ageMs: number | null;
+		fresh: boolean;
+		stale: boolean;
+	};
+	listenerStatus?: {
+		running?: boolean;
+		status?: string;
+		checkedAt?: string;
+		error?: string | null;
+		vm?: { host?: string; user?: string; path?: string };
+	} | null;
+}
+
 export interface HikvisionListenerStatus {
 	service: string;
 	vm: {
@@ -2045,6 +2092,163 @@ class DevicesService extends APIService {
 					"Error loading Hikvision listener status",
 			);
 		}
+	}
+
+	/**
+	 * Truthful readiness using endpoints that already work:
+	 * - GET /api/device/events?limit=1 → proves DB + auth
+	 * - GET /api/device/hikvision/listener → proves live capture service
+	 * Does not depend on a dedicated route that can collide with /device/:id.
+	 */
+	async getDeviceLiveReadiness(): Promise<DeviceLiveReadiness> {
+		const { buildClientDeviceLiveReadiness } = await import(
+			"../lib/device-live-readiness-client"
+		);
+
+		let databaseOk = false;
+		let databaseLatencyMs: number | null = null;
+		let databaseError: string | null = null;
+		let lastSdkEventAt: string | null = null;
+		const dbStarted = Date.now();
+		try {
+			const events = await this.getDeviceEvents({
+				page: 1,
+				limit: 5,
+				source: "EN_HCNETSDK_ALARM",
+				sort: "eventTime",
+				order: "desc",
+			} as any);
+			databaseOk = true;
+			databaseLatencyMs = Date.now() - dbStarted;
+			const first = events?.events?.[0] || (events as any)?.data?.events?.[0];
+			lastSdkEventAt =
+				(first?.receivedAt && String(first.receivedAt)) ||
+				(first?.eventTime && String(first.eventTime)) ||
+				null;
+		} catch (error: any) {
+			databaseOk = false;
+			databaseLatencyMs = Date.now() - dbStarted;
+			databaseError = String(
+				error?.message || error?.data?.message || error || "database_or_auth_unreachable",
+			).slice(0, 280);
+		}
+
+		let listener: HikvisionListenerStatus | null = null;
+		let listenerError: string | null = null;
+		try {
+			listener = await this.getHikvisionListenerStatus();
+		} catch (error: any) {
+			listenerError = String(error?.message || error).slice(0, 200);
+		}
+
+		return buildClientDeviceLiveReadiness({
+			databaseOk,
+			databaseLatencyMs,
+			databaseError: databaseError || listenerError,
+			listener,
+			listenerError,
+			lastSdkEventAt: lastSdkEventAt || listener?.sdk?.lastAlarmAt || null,
+		});
+	}
+
+	/**
+	 * Operator prove: re-check DB via events, restart listener if stopped, re-check.
+	 */
+	async proveDeviceLivePath(): Promise<{
+		proven: boolean;
+		restartAttempted?: boolean;
+		steps: Array<{ step: string; ok: boolean; detail: string }>;
+		readiness: DeviceLiveReadiness;
+		operatorHint?: string;
+		message?: string;
+	}> {
+		const steps: Array<{ step: string; ok: boolean; detail: string }> = [];
+		let restartAttempted = false;
+
+		// 1) DB/auth proof
+		const dbStarted = Date.now();
+		try {
+			await this.getDeviceEvents({ page: 1, limit: 1 } as any);
+			steps.push({
+				step: "database",
+				ok: true,
+				detail: `Authenticated events API OK (${Date.now() - dbStarted}ms)`,
+			});
+		} catch (error: any) {
+			steps.push({
+				step: "database",
+				ok: false,
+				detail: String(error?.message || "DB/auth failed").slice(0, 200),
+			});
+		}
+
+		// 2) Listener status (+ restart if down)
+		let listener: HikvisionListenerStatus | null = null;
+		try {
+			listener = await this.getHikvisionListenerStatus();
+			steps.push({
+				step: "listener_status",
+				ok: Boolean(listener.running),
+				detail: listener.running
+					? `Listener ${listener.status} / sdk=${listener.sdk?.state || "unknown"}`
+					: listener.error || "Listener not running",
+			});
+			if (!listener.running && listener.control?.available) {
+				restartAttempted = true;
+				try {
+					await this.controlHikvisionListener("restart");
+					steps.push({
+						step: "listener_restart",
+						ok: true,
+						detail: "Listener restart requested",
+					});
+					await new Promise((r) => setTimeout(r, 3000));
+					listener = await this.getHikvisionListenerStatus();
+					steps.push({
+						step: "listener_status_after_restart",
+						ok: Boolean(listener.running),
+						detail: listener.running
+							? `Listener ${listener.status} after restart`
+							: "Still not running after restart",
+					});
+				} catch (error: any) {
+					steps.push({
+						step: "listener_restart",
+						ok: false,
+						detail: String(error?.message || "Restart failed").slice(0, 200),
+					});
+				}
+			}
+		} catch (error: any) {
+			steps.push({
+				step: "listener_status",
+				ok: false,
+				detail: String(error?.message || "Listener status failed").slice(0, 200),
+			});
+		}
+
+		const readiness = await this.getDeviceLiveReadiness();
+		const proven =
+			readiness.overall === "green" && readiness.safeToTap && readiness.safeToEnroll;
+
+		return {
+			proven,
+			restartAttempted,
+			steps,
+			readiness,
+			message: proven
+				? "Live path prove passed — safe to tap and enroll for realtime"
+				: "Live path prove incomplete — fix red checks before relying on realtime",
+			operatorHint: proven
+				? "Tap TEST A once now; a TAP or SDK row should appear within a few seconds."
+				: !readiness.database.ok
+					? "Restore Postgres tunnel (local 55435 / predev) first."
+					: !readiness.listener.running
+						? "Listener failed to start — open Listener and Restart; check reverse tunnel."
+						: readiness.proof.stale
+							? "Path is quiet — tap the device once for fresh proof, then Prove again."
+							: "Review red/yellow readiness chips.",
+		};
 	}
 
 	async controlHikvisionListener(

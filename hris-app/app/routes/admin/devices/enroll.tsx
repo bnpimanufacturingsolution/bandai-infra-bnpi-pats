@@ -38,6 +38,7 @@ import * as XLSX from "xlsx";
 import { useEmployee, useEmployees } from "~/lib/hooks/useEmployees";
 import {
 	useDevices,
+	useDeviceLiveReadiness,
 	useDeviceSyncPreview,
 	useDeviceSyncRuns,
 	useDeviceActivity,
@@ -70,6 +71,7 @@ import {
 } from "~/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
+import { DeviceLiveReadinessStrip } from "~/components/molecules/DeviceLiveReadinessStrip";
 import type { HikvisionUserInfo } from "~/types/hikvision";
 import deviceService, {
 	type DeviceSyncPreviewRow,
@@ -578,6 +580,45 @@ export function DeviceEnrollmentPanel({
 		},
 	);
 	const hikvisionListenerControl = useControlHikvisionListener();
+	const {
+		data: liveReadiness,
+		isLoading: isLiveReadinessLoading,
+		error: liveReadinessError,
+		refetch: refetchLiveReadiness,
+	} = useDeviceLiveReadiness(true, {
+		refetchInterval: 15_000,
+		staleTime: 8_000,
+	});
+	const [isProvingLivePath, setIsProvingLivePath] = useState(false);
+	const proveLivePath = async () => {
+		setIsProvingLivePath(true);
+		try {
+			const result = await deviceService.proveDeviceLivePath();
+			await refetchLiveReadiness();
+			if (result.proven) {
+				toast.success("Safe to enroll — live path proved", {
+					id: "device-live-path-prove",
+					description:
+						result.operatorHint ||
+						"DB + live capture + proof look healthy. Create/enroll should stream realtime.",
+				});
+			} else {
+				toast.warning("Not fully ready to enroll", {
+					id: "device-live-path-prove",
+					description:
+						result.operatorHint ||
+						result.readiness?.headline ||
+						"Fix red readiness checks first.",
+				});
+			}
+		} catch (error: any) {
+			toast.error(error?.message || "Live path prove failed", {
+				id: "device-live-path-prove",
+			});
+		} finally {
+			setIsProvingLivePath(false);
+		}
+	};
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
 	const previewDeviceUserExportMutation = usePreviewDeviceUserExport();
 	const exportDeviceUsersMutation = useExportDeviceUsers();
@@ -4316,6 +4357,22 @@ export function DeviceEnrollmentPanel({
 					</div>
 				</div>
 			)}
+
+			<DeviceLiveReadinessStrip
+				compact
+				mode="enroll"
+				readiness={liveReadiness}
+				isLoading={isLiveReadinessLoading}
+				errorMessage={
+					liveReadinessError
+						? liveReadinessError instanceof Error
+							? liveReadinessError.message
+							: "Readiness check failed"
+						: null
+				}
+				onProve={() => void proveLivePath()}
+				isProving={isProvingLivePath}
+			/>
 
 			<Tabs value={activePanel} onValueChange={setActivePanel} className="space-y-4">
 				<TabsList className="grid h-auto w-full grid-cols-4 rounded-md bg-slate-100 p-1">

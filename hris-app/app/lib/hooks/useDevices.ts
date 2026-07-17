@@ -19,6 +19,7 @@ import devicesService, {
 	type DeviceEventsResetScope,
 	type HikvisionListenerAction,
 	type HikvisionListenerStatus,
+	type DeviceLiveReadiness,
 	type CreateDeviceRequest,
 	type UpdateDeviceRequest,
 	type ZktecoAttendanceSyncRequest,
@@ -42,6 +43,7 @@ export const queryKeys = {
 			[...queryKeys.devices.all, "events", { params }] as const,
 		health: (id?: string) => [...queryKeys.devices.all, "health", id] as const,
 		hikvisionListener: () => [...queryKeys.devices.all, "hikvision-listener"] as const,
+		liveReadiness: () => [...queryKeys.devices.all, "live-readiness"] as const,
 		syncPreview: (params?: { deviceId?: string; source?: string }) =>
 			[...queryKeys.devices.all, "sync-preview", { params }] as const,
 		importJob: (jobId?: string) => [...queryKeys.devices.all, "import-job", jobId] as const,
@@ -267,6 +269,27 @@ export const useHikvisionListenerStatus = (
 		refetchOnWindowFocus: false,
 		retry: 0,
 		// Keep last successful snapshot visible while a quieter refresh runs.
+		placeholderData: (previous) => previous,
+	});
+};
+
+/** Truthful DB + live-capture + proof readiness (poll while Device Events / enroll open). */
+export const useDeviceLiveReadiness = (
+	enabled = true,
+	options: { refetchInterval?: number | false; staleTime?: number } = {},
+) => {
+	return useQuery<DeviceLiveReadiness>({
+		queryKey: queryKeys.devices.liveReadiness(),
+		queryFn: () => devicesService.getDeviceLiveReadiness(),
+		enabled,
+		staleTime: options.staleTime ?? 10 * 1000,
+		refetchInterval: enabled
+			? options.refetchInterval === undefined
+				? 15_000
+				: options.refetchInterval
+			: false,
+		refetchOnWindowFocus: true,
+		retry: 0,
 		placeholderData: (previous) => previous,
 	});
 };

@@ -38,6 +38,7 @@ import {
 	useCancelDeviceImportJob,
 	useControlHikvisionListener,
 	useDevices,
+	useDeviceLiveReadiness,
 	useHikvisionListenerStatus,
 	useResetDeviceEvents,
 	useTriggerHikvisionAttendanceImport,
@@ -55,6 +56,8 @@ import {
 	savedDeviceEventMatchesScope,
 	shouldRefreshSavedEventsAfterSocketEvent,
 } from "~/lib/device-events-realtime-ui";
+import { DeviceLiveReadinessStrip } from "~/components/molecules/DeviceLiveReadinessStrip";
+import devicesService from "~/services/devices.service";
 import type {
 	DeviceEvent,
 	DeviceEventStatus,
@@ -1340,6 +1343,48 @@ export default function DeviceEventsPage() {
 	const isLoadingHikvisionListenerStatus =
 		isHikvisionListenerStatusPending && !hikvisionListenerStatus;
 	const hikvisionListenerControl = useControlHikvisionListener();
+	// Truthful RYG: DB tunnel + listener + recent proof (armed alone is never enough).
+	const {
+		data: liveReadiness,
+		isLoading: isLiveReadinessLoading,
+		error: liveReadinessError,
+		refetch: refetchLiveReadiness,
+	} = useDeviceLiveReadiness(viewMode === "saved", {
+		refetchInterval: 15_000,
+		staleTime: 8_000,
+	});
+	const [isProvingLivePath, setIsProvingLivePath] = useState(false);
+	const proveLivePath = async () => {
+		setIsProvingLivePath(true);
+		try {
+			const result = await devicesService.proveDeviceLivePath();
+			await refetchLiveReadiness();
+			void refetch();
+			if (result.proven) {
+				toast.success("Live path prove passed", {
+					id: "device-live-path-prove",
+					description:
+						result.operatorHint ||
+						"Safe to tap and enroll for realtime. Tap TEST A once to confirm a new row.",
+				});
+			} else {
+				toast.warning("Live path prove incomplete", {
+					id: "device-live-path-prove",
+					description:
+						result.operatorHint ||
+						result.readiness?.headline ||
+						"Fix red checks before relying on realtime enroll.",
+				});
+			}
+		} catch (error: unknown) {
+			toast.error("Live path prove failed", {
+				id: "device-live-path-prove",
+				description: getAsyncErrorMessage(error, "Could not prove live path."),
+			});
+		} finally {
+			setIsProvingLivePath(false);
+		}
+	};
 
 	const savedQueryParams: ApiQueryParams = {
 		page: pageParam,
@@ -2514,29 +2559,38 @@ export default function DeviceEventsPage() {
 	const realtimePanelIsLive = isSdkAlarmSavedScope
 		? isLatestSdkSavedFresh || hikvisionSdkReceiving
 		: realtimeStatus.isListening;
+	// Age of last saved SDK row — operator needs wall-clock truth, not only green badges.
+	const latestSdkProofAgeLabel =
+		latestSdkEvidenceAgeMs === null
+			? null
+			: latestSdkEvidenceAgeMs < 60 * 1000
+				? "just now"
+				: latestSdkEvidenceAgeMs < 60 * 60 * 1000
+					? `${Math.max(1, Math.round(latestSdkEvidenceAgeMs / 60000))}m ago`
+					: `${Math.max(1, Math.round(latestSdkEvidenceAgeMs / 3600000))}h ago`;
 	const realtimePanelStatusLabel = isSdkAlarmSavedScope
 		? isLoadingHikvisionListenerStatus
 			? "Checking live capture…"
-			: isLatestSdkSavedFresh
-				? "Recent live event saved"
-				: hikvisionSdkReceiving
-					? "Live capture receiving taps"
-					: hikvisionListenerRunning
-						? "Live capture running"
-						: hikvisionListenerUnavailable
-							? "Live capture offline"
-							: "Live capture stopped"
+			: isLatestSdkSavedFresh || hikvisionSdkReceiving
+				? "Live capture receiving / fresh proof"
+				: hikvisionSdkArmed || hikvisionListenerRunning
+					? "Live capture quiet (no new proof yet)"
+					: hikvisionListenerUnavailable
+						? "Live capture offline"
+						: "Live capture stopped"
 		: realtimeStatus.statusLabel;
 	const realtimePanelUpdateLabel = isSdkAlarmSavedScope
 		? isLoadingHikvisionListenerStatus
 			? "Checking service…"
 			: isLatestSdkSavedFresh
 				? `${latestSdkEvidenceLabel} saved recently`
-			: hikvisionSdkReceiving
-				? "Taps are reaching HRIS"
-			: hikvisionListenerRunning
-				? "Service running · waiting for event proof"
-				: "Waiting for live capture"
+				: hikvisionSdkReceiving
+					? "Taps are reaching HRIS"
+					: latestSdkProofAgeLabel
+						? `Last proof ${latestSdkProofAgeLabel} · tap again to verify live path`
+						: hikvisionListenerRunning
+							? "Service up · no SDK row in this filter yet — tap TEST A"
+							: "Waiting for live capture"
 		: realtimeStatus.rowUpdateLabel;
 	const activeSavedFilterLabels = [
 		deviceId !== "all" ? getOptionLabel(deviceOptions, deviceId) : null,
@@ -2929,19 +2983,25 @@ export default function DeviceEventsPage() {
 						) : null}
 					</div>
 				</div>
-				<div className="flex items-center gap-2">
-					<Badge
-						variant={savedRowsBadgeVariant}
-						className="rounded-md px-2 py-1">
-						{savedRowsBadgeLabel}
-					</Badge>
-					{isSdkAlarmSavedScope ? (
-						<>
-							<Badge
-								variant={hikvisionListenerStatusVariant}
-								className="rounded-md px-2 py-1">
-								{hikvisionListenerStatusLabel}
-							</Badge>
+				<div className="flex flex-col items-stretch gap-2 sm:items-end">
+					{viewMode === "saved" ? (
+						<DeviceLiveReadinessStrip
+							compact
+							mode="events"
+							className="w-full max-w-xl sm:max-w-2xl"
+							readiness={liveReadiness}
+							isLoading={isLiveReadinessLoading}
+							errorMessage={
+								liveReadinessError
+									? getAsyncErrorMessage(liveReadinessError, "Readiness check failed")
+									: null
+							}
+							onProve={() => void proveLivePath()}
+							isProving={isProvingLivePath}
+						/>
+					) : null}
+					<div className="flex flex-wrap items-center justify-end gap-2">
+						{isSdkAlarmSavedScope ? (
 							<Button
 								type="button"
 								variant="outline"
@@ -2950,37 +3010,38 @@ export default function DeviceEventsPage() {
 								<Power className="mr-2 h-4 w-4" />
 								Listener
 							</Button>
-						</>
-					) : null}
-					<Button
-						type="button"
-						variant="outline"
-						className={
-							hasImportProgress
-								? "relative h-9 border-orange-200 bg-orange-50 px-3 text-orange-700 hover:bg-orange-100 hover:text-orange-800"
-								: "h-9 px-3"
-						}
-						onClick={openSyncLogs}>
-						<UploadCloud className="mr-2 h-4 w-4" />
-						Sync logs
-						{importProgressBubbleLabel ? (
-							<span className="ml-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
-								{importProgressBubbleLabel}
-							</span>
 						) : null}
-					</Button>
-					<Button
-						type="button"
-						variant="outline"
-						className="h-9 px-3"
-						onClick={() => {
-							if (isSdkAlarmSavedScope) void refetchHikvisionListenerStatus();
-							if (viewMode === "live") void refetchLive();
-							else void refetch();
-						}}>
-						<RefreshCw className="mr-2 h-4 w-4" />
-						Refresh
-					</Button>
+						<Button
+							type="button"
+							variant="outline"
+							className={
+								hasImportProgress
+									? "relative h-9 border-orange-200 bg-orange-50 px-3 text-orange-700 hover:bg-orange-100 hover:text-orange-800"
+									: "h-9 px-3"
+							}
+							onClick={openSyncLogs}>
+							<UploadCloud className="mr-2 h-4 w-4" />
+							Sync logs
+							{importProgressBubbleLabel ? (
+								<span className="ml-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+									{importProgressBubbleLabel}
+								</span>
+							) : null}
+						</Button>
+						<Button
+							type="button"
+							variant="outline"
+							className="h-9 px-3"
+							onClick={() => {
+								void refetchLiveReadiness();
+								if (isSdkAlarmSavedScope) void refetchHikvisionListenerStatus();
+								if (viewMode === "live") void refetchLive();
+								else void refetch();
+							}}>
+							<RefreshCw className="mr-2 h-4 w-4" />
+							Refresh
+						</Button>
+					</div>
 				</div>
 			</div>
 

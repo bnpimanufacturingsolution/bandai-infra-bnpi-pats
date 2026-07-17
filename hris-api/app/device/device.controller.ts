@@ -13562,6 +13562,303 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	/**
+	 * Truthful RYG readiness for tap + enroll.
+	 * Combines: Postgres reachability (host tunnel), VM listener armed/receiving,
+	 * and last SDK proof age. "Armed" alone is never green overall.
+	 */
+	const getDeviceLiveReadiness = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+
+			const { buildDeviceLiveReadiness } = await import(
+				"../../helper/device-live-readiness.helper"
+			);
+
+			let databaseOk = false;
+			let databaseLatencyMs: number | null = null;
+			let databaseError: string | null = null;
+			const dbStarted = Date.now();
+			try {
+				await (prisma as any).$queryRaw`SELECT 1`;
+				databaseOk = true;
+				databaseLatencyMs = Date.now() - dbStarted;
+			} catch (error: any) {
+				databaseOk = false;
+				databaseLatencyMs = Date.now() - dbStarted;
+				databaseError = String(error?.message || error || "database_unreachable").slice(0, 280);
+			}
+
+			let listener: Awaited<ReturnType<typeof readHikvisionListenerStatus>> | null = null;
+			try {
+				listener = await readHikvisionListenerStatus();
+			} catch (error: any) {
+				deviceLogger.warn(
+					`Live readiness listener status failed: ${error?.message || error}`,
+				);
+			}
+
+			let lastSdkEventAt: string | null = null;
+			if (databaseOk) {
+				try {
+					const latest = await (prisma as any).deviceEvent.findFirst({
+						where: {
+							organizationId: String(admin.organizationId),
+							source: "EN_HCNETSDK_ALARM",
+						},
+						orderBy: { receivedAt: "desc" },
+						select: { receivedAt: true, eventTime: true },
+					});
+					lastSdkEventAt =
+						(latest?.receivedAt && new Date(latest.receivedAt).toISOString()) ||
+						(latest?.eventTime && new Date(latest.eventTime).toISOString()) ||
+						null;
+				} catch {
+					// keep null
+				}
+			}
+
+			const readiness = buildDeviceLiveReadiness({
+				databaseOk,
+				databaseLatencyMs,
+				databaseError,
+				listenerRunning: Boolean(listener?.running),
+				listenerArmed: Boolean(listener?.sdk?.armed),
+				listenerReceiving: Boolean(listener?.sdk?.receivingCallbacks),
+				listenerState: listener?.sdk?.state || listener?.status || null,
+				lastAlarmAt: listener?.sdk?.lastAlarmAt || null,
+				lastPostAt: listener?.sdk?.lastPostAt || null,
+				lastSdkEventAt: lastSdkEventAt || listener?.sdk?.lastAlarmAt || null,
+			});
+
+			res.status(200).json(
+				buildSuccessResponse("Device live readiness loaded", {
+					...readiness,
+					listenerStatus: listener
+						? {
+								running: listener.running,
+								status: listener.status,
+								checkedAt: listener.checkedAt,
+								error: listener.error,
+								vm: listener.vm,
+							}
+						: null,
+				}, 200),
+			);
+		} catch (error: any) {
+			deviceLogger.error(`Device live readiness failed: ${error?.message || error}`);
+			res.status(500).json(buildErrorResponse("Failed to load device live readiness", 500));
+		}
+	};
+
+	/**
+	 * Operator "Prove live path" action: re-check DB, ensure listener is running
+	 * (restart if stopped), re-read status, and return readiness + prove steps.
+	 */
+	const proveDeviceLivePath = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+
+			const { buildDeviceLiveReadiness } = await import(
+				"../../helper/device-live-readiness.helper"
+			);
+			const steps: Array<{
+				step: string;
+				ok: boolean;
+				detail: string;
+			}> = [];
+
+			let databaseOk = false;
+			let databaseLatencyMs: number | null = null;
+			let databaseError: string | null = null;
+			const dbStarted = Date.now();
+			try {
+				await (prisma as any).$queryRaw`SELECT 1`;
+				databaseOk = true;
+				databaseLatencyMs = Date.now() - dbStarted;
+				steps.push({
+					step: "database",
+					ok: true,
+					detail: `Postgres OK (${databaseLatencyMs}ms)`,
+				});
+			} catch (error: any) {
+				databaseOk = false;
+				databaseLatencyMs = Date.now() - dbStarted;
+				databaseError = String(error?.message || error || "database_unreachable").slice(0, 280);
+				steps.push({
+					step: "database",
+					ok: false,
+					detail: databaseError,
+				});
+			}
+
+			let listener = null as Awaited<ReturnType<typeof readHikvisionListenerStatus>> | null;
+			let restartAttempted = false;
+			try {
+				listener = await readHikvisionListenerStatus();
+				steps.push({
+					step: "listener_status",
+					ok: Boolean(listener?.running),
+					detail: listener?.running
+						? `Listener ${listener.status} / sdk=${listener.sdk?.state || "unknown"}`
+						: listener?.error || "Listener not running",
+				});
+			} catch (error: any) {
+				steps.push({
+					step: "listener_status",
+					ok: false,
+					detail: String(error?.message || error).slice(0, 200),
+				});
+			}
+
+			// If service is not running, try restart once (admin-triggered prove).
+			if (databaseOk && listener && !listener.running && listener.control?.available) {
+				restartAttempted = true;
+				try {
+					const managedWrapper = await installManagedHikvisionListenerWrapperOnVm();
+					if (!managedWrapper.ok) {
+						steps.push({
+							step: "listener_restart",
+							ok: false,
+							detail: managedWrapper.error || "Failed to prepare listener wrapper",
+						});
+					} else {
+						const result = await runHikvisionListenerVmCommand(
+							["sudo", "systemctl", "restart", HIKVISION_HOT_RELOAD_LISTENER_SERVICE],
+							15000,
+						);
+						const ok = result.exitCode === 0;
+						steps.push({
+							step: "listener_restart",
+							ok,
+							detail: ok
+								? "Listener restart requested"
+								: result.stderr.trim() || result.stdout.trim() || "Restart failed",
+						});
+						// Re-read after short settle
+						await new Promise((r) => setTimeout(r, 2500));
+						listener = await readHikvisionListenerStatus();
+						steps.push({
+							step: "listener_status_after_restart",
+							ok: Boolean(listener?.running),
+							detail: listener?.running
+								? `Listener ${listener.status} / sdk=${listener.sdk?.state || "unknown"}`
+								: listener?.error || "Still not running after restart",
+						});
+					}
+				} catch (error: any) {
+					steps.push({
+						step: "listener_restart",
+						ok: false,
+						detail: String(error?.message || error).slice(0, 200),
+					});
+				}
+			}
+
+			let lastSdkEventAt: string | null = null;
+			if (databaseOk) {
+				try {
+					const latest = await (prisma as any).deviceEvent.findFirst({
+						where: {
+							organizationId: String(admin.organizationId),
+							source: "EN_HCNETSDK_ALARM",
+						},
+						orderBy: { receivedAt: "desc" },
+						select: { receivedAt: true, eventTime: true },
+					});
+					lastSdkEventAt =
+						(latest?.receivedAt && new Date(latest.receivedAt).toISOString()) ||
+						(latest?.eventTime && new Date(latest.eventTime).toISOString()) ||
+						null;
+					steps.push({
+						step: "event_proof",
+						ok: Boolean(lastSdkEventAt),
+						detail: lastSdkEventAt
+							? `Latest SDK saved event at ${lastSdkEventAt}`
+							: "No EN_HCNETSDK_ALARM rows found",
+					});
+				} catch (error: any) {
+					steps.push({
+						step: "event_proof",
+						ok: false,
+						detail: String(error?.message || error).slice(0, 160),
+					});
+				}
+			}
+
+			const readiness = buildDeviceLiveReadiness({
+				databaseOk,
+				databaseLatencyMs,
+				databaseError,
+				listenerRunning: Boolean(listener?.running),
+				listenerArmed: Boolean(listener?.sdk?.armed),
+				listenerReceiving: Boolean(listener?.sdk?.receivingCallbacks),
+				listenerState: listener?.sdk?.state || listener?.status || null,
+				lastAlarmAt: listener?.sdk?.lastAlarmAt || null,
+				lastPostAt: listener?.sdk?.lastPostAt || null,
+				lastSdkEventAt: lastSdkEventAt || listener?.sdk?.lastAlarmAt || null,
+			});
+
+			const proven =
+				readiness.overall === "green" &&
+				readiness.safeToTap &&
+				readiness.safeToEnroll &&
+				steps.every((s) => s.ok || s.step === "listener_restart");
+
+			logActivity(req, {
+				userId: String((req as any).userId || "unknown"),
+				action: "DEVICE_LIVE_PATH_PROVE",
+				description: proven
+					? "Live path prove passed"
+					: `Live path prove incomplete overall=${readiness.overall}`,
+				page: {
+					url: req.originalUrl,
+					title: "Device Events",
+				},
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					proven
+						? "Live path prove passed — safe to tap and enroll for realtime"
+						: "Live path prove incomplete — fix red checks before relying on realtime",
+					{
+						proven,
+						restartAttempted,
+						steps,
+						readiness: {
+							...readiness,
+							listenerStatus: listener
+								? {
+										running: listener.running,
+										status: listener.status,
+										checkedAt: listener.checkedAt,
+										error: listener.error,
+										vm: listener.vm,
+									}
+								: null,
+						},
+						operatorHint: proven
+							? "Tap TEST A once now; a TAP or SDK row should appear within a few seconds."
+							: !databaseOk
+								? "Restore Postgres tunnel (local 55435 / predev) first."
+								: !listener?.running
+									? "Listener failed to start — open Listener modal and Restart, check reverse tunnel."
+									: readiness.proof.stale
+										? "Path is quiet — tap the device once to create fresh proof, then click Prove again."
+										: "Review red/yellow checks above.",
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			deviceLogger.error(`Device live path prove failed: ${error?.message || error}`);
+			res.status(500).json(buildErrorResponse("Failed to prove device live path", 500));
+		}
+	};
+
 	const controlHikvisionListener = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
 			const admin = assertDeviceUserAdmin(req, res);
@@ -15294,6 +15591,8 @@ export const controller = (prisma: PrismaClient) => {
 		getEvents,
 		getDeviceHealth,
 		getHikvisionListenerStatus,
+		getDeviceLiveReadiness,
+		proveDeviceLivePath,
 		controlHikvisionListener,
 		searchHikvisionDeviceLogs,
 		getDeviceSyncPreview,

@@ -10,6 +10,8 @@ interface IController {
 	getEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceHealth(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getHikvisionListenerStatus(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceLiveReadiness(req: Request, res: Response, next: NextFunction): Promise<void>;
+	proveDeviceLivePath(req: Request, res: Response, next: NextFunction): Promise<void>;
 	controlHikvisionListener(req: Request, res: Response, next: NextFunction): Promise<void>;
 	searchHikvisionDeviceLogs(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceSyncPreview(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -81,10 +83,13 @@ export const router = (route: Router, controller: IController): Router => {
 		controller.getEvents,
 	);
 	routes.post("/events/reset", controller.resetDeviceEvents);
-
-	routes.get("/:id/health", controller.getDeviceHealth);
+	// Nested under /events so Express never treats the path as /:id (device by id).
+	routes.get("/events/live-readiness", controller.getDeviceLiveReadiness);
+	routes.post("/events/live-readiness/prove", controller.proveDeviceLivePath);
 	routes.get("/hikvision/listener", controller.getHikvisionListenerStatus);
 	routes.post("/hikvision/listener", controller.controlHikvisionListener);
+
+	routes.get("/:id/health", controller.getDeviceHealth);
 	routes.post("/:id/hikvision/log-search", controller.searchHikvisionDeviceLogs);
 	routes.get("/users", controller.listDeviceUsers);
 	routes.post("/users/export/preview", controller.previewDeviceUserExport);
