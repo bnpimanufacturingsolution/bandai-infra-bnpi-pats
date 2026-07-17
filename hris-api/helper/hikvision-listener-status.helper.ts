@@ -277,10 +277,35 @@ export const summarizeHikvisionListenerLogs = (
 			return String(a.name || a.host || "").localeCompare(String(b.name || b.host || ""));
 		});
 
+	// Overall truth is the BEST live device, not the last log line.
+	// 1 receiving + 6 login_failed (LAN) must be overall "receiving", not "login_failed".
+	const anyDeviceReceiving = devices.some((d) => d.receivingCallbacks);
+	const anyDeviceArmed = devices.some((d) => d.armed && d.state !== "login_failed");
+	const loginFailedCount = devices.filter((d) => d.state === "login_failed").length;
+	const overallReceiving = receivingCallbacks || anyDeviceReceiving;
+	const overallArmed = overallReceiving || armed || anyDeviceArmed;
+	const overallState: HikvisionListenerLogEvidence["state"] = overallReceiving
+		? "receiving"
+		: overallArmed
+			? "armed"
+			: lastLoginOk === false || loginFailedCount > 0
+				? "login_failed"
+				: sawPostFailure
+					? "posting_failed"
+					: lines.length
+						? "idle"
+						: "unknown";
+	const overallDiagnosis =
+		overallReceiving || overallArmed
+			? loginFailedCount > 0
+				? `${loginFailedCount} other device(s) SDK login failed (often off-LAN). Live path uses the receiving/armed device(s) — not those failures.`
+				: null
+			: diagnosis;
+
 	return {
-		receivingCallbacks,
+		receivingCallbacks: overallReceiving,
 		postingToHris,
-		armed,
+		armed: overallArmed,
 		lastAlarmAt: lastAlarmAt?.toISOString() || null,
 		lastPostAt: lastPostAt?.toISOString() || null,
 		lastLoginAt: lastLoginAt?.toISOString() || null,
@@ -289,8 +314,8 @@ export const summarizeHikvisionListenerLogs = (
 		lastError,
 		lastTargetHost,
 		lastFailureReason,
-		diagnosis,
-		state,
+		diagnosis: overallDiagnosis,
+		state: overallState,
 		devices,
 	};
 };

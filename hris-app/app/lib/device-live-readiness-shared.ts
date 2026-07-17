@@ -142,7 +142,10 @@ export const buildDeviceLiveReadiness = (input: {
 					"Host API cannot reach Postgres (often local tunnel port 55435). Auth and saved events will fail until restored.",
 			};
 
-	const livePathProvenByFreshProof = listenerRunning && timedFresh;
+	// Operator truth (TEST A path):
+	//   1 receiving / 1 armed / 6 login_failed  → WORKS (green)
+	//   0 receiving / 1 armed / 6 login_failed  → NOT fully live (yellow — Keep ready re-arms)
+	// Full green requires REAL receiving, not just armed or old proof.
 
 	let liveCaptureCheck: ReadinessCheck;
 	if (!listenerRunning) {
@@ -160,25 +163,16 @@ export const buildDeviceLiveReadiness = (input: {
 			level: "green",
 			ok: true,
 			label: "Live capture receiving",
-			detail: "SDK callbacks are arriving now.",
-		};
-	} else if (livePathProvenByFreshProof) {
-		liveCaptureCheck = {
-			id: "liveCapture",
-			level: "green",
-			ok: true,
-			label: "Live path recently proved",
-			detail:
-				"Listener is running and a fresh SDK event was saved in HRIS — path works even if status is briefly quiet.",
+			detail: "SDK callbacks are arriving now (receiving count >= 1).",
 		};
 	} else if (listenerArmed) {
 		liveCaptureCheck = {
 			id: "liveCapture",
 			level: "yellow",
 			ok: true,
-			label: "Live capture armed (quiet)",
+			label: "Live capture armed (not receiving)",
 			detail:
-				"Service is armed but no callback in the last few minutes. Tap once to refresh proof.",
+				"Armed but 0 receiving right now. Keep ready / Prove re-arms until a device is receiving callbacks.",
 		};
 	} else {
 		liveCaptureCheck = {
@@ -186,7 +180,7 @@ export const buildDeviceLiveReadiness = (input: {
 			level: "red",
 			ok: false,
 			label: "Live capture not armed",
-			detail: "Listener process may be up but device is not armed for callbacks.",
+			detail: "Listener process may be up but no device is armed for callbacks.",
 		};
 	}
 
@@ -204,10 +198,10 @@ export const buildDeviceLiveReadiness = (input: {
 	} else if (timedFresh) {
 		eventProofCheck = {
 			id: "eventProof",
-			level: "green",
+			level: "yellow",
 			ok: true,
-			label: "Fresh event proof",
-			detail: `Last SDK/saved proof ${formatAge(proofAge)}.`,
+			label: "Proof recent but not receiving",
+			detail: `Last proof ${formatAge(proofAge)} but live receiving is off (0 receiving). Tap once or Prove / Keep ready to re-arm.`,
 		};
 	} else if (!stale && lastSdkEventAt) {
 		eventProofCheck = {
@@ -215,7 +209,7 @@ export const buildDeviceLiveReadiness = (input: {
 			level: "yellow",
 			ok: true,
 			label: "Proof getting old",
-			detail: `Last proof ${formatAge(proofAge)}. Path is quiet — tap once if you need a fresh realtime confirmation before a critical enroll.`,
+			detail: `Last proof ${formatAge(proofAge)}. Path is quiet — re-arm until receiving is 1+.`,
 		};
 	} else {
 		eventProofCheck = {
@@ -232,42 +226,39 @@ export const buildDeviceLiveReadiness = (input: {
 	const safeToTap =
 		databaseOk &&
 		listenerRunning &&
-		(listenerReceiving || livePathProvenByFreshProof || (listenerArmed && !stale));
-
-	const safeToEnroll = safeToTap;
+		(listenerReceiving || (listenerArmed && !stale));
+	const safeToEnroll = databaseOk && listenerRunning && listenerReceiving;
 
 	const checksFinal = [databaseCheck, liveCaptureCheck, eventProofCheck];
 	const hasRedFinal = checksFinal.some((c) => c.level === "red");
-	const hasYellowFinal = checksFinal.some((c) => c.level === "yellow");
 
-	// Receiving (or fresh proof) + DB must win overall green — never yellow from aging while live.
-	let overall: ReadinessLevel = "green";
-	if (!databaseOk || hasRedFinal) overall = "red";
-	else if (safeToTap && (listenerReceiving || timedFresh)) overall = "green";
-	else if (hasYellowFinal || !safeToTap) overall = "yellow";
-	else overall = "green";
+	// STRICT: overall green only when DB ok AND really receiving.
+	let overall: ReadinessLevel = "yellow";
+	if (!databaseOk || !listenerRunning || hasRedFinal) overall = "red";
+	else if (databaseOk && listenerReceiving) overall = "green";
+	else overall = "yellow";
 
 	const reasons: string[] = [];
 	for (const check of checksFinal) {
 		if (check.level !== "green") reasons.push(`${check.label}: ${check.detail}`);
 	}
-	if (safeToTap && safeToEnroll && overall === "green") {
-		reasons.push("DB + live capture + recent proof are all healthy.");
+	if (overall === "green" && listenerReceiving) {
+		reasons.push("DB ok + live receiving (1+ device callbacks) — path is truthful.");
 	}
 
 	let headline: string;
 	if (overall === "green") {
-		headline = "Safe to tap and enroll — realtime path is truthful";
+		headline = "Safe to tap and enroll — live path is receiving";
 	} else if (!databaseOk) {
 		headline = "Not safe — database tunnel/path is down (events/auth will fail)";
 	} else if (!listenerRunning) {
 		headline = "Not safe for live events — restart Hikvision listener";
+	} else if (!listenerReceiving && listenerArmed) {
+		headline = "Armed but not receiving — Keep ready / Prove until receiving is 1+";
 	} else if (stale) {
 		headline = "Not fully safe yet — re-arm / tap once for fresh proof before enroll";
-	} else if (!listenerArmed && !fresh) {
-		headline = "Not fully safe yet — re-arm / tap once for fresh proof before enroll";
 	} else {
-		headline = "Partially ready — quiet armed path; confirm with a tap before critical enroll";
+		headline = "Partially ready — need live receiving before trusting enroll realtime";
 	}
 
 	return {

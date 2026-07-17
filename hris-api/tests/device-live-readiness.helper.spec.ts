@@ -22,7 +22,7 @@ describe("device-live-readiness helper", () => {
 		expect(readiness.headline).to.match(/database/i);
 	});
 
-	it("is green only when DB + live path + fresh proof all pass", () => {
+	it("is green only when DB + really receiving (1+ callbacks)", () => {
 		const readiness = buildDeviceLiveReadiness({
 			databaseOk: true,
 			databaseLatencyMs: 12,
@@ -36,6 +36,22 @@ describe("device-live-readiness helper", () => {
 		expect(readiness.overall).to.equal("green");
 		expect(readiness.safeToTap).to.equal(true);
 		expect(readiness.safeToEnroll).to.equal(true);
+	});
+
+	it("is yellow when armed but 0 receiving (0/1/6 pattern)", () => {
+		const readiness = buildDeviceLiveReadiness({
+			databaseOk: true,
+			listenerRunning: true,
+			listenerArmed: true,
+			listenerReceiving: false,
+			lastAlarmAt: "2026-07-17T06:05:00.000Z",
+			lastSdkEventAt: "2026-07-17T06:05:00.000Z",
+			now,
+		});
+		expect(readiness.overall).to.equal("yellow");
+		expect(readiness.safeToTap).to.equal(true);
+		expect(readiness.safeToEnroll).to.equal(false);
+		expect(readiness.checks.find((c) => c.id === "liveCapture")?.level).to.equal("yellow");
 	});
 
 	it("stays green while receiving even if last saved proof is aging", () => {
@@ -84,8 +100,10 @@ describe("device-live-readiness helper", () => {
 			now,
 		});
 		expect(readiness.proof.lastSdkEventAt).to.equal("2026-07-17T06:09:00.000Z");
+		// Fresh proof without receiving is yellow (not full green).
 		expect(readiness.proof.fresh).to.equal(true);
-		expect(readiness.overall).to.equal("green");
+		expect(readiness.overall).to.equal("yellow");
+		expect(readiness.safeToEnroll).to.equal(false);
 	});
 
 	it("treats armed-but-quiet-without-fresh-proof as not fully safe", () => {
@@ -119,7 +137,8 @@ describe("device-live-readiness helper", () => {
 		expect(readiness.proof.fresh).to.equal(false);
 		expect(readiness.proof.stale).to.equal(false);
 		expect(readiness.safeToTap).to.equal(true);
-		expect(readiness.safeToEnroll).to.equal(true);
+		// Enroll realtime requires receiving (1+), not armed-only.
+		expect(readiness.safeToEnroll).to.equal(false);
 		expect(readiness.overall).to.equal("yellow");
 	});
 });

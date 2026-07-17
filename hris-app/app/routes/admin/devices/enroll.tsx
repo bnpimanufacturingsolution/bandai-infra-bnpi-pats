@@ -681,19 +681,14 @@ export function DeviceEnrollmentPanel({
 		if (!keepLiveReady) return;
 		if (typeof window === "undefined") return;
 		if (!liveReadiness) return;
+		// Healthy ONLY when really receiving (1+). Armed-only is not enough.
 		const pathHealthy =
-			liveReadiness.database?.ok !== false &&
-			liveReadiness.safeToTap === true &&
-			liveReadiness.safeToEnroll === true &&
-			liveReadiness.overall !== "red" &&
-			(liveReadiness.listener?.running ||
-				liveReadiness.listener?.receiving ||
-				liveReadiness.listener?.armed ||
-				liveReadiness.proof?.fresh);
+			liveReadiness.database?.ok === true &&
+			liveReadiness.listener?.receiving === true &&
+			liveReadiness.overall === "green" &&
+			liveReadiness.safeToEnroll === true;
 		if (pathHealthy) return;
-		const needsForceReArm =
-			!liveReadiness.listener?.receiving &&
-			(!liveReadiness.listener?.running || !liveReadiness.listener?.armed);
+		const needsForceReArm = liveReadiness.listener?.receiving !== true;
 		let cancelled = false;
 		const run = () => {
 			if (cancelled || isProvingLivePath || isQuietKeepReadyRepair) return;

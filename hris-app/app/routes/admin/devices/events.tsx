@@ -1477,20 +1477,16 @@ export default function DeviceEventsPage() {
 		if (viewMode !== "saved" || !keepLiveReady) return;
 		if (typeof window === "undefined") return;
 		if (!liveReadiness) return; // wait for first snapshot — do not prove into a loading gap
+		// Healthy ONLY when really receiving (1+), same gate as modal "1 receiving / …".
+		// 0 receiving / 1 armed is NOT healthy — Keep ready must re-arm.
 		const pathHealthy =
-			liveReadiness.database?.ok !== false &&
-			liveReadiness.safeToTap === true &&
-			liveReadiness.safeToEnroll === true &&
-			liveReadiness.overall !== "red" &&
-			(liveReadiness.listener?.running ||
-				liveReadiness.listener?.receiving ||
-				liveReadiness.listener?.armed ||
-				liveReadiness.proof?.fresh);
+			liveReadiness.database?.ok === true &&
+			liveReadiness.listener?.receiving === true &&
+			liveReadiness.overall === "green" &&
+			liveReadiness.safeToEnroll === true;
 		if (pathHealthy) return;
-		const pathBroken = true;
-		const needsForceReArm =
-			!liveReadiness.listener?.receiving &&
-			(!liveReadiness.listener?.running || !liveReadiness.listener?.armed);
+		// Not receiving → always try force re-arm (host ensure + listener restart).
+		const needsForceReArm = liveReadiness.listener?.receiving !== true;
 		let cancelled = false;
 		const run = () => {
 			if (cancelled || isProvingLivePath || isQuietKeepReadyRepair) return;

@@ -58,6 +58,28 @@ describe("hikvision-listener-status helper", () => {
 		expect(deviceA?.armed).to.equal(true);
 		expect(deviceB?.state).to.equal("login_failed");
 		expect(deviceB?.lastLoginError).to.equal("7");
+		// Overall must follow the best device (armed TEST-A path), not last failed LAN login.
+		expect(status.state).to.equal("armed");
+		expect(status.armed).to.equal(true);
+	});
+
+	it("overall receiving wins even when other devices login_failed (1/1/6 pattern)", () => {
+		const now = new Date("2026-07-17T07:50:00.000Z");
+		const status = summarizeHikvisionListenerLogs(
+			[
+				'{"ts":"2026-07-17T07:49:50Z","deviceId":"test-a","deviceName":"TEST A","event":"sdk_login","host":"127.0.0.1","lastError":"0","ok":"true","sdkPort":"59000"}',
+				'{"ts":"2026-07-17T07:49:51Z","deviceId":"test-a","event":"sdk_alarm_arm","host":"127.0.0.1","ok":"true"}',
+				'{"ts":"2026-07-17T07:49:52Z","deviceId":"test-a","event":"acs_alarm_received","eventKind":"attendance","serialNo":"1","sourceDeviceId":"test-a"}',
+				'{"ts":"2026-07-17T07:49:55Z","deviceId":"lan-a","deviceName":"Main Entrance Device A","event":"sdk_login","host":"10.184.38.173","lastError":"7","ok":"false","sdkPort":"8000"}',
+				'{"ts":"2026-07-17T07:49:56Z","deviceId":"lan-b","deviceName":"Main Entrance Device B","event":"sdk_login","host":"10.184.38.177","lastError":"7","ok":"false","sdkPort":"8000"}',
+			],
+			now,
+		);
+		expect(status.receivingCallbacks).to.equal(true);
+		expect(status.state).to.equal("receiving");
+		expect(status.devices.find((d) => d.deviceId === "test-a")?.state).to.equal("receiving");
+		expect(status.devices.filter((d) => d.state === "login_failed").length).to.equal(2);
+		expect(status.diagnosis || "").to.match(/other device/i);
 	});
 
 	it("surfaces Hikvision locked-user backoff per device", () => {
