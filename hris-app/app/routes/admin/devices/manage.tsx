@@ -834,11 +834,15 @@ export default function DevicesManagePage() {
 	];
 
 	const updateSearchParams = (mutator: (next: URLSearchParams) => void) => {
-		setSearchParams((prev) => {
-			const next = new URLSearchParams(prev);
-			mutator(next);
-			return next;
-		});
+		// replace: avoid history stack traps that make X feel stuck while loaders run.
+		setSearchParams(
+			(prev) => {
+				const next = new URLSearchParams(prev);
+				mutator(next);
+				return next;
+			},
+			{ replace: true },
+		);
 	};
 
 	const openCreate = () => {

@@ -121,8 +121,11 @@ export const useDeviceEvents = (
 	return useQuery<DeviceEventsResponse>({
 		queryKey: queryKeys.devices.events(params),
 		queryFn: () => devicesService.getDeviceEvents(params),
-		staleTime: 15 * 1000,
+		staleTime: 10 * 1000,
+		// Keep previous filter results visible while the next query runs (no blank table flash).
+		placeholderData: (previous) => previous,
 		refetchInterval: options.refetchInterval ?? 30 * 1000,
+		retry: 0,
 	});
 };
 
@@ -382,14 +385,22 @@ export const useCancelDeviceUserSyncJob = () => {
 export const useDeviceSyncPreview = (
 	params: { deviceId?: string; source?: string },
 	enabled = true,
+	options?: { refetchIntervalMs?: number | false },
 ) => {
+	const refetchIntervalMs =
+		options?.refetchIntervalMs === undefined ? false : options.refetchIntervalMs;
 	return useQuery<DeviceSyncPreviewResponse>({
 		queryKey: queryKeys.devices.syncPreview(params),
 		queryFn: () => devicesService.getDeviceSyncPreview(params),
 		enabled,
-		staleTime: 10 * 1000,
-		refetchInterval: enabled ? 5 * 1000 : false,
-		retry: 1,
+		// Keep last good preview while refetching so modals never stick on skeleton forever.
+		placeholderData: (previous) => previous,
+		staleTime: 30 * 1000,
+		// Default: no auto-poll (was 5s and overloaded API + froze modal close).
+		refetchInterval: enabled ? refetchIntervalMs : false,
+		retry: 0,
+		// Fail open to the UI within ~8s so Sync logs / Sync Center never spin indefinitely.
+		meta: { timeoutMs: 8000 },
 	});
 };
 

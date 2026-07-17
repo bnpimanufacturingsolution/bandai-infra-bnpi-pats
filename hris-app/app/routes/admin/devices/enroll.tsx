@@ -482,7 +482,12 @@ export function DeviceEnrollmentPanel({
 	const queryClient = useQueryClient();
 
 	// Fetch devices for enrollment
-	const { data: devicesData, isLoading: isLoadingDevices } = useDevices({
+	const {
+		data: devicesData,
+		isLoading: isLoadingDevices,
+		isError: isDevicesError,
+		error: devicesLoadError,
+	} = useDevices({
 		limit: 100,
 		document: "true",
 	});
@@ -4312,11 +4317,17 @@ export function DeviceEnrollmentPanel({
 					{isLoadingDevices && devices.length === 0 ? (
 						<div className="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
 							<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
-							Loading device sync...
+							Loading device list… Close is always available if this hangs.
 						</div>
 					) : syncCenterDevices.length === 0 ? (
 						<div className="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
 							No configured physical devices found.
+							{isDevicesError ? (
+								<p className="mt-2 text-xs text-amber-700">
+									{(devicesLoadError as any)?.message ||
+										"Device list could not load (API offline?). Use the X button to close and retry."}
+								</p>
+							) : null}
 						</div>
 					) : (
 						<>

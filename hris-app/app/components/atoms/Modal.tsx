@@ -13,6 +13,8 @@ export interface ModalProps {
 	className?: string;
 	showCloseButton?: boolean;
 	closeOnBackdropClick?: boolean;
+	/** When false, Escape still closes (admin modals must always dismiss). Default true. */
+	closeOnEscape?: boolean;
 }
 
 const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
@@ -27,12 +29,21 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 			className,
 			showCloseButton = true,
 			closeOnBackdropClick = true,
+			closeOnEscape = true,
 			...props
 		},
 		ref,
 	) => {
 		const titleId = React.useId();
 		const descriptionId = React.useId();
+		const requestClose = React.useCallback(() => {
+			// Always allow close; never block on child loading/network.
+			onOpenChange?.(false);
+			// Defensive: nested/stuck modals can leave body scroll locked.
+			if (typeof document !== "undefined") {
+				document.body.style.overflow = "unset";
+			}
+		}, [onOpenChange]);
 
 		React.useEffect(() => {
 			if (open) {
@@ -47,15 +58,18 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 		}, [open]);
 
 		React.useEffect(() => {
-			if (!open) return;
+			if (!open || !closeOnEscape) return;
 			const handleKeyDown = (event: KeyboardEvent) => {
 				if (event.key === "Escape") {
-					onOpenChange?.(false);
+					event.preventDefault();
+					event.stopPropagation();
+					requestClose();
 				}
 			};
-			window.addEventListener("keydown", handleKeyDown);
-			return () => window.removeEventListener("keydown", handleKeyDown);
-		}, [onOpenChange, open]);
+			// Capture phase so child handlers / busy UI cannot swallow Escape.
+			window.addEventListener("keydown", handleKeyDown, true);
+			return () => window.removeEventListener("keydown", handleKeyDown, true);
+		}, [closeOnEscape, open, requestClose]);
 
 		if (!open) {
 			return trigger ? <>{trigger}</> : null;
@@ -64,14 +78,14 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 		return (
 			<>
 				{trigger}
-				<div className="fixed inset-0 z-50 flex items-center justify-center">
+				<div className="fixed inset-0 z-[100] flex items-center justify-center">
 					{/* Backdrop */}
 					<button
 						type="button"
-						className="fixed inset-0 bg-black/50"
+						className="fixed inset-0 z-[100] bg-black/50"
 						aria-label="Close modal backdrop"
 						onClick={() => {
-							if (closeOnBackdropClick) onOpenChange?.(false);
+							if (closeOnBackdropClick) requestClose();
 						}}
 					/>
 					{/* Modal Content */}
@@ -82,12 +96,12 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 						aria-labelledby={title ? titleId : undefined}
 						aria-describedby={description ? descriptionId : undefined}
 						className={cn(
-							"relative z-50 flex flex-col w-full max-w-3xl gap-4 border bg-white p-6 shadow-lg duration-200 rounded-lg mx-4 max-h-[90vh] overflow-y-auto modern-scroll",
+							"relative z-[110] flex flex-col w-full max-w-3xl gap-4 border bg-white p-6 shadow-lg duration-200 rounded-lg mx-4 max-h-[90vh] overflow-y-auto modern-scroll",
 							className,
 						)}
 						{...props}>
 						{(title || description) && (
-							<div className="space-y-1.5">
+							<div className="sticky top-0 z-[120] -mx-1 space-y-1.5 bg-white/95 px-1 pb-1 pr-12 backdrop-blur-sm">
 								{title && (
 									<h2
 										id={titleId}
@@ -103,10 +117,15 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 						{children}
 						{showCloseButton && (
 							<Button
+								type="button"
 								variant="ghost"
 								size="icon"
-								className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
-								onClick={() => onOpenChange?.(false)}>
+								className="absolute right-3 top-3 z-[130] pointer-events-auto rounded-sm bg-white/90 opacity-90 shadow-sm ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+								onClick={(event) => {
+									event.preventDefault();
+									event.stopPropagation();
+									requestClose();
+								}}>
 								<X className="h-4 w-4" />
 								<span className="sr-only">Close</span>
 							</Button>

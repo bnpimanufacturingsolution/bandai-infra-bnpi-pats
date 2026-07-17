@@ -171,8 +171,8 @@ const HIKVISION_PREVIEW_TOTAL_TIMEOUT_MS = Math.max(
 );
 /** Hard budget per device for Sync logs modal (must stay open in ~1-3s overall). */
 const HIKVISION_PREVIEW_DEVICE_BUDGET_MS = Math.max(
-	1200,
-	Math.min(Number(process.env.HIKVISION_PREVIEW_DEVICE_BUDGET_MS || 2500), 5000),
+	800,
+	Math.min(Number(process.env.HIKVISION_PREVIEW_DEVICE_BUDGET_MS || 1800), 3500),
 );
 const HIKVISION_PEER_COPY_RETRY_LIMIT = Math.max(
 	1,
@@ -2919,9 +2919,9 @@ export const controller = (prisma: PrismaClient) => {
 			const directCounts = await getHikvisionSourceCounts(req, deviceId, {
 				// Event-first Sync logs must not wait on full user inventory pages.
 				includeDirectUserInventory: !syncPreviewMode,
-				// Sample recent operation logs so enroll/user-created are not hidden
-				// behind a single residual "Unknown operation" bucket.
-				sampleOperationClassify: syncPreviewMode,
+				// Preview modal prioritizes open speed: skip heavy operation-log classify.
+				// Keep operation source totals; detailed classify runs on Sync job start.
+				sampleOperationClassify: false,
 			});
 			if (
 				directCounts.ok &&
@@ -12706,32 +12706,8 @@ export const controller = (prisma: PrismaClient) => {
 				// Older DBs without eventAction stay device-total only; UI falls back safely.
 				savedByDeviceAction = new Map();
 			}
-			const deviceUserRows = (await hasDeviceUserTable())
-				? ((await (prisma as any).deviceUser.findMany({
-						where: {
-							organizationId: String(organizationId),
-							deviceId: { in: syncDevices.map((device) => device.id) },
-						},
-						select: {
-							deviceId: true,
-							vendorUserId: true,
-							status: true,
-							employeeId: true,
-							rawPayload: true,
-						},
-					})) as SavedDeviceUserTruthRow[])
-				: [];
-			const deviceUserRowsByDeviceId = deviceUserRows.reduce(
-				(groups: Map<string, SavedDeviceUserTruthRow[]>, row) => {
-					const deviceId = String(row.deviceId || "").trim();
-					if (!deviceId) return groups;
-					const bucket = groups.get(deviceId) || [];
-					bucket.push(row);
-					groups.set(deviceId, bucket);
-					return groups;
-				},
-				new Map<string, SavedDeviceUserTruthRow[]>(),
-			);
+			// Fast Sync logs path: never load full DeviceUser rows/rawPayload here.
+			// Full inventory scans made the modal hang for many seconds on multi-device orgs.
 			const deviceUserSummaryByDeviceId = new Map<
 				string,
 				ReturnType<typeof summarizeDeviceUserStatuses>
@@ -12747,39 +12723,82 @@ export const controller = (prisma: PrismaClient) => {
 					faceEnvelopeMissing: number;
 				}
 			>();
-			for (const device of syncDevices) {
-				const rows = deviceUserRowsByDeviceId.get(device.id) || [];
-				deviceUserSummaryByDeviceId.set(
-					device.id,
-					summarizeDeviceUserStatuses(rows),
-				);
-				biometricCustodyByDeviceId.set(
-					device.id,
-					rows.reduce(
-						(summary, row: any) => {
-							const credentialSummary = extractHikvisionCredentialSummary(row.rawPayload || {});
-							const templates = parseCachedDeviceUserBiometricTemplates(row);
-							const hasFingerprint = Number(credentialSummary.fingerprintCount || 0) > 0;
-							const hasFace = Number(credentialSummary.faceCount || 0) > 0;
-							if (hasFingerprint) summary.fingerprintReported += 1;
-							if (hasFingerprint && templates.fingerprint) summary.fingerprintEnvelopePresent += 1;
-							if (hasFingerprint && !templates.fingerprint) summary.fingerprintEnvelopeMissing += 1;
-							if (hasFace) summary.faceReported += 1;
-							if (hasFace && templates.face) summary.faceEnvelopePresent += 1;
-							if (hasFace && !templates.face) summary.faceEnvelopeMissing += 1;
-							return summary;
+			const emptyBiometricCustody = () => ({
+				fingerprintReported: 0,
+				fingerprintEnvelopePresent: 0,
+				fingerprintEnvelopeMissing: 0,
+				faceReported: 0,
+				faceEnvelopePresent: 0,
+				faceEnvelopeMissing: 0,
+			});
+			if (await hasDeviceUserTable()) {
+				try {
+					const statusGroups = await (prisma as any).deviceUser.groupBy({
+						by: ["deviceId", "status"],
+						where: {
+							organizationId: String(organizationId),
+							deviceId: { in: syncDevices.map((device) => device.id) },
 						},
-						{
-							fingerprintReported: 0,
-							fingerprintEnvelopePresent: 0,
-							fingerprintEnvelopeMissing: 0,
-							faceReported: 0,
-							faceEnvelopePresent: 0,
-							faceEnvelopeMissing: 0,
-						},
-					),
-				);
+						_count: { _all: true },
+					});
+					const byDevice = new Map<
+						string,
+						{ total: number; active: number; matched: number; unmatched: number; conflict: number; disabled: number }
+					>();
+					for (const device of syncDevices) {
+						byDevice.set(device.id, {
+							total: 0,
+							active: 0,
+							matched: 0,
+							unmatched: 0,
+							conflict: 0,
+							disabled: 0,
+						});
+					}
+					for (const row of statusGroups || []) {
+						const deviceId = String(row.deviceId || "").trim();
+						if (!deviceId || !byDevice.has(deviceId)) continue;
+						const bucket = byDevice.get(deviceId)!;
+						const count = Number(row?._count?._all || 0);
+						const status = String(row.status || "").toUpperCase();
+						bucket.total += count;
+						if (status === "ACTIVE") bucket.active += count;
+						else if (status === "MATCHED") bucket.matched += count;
+						else if (status === "UNMATCHED" || status === "SOURCE_ONLY") bucket.unmatched += count;
+						else if (status === "CONFLICT") bucket.conflict += count;
+						else if (status === "DISABLED") bucket.disabled += count;
+					}
+					for (const [deviceId, summary] of byDevice.entries()) {
+						deviceUserSummaryByDeviceId.set(deviceId, summary as any);
+						biometricCustodyByDeviceId.set(deviceId, emptyBiometricCustody());
+					}
+				} catch {
+					for (const device of syncDevices) {
+						deviceUserSummaryByDeviceId.set(device.id, {
+							total: 0,
+							active: 0,
+							matched: 0,
+							unmatched: 0,
+							conflict: 0,
+							disabled: 0,
+						} as any);
+						biometricCustodyByDeviceId.set(device.id, emptyBiometricCustody());
+					}
+				}
+			} else {
+				for (const device of syncDevices) {
+					deviceUserSummaryByDeviceId.set(device.id, {
+						total: 0,
+						active: 0,
+						matched: 0,
+						unmatched: 0,
+						conflict: 0,
+						disabled: 0,
+					} as any);
+					biometricCustodyByDeviceId.set(device.id, emptyBiometricCustody());
+				}
 			}
+			// Peer baseline drift requires full inventory rows; skip on Sync logs modal open path.
 			const peerBaselineByVendor = new Map<
 				string,
 				{
@@ -12789,42 +12808,6 @@ export const controller = (prisma: PrismaClient) => {
 					summary: ReturnType<typeof summarizeSavedDeviceUserTruth>;
 				}
 			>();
-			for (const [vendor, vendorDevices] of syncDevices
-				.reduce<Map<string, Array<(typeof syncDevices)[number]>>>((groups, device) => {
-					const bucket = groups.get(device.vendor) || [];
-					bucket.push(device);
-					groups.set(device.vendor, bucket);
-					return groups;
-				}, new Map<string, Array<(typeof syncDevices)[number]>>())
-				.entries()) {
-				const rankedDevices = vendorDevices
-					.map((device) => ({
-						deviceId: device.id,
-						deviceName: String(device.name || "").trim() || "Unnamed device",
-						rows: deviceUserRowsByDeviceId.get(device.id) || [],
-						summary: summarizeSavedDeviceUserTruth(
-							deviceUserRowsByDeviceId.get(device.id) || [],
-						),
-					}))
-					.sort((left, right) => {
-						if (right.summary.userCount !== left.summary.userCount) {
-							return right.summary.userCount - left.summary.userCount;
-						}
-						if (right.summary.fingerprintCount !== left.summary.fingerprintCount) {
-							return right.summary.fingerprintCount - left.summary.fingerprintCount;
-						}
-						if (right.summary.faceCount !== left.summary.faceCount) {
-							return right.summary.faceCount - left.summary.faceCount;
-						}
-						if (right.summary.cardCount !== left.summary.cardCount) {
-							return right.summary.cardCount - left.summary.cardCount;
-						}
-						return left.deviceName.localeCompare(right.deviceName);
-					});
-				if (rankedDevices[0]) {
-					peerBaselineByVendor.set(vendor, rankedDevices[0]);
-				}
-			}
 
 			const zktecoDevices = syncDevices.filter((device) => device.vendor === "ZKTeco");
 			// Sync logs modal must open in ~1-3s. Never use the long full-history ZKTeco
@@ -12900,21 +12883,18 @@ export const controller = (prisma: PrismaClient) => {
 						? zktecoPreviewByIp.get(String(device.address || "").trim())
 						: hikvisionTotals.get(device.id);
 				const peerBaseline = peerBaselineByVendor.get(device.vendor) || null;
-				const peerDrift =
-					peerBaseline && peerBaseline.deviceId !== device.id
-						? compareSavedDeviceUserTruth(
-								peerBaseline.rows,
-								deviceUserRowsByDeviceId.get(device.id) || [],
-							)
-						: {
-								missingUsers: 0,
-								staleUsers: 0,
-								missingFingerprintCount: 0,
-								missingFaceCount: 0,
-								missingCardCount: 0,
-								totalCredentialGapCount: 0,
-								totalNeedsMatchCount: 0,
-							};
+				const peerDrift = {
+					missingUsers: 0,
+					staleUsers: 0,
+					missingFingerprintCount: 0,
+					missingFaceCount: 0,
+					missingCardCount: 0,
+					totalCredentialGapCount: 0,
+					totalNeedsMatchCount: 0,
+					// Peer baseline comparison deliberately skipped on sync-preview for speed.
+					skippedForPreviewSpeed: true,
+					peerBaselineDeviceId: peerBaseline?.deviceId || null,
+				};
 				const totalEvents =
 					device.vendor === "ZKTeco"
 						? (sourcePreview?.totalEvents ?? null)

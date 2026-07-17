@@ -1325,7 +1325,8 @@ class DevicesService extends APIService {
 				query.set("deviceId", params.deviceId);
 			if (params.source && params.source !== "all") query.set("source", params.source);
 			const endpoint = `/api/device/sync-preview${query.toString() ? `?${query.toString()}` : ""}`;
-			const response = await hrisApiClient.get<any>(endpoint);
+			// Sync logs / Sync Center must not hang the UI. Abort if preview exceeds budget.
+			const response = await hrisApiClient.get<any>(endpoint, undefined, { timeoutMs: 8000 });
 			const previewData = response.data?.data || response.data;
 			if (!previewData) {
 				throw new Error("Failed to build device sync preview");

@@ -270,6 +270,28 @@ const EVENT_ACTIONS_BY_CATEGORY: Record<string, string[]> = {
 	UNKNOWN_VENDOR: ["UNKNOWN"],
 };
 
+/** Action → category so picking "Attendance tap" also sets Category = Attendance. */
+const EVENT_CATEGORY_BY_ACTION: Record<string, string> = {
+	TAP: "ATTENDANCE",
+	TAP_REJECTED: "ATTENDANCE",
+	FINGERPRINT_ENROLLED: "ENROLLMENT",
+	FINGERPRINT_UPDATED: "ENROLLMENT",
+	FINGERPRINT_DELETED: "ENROLLMENT",
+	FACE_ENROLLED: "ENROLLMENT",
+	FACE_UPDATED: "ENROLLMENT",
+	FACE_DELETED: "ENROLLMENT",
+	CARD_ENROLLED: "ENROLLMENT",
+	CARD_UPDATED: "ENROLLMENT",
+	CARD_DELETED: "ENROLLMENT",
+	USER_CREATED: "USER_MANAGEMENT",
+	USER_UPDATED: "USER_MANAGEMENT",
+	USER_DELETED: "USER_MANAGEMENT",
+	SYNC_SIGNAL: "DEVICE_HEALTH",
+	LISTENER_RECEIVED: "DEVICE_HEALTH",
+	SYNC_IMPORTED: "RUNTIME",
+	UNKNOWN: "UNKNOWN_VENDOR",
+};
+
 const getEventActionOptionsForCategory = (category: string): SelectOption[] => {
 	if (!category || category === "all") return eventActionOptions;
 	const allowed = new Set(EVENT_ACTIONS_BY_CATEGORY[category] || []);
@@ -1261,8 +1283,10 @@ export default function DeviceEventsPage() {
 		viewMode === "saved" &&
 		(source === "all" || source === "EN_HCNETSDK_ALARM") &&
 		(deviceId === "all" || isHikvisionDevice(selectedDevice));
+	// Do not re-query the full saved list every 2s — that made filter clicks feel stuck for
+	// multi-second waits (listener/socket already covers true realtime inserts).
 	const savedEventsRefetchInterval = isSdkAlarmSavedScope
-		? 2 * 1000
+		? 10 * 1000
 		: shouldPollSavedEvents
 			? 30 * 1000
 			: false;
@@ -1298,6 +1322,8 @@ export default function DeviceEventsPage() {
 	const {
 		data,
 		isLoading: isLoadingSaved,
+		isFetching: isFetchingSaved,
+		isPlaceholderData: isSavedPlaceholderData,
 		error: savedError,
 		refetch,
 	} = useDeviceEvents(savedQueryParams, {
@@ -1315,7 +1341,8 @@ export default function DeviceEventsPage() {
 			from,
 			to,
 		},
-		{ refetchInterval: isSdkAlarmSavedScope ? 5 * 1000 : false },
+		// Lightweight "last SDK row" strip — not the full table.
+		{ refetchInterval: isSdkAlarmSavedScope ? 10 * 1000 : false },
 	);
 	const {
 		data: liveData,
@@ -1492,11 +1519,14 @@ export default function DeviceEventsPage() {
 	]);
 
 	const updateSearchParams = (mutator: (next: URLSearchParams) => void) => {
-		setSearchParams((prev) => {
-			const next = new URLSearchParams(prev);
-			mutator(next);
-			return next;
-		});
+		setSearchParams(
+			(prev) => {
+				const next = new URLSearchParams(prev);
+				mutator(next);
+				return next;
+			},
+			{ replace: true },
+		);
 	};
 
 	const setFilter = (key: string, value: string) => {
@@ -1631,7 +1661,10 @@ export default function DeviceEventsPage() {
 	const sdkSummary = (selectedDevice as any)?.config?.zktecoSdkSummary || null;
 	const liveTotal = Number(acsEventPayload?.totalMatches || liveEvents.length || 0);
 	const totalItems = viewMode === "live" ? liveTotal : data?.pagination?.total || savedSummary.total || 0;
-	const isEventLoading = viewMode === "live" ? isLoadingLive : isLoadingSaved;
+	// Only block the table on first load. Filter changes keep previous rows + show a light status.
+	const isEventLoading = viewMode === "live" ? isLoadingLive : isLoadingSaved && !data;
+	const isEventFilterUpdating =
+		viewMode === "saved" && isFetchingSaved && (isSavedPlaceholderData || Boolean(data));
 	const activeError = viewMode === "live" ? liveError || savedError : savedError;
 	const countSavedStatus = (...statuses: string[]) =>
 		statuses.reduce((total, currentStatus) => {
@@ -1881,9 +1914,13 @@ export default function DeviceEventsPage() {
 	const syncMissingLogLabel = hasNumericCount(syncDryRunEstimate)
 		? formatCount(syncDryRunEstimate)
 		: "Needs device read";
+	// Only skeleton when we have zero useful rows yet. Keep previous preview visible on refetch.
+	// Never keep skeleton after an error — show fail-open message instead of infinite "Checking…".
 	const showSyncPreviewSkeleton =
 		isSyncLogsModalOpen &&
-		(isLoadingSyncPreview || (isFetchingSyncPreview && syncPreviewRows.length === 0));
+		!syncPreviewError &&
+		syncPreviewRows.length === 0 &&
+		(isLoadingSyncPreview || isFetchingSyncPreview);
 	const syncVendorSections = useMemo(() => {
 		const order = ["Hikvision", "ZKTeco"];
 		const isBlockedRow = (row: DeviceSyncPreviewRow) =>
@@ -2029,6 +2066,11 @@ export default function DeviceEventsPage() {
 		});
 	};
 	const closeSyncLogs = () => {
+		// Always dismiss immediately even if preview/health requests are in flight.
+		setSyncLogsState({ status: "idle" });
+		if (typeof document !== "undefined") {
+			document.body.style.overflow = "unset";
+		}
 		updateSearchParams((next) => {
 			next.delete("action");
 		});
@@ -2041,6 +2083,9 @@ export default function DeviceEventsPage() {
 		void refetchHikvisionListenerStatus();
 	};
 	const closeListenerControl = () => {
+		if (typeof document !== "undefined") {
+			document.body.style.overflow = "unset";
+		}
 		updateSearchParams((next) => {
 			next.delete("action");
 		});
@@ -3070,7 +3115,22 @@ export default function DeviceEventsPage() {
 								<Select
 									options={getEventActionOptionsForCategory(eventCategory)}
 									value={eventAction}
-									onChange={(value) => setFilter("eventAction", value)}
+									onChange={(value) => {
+										// Picking an action also sets its parent category
+										// (e.g. Attendance tap → Category = Attendance).
+										updateSearchParams((next) => {
+											if (!value || value === "all") {
+												next.delete("eventAction");
+											} else {
+												next.set("eventAction", value);
+												const parentCategory = EVENT_CATEGORY_BY_ACTION[value];
+												if (parentCategory) {
+													next.set("eventCategory", parentCategory);
+												}
+											}
+											next.set("page", "1");
+										});
+									}}
 									placeholder="Any event action"
 									className={compactSelectClassName}
 									dropdownClassName={compactSelectDropdownClassName}
@@ -3084,6 +3144,12 @@ export default function DeviceEventsPage() {
 					<span className="font-semibold text-slate-900">Saved event ledger</span>
 					<span className="mx-2 text-slate-300">·</span>
 					Only events already saved in HRIS. Device users are managed separately under Devices.
+					{isEventFilterUpdating ? (
+						<span className="ml-2 inline-flex items-center gap-1 font-medium text-sky-700">
+							<Loader2 className="h-3 w-3 animate-spin" />
+							Updating filters…
+						</span>
+					) : null}
 				</div>
 				<div className="grid grid-cols-2 gap-0 divide-x divide-y divide-slate-200 sm:grid-cols-3 xl:grid-cols-6">
 					<div
@@ -3959,7 +4025,31 @@ export default function DeviceEventsPage() {
 
 					<div className="rounded-lg border border-slate-200 bg-white">
 						{showSyncPreviewSkeleton ? (
-							<SyncDeviceDetailsSkeleton />
+							<div className="space-y-2 p-2">
+								<p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+									Reading devices… rows fill in as each device answers (target ~1–3s). Close is always
+									available.
+								</p>
+								<SyncDeviceDetailsSkeleton />
+							</div>
+						) : syncPreviewError && syncPreviewRows.length === 0 ? (
+							<div className="space-y-2 px-3 py-3">
+								<p className="text-sm font-medium text-amber-900">Could not load device preview</p>
+								<p className="text-xs text-amber-800">
+									{getAsyncErrorMessage(
+										syncPreviewError,
+										"API timed out or went offline. Close and retry when the server is healthy.",
+									)}
+								</p>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="h-8"
+									onClick={() => void refetchSyncPreview()}>
+									Retry preview
+								</Button>
+							</div>
 						) : syncVendorSections.length ? (
 							<div className="divide-y divide-slate-100">
 								{syncVendorSections.map((section) => (

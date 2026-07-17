@@ -113,3 +113,30 @@ if (-not (Wait-ForApiHealth)) {
 }
 
 Write-Host "[local-api-restart] Local hris-api is healthy on http://localhost:$Port/health"
+
+# Keep Live capture usable for TEST A after every local API restart.
+$bridgeScript = Join-Path $repoRoot "scripts\start-host-hikvision-vm-ssh-bridge.ps1"
+$listenerRestartScript = Join-Path $repoRoot "scripts\restart-local-hikvision-listener.ps1"
+if (Test-Path $bridgeScript) {
+	try {
+		Write-Host "[local-api-restart] Ensuring TEST A SSH reverse bridge for Live capture"
+		& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeScript `
+			-Action start `
+			-DeviceIp "192.168.254.189" `
+			-HttpDevicePort 443 `
+			-SdkDevicePort 8000 `
+			-HttpListenPort 59443 `
+			-SdkListenPort 59000 `
+			-ApiLocalPort $Port `
+			-ApiRemotePort 53001
+	} catch {
+		Write-Host "[local-api-restart] Bridge ensure skipped: $($_.Exception.Message)"
+	}
+}
+if (Test-Path $listenerRestartScript) {
+	try {
+		& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $listenerRestartScript -ApiBase "http://localhost:$Port" -WaitHealthSeconds 0
+	} catch {
+		Write-Host "[local-api-restart] Listener restart skipped: $($_.Exception.Message)"
+	}
+}
