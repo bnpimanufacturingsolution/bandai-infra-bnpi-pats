@@ -118,19 +118,28 @@ export const useDevice = (id: string) => {
 
 export const useDeviceEvents = (
 	params?: ApiQueryParams,
-	options: { refetchInterval?: number | false; enabled?: boolean } = {},
+	options: {
+		refetchInterval?: number | false;
+		enabled?: boolean;
+		/** When true (Device Events live path), always treat data as stale so polls apply immediately. */
+		liveLedger?: boolean;
+	} = {},
 ) => {
 	const enabled = options.enabled !== false;
+	const liveLedger = options.liveLedger === true;
 	return useQuery<DeviceEventsResponse>({
 		queryKey: queryKeys.devices.events(params),
 		queryFn: () => devicesService.getDeviceEvents(params),
 		enabled,
-		staleTime: 20 * 1000,
+		// Live ledger must not sit on a 20s stale window — that blocked 5s polls from feeling live.
+		staleTime: liveLedger ? 0 : 20 * 1000,
 		// Keep previous filter results visible while the next query runs (no blank table flash).
 		placeholderData: (previous) => previous,
 		// Default: no background spam. Callers opt into polling only when needed.
 		refetchInterval: enabled ? (options.refetchInterval ?? false) : false,
-		refetchOnWindowFocus: false,
+		refetchIntervalInBackground: liveLedger,
+		refetchOnWindowFocus: liveLedger,
+		refetchOnReconnect: true,
 		retry: 0,
 	});
 };

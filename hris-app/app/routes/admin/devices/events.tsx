@@ -1332,12 +1332,13 @@ export default function DeviceEventsPage() {
 		viewMode === "saved" &&
 		(source === "all" || source === "EN_HCNETSDK_ALARM") &&
 		(deviceId === "all" || isHikvisionDevice(selectedDevice));
-	const shouldPollSavedEvents =
-		viewMode === "saved" && (!isConnected || !hasRealtimeScope || isSdkAlarmSavedScope);
+	// Always poll the saved ledger on this page. Host socket often misses VM→API
+	// device-event:saved, so operators had to hard-refresh to see taps.
+	const shouldPollSavedEvents = viewMode === "saved";
 	const savedEventsRefetchInterval = shouldPollSavedEvents
 		? isSdkAlarmSavedScope
-			? 5_000
-			: 45_000
+			? 3_000
+			: 10_000
 		: false;
 	// Listener status must load on the saved SDK ledger too — otherwise the mid
 	// panel says "Live capture offline" while the readiness strip says "armed"
@@ -1563,6 +1564,7 @@ export default function DeviceEventsPage() {
 		refetch,
 	} = useDeviceEvents(savedQueryParams, {
 		refetchInterval: savedEventsRefetchInterval,
+		liveLedger: viewMode === "saved",
 	});
 	const {
 		data: liveData,
@@ -1691,11 +1693,27 @@ export default function DeviceEventsPage() {
 		viewMode,
 	]);
 
+	// When live-readiness / listener shows a newer SDK alarm than our table, pull ledger now.
+	// This is the truthful "I just tapped" path without waiting for host socket.
+	const lastProofAt =
+		liveReadiness?.proof?.lastSdkEventAt ||
+		liveReadiness?.listener?.lastAlarmAt ||
+		hikvisionListenerStatus?.sdk?.lastAlarmAt ||
+		null;
+	useEffect(() => {
+		if (viewMode !== "saved" || !lastProofAt) return;
+		void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
+		void refetch();
+		void refetchLiveReadiness();
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- only when proof timestamp advances
+	}, [viewMode, lastProofAt]);
+
 	useEffect(() => {
 		if (viewMode !== "saved") return;
 		if (typeof window === "undefined") return;
 
-		const intervalMs = isConnected && hasRealtimeScope ? 30000 : 10000;
+		// Host socket is often a false friend for VM-posted SDK rows — poll hard on this page.
+		const intervalMs = isSdkAlarmSavedScope ? 3_000 : isConnected && hasRealtimeScope ? 10_000 : 5_000;
 		// Avoid toast-storm when DB tunnel flaps every poll (same id + min gap).
 		let lastRecoveryToastAt = 0;
 		const refreshFromRecovery = () => {
@@ -1733,7 +1751,9 @@ export default function DeviceEventsPage() {
 			}
 		};
 	}, [
+		hasRealtimeScope,
 		isConnected,
+		isSdkAlarmSavedScope,
 		organizationId,
 		queryClient,
 		refetch,
