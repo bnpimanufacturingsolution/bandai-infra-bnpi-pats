@@ -367,9 +367,20 @@ const operationLogResolveCooldownMs = new Map<string, number>();
  * Proven lifecycle metaIds on Bandai Hikvision (TEST A DS family, 2026-07-17).
  * Invalid leaf names (deleteUserInfo, addFaceByEmployeeNo, addCardInfo, …) return
  * ISAPI badXmlFormat and only slow resolve — do not invent leaves.
- * Face/card use vendor localFaceData* / addCard when present.
+ *
+ * Priority leaves are fetched in parallel on the first passes so create/FP can land
+ * in ~1–2s after the device log exists (serial logSearch was multi-second).
  */
-const OPERATION_LOG_META = [
+type OperationLogMeta = {
+	metaId: string;
+	eventAction: string;
+	eventLabel: string;
+	eventCategory: string;
+	minor: string;
+};
+
+/** Fast path: create / fingerprint / delete (what device-panel enroll needs). */
+const OPERATION_LOG_META_PRIORITY: OperationLogMeta[] = [
 	{
 		metaId: "log.hikvision.com/Information/addUserInfo",
 		eventAction: "USER_CREATED",
@@ -378,13 +389,13 @@ const OPERATION_LOG_META = [
 		minor: "addUserInfo",
 	},
 	{
-		metaId: "log.hikvision.com/Information/modifyUserInfo",
-		eventAction: "USER_UPDATED",
-		eventLabel: "Device user updated",
-		eventCategory: "USER_MANAGEMENT",
-		minor: "modifyUserInfo",
+		metaId: "log.hikvision.com/Information/addFpByEmployeeNo",
+		eventAction: "FINGERPRINT_ENROLLED",
+		eventLabel: "Fingerprint enrolled",
+		eventCategory: "ENROLLMENT",
+		minor: "addFpByEmployeeNo",
 	},
-	// Device leaf is clearUserInfo (not deleteUserInfo). Sync logs already probes this.
+	// Device leaf is clearUserInfo (not deleteUserInfo).
 	{
 		metaId: "log.hikvision.com/Information/clearUserInfo",
 		eventAction: "USER_DELETED",
@@ -392,12 +403,15 @@ const OPERATION_LOG_META = [
 		eventCategory: "USER_MANAGEMENT",
 		minor: "clearUserInfo",
 	},
+];
+
+const OPERATION_LOG_META_SECONDARY: OperationLogMeta[] = [
 	{
-		metaId: "log.hikvision.com/Information/addFpByEmployeeNo",
-		eventAction: "FINGERPRINT_ENROLLED",
-		eventLabel: "Fingerprint enrolled",
-		eventCategory: "ENROLLMENT",
-		minor: "addFpByEmployeeNo",
+		metaId: "log.hikvision.com/Information/modifyUserInfo",
+		eventAction: "USER_UPDATED",
+		eventLabel: "Device user updated",
+		eventCategory: "USER_MANAGEMENT",
+		minor: "modifyUserInfo",
 	},
 	{
 		metaId: "log.hikvision.com/Information/addFpByCardNo",
@@ -413,7 +427,6 @@ const OPERATION_LOG_META = [
 		eventCategory: "ENROLLMENT",
 		minor: "modifyFpByEmployeeNo",
 	},
-	// Card enroll leaf is addCard on this family (deleteCard / clearCardInfo invalid).
 	{
 		metaId: "log.hikvision.com/Information/addCard",
 		eventAction: "CARD_ENROLLED",
@@ -421,7 +434,12 @@ const OPERATION_LOG_META = [
 		eventCategory: "ENROLLMENT",
 		minor: "addCard",
 	},
-] as const;
+];
+
+const OPERATION_LOG_META_ALL: OperationLogMeta[] = [
+	...OPERATION_LOG_META_PRIORITY,
+	...OPERATION_LOG_META_SECONDARY,
+];
 
 export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 	prisma: PrismaClient | any;
@@ -442,26 +460,30 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 	const organizationId = String(params.organizationId || "").trim();
 	if (!deviceId || !organizationId) return;
 
-	const cooldownMs = params.cooldownMs ?? 4_000;
+	// Short cooldown so late major=3 after enroll can re-arm multipass; in-flight multipass
+	// still covers the common burst without thrashing the device.
+	const cooldownMs = params.cooldownMs ?? 2_500;
 	const now = Date.now();
 	const last = operationLogResolveCooldownMs.get(deviceId) || 0;
 	if (now - last < cooldownMs) return;
 	operationLogResolveCooldownMs.set(deviceId, now);
 
-	const settleMs = params.settleMs ?? 1_500;
-	// Device often emits major=3 while the operator is still mid-enroll; addUserInfo /
-	// addFpByEmployeeNo leaves can lag 5–45s after the first SYNC_SIGNAL burst.
+	// Fast first pass (~0.4s) once device leaf exists → target 1–2s UI with parallel logSearch.
+	// Later passes cover mid-enroll when major=3 fires before addUserInfo/addFp leaves.
+	const settleMs = params.settleMs ?? 400;
 	const retryDelaysMs =
 		params.retryDelaysMs ??
 		(settleMs > 0
-			? Array.from(new Set([settleMs, 8_000, 20_000, 45_000])).sort((a, b) => a - b)
+			? Array.from(new Set([settleMs, 2_500, 8_000, 20_000, 45_000])).sort((a, b) => a - b)
 			: [0]);
-	// Cooldown only collapses concurrent schedules; multipass above still covers late leaves.
 	const windowBeforeMs = params.windowBeforeMs ?? 15 * 60_000;
 	const windowAfterMs = params.windowAfterMs ?? 3 * 60_000;
 	const triggerMinor = String(params.triggerMinor ?? "").trim();
 
-	const runResolvePass = async (passLabel: string): Promise<number> => {
+	const runResolvePass = async (
+		passLabel: string,
+		metas: OperationLogMeta[],
+	): Promise<number> => {
 		const startTime = formatHikvisionPlus08(Date.now() - windowBeforeMs);
 		const endTime = formatHikvisionPlus08(Date.now() + windowAfterMs);
 		const device = {
@@ -478,7 +500,7 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 				deviceId,
 				prisma: params.prisma,
 				request: params.req,
-				timeoutMs: 20_000,
+				timeoutMs: 12_000,
 				ensureJsonFormat: false,
 				rawResponse: true,
 				headers: {
@@ -497,10 +519,9 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 			return parseHikvisionLogSearchResponse(String((response as any)?.raw || ""));
 		};
 
-		for (const meta of OPERATION_LOG_META) {
+		const fetchMetaRows = async (meta: OperationLogMeta) => {
 			try {
-				// First page: learn totalMatches. Prefer newest page so recent enroll/delete
-				// is not lost when the window has hundreds of historical leaf rows.
+				// Parallel leaf fetches; prefer newest page when totals are large.
 				let parsed = await fetchLogPage(meta.metaId, 0);
 				const total =
 					typeof parsed.totalMatches === "number" && Number.isFinite(parsed.totalMatches)
@@ -510,7 +531,24 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 					const newestPosition = Math.max(0, total - pageSize);
 					parsed = await fetchLogPage(meta.metaId, newestPosition);
 				}
-				for (const row of parsed.rows || []) {
+				return { meta, rows: (parsed.rows || []) as any[] };
+			} catch (error: any) {
+				console.warn(
+					"[device-person-token] operation-log resolve failed",
+					meta.metaId,
+					deviceId,
+					error?.message || error,
+				);
+				return { meta, rows: [] as any[] };
+			}
+		};
+
+		// Parallel logSearch across leaves — serial was multi-second even when leaves existed.
+		const fetched = await Promise.all(metas.map((meta) => fetchMetaRows(meta)));
+
+		for (const { meta, rows } of fetched) {
+			for (const row of rows || []) {
+				try {
 					const evidence = normalizeHikvisionLogSearchRow(row as any, device);
 					const applied = await applyDevicePersonTokenToEvidence(params.prisma, {
 						organizationId,
@@ -556,7 +594,6 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 					});
 					if (exists) continue;
 
-					// Skip near-duplicates (same action + ~same second), even when person is still opaque.
 					const near = await params.prisma.deviceEvent.findFirst({
 						where: {
 							organizationId,
@@ -620,11 +657,12 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 							opaqueToken: opaque,
 						}).catch(() => null);
 					}
-					// Reload with relations so FE socket prepend has name/action/device columns.
 					const fullRow = await params.prisma.deviceEvent.findUnique({
 						where: { id: createdRow.id },
 						include: {
-							device: { select: { id: true, name: true, address: true, port: true, protocol: true } },
+							device: {
+								select: { id: true, name: true, address: true, port: true, protocol: true },
+							},
 							employee: {
 								select: {
 									id: true,
@@ -637,14 +675,14 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 					});
 					emitDeviceEventSaved(params.req?.io, fullRow || createdRow);
 					created += 1;
+				} catch (error: any) {
+					console.warn(
+						"[device-person-token] operation-log row persist failed",
+						meta.metaId,
+						deviceId,
+						error?.message || error,
+					);
 				}
-			} catch (error: any) {
-				console.warn(
-					"[device-person-token] operation-log resolve failed",
-					meta.metaId,
-					deviceId,
-					error?.message || error,
-				);
 			}
 		}
 
@@ -666,8 +704,11 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 				await new Promise((resolve) => setTimeout(resolve, waitMs));
 			}
 			previousDelay = delay;
+			// First two passes: priority leaves only (create/FP/delete) for 1–2s target.
+			// Later passes: full set for update/card residual.
+			const metas = i < 2 ? OPERATION_LOG_META_PRIORITY : OPERATION_LOG_META_ALL;
 			try {
-				totalCreated += await runResolvePass(`t+${delay}ms`);
+				totalCreated += await runResolvePass(`t+${delay}ms`, metas);
 			} catch (error: any) {
 				console.warn(
 					"[device-person-token] operation-log resolve pass crashed",
