@@ -63,7 +63,9 @@ describe("device log sync targeted import contract", () => {
 		// Device UI Log tab uses Information major: Add Fingerprint / Add Person Info.
 		expect(controllerSource).to.contain('log.hikvision.com/Information');
 		expect(controllerSource).to.contain("sampleClassify");
-		expect(controllerSource).to.contain("extrapolatedByAction");
+		expect(controllerSource).to.contain("Only exact rows read from logSearch may become Ready to add");
+		expect(controllerSource).not.to.contain("extrapolatedByAction");
+		expect(controllerSource).not.to.contain("Math.round((Number(sampleCount) / sampleSize) * total)");
 	});
 
 	it("syncs both attendance taps and user/enrollment logSearch not ACS-only", () => {

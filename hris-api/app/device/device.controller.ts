@@ -2657,7 +2657,6 @@ export const controller = (prisma: PrismaClient) => {
 
 			let byAction: Record<string, number> | null = null;
 			let sampleSize = 0;
-			let extrapolatedByAction: Record<string, number> | null = null;
 			let labelsByAction: Record<string, string[]> | null = null;
 			if (sampleClassify && (parsed.rows || []).length > 0) {
 				const sampleCounts = new Map<string, number>();
@@ -2686,35 +2685,16 @@ export const controller = (prisma: PrismaClient) => {
 							Array.from(labels),
 						]),
 					);
-					// Extrapolate sample proportions to full logSearch total so Sync logs
-					// matches device maintain-log truth (e.g. ~half Add Fingerprint / Add Person).
-					const total = Number(count || sampleSize);
-					if (total > 0 && sampleSize > 0) {
-						const extrapolated = new Map<string, number>();
-						let assigned = 0;
-						for (const [action, sampleCount] of sampleCounts.entries()) {
-							if (action === "UNKNOWN_OPERATION") continue;
-							const estimated = Math.round((Number(sampleCount) / sampleSize) * total);
-							extrapolated.set(action, estimated);
-							assigned += estimated;
-						}
-						const residual = Math.max(0, total - assigned);
-						if (residual > 0) {
-							extrapolated.set(
-								"UNKNOWN_OPERATION",
-								(extrapolated.get("UNKNOWN_OPERATION") || 0) + residual,
-							);
-						}
-						extrapolatedByAction = Object.fromEntries(extrapolated.entries());
-					}
 				}
 			}
 
 			return {
 				ok: count !== null || Boolean(parsed.responseStatus),
 				count,
-				// Prefer extrapolated full-device estimates for Sync logs willAdd.
-				byAction: extrapolatedByAction || byAction,
+				// Only exact rows read from logSearch may become Ready to add. The
+				// unread operation total remains Needs review instead of becoming
+				// sample-extrapolated user/enrollment truth.
+				byAction,
 				labelsByAction,
 				sampleByAction: byAction,
 				sampleSize,
@@ -5112,6 +5092,11 @@ export const controller = (prisma: PrismaClient) => {
 			const maxRows = Number((req.body as any)?.maxRows || 500);
 			const startPosition = Number((req.body as any)?.searchResultPostion || (req.body as any)?.searchResultPosition || 0);
 			const searchId = String((req.body as any)?.searchId || randomUUID()).trim();
+			const metaId = String(
+				(req.body as any)?.metaId ||
+					(req.query as any)?.metaId ||
+					"log.std-cgi.com",
+			).trim();
 			const result = await paginateHikvisionLogSearch({
 				startPosition,
 				pageSize,
@@ -5135,6 +5120,7 @@ export const controller = (prisma: PrismaClient) => {
 							endTime,
 							maxResults,
 							searchResultPosition,
+							metaId,
 						}),
 					});
 					return String(response?.raw || "");
@@ -5183,6 +5169,7 @@ export const controller = (prisma: PrismaClient) => {
 						execute,
 						device: { id: device.id, name: device.name, address: device.address },
 						request: { searchId, startTime, endTime, pageSize, maxRows, startPosition },
+						metaId,
 						pages: result.pages,
 						summary,
 						normalized,

@@ -291,6 +291,18 @@ describe("hikvision event contract helper", () => {
 		expect(
 			isHikvisionAttendancePunchEvent({
 				major: 5,
+				minor: 40,
+			}),
+		).to.equal(true);
+		expect(
+			isHikvisionAttendancePunchEvent({
+				major: 5,
+				minor: 69,
+			}),
+		).to.equal(true);
+		expect(
+			isHikvisionAttendancePunchEvent({
+				major: 5,
 				employeeNo: "1",
 				verifyMode: "faceOrFpOrCardOrPw",
 			}),
@@ -311,6 +323,20 @@ describe("hikvision event contract helper", () => {
 
 		expect(isHikvisionBiometricVerificationEvent(facialAttempt)).to.equal(true);
 		expect(isHikvisionAttendancePunchEvent(facialAttempt)).to.equal(false);
+	});
+
+	it("classifies ACS authentication failures as rejected taps", () => {
+		const event = normalizeHikvisionSdkCallbackEvidence({
+			major: 5,
+			minor: 76,
+			employeeNo: "1",
+			time: "2026-07-17T09:00:00+08:00",
+		});
+		expect(event).to.deep.include({
+			eventCategory: "ATTENDANCE",
+			eventAction: "TAP_REJECTED",
+			eventLabel: "Rejected tap",
+		});
 	});
 
 	it("does not shift callback event time from stale stored skew unless explicitly enabled", () => {

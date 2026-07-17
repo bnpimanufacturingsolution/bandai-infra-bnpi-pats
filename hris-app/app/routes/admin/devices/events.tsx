@@ -606,6 +606,27 @@ const getScopedSyncWillAddBreakdown = (
 	return { attendance, operations, total: attendance + operations };
 };
 
+const getScopedSyncNeedsReviewBreakdown = (
+	device: DeviceSyncPreviewRow,
+	skipMissingEmployeeNo: boolean,
+	scopes: SyncImportScopeOptions,
+) => {
+	const rows = getFallbackSyncEventRows(device, skipMissingEmployeeNo);
+	let attendance = 0;
+	let operations = 0;
+	for (const row of rows) {
+		if (row.status !== "Needs review") continue;
+		const count = hasNumericCount(row.willAdd) ? Math.max(0, Number(row.willAdd)) : 1;
+		if (scopes.includeAttendance && isSyncAttendanceEventRow(row)) {
+			attendance += count;
+		}
+		if (scopes.includeOperations && isSyncOperationEventRow(row)) {
+			operations += count;
+		}
+	}
+	return { attendance, operations, total: attendance + operations };
+};
+
 const SYNC_TIME_WINDOW_OPTIONS: Array<{ value: "all" | "7d" | "30d" | "90d"; label: string; help: string }> = [
 	{ value: "all", label: "All history", help: "Everything the device still has" },
 	{ value: "7d", label: "Last 7 days", help: "Recent week only" },
@@ -1753,6 +1774,22 @@ export default function DeviceEventsPage() {
 		return syncPreviewRows.reduce(
 			(acc, device) => {
 				const part = getScopedSyncWillAddBreakdown(
+					device,
+					skipMissingEmployeeNo,
+					syncImportScopes,
+				);
+				acc.attendance += part.attendance;
+				acc.operations += part.operations;
+				acc.total += part.total;
+				return acc;
+			},
+			{ attendance: 0, operations: 0, total: 0 },
+		);
+	}, [skipMissingEmployeeNo, syncImportScopes, syncPreviewRows]);
+	const syncScopedNeedsReviewBreakdown = useMemo(() => {
+		return syncPreviewRows.reduce(
+			(acc, device) => {
+				const part = getScopedSyncNeedsReviewBreakdown(
 					device,
 					skipMissingEmployeeNo,
 					syncImportScopes,
@@ -3770,6 +3807,9 @@ export default function DeviceEventsPage() {
 										User created, fingerprint enrolled, and similar device admin actions
 										{syncScopedBreakdown.operations > 0
 											? ` · about +${formatCount(syncScopedBreakdown.operations)}`
+											: " - 0 ready"}
+										{syncScopedNeedsReviewBreakdown.operations > 0
+											? ` - ${formatCount(syncScopedNeedsReviewBreakdown.operations)} need review`
 											: ""}
 									</span>
 								</span>
@@ -3812,6 +3852,9 @@ export default function DeviceEventsPage() {
 							{syncTimeWindow !== "all"
 								? ` · window: ${SYNC_TIME_WINDOW_OPTIONS.find((o) => o.value === syncTimeWindow)?.label || syncTimeWindow}`
 								: ""}
+							{syncScopedNeedsReviewBreakdown.total > 0
+								? ` ${formatCount(syncScopedNeedsReviewBreakdown.total)} rows need review and will not be saved as known events`
+								: ""}
 							.
 						</p>
 					</div>
@@ -3831,7 +3874,21 @@ export default function DeviceEventsPage() {
 											{section.rows.map((device) => {
 									const eventRows = getFallbackSyncEventRows(device, skipMissingEmployeeNo);
 									const projectedDeviceAdds = eventRows.reduce(
-										(total, row) => total + (hasNumericCount(row.willAdd) ? Number(row.willAdd) : 0),
+										(total, row) =>
+											total +
+											(row.status === "Ready" && hasNumericCount(row.willAdd)
+												? Number(row.willAdd)
+												: 0),
+										0,
+									);
+									const projectedDeviceNeedsReview = eventRows.reduce(
+										(total, row) =>
+											total +
+											(row.status === "Needs review"
+												? hasNumericCount(row.willAdd)
+													? Number(row.willAdd)
+													: 1
+												: 0),
 										0,
 									);
 									const deviceHasReadyRows = eventRows.some((row) => row.status === "Ready");
@@ -3887,6 +3944,11 @@ export default function DeviceEventsPage() {
 															? "—"
 															: `+${formatCount(projectedDeviceAdds)}`}
 													</span>
+													{projectedDeviceNeedsReview > 0 ? (
+														<span className="text-xs font-semibold text-amber-700">
+															Needs review {formatCount(projectedDeviceNeedsReview)}
+														</span>
+													) : null}
 													<Badge
 														variant={
 															deviceHasReadyRows
@@ -3914,7 +3976,7 @@ export default function DeviceEventsPage() {
 														<thead className="bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
 															<tr>
 																<th className="whitespace-nowrap px-2 py-1.5">Event</th>
-																<th className="whitespace-nowrap px-2 py-1.5">Category</th>
+																<th className="whitespace-nowrap px-2 py-1.5">Business area</th>
 																<th className="whitespace-nowrap px-2 py-1.5 text-right">Will add</th>
 																<th className="whitespace-nowrap px-2 py-1.5 text-right">Saved</th>
 																<th className="whitespace-nowrap px-2 py-1.5">Status</th>
@@ -3934,6 +3996,12 @@ export default function DeviceEventsPage() {
 																	.filter(Boolean)
 																	.join(" · ");
 																const statusLabel = row.confidenceLabel || row.status || "—";
+																const willAddCell =
+																	row.status === "Ready" && hasNumericCount(row.willAdd)
+																		? `+${formatCount(row.willAdd)}`
+																		: row.status === "Needs review" && hasNumericCount(row.willAdd)
+																			? `Review ${formatCount(row.willAdd)}`
+																			: "—";
 																return (
 																	<tr
 																		key={row.key}
@@ -3949,8 +4017,13 @@ export default function DeviceEventsPage() {
 																				{categoryToken}
 																			</span>
 																		</td>
-																		<td className="px-2 py-1 text-right font-bold tabular-nums text-red-700">
-																			{hasNumericCount(row.willAdd) ? `+${formatCount(row.willAdd)}` : "—"}
+																		<td
+																			className={
+																				row.status === "Needs review"
+																					? "px-2 py-1 text-right font-bold tabular-nums text-amber-700"
+																					: "px-2 py-1 text-right font-bold tabular-nums text-red-700"
+																			}>
+																			{willAddCell}
 																		</td>
 																		<td className="px-2 py-1 text-right font-semibold tabular-nums text-slate-700">
 																			{formatCount(row.alreadyInHris)}

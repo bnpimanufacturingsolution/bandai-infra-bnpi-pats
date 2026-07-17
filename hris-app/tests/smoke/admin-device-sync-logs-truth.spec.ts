@@ -57,7 +57,7 @@ const json = (data: unknown) => ({
 	body: JSON.stringify({ success: true, message: "ok", data }),
 });
 
-test("sync logs modal shows classified fingerprint/user willAdd not only unknown residual", async ({
+test("sync logs modal keeps unproven operation volume in Needs review", async ({
 	page,
 }) => {
 	await page.addInitScript(() => {
@@ -87,7 +87,7 @@ test("sync logs modal shows classified fingerprint/user willAdd not only unknown
 			return;
 		}
 		if (path.includes("/device/sync-preview")) {
-			// Truth shape after Information logSearch classify + extrapolate.
+			// Truth shape: ACS attendance is Ready; unread operation volume is review-only.
 			await route.fulfill(
 				json({
 					generatedAt: timestamp,
@@ -115,14 +115,14 @@ test("sync logs modal shows classified fingerprint/user willAdd not only unknown
 									businessArea: "Enrollment",
 									eventAction: "FINGERPRINT_ENROLLED",
 									eventCategory: "ENROLLMENT",
-									willAdd: 10080,
-									alreadyInHris: 0,
+									willAdd: 0,
+									alreadyInHris: 44,
 									sourceProof: "Operation logs",
 									readsFrom: "ContentMgmt/logSearch",
 									filterAfterSync: "Enrollment > Fingerprint enrolled",
 									whereToFind: "Device Events > Enrollment > Fingerprint enrolled",
-									status: "Ready",
-									confidenceLabel: "Ready",
+									status: "No new rows",
+									confidenceLabel: "No new rows",
 									deviceLabels: ["Add Fingerprint (By Employee ID)"],
 									sourceDetail:
 										"Read from device operation logs. Device label: Add Fingerprint (By Employee ID). HRIS will save this as: Fingerprint enrolled.",
@@ -133,14 +133,14 @@ test("sync logs modal shows classified fingerprint/user willAdd not only unknown
 									businessArea: "User Management",
 									eventAction: "USER_CREATED",
 									eventCategory: "USER_MANAGEMENT",
-									willAdd: 10078,
-									alreadyInHris: 2,
+									willAdd: 0,
+									alreadyInHris: 73,
 									sourceProof: "Operation logs",
 									readsFrom: "ContentMgmt/logSearch",
 									filterAfterSync: "User Management > User created",
 									whereToFind: "Device Events > User Management > User created",
-									status: "Ready",
-									confidenceLabel: "Ready",
+									status: "No new rows",
+									confidenceLabel: "No new rows",
 									deviceLabels: ["Add Person Information"],
 									sourceDetail:
 										"Read from device operation logs. Device label: Add Person Information. HRIS will save this as: User created.",
@@ -166,8 +166,8 @@ test("sync logs modal shows classified fingerprint/user willAdd not only unknown
 									businessArea: "Needs review",
 									eventAction: "UNKNOWN_OPERATION",
 									eventCategory: "UNKNOWN",
-									willAdd: 9,
-									alreadyInHris: 79,
+									willAdd: 19912,
+									alreadyInHris: 137,
 									sourceProof: "Operation logs",
 									readsFrom: "ContentMgmt/logSearch",
 									filterAfterSync: "Needs review > Unclassified device operation",
@@ -227,7 +227,7 @@ test("sync logs modal shows classified fingerprint/user willAdd not only unknown
 	await expect(eventTable).toBeVisible();
 	await expect(dialog.getByTestId("sync-logs-event-table")).toHaveCount(1);
 	await expect(eventTable.getByRole("columnheader", { name: "Event", exact: true })).toBeVisible();
-	await expect(eventTable.getByRole("columnheader", { name: "Category", exact: true })).toBeVisible();
+	await expect(eventTable.getByRole("columnheader", { name: "Business area", exact: true })).toBeVisible();
 	await expect(eventTable.getByRole("columnheader", { name: "Will add", exact: true })).toBeVisible();
 	await expect(eventTable.getByRole("columnheader", { name: "Saved", exact: true })).toBeVisible();
 	await expect(eventTable.getByRole("columnheader", { name: "Status", exact: true })).toBeVisible();
@@ -241,15 +241,16 @@ test("sync logs modal shows classified fingerprint/user willAdd not only unknown
 	await expect(eventTable.getByText("REVIEW", { exact: true }).first()).toBeVisible();
 	await expect(eventTable.getByText("Unclassified", { exact: true }).first()).toBeVisible();
 
-	// Will-add should be large Ready counts for enroll/user (device maintain truth).
-	await expect(eventTable.getByText(/\+10,?0\d{2}/).first()).toBeVisible();
+	// Operation-log volume is not saveable lifecycle truth unless rows are proven.
+	await expect(eventTable.getByText("Review 19,912", { exact: true })).toBeVisible();
+	await expect(eventTable.getByText("+4,743", { exact: true })).toBeVisible();
 	await expect(eventTable.getByText("Ready").first()).toBeVisible();
 
 	// Fingerprint row is one line: Event + ENROLLMENT + willAdd + Saved + Status.
 	const fingerprintRow = eventTable.getByRole("row").filter({ hasText: "Fingerprint enrolled" });
 	await expect(fingerprintRow).toHaveCount(1);
 	await expect(fingerprintRow.getByText("ENROLLMENT", { exact: true })).toBeVisible();
-	await expect(fingerprintRow.getByText(/\+10,?0\d{2}/)).toBeVisible();
+	await expect(fingerprintRow.getByText("—", { exact: true })).toBeVisible();
 	await expect(fingerprintRow.locator("details")).toHaveCount(0);
 
 	const elapsedMs = Date.now() - startedAt;
@@ -316,7 +317,7 @@ test("sync logs compact table: every event is one line with short category token
 							syncedEvents: 104,
 							totalEvents: 4782,
 							operationLogTotal: 20167,
-							needsSyncEvents: 24909,
+							needsSyncEvents: 4743,
 							hrisSavedCount: 104,
 							canStartSync: true,
 							status: "needs_sync",
@@ -327,10 +328,10 @@ test("sync logs compact table: every event is one line with short category token
 									businessArea: "User Management",
 									eventAction: "USER_CREATED",
 									eventCategory: "USER_MANAGEMENT",
-									willAdd: 15125,
-									alreadyInHris: 0,
-									status: "Ready",
-									confidenceLabel: "Ready",
+									willAdd: 0,
+									alreadyInHris: 73,
+									status: "No new rows",
+									confidenceLabel: "No new rows",
 								},
 								{
 									key: `${testA.id}-USER_DELETED`,
@@ -338,10 +339,10 @@ test("sync logs compact table: every event is one line with short category token
 									businessArea: "User Management",
 									eventAction: "USER_DELETED",
 									eventCategory: "USER_MANAGEMENT",
-									willAdd: 1008,
-									alreadyInHris: 0,
-									status: "Ready",
-									confidenceLabel: "Ready",
+									willAdd: 0,
+									alreadyInHris: 1,
+									status: "No new rows",
+									confidenceLabel: "No new rows",
 								},
 								{
 									key: `${testA.id}-FINGERPRINT_ENROLLED`,
@@ -349,10 +350,10 @@ test("sync logs compact table: every event is one line with short category token
 									businessArea: "Enrollment",
 									eventAction: "FINGERPRINT_ENROLLED",
 									eventCategory: "ENROLLMENT",
-									willAdd: 4033,
-									alreadyInHris: 0,
-									status: "Ready",
-									confidenceLabel: "Ready",
+									willAdd: 0,
+									alreadyInHris: 44,
+									status: "No new rows",
+									confidenceLabel: "No new rows",
 								},
 								{
 									key: `${testA.id}-TAP`,
@@ -382,8 +383,8 @@ test("sync logs compact table: every event is one line with short category token
 									businessArea: "Needs review",
 									eventAction: "UNKNOWN_OPERATION",
 									eventCategory: "UNKNOWN",
-									willAdd: 0,
-									alreadyInHris: 79,
+									willAdd: 19912,
+									alreadyInHris: 137,
 									status: "Needs review",
 									confidenceLabel: "Needs review",
 								},
@@ -447,18 +448,19 @@ test("sync logs compact table: every event is one line with short category token
 	const userCreated = table.locator('tr[data-event-action="USER_CREATED"]');
 	await expect(userCreated.getByText("User created", { exact: true })).toBeVisible();
 	await expect(userCreated.getByText("USER MGMT", { exact: true })).toBeVisible();
-	await expect(userCreated.getByText("+15,125", { exact: true })).toBeVisible();
-	await expect(userCreated.getByText("0", { exact: true })).toBeVisible();
-	await expect(userCreated.getByText("Ready", { exact: true })).toBeVisible();
+	await expect(userCreated.getByText("—", { exact: true })).toBeVisible();
+	await expect(userCreated.getByText("73", { exact: true })).toBeVisible();
+	await expect(userCreated.getByText("No new rows", { exact: true })).toBeVisible();
 
 	const fingerprint = table.locator('tr[data-event-action="FINGERPRINT_ENROLLED"]');
 	await expect(fingerprint.getByText("Fingerprint enrolled", { exact: true })).toBeVisible();
 	await expect(fingerprint.getByText("ENROLLMENT", { exact: true })).toBeVisible();
-	await expect(fingerprint.getByText("+4,033", { exact: true })).toBeVisible();
+	await expect(fingerprint.getByText("—", { exact: true })).toBeVisible();
 
 	const review = table.locator('tr[data-event-action="UNKNOWN_OPERATION"]');
 	await expect(review.getByText("Unclassified", { exact: true })).toBeVisible();
 	await expect(review.getByText("REVIEW", { exact: true })).toBeVisible();
+	await expect(review.getByText("Review 19,912", { exact: true })).toBeVisible();
 
 	// No long "Where to find it" / business-area section headers in the grid.
 	await expect(table.getByText("User Management", { exact: true })).toHaveCount(0);
@@ -536,10 +538,10 @@ test("sync logs scope toggles send attendance and user/enrollment targets", asyn
 									eventLabel: "User created",
 									eventAction: "USER_CREATED",
 									eventCategory: "USER_MANAGEMENT",
-									willAdd: 15125,
-									alreadyInHris: 0,
-									status: "Ready",
-									confidenceLabel: "Ready",
+									willAdd: 0,
+									alreadyInHris: 73,
+									status: "No new rows",
+									confidenceLabel: "No new rows",
 									sourceProof: "Operation logs",
 									readsFrom: "ContentMgmt/logSearch",
 								},
@@ -548,10 +550,10 @@ test("sync logs scope toggles send attendance and user/enrollment targets", asyn
 									eventLabel: "Fingerprint enrolled",
 									eventAction: "FINGERPRINT_ENROLLED",
 									eventCategory: "ENROLLMENT",
-									willAdd: 4033,
-									alreadyInHris: 0,
-									status: "Ready",
-									confidenceLabel: "Ready",
+									willAdd: 0,
+									alreadyInHris: 44,
+									status: "No new rows",
+									confidenceLabel: "No new rows",
 									sourceProof: "Operation logs",
 									readsFrom: "ContentMgmt/logSearch",
 								},
@@ -675,8 +677,7 @@ test("sync logs scope toggles send attendance and user/enrollment targets", asyn
 	await syncButton.click();
 
 	await expect.poll(() => syncBody !== null, { timeout: 10_000 }).toBeTruthy();
-	if (!syncBody) throw new Error("Sync request was not captured");
-	const capturedSyncBody = syncBody;
+	const capturedSyncBody = syncBody as unknown as Record<string, unknown>;
 	expect(capturedSyncBody).toMatchObject({
 		deviceId: testA.id,
 		includeAttendance: true,

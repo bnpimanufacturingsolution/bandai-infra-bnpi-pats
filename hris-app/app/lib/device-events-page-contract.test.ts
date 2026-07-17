@@ -98,13 +98,12 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Rows scanned this pass");
 		expect(routeSource).to.contain("Preview estimate");
 		expect(routeSource).to.contain(">Event</th>");
-		expect(routeSource).to.contain(">Category</th>");
+		expect(routeSource).to.contain(">Business area</th>");
 		expect(routeSource).to.contain(">Will add</th>");
 		expect(routeSource).to.contain(">Saved</th>");
 		expect(routeSource).to.contain(">Status</th>");
 		expect(routeSource).to.contain("ENROLLMENT");
 		expect(routeSource).to.contain("USER MGMT");
-		expect(routeSource).not.to.contain(">Business area</th>");
 		expect(routeSource).not.to.contain(">Where to find it</th>");
 		expect(routeSource).not.to.contain(">Already saved</th>");
 		expect(routeSource).not.to.contain(">Source proof</th>");
