@@ -428,6 +428,12 @@ export interface DeviceImportJobProgress {
 	alreadySaved?: number;
 	knownSkipped?: number;
 	skipMissingEmployeeNo?: boolean;
+	includeAttendance?: boolean;
+	includeOperations?: boolean;
+	timeWindow?: string;
+	phase?: string | null;
+	attendanceImported?: number;
+	operationsImported?: number;
 	cancelRequested?: boolean;
 	cancelRequestedAt?: string;
 	failed: number;
@@ -1936,6 +1942,11 @@ class DevicesService extends APIService {
 		deviceId: string;
 		skipMissingEmployeeNo?: boolean;
 		targetImportCount?: number | null;
+		targetAttendanceCount?: number | null;
+		targetOperationsCount?: number | null;
+		includeAttendance?: boolean;
+		includeOperations?: boolean;
+		timeWindow?: "all" | "7d" | "30d" | "90d" | string;
 	}): Promise<any> {
 		try {
 			const response = await hrisApiClient.post<any>("/api/device/hikvision/sync", payload);

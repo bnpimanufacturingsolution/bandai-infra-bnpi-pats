@@ -418,6 +418,11 @@ export const useTriggerHikvisionAttendanceImport = () => {
 			deviceId: string;
 			skipMissingEmployeeNo?: boolean;
 			targetImportCount?: number | null;
+			targetAttendanceCount?: number | null;
+			targetOperationsCount?: number | null;
+			includeAttendance?: boolean;
+			includeOperations?: boolean;
+			timeWindow?: "all" | "7d" | "30d" | "90d" | string;
 		}) => {
 			return await devicesService.triggerHikvisionAttendanceImport(payload);
 		},

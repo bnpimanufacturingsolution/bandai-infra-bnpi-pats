@@ -18,13 +18,19 @@ describe("device log sync targeted import contract", () => {
 		expect(controllerSource).to.contain("HIKVISION_IMPORT_TARGETED_MAX_SCAN");
 		expect(controllerSource).to.contain("sourceTotal");
 		expect(controllerSource).to.contain("targetedLatestScan: targetImportCount !== null");
-		expect(controllerSource).to.contain("if (targetImportCount !== null && imported >= targetImportCount) break;");
+		// Scoped stops: attendance and operations each honor their targets.
+		expect(controllerSource).to.contain(
+			"attendanceImported >= Number(targetAttendanceCount)",
+		);
+		expect(controllerSource).to.contain(
+			"operationsImported >= Number(targetOperationsCount)",
+		);
 	});
 
 	it("does not fall back to a full history scan when the preview estimate is zero", () => {
-		expect(controllerSource).to.contain("if (targetImportCount === 0)");
 		expect(controllerSource).to.contain("No unsaved device logs found in the dry-run estimate");
 		expect(controllerSource).to.contain("processed: 0");
+		expect(controllerSource).to.contain("noWorkRequested");
 	});
 
 	it("runs independent ZKTeco and Hikvision availability probes concurrently", () => {
@@ -58,5 +64,24 @@ describe("device log sync targeted import contract", () => {
 		expect(controllerSource).to.contain('log.hikvision.com/Information');
 		expect(controllerSource).to.contain("sampleClassify");
 		expect(controllerSource).to.contain("extrapolatedByAction");
+	});
+
+	it("syncs both attendance taps and user/enrollment logSearch not ACS-only", () => {
+		// Interactive Sync must not be attendance-only when preview shows enroll/user willAdd.
+		expect(controllerSource).to.contain("includeOperations");
+		expect(controllerSource).to.contain("includeAttendance");
+		expect(controllerSource).to.contain("targetOperationsCount");
+		expect(controllerSource).to.contain("targetAttendanceCount");
+		expect(controllerSource).to.contain("operationsImported");
+		expect(controllerSource).to.contain("attendanceImported");
+		expect(controllerSource).to.contain("persistNormalizedHikvisionEvidence");
+		expect(controllerSource).to.contain(
+			"Reading user & enrollment activity from device operation logs",
+		);
+		expect(controllerSource).to.contain("Reading attendance taps from the device access log");
+		// Old 200-row cap made large residuals stall at 0/200.
+		expect(controllerSource).to.contain("HIKVISION_IMPORT_TARGETED_MAX_SCAN || 5000");
+		expect(controllerSource).to.contain("HIKVISION_IMPORT_MAX_OPERATION_EVENTS");
+		expect(controllerSource).to.contain('timeWindow');
 	});
 });

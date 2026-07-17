@@ -492,6 +492,85 @@ const getSyncProjectedSaveCount = (
 		: Math.max(explicitSaveAll, 0);
 };
 
+/** Attendance taps = ACS access events. User/enrollment = Information logSearch. */
+const isSyncAttendanceEventRow = (row: DeviceSyncPreviewEventRow) => {
+	const cat = String(row.eventCategory || "").toUpperCase();
+	if (cat === "ATTENDANCE") return true;
+	if (String(row.readsFrom || "").includes("AcsEvent")) return true;
+	if (String(row.sourceProof || "").toLowerCase().includes("attendance")) return true;
+	const action = String(row.eventAction || "").toUpperCase();
+	return action === "TAP" || action === "TAP_REJECTED";
+};
+
+const isSyncOperationEventRow = (row: DeviceSyncPreviewEventRow) => {
+	const cat = String(row.eventCategory || "").toUpperCase();
+	if (cat === "ENROLLMENT" || cat === "USER_MANAGEMENT") return true;
+	if (String(row.readsFrom || "").includes("logSearch")) return true;
+	if (String(row.sourceProof || "").toLowerCase().includes("operation")) return true;
+	const action = String(row.eventAction || "").toUpperCase();
+	return (
+		action.startsWith("USER_") ||
+		action.startsWith("FINGERPRINT_") ||
+		action.startsWith("FACE_") ||
+		action.startsWith("CARD_")
+	);
+};
+
+type SyncImportScopeOptions = {
+	includeAttendance: boolean;
+	includeOperations: boolean;
+};
+
+/** Sum Ready willAdd for the scopes the admin chose to save (preview-truthful). */
+const getScopedSyncWillAdd = (
+	device: DeviceSyncPreviewRow,
+	skipMissingEmployeeNo: boolean,
+	scopes: SyncImportScopeOptions,
+) => {
+	const rows = getFallbackSyncEventRows(device, skipMissingEmployeeNo);
+	return rows.reduce((sum, row) => {
+		if (row.status !== "Ready" || !hasNumericCount(row.willAdd) || Number(row.willAdd) <= 0) {
+			return sum;
+		}
+		if (scopes.includeAttendance && isSyncAttendanceEventRow(row)) {
+			return sum + Number(row.willAdd);
+		}
+		if (scopes.includeOperations && isSyncOperationEventRow(row)) {
+			return sum + Number(row.willAdd);
+		}
+		return sum;
+	}, 0);
+};
+
+const getScopedSyncWillAddBreakdown = (
+	device: DeviceSyncPreviewRow,
+	skipMissingEmployeeNo: boolean,
+	scopes: SyncImportScopeOptions,
+) => {
+	const rows = getFallbackSyncEventRows(device, skipMissingEmployeeNo);
+	let attendance = 0;
+	let operations = 0;
+	for (const row of rows) {
+		if (row.status !== "Ready" || !hasNumericCount(row.willAdd) || Number(row.willAdd) <= 0) {
+			continue;
+		}
+		if (scopes.includeAttendance && isSyncAttendanceEventRow(row)) {
+			attendance += Number(row.willAdd);
+		}
+		if (scopes.includeOperations && isSyncOperationEventRow(row)) {
+			operations += Number(row.willAdd);
+		}
+	}
+	return { attendance, operations, total: attendance + operations };
+};
+
+const SYNC_TIME_WINDOW_OPTIONS: Array<{ value: "all" | "7d" | "30d" | "90d"; label: string; help: string }> = [
+	{ value: "all", label: "All history", help: "Everything the device still has" },
+	{ value: "7d", label: "Last 7 days", help: "Recent week only" },
+	{ value: "30d", label: "Last 30 days", help: "Recent month only" },
+	{ value: "90d", label: "Last 90 days", help: "Recent quarter only" },
+];
+
 const getSyncProjectedSkipCount = (
 	row: { knownSkippedEventCount?: number | string | null },
 	skipMissingEmployeeNo: boolean,
@@ -957,6 +1036,10 @@ export default function DeviceEventsPage() {
 	const [includeLinkedAttendanceReset, setIncludeLinkedAttendanceReset] = useState(false);
 	const [showImportProgressModal, setShowImportProgressModal] = useState(false);
 	const [skipMissingEmployeeNo, setSkipMissingEmployeeNo] = useState(false);
+	/** What to save from Sync logs preview (defaults match full preview truth). */
+	const [syncIncludeAttendance, setSyncIncludeAttendance] = useState(true);
+	const [syncIncludeOperations, setSyncIncludeOperations] = useState(true);
+	const [syncTimeWindow, setSyncTimeWindow] = useState<"all" | "7d" | "30d" | "90d">("all");
 	const [activeImportJob, setActiveImportJob] = useState<ActiveImportJob | null>(() => {
 		try {
 			if (typeof window === "undefined") return null;
@@ -1538,15 +1621,25 @@ export default function DeviceEventsPage() {
 		(syncHealthDevice && !syncBridgeOk ? "The ZKTeco bridge is not reachable for this preflight." : "");
 	const syncPreviewRows = useMemo(() => syncPreview?.devices || [], [syncPreview?.devices]);
 	const syncHasZktecoRows = syncPreviewRows.some((row) => row.vendor === "ZKTeco");
+	const syncImportScopes = useMemo(
+		() => ({
+			includeAttendance: syncIncludeAttendance,
+			includeOperations: syncIncludeOperations,
+		}),
+		[syncIncludeAttendance, syncIncludeOperations],
+	);
 	const syncStartableRows = syncPreviewRows.filter((row) => {
 		const projectedSaveCount = getSyncProjectedSaveCount(row, skipMissingEmployeeNo);
+		const scopedWillAdd = getScopedSyncWillAdd(row, skipMissingEmployeeNo, syncImportScopes);
 		const readyWillAdd = getFallbackSyncEventRows(row, skipMissingEmployeeNo).some(
 			(eventRow) =>
 				eventRow.status === "Ready" &&
 				hasNumericCount(eventRow.willAdd) &&
-				Number(eventRow.willAdd) > 0,
+				Number(eventRow.willAdd) > 0 &&
+				((syncIncludeAttendance && isSyncAttendanceEventRow(eventRow)) ||
+					(syncIncludeOperations && isSyncOperationEventRow(eventRow))),
 		);
-		if (row.vendor === "Hikvision") return !row.error && readyWillAdd;
+		if (row.vendor === "Hikvision") return !row.error && (readyWillAdd || scopedWillAdd > 0);
 		return !row.error && (readyWillAdd || Boolean(row.canStartSync && projectedSaveCount && projectedSaveCount > 0));
 	});
 	const syncHasUnknownEventTotal = syncPreviewRows.some(
@@ -1607,22 +1700,29 @@ export default function DeviceEventsPage() {
 	}, [syncPreviewRows]);
 	const syncEventWillAddTotal = useMemo(
 		() =>
-			syncPreviewRows.reduce((total, device) => {
-				const rows = getFallbackSyncEventRows(device, skipMissingEmployeeNo);
-				return (
-					total +
-					rows.reduce(
-						(sum, row) =>
-							sum +
-							(row.status === "Ready" && hasNumericCount(row.willAdd)
-								? Number(row.willAdd)
-								: 0),
-						0,
-					)
-				);
-			}, 0),
-		[skipMissingEmployeeNo, syncPreviewRows],
+			syncPreviewRows.reduce(
+				(total, device) =>
+					total + getScopedSyncWillAdd(device, skipMissingEmployeeNo, syncImportScopes),
+				0,
+			),
+		[skipMissingEmployeeNo, syncImportScopes, syncPreviewRows],
 	);
+	const syncScopedBreakdown = useMemo(() => {
+		return syncPreviewRows.reduce(
+			(acc, device) => {
+				const part = getScopedSyncWillAddBreakdown(
+					device,
+					skipMissingEmployeeNo,
+					syncImportScopes,
+				);
+				acc.attendance += part.attendance;
+				acc.operations += part.operations;
+				acc.total += part.total;
+				return acc;
+			},
+			{ attendance: 0, operations: 0, total: 0 },
+		);
+	}, [skipMissingEmployeeNo, syncImportScopes, syncPreviewRows]);
 	const syncHasUnknownMissingCount = syncPreviewRows.some(
 		(row) => getSyncProjectedSaveCount(row, skipMissingEmployeeNo) === null,
 	);
@@ -1874,12 +1974,22 @@ export default function DeviceEventsPage() {
 		address?: string | null;
 		vendor?: string | null;
 		targetImportCount?: number | null;
+		targetAttendanceCount?: number | null;
+		targetOperationsCount?: number | null;
+		includeAttendance?: boolean;
+		includeOperations?: boolean;
+		timeWindow?: "all" | "7d" | "30d" | "90d";
 	}) => {
 		hikvisionImport.mutate(
 			{
 				deviceId: device.deviceId,
 				skipMissingEmployeeNo,
 				targetImportCount: device.targetImportCount,
+				targetAttendanceCount: device.targetAttendanceCount,
+				targetOperationsCount: device.targetOperationsCount,
+				includeAttendance: device.includeAttendance ?? syncIncludeAttendance,
+				includeOperations: device.includeOperations ?? syncIncludeOperations,
+				timeWindow: device.timeWindow ?? syncTimeWindow,
 			},
 			{
 				onSuccess: (data: any) => {
@@ -1939,13 +2049,38 @@ export default function DeviceEventsPage() {
 
 	const startDeviceLogImport = () => {
 		setSyncLogsState({ status: "idle" });
+		if (!syncIncludeAttendance && !syncIncludeOperations) {
+			toast.error("Choose what to save", {
+				description: "Turn on Attendance taps and/or User & enrollment activity.",
+			});
+			return;
+		}
 		const startableRow = syncStartableRows[0];
 		if (!startableRow?.deviceId) return;
 
 		if (startableRow.syncAction === "hikvision-import" || startableRow.vendor === "Hikvision") {
+			const scopes = {
+				includeAttendance: syncIncludeAttendance,
+				includeOperations: syncIncludeOperations,
+			};
+			const breakdown = getScopedSyncWillAddBreakdown(
+				startableRow,
+				skipMissingEmployeeNo,
+				scopes,
+			);
+			// Prefer preview eventRows (truthful) over ACS-only needsSyncEvents.
+			const scopedTotal =
+				breakdown.total > 0
+					? breakdown.total
+					: getSyncProjectedSaveCount(startableRow, skipMissingEmployeeNo);
 			startHikvisionDeviceLogImport({
 				...startableRow,
-				targetImportCount: getSyncProjectedSaveCount(startableRow, skipMissingEmployeeNo),
+				targetImportCount: scopedTotal,
+				targetAttendanceCount: scopes.includeAttendance ? breakdown.attendance : 0,
+				targetOperationsCount: scopes.includeOperations ? breakdown.operations : 0,
+				includeAttendance: scopes.includeAttendance,
+				includeOperations: scopes.includeOperations,
+				timeWindow: syncTimeWindow,
 			});
 			return;
 		}
@@ -3522,6 +3657,94 @@ export default function DeviceEventsPage() {
 						</div>
 					</div>
 
+					{/* What to save — user-friendly scope (attendance ACS vs user/enrollment logSearch). */}
+					<div
+						className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5"
+						data-testid="sync-logs-scope-controls">
+						<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+							What to save
+						</p>
+						<div className="mt-2 grid gap-2 sm:grid-cols-2">
+							<label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-800">
+								<input
+									type="checkbox"
+									className="mt-0.5 h-4 w-4 rounded border-slate-300"
+									checked={syncIncludeAttendance}
+									onChange={(e) => setSyncIncludeAttendance(e.target.checked)}
+									data-testid="sync-include-attendance"
+								/>
+								<span className="min-w-0">
+									<span className="block font-semibold text-slate-950">Attendance taps</span>
+									<span className="block text-xs text-slate-600">
+										Door / clock-in punches from the access log
+										{syncScopedBreakdown.attendance > 0
+											? ` · about +${formatCount(syncScopedBreakdown.attendance)}`
+											: ""}
+									</span>
+								</span>
+							</label>
+							<label className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-800">
+								<input
+									type="checkbox"
+									className="mt-0.5 h-4 w-4 rounded border-slate-300"
+									checked={syncIncludeOperations}
+									onChange={(e) => setSyncIncludeOperations(e.target.checked)}
+									data-testid="sync-include-operations"
+								/>
+								<span className="min-w-0">
+									<span className="block font-semibold text-slate-950">
+										User &amp; enrollment activity
+									</span>
+									<span className="block text-xs text-slate-600">
+										User created, fingerprint enrolled, and similar device admin actions
+										{syncScopedBreakdown.operations > 0
+											? ` · about +${formatCount(syncScopedBreakdown.operations)}`
+											: ""}
+									</span>
+								</span>
+							</label>
+						</div>
+						<div className="mt-2">
+							<label
+								htmlFor="sync-time-window"
+								className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+								How far back
+							</label>
+							<select
+								id="sync-time-window"
+								className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-900 sm:max-w-xs"
+								value={syncTimeWindow}
+								onChange={(e) =>
+									setSyncTimeWindow(e.target.value as "all" | "7d" | "30d" | "90d")
+								}
+								data-testid="sync-time-window">
+								{SYNC_TIME_WINDOW_OPTIONS.map((option) => (
+									<option key={option.value} value={option.value}>
+										{option.label} — {option.help}
+									</option>
+								))}
+							</select>
+						</div>
+						<p className="mt-2 text-xs text-slate-600" data-testid="sync-scope-summary">
+							Will try to save about{" "}
+							<span className="font-semibold text-slate-950">
+								{formatCount(syncScopedBreakdown.total)}
+							</span>{" "}
+							new rows
+							{syncIncludeAttendance && syncIncludeOperations
+								? ` (${formatCount(syncScopedBreakdown.attendance)} attendance + ${formatCount(syncScopedBreakdown.operations)} user/enrollment)`
+								: syncIncludeAttendance
+									? " (attendance only)"
+									: syncIncludeOperations
+										? " (user & enrollment only)"
+										: " (nothing selected)"}
+							{syncTimeWindow !== "all"
+								? ` · window: ${SYNC_TIME_WINDOW_OPTIONS.find((o) => o.value === syncTimeWindow)?.label || syncTimeWindow}`
+								: ""}
+							.
+						</p>
+					</div>
+
 					<div className="rounded-lg border border-slate-200 bg-white">
 						{showSyncPreviewSkeleton ? (
 							<SyncDeviceDetailsSkeleton />
@@ -3783,7 +4006,7 @@ export default function DeviceEventsPage() {
 							</div>
 							<p className="mt-1 text-xs opacity-90">
 								{isTargetedImport
-									? `Sync is saving up to ${formatCount(activeImportTargetCount)} estimated unsaved log${activeImportTargetCount === 1 ? "" : "s"} from the latest device rows.`
+									? `Saving up to ${formatCount(activeImportTargetCount)} estimated unsaved row${activeImportTargetCount === 1 ? "" : "s"} from the sources you selected (attendance taps and/or user & enrollment activity).`
 									: "Sync scans device source logs, then classifies each row against HRIS."}
 							</p>
 							<div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
@@ -3799,6 +4022,22 @@ export default function DeviceEventsPage() {
 								<div className="text-red-700">
 									Failed: <span className="font-semibold">{formatCount(importJobProgress.failed)}</span>
 								</div>
+								{(importJobProgress.attendanceImported !== undefined ||
+									importJobProgress.operationsImported !== undefined) && (
+									<div className="col-span-2 text-[11px] text-slate-700">
+										Breakdown:{" "}
+										<span className="font-semibold">
+											{formatCount(importJobProgress.attendanceImported || 0)} attendance taps
+										</span>
+										{" · "}
+										<span className="font-semibold">
+											{formatCount(importJobProgress.operationsImported || 0)} user/enrollment
+										</span>
+										{importJobProgress.phase ? (
+											<span className="text-slate-500"> · {importJobProgress.phase}</span>
+										) : null}
+									</div>
+								)}
 							</div>
 							<div className="mt-3 grid grid-cols-2 gap-2 rounded-md border border-orange-100 bg-white/70 px-3 py-2 text-xs text-orange-900">
 								<div>

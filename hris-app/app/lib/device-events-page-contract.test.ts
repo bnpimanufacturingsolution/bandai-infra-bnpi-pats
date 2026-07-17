@@ -46,7 +46,8 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Syncing device logs");
 		expect(routeSource).to.contain("Preview only — nothing is saved until you confirm");
 		expect(routeSource).to.contain("Sync ${formatCount(syncDryRunEstimate)} log");
-		expect(routeSource).to.contain("targetImportCount: getSyncProjectedSaveCount(startableRow, skipMissingEmployeeNo)");
+		expect(routeSource).to.contain("targetImportCount: scopedTotal");
+		expect(routeSource).to.contain("getScopedSyncWillAddBreakdown");
 		expect(routeSource).to.contain("Syncing estimated unsaved logs");
 		expect(routeSource).to.contain("Latest rows checked");
 		expect(routeSource).to.contain("Target estimate");
@@ -81,6 +82,15 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("getSyncCategoryToken");
 		expect(routeSource).to.contain("sortSyncEventRows");
 		expect(routeSource).to.contain("getSyncEventLabelCompact");
+		// Sync must let admins choose attendance vs user/enrollment and a time window.
+		expect(routeSource).to.contain('data-testid="sync-logs-scope-controls"');
+		expect(routeSource).to.contain('data-testid="sync-include-attendance"');
+		expect(routeSource).to.contain('data-testid="sync-include-operations"');
+		expect(routeSource).to.contain('data-testid="sync-time-window"');
+		expect(routeSource).to.contain("getScopedSyncWillAddBreakdown");
+		expect(routeSource).to.contain("targetOperationsCount");
+		expect(routeSource).to.contain("User &amp; enrollment activity");
+		expect(routeSource).to.contain("Attendance taps");
 		expect(routeSource).to.contain(">Event</th>");
 		expect(routeSource).to.contain(">Category</th>");
 		expect(routeSource).to.contain(">Will add</th>");

@@ -478,6 +478,222 @@ test("sync logs compact table: every event is one line with short category token
 	});
 });
 
+test("sync logs scope toggles send attendance and user/enrollment targets", async ({ page }) => {
+	let syncBody: Record<string, unknown> | null = null;
+
+	await page.addInitScript(() => {
+		window.localStorage.setItem("authToken", "smoke-token");
+		window.localStorage.setItem("userRole", "hris-admin");
+		window.localStorage.setItem("userSubRole", "hris-admin");
+	});
+
+	await page.route("**/api/**", async (route) => {
+		const request = route.request();
+		const path = new URL(request.url()).pathname;
+		if (path.endsWith("/auth/me")) {
+			await route.fulfill(json(adminUser));
+			return;
+		}
+		if (path.endsWith("/system-provisioning/status")) {
+			await route.fulfill(json(readyProvisioningStatus));
+			return;
+		}
+		if (path.includes("/device/events")) {
+			await route.fulfill(
+				json({
+					events: [],
+					summary: { total: 0, byStatus: {}, bySource: {}, byAction: {} },
+					pagination: { total: 0, page: 1, limit: 25, totalPages: 0 },
+				}),
+			);
+			return;
+		}
+		if (path.includes("/device/sync-preview")) {
+			await route.fulfill(
+				json({
+					generatedAt: timestamp,
+					scope: { deviceId: "all", source: "all" },
+					bridge: null,
+					devices: [
+						{
+							deviceId: testA.id,
+							name: testA.name,
+							address: testA.address,
+							port: testA.port,
+							vendor: "Hikvision",
+							source: "HIKVISION_CALLBACK",
+							syncedEvents: 100,
+							totalEvents: 4782,
+							operationLogTotal: 20167,
+							needsSyncEvents: 4105,
+							hrisSavedCount: 100,
+							canStartSync: true,
+							status: "needs_sync",
+							syncAction: "hikvision-import",
+							eventRows: [
+								{
+									key: `${testA.id}-USER_CREATED`,
+									eventLabel: "User created",
+									eventAction: "USER_CREATED",
+									eventCategory: "USER_MANAGEMENT",
+									willAdd: 15125,
+									alreadyInHris: 0,
+									status: "Ready",
+									confidenceLabel: "Ready",
+									sourceProof: "Operation logs",
+									readsFrom: "ContentMgmt/logSearch",
+								},
+								{
+									key: `${testA.id}-FINGERPRINT_ENROLLED`,
+									eventLabel: "Fingerprint enrolled",
+									eventAction: "FINGERPRINT_ENROLLED",
+									eventCategory: "ENROLLMENT",
+									willAdd: 4033,
+									alreadyInHris: 0,
+									status: "Ready",
+									confidenceLabel: "Ready",
+									sourceProof: "Operation logs",
+									readsFrom: "ContentMgmt/logSearch",
+								},
+								{
+									key: `${testA.id}-TAP`,
+									eventLabel: "Attendance tap",
+									eventAction: "TAP",
+									eventCategory: "ATTENDANCE",
+									willAdd: 4105,
+									alreadyInHris: 33,
+									status: "Ready",
+									confidenceLabel: "Ready",
+									sourceProof: "Attendance/access events",
+									readsFrom: "AccessControl/AcsEvent",
+								},
+							],
+							sources: [
+								{ key: "operation_logs", label: "Operation logs", ok: true, status: "ready", total: 20167 },
+								{ key: "attendance_access", label: "Attendance", ok: true, status: "ready", total: 4782 },
+							],
+							readySourceCount: 2,
+							sourceCheckTotal: 2,
+						},
+					],
+				}),
+			);
+			return;
+		}
+		if (path.includes("/device/hikvision/sync") || path.includes("/device/hikvision/import")) {
+			syncBody = request.postDataJSON() as Record<string, unknown>;
+			await route.fulfill(
+				json({
+					jobId: "job-scope-1",
+					progress: {
+						jobId: "job-scope-1",
+						status: "processing",
+						deviceId: testA.id,
+						deviceName: "TEST A",
+						total: 23263,
+						targetImportCount: 23263,
+						includeAttendance: true,
+						includeOperations: true,
+						processed: 0,
+						imported: 0,
+						skipped: 0,
+						failed: 0,
+						message: "Reading user & enrollment activity from device operation logs",
+						phase: "operations",
+						attendanceImported: 0,
+						operationsImported: 0,
+					},
+				}),
+			);
+			return;
+		}
+		if (path.includes("/device/import-jobs/")) {
+			await route.fulfill(
+				json({
+					jobId: "job-scope-1",
+					status: "processing",
+					deviceId: testA.id,
+					deviceName: "TEST A",
+					total: 23263,
+					targetImportCount: 23263,
+					processed: 12,
+					imported: 5,
+					skipped: 0,
+					failed: 0,
+					message: "Saving user & enrollment activity… 5 new",
+					phase: "operations",
+					attendanceImported: 0,
+					operationsImported: 5,
+					scanLimit: 3000,
+				}),
+			);
+			return;
+		}
+		if (path.endsWith("/device") || /\/device\?/.test(path)) {
+			await route.fulfill(
+				json({
+					devices: [testA],
+					pagination: { total: 1, page: 1, limit: 100, totalPages: 1 },
+				}),
+			);
+			return;
+		}
+		await route.fulfill(json({}));
+	});
+
+	await page.goto("/admin/configuration/devices/events?view=saved&action=sync-logs");
+	const dialog = page.getByRole("dialog");
+	await expect(dialog.getByRole("heading", { name: "Sync device logs" })).toBeVisible({
+		timeout: routeReadyTimeoutMs,
+	});
+
+	const scope = dialog.getByTestId("sync-logs-scope-controls");
+	await expect(scope).toBeVisible();
+	await expect(scope.getByText("Attendance taps", { exact: true })).toBeVisible();
+	await expect(scope.getByText(/User & enrollment activity|User &amp; enrollment activity/i)).toBeVisible();
+	await expect(dialog.getByTestId("sync-scope-summary")).toContainText(/15,?125|4,?033|4,?105|23,?263/);
+
+	// Both on by default → total = ops + attendance.
+	await expect(dialog.getByTestId("sync-include-attendance")).toBeChecked();
+	await expect(dialog.getByTestId("sync-include-operations")).toBeChecked();
+
+	// Attendance-only: summary should drop user/enrollment counts from the save target.
+	await dialog.getByTestId("sync-include-operations").uncheck();
+	await expect(dialog.getByTestId("sync-scope-summary")).toContainText(/attendance only/i);
+	await expect(dialog.getByTestId("sync-scope-summary")).toContainText(/4,?105/);
+
+	// Turn operations back on and pick a time window.
+	await dialog.getByTestId("sync-include-operations").check();
+	await dialog.getByTestId("sync-time-window").selectOption("30d");
+
+	const syncButton = dialog.getByRole("button", { name: /Sync/i }).last();
+	await syncButton.click();
+
+	await expect.poll(() => syncBody !== null, { timeout: 10_000 }).toBeTruthy();
+	expect(syncBody).toMatchObject({
+		deviceId: testA.id,
+		includeAttendance: true,
+		includeOperations: true,
+		timeWindow: "30d",
+	});
+	expect(Number(syncBody?.targetAttendanceCount)).toBe(4105);
+	expect(Number(syncBody?.targetOperationsCount)).toBe(19158);
+	expect(Number(syncBody?.targetImportCount)).toBe(23263);
+
+	const screenshotDir = resolve(
+		process.cwd(),
+		"..",
+		".runtime",
+		"sync-logs-truth-proof",
+		"screenshots",
+	);
+	mkdirSync(screenshotDir, { recursive: true });
+	await page.screenshot({
+		path: resolve(screenshotDir, "sync-logs-scope-toggles.png"),
+		fullPage: true,
+	});
+});
+
 test("attendance category only lists attendance actions in the action filter", async ({ page }) => {
 	await page.addInitScript(() => {
 		window.localStorage.setItem("authToken", "smoke-token");

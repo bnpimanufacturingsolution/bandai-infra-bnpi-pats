@@ -222,6 +222,15 @@ type DeviceImportJob = {
 	alreadySaved?: number;
 	knownSkipped?: number;
 	skipMissingEmployeeNo?: boolean;
+	/** Save attendance taps (ACS AcsEvent). Default true. */
+	includeAttendance?: boolean;
+	/** Save user/enrollment activity from Information logSearch. Default true. */
+	includeOperations?: boolean;
+	/** all | 7d | 30d | 90d */
+	timeWindow?: string;
+	phase?: string | null;
+	attendanceImported?: number;
+	operationsImported?: number;
 	cancelRequested?: boolean;
 	cancelRequestedAt?: Date;
 	failed: number;
@@ -11025,6 +11034,14 @@ export const controller = (prisma: PrismaClient) => {
 		);
 	};
 
+	const resolveHikvisionImportStartTime = (timeWindow?: string | null) => {
+		const windowKey = String(timeWindow || "all").trim().toLowerCase();
+		const days =
+			windowKey === "7d" ? 7 : windowKey === "30d" ? 30 : windowKey === "90d" ? 90 : null;
+		if (days === null) return "2000-01-01T00:00:00+08:00";
+		return formatHikvisionManilaDateTime(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
+	};
+
 	const processHikvisionImportJob = async (params: {
 		jobId: string;
 		runId?: string;
@@ -11032,16 +11049,43 @@ export const controller = (prisma: PrismaClient) => {
 		device: any;
 		totalHint: number;
 		targetImportCount?: number | null;
+		targetAttendanceCount?: number | null;
+		targetOperationsCount?: number | null;
 		skipMissingEmployeeNo?: boolean;
+		/** Default true: ACS attendance taps. */
+		includeAttendance?: boolean;
+		/** Default true: Information logSearch user/enrollment activity. */
+		includeOperations?: boolean;
+		/** all | 7d | 30d | 90d */
+		timeWindow?: string | null;
 	}) => {
 		const { jobId, runId, req, device, totalHint } = params;
 		const skipMissingEmployeeNo = params.skipMissingEmployeeNo === true;
+		const includeAttendance = params.includeAttendance !== false;
+		const includeOperations = params.includeOperations !== false;
+		const timeWindow = String(params.timeWindow || "all").trim() || "all";
 		const targetImportCount =
 			params.targetImportCount !== null &&
 			params.targetImportCount !== undefined &&
 			Number.isFinite(Number(params.targetImportCount))
 				? Math.max(Number(params.targetImportCount), 0)
 				: null;
+		const targetAttendanceCount =
+			params.targetAttendanceCount !== null &&
+			params.targetAttendanceCount !== undefined &&
+			Number.isFinite(Number(params.targetAttendanceCount))
+				? Math.max(Number(params.targetAttendanceCount), 0)
+				: includeAttendance
+					? targetImportCount
+					: 0;
+		const targetOperationsCount =
+			params.targetOperationsCount !== null &&
+			params.targetOperationsCount !== undefined &&
+			Number.isFinite(Number(params.targetOperationsCount))
+				? Math.max(Number(params.targetOperationsCount), 0)
+				: includeOperations
+					? null
+					: 0;
 		const ctrl = callbackController(prisma);
 		const pageSize = Math.max(
 			1,
@@ -11051,20 +11095,37 @@ export const controller = (prisma: PrismaClient) => {
 			1,
 			Math.min(Number(process.env.HIKVISION_IMPORT_MAX_EVENTS || totalHint || 1000), 10000),
 		);
-		const targetedScanLimit = targetImportCount
-			? Math.max(
-					Math.min(
-						Number(process.env.HIKVISION_IMPORT_TARGETED_MAX_SCAN || 200),
-						Math.max(targetImportCount + 10, targetImportCount * 3, 10),
-					),
-				)
-			: null;
+		// Cap is an upper bound only. Old default (200) made large attendance residuals
+		// report "0 / 200" forever while target estimate stayed ~4k.
+		const targetedMaxScanCap = Math.max(
+			100,
+			Math.min(Number(process.env.HIKVISION_IMPORT_TARGETED_MAX_SCAN || 5000), 10000),
+		);
+		const attendanceTargetForScan =
+			includeAttendance && targetAttendanceCount !== null && targetAttendanceCount !== undefined
+				? Number(targetAttendanceCount)
+				: includeAttendance && targetImportCount !== null
+					? Number(targetImportCount)
+					: null;
+		const targetedScanLimit =
+			attendanceTargetForScan !== null && Number.isFinite(attendanceTargetForScan)
+				? Math.min(
+						fullScanLimit,
+						targetedMaxScanCap,
+						Math.max(
+							attendanceTargetForScan + 50,
+							Math.ceil(attendanceTargetForScan * 1.5),
+							100,
+						),
+					)
+				: null;
 		const maxEvents = Math.min(fullScanLimit, targetedScanLimit || fullScanLimit);
 		const effectivePageSize =
-			targetImportCount !== null
-				? Math.min(pageSize, Math.max(targetImportCount + 10, 10))
+			attendanceTargetForScan !== null
+				? Math.min(pageSize, Math.max(Math.min(attendanceTargetForScan + 10, 100), 10))
 				: pageSize;
 		const endTime = formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
+		const startTime = resolveHikvisionImportStartTime(timeWindow);
 		let position = 0;
 		let processed = 0;
 		let imported = 0;
@@ -11072,23 +11133,214 @@ export const controller = (prisma: PrismaClient) => {
 		let alreadySaved = 0;
 		let knownSkipped = 0;
 		let failed = 0;
+		let attendanceImported = 0;
+		let operationsImported = 0;
 		let sourceTotalForLoop =
 			Number.isFinite(Number(totalHint)) && Number(totalHint) > 0
 				? Math.min(Number(totalHint), maxEvents)
 				: maxEvents;
+		const scopeParts: string[] = [];
+		if (includeAttendance) scopeParts.push("attendance taps");
+		if (includeOperations) scopeParts.push("user & enrollment activity");
+		const scopeLabel = scopeParts.length ? scopeParts.join(" + ") : "selected device logs";
+		const overallTarget =
+			targetImportCount !== null
+				? targetImportCount
+				: (Number(targetAttendanceCount || 0) || 0) +
+					(Number(targetOperationsCount || 0) || 0) ||
+					null;
 
 		try {
 			updateDeviceImportJob(jobId, {
-				total: targetImportCount || Math.min(totalHint || maxEvents, maxEvents),
+				total: overallTarget || Math.min(totalHint || maxEvents, maxEvents),
 				sourceTotal: totalHint,
-				targetImportCount,
+				targetImportCount: overallTarget,
 				scanLimit: maxEvents,
-				message: targetImportCount
-					? `Reading latest device logs for ${targetImportCount.toLocaleString()} estimated unsaved row${targetImportCount === 1 ? "" : "s"}`
-					: "Reading device logs",
+				includeAttendance,
+				includeOperations,
+				timeWindow,
+				attendanceImported: 0,
+				operationsImported: 0,
+				phase: "starting",
+				message: `Preparing to save ${scopeLabel}${timeWindow !== "all" ? ` (${timeWindow})` : ""}`,
 			});
 
-			while (processed < maxEvents) {
+			// ── Phase A: user & enrollment activity (Information logSearch) ──
+			// Preview classifies Add Fingerprint / Add Person from this source.
+			// Attendance-only ACS import never creates USER_CREATED / FINGERPRINT_ENROLLED rows.
+			if (includeOperations) {
+				const opMaxCap = Math.max(
+					50,
+					Math.min(Number(process.env.HIKVISION_IMPORT_MAX_OPERATION_EVENTS || 3000), 10000),
+				);
+				const opMax =
+					targetOperationsCount !== null && targetOperationsCount !== undefined
+						? Math.min(
+								opMaxCap,
+								Math.max(
+									Number(targetOperationsCount) + 50,
+									Math.ceil(Number(targetOperationsCount) * 1.5),
+									100,
+								),
+							)
+						: opMaxCap;
+				const operationSearchId = randomUUID();
+				let opPosition = 0;
+				let opProcessed = 0;
+				updateDeviceImportJob(jobId, {
+					phase: "operations",
+					scanLimit: Math.max(maxEvents, opMax),
+					message:
+						"Reading user & enrollment activity from device operation logs (not attendance taps)…",
+				});
+				while (opProcessed < opMax) {
+					const currentJob = deviceImportJobs.get(jobId);
+					if (currentJob?.cancelRequested) {
+						updateDeviceImportJob(jobId, {
+							status: "cancelled",
+							message: "Sync cancelled",
+							completedAt: new Date(),
+						});
+						break;
+					}
+					if (
+						targetOperationsCount !== null &&
+						targetOperationsCount !== undefined &&
+						operationsImported >= Number(targetOperationsCount)
+					) {
+						break;
+					}
+					const pageSizeOp = Math.min(pageSize, opMax - opProcessed);
+					let rawXml = "";
+					try {
+						const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
+							method: "POST",
+							deviceId: device.id,
+							prisma,
+							request: req,
+							timeoutMs: 15000,
+							ensureJsonFormat: false,
+							rawResponse: true,
+							headers: {
+								Accept: "application/xml, text/xml, */*",
+								"Content-Type": "application/xml; charset=UTF-8",
+							},
+							body: buildHikvisionLogSearchXml({
+								searchId: operationSearchId,
+								startTime,
+								endTime,
+								maxResults: pageSizeOp,
+								searchResultPosition: opPosition,
+								metaId: "log.hikvision.com/Information",
+							}),
+						});
+						rawXml = String(response?.raw || "");
+					} catch (error: any) {
+						failed += 1;
+						const job = deviceImportJobs.get(jobId);
+						if (job && job.errors.length < 25) {
+							job.errors.push({
+								row: opProcessed + 1,
+								error: error?.message || "Operation logSearch failed",
+							});
+						}
+						break;
+					}
+					const parsed = parseHikvisionLogSearchResponse(rawXml);
+					if (!parsed.rows.length) break;
+					for (const row of parsed.rows) {
+						opProcessed += 1;
+						processed += 1;
+						const evidence = normalizeHikvisionLogSearchRow(row, device);
+						const action = String(evidence.eventAction || "").toUpperCase();
+						// Keep residual noise out of Device Events unless classified.
+						if (!action || action === "UNKNOWN" || action === "UNKNOWN_OPERATION") {
+							skipped += 1;
+							continue;
+						}
+						const employeeNo = String(evidence.employeeNo || "").trim();
+						if (!employeeNo && skipMissingEmployeeNo) {
+							skipped += 1;
+							knownSkipped += 1;
+							continue;
+						}
+						try {
+							const saved = await persistNormalizedHikvisionEvidence({
+								req,
+								organizationId: String(device.organizationId),
+								device,
+								evidence,
+							});
+							if (saved.duplicate) {
+								alreadySaved += 1;
+							} else {
+								imported += 1;
+								operationsImported += 1;
+							}
+						} catch (error: any) {
+							failed += 1;
+							const job = deviceImportJobs.get(jobId);
+							if (job && job.errors.length < 25) {
+								job.errors.push({
+									row: processed,
+									error: error?.message || "Failed to save user/enrollment log",
+								});
+							}
+						}
+						if (opProcessed % 10 === 0 || opProcessed >= opMax) {
+							updateDeviceImportJob(jobId, {
+								processed,
+								imported,
+								skipped,
+								alreadySaved,
+								knownSkipped,
+								failed,
+								operationsImported,
+								attendanceImported,
+								phase: "operations",
+								message: `Saving user & enrollment activity… ${operationsImported.toLocaleString()} new`,
+							});
+						}
+						if (
+							targetOperationsCount !== null &&
+							targetOperationsCount !== undefined &&
+							operationsImported >= Number(targetOperationsCount)
+						) {
+							break;
+						}
+					}
+					opPosition += parsed.rows.length;
+					if (
+						parsed.totalMatches !== undefined &&
+						opPosition >= Number(parsed.totalMatches)
+					) {
+						break;
+					}
+					if (String(parsed.responseStatus || "").toUpperCase() !== "MORE") break;
+					const cancelled = deviceImportJobs.get(jobId);
+					if (cancelled?.status === "cancelled" || cancelled?.cancelRequested) break;
+				}
+			}
+
+			const cancelledAfterOps = deviceImportJobs.get(jobId);
+			if (cancelledAfterOps?.status === "cancelled" || cancelledAfterOps?.cancelRequested) {
+				// already finalized
+			} else if (includeAttendance) {
+			// ── Phase B: attendance taps (ACS AcsEvent) ──
+			updateDeviceImportJob(jobId, {
+				phase: "attendance",
+				scanLimit: maxEvents,
+				message: "Reading attendance taps from the device access log…",
+			});
+
+			let attendanceProcessed = 0;
+			position = 0;
+			sourceTotalForLoop =
+				Number.isFinite(Number(totalHint)) && Number(totalHint) > 0
+					? Math.min(Number(totalHint), maxEvents)
+					: maxEvents;
+
+			while (attendanceProcessed < maxEvents) {
 				const currentJob = deviceImportJobs.get(jobId);
 				if (currentJob?.cancelRequested) {
 					updateDeviceImportJob(jobId, {
@@ -11098,14 +11350,21 @@ export const controller = (prisma: PrismaClient) => {
 					});
 					break;
 				}
+				if (
+					targetAttendanceCount !== null &&
+					targetAttendanceCount !== undefined &&
+					attendanceImported >= Number(targetAttendanceCount)
+				) {
+					break;
+				}
 				const payload = {
 					AcsEventCond: {
-						searchID: `${jobId}-${position}`,
+						searchID: `${jobId}-att-${position}`,
 						searchResultPosition: position,
-						maxResults: Math.min(effectivePageSize, maxEvents - processed),
+						maxResults: Math.min(effectivePageSize, maxEvents - attendanceProcessed),
 						major: 0,
 						minor: 0,
-						startTime: "2000-01-01T00:00:00+08:00",
+						startTime,
 						endTime,
 						timeReverseOrder: true,
 					},
@@ -11129,13 +11388,13 @@ export const controller = (prisma: PrismaClient) => {
 				if (totalFromDevice !== null) {
 					sourceTotalForLoop = Math.min(Number(totalFromDevice), maxEvents);
 					updateDeviceImportJob(jobId, {
-						total: targetImportCount || Math.min(Number(totalFromDevice), maxEvents),
 						sourceTotal: Number(totalFromDevice),
 					});
 				}
 				if (!pageEvents.length) break;
 
 				for (const event of pageEvents) {
+					attendanceProcessed += 1;
 					processed += 1;
 					const employeeNo = String(
 						event?.employeeNoString || event?.employeeNo || "",
@@ -11162,7 +11421,7 @@ export const controller = (prisma: PrismaClient) => {
 								...req,
 								body: {
 									deviceId: device.id,
-									evidenceSource: "ISAPI_LOGSEARCH",
+									evidenceSource: "ISAPI_ACS",
 									directDeviceEvidence: true,
 									AcsEventInfo: event,
 								},
@@ -11184,22 +11443,24 @@ export const controller = (prisma: PrismaClient) => {
 									callbackRes,
 									(() => undefined) as any,
 								);
-								if (statusCode >= 200 && statusCode < 300) imported += 1;
-								else failed += 1;
+								if (statusCode >= 200 && statusCode < 300) {
+									imported += 1;
+									attendanceImported += 1;
+								} else failed += 1;
 							} catch (error: any) {
 								failed += 1;
 								const job = deviceImportJobs.get(jobId);
 								if (job && job.errors.length < 25) {
 									job.errors.push({
 										row: processed,
-										error: error?.message || "Failed to save device punch",
+										error: error?.message || "Failed to save attendance tap",
 									});
 								}
 							}
 						}
 					}
 
-					if (processed % 10 === 0 || processed >= maxEvents) {
+					if (attendanceProcessed % 10 === 0 || attendanceProcessed >= maxEvents) {
 						updateDeviceImportJob(jobId, {
 							processed,
 							imported,
@@ -11207,24 +11468,51 @@ export const controller = (prisma: PrismaClient) => {
 							alreadySaved,
 							knownSkipped,
 							failed,
-							message: targetImportCount
-								? "Checking latest estimated unsaved rows against HRIS"
-								: "Scanning device logs and checking HRIS matches",
+							attendanceImported,
+							operationsImported,
+							phase: "attendance",
+							scanLimit: maxEvents,
+							message: `Saving attendance taps… ${attendanceImported.toLocaleString()} new · checked ${attendanceProcessed.toLocaleString()} of ${maxEvents.toLocaleString()}`,
 						});
 					}
-					if (targetImportCount !== null && imported >= targetImportCount) break;
-					if (processed >= maxEvents) break;
+					if (
+						targetAttendanceCount !== null &&
+						targetAttendanceCount !== undefined &&
+						attendanceImported >= Number(targetAttendanceCount)
+					) {
+						break;
+					}
+					if (attendanceProcessed >= maxEvents) break;
 				}
 
 				position += pageEvents.length;
-				if (targetImportCount !== null && imported >= targetImportCount) break;
+				if (
+					targetAttendanceCount !== null &&
+					targetAttendanceCount !== undefined &&
+					attendanceImported >= Number(targetAttendanceCount)
+				) {
+					break;
+				}
 				if (position >= sourceTotalForLoop) break;
 			}
+			} // end includeAttendance
 
 			const finalJob = deviceImportJobs.get(jobId);
 			const wasCancelled = finalJob?.status === "cancelled" || finalJob?.cancelRequested;
 			const remainingEstimatedMissing =
-				targetImportCount === null ? 0 : Math.max(targetImportCount - imported, 0);
+				overallTarget === null ? 0 : Math.max(overallTarget - imported, 0);
+			const summaryBits = [
+				operationsImported > 0
+					? `${operationsImported.toLocaleString()} user/enrollment`
+					: includeOperations
+						? "0 user/enrollment"
+						: null,
+				attendanceImported > 0
+					? `${attendanceImported.toLocaleString()} attendance`
+					: includeAttendance
+						? "0 attendance"
+						: null,
+			].filter(Boolean);
 			updateDeviceImportJob(jobId, {
 				status: wasCancelled
 					? "cancelled"
@@ -11237,14 +11525,17 @@ export const controller = (prisma: PrismaClient) => {
 				alreadySaved,
 				knownSkipped,
 				failed,
+				attendanceImported,
+				operationsImported,
+				phase: "done",
 				message: wasCancelled
 					? "Sync cancelled"
 					: failed > 0 && imported === 0
 						? "Import failed"
 						: imported > 0
-							? `Saved ${imported.toLocaleString()} device logs to HRIS`
+							? `Saved ${imported.toLocaleString()} device logs (${summaryBits.join(", ")})`
 							: remainingEstimatedMissing > 0
-								? "Estimated rows were not found in the latest device scan"
+								? "Estimated rows were not found in the selected device scan window"
 								: "No new device logs saved",
 				completedAt: new Date(),
 			});
@@ -11362,11 +11653,33 @@ export const controller = (prisma: PrismaClient) => {
 			);
 			const hasRequestedTargetImportCount =
 				Number.isFinite(requestedTargetImportCount) && requestedTargetImportCount >= 0;
+			const requestedAttendanceCount = Number((req.body as any)?.targetAttendanceCount);
+			const hasRequestedAttendanceCount =
+				Number.isFinite(requestedAttendanceCount) && requestedAttendanceCount >= 0;
+			const requestedOperationsCount = Number((req.body as any)?.targetOperationsCount);
+			const hasRequestedOperationsCount =
+				Number.isFinite(requestedOperationsCount) && requestedOperationsCount >= 0;
 			const skipMissingEmployeeNo =
 				(req.body as any)?.skipMissingEmployeeNo === true ||
 				(req.query as any)?.skipMissingEmployeeNo === "true";
+			// Defaults: both sources on so Sync matches Sync logs preview (not attendance-only).
+			const includeAttendance = (req.body as any)?.includeAttendance !== false;
+			const includeOperations = (req.body as any)?.includeOperations !== false;
+			const timeWindowRaw = String((req.body as any)?.timeWindow || "all").trim().toLowerCase();
+			const timeWindow = ["all", "7d", "30d", "90d"].includes(timeWindowRaw)
+				? timeWindowRaw
+				: "all";
 			if (!deviceId) {
 				res.status(400).json(buildErrorResponse("Device is required", 400));
+				return;
+			}
+			if (!includeAttendance && !includeOperations) {
+				res.status(400).json(
+					buildErrorResponse(
+						"Choose at least one thing to save: attendance taps or user & enrollment activity",
+						400,
+					),
+				);
 				return;
 			}
 			const device = await (prisma as any).device.findFirst({
@@ -11415,10 +11728,43 @@ export const controller = (prisma: PrismaClient) => {
 					: skipMissingEmployeeNo
 						? Math.max(estimatedUnsaved - knownSkippedEvents, 0)
 						: estimatedUnsaved;
+			const targetAttendanceCount = !includeAttendance
+				? 0
+				: hasRequestedAttendanceCount
+					? Math.max(Math.floor(requestedAttendanceCount), 0)
+					: hasRequestedTargetImportCount && !includeOperations
+						? Math.max(Math.floor(requestedTargetImportCount), 0)
+						: hasRequestedTargetImportCount
+							? null
+							: serverEstimatedTargetImportCount;
+			const targetOperationsCount = !includeOperations
+				? 0
+				: hasRequestedOperationsCount
+					? Math.max(Math.floor(requestedOperationsCount), 0)
+					: null;
 			const targetImportCount = hasRequestedTargetImportCount
 				? Math.max(Math.floor(requestedTargetImportCount), 0)
-				: serverEstimatedTargetImportCount;
-			if (targetImportCount === 0) {
+				: includeOperations
+					? // ACS-only dry-run is incomplete when operations are in scope;
+						// client preview sums willAdd for both families.
+						null
+					: serverEstimatedTargetImportCount;
+			const noWorkRequested =
+				(targetImportCount === 0 &&
+					(targetAttendanceCount === 0 || targetAttendanceCount === null) &&
+					(targetOperationsCount === 0 || targetOperationsCount === null) &&
+					!includeOperations) ||
+				(targetImportCount === 0 &&
+					targetAttendanceCount === 0 &&
+					targetOperationsCount === 0) ||
+				(targetImportCount === 0 && !includeOperations && !includeAttendance);
+			if (
+				noWorkRequested ||
+				(hasRequestedTargetImportCount &&
+					Math.floor(requestedTargetImportCount) === 0 &&
+					(!hasRequestedOperationsCount || Math.floor(requestedOperationsCount) === 0) &&
+					(!hasRequestedAttendanceCount || Math.floor(requestedAttendanceCount) === 0))
+			) {
 				res.status(200).json(
 					buildSuccessResponse(
 						"No unsaved device logs found",
@@ -11430,7 +11776,10 @@ export const controller = (prisma: PrismaClient) => {
 								deviceName: device.name || device.address,
 								total: totalHint,
 								sourceTotal: totalHint,
-								targetImportCount,
+								targetImportCount: 0,
+								includeAttendance,
+								includeOperations,
+								timeWindow,
 								processed: 0,
 								imported: 0,
 								skipped: 0,
@@ -11466,6 +11815,11 @@ export const controller = (prisma: PrismaClient) => {
 								? Math.max(Math.floor(requestedTargetImportCount), 0)
 								: null,
 							targetImportCount,
+							targetAttendanceCount,
+							targetOperationsCount,
+							includeAttendance,
+							includeOperations,
+							timeWindow,
 							targetedLatestScan: targetImportCount !== null,
 						},
 					},
@@ -11479,6 +11833,11 @@ export const controller = (prisma: PrismaClient) => {
 					throw error;
 				}
 			}
+			const queuedTargetTotal =
+				(Number(targetImportCount) || 0) ||
+				(Number(targetAttendanceCount) || 0) + (Number(targetOperationsCount) || 0) ||
+				totalHint ||
+				0;
 			const job: DeviceImportJob = {
 				jobId,
 				runId: run?.id || undefined,
@@ -11486,15 +11845,23 @@ export const controller = (prisma: PrismaClient) => {
 				organizationId: String(organizationId),
 				deviceId: device.id,
 				deviceName: device.name || device.address,
-				total: targetImportCount || totalHint,
+				total: queuedTargetTotal,
 				sourceTotal: totalHint,
 				targetImportCount,
+				includeAttendance,
+				includeOperations,
+				timeWindow,
+				attendanceImported: 0,
+				operationsImported: 0,
+				phase: "queued",
 				processed: 0,
 				imported: 0,
 				skipped: 0,
 				skipMissingEmployeeNo,
 				failed: 0,
-				message: "Sync queued",
+				message: includeOperations
+					? "Sync queued — will save attendance taps and user & enrollment activity"
+					: "Sync queued — will save attendance taps",
 				errors: [],
 				startedAt: new Date(),
 			};
@@ -11506,7 +11873,12 @@ export const controller = (prisma: PrismaClient) => {
 				device,
 				totalHint,
 				targetImportCount,
+				targetAttendanceCount,
+				targetOperationsCount,
 				skipMissingEmployeeNo,
+				includeAttendance,
+				includeOperations,
+				timeWindow,
 			}).catch((error) => {
 				deviceLogger.error(`Hikvision import job ${jobId} failed: ${error}`);
 			});
