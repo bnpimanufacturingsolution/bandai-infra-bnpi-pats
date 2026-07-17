@@ -63,7 +63,7 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Business area");
 		expect(routeSource).to.contain("Where to find it");
 		expect(routeSource).to.contain("Nothing is saved yet. This preview shows what HRIS can add to Device Events after you confirm.");
-		expect(routeSource).to.contain("Device logs scanned");
+		expect(routeSource).to.contain("Rows scanned this pass");
 		expect(routeSource).to.contain("Saved to HRIS");
 		expect(routeSource).to.contain("Sync scans device source logs, then classifies each row against HRIS.");
 		expect(routeSource).not.to.contain("Missing saved");
