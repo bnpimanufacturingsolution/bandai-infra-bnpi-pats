@@ -675,7 +675,8 @@ test("sync logs scope toggles send attendance and user/enrollment targets", asyn
 	await syncButton.click();
 
 	await expect.poll(() => syncBody !== null, { timeout: 10_000 }).toBeTruthy();
-	const capturedSyncBody = syncBody as Record<string, unknown>;
+	if (!syncBody) throw new Error("Sync request was not captured");
+	const capturedSyncBody = syncBody;
 	expect(capturedSyncBody).toMatchObject({
 		deviceId: testA.id,
 		includeAttendance: true,
