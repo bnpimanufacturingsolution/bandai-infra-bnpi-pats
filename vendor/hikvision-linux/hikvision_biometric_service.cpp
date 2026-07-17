@@ -3192,38 +3192,56 @@ void process_reconcile_job(const ReconcileJob &job) {
     });
 }
 
-void worker_loop() {
+// Realtime path only: never share a worker with reconcile (inventory can take seconds).
+void hris_post_loop() {
     while (keep_running) {
         ReconcileJob hris_job;
         bool has_hris_job = false;
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            queue_cv.wait_for(lock, std::chrono::milliseconds(50), [] {
+                return !hris_event_queue.empty() || !keep_running;
+            });
+            // Drain the entire HRIS queue so multi-event taps post immediately.
+            while (!hris_event_queue.empty() && keep_running) {
+                hris_job = hris_event_queue.front();
+                hris_event_queue.pop_front();
+                has_hris_job = true;
+                lock.unlock();
+                post_hikvision_callback(hris_job);
+                lock.lock();
+            }
+        }
+        if (!has_hris_job) {
+            continue;
+        }
+    }
+}
+
+void reconcile_worker_loop() {
+    while (keep_running) {
         ReconcileJob reconcile_job;
         bool has_reconcile_job = false;
         {
             std::unique_lock<std::mutex> lock(queue_mutex);
-            queue_cv.wait_for(lock, std::chrono::milliseconds(500), [] {
-                return !hris_event_queue.empty() || !reconcile_queue.empty() || !keep_running;
+            queue_cv.wait_for(lock, std::chrono::milliseconds(200), [] {
+                return !reconcile_queue.empty() || !keep_running;
             });
-            if (!hris_event_queue.empty()) {
-                hris_job = hris_event_queue.front();
-                hris_event_queue.pop_front();
-                has_hris_job = true;
-            }
             if (!reconcile_queue.empty()) {
                 reconcile_job = reconcile_queue.front();
                 reconcile_queue.pop_front();
                 has_reconcile_job = true;
             }
-            if (!has_hris_job && !has_reconcile_job) {
-                continue;
-            }
-        }
-        if (has_hris_job) {
-            post_hikvision_callback(hris_job);
         }
         if (has_reconcile_job) {
             process_reconcile_job(reconcile_job);
         }
     }
+}
+
+// Back-compat name used by older call sites if any.
+void worker_loop() {
+    hris_post_loop();
 }
 
 bool parse_device_spec(const std::string &spec, DeviceConfig *config) {
@@ -3545,10 +3563,12 @@ int main(int argc, char **argv) {
     }
 
     // CRITICAL latency fix (host-local + multi-device):
-    // Start HRIS post worker BEFORE arming every device. Otherwise a live TEST A
+    // Start HRIS post workers BEFORE arming every device. Otherwise a live TEST A
     // can queue taps during arm, then wait ~60-90s while 6 off-LAN devices fail
-    // login (3 retries each) before worker_loop even starts — that is the "tap lag".
-    std::thread worker(worker_loop);
+    // login (3 retries each) before workers start — that is the "tap lag".
+    // Realtime posts and reconcile are separate threads so inventory never blocks taps.
+    std::thread hris_poster(hris_post_loop);
+    std::thread reconcile_worker(reconcile_worker_loop);
     std::thread callback_spool_replayer(callback_spool_replay_loop);
 
     // Arm reverse-tunnel / local hosts first (127.0.0.1 TEST A) so live path is ready
@@ -3660,8 +3680,11 @@ int main(int argc, char **argv) {
     if (sessions.empty()) {
         keep_running = 0;
         queue_cv.notify_all();
-        if (worker.joinable()) {
-            worker.join();
+        if (hris_poster.joinable()) {
+            hris_poster.join();
+        }
+        if (reconcile_worker.joinable()) {
+            reconcile_worker.join();
         }
         if (callback_spool_replayer.joinable()) {
             callback_spool_replayer.join();
@@ -3843,8 +3866,11 @@ int main(int argc, char **argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
 
-    if (worker.joinable()) {
-        worker.join();
+    if (hris_poster.joinable()) {
+        hris_poster.join();
+    }
+    if (reconcile_worker.joinable()) {
+        reconcile_worker.join();
     }
     if (poller.joinable()) {
         poller.join();

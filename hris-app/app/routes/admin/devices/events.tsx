@@ -1329,9 +1329,10 @@ export default function DeviceEventsPage() {
 		viewMode === "saved" &&
 		(source === "all" || source === "EN_HCNETSDK_ALARM") &&
 		(deviceId === "all" || isHikvisionDevice(selectedDevice));
-	// Socket is canonical for live saved rows. Poll only when socket is down.
-	const shouldPollSavedEvents = viewMode === "saved" && !isConnected;
-	const savedEventsRefetchInterval = shouldPollSavedEvents ? 30_000 : false;
+	// Socket is canonical. Soft-poll every 2s on this page so UI hits ~1–2s even if a
+	// socket frame is dropped (placeholderData keeps rows stable; no "Updating filters").
+	const shouldPollSavedEvents = viewMode === "saved" && isSdkAlarmSavedScope;
+	const savedEventsRefetchInterval = shouldPollSavedEvents ? 2_000 : false;
 	// Listener status must load on the saved SDK ledger too — otherwise the mid
 	// panel says "Live capture offline" while the readiness strip says "armed"
 	// (readiness fetches listener separately; the panel used to only load when
@@ -1361,9 +1362,9 @@ export default function DeviceEventsPage() {
 		error: liveReadinessError,
 		refetch: refetchLiveReadiness,
 	} = useDeviceLiveReadiness(viewMode === "saved", {
-		// Calm: 45s is enough for RYG; manual Prove / Keep ready still force refresh.
-		refetchInterval: 45_000,
-		staleTime: 20_000,
+		// While page open: 8s is enough for RYG without thrashing SSH status.
+		refetchInterval: 8_000,
+		staleTime: 4_000,
 	});
 	const [isProvingLivePath, setIsProvingLivePath] = useState(false);
 	/** Quiet Keep ready repair — must not flip the green strip to "Fixing…". */
