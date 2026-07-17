@@ -57,3 +57,20 @@ exists and probes:
 ## Recommendation Review
 
 No new recommendations were identified.
+
+## WWG Truth Synchronization
+
+- Task mode: Mixed infrastructure/runtime repair and host-route validation
+- New truth detected: YES at the time — host needed `10.184.37.250/24` on `vEthernet (Default Switch)` to reach guest static `10.184.37.241`
+- Wiki updated: NO in this historical report; current Project Truth summary may supersede with later pure-static LAN evidence (`10.184.37.19` / `10.184.37.78`)
+- Workspace updated: NO for this historical report
+- Governance review completed: YES
+- Drift status: STALE relative to later 2026-07-03+ pure-static LAN cutover — treat `10.184.37.241` host-route proof as incident snapshot, not current canonical operator IP
+- Canonical files changed (historical pass):
+  - `scripts/ensure-project-truth-vm-241-host-route.ps1`
+  - Host-side Default Switch address assignment (not committed as VM guest change)
+- Implementation discoveries synced:
+  - Guest static IP alone is insufficient when host switch lacks a same-subnet address
+  - Script is idempotent and must not touch Cloudflare tunnel, WSL, or Docker Desktop
+- Remaining stale context:
+  - Current operator/LAN target in Project Truth summary is pure static `10.184.37.19` with secondary `10.184.37.78`; do not assume `.241` is still the live target without fresh probe evidence

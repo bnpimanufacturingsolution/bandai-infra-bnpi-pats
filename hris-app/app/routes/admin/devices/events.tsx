@@ -358,6 +358,23 @@ const getDateRangeForWindow = (window: TimeWindow) => {
 	return { from: getDateKey(today), to: getDateKey(today) };
 };
 
+const getSyncDateRangeForWindow = (window: "all" | "7d" | "30d" | "90d") => {
+	if (window === "all") return { from: null, to: null };
+	const today = new Date();
+	const days = window === "7d" ? 6 : window === "30d" ? 29 : 89;
+	return { from: getDateKey(subtractDays(today, days)), to: getDateKey(today) };
+};
+
+const getSyncSourceGroup = (scopes: {
+	includeAttendance: boolean;
+	includeOperations: boolean;
+}) => {
+	if (scopes.includeAttendance && scopes.includeOperations) return "all";
+	if (scopes.includeAttendance) return "attendance";
+	if (scopes.includeOperations) return "operations";
+	return "needsReview";
+};
+
 const getAcsEventPayload = (data: any) => data?.data?.AcsEvent || data?.AcsEvent || null;
 
 const formatBusinessStatus = (status: string) => {
@@ -1980,6 +1997,10 @@ export default function DeviceEventsPage() {
 		includeOperations?: boolean;
 		timeWindow?: "all" | "7d" | "30d" | "90d";
 	}) => {
+		const includeAttendance = device.includeAttendance ?? syncIncludeAttendance;
+		const includeOperations = device.includeOperations ?? syncIncludeOperations;
+		const timeWindow = device.timeWindow ?? syncTimeWindow;
+		const syncRange = getSyncDateRangeForWindow(timeWindow);
 		hikvisionImport.mutate(
 			{
 				deviceId: device.deviceId,
@@ -1987,9 +2008,12 @@ export default function DeviceEventsPage() {
 				targetImportCount: device.targetImportCount,
 				targetAttendanceCount: device.targetAttendanceCount,
 				targetOperationsCount: device.targetOperationsCount,
-				includeAttendance: device.includeAttendance ?? syncIncludeAttendance,
-				includeOperations: device.includeOperations ?? syncIncludeOperations,
-				timeWindow: device.timeWindow ?? syncTimeWindow,
+				includeAttendance,
+				includeOperations,
+				sourceGroup: getSyncSourceGroup({ includeAttendance, includeOperations }),
+				from: syncRange.from,
+				to: syncRange.to,
+				timeWindow,
 			},
 			{
 				onSuccess: (data: any) => {

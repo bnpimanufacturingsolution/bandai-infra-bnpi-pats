@@ -58,3 +58,21 @@ Status: COMPLETE
 ## Recommendation Review
 
 No new recommendations were identified.
+
+## WWG Truth Synchronization
+
+- Task mode: Meaningful feature + bug fix + contract/UI tests + dry-run API proof
+- New truth detected: YES — admin employee hard-delete is preview-first with typed confirmation; Device events copy separates connectivity from SDK tap evidence
+- Wiki updated: NO at report close (behavior remains under admin device/employee surfaces; promote if product copy becomes canonical)
+- Workspace updated: NO for this historical report
+- Governance review completed: YES
+- Drift status: LOW for this task; residual `hris-app` `typecheck:test` TimesheetsTab mock failure is unrelated and already in the recommendation registry
+- Canonical files changed (historical pass):
+  - Admin device Add/Edit and Device events UX
+  - Employee hard-delete preview/execute API and admin UI
+- Implementation discoveries synced:
+  - Hard delete requires safe preview and typed `DELETE <employeeId>` confirmation
+  - Attendance/payroll/legal/history/timesheet/schedule/SOA relations block hard delete; device/audit refs detach on execute
+  - No live employee hard-delete execute was performed in proof
+- Remaining stale context:
+  - Unrelated `TimesheetsTab.test.tsx` React Query mock typing failure for broad typecheck:test gate

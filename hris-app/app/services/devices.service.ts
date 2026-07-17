@@ -420,6 +420,8 @@ export interface DeviceImportJobProgress {
 	deviceName: string;
 	total: number;
 	sourceTotal?: number | null;
+	attendanceSourceTotal?: number | null;
+	operationSourceTotal?: number | null;
 	targetImportCount?: number | null;
 	scanLimit?: number | null;
 	processed: number;
@@ -431,6 +433,11 @@ export interface DeviceImportJobProgress {
 	includeAttendance?: boolean;
 	includeOperations?: boolean;
 	timeWindow?: string;
+	sourceGroup?: string;
+	from?: string | null;
+	to?: string | null;
+	startTime?: string | null;
+	endTime?: string | null;
 	phase?: string | null;
 	attendanceImported?: number;
 	operationsImported?: number;
@@ -1946,6 +1953,11 @@ class DevicesService extends APIService {
 		targetOperationsCount?: number | null;
 		includeAttendance?: boolean;
 		includeOperations?: boolean;
+		sourceGroup?: "all" | "attendance" | "operations" | "needsReview" | string;
+		from?: string | null;
+		to?: string | null;
+		dryRun?: boolean;
+		execute?: boolean;
 		timeWindow?: "all" | "7d" | "30d" | "90d" | string;
 	}): Promise<any> {
 		try {

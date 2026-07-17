@@ -184,3 +184,23 @@ runtime or repo refactors.
 Focused tests, Prisma generation/typecheck, migration review, reset preview,
 backup manifest inspection, cleanup recount, API filter/summary parity,
 local/VM health, direct device retry, and Playwright after API proof.
+
+## WWG Truth Synchronization
+
+- Task mode: mixed meaningful feature, regression repair, persistence cleanup, runtime repair, and high-risk data migration
+- New truth detected: YES — `DeviceEvent` is the single saved event ledger; current inventory is `DEVICE_CURRENT_STATE` and must not invent lifecycle history
+- Wiki updated: YES (via companion truth-sync report / Project Truth summary DeviceEvent contract)
+- Workspace updated: YES for the completed local implementation and promotion boundary
+- Governance review completed: YES — proposed historical ACS serial reconciliation remains in recommendation registry
+- Drift status: MEDIUM — local/shared-DEV proof is not GitOps/public promotion; calculated 1,236 historical gap is not row-by-row missing proof
+- Canonical files changed (this pass):
+  - Device-event schema/helpers/controller/filters/UI and focused tests
+  - Backup-first cleanup of 219 fake lifecycle rows (zero attendance deleted)
+- Implementation discoveries synced:
+  - Direct Device A proof: 167 users, 2,107 device logs; frozen window 70/70 ACS + 23/23 logSearch; API total 93
+  - Evidence source / confidence filtering and saved-ledger UI contract
+  - Unknown evidence retained (328) until vendor mapping review
+- Remaining stale context:
+  - Full historical ACS serial reconciliation still open
+  - GitOps/public image promotion not claimed by this local pass
+  - `project-truth-runtime-dev` was degraded at discovery

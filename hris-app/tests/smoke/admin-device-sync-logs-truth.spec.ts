@@ -592,8 +592,13 @@ test("sync logs scope toggles send attendance and user/enrollment targets", asyn
 						deviceName: "TEST A",
 						total: 23263,
 						targetImportCount: 23263,
+						sourceTotal: 24940,
+						attendanceSourceTotal: 4782,
+						operationSourceTotal: 20158,
 						includeAttendance: true,
 						includeOperations: true,
+						sourceGroup: "all",
+						timeWindow: "30d",
 						processed: 0,
 						imported: 0,
 						skipped: 0,
@@ -670,15 +675,19 @@ test("sync logs scope toggles send attendance and user/enrollment targets", asyn
 	await syncButton.click();
 
 	await expect.poll(() => syncBody !== null, { timeout: 10_000 }).toBeTruthy();
-	expect(syncBody).toMatchObject({
+	const capturedSyncBody = syncBody as Record<string, unknown>;
+	expect(capturedSyncBody).toMatchObject({
 		deviceId: testA.id,
 		includeAttendance: true,
 		includeOperations: true,
+		sourceGroup: "all",
 		timeWindow: "30d",
 	});
-	expect(Number(syncBody?.targetAttendanceCount)).toBe(4105);
-	expect(Number(syncBody?.targetOperationsCount)).toBe(19158);
-	expect(Number(syncBody?.targetImportCount)).toBe(23263);
+	expect(capturedSyncBody.from).toEqual(expect.any(String));
+	expect(capturedSyncBody.to).toEqual(expect.any(String));
+	expect(Number(capturedSyncBody.targetAttendanceCount)).toBe(4105);
+	expect(Number(capturedSyncBody.targetOperationsCount)).toBe(19158);
+	expect(Number(capturedSyncBody.targetImportCount)).toBe(23263);
 
 	const screenshotDir = resolve(
 		process.cwd(),

@@ -127,6 +127,68 @@ describe("sync-logs-event-rows.helper", () => {
 		expect(tap?.willAdd).to.equal(4756);
 	});
 
+	it("keeps Needs review out of Ready to add totals", () => {
+		const alreadyByAction = countAlreadyInHrisByAction([]);
+		const rows = buildHikvisionSyncLogsEventRows({
+			deviceId: "test-a",
+			alreadyByAction,
+			operationDeviceByAction: new Map<string, number>([
+				["FINGERPRINT_ENROLLED", 12],
+				["UNKNOWN_OPERATION", 20],
+			]),
+			operationDeviceLabelsByAction: new Map<string, string[]>([
+				["FINGERPRINT_ENROLLED", ["Add Fingerprint (By Card No.)"]],
+				["UNKNOWN_OPERATION", ["Vendor-specific operation"]],
+			]),
+			operationSourceOk: true,
+			operationSourceTotal: 32,
+			attendanceSourceOk: false,
+			attendanceSourceTotal: null,
+			hideSilentZeros: true,
+		});
+		const readyToAdd = rows.reduce(
+			(sum, row) =>
+				sum +
+				(row.status === "Ready" && typeof row.willAdd === "number" ? row.willAdd : 0),
+			0,
+		);
+		const needsReview = rows.reduce(
+			(sum, row) =>
+				sum +
+				(row.status === "Needs review" && typeof row.willAdd === "number"
+					? row.willAdd
+					: 0),
+			0,
+		);
+		const fingerprint = rows.find((row) => row.eventAction === "FINGERPRINT_ENROLLED");
+		expect(fingerprint?.businessArea).to.equal("Enrollment");
+		expect(fingerprint?.eventLabel).to.equal("Fingerprint enrolled");
+		expect(fingerprint?.sourceDetail).to.contain("Device label: Add Fingerprint (By Card No.)");
+		expect(readyToAdd).to.equal(12);
+		expect(needsReview).to.equal(20);
+	});
+
+	it("maps employee-id fingerprint labels to Enrollment > Fingerprint enrolled", () => {
+		const rows = buildHikvisionSyncLogsEventRows({
+			deviceId: "test-a",
+			alreadyByAction: countAlreadyInHrisByAction([]),
+			operationDeviceByAction: new Map<string, number>([["FINGERPRINT_ENROLLED", 7]]),
+			operationDeviceLabelsByAction: new Map<string, string[]>([
+				["FINGERPRINT_ENROLLED", ["Add Fingerprint (By Employee ID)"]],
+			]),
+			operationSourceOk: true,
+			operationSourceTotal: 7,
+			attendanceSourceOk: false,
+			attendanceSourceTotal: null,
+			hideSilentZeros: true,
+		});
+		const fingerprint = rows.find((row) => row.eventAction === "FINGERPRINT_ENROLLED");
+		expect(fingerprint?.businessArea).to.equal("Enrollment");
+		expect(fingerprint?.eventLabel).to.equal("Fingerprint enrolled");
+		expect(fingerprint?.filterAfterSync).to.equal("Enrollment > Fingerprint enrolled");
+		expect(fingerprint?.sourceDetail).to.contain("Device label: Add Fingerprint (By Employee ID)");
+	});
+
 	it("reports dual source checks for Sync logs summary", () => {
 		const sources = buildHikvisionSourceChecks({
 			operationOk: true,

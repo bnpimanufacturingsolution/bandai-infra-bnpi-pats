@@ -422,6 +422,11 @@ export const useTriggerHikvisionAttendanceImport = () => {
 			targetOperationsCount?: number | null;
 			includeAttendance?: boolean;
 			includeOperations?: boolean;
+			sourceGroup?: "all" | "attendance" | "operations" | "needsReview" | string;
+			from?: string | null;
+			to?: string | null;
+			dryRun?: boolean;
+			execute?: boolean;
 			timeWindow?: "all" | "7d" | "30d" | "90d" | string;
 		}) => {
 			return await devicesService.triggerHikvisionAttendanceImport(payload);

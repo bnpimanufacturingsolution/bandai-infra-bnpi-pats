@@ -4,22 +4,16 @@
   "generatedTemplateVersion": "0.6.6",
   "checkedFiles": [
     ".wwg/governance/drift-guard.md",
+    ".wwg/wiki/project-truth-summary.md",
     ".wwg/wiki/project-truth.md",
     ".wwg/wiki/terminology.md",
     "AGENTS.md",
     "README.md"
   ],
   "missingFiles": [
-    ".wwg/wiki/project-truth-summary.md",
     ".wwg/wiki/terminology-summary.md"
   ],
   "safeAdds": [
-    {
-      "file": ".wwg/wiki/project-truth-summary.md",
-      "reason": "Compact active surface is missing.",
-      "recommendation": "Add a compact summary surface in a future approved action. The full canonical file must remain authoritative.",
-      "riskLevel": "low"
-    },
     {
       "file": ".wwg/wiki/terminology-summary.md",
       "reason": "Compact active surface is missing.",
@@ -41,6 +35,12 @@
       "reason": "File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings.",
       "recommendation": "Review and merge manually. Do not apply an automatic overwrite.",
       "riskLevel": "medium"
+    },
+    {
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "reason": "File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings.",
+      "recommendation": "Review and merge manually. Do not apply an automatic overwrite.",
+      "riskLevel": "high"
     },
     {
       "file": ".wwg/wiki/project-truth.md",
@@ -123,14 +123,25 @@
       "riskLevel": "medium"
     }
   ],
-  "staleTemplateReferences": [],
-  "missingCompactSurfaces": [
+  "staleTemplateReferences": [
     {
+      "severity": "low",
+      "code": "stale-template-history-language",
       "file": ".wwg/wiki/project-truth-summary.md",
-      "reason": "Compact active surface is missing.",
-      "recommendation": "Add a compact summary surface in a future approved action. The full canonical file must remain authoritative.",
-      "riskLevel": "low"
+      "message": "Active file contains phase/pass or dogfood-history language.",
+      "recommendation": "Move implementation history to reports, changelog, or history docs before using the file as stable active context.",
+      "line": 96
     },
+    {
+      "severity": "low",
+      "code": "stale-template-history-language",
+      "file": "AGENTS.md",
+      "message": "Active file contains phase/pass or dogfood-history language.",
+      "recommendation": "Move implementation history to reports, changelog, or history docs before using the file as stable active context.",
+      "line": 335
+    }
+  ],
+  "missingCompactSurfaces": [
     {
       "file": ".wwg/wiki/terminology-summary.md",
       "reason": "Compact active surface is missing.",
@@ -183,6 +194,55 @@
     },
     {
       "severity": "medium",
+      "code": "context-missing-purpose",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'Purpose'.",
+      "recommendation": "Add 'Purpose' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "context-missing-scope",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'Scope'.",
+      "recommendation": "Add 'Scope' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "context-missing-current-state",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'Current State'.",
+      "recommendation": "Add 'Current State' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "context-missing-canonical-terms",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'Canonical Terms'.",
+      "recommendation": "Add 'Canonical Terms' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "context-missing-decisions",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'Decisions'.",
+      "recommendation": "Add 'Decisions' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "context-missing-constraints",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'Constraints'.",
+      "recommendation": "Add 'Constraints' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "context-missing-references",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'References'.",
+      "recommendation": "Add 'References' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
       "code": "governance-missing-purpose",
       "file": ".wwg/governance/drift-guard.md",
       "message": "Governance file is missing 'Purpose'.",
@@ -224,7 +284,57 @@
       "recommendation": "Add 'References' during a reviewed merge. Do not overwrite project-specific content."
     }
   ],
-  "contextFindings": [],
+  "contextFindings": [
+    {
+      "severity": "medium",
+      "code": "context-missing-purpose",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'Purpose'.",
+      "recommendation": "Add 'Purpose' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "context-missing-scope",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'Scope'.",
+      "recommendation": "Add 'Scope' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "context-missing-current-state",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'Current State'.",
+      "recommendation": "Add 'Current State' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "context-missing-canonical-terms",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'Canonical Terms'.",
+      "recommendation": "Add 'Canonical Terms' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "context-missing-decisions",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'Decisions'.",
+      "recommendation": "Add 'Decisions' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "context-missing-constraints",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'Constraints'.",
+      "recommendation": "Add 'Constraints' during a reviewed merge. Do not overwrite project-specific content."
+    },
+    {
+      "severity": "medium",
+      "code": "context-missing-references",
+      "file": ".wwg/wiki/project-truth-summary.md",
+      "message": "Context file is missing 'References'.",
+      "recommendation": "Add 'References' during a reviewed merge. Do not overwrite project-specific content."
+    }
+  ],
   "skillFindings": [],
   "governanceFindings": [
     {

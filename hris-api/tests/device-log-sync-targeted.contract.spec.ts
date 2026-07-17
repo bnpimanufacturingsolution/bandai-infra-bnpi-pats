@@ -84,4 +84,33 @@ describe("device log sync targeted import contract", () => {
 		expect(controllerSource).to.contain("HIKVISION_IMPORT_MAX_OPERATION_EVENTS");
 		expect(controllerSource).to.contain('timeWindow');
 	});
+
+	it("supports dry-run execution proof for the same Sync endpoint", () => {
+		expect(controllerSource).to.contain('"POST /api/device/hikvision/sync"');
+		expect(controllerSource).to.contain("Device log sync dry-run ready");
+		expect(controllerSource).to.contain("(req.body as any)?.dryRun === true");
+		expect(controllerSource).to.contain("(req.body as any)?.execute === false");
+		expect(controllerSource).to.contain("sourceGroup");
+		expect(controllerSource).to.contain("includeAttendanceSource: includeAttendance");
+		expect(controllerSource).to.contain("includeOperationSource: includeOperations");
+		expect(controllerSource).to.contain("startTime: windowScope.startTime");
+		expect(controllerSource).to.contain("endTime: windowScope.endTime");
+		expect(controllerSource).to.contain("AccessControl/AcsEvent");
+		expect(controllerSource).to.contain("ContentMgmt/logSearch");
+		expect(controllerSource).to.contain("Ready to add excludes Needs review rows.");
+		expect(controllerSource).to.contain("Nothing was saved because dryRun=true.");
+	});
+
+	it("uses operation log source totals when scanning operation execution", () => {
+		expect(controllerSource).to.contain("const operationSourceTotal = Number(params.operationSourceTotal || 0)");
+		expect(controllerSource).to.contain(
+			"process.env.HIKVISION_IMPORT_OPERATION_SCAN_CAP",
+		);
+		expect(controllerSource).to.contain(
+			"(operationSourceTotal > 0 ? operationSourceTotal : 50000)",
+		);
+		expect(controllerSource).to.contain("Math.ceil(Number(operationTargetHint) * 1.5)");
+		expect(controllerSource).to.contain("operationSourceTotal");
+		expect(controllerSource).to.contain("attendanceSourceTotal");
+	});
 });

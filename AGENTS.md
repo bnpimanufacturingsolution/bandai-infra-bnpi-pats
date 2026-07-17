@@ -18,16 +18,22 @@ You must **open the files with tools** before planning, coding, diagnosing, or c
 
 Use the Read tool (or equivalent). Do not skip because "you already know this project."
 
-1. `.wwg/reports/wwg-agent-handoff.md`
-2. `.wwg/workspace/current-task.md`
-3. `.wwg/wiki/project-truth-summary.md`
-4. `.wwg/wiki/terminology-summary.md` (if present)
-5. `.wwg/wiki/project-truth.md` (sections relevant to the task)
-6. `.wwg/wiki/terminology.md` (terms relevant to the task)
-7. `.wwg/wiki/principles/README.md` and relevant principles when architecture/UX/governance reasoning is involved (especially `evidence-over-assumption.md`)
-8. `.wwg/governance/drift-guard.md`
-9. `Agent-Meta-Prompt-Template.md` for multi-step, drift, device, VM/GitOps, or repair work
-10. Relevant source, tests, and latest `.runtime/*` / `.wwg/reports/*` evidence for the task
+WWG operating-contract order (first occurrences must stay in this sequence):
+
+1. `.wwg/wiki/project-truth.md` (sections relevant to the task)
+2. `.wwg/wiki/terminology.md` (terms relevant to the task)
+3. `.wwg/wiki/principles/README.md` and relevant principles when architecture/UX/governance reasoning is involved (especially `evidence-over-assumption.md`)
+4. `.wwg/workspace/current-task.md`
+5. `.wwg/governance/drift-guard.md`
+6. `README.md`
+7. Relevant source files, tests, and latest `.runtime/*` / `.wwg/reports/*` evidence for the task
+
+Also open compact active surfaces when present (do not reorder the contract list above):
+
+- `.wwg/wiki/project-truth-summary.md`
+- `.wwg/wiki/terminology-summary.md` (if present)
+- `.wwg/reports/wwg-agent-handoff.md`
+- `Agent-Meta-Prompt-Template.md` for multi-step, drift, device, VM/GitOps, or repair work
 
 After opening, write a short **Current-State Report** (chat or `.runtime` stamp) with:
 
@@ -383,7 +389,7 @@ Developers may prompt naturally. Agents must execute structurally.
 
 This is required at **session start and before every meaningful plan/edit**, not only “before merge.” See also **Session Bootstrap Rule** at the top of this file.
 
-Read compact active surfaces when present, then full canonical sources: `.wwg/reports/wwg-agent-handoff.md`, `.wwg/workspace/current-task.md`, `.wwg/wiki/project-truth-summary.md`, `.wwg/wiki/terminology-summary.md`, `.wwg/wiki/project-truth.md`, `.wwg/wiki/terminology.md`, `.wwg/wiki/principles/README.md`, relevant `.wwg/wiki/principles/*.md` (especially `evidence-over-assumption.md`), `.wwg/governance/drift-guard.md`, `README.md`, and relevant source files.
+Before modifying code, read compact active surfaces when present, then full canonical sources in this WWG operating-contract order: `.wwg/wiki/project-truth.md`, `.wwg/wiki/terminology.md`, `.wwg/wiki/principles/README.md`, relevant `.wwg/wiki/principles/*.md` files when the task may affect durable reasoning, `.wwg/workspace/current-task.md`, `.wwg/governance/drift-guard.md`, `README.md`, and Relevant source files. Compact orientation surfaces when present: `.wwg/wiki/project-truth-summary.md`, `.wwg/wiki/terminology-summary.md`, and `.wwg/reports/wwg-agent-handoff.md`.
 
 Grok auto-loads `AGENTS.md` and `.grok/rules/*.md`. Grok does **not** auto-load `.wwg/wiki/*`. Opening WWG with tools is mandatory so agents do not hallucinate product truth.
 

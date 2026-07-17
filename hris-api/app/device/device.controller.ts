@@ -214,6 +214,8 @@ type DeviceImportJob = {
 	deviceName: string;
 	total: number;
 	sourceTotal?: number | null;
+	attendanceSourceTotal?: number | null;
+	operationSourceTotal?: number | null;
 	targetImportCount?: number | null;
 	scanLimit?: number | null;
 	processed: number;
@@ -228,6 +230,11 @@ type DeviceImportJob = {
 	includeOperations?: boolean;
 	/** all | 7d | 30d | 90d */
 	timeWindow?: string;
+	sourceGroup?: "all" | "attendance" | "operations" | "needsReview";
+	from?: string | null;
+	to?: string | null;
+	startTime?: string | null;
+	endTime?: string | null;
 	phase?: string | null;
 	attendanceImported?: number;
 	operationsImported?: number;
@@ -2605,9 +2612,11 @@ export const controller = (prisma: PrismaClient) => {
 	const getHikvisionLogSearchTotal = async (
 		req: Request,
 		deviceId: string,
-		options: { sampleClassify?: boolean } = {},
+		options: { sampleClassify?: boolean; startTime?: string | null; endTime?: string | null } = {},
 	) => {
-		const endTime = formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
+		const startTime = options.startTime || "2000-01-01T00:00:00+08:00";
+		const endTime =
+			options.endTime || formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
 		const sampleClassify = options.sampleClassify === true;
 		// One logSearch call: totalMatches + first page sample (device UI order).
 		// Avoids a second round-trip so Sync logs stays near 1-3s.
@@ -2631,7 +2640,7 @@ export const controller = (prisma: PrismaClient) => {
 				},
 				body: buildHikvisionLogSearchXml({
 					searchId: `hris-logsearch-preview-${Date.now()}`,
-					startTime: "2000-01-01T00:00:00+08:00",
+					startTime,
 					endTime,
 					maxResults: sampleMax,
 					searchResultPosition: 0,
@@ -2736,12 +2745,23 @@ export const controller = (prisma: PrismaClient) => {
 	const getHikvisionSourceCounts = async (
 		req: Request,
 		deviceId: string,
-		options: { includeDirectUserInventory?: boolean; sampleOperationClassify?: boolean } = {},
+		options: {
+			includeDirectUserInventory?: boolean;
+			sampleOperationClassify?: boolean;
+			includeAttendanceSource?: boolean;
+			includeOperationSource?: boolean;
+			startTime?: string | null;
+			endTime?: string | null;
+		} = {},
 	) => {
 		const startedAt = Date.now();
 		const includeDirectUserInventory = options.includeDirectUserInventory !== false;
 		const sampleOperationClassify = options.sampleOperationClassify === true;
-		const endTime = formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
+		const includeAttendanceSource = options.includeAttendanceSource !== false;
+		const includeOperationSource = options.includeOperationSource !== false;
+		const startTime = options.startTime || "2000-01-01T00:00:00+08:00";
+		const endTime =
+			options.endTime || formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
 		// Sync logs only needs event + operation totals. Full UserInfo inventory is slow
 		// and must not block the modal when other devices are offline.
 		const [userSearch, eventSearch, logSearch, directUsers] = await Promise.all([
@@ -2758,26 +2778,53 @@ export const controller = (prisma: PrismaClient) => {
 				},
 				["totalMatches", "numOfMatches", "totalNum", "totalNumber", "total"],
 			),
-			getHikvisionCountFromSearch(
-				req,
-				deviceId,
-				hikvisionEndpoint.accessControl.acsEvent.list,
-				{
-					AcsEventCond: {
-						searchID: `hris-event-count-${Date.now()}`,
-						searchResultPosition: 0,
-						maxResults: 1,
-						major: 0,
-						minor: 0,
-						startTime: "2000-01-01T00:00:00+08:00",
+			includeAttendanceSource
+				? getHikvisionCountFromSearch(
+						req,
+						deviceId,
+						hikvisionEndpoint.accessControl.acsEvent.list,
+						{
+							AcsEventCond: {
+								searchID: `hris-event-count-${Date.now()}`,
+								searchResultPosition: 0,
+								maxResults: 1,
+								major: 0,
+								minor: 0,
+								startTime,
+								endTime,
+							},
+						},
+						[
+							"totalMatches",
+							"numOfMatches",
+							"totalNum",
+							"totalNumber",
+							"total",
+							"eventTotal",
+						],
+					)
+				: Promise.resolve({
+						ok: false,
+						count: null,
+						error: "Attendance/access events skipped by selected source group",
+						raw: null,
+					}),
+			includeOperationSource
+				? getHikvisionLogSearchTotal(req, deviceId, {
+						sampleClassify: sampleOperationClassify,
+						startTime,
 						endTime,
-					},
-				},
-				["totalMatches", "numOfMatches", "totalNum", "totalNumber", "total", "eventTotal"],
-			),
-			getHikvisionLogSearchTotal(req, deviceId, {
-				sampleClassify: sampleOperationClassify,
-			}),
+					})
+				: Promise.resolve({
+						ok: false,
+						count: null,
+						byAction: null,
+						labelsByAction: null,
+						sampleByAction: null,
+						sampleSize: 0,
+						error: "Operation logs skipped by selected source group",
+						raw: null,
+					}),
 			includeDirectUserInventory
 				? fetchAllHikvisionDeviceUsers(req, { id: deviceId }).catch(() => null)
 				: Promise.resolve(null),
@@ -11042,12 +11089,35 @@ export const controller = (prisma: PrismaClient) => {
 		return formatHikvisionManilaDateTime(new Date(Date.now() - days * 24 * 60 * 60 * 1000));
 	};
 
+	const resolveHikvisionImportWindow = (params: {
+		timeWindow?: string | null;
+		from?: string | null;
+		to?: string | null;
+	}) => {
+		const fromRaw = String(params.from || "").trim();
+		const toRaw = String(params.to || "").trim();
+		const fromDate = fromRaw ? parseHikvisionBusinessDateBound(fromRaw) : null;
+		const toDate = toRaw ? parseHikvisionBusinessDateBound(toRaw, true) : null;
+		return {
+			from: fromRaw || null,
+			to: toRaw || null,
+			startTime: fromDate
+				? formatHikvisionManilaDateTime(fromDate)
+				: resolveHikvisionImportStartTime(params.timeWindow),
+			endTime: toDate
+				? formatHikvisionManilaDateTime(toDate)
+				: formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000)),
+		};
+	};
+
 	const processHikvisionImportJob = async (params: {
 		jobId: string;
 		runId?: string;
 		req: Request;
 		device: any;
 		totalHint: number;
+		attendanceSourceTotal?: number | null;
+		operationSourceTotal?: number | null;
 		targetImportCount?: number | null;
 		targetAttendanceCount?: number | null;
 		targetOperationsCount?: number | null;
@@ -11058,12 +11128,30 @@ export const controller = (prisma: PrismaClient) => {
 		includeOperations?: boolean;
 		/** all | 7d | 30d | 90d */
 		timeWindow?: string | null;
+		sourceGroup?: "all" | "attendance" | "operations" | "needsReview";
+		from?: string | null;
+		to?: string | null;
+		startTime?: string | null;
+		endTime?: string | null;
 	}) => {
 		const { jobId, runId, req, device, totalHint } = params;
 		const skipMissingEmployeeNo = params.skipMissingEmployeeNo === true;
 		const includeAttendance = params.includeAttendance !== false;
 		const includeOperations = params.includeOperations !== false;
 		const timeWindow = String(params.timeWindow || "all").trim() || "all";
+		const windowScope =
+			params.startTime && params.endTime
+				? {
+						from: params.from || null,
+						to: params.to || null,
+						startTime: params.startTime,
+						endTime: params.endTime,
+					}
+				: resolveHikvisionImportWindow({
+						timeWindow,
+						from: params.from,
+						to: params.to,
+					});
 		const targetImportCount =
 			params.targetImportCount !== null &&
 			params.targetImportCount !== undefined &&
@@ -11124,8 +11212,7 @@ export const controller = (prisma: PrismaClient) => {
 			attendanceTargetForScan !== null
 				? Math.min(pageSize, Math.max(Math.min(attendanceTargetForScan + 10, 100), 10))
 				: pageSize;
-		const endTime = formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
-		const startTime = resolveHikvisionImportStartTime(timeWindow);
+		const { startTime, endTime } = windowScope;
 		let position = 0;
 		let processed = 0;
 		let imported = 0;
@@ -11154,11 +11241,18 @@ export const controller = (prisma: PrismaClient) => {
 			updateDeviceImportJob(jobId, {
 				total: overallTarget || Math.min(totalHint || maxEvents, maxEvents),
 				sourceTotal: totalHint,
+				attendanceSourceTotal: params.attendanceSourceTotal ?? null,
+				operationSourceTotal: params.operationSourceTotal ?? null,
 				targetImportCount: overallTarget,
 				scanLimit: maxEvents,
 				includeAttendance,
 				includeOperations,
 				timeWindow,
+				sourceGroup: params.sourceGroup || "all",
+				from: windowScope.from,
+				to: windowScope.to,
+				startTime,
+				endTime,
 				attendanceImported: 0,
 				operationsImported: 0,
 				phase: "starting",
@@ -11169,17 +11263,33 @@ export const controller = (prisma: PrismaClient) => {
 			// Preview classifies Add Fingerprint / Add Person from this source.
 			// Attendance-only ACS import never creates USER_CREATED / FINGERPRINT_ENROLLED rows.
 			if (includeOperations) {
+				const operationSourceTotal = Number(params.operationSourceTotal || 0);
+				const operationTargetHint =
+					targetOperationsCount !== null && targetOperationsCount !== undefined
+						? Number(targetOperationsCount)
+						: operationSourceTotal;
+				const configuredOperationCap = Number(
+					process.env.HIKVISION_IMPORT_MAX_OPERATION_EVENTS ||
+						process.env.HIKVISION_IMPORT_OPERATION_SCAN_CAP ||
+						(operationSourceTotal > 0 ? operationSourceTotal : 50000),
+				);
 				const opMaxCap = Math.max(
 					50,
-					Math.min(Number(process.env.HIKVISION_IMPORT_MAX_OPERATION_EVENTS || 3000), 10000),
+					Math.min(
+						Number.isFinite(configuredOperationCap) ? configuredOperationCap : 50000,
+						50000,
+					),
 				);
 				const opMax =
-					targetOperationsCount !== null && targetOperationsCount !== undefined
+					operationTargetHint !== null &&
+					operationTargetHint !== undefined &&
+					Number.isFinite(operationTargetHint) &&
+					operationTargetHint > 0
 						? Math.min(
 								opMaxCap,
 								Math.max(
-									Number(targetOperationsCount) + 50,
-									Math.ceil(Number(targetOperationsCount) * 1.5),
+									Number(operationTargetHint) + 50,
+									Math.ceil(Number(operationTargetHint) * 1.5),
 									100,
 								),
 							)
@@ -11569,6 +11679,18 @@ export const controller = (prisma: PrismaClient) => {
 							failed,
 							skipMissingEmployeeNo,
 							targetImportCount,
+							targetAttendanceCount,
+							targetOperationsCount,
+							attendanceSourceTotal: params.attendanceSourceTotal ?? null,
+							operationSourceTotal: params.operationSourceTotal ?? null,
+							includeAttendance,
+							includeOperations,
+							sourceGroup: params.sourceGroup || "all",
+							timeWindow,
+							from: windowScope.from,
+							to: windowScope.to,
+							startTime,
+							endTime,
 							scanLimit: maxEvents,
 							targetedLatestScan: targetImportCount !== null,
 							remainingEstimatedMissing,
@@ -11662,13 +11784,39 @@ export const controller = (prisma: PrismaClient) => {
 			const skipMissingEmployeeNo =
 				(req.body as any)?.skipMissingEmployeeNo === true ||
 				(req.query as any)?.skipMissingEmployeeNo === "true";
+			const dryRun =
+				(req.body as any)?.dryRun === true ||
+				String((req.query as any)?.dryRun || "").toLowerCase() === "true" ||
+				(req.body as any)?.execute === false ||
+				String((req.query as any)?.execute || "").toLowerCase() === "false";
+			const sourceGroupRaw = String(
+				(req.body as any)?.sourceGroup || (req.query as any)?.sourceGroup || "all",
+			)
+				.trim()
+				.toLowerCase();
+			const sourceGroup = ["all", "attendance", "operations", "needsreview"].includes(
+				sourceGroupRaw,
+			)
+				? sourceGroupRaw === "needsreview"
+					? "needsReview"
+					: (sourceGroupRaw as "all" | "attendance" | "operations")
+				: "all";
 			// Defaults: both sources on so Sync matches Sync logs preview (not attendance-only).
-			const includeAttendance = (req.body as any)?.includeAttendance !== false;
-			const includeOperations = (req.body as any)?.includeOperations !== false;
+			const includeAttendance =
+				sourceGroup === "all"
+					? (req.body as any)?.includeAttendance !== false
+					: sourceGroup === "attendance";
+			const includeOperations =
+				sourceGroup === "all"
+					? (req.body as any)?.includeOperations !== false
+					: sourceGroup === "operations" || sourceGroup === "needsReview";
 			const timeWindowRaw = String((req.body as any)?.timeWindow || "all").trim().toLowerCase();
 			const timeWindow = ["all", "7d", "30d", "90d"].includes(timeWindowRaw)
 				? timeWindowRaw
 				: "all";
+			const from = String((req.body as any)?.from || (req.query as any)?.from || "").trim();
+			const to = String((req.body as any)?.to || (req.query as any)?.to || "").trim();
+			const windowScope = resolveHikvisionImportWindow({ timeWindow, from, to });
 			if (!deviceId) {
 				res.status(400).json(buildErrorResponse("Device is required", 400));
 				return;
@@ -11677,6 +11825,15 @@ export const controller = (prisma: PrismaClient) => {
 				res.status(400).json(
 					buildErrorResponse(
 						"Choose at least one thing to save: attendance taps or user & enrollment activity",
+						400,
+					),
+				);
+				return;
+			}
+			if (sourceGroup === "needsReview" && !dryRun) {
+				res.status(400).json(
+					buildErrorResponse(
+						"Needs review rows cannot be synced as known events. Run a dry-run and fix classification first.",
 						400,
 					),
 				);
@@ -11701,8 +11858,20 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const counts = await getHikvisionSourceCounts(req, device.id);
+			const counts = await getHikvisionSourceCounts(req, device.id, {
+				includeDirectUserInventory: false,
+				sampleOperationClassify: includeOperations,
+				includeAttendanceSource: includeAttendance,
+				includeOperationSource: includeOperations,
+				startTime: windowScope.startTime,
+				endTime: windowScope.endTime,
+			});
 			const totalHint = Number(counts.totalEvents || 0);
+			const attendanceSourceTotal = Number(counts.totalEvents || 0);
+			const operationSourceTotal = Number(counts.operationLogTotal || 0);
+			const selectedSourceTotal =
+				(includeAttendance ? attendanceSourceTotal : 0) +
+				(includeOperations ? operationSourceTotal : 0);
 			const [savedEvents, latestCompletedRun] = await Promise.all([
 				(prisma as any).deviceEvent.count({
 					where: {
@@ -11718,6 +11887,68 @@ export const controller = (prisma: PrismaClient) => {
 				),
 			]);
 			const knownSkippedEvents = Number(latestCompletedRun?.skippedRecords || 0);
+			const actionMap = await (prisma as any).deviceEvent
+				.groupBy({
+					by: ["eventAction"],
+					where: {
+						organizationId: String(organizationId),
+						deviceId: device.id,
+						source: "HIKVISION_CALLBACK",
+					},
+					_count: { _all: true },
+				})
+				.catch(() => []);
+			const alreadyByAction = countAlreadyInHrisByAction(
+				(actionMap || []).map((row: any) => ({
+					eventAction: row.eventAction,
+					count: row?._count?._all || 0,
+				})),
+			);
+			const eventRows = buildHikvisionSyncLogsEventRows({
+				deviceId: device.id,
+				alreadyByAction,
+				operationDeviceByAction:
+					counts.operationDeviceByAction instanceof Map
+						? counts.operationDeviceByAction
+						: null,
+				operationDeviceLabelsByAction:
+					counts.operationDeviceLabelsByAction instanceof Map
+						? counts.operationDeviceLabelsByAction
+						: null,
+				operationSourceOk: includeOperations && Boolean(counts.operationLogProbe?.ok),
+				operationSourceTotal:
+					counts.operationLogTotal === null || counts.operationLogTotal === undefined
+						? null
+						: Number(counts.operationLogTotal),
+				attendanceSourceOk: includeAttendance && Boolean(counts.eventProbe?.ok),
+				attendanceSourceTotal:
+					counts.totalEvents === null || counts.totalEvents === undefined
+						? null
+						: Number(counts.totalEvents),
+				sourceError: null,
+				hideSilentZeros: true,
+			});
+			const readyToAdd = eventRows.reduce(
+				(sum, row) =>
+					sum +
+					(row.status === "Ready" && typeof row.willAdd === "number"
+						? Math.max(0, row.willAdd)
+						: 0),
+				0,
+			);
+			const needsReview = eventRows.reduce(
+				(sum, row) =>
+					sum +
+					(row.status === "Needs review" && typeof row.willAdd === "number"
+						? Math.max(0, row.willAdd)
+						: 0),
+				0,
+			);
+			const scopedReadyToAdd = sourceGroup === "needsReview" ? 0 : readyToAdd;
+			const scopedEventRows =
+				sourceGroup === "needsReview"
+					? eventRows.filter((row) => row.status === "Needs review")
+					: eventRows;
 			const estimatedUnsaved =
 				Number.isFinite(totalHint) && totalHint > 0
 					? Math.max(totalHint - Number(savedEvents || 0), 0)
@@ -11749,6 +11980,101 @@ export const controller = (prisma: PrismaClient) => {
 						// client preview sums willAdd for both families.
 						null
 					: serverEstimatedTargetImportCount;
+			if (dryRun) {
+				res.status(200).json(
+					buildSuccessResponse(
+						"Device log sync dry-run ready",
+						{
+							dryRun: true,
+							endpoint: "POST /api/device/hikvision/sync",
+							request: {
+								deviceId: device.id,
+								sourceGroup,
+								includeAttendance,
+								includeOperations,
+								from: windowScope.from,
+								to: windowScope.to,
+								timeWindow,
+								dryRun: true,
+							},
+							device: {
+								id: device.id,
+								name: device.name || null,
+								address: device.address || null,
+							},
+							timeWindow: {
+								from: windowScope.from,
+								to: windowScope.to,
+								startTime: windowScope.startTime,
+								endTime: windowScope.endTime,
+							},
+							sources: {
+								attendance: {
+									label: "Attendance/access events found",
+									readsFrom: "AccessControl/AcsEvent",
+									ok: includeAttendance && Boolean(counts.eventProbe?.ok),
+									total:
+										counts.totalEvents === null || counts.totalEvents === undefined
+											? null
+											: Number(counts.totalEvents),
+									selectedTimeWindow: {
+										startTime: windowScope.startTime,
+										endTime: windowScope.endTime,
+									},
+									error: includeAttendance ? counts.eventProbe?.error || null : null,
+								},
+								operations: {
+									label: "Operation logs found",
+									readsFrom: "ContentMgmt/logSearch",
+									ok: includeOperations && Boolean(counts.operationLogProbe?.ok),
+									total:
+										counts.operationLogTotal === null ||
+										counts.operationLogTotal === undefined
+											? null
+											: Number(counts.operationLogTotal),
+									selectedTimeWindow: {
+										startTime: windowScope.startTime,
+										endTime: windowScope.endTime,
+									},
+									error: includeOperations
+										? counts.operationLogProbe?.error || null
+										: null,
+								},
+							},
+							counts: {
+								attendanceFound:
+									counts.totalEvents === null || counts.totalEvents === undefined
+										? null
+										: Number(counts.totalEvents),
+								operationLogsFound:
+									counts.operationLogTotal === null ||
+									counts.operationLogTotal === undefined
+										? null
+										: Number(counts.operationLogTotal),
+								alreadySaved: savedEvents,
+								readyToAdd: scopedReadyToAdd,
+								needsReview,
+								targetImportCount,
+								targetAttendanceCount,
+								targetOperationsCount,
+							},
+							eventRows: scopedEventRows,
+							proof: [
+								includeOperations
+									? "User and enrollment operations are read from ContentMgmt/logSearch with the selected date/time window."
+									: null,
+								includeAttendance
+									? "Attendance taps are read from AccessControl/AcsEvent with the selected date/time window."
+									: null,
+								"Ready to add excludes Needs review rows.",
+								"Nothing was saved because dryRun=true.",
+							].filter(Boolean),
+						},
+						200,
+					),
+				);
+				return;
+			}
 			const noWorkRequested =
 				(targetImportCount === 0 &&
 					(targetAttendanceCount === 0 || targetAttendanceCount === null) &&
@@ -11774,8 +12100,8 @@ export const controller = (prisma: PrismaClient) => {
 								status: "completed",
 								deviceId: device.id,
 								deviceName: device.name || device.address,
-								total: totalHint,
-								sourceTotal: totalHint,
+								total: selectedSourceTotal || totalHint,
+								sourceTotal: selectedSourceTotal || totalHint,
 								targetImportCount: 0,
 								includeAttendance,
 								includeOperations,
@@ -11803,10 +12129,13 @@ export const controller = (prisma: PrismaClient) => {
 						status: "PROCESSING",
 						source: "HIKVISION_CALLBACK",
 						startedByUserId: (req as any).userId || null,
-						totalSourceRecords: totalHint,
+						totalSourceRecords: selectedSourceTotal || totalHint,
 						importableRecords: targetImportCount,
 						rawSummary: {
 							totalHint,
+							selectedSourceTotal,
+							attendanceSourceTotal,
+							operationSourceTotal,
 							savedEvents,
 							knownSkippedEvents,
 							estimatedUnsaved,
@@ -11819,7 +12148,12 @@ export const controller = (prisma: PrismaClient) => {
 							targetOperationsCount,
 							includeAttendance,
 							includeOperations,
+							sourceGroup,
 							timeWindow,
+							from: windowScope.from,
+							to: windowScope.to,
+							startTime: windowScope.startTime,
+							endTime: windowScope.endTime,
 							targetedLatestScan: targetImportCount !== null,
 						},
 					},
@@ -11836,6 +12170,7 @@ export const controller = (prisma: PrismaClient) => {
 			const queuedTargetTotal =
 				(Number(targetImportCount) || 0) ||
 				(Number(targetAttendanceCount) || 0) + (Number(targetOperationsCount) || 0) ||
+				selectedSourceTotal ||
 				totalHint ||
 				0;
 			const job: DeviceImportJob = {
@@ -11846,11 +12181,18 @@ export const controller = (prisma: PrismaClient) => {
 				deviceId: device.id,
 				deviceName: device.name || device.address,
 				total: queuedTargetTotal,
-				sourceTotal: totalHint,
+				sourceTotal: selectedSourceTotal || totalHint,
+				attendanceSourceTotal,
+				operationSourceTotal,
 				targetImportCount,
 				includeAttendance,
 				includeOperations,
 				timeWindow,
+				sourceGroup,
+				from: windowScope.from,
+				to: windowScope.to,
+				startTime: windowScope.startTime,
+				endTime: windowScope.endTime,
 				attendanceImported: 0,
 				operationsImported: 0,
 				phase: "queued",
@@ -11872,6 +12214,8 @@ export const controller = (prisma: PrismaClient) => {
 				req,
 				device,
 				totalHint,
+				attendanceSourceTotal,
+				operationSourceTotal,
 				targetImportCount,
 				targetAttendanceCount,
 				targetOperationsCount,
@@ -11879,6 +12223,11 @@ export const controller = (prisma: PrismaClient) => {
 				includeAttendance,
 				includeOperations,
 				timeWindow,
+				sourceGroup,
+				from: windowScope.from,
+				to: windowScope.to,
+				startTime: windowScope.startTime,
+				endTime: windowScope.endTime,
 			}).catch((error) => {
 				deviceLogger.error(`Hikvision import job ${jobId} failed: ${error}`);
 			});

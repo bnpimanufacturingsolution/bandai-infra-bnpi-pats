@@ -37,3 +37,23 @@ and local operational verification.
   mapping.
 
 No other new recommendations were identified.
+
+## WWG Truth Synchronization
+
+- Task mode: mixed regression repair, meaningful feature, runtime repair, high-risk cleanup, and local operational verification
+- New truth detected: YES — DeviceEvent single ledger; inventory never creates lifecycle history; evidence-source terminology split
+- Wiki updated: YES — Project Truth / summary / terminology for DeviceEvent, evidence source, direct device evidence
+- Workspace updated: YES — completed local implementation and promotion boundary recorded
+- Governance review completed: YES — one proposed follow-up for bounded historical ACS serial reconciliation
+- Drift status: MEDIUM — local/shared-DEV proof is not GitOps/public promotion; 1,236 historical gap remains calculated, not serial-proven
+- Canonical files changed:
+  - `.wwg/wiki/project-truth.md` / summary / terminology (DeviceEvent contract)
+  - `.wwg/workspace/current-task.md`
+  - `.wwg/governance/recommendation-registry.md` (historical reconciliation proposal)
+- Implementation discoveries synced:
+  - Direct inventory and frozen-window ACS/logSearch parity
+  - Backup-first cleanup of 219 fake lifecycle rows, zero linked attendance
+  - Local Playwright saved-ledger proof
+- Remaining stale context:
+  - Unknown evidence remains unknown until explicit vendor mapping
+  - GitOps/public promotion and full historical serial reconciliation still open
