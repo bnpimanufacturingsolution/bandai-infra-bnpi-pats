@@ -65,8 +65,12 @@ const apiRemotePort = envValue("HIKVISION_VM_BRIDGE_API_REMOTE_PORT", "53001");
 const sshTarget = envValue("HIKVISION_VM_BRIDGE_SSH_TARGET", "project-truth-hris");
 const restartListener = envBool("HIKVISION_VM_BRIDGE_RESTART_LISTENER", true);
 
+const t0 = Date.now();
 console.log(
-	`[hikvision-bridge] Ensuring SSH reverse bridge device=${deviceIp} sdk ${sdkListenPort}->${sdkDevicePort} http ${httpListenPort}->${httpDevicePort} api ${apiRemotePort}->host:${apiLocalPort} via ${sshTarget}`,
+	`[hikvision-bridge] STEP start: SSH reverse bridge device=${deviceIp} sdk ${sdkListenPort}->${sdkDevicePort} http ${httpListenPort}->${httpDevicePort} api ${apiRemotePort}->host:${apiLocalPort} via ${sshTarget}`,
+);
+console.log(
+	"[hikvision-bridge]   if quiet >20s, Cloudflare Access / ssh project-truth-hris may be waiting for browser login",
 );
 
 const result = spawnSync(
@@ -104,13 +108,15 @@ const result = spawnSync(
 	},
 );
 
+const sec = ((Date.now() - t0) / 1000).toFixed(1);
 if (result.status !== 0) {
 	console.warn(
-		`[hikvision-bridge] Bridge start failed (exit ${result.status || 1}). Live capture may stay Login failed (7). Continuing API boot.`,
+		`[hikvision-bridge] Bridge start failed (exit ${result.status || 1}) after ${sec}s. Live capture may stay Login failed (7). Continuing API boot.`,
 	);
 	// Do not fail predev hard — API can still serve Device Events / Sync.
 	process.exit(0);
 }
+console.log(`[hikvision-bridge] STEP start: ok in ${sec}s`);
 
 if (restartListener) {
 	// Best-effort: restart VM listener after tunnel is up so it re-logins TEST A.

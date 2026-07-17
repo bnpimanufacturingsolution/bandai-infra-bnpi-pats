@@ -101,7 +101,16 @@ function ensureProjectTruthRemoteLanForward() {
 	}
 	if (!fs.existsSync(remoteLanForwardScript)) return;
 
-	console.log("[bnpi-db-access] Ensuring Project Truth remote LAN URLs/DB forwards...");
+	const t0 = Date.now();
+	console.log(
+		"[bnpi-db-access] STEP remote-lan-forward: ensuring Project Truth remote LAN URLs/DB forwards (SSH may prompt Cloudflare Access)...",
+	);
+	console.log(
+		"[bnpi-db-access]   script: scripts/start-project-truth-remote-lan-forward.ps1",
+	);
+	console.log(
+		"[bnpi-db-access]   if this sits quiet >30s, check SSH/Cloudflare Access browser login for project-truth-hris",
+	);
 	const result = runPowerShell([
 		"-NoProfile",
 		"-ExecutionPolicy",
@@ -109,19 +118,24 @@ function ensureProjectTruthRemoteLanForward() {
 		"-File",
 		remoteLanForwardScript,
 	]);
+	const sec = ((Date.now() - t0) / 1000).toFixed(1);
 	if (result.status !== 0) {
 		console.warn(
-			"[bnpi-db-access] Project Truth remote LAN forward was not fully established; continuing with DB-specific bootstrap.",
+			`[bnpi-db-access] STEP remote-lan-forward: incomplete after ${sec}s; continuing with DB-specific bootstrap.`,
 		);
+	} else {
+		console.log(`[bnpi-db-access] STEP remote-lan-forward: done in ${sec}s`);
 	}
 }
 
 async function main() {
+	const mainT0 = Date.now();
 	if (process.env.HRIS_SKIP_BNPI_DB_ACCESS === "true") {
 		console.log("[bnpi-db-access] Skipped because HRIS_SKIP_BNPI_DB_ACCESS=true.");
 		return;
 	}
 
+	console.log("[bnpi-db-access] START — resolve Postgres for local hris-api dev");
 	loadEnvFile(envPath, { overwrite: true });
 	const datasource = parseDatasourceUrl(
 		process.env.WRITE_DATABASE_URL ||
@@ -129,20 +143,33 @@ async function main() {
 			process.env.DATABASE_URL ||
 			"",
 	);
-	if (!datasource || !datasource.protocol.startsWith("postgres")) return;
+	if (!datasource || !datasource.protocol.startsWith("postgres")) {
+		console.log("[bnpi-db-access] No postgres DATABASE_URL — nothing to do.");
+		return;
+	}
 	const environment = inferEnvironment(datasource);
 	const preferredDevK8sPort = Number(process.env.PROJECT_TRUTH_DEV_K8S_DB_LOCAL_PORT || 55435);
 	const remoteLanHost = process.env.PROJECT_TRUTH_LAN_IP || "10.184.37.19";
+	console.log(
+		`[bnpi-db-access] env=${environment} preferredDevK8s=127.0.0.1:${preferredDevK8sPort} lanHost=${remoteLanHost}`,
+	);
 
 	if (
 		environment === "dev" &&
 		process.env.PROJECT_TRUTH_DEV_DB_MODE !== "docker-dev-db"
 	) {
 		ensureProjectTruthRemoteLanForward();
+		console.log(
+			`[bnpi-db-access] STEP probe: checking Postgres wire on 127.0.0.1:${preferredDevK8sPort}...`,
+		);
+		const probeT0 = Date.now();
 		let devK8sForwardHost = await findReachableDevK8sForwardHost({
 			port: preferredDevK8sPort,
 			remoteLanHost,
 		});
+		console.log(
+			`[bnpi-db-access] STEP probe: host=${devK8sForwardHost || "none"} in ${((Date.now() - probeT0) / 1000).toFixed(1)}s`,
+		);
 
 		// Always bootstrap localhost:55435 when missing, even if 10.184.37.19:55435
 		// already answers (remote-LAN loopback alias). Prisma must use 127.0.0.1.
@@ -151,8 +178,9 @@ async function main() {
 				throw new Error(`Missing ${path.relative(repoRoot, k8sDevDbScript)}.`);
 			}
 
+			const k8sT0 = Date.now();
 			console.log(
-				`[bnpi-db-access] Starting DEV K3s DB forward for 127.0.0.1:${preferredDevK8sPort}...`,
+				`[bnpi-db-access] STEP k8s-db-forward: starting DEV K3s DB forward for 127.0.0.1:${preferredDevK8sPort} (SSH)...`,
 			);
 			const result = runPowerShell([
 				"-NoProfile",
@@ -166,7 +194,11 @@ async function main() {
 
 			if (result.status !== 0) {
 				console.warn(
-					`[bnpi-db-access] Could not start localhost:${preferredDevK8sPort} K3s forward; will try compose DEV 15433 fallback.`,
+					`[bnpi-db-access] STEP k8s-db-forward: failed in ${((Date.now() - k8sT0) / 1000).toFixed(1)}s; will try compose DEV 15433 fallback.`,
+				);
+			} else {
+				console.log(
+					`[bnpi-db-access] STEP k8s-db-forward: done in ${((Date.now() - k8sT0) / 1000).toFixed(1)}s`,
 				);
 			}
 			devK8sForwardHost = await findReachableDevK8sForwardHost({
@@ -197,6 +229,9 @@ async function main() {
 			);
 			console.log(
 				`[bnpi-db-access] Resolved DEV datasource to shared K3s runtime at 127.0.0.1:${preferredDevK8sPort}.`,
+			);
+			console.log(
+				`[bnpi-db-access] DONE in ${((Date.now() - mainT0) / 1000).toFixed(1)}s`,
 			);
 			return;
 		}
