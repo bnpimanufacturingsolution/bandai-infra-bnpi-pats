@@ -250,10 +250,23 @@ test.describe("admin device reachability status", () => {
 	test("device events filter does not run health probes for dropdown dots", async ({ page }) => {
 		await installAuth(page);
 		const healthRequests: string[] = [];
+		const listenerRequests: string[] = [];
+		const sdkProbeRequests: string[] = [];
 		page.on("request", (request) => {
-			const path = new URL(request.url()).pathname;
+			const url = new URL(request.url());
+			const path = url.pathname;
 			if (path.includes("/device/") && path.endsWith("/health")) {
 				healthRequests.push(path);
+			}
+			if (path.includes("/device/hikvision/listener")) {
+				listenerRequests.push(path);
+			}
+			if (
+				path.includes("/device/events") &&
+				url.searchParams.get("source") === "EN_HCNETSDK_ALARM" &&
+				url.searchParams.get("limit") === "1"
+			) {
+				sdkProbeRequests.push(`${path}?${url.searchParams.toString()}`);
 			}
 		});
 		await installApiMocks(page);
@@ -275,6 +288,8 @@ test.describe("admin device reachability status", () => {
 		await expect(offlineDot).toBeVisible();
 		await expect(offlineDot).toHaveAttribute("data-reachability", "not_checked");
 		expect(healthRequests).toEqual([]);
+		expect(listenerRequests).toEqual([]);
+		expect(sdkProbeRequests).toEqual([]);
 
 		const screenshotDir = resolve(
 			process.cwd(),

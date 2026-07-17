@@ -1327,18 +1327,27 @@ export default function DeviceEventsPage() {
 		(source === "all" || source === "EN_HCNETSDK_ALARM") &&
 		(deviceId === "all" || isHikvisionDevice(selectedDevice));
 	const savedEventsRefetchInterval = shouldPollSavedEvents ? 45 * 1000 : false;
-	// Listener status is an expensive VM/service probe. Keep it on demand: opening
-	// the Listener modal checks it, then the toolbar can reuse the cached snapshot.
+	// Listener status must load on the saved SDK ledger too — otherwise the mid
+	// panel says "Live capture offline" while the readiness strip says "armed"
+	// (readiness fetches listener separately; the panel used to only load when
+	// the Listener modal was open).
 	const {
 		data: hikvisionListenerStatus,
 		isLoading: isHikvisionListenerStatusPending,
 		isFetching: isFetchingHikvisionListenerStatus,
 		error: hikvisionListenerStatusError,
 		refetch: refetchHikvisionListenerStatus,
-	} = useHikvisionListenerStatus(isListenerControlModalOpen, {
-		staleTime: isListenerControlModalOpen ? 8 * 1000 : 60 * 1000,
-		refetchInterval: isListenerControlModalOpen ? 12 * 1000 : false,
-	});
+	} = useHikvisionListenerStatus(
+		isListenerControlModalOpen || (viewMode === "saved" && isSdkAlarmSavedScope),
+		{
+			staleTime: isListenerControlModalOpen ? 8 * 1000 : 20 * 1000,
+			refetchInterval: isListenerControlModalOpen
+				? 12 * 1000
+				: viewMode === "saved" && isSdkAlarmSavedScope
+					? 20 * 1000
+					: false,
+		},
+	);
 	// Only treat as "Checking…" when we have no snapshot yet. Refetch must not blank the modal.
 	const isLoadingHikvisionListenerStatus =
 		isHikvisionListenerStatusPending && !hikvisionListenerStatus;
@@ -2556,9 +2565,24 @@ export default function DeviceEventsPage() {
 						}.`
 					: `${selectedHikvisionListenerDevice.name || selectedHikvisionListenerDevice.host || "Selected device"} has no recent SDK proof.`
 		: null;
+	const liveReadinessErrorMessage = liveReadinessError
+		? getAsyncErrorMessage(liveReadinessError, "Live path health check failed")
+		: null;
+	const livePathHealthBlocked = Boolean(
+		(liveReadinessErrorMessage && !liveReadiness) ||
+			liveReadiness?.overall === "red",
+	);
+	const livePathHealthCaution = Boolean(
+		!livePathHealthBlocked && liveReadiness?.overall === "yellow",
+	);
+	const livePathHealthAllowsGreen = Boolean(
+		!livePathHealthBlocked &&
+			!liveReadinessErrorMessage &&
+			(!liveReadiness || liveReadiness.overall === "green"),
+	);
 	const realtimePanelIsLive = isSdkAlarmSavedScope
-		? isLatestSdkSavedFresh || hikvisionSdkReceiving
-		: realtimeStatus.isListening;
+		? livePathHealthAllowsGreen && (isLatestSdkSavedFresh || hikvisionSdkReceiving)
+		: !livePathHealthBlocked && realtimeStatus.isListening;
 	// Age of last saved SDK row — operator needs wall-clock truth, not only green badges.
 	const latestSdkProofAgeLabel =
 		latestSdkEvidenceAgeMs === null
@@ -2568,7 +2592,7 @@ export default function DeviceEventsPage() {
 				: latestSdkEvidenceAgeMs < 60 * 60 * 1000
 					? `${Math.max(1, Math.round(latestSdkEvidenceAgeMs / 60000))}m ago`
 					: `${Math.max(1, Math.round(latestSdkEvidenceAgeMs / 3600000))}h ago`;
-	const realtimePanelStatusLabel = isSdkAlarmSavedScope
+	const realtimePanelStatusLabelFromSignals = isSdkAlarmSavedScope
 		? isLoadingHikvisionListenerStatus
 			? "Checking live capture…"
 			: isLatestSdkSavedFresh || hikvisionSdkReceiving
@@ -2579,7 +2603,7 @@ export default function DeviceEventsPage() {
 						? "Live capture offline"
 						: "Live capture stopped"
 		: realtimeStatus.statusLabel;
-	const realtimePanelUpdateLabel = isSdkAlarmSavedScope
+	const realtimePanelUpdateLabelFromSignals = isSdkAlarmSavedScope
 		? isLoadingHikvisionListenerStatus
 			? "Checking service…"
 			: isLatestSdkSavedFresh
@@ -2592,6 +2616,22 @@ export default function DeviceEventsPage() {
 							? "Service up · no SDK row in this filter yet — tap TEST A"
 							: "Waiting for live capture"
 		: realtimeStatus.rowUpdateLabel;
+	const realtimePanelStatusLabel =
+		isSdkAlarmSavedScope && liveReadinessErrorMessage && !liveReadiness
+			? "Live path health check failed"
+			: isSdkAlarmSavedScope && livePathHealthBlocked && liveReadiness
+				? "Live path blocked"
+				: isSdkAlarmSavedScope && livePathHealthCaution
+					? "Live path needs proof"
+					: realtimePanelStatusLabelFromSignals;
+	const realtimePanelUpdateLabel =
+		isSdkAlarmSavedScope && liveReadinessErrorMessage && !liveReadiness
+			? "Ledger proof is historical until health passes"
+			: isSdkAlarmSavedScope && livePathHealthBlocked && liveReadiness
+				? liveReadiness.headline
+				: isSdkAlarmSavedScope && livePathHealthCaution && liveReadiness
+					? liveReadiness.headline
+					: realtimePanelUpdateLabelFromSignals;
 	const activeSavedFilterLabels = [
 		deviceId !== "all" ? getOptionLabel(deviceOptions, deviceId) : null,
 		timeWindow !== "all" ? getOptionLabel(timeWindowOptions, timeWindow) : null,
@@ -2984,22 +3024,6 @@ export default function DeviceEventsPage() {
 					</div>
 				</div>
 				<div className="flex flex-col items-stretch gap-2 sm:items-end">
-					{viewMode === "saved" ? (
-						<DeviceLiveReadinessStrip
-							compact
-							mode="events"
-							className="w-full max-w-xl sm:max-w-2xl"
-							readiness={liveReadiness}
-							isLoading={isLiveReadinessLoading}
-							errorMessage={
-								liveReadinessError
-									? getAsyncErrorMessage(liveReadinessError, "Readiness check failed")
-									: null
-							}
-							onProve={() => void proveLivePath()}
-							isProving={isProvingLivePath}
-						/>
-					) : null}
 					<div className="flex flex-wrap items-center justify-end gap-2">
 						{isSdkAlarmSavedScope ? (
 							<Button
@@ -3044,6 +3068,19 @@ export default function DeviceEventsPage() {
 					</div>
 				</div>
 			</div>
+
+			{viewMode === "saved" ? (
+				<DeviceLiveReadinessStrip
+					compact
+					mode="events"
+					className="w-full"
+					readiness={liveReadiness}
+					isLoading={isLiveReadinessLoading}
+					errorMessage={liveReadinessErrorMessage}
+					onProve={() => void proveLivePath()}
+					isProving={isProvingLivePath}
+				/>
+			) : null}
 
 			{isSyncLogsDebugView && canUseDebugReset ? (
 				<div className="rounded-md border border-red-200 bg-red-50 px-3 py-3">
