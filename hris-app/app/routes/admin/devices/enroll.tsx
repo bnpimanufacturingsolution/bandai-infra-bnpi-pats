@@ -3057,23 +3057,72 @@ export function DeviceEnrollmentPanel({
 		return true;
 	});
 	const normalizedDeviceUserSearch = deviceUserSearch.trim().toLowerCase();
-	const visibleDeviceUserRows = viewDeviceUserRows.filter((row) => {
-		const statusMatch =
-			deviceUserStatus === "all" ||
-			row.status === deviceUserStatus ||
-			(deviceUserStatus === "UNMATCHED" && row.status === "SOURCE_ONLY");
-		if (!statusMatch) return false;
-		if (!normalizedDeviceUserSearch) return true;
-		return [
-			row.vendorUserId,
-			row.displayName,
-			row.userType,
-			row.employee?.employeeId,
-			row.employee?.fullName,
-		]
-			.filter(Boolean)
-			.some((value) => String(value).toLowerCase().includes(normalizedDeviceUserSearch));
-	});
+	const rankDeviceUserSearchMatch = (row: VisibleDeviceUserRow) => {
+		if (!normalizedDeviceUserSearch) return 2;
+		const vendor = String(row.vendorUserId || "").toLowerCase();
+		const empId = String(row.employee?.employeeId || "").toLowerCase();
+		// Exact vendor / employee id first (search "19" → User 19 before 198/1198).
+		if (vendor === normalizedDeviceUserSearch || empId === normalizedDeviceUserSearch) return 0;
+		if (
+			vendor.startsWith(normalizedDeviceUserSearch) ||
+			empId.startsWith(normalizedDeviceUserSearch)
+		) {
+			return 1;
+		}
+		return 2;
+	};
+	const deviceUserActivityMs = (row: VisibleDeviceUserRow) => {
+		const candidates = [
+			row.lastSyncedAt,
+			(row.hrisDeviceUser as any)?.updatedAt,
+			(row.hrisDeviceUser as any)?.createdAt,
+			(row.hrisDeviceUser as any)?.lastSyncedAt,
+		];
+		let best = 0;
+		for (const value of candidates) {
+			const ms = value ? Date.parse(String(value)) : NaN;
+			if (Number.isFinite(ms) && ms > best) best = ms;
+		}
+		return best;
+	};
+	const visibleDeviceUserRows = viewDeviceUserRows
+		.filter((row) => {
+			const statusMatch =
+				deviceUserStatus === "all" ||
+				row.status === deviceUserStatus ||
+				(deviceUserStatus === "UNMATCHED" && row.status === "SOURCE_ONLY");
+			if (!statusMatch) return false;
+			if (!normalizedDeviceUserSearch) return true;
+			const vendor = String(row.vendorUserId || "").toLowerCase();
+			const empId = String(row.employee?.employeeId || "").toLowerCase();
+			const name = String(row.displayName || "").toLowerCase();
+			const empName = String(row.employee?.fullName || "").toLowerCase();
+			// Prefer exact/prefix on ids; still allow contains on names.
+			return (
+				vendor === normalizedDeviceUserSearch ||
+				empId === normalizedDeviceUserSearch ||
+				vendor.startsWith(normalizedDeviceUserSearch) ||
+				empId.startsWith(normalizedDeviceUserSearch) ||
+				vendor.includes(normalizedDeviceUserSearch) ||
+				empId.includes(normalizedDeviceUserSearch) ||
+				name.includes(normalizedDeviceUserSearch) ||
+				empName.includes(normalizedDeviceUserSearch)
+			);
+		})
+		.sort((left, right) => {
+			const rankDelta = rankDeviceUserSearchMatch(left) - rankDeviceUserSearchMatch(right);
+			if (rankDelta !== 0) return rankDelta;
+			// Newest activity first (lastSynced / created / updated).
+			const timeDelta = deviceUserActivityMs(right) - deviceUserActivityMs(left);
+			if (timeDelta !== 0) return timeDelta;
+			// Numeric vendor ids in natural order when times equal.
+			const leftNum = Number(left.vendorUserId);
+			const rightNum = Number(right.vendorUserId);
+			if (Number.isFinite(leftNum) && Number.isFinite(rightNum) && leftNum !== rightNum) {
+				return leftNum - rightNum;
+			}
+			return String(left.vendorUserId || "").localeCompare(String(right.vendorUserId || ""));
+		});
 	const deviceUserTotalPages = Math.max(
 		Math.ceil(visibleDeviceUserRows.length / deviceUserLimit),
 		1,

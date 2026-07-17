@@ -216,7 +216,7 @@ export const Select: React.FC<SelectProps> = ({
 	`;
 
 	const dropdownClasses = `
-		fixed z-[1000]
+		fixed z-[10050]
 		bg-white border border-gray-300 rounded-md
 		shadow-lg
 		overflow-auto
