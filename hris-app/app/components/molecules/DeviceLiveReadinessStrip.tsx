@@ -163,18 +163,10 @@ export function DeviceLiveReadinessStrip({
 	const level = readiness.overall;
 	const OverallIcon =
 		level === "green" ? ShieldCheck : level === "yellow" ? AlertTriangle : XCircle;
-	const tapLabel =
-		level === "green" && readiness.safeToTap
-			? "YES"
-			: level === "red" || !readiness.safeToTap
-				? "NO"
-				: "CHECK";
-	const enrollLabel =
-		level === "green" && readiness.safeToEnroll
-			? "YES"
-			: level === "red" || !readiness.safeToEnroll
-				? "NO"
-				: "CHECK";
+	// Gate labels follow truth flags, not overall color (receiving path can stay green now;
+	// if we ever show yellow while still safe, YES is still correct).
+	const tapLabel = readiness.safeToTap ? "YES" : "NO";
+	const enrollLabel = readiness.safeToEnroll ? "YES" : "NO";
 
 	return (
 		<div className={cn("min-w-0", className)}>

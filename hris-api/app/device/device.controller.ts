@@ -13727,7 +13727,15 @@ export const controller = (prisma: PrismaClient) => {
 			});
 		});
 		try {
-			const parsed = JSON.parse(raw.trim().split(/\r?\n/).filter(Boolean).slice(-1)[0] || raw);
+			// Script emits pretty multi-line JSON — parse the whole stdout, not last line.
+			const jsonText = raw.trim();
+			const firstBrace = jsonText.indexOf("{");
+			const lastBrace = jsonText.lastIndexOf("}");
+			const candidate =
+				firstBrace >= 0 && lastBrace > firstBrace
+					? jsonText.slice(firstBrace, lastBrace + 1)
+					: jsonText;
+			const parsed = JSON.parse(candidate);
 			const scriptSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
 			for (const s of scriptSteps) {
 				steps.push({
@@ -13745,12 +13753,31 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			return { ok: Boolean(parsed.ok), steps, raw: raw.slice(0, 2000) };
 		} catch {
+			// Fallback: if SDK port is already open, treat host path as OK enough.
+			const sdkOpen = await new Promise<boolean>((resolveCheck) => {
+				try {
+					const net = require("net") as typeof import("net");
+					const socket = net.connect({ host: "127.0.0.1", port: 59000 }, () => {
+						socket.end();
+						resolveCheck(true);
+					});
+					socket.on("error", () => resolveCheck(false));
+					socket.setTimeout(800, () => {
+						socket.destroy();
+						resolveCheck(false);
+					});
+				} catch {
+					resolveCheck(false);
+				}
+			});
 			steps.push({
 				step: "host_ensure",
-				ok: false,
-				detail: String(raw || "failed to parse ensure script output").slice(0, 400),
+				ok: sdkOpen,
+				detail: sdkOpen
+					? "Ensure script output unparsed but 59000 is listening"
+					: String(raw || "failed to parse ensure script output").slice(0, 400),
 			});
-			return { ok: false, steps, raw: raw.slice(0, 2000) };
+			return { ok: sdkOpen, steps, raw: raw.slice(0, 2000) };
 		}
 	};
 
@@ -13762,9 +13789,10 @@ export const controller = (prisma: PrismaClient) => {
 			const admin = assertDeviceUserAdmin(req, res);
 			if (!admin) return;
 
+			// keepReady is a mode flag for operator intent — it must NOT force a
+			// listener restart every Prove click (that was thrashing systemd mid-tap).
 			const forceReArm =
 				(req.body as any)?.forceReArm === true ||
-				(req.body as any)?.keepReady === true ||
 				(req.query as any)?.forceReArm === "true";
 
 			const { buildDeviceLiveReadiness } = await import(
@@ -13842,14 +13870,18 @@ export const controller = (prisma: PrismaClient) => {
 				: NaN;
 			const proofStale =
 				!Number.isFinite(lastAlarmMs) || Date.now() - lastAlarmMs > 15 * 60 * 1000;
+			// Never thrash a healthy receiving stream. forceReArm only restarts when
+			// the path is actually quiet / down / login_failed.
+			const pathNeedsReArm =
+				!listener?.running ||
+				sdkState === "login_failed" ||
+				(!receiving && (proofStale || !armed));
 			const shouldRestartListener =
 				Boolean(listener?.control?.available) &&
-				(!listener?.running ||
-					sdkState === "login_failed" ||
-					forceReArm ||
-					(!receiving && (proofStale || !armed)));
+				pathNeedsReArm &&
+				(forceReArm || !listener?.running || sdkState === "login_failed");
 
-			// Restart when stopped, login_failed, or Keep ready / quiet-stale re-arm.
+			// Restart when stopped, login_failed, or Keep ready needs a quiet re-arm.
 			if (shouldRestartListener) {
 				restartAttempted = true;
 				try {
@@ -13940,11 +13972,14 @@ export const controller = (prisma: PrismaClient) => {
 				lastSdkEventAt: lastSdkEventAt || listener?.sdk?.lastAlarmAt || null,
 			});
 
+			// Proven is final readiness truth only. Host ensure / restart step noise
+			// (e.g. optional reverse API port 53001, brief systemd lag) must not flip
+			// proven=false while DB + live path + proof are green for the operator.
 			const proven =
 				readiness.overall === "green" &&
-				readiness.safeToTap &&
-				readiness.safeToEnroll &&
-				steps.every((s) => s.ok || s.step === "listener_restart");
+				readiness.safeToTap === true &&
+				readiness.safeToEnroll === true &&
+				databaseOk === true;
 
 			logActivity(req, {
 				userId: String((req as any).userId || "unknown"),
@@ -13980,16 +14015,19 @@ export const controller = (prisma: PrismaClient) => {
 								: null,
 						},
 						operatorHint: proven
-							? "Tap TEST A once now; a TAP or SDK row should appear within a few seconds."
+							? "Safe to tap/enroll. New SDK rows should appear within a few seconds of a TEST A tap."
 							: !databaseOk
 								? "Database tunnel still down after ensure — run predev or scripts/start-k8s-dev-db-access.ps1."
-								: String(listener?.sdk?.state || "") === "login_failed"
-									? "Listener is up but SDK login failed — reverse tunnel to the device is missing or device unreachable. Keep ready runs ensure-device-live-path.ps1; if still red, check Cloudflare SSH login."
-									: !listener?.running
+								: String(listener?.sdk?.state || "") === "login_failed" &&
+									  !receiving
+									? "Listener is up but SDK login failed — reverse tunnel to the device is missing or device unreachable."
+									: !listener?.running && !receiving && !armed
 										? "Listener failed to start on the VM — check systemd / reverse tunnel."
-										: readiness.proof.stale
-											? "Path re-armed if possible. Tap the device once so proof becomes fresh (green needs a recent event)."
-											: "Review red/yellow checks above.",
+										: readiness.overall === "green"
+											? readiness.headline
+											: readiness.proof.stale
+												? "Path re-armed if possible. Tap the device once so proof becomes fresh."
+												: readiness.headline || "Review red readiness checks above.",
 					},
 					200,
 				),

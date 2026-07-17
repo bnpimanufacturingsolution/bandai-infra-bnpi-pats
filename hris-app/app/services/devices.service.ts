@@ -2166,21 +2166,30 @@ class DevicesService extends APIService {
 		message?: string;
 	}> {
 		const forceReArm = options?.forceReArm === true;
-		// Primary: API does host ensure (tunnels) + listener restart — what Keep ready needs.
+		// Primary: API does host ensure (tunnels) + optional listener re-arm.
 		try {
 			const response = await hrisApiClient.post<any>(
 				"/api/device/events/live-readiness/prove",
-				{ forceReArm, keepReady: forceReArm },
+				{ forceReArm },
 				{ timeoutMs: 150_000 } as any,
 			);
 			const data = response.data?.data || response.data;
 			if (data?.readiness) {
+				const readiness = data.readiness as DeviceLiveReadiness;
+				// Truth matrix: green readiness is proven even if ensure step noise lied.
+				const readinessGreen =
+					readiness.overall === "green" &&
+					readiness.safeToTap === true &&
+					readiness.safeToEnroll === true;
 				return {
-					proven: Boolean(data.proven),
+					proven: Boolean(data.proven) || readinessGreen,
 					restartAttempted: Boolean(data.restartAttempted),
 					steps: Array.isArray(data.steps) ? data.steps : [],
-					readiness: data.readiness as DeviceLiveReadiness,
-					operatorHint: data.operatorHint,
+					readiness,
+					operatorHint: readinessGreen
+						? readiness.headline ||
+							"Safe to tap and enroll — realtime path is truthful"
+						: data.operatorHint,
 					message: response.data?.message || data.message,
 				};
 			}

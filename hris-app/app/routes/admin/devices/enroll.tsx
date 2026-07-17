@@ -632,18 +632,22 @@ export function DeviceEnrollmentPanel({
 	};
 	const proveLivePath = async (options?: { quiet?: boolean; forceReArm?: boolean }) => {
 		const quiet = options?.quiet === true;
+		const forceReArm = options?.forceReArm === true;
 		setIsProvingLivePath(true);
 		try {
-			const result = await deviceService.proveDeviceLivePath({
-				forceReArm: options?.forceReArm ?? keepLiveReady,
-			});
+			const result = await deviceService.proveDeviceLivePath({ forceReArm });
 			await refetchLiveReadiness();
-			if (result.proven) {
+			const readinessGreen =
+				result.readiness?.overall === "green" &&
+				result.readiness?.safeToTap === true &&
+				result.readiness?.safeToEnroll === true;
+			const pathOk = result.proven === true || readinessGreen;
+			if (pathOk) {
 				if (!quiet) {
 					toast.success("Safe to enroll — live path proved", {
 						id: "device-live-path-prove",
 						description:
-							result.operatorHint ||
+							result.readiness?.headline ||
 							"DB + live capture + proof look healthy. Create/enroll should stream realtime.",
 					});
 				}
@@ -651,12 +655,12 @@ export function DeviceEnrollmentPanel({
 				toast.warning("Not fully ready to enroll", {
 					id: "device-live-path-prove",
 					description:
-						result.operatorHint ||
 						result.readiness?.headline ||
+						result.operatorHint ||
 						"Fix red readiness checks first.",
 				});
 			}
-			return result;
+			return { ...result, proven: pathOk };
 		} catch (error: any) {
 			if (!quiet) {
 				toast.error(error?.message || "Live path prove failed", {
@@ -673,17 +677,24 @@ export function DeviceEnrollmentPanel({
 		if (!keepLiveReady) return;
 		if (typeof window === "undefined") return;
 		let cancelled = false;
-		const needsRepair =
+		const pathBroken =
 			!liveReadiness ||
-			liveReadiness.overall !== "green" ||
+			!liveReadiness.database?.ok ||
 			!liveReadiness.safeToTap ||
-			!liveReadiness.safeToEnroll;
+			!liveReadiness.safeToEnroll ||
+			liveReadiness.overall === "red" ||
+			!liveReadiness.listener?.running;
+		const needsForceReArm =
+			pathBroken &&
+			(!liveReadiness?.listener?.running ||
+				!liveReadiness?.listener?.receiving ||
+				!liveReadiness?.listener?.armed);
 		const run = () => {
 			if (cancelled || isProvingLivePath) return;
-			if (!needsRepair && liveReadiness?.proof?.fresh) return;
-			void proveLivePath({ quiet: true, forceReArm: true });
+			if (!pathBroken) return;
+			void proveLivePath({ quiet: true, forceReArm: needsForceReArm });
 		};
-		if (needsRepair) {
+		if (pathBroken) {
 			const t = window.setTimeout(run, 800);
 			const intervalId = window.setInterval(run, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
 			return () => {
@@ -692,7 +703,10 @@ export function DeviceEnrollmentPanel({
 				window.clearInterval(intervalId);
 			};
 		}
-		const intervalId = window.setInterval(run, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
+		const intervalId = window.setInterval(() => {
+			if (cancelled || isProvingLivePath) return;
+			void refetchLiveReadiness();
+		}, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
 		return () => {
 			cancelled = true;
 			window.clearInterval(intervalId);
@@ -703,7 +717,10 @@ export function DeviceEnrollmentPanel({
 		liveReadiness?.overall,
 		liveReadiness?.safeToTap,
 		liveReadiness?.safeToEnroll,
-		liveReadiness?.proof?.fresh,
+		liveReadiness?.database?.ok,
+		liveReadiness?.listener?.running,
+		liveReadiness?.listener?.receiving,
+		liveReadiness?.listener?.armed,
 		isProvingLivePath,
 	]);
 	const syncDeviceUsersMutation = useSyncDeviceUsers();

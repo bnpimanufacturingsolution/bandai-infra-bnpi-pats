@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
 	ArrowLeft,
@@ -1325,13 +1325,20 @@ export default function DeviceEventsPage() {
 	const organizationId =
 		user?.organizationId || (user as any)?.organization?.id || liveDevice?.organizationId || "";
 	const hasRealtimeScope = Boolean(organizationId || selectedDeviceRoomId);
-	// Prefer socket for live rows. Poll the ledger only when socket is disconnected.
-	const shouldPollSavedEvents = viewMode === "saved" && (!isConnected || !hasRealtimeScope);
+	// Socket alone is not enough for host-local truth: VM listener posts to VM API,
+	// so host socket can stay "connected" without device-event:saved. Always light-poll
+	// the saved ledger so a physical tap appears within a few seconds.
 	const isSdkAlarmSavedScope =
 		viewMode === "saved" &&
 		(source === "all" || source === "EN_HCNETSDK_ALARM") &&
 		(deviceId === "all" || isHikvisionDevice(selectedDevice));
-	const savedEventsRefetchInterval = shouldPollSavedEvents ? 45 * 1000 : false;
+	const shouldPollSavedEvents =
+		viewMode === "saved" && (!isConnected || !hasRealtimeScope || isSdkAlarmSavedScope);
+	const savedEventsRefetchInterval = shouldPollSavedEvents
+		? isSdkAlarmSavedScope
+			? 5_000
+			: 45_000
+		: false;
 	// Listener status must load on the saved SDK ledger too — otherwise the mid
 	// panel says "Live capture offline" while the readiness strip says "armed"
 	// (readiness fetches listener separately; the panel used to only load when
@@ -1408,37 +1415,53 @@ export default function DeviceEventsPage() {
 	};
 	const proveLivePath = async (options?: { quiet?: boolean; forceReArm?: boolean }) => {
 		const quiet = options?.quiet === true;
+		// Never default forceReArm from Keep ready ON — that thrashed the VM listener
+		// mid-tap and produced lying "failed to start" toasts while rows still landed.
+		const forceReArm = options?.forceReArm === true;
 		setIsProvingLivePath(true);
 		try {
-			const result = await devicesService.proveDeviceLivePath({
-				forceReArm: options?.forceReArm ?? keepLiveReady,
-			});
+			const result = await devicesService.proveDeviceLivePath({ forceReArm });
 			await refetchLiveReadiness();
 			void refetch();
-			if (result.proven) {
+			// Truth matrix: green readiness wins over intermediate step noise / stale hints.
+			const readinessGreen =
+				result.readiness?.overall === "green" &&
+				result.readiness?.safeToTap === true &&
+				result.readiness?.safeToEnroll === true;
+			const pathOk = result.proven === true || readinessGreen;
+			if (pathOk) {
 				if (!quiet) {
 					toast.success("Live path prove passed", {
 						id: "device-live-path-prove",
 						description:
-							result.operatorHint ||
-							"Safe to tap and enroll for realtime. Tap TEST A once to confirm a new row.",
+							result.readiness?.headline ||
+							"Safe to tap and enroll for realtime. New rows should appear within a few seconds.",
 					});
 				}
 			} else if (!quiet) {
 				toast.warning("Live path prove incomplete", {
 					id: "device-live-path-prove",
 					description:
-						result.operatorHint ||
 						result.readiness?.headline ||
+						result.operatorHint ||
 						"Fix red checks before relying on realtime enroll.",
 				});
-			} else if (keepLiveReady && result.restartAttempted) {
-				toast.message("Keep ready re-armed listener", {
+			} else if (
+				keepLiveReady &&
+				result.restartAttempted &&
+				!pathOk &&
+				result.readiness?.overall === "red"
+			) {
+				// Only announce re-arm when path is still red after the attempt.
+				toast.message("Keep ready repairing live path", {
 					id: "device-live-keep-ready-repair",
-					description: result.operatorHint || "Tap once if proof is still stale.",
+					description:
+						result.readiness?.headline ||
+						result.operatorHint ||
+						"Still not green — check DB tunnel / reverse bridge / listener.",
 				});
 			}
-			return result;
+			return { ...result, proven: pathOk };
 		} catch (error: unknown) {
 			if (!quiet) {
 				toast.error("Live path prove failed", {
@@ -1452,32 +1475,50 @@ export default function DeviceEventsPage() {
 		}
 	};
 
-	// Keep ready: auto repair while Device Events saved view is open.
+	// Keep ready: only repair when path is actually broken (not quiet/yellow noise).
+	// Cooldown after a prove attempt so "Fixing…" cannot spin forever every render cycle.
+	const keepReadyLastProveAtRef = useRef(0);
 	useEffect(() => {
 		if (viewMode !== "saved" || !keepLiveReady) return;
 		if (typeof window === "undefined") return;
 		let cancelled = false;
-		const needsRepair =
-			!liveReadiness ||
-			liveReadiness.overall !== "green" ||
-			!liveReadiness.safeToTap ||
-			!liveReadiness.safeToEnroll;
+		const pathHealthy =
+			Boolean(liveReadiness) &&
+			liveReadiness.database?.ok !== false &&
+			liveReadiness.safeToTap === true &&
+			liveReadiness.safeToEnroll === true &&
+			liveReadiness.overall !== "red" &&
+			(liveReadiness.listener?.running ||
+				liveReadiness.listener?.receiving ||
+				liveReadiness.listener?.armed);
+		const pathBroken = !pathHealthy;
+		const needsForceReArm =
+			pathBroken &&
+			!liveReadiness?.listener?.receiving &&
+			(!liveReadiness?.listener?.running || !liveReadiness?.listener?.armed);
 		const run = () => {
 			if (cancelled || isProvingLivePath) return;
-			if (!needsRepair && liveReadiness?.proof?.fresh) return;
-			void proveLivePath({ quiet: true, forceReArm: true });
+			if (!pathBroken) return;
+			const now = Date.now();
+			// Min 90s between auto-proves so failed restart does not thrash systemd/UI.
+			if (now - keepReadyLastProveAtRef.current < 90_000) return;
+			keepReadyLastProveAtRef.current = now;
+			void proveLivePath({ quiet: true, forceReArm: needsForceReArm });
 		};
-		// Immediate pass when red/yellow after load or toggle.
-		if (needsRepair) {
-			const t = window.setTimeout(run, 800);
-			const intervalId = window.setInterval(run, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
+		if (pathBroken) {
+			const t = window.setTimeout(run, 1200);
+			const intervalId = window.setInterval(run, Math.max(DEVICE_LIVE_KEEP_READY_INTERVAL_MS, 90_000));
 			return () => {
 				cancelled = true;
 				window.clearTimeout(t);
 				window.clearInterval(intervalId);
 			};
 		}
-		const intervalId = window.setInterval(run, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
+		// Healthy: light poll only (no force re-arm / no Fixing spinner).
+		const intervalId = window.setInterval(() => {
+			if (cancelled || isProvingLivePath) return;
+			void refetchLiveReadiness();
+		}, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
 		return () => {
 			cancelled = true;
 			window.clearInterval(intervalId);
@@ -1489,7 +1530,10 @@ export default function DeviceEventsPage() {
 		liveReadiness?.overall,
 		liveReadiness?.safeToTap,
 		liveReadiness?.safeToEnroll,
-		liveReadiness?.proof?.fresh,
+		liveReadiness?.database?.ok,
+		liveReadiness?.listener?.running,
+		liveReadiness?.listener?.receiving,
+		liveReadiness?.listener?.armed,
 		isProvingLivePath,
 	]);
 
@@ -1891,12 +1935,19 @@ export default function DeviceEventsPage() {
 		latestSdkEvidenceReceivedAt && !Number.isNaN(latestSdkEvidenceReceivedAt.getTime())
 			? Date.now() - latestSdkEvidenceReceivedAt.getTime()
 			: null;
+	// Align with live-readiness helper (10m quiet window). 2m was causing mid-panel
+	// yellow "Last proof Xm ago" while top strip said green / TAP YES.
+	const SDK_SAVED_FRESH_MS = 10 * 60 * 1000;
 	const isLatestSavedFresh =
-		latestSavedAgeMs !== null && latestSavedAgeMs >= 0 && latestSavedAgeMs <= 2 * 60 * 1000;
+		latestSavedAgeMs !== null &&
+		latestSavedAgeMs >= -60 * 1000 &&
+		latestSavedAgeMs <= SDK_SAVED_FRESH_MS;
 	const isLatestSdkSavedFresh =
-		latestSdkEvidenceAgeMs !== null &&
-		latestSdkEvidenceAgeMs >= -60 * 1000 &&
-		latestSdkEvidenceAgeMs <= 2 * 60 * 1000;
+		(latestSdkEvidenceAgeMs !== null &&
+			latestSdkEvidenceAgeMs >= -60 * 1000 &&
+			latestSdkEvidenceAgeMs <= SDK_SAVED_FRESH_MS) ||
+		Boolean(liveReadiness?.proof?.fresh) ||
+		Boolean(liveReadiness?.listener?.receiving);
 	const latestRealtimeEventId = lastRealtimeEvent?.eventId || null;
 	const highlightedSavedEventId = getHighlightedSavedDeviceEventId({
 		latestSavedEventId: latestSavedEvent?.id,
@@ -2691,35 +2742,47 @@ export default function DeviceEventsPage() {
 					? `${Math.max(1, Math.round(latestSdkEvidenceAgeMs / 60000))}m ago`
 					: `${Math.max(1, Math.round(latestSdkEvidenceAgeMs / 3600000))}h ago`;
 	const realtimePanelStatusLabelFromSignals = isSdkAlarmSavedScope
-		? isLoadingHikvisionListenerStatus
+		? isLoadingHikvisionListenerStatus && !liveReadiness
 			? "Checking live capture…"
-			: isLatestSdkSavedFresh || hikvisionSdkReceiving
-				? "Live capture receiving / fresh proof"
-				: hikvisionSdkArmed || hikvisionListenerRunning
-					? "Live capture quiet (no new proof yet)"
-					: hikvisionListenerUnavailable
+			: liveReadiness?.overall === "green" ||
+				  isLatestSdkSavedFresh ||
+				  hikvisionSdkReceiving ||
+				  liveReadiness?.listener?.receiving
+				? liveReadiness?.listener?.receiving || hikvisionSdkReceiving
+					? "Live capture receiving / fresh proof"
+					: "Live path ready · proof accepted"
+				: hikvisionSdkArmed || hikvisionListenerRunning || liveReadiness?.listener?.armed
+					? "Live capture quiet (waiting for next tap)"
+					: hikvisionListenerUnavailable && !liveReadiness?.listener?.running
 						? "Live capture offline"
 						: "Live capture stopped"
 		: realtimeStatus.statusLabel;
 	const realtimePanelUpdateLabelFromSignals = isSdkAlarmSavedScope
-		? isLoadingHikvisionListenerStatus
+		? isLoadingHikvisionListenerStatus && !liveReadiness
 			? "Checking service…"
-			: isLatestSdkSavedFresh
-				? `${latestSdkEvidenceLabel} saved recently`
-				: hikvisionSdkReceiving
-					? "Taps are reaching HRIS"
-					: latestSdkProofAgeLabel
-						? `Last proof ${latestSdkProofAgeLabel} · tap again to verify live path`
-						: hikvisionListenerRunning
-							? "Service up · no SDK row in this filter yet — tap TEST A"
-							: "Waiting for live capture"
+			: liveReadiness?.overall === "green" && liveReadiness.safeToTap
+				? liveReadiness.listener.receiving || hikvisionSdkReceiving
+					? "Taps are reaching HRIS · safe to enroll"
+					: latestSdkEvidenceLabel
+						? `${latestSdkEvidenceLabel} · path still safe (quiet)`
+						: "Path still safe — tap anytime"
+				: isLatestSdkSavedFresh
+					? `${latestSdkEvidenceLabel} saved recently`
+					: hikvisionSdkReceiving || liveReadiness?.listener?.receiving
+						? "Taps are reaching HRIS"
+						: latestSdkProofAgeLabel
+							? `Last proof ${latestSdkProofAgeLabel}`
+							: hikvisionListenerRunning
+								? "Service up · no SDK row in this filter yet — tap TEST A"
+								: "Waiting for live capture"
 		: realtimeStatus.rowUpdateLabel;
 	const realtimePanelStatusLabel =
 		isSdkAlarmSavedScope && liveReadinessErrorMessage && !liveReadiness
 			? "Live path health check failed"
 			: isSdkAlarmSavedScope && livePathHealthBlocked && liveReadiness
 				? "Live path blocked"
-				: isSdkAlarmSavedScope && livePathHealthCaution
+				: // Do not override a green readiness strip with "needs proof" mid-panel.
+					isSdkAlarmSavedScope && livePathHealthCaution && liveReadiness?.overall !== "green"
 					? "Live path needs proof"
 					: realtimePanelStatusLabelFromSignals;
 	const realtimePanelUpdateLabel =
@@ -2727,7 +2790,10 @@ export default function DeviceEventsPage() {
 			? "Ledger proof is historical until health passes"
 			: isSdkAlarmSavedScope && livePathHealthBlocked && liveReadiness
 				? liveReadiness.headline
-				: isSdkAlarmSavedScope && livePathHealthCaution && liveReadiness
+				: isSdkAlarmSavedScope &&
+					  livePathHealthCaution &&
+					  liveReadiness &&
+					  liveReadiness.overall !== "green"
 					? liveReadiness.headline
 					: realtimePanelUpdateLabelFromSignals;
 	const activeSavedFilterLabels = [
