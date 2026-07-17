@@ -198,8 +198,21 @@ Do not stop just because:
 - `agent-browser` is missing from PATH.
 - Code needs to be committed or pushed to `develop`.
 - Dependencies or generated files need a normal repo-documented install/build/regenerate step.
+- “About 10 minutes elapsed” or any wall-clock alone — time is not a finish line.
+- Wanting the human to hard-refresh, restart the API, open Sync logs, or click Sync
+  when you can do those steps yourself.
 
 Research, recover, retry, and capture evidence before calling anything blocked.
+
+## Operator Steps Are Agent Steps
+
+Never close a multi-step truth/repair task with homework for the operator when the
+work is recoverable. You restart API/app (`npm.cmd` on Windows), poll health, login,
+hit endpoints, run Playwright, write `.runtime/` evidence, and commit/push `develop`
+when green. Forbidden exit pattern: “What you should do next: hard-refresh / restart
+API / click Sync.” For long Sync logs jobs, use
+`docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md` (EXIT GATE, min
+heartbeats, dual-source live proof, high max-turns).
 
 ## Real Endpoint Dry-Run Rule
 

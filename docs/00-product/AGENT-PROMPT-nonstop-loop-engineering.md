@@ -121,7 +121,7 @@ Minimum effort for multi-surface truth tasks:
 - At least 3 full prove/fix cycles if first proof fails
 - Wall-clock expectation: keep going ~30–180 minutes of agent work for
   Sync logs / listener / device truth — do not self-stop at 1–10 minutes
-- Headless: --max-turns 200+ and always-approve; 50 turns is too low
+- Headless: --max-turns 250+ and always-approve; 50–80 turns is too low
 
 After every major tool batch, post a heartbeat the user can see:
   HEARTBEAT | cycle N | checklist X/Y green | last proof | next action
@@ -274,11 +274,11 @@ This is **prompt + operator config**, not only model IQ. Checklist + non-stop + 
 
 1. Open this repo root in Grok.  
 2. Auto-approve tools (`/always-approve` or headless `--permission-mode bypassPermissions` / `--yolo`).  
-3. For Sync logs multi-hour work: paste **section 3a** (marathon v2) or full PASTE BLOCK from `AGENT-PROMPT-sync-logs-truth-3hr-marathon.md`.  
+3. For Sync logs multi-hour work: paste **section 3a** (marathon v3) or full PASTE BLOCK from `AGENT-PROMPT-sync-logs-truth-3hr-marathon.md`.  
 4. For other tasks: paste **section 1** with your checklist, or **section 3b** medium Sync logs.  
 5. If it stops early:  
-   `CONTINUE MARATHON v2. Open docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md. Resume incomplete PHASE/ACCEPTANCE. Next = HEARTBEAT + tool call.`  
-6. Headless: `--max-turns 200` for 3hr class (50 is too low).
+   `CONTINUE MARATHON v3. Open docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md. Resume incomplete PHASE/ACCEPTANCE. Next = HEARTBEAT + tool call. Do operator steps yourself — no hard-refresh homework.`  
+6. Headless: `--max-turns 250` for 3hr class (50–80 is too low; ~10m stops are often turn budget).
 
 ---
 
