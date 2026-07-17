@@ -2618,91 +2618,120 @@ export const controller = (prisma: PrismaClient) => {
 		const endTime =
 			options.endTime || formatHikvisionManilaDateTime(new Date(Date.now() + 60 * 1000));
 		const sampleClassify = options.sampleClassify === true;
-		// One logSearch call: totalMatches + first page sample (device UI order).
-		// Avoids a second round-trip so Sync logs stays near 1-3s.
-		// CRITICAL: device maintain Log (Add Fingerprint / Add Person Info) is under
-		// metaId log.hikvision.com/Information. log.std-cgi.com mixes UI noise
-		// (enterLocalUIBackground) and under-represents enroll/user truth.
-		const sampleMax = sampleClassify ? 80 : 1;
-		const operationMetaId = "log.hikvision.com/Information";
-		try {
-			const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
-				method: "POST",
-				deviceId,
-				prisma,
-				request: req,
-				timeoutMs: HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS,
-				ensureJsonFormat: false,
-				rawResponse: true,
-				headers: {
-					Accept: "application/xml, text/xml, */*",
-					"Content-Type": "application/xml; charset=UTF-8",
-				},
-				body: buildHikvisionLogSearchXml({
-					searchId: `hris-logsearch-preview-${Date.now()}`,
-					startTime,
-					endTime,
-					maxResults: sampleMax,
-					searchResultPosition: 0,
-					metaId: operationMetaId,
-				}),
-			});
-			const parsed = parseHikvisionLogSearchResponse(String(response?.raw || ""));
-			const count =
-				typeof parsed.totalMatches === "number" && Number.isFinite(parsed.totalMatches)
-					? parsed.totalMatches
-					: parsed.rows.length > 0
-						? parsed.rows.length
+		// Leaf metaIds (device-proven on TEST A): server-side filter for exact op totals.
+		// Faster and more truthful than sampling 80 mixed Information rows then dumping residual
+		// into "Unclassified". Full Information total still used for residual Needs review.
+		// See docs: ISAPI ContentMgmt/logSearch CMSearchDescription.metaId leaf paths.
+		const leafTimeoutMs = Math.max(HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS, 2800);
+		const probeLeaf = async (metaId: string) => {
+			try {
+				const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
+					method: "POST",
+					deviceId,
+					prisma,
+					request: req,
+					timeoutMs: leafTimeoutMs,
+					ensureJsonFormat: false,
+					rawResponse: true,
+					headers: {
+						Accept: "application/xml, text/xml, */*",
+						"Content-Type": "application/xml; charset=UTF-8",
+					},
+					body: buildHikvisionLogSearchXml({
+						searchId: `hris-logsearch-leaf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+						startTime,
+						endTime,
+						maxResults: 1,
+						searchResultPosition: 0,
+						metaId,
+					}),
+				});
+				const parsed = parseHikvisionLogSearchResponse(String(response?.raw || ""));
+				const count =
+					typeof parsed.totalMatches === "number" && Number.isFinite(parsed.totalMatches)
+						? parsed.totalMatches
 						: null;
+				return {
+					ok: count !== null || Boolean(parsed.responseStatus),
+					count,
+					metaId,
+					responseStatus: parsed.responseStatus || null,
+				};
+			} catch (error: any) {
+				return {
+					ok: false,
+					count: null as number | null,
+					metaId,
+					error:
+						error?.data?.errorCode ||
+						error?.data?.errorCause ||
+						error?.message ||
+						"leaf logSearch failed",
+				};
+			}
+		};
 
-			let byAction: Record<string, number> | null = null;
-			let sampleSize = 0;
-			let labelsByAction: Record<string, string[]> | null = null;
-			if (sampleClassify && (parsed.rows || []).length > 0) {
-				const sampleCounts = new Map<string, number>();
-				const sampleLabels = new Map<string, Set<string>>();
-				for (const row of parsed.rows || []) {
-					const classified = classifyHikvisionLogSearchRow(row);
-					// Normalize UNKNOWN* into residual bucket; keep proven enroll/user actions.
-					let action = String(classified?.eventAction || "UNKNOWN_OPERATION").trim();
-					if (action === "UNKNOWN" || action === "UNKNOWN_VENDOR") {
-						action = "UNKNOWN_OPERATION";
-					}
-					sampleCounts.set(action, (sampleCounts.get(action) || 0) + 1);
-					const label = String(row.minorType || row.information || row.metaId || "").trim();
-					if (label) {
-						const next = sampleLabels.get(action) || new Set<string>();
-						if (next.size < 3) next.add(label);
-						sampleLabels.set(action, next);
-					}
-					sampleSize += 1;
-				}
-				if (sampleCounts.size) {
-					byAction = Object.fromEntries(sampleCounts.entries());
-					labelsByAction = Object.fromEntries(
-						Array.from(sampleLabels.entries()).map(([action, labels]) => [
-							action,
-							Array.from(labels),
-						]),
-					);
-				}
+		try {
+			// Parallel leaf probes: total + exact action buckets.
+			const [infoProbe, userProbe, fpProbe, delProbe] = await Promise.all([
+				probeLeaf("log.hikvision.com/Information"),
+				sampleClassify
+					? probeLeaf("log.hikvision.com/Information/addUserInfo")
+					: Promise.resolve({ ok: false, count: null as number | null, metaId: "" }),
+				sampleClassify
+					? probeLeaf("log.hikvision.com/Information/addFpByEmployeeNo")
+					: Promise.resolve({ ok: false, count: null as number | null, metaId: "" }),
+				sampleClassify
+					? probeLeaf("log.hikvision.com/Information/clearUserInfo")
+					: Promise.resolve({ ok: false, count: null as number | null, metaId: "" }),
+			]);
+
+			const count = infoProbe.count;
+			const byAction: Record<string, number> = {};
+			const labelsByAction: Record<string, string[]> = {};
+			if (typeof userProbe.count === "number" && userProbe.count >= 0) {
+				byAction.USER_CREATED = userProbe.count;
+				labelsByAction.USER_CREATED = ["addUserInfo"];
+			}
+			if (typeof fpProbe.count === "number" && fpProbe.count >= 0) {
+				byAction.FINGERPRINT_ENROLLED = fpProbe.count;
+				labelsByAction.FINGERPRINT_ENROLLED = ["addFpByEmployeeNo"];
+			}
+			if (typeof delProbe.count === "number" && delProbe.count > 0) {
+				byAction.USER_DELETED = delProbe.count;
+				labelsByAction.USER_DELETED = ["clearUserInfo"];
+			}
+			// Residual unclassified volume inside Information (not leaf-classified).
+			const classifiedSum = Object.values(byAction).reduce((a, b) => a + b, 0);
+			if (
+				sampleClassify &&
+				typeof count === "number" &&
+				count >= classifiedSum &&
+				count - classifiedSum > 0
+			) {
+				byAction.UNKNOWN_OPERATION = Math.max(0, count - classifiedSum);
+				labelsByAction.UNKNOWN_OPERATION = ["Information residual (not addUser/addFp leaf)"];
 			}
 
+			const hasByAction = sampleClassify && Object.keys(byAction).length > 0;
+
 			return {
-				ok: count !== null || Boolean(parsed.responseStatus),
+				ok: count !== null || infoProbe.ok,
 				count,
-				// Only exact rows read from logSearch may become Ready to add. The
-				// unread operation total remains Needs review instead of becoming
-				// sample-extrapolated user/enrollment truth.
-				byAction,
-				labelsByAction,
-				sampleByAction: byAction,
-				sampleSize,
+				// Exact leaf totalMatches for USER_CREATED / FINGERPRINT_ENROLLED (device truth).
+				// willAdd = deviceLeafTotal - alreadyInHris (see buildHikvisionSyncLogsEventRows).
+				byAction: hasByAction ? byAction : null,
+				labelsByAction: hasByAction ? labelsByAction : null,
+				sampleByAction: hasByAction ? byAction : null,
+				sampleSize: hasByAction ? Object.keys(byAction).length : 0,
 				error: count === null ? "Operation logs total unavailable" : null,
 				raw: {
-					responseStatus: parsed.responseStatus,
-					totalMatches: parsed.totalMatches,
-					sampleRows: (parsed.rows || []).length,
+					method: "leaf-metaId-totalMatches",
+					informationTotal: count,
+					userCreatedTotal: userProbe.count,
+					fingerprintEnrolledTotal: fpProbe.count,
+					userDeletedTotal: delProbe.count,
+					infoStatus: infoProbe.responseStatus || null,
 				},
 			};
 		} catch (error: any) {
