@@ -75,12 +75,12 @@ export const controller = (prisma: PrismaClient) => {
 			deviceName: deviceName || null,
 			deviceAddress: deviceAddress || null,
 			triggerMinor: params.source,
-			// FE write just completed — device leaf is usually ready within ~0.5–2s.
-			settleMs: 400,
-			retryDelaysMs: [400, 1_500, 4_000, 12_000],
+			// FE write just completed — hammer logSearch for 1–5s socket target.
+			settleMs: 200,
+			retryDelaysMs: [200, 500, 1_000, 1_800, 3_000, 5_000],
 			windowBeforeMs: 2 * 60_000,
 			windowAfterMs: 3 * 60_000,
-			cooldownMs: 1_500,
+			cooldownMs: 800,
 		});
 	};
 

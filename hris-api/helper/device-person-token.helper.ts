@@ -856,24 +856,35 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 	const organizationId = String(params.organizationId || "").trim();
 	if (!deviceId || !organizationId) return;
 
-	// Short cooldown so late major=3 after enroll can re-arm multipass; in-flight multipass
-	// still covers the common burst without thrashing the device.
-	const cooldownMs = params.cooldownMs ?? 2_500;
+	// Short cooldown so a late major=3 after enroll can re-arm without thrash.
+	const cooldownMs = params.cooldownMs ?? 1_200;
 	const now = Date.now();
 	const last = operationLogResolveCooldownMs.get(deviceId) || 0;
 	if (now - last < cooldownMs) return;
 	operationLogResolveCooldownMs.set(deviceId, now);
 
-	// Fast first pass (~0.4s) once device leaf exists → target 1–2s UI with parallel logSearch.
-	// Later passes cover mid-enroll when major=3 fires before addUserInfo/addFp leaves.
-	const settleMs = params.settleMs ?? 400;
-	// Denser passes: panel leaves often land ~20–40s after first major=3 SYNC_SIGNAL.
+	// Target: lifecycle socket ~1–5s AFTER device logSearch leaves exist.
+	// Aggressive early multipass (not a 45s wait). After first save, only 2 short follow-ups
+	// so create+FP both land without sitting until 45s.
+	const settleMs = params.settleMs ?? 200;
 	const retryDelaysMs =
 		params.retryDelaysMs ??
 		(settleMs > 0
-			? Array.from(new Set([settleMs, 2_500, 8_000, 18_000, 30_000, 45_000])).sort(
-					(a, b) => a - b,
-				)
+			? Array.from(
+					new Set([
+						settleMs,
+						500,
+						1_000,
+						1_800,
+						2_800,
+						4_000,
+						6_000,
+						9_000,
+						13_000,
+						18_000,
+						25_000,
+					]),
+				).sort((a, b) => a - b)
 			: [0]);
 	const windowBeforeMs = params.windowBeforeMs ?? 15 * 60_000;
 	const windowAfterMs = params.windowAfterMs ?? 3 * 60_000;
@@ -900,7 +911,7 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 				deviceId,
 				prisma: params.prisma,
 				request: params.req,
-				timeoutMs: 12_000,
+				timeoutMs: 6_000,
 				ensureJsonFormat: false,
 				rawResponse: true,
 				headers: {
@@ -1134,30 +1145,30 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 			}
 		}
 
-		// Panel create/FP: reverse-map opaque log tokens → plain UserInfo id (e.g. "14") when
-		// exactly one new device person appears vs known inventory.
+		// Person-name delta must NOT block socket emit of lifecycle rows — run in background.
 		if (unmappedOpaquesThisPass.length > 0) {
-			try {
-				const delta = await resolveOpaqueViaDeviceUserInventoryDelta({
-					prisma: params.prisma,
-					req: params.req,
-					organizationId,
-					deviceId,
-					unmappedOpaques: unmappedOpaquesThisPass,
-					source: "PANEL_INVENTORY_DELTA",
-				});
-				if (delta.backfilledEvents > 0) {
-					console.log(
-						`[device-person-token] panel delta backfilled ${delta.backfilledEvents} event(s) pass=${passLabel}`,
+			void resolveOpaqueViaDeviceUserInventoryDelta({
+				prisma: params.prisma,
+				req: params.req,
+				organizationId,
+				deviceId,
+				unmappedOpaques: unmappedOpaquesThisPass,
+				source: "PANEL_INVENTORY_DELTA",
+			})
+				.then((delta) => {
+					if (delta.backfilledEvents > 0) {
+						console.log(
+							`[device-person-token] panel delta backfilled ${delta.backfilledEvents} event(s) pass=${passLabel}`,
+						);
+					}
+				})
+				.catch((error: any) => {
+					console.warn(
+						"[device-person-token] panel inventory delta crashed",
+						deviceId,
+						error?.message || error,
 					);
-				}
-			} catch (error: any) {
-				console.warn(
-					"[device-person-token] panel inventory delta crashed",
-					deviceId,
-					error?.message || error,
-				);
-			}
+				});
 		}
 
 		if (created > 0) {
@@ -1171,18 +1182,33 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 	void (async () => {
 		let totalCreated = 0;
 		let previousDelay = 0;
+		let firstSuccessPass = -1;
+		// After first lifecycle save, only run 2 more quick passes (catch FP after create).
+		const followUpPassesAfterSuccess = 2;
 		for (let i = 0; i < retryDelaysMs.length; i += 1) {
+			if (
+				firstSuccessPass >= 0 &&
+				i > firstSuccessPass + followUpPassesAfterSuccess
+			) {
+				break;
+			}
 			const delay = retryDelaysMs[i] || 0;
 			const waitMs = Math.max(0, delay - previousDelay);
 			if (waitMs > 0) {
 				await new Promise((resolve) => setTimeout(resolve, waitMs));
 			}
 			previousDelay = delay;
-			// First two passes: priority leaves only (create/FP/delete) for 1–2s target.
-			// Later passes: full set for update/card residual.
-			const metas = i < 2 ? OPERATION_LOG_META_PRIORITY : OPERATION_LOG_META_ALL;
+			// Priority leaves only until we have a save; then full set on follow-ups.
+			const metas =
+				firstSuccessPass < 0 || i <= firstSuccessPass + 1
+					? OPERATION_LOG_META_PRIORITY
+					: OPERATION_LOG_META_ALL;
 			try {
-				totalCreated += await runResolvePass(`t+${delay}ms`, metas);
+				const n = await runResolvePass(`t+${delay}ms`, metas);
+				totalCreated += n;
+				if (n > 0 && firstSuccessPass < 0) {
+					firstSuccessPass = i;
+				}
 			} catch (error: any) {
 				console.warn(
 					"[device-person-token] operation-log resolve pass crashed",
@@ -1194,7 +1220,7 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 		}
 		if (totalCreated > 0) {
 			console.log(
-				`[device-person-token] operation-log resolve total saved ${totalCreated} lifecycle event(s) device=${deviceId} triggerMinor=${triggerMinor || "?"}`,
+				`[device-person-token] operation-log resolve total saved ${totalCreated} lifecycle event(s) device=${deviceId} triggerMinor=${triggerMinor || "?"} (fast multipass)`,
 			);
 		}
 	})().catch((error) => {
