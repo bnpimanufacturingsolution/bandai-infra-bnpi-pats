@@ -449,12 +449,14 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 	operationLogResolveCooldownMs.set(deviceId, now);
 
 	const settleMs = params.settleMs ?? 1_500;
-	// Device often emits major=3 while the operator is still mid-enroll; logs appear 2–20s later.
+	// Device often emits major=3 while the operator is still mid-enroll; addUserInfo /
+	// addFpByEmployeeNo leaves can lag 5–45s after the first SYNC_SIGNAL burst.
 	const retryDelaysMs =
 		params.retryDelaysMs ??
 		(settleMs > 0
-			? Array.from(new Set([settleMs, 6_000, 14_000, 28_000])).sort((a, b) => a - b)
+			? Array.from(new Set([settleMs, 8_000, 20_000, 45_000])).sort((a, b) => a - b)
 			: [0]);
+	// Cooldown only collapses concurrent schedules; multipass above still covers late leaves.
 	const windowBeforeMs = params.windowBeforeMs ?? 15 * 60_000;
 	const windowAfterMs = params.windowAfterMs ?? 3 * 60_000;
 	const triggerMinor = String(params.triggerMinor ?? "").trim();
