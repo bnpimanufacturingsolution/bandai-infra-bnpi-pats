@@ -77,7 +77,7 @@ try {
 		try {
 			$restart = Invoke-RestMethod -Method Post "$ApiBase/api/device/hikvision/listener" -Headers $headers -ContentType "application/json" -Body (@{ action = "restart" } | ConvertTo-Json) -TimeoutSec 90
 			$restart | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $outDir "listener-restart.json") -Encoding utf8
-			Write-Step "Requested listener restart (may still post to VM :3101, not host :3001)."
+			Write-Step "Requested listener restart (must post VM :53001 -> host :3001 for socket truth)."
 		} catch {
 			Write-Warn "Listener restart failed: $($_.Exception.Message)"
 		}

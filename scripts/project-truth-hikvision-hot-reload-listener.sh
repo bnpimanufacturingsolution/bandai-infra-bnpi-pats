@@ -4,13 +4,63 @@ set -euo pipefail
 WORK=/home/infra/project-truth-hikvision-biometric-service
 SDK_ROOT=/home/infra/project-truth-hcnetsdk/EN-HCNetSDKV6.1.9.48_build20230410_linux64
 SOURCE_ROOT=${HIKVISION_HOT_RELOAD_SOURCE_ROOT:-/opt/project-truth/vendor/hikvision-linux}
-LOCAL_API_BASE=${HIKVISION_HOT_RELOAD_API_BASE:-http://localhost:3101}
+# Host-local socket truth (Windows Vite 5175 → host API 3001):
+#   listener posts to VM :53001 which is SSH -R into host :3001
+# VM K3s DEV API is :3101 — valid for pure-VM work, but WRONG for host browser sockets.
+# Prefer healthy host reverse unless HIKVISION_HOT_RELOAD_FORCE_API_BASE=1.
+HOST_REVERSE_API_BASE=${HIKVISION_HOST_REVERSE_API_BASE:-http://127.0.0.1:53001}
+VM_DEV_API_BASE=${HIKVISION_VM_DEV_API_BASE:-http://localhost:3101}
 POSTGRES_CONTAINER=${HIKVISION_POSTGRES_CONTAINER:-hris-postgres-dev}
 DEVICE_SOURCE=${HIKVISION_HOT_RELOAD_DEVICE_SOURCE:-postgres}
 DEVICE_FETCH_LIMIT=${HIKVISION_HOT_RELOAD_DEVICE_FETCH_LIMIT:-200}
 LOGIN_EMAIL=${HIKVISION_HOT_RELOAD_LOGIN_EMAIL:-admin@bandai.local}
 LOGIN_PASSWORD=${HIKVISION_HOT_RELOAD_LOGIN_PASSWORD:-password123}
 LOGIN_APP_CODE=${HIKVISION_HOT_RELOAD_LOGIN_APP_CODE:-hris}
+
+api_health_ok() {
+  local base="${1%/}"
+  curl --fail --silent --show-error --max-time 1 "${base}/health" >/dev/null 2>&1
+}
+
+resolve_local_api_base() {
+  local preferred="${HIKVISION_HOT_RELOAD_API_BASE:-}"
+  local force="${HIKVISION_HOT_RELOAD_FORCE_API_BASE:-0}"
+  local host_base="$HOST_REVERSE_API_BASE"
+  local vm_base="$VM_DEV_API_BASE"
+
+  if [[ "$force" == "1" || "$force" == "true" || "$force" == "yes" ]]; then
+    if [[ -n "$preferred" ]]; then
+      echo "$preferred"
+      return 0
+    fi
+  fi
+
+  # When host reverse is live, always use it — blocks accidental 3101 drift from unit/env defaults.
+  if api_health_ok "$host_base"; then
+    if [[ -n "$preferred" && "$preferred" != "$host_base" && "$preferred" != "http://localhost:53001" ]]; then
+      echo "WARN: ignoring HIKVISION_HOT_RELOAD_API_BASE=$preferred; $host_base is healthy (host socket path). Set HIKVISION_HOT_RELOAD_FORCE_API_BASE=1 to force." >&2
+    fi
+    echo "$host_base"
+    return 0
+  fi
+
+  if [[ -n "$preferred" ]]; then
+    echo "$preferred"
+    return 0
+  fi
+
+  if api_health_ok "$vm_base"; then
+    echo "$vm_base"
+    return 0
+  fi
+
+  # Prefer host reverse target even if not up yet (predev will open the tunnel).
+  echo "$host_base"
+}
+
+LOCAL_API_BASE="$(resolve_local_api_base)"
+export HIKVISION_HOT_RELOAD_API_BASE="$LOCAL_API_BASE"
+echo "INFO: hikvision hot-reload LOCAL_API_BASE=$LOCAL_API_BASE" >&2
 SPEC=/run/project-truth/hikvision-hot-reload-device.spec
 SPEC_OVERRIDE=${HIKVISION_DEVICE_SPEC_OVERRIDE:-}
 ALLOW_STATIC_SPEC_OVERRIDE=${HIKVISION_ALLOW_STATIC_DEVICE_SPEC:-0}
