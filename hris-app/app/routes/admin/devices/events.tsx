@@ -1247,7 +1247,8 @@ export default function DeviceEventsPage() {
 	const source = searchParams.get("source") || "all";
 	const evidenceSource = searchParams.get("evidenceSource") || "all";
 	const eventConfidence = searchParams.get("eventConfidence") || "all";
-	const sort = searchParams.get("sort") || "eventTime";
+	// Default receivedAt so new HRIS arrivals surface immediately even if device clock is skewed.
+	const sort = searchParams.get("sort") || "receivedAt";
 	const order = searchParams.get("order") === "asc" ? "asc" : "desc";
 	const action = searchParams.get("action");
 	const isSyncLogsDebugView = searchParams.get("debug") === "true";
