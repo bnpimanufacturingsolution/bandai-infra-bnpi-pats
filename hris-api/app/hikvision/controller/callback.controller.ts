@@ -404,9 +404,9 @@ export const controller = (prisma: PrismaClient) => {
 				try {
 					const {
 						resolveDevicePersonToken,
-					} = await import("../../../helper/device-person-token.helper");
+					} = await import("../../../helper/device-person-token.helper.js");
 					const { isOpaqueHikvisionPersonToken } = await import(
-						"../../../helper/hikvision-event-contract.helper"
+						"../../../helper/hikvision-event-contract.helper.js"
 					);
 					if (employeeNo && isOpaqueHikvisionPersonToken(employeeNo)) {
 						const resolved = await resolveDevicePersonToken(prisma as any, {

@@ -1,4 +1,4 @@
-import React, { useId, useState, useRef, useEffect, useCallback } from "react";
+import React, { useId, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronUp, Check } from "lucide-react";
 
@@ -44,11 +44,14 @@ export const Select: React.FC<SelectProps> = ({
 	dropdownClassName = "",
 }) => {
 	const [isOpen, setIsOpen] = useState(false);
-	const [selectedOption, setSelectedOption] = useState<SelectOption | null>(null);
 	const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition | null>(null);
 	const selectRef = useRef<HTMLDivElement>(null);
 	const listRef = useRef<HTMLDivElement>(null);
 	const listboxId = useId();
+	const selectedOption = useMemo(
+		() => options.find((opt) => opt.value === value) || null,
+		[options, value],
+	);
 
 	const updateDropdownPosition = useCallback(() => {
 		if (!selectRef.current || typeof window === "undefined") return;
@@ -87,18 +90,11 @@ export const Select: React.FC<SelectProps> = ({
 		(option: SelectOption) => {
 			if (option.disabled) return;
 
-			setSelectedOption(option);
 			onChange?.(option.value);
 			setIsOpen(false);
 		},
 		[onChange],
 	);
-
-	// Find selected option based on value prop
-	useEffect(() => {
-		const option = options.find((opt) => opt.value === value);
-		setSelectedOption(option || null);
-	}, [value, options]);
 
 	// Close dropdown when clicking outside (pointerdown so we beat label/focus races).
 	// Ignore the same interaction that opened the menu.

@@ -411,7 +411,7 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 	operationLogResolveCooldownMs.set(deviceId, now);
 
 	const settleMs = params.settleMs ?? 1_500;
-	const windowBeforeMs = params.windowBeforeMs ?? 10 * 60_000;
+	const windowBeforeMs = params.windowBeforeMs ?? 90 * 60_000;
 	const windowAfterMs = params.windowAfterMs ?? 2 * 60_000;
 	const triggerMinor = String(params.triggerMinor ?? "").trim();
 

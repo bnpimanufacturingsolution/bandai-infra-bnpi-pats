@@ -4951,7 +4951,7 @@ export const controller = (prisma: PrismaClient) => {
 		// Resolve opaque log person tokens via write-time map before save (Sync logs from today).
 		const {
 			applyDevicePersonTokenToEvidence,
-		} = await import("../../helper/device-person-token.helper");
+		} = await import("../../helper/device-person-token.helper.js");
 		const resolvedEvidence = await applyDevicePersonTokenToEvidence(prisma as any, {
 			organizationId: params.organizationId,
 			deviceId: params.device.id,
@@ -5065,7 +5065,7 @@ export const controller = (prisma: PrismaClient) => {
 			void (async () => {
 				try {
 					const { upsertDeviceUserInventoryStub } = await import(
-						"../../helper/device-person-token.helper"
+						"../../helper/device-person-token.helper.js"
 					);
 					await upsertDeviceUserInventoryStub(prisma as any, {
 						organizationId: params.organizationId,
@@ -14201,9 +14201,9 @@ export const controller = (prisma: PrismaClient) => {
 			// Resolve opaque person tokens for display + heal saved rows when map exists.
 			const {
 				isOpaqueHikvisionPersonToken,
-			} = await import("../../helper/hikvision-event-contract.helper");
+			} = await import("../../helper/hikvision-event-contract.helper.js");
 			const { resolveDevicePersonToken } = await import(
-				"../../helper/device-person-token.helper"
+				"../../helper/device-person-token.helper.js"
 			);
 			const enrichedEvents = await Promise.all(
 				events.map(async (event) => {
