@@ -2263,7 +2263,7 @@ export default function DeviceEventsPage() {
 			if (latestSavedEvent.source) next.set("source", latestSavedEvent.source);
 			next.delete("status");
 			next.delete("query");
-			next.set("sort", "eventTime");
+			next.set("sort", "receivedAt");
 			next.set("order", "desc");
 		});
 	};
@@ -2279,7 +2279,7 @@ export default function DeviceEventsPage() {
 			if (latestSdkEvidenceEvent.eventAction) next.set("eventAction", latestSdkEvidenceEvent.eventAction);
 			next.delete("status");
 			next.delete("query");
-			next.set("sort", "eventTime");
+			next.set("sort", "receivedAt");
 			next.set("order", "desc");
 		});
 	};
