@@ -2987,6 +2987,13 @@ export function DeviceEnrollmentPanel({
 		const vendorUserId = String(deviceUser.vendorUserId || "").trim();
 		if (vendorUserId) hrisDeviceUsersByVendorId.set(vendorUserId, deviceUser);
 	}
+	// Preserve live device list order (device UI "recent" often sits at end of paged
+	// UserInfo reads). Higher index = treated as more recent when no lastSyncedAt.
+	const liveSourceOrderByVendorId = new Map<string, number>();
+	deviceUsers.forEach((user, index) => {
+		const vendorUserId = String(user.employeeNo || "").trim();
+		if (vendorUserId) liveSourceOrderByVendorId.set(vendorUserId, index);
+	});
 	const sourceDeviceUserRows = deviceUsers
 		.filter((user) => String(user.employeeNo || "").trim())
 		.map<VisibleDeviceUserRow>((user) => {
@@ -3009,7 +3016,11 @@ export function DeviceEnrollmentPanel({
 							: "SOURCE_ONLY"),
 				employeeId: hrisDeviceUser?.employeeId || null,
 				employee: hrisDeviceUser?.employee || null,
-				lastSyncedAt: hrisDeviceUser?.lastSyncedAt || null,
+				// Live-on-device users without HRIS sync stamp: treat as "active now" so
+				// Current view sorts like the device recent page, not buried by old IDs.
+				lastSyncedAt:
+					hrisDeviceUser?.lastSyncedAt ||
+					(isLinkCheckPending ? null : new Date().toISOString()),
 				rawPayload: hrisDeviceUser?.rawPayload || { UserInfo: user },
 				vendorMetadata:
 					hrisDeviceUser?.vendorMetadata ||
@@ -3112,16 +3123,23 @@ export function DeviceEnrollmentPanel({
 		.sort((left, right) => {
 			const rankDelta = rankDeviceUserSearchMatch(left) - rankDeviceUserSearchMatch(right);
 			if (rankDelta !== 0) return rankDelta;
+			// On-device (live source) first — matches Hikvision Person Management "recent" feel.
+			const leftLive = left.sourceUser ? 0 : 1;
+			const rightLive = right.sourceUser ? 0 : 1;
+			if (leftLive !== rightLive) return leftLive - rightLive;
 			// Newest activity first (lastSynced / created / updated).
 			const timeDelta = deviceUserActivityMs(right) - deviceUserActivityMs(left);
 			if (timeDelta !== 0) return timeDelta;
-			// Numeric vendor ids in natural order when times equal.
+			// Prefer later position in live device read (often last page / newest).
+			const leftOrder = liveSourceOrderByVendorId.get(String(left.vendorUserId || "")) ?? -1;
+			const rightOrder = liveSourceOrderByVendorId.get(String(right.vendorUserId || "")) ?? -1;
+			if (leftOrder !== rightOrder) return rightOrder - leftOrder;
 			const leftNum = Number(left.vendorUserId);
 			const rightNum = Number(right.vendorUserId);
 			if (Number.isFinite(leftNum) && Number.isFinite(rightNum) && leftNum !== rightNum) {
-				return leftNum - rightNum;
+				return rightNum - leftNum;
 			}
-			return String(left.vendorUserId || "").localeCompare(String(right.vendorUserId || ""));
+			return String(right.vendorUserId || "").localeCompare(String(left.vendorUserId || ""));
 		});
 	const deviceUserTotalPages = Math.max(
 		Math.ceil(visibleDeviceUserRows.length / deviceUserLimit),
