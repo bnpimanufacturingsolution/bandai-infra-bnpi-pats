@@ -14187,23 +14187,88 @@ export const controller = (prisma: PrismaClient) => {
 					),
 				]);
 			const total = Number(totalRows[0]?.total || 0);
-			const enrichedEvents = events.map((event) => {
-				const runtimeLabels = classifyDeviceEvent(event);
-				return {
-					...event,
-					taxonomy: {
-						eventCategory: event.eventCategory,
-						eventAction: event.eventAction,
-						eventLabel: event.eventLabel,
-						eventConfidence: event.eventConfidence,
-						processingLabel: runtimeLabels.processingLabel,
-						transportLabel: runtimeLabels.transportLabel,
-						capabilityConfidence: String(
-							event.eventConfidence || "UNKNOWN",
-						).toLowerCase(),
-					},
-				};
-			});
+			// Resolve opaque person tokens for display + heal saved rows when map exists.
+			const {
+				isOpaqueHikvisionPersonToken,
+			} = await import("../../helper/hikvision-event-contract.helper");
+			const { resolveDevicePersonToken } = await import(
+				"../../helper/device-person-token.helper"
+			);
+			const enrichedEvents = await Promise.all(
+				events.map(async (event) => {
+					const runtimeLabels = classifyDeviceEvent(event);
+					let employeeNo = String(event.employeeNo || "").trim() || null;
+					let payload =
+						event.payload && typeof event.payload === "object" ? { ...event.payload } : {};
+					const opaqueCandidate =
+						(employeeNo && isOpaqueHikvisionPersonToken(employeeNo) && employeeNo) ||
+						(payload?.opaquePersonToken &&
+						isOpaqueHikvisionPersonToken(String(payload.opaquePersonToken))
+							? String(payload.opaquePersonToken)
+							: null);
+					if (
+						opaqueCandidate &&
+						event.deviceId &&
+						(!employeeNo || isOpaqueHikvisionPersonToken(employeeNo))
+					) {
+						try {
+							const resolved = await resolveDevicePersonToken(prisma as any, {
+								organizationId: String(organizationId),
+								deviceId: String(event.deviceId),
+								opaqueToken: opaqueCandidate,
+							});
+							if (resolved?.employeeNo) {
+								employeeNo = resolved.employeeNo;
+								payload = {
+									...payload,
+									personTokenResolved: true,
+									opaquePersonToken: opaqueCandidate,
+									resolvedEmployeeNo: resolved.employeeNo,
+									resolvedDisplayName: resolved.displayName,
+								};
+								// Heal row in background so next load is already plain.
+								void (prisma as any).deviceEvent
+									.update({
+										where: { id: event.id },
+										data: {
+											employeeNo: resolved.employeeNo,
+											payload,
+											status:
+												event.status === "RECEIVED" || event.status === "UNMATCHED"
+													? "UNMATCHED"
+													: event.status,
+										},
+									})
+									.catch(() => undefined);
+							}
+						} catch {
+							// ignore resolve failures on list
+						}
+					} else if (
+						payload?.personTokenResolved &&
+						payload?.resolvedEmployeeNo &&
+						(!employeeNo || isOpaqueHikvisionPersonToken(employeeNo))
+					) {
+						employeeNo = String(payload.resolvedEmployeeNo);
+					}
+					return {
+						...event,
+						employeeNo,
+						payload,
+						taxonomy: {
+							eventCategory: event.eventCategory,
+							eventAction: event.eventAction,
+							eventLabel: event.eventLabel,
+							eventConfidence: event.eventConfidence,
+							processingLabel: runtimeLabels.processingLabel,
+							transportLabel: runtimeLabels.transportLabel,
+							capabilityConfidence: String(
+								event.eventConfidence || "UNKNOWN",
+							).toLowerCase(),
+						},
+					};
+				}),
+			);
 			const byProcessingResult = Object.fromEntries(
 				statusGroups.map((item: any) => [item.status, Number(item.count || 0)]),
 			);

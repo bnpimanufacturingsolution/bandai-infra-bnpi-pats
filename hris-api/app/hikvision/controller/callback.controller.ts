@@ -393,7 +393,37 @@ export const controller = (prisma: PrismaClient) => {
 					return;
 				}
 
-				const employeeNo = String(event.employeeNo || "").trim();
+				let employeeNo = String(event.employeeNo || "").trim();
+				let opaquePersonToken: string | null = null;
+				let personTokenResolved = false;
+				// Resolve opaque log/callback person tokens via write-time map (future-proof).
+				try {
+					const {
+						resolveDevicePersonToken,
+					} = await import("../../../helper/device-person-token.helper");
+					const { isOpaqueHikvisionPersonToken } = await import(
+						"../../../helper/hikvision-event-contract.helper"
+					);
+					if (employeeNo && isOpaqueHikvisionPersonToken(employeeNo)) {
+						const resolved = await resolveDevicePersonToken(prisma as any, {
+							organizationId: String(device.organizationId),
+							deviceId: String(device.id),
+							opaqueToken: employeeNo,
+						});
+						if (resolved?.employeeNo) {
+							opaquePersonToken = employeeNo;
+							employeeNo = resolved.employeeNo;
+							personTokenResolved = true;
+							(event as any).employeeNo = employeeNo;
+							(event as any).opaquePersonToken = opaquePersonToken;
+							(event as any).personTokenResolved = true;
+							(event as any).resolvedEmployeeNo = employeeNo;
+							(event as any).resolvedDisplayName = resolved.displayName;
+						}
+					}
+				} catch {
+					// Token table may be missing on older DBs; never fail callback.
+				}
 				const receivedAt = new Date();
 				const knownSkewSeconds = Number(
 					(device.config as any)?.hikvisionClockSkewSeconds || 0,
@@ -475,10 +505,21 @@ export const controller = (prisma: PrismaClient) => {
 					res.status(200).json(successResponse);
 					return;
 				}
+				const callbackPayload = {
+					...payload,
+					...(personTokenResolved
+						? {
+								personTokenResolved: true,
+								opaquePersonToken,
+								resolvedEmployeeNo: employeeNo,
+								resolvedDisplayName: (event as any).resolvedDisplayName || null,
+							}
+						: {}),
+				};
 				const { eventRecord, isDuplicate } = await saveInitialDeviceEvent({
 					device,
 					event,
-					payload,
+					payload: callbackPayload,
 					eventTime,
 					employeeNo,
 					source,
