@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { DeviceLiveReadiness, DeviceLiveReadinessLevel } from "~/services/devices.service";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/atoms/Button";
+import { Switch } from "~/components/ui/switch";
 import {
 	Database,
 	Radio,
@@ -41,13 +42,13 @@ const shortOverall = (
 	if (level === "green" && safeToEnroll && safeToTap) {
 		return mode === "enroll" ? "Safe to enroll" : "Safe to tap / enroll";
 	}
-	if (level === "yellow") return mode === "enroll" ? "Enroll with caution" : "Partially ready";
+	if (level === "yellow") return mode === "enroll" ? "Needs fresh proof" : "Live path needs proof";
 	return mode === "enroll" ? "Not safe to enroll" : "Not ready for live ops";
 };
 
 /**
- * Compact top-bar readiness: one-line RYG + Prove button; expand for check details.
- * Armed alone is never shown as fully green without DB + proof.
+ * Compact top-bar readiness + Keep ready toggle + Prove button.
+ * Keep ready persists in localStorage and auto-repairs when the parent wires it.
  */
 export function DeviceLiveReadinessStrip({
 	readiness,
@@ -58,28 +59,61 @@ export function DeviceLiveReadinessStrip({
 	compact = false,
 	onProve,
 	isProving,
+	keepReady = false,
+	onKeepReadyChange,
+	keepReadyWorking = false,
 }: {
 	readiness?: DeviceLiveReadiness | null;
 	isLoading?: boolean;
 	errorMessage?: string | null;
 	mode?: "events" | "enroll";
 	className?: string;
-	/** Toolbar-sized strip (default). */
 	compact?: boolean;
 	onProve?: () => void;
 	isProving?: boolean;
+	/** When on, auto re-arm / prove while page is open (persisted by parent). */
+	keepReady?: boolean;
+	onKeepReadyChange?: (on: boolean) => void;
+	/** True while auto-repair is running. */
+	keepReadyWorking?: boolean;
 }) {
 	const [open, setOpen] = useState(false);
+
+	const keepReadyControl =
+		typeof onKeepReadyChange === "function" ? (
+			<label
+				className={cn(
+					"inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold",
+					keepReady
+						? "border-emerald-400 bg-emerald-50 text-emerald-950"
+						: "border-slate-200 bg-white text-slate-700",
+				)}
+				title="When ON: this page auto-restarts the listener and re-checks every ~45s so you do not need to call AI each time it goes red. Stays on after refresh. Cannot fix a dead DB tunnel by itself.">
+				<Switch
+					checked={keepReady}
+					onCheckedChange={(checked) => onKeepReadyChange(Boolean(checked))}
+					className="scale-90 data-[state=checked]:bg-emerald-600"
+					aria-label="Keep live path ready"
+				/>
+				<span className="whitespace-nowrap">
+					Keep ready{keepReady ? " ON" : ""}
+					{keepReady && keepReadyWorking ? " · fixing…" : ""}
+				</span>
+			</label>
+		) : null;
 
 	if (isLoading && !readiness) {
 		return (
 			<div
 				className={cn(
-					"inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700",
+					"flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-700",
 					className,
 				)}>
-				<Loader2 className="h-3.5 w-3.5 animate-spin" />
-				Checking DB + live path…
+				<span className="inline-flex items-center gap-2">
+					<Loader2 className="h-3.5 w-3.5 animate-spin" />
+					Checking DB + live path…
+				</span>
+				{keepReadyControl}
 			</div>
 		);
 	}
@@ -95,27 +129,31 @@ export function DeviceLiveReadinessStrip({
 					<XCircle className="mt-0.5 h-4 w-4 shrink-0" />
 					<div className="min-w-0">
 						<p className="font-semibold">Live path health check failed</p>
-						<p className="mt-0.5 break-words text-xs text-red-800">
-							{errorMessage}
-						</p>
+						<p className="mt-0.5 break-words text-xs text-red-800">{errorMessage}</p>
 						<p className="mt-1 text-xs text-red-700">
-							Saved rows may still be visible from the ledger, but realtime tap/enroll
-							truth is not proven until this check passes.
+							Turn <strong>Keep ready</strong> ON to auto-retry, or click Prove live path.
 						</p>
 					</div>
 				</div>
-				{onProve ? (
-					<Button
-						type="button"
-						size="sm"
-						variant="outline"
-						className="h-8 shrink-0 border-red-300 px-3 text-xs text-red-800 hover:bg-red-100"
-						disabled={isProving}
-						onClick={onProve}>
-						{isProving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Zap className="mr-1 h-3 w-3" />}
-						Prove live path
-					</Button>
-				) : null}
+				<div className="flex flex-wrap items-center gap-2">
+					{keepReadyControl}
+					{onProve ? (
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							className="h-8 shrink-0 border-red-300 px-3 text-xs text-red-800 hover:bg-red-100"
+							disabled={isProving}
+							onClick={onProve}>
+							{isProving ? (
+								<Loader2 className="mr-1 h-3 w-3 animate-spin" />
+							) : (
+								<Zap className="mr-1 h-3 w-3" />
+							)}
+							Prove live path
+						</Button>
+					) : null}
+				</div>
 			</div>
 		);
 	}
@@ -125,6 +163,18 @@ export function DeviceLiveReadinessStrip({
 	const level = readiness.overall;
 	const OverallIcon =
 		level === "green" ? ShieldCheck : level === "yellow" ? AlertTriangle : XCircle;
+	const tapLabel =
+		level === "green" && readiness.safeToTap
+			? "YES"
+			: level === "red" || !readiness.safeToTap
+				? "NO"
+				: "CHECK";
+	const enrollLabel =
+		level === "green" && readiness.safeToEnroll
+			? "YES"
+			: level === "red" || !readiness.safeToEnroll
+				? "NO"
+				: "CHECK";
 
 	return (
 		<div className={cn("min-w-0", className)}>
@@ -167,36 +217,42 @@ export function DeviceLiveReadinessStrip({
 				</button>
 
 				<span className="text-[10px] font-bold uppercase tracking-wide opacity-80">
-					Tap {readiness.safeToTap ? "YES" : "NO"} · Enroll {readiness.safeToEnroll ? "YES" : "NO"}
+					Tap {tapLabel} · Enroll {enrollLabel}
 				</span>
 
-				{onProve ? (
-					<Button
-						type="button"
-						size="sm"
-						variant={level === "green" ? "outline" : "default"}
-						className={cn(
-							"ml-auto h-7 px-2 text-xs",
-							level !== "green" && "bg-slate-900 text-white hover:bg-slate-800",
-						)}
-						disabled={isProving}
-						onClick={onProve}>
-						{isProving ? (
-							<Loader2 className="mr-1 h-3 w-3 animate-spin" />
-						) : (
-							<Zap className="mr-1 h-3 w-3" />
-						)}
-						Prove live path
-					</Button>
-				) : null}
+				<div className="ml-auto flex flex-wrap items-center gap-1.5">
+					{keepReadyControl}
+					{onProve ? (
+						<Button
+							type="button"
+							size="sm"
+							variant={level === "green" ? "outline" : "default"}
+							className={cn(
+								"h-7 px-2 text-xs",
+								level !== "green" && "bg-slate-900 text-white hover:bg-slate-800",
+							)}
+							disabled={isProving}
+							onClick={onProve}>
+							{isProving ? (
+								<Loader2 className="mr-1 h-3 w-3 animate-spin" />
+							) : (
+								<Zap className="mr-1 h-3 w-3" />
+							)}
+							{isProving ? "Fixing…" : "Prove / fix now"}
+						</Button>
+					) : null}
+				</div>
 			</div>
 
 			{open ? (
 				<div className="mt-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700 shadow-sm">
 					<p className="font-medium text-slate-900">{readiness.headline}</p>
 					<p className="mt-0.5 text-[11px] text-slate-600">
+						<strong>Keep ready ON</strong> auto-restarts the Hikvision listener and
+						re-checks every ~45s while this page is open (saved after refresh). It cannot
+						fix a down database tunnel by itself — predev/DB access still needed for that.
 						Green needs <strong>database</strong> + <strong>live capture</strong> +{" "}
-						<strong>recent proof</strong>. Listener “armed” alone is not enough.
+						<strong>recent proof</strong> (a real tap helps proof become fresh).
 					</p>
 					<div className="mt-2 grid gap-1 sm:grid-cols-3">
 						{readiness.checks.map((check) => {
@@ -204,10 +260,7 @@ export function DeviceLiveReadinessStrip({
 							return (
 								<div
 									key={check.id}
-									className={cn(
-										"rounded border px-2 py-1.5",
-										levelBadge[check.level],
-									)}>
+									className={cn("rounded border px-2 py-1.5", levelBadge[check.level])}>
 									<div className="flex items-center gap-1 font-semibold">
 										<Icon className="h-3 w-3" />
 										{check.label}

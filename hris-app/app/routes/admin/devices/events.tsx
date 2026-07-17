@@ -58,6 +58,11 @@ import {
 } from "~/lib/device-events-realtime-ui";
 import { DeviceLiveReadinessStrip } from "~/components/molecules/DeviceLiveReadinessStrip";
 import devicesService from "~/services/devices.service";
+import {
+	DEVICE_LIVE_KEEP_READY_INTERVAL_MS,
+	readDeviceLiveKeepReady,
+	writeDeviceLiveKeepReady,
+} from "~/lib/device-live-keep-ready";
 import type {
 	DeviceEvent,
 	DeviceEventStatus,
@@ -1363,20 +1368,63 @@ export default function DeviceEventsPage() {
 		staleTime: 8_000,
 	});
 	const [isProvingLivePath, setIsProvingLivePath] = useState(false);
-	const proveLivePath = async () => {
+	const [keepLiveReady, setKeepLiveReady] = useState(false);
+	useEffect(() => {
+		setKeepLiveReady(readDeviceLiveKeepReady());
+		const onStorage = (event: StorageEvent) => {
+			if (event.key === "project-truth.device-live-keep-ready") {
+				setKeepLiveReady(event.newValue === "1");
+			}
+		};
+		const onCustom = (event: Event) => {
+			const detail = (event as CustomEvent<{ on?: boolean }>).detail;
+			if (typeof detail?.on === "boolean") setKeepLiveReady(detail.on);
+		};
+		window.addEventListener("storage", onStorage);
+		window.addEventListener("project-truth:device-live-keep-ready", onCustom as EventListener);
+		return () => {
+			window.removeEventListener("storage", onStorage);
+			window.removeEventListener(
+				"project-truth:device-live-keep-ready",
+				onCustom as EventListener,
+			);
+		};
+	}, []);
+	const setKeepLiveReadyPersisted = (on: boolean) => {
+		setKeepLiveReady(on);
+		writeDeviceLiveKeepReady(on);
+		if (on) {
+			toast.success("Keep ready ON", {
+				id: "device-live-keep-ready",
+				description:
+					"Auto-restarts the Hikvision listener and re-checks about every 45s while this page is open. Stays on after refresh.",
+			});
+		} else {
+			toast.message("Keep ready OFF", {
+				id: "device-live-keep-ready",
+				description: "Live path will not auto-repair until you turn this on again.",
+			});
+		}
+	};
+	const proveLivePath = async (options?: { quiet?: boolean; forceReArm?: boolean }) => {
+		const quiet = options?.quiet === true;
 		setIsProvingLivePath(true);
 		try {
-			const result = await devicesService.proveDeviceLivePath();
+			const result = await devicesService.proveDeviceLivePath({
+				forceReArm: options?.forceReArm ?? keepLiveReady,
+			});
 			await refetchLiveReadiness();
 			void refetch();
 			if (result.proven) {
-				toast.success("Live path prove passed", {
-					id: "device-live-path-prove",
-					description:
-						result.operatorHint ||
-						"Safe to tap and enroll for realtime. Tap TEST A once to confirm a new row.",
-				});
-			} else {
+				if (!quiet) {
+					toast.success("Live path prove passed", {
+						id: "device-live-path-prove",
+						description:
+							result.operatorHint ||
+							"Safe to tap and enroll for realtime. Tap TEST A once to confirm a new row.",
+					});
+				}
+			} else if (!quiet) {
 				toast.warning("Live path prove incomplete", {
 					id: "device-live-path-prove",
 					description:
@@ -1384,16 +1432,66 @@ export default function DeviceEventsPage() {
 						result.readiness?.headline ||
 						"Fix red checks before relying on realtime enroll.",
 				});
+			} else if (keepLiveReady && result.restartAttempted) {
+				toast.message("Keep ready re-armed listener", {
+					id: "device-live-keep-ready-repair",
+					description: result.operatorHint || "Tap once if proof is still stale.",
+				});
 			}
+			return result;
 		} catch (error: unknown) {
-			toast.error("Live path prove failed", {
-				id: "device-live-path-prove",
-				description: getAsyncErrorMessage(error, "Could not prove live path."),
-			});
+			if (!quiet) {
+				toast.error("Live path prove failed", {
+					id: "device-live-path-prove",
+					description: getAsyncErrorMessage(error, "Could not prove live path."),
+				});
+			}
+			return null;
 		} finally {
 			setIsProvingLivePath(false);
 		}
 	};
+
+	// Keep ready: auto repair while Device Events saved view is open.
+	useEffect(() => {
+		if (viewMode !== "saved" || !keepLiveReady) return;
+		if (typeof window === "undefined") return;
+		let cancelled = false;
+		const needsRepair =
+			!liveReadiness ||
+			liveReadiness.overall !== "green" ||
+			!liveReadiness.safeToTap ||
+			!liveReadiness.safeToEnroll;
+		const run = () => {
+			if (cancelled || isProvingLivePath) return;
+			if (!needsRepair && liveReadiness?.proof?.fresh) return;
+			void proveLivePath({ quiet: true, forceReArm: true });
+		};
+		// Immediate pass when red/yellow after load or toggle.
+		if (needsRepair) {
+			const t = window.setTimeout(run, 800);
+			const intervalId = window.setInterval(run, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
+			return () => {
+				cancelled = true;
+				window.clearTimeout(t);
+				window.clearInterval(intervalId);
+			};
+		}
+		const intervalId = window.setInterval(run, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
+		return () => {
+			cancelled = true;
+			window.clearInterval(intervalId);
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- deliberate: re-run when readiness/toggle changes
+	}, [
+		viewMode,
+		keepLiveReady,
+		liveReadiness?.overall,
+		liveReadiness?.safeToTap,
+		liveReadiness?.safeToEnroll,
+		liveReadiness?.proof?.fresh,
+		isProvingLivePath,
+	]);
 
 	const savedQueryParams: ApiQueryParams = {
 		page: pageParam,
@@ -3077,8 +3175,11 @@ export default function DeviceEventsPage() {
 					readiness={liveReadiness}
 					isLoading={isLiveReadinessLoading}
 					errorMessage={liveReadinessErrorMessage}
-					onProve={() => void proveLivePath()}
+					onProve={() => void proveLivePath({ forceReArm: true })}
 					isProving={isProvingLivePath}
+					keepReady={keepLiveReady}
+					onKeepReadyChange={setKeepLiveReadyPersisted}
+					keepReadyWorking={keepLiveReady && isProvingLivePath}
 				/>
 			) : null}
 

@@ -72,6 +72,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
 import { DeviceLiveReadinessStrip } from "~/components/molecules/DeviceLiveReadinessStrip";
+import {
+	DEVICE_LIVE_KEEP_READY_INTERVAL_MS,
+	readDeviceLiveKeepReady,
+	writeDeviceLiveKeepReady,
+} from "~/lib/device-live-keep-ready";
 import type { HikvisionUserInfo } from "~/types/hikvision";
 import deviceService, {
 	type DeviceSyncPreviewRow,

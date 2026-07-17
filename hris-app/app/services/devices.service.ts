@@ -2152,9 +2152,13 @@ class DevicesService extends APIService {
 	}
 
 	/**
-	 * Operator prove: re-check DB via events, restart listener if stopped, re-check.
+	 * Operator prove / keep-alive repair:
+	 * re-check DB, restart listener when stopped OR quiet/stale (re-arm), re-check.
 	 */
-	async proveDeviceLivePath(): Promise<{
+	async proveDeviceLivePath(options?: {
+		/** When true (Keep ready), restart even if service is "running" but not receiving / proof stale. */
+		forceReArm?: boolean;
+	}): Promise<{
 		proven: boolean;
 		restartAttempted?: boolean;
 		steps: Array<{ step: string; ok: boolean; detail: string }>;
@@ -2162,6 +2166,7 @@ class DevicesService extends APIService {
 		operatorHint?: string;
 		message?: string;
 	}> {
+		const forceReArm = options?.forceReArm === true;
 		const steps: Array<{ step: string; ok: boolean; detail: string }> = [];
 		let restartAttempted = false;
 
@@ -2182,33 +2187,47 @@ class DevicesService extends APIService {
 			});
 		}
 
-		// 2) Listener status (+ restart if down)
+		// 2) Listener status (+ restart if down, or re-arm when keep-ready / quiet-stale)
 		let listener: HikvisionListenerStatus | null = null;
 		try {
 			listener = await this.getHikvisionListenerStatus();
+			const receiving = Boolean(listener.sdk?.receivingCallbacks);
+			const armed = Boolean(listener.sdk?.armed);
+			const lastAlarm = listener.sdk?.lastAlarmAt
+				? Date.parse(String(listener.sdk.lastAlarmAt))
+				: NaN;
+			const proofAgeMs = Number.isFinite(lastAlarm) ? Date.now() - lastAlarm : null;
+			const proofStale = proofAgeMs === null || proofAgeMs > 15 * 60 * 1000;
 			steps.push({
 				step: "listener_status",
 				ok: Boolean(listener.running),
 				detail: listener.running
-					? `Listener ${listener.status} / sdk=${listener.sdk?.state || "unknown"}`
+					? `Listener ${listener.status} / sdk=${listener.sdk?.state || "unknown"} receiving=${receiving}`
 					: listener.error || "Listener not running",
 			});
-			if (!listener.running && listener.control?.available) {
+			const shouldRestart =
+				listener.control?.available &&
+				(!listener.running ||
+					forceReArm ||
+					(!receiving && (proofStale || !armed)));
+			if (shouldRestart) {
 				restartAttempted = true;
 				try {
 					await this.controlHikvisionListener("restart");
 					steps.push({
 						step: "listener_restart",
 						ok: true,
-						detail: "Listener restart requested",
+						detail: !listener.running
+							? "Listener restart requested (was stopped)"
+							: "Listener re-arm restart requested (quiet/stale path)",
 					});
-					await new Promise((r) => setTimeout(r, 3000));
+					await new Promise((r) => setTimeout(r, 3500));
 					listener = await this.getHikvisionListenerStatus();
 					steps.push({
 						step: "listener_status_after_restart",
 						ok: Boolean(listener.running),
 						detail: listener.running
-							? `Listener ${listener.status} after restart`
+							? `Listener ${listener.status} after restart / sdk=${listener.sdk?.state || "unknown"}`
 							: "Still not running after restart",
 					});
 				} catch (error: any) {
@@ -2242,11 +2261,11 @@ class DevicesService extends APIService {
 			operatorHint: proven
 				? "Tap TEST A once now; a TAP or SDK row should appear within a few seconds."
 				: !readiness.database.ok
-					? "Restore Postgres tunnel (local 55435 / predev) first."
+					? "Restore Postgres tunnel (local 55435 / predev) first — Keep ready cannot fix a down DB tunnel by itself."
 					: !readiness.listener.running
-						? "Listener failed to start — open Listener and Restart; check reverse tunnel."
+						? "Listener failed to start — check reverse tunnel to the device, then toggle Keep ready again."
 						: readiness.proof.stale
-							? "Path is quiet — tap the device once for fresh proof, then Prove again."
+							? "Listener re-armed if possible. Tap the device once so proof becomes fresh (green needs a recent event)."
 							: "Review red/yellow readiness chips.",
 		};
 	}
