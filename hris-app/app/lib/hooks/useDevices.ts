@@ -131,13 +131,12 @@ export const useDeviceEvents = (
 		queryKey: queryKeys.devices.events(params),
 		queryFn: () => devicesService.getDeviceEvents(params),
 		enabled,
-		// Live ledger must not sit on a 20s stale window — that blocked 5s polls from feeling live.
-		staleTime: liveLedger ? 0 : 20 * 1000,
 		// Keep previous filter results visible while the next query runs (no blank table flash).
+		staleTime: liveLedger ? 5_000 : 20_000,
 		placeholderData: (previous) => previous,
 		// Default: no background spam. Callers opt into polling only when needed.
 		refetchInterval: enabled ? (options.refetchInterval ?? false) : false,
-		refetchIntervalInBackground: liveLedger,
+		refetchIntervalInBackground: false,
 		refetchOnWindowFocus: liveLedger,
 		refetchOnReconnect: true,
 		retry: 0,

@@ -1325,21 +1325,14 @@ export default function DeviceEventsPage() {
 	const organizationId =
 		user?.organizationId || (user as any)?.organization?.id || liveDevice?.organizationId || "";
 	const hasRealtimeScope = Boolean(organizationId || selectedDeviceRoomId);
-	// Socket alone is not enough for host-local truth: VM listener posts to VM API,
-	// so host socket can stay "connected" without device-event:saved. Always light-poll
-	// the saved ledger so a physical tap appears within a few seconds.
 	const isSdkAlarmSavedScope =
 		viewMode === "saved" &&
 		(source === "all" || source === "EN_HCNETSDK_ALARM") &&
 		(deviceId === "all" || isHikvisionDevice(selectedDevice));
-	// Always poll the saved ledger on this page. Host socket often misses VM→API
-	// device-event:saved, so operators had to hard-refresh to see taps.
-	const shouldPollSavedEvents = viewMode === "saved";
-	const savedEventsRefetchInterval = shouldPollSavedEvents
-		? isSdkAlarmSavedScope
-			? 3_000
-			: 10_000
-		: false;
+	// Calm by default: no spam poll. Socket + proof-change invalidation cover live taps.
+	// Only fall back to a slow poll when the socket is disconnected.
+	const shouldPollSavedEvents = viewMode === "saved" && (!isConnected || !hasRealtimeScope);
+	const savedEventsRefetchInterval = shouldPollSavedEvents ? 20_000 : false;
 	// Listener status must load on the saved SDK ledger too — otherwise the mid
 	// panel says "Live capture offline" while the readiness strip says "armed"
 	// (readiness fetches listener separately; the panel used to only load when
@@ -1353,12 +1346,9 @@ export default function DeviceEventsPage() {
 	} = useHikvisionListenerStatus(
 		isListenerControlModalOpen || (viewMode === "saved" && isSdkAlarmSavedScope),
 		{
-			staleTime: isListenerControlModalOpen ? 8 * 1000 : 20 * 1000,
-			refetchInterval: isListenerControlModalOpen
-				? 12 * 1000
-				: viewMode === "saved" && isSdkAlarmSavedScope
-					? 20 * 1000
-					: false,
+			staleTime: isListenerControlModalOpen ? 8 * 1000 : 45 * 1000,
+			// Modal: gentle poll. Page strip: no interval spam (readiness covers health).
+			refetchInterval: isListenerControlModalOpen ? 20 * 1000 : false,
 		},
 	);
 	// Only treat as "Checking…" when we have no snapshot yet. Refetch must not blank the modal.
@@ -1372,10 +1362,13 @@ export default function DeviceEventsPage() {
 		error: liveReadinessError,
 		refetch: refetchLiveReadiness,
 	} = useDeviceLiveReadiness(viewMode === "saved", {
-		refetchInterval: 15_000,
-		staleTime: 8_000,
+		// Calm: 45s is enough for RYG; manual Prove / Keep ready still force refresh.
+		refetchInterval: 45_000,
+		staleTime: 20_000,
 	});
 	const [isProvingLivePath, setIsProvingLivePath] = useState(false);
+	/** Quiet Keep ready repair — must not flip the green strip to "Fixing…". */
+	const [isQuietKeepReadyRepair, setIsQuietKeepReadyRepair] = useState(false);
 	const [keepLiveReady, setKeepLiveReady] = useState(false);
 	useEffect(() => {
 		setKeepLiveReady(readDeviceLiveKeepReady());
@@ -1405,7 +1398,7 @@ export default function DeviceEventsPage() {
 			toast.success("Keep ready ON", {
 				id: "device-live-keep-ready",
 				description:
-					"Auto-restarts the Hikvision listener and re-checks about every 45s while this page is open. Stays on after refresh.",
+					"Stays quiet while green. Only auto-repairs if the live path goes red. Saved after refresh.",
 			});
 		} else {
 			toast.message("Keep ready OFF", {
@@ -1419,7 +1412,8 @@ export default function DeviceEventsPage() {
 		// Never default forceReArm from Keep ready ON — that thrashed the VM listener
 		// mid-tap and produced lying "failed to start" toasts while rows still landed.
 		const forceReArm = options?.forceReArm === true;
-		setIsProvingLivePath(true);
+		if (quiet) setIsQuietKeepReadyRepair(true);
+		else setIsProvingLivePath(true);
 		try {
 			const result = await devicesService.proveDeviceLivePath({ forceReArm });
 			await refetchLiveReadiness();
@@ -1472,56 +1466,46 @@ export default function DeviceEventsPage() {
 			}
 			return null;
 		} finally {
-			setIsProvingLivePath(false);
+			if (quiet) setIsQuietKeepReadyRepair(false);
+			else setIsProvingLivePath(false);
 		}
 	};
 
-	// Keep ready: only repair when path is actually broken (not quiet/yellow noise).
-	// Cooldown after a prove attempt so "Fixing…" cannot spin forever every render cycle.
+	// Keep ready: repair ONLY when path is red / not safe. Never thrash a green path.
+	// No healthy-path interval prove (readiness already polls calmly).
 	const keepReadyLastProveAtRef = useRef(0);
 	useEffect(() => {
 		if (viewMode !== "saved" || !keepLiveReady) return;
 		if (typeof window === "undefined") return;
-		let cancelled = false;
+		if (!liveReadiness) return; // wait for first snapshot — do not prove into a loading gap
 		const pathHealthy =
-			Boolean(liveReadiness) &&
 			liveReadiness.database?.ok !== false &&
 			liveReadiness.safeToTap === true &&
 			liveReadiness.safeToEnroll === true &&
 			liveReadiness.overall !== "red" &&
 			(liveReadiness.listener?.running ||
 				liveReadiness.listener?.receiving ||
-				liveReadiness.listener?.armed);
-		const pathBroken = !pathHealthy;
+				liveReadiness.listener?.armed ||
+				liveReadiness.proof?.fresh);
+		if (pathHealthy) return;
+		const pathBroken = true;
 		const needsForceReArm =
-			pathBroken &&
-			!liveReadiness?.listener?.receiving &&
-			(!liveReadiness?.listener?.running || !liveReadiness?.listener?.armed);
+			!liveReadiness.listener?.receiving &&
+			(!liveReadiness.listener?.running || !liveReadiness.listener?.armed);
+		let cancelled = false;
 		const run = () => {
-			if (cancelled || isProvingLivePath) return;
-			if (!pathBroken) return;
+			if (cancelled || isProvingLivePath || isQuietKeepReadyRepair) return;
 			const now = Date.now();
-			// Min 90s between auto-proves so failed restart does not thrash systemd/UI.
-			if (now - keepReadyLastProveAtRef.current < 90_000) return;
+			// Min 2 minutes between auto-proves — no spinner thrash.
+			if (now - keepReadyLastProveAtRef.current < 120_000) return;
 			keepReadyLastProveAtRef.current = now;
 			void proveLivePath({ quiet: true, forceReArm: needsForceReArm });
 		};
-		if (pathBroken) {
-			const t = window.setTimeout(run, 1200);
-			const intervalId = window.setInterval(run, Math.max(DEVICE_LIVE_KEEP_READY_INTERVAL_MS, 90_000));
-			return () => {
-				cancelled = true;
-				window.clearTimeout(t);
-				window.clearInterval(intervalId);
-			};
-		}
-		// Healthy: light poll only (no force re-arm / no Fixing spinner).
-		const intervalId = window.setInterval(() => {
-			if (cancelled || isProvingLivePath) return;
-			void refetchLiveReadiness();
-		}, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
+		const t = window.setTimeout(run, 2_000);
+		const intervalId = window.setInterval(run, 120_000);
 		return () => {
 			cancelled = true;
+			window.clearTimeout(t);
 			window.clearInterval(intervalId);
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- deliberate: re-run when readiness/toggle changes
@@ -1535,7 +1519,9 @@ export default function DeviceEventsPage() {
 		liveReadiness?.listener?.running,
 		liveReadiness?.listener?.receiving,
 		liveReadiness?.listener?.armed,
+		liveReadiness?.proof?.fresh,
 		isProvingLivePath,
+		isQuietKeepReadyRepair,
 	]);
 
 	const savedQueryParams: ApiQueryParams = {
@@ -1564,7 +1550,8 @@ export default function DeviceEventsPage() {
 		refetch,
 	} = useDeviceEvents(savedQueryParams, {
 		refetchInterval: savedEventsRefetchInterval,
-		liveLedger: viewMode === "saved",
+		// Live ledger without hammering: only "live" when we are not socket-backed.
+		liveLedger: viewMode === "saved" && shouldPollSavedEvents,
 	});
 	const {
 		data: liveData,
@@ -1693,28 +1680,27 @@ export default function DeviceEventsPage() {
 		viewMode,
 	]);
 
-	// When live-readiness / listener shows a newer SDK alarm than our table, pull ledger now.
-	// This is the truthful "I just tapped" path without waiting for host socket.
+	// When live-readiness shows a *new* SDK proof time, pull the ledger once.
+	// No readiness re-fetch here (that caused loops + "Updating filters" spam).
 	const lastProofAt =
-		liveReadiness?.proof?.lastSdkEventAt ||
-		liveReadiness?.listener?.lastAlarmAt ||
-		hikvisionListenerStatus?.sdk?.lastAlarmAt ||
-		null;
+		liveReadiness?.proof?.lastSdkEventAt || liveReadiness?.listener?.lastAlarmAt || null;
+	const lastSeenProofAtRef = useRef<string | null>(null);
 	useEffect(() => {
 		if (viewMode !== "saved" || !lastProofAt) return;
+		if (lastSeenProofAtRef.current === lastProofAt) return;
+		const previous = lastSeenProofAtRef.current;
+		lastSeenProofAtRef.current = lastProofAt;
+		// Skip first paint (baseline) — only refresh when proof advances after mount.
+		if (!previous) return;
 		void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
 		void refetch();
-		void refetchLiveReadiness();
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- only when proof timestamp advances
 	}, [viewMode, lastProofAt]);
 
+	// Focus / tab-visible: one quiet refresh. No continuous 3s hammer.
 	useEffect(() => {
 		if (viewMode !== "saved") return;
 		if (typeof window === "undefined") return;
-
-		// Host socket is often a false friend for VM-posted SDK rows — poll hard on this page.
-		const intervalMs = isSdkAlarmSavedScope ? 3_000 : isConnected && hasRealtimeScope ? 10_000 : 5_000;
-		// Avoid toast-storm when DB tunnel flaps every poll (same id + min gap).
 		let lastRecoveryToastAt = 0;
 		const refreshFromRecovery = () => {
 			setLastRecoveryRefreshAt(new Date().toISOString());
@@ -1736,30 +1722,17 @@ export default function DeviceEventsPage() {
 			if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
 			refreshFromRecovery();
 		};
-
-		const intervalId = window.setInterval(refreshFromRecovery, intervalMs);
 		window.addEventListener("focus", handleVisibilityOrFocus);
 		if (typeof document !== "undefined") {
 			document.addEventListener("visibilitychange", handleVisibilityOrFocus);
 		}
-
 		return () => {
-			window.clearInterval(intervalId);
 			window.removeEventListener("focus", handleVisibilityOrFocus);
 			if (typeof document !== "undefined") {
 				document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
 			}
 		};
-	}, [
-		hasRealtimeScope,
-		isConnected,
-		isSdkAlarmSavedScope,
-		organizationId,
-		queryClient,
-		refetch,
-		selectedDeviceRoomId,
-		viewMode,
-	]);
+	}, [queryClient, refetch, viewMode]);
 
 	const updateSearchParams = (mutator: (next: URLSearchParams) => void) => {
 		setSearchParams(
@@ -1900,10 +1873,10 @@ export default function DeviceEventsPage() {
 	const sdkSummary = (selectedDevice as any)?.config?.zktecoSdkSummary || null;
 	const liveTotal = Number(acsEventPayload?.totalMatches || liveEvents.length || 0);
 	const totalItems = viewMode === "live" ? liveTotal : data?.pagination?.total || savedSummary.total || 0;
-	// Only block the table on first load. Filter changes keep previous rows + show a light status.
+	// Only block the table on first load. Background polls must NOT show "Updating filters…".
 	const isEventLoading = viewMode === "live" ? isLoadingLive : isLoadingSaved && !data;
 	const isEventFilterUpdating =
-		viewMode === "saved" && isFetchingSaved && (isSavedPlaceholderData || Boolean(data));
+		viewMode === "saved" && isFetchingSaved && isSavedPlaceholderData && !data;
 	const activeError = viewMode === "live" ? liveError || savedError : savedError;
 	const activeErrorHint = activeError ? getDeviceEventsRecoveryHint(activeError) : null;
 	const hasUsableSavedEventData =
@@ -3259,13 +3232,18 @@ export default function DeviceEventsPage() {
 					mode="events"
 					className="w-full"
 					readiness={liveReadiness}
-					isLoading={isLiveReadinessLoading}
+					isLoading={isLiveReadinessLoading && !liveReadiness}
 					errorMessage={liveReadinessErrorMessage}
 					onProve={() => void proveLivePath({ forceReArm: true })}
 					isProving={isProvingLivePath}
 					keepReady={keepLiveReady}
 					onKeepReadyChange={setKeepLiveReadyPersisted}
-					keepReadyWorking={keepLiveReady && isProvingLivePath}
+					// Never show "fixing…" on a green/safe path — only true red repair work.
+					keepReadyWorking={
+						keepLiveReady &&
+						isQuietKeepReadyRepair &&
+						(liveReadiness?.overall === "red" || liveReadiness?.safeToTap === false)
+					}
 				/>
 			) : null}
 

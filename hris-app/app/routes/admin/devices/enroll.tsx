@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Button } from "~/components/atoms/Button";
 import { Modal } from "~/components/atoms/Modal";
 import { Badge } from "~/components/atoms/Badge";
@@ -591,8 +591,8 @@ export function DeviceEnrollmentPanel({
 		error: liveReadinessError,
 		refetch: refetchLiveReadiness,
 	} = useDeviceLiveReadiness(true, {
-		refetchInterval: 15_000,
-		staleTime: 8_000,
+		refetchInterval: 45_000,
+		staleTime: 20_000,
 	});
 	const [isProvingLivePath, setIsProvingLivePath] = useState(false);
 	const [keepLiveReady, setKeepLiveReady] = useState(false);
@@ -624,16 +624,18 @@ export function DeviceEnrollmentPanel({
 			toast.success("Keep ready ON", {
 				id: "device-live-keep-ready",
 				description:
-					"Auto-restarts the Hikvision listener and re-checks about every 45s while this page is open.",
+					"Stays quiet while green. Only auto-repairs if the live path goes red.",
 			});
 		} else {
 			toast.message("Keep ready OFF", { id: "device-live-keep-ready" });
 		}
 	};
+	const [isQuietKeepReadyRepair, setIsQuietKeepReadyRepair] = useState(false);
 	const proveLivePath = async (options?: { quiet?: boolean; forceReArm?: boolean }) => {
 		const quiet = options?.quiet === true;
 		const forceReArm = options?.forceReArm === true;
-		setIsProvingLivePath(true);
+		if (quiet) setIsQuietKeepReadyRepair(true);
+		else setIsProvingLivePath(true);
 		try {
 			const result = await deviceService.proveDeviceLivePath({ forceReArm });
 			await refetchLiveReadiness();
@@ -669,46 +671,42 @@ export function DeviceEnrollmentPanel({
 			}
 			return null;
 		} finally {
-			setIsProvingLivePath(false);
+			if (quiet) setIsQuietKeepReadyRepair(false);
+			else setIsProvingLivePath(false);
 		}
 	};
 
+	const keepReadyLastProveAtRef = useRef(0);
 	useEffect(() => {
 		if (!keepLiveReady) return;
 		if (typeof window === "undefined") return;
-		let cancelled = false;
-		const pathBroken =
-			!liveReadiness ||
-			!liveReadiness.database?.ok ||
-			!liveReadiness.safeToTap ||
-			!liveReadiness.safeToEnroll ||
-			liveReadiness.overall === "red" ||
-			!liveReadiness.listener?.running;
+		if (!liveReadiness) return;
+		const pathHealthy =
+			liveReadiness.database?.ok !== false &&
+			liveReadiness.safeToTap === true &&
+			liveReadiness.safeToEnroll === true &&
+			liveReadiness.overall !== "red" &&
+			(liveReadiness.listener?.running ||
+				liveReadiness.listener?.receiving ||
+				liveReadiness.listener?.armed ||
+				liveReadiness.proof?.fresh);
+		if (pathHealthy) return;
 		const needsForceReArm =
-			pathBroken &&
-			(!liveReadiness?.listener?.running ||
-				!liveReadiness?.listener?.receiving ||
-				!liveReadiness?.listener?.armed);
+			!liveReadiness.listener?.receiving &&
+			(!liveReadiness.listener?.running || !liveReadiness.listener?.armed);
+		let cancelled = false;
 		const run = () => {
-			if (cancelled || isProvingLivePath) return;
-			if (!pathBroken) return;
+			if (cancelled || isProvingLivePath || isQuietKeepReadyRepair) return;
+			const now = Date.now();
+			if (now - keepReadyLastProveAtRef.current < 120_000) return;
+			keepReadyLastProveAtRef.current = now;
 			void proveLivePath({ quiet: true, forceReArm: needsForceReArm });
 		};
-		if (pathBroken) {
-			const t = window.setTimeout(run, 800);
-			const intervalId = window.setInterval(run, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
-			return () => {
-				cancelled = true;
-				window.clearTimeout(t);
-				window.clearInterval(intervalId);
-			};
-		}
-		const intervalId = window.setInterval(() => {
-			if (cancelled || isProvingLivePath) return;
-			void refetchLiveReadiness();
-		}, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
+		const t = window.setTimeout(run, 2_000);
+		const intervalId = window.setInterval(run, 120_000);
 		return () => {
 			cancelled = true;
+			window.clearTimeout(t);
 			window.clearInterval(intervalId);
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -721,7 +719,9 @@ export function DeviceEnrollmentPanel({
 		liveReadiness?.listener?.running,
 		liveReadiness?.listener?.receiving,
 		liveReadiness?.listener?.armed,
+		liveReadiness?.proof?.fresh,
 		isProvingLivePath,
+		isQuietKeepReadyRepair,
 	]);
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
 	const previewDeviceUserExportMutation = usePreviewDeviceUserExport();
@@ -4478,7 +4478,11 @@ export function DeviceEnrollmentPanel({
 				isProving={isProvingLivePath}
 				keepReady={keepLiveReady}
 				onKeepReadyChange={setKeepLiveReadyPersisted}
-				keepReadyWorking={keepLiveReady && isProvingLivePath}
+				keepReadyWorking={
+					keepLiveReady &&
+					isQuietKeepReadyRepair &&
+					(liveReadiness?.overall === "red" || liveReadiness?.safeToTap === false)
+				}
 			/>
 
 			<Tabs value={activePanel} onValueChange={setActivePanel} className="space-y-4">
