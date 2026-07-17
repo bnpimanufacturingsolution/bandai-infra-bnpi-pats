@@ -11364,122 +11364,43 @@ export const controller = (prisma: PrismaClient) => {
 								),
 							)
 						: opMaxCap;
-				const operationSearchId = randomUUID();
-				let opPosition = 0;
 				let opProcessed = 0;
+				const operationMetaImports = [
+					{
+						metaId: "log.hikvision.com/Information/addUserInfo",
+						label: "user created",
+					},
+					{
+						metaId: "log.hikvision.com/Information/addFpByEmployeeNo",
+						label: "fingerprint enrolled",
+					},
+					{
+						metaId: "log.hikvision.com/Information/addFpByCard",
+						label: "fingerprint enrolled",
+					},
+					{
+						metaId: "log.hikvision.com/Information/clearUserInfo",
+						label: "user deleted",
+					},
+				];
 				updateDeviceImportJob(jobId, {
 					phase: "operations",
 					scanLimit: Math.max(maxEvents, opMax),
 					message:
-						"Reading user & enrollment activity from device operation logs (not attendance taps)…",
+						"Reading user & enrollment activity from classified device operation logs…",
 				});
-				while (opProcessed < opMax) {
-					const currentJob = deviceImportJobs.get(jobId);
-					if (currentJob?.cancelRequested) {
-						updateDeviceImportJob(jobId, {
-							status: "cancelled",
-							message: "Sync cancelled",
-							completedAt: new Date(),
-						});
-						break;
-					}
-					if (
-						targetOperationsCount !== null &&
-						targetOperationsCount !== undefined &&
-						operationsImported >= Number(targetOperationsCount)
-					) {
-						break;
-					}
-					const pageSizeOp = Math.min(pageSize, opMax - opProcessed);
-					let rawXml = "";
-					try {
-						const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
-							method: "POST",
-							deviceId: device.id,
-							prisma,
-							request: req,
-							timeoutMs: 15000,
-							ensureJsonFormat: false,
-							rawResponse: true,
-							headers: {
-								Accept: "application/xml, text/xml, */*",
-								"Content-Type": "application/xml; charset=UTF-8",
-							},
-							body: buildHikvisionLogSearchXml({
-								searchId: operationSearchId,
-								startTime,
-								endTime,
-								maxResults: pageSizeOp,
-								searchResultPosition: opPosition,
-								metaId: "log.hikvision.com/Information",
-							}),
-						});
-						rawXml = String(response?.raw || "");
-					} catch (error: any) {
-						failed += 1;
-						const job = deviceImportJobs.get(jobId);
-						if (job && job.errors.length < 25) {
-							job.errors.push({
-								row: opProcessed + 1,
-								error: error?.message || "Operation logSearch failed",
-							});
-						}
-						break;
-					}
-					const parsed = parseHikvisionLogSearchResponse(rawXml);
-					if (!parsed.rows.length) break;
-					for (const row of parsed.rows) {
-						opProcessed += 1;
-						processed += 1;
-						const evidence = normalizeHikvisionLogSearchRow(row, device);
-						const action = String(evidence.eventAction || "").toUpperCase();
-						// Keep residual noise out of Device Events unless classified.
-						if (!action || action === "UNKNOWN" || action === "UNKNOWN_OPERATION") {
-							skipped += 1;
-							continue;
-						}
-						const employeeNo = String(evidence.employeeNo || "").trim();
-						if (!employeeNo && skipMissingEmployeeNo) {
-							skipped += 1;
-							knownSkipped += 1;
-							continue;
-						}
-						try {
-							const saved = await persistNormalizedHikvisionEvidence({
-								req,
-								organizationId: String(device.organizationId),
-								device,
-								evidence,
-							});
-							if (saved.duplicate) {
-								alreadySaved += 1;
-							} else {
-								imported += 1;
-								operationsImported += 1;
-							}
-						} catch (error: any) {
-							failed += 1;
-							const job = deviceImportJobs.get(jobId);
-							if (job && job.errors.length < 25) {
-								job.errors.push({
-									row: processed,
-									error: error?.message || "Failed to save user/enrollment log",
-								});
-							}
-						}
-						if (opProcessed % 10 === 0 || opProcessed >= opMax) {
+				for (const operationMeta of operationMetaImports) {
+					let opPosition = 0;
+					const operationSearchId = randomUUID();
+					while (opProcessed < opMax) {
+						const currentJob = deviceImportJobs.get(jobId);
+						if (currentJob?.cancelRequested) {
 							updateDeviceImportJob(jobId, {
-								processed,
-								imported,
-								skipped,
-								alreadySaved,
-								knownSkipped,
-								failed,
-								operationsImported,
-								attendanceImported,
-								phase: "operations",
-								message: `Saving user & enrollment activity… ${operationsImported.toLocaleString()} new`,
+								status: "cancelled",
+								message: "Sync cancelled",
+								completedAt: new Date(),
 							});
+							break;
 						}
 						if (
 							targetOperationsCount !== null &&
@@ -11488,17 +11409,129 @@ export const controller = (prisma: PrismaClient) => {
 						) {
 							break;
 						}
+						const pageSizeOp = Math.min(pageSize, opMax - opProcessed);
+						let rawXml = "";
+						try {
+							const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
+								method: "POST",
+								deviceId: device.id,
+								prisma,
+								request: req,
+								timeoutMs: 15000,
+								ensureJsonFormat: false,
+								rawResponse: true,
+								headers: {
+									Accept: "application/xml, text/xml, */*",
+									"Content-Type": "application/xml; charset=UTF-8",
+								},
+								body: buildHikvisionLogSearchXml({
+									searchId: operationSearchId,
+									startTime,
+									endTime,
+									maxResults: pageSizeOp,
+									searchResultPosition: opPosition,
+									metaId: operationMeta.metaId,
+								}),
+							});
+							rawXml = String(response?.raw || "");
+						} catch (error: any) {
+							failed += 1;
+							const job = deviceImportJobs.get(jobId);
+							if (job && job.errors.length < 25) {
+								job.errors.push({
+									row: opProcessed + 1,
+									error:
+										error?.message ||
+										`Operation logSearch failed for ${operationMeta.label}`,
+								});
+							}
+							break;
+						}
+						const parsed = parseHikvisionLogSearchResponse(rawXml);
+						if (!parsed.rows.length) break;
+						for (const row of parsed.rows) {
+							opProcessed += 1;
+							processed += 1;
+							const evidence = normalizeHikvisionLogSearchRow(row, device);
+							const action = String(evidence.eventAction || "").toUpperCase();
+							// Keep residual noise out of Device Events unless classified.
+							if (!action || action === "UNKNOWN" || action === "UNKNOWN_OPERATION") {
+								skipped += 1;
+								continue;
+							}
+							const employeeNo = String(evidence.employeeNo || "").trim();
+							if (!employeeNo && skipMissingEmployeeNo) {
+								skipped += 1;
+								knownSkipped += 1;
+								continue;
+							}
+							try {
+								const saved = await persistNormalizedHikvisionEvidence({
+									req,
+									organizationId: String(device.organizationId),
+									device,
+									evidence,
+								});
+								if (saved.duplicate) {
+									alreadySaved += 1;
+								} else {
+									imported += 1;
+									operationsImported += 1;
+								}
+							} catch (error: any) {
+								failed += 1;
+								const job = deviceImportJobs.get(jobId);
+								if (job && job.errors.length < 25) {
+									job.errors.push({
+										row: processed,
+										error: error?.message || "Failed to save user/enrollment log",
+									});
+								}
+							}
+							if (opProcessed % 10 === 0 || opProcessed >= opMax) {
+								updateDeviceImportJob(jobId, {
+									processed,
+									imported,
+									skipped,
+									alreadySaved,
+									knownSkipped,
+									failed,
+									operationsImported,
+									attendanceImported,
+									phase: "operations",
+									message: `Saving ${operationMeta.label} activity… ${operationsImported.toLocaleString()} new`,
+								});
+							}
+							if (
+								targetOperationsCount !== null &&
+								targetOperationsCount !== undefined &&
+								operationsImported >= Number(targetOperationsCount)
+							) {
+								break;
+							}
+						}
+						opPosition += parsed.rows.length;
+						if (
+							parsed.totalMatches !== undefined &&
+							opPosition >= Number(parsed.totalMatches)
+						) {
+							break;
+						}
+						if (String(parsed.responseStatus || "").toUpperCase() !== "MORE") break;
+						const cancelled = deviceImportJobs.get(jobId);
+						if (cancelled?.status === "cancelled" || cancelled?.cancelRequested) break;
 					}
-					opPosition += parsed.rows.length;
+					const cancelled = deviceImportJobs.get(jobId);
 					if (
-						parsed.totalMatches !== undefined &&
-						opPosition >= Number(parsed.totalMatches)
+						cancelled?.status === "cancelled" ||
+						cancelled?.cancelRequested ||
+						(targetOperationsCount !== null &&
+							targetOperationsCount !== undefined &&
+							operationsImported >= Number(targetOperationsCount)) ||
+						opProcessed >= opMax
 					) {
 						break;
 					}
-					if (String(parsed.responseStatus || "").toUpperCase() !== "MORE") break;
-					const cancelled = deviceImportJobs.get(jobId);
-					if (cancelled?.status === "cancelled" || cancelled?.cancelRequested) break;
 				}
 			}
 

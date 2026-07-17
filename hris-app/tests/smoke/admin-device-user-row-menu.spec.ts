@@ -202,6 +202,23 @@ async function installMockApi(page: Page) {
 		}
 
 		if (path.includes("/device/") && path.endsWith("/users")) {
+			if (requestUrl.searchParams.has("vendorUserIds")) {
+				await route.fulfill(
+					json({
+						deviceUsers: [],
+						summary: {
+							total: 0,
+							active: 0,
+							matched: 0,
+							unmatched: 0,
+							conflict: 0,
+							disabled: 0,
+						},
+						pagination: { total: 0, page: 1, limit: 50, totalPages: 0 },
+					}),
+				);
+				return;
+			}
 			await route.fulfill(
 				json({
 					deviceUsers,
@@ -239,6 +256,9 @@ test("device-user row action menu opens above the Sync Center modal", async ({ p
 
 	const detailsItem = page.getByRole("menuitem", { name: "Details" });
 	await expect(detailsItem).toBeVisible();
+	await expect(page.getByRole("menuitem", { name: "Link employee" })).toBeVisible();
+	await expect(page.getByRole("menuitem", { name: "Copy to peer device" })).toBeVisible();
+	await expect(page.getByRole("menuitem", { name: "Review sync" })).toBeVisible();
 
 	const layerOrder = await page.evaluate(() => {
 		const modalShell = document.querySelector<HTMLElement>("[data-modal-shell='true']");

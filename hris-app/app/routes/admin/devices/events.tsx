@@ -33,7 +33,6 @@ import { Switch } from "~/components/ui/switch";
 import {
 	useDeviceEvents,
 	useDeviceHealth,
-	useDeviceHealthMap,
 	useDeviceImportJob,
 	useDeviceSyncPreview,
 	useCancelDeviceImportJob,
@@ -45,7 +44,6 @@ import {
 	useTriggerZktecoAttendanceSync,
 	queryKeys,
 } from "~/lib/hooks/useDevices";
-import { getDeviceReachabilityDotClass } from "~/lib/device-reachability";
 import { useAcsEvents } from "~/lib/hooks/use-hikvision";
 import { useAuth } from "~/lib/hooks/use-auth";
 import { useSocket } from "~/contexts/socket-context";
@@ -1256,12 +1254,6 @@ export default function DeviceEventsPage() {
 
 	const { data: devicesData } = useDevices({ limit: 100, document: true });
 	const devices = useMemo(() => (devicesData as any)?.devices || [], [devicesData]);
-	// Filter-dot health only: one shot, no 45s multi-device poll storm on this page.
-	const deviceHealthMap = useDeviceHealthMap(
-		devices.map((device: any) => String(device?.id || "")).filter(Boolean),
-		devices.length > 0,
-		{ staleTime: 2 * 60 * 1000, refetchInterval: false },
-	);
 	const selectedDevice = deviceId === "all" ? undefined : devices.find((device: any) => device.id === deviceId);
 	const zktecoDevices = useMemo(
 		() => devices.filter((device: any) => isZktecoDevice(device)),
@@ -1286,8 +1278,7 @@ export default function DeviceEventsPage() {
 	const {
 		data: deviceHealth,
 		isLoading: isLoadingHealth,
-		refetch: refetchHealth,
-	} = useDeviceHealth(liveDeviceId, Boolean(liveDeviceId), {
+	} = useDeviceHealth(liveDeviceId, viewMode === "live" && Boolean(liveDeviceId), {
 		staleTime: 2 * 60 * 1000,
 		refetchInterval: false,
 	});
@@ -1333,14 +1324,15 @@ export default function DeviceEventsPage() {
 		(source === "all" || source === "EN_HCNETSDK_ALARM") &&
 		(deviceId === "all" || isHikvisionDevice(selectedDevice));
 	const savedEventsRefetchInterval = shouldPollSavedEvents ? 45 * 1000 : false;
-	// Listener: one fetch for toolbar badge; poll only while Listener modal is open.
+	// Listener status is an expensive VM/service probe. Keep it on demand: opening
+	// the Listener modal checks it, then the toolbar can reuse the cached snapshot.
 	const {
 		data: hikvisionListenerStatus,
 		isLoading: isHikvisionListenerStatusPending,
 		isFetching: isFetchingHikvisionListenerStatus,
 		error: hikvisionListenerStatusError,
 		refetch: refetchHikvisionListenerStatus,
-	} = useHikvisionListenerStatus(isSdkAlarmSavedScope || isListenerControlModalOpen, {
+	} = useHikvisionListenerStatus(isListenerControlModalOpen, {
 		staleTime: isListenerControlModalOpen ? 8 * 1000 : 60 * 1000,
 		refetchInterval: isListenerControlModalOpen ? 12 * 1000 : false,
 	});
@@ -1376,24 +1368,6 @@ export default function DeviceEventsPage() {
 	} = useDeviceEvents(savedQueryParams, {
 		refetchInterval: savedEventsRefetchInterval,
 	});
-	// Last SDK strip: one-shot (no poll). Socket + manual refresh update the main ledger.
-	const { data: latestSdkEventData } = useDeviceEvents(
-		{
-			page: 1,
-			limit: 1,
-			deviceId: deviceId === "all" ? undefined : deviceId,
-			source: "EN_HCNETSDK_ALARM",
-			sort: "eventTime",
-			order: "desc",
-			dateField: "eventTime",
-			from,
-			to,
-		},
-		{
-			enabled: isSdkAlarmSavedScope,
-			refetchInterval: false,
-		},
-	);
 	const {
 		data: liveData,
 		isLoading: isLoadingLive,
@@ -1594,28 +1568,24 @@ export default function DeviceEventsPage() {
 		() => [
 			{ value: "all", label: "All devices" },
 			...devices.map((device: any) => {
-				const reachability = deviceHealthMap.get(device.id)?.reachability;
-				const status = reachability?.status || "checking";
-				const statusLabel = reachability?.label || "Checking…";
 				const name = device.name || `${device.address}:${device.port}`;
 				return {
 					value: device.id,
-					// Keep plain label for accessibility; leading dot shows live reachability.
 					label: name,
 					leading: (
 						<span
-							className={`inline-block h-2.5 w-2.5 rounded-full ${getDeviceReachabilityDotClass(status)}`}
-							title={`${name}: ${statusLabel}`}
-							aria-label={statusLabel}
+							className="inline-block h-2.5 w-2.5 rounded-full bg-slate-300"
+							title={`${name}: reachability is checked only when needed`}
+							aria-label="Reachability not checked on ledger load"
 							data-testid="device-filter-reachability-dot"
 							data-device-id={device.id}
-							data-reachability={status}
+							data-reachability="not_checked"
 						/>
 					),
 				};
 			}),
 		],
-		[deviceHealthMap, devices],
+		[devices],
 	);
 
 	const savedEvents = useMemo(() => (data?.events || []).map(normalizeSavedEvent), [data?.events]);
@@ -1720,6 +1690,10 @@ export default function DeviceEventsPage() {
 		viewMode === "saved" && isFetchingSaved && (isSavedPlaceholderData || Boolean(data));
 	const activeError = viewMode === "live" ? liveError || savedError : savedError;
 	const activeErrorHint = activeError ? getDeviceEventsRecoveryHint(activeError) : null;
+	const hasUsableSavedEventData =
+		Boolean(data) && (savedEvents.length > 0 || Number(savedSummary.total || 0) > 0);
+	const activeErrorIsBackgroundStaleData =
+		viewMode === "saved" && Boolean(activeError) && hasUsableSavedEventData;
 	const countSavedStatus = (...statuses: string[]) =>
 		statuses.reduce((total, currentStatus) => {
 			const value = savedStatusCounts[currentStatus as keyof typeof savedStatusCounts];
@@ -1748,19 +1722,7 @@ export default function DeviceEventsPage() {
 		viewMode === "saved"
 			? rows.find((event) => event.source === "EN_HCNETSDK_ALARM")
 			: undefined;
-	const latestSdkProbeEvent =
-		viewMode === "saved" && latestSdkEventData?.events?.[0]
-			? normalizeSavedEvent(latestSdkEventData.events[0])
-			: undefined;
-	const getEventEvidenceTime = (event?: UnifiedDeviceEventRow) => {
-		const rawTime = event?.receivedAt || event?.eventTime;
-		const parsed = rawTime ? new Date(rawTime).getTime() : Number.NaN;
-		return Number.isNaN(parsed) ? 0 : parsed;
-	};
-	const latestSdkEvidenceEvent =
-		getEventEvidenceTime(latestSdkProbeEvent) > getEventEvidenceTime(latestSdkSavedEvent)
-			? latestSdkProbeEvent
-			: latestSdkSavedEvent || latestSdkProbeEvent;
+	const latestSdkEvidenceEvent = latestSdkSavedEvent;
 	const latestSavedReceivedAt = latestSavedEvent?.receivedAt
 		? new Date(latestSavedEvent.receivedAt)
 		: null;
@@ -2330,14 +2292,13 @@ export default function DeviceEventsPage() {
 				closeSyncLogs();
 				toast.success("Sync device logs started", {
 					id: "device-events-sync-start",
-					description: "Saved device-log rows and bridge health are refreshing.",
+					description: "Saved device-log rows are refreshing.",
 				});
 				setSyncLogsState({
 					status: "accepted",
-					message: "Bridge accepted the device-log sync. Saved rows and bridge health are refreshing.",
+					message: "Bridge accepted the device-log sync. Saved rows are refreshing.",
 				});
 				void refetch();
-				void refetchHealth();
 				void refetchSyncHealth();
 				void refetchSyncPreview();
 			},
@@ -2737,7 +2698,6 @@ export default function DeviceEventsPage() {
 				description: `${formatCount(importProgressImported)} device logs saved to HRIS. ${formatCount(importJobProgress?.alreadySaved || 0)} already in HRIS, ${formatCount(importProgressSkipped)} skipped with no employee number.`,
 			});
 			void refetch();
-			void refetchHealth();
 			void refetchSyncPreview();
 		} else if (importProgressStatus === "cancelled") {
 			toast.warning("Device log sync cancelled", {
@@ -2745,7 +2705,6 @@ export default function DeviceEventsPage() {
 				description: "The current job stopped. Retry will check the remaining gaps again.",
 			});
 			void refetch();
-			void refetchHealth();
 			void refetchSyncPreview();
 		} else {
 			toast.error("Device log sync failed", {
@@ -2760,7 +2719,6 @@ export default function DeviceEventsPage() {
 		importProgressStatus,
 		importJobProgress?.alreadySaved,
 		refetch,
-		refetchHealth,
 		refetchSyncPreview,
 	]);
 
@@ -3016,7 +2974,6 @@ export default function DeviceEventsPage() {
 						variant="outline"
 						className="h-9 px-3"
 						onClick={() => {
-							void refetchHealth();
 							if (isSdkAlarmSavedScope) void refetchHikvisionListenerStatus();
 							if (viewMode === "live") void refetchLive();
 							else void refetch();
@@ -3320,7 +3277,16 @@ export default function DeviceEventsPage() {
 				</div>
 			)}
 
-			{activeError && activeErrorHint && (
+			{activeErrorIsBackgroundStaleData && activeErrorHint && (
+				<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+					<p className="font-semibold">Showing saved rows from the last successful refresh</p>
+					<p className="mt-0.5 text-xs opacity-90">
+						A background refresh hiccuped, but the saved-event ledger data on this page is still usable. It will retry automatically.
+					</p>
+				</div>
+			)}
+
+			{activeError && activeErrorHint && !activeErrorIsBackgroundStaleData && (
 				<div
 					className={
 						activeErrorHint.kind === "database"

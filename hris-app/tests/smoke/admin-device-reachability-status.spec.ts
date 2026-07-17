@@ -247,8 +247,15 @@ test.describe("admin device reachability status", () => {
 		});
 	});
 
-	test("device events filter shows green/red reachability dots", async ({ page }) => {
+	test("device events filter does not run health probes for dropdown dots", async ({ page }) => {
 		await installAuth(page);
+		const healthRequests: string[] = [];
+		page.on("request", (request) => {
+			const path = new URL(request.url()).pathname;
+			if (path.includes("/device/") && path.endsWith("/health")) {
+				healthRequests.push(path);
+			}
+		});
 		await installApiMocks(page);
 		await page.goto("/admin/configuration/devices/events?view=saved");
 
@@ -264,9 +271,10 @@ test.describe("admin device reachability status", () => {
 		);
 
 		await expect(onlineDot).toBeVisible({ timeout: routeReadyTimeoutMs });
-		await expect(onlineDot).toHaveAttribute("data-reachability", "online");
+		await expect(onlineDot).toHaveAttribute("data-reachability", "not_checked");
 		await expect(offlineDot).toBeVisible();
-		await expect(offlineDot).toHaveAttribute("data-reachability", "offline");
+		await expect(offlineDot).toHaveAttribute("data-reachability", "not_checked");
+		expect(healthRequests).toEqual([]);
 
 		const screenshotDir = resolve(
 			process.cwd(),
@@ -277,7 +285,7 @@ test.describe("admin device reachability status", () => {
 		);
 		mkdirSync(screenshotDir, { recursive: true });
 		await page.screenshot({
-			path: resolve(screenshotDir, "device-events-filter-reachability-dots.png"),
+			path: resolve(screenshotDir, "device-events-filter-no-health-probes.png"),
 			fullPage: true,
 		});
 	});
