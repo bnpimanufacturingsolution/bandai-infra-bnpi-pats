@@ -533,6 +533,27 @@ export const controller = (prisma: PrismaClient) => {
 
 				if (isDuplicate) {
 					await publishDeviceEventSaved(req, eventRecord);
+					// Still schedule logSearch resolve: enroll create/FP often re-fires the same
+					// major=3 serial while typed leaves only appear a few seconds later.
+					if (
+						isHikvisionSdkOperationSignal({
+							major: event.major,
+							minor: event.minor,
+							eventKind: (event as any).eventKind || (payload as any).eventKind,
+							actionCode: (event as any).actionCode || (payload as any).actionCode,
+							payload,
+						})
+					) {
+						scheduleOperationLogResolveAfterSdkSignal({
+							prisma,
+							req,
+							deviceId: device.id,
+							organizationId: device.organizationId,
+							deviceName: device.name,
+							deviceAddress: device.address,
+							triggerMinor: event.minor,
+						});
+					}
 					const successResponse = buildSuccessResponse(
 						"Duplicate callback received; existing event reused",
 						{

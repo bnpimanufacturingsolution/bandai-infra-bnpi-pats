@@ -432,6 +432,8 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 	deviceAddress?: string | null;
 	triggerMinor?: string | number | null;
 	settleMs?: number;
+	/** Extra delayed passes (ms after schedule) so on-device create/FP after early major=3 still lands. */
+	retryDelaysMs?: number[];
 	windowBeforeMs?: number;
 	windowAfterMs?: number;
 	cooldownMs?: number;
@@ -447,14 +449,17 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 	operationLogResolveCooldownMs.set(deviceId, now);
 
 	const settleMs = params.settleMs ?? 1_500;
-	const windowBeforeMs = params.windowBeforeMs ?? 90 * 60_000;
-	const windowAfterMs = params.windowAfterMs ?? 2 * 60_000;
+	// Device often emits major=3 while the operator is still mid-enroll; logs appear 2–20s later.
+	const retryDelaysMs =
+		params.retryDelaysMs ??
+		(settleMs > 0
+			? Array.from(new Set([settleMs, 6_000, 14_000, 28_000])).sort((a, b) => a - b)
+			: [0]);
+	const windowBeforeMs = params.windowBeforeMs ?? 15 * 60_000;
+	const windowAfterMs = params.windowAfterMs ?? 3 * 60_000;
 	const triggerMinor = String(params.triggerMinor ?? "").trim();
 
-	void (async () => {
-		if (settleMs > 0) {
-			await new Promise((resolve) => setTimeout(resolve, settleMs));
-		}
+	const runResolvePass = async (passLabel: string): Promise<number> => {
 		const startTime = formatHikvisionPlus08(Date.now() - windowBeforeMs);
 		const endTime = formatHikvisionPlus08(Date.now() + windowAfterMs);
 		const device = {
@@ -643,7 +648,36 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 
 		if (created > 0) {
 			console.log(
-				`[device-person-token] operation-log resolve saved ${created} lifecycle event(s) device=${deviceId} triggerMinor=${triggerMinor || "?"}`,
+				`[device-person-token] operation-log resolve saved ${created} lifecycle event(s) device=${deviceId} triggerMinor=${triggerMinor || "?"} pass=${passLabel}`,
+			);
+		}
+		return created;
+	};
+
+	void (async () => {
+		let totalCreated = 0;
+		let previousDelay = 0;
+		for (let i = 0; i < retryDelaysMs.length; i += 1) {
+			const delay = retryDelaysMs[i] || 0;
+			const waitMs = Math.max(0, delay - previousDelay);
+			if (waitMs > 0) {
+				await new Promise((resolve) => setTimeout(resolve, waitMs));
+			}
+			previousDelay = delay;
+			try {
+				totalCreated += await runResolvePass(`t+${delay}ms`);
+			} catch (error: any) {
+				console.warn(
+					"[device-person-token] operation-log resolve pass crashed",
+					deviceId,
+					`t+${delay}ms`,
+					error?.message || error,
+				);
+			}
+		}
+		if (totalCreated > 0) {
+			console.log(
+				`[device-person-token] operation-log resolve total saved ${totalCreated} lifecycle event(s) device=${deviceId} triggerMinor=${triggerMinor || "?"}`,
 			);
 		}
 	})().catch((error) => {
