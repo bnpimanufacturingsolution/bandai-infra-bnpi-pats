@@ -116,27 +116,42 @@ export const useDevice = (id: string) => {
 
 export const useDeviceEvents = (
 	params?: ApiQueryParams,
-	options: { refetchInterval?: number | false } = {},
+	options: { refetchInterval?: number | false; enabled?: boolean } = {},
 ) => {
+	const enabled = options.enabled !== false;
 	return useQuery<DeviceEventsResponse>({
 		queryKey: queryKeys.devices.events(params),
 		queryFn: () => devicesService.getDeviceEvents(params),
-		staleTime: 10 * 1000,
+		enabled,
+		staleTime: 20 * 1000,
 		// Keep previous filter results visible while the next query runs (no blank table flash).
 		placeholderData: (previous) => previous,
-		refetchInterval: options.refetchInterval ?? 30 * 1000,
+		// Default: no background spam. Callers opt into polling only when needed.
+		refetchInterval: enabled ? (options.refetchInterval ?? false) : false,
+		refetchOnWindowFocus: false,
 		retry: 0,
 	});
 };
 
-export const useDeviceHealth = (deviceId?: string, enabled = true) => {
+export const useDeviceHealth = (
+	deviceId?: string,
+	enabled = true,
+	options: { refetchInterval?: number | false; staleTime?: number } = {},
+) => {
 	return useQuery<DeviceHealthResponse>({
 		queryKey: queryKeys.devices.health(deviceId),
 		queryFn: () => devicesService.getDeviceHealth(deviceId || ""),
 		enabled: Boolean(deviceId) && enabled,
-		staleTime: 10 * 1000,
-		refetchInterval: enabled && deviceId ? 30 * 1000 : false,
-		retry: 1,
+		staleTime: options.staleTime ?? 60 * 1000,
+		// Default off: health is expensive (device probe). Opt-in poll only.
+		refetchInterval:
+			enabled && deviceId
+				? options.refetchInterval === undefined
+					? false
+					: options.refetchInterval
+				: false,
+		refetchOnWindowFocus: false,
+		retry: 0,
 	});
 };
 
@@ -154,7 +169,11 @@ export type DeviceHealthMapEntry = {
  * Parallel per-device health map for admin tables and device filters.
  * Source of truth: GET /api/device/:id/health (summary.status online|degraded|offline).
  */
-export const useDeviceHealthMap = (deviceIds: string[], enabled = true) => {
+export const useDeviceHealthMap = (
+	deviceIds: string[],
+	enabled = true,
+	options: { refetchInterval?: number | false; staleTime?: number } = {},
+) => {
 	// Stabilize identity so parent .map() arrays do not thrash useQueries.
 	const deviceIdsKey = (deviceIds || [])
 		.map((id) => String(id || "").trim())
@@ -165,15 +184,21 @@ export const useDeviceHealthMap = (deviceIds: string[], enabled = true) => {
 		() => (deviceIdsKey ? deviceIdsKey.split("|") : []),
 		[deviceIdsKey],
 	);
+	const staleTime = options.staleTime ?? 120 * 1000;
+	// Default: one shot for filter dots. Continuous multi-device health polls overload the API.
+	const refetchInterval =
+		options.refetchInterval === undefined ? false : options.refetchInterval;
 
 	const queries = useQueries({
 		queries: uniqueIds.map((deviceId) => ({
 			queryKey: queryKeys.devices.health(deviceId),
 			queryFn: () => devicesService.getDeviceHealth(deviceId),
 			enabled: enabled && Boolean(deviceId),
-			staleTime: 15 * 1000,
-			refetchInterval: enabled ? 45 * 1000 : false,
-			retry: 1,
+			staleTime,
+			refetchInterval: enabled ? refetchInterval : false,
+			refetchOnWindowFocus: false,
+			retry: 0,
+			placeholderData: (previous: DeviceHealthResponse | undefined) => previous,
 		})),
 	});
 
@@ -224,15 +249,22 @@ export const useDeviceHealthMap = (deviceIds: string[], enabled = true) => {
 	};
 };
 
-export const useHikvisionListenerStatus = (enabled = true) => {
+export const useHikvisionListenerStatus = (
+	enabled = true,
+	options: { refetchInterval?: number | false; staleTime?: number } = {},
+) => {
 	return useQuery<HikvisionListenerStatus>({
 		queryKey: queryKeys.devices.hikvisionListener(),
 		queryFn: () => devicesService.getHikvisionListenerStatus(),
 		enabled,
-		staleTime: 2 * 1000,
-		// Listener modal must settle quickly; one failed status should not hang "Checking…".
-		// The API now uses a single SSH status round-trip with a hard budget.
-		refetchInterval: enabled ? 15 * 1000 : false,
+		// Default: cache status; only the open Listener modal should poll.
+		staleTime: options.staleTime ?? 45 * 1000,
+		refetchInterval: enabled
+			? options.refetchInterval === undefined
+				? false
+				: options.refetchInterval
+			: false,
+		refetchOnWindowFocus: false,
 		retry: 0,
 		// Keep last successful snapshot visible while a quieter refresh runs.
 		placeholderData: (previous) => previous,
@@ -385,7 +417,7 @@ export const useCancelDeviceUserSyncJob = () => {
 export const useDeviceSyncPreview = (
 	params: { deviceId?: string; source?: string },
 	enabled = true,
-	options?: { refetchIntervalMs?: number | false },
+	options?: { refetchIntervalMs?: number | false; staleTime?: number },
 ) => {
 	const refetchIntervalMs =
 		options?.refetchIntervalMs === undefined ? false : options.refetchIntervalMs;
@@ -395,9 +427,10 @@ export const useDeviceSyncPreview = (
 		enabled,
 		// Keep last good preview while refetching so modals never stick on skeleton forever.
 		placeholderData: (previous) => previous,
-		staleTime: 30 * 1000,
+		staleTime: options?.staleTime ?? 60 * 1000,
 		// Default: no auto-poll (was 5s and overloaded API + froze modal close).
 		refetchInterval: enabled ? refetchIntervalMs : false,
+		refetchOnWindowFocus: false,
 		retry: 0,
 		// Fail open to the UI within ~8s so Sync logs / Sync Center never spin indefinitely.
 		meta: { timeoutMs: 8000 },

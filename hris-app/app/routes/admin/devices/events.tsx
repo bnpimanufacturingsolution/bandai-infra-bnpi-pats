@@ -1209,7 +1209,6 @@ export default function DeviceEventsPage() {
 	const order = searchParams.get("order") === "asc" ? "asc" : "desc";
 	const action = searchParams.get("action");
 	const isSyncLogsDebugView = searchParams.get("debug") === "true";
-	const isSyncLogsFlowActive = action === "sync-logs";
 	const isSyncLogsModalOpen = action === "sync-logs" && !isSyncLogsDebugView;
 	const isListenerControlModalOpen = action === "listener-control";
 	const activeEventId = searchParams.get("id");
@@ -1221,9 +1220,11 @@ export default function DeviceEventsPage() {
 
 	const { data: devicesData } = useDevices({ limit: 100, document: true });
 	const devices = useMemo(() => (devicesData as any)?.devices || [], [devicesData]);
+	// Filter-dot health only: one shot, no 45s multi-device poll storm on this page.
 	const deviceHealthMap = useDeviceHealthMap(
 		devices.map((device: any) => String(device?.id || "")).filter(Boolean),
 		devices.length > 0,
+		{ staleTime: 2 * 60 * 1000, refetchInterval: false },
 	);
 	const selectedDevice = deviceId === "all" ? undefined : devices.find((device: any) => device.id === deviceId);
 	const zktecoDevices = useMemo(
@@ -1245,21 +1246,31 @@ export default function DeviceEventsPage() {
 	const liveDevice = selectedDevice;
 	const liveDeviceId = liveDevice?.id;
 	const selectedDeviceRoomId = deviceId !== "all" ? deviceId : liveDeviceId || "";
+	// Selected-device health only when a single device is chosen (not "all") — no 30s probe loop.
 	const {
 		data: deviceHealth,
 		isLoading: isLoadingHealth,
 		refetch: refetchHealth,
-	} = useDeviceHealth(liveDeviceId, Boolean(liveDeviceId));
+	} = useDeviceHealth(liveDeviceId, Boolean(liveDeviceId), {
+		staleTime: 2 * 60 * 1000,
+		refetchInterval: false,
+	});
 	const isZktecoHealth = isZktecoDevice(liveDevice, deviceHealth);
+	// ZKTeco health only inside Sync logs modal.
 	const {
 		data: syncDeviceHealth,
 		isLoading: isLoadingSyncHealth,
 		refetch: refetchSyncHealth,
-	} = useDeviceHealth(syncHealthDevice?.id, isSyncLogsModalOpen && Boolean(syncHealthDevice?.id));
+	} = useDeviceHealth(syncHealthDevice?.id, isSyncLogsModalOpen && Boolean(syncHealthDevice?.id), {
+		staleTime: 60 * 1000,
+		refetchInterval: false,
+	});
+	// Sync-preview only when Sync logs modal is open — never background.
 	const {
 		data: syncPreview,
 		isLoading: isLoadingSyncPreview,
 		isFetching: isFetchingSyncPreview,
+		isPlaceholderData: isSyncPreviewPlaceholder,
 		error: syncPreviewError,
 		refetch: refetchSyncPreview,
 	} = useDeviceSyncPreview(
@@ -1267,7 +1278,8 @@ export default function DeviceEventsPage() {
 			deviceId,
 			source,
 		},
-		isSyncLogsFlowActive,
+		isSyncLogsModalOpen,
+		{ refetchIntervalMs: false, staleTime: 60 * 1000 },
 	);
 	const canReadLiveEvents = Boolean(
 		liveDeviceId &&
@@ -1278,25 +1290,24 @@ export default function DeviceEventsPage() {
 	const organizationId =
 		user?.organizationId || (user as any)?.organization?.id || liveDevice?.organizationId || "";
 	const hasRealtimeScope = Boolean(organizationId || selectedDeviceRoomId);
-	const shouldPollSavedEvents = viewMode !== "saved" || !isConnected || !hasRealtimeScope;
+	// Prefer socket for live rows. Poll the ledger only when socket is disconnected.
+	const shouldPollSavedEvents = viewMode === "saved" && (!isConnected || !hasRealtimeScope);
 	const isSdkAlarmSavedScope =
 		viewMode === "saved" &&
 		(source === "all" || source === "EN_HCNETSDK_ALARM") &&
 		(deviceId === "all" || isHikvisionDevice(selectedDevice));
-	// Do not re-query the full saved list every 2s — that made filter clicks feel stuck for
-	// multi-second waits (listener/socket already covers true realtime inserts).
-	const savedEventsRefetchInterval = isSdkAlarmSavedScope
-		? 10 * 1000
-		: shouldPollSavedEvents
-			? 30 * 1000
-			: false;
+	const savedEventsRefetchInterval = shouldPollSavedEvents ? 45 * 1000 : false;
+	// Listener: one fetch for toolbar badge; poll only while Listener modal is open.
 	const {
 		data: hikvisionListenerStatus,
 		isLoading: isHikvisionListenerStatusPending,
 		isFetching: isFetchingHikvisionListenerStatus,
 		error: hikvisionListenerStatusError,
 		refetch: refetchHikvisionListenerStatus,
-	} = useHikvisionListenerStatus(isSdkAlarmSavedScope || isListenerControlModalOpen);
+	} = useHikvisionListenerStatus(isSdkAlarmSavedScope || isListenerControlModalOpen, {
+		staleTime: isListenerControlModalOpen ? 8 * 1000 : 60 * 1000,
+		refetchInterval: isListenerControlModalOpen ? 12 * 1000 : false,
+	});
 	// Only treat as "Checking…" when we have no snapshot yet. Refetch must not blank the modal.
 	const isLoadingHikvisionListenerStatus =
 		isHikvisionListenerStatusPending && !hikvisionListenerStatus;
@@ -1329,6 +1340,7 @@ export default function DeviceEventsPage() {
 	} = useDeviceEvents(savedQueryParams, {
 		refetchInterval: savedEventsRefetchInterval,
 	});
+	// Last SDK strip: one-shot (no poll). Socket + manual refresh update the main ledger.
 	const { data: latestSdkEventData } = useDeviceEvents(
 		{
 			page: 1,
@@ -1341,8 +1353,10 @@ export default function DeviceEventsPage() {
 			from,
 			to,
 		},
-		// Lightweight "last SDK row" strip — not the full table.
-		{ refetchInterval: isSdkAlarmSavedScope ? 10 * 1000 : false },
+		{
+			enabled: isSdkAlarmSavedScope,
+			refetchInterval: false,
+		},
 	);
 	const {
 		data: liveData,
@@ -1920,7 +1934,12 @@ export default function DeviceEventsPage() {
 		isSyncLogsModalOpen &&
 		!syncPreviewError &&
 		syncPreviewRows.length === 0 &&
-		(isLoadingSyncPreview || isFetchingSyncPreview);
+		isLoadingSyncPreview &&
+		!isSyncPreviewPlaceholder;
+	const isSyncPreviewRefreshing =
+		isSyncLogsModalOpen &&
+		isFetchingSyncPreview &&
+		(isSyncPreviewPlaceholder || syncPreviewRows.length > 0);
 	const syncVendorSections = useMemo(() => {
 		const order = ["Hikvision", "ZKTeco"];
 		const isBlockedRow = (row: DeviceSyncPreviewRow) =>
@@ -3874,6 +3893,11 @@ export default function DeviceEventsPage() {
 								<p className="truncate text-sm font-semibold text-slate-950">{syncScopeLabel}</p>
 								{showSyncPreviewSkeleton ? (
 									<SyncPreviewSkeleton />
+								) : isSyncPreviewRefreshing ? (
+									<p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-sky-700">
+										<Loader2 className="h-3 w-3 animate-spin" />
+										Refreshing device counts…
+									</p>
 								) : syncPreviewRows.length > 0 ? (
 									<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
 										<span>Will add: {syncMissingLogLabel}</span>

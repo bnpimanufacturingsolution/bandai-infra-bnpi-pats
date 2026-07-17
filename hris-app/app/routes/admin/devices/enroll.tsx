@@ -505,6 +505,8 @@ export function DeviceEnrollmentPanel({
 	const deviceUserStatus = searchParams.get("deviceUserStatus") || "all";
 	const deviceUserSearch = searchParams.get("deviceUserSearch") || "";
 	const [summaryDeviceSearch, setSummaryDeviceSearch] = useState("");
+	// Declared early so listener query can poll only while the details modal is open.
+	const [isListenerDetailsOpen, setIsListenerDetailsOpen] = useState(false);
 	const deviceUserView = searchParams.get("deviceUserView") || "shown";
 	const deviceUserPage = Math.max(Number(searchParams.get("deviceUserPage") || 1), 1);
 	const deviceUserLimit = Math.min(
@@ -543,7 +545,9 @@ export function DeviceEnrollmentPanel({
 		refetch: refetchSyncPreview,
 	} = useDeviceSyncPreview(
 		{ deviceId: activePanel === "overview" ? "all" : selectedDeviceId || "all" },
+		// Only while Sync Center panels that need counts are visible — no background poll.
 		activePanel === "overview" || activePanel === "users" || Boolean(selectedDeviceId),
+		{ refetchIntervalMs: false, staleTime: 60 * 1000 },
 	);
 	const {
 		data: syncRunsData,
@@ -566,7 +570,12 @@ export function DeviceEnrollmentPanel({
 		error: hikvisionListenerStatusError,
 		refetch: refetchHikvisionListenerStatus,
 	} = useHikvisionListenerStatus(
-		activePanel === "overview" || activePanel === "users" || activePanel === "runs",
+		// Overview badge once; poll only while listener details modal is open.
+		activePanel === "overview" || isListenerDetailsOpen,
+		{
+			staleTime: isListenerDetailsOpen ? 8 * 1000 : 60 * 1000,
+			refetchInterval: isListenerDetailsOpen ? 12 * 1000 : false,
+		},
 	);
 	const hikvisionListenerControl = useControlHikvisionListener();
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
@@ -656,7 +665,6 @@ export function DeviceEnrollmentPanel({
 		"idle" | "loading" | "ready" | "error"
 	>("idle");
 	const [detailsPeerTallyError, setDetailsPeerTallyError] = useState("");
-	const [isListenerDetailsOpen, setIsListenerDetailsOpen] = useState(false);
 	const [linkTarget, setLinkTarget] = useState<VisibleDeviceUserRow | null>(null);
 	const [unlinkTarget, setUnlinkTarget] = useState<VisibleDeviceUserRow | null>(null);
 	const [copyDeviceUserState, setCopyDeviceUserState] = useState<CopyDeviceUserState>({
