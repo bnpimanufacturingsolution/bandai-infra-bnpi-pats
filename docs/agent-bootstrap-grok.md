@@ -43,6 +43,9 @@ Bootstrap: open WWG handoff + current-task + project-truth-summary, Current-Stat
   **`--max-turns 250`** headless (or leave interactive session open for hours).
   Agents must never end with “you should hard-refresh / click Sync”; they do
   those steps themselves and keep going past ~10 minutes until acceptance green.
+- For **Sync logs → Device events journey honesty** (employee tokens, progress
+  estimate vs saved, non-confusing modal):  
+  `docs/00-product/AGENT-PROMPT-sync-logs-user-journey-truth.md`
 
 ## Limits (honest)
 

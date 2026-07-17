@@ -16,7 +16,9 @@ import {
 	normalizeHikvisionAddress,
 	normalizeHikvisionDeviceEventSource,
 	normalizeHikvisionFutureSkewedEventTime,
+	isOpaqueHikvisionPersonToken,
 	normalizeHikvisionLogSearchRow,
+	resolveHikvisionLogPersonRef,
 	normalizeHikvisionSdkCallbackEvidence,
 	normalizeHikvisionStateTransitionEvidence,
 	paginateHikvisionLogSearch,
@@ -634,7 +636,37 @@ describe("hikvision event contract helper", () => {
 			eventCategory: "USER_MANAGEMENT",
 			eventAction: "USER_CREATED",
 			eventConfidence: "PROVEN",
+			employeeNo: "42",
 		});
+		expect((event.rawEvidence as any)?.personRefKind).to.equal("plain");
+	});
+
+	it("marks Hikvision privacy person tokens as opaque (not readable employee nos)", () => {
+		expect(isOpaqueHikvisionPersonToken("17")).to.equal(false);
+		expect(isOpaqueHikvisionPersonToken("EMP-001")).to.equal(false);
+		expect(isOpaqueHikvisionPersonToken("ADRenBQDnvFhBTMtB9zT3g==")).to.equal(true);
+		expect(isOpaqueHikvisionPersonToken("sQdO+wAKh3NX4vy8U4lmWw==")).to.equal(true);
+		const resolved = resolveHikvisionLogPersonRef(["ADRenBQDnvFhBTMtB9zT3g==", "17"]);
+		expect(resolved).to.deep.equal({ employeeNo: "17", personRefKind: "plain" });
+		const opaqueOnly = resolveHikvisionLogPersonRef(["sQdO+wAKh3NX4vy8U4lmWw=="]);
+		expect(opaqueOnly.personRefKind).to.equal("opaque_device_token");
+		const event = normalizeHikvisionLogSearchRow(
+			{
+				index: 1,
+				time: "2026-07-10T12:53:30+08:00",
+				metaId: "log.hikvision.com/Information/addUserInfo",
+				majorType: "Information",
+				minorType: "addUserInfo",
+				information:
+					'{\n\t"LogAddInfo":\t{\n\t\t"EmployeeNo":\t"ADRenBQDnvFhBTMtB9zT3g==",\n\t\t"ErrorMsg":\t"OK"\n\t}\n}',
+				employeeNo: "ADRenBQDnvFhBTMtB9zT3g==",
+				rawXml: "<logDescriptor />",
+				raw: {},
+			},
+			{ id: "device-1" },
+		);
+		expect(event.employeeNo).to.equal("ADRenBQDnvFhBTMtB9zT3g==");
+		expect((event.rawEvidence as any)?.personRefKind).to.equal("opaque_device_token");
 	});
 
 	it("maps explicit face, card, user-update, and rejected-tap evidence", () => {

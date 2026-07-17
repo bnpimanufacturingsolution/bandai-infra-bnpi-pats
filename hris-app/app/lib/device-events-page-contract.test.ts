@@ -49,8 +49,8 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("targetImportCount: scopedTotal");
 		expect(routeSource).to.contain("getScopedSyncWillAddBreakdown");
 		expect(routeSource).to.contain("Syncing estimated unsaved logs");
-		expect(routeSource).to.contain("Latest rows checked");
-		expect(routeSource).to.contain("Target estimate");
+		expect(routeSource).to.contain("Rows scanned this pass");
+		expect(routeSource).to.contain("Preview estimate");
 		expect(routeSource).to.contain("Device total");
 		expect(routeSource).to.contain("No unsaved device logs found");
 		expect(routeSource).to.contain("Progress is available from Sync logs.");
@@ -91,6 +91,12 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("targetOperationsCount");
 		expect(routeSource).to.contain("User &amp; enrollment activity");
 		expect(routeSource).to.contain("Attendance taps");
+		// Opaque Hikvision person tokens must not show as "No. base64…".
+		expect(routeSource).to.contain("isOpaqueDevicePersonToken");
+		expect(routeSource).to.contain("formatDeviceEventPersonRef");
+		expect(routeSource).to.contain("Device person token (not a readable employee no.)");
+		expect(routeSource).to.contain("Rows scanned this pass");
+		expect(routeSource).to.contain("Preview estimate");
 		expect(routeSource).to.contain(">Event</th>");
 		expect(routeSource).to.contain(">Category</th>");
 		expect(routeSource).to.contain(">Will add</th>");

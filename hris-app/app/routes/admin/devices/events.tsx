@@ -425,10 +425,35 @@ const getEmployeeRecordUrl = (employeeProfileId?: string | null) =>
 		? `/admin/configuration/employees?action=view&id=${encodeURIComponent(employeeProfileId)}`
 		: "";
 
-const getEmployeeDisplayName = (item: UnifiedDeviceEventRow) =>
-	item.employeeName || (item.employeeNo ? "Employee not matched" : "Unknown employee");
+/** Device logSearch often stores base64 privacy tokens — not readable employee nos. */
+const isOpaqueDevicePersonToken = (value?: string | null) => {
+	const token = String(value || "").trim();
+	if (!token) return false;
+	if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/.test(token) && !/[+/=]/.test(token)) return false;
+	if (/^[A-Za-z0-9+/]{16,}={0,2}$/.test(token) && /[+/=]/.test(token)) return true;
+	if (token.length >= 20 && /[+/=]/.test(token)) return true;
+	return false;
+};
+
+const formatDeviceEventPersonRef = (employeeNo?: string | null) => {
+	const token = String(employeeNo || "").trim();
+	if (!token) return "No person id on device log";
+	if (isOpaqueDevicePersonToken(token)) {
+		return "Device person token (not a readable employee no.)";
+	}
+	return `No. ${token}`;
+};
+
+const getEmployeeDisplayName = (item: UnifiedDeviceEventRow) => {
+	if (item.employeeName) return item.employeeName;
+	if (item.employeeProfileId) return item.employeeId || item.employeeNo || "Employee";
+	if (isOpaqueDevicePersonToken(item.employeeNo)) return "Not linked to HRIS employee";
+	if (item.employeeNo) return "Employee not matched";
+	return "Unknown person";
+};
 
 const getEmployeeInitials = (item: UnifiedDeviceEventRow) => {
+	if (isOpaqueDevicePersonToken(item.employeeNo) && !item.employeeName) return "??";
 	const name = item.employeeName || item.employeeId || item.employeeNo || "?";
 	const parts = String(name).trim().split(/\s+/).filter(Boolean);
 	if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
@@ -2419,22 +2444,31 @@ export default function DeviceEventsPage() {
 	const activeImportTargetCount = getNumericCount(importJobProgress?.targetImportCount);
 	const activeImportScanLimit = getNumericCount(importJobProgress?.scanLimit);
 	const isTargetedImport = activeImportTargetCount !== null;
-	const activeImportProgressDone = isTargetedImport
-		? Number(importJobProgress?.imported || 0)
-		: Number(importJobProgress?.processed || 0);
-	const activeImportProgressTotal = isTargetedImport
-		? Math.max(activeImportTargetCount || 1, 1)
-		: Math.max(Number(importJobProgress?.total || 1), 1);
+	const activeImportProcessed = Number(importJobProgress?.processed || 0);
+	const activeImportImported = Number(importJobProgress?.imported || 0);
+	// Large targets (e.g. 24k) make imported/target stick at 0% for a long time while
+	// the job is healthy. Prefer scan progress during processing so the bar is honest.
+	const activeImportScanDenom = Math.max(
+		activeImportScanLimit || 0,
+		activeImportProcessed,
+		1,
+	);
+	const activeImportSaveDenom = Math.max(activeImportTargetCount || 0, activeImportImported, 1);
+	const scanProgressPct = Math.min(
+		100,
+		Math.round((activeImportProcessed / activeImportScanDenom) * 100),
+	);
+	const saveProgressPct = Math.min(
+		100,
+		Math.round((activeImportImported / activeImportSaveDenom) * 100),
+	);
 	const activeImportProgressPercent = importJobProgress
-		? Math.min(
-				100,
-				Math.round(
-					(activeImportProgressDone / activeImportProgressTotal) * 100,
-				),
-			)
+		? importJobProgress.status === "processing"
+			? Math.max(scanProgressPct, saveProgressPct)
+			: Math.min(100, Math.max(saveProgressPct, importJobProgress.status === "completed" ? 100 : 0))
 		: 0;
 	const activeImportJobSummary = importJobProgress
-		? `${formatCount(importJobProgress.imported)} device logs saved to HRIS, ${formatCount(importJobProgress.alreadySaved || 0)} already in HRIS, ${formatCount(importJobProgress.skipped)} skipped with no employee number, ${formatCount(importJobProgress.failed)} failed`
+		? `${formatCount(importJobProgress.imported)} device logs saved to HRIS, ${formatCount(importJobProgress.alreadySaved || 0)} already in HRIS, ${formatCount(importJobProgress.skipped)} skipped, ${formatCount(importJobProgress.failed)} failed. Preview “will add” is an estimate — this run may only finish part of that total in one pass.`
 		: "";
 	const hasImportProgress = Boolean(activeImportJob && importJobProgress);
 	const isImportProcessing = importJobProgress?.status === "processing";
@@ -2605,11 +2639,23 @@ export default function DeviceEventsPage() {
 							</p>
 						)}
 						<div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-							<span className="truncate text-xs text-slate-500">No. {value || "-"}</span>
+							<span
+								className="truncate text-xs text-slate-500"
+								title={
+									isOpaqueDevicePersonToken(String(value || item.employeeNo || ""))
+										? String(value || item.employeeNo || "")
+										: undefined
+								}>
+								{formatDeviceEventPersonRef(String(value || item.employeeNo || "") || null)}
+							</span>
 							<Badge
 								variant={item.employeeProfileId ? "success-soft" : "warning-soft"}
 								className="px-1.5 py-0 text-[11px] font-semibold">
-								{item.employeeProfileId ? "Matched" : "Needs match"}
+								{item.employeeProfileId
+									? "Matched"
+									: isOpaqueDevicePersonToken(String(value || item.employeeNo || ""))
+										? "Needs link"
+										: "Needs match"}
 							</Badge>
 						</div>
 					</div>
@@ -3063,7 +3109,8 @@ export default function DeviceEventsPage() {
 								{latestSavedProcessingLabel || (isLatestSavedFresh ? "Latest watcher save" : "Latest saved event")}
 							</span>
 							<span className="truncate text-xs opacity-80">
-								{latestSavedEvent.employeeName || `No. ${latestSavedEvent.employeeNo || "-"}`}
+								{latestSavedEvent.employeeName ||
+									formatDeviceEventPersonRef(latestSavedEvent.employeeNo)}
 							</span>
 						</div>
 						<div className="flex min-w-0 items-center gap-2 text-xs">
@@ -4030,7 +4077,7 @@ export default function DeviceEventsPage() {
 							</div>
 							<p className="mt-1 text-xs opacity-90">
 								{isTargetedImport
-									? `Saving up to ${formatCount(activeImportTargetCount)} estimated unsaved row${activeImportTargetCount === 1 ? "" : "s"} from the sources you selected (attendance taps and/or user & enrollment activity).`
+									? `Working through up to ${formatCount(activeImportTargetCount)} estimated rows from your Sync logs selection. The preview total can be larger than one pass can finish — Saved and Scanned below are the live truth.`
 									: "Sync scans device source logs, then classifies each row against HRIS."}
 							</p>
 							<div className="mt-3 h-2 overflow-hidden rounded-full bg-white/70">
@@ -4065,21 +4112,30 @@ export default function DeviceEventsPage() {
 							</div>
 							<div className="mt-3 grid grid-cols-2 gap-2 rounded-md border border-orange-100 bg-white/70 px-3 py-2 text-xs text-orange-900">
 								<div>
-									<span className="block text-orange-700">
-										{isTargetedImport ? "Latest rows checked" : "Device logs scanned"}
-									</span>
+									<span className="block text-orange-700">Rows scanned this pass</span>
 									<span className="font-semibold">
-										{formatCount(importJobProgress.processed)} / {formatCount(isTargetedImport ? activeImportScanLimit ?? importJobProgress.total : importJobProgress.total)}
+										{formatCount(importJobProgress.processed)} /{" "}
+										{formatCount(
+											activeImportScanLimit ??
+												importJobProgress.sourceTotal ??
+												importJobProgress.total,
+										)}
+									</span>
+									<span className="mt-0.5 block text-[10px] text-orange-700/80">
+										How far this run has read on the device (not the full estimate alone)
 									</span>
 								</div>
 								{isTargetedImport ? (
 									<div>
-										<span className="block text-orange-700">Target estimate</span>
+										<span className="block text-orange-700">Preview estimate</span>
 										<span className="font-semibold">{formatCount(activeImportTargetCount)}</span>
+										<span className="mt-0.5 block text-[10px] text-orange-700/80">
+											From Sync logs table (sample × totals) — may need more runs
+										</span>
 									</div>
 								) : null}
 								<div>
-									<span className="block text-orange-700">Already saved</span>
+									<span className="block text-orange-700">Already on device scan</span>
 									<span className="font-semibold">{formatCount(importJobProgress.alreadySaved || 0)}</span>
 								</div>
 								{isTargetedImport ? (
@@ -4207,7 +4263,7 @@ export default function DeviceEventsPage() {
 										{getEmployeeDisplayName(activeEvent)}
 									</p>
 									<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-										<span>No. {activeEvent.employeeNo || "-"}</span>
+										<span>{formatDeviceEventPersonRef(activeEvent.employeeNo)}</span>
 										<Badge
 											variant={activeEvent.employeeProfileId ? "success-soft" : "warning-soft"}
 											className="px-2 py-0.5">
