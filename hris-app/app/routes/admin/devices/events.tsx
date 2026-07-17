@@ -1660,9 +1660,23 @@ export default function DeviceEventsPage() {
 		setLastRoomJoinedAt(new Date().toISOString());
 		socket.on("device-event:saved", handleDeviceEventSaved);
 
+		// DEV/test hook: Playwright injects a synthetic device-event:saved without physical tap.
+		if (import.meta.env.DEV && typeof window !== "undefined") {
+			(window as any).__ptSocketConnected = () => Boolean(socket.connected);
+			(window as any).__ptDeviceEventsRoom = roomPayload;
+			(window as any).__ptInjectDeviceEventSaved = (payload: DeviceEventSavedPayload) => {
+				handleDeviceEventSaved(payload);
+			};
+		}
+
 		return () => {
 			socket.off("device-event:saved", handleDeviceEventSaved);
 			socket.emit("leave:device-events", roomPayload);
+			if (import.meta.env.DEV && typeof window !== "undefined") {
+				delete (window as any).__ptInjectDeviceEventSaved;
+				delete (window as any).__ptSocketConnected;
+				delete (window as any).__ptDeviceEventsRoom;
+			}
 		};
 	}, [
 		deviceId,
