@@ -83,12 +83,14 @@ console.log(
 );
 
 // FAST PATH: VM already listening on reverse SDK port (tunnel from any prior session).
+// Note: API reverse :53001 is enforced by ensure-device-live-path (next predev step).
+// This script only owns the device SDK tunnel; do not claim socket-truth here.
 console.log(
 	`[hikvision-bridge] STEP check: probing VM :${sdkListenPort} (fast SSH)...`,
 );
 if (vmPortOpen(Number(sdkListenPort))) {
 	console.log(
-		`[hikvision-bridge] DONE (fast path) in ${((Date.now() - t0) / 1000).toFixed(1)}s — VM :${sdkListenPort} already listening`,
+		`[hikvision-bridge] DONE (fast path) in ${((Date.now() - t0) / 1000).toFixed(1)}s — VM :${sdkListenPort} already listening (API :${apiRemotePort} checked by ensure-device-live-path)`,
 	);
 	process.exit(0);
 }

@@ -4,7 +4,7 @@
 	"main": "dist/lib-entry.js",
 	"scripts": {
 		"predev": "node scripts/predev-run.cjs",
-		"predev:steps": "node scripts/cleanup-emitted-js.cjs && node scripts/ensure-prisma-client.cjs && node scripts/ensure-dev-port-ownership.cjs && node scripts/ensure-bnpi-db-access.cjs && node scripts/ensure-local-dev-services.cjs && node scripts/ensure-hikvision-vm-bridge.cjs",
+		"predev:steps": "node scripts/cleanup-emitted-js.cjs && node scripts/ensure-prisma-client.cjs && node scripts/ensure-dev-port-ownership.cjs && node scripts/ensure-bnpi-db-access.cjs && node scripts/ensure-local-dev-services.cjs && node scripts/ensure-hikvision-vm-bridge.cjs && node scripts/ensure-device-live-path.cjs",
 		"dev": "dotenv -o -e .env -e .env.development.local -- node scripts/run-dev-api-watch.cjs",
 		"dev:api-only": "dotenv -o -e .env -e .env.development.local -- node scripts/run-dev-api-watch.cjs",
 		"dev:fast": "node -e \"process.env.HRIS_SKIP_BNPI_DB_ACCESS='true';process.env.HRIS_SKIP_PROJECT_TRUTH_REMOTE_LAN_FORWARD='true';process.env.HIKVISION_VM_BRIDGE_ENABLED='false';require('child_process').spawnSync(process.platform==='win32'?'npm.cmd':'npm',['run','dev'],{stdio:'inherit',env:process.env,shell:true})\"",

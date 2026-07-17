@@ -235,35 +235,73 @@ if (-not $apiReverseOk) {
 # --- 4) Point listener at host API reverse when available (socket process = browser process) ---
 # Critical: EnvironmentFile=/etc/project-truth/hikvision-hot-reload.env often wins over drop-ins
 # and defaults to VM :3101 (K3s). Host-local Device Events sockets need :53001 -> host :3001.
+# Only restart when drift is proven — keep warm predev fast.
 if ($apiReverseOk) {
   try {
     $retarget = ssh -o ConnectTimeout=20 -o BatchMode=yes $VmSshTarget @"
 set -e
+TARGET_BASE='http://127.0.0.1:$ApiRemotePort'
 DROP_DIR=/etc/systemd/system/project-truth-hikvision-hot-reload-listener.service.d
 ENV_FILE=/etc/project-truth/hikvision-hot-reload.env
-sudo mkdir -p "`$DROP_DIR"
-printf '%s\n' '[Service]' 'Environment=HIKVISION_HOT_RELOAD_API_BASE=http://127.0.0.1:$ApiRemotePort' | sudo tee "`$DROP_DIR/host-api-socket.conf" >/dev/null
-if sudo test -f "`$ENV_FILE"; then
-  sudo sed -i 's#HIKVISION_HOT_RELOAD_API_BASE=.*#HIKVISION_HOT_RELOAD_API_BASE=http://127.0.0.1:$ApiRemotePort#g' "`$ENV_FILE"
-else
-  printf '%s\n' 'HIKVISION_HOT_RELOAD_API_BASE=http://127.0.0.1:$ApiRemotePort' | sudo tee "`$ENV_FILE" >/dev/null
+UNIT=project-truth-hikvision-hot-reload-listener.service
+
+# Prove current listener target from the LATEST service_started / apiBase line only.
+# (journal may still contain older 3101 lines — do not treat those as current.)
+RECENT=`$(sudo -n journalctl -u "`$UNIT" -n 80 --no-pager 2>/dev/null | grep -E 'service_started|hrisApiBase|\"apiBase\"' | tail -n 12 || true)
+LAST=`$(echo "`$RECENT" | tail -n 1 || true)
+if echo "`$LAST" | grep -q "127.0.0.1:$ApiRemotePort"; then
+  if systemctl is-active --quiet "`$UNIT"; then
+    echo "LISTENER_ALREADY_HOST_API"
+    echo "`$LAST"
+    systemctl is-active "`$UNIT"
+    exit 0
+  fi
 fi
-sudo systemctl daemon-reload
-sudo systemctl restart project-truth-hikvision-hot-reload-listener.service
+
+echo "LISTENER_RETARGET_NEEDED"
+sudo -n mkdir -p "`$DROP_DIR"
+# Clean single-purpose drop-in (avoid corrupted multi-Environment lines).
+printf '%s\n' '[Service]' "Environment=HIKVISION_HOT_RELOAD_API_BASE=`$TARGET_BASE" | sudo -n tee "`$DROP_DIR/host-api-socket.conf" >/dev/null
+# EnvironmentFile wins over unit Environment= — rewrite the file with python (no sed # issues).
+sudo -n python3 - <<'PY'
+from pathlib import Path
+target = "http://127.0.0.1:$ApiRemotePort"
+path = Path("/etc/project-truth/hikvision-hot-reload.env")
+lines = []
+if path.exists():
+    for line in path.read_text().splitlines():
+        if line.startswith("HIKVISION_HOT_RELOAD_API_BASE="):
+            lines.append(f"HIKVISION_HOT_RELOAD_API_BASE={target}")
+        else:
+            lines.append(line)
+else:
+    lines = [f"HIKVISION_HOT_RELOAD_API_BASE={target}"]
+if not any(l.startswith("HIKVISION_HOT_RELOAD_API_BASE=") for l in lines):
+    lines.append(f"HIKVISION_HOT_RELOAD_API_BASE={target}")
+path.write_text("\n".join(lines) + "\n")
+print(path.read_text())
+PY
+sudo -n systemctl daemon-reload
+sudo -n systemctl restart "`$UNIT"
 sleep 3
-systemctl is-active project-truth-hikvision-hot-reload-listener.service
-# Prove process env (not only unit file)
-journalctl -u project-truth-hikvision-hot-reload-listener.service -n 40 --no-pager | grep -E 'service_started|hrisApiBase' | tail -n 3 || true
+systemctl is-active "`$UNIT"
+sudo -n journalctl -u "`$UNIT" -n 40 --no-pager 2>/dev/null | grep -E 'service_started|hrisApiBase|apiBase' | tail -n 4 || true
 "@ 2>&1
     $retargetText = ($retarget | Out-String)
-    $listenerActive = $retargetText -match "active"
-    $postsHost = $retargetText -match "127\.0\.0\.1:$ApiRemotePort|53001"
-    $stillVm3101 = $retargetText -match "localhost:3101"
+    $listenerActive = $retargetText -match "(?m)^active\s*$|LISTENER_ALREADY_HOST_API|is-active"
+    if ($retargetText -match "LISTENER_ALREADY_HOST_API") {
+      $listenerActive = $true
+    }
+    if ($retargetText -match "(?m)^active$") { $listenerActive = $true }
+    $postsHost = $retargetText -match "127\.0\.0\.1:$ApiRemotePort|LISTENER_ALREADY_HOST_API"
+    $stillVm3101 = ($retargetText -match "localhost:3101") -and -not ($retargetText -match "LISTENER_ALREADY_HOST_API")
     $result.steps += [pscustomobject]@{
       step = "listener_api_base_host"
       ok = [bool]($listenerActive -and $postsHost -and -not $stillVm3101)
-      detail = if ($listenerActive -and $postsHost -and -not $stillVm3101) {
-        "Listener posts to http://127.0.0.1:$ApiRemotePort (host $ApiLocalPort) so device-event:saved hits browser socket"
+      detail = if ($retargetText -match "LISTENER_ALREADY_HOST_API") {
+        "Already posts http://127.0.0.1:$ApiRemotePort (host $ApiLocalPort) — no restart"
+      } elseif ($listenerActive -and $postsHost -and -not $stillVm3101) {
+        "Listener retargeted to http://127.0.0.1:$ApiRemotePort (host $ApiLocalPort) for socket truth"
       } else {
         "Listener retarget attempted: $($retargetText.Trim().Substring(0, [Math]::Min(400, $retargetText.Trim().Length)))"
       }

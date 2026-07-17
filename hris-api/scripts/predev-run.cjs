@@ -68,6 +68,14 @@ const STEPS = [
 		typical: "<2s warm / 5–40s cold",
 		phase: "D",
 	},
+	{
+		// Socket truth: listener must post VM:53001 → host:3001 (never default VM:3101 alone).
+		id: "ensure-device-live-path",
+		label: "Device live path (53001→3001 listener + DB/SDK probes)",
+		script: "ensure-device-live-path.cjs",
+		typical: "<3s warm / 5–25s if retarget",
+		phase: "E",
+	},
 ];
 
 function nowIso() {
