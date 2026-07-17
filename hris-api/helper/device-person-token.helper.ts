@@ -11,8 +11,10 @@ import { hikvisionFetch } from "../lib/hikvision-client";
 import {
 	buildHikvisionLogSearchXml,
 	isOpaqueHikvisionPersonToken,
+	normalizeHikvisionLogSearchRow,
 	parseHikvisionLogSearchResponse,
 } from "./hikvision-event-contract.helper";
+import { emitDeviceEventSaved } from "./device-event-realtime.helper";
 
 export type DevicePersonTokenSource =
 	| "WRITE_TIME_CAPTURE"
@@ -351,4 +353,255 @@ export const applyDevicePersonTokenToEvidence = async <T extends { employeeNo?: 
 		personTokenResolved: true,
 		opaquePersonToken: opaque,
 	};
+};
+
+/**
+ * SDK major=3 "operation" alarms (minor 80/112/121…) arrive live without a person no
+ * and classify as SYNC_SIGNAL. Real Add Person / Add Fingerprint truth lives in
+ * ISAPI logSearch (addUserInfo / addFpByEmployeeNo). After an SDK signal, pull a
+ * short recent window and persist typed lifecycle DeviceEvents + socket emit.
+ */
+const operationLogResolveCooldownMs = new Map<string, number>();
+
+const OPERATION_LOG_META = [
+	{
+		metaId: "log.hikvision.com/Information/addUserInfo",
+		eventAction: "USER_CREATED",
+		eventLabel: "Device user created",
+		eventCategory: "USER_MANAGEMENT",
+		minor: "addUserInfo",
+	},
+	{
+		metaId: "log.hikvision.com/Information/addFpByEmployeeNo",
+		eventAction: "FINGERPRINT_ENROLLED",
+		eventLabel: "Fingerprint enrolled",
+		eventCategory: "ENROLLMENT",
+		minor: "addFpByEmployeeNo",
+	},
+	{
+		metaId: "log.hikvision.com/Information/addFpByCard",
+		eventAction: "FINGERPRINT_ENROLLED",
+		eventLabel: "Fingerprint enrolled",
+		eventCategory: "ENROLLMENT",
+		minor: "addFpByCard",
+	},
+] as const;
+
+export const scheduleOperationLogResolveAfterSdkSignal = (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	deviceId: string;
+	organizationId: string;
+	deviceName?: string | null;
+	deviceAddress?: string | null;
+	triggerMinor?: string | number | null;
+	settleMs?: number;
+	windowBeforeMs?: number;
+	windowAfterMs?: number;
+	cooldownMs?: number;
+}): void => {
+	const deviceId = String(params.deviceId || "").trim();
+	const organizationId = String(params.organizationId || "").trim();
+	if (!deviceId || !organizationId) return;
+
+	const cooldownMs = params.cooldownMs ?? 4_000;
+	const now = Date.now();
+	const last = operationLogResolveCooldownMs.get(deviceId) || 0;
+	if (now - last < cooldownMs) return;
+	operationLogResolveCooldownMs.set(deviceId, now);
+
+	const settleMs = params.settleMs ?? 1_500;
+	const windowBeforeMs = params.windowBeforeMs ?? 10 * 60_000;
+	const windowAfterMs = params.windowAfterMs ?? 2 * 60_000;
+	const triggerMinor = String(params.triggerMinor ?? "").trim();
+
+	void (async () => {
+		if (settleMs > 0) {
+			await new Promise((resolve) => setTimeout(resolve, settleMs));
+		}
+		const startTime = formatHikvisionPlus08(Date.now() - windowBeforeMs);
+		const endTime = formatHikvisionPlus08(Date.now() + windowAfterMs);
+		const device = {
+			id: deviceId,
+			name: params.deviceName || null,
+			address: params.deviceAddress || null,
+		};
+		let created = 0;
+
+		for (const meta of OPERATION_LOG_META) {
+			try {
+				const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
+					method: "POST",
+					deviceId,
+					prisma: params.prisma,
+					request: params.req,
+					timeoutMs: 20_000,
+					ensureJsonFormat: false,
+					rawResponse: true,
+					headers: {
+						Accept: "application/xml, text/xml, */*",
+						"Content-Type": "application/xml; charset=UTF-8",
+					},
+					body: buildHikvisionLogSearchXml({
+						searchId: `sdk-op-resolve-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+						startTime,
+						endTime,
+						maxResults: 30,
+						searchResultPosition: 0,
+						metaId: meta.metaId,
+					}),
+				});
+				const parsed = parseHikvisionLogSearchResponse(String((response as any)?.raw || ""));
+				for (const row of parsed.rows || []) {
+					const evidence = normalizeHikvisionLogSearchRow(row as any, device);
+					const applied = await applyDevicePersonTokenToEvidence(params.prisma, {
+						organizationId,
+						deviceId,
+						evidence: evidence as any,
+					});
+					let employeeNo = String(applied.employeeNo || evidence.employeeNo || "").trim();
+					const opaque =
+						(applied as any).opaquePersonToken ||
+						(isOpaqueHikvisionPersonToken(employeeNo) ? employeeNo : null);
+					if (employeeNo && isOpaqueHikvisionPersonToken(employeeNo)) {
+						const tok = await resolveDevicePersonToken(params.prisma, {
+							organizationId,
+							deviceId,
+							opaqueToken: employeeNo,
+						});
+						if (tok?.employeeNo) employeeNo = tok.employeeNo;
+						else employeeNo = "";
+					}
+					const eventAction = String(
+						(applied as any).eventAction || evidence.eventAction || meta.eventAction,
+					);
+					const eventCategory = String(
+						(applied as any).eventCategory || evidence.eventCategory || meta.eventCategory,
+					);
+					const eventLabel = String(
+						(applied as any).eventLabel || evidence.eventLabel || meta.eventLabel,
+					);
+					const eventTimeRaw = applied.time || (row as any).time || Date.now();
+					const eventTime = new Date(eventTimeRaw);
+					const personKey = employeeNo || opaque || "unknown";
+					const dedupeKey = [
+						"sdk-op-log-resolve",
+						deviceId,
+						eventAction,
+						eventTime.toISOString(),
+						personKey,
+						meta.minor,
+					].join("|");
+					const exists = await params.prisma.deviceEvent.findFirst({
+						where: { organizationId, dedupeKey },
+						select: { id: true },
+					});
+					if (exists) continue;
+
+					// Skip near-duplicates (same action + ~same second), even when person is still opaque.
+					const near = await params.prisma.deviceEvent.findFirst({
+						where: {
+							organizationId,
+							deviceId,
+							eventAction,
+							eventTime: {
+								gte: new Date(eventTime.getTime() - 5_000),
+								lte: new Date(eventTime.getTime() + 5_000),
+							},
+							...(employeeNo
+								? { employeeNo }
+								: opaque
+									? {
+											OR: [
+												{ employeeNo: null },
+												{ employeeNo: "" },
+											],
+										}
+									: {}),
+						},
+						select: { id: true },
+					});
+					if (near) continue;
+
+					const createdRow = await params.prisma.deviceEvent.create({
+						data: {
+							organizationId,
+							deviceId,
+							eventTime: Number.isFinite(eventTime.getTime()) ? eventTime : new Date(),
+							employeeNo: employeeNo || null,
+							source: "HIKVISION_CALLBACK",
+							status: employeeNo ? "UNMATCHED" : "RECEIVED",
+							eventCategory,
+							eventAction,
+							eventLabel,
+							eventConfidence: "PROVEN",
+							eventType: "ISAPI_LOGSEARCH",
+							major: "Information",
+							minor: meta.minor,
+							dedupeKey,
+							payload: {
+								evidenceSource: "ISAPI_LOGSEARCH",
+								directDeviceEvidence: true,
+								resolvedFromSdkOperationSignal: true,
+								sdkTriggerMinor: triggerMinor || null,
+								personTokenResolved: Boolean(employeeNo && opaque),
+								opaquePersonToken: opaque,
+								resolvedEmployeeNo: employeeNo || null,
+								notHrisEmployee: true,
+								plane: "DEVICE_USER",
+								rawEvidence: (applied as any).rawEvidence || evidence,
+							},
+						},
+					});
+					if (employeeNo) {
+						await upsertDeviceUserInventoryStub(params.prisma, {
+							organizationId,
+							deviceId,
+							employeeNo,
+							displayName: null,
+							opaqueToken: opaque,
+						}).catch(() => null);
+					}
+					emitDeviceEventSaved(params.req?.io, createdRow);
+					created += 1;
+				}
+			} catch (error: any) {
+				console.warn(
+					"[device-person-token] operation-log resolve failed",
+					meta.metaId,
+					deviceId,
+					error?.message || error,
+				);
+			}
+		}
+
+		if (created > 0) {
+			console.log(
+				`[device-person-token] operation-log resolve saved ${created} lifecycle event(s) device=${deviceId} triggerMinor=${triggerMinor || "?"}`,
+			);
+		}
+	})().catch((error) => {
+		console.warn(
+			"[device-person-token] operation-log resolve crashed",
+			deviceId,
+			error?.message || error,
+		);
+	});
+};
+
+/** True when an SDK callback is the opaque "something changed on device" major-3 path. */
+export const isHikvisionSdkOperationSignal = (event: {
+	major?: string | number | null;
+	minor?: string | number | null;
+	eventKind?: string | null;
+	actionCode?: string | null;
+	payload?: any;
+}): boolean => {
+	const major = String(event.major ?? event.payload?.major ?? "").trim();
+	const eventKind = String(event.eventKind ?? event.payload?.eventKind ?? "").trim();
+	const actionCode = String(event.actionCode ?? event.payload?.actionCode ?? "").trim();
+	if (eventKind === "biometric_operation_sync") return true;
+	if (actionCode.startsWith("OBSERVED_OPERATION_MINOR_")) return true;
+	if (major === "3") return true;
+	return false;
 };

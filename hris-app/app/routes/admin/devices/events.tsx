@@ -324,6 +324,9 @@ const eventConfidenceOptions: SelectOption[] = [
 const compactSelectClassName = "h-7 text-xs";
 const compactSelectDropdownClassName = "rounded-md shadow-md";
 
+// Must be a <div>, not <label>. Wrapping a custom Select (role=combobox) in
+// <label> makes browsers re-dispatch the click onto the combobox and instantly
+// toggle the menu closed — Actions/Category look like they "won't open".
 const FilterField = ({
 	label,
 	children,
@@ -331,10 +334,10 @@ const FilterField = ({
 	label: string;
 	children: ReactNode;
 }) => (
-	<label className="block min-w-0 space-y-1">
+	<div className="block min-w-0 space-y-1">
 		<span className="block truncate text-[11px] font-semibold text-slate-500">{label}</span>
 		{children}
-	</label>
+	</div>
 );
 
 const getDateKey = (date: Date) => {

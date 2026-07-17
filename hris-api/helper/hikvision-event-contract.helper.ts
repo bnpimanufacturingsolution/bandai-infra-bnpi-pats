@@ -808,7 +808,7 @@ const classifyHikvisionSdkEvidence = (event: NormalizedHikvisionEvent) => {
 		return {
 			eventCategory: "RUNTIME",
 			eventAction: "SYNC_SIGNAL",
-			eventLabel: "Device user or biometric operation",
+			eventLabel: "Device operation signal (resolving person/enroll details)",
 			eventConfidence: "SUPPORTED",
 		} as const;
 	}

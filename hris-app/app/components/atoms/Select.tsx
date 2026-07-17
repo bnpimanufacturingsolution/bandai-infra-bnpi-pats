@@ -100,24 +100,32 @@ export const Select: React.FC<SelectProps> = ({
 		setSelectedOption(option || null);
 	}, [value, options]);
 
-	// Close dropdown when clicking outside
+	// Close dropdown when clicking outside (pointerdown so we beat label/focus races).
+	// Ignore the same interaction that opened the menu.
+	const ignoreOutsideUntilRef = useRef(0);
 	useEffect(() => {
-		const handleClickOutside = (event: MouseEvent) => {
-			const target = event.target as Node;
-			if (
-				selectRef.current &&
-				!selectRef.current.contains(target) &&
-				!listRef.current?.contains(target)
-			) {
-				setIsOpen(false);
+		if (!isOpen) return;
+
+		const handlePointerOutside = (event: Event) => {
+			if (Date.now() < ignoreOutsideUntilRef.current) return;
+			const target = event.target as Node | null;
+			if (!target) return;
+			if (selectRef.current?.contains(target) || listRef.current?.contains(target)) {
+				return;
 			}
+			setIsOpen(false);
 		};
 
-		document.addEventListener("mousedown", handleClickOutside);
+		// Defer attach so the opening click cannot immediately close.
+		const timer = window.setTimeout(() => {
+			document.addEventListener("pointerdown", handlePointerOutside, true);
+		}, 0);
+
 		return () => {
-			document.removeEventListener("mousedown", handleClickOutside);
+			window.clearTimeout(timer);
+			document.removeEventListener("pointerdown", handlePointerOutside, true);
 		};
-	}, []);
+	}, [isOpen]);
 
 	useEffect(() => {
 		if (!isOpen) return;
@@ -176,10 +184,13 @@ export const Select: React.FC<SelectProps> = ({
 	}, [isOpen, options, value, onChange, handleSelect]);
 
 	const toggleDropdown = () => {
-		if (!disabled) {
-			if (!isOpen) updateDropdownPosition();
-			setIsOpen((current) => !current);
+		if (disabled) return;
+		if (!isOpen) {
+			// Suppress outside-close for the opening gesture (label re-click, portal mount).
+			ignoreOutsideUntilRef.current = Date.now() + 250;
+			updateDropdownPosition();
 		}
+		setIsOpen((current) => !current);
 	};
 
 	// Extract height and text size from className, or use defaults
@@ -216,7 +227,7 @@ export const Select: React.FC<SelectProps> = ({
 	`;
 
 	const dropdownClasses = `
-		fixed z-[10050]
+		fixed z-[20000] pointer-events-auto
 		bg-white border border-gray-300 rounded-md
 		shadow-lg
 		overflow-auto
@@ -299,7 +310,16 @@ export const Select: React.FC<SelectProps> = ({
 			{/* Select Trigger */}
 			<div
 				className={triggerClasses}
-				onClick={toggleDropdown}
+				onClick={(event) => {
+					// Stop label ancestors from re-dispatching this click.
+					event.preventDefault();
+					event.stopPropagation();
+					toggleDropdown();
+				}}
+				onMouseDown={(event) => {
+					// Prevent focus/label activation races that close the menu immediately.
+					event.stopPropagation();
+				}}
 				onKeyDown={(e) => {
 					if (e.key === "Enter" || e.key === " ") {
 						e.preventDefault();
@@ -313,6 +333,7 @@ export const Select: React.FC<SelectProps> = ({
 				aria-haspopup="listbox"
 				aria-required={required}
 				aria-invalid={error}
+				data-select-trigger="true"
 				data-field-invalid={error ? "true" : undefined}>
 				<span
 					className={`flex min-w-0 items-center gap-2 truncate ${

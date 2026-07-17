@@ -38,6 +38,10 @@ import { emitDeviceEventSaved } from "../../../helper/device-event-realtime.help
 import { emitAttendanceRealtimeEvent } from "../../../helper/attendance-realtime.helper";
 import { refreshTimesheetForAttendanceDate } from "../../../helper/timesheet.helper";
 import { buildPersistedDeviceEventTaxonomy } from "../../../helper/device-event-taxonomy.helper";
+import {
+	isHikvisionSdkOperationSignal,
+	scheduleOperationLogResolveAfterSdkSignal,
+} from "../../../helper/device-person-token.helper";
 
 export const controller = (prisma: PrismaClient) => {
 	const getEmployeeDisplayNameFromSnapshot = (employee: any) => {
@@ -555,6 +559,28 @@ export const controller = (prisma: PrismaClient) => {
 						status: "IGNORED",
 						errorMessage: "non_attendance_device_event",
 					});
+					// Live path is green, but major=3 SDK ops are opaque SYNC_SIGNAL rows.
+					// Follow up via ISAPI logSearch so Add Person / Add Fingerprint become
+					// typed USER_CREATED / FINGERPRINT_ENROLLED and re-emit on the socket.
+					if (
+						isHikvisionSdkOperationSignal({
+							major: event.major,
+							minor: event.minor,
+							eventKind: (event as any).eventKind || (payload as any).eventKind,
+							actionCode: (event as any).actionCode || (payload as any).actionCode,
+							payload,
+						})
+					) {
+						scheduleOperationLogResolveAfterSdkSignal({
+							prisma,
+							req,
+							deviceId: device.id,
+							organizationId: device.organizationId,
+							deviceName: device.name,
+							deviceAddress: device.address,
+							triggerMinor: event.minor,
+						});
+					}
 					const successResponse = buildSuccessResponse(
 						"Callback received but event is not an attendance punch",
 						{
@@ -562,6 +588,13 @@ export const controller = (prisma: PrismaClient) => {
 							matched: false,
 							employeeNo,
 							reason: "non_attendance_device_event",
+							operationLogResolveScheduled: isHikvisionSdkOperationSignal({
+								major: event.major,
+								minor: event.minor,
+								eventKind: (event as any).eventKind || (payload as any).eventKind,
+								actionCode: (event as any).actionCode || (payload as any).actionCode,
+								payload,
+							}),
 							eventId: eventRecord.id,
 							dedupeKey,
 							event,

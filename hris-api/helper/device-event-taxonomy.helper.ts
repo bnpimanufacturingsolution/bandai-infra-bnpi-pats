@@ -253,7 +253,8 @@ export const classifyDeviceEvent = (event: {
 		return withCompatibilityConfidence({
 			eventCategory: "RUNTIME",
 			eventAction: "SYNC_SIGNAL",
-			eventLabel: "Device user or biometric operation",
+			// SDK only says "an operation happened" — person/type come from logSearch follow-up.
+			eventLabel: "Device operation signal (resolving person/enroll details)",
 			eventConfidence: "SUPPORTED",
 			processingLabel,
 			transportLabel,
