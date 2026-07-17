@@ -13653,13 +13653,119 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	/**
-	 * Operator "Prove live path" action: re-check DB, ensure listener is running
-	 * (restart if stopped), re-read status, and return readiness + prove steps.
+	 * Host-side deps that browser Keep ready cannot do alone:
+	 * DB tunnel (55435) + Hikvision reverse SSH bridge (TEST A 59000/59443).
+	 * Mirrors predev ensure steps so toggle can go green without AI.
+	 */
+	const runEnsureHostLivePath = async (): Promise<{
+		ok: boolean;
+		steps: Array<{ step: string; ok: boolean; detail: string }>;
+		raw?: string;
+	}> => {
+		const steps: Array<{ step: string; ok: boolean; detail: string }> = [];
+		if (process.platform !== "win32") {
+			steps.push({
+				step: "host_ensure",
+				ok: false,
+				detail: "Host ensure scripts only run on Windows host API",
+			});
+			return { ok: false, steps };
+		}
+		const pathMod = await import("path");
+		const fsMod = await import("fs");
+		const { spawn } = await import("child_process");
+		const scriptPath = pathMod.resolve(
+			process.cwd(),
+			"../scripts/ensure-device-live-path.ps1",
+		);
+		const altScript = pathMod.resolve(process.cwd(), "scripts/ensure-device-live-path.ps1");
+		const resolved = fsMod.existsSync(scriptPath)
+			? scriptPath
+			: fsMod.existsSync(altScript)
+				? altScript
+				: null;
+		if (!resolved) {
+			steps.push({
+				step: "host_ensure",
+				ok: false,
+				detail: "ensure-device-live-path.ps1 not found",
+			});
+			return { ok: false, steps };
+		}
+		const raw = await new Promise<string>((resolvePromise) => {
+			const child = spawn(
+				"powershell.exe",
+				["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", resolved],
+				{
+					windowsHide: true,
+					cwd: pathMod.dirname(pathMod.dirname(resolved)),
+				},
+			);
+			let out = "";
+			let err = "";
+			const timer = setTimeout(() => {
+				try {
+					child.kill();
+				} catch {
+					// ignore
+				}
+				resolvePromise(out || err || "host ensure timed out");
+			}, 120_000);
+			child.stdout?.on("data", (chunk) => {
+				out += String(chunk);
+			});
+			child.stderr?.on("data", (chunk) => {
+				err += String(chunk);
+			});
+			child.on("close", () => {
+				clearTimeout(timer);
+				resolvePromise(out || err || "");
+			});
+			child.on("error", (error) => {
+				clearTimeout(timer);
+				resolvePromise(String(error?.message || error));
+			});
+		});
+		try {
+			const parsed = JSON.parse(raw.trim().split(/\r?\n/).filter(Boolean).slice(-1)[0] || raw);
+			const scriptSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
+			for (const s of scriptSteps) {
+				steps.push({
+					step: String(s.step || "host_step"),
+					ok: Boolean(s.ok),
+					detail: String(s.detail || ""),
+				});
+			}
+			if (!scriptSteps.length) {
+				steps.push({
+					step: "host_ensure",
+					ok: Boolean(parsed.ok),
+					detail: String(parsed.message || raw).slice(0, 300),
+				});
+			}
+			return { ok: Boolean(parsed.ok), steps, raw: raw.slice(0, 2000) };
+		} catch {
+			steps.push({
+				step: "host_ensure",
+				ok: false,
+				detail: String(raw || "failed to parse ensure script output").slice(0, 400),
+			});
+			return { ok: false, steps, raw: raw.slice(0, 2000) };
+		}
+	};
+
+	/**
+	 * Operator "Prove live path" / Keep ready: host ensure (like predev) + re-arm listener.
 	 */
 	const proveDeviceLivePath = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
 			const admin = assertDeviceUserAdmin(req, res);
 			if (!admin) return;
+
+			const forceReArm =
+				(req.body as any)?.forceReArm === true ||
+				(req.body as any)?.keepReady === true ||
+				(req.query as any)?.forceReArm === "true";
 
 			const { buildDeviceLiveReadiness } = await import(
 				"../../helper/device-live-readiness.helper"
@@ -13669,6 +13775,18 @@ export const controller = (prisma: PrismaClient) => {
 				ok: boolean;
 				detail: string;
 			}> = [];
+
+			// 0) Host deps (DB tunnel + reverse bridge) — what Keep ready was missing vs predev
+			try {
+				const hostEnsure = await runEnsureHostLivePath();
+				steps.push(...hostEnsure.steps);
+			} catch (error: any) {
+				steps.push({
+					step: "host_ensure",
+					ok: false,
+					detail: String(error?.message || error).slice(0, 200),
+				});
+			}
 
 			let databaseOk = false;
 			let databaseLatencyMs: number | null = null;
@@ -13698,11 +13816,14 @@ export const controller = (prisma: PrismaClient) => {
 			let restartAttempted = false;
 			try {
 				listener = await readHikvisionListenerStatus();
+				const sdkState = String(listener?.sdk?.state || "");
+				const receiving = Boolean(listener?.sdk?.receivingCallbacks);
+				const armed = Boolean(listener?.sdk?.armed);
 				steps.push({
 					step: "listener_status",
-					ok: Boolean(listener?.running),
+					ok: Boolean(listener?.running) && sdkState !== "login_failed",
 					detail: listener?.running
-						? `Listener ${listener.status} / sdk=${listener.sdk?.state || "unknown"}`
+						? `Listener ${listener.status} / sdk=${sdkState || "unknown"} receiving=${receiving}`
 						: listener?.error || "Listener not running",
 				});
 			} catch (error: any) {
@@ -13713,8 +13834,23 @@ export const controller = (prisma: PrismaClient) => {
 				});
 			}
 
-			// If service is not running, try restart once (admin-triggered prove).
-			if (databaseOk && listener && !listener.running && listener.control?.available) {
+			const sdkState = String(listener?.sdk?.state || "");
+			const receiving = Boolean(listener?.sdk?.receivingCallbacks);
+			const armed = Boolean(listener?.sdk?.armed);
+			const lastAlarmMs = listener?.sdk?.lastAlarmAt
+				? Date.parse(String(listener.sdk.lastAlarmAt))
+				: NaN;
+			const proofStale =
+				!Number.isFinite(lastAlarmMs) || Date.now() - lastAlarmMs > 15 * 60 * 1000;
+			const shouldRestartListener =
+				Boolean(listener?.control?.available) &&
+				(!listener?.running ||
+					sdkState === "login_failed" ||
+					forceReArm ||
+					(!receiving && (proofStale || !armed)));
+
+			// Restart when stopped, login_failed, or Keep ready / quiet-stale re-arm.
+			if (shouldRestartListener) {
 				restartAttempted = true;
 				try {
 					const managedWrapper = await installManagedHikvisionListenerWrapperOnVm();
@@ -13734,17 +13870,20 @@ export const controller = (prisma: PrismaClient) => {
 							step: "listener_restart",
 							ok,
 							detail: ok
-								? "Listener restart requested"
+								? forceReArm || proofStale
+									? "Listener re-arm restart requested (host bridge ensured first)"
+									: "Listener restart requested"
 								: result.stderr.trim() || result.stdout.trim() || "Restart failed",
 						});
 						// Re-read after short settle
-						await new Promise((r) => setTimeout(r, 2500));
+						await new Promise((r) => setTimeout(r, 3500));
 						listener = await readHikvisionListenerStatus();
+						const stateAfter = String(listener?.sdk?.state || "");
 						steps.push({
 							step: "listener_status_after_restart",
-							ok: Boolean(listener?.running),
+							ok: Boolean(listener?.running) && stateAfter !== "login_failed",
 							detail: listener?.running
-								? `Listener ${listener.status} / sdk=${listener.sdk?.state || "unknown"}`
+								? `Listener ${listener.status} / sdk=${stateAfter || "unknown"}`
 								: listener?.error || "Still not running after restart",
 						});
 					}
@@ -13843,12 +13982,14 @@ export const controller = (prisma: PrismaClient) => {
 						operatorHint: proven
 							? "Tap TEST A once now; a TAP or SDK row should appear within a few seconds."
 							: !databaseOk
-								? "Restore Postgres tunnel (local 55435 / predev) first."
-								: !listener?.running
-									? "Listener failed to start — open Listener modal and Restart, check reverse tunnel."
-									: readiness.proof.stale
-										? "Path is quiet — tap the device once to create fresh proof, then click Prove again."
-										: "Review red/yellow checks above.",
+								? "Database tunnel still down after ensure — run predev or scripts/start-k8s-dev-db-access.ps1."
+								: String(listener?.sdk?.state || "") === "login_failed"
+									? "Listener is up but SDK login failed — reverse tunnel to the device is missing or device unreachable. Keep ready runs ensure-device-live-path.ps1; if still red, check Cloudflare SSH login."
+									: !listener?.running
+										? "Listener failed to start on the VM — check systemd / reverse tunnel."
+										: readiness.proof.stale
+											? "Path re-armed if possible. Tap the device once so proof becomes fresh (green needs a recent event)."
+											: "Review red/yellow checks above.",
 					},
 					200,
 				),

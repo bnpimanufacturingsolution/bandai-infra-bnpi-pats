@@ -2152,11 +2152,10 @@ class DevicesService extends APIService {
 	}
 
 	/**
-	 * Operator prove / keep-alive repair:
-	 * re-check DB, restart listener when stopped OR quiet/stale (re-arm), re-check.
+	 * Prefer server prove (runs ensure-device-live-path.ps1 like predev: DB + reverse bridge
+	 * + listener re-arm). Falls back to browser-only restart if API route unavailable.
 	 */
 	async proveDeviceLivePath(options?: {
-		/** When true (Keep ready), restart even if service is "running" but not receiving / proof stale. */
 		forceReArm?: boolean;
 	}): Promise<{
 		proven: boolean;
@@ -2167,10 +2166,34 @@ class DevicesService extends APIService {
 		message?: string;
 	}> {
 		const forceReArm = options?.forceReArm === true;
+		// Primary: API does host ensure (tunnels) + listener restart — what Keep ready needs.
+		try {
+			const response = await hrisApiClient.post<any>(
+				"/api/device/events/live-readiness/prove",
+				{ forceReArm, keepReady: forceReArm },
+				{ timeoutMs: 150_000 } as any,
+			);
+			const data = response.data?.data || response.data;
+			if (data?.readiness) {
+				return {
+					proven: Boolean(data.proven),
+					restartAttempted: Boolean(data.restartAttempted),
+					steps: Array.isArray(data.steps) ? data.steps : [],
+					readiness: data.readiness as DeviceLiveReadiness,
+					operatorHint: data.operatorHint,
+					message: response.data?.message || data.message,
+				};
+			}
+		} catch (error: any) {
+			// Fall through to client-only path if route missing / timeout
+			console.warn(
+				"Server live-path prove failed, falling back to client repair:",
+				error?.message || error,
+			);
+		}
+
 		const steps: Array<{ step: string; ok: boolean; detail: string }> = [];
 		let restartAttempted = false;
-
-		// 1) DB/auth proof
 		const dbStarted = Date.now();
 		try {
 			await this.getDeviceEvents({ page: 1, limit: 1 } as any);
@@ -2187,27 +2210,27 @@ class DevicesService extends APIService {
 			});
 		}
 
-		// 2) Listener status (+ restart if down, or re-arm when keep-ready / quiet-stale)
 		let listener: HikvisionListenerStatus | null = null;
 		try {
 			listener = await this.getHikvisionListenerStatus();
 			const receiving = Boolean(listener.sdk?.receivingCallbacks);
 			const armed = Boolean(listener.sdk?.armed);
+			const state = String(listener.sdk?.state || "");
 			const lastAlarm = listener.sdk?.lastAlarmAt
 				? Date.parse(String(listener.sdk.lastAlarmAt))
 				: NaN;
-			const proofAgeMs = Number.isFinite(lastAlarm) ? Date.now() - lastAlarm : null;
-			const proofStale = proofAgeMs === null || proofAgeMs > 15 * 60 * 1000;
+			const proofStale = !Number.isFinite(lastAlarm) || Date.now() - lastAlarm > 15 * 60 * 1000;
 			steps.push({
 				step: "listener_status",
-				ok: Boolean(listener.running),
+				ok: Boolean(listener.running) && state !== "login_failed",
 				detail: listener.running
-					? `Listener ${listener.status} / sdk=${listener.sdk?.state || "unknown"} receiving=${receiving}`
+					? `Listener ${listener.status} / sdk=${state} receiving=${receiving}`
 					: listener.error || "Listener not running",
 			});
 			const shouldRestart =
 				listener.control?.available &&
 				(!listener.running ||
+					state === "login_failed" ||
 					forceReArm ||
 					(!receiving && (proofStale || !armed)));
 			if (shouldRestart) {
@@ -2217,17 +2240,15 @@ class DevicesService extends APIService {
 					steps.push({
 						step: "listener_restart",
 						ok: true,
-						detail: !listener.running
-							? "Listener restart requested (was stopped)"
-							: "Listener re-arm restart requested (quiet/stale path)",
+						detail: "Listener restart requested (client fallback — host tunnels not ensured)",
 					});
 					await new Promise((r) => setTimeout(r, 3500));
 					listener = await this.getHikvisionListenerStatus();
 					steps.push({
 						step: "listener_status_after_restart",
-						ok: Boolean(listener.running),
+						ok: Boolean(listener.running) && String(listener.sdk?.state) !== "login_failed",
 						detail: listener.running
-							? `Listener ${listener.status} after restart / sdk=${listener.sdk?.state || "unknown"}`
+							? `Listener ${listener.status} / sdk=${listener.sdk?.state}`
 							: "Still not running after restart",
 					});
 				} catch (error: any) {
@@ -2257,15 +2278,16 @@ class DevicesService extends APIService {
 			readiness,
 			message: proven
 				? "Live path prove passed — safe to tap and enroll for realtime"
-				: "Live path prove incomplete — fix red checks before relying on realtime",
+				: "Live path prove incomplete — host ensure may have failed; try again or run predev",
 			operatorHint: proven
 				? "Tap TEST A once now; a TAP or SDK row should appear within a few seconds."
 				: !readiness.database.ok
-					? "Restore Postgres tunnel (local 55435 / predev) first — Keep ready cannot fix a down DB tunnel by itself."
-					: !readiness.listener.running
-						? "Listener failed to start — check reverse tunnel to the device, then toggle Keep ready again."
+					? "Database tunnel still down — Keep ready will retry ensure-device-live-path.ps1."
+					: String(readiness.listener?.state || "") === "login_failed" ||
+						  !readiness.listener.running
+						? "Reverse tunnel or device SDK login failed — Keep ready retries host bridge + listener."
 						: readiness.proof.stale
-							? "Listener re-armed if possible. Tap the device once so proof becomes fresh (green needs a recent event)."
+							? "Listener re-armed if possible. Tap once for fresh proof."
 							: "Review red/yellow readiness chips.",
 		};
 	}

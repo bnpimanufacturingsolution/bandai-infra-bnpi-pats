@@ -595,19 +595,59 @@ export function DeviceEnrollmentPanel({
 		staleTime: 8_000,
 	});
 	const [isProvingLivePath, setIsProvingLivePath] = useState(false);
-	const proveLivePath = async () => {
+	const [keepLiveReady, setKeepLiveReady] = useState(false);
+	useEffect(() => {
+		setKeepLiveReady(readDeviceLiveKeepReady());
+		const onStorage = (event: StorageEvent) => {
+			if (event.key === "project-truth.device-live-keep-ready") {
+				setKeepLiveReady(event.newValue === "1");
+			}
+		};
+		const onCustom = (event: Event) => {
+			const detail = (event as CustomEvent<{ on?: boolean }>).detail;
+			if (typeof detail?.on === "boolean") setKeepLiveReady(detail.on);
+		};
+		window.addEventListener("storage", onStorage);
+		window.addEventListener("project-truth:device-live-keep-ready", onCustom as EventListener);
+		return () => {
+			window.removeEventListener("storage", onStorage);
+			window.removeEventListener(
+				"project-truth:device-live-keep-ready",
+				onCustom as EventListener,
+			);
+		};
+	}, []);
+	const setKeepLiveReadyPersisted = (on: boolean) => {
+		setKeepLiveReady(on);
+		writeDeviceLiveKeepReady(on);
+		if (on) {
+			toast.success("Keep ready ON", {
+				id: "device-live-keep-ready",
+				description:
+					"Auto-restarts the Hikvision listener and re-checks about every 45s while this page is open.",
+			});
+		} else {
+			toast.message("Keep ready OFF", { id: "device-live-keep-ready" });
+		}
+	};
+	const proveLivePath = async (options?: { quiet?: boolean; forceReArm?: boolean }) => {
+		const quiet = options?.quiet === true;
 		setIsProvingLivePath(true);
 		try {
-			const result = await deviceService.proveDeviceLivePath();
+			const result = await deviceService.proveDeviceLivePath({
+				forceReArm: options?.forceReArm ?? keepLiveReady,
+			});
 			await refetchLiveReadiness();
 			if (result.proven) {
-				toast.success("Safe to enroll — live path proved", {
-					id: "device-live-path-prove",
-					description:
-						result.operatorHint ||
-						"DB + live capture + proof look healthy. Create/enroll should stream realtime.",
-				});
-			} else {
+				if (!quiet) {
+					toast.success("Safe to enroll — live path proved", {
+						id: "device-live-path-prove",
+						description:
+							result.operatorHint ||
+							"DB + live capture + proof look healthy. Create/enroll should stream realtime.",
+					});
+				}
+			} else if (!quiet) {
 				toast.warning("Not fully ready to enroll", {
 					id: "device-live-path-prove",
 					description:
@@ -616,14 +656,56 @@ export function DeviceEnrollmentPanel({
 						"Fix red readiness checks first.",
 				});
 			}
+			return result;
 		} catch (error: any) {
-			toast.error(error?.message || "Live path prove failed", {
-				id: "device-live-path-prove",
-			});
+			if (!quiet) {
+				toast.error(error?.message || "Live path prove failed", {
+					id: "device-live-path-prove",
+				});
+			}
+			return null;
 		} finally {
 			setIsProvingLivePath(false);
 		}
 	};
+
+	useEffect(() => {
+		if (!keepLiveReady) return;
+		if (typeof window === "undefined") return;
+		let cancelled = false;
+		const needsRepair =
+			!liveReadiness ||
+			liveReadiness.overall !== "green" ||
+			!liveReadiness.safeToTap ||
+			!liveReadiness.safeToEnroll;
+		const run = () => {
+			if (cancelled || isProvingLivePath) return;
+			if (!needsRepair && liveReadiness?.proof?.fresh) return;
+			void proveLivePath({ quiet: true, forceReArm: true });
+		};
+		if (needsRepair) {
+			const t = window.setTimeout(run, 800);
+			const intervalId = window.setInterval(run, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
+			return () => {
+				cancelled = true;
+				window.clearTimeout(t);
+				window.clearInterval(intervalId);
+			};
+		}
+		const intervalId = window.setInterval(run, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
+		return () => {
+			cancelled = true;
+			window.clearInterval(intervalId);
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [
+		keepLiveReady,
+		liveReadiness?.overall,
+		liveReadiness?.safeToTap,
+		liveReadiness?.safeToEnroll,
+		liveReadiness?.proof?.fresh,
+		isProvingLivePath,
+	]);
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
 	const previewDeviceUserExportMutation = usePreviewDeviceUserExport();
 	const exportDeviceUsersMutation = useExportDeviceUsers();
@@ -4375,8 +4457,11 @@ export function DeviceEnrollmentPanel({
 							: "Readiness check failed"
 						: null
 				}
-				onProve={() => void proveLivePath()}
+				onProve={() => void proveLivePath({ forceReArm: true })}
 				isProving={isProvingLivePath}
+				keepReady={keepLiveReady}
+				onKeepReadyChange={setKeepLiveReadyPersisted}
+				keepReadyWorking={keepLiveReady && isProvingLivePath}
 			/>
 
 			<Tabs value={activePanel} onValueChange={setActivePanel} className="space-y-4">

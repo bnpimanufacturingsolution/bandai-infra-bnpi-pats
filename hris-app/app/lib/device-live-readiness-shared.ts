@@ -114,6 +114,10 @@ export const buildDeviceLiveReadiness = (input: {
 					"Host API cannot reach Postgres (often local tunnel port 55435). Auth and saved events will fail until restored.",
 			};
 
+	// Fresh saved SDK proof means the live path recently delivered events even if
+	// the status summarizer is briefly "quiet" / not sticky-armed.
+	const livePathProvenByFreshProof = listenerRunning && fresh;
+
 	let liveCaptureCheck: ReadinessCheck;
 	if (!listenerRunning) {
 		liveCaptureCheck = {
@@ -131,6 +135,15 @@ export const buildDeviceLiveReadiness = (input: {
 			label: "Live capture receiving",
 			detail: "SDK callbacks are arriving now.",
 		};
+	} else if (livePathProvenByFreshProof) {
+		liveCaptureCheck = {
+			id: "liveCapture",
+			level: "green",
+			ok: true,
+			label: "Live path recently proved",
+			detail:
+				"Listener is running and a fresh SDK event was saved in HRIS — path works even if status is briefly quiet.",
+		};
 	} else if (listenerArmed) {
 		liveCaptureCheck = {
 			id: "liveCapture",
@@ -138,7 +151,7 @@ export const buildDeviceLiveReadiness = (input: {
 			ok: true,
 			label: "Live capture armed (quiet)",
 			detail:
-				"Service is armed but no callback in the last few minutes. Armed does not prove the next tap will land until you see a fresh proof.",
+				"Service is armed but no callback in the last few minutes. Tap once to refresh proof.",
 		};
 	} else {
 		liveCaptureCheck = {
@@ -183,26 +196,27 @@ export const buildDeviceLiveReadiness = (input: {
 	const hasRed = checks.some((c) => c.level === "red");
 	const hasYellow = checks.some((c) => c.level === "yellow");
 
-	// Safe to tap for realtime only when DB can save + live path is receiving OR (armed + not-stale proof).
+	// Safe to tap: DB up + listener running + (receiving OR fresh proof OR armed+not-stale).
 	const safeToTap =
 		databaseOk &&
 		listenerRunning &&
-		(listenerReceiving || (listenerArmed && !stale));
+		(listenerReceiving || livePathProvenByFreshProof || (listenerArmed && !stale));
 
-	// Enroll create (ISAPI write) needs DB; realtime USER_CREATED/FP after enroll needs live path too.
-	// Green enroll = DB + live armed/receiving + proof not ancient.
-	const safeToEnroll = databaseOk && listenerRunning && listenerArmed && !stale;
+	// Enroll realtime needs the same live path health (create still uses ISAPI write via API).
+	const safeToEnroll = safeToTap;
+
+	// Recompute overall after live-capture may have been upgraded by fresh proof.
+	const checksFinal = [databaseCheck, liveCaptureCheck, eventProofCheck];
+	const hasRedFinal = checksFinal.some((c) => c.level === "red");
+	const hasYellowFinal = checksFinal.some((c) => c.level === "yellow");
 
 	let overall: ReadinessLevel = "green";
-	if (hasRed || !databaseOk) overall = "red";
-	else if (hasYellow || !safeToEnroll) overall = "yellow";
+	if (!databaseOk || hasRedFinal) overall = "red";
+	else if (hasYellowFinal || !safeToTap) overall = "yellow";
 	else overall = "green";
 
-	// If DB red, overall must be red even if live is green.
-	if (!databaseOk) overall = "red";
-
 	const reasons: string[] = [];
-	for (const check of checks) {
+	for (const check of checksFinal) {
 		if (check.level !== "green") reasons.push(`${check.label}: ${check.detail}`);
 	}
 	if (safeToTap && safeToEnroll && overall === "green") {
@@ -216,7 +230,9 @@ export const buildDeviceLiveReadiness = (input: {
 		headline = "Not safe — database tunnel/path is down (events/auth will fail)";
 	} else if (!listenerRunning) {
 		headline = "Not safe for live events — restart Hikvision listener";
-	} else if (stale || !listenerArmed) {
+	} else if (stale) {
+		headline = "Not fully safe yet — re-arm / tap once for fresh proof before enroll";
+	} else if (!listenerArmed && !fresh) {
 		headline = "Not fully safe yet — re-arm / tap once for fresh proof before enroll";
 	} else {
 		headline = "Partially ready — quiet armed path; confirm with a tap before critical enroll";
