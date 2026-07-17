@@ -1691,9 +1691,38 @@ export default function DeviceEventsPage() {
 		viewMode,
 	]);
 
-	// Focus refresh only when socket is offline (socket is primary while connected).
+	// Bridge gap safety: when listener posts to a different API process than the
+	// browser socket (VM :3101 vs host :3001), device-event:saved never arrives.
+	// If readiness proof advances (new SDK save), soft-refetch the ledger once —
+	// not a spam poll, only on proof timestamp change after baseline.
+	const lastProofAt =
+		liveReadiness?.proof?.lastSdkEventAt || liveReadiness?.listener?.lastAlarmAt || null;
+	const lastSeenProofAtRef = useRef<string | null>(null);
 	useEffect(() => {
-		if (viewMode !== "saved" || isConnected) return;
+		if (viewMode !== "saved" || !lastProofAt) return;
+		if (lastSeenProofAtRef.current === lastProofAt) return;
+		const previous = lastSeenProofAtRef.current;
+		lastSeenProofAtRef.current = lastProofAt;
+		if (!previous) return; // baseline
+		void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
+		void refetch();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [viewMode, lastProofAt]);
+
+	// While live path is receiving, poll readiness a bit faster so proof advances
+	// (and thus the ledger soft-refetch above) without hard reload.
+	useEffect(() => {
+		if (viewMode !== "saved") return;
+		if (!liveReadiness?.listener?.receiving) return;
+		const id = window.setInterval(() => {
+			void refetchLiveReadiness();
+		}, 12_000);
+		return () => window.clearInterval(id);
+	}, [viewMode, liveReadiness?.listener?.receiving, refetchLiveReadiness]);
+
+	// Focus refresh when socket offline OR as a quiet second chance.
+	useEffect(() => {
+		if (viewMode !== "saved") return;
 		if (typeof window === "undefined") return;
 		let lastRecoveryToastAt = 0;
 		const refreshFromRecovery = () => {
@@ -1726,7 +1755,7 @@ export default function DeviceEventsPage() {
 				document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
 			}
 		};
-	}, [isConnected, queryClient, refetch, viewMode]);
+	}, [queryClient, refetch, viewMode]);
 
 	const updateSearchParams = (mutator: (next: URLSearchParams) => void) => {
 		setSearchParams(

@@ -141,15 +141,13 @@ if ($bridgeOk) {
 $sdkPortOpen = Test-Tcp "127.0.0.1" $SdkListenPort
 if ($sdkPortOpen) {
   $result.reverseBridge = $true
-  # Rewrite any failed reverse_bridge step so prove "all steps ok" truth stays honest:
-  # optional remote API port 53001 can fail while TEST A SDK 59000 still works.
   $fixedSteps = @()
   foreach ($s in $result.steps) {
     if ($s.step -eq "reverse_bridge" -and -not $s.ok) {
       $fixedSteps += [pscustomobject]@{
         step = "reverse_bridge"
         ok = $true
-        detail = "Optional remote API port may be busy; SDK listen 127.0.0.1:$SdkListenPort is open for TEST A"
+        detail = "SDK reverse path up; API reverse handled separately"
       }
     } else {
       $fixedSteps += $s
@@ -171,9 +169,109 @@ if ($sdkPortOpen) {
   }
 }
 
+# --- 3) Host API reverse into VM (53001 -> host 3001) for SOCKET truth ---
+# Listener posts to VM API base. Browser socket is on host:3001. Without this reverse,
+# events save to DB (reload works) but device-event:saved never reaches the browser.
+$apiReverseOk = $false
+try {
+  $vmApiListen = ssh -o ConnectTimeout=12 -o BatchMode=yes $VmSshTarget "ss -ltn 2>/dev/null | grep -E ':$ApiRemotePort\s' || true" 2>$null
+  if ($vmApiListen -match [string]$ApiRemotePort) {
+    $apiReverseOk = $true
+    $result.steps += [pscustomobject]@{
+      step = "api_reverse_bridge"
+      ok = $true
+      detail = "VM already listens on $ApiRemotePort (host API reverse)"
+    }
+  }
+} catch {
+  # continue to start
+}
+
+if (-not $apiReverseOk) {
+  try {
+    $apiBridgeRoot = Join-Path $repoRoot ".runtime\hikvision-api-reverse-bridge"
+    New-Item -ItemType Directory -Force -Path $apiBridgeRoot | Out-Null
+    $apiState = Join-Path $apiBridgeRoot "active.json"
+    if (Test-Path $apiState) {
+      try {
+        $st = Get-Content -Raw $apiState | ConvertFrom-Json
+        if ($st.ProcessId) { Stop-Process -Id ([int]$st.ProcessId) -Force -ErrorAction SilentlyContinue }
+      } catch {}
+    }
+    $stdout = Join-Path $apiBridgeRoot "ssh.stdout.log"
+    $stderr = Join-Path $apiBridgeRoot "ssh.stderr.log"
+    $proc = Start-Process -FilePath "ssh.exe" -ArgumentList @(
+      "-N", "-T",
+      "-o", "ExitOnForwardFailure=yes",
+      "-o", "ServerAliveInterval=30",
+      "-o", "ServerAliveCountMax=3",
+      "-R", "${ApiRemotePort}:127.0.0.1:${ApiLocalPort}",
+      $VmSshTarget
+    ) -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+    Start-Sleep -Seconds 3
+    if ($proc.HasExited) {
+      $err = if (Test-Path $stderr) { Get-Content -Raw $stderr } else { "ssh exited" }
+      $result.steps += [pscustomobject]@{ step = "api_reverse_bridge"; ok = $false; detail = "Failed to start API reverse: $err".Trim() }
+    } else {
+      $vmApiListen2 = ssh -o ConnectTimeout=12 -o BatchMode=yes $VmSshTarget "ss -ltn 2>/dev/null | grep -E ':$ApiRemotePort\s' || true" 2>$null
+      $apiReverseOk = $vmApiListen2 -match [string]$ApiRemotePort
+      @{ ProcessId = $proc.Id; ApiRemotePort = $ApiRemotePort; ApiLocalPort = $ApiLocalPort; generatedAt = (Get-Date).ToString("o") } |
+        ConvertTo-Json | Set-Content -LiteralPath $apiState -Encoding UTF8
+      $result.steps += [pscustomobject]@{
+        step = "api_reverse_bridge"
+        ok = $apiReverseOk
+        detail = if ($apiReverseOk) {
+          "Started SSH -R ${ApiRemotePort}:127.0.0.1:${ApiLocalPort} so VM posts hit host API (socket)"
+        } else {
+          "SSH process started but VM :$ApiRemotePort not listening yet"
+        }
+      }
+    }
+  } catch {
+    $result.steps += [pscustomobject]@{ step = "api_reverse_bridge"; ok = $false; detail = "$_" }
+  }
+}
+
+# --- 4) Point listener at host API reverse when available (socket process = browser process) ---
+if ($apiReverseOk) {
+  try {
+    $retarget = ssh -o ConnectTimeout=20 -o BatchMode=yes $VmSshTarget @"
+set -e
+DROP_DIR=/etc/systemd/system/project-truth-hikvision-hot-reload-listener.service.d
+sudo mkdir -p "`$DROP_DIR"
+printf '%s\n' '[Service]' 'Environment=HIKVISION_HOT_RELOAD_API_BASE=http://127.0.0.1:$ApiRemotePort' | sudo tee "`$DROP_DIR/host-api-socket.conf" >/dev/null
+sudo systemctl daemon-reload
+sudo systemctl restart project-truth-hikvision-hot-reload-listener.service
+sleep 2
+systemctl is-active project-truth-hikvision-hot-reload-listener.service
+"@ 2>&1
+    $listenerActive = ($retarget | Out-String) -match "active"
+    $result.steps += [pscustomobject]@{
+      step = "listener_api_base_host"
+      ok = $listenerActive
+      detail = if ($listenerActive) {
+        "Listener posts to http://127.0.0.1:$ApiRemotePort (host $ApiLocalPort) so device-event:saved hits browser socket"
+      } else {
+        "Listener retarget attempted: $($retarget | Out-String)".Trim().Substring(0, [Math]::Min(280, ("$retarget").Length))
+      }
+    }
+  } catch {
+    $result.steps += [pscustomobject]@{ step = "listener_api_base_host"; ok = $false; detail = "$_" }
+  }
+} else {
+  $result.steps += [pscustomobject]@{
+    step = "listener_api_base_host"
+    ok = $false
+    detail = "Skipped - API reverse $ApiRemotePort not up; listener may still post to VM :3101 (reload works, socket lag)"
+  }
+}
+
+$result.apiReverseOk = $apiReverseOk
 $result.ok = [bool]($result.dbOpen -and ($result.reverseBridge -or $sdkPortOpen))
-$result.message = if ($result.ok) {
-  "Host live path deps ready (DB + reverse bridge). Listener re-arm is next."
+$result.message = if ($result.ok -and $apiReverseOk) {
+  "Host live path ready: DB + SDK reverse + API reverse (socket-aligned)."
+} elseif ($result.ok) {
+  "DB + SDK reverse OK. API reverse missing - UI may need reload until 53001 bridge is up."
 } elseif (-not $result.dbOpen) {
   "Database tunnel not ready on port $DbLocalPort"
 } else {
