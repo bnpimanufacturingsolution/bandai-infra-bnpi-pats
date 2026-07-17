@@ -1,8 +1,8 @@
-# Task Writer: Sync logs truth — 3-hour non-stop marathon (v2)
+# Task Writer: Sync logs truth — 3-hour non-stop marathon (v3)
 
 **File:** `docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md`  
-**Purpose:** Force a long, evidence-driven loop until Sync logs is truthful **and** Playwright-green.  
-**Use when:** Agent stops after ~30s–4m of partial work; UI still shows Unknown operation; you want a true multi-hour job.
+**Purpose:** Force a long, evidence-driven loop until Sync logs is truthful **and** Playwright-green **and** live dual-source sync proven by the agent (not the human).  
+**Use when:** Agent stops after ~30s–10m of partial work; ends with “you should hard-refresh”; UI still wrong; you want a true multi-hour job.
 
 ---
 
@@ -10,15 +10,17 @@
 
 | Failure | Root cause | What this card forces |
 |---|---|---|
-| Stops at ~34s / 1m | Soft “keep going” + no exit gate | **EXIT GATE** forbids summary-only end |
-| “Done” after edit | Code ≠ live process | Live `sync-preview` JSON required |
+| Stops at ~34s / 1m / **10m** | Soft “keep going” + no exit gate | **EXIT GATE** forbids summary-only end |
+| Ends with “you should…” | Operator homework | **Agent owns all operator steps** |
+| “Done” after edit | Code ≠ live process | Live `sync-preview` + **live dual-source sync job** |
 | Unit green, UI wrong | Stale node on :3001 | Restart + re-prove response shape |
 | Says Playwright, never runs | Planned ≠ proven | Playwright GREEN is a hard box |
 | Background npm abandoned | No wait/poll | Poll `/health` up to 3 min |
-| Permission / turn cap fake-stop | Operator config | `--max-turns 200` + always-approve |
+| Permission / turn cap fake-stop | Operator config | `--max-turns 250` + always-approve |
 | Windows `Start-Process npm` dies | npm is a shim | Use `npm.cmd` / `cmd /c` |
+| Sync only attendance | ACS-only import | **includeOperations + includeAttendance** job proof |
 
-**This file alone cannot fight low max-turns or tool permission prompts.** Operator setup below is mandatory.
+**This file alone cannot fight low max-turns or tool permission prompts.** Operator setup below is mandatory for headless length; **inside the job, the agent never assigns work back to the human.**
 
 ---
 
@@ -29,8 +31,8 @@
 | Working directory | Repo root `PROJECT_TRUTH_HYPERV_FRESH` |
 | Branch | `develop` |
 | Tool permissions | **Always approve** / `/always-approve` / `--yolo` / `--permission-mode bypassPermissions` |
-| Max turns (headless) | **`--max-turns 200`** (50 is too low for 3hr class) |
-| Wall clock | Plan **up to 3 hours**; do not kill the session after 1–5 minutes |
+| Max turns (headless) | **`--max-turns 250`** (50–80 is too low; 10m fake-stops often = turn budget) |
+| Wall clock | Plan **up to 3 hours**; do **not** kill the session after 1–15 minutes |
 | Mode | Keep session open; if it ends early, paste **CONTINUE** block |
 
 ### Headless / CLI (preferred for marathon)
@@ -38,22 +40,22 @@
 ```powershell
 cd C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH
 
-# Extract only the fenced PASTE block into a temp file, or paste interactively.
 # Headless example (flags from Grok user-guide 14-headless-mode):
 grok -p (Get-Content -Raw docs\00-product\AGENT-PROMPT-sync-logs-truth-3hr-marathon.md) `
-  --max-turns 200 `
+  --max-turns 250 `
   --permission-mode bypassPermissions
 ```
 
-Interactive TUI: open repo root → enable always-approve → paste **PASTE BLOCK** below → leave it running.
+Interactive TUI: open repo root → enable always-approve → paste **PASTE BLOCK** below → leave it running for hours if needed.
 
 ### If it dies early (paste only this)
 
 ```text
-CONTINUE MARATHON v2.
+CONTINUE MARATHON v3.
 Open docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md.
 Resume last incomplete PHASE and incomplete ACCEPTANCE boxes.
-EXIT GATE still applies: no summary-only turn. Next action = HEARTBEAT + tool call.
+EXIT GATE still applies: no summary-only turn, no "you should hard-refresh" exit.
+Next action = HEARTBEAT + tool call. Do the operator steps yourself.
 Do not re-plan from zero unless evidence is missing.
 ```
 
@@ -63,22 +65,24 @@ Do not re-plan from zero unless evidence is missing.
 
 ```text
 ================================================================
-TASK WRITER JOB CARD v2 — SYNC LOGS TRUTH (3-HOUR MARATHON)
+TASK WRITER JOB CARD v3 — SYNC LOGS TRUTH (3-HOUR MARATHON)
 ================================================================
 You are Project Truth owner-operator agent (NOT a chat summarizer).
 Repo = this workspace root. Branch = develop unless told otherwise.
 Law = AGENTS.md + Agent-Meta-Prompt-Template.md + THIS JOB CARD.
+Also obey .grok/rules/00-wwg-session-bootstrap.md "Operator steps are agent steps".
 
 DURATION CONTRACT:
 - Budget: UP TO 3 HOURS of continuous loop engineering.
-- FORBIDDEN self-stops at 30s / 1m / 4m / “one PR” / “tests planned” /
-  “enough for now” / “user can continue later”.
+- FORBIDDEN self-stops at 30s / 1m / 4m / 10m / 15m / “one PR” /
+  “tests planned” / “enough for now” / “user can continue later”.
+- Wall-clock is NOT a finish line. 10 minutes of work is NOT done.
 - You may finish EARLY only if ACCEPTANCE (section F) is fully green
   with .runtime evidence paths. Early green is allowed. Early exit
   without green is BANNED.
 
 ================================================================
-A. EXIT GATE (read twice — this is why 34s stops happen)
+A. EXIT GATE (read twice — this is why 34s / 10m stops happen)
 ================================================================
 Before you emit ANY final/idle/summary-only message, you MUST:
 
@@ -92,7 +96,8 @@ Before you emit ANY final/idle/summary-only message, you MUST:
    - code edited but live API still Unknown-only
    - unit tests green but Playwright not run to green
    - Playwright green on mocks but live sync-preview wrong
-   - “user should restart API” when you can restart it
+   - live dual-source sync job never started / never polled to completed
+   - “user should restart API / hard-refresh / click Sync” (YOU do it)
    - background job started but never polled to health
 4) If a command is long: wait/poll; do not abandon the job card.
 5) If one path blocks after 3 documented recoveries: mark that sub-path
@@ -105,16 +110,25 @@ Before you emit ANY final/idle/summary-only message, you MUST:
 7) Real Stop only per AGENTS.md: 3 distinct recoveries failed with evidence,
    irreversible data risk, missing irrecoverable access, or would invent secrets.
 
+OPERATOR STEPS ARE AGENT STEPS (never assign to human):
+- Restart hris-api with npm.cmd; poll http://localhost:3001/health.
+- Restart or re-hit hris-app if UI is stale; prove via network/API + Playwright.
+- Login admin@bandai.local / password123 / appCode=hris.
+- GET sync-preview; POST hikvision/sync with includeAttendance+includeOperations;
+  poll import-jobs until completed; save JSON under .runtime/.
+- Run Playwright smoke for Sync logs table + scope toggles to GREEN.
+- Commit + push develop when green. Do not say “you should push”.
+
 HEARTBEAT (required every cycle; user-visible):
 HEARTBEAT | cycle=<N> | phase=<0-7> | checklist=<done>/<total> | last_proof=<path|fail> | next=<one action>
 
 MINIMUM WORK BEFORE YOU MAY CONSIDER STOPPING IF NOT GREEN:
-- At least 15 HEARTBEAT cycles, OR
+- At least 20 HEARTBEAT cycles, OR
 - Full ACCEPTANCE green with evidence
-(whichever comes first for DONE; if not green after 15 cycles, KEEP GOING)
+(whichever comes first for DONE; if not green after 20 cycles, KEEP GOING)
 
-If you catch yourself writing “In summary…” with open boxes: STOP that
-sentence and issue the next tool call instead.
+If you catch yourself writing “In summary…” or “What you should do next…”
+with open boxes: DELETE that and issue the next tool call instead.
 
 ================================================================
 B. BOOTSTRAP (tools first — ban memory / ban hallucination)
@@ -278,9 +292,13 @@ F. ACCEPTANCE CHECKLIST (DONE only when all proven)
 [ ] vitest device-events-page-contract green
 [ ] Playwright admin-device-sync-logs-truth.spec.ts GREEN
 [ ] Playwright admin-device-events-sync-modal.spec.ts GREEN (or justified skip with evidence)
+[ ] Live dual-source sync job completed with operationsImported>0 AND attendanceImported>0
+    (POST hikvision/sync includeAttendance+includeOperations; poll import-jobs; .runtime JSON)
+[ ] Scope controls on Sync logs modal proven (What to save + How far back) via Playwright
 [ ] Live UI screenshot after API restart matches JSON
-[ ] Evidence directory complete under .runtime/sync-logs-truth-marathon-*/
+[ ] Evidence directory complete under .runtime/sync-logs-truth-marathon-*/ (or sync-operator-owned-*)
 [ ] develop commit+push when green (or blocked with reason + evidence)
+[ ] FINAL message has ZERO "you should hard-refresh / click Sync / restart API" homework
 
 ================================================================
 G. COMMANDS (adapt; never invent success)
@@ -343,13 +361,14 @@ First user-visible line after bootstrap: HEARTBEAT | cycle=1 | ...
 If the TUI chokes on length, paste this instead (agent must still open the full file):
 
 ```text
-TASK WRITER MARATHON v2 — Sync logs truth (3 hours).
+TASK WRITER MARATHON v3 — Sync logs truth (3 hours).
 Open and OBEY docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md PASTE BLOCK.
 EXIT GATE active: no summary-only end while ACCEPTANCE open.
-Min 15 HEARTBEATs or full green. Live sync-preview + Playwright GREEN required.
-Restart API with npm.cmd on Windows. Evidence under .runtime/sync-logs-truth-marathon-*/.
+Never end with "you should hard-refresh / click Sync" — YOU do operator steps.
+Min 20 HEARTBEATs or full green. Live sync-preview + dual-source sync job + Playwright GREEN.
+Restart API with npm.cmd on Windows. Evidence under .runtime/.
 Commit/push develop when green. Real stop only per AGENTS.md.
-START: PHASE 0 Read WWG + HEARTBEAT cycle=1.
+Headless: --max-turns 250. START: PHASE 0 Read WWG + HEARTBEAT cycle=1.
 ```
 
 ---

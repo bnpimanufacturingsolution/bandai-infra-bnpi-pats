@@ -40,7 +40,9 @@ Bootstrap: open WWG handoff + current-task + project-truth-summary, Current-Stat
   die at ~34s–1m), paste PASTE BLOCK or short launcher from:
   `docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md`
   Operator must pair that with **always-approve tools** and
-  **`--max-turns 200`** headless (or leave interactive session open for hours).
+  **`--max-turns 250`** headless (or leave interactive session open for hours).
+  Agents must never end with “you should hard-refresh / click Sync”; they do
+  those steps themselves and keep going past ~10 minutes until acceptance green.
 
 ## Limits (honest)
 

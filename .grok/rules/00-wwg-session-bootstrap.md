@@ -31,6 +31,15 @@ Banned fake blockers and real stop conditions are in root `AGENTS.md`. Recover a
 - Real blocker only: 3 distinct recovery failures with evidence, irreversible data risk without backup, missing irrecoverable access, or inventing secrets/evidence.
 - If one path blocks, continue all other open paths immediately.
 
+## Operator steps are agent steps (hard ban)
+
+Never end with homework for the human when you can run it:
+
+- FORBIDDEN exit lines: "you should hard-refresh", "restart the API", "open Sync logs and click Sync", "run Playwright yourself", "try again after rebuild".
+- REQUIRED: you restart API/app (`npm.cmd` on Windows), poll `/health`, login, hit the real endpoints, run Playwright, capture `.runtime/` evidence, commit/push when green.
+- Wall time is not a stop: 10 minutes of work is not done. Multi-surface Sync logs / device truth jobs expect **tens of minutes to hours** with heartbeats until acceptance is green.
+- For long Sync logs work, open and obey `docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md` (EXIT GATE + min heartbeats + live process + Playwright).
+
 ## Verify this machine still loads rules
 
 ```powershell

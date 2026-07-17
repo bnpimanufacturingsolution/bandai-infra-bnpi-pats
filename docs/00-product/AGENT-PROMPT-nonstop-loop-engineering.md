@@ -98,10 +98,20 @@ FORBIDDEN reasons to end the turn:
 - “I edited the file”
 - “unit tests passed”
 - “one command succeeded”
-- “~30s–4 minutes elapsed”
+- “~30s–4 minutes elapsed” OR “~10 minutes elapsed” (time is not done)
 - “background job still starting” (wait for health OR continue other paths)
 - “UI screenshot looks better” without API JSON proof
 - “user can restart later” for recoverable restarts you can do yourself
+- “What you should do: hard-refresh / open Sync logs / click Sync” — YOU do those steps
+
+OPERATOR STEPS ARE AGENT STEPS (hard ban on homework endings):
+- Restart API/app yourself (Windows: npm.cmd, poll /health up to 3 min).
+- Login as admin, hit live endpoints, start sync jobs, poll import-jobs.
+- Run Playwright to green; save screenshots under .runtime/.
+- Hard-refresh is not a user chore: restart Vite/app process or re-navigate
+  with cache-busting probes; prove the live process serves the new code.
+- Never close with a bullet list of actions for the human if any of them
+  are recoverable agent work.
 
 REQUIRED loop until checklist green:
   discover → plan (short) → implement → prove API → prove Playwright →
@@ -109,8 +119,9 @@ REQUIRED loop until checklist green:
 
 Minimum effort for multi-surface truth tasks:
 - At least 3 full prove/fix cycles if first proof fails
-- Wall-clock expectation: keep going ~15–45 minutes of agent work for
-  Sync logs / listener / device truth — do not self-stop at 1 minute
+- Wall-clock expectation: keep going ~30–180 minutes of agent work for
+  Sync logs / listener / device truth — do not self-stop at 1–10 minutes
+- Headless: --max-turns 200+ and always-approve; 50 turns is too low
 
 After every major tool batch, post a heartbeat the user can see:
   HEARTBEAT | cycle N | checklist X/Y green | last proof | next action
@@ -159,9 +170,11 @@ If checklist incomplete, you are NOT done — continue the loop.
 ```text
 NON-STOP: Bootstrap WWG with tools first. Keep looping until every acceptance
 box is proven (live API + Playwright). Do not stop after one edit, one green
-unit test, or a few minutes. Recover API/DB/ports/tunnels yourself (3 tries).
-Heartbeat each cycle. Evidence under .runtime/<task-stamp>/. Commit/push
-develop when green. Real stop only per AGENTS.md Real Stop Conditions.
+unit test, or ~10 minutes. YOU own operator steps (restart API with npm.cmd,
+poll health, login, hit endpoints, run Playwright, commit) — never end with
+"you should hard-refresh / click Sync". Recover API/DB/ports/tunnels yourself
+(3 tries). Heartbeat each cycle. Evidence under .runtime/<task-stamp>/.
+Commit/push develop when green. Real stop only per AGENTS.md Real Stop Conditions.
 ```
 
 ---
@@ -177,16 +190,17 @@ develop when green. Real stop only per AGENTS.md Real Stop Conditions.
 Or short launcher:
 
 ```text
-TASK WRITER MARATHON v2 — Sync logs truth (3 hours).
+TASK WRITER MARATHON v3 — Sync logs truth (3 hours).
 Open and OBEY docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md PASTE BLOCK.
 EXIT GATE active: no summary-only end while ACCEPTANCE open.
-Min 15 HEARTBEATs or full green. Live sync-preview + Playwright GREEN required.
-Restart API with npm.cmd on Windows. Evidence under .runtime/sync-logs-truth-marathon-*/.
+Never end with "you should hard-refresh / click Sync" — YOU do operator steps.
+Min 20 HEARTBEATs or full green. Live dual-source sync job + Playwright GREEN.
+Restart API with npm.cmd on Windows. Evidence under .runtime/.
 Commit/push develop when green. Real stop only per AGENTS.md.
 START: PHASE 0 Read WWG + HEARTBEAT cycle=1.
 ```
 
-Operator: auto-approve tools + `--max-turns 200` if headless. See marathon file for CONTINUE line.
+Operator: auto-approve tools + `--max-turns 250` if headless. See marathon file for CONTINUE line.
 
 ### 3b) Medium non-stop Sync logs (shorter; still checklist-bound)
 
