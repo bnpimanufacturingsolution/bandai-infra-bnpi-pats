@@ -82,23 +82,24 @@ console.log(
 	`[hikvision-bridge] STEP check: device=${deviceIp} sdk ${sdkListenPort}->${sdkDevicePort} via ${sshTarget}`,
 );
 
-// FAST PATH: existing bridge process + VM listening on SDK reverse port.
+// FAST PATH: VM already listening on reverse SDK port (tunnel from any prior session).
+console.log(
+	`[hikvision-bridge] STEP check: probing VM :${sdkListenPort} (fast SSH)...`,
+);
+if (vmPortOpen(Number(sdkListenPort))) {
+	console.log(
+		`[hikvision-bridge] DONE (fast path) in ${((Date.now() - t0) / 1000).toFixed(1)}s — VM :${sdkListenPort} already listening`,
+	);
+	process.exit(0);
+}
+
 if (fs.existsSync(stateFile)) {
 	try {
 		const state = JSON.parse(fs.readFileSync(stateFile, "utf8"));
 		const pid = state.processId || state.ProcessId;
 		if (processAlive(pid)) {
 			console.log(
-				`[hikvision-bridge] STEP check: local bridge PID ${pid} alive — verifying VM :${sdkListenPort}...`,
-			);
-			if (vmPortOpen(Number(sdkListenPort))) {
-				console.log(
-					`[hikvision-bridge] DONE (fast path) in ${((Date.now() - t0) / 1000).toFixed(1)}s — tunnel already up`,
-				);
-				process.exit(0);
-			}
-			console.log(
-				`[hikvision-bridge] STEP check: PID alive but VM :${sdkListenPort} not listening — will re-start bridge`,
+				`[hikvision-bridge] STEP check: local bridge PID ${pid} alive but VM port closed — will re-start bridge`,
 			);
 		} else {
 			console.log("[hikvision-bridge] STEP check: state file present but process dead — re-start");
@@ -107,7 +108,7 @@ if (fs.existsSync(stateFile)) {
 		console.log("[hikvision-bridge] STEP check: state unreadable — re-start");
 	}
 } else {
-	console.log("[hikvision-bridge] STEP check: no active state — full start");
+	console.log("[hikvision-bridge] STEP check: no VM tunnel — full start");
 }
 
 console.log(
