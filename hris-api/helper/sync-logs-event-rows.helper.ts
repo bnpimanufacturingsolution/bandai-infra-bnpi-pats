@@ -8,12 +8,18 @@ export type SyncLogsSourceProof = "Operation logs" | "Attendance/access events" 
 export type SyncLogsEventRow = {
 	key: string;
 	eventLabel: string;
+	businessArea: string;
 	willAdd: number | null;
 	alreadyInHris: number;
 	sourceProof: SyncLogsSourceProof;
 	readsFrom: "ContentMgmt/logSearch" | "AccessControl/AcsEvent" | string;
 	filterAfterSync: string;
+	whereToFind: string;
 	status: "Ready" | "Needs review" | "Unavailable" | "No new rows" | "Partial" | "Failed" | string;
+	confidenceLabel?: string | null;
+	reviewReason?: string | null;
+	sourceDetail?: string | null;
+	deviceLabels?: string[];
 	eventCategory?: string | null;
 	eventAction?: string | null;
 	evidenceSource?: "ISAPI_LOGSEARCH" | "SDK_CALLBACK" | string | null;
@@ -166,11 +172,11 @@ export const SYNC_LOGS_EVENT_CATALOG: CatalogEntry[] = [
 		eventAction: "UNKNOWN_OPERATION",
 		// Residual logSearch totals that were not classified into enroll/user rows.
 		// Not the same as proven "new enrollments".
-		eventLabel: "Unclassified operations",
+		eventLabel: "Unclassified device operation",
 		eventCategory: "UNKNOWN",
 		sourceProof: "Operation logs",
 		readsFrom: "ContentMgmt/logSearch",
-		filterAfterSync: "Unknown > Unknown",
+		filterAfterSync: "Needs review > Unclassified device operation",
 		evidenceSource: "ISAPI_LOGSEARCH",
 		family: "operation",
 	},
@@ -200,7 +206,7 @@ export const SYNC_LOGS_EVENT_CATALOG: CatalogEntry[] = [
 		eventCategory: "UNKNOWN",
 		sourceProof: "Attendance/access events",
 		readsFrom: "AccessControl/AcsEvent",
-		filterAfterSync: "Unknown > Unknown",
+		filterAfterSync: "Needs review > Unknown access event",
 		evidenceSource: "SDK_CALLBACK",
 		family: "attendance",
 	},
@@ -212,6 +218,41 @@ const OPERATION_ACTIONS = new Set(
 const ATTENDANCE_ACTIONS = new Set(
 	SYNC_LOGS_EVENT_CATALOG.filter((row) => row.family === "attendance").map((row) => row.eventAction),
 );
+
+const businessAreaForEvent = (entry: Pick<CatalogEntry, "eventCategory" | "eventAction">) => {
+	if (entry.eventAction === "UNKNOWN_OPERATION" || entry.eventAction === "UNKNOWN_ACCESS") return "Needs review";
+	if (entry.eventCategory === "USER_MANAGEMENT") return "User Management";
+	if (entry.eventCategory === "ENROLLMENT") return "Enrollment";
+	if (entry.eventCategory === "ATTENDANCE") return "Attendance";
+	return "Needs review";
+};
+
+const reviewReasonForEvent = (entry: Pick<CatalogEntry, "eventAction">) => {
+	if (entry.eventAction === "UNKNOWN_OPERATION") {
+		return "HRIS could not identify this device action yet.";
+	}
+	if (entry.eventAction === "UNKNOWN_ACCESS") {
+		return "HRIS could not identify this access event yet.";
+	}
+	return null;
+};
+
+const buildSourceDetail = (params: {
+	entry: CatalogEntry;
+	deviceLabels?: string[];
+}) => {
+	const readLabel =
+		params.entry.family === "operation"
+			? "Read from device operation logs."
+			: "Read from attendance/access events.";
+	const sourceLabels = (params.deviceLabels || []).filter(Boolean);
+	const deviceLabel = sourceLabels.length ? ` Device label: ${sourceLabels.join(", ")}.` : "";
+	const hrisLabel =
+		params.entry.eventAction === "UNKNOWN_OPERATION" || params.entry.eventAction === "UNKNOWN_ACCESS"
+			? " HRIS will hold this for review instead of saving it as a known event."
+			: ` HRIS will save this as: ${params.entry.eventLabel}.`;
+	return `${readLabel}${deviceLabel}${hrisLabel}`;
+};
 
 const normalizeActionKey = (raw: unknown) => {
 	const value = String(raw || "").trim().toUpperCase();
@@ -260,6 +301,8 @@ export const buildHikvisionSyncLogsEventRows = (params: {
 	alreadyByAction: Map<string, number>;
 	/** Optional classified counts from device Operation logs sample/full. */
 	operationDeviceByAction?: Map<string, number> | null;
+	/** Optional user-facing vendor labels sampled from Operation logs by action. */
+	operationDeviceLabelsByAction?: Map<string, string[]> | null;
 	operationSourceOk: boolean;
 	operationSourceTotal: number | null;
 	attendanceSourceOk: boolean;
@@ -270,6 +313,7 @@ export const buildHikvisionSyncLogsEventRows = (params: {
 }): SyncLogsEventRow[] => {
 	const already = params.alreadyByAction;
 	const opDevice = params.operationDeviceByAction || new Map<string, number>();
+	const opLabels = params.operationDeviceLabelsByAction || new Map<string, string[]>();
 	const failed = Boolean(params.sourceError);
 
 	const alreadyOperationTotal = Array.from(already.entries())
@@ -334,12 +378,17 @@ export const buildHikvisionSyncLogsEventRows = (params: {
 			return {
 				key: `${params.deviceId}-${entry.eventAction}`,
 				eventLabel: entry.eventLabel,
+				businessArea: businessAreaForEvent(entry),
 				willAdd,
 				alreadyInHris,
 				sourceProof: entry.sourceProof,
 				readsFrom: entry.readsFrom,
 				filterAfterSync: entry.filterAfterSync,
+				whereToFind: `Device Events > ${entry.filterAfterSync}`,
 				status,
+				confidenceLabel: entry.eventAction === "UNKNOWN_ACCESS" ? "Needs review" : status === "Ready" ? "Ready" : status,
+				reviewReason: reviewReasonForEvent(entry),
+				sourceDetail: buildSourceDetail({ entry }),
 				eventCategory: entry.eventCategory,
 				eventAction: entry.eventAction,
 				evidenceSource: entry.evidenceSource,
@@ -395,12 +444,21 @@ export const buildHikvisionSyncLogsEventRows = (params: {
 		return {
 			key: `${params.deviceId}-${entry.eventAction}`,
 			eventLabel: entry.eventLabel,
+			businessArea: businessAreaForEvent(entry),
 			willAdd,
 			alreadyInHris,
 			sourceProof: entry.sourceProof,
 			readsFrom: entry.readsFrom,
 			filterAfterSync: entry.filterAfterSync,
+			whereToFind: `Device Events > ${entry.filterAfterSync}`,
 			status,
+			confidenceLabel: entry.eventAction === "UNKNOWN_OPERATION" ? "Needs review" : status === "Ready" ? "Ready" : status,
+			reviewReason: reviewReasonForEvent(entry),
+			sourceDetail: buildSourceDetail({
+				entry,
+				deviceLabels: opLabels.get(entry.eventAction) || opLabels.get(actionKey) || [],
+			}),
+			deviceLabels: opLabels.get(entry.eventAction) || opLabels.get(actionKey) || [],
 			eventCategory: entry.eventCategory,
 			eventAction: entry.eventAction,
 			evidenceSource: entry.evidenceSource,
@@ -471,12 +529,16 @@ export const buildZktecoSyncLogsEventRows = (params: {
 		{
 			key: `${params.deviceId}-device-events`,
 			eventLabel: "Device events",
+			businessArea: "Attendance",
 			willAdd,
 			alreadyInHris: params.alreadyInHris,
 			sourceProof: params.sourceProof,
 			readsFrom: params.sourceProof,
 			filterAfterSync: "Device Events",
+			whereToFind: "Device Events",
 			status,
+			confidenceLabel: status === "Ready" ? "Ready" : status,
+			sourceDetail: "Read from device attendance logs. HRIS will save this in Device Events.",
 			eventCategory: "ATTENDANCE",
 			eventAction: "TAP",
 			evidenceSource: "ZKTECO_EVENT",

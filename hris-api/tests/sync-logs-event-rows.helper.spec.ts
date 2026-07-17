@@ -17,11 +17,16 @@ describe("sync-logs-event-rows.helper", () => {
 			["USER_CREATED", 20],
 			["FACE_ENROLLED", 12],
 		]);
+		const operationDeviceLabelsByAction = new Map<string, string[]>([
+			["FINGERPRINT_ENROLLED", ["Add Fingerprint (By Employee ID)"]],
+			["USER_CREATED", ["Add Person Information"]],
+		]);
 
 		const rows = buildHikvisionSyncLogsEventRows({
 			deviceId: "dev-a",
 			alreadyByAction,
 			operationDeviceByAction,
+			operationDeviceLabelsByAction,
 			operationSourceOk: true,
 			operationSourceTotal: 70,
 			attendanceSourceOk: true,
@@ -36,20 +41,28 @@ describe("sync-logs-event-rows.helper", () => {
 
 		expect(fingerprint?.willAdd).to.equal(24);
 		expect(fingerprint?.alreadyInHris).to.equal(3);
+		expect(fingerprint?.businessArea).to.equal("Enrollment");
 		expect(fingerprint?.sourceProof).to.equal("Operation logs");
 		expect(fingerprint?.filterAfterSync).to.equal("Enrollment > Fingerprint enrolled");
+		expect(fingerprint?.whereToFind).to.equal("Device Events > Enrollment > Fingerprint enrolled");
+		expect(fingerprint?.sourceDetail).to.contain("Device label: Add Fingerprint (By Employee ID)");
 		expect(fingerprint?.status).to.equal("Ready");
 
 		expect(userCreated?.willAdd).to.equal(20);
+		expect(userCreated?.businessArea).to.equal("User Management");
 		expect(userCreated?.filterAfterSync).to.equal("User Management > User created");
+		expect(userCreated?.sourceDetail).to.contain("Device label: Add Person Information");
 
 		expect(tap?.willAdd).to.equal(2085);
+		expect(tap?.businessArea).to.equal("Attendance");
 		expect(tap?.sourceProof).to.equal("Attendance/access events");
 		expect(tap?.filterAfterSync).to.equal("Attendance > Tap");
 
 		expect(unknownOp?.status).to.equal("Needs review");
-		expect(unknownOp?.eventLabel).to.equal("Unclassified operations");
-		expect(unknownOp?.filterAfterSync).to.equal("Unknown > Unknown");
+		expect(unknownOp?.businessArea).to.equal("Needs review");
+		expect(unknownOp?.eventLabel).to.equal("Unclassified device operation");
+		expect(unknownOp?.reviewReason).to.equal("HRIS could not identify this device action yet.");
+		expect(unknownOp?.filterAfterSync).to.equal("Needs review > Unclassified device operation");
 
 		// Never invent lifecycle rows from DeviceUser inventory — only DeviceEvent already + log sources.
 		expect(rows.every((row) => row.evidenceSource !== "DEVICE_USER_INVENTORY")).to.equal(true);
@@ -73,7 +86,7 @@ describe("sync-logs-event-rows.helper", () => {
 		const userCreated = rows.find((row) => row.eventAction === "USER_CREATED");
 		expect(unknownOp?.willAdd).to.equal(20550);
 		expect(unknownOp?.status).to.equal("Needs review");
-		expect(unknownOp?.eventLabel).to.equal("Unclassified operations");
+		expect(unknownOp?.eventLabel).to.equal("Unclassified device operation");
 		// Without logSearch classification sample, do not invent enroll will-add.
 		expect(fingerprint?.willAdd ?? 0).to.equal(0);
 		expect(userCreated?.willAdd ?? 0).to.equal(0);

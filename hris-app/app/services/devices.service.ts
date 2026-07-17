@@ -297,12 +297,18 @@ export interface DeviceSyncPreviewSourceCheck {
 export interface DeviceSyncPreviewEventRow {
 	key: string;
 	eventLabel: string;
+	businessArea?: string;
 	willAdd: number | null;
 	alreadyInHris: number;
 	sourceProof: "Operation logs" | "Attendance/access events" | string;
 	readsFrom: "ContentMgmt/logSearch" | "AccessControl/AcsEvent" | string;
 	filterAfterSync: string;
+	whereToFind?: string;
 	status: "Ready" | "Needs review" | "Unavailable" | "No new rows" | "Partial" | "Failed" | string;
+	confidenceLabel?: string | null;
+	reviewReason?: string | null;
+	sourceDetail?: string | null;
+	deviceLabels?: string[];
 	eventCategory?: string | null;
 	eventAction?: string | null;
 	evidenceSource?: string | null;
@@ -2003,7 +2009,7 @@ class DevicesService extends APIService {
 			// Cap client wait so the Listener modal never spins forever if SSH stalls.
 			const response = await hrisApiClient.get<any>("/api/device/hikvision/listener", {
 				timeoutMs: 8000,
-			});
+			} as any);
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Failed to load Hikvision listener status");
 			return data as HikvisionListenerStatus;

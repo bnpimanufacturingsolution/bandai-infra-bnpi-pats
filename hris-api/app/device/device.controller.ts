@@ -2602,7 +2602,11 @@ export const controller = (prisma: PrismaClient) => {
 		const sampleClassify = options.sampleClassify === true;
 		// One logSearch call: totalMatches + first page sample (device UI order).
 		// Avoids a second round-trip so Sync logs stays near 1-3s.
+		// CRITICAL: device maintain Log (Add Fingerprint / Add Person Info) is under
+		// metaId log.hikvision.com/Information. log.std-cgi.com mixes UI noise
+		// (enterLocalUIBackground) and under-represents enroll/user truth.
 		const sampleMax = sampleClassify ? 80 : 1;
+		const operationMetaId = "log.hikvision.com/Information";
 		try {
 			const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
 				method: "POST",
@@ -2622,6 +2626,7 @@ export const controller = (prisma: PrismaClient) => {
 					endTime,
 					maxResults: sampleMax,
 					searchResultPosition: 0,
+					metaId: operationMetaId,
 				}),
 			});
 			const parsed = parseHikvisionLogSearchResponse(String(response?.raw || ""));
@@ -2635,8 +2640,10 @@ export const controller = (prisma: PrismaClient) => {
 			let byAction: Record<string, number> | null = null;
 			let sampleSize = 0;
 			let extrapolatedByAction: Record<string, number> | null = null;
+			let labelsByAction: Record<string, string[]> | null = null;
 			if (sampleClassify && (parsed.rows || []).length > 0) {
 				const sampleCounts = new Map<string, number>();
+				const sampleLabels = new Map<string, Set<string>>();
 				for (const row of parsed.rows || []) {
 					const classified = classifyHikvisionLogSearchRow(row);
 					// Normalize UNKNOWN* into residual bucket; keep proven enroll/user actions.
@@ -2645,10 +2652,22 @@ export const controller = (prisma: PrismaClient) => {
 						action = "UNKNOWN_OPERATION";
 					}
 					sampleCounts.set(action, (sampleCounts.get(action) || 0) + 1);
+					const label = String(row.minorType || row.information || row.metaId || "").trim();
+					if (label) {
+						const next = sampleLabels.get(action) || new Set<string>();
+						if (next.size < 3) next.add(label);
+						sampleLabels.set(action, next);
+					}
 					sampleSize += 1;
 				}
 				if (sampleCounts.size) {
 					byAction = Object.fromEntries(sampleCounts.entries());
+					labelsByAction = Object.fromEntries(
+						Array.from(sampleLabels.entries()).map(([action, labels]) => [
+							action,
+							Array.from(labels),
+						]),
+					);
 					// Extrapolate sample proportions to full logSearch total so Sync logs
 					// matches device maintain-log truth (e.g. ~half Add Fingerprint / Add Person).
 					const total = Number(count || sampleSize);
@@ -2678,6 +2697,7 @@ export const controller = (prisma: PrismaClient) => {
 				count,
 				// Prefer extrapolated full-device estimates for Sync logs willAdd.
 				byAction: extrapolatedByAction || byAction,
+				labelsByAction,
 				sampleByAction: byAction,
 				sampleSize,
 				error: count === null ? "Operation logs total unavailable" : null,
@@ -2765,12 +2785,22 @@ export const controller = (prisma: PrismaClient) => {
 						]),
 					)
 				: null;
+		const operationDeviceLabelsByAction =
+			logSearch.labelsByAction && typeof logSearch.labelsByAction === "object"
+				? new Map(
+						Object.entries(logSearch.labelsByAction).map(([action, labels]) => [
+							action,
+							Array.isArray(labels) ? labels.map(String).filter(Boolean) : [],
+						]),
+					)
+				: null;
 
 		return {
 			ok: userSearch.ok || eventSearch.ok || logSearch.ok,
 			totalEvents: eventSearch.count,
 			operationLogTotal: logSearch.count,
 			operationDeviceByAction,
+			operationDeviceLabelsByAction,
 			operationSampleSize: Number(logSearch.sampleSize || 0) || 0,
 			userCount: userSearch.count,
 			fingerprintUserCount: directCredentialInventory
@@ -12171,12 +12201,28 @@ export const controller = (prisma: PrismaClient) => {
 									),
 								)
 							: null;
+				const operationDeviceLabelsByAction =
+					device.vendor === "Hikvision" && sourcePreview?.operationDeviceLabelsByAction instanceof Map
+						? (sourcePreview.operationDeviceLabelsByAction as Map<string, string[]>)
+						: device.vendor === "Hikvision" &&
+							  sourcePreview?.operationDeviceLabelsByAction &&
+							  typeof sourcePreview.operationDeviceLabelsByAction === "object"
+							? new Map(
+									Object.entries(sourcePreview.operationDeviceLabelsByAction).map(
+										([action, labels]) => [
+											action,
+											Array.isArray(labels) ? labels.map(String).filter(Boolean) : [],
+										],
+									),
+								)
+							: null;
 				const eventRows =
 					device.vendor === "Hikvision"
 						? buildHikvisionSyncLogsEventRows({
 								deviceId: device.id,
 								alreadyByAction,
 								operationDeviceByAction,
+								operationDeviceLabelsByAction,
 								operationSourceOk: operationOk,
 								operationSourceTotal:
 									operationLogTotal === null || operationLogTotal === undefined
@@ -12230,15 +12276,21 @@ export const controller = (prisma: PrismaClient) => {
 							];
 				const readySourceCount = sources.filter((source) => source.ok).length;
 				const eventWillAddTotal = eventRows.reduce(
-					(sum, row) => sum + (typeof row.willAdd === "number" ? Math.max(0, row.willAdd) : 0),
+					(sum, row) =>
+						sum +
+						(row.status === "Ready" && typeof row.willAdd === "number"
+							? Math.max(0, row.willAdd)
+							: 0),
 					0,
 				);
 				const canStartSync =
 					!sourceErrorMessage &&
-					(eventWillAddTotal > 0 ||
-						(Number.isFinite(Number(needsSyncEvents)) && Number(needsSyncEvents) > 0)) &&
-					(device.vendor === "Hikvision" ||
-						(device.vendor === "ZKTeco" && Boolean(zktecoPreview?.ok)));
+					(device.vendor === "Hikvision"
+						? eventWillAddTotal > 0
+						: (eventWillAddTotal > 0 ||
+								(Number.isFinite(Number(needsSyncEvents)) && Number(needsSyncEvents) > 0)) &&
+							device.vendor === "ZKTeco" &&
+							Boolean(zktecoPreview?.ok));
 				return {
 					deviceId: device.id,
 					name: device.name,

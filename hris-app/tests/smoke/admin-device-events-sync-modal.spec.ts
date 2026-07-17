@@ -250,8 +250,8 @@ test("admin device events opens sync logs modal with device and saved counts bef
 	await expect(dialog.getByText(/Can.?t read this device|ZKTECO_BRIDGE_STATUS_URL is not configured/i).first()).toBeVisible();
 	await expect(dialog.getByText("Blocked", { exact: true }).first()).toBeVisible();
 	await expect(dialog.getByText("Event breakdown is hidden until this device can be read")).toBeVisible();
-	await expect(dialog.getByRole("columnheader", { name: "Source proof" })).toHaveCount(0);
-	await expect(dialog.getByRole("columnheader", { name: "Filter after sync" })).toHaveCount(0);
+	await expect(dialog.getByRole("columnheader", { name: "Business area" })).toHaveCount(0);
+	await expect(dialog.getByRole("columnheader", { name: "Where to find it" })).toHaveCount(0);
 	await expect(dialog.getByRole("button", { name: /Sync logs/i })).toBeDisabled();
 	expect(api.getSyncPostCount()).toBe(0);
 
@@ -351,13 +351,16 @@ test("admin device events sync logs shows Hikvision event-first rows", async ({ 
 					},
 					{
 						key: `${hikvisionDevice.id}-UNKNOWN_OPERATION`,
-						eventLabel: "Unknown operation",
+						eventLabel: "Unclassified device operation",
+						businessArea: "Needs review",
 						willAdd: 14,
 						alreadyInHris: 0,
 						sourceProof: "Operation logs",
 						readsFrom: "ContentMgmt/logSearch",
-						filterAfterSync: "Unknown > Unknown",
+						filterAfterSync: "Needs review > Unclassified device operation",
+						whereToFind: "Device Events > Needs review > Unclassified device operation",
 						status: "Needs review",
+						reviewReason: "HRIS could not identify this device action yet.",
 					},
 				],
 			},
@@ -413,20 +416,35 @@ test("admin device events sync logs shows Hikvision event-first rows", async ({ 
 		timeout: routeReadyTimeoutMs,
 	});
 	await expect(dialog.getByText("Devices (1)", { exact: true })).toBeVisible();
-	await expect(dialog.getByText(/Will add:\s*2,143/)).toBeVisible();
+	await expect(dialog.getByText(/Will add:\s*2,129/)).toBeVisible();
 	await expect(dialog.getByText(/Devices ready:\s*1 of\s*1/)).toBeVisible();
 	await expect(dialog.getByText("Ready to sync", { exact: true }).first()).toBeVisible();
 	await expect(dialog.getByText(/Hikvision Main Entrance Device A|Main Entrance Device A/)).toBeVisible();
 	await expect(dialog.getByText("10.184.38.173:443")).toBeVisible();
-	await expect(dialog.getByRole("columnheader", { name: "Event", exact: true })).toBeVisible();
-	await expect(dialog.getByRole("columnheader", { name: "Already saved", exact: true })).toBeVisible();
-	await expect(dialog.getByRole("columnheader", { name: "Source proof" })).toHaveCount(0);
-	await expect(dialog.getByRole("columnheader", { name: "Filter after sync" })).toHaveCount(0);
-	await expect(dialog.getByRole("cell", { name: "Fingerprint enrolled", exact: true })).toBeVisible();
-	await expect(dialog.getByRole("cell", { name: "+24", exact: true })).toBeVisible();
-	await expect(dialog.getByRole("cell", { name: "User created", exact: true })).toBeVisible();
-	await expect(dialog.getByRole("cell", { name: "Attendance tap", exact: true })).toBeVisible();
-	await expect(dialog.getByText(/After sync, filter Device events/i)).toBeVisible();
+	const eventTable = dialog.getByTestId("sync-logs-event-table");
+	await expect(eventTable).toBeVisible();
+	// Exactly one event table for this device (no per-category section tables).
+	await expect(dialog.getByTestId("sync-logs-event-table")).toHaveCount(1);
+	await expect(eventTable.getByRole("columnheader", { name: "Event", exact: true })).toBeVisible();
+	await expect(eventTable.getByRole("columnheader", { name: "Category", exact: true })).toBeVisible();
+	await expect(eventTable.getByRole("columnheader", { name: "Will add", exact: true })).toBeVisible();
+	await expect(eventTable.getByRole("columnheader", { name: "Saved", exact: true })).toBeVisible();
+	await expect(eventTable.getByRole("columnheader", { name: "Status", exact: true })).toBeVisible();
+	await expect(eventTable.getByRole("columnheader", { name: "Business area" })).toHaveCount(0);
+	await expect(eventTable.getByRole("columnheader", { name: "Where to find it" })).toHaveCount(0);
+	// Short category tokens on single-line rows.
+	await expect(eventTable.getByText("ENROLLMENT", { exact: true }).first()).toBeVisible();
+	await expect(eventTable.getByText("USER MGMT", { exact: true }).first()).toBeVisible();
+	await expect(eventTable.getByText("ATTENDANCE", { exact: true }).first()).toBeVisible();
+	await expect(eventTable.getByText("REVIEW", { exact: true }).first()).toBeVisible();
+	await expect(eventTable.getByText("Fingerprint enrolled", { exact: true }).first()).toBeVisible();
+	await expect(eventTable.getByRole("cell", { name: "+24", exact: true })).toBeVisible();
+	await expect(eventTable.getByText("User created", { exact: true }).first()).toBeVisible();
+	await expect(eventTable.getByText("Attendance tap", { exact: true }).first()).toBeVisible();
+	await expect(eventTable.getByText("Unclassified", { exact: true }).first()).toBeVisible();
+	// Long paths are not primary table cells (hover title only).
+	await expect(eventTable.getByText(/Device Events > Enrollment/i)).toHaveCount(0);
+	await expect(dialog.getByText(/Nothing is saved yet\. This preview shows what HRIS can add/i)).toBeVisible();
 	// No primary VM jargon on the events/sync journey.
 	await expect(page.getByText(/VM listener/i)).toHaveCount(0);
 
@@ -586,7 +604,7 @@ test("sync logs modal still opens fast with mixed ready and unreachable devices"
 	await expect(dialog.getByText(/Main Entrance Device Offline/)).toBeVisible();
 	await expect(dialog.getByText(/Can.?t reach this device right now/i).first()).toBeVisible();
 	// Ready device stays actionable even when a peer is unreachable.
-	await expect(dialog.getByRole("cell", { name: "Attendance tap", exact: true })).toBeVisible();
+	await expect(dialog.getByText("Attendance tap", { exact: true }).first()).toBeVisible();
 	const elapsedMs = Date.now() - startedAt;
 	expect(elapsedMs).toBeLessThan(8000);
 

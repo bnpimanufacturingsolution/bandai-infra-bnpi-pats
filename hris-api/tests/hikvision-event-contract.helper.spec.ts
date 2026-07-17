@@ -557,6 +557,36 @@ describe("hikvision event contract helper", () => {
 			eventAction: "USER_CREATED",
 			eventCategory: "USER_MANAGEMENT",
 		});
+		expect(
+			classifyHikvisionLogSearchRow({
+				majorType: "Information",
+				minorType: "Add Person Information",
+			}),
+		).to.deep.include({
+			eventAction: "USER_CREATED",
+			eventCategory: "USER_MANAGEMENT",
+			eventConfidence: "PROVEN",
+		});
+		expect(
+			classifyHikvisionLogSearchRow({
+				majorType: "Information",
+				minorType: "Add Fingerprint (By Card No.)",
+			}),
+		).to.deep.include({
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventCategory: "ENROLLMENT",
+			eventConfidence: "PROVEN",
+		});
+		expect(
+			classifyHikvisionLogSearchRow({
+				majorType: "Information",
+				minorType: "Add Fingerprint (By Employee ID)",
+			}),
+		).to.deep.include({
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventCategory: "ENROLLMENT",
+			eventConfidence: "PROVEN",
+		});
 	});
 
 	it("maps the exact verified 10.184.38.177 logSearch metaIds", () => {

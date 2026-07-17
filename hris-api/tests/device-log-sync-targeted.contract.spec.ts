@@ -52,4 +52,11 @@ describe("device log sync targeted import contract", () => {
 			/zktecoDevices\.length === 1\s*\?\s*getZktecoBridgePreview/,
 		);
 	});
+
+	it("reads maintain Information logSearch for enroll/user truth not std-cgi noise", () => {
+		// Device UI Log tab uses Information major: Add Fingerprint / Add Person Info.
+		expect(controllerSource).to.contain('log.hikvision.com/Information');
+		expect(controllerSource).to.contain("sampleClassify");
+		expect(controllerSource).to.contain("extrapolatedByAction");
+	});
 });

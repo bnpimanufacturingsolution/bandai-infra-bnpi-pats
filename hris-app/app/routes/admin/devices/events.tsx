@@ -62,6 +62,7 @@ import type {
 	DeviceEventStatus,
 	DeviceEventsResetResponse,
 	DeviceHealthResponse,
+	DeviceSyncPreviewEventRow,
 	DeviceSyncPreviewRow,
 } from "~/services/devices.service";
 import type { ApiQueryParams } from "~/services/api-service";
@@ -247,6 +248,37 @@ const eventActionOptions: SelectOption[] = [
 	{ value: "LISTENER_RECEIVED", label: "Listener received" },
 	{ value: "UNKNOWN", label: "Unknown" },
 ];
+
+/** Category → actions so Action dropdown is not misleading under Attendance etc. */
+const EVENT_ACTIONS_BY_CATEGORY: Record<string, string[]> = {
+	ATTENDANCE: ["TAP", "TAP_REJECTED"],
+	ENROLLMENT: [
+		"FINGERPRINT_ENROLLED",
+		"FINGERPRINT_UPDATED",
+		"FINGERPRINT_DELETED",
+		"FACE_ENROLLED",
+		"FACE_UPDATED",
+		"FACE_DELETED",
+		"CARD_ENROLLED",
+		"CARD_UPDATED",
+		"CARD_DELETED",
+	],
+	USER_MANAGEMENT: ["USER_CREATED", "USER_UPDATED", "USER_DELETED"],
+	ACCESS_CONTROL: ["TAP", "TAP_REJECTED"],
+	DEVICE_HEALTH: ["SYNC_SIGNAL", "LISTENER_RECEIVED"],
+	RUNTIME: ["SYNC_SIGNAL", "SYNC_IMPORTED", "LISTENER_RECEIVED"],
+	UNKNOWN_VENDOR: ["UNKNOWN"],
+};
+
+const getEventActionOptionsForCategory = (category: string): SelectOption[] => {
+	if (!category || category === "all") return eventActionOptions;
+	const allowed = new Set(EVENT_ACTIONS_BY_CATEGORY[category] || []);
+	if (allowed.size === 0) return eventActionOptions;
+	return [
+		{ value: "all", label: "Any event action" },
+		...eventActionOptions.filter((option) => option.value !== "all" && allowed.has(option.value)),
+	];
+};
 
 const evidenceSourceOptions: SelectOption[] = [
 	{ value: "all", label: "All evidence sources" },
@@ -534,10 +566,10 @@ const hikvisionSyncLogsFallbackCatalog: Array<{
 	},
 	{
 		eventAction: "UNKNOWN_OPERATION",
-		eventLabel: "Unknown operation",
+		eventLabel: "Unclassified device operation",
 		sourceProof: "Operation logs",
 		readsFrom: "ContentMgmt/logSearch",
-		filterAfterSync: "Unknown > Unknown",
+		filterAfterSync: "Needs review > Unclassified device operation",
 		eventCategory: "UNKNOWN",
 		evidenceSource: "ISAPI_LOGSEARCH",
 		family: "operation",
@@ -563,6 +595,88 @@ const hikvisionSyncLogsFallbackCatalog: Array<{
 		family: "attendance",
 	},
 ];
+
+const getSyncBusinessArea = (row: DeviceSyncPreviewEventRow) => {
+	if (row.businessArea) return row.businessArea;
+	const filterArea = String(row.filterAfterSync || "").split(" > ")[0]?.trim();
+	if (filterArea === "User Management" || filterArea === "Enrollment" || filterArea === "Attendance") {
+		return filterArea;
+	}
+	if (filterArea === "Needs review") return "Needs review";
+	if (row.eventAction === "UNKNOWN_OPERATION" || row.eventAction === "UNKNOWN_ACCESS") return "Needs review";
+	if (row.eventCategory === "USER_MANAGEMENT") return "User Management";
+	if (row.eventCategory === "ENROLLMENT") return "Enrollment";
+	if (row.eventCategory === "ATTENDANCE") return "Attendance";
+	return row.status === "Needs review" ? "Needs review" : "Device Events";
+};
+
+const getSyncWhereToFind = (row: DeviceSyncPreviewEventRow) =>
+	row.whereToFind || (row.filterAfterSync ? `Device Events > ${row.filterAfterSync}` : "Device Events");
+
+const getSyncReviewReason = (row: DeviceSyncPreviewEventRow) =>
+	row.reviewReason ||
+	(row.status === "Needs review"
+		? "HRIS could not identify this device action yet."
+		: null);
+
+const getSyncSourceDetail = (row: DeviceSyncPreviewEventRow) => {
+	if (row.sourceDetail) return row.sourceDetail;
+	const readLabel =
+		row.sourceProof === "Operation logs"
+			? "Read from device operation logs."
+			: row.sourceProof === "Attendance/access events"
+				? "Read from attendance/access events."
+				: row.sourceProof
+					? `Read from ${row.sourceProof}.`
+					: "Read from the device source.";
+	const deviceLabel = row.deviceLabels?.length ? ` Device label: ${row.deviceLabels.join(", ")}.` : "";
+	const saveLabel =
+		row.status === "Needs review"
+			? " HRIS will hold this for review instead of saving it as a known event."
+			: ` HRIS will save this as: ${row.eventLabel}.`;
+	return `${readLabel}${deviceLabel}${saveLabel}`;
+};
+
+/** Short category chip for the single Sync logs table (no multi-section layout). */
+const getSyncCategoryToken = (row: DeviceSyncPreviewEventRow) => {
+	const cat = String(row.eventCategory || "").toUpperCase();
+	if (cat === "USER_MANAGEMENT") return "USER MGMT";
+	if (cat === "ENROLLMENT") return "ENROLLMENT";
+	if (cat === "ATTENDANCE") return "ATTENDANCE";
+	if (cat === "UNKNOWN") return "REVIEW";
+	const area = getSyncBusinessArea(row);
+	if (area === "User Management") return "USER MGMT";
+	if (area === "Enrollment") return "ENROLLMENT";
+	if (area === "Attendance") return "ATTENDANCE";
+	if (area === "Needs review") return "REVIEW";
+	return "OTHER";
+};
+
+const syncCategoryTokenOrder = ["USER MGMT", "ENROLLMENT", "ATTENDANCE", "REVIEW", "OTHER"];
+
+/** Compact single-line event name (long API labels stay in title tooltip). */
+const getSyncEventLabelCompact = (row: DeviceSyncPreviewEventRow) => {
+	const label = String(row.eventLabel || row.eventAction || "Event").trim();
+	if (row.eventAction === "UNKNOWN_OPERATION" || /unclassified/i.test(label)) return "Unclassified";
+	if (row.eventAction === "TAP_REJECTED" || /rejected tap/i.test(label)) return "Rejected tap";
+	if (label.length > 22) return `${label.slice(0, 20)}…`;
+	return label;
+};
+
+const sortSyncEventRows = (rows: DeviceSyncPreviewEventRow[]) =>
+	[...rows].sort((left, right) => {
+		const leftToken = getSyncCategoryToken(left);
+		const rightToken = getSyncCategoryToken(right);
+		const leftIndex = syncCategoryTokenOrder.indexOf(leftToken);
+		const rightIndex = syncCategoryTokenOrder.indexOf(rightToken);
+		const leftOrder = leftIndex === -1 ? 99 : leftIndex;
+		const rightOrder = rightIndex === -1 ? 99 : rightIndex;
+		if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+		const leftWill = hasNumericCount(left.willAdd) ? Number(left.willAdd) : -1;
+		const rightWill = hasNumericCount(right.willAdd) ? Number(right.willAdd) : -1;
+		if (rightWill !== leftWill) return rightWill - leftWill;
+		return String(left.eventLabel || "").localeCompare(String(right.eventLabel || ""));
+	});
 
 const getFallbackSyncEventRows = (device: DeviceSyncPreviewRow, skipMissingEmployeeNo: boolean) => {
 	if (Array.isArray(device.eventRows) && device.eventRows.length) return device.eventRows;
@@ -596,12 +710,24 @@ const getFallbackSyncEventRows = (device: DeviceSyncPreviewRow, skipMissingEmplo
 				return {
 					key: `${device.deviceId}-${entry.eventAction}`,
 					eventLabel: entry.eventLabel,
+					businessArea:
+						entry.eventAction === "UNKNOWN_OPERATION" ? "Needs review" : eventFilterLabels[entry.eventAction]?.split(" > ")[0] || "Device Events",
 					willAdd,
 					alreadyInHris,
 					sourceProof: entry.sourceProof,
 					readsFrom: entry.readsFrom,
 					filterAfterSync: entry.filterAfterSync,
+					whereToFind: `Device Events > ${entry.filterAfterSync}`,
 					status,
+					confidenceLabel: entry.eventAction === "UNKNOWN_OPERATION" ? "Needs review" : status,
+					reviewReason:
+						entry.eventAction === "UNKNOWN_OPERATION"
+							? "HRIS could not identify this device action yet."
+							: null,
+					sourceDetail:
+						entry.eventAction === "UNKNOWN_OPERATION"
+							? "Read from device operation logs. HRIS will hold this for review instead of saving it as a known event."
+							: `${entry.family === "operation" ? "Read from device operation logs." : "Read from attendance/access events."} HRIS will save this as: ${entry.eventLabel}.`,
 					eventCategory: entry.eventCategory,
 					eventAction: entry.eventAction,
 					evidenceSource: entry.evidenceSource,
@@ -619,11 +745,13 @@ const getFallbackSyncEventRows = (device: DeviceSyncPreviewRow, skipMissingEmplo
 		{
 			key: `${device.deviceId}-device-events`,
 			eventLabel: "Device events",
+			businessArea: "Device Events",
 			willAdd: projectedSaveEvents,
 			alreadyInHris: hrisSaved,
 			sourceProof: formatEventSource(device.source),
 			readsFrom: formatEventSource(device.source),
 			filterAfterSync: "Device Events",
+			whereToFind: "Device Events",
 			status: isUnavailable
 				? "Unavailable"
 				: projectedSaveEvents && projectedSaveEvents > 0
@@ -1412,7 +1540,14 @@ export default function DeviceEventsPage() {
 	const syncHasZktecoRows = syncPreviewRows.some((row) => row.vendor === "ZKTeco");
 	const syncStartableRows = syncPreviewRows.filter((row) => {
 		const projectedSaveCount = getSyncProjectedSaveCount(row, skipMissingEmployeeNo);
-		return !row.error && (Boolean(row.canStartSync) || Boolean(projectedSaveCount && projectedSaveCount > 0));
+		const readyWillAdd = getFallbackSyncEventRows(row, skipMissingEmployeeNo).some(
+			(eventRow) =>
+				eventRow.status === "Ready" &&
+				hasNumericCount(eventRow.willAdd) &&
+				Number(eventRow.willAdd) > 0,
+		);
+		if (row.vendor === "Hikvision") return !row.error && readyWillAdd;
+		return !row.error && (readyWillAdd || Boolean(row.canStartSync && projectedSaveCount && projectedSaveCount > 0));
 	});
 	const syncHasUnknownEventTotal = syncPreviewRows.some(
 		(row) => !hasNumericCount(row.vendorEventCount ?? row.totalEvents),
@@ -1477,7 +1612,11 @@ export default function DeviceEventsPage() {
 				return (
 					total +
 					rows.reduce(
-						(sum, row) => sum + (hasNumericCount(row.willAdd) ? Number(row.willAdd) : 0),
+						(sum, row) =>
+							sum +
+							(row.status === "Ready" && hasNumericCount(row.willAdd)
+								? Number(row.willAdd)
+								: 0),
 						0,
 					)
 				);
@@ -1982,7 +2121,7 @@ export default function DeviceEventsPage() {
 	const hikvisionListenerDevices = useMemo(() => {
 		const rows = hikvisionListenerStatus?.sdk?.devices || [];
 		const selectedId = deviceId !== "all" ? deviceId : "";
-		const catalogById = new Map(
+		const catalogById = new Map<string, any>(
 			devices.map((device: any) => [String(device.id || ""), device] as const),
 		);
 		const enriched = rows.map((row) => {
@@ -2587,7 +2726,22 @@ export default function DeviceEventsPage() {
 								<Select
 									options={eventCategoryOptions}
 									value={eventCategory}
-									onChange={(value) => setFilter("eventCategory", value)}
+									onChange={(value) => {
+										// Changing category must not leave a mismatched action selected
+										// (e.g. Attendance + User created).
+										updateSearchParams((next) => {
+											if (!value || value === "all") next.delete("eventCategory");
+											else next.set("eventCategory", value);
+											const allowed = new Set(
+												getEventActionOptionsForCategory(value).map((option) => option.value),
+											);
+											const currentAction = next.get("eventAction") || "all";
+											if (currentAction !== "all" && !allowed.has(currentAction)) {
+												next.delete("eventAction");
+											}
+											next.set("page", "1");
+										});
+									}}
 									placeholder="Any event category"
 									className={compactSelectClassName}
 									dropdownClassName={compactSelectDropdownClassName}
@@ -2595,7 +2749,7 @@ export default function DeviceEventsPage() {
 							</FilterField>
 							<FilterField label="Action">
 								<Select
-									options={eventActionOptions}
+									options={getEventActionOptionsForCategory(eventCategory)}
 									value={eventAction}
 									onChange={(value) => setFilter("eventAction", value)}
 									placeholder="Any event action"
@@ -3458,46 +3612,72 @@ export default function DeviceEventsPage() {
 													sync, use Device / Time / Category / Action filters on the Device events page.
 												</div>
 											) : (
-											<div className="overflow-x-auto rounded-md border border-slate-200">
-												<table className="w-full min-w-[520px] border-collapse text-left text-xs">
-													<thead className="bg-slate-50 text-[11px] font-semibold uppercase text-slate-500">
-														<tr>
-															<th className="px-2 py-2">Event</th>
-															<th className="px-2 py-2 text-right">Will add</th>
-															<th className="px-2 py-2 text-right">Already saved</th>
-															<th className="px-2 py-2">Status</th>
-														</tr>
-													</thead>
-													<tbody className="divide-y divide-slate-100 bg-white">
-														{tableRows.map((row) => (
-															<tr key={row.key}>
-																<td className="px-2 py-2 font-semibold text-slate-950">
-																	<span title={`${row.sourceProof || ""}${row.filterAfterSync ? ` · After sync: ${row.filterAfterSync}` : ""}`}>
-																		{row.eventLabel}
-																	</span>
-																</td>
-																<td className="px-2 py-2 text-right font-bold text-red-700">
-																	{hasNumericCount(row.willAdd) ? `+${formatCount(row.willAdd)}` : "—"}
-																</td>
-																<td className="px-2 py-2 text-right font-semibold text-slate-700">
-																	{formatCount(row.alreadyInHris)}
-																</td>
-																<td className="px-2 py-2">
-																	<Badge
-																		variant={row.status === "Ready" ? "success-soft" : "warning-soft"}
-																		className="rounded-md px-2 py-0.5 font-semibold">
-																		{row.status}
-																	</Badge>
-																</td>
+												<div className="overflow-hidden rounded-md border border-slate-200">
+													{/* One compact table: every event is a single line (no section groups, no long paths). */}
+													<table
+														className="w-full border-collapse text-left text-xs"
+														data-testid="sync-logs-event-table">
+														<thead className="bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+															<tr>
+																<th className="whitespace-nowrap px-2 py-1.5">Event</th>
+																<th className="whitespace-nowrap px-2 py-1.5">Category</th>
+																<th className="whitespace-nowrap px-2 py-1.5 text-right">Will add</th>
+																<th className="whitespace-nowrap px-2 py-1.5 text-right">Saved</th>
+																<th className="whitespace-nowrap px-2 py-1.5">Status</th>
 															</tr>
-														))}
-													</tbody>
-												</table>
-											</div>
+														</thead>
+														<tbody className="divide-y divide-slate-100 bg-white">
+															{sortSyncEventRows(tableRows).map((row) => {
+																const categoryToken = getSyncCategoryToken(row);
+																const compactLabel = getSyncEventLabelCompact(row);
+																const fullLabel = String(row.eventLabel || row.eventAction || compactLabel);
+																const detailTitle = [
+																	fullLabel,
+																	getSyncWhereToFind(row),
+																	getSyncSourceDetail(row),
+																	getSyncReviewReason(row),
+																]
+																	.filter(Boolean)
+																	.join(" · ");
+																const statusLabel = row.confidenceLabel || row.status || "—";
+																return (
+																	<tr
+																		key={row.key}
+																		className="h-8 whitespace-nowrap"
+																		title={detailTitle}
+																		data-category={categoryToken}
+																		data-event-action={row.eventAction || ""}>
+																		<td className="max-w-[11rem] truncate px-2 py-1 font-semibold text-slate-950">
+																			{compactLabel}
+																		</td>
+																		<td className="px-2 py-1">
+																			<span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-slate-700">
+																				{categoryToken}
+																			</span>
+																		</td>
+																		<td className="px-2 py-1 text-right font-bold tabular-nums text-red-700">
+																			{hasNumericCount(row.willAdd) ? `+${formatCount(row.willAdd)}` : "—"}
+																		</td>
+																		<td className="px-2 py-1 text-right font-semibold tabular-nums text-slate-700">
+																			{formatCount(row.alreadyInHris)}
+																		</td>
+																		<td className="px-2 py-1">
+																			<Badge
+																				variant={row.status === "Ready" ? "success-soft" : "warning-soft"}
+																				className="rounded-md px-1.5 py-0 text-[10px] font-semibold">
+																				{statusLabel}
+																			</Badge>
+																		</td>
+																	</tr>
+																);
+															})}
+														</tbody>
+													</table>
+												</div>
 											)}
 											{!deviceIsBlocked ? (
 												<p className="mt-2 text-[11px] text-slate-500">
-													After sync, filter Device events by Category and Action if you need a subset.
+													Nothing is saved yet. This preview shows what HRIS can add to Device Events after you confirm.
 												</p>
 											) : null}
 											{/* Keep legacy labels available for source contracts without table clutter */}
@@ -3505,6 +3685,8 @@ export default function DeviceEventsPage() {
 											<span className="sr-only">Already in HRIS</span>
 											<span className="sr-only">Source proof</span>
 											<span className="sr-only">Filter after sync</span>
+											<span className="sr-only">Business area</span>
+											<span className="sr-only">Where to find it</span>
 										</div>
 									);
 								})}

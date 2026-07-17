@@ -20,6 +20,15 @@ describe("device events page UX contract", () => {
 		);
 	});
 
+	it("filters event action options by selected event category", () => {
+		expect(routeSource).to.contain("EVENT_ACTIONS_BY_CATEGORY");
+		expect(routeSource).to.contain("getEventActionOptionsForCategory");
+		expect(routeSource).to.contain("getEventActionOptionsForCategory(eventCategory)");
+		// Attendance must not list User created / enroll actions.
+		expect(routeSource).to.contain('ATTENDANCE: ["TAP", "TAP_REJECTED"]');
+		expect(routeSource).to.contain('USER_MANAGEMENT: ["USER_CREATED", "USER_UPDATED", "USER_DELETED"]');
+	});
+
 	it("opens Sync logs as a modal journey with device counts and sync status", () => {
 		expect(routeSource).to.contain('next.set("action", "sync-logs")');
 		expect(routeSource).to.contain('searchParams.get("debug") === "true"');
@@ -50,7 +59,9 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Event to add");
 		expect(routeSource).to.contain("Already in HRIS");
 		expect(routeSource).to.contain("Source proof");
-		expect(routeSource).to.contain("Filter after sync");
+		expect(routeSource).to.contain("Business area");
+		expect(routeSource).to.contain("Where to find it");
+		expect(routeSource).to.contain("Nothing is saved yet. This preview shows what HRIS can add to Device Events after you confirm.");
 		expect(routeSource).to.contain("Device logs scanned");
 		expect(routeSource).to.contain("Saved to HRIS");
 		expect(routeSource).to.contain("Sync scans device source logs, then classifies each row against HRIS.");
@@ -65,11 +76,24 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Operation logs");
 		expect(routeSource).to.contain("Attendance/access events");
 		expect(routeSource).to.contain("Sync logs");
-		// Primary table is slim; full filter/source columns are not permanent grid headers.
+		// One compact single-line table: short Category tokens (ENROLLMENT / USER MGMT / …).
+		expect(routeSource).to.contain('data-testid="sync-logs-event-table"');
+		expect(routeSource).to.contain("getSyncCategoryToken");
+		expect(routeSource).to.contain("sortSyncEventRows");
+		expect(routeSource).to.contain("getSyncEventLabelCompact");
 		expect(routeSource).to.contain(">Event</th>");
-		expect(routeSource).to.contain(">Already saved</th>");
+		expect(routeSource).to.contain(">Category</th>");
+		expect(routeSource).to.contain(">Will add</th>");
+		expect(routeSource).to.contain(">Saved</th>");
+		expect(routeSource).to.contain(">Status</th>");
+		expect(routeSource).to.contain("ENROLLMENT");
+		expect(routeSource).to.contain("USER MGMT");
+		expect(routeSource).not.to.contain(">Business area</th>");
+		expect(routeSource).not.to.contain(">Where to find it</th>");
+		expect(routeSource).not.to.contain(">Already saved</th>");
 		expect(routeSource).not.to.contain(">Source proof</th>");
 		expect(routeSource).not.to.contain(">Filter after sync</th>");
+		expect(routeSource).not.to.contain("groupSyncRowsByBusinessArea");
 	});
 
 	it("exposes the saved event reset only in the admin debug sync view", () => {
@@ -166,7 +190,8 @@ describe("device events page UX contract", () => {
 		// Practical filters remain available in the toolbar.
 		expect(routeSource).to.contain('setFilter("deviceId", value)');
 		expect(routeSource).to.contain('setFilter("window", value)');
-		expect(routeSource).to.contain('setFilter("eventCategory", value)');
+		// Category uses updateSearchParams so mismatched action is cleared in one URL write.
+		expect(routeSource).to.contain('next.set("eventCategory", value)');
 		expect(routeSource).to.contain('setFilter("eventAction", value)');
 		// Advanced/internal filters were removed from the toolbar because they mislead operators.
 		expect(routeSource).not.to.contain('setFilter("source", value)');
