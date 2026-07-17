@@ -1329,10 +1329,9 @@ export default function DeviceEventsPage() {
 		viewMode === "saved" &&
 		(source === "all" || source === "EN_HCNETSDK_ALARM") &&
 		(deviceId === "all" || isHikvisionDevice(selectedDevice));
-	// Calm by default: no spam poll. Socket + proof-change invalidation cover live taps.
-	// Only fall back to a slow poll when the socket is disconnected.
-	const shouldPollSavedEvents = viewMode === "saved" && (!isConnected || !hasRealtimeScope);
-	const savedEventsRefetchInterval = shouldPollSavedEvents ? 20_000 : false;
+	// Socket is canonical for live saved rows. Poll only when socket is down.
+	const shouldPollSavedEvents = viewMode === "saved" && !isConnected;
+	const savedEventsRefetchInterval = shouldPollSavedEvents ? 30_000 : false;
 	// Listener status must load on the saved SDK ledger too — otherwise the mid
 	// panel says "Live capture offline" while the readiness strip says "armed"
 	// (readiness fetches listener separately; the panel used to only load when
@@ -1579,12 +1578,17 @@ export default function DeviceEventsPage() {
 		}
 	}, [liveData, refetch, viewMode]);
 
+	// Socket-first live path. Join org (+ optional device) and render device-event:saved.
 	useEffect(() => {
 		if (!socket || !isConnected || (!organizationId && !selectedDeviceRoomId)) return;
 
 		const roomPayload = {
 			organizationId: organizationId || undefined,
-			deviceId: selectedDeviceRoomId || undefined,
+			// When "All devices", only org room — emit always hits org room.
+			deviceId:
+				selectedDeviceRoomId && selectedDeviceRoomId !== "all"
+					? selectedDeviceRoomId
+					: undefined,
 		};
 
 		const matchesCurrentScope = (payload: DeviceEventSavedPayload) => {
@@ -1594,7 +1598,11 @@ export default function DeviceEventsPage() {
 			if (deviceId !== "all" && payload.deviceId && payload.deviceId !== deviceId) {
 				return false;
 			}
+			// Scope filters: only apply when the socket payload carries the field.
 			if (status !== "all" && payload.status && payload.status !== status) {
+				return false;
+			}
+			if (source !== "all" && payload.source && payload.source !== source) {
 				return false;
 			}
 			if (
@@ -1611,21 +1619,6 @@ export default function DeviceEventsPage() {
 			) {
 				return false;
 			}
-			if (source !== "all" && payload.source && payload.source !== source) {
-				return false;
-			}
-			if (
-				evidenceSource !== "all" &&
-				payload.event?.payload?.evidenceSource !== evidenceSource
-			) {
-				return false;
-			}
-			if (
-				eventConfidence !== "all" &&
-				payload.event?.eventConfidence !== eventConfidence
-			) {
-				return false;
-			}
 			return true;
 		};
 
@@ -1634,11 +1627,15 @@ export default function DeviceEventsPage() {
 			setLastRealtimeEvent(payload);
 			const hasRealtimeEventRow = Boolean(payload.event?.id);
 			if (hasRealtimeEventRow) {
-				setRealtimeSavedEvents((current) => [
-					payload.event as DeviceEvent,
-					...current.filter((event) => event.id !== payload.event?.id),
-				].slice(0, limitParam));
+				// Instant row: socket payload is source of truth for the new line.
+				setRealtimeSavedEvents((current) =>
+					[
+						payload.event as DeviceEvent,
+						...current.filter((event) => event.id !== payload.event?.id),
+					].slice(0, Math.max(limitParam, 25)),
+				);
 			}
+			// Only HTTP-refetch when socket did not bring a full row (or live ACS view).
 			if (
 				shouldRefreshSavedEventsAfterSocketEvent({
 					viewMode,
@@ -1647,6 +1644,12 @@ export default function DeviceEventsPage() {
 			) {
 				void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
 				void refetch();
+			} else if (viewMode === "saved") {
+				// Quiet summary/total refresh after socket row (debounced via rAF once).
+				void queryClient.invalidateQueries({
+					queryKey: [...queryKeys.devices.all, "events"],
+					refetchType: "none",
+				});
 			}
 			if (viewMode === "live") {
 				void refetchLive();
@@ -1663,10 +1666,8 @@ export default function DeviceEventsPage() {
 		};
 	}, [
 		deviceId,
-		evidenceSource,
 		eventAction,
 		eventCategory,
-		eventConfidence,
 		isConnected,
 		limitParam,
 		organizationId,
@@ -1674,32 +1675,15 @@ export default function DeviceEventsPage() {
 		refetch,
 		refetchLive,
 		selectedDeviceRoomId,
-		source,
 		socket,
+		source,
 		status,
 		viewMode,
 	]);
 
-	// When live-readiness shows a *new* SDK proof time, pull the ledger once.
-	// No readiness re-fetch here (that caused loops + "Updating filters" spam).
-	const lastProofAt =
-		liveReadiness?.proof?.lastSdkEventAt || liveReadiness?.listener?.lastAlarmAt || null;
-	const lastSeenProofAtRef = useRef<string | null>(null);
+	// Focus refresh only when socket is offline (socket is primary while connected).
 	useEffect(() => {
-		if (viewMode !== "saved" || !lastProofAt) return;
-		if (lastSeenProofAtRef.current === lastProofAt) return;
-		const previous = lastSeenProofAtRef.current;
-		lastSeenProofAtRef.current = lastProofAt;
-		// Skip first paint (baseline) — only refresh when proof advances after mount.
-		if (!previous) return;
-		void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
-		void refetch();
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- only when proof timestamp advances
-	}, [viewMode, lastProofAt]);
-
-	// Focus / tab-visible: one quiet refresh. No continuous 3s hammer.
-	useEffect(() => {
-		if (viewMode !== "saved") return;
+		if (viewMode !== "saved" || isConnected) return;
 		if (typeof window === "undefined") return;
 		let lastRecoveryToastAt = 0;
 		const refreshFromRecovery = () => {
@@ -1732,7 +1716,7 @@ export default function DeviceEventsPage() {
 				document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
 			}
 		};
-	}, [queryClient, refetch, viewMode]);
+	}, [isConnected, queryClient, refetch, viewMode]);
 
 	const updateSearchParams = (mutator: (next: URLSearchParams) => void) => {
 		setSearchParams(
@@ -2802,9 +2786,9 @@ export default function DeviceEventsPage() {
 	].filter(Boolean) as string[];
 	const hasScopedSavedFilters = viewMode === "saved" && activeSavedFilterLabels.length > 0;
 	const socketTruthLabel = isConnected
-		? "Socket connected"
+		? "Socket live (canonical)"
 		: shouldPollSavedEvents
-			? "Socket polling fallback"
+			? "Socket offline · slow poll fallback"
 			: "Socket not connected";
 	const savedEmptyMessage = isEventLoading
 		? "Loading saved events…"

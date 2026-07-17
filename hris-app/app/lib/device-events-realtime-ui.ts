@@ -159,6 +159,11 @@ export const prependRealtimeSavedRow = <T extends { id: string }>({
 		maxRealtimeRows: 1,
 	});
 
+/**
+ * Socket is the canonical live path for Device Events.
+ * - Saved view with a full event row: prepend locally (no forced HTTP refetch).
+ * - Live ACS view, or payload without a full row: invalidate/refetch once.
+ */
 export const shouldRefreshSavedEventsAfterSocketEvent = ({
 	viewMode,
 	hasRealtimeEventRow,

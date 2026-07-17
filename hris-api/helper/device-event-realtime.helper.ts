@@ -138,10 +138,18 @@ export const emitDeviceEventSaved = (
 		: null;
 	const deviceRoom = payload.deviceId ? `device-events:device:${payload.deviceId}` : null;
 
-	let target: SocketIOServer | ReturnType<SocketIOServer["to"]> = io;
-	if (organizationRoom) target = target.to(organizationRoom);
-	if (deviceRoom) target = target.to(deviceRoom);
-	target.emit("device-event:saved", payload);
+	// Canonical live path: Socket rooms only (no poll required for Device Events).
+	// Emit org room first — "All devices" view joins org only.
+	// Emit device room second for device-scoped joins. Socket.IO dedupes clients in both.
+	if (organizationRoom) {
+		io.to(organizationRoom).emit("device-event:saved", payload);
+	}
+	if (deviceRoom) {
+		io.to(deviceRoom).emit("device-event:saved", payload);
+	}
+	if (!organizationRoom && !deviceRoom) {
+		io.emit("device-event:saved", payload);
+	}
 
 	return payload;
 };
