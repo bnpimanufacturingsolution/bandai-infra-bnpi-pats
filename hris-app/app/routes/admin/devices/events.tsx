@@ -435,8 +435,23 @@ const isOpaqueDevicePersonToken = (value?: string | null) => {
 	return false;
 };
 
-const formatDeviceEventPersonRef = (employeeNo?: string | null) => {
-	const token = String(employeeNo || "").trim();
+/** Prefer plain employeeNo after write-time map resolve; fall back to raw. */
+const getDisplayEmployeeNo = (item: Pick<UnifiedDeviceEventRow, "employeeNo" | "payload">) => {
+	const resolved = String(
+		item.payload?.resolvedEmployeeNo ||
+			(item.payload?.personTokenResolved ? item.employeeNo : "") ||
+			"",
+	).trim();
+	if (resolved && !isOpaqueDevicePersonToken(resolved)) return resolved;
+	const raw = String(item.employeeNo || "").trim();
+	return raw;
+};
+
+const formatDeviceEventPersonRef = (
+	employeeNo?: string | null,
+	item?: Pick<UnifiedDeviceEventRow, "employeeNo" | "payload"> | null,
+) => {
+	const token = item ? getDisplayEmployeeNo(item) : String(employeeNo || "").trim();
 	if (!token) return "No person id on device log";
 	if (isOpaqueDevicePersonToken(token)) {
 		return "Device person token (not a readable employee no.)";
@@ -446,15 +461,17 @@ const formatDeviceEventPersonRef = (employeeNo?: string | null) => {
 
 const getEmployeeDisplayName = (item: UnifiedDeviceEventRow) => {
 	if (item.employeeName) return item.employeeName;
-	if (item.employeeProfileId) return item.employeeId || item.employeeNo || "Employee";
-	if (isOpaqueDevicePersonToken(item.employeeNo)) return "Not linked to HRIS employee";
-	if (item.employeeNo) return "Employee not matched";
+	if (item.employeeProfileId) return item.employeeId || getDisplayEmployeeNo(item) || "Employee";
+	const displayNo = getDisplayEmployeeNo(item);
+	if (isOpaqueDevicePersonToken(displayNo)) return "Not linked to HRIS employee";
+	if (displayNo) return "Employee not matched";
 	return "Unknown person";
 };
 
 const getEmployeeInitials = (item: UnifiedDeviceEventRow) => {
-	if (isOpaqueDevicePersonToken(item.employeeNo) && !item.employeeName) return "??";
-	const name = item.employeeName || item.employeeId || item.employeeNo || "?";
+	const displayNo = getDisplayEmployeeNo(item);
+	if (isOpaqueDevicePersonToken(displayNo) && !item.employeeName) return "??";
+	const name = item.employeeName || item.employeeId || displayNo || "?";
 	const parts = String(name).trim().split(/\s+/).filter(Boolean);
 	if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 	return String(parts[0] || "?").slice(0, 2).toUpperCase();
@@ -1004,10 +1021,18 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		eventTime: event.eventTime,
 		employeeId: event.employee?.employeeId || null,
 		employeeProfileId: event.employee?.id || event.employeeId || null,
-		employeeNo: event.employeeNo,
+		employeeNo:
+			// Write-time map: store plain employeeNo when resolved from opaque log token.
+			(payload.personTokenResolved && payload.resolvedEmployeeNo
+				? String(payload.resolvedEmployeeNo)
+				: null) ||
+			(event.employeeNo && !isOpaqueDevicePersonToken(event.employeeNo)
+				? event.employeeNo
+				: payload.resolvedEmployeeNo || event.employeeNo),
 		employeeName:
 			event.employee?.fullName ||
 			payload.name ||
+			payload.resolvedDisplayName ||
 			zktecoAttendance.userName ||
 			zktecoAttendance.name ||
 			accessEvent.name ||
@@ -2679,18 +2704,20 @@ export default function DeviceEventsPage() {
 							<span
 								className="truncate text-xs text-slate-500"
 								title={
-									isOpaqueDevicePersonToken(String(value || item.employeeNo || ""))
-										? String(value || item.employeeNo || "")
-										: undefined
+									isOpaqueDevicePersonToken(getDisplayEmployeeNo(item))
+										? String(item.payload?.opaquePersonToken || item.employeeNo || "")
+										: item.payload?.opaquePersonToken
+											? `Mapped from device token ${item.payload.opaquePersonToken}`
+											: undefined
 								}>
-								{formatDeviceEventPersonRef(String(value || item.employeeNo || "") || null)}
+								{formatDeviceEventPersonRef(null, item)}
 							</span>
 							<Badge
 								variant={item.employeeProfileId ? "success-soft" : "warning-soft"}
 								className="px-1.5 py-0 text-[11px] font-semibold">
 								{item.employeeProfileId
 									? "Matched"
-									: isOpaqueDevicePersonToken(String(value || item.employeeNo || ""))
+									: isOpaqueDevicePersonToken(getDisplayEmployeeNo(item))
 										? "Needs link"
 										: "Needs match"}
 							</Badge>
