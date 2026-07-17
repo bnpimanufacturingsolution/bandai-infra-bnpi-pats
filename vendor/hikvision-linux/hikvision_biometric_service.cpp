@@ -3544,7 +3544,26 @@ int main(int argc, char **argv) {
         replay_pending_hikvision_callbacks();
     }
 
-    for (const auto &config : configs) {
+    // CRITICAL latency fix (host-local + multi-device):
+    // Start HRIS post worker BEFORE arming every device. Otherwise a live TEST A
+    // can queue taps during arm, then wait ~60-90s while 6 off-LAN devices fail
+    // login (3 retries each) before worker_loop even starts — that is the "tap lag".
+    std::thread worker(worker_loop);
+    std::thread callback_spool_replayer(callback_spool_replay_loop);
+
+    // Arm reverse-tunnel / local hosts first (127.0.0.1 TEST A) so live path is ready
+    // before wasting time on unreachable LAN peers.
+    std::vector<DeviceConfig> arm_order = configs;
+    std::stable_sort(arm_order.begin(), arm_order.end(), [](const DeviceConfig &a, const DeviceConfig &b) {
+        const auto score = [](const DeviceConfig &c) {
+            if (c.host == "127.0.0.1" || c.host == "localhost" || c.host == "::1") return 0;
+            if (c.host.rfind("192.168.254.", 0) == 0) return 1;
+            return 2;
+        };
+        return score(a) < score(b);
+    });
+
+    for (const auto &config : arm_order) {
         emit_json({
             {"event", "device_config_loaded"},
             {"deviceId", config.hris_device_id},
@@ -3558,7 +3577,12 @@ int main(int argc, char **argv) {
         bool armed = false;
         int attempts_performed = 0;
         bool backed_off = false;
-        static constexpr int max_login_attempts = 3;
+        // Off-LAN peers fail with code 7; one retry is enough for them so TEST A
+        // path is not blocked for ~70s on every listener restart.
+        const bool is_local_path =
+            config.host == "127.0.0.1" || config.host == "localhost" || config.host == "::1" ||
+            config.host.rfind("192.168.254.", 0) == 0;
+        const int max_login_attempts = is_local_path ? 3 : 1;
         for (int attempt = 1; attempt <= max_login_attempts && !armed; ++attempt) {
             attempts_performed = attempt;
             DeviceSession session;
@@ -3604,6 +3628,17 @@ int main(int argc, char **argv) {
                 backed_off = true;
                 break;
             }
+            // Network unreachable (code 7): do not burn retries on this restart.
+            if (!armed && session.last_login_error == 7) {
+                emit_json({
+                    {"event", "device_login_network_fail_skip_retries"},
+                    {"deviceId", config.hris_device_id},
+                    {"host", config.host},
+                    {"lastError", "7"},
+                    {"attempt", std::to_string(attempt)}
+                });
+                break;
+            }
             if (!armed && attempt < max_login_attempts) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(500 * attempt));
             }
@@ -3623,14 +3658,20 @@ int main(int argc, char **argv) {
     }
 
     if (sessions.empty()) {
+        keep_running = 0;
+        queue_cv.notify_all();
+        if (worker.joinable()) {
+            worker.join();
+        }
+        if (callback_spool_replayer.joinable()) {
+            callback_spool_replayer.join();
+        }
         emit_json({{"event", "service_start_failed"}, {"reason", "no_armed_devices"}});
         NET_DVR_Cleanup();
         return 1;
     }
 
-    std::thread worker(worker_loop);
     std::thread poller(polling_loop);
-    std::thread callback_spool_replayer(callback_spool_replay_loop);
     if (manual_fingerprint_clone_mode) {
         DeviceSession *manual_source = nullptr;
         DeviceSession *manual_target = nullptr;
