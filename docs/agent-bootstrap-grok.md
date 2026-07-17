@@ -32,6 +32,15 @@ Bootstrap: open WWG handoff + current-task + project-truth-summary, Current-Stat
 
 - For Sync logs redesign non-stop work, also paste or reference:
   `docs/00-product/TASK-sync-logs-event-first-modal-GROK-PROMPT.md`
+- For **any multi-step truth task** (Sync logs, listener, device reachability)
+  when Grok stops after ~1 minute of partial work, paste:
+  `docs/00-product/AGENT-PROMPT-nonstop-loop-engineering.md`
+  — use **section 1** (full template) or **section 3b** (medium Sync logs).
+- For **true 3-hour Sync logs + Playwright marathon** (recommended when agents
+  die at ~34s–1m), paste PASTE BLOCK or short launcher from:
+  `docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md`
+  Operator must pair that with **always-approve tools** and
+  **`--max-turns 200`** headless (or leave interactive session open for hours).
 
 ## Limits (honest)
 
