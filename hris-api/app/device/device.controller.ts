@@ -4948,20 +4948,33 @@ export const controller = (prisma: PrismaClient) => {
 		device: { id: string; name: string; address?: string | null };
 		evidence: NormalizedHikvisionEvidenceEvent;
 	}) => {
-		const employeeNo = String(params.evidence.employeeNo || "").trim();
-		const eventTime = parseHikvisionEventTime(params.evidence.time);
-		const rawEvidence = params.evidence.rawEvidence as any;
+		// Resolve opaque log person tokens via write-time map before save (Sync logs from today).
+		const {
+			applyDevicePersonTokenToEvidence,
+		} = await import("../../helper/device-person-token.helper");
+		const resolvedEvidence = await applyDevicePersonTokenToEvidence(prisma as any, {
+			organizationId: params.organizationId,
+			deviceId: params.device.id,
+			evidence: params.evidence as any,
+		});
+		const employeeNo = String(resolvedEvidence.employeeNo || "").trim();
+		const eventTime = parseHikvisionEventTime(resolvedEvidence.time || params.evidence.time);
+		const rawEvidence = resolvedEvidence.rawEvidence as any;
+		const opaquePersonToken =
+			String((resolvedEvidence as any).opaquePersonToken || rawEvidence?.opaquePersonToken || "").trim() ||
+			null;
 		const dedupeKey = createHash("sha256")
 			.update(
 				JSON.stringify({
 					deviceId: params.device.id,
-					evidenceSource: params.evidence.evidenceSource,
+					evidenceSource: resolvedEvidence.evidenceSource || params.evidence.evidenceSource,
 					eventTime: eventTime.toISOString(),
-					employeeNo,
-					eventCategory: params.evidence.eventCategory,
-					eventAction: params.evidence.eventAction,
-					major: params.evidence.major ?? null,
-					minor: params.evidence.minor ?? null,
+					// Prefer opaque for stable dedupe when both known (same log row).
+					employeeNo: opaquePersonToken || employeeNo,
+					eventCategory: resolvedEvidence.eventCategory || params.evidence.eventCategory,
+					eventAction: resolvedEvidence.eventAction || params.evidence.eventAction,
+					major: resolvedEvidence.major ?? params.evidence.major ?? null,
+					minor: resolvedEvidence.minor ?? params.evidence.minor ?? null,
 					parameter: rawEvidence?.parameter || null,
 					information: rawEvidence?.information || null,
 				}),
@@ -4995,19 +5008,23 @@ export const controller = (prisma: PrismaClient) => {
 				: null;
 		const employeeId = deviceUser?.employeeId || legacyEmployee?.id || null;
 		const payload = {
-			evidenceSource: params.evidence.evidenceSource,
-			directDeviceEvidence: params.evidence.directDeviceEvidence,
+			evidenceSource: resolvedEvidence.evidenceSource || params.evidence.evidenceSource,
+			directDeviceEvidence:
+				resolvedEvidence.directDeviceEvidence ?? params.evidence.directDeviceEvidence,
 			vendorAction:
-				(rawEvidence?.metaId || rawEvidence?.minorType || params.evidence.actionCode || params.evidence.minor || null),
-			vendorCode: params.evidence.actionCode || params.evidence.minor || null,
-			rawDeviceTime: rawEvidence?.time || params.evidence.time || null,
+				(rawEvidence?.metaId || rawEvidence?.minorType || resolvedEvidence.actionCode || resolvedEvidence.minor || null),
+			vendorCode: resolvedEvidence.actionCode || resolvedEvidence.minor || null,
+			rawDeviceTime: rawEvidence?.time || resolvedEvidence.time || null,
 			operator: rawEvidence?.operator || rawEvidence?.raw?.operator || null,
 			remoteHost: rawEvidence?.remoteHost || rawEvidence?.raw?.remoteHost || null,
-			rawEvidence: params.evidence.rawEvidence ?? null,
+			rawEvidence: resolvedEvidence.rawEvidence ?? null,
 			deviceId: params.device.id,
 			deviceName: params.device.name,
-			deviceIP: params.device.address || params.evidence.deviceIP || null,
+			deviceIP: params.device.address || resolvedEvidence.deviceIP || null,
 			employeeNo: employeeNo || null,
+			opaquePersonToken,
+			personTokenResolved: Boolean((resolvedEvidence as any).personTokenResolved),
+			resolvedEmployeeNo: (resolvedEvidence as any).personTokenResolved ? employeeNo : null,
 		};
 		const eventRecord = await (prisma as any).deviceEvent.create({
 			data: {
@@ -5017,21 +5034,27 @@ export const controller = (prisma: PrismaClient) => {
 				employeeId,
 				eventTime,
 				employeeNo: employeeNo || null,
-				source: normalizeHikvisionDeviceEventSource(params.evidence.source),
+				source: normalizeHikvisionDeviceEventSource(
+					resolvedEvidence.source || params.evidence.source,
+				),
 				status: employeeNo ? (employeeId ? "MATCHED" : "UNMATCHED") : "RECEIVED",
-				eventCategory: params.evidence.eventCategory,
-				eventAction: params.evidence.eventAction,
-				eventLabel: params.evidence.eventLabel,
-				eventConfidence: params.evidence.eventConfidence,
-				eventType: params.evidence.eventType || null,
+				eventCategory: resolvedEvidence.eventCategory || params.evidence.eventCategory,
+				eventAction: resolvedEvidence.eventAction || params.evidence.eventAction,
+				eventLabel: resolvedEvidence.eventLabel || params.evidence.eventLabel,
+				eventConfidence: resolvedEvidence.eventConfidence || params.evidence.eventConfidence,
+				eventType: resolvedEvidence.eventType || params.evidence.eventType || null,
 				major:
-					params.evidence.major !== undefined && params.evidence.major !== null
-						? String(params.evidence.major)
-						: null,
+					resolvedEvidence.major !== undefined && resolvedEvidence.major !== null
+						? String(resolvedEvidence.major)
+						: params.evidence.major !== undefined && params.evidence.major !== null
+							? String(params.evidence.major)
+							: null,
 				minor:
-					params.evidence.minor !== undefined && params.evidence.minor !== null
-						? String(params.evidence.minor)
-						: null,
+					resolvedEvidence.minor !== undefined && resolvedEvidence.minor !== null
+						? String(resolvedEvidence.minor)
+						: params.evidence.minor !== undefined && params.evidence.minor !== null
+							? String(params.evidence.minor)
+							: null,
 				dedupeKey,
 				payload,
 			},

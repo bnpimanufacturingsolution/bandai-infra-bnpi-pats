@@ -92,16 +92,46 @@ model Device {
 
   access Json
 
-  employees Employee[]
-  events    DeviceEvent[]
-  users     DeviceUser[]
-  syncRuns  DeviceSyncRun[]
+  employees    Employee[]
+  events       DeviceEvent[]
+  users        DeviceUser[]
+  syncRuns     DeviceSyncRun[]
+  personTokens DevicePersonToken[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   isDeleted Boolean  @default(false)
 
   @@unique([organizationId, address, port])
+}
+
+/**
+ * Write-time map: Hikvision operation logs use opaque LogAddInfo.EmployeeNo tokens.
+ * Inventory / UserInfo use plain employeeNo. Capture opaque after we write plain.
+ * Historical bulk logs without capture cannot be decoded.
+ */
+model DevicePersonToken {
+  id               String   @id @default(cuid())
+  organizationId   String
+  device           Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId         String
+  /// Opaque base64 token from ContentMgmt/logSearch LogAddInfo.EmployeeNo
+  opaqueToken      String
+  /// Plain device employeeNo we wrote / know (UserInfo.employeeNo)
+  employeeNo       String
+  displayName      String?
+  source           String   @default("WRITE_TIME_CAPTURE")
+  captureMetaId    String?
+  captureEventTime DateTime?
+  firstSeenAt      DateTime @default(now())
+  lastSeenAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([organizationId, deviceId, opaqueToken])
+  @@index([organizationId, deviceId, employeeNo])
+  @@index([organizationId, opaqueToken])
+  @@map("device_person_tokens")
 }
 
 model DeviceEvent {

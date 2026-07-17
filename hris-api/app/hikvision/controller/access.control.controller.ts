@@ -9,6 +9,11 @@ import {
 	getHikvisionObservedClockSkewSeconds,
 	normalizeHikvisionAcsEventListTimes,
 } from "../../../helper/hikvision-event-contract.helper";
+import {
+	captureOpaqueTokenAfterUserWrite,
+	extractDisplayNameFromUserInfoBody,
+	extractPlainEmployeeNoFromUserInfoBody,
+} from "../../../helper/device-person-token.helper";
 import { controller as callbackController } from "./callback.controller";
 
 export const controller = (prisma: PrismaClient) => {
@@ -17,6 +22,43 @@ export const controller = (prisma: PrismaClient) => {
 		endpoint: string,
 		options: Parameters<typeof hikvisionFetch>[1] = {},
 	) => hikvisionFetch(endpoint, { ...options, prisma, request: req });
+
+	const scheduleWriteTimePersonTokenCapture = (params: {
+		req: Request;
+		userInfoBody: unknown;
+		source: "USER_INFO_RECORD" | "USER_INFO_MODIFY";
+	}) => {
+		const plainEmployeeNo = extractPlainEmployeeNoFromUserInfoBody(params.userInfoBody);
+		const deviceId = String(
+			params.req.body?.deviceId ||
+				params.req.query?.deviceId ||
+				(params.req.body as any)?.UserInfo?.deviceId ||
+				"",
+		).trim();
+		const organizationId = getRequestOrganizationId(params.req);
+		if (!plainEmployeeNo || !deviceId || !organizationId) return;
+		const writeMs = Date.now();
+		const displayName = extractDisplayNameFromUserInfoBody(params.userInfoBody);
+		// Fire-and-forget: never block enroll response on logSearch capture.
+		void captureOpaqueTokenAfterUserWrite({
+			prisma,
+			req: params.req,
+			deviceId,
+			organizationId,
+			plainEmployeeNo,
+			displayName,
+			source: params.source,
+			writeMs,
+			settleMs: 1200,
+		}).catch((error) => {
+			console.warn(
+				"[device-person-token] write-time capture failed",
+				params.source,
+				plainEmployeeNo,
+				error?.message || error,
+			);
+		});
+	};
 
 	const normalizeUserInfoSearchCond = (body: any) => {
 		const cond = body?.UserInfoSearchCond || {};
@@ -580,6 +622,12 @@ export const controller = (prisma: PrismaClient) => {
 					method: "PUT",
 					body: userInfoData,
 				});
+				// Real field changes may emit op-logs; no-op re-apply often does not.
+				scheduleWriteTimePersonTokenCapture({
+					req,
+					userInfoBody: userInfoData,
+					source: "USER_INFO_MODIFY",
+				});
 
 				return res
 					.status(200)
@@ -603,6 +651,12 @@ export const controller = (prisma: PrismaClient) => {
 				const data = await fetchFromDevice(req, hikvisionEndpoint.accessControl.userInfo.record, {
 					method: "POST",
 					body: userInfoData,
+				});
+				// Proven path: Record plain employeeNo → logSearch opaque token within seconds.
+				scheduleWriteTimePersonTokenCapture({
+					req,
+					userInfoBody: userInfoData,
+					source: "USER_INFO_RECORD",
 				});
 
 				return res

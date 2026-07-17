@@ -97,16 +97,40 @@ model Device {
 
   access Access
 
-  employees Employee[]
-  events    DeviceEvent[]
-  users     DeviceUser[]
-  syncRuns  DeviceSyncRun[]
+  employees    Employee[]
+  events       DeviceEvent[]
+  users        DeviceUser[]
+  syncRuns     DeviceSyncRun[]
+  personTokens DevicePersonToken[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   isDeleted Boolean  @default(false)
 
   @@unique([organizationId, address, port])
+}
+
+/// Write-time map: opaque log person token ↔ plain employeeNo (Postgres is source of truth for runtime).
+model DevicePersonToken {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId   String
+  device           Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId         String   @db.ObjectId
+  opaqueToken      String
+  employeeNo       String
+  displayName      String?
+  source           String   @default("WRITE_TIME_CAPTURE")
+  captureMetaId    String?
+  captureEventTime DateTime?
+  firstSeenAt      DateTime @default(now())
+  lastSeenAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([organizationId, deviceId, opaqueToken])
+  @@index([organizationId, deviceId, employeeNo])
+  @@index([organizationId, opaqueToken])
+  @@map("device_person_tokens")
 }
 
 model DeviceEvent {
