@@ -66,11 +66,25 @@ const buildRealtimeDeviceSnapshot = (device: any) => {
 
 const buildRealtimeEmployeeSnapshot = (employee: any) => {
 	if (!employee) return null;
+	const personalInfo = employee?.person?.personalInfo || {};
+	const fromPerson = [personalInfo.firstName, personalInfo.middleName, personalInfo.lastName]
+		.map((part: any) => String(part || "").trim())
+		.filter(Boolean)
+		.join(" ")
+		.trim();
+	const fullName =
+		String(employee.fullName || "").trim() || fromPerson || null;
 	return {
 		id: employee.id,
 		employeeId: employee.employeeId,
 		deviceEmpId: employee.deviceEmpId,
-		fullName: employee.fullName,
+		fullName,
+		// FE Device Events often reads personalInfo for the person column.
+		person: employee.person
+			? { personalInfo: employee.person.personalInfo || null }
+			: fullName
+				? { personalInfo: { firstName: fullName } }
+				: null,
 	};
 };
 

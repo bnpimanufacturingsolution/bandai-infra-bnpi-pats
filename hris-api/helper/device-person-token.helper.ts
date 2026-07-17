@@ -115,9 +115,56 @@ export const upsertDevicePersonToken = async (
 	return tokenRow;
 };
 
+/** Build HRIS display name from Employee.person.personalInfo (or null). */
+export const buildEmployeeDisplayName = (employee: any): string | null => {
+	const personalInfo = employee?.person?.personalInfo || {};
+	const name = [personalInfo.firstName, personalInfo.middleName, personalInfo.lastName]
+		.map((part) => String(part || "").trim())
+		.filter(Boolean)
+		.join(" ")
+		.trim();
+	return name || null;
+};
+
 /**
- * DeviceUser is inventory of people ON THE DEVICE — not HRIS Employee.
- * Upsert so Sync Center can open the real device user for this device.
+ * Link plain device person id → HRIS Employee when deviceEmpId or employeeId matches.
+ * This is the Sync Center / Device Events name source for enroll/create rows.
+ */
+export const resolveLinkedEmployeeForDevicePerson = async (
+	prisma: PrismaClient | any,
+	input: { organizationId: string; employeeNo: string },
+): Promise<{ id: string; displayName: string | null; employeeIdCode: string | null } | null> => {
+	const organizationId = String(input.organizationId || "").trim();
+	const employeeNo = String(input.employeeNo || "").trim();
+	if (!organizationId || !employeeNo || isOpaqueHikvisionPersonToken(employeeNo)) {
+		return null;
+	}
+	const employee = await prisma.employee.findFirst({
+		where: {
+			organizationId,
+			isDeleted: false,
+			OR: [{ deviceEmpId: employeeNo }, { employeeId: employeeNo }],
+		},
+		select: {
+			id: true,
+			employeeId: true,
+			deviceEmpId: true,
+			person: { select: { personalInfo: true } },
+		},
+	});
+	if (!employee?.id) return null;
+	return {
+		id: String(employee.id),
+		displayName: buildEmployeeDisplayName(employee),
+		employeeIdCode: employee.employeeId ? String(employee.employeeId) : null,
+	};
+};
+
+/**
+ * DeviceUser is inventory of people ON THE DEVICE.
+ * - vendorUserId / employeeNo = plain device person id when known
+ * - opaque person token ALWAYS stored in vendorMetadata (never lost)
+ * - If same deviceEmpId/employeeId exists on Employee, auto-link + pull HRIS name
  */
 export const upsertDeviceUserInventoryStub = async (
 	prisma: PrismaClient | any,
@@ -135,26 +182,41 @@ export const upsertDeviceUserInventoryStub = async (
 	if (!organizationId || !deviceId || !employeeNo || isOpaqueHikvisionPersonToken(employeeNo)) {
 		return null;
 	}
+	const linked = await resolveLinkedEmployeeForDevicePerson(prisma, {
+		organizationId,
+		employeeNo,
+	});
+	const displayName =
+		String(input.displayName || "").trim() ||
+		linked?.displayName ||
+		null;
+	const opaqueToken = String(input.opaqueToken || "").trim() || null;
 	const existing = await prisma.deviceUser.findFirst({
 		where: { organizationId, deviceId, vendorUserId: employeeNo },
 	});
+	const priorMeta = (existing?.vendorMetadata as any) || {};
 	const vendorMetadata = {
+		...priorMeta,
 		writeTimeCapture: true,
-		opaquePersonToken: input.opaqueToken || null,
-		notHrisEmployee: true,
+		// Always keep latest opaque token when known (panel/SDK logs use this).
+		opaquePersonToken: opaqueToken || priorMeta.opaquePersonToken || null,
+		linkedEmployeeId: linked?.id || priorMeta.linkedEmployeeId || null,
+		linkedEmployeeCode: linked?.employeeIdCode || priorMeta.linkedEmployeeCode || null,
+		notHrisEmployee: !linked?.id,
 		plane: "DEVICE_USER_INVENTORY",
 	};
+	const status = linked?.id ? "ACTIVE" : existing?.status || "UNMATCHED";
 	if (existing) {
 		return prisma.deviceUser.update({
 			where: { id: existing.id },
 			data: {
 				employeeNo,
-				displayName: input.displayName ?? existing.displayName,
+				displayName: displayName ?? existing.displayName,
+				// Prefer explicit HRIS link when deviceEmpId matches.
+				employeeId: linked?.id || existing.employeeId || null,
+				status,
 				lastSyncedAt: new Date(),
-				vendorMetadata: {
-					...((existing.vendorMetadata as any) || {}),
-					...vendorMetadata,
-				},
+				vendorMetadata,
 			},
 		});
 	}
@@ -164,8 +226,9 @@ export const upsertDeviceUserInventoryStub = async (
 			deviceId,
 			vendorUserId: employeeNo,
 			employeeNo,
-			displayName: input.displayName || null,
-			status: "UNMATCHED",
+			displayName: displayName || null,
+			employeeId: linked?.id || null,
+			status,
 			lastSyncedAt: new Date(),
 			vendorMetadata,
 		},
@@ -237,6 +300,16 @@ export const captureOpaqueTokenAfterUserWrite = async (params: {
 	const tokens: Array<{ opaque: string; time: string | null; metaId: string; timeMs: number }> =
 		[];
 
+	// Prefer HRIS employee name when deviceEmpId/employeeId matches plain person id.
+	let displayName = String(params.displayName || "").trim() || null;
+	if (!displayName && params.plainEmployeeNo) {
+		const linked = await resolveLinkedEmployeeForDevicePerson(params.prisma, {
+			organizationId: params.organizationId,
+			employeeNo: params.plainEmployeeNo,
+		}).catch(() => null);
+		if (linked?.displayName) displayName = linked.displayName;
+	}
+
 	for (const metaId of metaIds) {
 		try {
 			const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
@@ -298,7 +371,7 @@ export const captureOpaqueTokenAfterUserWrite = async (params: {
 		deviceId: params.deviceId,
 		opaqueToken: chosen.opaque,
 		employeeNo: params.plainEmployeeNo,
-		displayName: params.displayName,
+		displayName,
 		source: params.source || "WRITE_TIME_CAPTURE",
 		captureMetaId: chosen.metaId,
 		captureEventTime: chosen.time ? new Date(chosen.timeMs) : new Date(writeMs),
@@ -556,6 +629,8 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 						evidence: evidence as any,
 					});
 					let employeeNo = String(applied.employeeNo || evidence.employeeNo || "").trim();
+					let resolvedDisplayName: string | null =
+						String((applied as any).resolvedDisplayName || "").trim() || null;
 					const opaque =
 						(applied as any).opaquePersonToken ||
 						(isOpaqueHikvisionPersonToken(employeeNo) ? employeeNo : null);
@@ -565,8 +640,12 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 							deviceId,
 							opaqueToken: employeeNo,
 						});
-						if (tok?.employeeNo) employeeNo = tok.employeeNo;
-						else employeeNo = "";
+						if (tok?.employeeNo) {
+							employeeNo = tok.employeeNo;
+							if (tok.displayName) resolvedDisplayName = tok.displayName;
+						} else {
+							employeeNo = "";
+						}
 					}
 					const eventAction = String(
 						(applied as any).eventAction || evidence.eventAction || meta.eventAction,
@@ -618,14 +697,49 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 					});
 					if (near) continue;
 
+					// DeviceUser inventory: plain device id + ALWAYS keep opaque; auto-link HRIS employee
+					// when deviceEmpId/employeeId matches (pull real name onto DeviceUser + event).
+					let deviceUser: any = null;
+					if (employeeNo) {
+						deviceUser = await upsertDeviceUserInventoryStub(params.prisma, {
+							organizationId,
+							deviceId,
+							employeeNo,
+							displayName: resolvedDisplayName,
+							opaqueToken: opaque,
+						}).catch(() => null);
+						if (!resolvedDisplayName && deviceUser?.displayName) {
+							resolvedDisplayName = String(deviceUser.displayName);
+						}
+					}
+					const linkedEmployeeId =
+						deviceUser?.employeeId ||
+						(
+							await resolveLinkedEmployeeForDevicePerson(params.prisma, {
+								organizationId,
+								employeeNo,
+							}).catch(() => null)
+						)?.id ||
+						null;
+					if (linkedEmployeeId && !resolvedDisplayName) {
+						const empRow = await params.prisma.employee.findFirst({
+							where: { id: linkedEmployeeId },
+							select: { person: { select: { personalInfo: true } } },
+						});
+						resolvedDisplayName = buildEmployeeDisplayName(empRow);
+					}
+
 					const createdRow = await params.prisma.deviceEvent.create({
 						data: {
 							organizationId,
 							deviceId,
+							deviceUserId: deviceUser?.id || null,
+							employeeId: linkedEmployeeId || null,
 							eventTime: Number.isFinite(eventTime.getTime()) ? eventTime : new Date(),
+							// Plain device person id when known (never leave opaque as employeeNo when mapped).
 							employeeNo: employeeNo || null,
 							source: "HIKVISION_CALLBACK",
-							status: employeeNo ? "UNMATCHED" : "RECEIVED",
+							status: linkedEmployeeId ? "MATCHED" : employeeNo ? "UNMATCHED" : "RECEIVED",
 							eventCategory,
 							eventAction,
 							eventLabel,
@@ -640,28 +754,31 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 								resolvedFromSdkOperationSignal: true,
 								sdkTriggerMinor: triggerMinor || null,
 								personTokenResolved: Boolean(employeeNo && opaque),
+								// Opaque always retained for audit / re-link.
 								opaquePersonToken: opaque,
 								resolvedEmployeeNo: employeeNo || null,
-								notHrisEmployee: true,
+								resolvedDisplayName: resolvedDisplayName || null,
+								notHrisEmployee: !linkedEmployeeId,
 								plane: "DEVICE_USER",
 								rawEvidence: (applied as any).rawEvidence || evidence,
 							},
 						},
 					});
-					if (employeeNo) {
-						await upsertDeviceUserInventoryStub(params.prisma, {
-							organizationId,
-							deviceId,
-							employeeNo,
-							displayName: null,
-							opaqueToken: opaque,
-						}).catch(() => null);
-					}
 					const fullRow = await params.prisma.deviceEvent.findUnique({
 						where: { id: createdRow.id },
 						include: {
 							device: {
 								select: { id: true, name: true, address: true, port: true, protocol: true },
+							},
+							deviceUser: {
+								select: {
+									id: true,
+									vendorUserId: true,
+									employeeNo: true,
+									displayName: true,
+									employeeId: true,
+									vendorMetadata: true,
+								},
 							},
 							employee: {
 								select: {
@@ -673,6 +790,7 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 							},
 						},
 					});
+					// Capture io at emit time from request (same process as browser socket on :3001).
 					emitDeviceEventSaved(params.req?.io, fullRow || createdRow);
 					created += 1;
 				} catch (error: any) {

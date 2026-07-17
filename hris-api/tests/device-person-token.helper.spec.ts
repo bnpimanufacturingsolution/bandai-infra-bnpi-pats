@@ -2,6 +2,7 @@ import { expect } from "chai";
 import { readFileSync } from "fs";
 import { join } from "path";
 import {
+	buildEmployeeDisplayName,
 	extractPlainEmployeeNoFromUserInfoBody,
 	formatHikvisionPlus08,
 } from "../helper/device-person-token.helper";
@@ -33,6 +34,16 @@ describe("device-person-token helper", () => {
 		expect(isOpaqueHikvisionPersonToken("ckC6ilTx9CdZvFg/hOy23Q==")).to.equal(true);
 		expect(isOpaqueHikvisionPersonToken("1")).to.equal(false);
 		expect(isOpaqueHikvisionPersonToken("ptmap001")).to.equal(false);
+	});
+
+	it("builds employee display name from personalInfo for linked device persons", () => {
+		expect(
+			buildEmployeeDisplayName({
+				person: { personalInfo: { firstName: "Juan", middleName: "D", lastName: "Cruz" } },
+			}),
+		).to.equal("Juan D Cruz");
+		expect(buildEmployeeDisplayName({ person: { personalInfo: {} } })).to.equal(null);
+		expect(buildEmployeeDisplayName(null)).to.equal(null);
 	});
 
 	it("operation-log resolve source uses proven device metaIds (clearUserInfo, not deleteUserInfo)", () => {
