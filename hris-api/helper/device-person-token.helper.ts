@@ -363,6 +363,12 @@ export const applyDevicePersonTokenToEvidence = async <T extends { employeeNo?: 
  */
 const operationLogResolveCooldownMs = new Map<string, number>();
 
+/**
+ * Proven lifecycle metaIds on Bandai Hikvision (TEST A DS family, 2026-07-17).
+ * Invalid leaf names (deleteUserInfo, addFaceByEmployeeNo, addCardInfo, …) return
+ * ISAPI badXmlFormat and only slow resolve — do not invent leaves.
+ * Face/card use vendor localFaceData* / addCard when present.
+ */
 const OPERATION_LOG_META = [
 	{
 		metaId: "log.hikvision.com/Information/addUserInfo",
@@ -372,6 +378,21 @@ const OPERATION_LOG_META = [
 		minor: "addUserInfo",
 	},
 	{
+		metaId: "log.hikvision.com/Information/modifyUserInfo",
+		eventAction: "USER_UPDATED",
+		eventLabel: "Device user updated",
+		eventCategory: "USER_MANAGEMENT",
+		minor: "modifyUserInfo",
+	},
+	// Device leaf is clearUserInfo (not deleteUserInfo). Sync logs already probes this.
+	{
+		metaId: "log.hikvision.com/Information/clearUserInfo",
+		eventAction: "USER_DELETED",
+		eventLabel: "Device user deleted",
+		eventCategory: "USER_MANAGEMENT",
+		minor: "clearUserInfo",
+	},
+	{
 		metaId: "log.hikvision.com/Information/addFpByEmployeeNo",
 		eventAction: "FINGERPRINT_ENROLLED",
 		eventLabel: "Fingerprint enrolled",
@@ -379,11 +400,26 @@ const OPERATION_LOG_META = [
 		minor: "addFpByEmployeeNo",
 	},
 	{
-		metaId: "log.hikvision.com/Information/addFpByCard",
+		metaId: "log.hikvision.com/Information/addFpByCardNo",
 		eventAction: "FINGERPRINT_ENROLLED",
 		eventLabel: "Fingerprint enrolled",
 		eventCategory: "ENROLLMENT",
-		minor: "addFpByCard",
+		minor: "addFpByCardNo",
+	},
+	{
+		metaId: "log.hikvision.com/Information/modifyFpByEmployeeNo",
+		eventAction: "FINGERPRINT_UPDATED",
+		eventLabel: "Fingerprint updated",
+		eventCategory: "ENROLLMENT",
+		minor: "modifyFpByEmployeeNo",
+	},
+	// Card enroll leaf is addCard on this family (deleteCard / clearCardInfo invalid).
+	{
+		metaId: "log.hikvision.com/Information/addCard",
+		eventAction: "CARD_ENROLLED",
+		eventLabel: "Card enrolled",
+		eventCategory: "ENROLLMENT",
+		minor: "addCard",
 	},
 ] as const;
 
@@ -427,31 +463,46 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 			address: params.deviceAddress || null,
 		};
 		let created = 0;
+		const pageSize = 30;
+
+		const fetchLogPage = async (metaId: string, searchResultPosition: number) => {
+			const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
+				method: "POST",
+				deviceId,
+				prisma: params.prisma,
+				request: params.req,
+				timeoutMs: 20_000,
+				ensureJsonFormat: false,
+				rawResponse: true,
+				headers: {
+					Accept: "application/xml, text/xml, */*",
+					"Content-Type": "application/xml; charset=UTF-8",
+				},
+				body: buildHikvisionLogSearchXml({
+					searchId: `sdk-op-resolve-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+					startTime,
+					endTime,
+					maxResults: pageSize,
+					searchResultPosition,
+					metaId,
+				}),
+			});
+			return parseHikvisionLogSearchResponse(String((response as any)?.raw || ""));
+		};
 
 		for (const meta of OPERATION_LOG_META) {
 			try {
-				const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
-					method: "POST",
-					deviceId,
-					prisma: params.prisma,
-					request: params.req,
-					timeoutMs: 20_000,
-					ensureJsonFormat: false,
-					rawResponse: true,
-					headers: {
-						Accept: "application/xml, text/xml, */*",
-						"Content-Type": "application/xml; charset=UTF-8",
-					},
-					body: buildHikvisionLogSearchXml({
-						searchId: `sdk-op-resolve-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-						startTime,
-						endTime,
-						maxResults: 30,
-						searchResultPosition: 0,
-						metaId: meta.metaId,
-					}),
-				});
-				const parsed = parseHikvisionLogSearchResponse(String((response as any)?.raw || ""));
+				// First page: learn totalMatches. Prefer newest page so recent enroll/delete
+				// is not lost when the window has hundreds of historical leaf rows.
+				let parsed = await fetchLogPage(meta.metaId, 0);
+				const total =
+					typeof parsed.totalMatches === "number" && Number.isFinite(parsed.totalMatches)
+						? parsed.totalMatches
+						: 0;
+				if (total > pageSize) {
+					const newestPosition = Math.max(0, total - pageSize);
+					parsed = await fetchLogPage(meta.metaId, newestPosition);
+				}
 				for (const row of parsed.rows || []) {
 					const evidence = normalizeHikvisionLogSearchRow(row as any, device);
 					const applied = await applyDevicePersonTokenToEvidence(params.prisma, {
@@ -562,7 +613,22 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 							opaqueToken: opaque,
 						}).catch(() => null);
 					}
-					emitDeviceEventSaved(params.req?.io, createdRow);
+					// Reload with relations so FE socket prepend has name/action/device columns.
+					const fullRow = await params.prisma.deviceEvent.findUnique({
+						where: { id: createdRow.id },
+						include: {
+							device: { select: { id: true, name: true, address: true, port: true, protocol: true } },
+							employee: {
+								select: {
+									id: true,
+									employeeId: true,
+									deviceEmpId: true,
+									person: { select: { personalInfo: true } },
+								},
+							},
+						},
+					});
+					emitDeviceEventSaved(params.req?.io, fullRow || createdRow);
 					created += 1;
 				}
 			} catch (error: any) {

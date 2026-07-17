@@ -1,9 +1,14 @@
 import { expect } from "chai";
+import { readFileSync } from "fs";
+import { join } from "path";
 import {
 	extractPlainEmployeeNoFromUserInfoBody,
 	formatHikvisionPlus08,
 } from "../helper/device-person-token.helper";
-import { isOpaqueHikvisionPersonToken } from "../helper/hikvision-event-contract.helper";
+import {
+	classifyHikvisionLogSearchRow,
+	isOpaqueHikvisionPersonToken,
+} from "../helper/hikvision-event-contract.helper";
 
 describe("device-person-token helper", () => {
 	it("extracts plain employeeNo from UserInfo record body", () => {
@@ -28,5 +33,28 @@ describe("device-person-token helper", () => {
 		expect(isOpaqueHikvisionPersonToken("ckC6ilTx9CdZvFg/hOy23Q==")).to.equal(true);
 		expect(isOpaqueHikvisionPersonToken("1")).to.equal(false);
 		expect(isOpaqueHikvisionPersonToken("ptmap001")).to.equal(false);
+	});
+
+	it("operation-log resolve source uses proven device metaIds (clearUserInfo, not deleteUserInfo)", () => {
+		// Live TEST A 2026-07-17: deleteUserInfo is ISAPI-invalid; clearUserInfo is the delete leaf.
+		const source = readFileSync(
+			join(__dirname, "../helper/device-person-token.helper.ts"),
+			"utf8",
+		);
+		expect(source).to.include("log.hikvision.com/Information/clearUserInfo");
+		expect(source).to.include("log.hikvision.com/Information/addUserInfo");
+		expect(source).to.include("log.hikvision.com/Information/addFpByEmployeeNo");
+		expect(source).to.not.match(/Information\/deleteUserInfo/);
+		expect(source).to.not.match(/Information\/addFaceByEmployeeNo/);
+		expect(source).to.not.match(/Information\/addCardInfo/);
+		expect(classifyHikvisionLogSearchRow({ metaId: "log.hikvision.com/Information/clearUserInfo" }))
+			.to.include({ eventAction: "USER_DELETED" });
+		expect(classifyHikvisionLogSearchRow({ metaId: "log.hikvision.com/Information/addUserInfo" }))
+			.to.include({ eventAction: "USER_CREATED" });
+		expect(
+			classifyHikvisionLogSearchRow({
+				metaId: "log.hikvision.com/Information/addFpByEmployeeNo",
+			}),
+		).to.include({ eventAction: "FINGERPRINT_ENROLLED" });
 	});
 });

@@ -13,6 +13,7 @@ import {
 	captureOpaqueTokenAfterUserWrite,
 	extractDisplayNameFromUserInfoBody,
 	extractPlainEmployeeNoFromUserInfoBody,
+	scheduleOperationLogResolveAfterSdkSignal,
 } from "../../../helper/device-person-token.helper";
 import { controller as callbackController } from "./callback.controller";
 
@@ -57,6 +58,28 @@ export const controller = (prisma: PrismaClient) => {
 				plainEmployeeNo,
 				error?.message || error,
 			);
+		});
+		// Also pull typed DeviceEvents (USER_CREATED / FP / deletes) from ISAPI logSearch
+		// so Device Events FE shows the same truth as FE enroll actions.
+		const deviceName = String(
+			(params.req.body as any)?.deviceName || (params.req as any).device?.name || "",
+		).trim();
+		const deviceAddress = String(
+			(params.req.body as any)?.deviceAddress || (params.req as any).device?.address || "",
+		).trim();
+		scheduleOperationLogResolveAfterSdkSignal({
+			prisma,
+			req: params.req,
+			deviceId,
+			organizationId,
+			deviceName: deviceName || null,
+			deviceAddress: deviceAddress || null,
+			triggerMinor: params.source,
+			settleMs: 1_800,
+			// FE enroll: tighter window around this write.
+			windowBeforeMs: 2 * 60_000,
+			windowAfterMs: 3 * 60_000,
+			cooldownMs: 2_000,
 		});
 	};
 
@@ -599,6 +622,24 @@ export const controller = (prisma: PrismaClient) => {
 					body: deleteData,
 				});
 
+				const deviceId = String(
+					req.body?.deviceId || req.query?.deviceId || "",
+				).trim();
+				const organizationId = getRequestOrganizationId(req);
+				if (deviceId && organizationId) {
+					scheduleOperationLogResolveAfterSdkSignal({
+						prisma,
+						req,
+						deviceId,
+						organizationId,
+						triggerMinor: "USER_INFO_DELETE",
+						settleMs: 1_800,
+						windowBeforeMs: 2 * 60_000,
+						windowAfterMs: 3 * 60_000,
+						cooldownMs: 2_000,
+					});
+				}
+
 				return res
 					.status(200)
 					.json(buildSuccessResponse("UserInfo deleted successfully", data, 200));
@@ -806,6 +847,25 @@ export const controller = (prisma: PrismaClient) => {
 						body: deleteData,
 					},
 				);
+
+				const deviceId = String(
+					req.body?.deviceId || req.query?.deviceId || "",
+				).trim();
+				const organizationId = getRequestOrganizationId(req);
+				if (deviceId && organizationId) {
+					// Fingerprint/face/card deletes on device → typed DeviceEvents via logSearch.
+					scheduleOperationLogResolveAfterSdkSignal({
+						prisma,
+						req,
+						deviceId,
+						organizationId,
+						triggerMinor: "USER_INFO_DETAIL_DELETE",
+						settleMs: 1_800,
+						windowBeforeMs: 2 * 60_000,
+						windowAfterMs: 3 * 60_000,
+						cooldownMs: 2_000,
+					});
+				}
 
 				return res
 					.status(200)
