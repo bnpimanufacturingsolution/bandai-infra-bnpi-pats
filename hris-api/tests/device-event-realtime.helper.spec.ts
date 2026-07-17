@@ -112,7 +112,9 @@ describe("device event realtime helper", () => {
 			"device-events:org:org-1",
 			"device-events:device:device-1",
 		]);
-		expect(emitted).to.have.length(1);
+		// One emit per room so "All devices" (org-only join) and device-scoped tabs both hear it.
+		expect(emitted).to.have.length(2);
 		expect(emitted.every((item) => item.event === "device-event:saved")).to.equal(true);
+		expect(emitted.every((item) => item.payload?.eventId === "event-1")).to.equal(true);
 	});
 });
