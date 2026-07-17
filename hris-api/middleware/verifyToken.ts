@@ -79,6 +79,7 @@ export type AuthFailureKind =
 	| "JWT_SECRET_MISSING"
 	| "INVALID_TOKEN"
 	| "DATASOURCE_CONFIG"
+	| "DATABASE_UNAVAILABLE"
 	| "EMPLOYEE_LOOKUP_FAILED"
 	| "ACCOUNT_DEACTIVATED";
 
@@ -158,6 +159,41 @@ const isJwtVerificationError = (error: unknown) =>
 	error instanceof JsonWebTokenError ||
 	error instanceof NotBeforeError;
 
+/** Prisma/network failures that look like "auth down" but are really DB tunnel/runtime. */
+const isDatabaseConnectivityError = (error: unknown): boolean => {
+	const record = error && typeof error === "object" ? (error as Record<string, unknown>) : {};
+	const code = String(record.code || "").trim().toUpperCase();
+	if (
+		code === "P1001" ||
+		code === "P1002" ||
+		code === "P1017" ||
+		code === "P2024" ||
+		code === "ECONNREFUSED" ||
+		code === "ETIMEDOUT" ||
+		code === "ENOTFOUND" ||
+		code === "ECONNRESET"
+	) {
+		return true;
+	}
+	const message = String(
+		(error instanceof Error ? error.message : "") || record.message || error || "",
+	).toLowerCase();
+	return (
+		message.includes("can't reach database") ||
+		message.includes("cannot reach database") ||
+		message.includes("connection refused") ||
+		message.includes("connection timed out") ||
+		message.includes("server has closed the connection") ||
+		message.includes("database system is starting up") ||
+		message.includes("too many connections") ||
+		message.includes("econnrefused") ||
+		message.includes("etimedout")
+	);
+};
+
+const DATABASE_UNAVAILABLE_MESSAGE =
+	"Database is temporarily unreachable (local Postgres tunnel or DB host). Restore DB access (port 55435 / predev) and retry — your session is not necessarily invalid.";
+
 const normalizeAuthError = (error: unknown): AuthMiddlewareError => {
 	if (error instanceof AuthMiddlewareError) {
 		return error;
@@ -175,12 +211,22 @@ const normalizeAuthError = (error: unknown): AuthMiddlewareError => {
 
 	if (error instanceof PrismaDatasourceConfigError) {
 		return new AuthMiddlewareError(
-			"Authentication is temporarily unavailable",
+			DATABASE_UNAVAILABLE_MESSAGE,
 			"DATASOURCE_CONFIG",
-			500,
+			503,
 			"auth.datasource.invalid",
 			error,
 			error.details,
+		);
+	}
+
+	if (isDatabaseConnectivityError(error)) {
+		return new AuthMiddlewareError(
+			DATABASE_UNAVAILABLE_MESSAGE,
+			"DATABASE_UNAVAILABLE",
+			503,
+			"auth.database.unavailable",
+			error,
 		);
 	}
 

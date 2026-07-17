@@ -188,6 +188,39 @@ const getAsyncErrorMessage = (error: unknown, fallback: string) => {
 	return fallback;
 };
 
+/** Map flaky auth/DB middleware copy into an operator-actionable recovery hint. */
+const getDeviceEventsRecoveryHint = (error: unknown) => {
+	const message = getAsyncErrorMessage(error, "").toLowerCase();
+	if (
+		message.includes("authentication is temporarily unavailable") ||
+		message.includes("database is temporarily unreachable") ||
+		message.includes("postgres") ||
+		message.includes("55435") ||
+		message.includes("econnrefused") ||
+		message.includes("can't reach database") ||
+		message.includes("cannot reach database")
+	) {
+		return {
+			title: "HRIS database is temporarily unreachable",
+			description:
+				"Usually the local DB tunnel (port 55435) dropped. Filters will retry automatically. Run predev or restore DB access — this is not a permanent logout.",
+			kind: "database" as const,
+		};
+	}
+	if (message.includes("invalid token") || message.includes("unauthorized") || message.includes("401")) {
+		return {
+			title: "Session expired",
+			description: "Sign in again to refresh Device Events.",
+			kind: "session" as const,
+		};
+	}
+	return {
+		title: "Saved events could not refresh",
+		description: getAsyncErrorMessage(error, "The recovery refresh will retry automatically."),
+		kind: "other" as const,
+	};
+};
+
 const timeWindowOptions: SelectOption[] = [
 	{ value: "today", label: "Today" },
 	{ value: "yesterday", label: "Yesterday" },
@@ -1493,19 +1526,22 @@ export default function DeviceEventsPage() {
 		if (typeof window === "undefined") return;
 
 		const intervalMs = isConnected && hasRealtimeScope ? 30000 : 10000;
+		// Avoid toast-storm when DB tunnel flaps every poll (same id + min gap).
+		let lastRecoveryToastAt = 0;
 		const refreshFromRecovery = () => {
 			setLastRecoveryRefreshAt(new Date().toISOString());
 			void queryClient.invalidateQueries({ queryKey: [...queryKeys.devices.all, "events"] });
 			void refetch().then((result) => {
-				if (result.error) {
-					toast.warning("Saved events could not refresh", {
-						id: "device-events-recovery-refresh",
-						description: getAsyncErrorMessage(
-							result.error,
-							"The recovery refresh will retry automatically.",
-						),
-					});
-				}
+				if (!result.error) return;
+				const now = Date.now();
+				if (now - lastRecoveryToastAt < 60_000) return;
+				lastRecoveryToastAt = now;
+				const hint = getDeviceEventsRecoveryHint(result.error);
+				toast.warning(hint.title, {
+					id: "device-events-recovery-refresh",
+					description: hint.description,
+					duration: hint.kind === "database" ? 12_000 : 6_000,
+				});
 			});
 		};
 		const handleVisibilityOrFocus = () => {
@@ -1683,6 +1719,7 @@ export default function DeviceEventsPage() {
 	const isEventFilterUpdating =
 		viewMode === "saved" && isFetchingSaved && (isSavedPlaceholderData || Boolean(data));
 	const activeError = viewMode === "live" ? liveError || savedError : savedError;
+	const activeErrorHint = activeError ? getDeviceEventsRecoveryHint(activeError) : null;
 	const countSavedStatus = (...statuses: string[]) =>
 		statuses.reduce((total, currentStatus) => {
 			const value = savedStatusCounts[currentStatus as keyof typeof savedStatusCounts];
@@ -3283,9 +3320,18 @@ export default function DeviceEventsPage() {
 				</div>
 			)}
 
-			{activeError && (
-				<div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-					{activeError.message}
+			{activeError && activeErrorHint && (
+				<div
+					className={
+						activeErrorHint.kind === "database"
+							? "rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+							: "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+					}>
+					<p className="font-semibold">{activeErrorHint.title}</p>
+					<p className="mt-0.5 text-xs opacity-90">{activeErrorHint.description}</p>
+					{activeError.message && activeErrorHint.kind === "other" ? (
+						<p className="mt-1 text-xs opacity-80">{activeError.message}</p>
+					) : null}
 				</div>
 			)}
 
