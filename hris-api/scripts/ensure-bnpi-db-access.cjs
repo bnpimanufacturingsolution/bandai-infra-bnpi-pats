@@ -158,9 +158,11 @@ async function main() {
 		environment === "dev" &&
 		process.env.PROJECT_TRUTH_DEV_DB_MODE !== "docker-dev-db"
 	) {
-		ensureProjectTruthRemoteLanForward();
+		// FAST PATH (target <1s): probe first. If 127.0.0.1:55435 already answers
+		// Postgres wire, write runtime override and return — do NOT re-run SSH/LAN
+		// bootstrap every npm run dev when you already have the tunnel.
 		console.log(
-			`[bnpi-db-access] STEP probe: checking Postgres wire on 127.0.0.1:${preferredDevK8sPort}...`,
+			`[bnpi-db-access] STEP probe-first: Postgres wire on 127.0.0.1:${preferredDevK8sPort}...`,
 		);
 		const probeT0 = Date.now();
 		let devK8sForwardHost = await findReachableDevK8sForwardHost({
@@ -168,8 +170,48 @@ async function main() {
 			remoteLanHost,
 		});
 		console.log(
-			`[bnpi-db-access] STEP probe: host=${devK8sForwardHost || "none"} in ${((Date.now() - probeT0) / 1000).toFixed(1)}s`,
+			`[bnpi-db-access] STEP probe-first: host=${devK8sForwardHost || "none"} in ${((Date.now() - probeT0) / 1000).toFixed(1)}s`,
 		);
+
+		const writeDevK8sRuntime = () => {
+			const devK8sDatasource = {
+				...datasource,
+				hostname: "127.0.0.1",
+				port: preferredDevK8sPort,
+				raw: new URL(
+					`postgresql://${datasource.username}:${datasource.password}@127.0.0.1:${preferredDevK8sPort}${datasource.pathname}${datasource.search}${datasource.hash}`,
+				).toString(),
+			};
+			fs.writeFileSync(
+				runtimeEnvPath,
+				renderRuntimeOverride({
+					environment,
+					resolution: "local-k8s-dev-forward",
+					selectedDatasource: devK8sDatasource,
+					selectedVmHost: null,
+					needsBnpiForward: false,
+				}),
+				"utf8",
+			);
+			console.log(
+				`[bnpi-db-access] Resolved DEV datasource to shared K3s runtime at 127.0.0.1:${preferredDevK8sPort}.`,
+			);
+			console.log(
+				`[bnpi-db-access] DONE (fast path) in ${((Date.now() - mainT0) / 1000).toFixed(1)}s`,
+			);
+		};
+
+		if (devK8sForwardHost === "127.0.0.1") {
+			writeDevK8sRuntime();
+			return;
+		}
+
+		// SLOW PATH only when tunnel is missing: remote LAN + k8s forward scripts.
+		ensureProjectTruthRemoteLanForward();
+		devK8sForwardHost = await findReachableDevK8sForwardHost({
+			port: preferredDevK8sPort,
+			remoteLanHost,
+		});
 
 		// Always bootstrap localhost:55435 when missing, even if 10.184.37.19:55435
 		// already answers (remote-LAN loopback alias). Prisma must use 127.0.0.1.
@@ -208,31 +250,7 @@ async function main() {
 		}
 
 		if (devK8sForwardHost === "127.0.0.1") {
-			const devK8sDatasource = {
-				...datasource,
-				hostname: "127.0.0.1",
-				port: preferredDevK8sPort,
-				raw: new URL(
-					`postgresql://${datasource.username}:${datasource.password}@127.0.0.1:${preferredDevK8sPort}${datasource.pathname}${datasource.search}${datasource.hash}`,
-				).toString(),
-			};
-			fs.writeFileSync(
-				runtimeEnvPath,
-				renderRuntimeOverride({
-					environment,
-					resolution: "local-k8s-dev-forward",
-					selectedDatasource: devK8sDatasource,
-					selectedVmHost: null,
-					needsBnpiForward: false,
-				}),
-				"utf8",
-			);
-			console.log(
-				`[bnpi-db-access] Resolved DEV datasource to shared K3s runtime at 127.0.0.1:${preferredDevK8sPort}.`,
-			);
-			console.log(
-				`[bnpi-db-access] DONE in ${((Date.now() - mainT0) / 1000).toFixed(1)}s`,
-			);
+			writeDevK8sRuntime();
 			return;
 		}
 

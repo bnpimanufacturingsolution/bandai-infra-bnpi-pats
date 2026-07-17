@@ -120,6 +120,26 @@ docker run --rm --network host \
   project-truth-hikvision-linux-trial:local --mode isapi-time
 ```
 
+## Opaque log ID SDK dry-run probe (HCNetSDK)
+
+Read-only C++ probe that logs in with HCNetSDK, pulls UserInfo + logSearch + AcsEvent
+via `NET_DVR_STDXMLConfig`, tries `NET_DVR_FindDVRLog_V50`, and compares opaque
+`LogAddInfo.EmployeeNo` tokens to plain inventory `employeeNo`.
+
+```powershell
+# From Windows repo root (agent-owned: export credentials, stage SDK, build, run, evidence)
+$env:FORCE_DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public'
+powershell -File vendor/hikvision-linux/scripts/run-opaque-id-sdk-probe.ps1
+```
+
+Sources:
+
+- `opaque_id_sdk_probe.cpp` — dry-run probe (no device writes)
+- `Dockerfile.opaque-id-sdk-probe` — debian + g++ + local linux64 SDK
+- `scripts/export-test-a-device-spec.cjs` — writes `.runtime/opaque-id-sdk-probe/device.spec`
+- Evidence lands under `.runtime/opaque-id-sdk-probe/<stamp>/`
+
+
 Use host networking for the first VM proof so the container sees the same LAN
 routing as the VM.
 

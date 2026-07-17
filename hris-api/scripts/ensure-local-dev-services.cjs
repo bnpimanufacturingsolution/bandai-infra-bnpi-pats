@@ -351,6 +351,18 @@ async function main() {
 		return;
 	}
 
+	// Tunnel ports (K3s DEV forward, compose-on-VM publish) are not local Docker
+	// databases. Probing/creating schema via docker exec would hang or wrong-DB.
+	const tunnelPorts = new Set([55435, 15432, 15433, 15434]);
+	if (tunnelPorts.has(Number(datasource.port))) {
+		const up = await canConnect(datasource.port, datasource.hostname);
+		console.log(
+			`[local-services] Postgres tunnel ${datasource.hostname}:${datasource.port} ${up ? "reachable" : "NOT reachable"} — skip local Docker bootstrap.`,
+		);
+		console.log("[local-services] Hikvision watcher is Linux/VM managed and is not started on this host.");
+		return;
+	}
+
 	if (await canConnect(datasource.port, datasource.hostname)) {
 		console.log(`[local-services] Postgres is reachable at ${datasource.hostname}:${datasource.port}.`);
 		ensureLocalDatabase(datasource);

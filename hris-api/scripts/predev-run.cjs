@@ -22,42 +22,51 @@ const logPath = path.join(runtimeDir, "latest.log");
 const statusPath = path.join(runtimeDir, "latest-status.json");
 const historyDir = path.join(runtimeDir, "history");
 
+// All steps still run every predev. Warm path targets 3–8s total via probe-first
+// inside each script (no re-SSH when tunnels already healthy).
 const STEPS = [
 	{
 		id: "cleanup-emitted-js",
 		label: "Clean emitted .js next to .ts",
 		script: "cleanup-emitted-js.cjs",
-		typical: "1–5s",
+		typical: "<1s warm / 1–5s cold",
+		// phase A — independent of others
+		phase: "A",
 	},
 	{
 		id: "ensure-prisma-client",
 		label: "Ensure Prisma client generated",
 		script: "ensure-prisma-client.cjs",
-		typical: "1–10s",
+		typical: "<1s warm / 1–10s cold",
+		phase: "A",
 	},
 	{
 		id: "ensure-dev-port-ownership",
 		label: "Claim free port 3001 / kill stale API watchers",
 		script: "ensure-dev-port-ownership.cjs",
-		typical: "1–15s",
+		typical: "1–3s",
+		phase: "B",
 	},
 	{
 		id: "ensure-bnpi-db-access",
-		label: "DB tunnel (remote LAN + K3s 55435) — often the slow step",
+		label: "DB tunnel (probe 55435 first; SSH only if missing)",
 		script: "ensure-bnpi-db-access.cjs",
-		typical: "10–90s if SSH/Cloudflare cold; ~1s if tunnel already up",
+		typical: "<1s warm / 10–90s cold",
+		phase: "C",
 	},
 	{
 		id: "ensure-local-dev-services",
 		label: "Local postgres/services if needed",
 		script: "ensure-local-dev-services.cjs",
-		typical: "1–30s",
+		typical: "<1s on K3s tunnel / 1–30s docker",
+		phase: "D",
 	},
 	{
 		id: "ensure-hikvision-vm-bridge",
-		label: "TEST A SSH reverse tunnel for Live capture (Windows)",
+		label: "TEST A SSH reverse tunnel for Live capture",
 		script: "ensure-hikvision-vm-bridge.cjs",
-		typical: "5–40s if SSH needed; skip if disabled",
+		typical: "<2s warm / 5–40s cold",
+		phase: "D",
 	},
 ];
 
@@ -157,6 +166,76 @@ function runStep(step, index, total, runState) {
 	return code;
 }
 
+/** Run steps that share a phase in parallel (still all execute). */
+function runPhaseParallel(steps, indexOffset, total, runState) {
+	const { spawn } = require("child_process");
+	return new Promise((resolve) => {
+		if (steps.length === 1) {
+			resolve(runStep(steps[0], indexOffset, total, runState));
+			return;
+		}
+
+		logLine(
+			`[predev] PHASE parallel: ${steps.map((s) => s.id).join(" + ")}`,
+		);
+		const results = [];
+		let remaining = steps.length;
+
+		steps.forEach((step, i) => {
+			const n = indexOffset + i + 1;
+			const scriptPath = path.join(__dirname, step.script);
+			const startedAt = Date.now();
+			logLine(
+				`[predev ${n}/${total}] START  ${step.id} — ${step.label} (parallel)`,
+			);
+
+			if (!fs.existsSync(scriptPath)) {
+				results[i] = 0;
+				runState.steps.push({
+					id: step.id,
+					status: "skipped",
+					reason: "missing_script",
+					ms: 0,
+				});
+				remaining -= 1;
+				if (remaining === 0) resolve(Math.max(0, ...results));
+				return;
+			}
+
+			const child = spawn(process.execPath, [scriptPath], {
+				cwd: apiRoot,
+				stdio: "inherit",
+				windowsHide: true,
+				env: process.env,
+			});
+			child.on("exit", (code) => {
+				const ms = Date.now() - startedAt;
+				const exitCode = code == null ? 1 : code;
+				results[i] = exitCode;
+				if (exitCode === 0) {
+					logLine(
+						`[predev ${n}/${total}] OK     ${step.id} — ${(ms / 1000).toFixed(1)}s`,
+					);
+					runState.steps.push({ id: step.id, status: "ok", ms, exitCode: 0 });
+				} else {
+					logLine(
+						`[predev ${n}/${total}] FAIL   ${step.id} — exit ${exitCode} after ${(ms / 1000).toFixed(1)}s`,
+					);
+					runState.steps.push({
+						id: step.id,
+						status: "fail",
+						ms,
+						exitCode,
+					});
+				}
+				writeStatus(runState);
+				remaining -= 1;
+				if (remaining === 0) resolve(Math.max(...results.map((c) => c || 0)));
+			});
+		});
+	});
+}
+
 function main() {
 	if (process.env.HRIS_SKIP_PREDEV === "true") {
 		console.log("[predev] Skipped because HRIS_SKIP_PREDEV=true");
@@ -198,52 +277,78 @@ function main() {
 	);
 
 	const t0 = Date.now();
-	let failed = null;
 
-	for (let i = 0; i < STEPS.length; i++) {
-		const code = runStep(STEPS[i], i, STEPS.length, runState);
-		if (code !== 0) {
-			failed = { step: STEPS[i], code };
-			break;
+	(async () => {
+		let failed = null;
+		const total = STEPS.length;
+		const phases = [];
+		for (const step of STEPS) {
+			const last = phases[phases.length - 1];
+			if (!last || last.phase !== step.phase) {
+				phases.push({ phase: step.phase, steps: [step] });
+			} else {
+				last.steps.push(step);
+			}
 		}
-	}
 
-	const totalSec = ((Date.now() - t0) / 1000).toFixed(1);
+		let indexOffset = 0;
+		for (const group of phases) {
+			const code =
+				group.steps.length > 1
+					? await runPhaseParallel(group.steps, indexOffset, total, runState)
+					: runStep(group.steps[0], indexOffset, total, runState);
+			indexOffset += group.steps.length;
+			if (code !== 0) {
+				failed = { step: group.steps[0], code };
+				break;
+			}
+		}
 
-	if (failed) {
-		runState.status = "failed";
+		const totalSec = ((Date.now() - t0) / 1000).toFixed(1);
+
+		if (failed) {
+			runState.status = "failed";
+			runState.finishedAt = nowIso();
+			runState.totalMs = Date.now() - t0;
+			runState.failedStep = failed.step.id;
+			writeStatus(runState);
+			banner(
+				`[predev] FAILED at ${failed.step.id} (exit ${failed.code}) after ${totalSec}s`,
+			);
+			logLine(`[predev] See log: ${logPath}`);
+			try {
+				fs.copyFileSync(logPath, historyLog);
+			} catch {
+				/* ignore */
+			}
+			process.exit(failed.code || 1);
+		}
+
+		runState.status = "ok";
 		runState.finishedAt = nowIso();
 		runState.totalMs = Date.now() - t0;
-		runState.failedStep = failed.step.id;
 		writeStatus(runState);
-		banner(
-			`[predev] FAILED at ${failed.step.id} (exit ${failed.code}) after ${totalSec}s`,
+
+		banner(`[predev] ALL OK in ${totalSec}s — starting API watcher next`);
+		logLine(
+			`[predev] Summary: ${runState.steps.map((s) => `${s.id}=${s.status}/${(s.ms / 1000).toFixed(1)}s`).join(" · ")}`,
 		);
-		logLine(`[predev] See log: ${logPath}`);
+		if (Date.now() - t0 > 8000) {
+			logLine(
+				"[predev] Tip: >8s usually means cold SSH/Cloudflare. Next run should be 3–8s if 55435 + bridge stay up.",
+			);
+		}
 		try {
 			fs.copyFileSync(logPath, historyLog);
+			logLine(`[predev] History copy: ${path.relative(repoRoot, historyLog)}`);
 		} catch {
 			/* ignore */
 		}
-		process.exit(failed.code || 1);
-	}
-
-	runState.status = "ok";
-	runState.finishedAt = nowIso();
-	runState.totalMs = Date.now() - t0;
-	writeStatus(runState);
-
-	banner(`[predev] ALL OK in ${totalSec}s — starting API watcher next`);
-	logLine(
-		`[predev] Summary: ${runState.steps.map((s) => `${s.id}=${s.status}/${(s.ms / 1000).toFixed(1)}s`).join(" · ")}`,
-	);
-	try {
-		fs.copyFileSync(logPath, historyLog);
-		logLine(`[predev] History copy: ${path.relative(repoRoot, historyLog)}`);
-	} catch {
-		/* ignore */
-	}
-	process.exit(0);
+		process.exit(0);
+	})().catch((error) => {
+		console.error(`[predev] ${error instanceof Error ? error.message : String(error)}`);
+		process.exit(1);
+	});
 }
 
 main();
