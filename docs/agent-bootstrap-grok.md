@@ -46,6 +46,8 @@ Bootstrap: open WWG handoff + current-task + project-truth-summary, Current-Stat
 - For **Sync logs → Device events journey honesty** (employee tokens, progress
   estimate vs saved, non-confusing modal):  
   `docs/00-product/AGENT-PROMPT-sync-logs-user-journey-truth.md`
+- For **device truth matrix** (users on device now + this week events + willAdd):  
+  `docs/00-product/AGENT-PROMPT-device-truth-matrix-week.md`
 
 ## Limits (honest)
 
