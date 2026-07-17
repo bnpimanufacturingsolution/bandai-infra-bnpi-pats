@@ -3,7 +3,10 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import {
 	buildEmployeeDisplayName,
+	correlateOpaqueToPlainByInventoryDelta,
+	extractOpaqueEmployeeNoFromLogEvidence,
 	extractPlainEmployeeNoFromUserInfoBody,
+	extractPlainUserFromUserInfoRecord,
 	formatHikvisionPlus08,
 } from "../helper/device-person-token.helper";
 import {
@@ -44,6 +47,68 @@ describe("device-person-token helper", () => {
 		).to.equal("Juan D Cruz");
 		expect(buildEmployeeDisplayName({ person: { personalInfo: {} } })).to.equal(null);
 		expect(buildEmployeeDisplayName(null)).to.equal(null);
+	});
+
+	it("parses opaque from proven logSearch LogAddInfo shape (panel enroll)", () => {
+		// Real TEST A panel create/FP 2026-07-17: plain typed "14" → opaque in log only.
+		const opaque = "EmfPTja5gq/kmy/CI1wDHA==";
+		expect(
+			extractOpaqueEmployeeNoFromLogEvidence({
+				employeeNo: opaque,
+				information: JSON.stringify({
+					LogAddInfo: { EmployeeNo: opaque, ErrorMsg: "OK" },
+				}),
+			}),
+		).to.equal(opaque);
+		expect(
+			extractOpaqueEmployeeNoFromLogEvidence({
+				information: `{\n\t"LogAddInfo":\t{\n\t\t"EmployeeNo":\t"${opaque}",\n\t\t"FingerId":\t1,\n\t\t"ErrorMsg":\t"OK"\n\t}\n}`,
+			}),
+		).to.equal(opaque);
+		expect(extractOpaqueEmployeeNoFromLogEvidence({ employeeNo: "14" })).to.equal(null);
+	});
+
+	it("parses plain UserInfo/Search person shape", () => {
+		expect(
+			extractPlainUserFromUserInfoRecord({
+				employeeNo: "14",
+				name: "Panel User",
+				numOfFP: 1,
+				userType: "normal",
+			}),
+		).to.deep.equal({ employeeNo: "14", displayName: "Panel User", numOfFP: 1 });
+		expect(
+			extractPlainUserFromUserInfoRecord({
+				employeeNo: "EmfPTja5gq/kmy/CI1wDHA==",
+				name: "x",
+			}),
+		).to.equal(null);
+	});
+
+	it("correlates single new plain device user to single unmapped opaque (panel 14 case)", () => {
+		const hit = correlateOpaqueToPlainByInventoryDelta({
+			devicePlains: [
+				{ employeeNo: "1", displayName: "ernest" },
+				{ employeeNo: "14", displayName: "Panel User" },
+			],
+			knownPlains: ["1", "01515"],
+			unmappedOpaques: ["EmfPTja5gq/kmy/CI1wDHA=="],
+		});
+		expect(hit).to.deep.equal({
+			opaqueToken: "EmfPTja5gq/kmy/CI1wDHA==",
+			employeeNo: "14",
+			displayName: "Panel User",
+		});
+		expect(
+			correlateOpaqueToPlainByInventoryDelta({
+				devicePlains: [
+					{ employeeNo: "14", displayName: "A" },
+					{ employeeNo: "15", displayName: "B" },
+				],
+				knownPlains: [],
+				unmappedOpaques: ["EmfPTja5gq/kmy/CI1wDHA=="],
+			}),
+		).to.equal(null);
 	});
 
 	it("operation-log resolve source uses proven device metaIds (clearUserInfo, not deleteUserInfo)", () => {

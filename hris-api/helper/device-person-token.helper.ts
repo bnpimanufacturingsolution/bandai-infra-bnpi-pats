@@ -21,6 +21,7 @@ export type DevicePersonTokenSource =
 	| "USER_INFO_RECORD"
 	| "USER_INFO_MODIFY"
 	| "FINGERPRINT_ENROLL"
+	| "PANEL_INVENTORY_DELTA"
 	| "MANUAL"
 	| string;
 
@@ -43,6 +44,86 @@ export const extractDisplayNameFromUserInfoBody = (body: unknown): string | null
 	const root = (body as any)?.UserInfo || body;
 	const name = String(root?.name || "").trim();
 	return name || null;
+};
+
+/**
+ * Proven logSearch leaf shape (TEST A UI panel 2026-07-17):
+ *   LogAddInfo.EmployeeNo = opaque token (e.g. "EmfPTja5gq/kmy/CI1wDHA==")
+ *   operator userName often "UI" for panel enroll
+ * Plain device person id is NOT in the log — only in UserInfo/Search.
+ */
+export const extractOpaqueEmployeeNoFromLogEvidence = (evidence: any): string | null => {
+	const direct = String(
+		evidence?.employeeNo ||
+			evidence?.raw?.employeeNo ||
+			evidence?.rawEvidence?.employeeNo ||
+			"",
+	).trim();
+	if (direct && isOpaqueHikvisionPersonToken(direct)) return direct;
+	const info = String(
+		evidence?.information ||
+			evidence?.raw?.information ||
+			evidence?.rawEvidence?.information ||
+			"",
+	).trim();
+	if (info) {
+		try {
+			const parsed = JSON.parse(info);
+			const opaque = String(
+				parsed?.LogAddInfo?.EmployeeNo || parsed?.logAddInfo?.EmployeeNo || "",
+			).trim();
+			if (opaque && isOpaqueHikvisionPersonToken(opaque)) return opaque;
+		} catch {
+			/* ignore */
+		}
+	}
+	return null;
+};
+
+/** Proven UserInfo/Search person shape: plain employeeNo + name (+ numOfFP…). */
+export const extractPlainUserFromUserInfoRecord = (
+	rawUser: any,
+): { employeeNo: string; displayName: string | null; numOfFP: number } | null => {
+	const employeeNo = String(
+		rawUser?.employeeNo || rawUser?.employeeNoString || rawUser?.userId || "",
+	).trim();
+	if (!employeeNo || isOpaqueHikvisionPersonToken(employeeNo)) return null;
+	const displayName = String(rawUser?.name || rawUser?.employeeName || "").trim() || null;
+	const numOfFP = Number(rawUser?.numOfFP ?? rawUser?.numOfFingerPrint ?? 0) || 0;
+	return { employeeNo, displayName, numOfFP };
+};
+
+/**
+ * Panel enroll correlation (no write-time map):
+ * - knownPlains = DeviceUser / DevicePersonToken plain ids already in HRIS
+ * - devicePlains = plain ids currently on device (UserInfo/Search)
+ * - unmappedOpaques = opaque tokens from recent lifecycle logs without a map
+ * If exactly one new plain and one unmapped opaque in the same resolve window → map them.
+ * Reference case: plain "14" + opaque "EmfPTja5gq/kmy/CI1wDHA==".
+ */
+export const correlateOpaqueToPlainByInventoryDelta = (input: {
+	devicePlains: Array<{ employeeNo: string; displayName: string | null }>;
+	knownPlains: string[];
+	unmappedOpaques: string[];
+}): { opaqueToken: string; employeeNo: string; displayName: string | null } | null => {
+	const known = new Set(
+		(input.knownPlains || []).map((v) => String(v || "").trim()).filter(Boolean),
+	);
+	const newPlains = (input.devicePlains || []).filter(
+		(p) => p.employeeNo && !known.has(p.employeeNo),
+	);
+	const opaques = Array.from(
+		new Set((input.unmappedOpaques || []).map((v) => String(v || "").trim()).filter(Boolean)),
+	);
+	if (newPlains.length === 1 && opaques.length === 1) {
+		return {
+			opaqueToken: opaques[0],
+			employeeNo: newPlains[0].employeeNo,
+			displayName: newPlains[0].displayName,
+		};
+	}
+	// FP-only on existing plain: no new plain, but exactly one opaque and we cannot invent id.
+	return null;
 };
 
 export const upsertDevicePersonToken = async (
@@ -254,6 +335,248 @@ export const resolveDevicePersonToken = async (
 		employeeNo: String(row.employeeNo),
 		displayName: row.displayName ? String(row.displayName) : null,
 		opaqueToken: String(row.opaqueToken),
+	};
+};
+
+/** Page UserInfo/Search for plain device persons (panel enroll reverse-map input). */
+export const fetchDeviceUserInfoCandidates = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	deviceId: string;
+	maxPages?: number;
+	pageSize?: number;
+}): Promise<Array<{ employeeNo: string; displayName: string | null; numOfFP: number }>> => {
+	const pageSize = Math.min(Math.max(Number(params.pageSize) || 50, 1), 100);
+	const maxPages = Math.min(Math.max(Number(params.maxPages) || 4, 1), 10);
+	const out: Array<{ employeeNo: string; displayName: string | null; numOfFP: number }> = [];
+	let position = 0;
+	for (let page = 0; page < maxPages; page += 1) {
+		const response = await hikvisionFetch("/ISAPI/AccessControl/UserInfo/Search?format=json", {
+			method: "POST",
+			deviceId: params.deviceId,
+			prisma: params.prisma,
+			request: params.req,
+			timeoutMs: 15_000,
+			body: {
+				UserInfoSearchCond: {
+					searchID: `panel-delta-${Date.now()}-${page}`,
+					searchResultPosition: position,
+					maxResults: pageSize,
+				},
+			},
+		});
+		const search =
+			(response as any)?.UserInfoSearch ||
+			(response as any)?.data?.UserInfoSearch ||
+			{};
+		const list = Array.isArray(search?.UserInfo)
+			? search.UserInfo
+			: search?.UserInfo
+				? [search.UserInfo]
+				: [];
+		for (const raw of list) {
+			const plain = extractPlainUserFromUserInfoRecord(raw);
+			if (plain) out.push(plain);
+		}
+		const num = Number(search?.numOfMatches || list.length || 0) || 0;
+		const status = String(search?.responseStatusStrg || "").toUpperCase();
+		position += num > 0 ? num : list.length;
+		if (status !== "MORE" || list.length === 0) break;
+	}
+	const map = new Map<string, { employeeNo: string; displayName: string | null; numOfFP: number }>();
+	for (const row of out) map.set(row.employeeNo, row);
+	return Array.from(map.values());
+};
+
+/**
+ * Panel path: map unmapped opaque log tokens → plain UserInfo ids via inventory delta,
+ * persist DevicePersonToken, backfill recent lifecycle DeviceEvents, upsert DeviceUser.
+ * Reference: panel typed "14" → log opaque EmfPTja5gq/kmy/CI1wDHA== (TEST A 2026-07-17).
+ */
+export const resolveOpaqueViaDeviceUserInventoryDelta = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	organizationId: string;
+	deviceId: string;
+	unmappedOpaques: string[];
+	source?: DevicePersonTokenSource;
+}): Promise<{
+	mapped: Array<{ opaqueToken: string; employeeNo: string; displayName: string | null }>;
+	backfilledEvents: number;
+}> => {
+	const organizationId = String(params.organizationId || "").trim();
+	const deviceId = String(params.deviceId || "").trim();
+	const opaques = Array.from(
+		new Set((params.unmappedOpaques || []).map((v) => String(v || "").trim()).filter(Boolean)),
+	).filter((v) => isOpaqueHikvisionPersonToken(v));
+	if (!organizationId || !deviceId || opaques.length === 0) {
+		return { mapped: [], backfilledEvents: 0 };
+	}
+
+	const stillUnmapped: string[] = [];
+	for (const opaque of opaques) {
+		const existing = await resolveDevicePersonToken(params.prisma, {
+			organizationId,
+			deviceId,
+			opaqueToken: opaque,
+		});
+		if (!existing?.employeeNo) stillUnmapped.push(opaque);
+	}
+	if (stillUnmapped.length === 0) return { mapped: [], backfilledEvents: 0 };
+
+	let devicePlains: Array<{ employeeNo: string; displayName: string | null }> = [];
+	try {
+		const candidates = await fetchDeviceUserInfoCandidates({
+			prisma: params.prisma,
+			req: params.req,
+			deviceId,
+			maxPages: 6,
+			pageSize: 50,
+		});
+		devicePlains = candidates.map((c) => ({
+			employeeNo: c.employeeNo,
+			displayName: c.displayName,
+		}));
+	} catch (error: any) {
+		console.warn(
+			"[device-person-token] UserInfo/Search delta failed",
+			deviceId,
+			error?.message || error,
+		);
+		return { mapped: [], backfilledEvents: 0 };
+	}
+
+	const knownTokenPlains = await params.prisma.devicePersonToken.findMany({
+		where: { organizationId, deviceId },
+		select: { employeeNo: true },
+	});
+	const knownUsers = await params.prisma.deviceUser.findMany({
+		where: { organizationId, deviceId },
+		select: { vendorUserId: true, employeeNo: true },
+	});
+	const knownPlains = [
+		...knownTokenPlains.map((r: any) => String(r.employeeNo || "").trim()),
+		...knownUsers.map((r: any) => String(r.vendorUserId || r.employeeNo || "").trim()),
+	].filter(Boolean);
+
+	const correlated = correlateOpaqueToPlainByInventoryDelta({
+		devicePlains,
+		knownPlains,
+		unmappedOpaques: stillUnmapped,
+	});
+	if (!correlated) {
+		return { mapped: [], backfilledEvents: 0 };
+	}
+
+	await upsertDevicePersonToken(params.prisma, {
+		organizationId,
+		deviceId,
+		opaqueToken: correlated.opaqueToken,
+		employeeNo: correlated.employeeNo,
+		displayName: correlated.displayName,
+		source: params.source || "PANEL_INVENTORY_DELTA",
+	});
+
+	const deviceUser = await upsertDeviceUserInventoryStub(params.prisma, {
+		organizationId,
+		deviceId,
+		employeeNo: correlated.employeeNo,
+		displayName: correlated.displayName,
+		opaqueToken: correlated.opaqueToken,
+	}).catch(() => null);
+
+	const linked = await resolveLinkedEmployeeForDevicePerson(params.prisma, {
+		organizationId,
+		employeeNo: correlated.employeeNo,
+	}).catch(() => null);
+
+	const recent = await params.prisma.deviceEvent.findMany({
+		where: {
+			organizationId,
+			deviceId,
+			eventAction: {
+				in: [
+					"USER_CREATED",
+					"USER_UPDATED",
+					"USER_DELETED",
+					"FINGERPRINT_ENROLLED",
+					"FINGERPRINT_UPDATED",
+					"FINGERPRINT_DELETED",
+					"CARD_ENROLLED",
+				],
+			},
+			receivedAt: { gte: new Date(Date.now() - 30 * 60_000) },
+		},
+		orderBy: { receivedAt: "desc" },
+		take: 40,
+	});
+	let backfilledEvents = 0;
+	for (const event of recent) {
+		const payload = (event.payload as any) || {};
+		const eventOpaque = String(
+			payload.opaquePersonToken ||
+				payload?.rawEvidence?.employeeNo ||
+				payload?.rawEvidence?.raw?.employeeNo ||
+				"",
+		).trim();
+		const needs =
+			eventOpaque === correlated.opaqueToken ||
+			(!event.employeeNo &&
+				String(payload.opaquePersonToken || "").trim() === correlated.opaqueToken);
+		if (!needs) continue;
+		const nextPayload = {
+			...payload,
+			opaquePersonToken: correlated.opaqueToken,
+			resolvedEmployeeNo: correlated.employeeNo,
+			resolvedDisplayName:
+				correlated.displayName || linked?.displayName || payload.resolvedDisplayName || null,
+			personTokenResolved: true,
+			personTokenSource: "PANEL_INVENTORY_DELTA",
+			notHrisEmployee: !linked?.id,
+		};
+		const updated = await params.prisma.deviceEvent.update({
+			where: { id: event.id },
+			data: {
+				employeeNo: correlated.employeeNo,
+				employeeId: linked?.id || deviceUser?.employeeId || event.employeeId || null,
+				deviceUserId: deviceUser?.id || event.deviceUserId || null,
+				status: linked?.id || deviceUser?.employeeId ? "MATCHED" : "UNMATCHED",
+				payload: nextPayload,
+			},
+			include: {
+				device: {
+					select: { id: true, name: true, address: true, port: true, protocol: true },
+				},
+				deviceUser: {
+					select: {
+						id: true,
+						vendorUserId: true,
+						employeeNo: true,
+						displayName: true,
+						employeeId: true,
+						vendorMetadata: true,
+					},
+				},
+				employee: {
+					select: {
+						id: true,
+						employeeId: true,
+						deviceEmpId: true,
+						person: { select: { personalInfo: true } },
+					},
+				},
+			},
+		});
+		emitDeviceEventSaved(params.req?.io, updated);
+		backfilledEvents += 1;
+	}
+
+	console.log(
+		`[device-person-token] panel inventory delta mapped opaque→${correlated.employeeNo} device=${deviceId} backfilled=${backfilledEvents}`,
+	);
+	return {
+		mapped: [correlated],
+		backfilledEvents,
 	};
 };
 
@@ -544,10 +867,13 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 	// Fast first pass (~0.4s) once device leaf exists → target 1–2s UI with parallel logSearch.
 	// Later passes cover mid-enroll when major=3 fires before addUserInfo/addFp leaves.
 	const settleMs = params.settleMs ?? 400;
+	// Denser passes: panel leaves often land ~20–40s after first major=3 SYNC_SIGNAL.
 	const retryDelaysMs =
 		params.retryDelaysMs ??
 		(settleMs > 0
-			? Array.from(new Set([settleMs, 2_500, 8_000, 20_000, 45_000])).sort((a, b) => a - b)
+			? Array.from(new Set([settleMs, 2_500, 8_000, 18_000, 30_000, 45_000])).sort(
+					(a, b) => a - b,
+				)
 			: [0]);
 	const windowBeforeMs = params.windowBeforeMs ?? 15 * 60_000;
 	const windowAfterMs = params.windowAfterMs ?? 3 * 60_000;
@@ -565,6 +891,7 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 			address: params.deviceAddress || null,
 		};
 		let created = 0;
+		const unmappedOpaquesThisPass: string[] = [];
 		const pageSize = 30;
 
 		const fetchLogPage = async (metaId: string, searchResultPosition: number) => {
@@ -633,6 +960,7 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 						String((applied as any).resolvedDisplayName || "").trim() || null;
 					const opaque =
 						(applied as any).opaquePersonToken ||
+						extractOpaqueEmployeeNoFromLogEvidence(evidence) ||
 						(isOpaqueHikvisionPersonToken(employeeNo) ? employeeNo : null);
 					if (employeeNo && isOpaqueHikvisionPersonToken(employeeNo)) {
 						const tok = await resolveDevicePersonToken(params.prisma, {
@@ -644,6 +972,8 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 							employeeNo = tok.employeeNo;
 							if (tok.displayName) resolvedDisplayName = tok.displayName;
 						} else {
+							// Panel enroll: opaque only until inventory delta maps it (do not invent plain id).
+							if (opaque) unmappedOpaquesThisPass.push(opaque);
 							employeeNo = "";
 						}
 					}
@@ -801,6 +1131,32 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 						error?.message || error,
 					);
 				}
+			}
+		}
+
+		// Panel create/FP: reverse-map opaque log tokens → plain UserInfo id (e.g. "14") when
+		// exactly one new device person appears vs known inventory.
+		if (unmappedOpaquesThisPass.length > 0) {
+			try {
+				const delta = await resolveOpaqueViaDeviceUserInventoryDelta({
+					prisma: params.prisma,
+					req: params.req,
+					organizationId,
+					deviceId,
+					unmappedOpaques: unmappedOpaquesThisPass,
+					source: "PANEL_INVENTORY_DELTA",
+				});
+				if (delta.backfilledEvents > 0) {
+					console.log(
+						`[device-person-token] panel delta backfilled ${delta.backfilledEvents} event(s) pass=${passLabel}`,
+					);
+				}
+			} catch (error: any) {
+				console.warn(
+					"[device-person-token] panel inventory delta crashed",
+					deviceId,
+					error?.message || error,
+				);
 			}
 		}
 
