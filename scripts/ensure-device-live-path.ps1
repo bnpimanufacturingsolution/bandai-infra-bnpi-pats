@@ -299,7 +299,7 @@ sudo -n journalctl -u "`$UNIT" -n 40 --no-pager 2>/dev/null | grep -E 'service_s
       step = "listener_api_base_host"
       ok = [bool]($listenerActive -and $postsHost -and -not $stillVm3101)
       detail = if ($retargetText -match "LISTENER_ALREADY_HOST_API") {
-        "Already posts http://127.0.0.1:$ApiRemotePort (host $ApiLocalPort) — no restart"
+        "Already posts http://127.0.0.1:$ApiRemotePort (host $ApiLocalPort) - no restart"
       } elseif ($listenerActive -and $postsHost -and -not $stillVm3101) {
         "Listener retargeted to http://127.0.0.1:$ApiRemotePort (host $ApiLocalPort) for socket truth"
       } else {
