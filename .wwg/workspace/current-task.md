@@ -1,5 +1,40 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 SDK enrollment plain person id on callback
+
+- Task mode: Bug fix / runtime identity path + unit proof.
+- Goal: When an SDK user create/update (or enroll) callback already carries a plain device person id, apply it on the callback path immediately, socket identity quickly, and always land raw UserInfo metadata on `DeviceUser` — without treating multipass logSearch as the only path.
+- Clarified architecture (not a secret second poller inventing people):
+  - Live path is still the HCNetSDK ACS alarm callback → `/api/hikvision/callback`.
+  - When `dwEmployeeNo` / plain `employeeNo` is present on that callback, HRIS now runs the fast identity path.
+  - When the callback is only a major=3 opaque SYNC_SIGNAL (empty person), multipass ISAPI `ContentMgmt/logSearch` still resolves typed USER_CREATED / FP leaves and may map opaque tokens → plain via inventory delta / `DevicePersonToken`. That is follow-up evidence, not a replacement for the SDK callback.
+- Implemented:
+  - `applyFastEnrollmentIdentityOnSdkCallback` / `isHikvisionEnrollmentLifecycleCallback` in `hris-api/helper/device-person-token.helper.ts`.
+  - Immediate `DeviceUser` upsert (stub + HRIS link via `deviceEmpId` / `employeeId` code match), `DeviceEvent` MATCHED/UNMATCHED with plain `employeeNo`, first `device-event:saved` socket.
+  - Background `enrichEnrollmentLifecycleEvent` still pulls full UserInfo into `DeviceUser.rawPayload` / `vendorMetadata` and re-sockets.
+  - `callback.controller.ts` non-attendance enrollment path uses the fast path and no longer forces `IGNORED` over identity when plain id is applied.
+- Proof:
+  - Focused Mocha: `tests/device-person-token.helper.spec.ts` + `tests/hikvision-callback.controller.spec.ts` → 17/17 pass.
+- Boundary:
+  - Plain device person id ≠ HRIS `Employee.employeeId` code unless already linked via DeviceUser / `deviceEmpId`.
+  - Empty-person major=3 signals still need logSearch / inventory delta for plain id; we do not invent person numbers.
+- Recommendation capture: No new recommendations were identified.
+
+## Latest Task Addendum - 2026-07-19 Hikvision bridge follows DB device address
+
+- Task mode: Bug fix + runtime proof.
+- Goal: Stop local predev/Keep-ready from reusing a stale TEST A reverse-tunnel IP when the HRIS Device row already has the current Hikvision address.
+- Implemented:
+  - Added a DB-backed resolver for host-side Hikvision VM bridge targets.
+  - `ensure-hikvision-vm-bridge.cjs` now resolves reverse-bridge devices from HRIS Device rows, prefers rows configured with `ssh-reverse-forward`, and restarts stale tunnels instead of accepting an open SDK port pointed at an old IP.
+  - `ensure-device-live-path.ps1` and `restart-local-hris-api-dev.ps1` now follow the same DB-resolved target unless an explicit operator override is supplied.
+- Proof:
+  - Resolver selected `TEST A` at `192.168.254.102` from the DB.
+  - Host live-path ensure reported DB tunnel, SDK reverse, and API reverse all ready for `192.168.254.102`.
+  - Prove endpoint returned `proven=true`, listener `armed=true`, `receiving=true`, and fresh SDK event proof.
+- Truth sync: Existing Hikvision runtime truth already says the HRIS Device row is the source of configuration truth; this repair aligns predev/Keep-ready scripts with that truth.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-19 Local API predev DB fast path
 
 - Task mode: Focused startup performance repair + regression proof.

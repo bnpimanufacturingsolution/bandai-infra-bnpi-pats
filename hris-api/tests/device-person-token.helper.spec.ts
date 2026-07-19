@@ -2,12 +2,17 @@ import { expect } from "chai";
 import { readFileSync } from "fs";
 import { join } from "path";
 import {
+	applyFastEnrollmentIdentityOnSdkCallback,
 	buildEmployeeDisplayName,
+	buildEnrollmentSnapshot,
 	correlateOpaqueToPlainByInventoryDelta,
+	extractFingerIdFromLogEvidence,
 	extractOpaqueEmployeeNoFromLogEvidence,
 	extractPlainEmployeeNoFromUserInfoBody,
 	extractPlainUserFromUserInfoRecord,
 	formatHikvisionPlus08,
+	isHikvisionEnrollmentLifecycleCallback,
+	isHikvisionSdkOperationSignal,
 } from "../helper/device-person-token.helper";
 import {
 	classifyHikvisionLogSearchRow,
@@ -111,6 +116,40 @@ describe("device-person-token helper", () => {
 		).to.equal(null);
 	});
 
+	it("extracts FingerId from LogAddInfo (panel fingerprint enroll)", () => {
+		const opaque = "yPFUNQTscAXEP8dc9bpbBw==";
+		expect(
+			extractFingerIdFromLogEvidence({
+				information: JSON.stringify({
+					LogAddInfo: { EmployeeNo: opaque, FingerId: 1, ErrorMsg: "OK" },
+				}),
+			}),
+		).to.equal(1);
+		expect(extractFingerIdFromLogEvidence({ information: "{}" })).to.equal(null);
+	});
+
+	it("builds enrollment snapshot with identity goal fields and no raw template on event", () => {
+		const snap = buildEnrollmentSnapshot({
+			eventAction: "FINGERPRINT_ENROLLED",
+			plainEmployeeNo: "14",
+			displayName: "Panel User",
+			opaqueToken: "EmfPTja5gq/kmy/CI1wDHA==",
+			userInfo: { employeeNo: "14", name: "Panel User", numOfFP: 1, numOfFace: 0, numOfCard: 0 },
+			fingerIdFromLog: 1,
+			deviceUserId: "du1",
+		});
+		expect(snap.schema).to.equal("project-truth.enrollment-snapshot.v1");
+		expect(snap.plainEmployeeNo).to.equal("14");
+		expect(snap.displayName).to.equal("Panel User");
+		expect(snap.opaquePersonToken).to.equal("EmfPTja5gq/kmy/CI1wDHA==");
+		expect((snap.credentialSummary as any)?.fingerprintCount).to.equal(1);
+		expect((snap.biometricCustody as any)?.templateStorage).to.equal(
+			"encrypted_on_device_user_not_device_event",
+		);
+		expect((snap.completeness as any)?.identityReady).to.equal(true);
+		expect(JSON.stringify(snap)).to.not.include("fingerData");
+	});
+
 	it("operation-log resolve source uses proven device metaIds (clearUserInfo, not deleteUserInfo)", () => {
 		// Live TEST A 2026-07-17: deleteUserInfo is ISAPI-invalid; clearUserInfo is the delete leaf.
 		const source = readFileSync(
@@ -118,8 +157,11 @@ describe("device-person-token helper", () => {
 			"utf8",
 		);
 		expect(source).to.include("log.hikvision.com/Information/clearUserInfo");
+		expect(source).to.include("enrichEnrollmentLifecycleEvent");
+		expect(source).to.include("enrollmentSnapshot");
 		expect(source).to.include("log.hikvision.com/Information/addUserInfo");
 		expect(source).to.include("log.hikvision.com/Information/addFpByEmployeeNo");
+		expect(source).to.include("applyFastEnrollmentIdentityOnSdkCallback");
 		expect(source).to.not.match(/Information\/deleteUserInfo/);
 		expect(source).to.not.match(/Information\/addFaceByEmployeeNo/);
 		expect(source).to.not.match(/Information\/addCardInfo/);
@@ -132,5 +174,218 @@ describe("device-person-token helper", () => {
 				metaId: "log.hikvision.com/Information/addFpByEmployeeNo",
 			}),
 		).to.include({ eventAction: "FINGERPRINT_ENROLLED" });
+	});
+
+	it("classifies user create/update as enrollment lifecycle and major=3 as operation signal", () => {
+		expect(
+			isHikvisionEnrollmentLifecycleCallback({
+				eventKind: "biometric_user_management",
+				actionCode: "MINOR_ADD_USER_INFO",
+			}),
+		).to.equal(true);
+		expect(
+			isHikvisionEnrollmentLifecycleCallback({
+				eventAction: "USER_UPDATED",
+			}),
+		).to.equal(true);
+		expect(
+			isHikvisionEnrollmentLifecycleCallback({
+				major: "3",
+				actionCode: "OBSERVED_OPERATION_MINOR_112",
+			}),
+		).to.equal(false);
+		expect(
+			isHikvisionSdkOperationSignal({
+				major: "3",
+				actionCode: "OBSERVED_OPERATION_MINOR_112",
+			}),
+		).to.equal(true);
+	});
+
+	it("fast enrollment identity applies plain employeeNo to DeviceEvent + DeviceUser and sockets", async () => {
+		const emitted: any[] = [];
+		const createdUsers: any[] = [];
+		const updatedEvents: any[] = [];
+		const eventRow = {
+			id: "evt-enroll-1",
+			payload: { source: "EN_HCNETSDK_ALARM", major: 3 },
+			status: "RECEIVED",
+			employeeNo: null,
+		};
+		const prisma = {
+			deviceUser: {
+				findFirst: async () => null,
+				create: async (input: any) => {
+					const row = { id: "du-14", ...input.data };
+					createdUsers.push(row);
+					return row;
+				},
+				update: async (input: any) => ({ id: input.where.id, ...input.data }),
+			},
+			devicePersonToken: {
+				findFirst: async () => null,
+			},
+			employee: {
+				findFirst: async (input: any) => {
+					const or = input?.where?.OR || [];
+					const hit = or.some(
+						(clause: any) =>
+							clause.deviceEmpId === "14" || clause.employeeId === "14",
+					);
+					if (!hit) return null;
+					return {
+						id: "emp-hris-14",
+						employeeId: "BNPI-014",
+						deviceEmpId: "14",
+						person: { personalInfo: { firstName: "Panel", lastName: "User" } },
+					};
+				},
+				findUnique: async (input: any) => {
+					if (input.where.id !== "emp-hris-14") return null;
+					return {
+						id: "emp-hris-14",
+						employeeId: "BNPI-014",
+						deviceEmpId: "14",
+						person: { personalInfo: { firstName: "Panel", lastName: "User" } },
+					};
+				},
+			},
+			deviceEvent: {
+				findUnique: async () => eventRow,
+				update: async (input: any) => {
+					updatedEvents.push(input);
+					const row = {
+						...eventRow,
+						...input.data,
+						device: { id: "dev-1", name: "TEST A", address: "192.168.254.102" },
+						deviceUser: createdUsers[0] || null,
+					};
+					Object.assign(eventRow, input.data);
+					emitted.push({ kind: "event-update", row });
+					return row;
+				},
+			},
+		};
+		const req = {
+			io: {
+				to: () => ({
+					emit: (event: string, payload: any) => {
+						emitted.push({ event, payload });
+					},
+				}),
+				emit: (event: string, payload: any) => {
+					emitted.push({ event, payload });
+				},
+			},
+		};
+
+		const result = await applyFastEnrollmentIdentityOnSdkCallback({
+			prisma: prisma as any,
+			req,
+			organizationId: "org-1",
+			deviceId: "dev-1",
+			eventId: "evt-enroll-1",
+			eventAction: "USER_CREATED",
+			employeeNo: "14",
+			displayName: "Panel User",
+			// Keep unit test free of live device UserInfo fetch.
+			enrichUserInfo: false,
+		});
+
+		expect(result.ok).to.equal(true);
+		expect(result.path).to.equal("plain_immediate");
+		expect(result.plainEmployeeNo).to.equal("14");
+		expect(result.linkedEmployeeId).to.equal("emp-hris-14");
+		expect(result.deviceUserId).to.equal("du-14");
+		expect(createdUsers[0]).to.include({
+			organizationId: "org-1",
+			deviceId: "dev-1",
+			vendorUserId: "14",
+			employeeNo: "14",
+			employeeId: "emp-hris-14",
+		});
+		expect(updatedEvents[0].data).to.include({
+			employeeNo: "14",
+			employeeId: "emp-hris-14",
+			deviceUserId: "du-14",
+			status: "MATCHED",
+		});
+		expect(updatedEvents[0].data.payload.resolvedEmployeeNo).to.equal("14");
+		expect(updatedEvents[0].data.payload.fastEnrollmentIdentityPath).to.equal(
+			"plain_immediate",
+		);
+		const socketPayloads = emitted.filter((item) => item.event === "device-event:saved");
+		expect(socketPayloads.length).to.be.greaterThan(0);
+		expect(socketPayloads[0].payload.event.employeeNo).to.equal("14");
+		expect(socketPayloads[0].payload.event.employeeId).to.equal("emp-hris-14");
+		expect(socketPayloads[0].payload.event.employee.employeeId).to.equal("BNPI-014");
+	});
+
+	it("fast enrollment identity maps opaque token to plain when DevicePersonToken exists", async () => {
+		const opaque = "EmfPTja5gq/kmy/CI1wDHA==";
+		const eventRow = {
+			id: "evt-enroll-2",
+			payload: {},
+			status: "RECEIVED",
+			employeeNo: null,
+		};
+		const prisma = {
+			deviceUser: {
+				findFirst: async () => null,
+				create: async (input: any) => ({ id: "du-14", ...input.data }),
+			},
+			devicePersonToken: {
+				findFirst: async () => ({
+					employeeNo: "14",
+					displayName: "Panel User",
+					opaqueToken: opaque,
+				}),
+			},
+			employee: {
+				findFirst: async () => null,
+				findUnique: async () => null,
+			},
+			deviceEvent: {
+				findUnique: async () => eventRow,
+				update: async (input: any) => ({
+					...eventRow,
+					...input.data,
+					device: { id: "dev-1" },
+					deviceUser: { id: "du-14", vendorUserId: "14" },
+				}),
+			},
+		};
+
+		const result = await applyFastEnrollmentIdentityOnSdkCallback({
+			prisma: prisma as any,
+			req: { io: null },
+			organizationId: "org-1",
+			deviceId: "dev-1",
+			eventId: "evt-enroll-2",
+			eventAction: "USER_CREATED",
+			employeeNo: opaque,
+			enrichUserInfo: false,
+		});
+
+		expect(result.ok).to.equal(true);
+		expect(result.path).to.equal("opaque_mapped");
+		expect(result.plainEmployeeNo).to.equal("14");
+		expect(result.opaqueToken).to.equal(opaque);
+	});
+
+	it("fast enrollment identity stays pending when callback has no plain person id", async () => {
+		const result = await applyFastEnrollmentIdentityOnSdkCallback({
+			prisma: {} as any,
+			req: { io: null },
+			organizationId: "org-1",
+			deviceId: "dev-1",
+			eventId: "evt-enroll-3",
+			eventAction: "SYNC_SIGNAL",
+			employeeNo: null,
+			enrichUserInfo: false,
+		});
+		expect(result.ok).to.equal(false);
+		expect(result.path).to.equal("pending_log_resolve");
+		expect(result.reason).to.equal("plain_employee_no_not_on_callback");
 	});
 });

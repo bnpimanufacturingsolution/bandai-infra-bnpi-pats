@@ -39,7 +39,10 @@ import { emitAttendanceRealtimeEvent } from "../../../helper/attendance-realtime
 import { refreshTimesheetForAttendanceDate } from "../../../helper/timesheet.helper";
 import { buildPersistedDeviceEventTaxonomy } from "../../../helper/device-event-taxonomy.helper";
 import {
+	applyFastEnrollmentIdentityOnSdkCallback,
+	isHikvisionEnrollmentLifecycleCallback,
 	isHikvisionSdkOperationSignal,
+	scheduleFastEnrollmentIdentityOnSdkCallback,
 	scheduleOperationLogResolveAfterSdkSignal,
 } from "../../../helper/device-person-token.helper";
 
@@ -531,19 +534,69 @@ export const controller = (prisma: PrismaClient) => {
 				});
 				savedEventId = eventRecord.id;
 
+				const enrollmentLifecycle = isHikvisionEnrollmentLifecycleCallback({
+					major: event.major,
+					minor: event.minor,
+					eventKind: (event as any).eventKind || (payload as any).eventKind,
+					actionCode: (event as any).actionCode || (payload as any).actionCode,
+					eventAction: eventRecord.eventAction,
+					payload,
+				});
+				const operationSignal = isHikvisionSdkOperationSignal({
+					major: event.major,
+					minor: event.minor,
+					eventKind: (event as any).eventKind || (payload as any).eventKind,
+					actionCode: (event as any).actionCode || (payload as any).actionCode,
+					payload,
+				});
+				const runEnrollmentIdentityIfNeeded = async () => {
+					// Plain (or mapped opaque) person id on this SDK callback → DeviceUser + socket now.
+					// Empty person still needs multipass logSearch (not inventing ids).
+					if (!employeeNo && !opaquePersonToken && !enrollmentLifecycle && !operationSignal) {
+						return null;
+					}
+					// Await when person ref is present so MATCHED/UNMATCHED wins over IGNORED.
+					// Fire-and-forget only when we are only hoping a later resolve fills person.
+					if (employeeNo || opaquePersonToken) {
+						return applyFastEnrollmentIdentityOnSdkCallback({
+							prisma,
+							req,
+							organizationId: String(device.organizationId),
+							deviceId: String(device.id),
+							eventId: String(eventRecord.id),
+							eventAction: eventRecord.eventAction || null,
+							employeeNo: employeeNo || null,
+							opaqueToken: opaquePersonToken || null,
+							displayName: (event as any).resolvedDisplayName || null,
+						});
+					}
+					scheduleFastEnrollmentIdentityOnSdkCallback({
+						prisma,
+						req,
+						organizationId: String(device.organizationId),
+						deviceId: String(device.id),
+						eventId: String(eventRecord.id),
+						eventAction: eventRecord.eventAction || null,
+						employeeNo: null,
+						opaqueToken: null,
+						displayName: (event as any).resolvedDisplayName || null,
+					});
+					return {
+						ok: false,
+						plainEmployeeNo: null,
+						opaqueToken: null,
+						deviceUserId: null,
+						linkedEmployeeId: null,
+						path: "pending_log_resolve" as const,
+						reason: "plain_employee_no_not_on_callback",
+					};
+				};
+
 				if (isDuplicate) {
 					await publishDeviceEventSaved(req, eventRecord);
 					// Still schedule logSearch resolve: enroll create/FP often re-fires the same
 					// major=3 serial while typed leaves only appear a few seconds later.
-					if (
-						isHikvisionSdkOperationSignal({
-							major: event.major,
-							minor: event.minor,
-							eventKind: (event as any).eventKind || (payload as any).eventKind,
-							actionCode: (event as any).actionCode || (payload as any).actionCode,
-							payload,
-						})
-					) {
+					if (operationSignal) {
 						scheduleOperationLogResolveAfterSdkSignal({
 							prisma,
 							req,
@@ -554,6 +607,8 @@ export const controller = (prisma: PrismaClient) => {
 							triggerMinor: event.minor,
 						});
 					}
+					// Re-apply identity when the device finally posts plain employeeNo on a retry.
+					const identity = await runEnrollmentIdentityIfNeeded();
 					const successResponse = buildSuccessResponse(
 						"Duplicate callback received; existing event reused",
 						{
@@ -561,9 +616,10 @@ export const controller = (prisma: PrismaClient) => {
 							duplicate: true,
 							eventId: eventRecord.id,
 							status: eventRecord.status,
-							employeeNo: eventRecord.employeeNo,
-							employeeId: eventRecord.employeeId,
+							employeeNo: identity?.plainEmployeeNo || eventRecord.employeeNo,
+							employeeId: identity?.linkedEmployeeId || eventRecord.employeeId,
 							attendanceId: eventRecord.attendanceId,
+							enrollmentIdentityPath: identity?.path || null,
 							dedupeKey,
 						},
 						200,
@@ -574,24 +630,11 @@ export const controller = (prisma: PrismaClient) => {
 
 				if (!isHikvisionAttendancePunchEvent(event)) {
 					console.log(
-						`[HIKVISION_CALLBACK][CTRL] ignored non-attendance event major=${event.major} minor=${event.minor}`,
+						`[HIKVISION_CALLBACK][CTRL] non-attendance event major=${event.major} minor=${event.minor} employeeNo=${employeeNo || ""} enrollment=${enrollmentLifecycle} opSignal=${operationSignal}`,
 					);
-					await updateDeviceEventStatus(req, eventRecord.id, {
-						status: "IGNORED",
-						errorMessage: "non_attendance_device_event",
-					});
-					// Live path is green, but major=3 SDK ops are opaque SYNC_SIGNAL rows.
-					// Follow up via ISAPI logSearch so Add Person / Add Fingerprint become
-					// typed USER_CREATED / FINGERPRINT_ENROLLED and re-emit on the socket.
-					if (
-						isHikvisionSdkOperationSignal({
-							major: event.major,
-							minor: event.minor,
-							eventKind: (event as any).eventKind || (payload as any).eventKind,
-							actionCode: (event as any).actionCode || (payload as any).actionCode,
-							payload,
-						})
-					) {
+					// Major=3 SDK ops are often opaque SYNC_SIGNAL rows until logSearch leaves exist.
+					// Multipass logSearch still creates typed USER_CREATED / FP rows — not a parallel poller inventing people.
+					if (operationSignal) {
 						scheduleOperationLogResolveAfterSdkSignal({
 							prisma,
 							req,
@@ -602,20 +645,37 @@ export const controller = (prisma: PrismaClient) => {
 							triggerMinor: event.minor,
 						});
 					}
+
+					// When SDK already carried plain (or mapped) person id, identity + DeviceUser raw metadata
+					// go on the fast path and socket immediately. Do not force IGNORED over MATCHED/UNMATCHED.
+					const identity = await runEnrollmentIdentityIfNeeded();
+					const identityApplied = Boolean(identity?.ok && identity.plainEmployeeNo);
+					if (!identityApplied) {
+						await updateDeviceEventStatus(req, eventRecord.id, {
+							status: "IGNORED",
+							errorMessage: operationSignal
+								? "sdk_operation_signal_resolving"
+								: "non_attendance_device_event",
+						});
+					}
+
 					const successResponse = buildSuccessResponse(
-						"Callback received but event is not an attendance punch",
+						identityApplied
+							? "Enrollment/user-management callback accepted; plain person id applied on fast path"
+							: "Callback received but event is not an attendance punch",
 						{
 							received: true,
-							matched: false,
-							employeeNo,
-							reason: "non_attendance_device_event",
-							operationLogResolveScheduled: isHikvisionSdkOperationSignal({
-								major: event.major,
-								minor: event.minor,
-								eventKind: (event as any).eventKind || (payload as any).eventKind,
-								actionCode: (event as any).actionCode || (payload as any).actionCode,
-								payload,
-							}),
+							matched: Boolean(identity?.linkedEmployeeId),
+							employeeNo: identity?.plainEmployeeNo || employeeNo,
+							deviceUserId: identity?.deviceUserId || null,
+							employeeId: identity?.linkedEmployeeId || null,
+							reason: identityApplied
+								? "enrollment_identity_fast_path"
+								: operationSignal
+									? "sdk_operation_signal_resolving"
+									: "non_attendance_device_event",
+							operationLogResolveScheduled: operationSignal,
+							enrollmentIdentityPath: identity?.path || null,
 							eventId: eventRecord.id,
 							dedupeKey,
 							event,

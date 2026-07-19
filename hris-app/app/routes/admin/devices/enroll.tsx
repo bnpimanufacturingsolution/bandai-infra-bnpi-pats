@@ -515,6 +515,8 @@ export function DeviceEnrollmentPanel({
 	// Declared early so listener query can poll only while the details modal is open.
 	const [isListenerDetailsOpen, setIsListenerDetailsOpen] = useState(false);
 	const deviceUserView = searchParams.get("deviceUserView") || "shown";
+	// Deep-link from Device Events "Device user" / person click: open details for this vendor user id.
+	const deviceUserDetailsParam = String(searchParams.get("deviceUserDetails") || "").trim();
 	const deviceUserPage = Math.max(Number(searchParams.get("deviceUserPage") || 1), 1);
 	const deviceUserLimit = Math.min(
 		Math.max(Number(searchParams.get("deviceUserLimit") || 8), 1),
@@ -3290,6 +3292,31 @@ export function DeviceEnrollmentPanel({
 		(safeDeviceUserPage - 1) * deviceUserLimit,
 		safeDeviceUserPage * deviceUserLimit,
 	);
+
+	// From Device Events: /devices?action=device-users&deviceUserDetails=14 → open that user's modal.
+	useEffect(() => {
+		if (!deviceUserDetailsParam) return;
+		if (activePanel !== "users") return;
+		const target = String(deviceUserDetailsParam).trim();
+		if (!target) return;
+		const match =
+			visibleDeviceUserRows.find(
+				(row) => String(row.vendorUserId || "").trim() === target,
+			) ||
+			visibleDeviceUserRows.find(
+				(row) => String(row.employeeNo || "").trim() === target,
+			) ||
+			null;
+		if (!match) return;
+		if (String(detailsDeviceUser?.vendorUserId || "").trim() === target) return;
+		setDetailsDeviceUser(match);
+	}, [
+		deviceUserDetailsParam,
+		activePanel,
+		visibleDeviceUserRows,
+		detailsDeviceUser?.vendorUserId,
+	]);
+
 	const selectedExportVendorUserIdSet = new Set(selectedExportVendorUserIds);
 	const allPagedRowsSelected =
 		pagedDeviceUserRows.length > 0 &&
@@ -7651,7 +7678,17 @@ export function DeviceEnrollmentPanel({
 			<Modal
 				open={Boolean(detailsDeviceUser)}
 				onOpenChange={(open) => {
-					if (!open) setDetailsDeviceUser(null);
+					if (!open) {
+						setDetailsDeviceUser(null);
+						// Drop deep-link param so closing details does not re-open.
+						if (deviceUserDetailsParam) {
+							setSearchParams((prev) => {
+								const next = new URLSearchParams(prev);
+								next.delete("deviceUserDetails");
+								return next;
+							}, { replace: true });
+						}
+					}
 				}}
 				title="Device user details"
 				className="max-w-4xl">

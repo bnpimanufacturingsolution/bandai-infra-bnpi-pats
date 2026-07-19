@@ -14,6 +14,10 @@ import {
 	normalizeHikvisionLogSearchRow,
 	parseHikvisionLogSearchResponse,
 } from "./hikvision-event-contract.helper";
+import {
+	extractHikvisionCredentialSummary,
+	normalizeHikvisionDeviceUser,
+} from "./device-user-sync.helper";
 import { emitDeviceEventSaved } from "./device-event-realtime.helper";
 
 export type DevicePersonTokenSource =
@@ -91,6 +95,381 @@ export const extractPlainUserFromUserInfoRecord = (
 	const displayName = String(rawUser?.name || rawUser?.employeeName || "").trim() || null;
 	const numOfFP = Number(rawUser?.numOfFP ?? rawUser?.numOfFingerPrint ?? 0) || 0;
 	return { employeeNo, displayName, numOfFP };
+};
+
+/**
+ * LogAddInfo can carry FingerId for addFpByEmployeeNo leaves (panel FP enroll).
+ * Never treat this as a full fingerprint template — only an enrollment index.
+ */
+export const extractFingerIdFromLogEvidence = (evidence: any): number | null => {
+	const info = String(
+		evidence?.information ||
+			evidence?.raw?.information ||
+			evidence?.rawEvidence?.information ||
+			evidence?.rawEvidence?.raw?.information ||
+			"",
+	).trim();
+	if (!info) return null;
+	try {
+		const parsed = JSON.parse(info);
+		const fingerId = Number(
+			parsed?.LogAddInfo?.FingerId ??
+				parsed?.logAddInfo?.FingerId ??
+				parsed?.LogAddInfo?.fingerId ??
+				parsed?.logAddInfo?.fingerId,
+		);
+		return Number.isFinite(fingerId) && fingerId > 0 ? fingerId : null;
+	} catch {
+		return null;
+	}
+};
+
+/**
+ * Enrollment snapshot for DeviceEvent.payload.
+ * Goal fields for "did enroll work?": plain employeeNo, display name, opaque token,
+ * UserInfo credentials, finger id from op log. Raw fingerprint template bytes are
+ * intentionally NOT stored on DeviceEvent (encrypted DeviceUser custody only).
+ */
+export const buildEnrollmentSnapshot = (input: {
+	eventAction?: string | null;
+	plainEmployeeNo?: string | null;
+	displayName?: string | null;
+	opaqueToken?: string | null;
+	userInfo?: any | null;
+	fingerIdFromLog?: number | null;
+	deviceUserId?: string | null;
+	linkedEmployeeId?: string | null;
+	biometricTemplateStatus?:
+		| "not_applicable"
+		| "pending_plain_employee_no"
+		| "userinfo_counts_only"
+		| "encrypted_on_device_user"
+		| "missing_on_device";
+}): Record<string, unknown> => {
+	const plain = String(input.plainEmployeeNo || "").trim() || null;
+	const opaque = String(input.opaqueToken || "").trim() || null;
+	const credentialSummary = input.userInfo
+		? extractHikvisionCredentialSummary(input.userInfo)
+		: null;
+	const fingerId =
+		typeof input.fingerIdFromLog === "number" && Number.isFinite(input.fingerIdFromLog)
+			? input.fingerIdFromLog
+			: null;
+	const completeEnoughForEnrollmentIdentity = Boolean(plain && (input.displayName || input.userInfo));
+	return {
+		schema: "project-truth.enrollment-snapshot.v1",
+		eventAction: input.eventAction || null,
+		// What operators need to identify the person on device.
+		plainEmployeeNo: plain,
+		displayName: String(input.displayName || "").trim() || null,
+		opaquePersonToken: opaque,
+		deviceUserId: input.deviceUserId || null,
+		linkedEmployeeId: input.linkedEmployeeId || null,
+		// Device UserInfo identity/credentials (safe summary + raw UserInfo, not FP blobs).
+		userInfoPresent: Boolean(input.userInfo),
+		userInfo: input.userInfo || null,
+		credentialSummary,
+		fingerIdFromLog: fingerId,
+		// Biometric template custody plane (DeviceUser.vendorMetadata.biometricBundle).
+		biometricCustody: {
+			plane: "DEVICE_USER",
+			templateStorage: "encrypted_on_device_user_not_device_event",
+			status:
+				input.biometricTemplateStatus ||
+				(plain
+					? credentialSummary?.hasFingerprint
+						? "userinfo_counts_only"
+						: "missing_on_device"
+					: "pending_plain_employee_no"),
+			fingerprintCount: credentialSummary?.fingerprintCount ?? null,
+			faceCount: credentialSummary?.faceCount ?? null,
+			cardCount: credentialSummary?.cardCount ?? null,
+			note:
+				"DeviceEvent keeps enrollment proof + UserInfo. Raw fingerprint/face template bytes live encrypted on DeviceUser only (AES-256-GCM), never as plaintext on the event ledger.",
+		},
+		completeness: {
+			hasOpaqueToken: Boolean(opaque),
+			hasPlainEmployeeNo: Boolean(plain),
+			hasDisplayName: Boolean(String(input.displayName || "").trim()),
+			hasUserInfo: Boolean(input.userInfo),
+			hasFingerprintCount: Boolean(credentialSummary?.hasFingerprint),
+			identityReady: completeEnoughForEnrollmentIdentity,
+		},
+	};
+};
+
+/** Targeted UserInfo/Search by plain employeeNo (Enrollment enrichment). */
+export const fetchUserInfoRecordByEmployeeNo = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	deviceId: string;
+	employeeNo: string;
+}): Promise<any | null> => {
+	const employeeNo = String(params.employeeNo || "").trim();
+	if (!employeeNo || isOpaqueHikvisionPersonToken(employeeNo)) return null;
+	const response = await hikvisionFetch("/ISAPI/AccessControl/UserInfo/Search?format=json", {
+		method: "POST",
+		deviceId: params.deviceId,
+		prisma: params.prisma,
+		request: params.req,
+		timeoutMs: 10_000,
+		body: {
+			UserInfoSearchCond: {
+				searchID: `enroll-enrich-${Date.now()}`,
+				searchResultPosition: 0,
+				maxResults: 4,
+				EmployeeNoList: [{ employeeNo }],
+			},
+		},
+	});
+	const search =
+		(response as any)?.UserInfoSearch || (response as any)?.data?.UserInfoSearch || {};
+	const list = Array.isArray(search?.UserInfo)
+		? search.UserInfo
+		: search?.UserInfo
+			? [search.UserInfo]
+			: [];
+	const match =
+		list.find(
+			(raw: any) =>
+				String(raw?.employeeNo || raw?.employeeNoString || "").trim() === employeeNo,
+		) ||
+		list[0] ||
+		null;
+	return match || null;
+};
+
+/**
+ * After a lifecycle DeviceEvent is saved, pull full UserInfo into DeviceUser +
+ * attach enrollmentSnapshot on the event so UI/API show the enrollment goal data.
+ */
+export const enrichEnrollmentLifecycleEvent = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	organizationId: string;
+	deviceId: string;
+	eventId: string;
+	eventAction?: string | null;
+	plainEmployeeNo?: string | null;
+	displayName?: string | null;
+	opaqueToken?: string | null;
+	fingerIdFromLog?: number | null;
+	linkedEmployeeId?: string | null;
+	deviceUserId?: string | null;
+}): Promise<{ ok: boolean; snapshot: Record<string, unknown> | null; reason?: string }> => {
+	const eventId = String(params.eventId || "").trim();
+	const organizationId = String(params.organizationId || "").trim();
+	const deviceId = String(params.deviceId || "").trim();
+	if (!eventId || !organizationId || !deviceId) {
+		return { ok: false, snapshot: null, reason: "missing_ids" };
+	}
+
+	let plain = String(params.plainEmployeeNo || "").trim() || null;
+	if (plain && isOpaqueHikvisionPersonToken(plain)) plain = null;
+	let displayName = String(params.displayName || "").trim() || null;
+	const opaque = String(params.opaqueToken || "").trim() || null;
+	let userInfo: any = null;
+	let deviceUserId = String(params.deviceUserId || "").trim() || null;
+	let linkedEmployeeId = String(params.linkedEmployeeId || "").trim() || null;
+
+	if (plain) {
+		try {
+			userInfo = await fetchUserInfoRecordByEmployeeNo({
+				prisma: params.prisma,
+				req: params.req,
+				deviceId,
+				employeeNo: plain,
+			});
+		} catch (error: any) {
+			console.warn(
+				"[device-person-token] UserInfo enrich failed",
+				deviceId,
+				plain,
+				error?.message || error,
+			);
+		}
+		if (userInfo) {
+			const plainUser = extractPlainUserFromUserInfoRecord(userInfo);
+			if (plainUser?.displayName) displayName = plainUser.displayName;
+			const candidate = normalizeHikvisionDeviceUser(userInfo);
+			if (candidate) {
+				const existing = await params.prisma.deviceUser.findFirst({
+					where: {
+						organizationId,
+						deviceId,
+						vendorUserId: candidate.vendorUserId,
+					},
+				});
+				const priorMeta = (existing?.vendorMetadata as any) || {};
+				const vendorMetadata = {
+					...priorMeta,
+					...(candidate.vendorMetadata as any),
+					opaquePersonToken: opaque || priorMeta.opaquePersonToken || null,
+					enrollmentEnrichedAt: new Date().toISOString(),
+					plane: "DEVICE_USER_INVENTORY",
+				};
+				const linked =
+					(await resolveLinkedEmployeeForDevicePerson(params.prisma, {
+						organizationId,
+						employeeNo: candidate.employeeNo,
+					}).catch(() => null)) || null;
+				linkedEmployeeId = linked?.id || linkedEmployeeId;
+				const status = linked?.id
+					? "ACTIVE"
+					: existing?.status === "DISABLED"
+						? "DISABLED"
+						: "UNMATCHED";
+				const saved = existing
+					? await params.prisma.deviceUser.update({
+							where: { id: existing.id },
+							data: {
+								employeeNo: candidate.employeeNo,
+								displayName:
+									displayName || candidate.displayName || existing.displayName,
+								userType: candidate.userType,
+								status,
+								validFrom: candidate.validFrom,
+								validTo: candidate.validTo,
+								doorRight: candidate.doorRight,
+								accessPlan: candidate.accessPlan as any,
+								rawPayload: candidate.rawPayload as any,
+								employeeId: linked?.id || existing.employeeId || null,
+								lastSyncedAt: new Date(),
+								vendorMetadata,
+							},
+						})
+					: await params.prisma.deviceUser.create({
+							data: {
+								organizationId,
+								deviceId,
+								vendorUserId: candidate.vendorUserId,
+								employeeNo: candidate.employeeNo,
+								displayName: displayName || candidate.displayName,
+								userType: candidate.userType,
+								status,
+								validFrom: candidate.validFrom,
+								validTo: candidate.validTo,
+								doorRight: candidate.doorRight,
+								accessPlan: candidate.accessPlan as any,
+								rawPayload: candidate.rawPayload as any,
+								employeeId: linked?.id || null,
+								lastSyncedAt: new Date(),
+								vendorMetadata,
+							},
+						});
+				deviceUserId = saved?.id || deviceUserId;
+			}
+		} else {
+			// Still ensure inventory stub exists even if single-user UserInfo failed.
+			const stub = await upsertDeviceUserInventoryStub(params.prisma, {
+				organizationId,
+				deviceId,
+				employeeNo: plain,
+				displayName,
+				opaqueToken: opaque,
+			}).catch(() => null);
+			deviceUserId = stub?.id || deviceUserId;
+			linkedEmployeeId = stub?.employeeId || linkedEmployeeId;
+		}
+	}
+
+	const existingEvent = await params.prisma.deviceEvent.findUnique({
+		where: { id: eventId },
+		select: { id: true, payload: true, employeeNo: true, status: true },
+	});
+	if (!existingEvent) return { ok: false, snapshot: null, reason: "event_missing" };
+
+	const priorPayload = (existingEvent.payload as any) || {};
+	const snapshot = buildEnrollmentSnapshot({
+		eventAction: params.eventAction,
+		plainEmployeeNo: plain,
+		displayName,
+		opaqueToken: opaque,
+		userInfo,
+		fingerIdFromLog: params.fingerIdFromLog,
+		deviceUserId,
+		linkedEmployeeId,
+		biometricTemplateStatus: plain
+			? userInfo
+				? "userinfo_counts_only"
+				: "pending_plain_employee_no"
+			: "pending_plain_employee_no",
+	});
+
+	const nextPayload = {
+		...priorPayload,
+		enrollmentSnapshot: snapshot,
+		resolvedEmployeeNo: plain || priorPayload.resolvedEmployeeNo || null,
+		resolvedDisplayName: displayName || priorPayload.resolvedDisplayName || null,
+		personTokenResolved: Boolean(plain && opaque),
+		opaquePersonToken: opaque || priorPayload.opaquePersonToken || null,
+		// Explicit goal fields for consumers that do not deep-read enrollmentSnapshot.
+		enrollmentGoal: {
+			employeeNo: plain,
+			displayName,
+			opaquePersonToken: opaque,
+			userInfo: userInfo || null,
+			credentialSummary: snapshot.credentialSummary,
+			fingerIdFromLog: snapshot.fingerIdFromLog,
+			deviceUserId,
+			// Templates: pointer only — full encrypted blobs on DeviceUser.
+			fingerprintTemplateLocation: deviceUserId
+				? `DeviceUser(${deviceUserId}).vendorMetadata.biometricBundle`
+				: "DeviceUser.vendorMetadata.biometricBundle (after plain employeeNo + biometric export)",
+			rawTemplateOnDeviceEvent: false,
+		},
+	};
+
+	const updated = await params.prisma.deviceEvent.update({
+		where: { id: eventId },
+		data: {
+			employeeNo: plain || existingEvent.employeeNo || null,
+			employeeId: linkedEmployeeId || null,
+			deviceUserId: deviceUserId || null,
+			status: linkedEmployeeId
+				? "MATCHED"
+				: plain
+					? "UNMATCHED"
+					: existingEvent.status || "RECEIVED",
+			payload: nextPayload,
+		},
+		include: {
+			device: {
+				select: { id: true, name: true, address: true, port: true, protocol: true },
+			},
+			deviceUser: {
+				select: {
+					id: true,
+					vendorUserId: true,
+					employeeNo: true,
+					displayName: true,
+					employeeId: true,
+					vendorMetadata: true,
+				},
+			},
+		},
+	});
+
+	let employeeForSocket: any = null;
+	if (linkedEmployeeId) {
+		employeeForSocket = await params.prisma.employee
+			.findUnique({
+				where: { id: linkedEmployeeId },
+				select: {
+					id: true,
+					employeeId: true,
+					deviceEmpId: true,
+					person: { select: { personalInfo: true } },
+				},
+			})
+			.catch(() => null);
+	}
+	emitDeviceEventSaved(params.req?.io, {
+		...updated,
+		employee: employeeForSocket,
+	});
+
+	return { ok: true, snapshot };
 };
 
 /**
@@ -557,17 +936,49 @@ export const resolveOpaqueViaDeviceUserInventoryDelta = async (params: {
 						vendorMetadata: true,
 					},
 				},
-				employee: {
-					select: {
-						id: true,
-						employeeId: true,
-						deviceEmpId: true,
-						person: { select: { personalInfo: true } },
-					},
-				},
 			},
 		});
-		emitDeviceEventSaved(params.req?.io, updated);
+		// DeviceEvent has employeeId but no Prisma employee relation — attach for socket UI only.
+		const employeeIdForSocket =
+			String(updated?.employeeId || linked?.id || deviceUser?.employeeId || "").trim() || null;
+		let employeeForSocket: any = null;
+		if (employeeIdForSocket) {
+			employeeForSocket = await params.prisma.employee.findUnique({
+				where: { id: employeeIdForSocket },
+				select: {
+					id: true,
+					employeeId: true,
+					deviceEmpId: true,
+					person: { select: { personalInfo: true } },
+				},
+			});
+		}
+		// Pull full UserInfo + enrollmentSnapshot so mapped events carry enroll goal data.
+		await enrichEnrollmentLifecycleEvent({
+			prisma: params.prisma,
+			req: params.req,
+			organizationId,
+			deviceId,
+			eventId: updated.id,
+			eventAction: event.eventAction,
+			plainEmployeeNo: correlated.employeeNo,
+			displayName:
+				correlated.displayName || linked?.displayName || payload.resolvedDisplayName || null,
+			opaqueToken: correlated.opaqueToken,
+			fingerIdFromLog: extractFingerIdFromLogEvidence(payload),
+			linkedEmployeeId: linked?.id || deviceUser?.employeeId || null,
+			deviceUserId: deviceUser?.id || updated.deviceUserId || null,
+		}).catch((error: any) => {
+			console.warn(
+				"[device-person-token] post-delta enrollment enrich failed",
+				updated.id,
+				error?.message || error,
+			);
+			emitDeviceEventSaved(params.req?.io, {
+				...updated,
+				employee: employeeForSocket,
+			});
+		});
 		backfilledEvents += 1;
 	}
 
@@ -1070,6 +1481,21 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 						resolvedDisplayName = buildEmployeeDisplayName(empRow);
 					}
 
+					const fingerIdFromLog = extractFingerIdFromLogEvidence(
+						(applied as any).rawEvidence || evidence,
+					);
+					const initialSnapshot = buildEnrollmentSnapshot({
+						eventAction,
+						plainEmployeeNo: employeeNo || null,
+						displayName: resolvedDisplayName,
+						opaqueToken: opaque,
+						fingerIdFromLog,
+						deviceUserId: deviceUser?.id || null,
+						linkedEmployeeId,
+						biometricTemplateStatus: employeeNo
+							? "userinfo_counts_only"
+							: "pending_plain_employee_no",
+					});
 					const createdRow = await params.prisma.deviceEvent.create({
 						data: {
 							organizationId,
@@ -1102,37 +1528,45 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 								notHrisEmployee: !linkedEmployeeId,
 								plane: "DEVICE_USER",
 								rawEvidence: (applied as any).rawEvidence || evidence,
-							},
-						},
-					});
-					const fullRow = await params.prisma.deviceEvent.findUnique({
-						where: { id: createdRow.id },
-						include: {
-							device: {
-								select: { id: true, name: true, address: true, port: true, protocol: true },
-							},
-							deviceUser: {
-								select: {
-									id: true,
-									vendorUserId: true,
-									employeeNo: true,
-									displayName: true,
-									employeeId: true,
-									vendorMetadata: true,
-								},
-							},
-							employee: {
-								select: {
-									id: true,
-									employeeId: true,
-									deviceEmpId: true,
-									person: { select: { personalInfo: true } },
+								// Goal-oriented enrollment payload (identity + UserInfo; not raw FP bytes).
+								enrollmentSnapshot: initialSnapshot,
+								enrollmentGoal: {
+									employeeNo: employeeNo || null,
+									displayName: resolvedDisplayName || null,
+									opaquePersonToken: opaque,
+									fingerIdFromLog,
+									rawTemplateOnDeviceEvent: false,
+									fingerprintTemplateLocation:
+										"DeviceUser.vendorMetadata.biometricBundle (encrypted)",
 								},
 							},
 						},
 					});
-					// Capture io at emit time from request (same process as browser socket on :3001).
-					emitDeviceEventSaved(params.req?.io, fullRow || createdRow);
+					// Enrich with live UserInfo (plain employeeNo) so DeviceUser + event carry enroll truth.
+					try {
+						await enrichEnrollmentLifecycleEvent({
+							prisma: params.prisma,
+							req: params.req,
+							organizationId,
+							deviceId,
+							eventId: createdRow.id,
+							eventAction,
+							plainEmployeeNo: employeeNo || null,
+							displayName: resolvedDisplayName,
+							opaqueToken: opaque,
+							fingerIdFromLog,
+							linkedEmployeeId,
+							deviceUserId: deviceUser?.id || null,
+						});
+					} catch (enrichError: any) {
+						console.warn(
+							"[device-person-token] enrollment enrich failed",
+							createdRow.id,
+							enrichError?.message || enrichError,
+						);
+						// Still emit create so UI sees the lifecycle row.
+						emitDeviceEventSaved(params.req?.io, createdRow);
+					}
 					created += 1;
 				} catch (error: any) {
 					console.warn(
@@ -1247,4 +1681,340 @@ export const isHikvisionSdkOperationSignal = (event: {
 	if (actionCode.startsWith("OBSERVED_OPERATION_MINOR_")) return true;
 	if (major === "3") return true;
 	return false;
+};
+
+/**
+ * True when the callback is a user/enroll lifecycle event (create/update/delete/FP/card),
+ * not an attendance punch and not a bare major=3 SYNC_SIGNAL.
+ */
+export const isHikvisionEnrollmentLifecycleCallback = (event: {
+	major?: string | number | null;
+	minor?: string | number | null;
+	eventKind?: string | null;
+	actionCode?: string | null;
+	eventAction?: string | null;
+	payload?: any;
+}): boolean => {
+	const eventKind = String(event.eventKind ?? event.payload?.eventKind ?? "").trim();
+	const actionCode = String(event.actionCode ?? event.payload?.actionCode ?? "")
+		.trim()
+		.toUpperCase();
+	const eventAction = String(
+		event.eventAction ?? event.payload?.eventAction ?? "",
+	)
+		.trim()
+		.toUpperCase();
+	if (
+		eventKind === "biometric_user_management" ||
+		eventKind === "biometric_fingerprint_management" ||
+		eventKind === "biometric_card_management"
+	) {
+		return true;
+	}
+	if (
+		actionCode.includes("USER_INFO") ||
+		actionCode.includes("FINGER") ||
+		actionCode.includes("CARD") ||
+		actionCode === "MINOR_ADD_USER_INFO" ||
+		actionCode === "MINOR_MODIFY_USER_INFO" ||
+		actionCode === "MINOR_CLR_USER_INFO"
+	) {
+		return true;
+	}
+	if (
+		eventAction === "USER_CREATED" ||
+		eventAction === "USER_UPDATED" ||
+		eventAction === "USER_DELETED" ||
+		eventAction === "FINGERPRINT_ENROLLED" ||
+		eventAction === "FINGERPRINT_UPDATED" ||
+		eventAction === "FINGERPRINT_DELETED" ||
+		eventAction === "CARD_ENROLLED" ||
+		eventAction === "CARD_UPDATED" ||
+		eventAction === "CARD_DELETED"
+	) {
+		return true;
+	}
+	return false;
+};
+
+export type FastEnrollmentIdentityResult = {
+	ok: boolean;
+	plainEmployeeNo: string | null;
+	opaqueToken: string | null;
+	deviceUserId: string | null;
+	linkedEmployeeId: string | null;
+	path:
+		| "plain_immediate"
+		| "opaque_mapped"
+		| "pending_log_resolve"
+		| "skipped";
+	reason?: string;
+};
+
+/**
+ * SDK enrollment / user-management callback fast path.
+ *
+ * Device truth:
+ * - SDK ACS callback may carry plain dwEmployeeNo (device person id), empty, or later opaque log tokens.
+ * - Plain device person id is NOT HRIS Employee.employeeId; HRIS link is DeviceUser / deviceEmpId map.
+ * - Raw UserInfo metadata always belongs on DeviceUser (rawPayload + vendorMetadata), not only on DeviceEvent.
+ *
+ * Behavior:
+ * 1) If plain employeeNo is already on the callback → stub DeviceUser + socket identity immediately,
+ *    then pull full UserInfo onto DeviceUser.rawPayload/vendorMetadata and re-socket.
+ * 2) If opaque token only → map via DevicePersonToken when known, then same as (1).
+ * 3) If neither → caller keeps multipass logSearch resolve (not invented plain ids).
+ */
+export const applyFastEnrollmentIdentityOnSdkCallback = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	organizationId: string;
+	deviceId: string;
+	eventId: string;
+	eventAction?: string | null;
+	employeeNo?: string | null;
+	opaqueToken?: string | null;
+	displayName?: string | null;
+	/** When true, always fire UserInfo enrich in background after stub. Default true. */
+	enrichUserInfo?: boolean;
+}): Promise<FastEnrollmentIdentityResult> => {
+	const organizationId = String(params.organizationId || "").trim();
+	const deviceId = String(params.deviceId || "").trim();
+	const eventId = String(params.eventId || "").trim();
+	if (!organizationId || !deviceId || !eventId) {
+		return {
+			ok: false,
+			plainEmployeeNo: null,
+			opaqueToken: null,
+			deviceUserId: null,
+			linkedEmployeeId: null,
+			path: "skipped",
+			reason: "missing_ids",
+		};
+	}
+
+	let plain = String(params.employeeNo || "").trim() || null;
+	let opaque = String(params.opaqueToken || "").trim() || null;
+	let displayName = String(params.displayName || "").trim() || null;
+	let path: FastEnrollmentIdentityResult["path"] = "pending_log_resolve";
+
+	if (plain && isOpaqueHikvisionPersonToken(plain)) {
+		opaque = opaque || plain;
+		const mapped = await resolveDevicePersonToken(params.prisma, {
+			organizationId,
+			deviceId,
+			opaqueToken: plain,
+		}).catch(() => null);
+		if (mapped?.employeeNo) {
+			plain = mapped.employeeNo;
+			if (mapped.displayName) displayName = mapped.displayName;
+			path = "opaque_mapped";
+		} else {
+			plain = null;
+		}
+	} else if (plain) {
+		path = "plain_immediate";
+	}
+
+	if (!plain && opaque && isOpaqueHikvisionPersonToken(opaque)) {
+		const mapped = await resolveDevicePersonToken(params.prisma, {
+			organizationId,
+			deviceId,
+			opaqueToken: opaque,
+		}).catch(() => null);
+		if (mapped?.employeeNo) {
+			plain = mapped.employeeNo;
+			if (mapped.displayName) displayName = mapped.displayName;
+			path = "opaque_mapped";
+		}
+	}
+
+	if (!plain) {
+		return {
+			ok: false,
+			plainEmployeeNo: null,
+			opaqueToken: opaque,
+			deviceUserId: null,
+			linkedEmployeeId: null,
+			path: "pending_log_resolve",
+			reason: "plain_employee_no_not_on_callback",
+		};
+	}
+
+	// Immediate inventory + HRIS link (no device round-trip yet) so socket carries plain id now.
+	const deviceUser = await upsertDeviceUserInventoryStub(params.prisma, {
+		organizationId,
+		deviceId,
+		employeeNo: plain,
+		displayName,
+		opaqueToken: opaque,
+	}).catch(() => null);
+
+	const linkedEmployeeId = deviceUser?.employeeId
+		? String(deviceUser.employeeId)
+		: (
+				await resolveLinkedEmployeeForDevicePerson(params.prisma, {
+					organizationId,
+					employeeNo: plain,
+				}).catch(() => null)
+			)?.id || null;
+
+	if (!displayName && deviceUser?.displayName) {
+		displayName = String(deviceUser.displayName);
+	}
+
+	const existingEvent = await params.prisma.deviceEvent.findUnique({
+		where: { id: eventId },
+		select: { id: true, payload: true, status: true, employeeNo: true },
+	});
+	if (!existingEvent) {
+		return {
+			ok: false,
+			plainEmployeeNo: plain,
+			opaqueToken: opaque,
+			deviceUserId: deviceUser?.id || null,
+			linkedEmployeeId,
+			path,
+			reason: "event_missing",
+		};
+	}
+
+	const priorPayload = (existingEvent.payload as any) || {};
+	const initialSnapshot = buildEnrollmentSnapshot({
+		eventAction: params.eventAction,
+		plainEmployeeNo: plain,
+		displayName,
+		opaqueToken: opaque,
+		deviceUserId: deviceUser?.id || null,
+		linkedEmployeeId,
+		biometricTemplateStatus: "pending_plain_employee_no",
+	});
+	// Mark that UserInfo raw metadata is still loading onto DeviceUser.
+	(initialSnapshot as any).biometricCustody = {
+		...(initialSnapshot.biometricCustody as any),
+		status: "userinfo_enrich_pending",
+	};
+
+	const updated = await params.prisma.deviceEvent.update({
+		where: { id: eventId },
+		data: {
+			employeeNo: plain,
+			employeeId: linkedEmployeeId || null,
+			deviceUserId: deviceUser?.id || null,
+			// Enrollment lifecycle is not attendance; still MATCHED/UNMATCHED for person truth.
+			status: linkedEmployeeId ? "MATCHED" : "UNMATCHED",
+			errorMessage: null,
+			payload: {
+				...priorPayload,
+				personTokenResolved: Boolean(opaque),
+				opaquePersonToken: opaque || priorPayload.opaquePersonToken || null,
+				resolvedEmployeeNo: plain,
+				resolvedDisplayName: displayName || priorPayload.resolvedDisplayName || null,
+				fastEnrollmentIdentityPath: path,
+				enrollmentSnapshot: initialSnapshot,
+				enrollmentGoal: {
+					employeeNo: plain,
+					displayName,
+					opaquePersonToken: opaque,
+					deviceUserId: deviceUser?.id || null,
+					rawTemplateOnDeviceEvent: false,
+					fingerprintTemplateLocation: deviceUser?.id
+						? `DeviceUser(${deviceUser.id}).vendorMetadata.biometricBundle`
+						: "DeviceUser.vendorMetadata.biometricBundle (encrypted)",
+				},
+			},
+		},
+		include: {
+			device: {
+				select: { id: true, name: true, address: true, port: true, protocol: true },
+			},
+			deviceUser: {
+				select: {
+					id: true,
+					vendorUserId: true,
+					employeeNo: true,
+					displayName: true,
+					employeeId: true,
+					vendorMetadata: true,
+				},
+			},
+		},
+	});
+
+	let employeeForSocket: any = null;
+	if (linkedEmployeeId) {
+		employeeForSocket = await params.prisma.employee
+			.findUnique({
+				where: { id: linkedEmployeeId },
+				select: {
+					id: true,
+					employeeId: true,
+					deviceEmpId: true,
+					person: { select: { personalInfo: true } },
+				},
+			})
+			.catch(() => null);
+	}
+
+	// First socket: plain device person id (+ HRIS when already linked) without waiting on UserInfo.
+	emitDeviceEventSaved(params.req?.io, {
+		...updated,
+		employee: employeeForSocket,
+	});
+
+	// Second wave: full UserInfo raw metadata always lands on DeviceUser, then re-socket.
+	if (params.enrichUserInfo !== false) {
+		void enrichEnrollmentLifecycleEvent({
+			prisma: params.prisma,
+			req: params.req,
+			organizationId,
+			deviceId,
+			eventId,
+			eventAction: params.eventAction,
+			plainEmployeeNo: plain,
+			displayName,
+			opaqueToken: opaque,
+			linkedEmployeeId,
+			deviceUserId: deviceUser?.id || null,
+		}).catch((error: any) => {
+			console.warn(
+				"[device-person-token] fast enroll UserInfo enrich failed",
+				eventId,
+				error?.message || error,
+			);
+		});
+	}
+
+	return {
+		ok: true,
+		plainEmployeeNo: plain,
+		opaqueToken: opaque,
+		deviceUserId: deviceUser?.id || null,
+		linkedEmployeeId,
+		path,
+	};
+};
+
+/**
+ * Fire-and-forget wrapper for the callback controller.
+ * Never blocks HTTP ack more than the immediate stub/socket path.
+ */
+export const scheduleFastEnrollmentIdentityOnSdkCallback = (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	organizationId: string;
+	deviceId: string;
+	eventId: string;
+	eventAction?: string | null;
+	employeeNo?: string | null;
+	opaqueToken?: string | null;
+	displayName?: string | null;
+}): void => {
+	void applyFastEnrollmentIdentityOnSdkCallback(params).catch((error: any) => {
+		console.warn(
+			"[device-person-token] fast enroll identity crashed",
+			params.eventId,
+			error?.message || error,
+		);
+	});
 };

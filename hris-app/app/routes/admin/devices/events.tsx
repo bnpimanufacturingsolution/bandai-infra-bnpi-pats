@@ -492,6 +492,8 @@ const getEmployeeRecordUrl = (employeeProfileId?: string | null) =>
 /**
  * Open Sync Center → Device users for this physical device, filtered to plain device person no.
  * This is DEVICE inventory (DeviceUser), not HRIS Employee.
+ * When a plain person no is known (e.g. panel enroll "14"), open Current view + search + details
+ * so the Device user details modal lands on that vendor user.
  */
 const getDeviceUserSyncCenterUrl = (
 	deviceId?: string | null,
@@ -499,17 +501,22 @@ const getDeviceUserSyncCenterUrl = (
 ) => {
 	const id = String(deviceId || "").trim();
 	if (!id) return "/admin/configuration/devices?action=device-users&syncPanel=users";
+	const person = String(employeeNo || "").trim();
+	const hasPlainPerson =
+		Boolean(person) && !/^[A-Za-z0-9+/]{16,}={0,2}$/.test(person) && !/[+/=]/.test(person);
 	const params = new URLSearchParams({
 		action: "device-users",
 		deviceId: id,
 		syncPanel: "users",
-		// HRIS DeviceUser inventory (saved stubs), not live "Current view" merge which can be empty
-		// when the person was never imported or was removed from the terminal.
-		deviceUserView: "hris",
+		// Prefer Current view when we have a plain device person no so SOURCE_ONLY
+		// panel enrolls (not yet in HRIS inventory) still appear and can open details.
+		// Fall back to HRIS inventory when opening the device list without a person filter.
+		deviceUserView: hasPlainPerson ? "shown" : "hris",
 	});
-	const person = String(employeeNo || "").trim();
-	if (person && !/^[A-Za-z0-9+/]{16,}={0,2}$/.test(person)) {
+	if (hasPlainPerson) {
 		params.set("deviceUserSearch", person);
+		// Auto-open Device user details modal for this vendor user id.
+		params.set("deviceUserDetails", person);
 	}
 	return `/admin/configuration/devices?${params.toString()}`;
 };
@@ -553,7 +560,16 @@ const getEmployeeDisplayName = (item: UnifiedDeviceEventRow) => {
 	if (item.employeeProfileId) return item.employeeId || getDisplayEmployeeNo(item) || "Employee";
 	const displayNo = getDisplayEmployeeNo(item);
 	if (isOpaqueDevicePersonToken(displayNo)) return "Not linked to HRIS employee";
-	if (displayNo) return "Employee not matched";
+	// Plain device person no (e.g. panel enroll "14") — show as device user, not HRIS employee.
+	if (displayNo) {
+		const resolvedName = String(
+			item.payload?.resolvedDisplayName ||
+				item.payload?.enrollmentSnapshot?.displayName ||
+				item.payload?.enrollmentGoal?.displayName ||
+				"",
+		).trim();
+		return resolvedName || `User ${displayNo}`;
+	}
 	return "Unknown person";
 };
 
