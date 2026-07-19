@@ -135,7 +135,11 @@ constexpr auto recent_employee_candidate_ttl = std::chrono::seconds(180);
 constexpr auto poll_reconcile_min_interval = std::chrono::seconds(3);
 constexpr auto inventory_poll_interval = std::chrono::seconds(2);
 
-bool curl_post_json(const std::string &url, const std::string &body, const std::string &event_name);
+bool curl_post_json(
+    const std::string &url,
+    const std::string &body,
+    const std::string &event_name,
+    int max_time_seconds = 5);
 void queue_reconcile(const ReconcileJob &job);
 std::string pick_newest_plain_employee_no(const std::vector<std::string> &candidates);
 std::vector<std::string> get_recent_employee_candidates_for_host(const std::string &host);
@@ -3031,9 +3035,10 @@ bool post_json_with_retries(
     const std::string &body,
     const std::string &event_name,
     int attempts,
-    int retry_sleep_ms) {
+    int retry_sleep_ms,
+    int max_time_seconds = 5) {
     for (int attempt = 1; attempt <= attempts; ++attempt) {
-        const bool ok = curl_post_json(url, body, event_name);
+        const bool ok = curl_post_json(url, body, event_name, max_time_seconds);
         emit_json({
             {"event", event_name + "_attempt"},
             {"attempt", std::to_string(attempt)},
@@ -3098,7 +3103,13 @@ void replay_pending_hikvision_callbacks() {
             emit_json({{"event", "hikvision_callback_spool_read_failed"}, {"path", path}});
             continue;
         }
-        const bool ok = post_json_with_retries(url, body, "hikvision_callback_spool_replay", 3, 1500);
+        const bool ok = post_json_with_retries(
+            url,
+            body,
+            "hikvision_callback_spool_replay",
+            3,
+            1500,
+            30);
         emit_json({
             {"event", "hikvision_callback_spool_replay_result"},
             {"path", path},
@@ -3178,7 +3189,11 @@ bool post_hris_contract_payload(
     return ok;
 }
 
-bool curl_post_json(const std::string &url, const std::string &body, const std::string &event_name) {
+bool curl_post_json(
+    const std::string &url,
+    const std::string &body,
+    const std::string &event_name,
+    int max_time_seconds) {
     char body_template[] = "/tmp/project-truth-hikvision-body-XXXXXX";
     const int body_fd = mkstemp(body_template);
     if (body_fd < 0) {
@@ -3215,7 +3230,7 @@ bool curl_post_json(const std::string &url, const std::string &body, const std::
     std::fprintf(config_file, "request = \"POST\"\n");
     std::fprintf(config_file, "header = \"Content-Type: application/json\"\n");
     std::fprintf(config_file, "connect-timeout = 3\n");
-    std::fprintf(config_file, "max-time = 5\n");
+    std::fprintf(config_file, "max-time = %d\n", std::max(1, max_time_seconds));
     if (!hris_api_token.empty()) {
         std::fprintf(config_file, "header = \"Authorization: Bearer %s\"\n", hris_api_token.c_str());
     }
@@ -3920,7 +3935,9 @@ bool post_hikvision_callback(const ReconcileJob &job) {
     }
 
     const std::string url = hris_api_base + "/api/hikvision/callback";
-    const bool ok = post_json_with_retries(url, body, "hikvision_callback_post", 3, 1500);
+    // Raw biometric custody can require DeviceUser + DeviceEvent writes before the API
+    // acknowledges. Keep contract polling fast, but allow callback persistence to finish.
+    const bool ok = post_json_with_retries(url, body, "hikvision_callback_post", 3, 1500, 30);
     emit_json({
         {"event", "hikvision_callback_post_result"},
         {"sourceDeviceId", job.source_device_id},

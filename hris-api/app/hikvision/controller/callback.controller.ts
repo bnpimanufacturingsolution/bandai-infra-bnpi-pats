@@ -599,6 +599,56 @@ export const controller = (prisma: PrismaClient) => {
 					};
 				};
 
+				// C++ may attach raw fingerprints/face after inventory enrich on any solid
+				// callback POST — including retries that dedupe to an existing DeviceEvent.
+				// Extract blobs from this payload and store on DeviceUser (cpp_sdk_callback_raw).
+				// Do not skip on isDuplicate: person-15 FP bodies often re-fire same major=3 serial.
+				const persistCallbackTemplatesIfPresent = async (
+					identityResult: Awaited<ReturnType<typeof runEnrollmentIdentityIfNeeded>>,
+				) => {
+					const plainForTemplates =
+						String(identityResult?.plainEmployeeNo || employeeNo || "").trim() || "";
+					const callbackFingerprints =
+						(payload as any)?.fingerprints || (rawPayload as any)?.fingerprints;
+					const callbackFaceTemplate =
+						(payload as any)?.faceTemplate || (rawPayload as any)?.faceTemplate;
+					const callbackFacePicture =
+						(payload as any)?.facePicture || (rawPayload as any)?.facePicture;
+					if (
+						!plainForTemplates ||
+						isOpaqueHikvisionPersonToken(plainForTemplates) ||
+						!(Array.isArray(callbackFingerprints)
+							? callbackFingerprints.length > 0
+							: Boolean(callbackFaceTemplate || callbackFacePicture))
+					) {
+						return null;
+					}
+					try {
+						const {
+							persistRawFingerprintsFromSdkCallback,
+						} = await import("../../../helper/device-user-raw-fingerprint.helper.js");
+						return await persistRawFingerprintsFromSdkCallback({
+							prisma,
+							req,
+							organizationId: String(device.organizationId),
+							deviceId: String(device.id),
+							employeeNo: plainForTemplates,
+							deviceUserId: identityResult?.deviceUserId || null,
+							eventId: String(eventRecord.id),
+							fingerprints: callbackFingerprints,
+							faceTemplate: callbackFaceTemplate,
+							facePicture: callbackFacePicture,
+							source: "cpp_sdk_callback_raw",
+						});
+					} catch (templateError: any) {
+						console.warn(
+							"[HIKVISION_CALLBACK][CTRL] raw template persist failed",
+							templateError?.message || templateError,
+						);
+						return null;
+					}
+				};
+
 				if (isDuplicate) {
 					await publishDeviceEventSaved(req, eventRecord);
 					// Still schedule logSearch resolve: enroll create/FP often re-fires the same
@@ -616,6 +666,10 @@ export const controller = (prisma: PrismaClient) => {
 					}
 					// Re-apply identity when the device finally posts plain employeeNo on a retry.
 					const identity = await runEnrollmentIdentityIfNeeded();
+					// Still extract fingerprints/face from payload on duplicate path and persist
+					// to DeviceUser with source cpp_sdk_callback_raw (first solid spool often
+					// reuses serial / dedupeKey after template_repost or multipass enrich).
+					const templatePersist = await persistCallbackTemplatesIfPresent(identity);
 					const successResponse = buildSuccessResponse(
 						"Duplicate callback received; existing event reused",
 						{
@@ -627,6 +681,10 @@ export const controller = (prisma: PrismaClient) => {
 							employeeId: identity?.linkedEmployeeId || eventRecord.employeeId,
 							attendanceId: eventRecord.attendanceId,
 							enrollmentIdentityPath: identity?.path || null,
+							deviceUserId:
+								templatePersist?.deviceUserId || identity?.deviceUserId || null,
+							rawTemplatesFromCallback: Boolean(templatePersist?.ok),
+							rawFingerprintCount: templatePersist?.fingerprintCount || 0,
 							dedupeKey,
 						},
 						200,
@@ -668,46 +726,7 @@ export const controller = (prisma: PrismaClient) => {
 
 					// C++ may attach raw fingerprints/face on the callback after inventory enrich.
 					// Store on DeviceUser immediately so Device Users shows blobs without second ISAPI.
-					const plainForTemplates =
-						String(identity?.plainEmployeeNo || employeeNo || "").trim() || "";
-					const callbackFingerprints =
-						(payload as any)?.fingerprints || (rawPayload as any)?.fingerprints;
-					const callbackFaceTemplate =
-						(payload as any)?.faceTemplate || (rawPayload as any)?.faceTemplate;
-					const callbackFacePicture =
-						(payload as any)?.facePicture || (rawPayload as any)?.facePicture;
-					let templatePersist: any = null;
-					if (
-						plainForTemplates &&
-						!isOpaqueHikvisionPersonToken(plainForTemplates) &&
-						(Array.isArray(callbackFingerprints)
-							? callbackFingerprints.length > 0
-							: Boolean(callbackFaceTemplate || callbackFacePicture))
-					) {
-						try {
-							const {
-								persistRawFingerprintsFromSdkCallback,
-							} = await import("../../../helper/device-user-raw-fingerprint.helper.js");
-							templatePersist = await persistRawFingerprintsFromSdkCallback({
-								prisma,
-								req,
-								organizationId: String(device.organizationId),
-								deviceId: String(device.id),
-								employeeNo: plainForTemplates,
-								deviceUserId: identity?.deviceUserId || null,
-								eventId: String(eventRecord.id),
-								fingerprints: callbackFingerprints,
-								faceTemplate: callbackFaceTemplate,
-								facePicture: callbackFacePicture,
-								source: "cpp_sdk_callback_raw",
-							});
-						} catch (templateError: any) {
-							console.warn(
-								"[HIKVISION_CALLBACK][CTRL] raw template persist failed",
-								templateError?.message || templateError,
-							);
-						}
-					}
+					const templatePersist = await persistCallbackTemplatesIfPresent(identity);
 
 					const successResponse = buildSuccessResponse(
 						identityApplied
