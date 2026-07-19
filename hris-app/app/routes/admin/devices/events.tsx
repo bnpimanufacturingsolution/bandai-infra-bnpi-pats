@@ -259,7 +259,7 @@ const sourceOptions: SelectOption[] = [
 	{ value: "ZKTECO_EVENT", label: "ZKTeco Linux bridge" },
 ];
 
-const eventCategoryOptions: SelectOption[] = [
+const eventCategoryOptionsStatic: SelectOption[] = [
 	{ value: "all", label: "Any event category" },
 	{ value: "ATTENDANCE", label: "Attendance" },
 	{ value: "ENROLLMENT", label: "Enrollment" },
@@ -270,7 +270,7 @@ const eventCategoryOptions: SelectOption[] = [
 	{ value: "UNKNOWN_VENDOR", label: "Unknown vendor" },
 ];
 
-const eventActionOptions: SelectOption[] = [
+const eventActionOptionsStatic: SelectOption[] = [
 	{ value: "all", label: "Any event action" },
 	{ value: "TAP", label: "Attendance tap" },
 	{ value: "FINGERPRINT_ENROLLED", label: "Fingerprint enrolled" },
@@ -335,13 +335,27 @@ const EVENT_CATEGORY_BY_ACTION: Record<string, string> = {
 	UNKNOWN: "UNKNOWN_VENDOR",
 };
 
-const getEventActionOptionsForCategory = (category: string): SelectOption[] => {
-	if (!category || category === "all") return eventActionOptions;
-	const allowed = new Set(EVENT_ACTIONS_BY_CATEGORY[category] || []);
-	if (allowed.size === 0) return eventActionOptions;
+const getCountedSelectOptions = (
+	baseOptions: SelectOption[],
+	counts?: Record<string, number> | null,
+	allLabel = baseOptions[0]?.label || "All",
+	selectedValue = "all",
+) => {
+	const normalizedCounts = counts && typeof counts === "object" ? counts : {};
+	const valuesFromRows = Object.entries(normalizedCounts)
+		.filter(([, count]) => Number(count || 0) > 0)
+		.map(([value]) => String(value || "").trim())
+		.filter(Boolean);
+	const values = new Set<string>(valuesFromRows);
+	if (selectedValue && selectedValue !== "all") values.add(selectedValue);
+
+	const labelByValue = new Map(baseOptions.map((option) => [option.value, option.label]));
 	return [
-		{ value: "all", label: "Any event action" },
-		...eventActionOptions.filter((option) => option.value !== "all" && allowed.has(option.value)),
+		{ value: "all", label: allLabel },
+		...Array.from(values).map((value) => ({
+			value,
+			label: labelByValue.get(value) || formatEventTaxonomyToken(value),
+		})),
 	];
 };
 
@@ -570,15 +584,40 @@ const formatDeviceEventPersonRef = (
 		const errorText = String(
 			item?.payload?.errorMessage || item?.payload?.processingError || "",
 		).toLowerCase();
+		const opaqueInPayload = String(
+			item?.payload?.opaquePersonToken ||
+				item?.payload?.enrollmentGoal?.opaquePersonToken ||
+				"",
+		).trim();
+		// SYNC_SIGNAL is transport/path-alive — not the enrollment person ledger.
 		if (action === "SYNC_SIGNAL" && !errorText.includes("resolving")) {
 			return "No person id on SDK signal";
 		}
-		const resolving =
+		// USER_CREATED / FINGERPRINT_ENROLLED are the person ledger. Prefer honest labels:
+		// "pending" only when custody is actually mid-resolve, not forever for stuck opaque rows.
+		const custodyStatus = String(
+			item?.payload?.enrollmentSnapshot?.biometricCustody?.status || "",
+		).toLowerCase();
+		const activelyResolving =
 			errorText.includes("resolving") ||
-			String(item?.payload?.enrollmentSnapshot?.biometricCustody?.status || "").includes(
-				"pending",
-			);
-		return resolving ? "Identity check pending" : "No person id on device log";
+			custodyStatus === "userinfo_enrich_pending" ||
+			custodyStatus === "pending_plain_employee_no";
+		if (
+			action === "USER_CREATED" ||
+			action === "USER_UPDATED" ||
+			action === "FINGERPRINT_ENROLLED" ||
+			action === "FINGERPRINT_UPDATED" ||
+			action === "FINGERPRINT_DELETED" ||
+			action === "CARD_ENROLLED"
+		) {
+			if (activelyResolving) return "Resolving plain person id…";
+			if (opaqueInPayload || isOpaqueDevicePersonToken(opaqueInPayload)) {
+				return "Opaque device log id (not plain person no yet)";
+			}
+			return "No plain person id on this row";
+		}
+		if (activelyResolving) return "Resolving plain person id…";
+		return "No person id on device log";
 	}
 	if (isOpaqueDevicePersonToken(token)) {
 		return "Device person token (not a readable employee no.)";
@@ -602,6 +641,11 @@ const getEmployeeDisplayName = (item: UnifiedDeviceEventRow) => {
 		).trim();
 		return resolvedName || `User ${displayNo}`;
 	}
+	// Lifecycle rows without plain id — do not look like an unknown HRIS employee forever.
+	const action = String(item.eventAction || "").toUpperCase();
+	if (action === "USER_CREATED") return "Device user created (plain id pending)";
+	if (action === "FINGERPRINT_ENROLLED") return "Fingerprint enrolled (plain id pending)";
+	if (action === "SYNC_SIGNAL") return "Device operation signal";
 	return "Unknown person";
 };
 
@@ -1187,7 +1231,7 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		eventAction: event.eventAction || event.taxonomy?.eventAction || null,
 		eventLabel:
 			(event.eventAction || event.taxonomy?.eventAction
-				? getOptionLabel(eventActionOptions, event.eventAction || event.taxonomy?.eventAction || "")
+				? getOptionLabel(eventActionOptionsStatic, event.eventAction || event.taxonomy?.eventAction || "")
 				: null) ||
 			event.eventLabel ||
 			event.taxonomy?.eventLabel ||
@@ -1590,6 +1634,25 @@ export default function DeviceEventsPage() {
 		from,
 		to,
 	};
+	const savedFacetQueryParams: ApiQueryParams = {
+		page: 1,
+		limit: 1,
+		query: viewMode === "saved" ? query : undefined,
+		deviceId: deviceId === "all" ? undefined : deviceId,
+		evidenceSource: evidenceSource !== "all" ? evidenceSource : undefined,
+		eventConfidence: eventConfidence !== "all" ? eventConfidence : undefined,
+		status: viewMode === "saved" && status !== "all" ? status : undefined,
+		source: viewMode === "saved" && source !== "all" ? source : undefined,
+		sort: viewMode === "saved" ? sort : undefined,
+		order: viewMode === "saved" ? order : undefined,
+		dateField: viewMode === "saved" ? "eventTime" : undefined,
+		from,
+		to,
+	};
+	const { data: savedFacetData } = useDeviceEvents(savedFacetQueryParams, {
+		enabled: viewMode === "saved",
+		refetchInterval: false,
+	});
 	const {
 		data,
 		isLoading: isLoadingSaved,
@@ -1602,6 +1665,60 @@ export default function DeviceEventsPage() {
 		// Live ledger without hammering: only "live" when we are not socket-backed.
 		liveLedger: viewMode === "saved" && shouldPollSavedEvents,
 	});
+	const savedFacetSummary = savedFacetData?.summary || data?.summary || null;
+	const eventCategoryOptions = useMemo(
+		() =>
+			getCountedSelectOptions(
+				eventCategoryOptionsStatic,
+				savedFacetSummary?.byCategory as Record<string, number> | undefined,
+				"Any event category",
+				eventCategory,
+			),
+		[savedFacetSummary?.byCategory, eventCategory],
+	);
+	const eventActionOptions = useMemo(
+		() =>
+			getCountedSelectOptions(
+				eventActionOptionsStatic,
+				savedFacetSummary?.byAction as Record<string, number> | undefined,
+				"Any event action",
+				eventAction,
+			),
+		[savedFacetSummary?.byAction, eventAction],
+	);
+	const getSavedCategoryForAction = (actionValue: string) => {
+		const countsByCategory = (savedFacetSummary?.byActionCategory as any)?.[actionValue];
+		if (countsByCategory && typeof countsByCategory === "object") {
+			const categories = Object.entries(countsByCategory)
+				.filter(([, count]) => Number(count || 0) > 0)
+				.map(([category]) => String(category));
+			if (categories.length === 1) return categories[0];
+		}
+		return EVENT_CATEGORY_BY_ACTION[actionValue] || "";
+	};
+	const getSavedActionOptionsForCategory = (categoryValue: string): SelectOption[] => {
+		if (!categoryValue || categoryValue === "all") return eventActionOptions;
+		const countsByActionCategory = (savedFacetSummary?.byActionCategory || {}) as Record<
+			string,
+			Record<string, number>
+		>;
+		const actionValues = Object.entries(countsByActionCategory)
+			.filter(([, categoryCounts]) => Number(categoryCounts?.[categoryValue] || 0) > 0)
+			.map(([actionValue]) => actionValue);
+		if (eventAction !== "all" && !actionValues.includes(eventAction)) {
+			actionValues.push(eventAction);
+		}
+		const allowed =
+			actionValues.length > 0
+				? new Set(actionValues)
+				: new Set(EVENT_ACTIONS_BY_CATEGORY[categoryValue] || []);
+		return [
+			{ value: "all", label: "Any event action" },
+			...eventActionOptions.filter(
+				(option) => option.value !== "all" && allowed.has(option.value),
+			),
+		];
+	};
 	const {
 		data: liveData,
 		isLoading: isLoadingLive,
@@ -3454,7 +3571,7 @@ export default function DeviceEventsPage() {
 											if (!value || value === "all") next.delete("eventCategory");
 											else next.set("eventCategory", value);
 											const allowed = new Set(
-												getEventActionOptionsForCategory(value).map((option) => option.value),
+												getSavedActionOptionsForCategory(value).map((option) => option.value),
 											);
 											const currentAction = next.get("eventAction") || "all";
 											if (currentAction !== "all" && !allowed.has(currentAction)) {
@@ -3470,7 +3587,7 @@ export default function DeviceEventsPage() {
 							</FilterField>
 							<FilterField label="Action">
 								<Select
-									options={getEventActionOptionsForCategory(eventCategory)}
+									options={getSavedActionOptionsForCategory(eventCategory)}
 									value={eventAction}
 									onChange={(value) => {
 										// Picking an action also sets its parent category
@@ -3480,7 +3597,7 @@ export default function DeviceEventsPage() {
 												next.delete("eventAction");
 											} else {
 												next.set("eventAction", value);
-												const parentCategory = EVENT_CATEGORY_BY_ACTION[value];
+												const parentCategory = getSavedCategoryForAction(value);
 												if (parentCategory) {
 													next.set("eventCategory", parentCategory);
 												}

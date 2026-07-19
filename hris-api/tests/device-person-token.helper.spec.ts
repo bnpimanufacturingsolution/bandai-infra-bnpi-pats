@@ -177,6 +177,8 @@ describe("device-person-token helper", () => {
 		expect(source).to.include("log.hikvision.com/Information/addUserInfo");
 		expect(source).to.include("log.hikvision.com/Information/addFpByEmployeeNo");
 		expect(source).to.include("applyFastEnrollmentIdentityOnSdkCallback");
+		expect(source).to.include("backfillRecentLifecycleEventsWithPlain");
+		expect(source).to.include("SDK_FAST_IDENTITY_SIBLING_BACKFILL");
 		expect(source).to.include("scheduleRawFingerprintCaptureForEnrollment");
 		expect(source).to.include("raw_base64_on_device_user");
 		expect(source).to.not.match(/Information\/deleteUserInfo/);

@@ -859,6 +859,247 @@ export const fetchDeviceUserInfoCandidates = async (params: {
 	return Array.from(map.values());
 };
 
+const LIFECYCLE_EVENT_ACTIONS_FOR_PLAIN_BACKFILL = [
+	"USER_CREATED",
+	"USER_UPDATED",
+	"USER_DELETED",
+	"FINGERPRINT_ENROLLED",
+	"FINGERPRINT_UPDATED",
+	"FINGERPRINT_DELETED",
+	"CARD_ENROLLED",
+] as const;
+
+/**
+ * Operator truth: USER_CREATED / FINGERPRINT_ENROLLED must show the plain person id.
+ * Race (TEST A 2026-07-19): C++ inventory_delta attaches plain to SYNC_SIGNAL first and
+ * upserts DeviceUser, then multipass logSearch saves lifecycle rows with opaque only.
+ * Inventory delta then sees no *new* plain → opaque map never runs → UI shows
+ * "Identity check pending" on create/enroll while SYNC_SIGNAL shows User 16.
+ *
+ * Call this whenever plain is known (SDK fast path or opaque map) to backfill siblings.
+ */
+export const backfillRecentLifecycleEventsWithPlain = async (params: {
+	prisma: PrismaClient | any;
+	req?: any;
+	organizationId: string;
+	deviceId: string;
+	plainEmployeeNo: string;
+	opaqueToken?: string | null;
+	displayName?: string | null;
+	deviceUserId?: string | null;
+	/** Default 10 minutes. */
+	windowMs?: number;
+	/** Exclude this event id (already updated by caller). */
+	excludeEventId?: string | null;
+	source?: string;
+}): Promise<{ backfilledEvents: number; eventIds: string[] }> => {
+	const organizationId = String(params.organizationId || "").trim();
+	const deviceId = String(params.deviceId || "").trim();
+	const plain = String(params.plainEmployeeNo || "").trim();
+	const opaque = String(params.opaqueToken || "").trim() || null;
+	if (
+		!organizationId ||
+		!deviceId ||
+		!plain ||
+		isOpaqueHikvisionPersonToken(plain)
+	) {
+		return { backfilledEvents: 0, eventIds: [] };
+	}
+
+	const windowMs = Math.min(
+		Math.max(Number(params.windowMs) || 10 * 60_000, 30_000),
+		60 * 60_000,
+	);
+	const source = params.source || "SDK_PLAIN_LIFECYCLE_BACKFILL";
+
+	const recent = await params.prisma.deviceEvent.findMany({
+		where: {
+			organizationId,
+			deviceId,
+			eventAction: { in: [...LIFECYCLE_EVENT_ACTIONS_FOR_PLAIN_BACKFILL] },
+			receivedAt: { gte: new Date(Date.now() - windowMs) },
+			...(params.excludeEventId
+				? { id: { not: String(params.excludeEventId) } }
+				: {}),
+			OR: [{ employeeNo: null }, { employeeNo: "" }],
+		},
+		orderBy: { receivedAt: "desc" },
+		take: 40,
+	});
+
+	// Collect unique opaques among empty-person lifecycle rows.
+	const withOpaqueMeta = recent.map((event: any) => {
+		const payload = (event.payload as any) || {};
+		const eventOpaque = String(
+			payload.opaquePersonToken ||
+				payload?.enrollmentGoal?.opaquePersonToken ||
+				payload?.rawEvidence?.employeeNo ||
+				"",
+		).trim();
+		return { event, payload, eventOpaque };
+	});
+
+	const uniqueOpaques = Array.from(
+		new Set(
+			withOpaqueMeta
+				.map((r) => r.eventOpaque)
+				.filter((v) => v && isOpaqueHikvisionPersonToken(v)),
+		),
+	);
+
+	// Safety: if multiple distinct opaques in window without a target opaque, do not invent maps.
+	if (!opaque && uniqueOpaques.length > 1) {
+		return { backfilledEvents: 0, eventIds: [] };
+	}
+
+	let deviceUserId = String(params.deviceUserId || "").trim() || null;
+	if (!deviceUserId) {
+		const du = await params.prisma.deviceUser
+			.findFirst({
+				where: {
+					organizationId,
+					deviceId,
+					OR: [{ vendorUserId: plain }, { employeeNo: plain }],
+				},
+				select: { id: true, employeeId: true, displayName: true },
+			})
+			.catch(() => null);
+		deviceUserId = du?.id || null;
+		if (!params.displayName && du?.displayName) {
+			params.displayName = String(du.displayName);
+		}
+	}
+
+	const linked = await resolveLinkedEmployeeForDevicePerson(params.prisma, {
+		organizationId,
+		employeeNo: plain,
+	}).catch(() => null);
+
+	// Persist opaque→plain map when we know both.
+	if (opaque && isOpaqueHikvisionPersonToken(opaque)) {
+		await upsertDevicePersonToken(params.prisma, {
+			organizationId,
+			deviceId,
+			opaqueToken: opaque,
+			employeeNo: plain,
+			displayName: params.displayName || linked?.displayName || null,
+			source: "SDK_PLAIN_LIFECYCLE_BACKFILL" as DevicePersonTokenSource,
+		}).catch(() => null);
+	} else if (uniqueOpaques.length === 1) {
+		await upsertDevicePersonToken(params.prisma, {
+			organizationId,
+			deviceId,
+			opaqueToken: uniqueOpaques[0],
+			employeeNo: plain,
+			displayName: params.displayName || linked?.displayName || null,
+			source: "SDK_PLAIN_LIFECYCLE_BACKFILL" as DevicePersonTokenSource,
+		}).catch(() => null);
+	}
+
+	const eventIds: string[] = [];
+	for (const row of withOpaqueMeta) {
+		const { event, payload, eventOpaque } = row;
+		// If caller gave a specific opaque, only backfill matching rows (or rows with no opaque).
+		if (opaque && eventOpaque && eventOpaque !== opaque) continue;
+		// If multiple opaques and no target, we already returned; here at most one opaque family.
+		if (!opaque && uniqueOpaques.length === 1 && eventOpaque && eventOpaque !== uniqueOpaques[0]) {
+			continue;
+		}
+
+		const resolvedOpaque = opaque || eventOpaque || uniqueOpaques[0] || null;
+		const nextPayload = {
+			...payload,
+			opaquePersonToken: resolvedOpaque || payload.opaquePersonToken || null,
+			resolvedEmployeeNo: plain,
+			resolvedDisplayName:
+				params.displayName ||
+				linked?.displayName ||
+				payload.resolvedDisplayName ||
+				null,
+			personTokenResolved: Boolean(resolvedOpaque),
+			personTokenSource: source,
+			lifecyclePlainBackfilledAt: new Date().toISOString(),
+			notHrisEmployee: !linked?.id,
+			enrollmentGoal: {
+				...((payload.enrollmentGoal as any) || {}),
+				employeeNo: plain,
+				displayName:
+					params.displayName ||
+					linked?.displayName ||
+					payload.enrollmentGoal?.displayName ||
+					null,
+				deviceUserId: deviceUserId || payload.enrollmentGoal?.deviceUserId || null,
+				opaquePersonToken:
+					resolvedOpaque || payload.enrollmentGoal?.opaquePersonToken || null,
+			},
+			enrollmentSnapshot: {
+				...((payload.enrollmentSnapshot as any) || {}),
+				employeeNo: plain,
+				displayName:
+					params.displayName ||
+					linked?.displayName ||
+					payload.enrollmentSnapshot?.displayName ||
+					null,
+				deviceUserId: deviceUserId || payload.enrollmentSnapshot?.deviceUserId || null,
+			},
+		};
+
+		const updated = await params.prisma.deviceEvent.update({
+			where: { id: event.id },
+			data: {
+				employeeNo: plain,
+				employeeId: linked?.id || event.employeeId || null,
+				deviceUserId: deviceUserId || event.deviceUserId || null,
+				status: linked?.id ? "MATCHED" : "UNMATCHED",
+				errorMessage: null,
+				payload: nextPayload,
+			},
+			include: {
+				device: {
+					select: { id: true, name: true, address: true, port: true, protocol: true },
+				},
+				deviceUser: {
+					select: {
+						id: true,
+						vendorUserId: true,
+						employeeNo: true,
+						displayName: true,
+						employeeId: true,
+						vendorMetadata: true,
+					},
+				},
+			},
+		});
+
+		let employeeForSocket: any = null;
+		if (linked?.id) {
+			employeeForSocket = await params.prisma.employee
+				.findUnique({
+					where: { id: linked.id },
+					select: {
+						id: true,
+						employeeId: true,
+						deviceEmpId: true,
+						person: { select: { personalInfo: true } },
+					},
+				})
+				.catch(() => null);
+		}
+		emitDeviceEventSaved(params.req?.io, {
+			...updated,
+			employee: employeeForSocket,
+		});
+		eventIds.push(String(event.id));
+	}
+
+	if (eventIds.length) {
+		console.log(
+			`[device-person-token] lifecycle plain backfill plain=${plain} count=${eventIds.length} source=${source}`,
+		);
+	}
+	return { backfilledEvents: eventIds.length, eventIds };
+};
+
 /**
  * Panel path: map unmapped opaque log tokens → plain UserInfo ids via inventory delta,
  * persist DevicePersonToken, backfill recent lifecycle DeviceEvents, upsert DeviceUser.
@@ -1041,11 +1282,56 @@ export const resolveOpaqueViaDeviceUserInventoryDelta = async (params: {
 		}
 	}
 
-	const correlated = correlateOpaqueToPlainByInventoryDelta({
+	let correlated = correlateOpaqueToPlainByInventoryDelta({
 		devicePlains,
 		knownPlains,
 		unmappedOpaques: stillUnmapped,
 	});
+
+	// Race fix: plain may already be known (SDK SYNC_SIGNAL inventory_delta upserted DeviceUser)
+	// so newPlains is empty and classic correlation returns null. Recover via recent SDK plain.
+	if (!correlated && stillUnmapped.length === 1) {
+		const recentPlainEvent = await params.prisma.deviceEvent.findFirst({
+			where: {
+				organizationId,
+				deviceId,
+				receivedAt: { gte: new Date(Date.now() - 10 * 60_000) },
+				AND: [
+					{ employeeNo: { not: null } },
+					{ NOT: { employeeNo: "" } },
+				],
+				eventAction: {
+					in: ["SYNC_SIGNAL", "USER_CREATED", "USER_UPDATED", "FINGERPRINT_ENROLLED"],
+				},
+			},
+			orderBy: { receivedAt: "desc" },
+			select: {
+				employeeNo: true,
+				deviceUserId: true,
+				payload: true,
+			},
+		});
+		const recentPlain = String(recentPlainEvent?.employeeNo || "").trim();
+		if (recentPlain && !isOpaqueHikvisionPersonToken(recentPlain)) {
+			const displayName =
+				String(
+					(recentPlainEvent?.payload as any)?.resolvedDisplayName ||
+						(recentPlainEvent?.payload as any)?.enrollmentGoal?.displayName ||
+						"",
+				).trim() ||
+				devicePlains.find((p) => p.employeeNo === recentPlain)?.displayName ||
+				null;
+			correlated = {
+				opaqueToken: stillUnmapped[0],
+				employeeNo: recentPlain,
+				displayName,
+			};
+			console.log(
+				`[device-person-token] opaque map via recent SDK plain=${recentPlain} opaque=${stillUnmapped[0].slice(0, 12)}… device=${deviceId}`,
+			);
+		}
+	}
+
 	if (!correlated) {
 		if (newPlains.length) {
 			console.log(
@@ -1797,11 +2083,51 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 				unmappedOpaques: unmappedOpaquesThisPass,
 				source: "PANEL_INVENTORY_DELTA",
 			})
-				.then((delta) => {
+				.then(async (delta) => {
 					if (delta.backfilledEvents > 0) {
 						console.log(
 							`[device-person-token] panel delta backfilled ${delta.backfilledEvents} event(s) pass=${passLabel}`,
 						);
+					}
+					// If delta mapped zero (plain already known via SYNC_SIGNAL), still force sibling backfill.
+					if (delta.backfilledEvents === 0 && unmappedOpaquesThisPass.length >= 1) {
+						const recentPlain = await params.prisma.deviceEvent.findFirst({
+							where: {
+								organizationId,
+								deviceId,
+								receivedAt: { gte: new Date(Date.now() - 10 * 60_000) },
+								AND: [{ employeeNo: { not: null } }, { NOT: { employeeNo: "" } }],
+								eventAction: { in: ["SYNC_SIGNAL", "USER_CREATED", "USER_UPDATED"] },
+							},
+							orderBy: { receivedAt: "desc" },
+							select: { employeeNo: true, deviceUserId: true, payload: true },
+						});
+						const plain = String(recentPlain?.employeeNo || "").trim();
+						if (plain && !isOpaqueHikvisionPersonToken(plain)) {
+							const bf = await backfillRecentLifecycleEventsWithPlain({
+								prisma: params.prisma,
+								req: params.req,
+								organizationId,
+								deviceId,
+								plainEmployeeNo: plain,
+								opaqueToken:
+									unmappedOpaquesThisPass.length === 1
+										? unmappedOpaquesThisPass[0]
+										: null,
+								deviceUserId: recentPlain?.deviceUserId || null,
+								displayName:
+									String(
+										(recentPlain?.payload as any)?.resolvedDisplayName || "",
+									).trim() || null,
+								windowMs: 10 * 60_000,
+								source: "OPLOG_PASS_RECENT_SDK_PLAIN",
+							});
+							if (bf.backfilledEvents > 0) {
+								console.log(
+									`[device-person-token] oplog pass sibling backfill plain=${plain} count=${bf.backfilledEvents}`,
+								);
+							}
+						}
 					}
 				})
 				.catch((error: any) => {
@@ -1811,6 +2137,36 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 						error?.message || error,
 					);
 				});
+		} else if (created > 0) {
+			// Lifecycle rows may have been saved with empty person while SYNC_SIGNAL already has plain.
+			void (async () => {
+				const recentPlain = await params.prisma.deviceEvent.findFirst({
+					where: {
+						organizationId,
+						deviceId,
+						receivedAt: { gte: new Date(Date.now() - 10 * 60_000) },
+						AND: [{ employeeNo: { not: null } }, { NOT: { employeeNo: "" } }],
+						eventAction: { in: ["SYNC_SIGNAL", "USER_CREATED", "USER_UPDATED"] },
+					},
+					orderBy: { receivedAt: "desc" },
+					select: { employeeNo: true, deviceUserId: true, payload: true },
+				});
+				const plain = String(recentPlain?.employeeNo || "").trim();
+				if (!plain || isOpaqueHikvisionPersonToken(plain)) return;
+				await backfillRecentLifecycleEventsWithPlain({
+					prisma: params.prisma,
+					req: params.req,
+					organizationId,
+					deviceId,
+					plainEmployeeNo: plain,
+					deviceUserId: recentPlain?.deviceUserId || null,
+					displayName:
+						String((recentPlain?.payload as any)?.resolvedDisplayName || "").trim() ||
+						null,
+					windowMs: 10 * 60_000,
+					source: "OPLOG_CREATED_EMPTY_PERSON_BACKFILL",
+				});
+			})().catch(() => undefined);
 		}
 
 		if (created > 0) {
@@ -2168,6 +2524,28 @@ export const applyFastEnrollmentIdentityOnSdkCallback = async (params: {
 	emitDeviceEventSaved(params.req?.io, {
 		...updated,
 		employee: employeeForSocket,
+	});
+
+	// Sibling lifecycle rows (USER_CREATED / FINGERPRINT_ENROLLED) often land via logSearch
+	// with opaque only after this SYNC_SIGNAL already has plain. Backfill them now.
+	void backfillRecentLifecycleEventsWithPlain({
+		prisma: params.prisma,
+		req: params.req,
+		organizationId,
+		deviceId,
+		plainEmployeeNo: plain,
+		opaqueToken: opaque,
+		displayName,
+		deviceUserId: deviceUser?.id || null,
+		excludeEventId: eventId,
+		windowMs: 10 * 60_000,
+		source: "SDK_FAST_IDENTITY_SIBLING_BACKFILL",
+	}).catch((error: any) => {
+		console.warn(
+			"[device-person-token] sibling lifecycle plain backfill failed",
+			eventId,
+			error?.message || error,
+		);
 	});
 
 	// Second wave: full UserInfo raw metadata always lands on DeviceUser, then re-socket.
