@@ -7,6 +7,7 @@ import {
 	prependRealtimeSavedRow,
 	prependRealtimeSavedRows,
 	savedDeviceEventMatchesScope,
+	selectWatcherHeadlineEvent,
 	shouldRefreshSavedEventsAfterSocketEvent,
 } from "./device-events-realtime-ui";
 
@@ -228,6 +229,55 @@ describe("device events realtime UI", () => {
 			"tap-3",
 			"server-row",
 		]);
+	});
+
+	it("keeps a person-bearing tap in the watcher headline when a no-person signal follows", () => {
+		const selected = selectWatcherHeadlineEvent([
+			{
+				id: "door-close",
+				deviceId: "test-a",
+				eventAction: "UNKNOWN",
+				employeeNo: null,
+				receivedAt: "2026-07-19T14:26:45.000Z",
+			},
+			{
+				id: "ernest-tap",
+				deviceId: "test-a",
+				eventAction: "TAP",
+				employeeNo: "1",
+				employeeName: "Ernst tey Malasa",
+				receivedAt: "2026-07-19T14:26:39.000Z",
+			},
+		]);
+
+		expect(selected?.id).to.equal("ernest-tap");
+	});
+
+	it("does not replace a no-person headline with an old or different-device tap", () => {
+		const selected = selectWatcherHeadlineEvent([
+			{
+				id: "current-signal",
+				deviceId: "test-a",
+				eventAction: "SYNC_SIGNAL",
+				receivedAt: "2026-07-19T14:26:45.000Z",
+			},
+			{
+				id: "other-device-tap",
+				deviceId: "test-b",
+				eventAction: "TAP",
+				employeeNo: "1",
+				receivedAt: "2026-07-19T14:26:40.000Z",
+			},
+			{
+				id: "old-test-a-tap",
+				deviceId: "test-a",
+				eventAction: "TAP",
+				employeeNo: "1",
+				receivedAt: "2026-07-19T14:20:00.000Z",
+			},
+		]);
+
+		expect(selected?.id).to.equal("current-signal");
 	});
 
 	it("trusts socket-carried saved rows without forcing an immediate saved-list refetch", () => {

@@ -57,18 +57,19 @@ test.describe("Device Events socket-first live path", () => {
 			timeout: 30_000,
 		});
 
-		// 3) Wait for socket connect (console or hook)
+		// 3) Wait for the HRIS device-events socket. A Vite/HMR websocket is not
+		// proof that the page joined the device-events room.
 		await expect
 			.poll(
 				async () => {
 					const fromHook = await page.evaluate(() => {
 						const fn = (window as any).__ptSocketConnected;
-						return typeof fn === "function" ? Boolean(fn()) : false;
+						const inject = (window as any).__ptInjectDeviceEventSaved;
+						return typeof fn === "function" && typeof inject === "function"
+							? Boolean(fn())
+							: false;
 					});
-					const fromConsole = consoleLogs.some((line) =>
-						/Socket connected/i.test(line),
-					);
-					return fromHook || fromConsole || wsUrls.length > 0;
+					return fromHook;
 				},
 				{ timeout: 30_000 },
 			)
@@ -132,7 +133,11 @@ test.describe("Device Events socket-first live path", () => {
 						doorNo: "1",
 						verifyMode: null,
 						dedupeKey: id,
-						payload: { playwright: true, marker: label },
+						payload: {
+							playwright: true,
+							marker: label,
+							resolvedDisplayName: "ernest T571774",
+						},
 						errorMessage: null,
 						createdAt: when,
 						updatedAt: when,
@@ -152,6 +157,66 @@ test.describe("Device Events socket-first live path", () => {
 		await expect(page.getByText(/TAP|Attendance tap|Attendance/i).first()).toBeVisible({
 			timeout: 5_000,
 		});
+
+		// One physical tap can emit a later controller/open/close row without a
+		// person id. That evidence stays in the ledger, but must not replace the
+		// person-bearing attendance tap in the watcher headline.
+		const followupSignalId = `pw-signal-${Date.now()}`;
+		const followupIso = new Date(Date.now() + 5_000).toISOString();
+		await page.evaluate(
+			({ id, when, roomInfo }) => {
+				const inject = (window as any).__ptInjectDeviceEventSaved;
+				inject({
+					eventId: id,
+					organizationId: roomInfo?.organizationId || null,
+					deviceId: roomInfo?.deviceId || null,
+					status: "IGNORED",
+					source: "EN_HCNETSDK_ALARM",
+					eventTime: when,
+					receivedAt: when,
+					emittedAt: when,
+					event: {
+						id,
+						organizationId: roomInfo?.organizationId || null,
+						deviceId: roomInfo?.deviceId || null,
+						device: {
+							id: roomInfo?.deviceId || null,
+							name: "TEST A",
+							address: "192.168.254.189",
+						},
+						employee: null,
+						employeeId: null,
+						attendanceId: null,
+						eventTime: when,
+						receivedAt: when,
+						employeeNo: null,
+						source: "EN_HCNETSDK_ALARM",
+						status: "IGNORED",
+						eventType: null,
+						eventCategory: "UNKNOWN_VENDOR",
+						eventAction: "UNKNOWN",
+						eventLabel: "Access controller event",
+						eventConfidence: "DIRECT",
+						major: "5",
+						minor: "22",
+						doorNo: "1",
+						verifyMode: null,
+						dedupeKey: id,
+						payload: { playwright: true, identitySource: "empty" },
+						errorMessage: null,
+						createdAt: when,
+						updatedAt: when,
+					},
+				});
+			},
+			{ id: followupSignalId, when: followupIso, roomInfo: room },
+		);
+
+		const watcherHeadline = page.getByRole("button", {
+			name: "Show latest saved event row",
+		});
+		await expect(watcherHeadline).toContainText("ernest T571774");
+		await expect(watcherHeadline).toContainText("Attendance tap received");
 
 		const afterText = await page.locator("body").innerText();
 		expect(afterText.includes(markerLabel), "marker must be in DOM after inject").toBe(true);

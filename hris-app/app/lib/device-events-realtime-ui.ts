@@ -159,6 +159,50 @@ export const prependRealtimeSavedRow = <T extends { id: string }>({
 		maxRealtimeRows: 1,
 	});
 
+export type WatcherHeadlineEventCandidate = {
+	deviceId?: string | null;
+	employeeNo?: string | null;
+	employeeName?: string | null;
+	deviceUserDisplayName?: string | null;
+	eventAction?: string | null;
+	receivedAt?: string | Date | null;
+	eventTime?: string | Date | null;
+};
+
+const hasReadableWatcherPerson = (event: WatcherHeadlineEventCandidate) =>
+	Boolean(
+		String(event.employeeName || "").trim() ||
+			String(event.deviceUserDisplayName || "").trim() ||
+			String(event.employeeNo || "").trim(),
+	);
+
+/**
+ * A physical access tap can fan out into several saved SDK rows. Keep the
+ * person-bearing attendance row as the watcher headline when a lower-value
+ * controller/open/close signal from the same device arrives moments later.
+ * Every row remains in the ledger; this only chooses the operator summary.
+ */
+export const selectWatcherHeadlineEvent = <T extends WatcherHeadlineEventCandidate>(
+	rows: T[],
+	maxTapFanoutMs = 2 * 60 * 1000,
+): T | undefined => {
+	const newest = rows[0];
+	if (!newest || hasReadableWatcherPerson(newest)) return newest;
+
+	const newestTimeMs = getTimeMs(newest.receivedAt) ?? getTimeMs(newest.eventTime);
+	if (newestTimeMs === null) return newest;
+
+	const personTap = rows.find((event) => {
+		if (String(event.eventAction || "").toUpperCase() !== "TAP") return false;
+		if (!hasReadableWatcherPerson(event)) return false;
+		if (newest.deviceId && event.deviceId && event.deviceId !== newest.deviceId) return false;
+		const eventTimeMs = getTimeMs(event.receivedAt) ?? getTimeMs(event.eventTime);
+		return eventTimeMs !== null && Math.abs(newestTimeMs - eventTimeMs) <= maxTapFanoutMs;
+	});
+
+	return personTap || newest;
+};
+
 /**
  * Socket is the canonical live path for Device Events.
  * - Saved view with a full event row: prepend locally (no forced HTTP refetch).

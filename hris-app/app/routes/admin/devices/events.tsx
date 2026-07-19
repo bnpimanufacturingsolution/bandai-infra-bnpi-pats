@@ -54,6 +54,7 @@ import {
 	getSavedDeviceEventProcessingLabel,
 	prependRealtimeSavedRows,
 	savedDeviceEventMatchesScope,
+	selectWatcherHeadlineEvent,
 	shouldRefreshSavedEventsAfterSocketEvent,
 } from "~/lib/device-events-realtime-ui";
 import { DeviceLiveReadinessStrip } from "~/components/molecules/DeviceLiveReadinessStrip";
@@ -2113,6 +2114,8 @@ export default function DeviceEventsPage() {
 		(event: UnifiedDeviceEventRow) => event.status === "NOT_SAVED",
 	).length;
 	const latestSavedEvent = viewMode === "saved" ? rows[0] : undefined;
+	const watcherHeadlineEvent =
+		viewMode === "saved" ? selectWatcherHeadlineEvent(rows) : undefined;
 	const latestSdkSavedEvent =
 		viewMode === "saved"
 			? rows.find((event) => event.source === "EN_HCNETSDK_ALARM")
@@ -2161,6 +2164,16 @@ export default function DeviceEventsPage() {
 				eventTime: latestSavedEvent.eventTime,
 			})
 		: null;
+	const watcherHeadlineProcessingLabel = watcherHeadlineEvent
+		? watcherHeadlineEvent.id !== latestSavedEvent?.id && watcherHeadlineEvent.eventAction === "TAP"
+			? "Attendance tap received"
+			: getSavedDeviceEventProcessingLabel({
+					itemId: watcherHeadlineEvent.id,
+					latestRealtimeEventId,
+					receivedAt: watcherHeadlineEvent.receivedAt,
+					eventTime: watcherHeadlineEvent.eventTime,
+				})
+		: latestSavedProcessingLabel;
 	const latestSdkActionLabel = latestSdkEvidenceEvent?.eventAction
 		? getOptionLabel(eventActionOptions, latestSdkEvidenceEvent.eventAction)
 		: null;
@@ -2435,13 +2448,13 @@ export default function DeviceEventsPage() {
 	}, [isSyncLogsModalOpen, syncBridgeError, syncHasZktecoRows]);
 
 	const focusLatestSavedEvent = () => {
-		if (!latestSavedEvent) return;
+		if (!watcherHeadlineEvent) return;
 		updateSearchParams((next) => {
 			next.set("view", "saved");
 			next.set("page", "1");
 			next.set("window", "all");
-			if (latestSavedEvent.deviceId) next.set("deviceId", latestSavedEvent.deviceId);
-			if (latestSavedEvent.source) next.set("source", latestSavedEvent.source);
+			if (watcherHeadlineEvent.deviceId) next.set("deviceId", watcherHeadlineEvent.deviceId);
+			if (watcherHeadlineEvent.source) next.set("source", watcherHeadlineEvent.source);
 			next.delete("status");
 			next.delete("query");
 			next.set("sort", "receivedAt");
@@ -3775,7 +3788,7 @@ export default function DeviceEventsPage() {
 				</div>
 			)}
 
-			{viewMode === "saved" && latestSavedEvent && (
+			{viewMode === "saved" && watcherHeadlineEvent && (
 				<button
 					type="button"
 					onClick={focusLatestSavedEvent}
@@ -3795,20 +3808,22 @@ export default function DeviceEventsPage() {
 								}
 							/>
 							<span className="truncate font-medium">
-								{latestSavedProcessingLabel || (isLatestSavedFresh ? "Latest watcher save" : "Latest saved event")}
+								{watcherHeadlineProcessingLabel ||
+									(isLatestSavedFresh ? "Latest watcher save" : "Latest saved event")}
 							</span>
 							<span className="truncate text-xs opacity-80">
-								{latestSavedEvent.employeeName ||
-									formatDeviceEventPersonRef(latestSavedEvent.employeeNo)}
+								{watcherHeadlineEvent.employeeName ||
+									watcherHeadlineEvent.deviceUserDisplayName ||
+									formatDeviceEventPersonRef(watcherHeadlineEvent.employeeNo)}
 							</span>
 						</div>
 						<div className="flex min-w-0 items-center gap-2 text-xs">
-							<span className="truncate">{formatEventTime(latestSavedEvent.receivedAt)}</span>
+							<span className="truncate">{formatEventTime(watcherHeadlineEvent.receivedAt)}</span>
 							<span className="text-slate-400">/</span>
-							<span className="truncate">{formatEventSource(latestSavedEvent.source)}</span>
+							<span className="truncate">{formatEventSource(watcherHeadlineEvent.source)}</span>
 							<span className="text-slate-400">/</span>
-							<span className="truncate">{latestSavedEvent.deviceName || latestSavedEvent.deviceAddress || "Device"}</span>
-							{lastRealtimeEvent?.emittedAt && latestRealtimeEventId === latestSavedEvent.id && (
+							<span className="truncate">{watcherHeadlineEvent.deviceName || watcherHeadlineEvent.deviceAddress || "Device"}</span>
+							{lastRealtimeEvent?.emittedAt && latestRealtimeEventId === watcherHeadlineEvent.id && (
 								<Badge variant="success-soft" className="px-2 py-0.5">
 									Socket received
 								</Badge>

@@ -13593,10 +13593,6 @@ export const controller = (prisma: PrismaClient) => {
 					`printf 'ACTIVE='`,
 					`systemctl is-active ${HIKVISION_HOT_RELOAD_LISTENER_SERVICE} 2>/dev/null || true`,
 					`printf '\\n'`,
-					// Same SSH round-trip: probe VM loopback reverse that C++ uses for HRIS posts.
-					`echo '---API_REVERSE---'`,
-					`curl -sS -m 2 -o /dev/null -w 'code=%{http_code}' http://127.0.0.1:53001/health 2>/dev/null || echo 'code=000'`,
-					`printf '\\n'`,
 					`echo '---SHOW---'`,
 					`systemctl show ${HIKVISION_HOT_RELOAD_LISTENER_SERVICE} --property=ActiveState,SubState,MainPID,NRestarts,ExecMainStatus,Result --no-pager 2>/dev/null || true`,
 					`echo '---LOG---'`,
@@ -13611,16 +13607,6 @@ export const controller = (prisma: PrismaClient) => {
 			? raw.split("---SHOW---")[1]?.split("---LOG---")[0] || ""
 			: "";
 		const logChunk = raw.includes("---LOG---") ? raw.split("---LOG---").slice(1).join("---LOG---") : "";
-		const apiReverseChunk = raw.includes("---API_REVERSE---")
-			? raw.split("---API_REVERSE---")[1]?.split("---SHOW---")[0] || ""
-			: "";
-		const apiReverseCodeMatch = apiReverseChunk.match(/code=(\d+)/);
-		const apiReverseHttpCode = apiReverseCodeMatch
-			? Number(apiReverseCodeMatch[1])
-			: null;
-		// true when VM can reach host API via reverse (C++ LOCAL_API_BASE :53001).
-		const callbackPostPathOk =
-			apiReverseHttpCode !== null ? apiReverseHttpCode >= 200 && apiReverseHttpCode < 500 : null;
 		const activeMatch = raw.match(/ACTIVE=([^\r\n]*)/);
 		const activeText = String(activeMatch?.[1] || "").trim();
 		const show = parseSystemctlShow(showChunk);
@@ -13670,9 +13656,6 @@ export const controller = (prisma: PrismaClient) => {
 			running,
 			status: running ? "running" : activeState === "inactive" ? "stopped" : activeState,
 			sdk,
-			// Operator truth: C++ posts to http://127.0.0.1:53001 on VM (host reverse).
-			callbackPostPathOk,
-			apiReverseHttpCode,
 			activeState,
 			subState,
 			mainPid: mainPid || null,
@@ -13780,10 +13763,6 @@ export const controller = (prisma: PrismaClient) => {
 				lastAlarmAt: listener?.sdk?.lastAlarmAt || null,
 				lastPostAt: listener?.sdk?.lastPostAt || null,
 				lastSdkEventAt: lastSdkEventAt || listener?.sdk?.lastAlarmAt || null,
-				callbackPostPathOk:
-					typeof listener?.callbackPostPathOk === "boolean"
-						? listener.callbackPostPathOk
-						: null,
 			});
 
 			res.status(200).json(
@@ -13796,8 +13775,6 @@ export const controller = (prisma: PrismaClient) => {
 								checkedAt: listener.checkedAt,
 								error: listener.error,
 								vm: listener.vm,
-								callbackPostPathOk: listener.callbackPostPathOk,
-								apiReverseHttpCode: listener.apiReverseHttpCode,
 							}
 						: null,
 				}, 200),
@@ -14126,14 +14103,11 @@ export const controller = (prisma: PrismaClient) => {
 				lastAlarmAt: listener?.sdk?.lastAlarmAt || null,
 				lastPostAt: listener?.sdk?.lastPostAt || null,
 				lastSdkEventAt: lastSdkEventAt || listener?.sdk?.lastAlarmAt || null,
-				callbackPostPathOk:
-					typeof listener?.callbackPostPathOk === "boolean"
-						? listener.callbackPostPathOk
-						: null,
 			});
 
-			// Proven only when full matrix is green: DB + receiving + HRIS post path.
-			// VM :53001 reverse is NOT optional noise — without it C++ cannot save rows.
+			// Proven is final readiness truth only. Host ensure / restart step noise
+			// (e.g. optional reverse API port 53001, brief systemd lag) must not flip
+			// proven=false while DB + live path + proof are green for the operator.
 			const proven =
 				readiness.overall === "green" &&
 				readiness.safeToTap === true &&
@@ -14449,13 +14423,6 @@ export const controller = (prisma: PrismaClient) => {
 			const evidenceSource = String(req.query.evidenceSource || "")
 				.trim()
 				.toUpperCase();
-			// summaryScope=list (default): summary aggregates use the same filters as the page.
-			// summaryScope=facets: omit eventCategory/eventAction from summary only so Action/
-			// Category dropdowns stay ledger-truthful while the table can be leaf-filtered.
-			const summaryScope = String(req.query.summaryScope || "list")
-				.trim()
-				.toLowerCase();
-			const useFacetSummaryScope = summaryScope === "facets";
 			const query = String(req.query.query || req.query.search || "").trim();
 			const from = String(req.query.from || "").trim();
 			const to = String(req.query.to || "").trim();
@@ -14471,22 +14438,13 @@ export const controller = (prisma: PrismaClient) => {
 			const whereConditions: Prisma.Sql[] = [
 				Prisma.sql`de."organizationId" = ${String(organizationId)}`,
 			];
-			// Facet aggregates share device/time/status/source/query but never taxonomy leaf.
-			const facetWhereConditions: Prisma.Sql[] = [
-				Prisma.sql`de."organizationId" = ${String(organizationId)}`,
-			];
 
-			if (deviceId) {
-				whereConditions.push(Prisma.sql`de."deviceId" = ${deviceId}`);
-				facetWhereConditions.push(Prisma.sql`de."deviceId" = ${deviceId}`);
-			}
+			if (deviceId) whereConditions.push(Prisma.sql`de."deviceId" = ${deviceId}`);
 			if (status && status !== "all" && DEVICE_EVENT_STATUSES.has(status)) {
 				whereConditions.push(Prisma.sql`de."status" = ${status}::"DeviceEventStatus"`);
-				facetWhereConditions.push(Prisma.sql`de."status" = ${status}::"DeviceEventStatus"`);
 			}
 			if (source && source !== "all" && DEVICE_EVENT_SOURCES.has(source)) {
 				whereConditions.push(Prisma.sql`de."source" = ${source}::"DeviceEventSource"`);
-				facetWhereConditions.push(Prisma.sql`de."source" = ${source}::"DeviceEventSource"`);
 			}
 			const hasDeviceEventColumns = await getDeviceEventColumnPresence();
 			const hasDeviceUsersTable = await hasDeviceUserTable();
@@ -14520,15 +14478,9 @@ export const controller = (prisma: PrismaClient) => {
 				whereConditions.push(
 					Prisma.sql`de."eventConfidence" = ${eventConfidence}::"DeviceEventConfidence"`,
 				);
-				facetWhereConditions.push(
-					Prisma.sql`de."eventConfidence" = ${eventConfidence}::"DeviceEventConfidence"`,
-				);
 			}
 			if (evidenceSource && evidenceSource !== "ALL") {
 				whereConditions.push(
-					Prisma.sql`UPPER(COALESCE(de.payload->>'evidenceSource', '')) = ${evidenceSource}`,
-				);
-				facetWhereConditions.push(
 					Prisma.sql`UPPER(COALESCE(de.payload->>'evidenceSource', '')) = ${evidenceSource}`,
 				);
 			}
@@ -14536,17 +14488,11 @@ export const controller = (prisma: PrismaClient) => {
 			if (from || to) {
 				if (from) {
 					const fromDate = parseHikvisionBusinessDateBound(from);
-					if (fromDate) {
-						whereConditions.push(Prisma.sql`${dateColumnSql} >= ${fromDate}`);
-						facetWhereConditions.push(Prisma.sql`${dateColumnSql} >= ${fromDate}`);
-					}
+					if (fromDate) whereConditions.push(Prisma.sql`${dateColumnSql} >= ${fromDate}`);
 				}
 				if (to) {
 					const toDate = parseHikvisionBusinessDateBound(to, true);
-					if (toDate) {
-						whereConditions.push(Prisma.sql`${dateColumnSql} <= ${toDate}`);
-						facetWhereConditions.push(Prisma.sql`${dateColumnSql} <= ${toDate}`);
-					}
+					if (toDate) whereConditions.push(Prisma.sql`${dateColumnSql} <= ${toDate}`);
 				}
 			}
 
@@ -14559,7 +14505,7 @@ export const controller = (prisma: PrismaClient) => {
 				const paddedEmployeeCode = strippedNumericQuery
 					? strippedNumericQuery.padStart(5, "0")
 					: "";
-				const querySql = Prisma.sql`(
+				whereConditions.push(Prisma.sql`(
 					de."employeeNo" ILIKE ${queryLike}
 					OR de."eventType" ILIKE ${queryLike}
 					${
@@ -14593,16 +14539,10 @@ export const controller = (prisma: PrismaClient) => {
 							${paddedEmployeeCode}
 						)
 					)
-				)`;
-				whereConditions.push(querySql);
-				facetWhereConditions.push(querySql);
+				)`);
 			}
 
 			const whereSql = Prisma.sql`WHERE ${Prisma.join(whereConditions, " AND ")}`;
-			const facetWhereSql = Prisma.sql`WHERE ${Prisma.join(
-				useFacetSummaryScope ? facetWhereConditions : whereConditions,
-				" AND ",
-			)}`;
 			const deviceUserIdSql = hasDeviceEventColumns.deviceUserId
 				? Prisma.sql`de."deviceUserId"`
 				: Prisma.sql`NULL::text`;
@@ -14834,32 +14774,28 @@ export const controller = (prisma: PrismaClient) => {
 				${aggregateFromSql}
 				${whereSql}
 			`;
-			// Facet/list summary aggregates: when summaryScope=facets, taxonomy leaf
-			// filters are omitted so byAction still includes USER_CREATED while the
-			// page can be filtered to ENROLLMENT (backend contract, not client invent).
-			const summaryWhereSql = facetWhereSql;
 			const statusGroupsSql = Prisma.sql`
 				SELECT de.status::text AS status, COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${summaryWhereSql}
+				${whereSql}
 				GROUP BY de.status
 			`;
 			const sourceGroupsSql = Prisma.sql`
 				SELECT de.source::text AS source, COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${summaryWhereSql}
+				${whereSql}
 				GROUP BY de.source
 			`;
 			const categoryGroupsSql = Prisma.sql`
 				SELECT ${eventCategorySql} AS "eventCategory", COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${summaryWhereSql}
+				${whereSql}
 				GROUP BY 1
 			`;
 			const actionGroupsSql = Prisma.sql`
 				SELECT ${eventActionSql} AS "eventAction", COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${summaryWhereSql}
+				${whereSql}
 				GROUP BY 1
 			`;
 			const actionCategoryGroupsSql = Prisma.sql`
@@ -14868,20 +14804,20 @@ export const controller = (prisma: PrismaClient) => {
 					${eventCategorySql} AS "eventCategory",
 					COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${summaryWhereSql}
+				${whereSql}
 				GROUP BY 1, 2
 			`;
 			const confidenceGroupsSql = Prisma.sql`
 				SELECT ${eventConfidenceSql} AS "eventConfidence", COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${summaryWhereSql}
+				${whereSql}
 				GROUP BY 1
 			`;
 			const evidenceGroupsSql = Prisma.sql`
 				SELECT COALESCE(NULLIF(UPPER(de.payload->>'evidenceSource'), ''), 'UNKNOWN') AS "evidenceSource",
 					COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${summaryWhereSql}
+				${whereSql}
 				GROUP BY 1
 			`;
 			const evidenceTotalsSql = Prisma.sql`
@@ -14890,7 +14826,7 @@ export const controller = (prisma: PrismaClient) => {
 					COUNT(*) FILTER (WHERE ${eventConfidenceSql} = 'INFERRED')::bigint AS inferred,
 					COUNT(*) FILTER (WHERE ${eventConfidenceSql} = 'UNKNOWN')::bigint AS unknown
 				${aggregateFromSql}
-				${summaryWhereSql}
+				${whereSql}
 			`;
 
 			const [
@@ -15053,7 +14989,6 @@ export const controller = (prisma: PrismaClient) => {
 
 			const summary = {
 				total,
-				summaryScope: useFacetSummaryScope ? "facets" : "list",
 				byCategory,
 				byAction,
 				byActionCategory,
