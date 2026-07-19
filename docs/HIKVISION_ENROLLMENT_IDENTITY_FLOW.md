@@ -117,6 +117,16 @@ When person **15** is created on one device:
 | “DeviceUser is the event ledger” | No. **DeviceEvent** = history. **DeviceUser** = current inventory on device. |
 | “Listener green = employee matched” | No. Listener green = transport/SDK armed. Matching is a separate HRIS link step. |
 | “Host reverse tunnel = VM can ping device LAN” | No. Reverse only exposes chosen TCP ports on VM loopback. |
+| “First socket always has plain person id on create/enroll” | **False.** ACS often has `dwEmployeeNo=0` on major=3. C++ must inventory-enrich before POST (2026-07-19 harden), or HRIS multipass later. Trace `alarm_callback` + live payload; do not invent. See `.grok/rules/02-sdk-callback-wire-truth.md`. |
+
+### C++ pre-POST enrich (2026-07-19)
+
+Before `POST /api/hikvision/callback`, `enrich_hris_job_before_post`:
+
+1. If `employeeNo` empty on enroll/op → UserInfo inventory delta (with short retries) → set plain id + `identitySource=inventory_delta`.
+2. If plain known and FP/user-management → read raw fingerprint templates into callback `fingerprints[]` (base64, not AES).
+3. If card known → optional `faceTemplate` / `facePicture` base64.
+4. Socket/HRIS then receive plain + templates on that same POST when enrich succeeds.
 
 This matches Project Truth principles: **DeviceEvent is saved event truth; DeviceUser is inventory; evidence over assumption.**
 

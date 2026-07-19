@@ -400,7 +400,17 @@ export const controller = (prisma: PrismaClient) => {
 					return;
 				}
 
-				let employeeNo = String(event.employeeNo || "").trim();
+				// Prefer plain id already on ACS/callback body. C++ may have filled it via
+				// inventory_delta enrich when dwEmployeeNo was empty (see hikvision_biometric_service.cpp).
+				const {
+					extractPlainDevicePersonIdFromCallbackPayload,
+					isOpaqueHikvisionPersonToken,
+				} = await import("../../../helper/hikvision-event-contract.helper.js");
+				let employeeNo =
+					String(event.employeeNo || "").trim() ||
+					extractPlainDevicePersonIdFromCallbackPayload(payload as any) ||
+					"";
+				if (employeeNo === "0") employeeNo = "";
 				let opaquePersonToken: string | null = null;
 				let personTokenResolved = false;
 				// Resolve opaque log/callback person tokens via write-time map (future-proof).
@@ -408,9 +418,6 @@ export const controller = (prisma: PrismaClient) => {
 					const {
 						resolveDevicePersonToken,
 					} = await import("../../../helper/device-person-token.helper.js");
-					const { isOpaqueHikvisionPersonToken } = await import(
-						"../../../helper/hikvision-event-contract.helper.js"
-					);
 					if (employeeNo && isOpaqueHikvisionPersonToken(employeeNo)) {
 						const resolved = await resolveDevicePersonToken(prisma as any, {
 							organizationId: String(device.organizationId),
@@ -659,6 +666,49 @@ export const controller = (prisma: PrismaClient) => {
 						});
 					}
 
+					// C++ may attach raw fingerprints/face on the callback after inventory enrich.
+					// Store on DeviceUser immediately so Device Users shows blobs without second ISAPI.
+					const plainForTemplates =
+						String(identity?.plainEmployeeNo || employeeNo || "").trim() || "";
+					const callbackFingerprints =
+						(payload as any)?.fingerprints || (rawPayload as any)?.fingerprints;
+					const callbackFaceTemplate =
+						(payload as any)?.faceTemplate || (rawPayload as any)?.faceTemplate;
+					const callbackFacePicture =
+						(payload as any)?.facePicture || (rawPayload as any)?.facePicture;
+					let templatePersist: any = null;
+					if (
+						plainForTemplates &&
+						!isOpaqueHikvisionPersonToken(plainForTemplates) &&
+						(Array.isArray(callbackFingerprints)
+							? callbackFingerprints.length > 0
+							: Boolean(callbackFaceTemplate || callbackFacePicture))
+					) {
+						try {
+							const {
+								persistRawFingerprintsFromSdkCallback,
+							} = await import("../../../helper/device-user-raw-fingerprint.helper.js");
+							templatePersist = await persistRawFingerprintsFromSdkCallback({
+								prisma,
+								req,
+								organizationId: String(device.organizationId),
+								deviceId: String(device.id),
+								employeeNo: plainForTemplates,
+								deviceUserId: identity?.deviceUserId || null,
+								eventId: String(eventRecord.id),
+								fingerprints: callbackFingerprints,
+								faceTemplate: callbackFaceTemplate,
+								facePicture: callbackFacePicture,
+								source: "cpp_sdk_callback_raw",
+							});
+						} catch (templateError: any) {
+							console.warn(
+								"[HIKVISION_CALLBACK][CTRL] raw template persist failed",
+								templateError?.message || templateError,
+							);
+						}
+					}
+
 					const successResponse = buildSuccessResponse(
 						identityApplied
 							? "Enrollment/user-management callback accepted; plain person id applied on fast path"
@@ -667,7 +717,8 @@ export const controller = (prisma: PrismaClient) => {
 							received: true,
 							matched: Boolean(identity?.linkedEmployeeId),
 							employeeNo: identity?.plainEmployeeNo || employeeNo,
-							deviceUserId: identity?.deviceUserId || null,
+							deviceUserId:
+								templatePersist?.deviceUserId || identity?.deviceUserId || null,
 							employeeId: identity?.linkedEmployeeId || null,
 							reason: identityApplied
 								? "enrollment_identity_fast_path"
@@ -676,6 +727,12 @@ export const controller = (prisma: PrismaClient) => {
 									: "non_attendance_device_event",
 							operationLogResolveScheduled: operationSignal,
 							enrollmentIdentityPath: identity?.path || null,
+							identitySource:
+								(payload as any)?.identitySource ||
+								(rawPayload as any)?.identitySource ||
+								null,
+							rawTemplatesFromCallback: Boolean(templatePersist?.ok),
+							rawFingerprintCount: templatePersist?.fingerprintCount || 0,
 							eventId: eventRecord.id,
 							dedupeKey,
 							event,

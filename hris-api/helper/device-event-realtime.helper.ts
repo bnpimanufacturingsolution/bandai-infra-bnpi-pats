@@ -88,8 +88,44 @@ const buildRealtimeEmployeeSnapshot = (employee: any) => {
 	};
 };
 
+const isLikelyOpaquePersonToken = (value: unknown) => {
+	const token = String(value || "").trim();
+	if (!token || token.length < 16) return false;
+	if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/.test(token) && !/[+/=]/.test(token)) return false;
+	if (/^[A-Za-z0-9+/]{16,}={0,2}$/.test(token) && /[+/=]/.test(token)) return true;
+	return token.length >= 20 && /[+/=]/.test(token);
+};
+
+/** Prefer plain device person id for socket UI; never surface opaque as employeeNo. */
+const pickPlainEmployeeNoForSocket = (eventRecord: any): string | null => {
+	const payload = (eventRecord?.payload || {}) as any;
+	const deviceUserPlain = String(
+		eventRecord?.deviceUser?.vendorUserId || eventRecord?.deviceUser?.employeeNo || "",
+	).trim();
+	const candidates = [
+		deviceUserPlain,
+		payload.resolvedEmployeeNo,
+		eventRecord?.employeeNo,
+		payload.employeeNo,
+	];
+	for (const raw of candidates) {
+		const text = String(raw || "").trim();
+		if (!text || text === "0") continue;
+		if (isLikelyOpaquePersonToken(text)) continue;
+		return text;
+	}
+	return null;
+};
+
 export const buildRealtimeDeviceEventRow = (eventRecord: any): RealtimeDeviceEventRow | null => {
 	if (!eventRecord?.id) return null;
+
+	const plainEmployeeNo = pickPlainEmployeeNoForSocket(eventRecord);
+	const payload = (eventRecord.payload || {}) as any;
+	const nextPayload =
+		plainEmployeeNo && !payload.resolvedEmployeeNo
+			? { ...payload, resolvedEmployeeNo: plainEmployeeNo }
+			: payload;
 
 	return {
 		id: eventRecord.id,
@@ -97,11 +133,23 @@ export const buildRealtimeDeviceEventRow = (eventRecord: any): RealtimeDeviceEve
 		deviceId: eventRecord.deviceId,
 		device: buildRealtimeDeviceSnapshot(eventRecord.device),
 		employee: buildRealtimeEmployeeSnapshot(eventRecord.employee),
+		// Include deviceUser so FE can deep-link vendorUserId without waiting on HTTP refetch.
+		...(eventRecord.deviceUser
+			? {
+					deviceUser: {
+						id: eventRecord.deviceUser.id,
+						vendorUserId: eventRecord.deviceUser.vendorUserId,
+						employeeNo: eventRecord.deviceUser.employeeNo,
+						displayName: eventRecord.deviceUser.displayName,
+					},
+				}
+			: {}),
 		employeeId: eventRecord.employeeId,
 		attendanceId: eventRecord.attendanceId,
 		eventTime: eventRecord.eventTime,
 		receivedAt: eventRecord.receivedAt,
-		employeeNo: eventRecord.employeeNo,
+		// Socket contract: plain person id only (opaque stays in payload.opaquePersonToken if any).
+		employeeNo: plainEmployeeNo,
 		source: eventRecord.source,
 		status: eventRecord.status,
 		eventType: eventRecord.eventType,
@@ -114,11 +162,11 @@ export const buildRealtimeDeviceEventRow = (eventRecord: any): RealtimeDeviceEve
 		doorNo: eventRecord.doorNo,
 		verifyMode: eventRecord.verifyMode,
 		dedupeKey: eventRecord.dedupeKey,
-		payload: eventRecord.payload,
+		payload: nextPayload,
 		errorMessage: eventRecord.errorMessage,
 		createdAt: eventRecord.createdAt,
 		updatedAt: eventRecord.updatedAt,
-	};
+	} as RealtimeDeviceEventRow;
 };
 
 export const buildDeviceEventRealtimePayload = (eventRecord: any): DeviceEventRealtimePayload | null => {

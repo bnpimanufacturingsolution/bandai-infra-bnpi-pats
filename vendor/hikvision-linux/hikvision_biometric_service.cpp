@@ -64,6 +64,14 @@ struct ReconcileJob {
     std::string sdk_time;
     bool include_fingerprints = false;
     bool include_face_recognition = true;
+    // Filled by enrich_hris_job_before_post when ACS person was empty or templates needed.
+    // identity_source: acs_dwEmployeeNo | inventory_delta | poll_inventory | empty
+    std::string identity_source;
+    // JSON array of {fingerPrintId,fingerType,length,data} with base64 fingerData (raw).
+    std::string fingerprints_json;
+    std::string face_template_b64;
+    std::string face_picture_b64;
+    int fingerprint_count = 0;
 };
 
 template <typename Operation>
@@ -669,6 +677,13 @@ bool stdxml_json_request(DeviceSession &session, const std::string &method_and_p
 }
 
 std::string build_hikvision_callback_json(const ReconcileJob &job) {
+    const std::string identity_source =
+        !job.identity_source.empty()
+            ? job.identity_source
+            : (!job.employee_no.empty() ? "acs_dwEmployeeNo" : "empty");
+    const bool has_raw_fp = !job.fingerprints_json.empty() && job.fingerprints_json != "[]";
+    const bool has_raw_face =
+        !job.face_template_b64.empty() || !job.face_picture_b64.empty();
     std::ostringstream body;
     body << "{"
          << "\"source\":\"EN_HCNETSDK_ALARM\","
@@ -679,6 +694,7 @@ std::string build_hikvision_callback_json(const ReconcileJob &job) {
          << "\"dateTime\":\"" << json_escape(job.sdk_time) << "\","
          << "\"employeeNo\":\"" << json_escape(job.employee_no) << "\","
          << "\"employeeNoString\":\"" << json_escape(job.employee_no) << "\","
+         << "\"identitySource\":\"" << json_escape(identity_source) << "\","
          << "\"cardNo\":\"" << json_escape(job.card_no) << "\","
          << "\"major\":" << job.major << ","
          << "\"minor\":" << job.minor << ","
@@ -688,10 +704,17 @@ std::string build_hikvision_callback_json(const ReconcileJob &job) {
          << "\"verifyMode\":\"" << json_escape(job.verify_mode) << "\","
          << "\"currentVerifyMode\":\"" << json_escape(job.verify_mode) << "\","
          << "\"serialNo\":\"" << json_escape(job.serial_no) << "\","
+         << "\"fingerprintCount\":" << job.fingerprint_count << ","
+         // Raw base64 templates when C++ could read them (not AES). Empty array when none.
+         << "\"fingerprints\":" << (has_raw_fp ? job.fingerprints_json : "[]") << ","
+         << "\"faceTemplate\":\"" << json_escape(job.face_template_b64) << "\","
+         << "\"facePicture\":\"" << json_escape(job.face_picture_b64) << "\","
          << "\"rawAlarm\":{"
          << "\"deviceIp\":\"" << json_escape(job.source_host) << "\","
          << "\"sourceDeviceId\":\"" << json_escape(job.source_device_id) << "\","
-         << "\"rawFingerprintTemplateStored\":false"
+         << "\"identitySource\":\"" << json_escape(identity_source) << "\","
+         << "\"rawFingerprintTemplateStored\":" << (has_raw_fp ? "true" : "false") << ","
+         << "\"rawFaceTemplateStored\":" << (has_raw_face ? "true" : "false")
          << "}"
          << "}";
     return body.str();
@@ -2690,6 +2713,251 @@ bool curl_post_json(const std::string &url, const std::string &body, const std::
     return rc == 0;
 }
 
+// Pick highest pure-numeric plain id (panel typed person nos like "15").
+std::string pick_newest_plain_employee_no(const std::vector<std::string> &candidates) {
+    if (candidates.empty()) {
+        return "";
+    }
+    if (candidates.size() == 1) {
+        return candidates[0];
+    }
+    std::string best;
+    long long best_num = -1;
+    for (const auto &raw : candidates) {
+        if (raw.empty()) {
+            continue;
+        }
+        bool pure = true;
+        for (char c : raw) {
+            if (c < '0' || c > '9') {
+                pure = false;
+                break;
+            }
+        }
+        if (pure) {
+            long long n = 0;
+            try {
+                n = std::stoll(raw);
+            } catch (...) {
+                n = -1;
+            }
+            if (n > best_num) {
+                best_num = n;
+                best = raw;
+            }
+        } else if (best.empty()) {
+            best = raw;
+        }
+    }
+    return best.empty() ? candidates.back() : best;
+}
+
+// When ACS dwEmployeeNo is empty (common major=3 panel create/FP enroll), resolve plain
+// person id from device UserInfo inventory delta vs baseline. Does not invent ids.
+std::string resolve_plain_employee_no_from_inventory(DeviceSession &device) {
+    const std::vector<std::string> current = read_device_employee_numbers(device);
+    auto &observed = observed_employee_numbers_by_host[device.config.host];
+    if (observed.empty()) {
+        // First observation establishes baseline only — do not claim a "new" person yet.
+        observed.insert(current.begin(), current.end());
+        emit_json({
+            {"event", "callback_identity_inventory_baseline"},
+            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceHost", device.config.host},
+            {"employeeCount", std::to_string(observed.size())}
+        });
+        return "";
+    }
+
+    std::vector<std::string> news;
+    for (const auto &employee_no : current) {
+        if (!employee_no.empty() && observed.find(employee_no) == observed.end()) {
+            news.push_back(employee_no);
+        }
+    }
+    // Always advance baseline so we do not re-report the same new plain forever.
+    observed.insert(current.begin(), current.end());
+
+    if (news.empty()) {
+        emit_json({
+            {"event", "callback_identity_inventory_no_new_plain"},
+            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceHost", device.config.host},
+            {"employeeCount", std::to_string(current.size())}
+        });
+        return "";
+    }
+
+    const std::string plain = pick_newest_plain_employee_no(news);
+    emit_json({
+        {"event", "callback_identity_inventory_delta"},
+        {"sourceDeviceId", device.config.hris_device_id},
+        {"sourceHost", device.config.host},
+        {"newPlainCount", std::to_string(news.size())},
+        {"employeeNo", plain}
+    });
+    return plain;
+}
+
+bool needs_callback_identity_enrich(const ReconcileJob &job) {
+    if (!job.employee_no.empty()) {
+        return false;
+    }
+    if (job.major == MAJOR_OPERATION) {
+        return true;
+    }
+    // Some devices surface ops under major 3 with observed minors only.
+    if (job.major == 3 || is_observed_operation_sync_minor(job.minor) ||
+        is_user_management_minor(job.minor) || is_fingerprint_management_minor(job.minor) ||
+        is_card_management_minor(job.minor)) {
+        return true;
+    }
+    return job.event_kind.find("biometric_") == 0 ||
+           job.event_kind.find("poll_") == 0;
+}
+
+bool needs_callback_template_enrich(const ReconcileJob &job) {
+    if (job.employee_no.empty()) {
+        return false;
+    }
+    if (is_fingerprint_management_minor(job.minor) || job.include_fingerprints) {
+        return true;
+    }
+    // User create/update: often followed by FP/face enroll; try templates when id known.
+    if (is_user_management_minor(job.minor) ||
+        job.event_kind == "biometric_user_management" ||
+        job.event_kind == "poll_inventory_user_created") {
+        return true;
+    }
+    return job.include_face_recognition &&
+           (job.event_kind.find("face") != std::string::npos ||
+            job.event_kind == "biometric_user_management");
+}
+
+// Before POST: fill plain employeeNo when ACS left it empty; attach raw FP/face when possible.
+// This is the correct place to harden "socket always has plain id" for enroll — not inventing in UI.
+void enrich_hris_job_before_post(ReconcileJob &job) {
+    DeviceSession *session = find_session_by_host(job.source_host);
+    if (session == nullptr) {
+        if (job.employee_no.empty()) {
+            job.identity_source = "empty";
+        } else if (job.identity_source.empty()) {
+            job.identity_source = "acs_dwEmployeeNo";
+        }
+        emit_json({
+            {"event", "callback_enrich_skipped"},
+            {"reason", "session_not_found"},
+            {"sourceHost", job.source_host},
+            {"employeeNo", job.employee_no}
+        });
+        return;
+    }
+
+    if (job.employee_no.empty() && needs_callback_identity_enrich(job)) {
+        // Panel UserInfo may lag ACS major=3 by a short time — multipass inventory.
+        static const int delays_ms[] = {0, 350, 900, 1800};
+        for (int delay_ms : delays_ms) {
+            if (delay_ms > 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+            }
+            const std::string plain = resolve_plain_employee_no_from_inventory(*session);
+            if (!plain.empty()) {
+                job.employee_no = plain;
+                job.identity_source = "inventory_delta";
+                mark_recent_employee_candidate(job.source_host, plain);
+                break;
+            }
+        }
+        if (job.employee_no.empty()) {
+            job.identity_source = "empty";
+        }
+    } else if (!job.employee_no.empty() && job.identity_source.empty()) {
+        job.identity_source =
+            job.event_kind.find("poll_") == 0 ? "poll_inventory" : "acs_dwEmployeeNo";
+    }
+
+    if (!needs_callback_template_enrich(job)) {
+        emit_json({
+            {"event", "callback_enrich_done"},
+            {"sourceDeviceId", job.source_device_id},
+            {"employeeNo", job.employee_no},
+            {"identitySource", job.identity_source},
+            {"fingerprintCount", "0"},
+            {"templatesAttached", "false"}
+        });
+        return;
+    }
+
+    // Fingerprint templates (raw base64) for enroll path.
+    if (is_fingerprint_management_minor(job.minor) || job.include_fingerprints ||
+        is_user_management_minor(job.minor)) {
+        const auto templates = read_source_fingerprints(*session, job);
+        if (!templates.empty()) {
+            std::ostringstream fp_json;
+            fp_json << "[";
+            for (size_t i = 0; i < templates.size(); ++i) {
+                const auto &record = templates[i];
+                if (i > 0) {
+                    fp_json << ",";
+                }
+                const std::string data =
+                    base64_encode(record.byFingerData, record.dwFingerPrintLen);
+                fp_json << "{\"fingerPrintId\":" << static_cast<int>(record.byFingerPrintID)
+                        << ",\"fingerType\":" << static_cast<int>(record.byFingerType)
+                        << ",\"length\":" << record.dwFingerPrintLen
+                        << ",\"data\":\"" << data << "\"}";
+            }
+            fp_json << "]";
+            job.fingerprints_json = fp_json.str();
+            job.fingerprint_count = static_cast<int>(templates.size());
+        }
+    }
+
+    // Face template/picture when card is available (SDK face read is card-keyed on this device).
+    if (job.include_face_recognition || is_user_management_minor(job.minor)) {
+        std::string user_json;
+        std::string card_json;
+        read_source_user(*session, job, &user_json);
+        read_source_card(*session, job, &card_json);
+        std::string card_no = extract_string_field_from_json(card_json, "cardNo");
+        if (card_no.empty()) {
+            card_no = extract_string_field_from_json(user_json, "cardNo");
+        }
+        if (job.card_no.empty() && !card_no.empty()) {
+            job.card_no = card_no;
+        }
+        if (!card_no.empty()) {
+            std::vector<char> face_template;
+            std::vector<char> face_picture;
+            if (read_face_and_template(
+                    *session, job.employee_no, card_no, &face_template, &face_picture)) {
+                if (!face_template.empty()) {
+                    job.face_template_b64 = base64_encode(
+                        reinterpret_cast<const BYTE *>(face_template.data()),
+                        face_template.size());
+                }
+                if (!face_picture.empty()) {
+                    job.face_picture_b64 = base64_encode(
+                        reinterpret_cast<const BYTE *>(face_picture.data()),
+                        face_picture.size());
+                }
+            }
+        }
+    }
+
+    emit_json({
+        {"event", "callback_enrich_done"},
+        {"sourceDeviceId", job.source_device_id},
+        {"employeeNo", job.employee_no},
+        {"identitySource", job.identity_source},
+        {"fingerprintCount", std::to_string(job.fingerprint_count)},
+        {"faceTemplateChars", std::to_string(job.face_template_b64.size())},
+        {"facePictureChars", std::to_string(job.face_picture_b64.size())},
+        {"templatesAttached",
+         (job.fingerprint_count > 0 || !job.face_template_b64.empty()) ? "true" : "false"}
+    });
+}
+
 bool post_hikvision_callback(const ReconcileJob &job) {
     const std::string body = build_hikvision_callback_json(job);
     if (hris_api_base.empty()) {
@@ -3193,6 +3461,7 @@ void process_reconcile_job(const ReconcileJob &job) {
 }
 
 // Realtime path only: never share a worker with reconcile (inventory can take seconds).
+// Enrich runs outside the queue lock so inventory/FP reads do not block ACS enqueue.
 void hris_post_loop() {
     while (keep_running) {
         ReconcileJob hris_job;
@@ -3208,6 +3477,8 @@ void hris_post_loop() {
                 hris_event_queue.pop_front();
                 has_hris_job = true;
                 lock.unlock();
+                // Fill plain person id + raw templates BEFORE POST so socket/HRIS see truth.
+                enrich_hris_job_before_post(hris_job);
                 post_hikvision_callback(hris_job);
                 lock.lock();
             }

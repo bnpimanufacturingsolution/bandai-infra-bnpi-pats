@@ -1,5 +1,22 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 C++ plain-id enrich + raw templates + anti-assumption WWG
+
+- Task mode: Regression repair + governance + C++ wire-path harden.
+- Operator pushback: stop assuming first socket always has plain id; **trace** C++ ACS → POST → socket. Proven: major=3 often empty `dwEmployeeNo`; major=5 taps often plain; logSearch often opaque.
+- Governance:
+  - `.grok/rules/02-sdk-callback-wire-truth.md` (always-on)
+  - `AGENTS.md` hard ban on inventing callback person id
+  - principle `evidence-over-assumption.md` Hikvision wire-truth section
+- C++ (`hikvision_biometric_service.cpp`):
+  - `enrich_hris_job_before_post` before POST: inventory delta multipass when ACS person empty; attach raw FP templates (+ face when card known)
+  - Callback JSON: `identitySource`, `fingerprints[]` raw base64, `faceTemplate`/`facePicture`, `fingerprintCount`
+- HRIS:
+  - Accept callback fingerprints/face → DeviceUser raw store immediately
+  - Socket: plain-only `employeeNo`; include deviceUser; UI “Resolving person id…” when empty/resolving
+- Rebuild/redeploy listener binary on VM still required for C++ path to run live.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-19 Raw fingerprint template on DeviceUser (not AES)
 
 - Task mode: Bug fix / product expectation correction + live proof.
@@ -1687,3 +1704,18 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
     - optional `Employee` link when an existing HRIS employee safely matches.
 - Architecture twin updated:
   - `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md` now records that `Employee.deviceEmpId` is plain for device matching, while `Employee.employeeId` may be padded/display-coded.
+
+## 2026-07-19 Reverse Tunnel Stability Hardening Addendum
+
+- Task mode: focused runtime hardening for Device Events Keep Ready / predev live path.
+- Root cause identified:
+  - The reverse tunnel itself can be healthy while the UI still shows six direct off-LAN device SDK login failures.
+  - The older Keep Ready proof could also trust a stale Windows `ssh.exe` process or host-local `127.0.0.1:59000` instead of proving the VM-side reverse listener ports actually exist.
+- Implemented hardening:
+  - `scripts/ensure-device-live-path.ps1` now proves VM-side `127.0.0.1:59000` and `127.0.0.1:59443` before treating the Hikvision reverse bridge as healthy.
+  - If a local SSH bridge process exists but VM reverse ports are not proven, Keep Ready records `reverse_bridge_stale` and rebinds the bridge.
+  - `hris-api/scripts/ensure-device-live-path.cjs` fast path now requires VM SDK reverse proof instead of accepting a host-local SDK port as enough.
+- Runtime proof after hardening:
+  - `node hris-api/scripts/ensure-device-live-path.cjs` fast-passed with VM `53001=true` and VM `59000=true`, and listener `service_started` showed `hrisApiBase=http://127.0.0.1:53001`.
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensure-device-live-path.ps1` returned `ok=true`, DB tunnel open, VM reverse ports open, API reverse open, and listener API base already host-aligned.
+  - Listener status after hardening showed TEST A on `127.0.0.1:59000` with `lastLoginOk=true`, `armed=true`, `receivingCallbacks=true`, and `postingToHris=true`.

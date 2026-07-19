@@ -133,6 +133,23 @@ export const extractHikvisionEventData = (
 		return undefined;
 	};
 
+	// Person id: prefer plain readable id. Hikvision may send dwEmployeeNo as number,
+	// employeeNoString, or nested ACS structs. "0" / empty means missing (panel major=3 often).
+	const rawEmployeeNo = pick(
+		"employeeNo",
+		"employeeNoString",
+		"employeeID",
+		"EmployeeNo",
+		"dwEmployeeNo",
+		"EmployeeNoString",
+	);
+	const employeeNo =
+		rawEmployeeNo === undefined || rawEmployeeNo === null
+			? undefined
+			: String(rawEmployeeNo).trim() === "0"
+				? undefined
+				: String(rawEmployeeNo).trim() || undefined;
+
 	return {
 		deviceId: pick("deviceId", "hikvisionDeviceId"),
 		source: pick("source", "eventSource"),
@@ -141,7 +158,7 @@ export const extractHikvisionEventData = (
 		minor: pick("minor", "Minor"),
 		actionCode: pick("actionCode"),
 		time: pick("time", "dateTime", "eventTime"),
-		employeeNo: pick("employeeNo", "employeeID", "EmployeeNo", "employeeNoString"),
+		employeeNo,
 		name: pick("name", "employeeName"),
 		deviceIP: pick("deviceIP", "ipAddress", "deviceIp"),
 		doorNo: pick("doorNo"),
@@ -151,6 +168,50 @@ export const extractHikvisionEventData = (
 		timeAdjusted: Boolean(pick("timeAdjusted")),
 		deviceClockSkewSeconds: Number(pick("deviceClockSkewSeconds") || 0),
 	};
+};
+
+/**
+ * Best-effort plain device person id from a full callback/body tree.
+ * Used so socket/ledger never miss a plain id that is nested in the payload.
+ * Never returns opaque log tokens or "0".
+ */
+export const extractPlainDevicePersonIdFromCallbackPayload = (
+	payload: Record<string, any> | null | undefined,
+): string | null => {
+	if (!payload || typeof payload !== "object") return null;
+	const candidates: unknown[] = [
+		payload.employeeNo,
+		payload.employeeNoString,
+		payload.employeeID,
+		payload.EmployeeNo,
+		payload.dwEmployeeNo,
+		payload.resolvedEmployeeNo,
+		payload?.AccessControllerEvent?.employeeNo,
+		payload?.AccessControllerEvent?.employeeNoString,
+		payload?.EventNotificationAlert?.AccessControllerEvent?.employeeNo,
+		payload?.AcsEventInfo?.employeeNo,
+		payload?.AcsEventInfo?.dwEmployeeNo,
+		payload?.rawAlarm?.employeeNo,
+		payload?.rawAlarm?.employeeNoString,
+		payload?.rawAlarm?.dwEmployeeNo,
+		payload?.rawAlarm?.struAcsEventInfo?.dwEmployeeNo,
+		payload?.rawEvidence?.employeeNo,
+		payload?.rawEvidence?.employeeNoString,
+		payload?.rawEvidence?.dwEmployeeNo,
+		payload?.event?.employeeNo,
+		payload?.socketCandidate?.employeeNo,
+	];
+	for (const raw of candidates) {
+		if (raw === undefined || raw === null) continue;
+		const text = String(raw).trim();
+		if (!text || text === "0") continue;
+		if (isOpaqueHikvisionPersonToken(text)) continue;
+		// Plain device person ids: digits / short alnum, not base64-ish tokens.
+		if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/.test(text) && !/[+/=]/.test(text)) {
+			return text;
+		}
+	}
+	return null;
 };
 
 export const normalizeHikvisionAddress = (value: unknown): string => {

@@ -13,6 +13,7 @@ You must **open the files with tools** before planning, coding, diagnosing, or c
 - Do **not** answer architecture or Device Events / Sync logs questions from training data alone.
 - If a fact is not in opened WWG, code, config, or `.runtime` evidence, label it `NEEDS_CONFIRMATION` or go read the file.
 - Prefer: **read → quote path → act → prove**. Never: **assume → invent → declare done**.
+- **Hikvision callback / socket person id:** do **not** claim panel create/enroll always delivers plain `employeeNo` on the first ACS callback or first socket. Trace `vendor/hikvision-linux/hikvision_biometric_service.cpp` (`alarm_callback` → `dwEmployeeNo` → `build_hikvision_callback_json` → POST) and live `.runtime` / DeviceEvent payloads. Major=3 often has **empty** person; major=5 taps often have plain; logSearch often has **opaque** tokens. See `.grok/rules/02-sdk-callback-wire-truth.md` and principle `evidence-over-assumption.md`.
 
 ### Required open order before first substantive action
 

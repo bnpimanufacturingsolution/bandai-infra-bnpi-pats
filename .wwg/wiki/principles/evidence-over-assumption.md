@@ -3,7 +3,7 @@ type: principle-brief
 status: active
 mutability: high-friction
 scope: agent-reasoning
-last_reviewed: 2026-07-16
+last_reviewed: 2026-07-19
 ---
 
 # Evidence Over Assumption
@@ -35,6 +35,37 @@ Use explicit labels instead of inventing facts:
 - Lifecycle rows such as Fingerprint enrolled come from Operation logs (`ContentMgmt/logSearch`), not from inventory.
 - Attendance taps come from Attendance/access events (`AccessControl/AcsEvent`).
 - Host-local Windows Docker is diagnostic; the Project Truth finish line is VM/GitOps/LAN (+ named tunnel when public).
+
+## Hikvision callback / socket wire truth (do not invent)
+
+Agents repeatedly fail by **assuming** the first `device-event:saved` always has plain person id (`15`) after panel create/enroll.
+
+**Find truth this way (mandatory before claims):**
+
+1. Read `vendor/hikvision-linux/hikvision_biometric_service.cpp`:
+   - `alarm_callback` — person id **only** from `dwEmployeeNo` (empty when 0).
+   - `build_hikvision_callback_json` — `employeeNo` / `employeeNoString` are that same string.
+   - `hris_post_loop` / enrich path — what is filled **before** POST.
+2. Read a real saved payload or `.runtime` SDK log (major/minor + `employeeNo`).
+3. State what the wire actually had: **plain** / **empty** / **opaque**.
+
+**Proven patterns (re-verify if firmware changes):**
+
+| Packet | Typical person field |
+|---|---|
+| ACS major=3 panel create/enroll | often **empty** `dwEmployeeNo` |
+| ACS major=5 fingerprint tap | often **plain** id |
+| ISAPI logSearch addUser/addFp | often **opaque** token, not plain |
+
+Socket shows saved row truth. It does not invent plain id missing from the POST body.
+
+**Correct fix direction when user wants plain on live UI:**
+
+- Prefer C++ inventory delta + template read **before** POST when ACS person is empty.
+- HRIS multipass is fallback, not a license to claim “callback always had 15.”
+- Store raw FP/face templates on DeviceUser when read; pointer/status on DeviceEvent only.
+
+Also see: `.grok/rules/02-sdk-callback-wire-truth.md`.
 
 ## Non-goals
 

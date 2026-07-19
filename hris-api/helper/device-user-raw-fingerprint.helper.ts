@@ -454,7 +454,7 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 	};
 };
 
-const patchEnrollmentEventRawStatus = async (
+export const patchEnrollmentEventRawStatus = async (
 	params: {
 		prisma: PrismaClient | any;
 		req: any;
@@ -596,4 +596,178 @@ export const shouldCaptureRawFingerprintForEventAction = (eventAction?: string |
 		action === "USER_CREATED" ||
 		action === "USER_UPDATED"
 	);
+};
+
+/** Parse fingerprints array from C++ EN_HCNETSDK_ALARM callback body (raw base64). */
+export const normalizeCallbackFingerprintArray = (raw: unknown): RawFingerprintTemplate[] => {
+	let list: any[] = [];
+	if (Array.isArray(raw)) list = raw;
+	else if (typeof raw === "string" && raw.trim().startsWith("[")) {
+		try {
+			const parsed = JSON.parse(raw);
+			if (Array.isArray(parsed)) list = parsed;
+		} catch {
+			list = [];
+		}
+	}
+	const out: RawFingerprintTemplate[] = [];
+	for (const node of list) {
+		const data = extractFingerDataFromIsapiNode(node);
+		if (!data) continue;
+		const fingerPrintId = Number(node?.fingerPrintId ?? node?.fingerPrintID ?? out.length + 1);
+		out.push({
+			fingerPrintId: Number.isFinite(fingerPrintId) && fingerPrintId > 0 ? fingerPrintId : out.length + 1,
+			fingerType: node?.fingerType ?? null,
+			length: Number(node?.length ?? data.length) || data.length,
+			data,
+		});
+	}
+	return out;
+};
+
+/**
+ * When C++ already attached raw templates on the callback, store them on DeviceUser
+ * immediately (no second ISAPI round-trip). Prefer this over delayed ISAPI capture.
+ */
+export const persistRawFingerprintsFromSdkCallback = async (params: {
+	prisma: PrismaClient | any;
+	req?: any;
+	organizationId: string;
+	deviceId: string;
+	employeeNo: string;
+	deviceUserId?: string | null;
+	eventId?: string | null;
+	fingerprints: unknown;
+	faceTemplate?: string | null;
+	facePicture?: string | null;
+	source?: string;
+}): Promise<{
+	ok: boolean;
+	rawPresent: boolean;
+	fingerprintCount: number;
+	totalDataChars: number;
+	deviceUserId: string | null;
+	reason?: string;
+}> => {
+	const organizationId = String(params.organizationId || "").trim();
+	const deviceId = String(params.deviceId || "").trim();
+	const employeeNo = String(params.employeeNo || "").trim();
+	const fingerprints = normalizeCallbackFingerprintArray(params.fingerprints);
+	const faceTemplate = String(params.faceTemplate || "").trim();
+	const facePicture = String(params.facePicture || "").trim();
+
+	if (!organizationId || !deviceId || !employeeNo || isOpaqueHikvisionPersonToken(employeeNo)) {
+		return {
+			ok: false,
+			rawPresent: false,
+			fingerprintCount: 0,
+			totalDataChars: 0,
+			deviceUserId: params.deviceUserId || null,
+			reason: "missing_ids_or_opaque",
+		};
+	}
+	if (!fingerprints.length && !faceTemplate && !facePicture) {
+		return {
+			ok: false,
+			rawPresent: false,
+			fingerprintCount: 0,
+			totalDataChars: 0,
+			deviceUserId: params.deviceUserId || null,
+			reason: "no_templates_on_callback",
+		};
+	}
+
+	const custody = buildRawFingerprintCustody({
+		deviceId,
+		vendorUserId: employeeNo,
+		fingerprints,
+		source: params.source || "cpp_sdk_callback_raw",
+	});
+
+	let row =
+		(await params.prisma.deviceUser.findFirst({
+			where: {
+				organizationId,
+				deviceId,
+				OR: [{ vendorUserId: employeeNo }, { employeeNo }],
+			},
+		})) || null;
+
+	if (!row) {
+		row = await params.prisma.deviceUser.create({
+			data: {
+				organizationId,
+				deviceId,
+				vendorUserId: employeeNo,
+				employeeNo,
+				status: "UNMATCHED",
+				rawPayload: {},
+				vendorMetadata: {},
+				lastSyncedAt: new Date(),
+			},
+		});
+	}
+
+	applyRawFingerprintCustodyToRow(row, custody);
+	// Optional face blobs on the same custody plane (raw base64, not AES).
+	if (faceTemplate || facePicture) {
+		const priorVendor = (row.vendorMetadata as any) || {};
+		const priorRaw = (row.rawPayload as any) || {};
+		row.vendorMetadata = {
+			...priorVendor,
+			rawFace: {
+				present: true,
+				faceTemplateChars: faceTemplate.length,
+				facePictureChars: facePicture.length,
+				faceTemplate: faceTemplate || null,
+				facePicture: facePicture || null,
+				capturedAt: new Date().toISOString(),
+				source: params.source || "cpp_sdk_callback_raw",
+			},
+			rawFacePresent: true,
+		};
+		row.rawPayload = {
+			...priorRaw,
+			_hrisDeviceMetadata: {
+				...(priorRaw._hrisDeviceMetadata || {}),
+				rawFace: (row.vendorMetadata as any).rawFace,
+			},
+		};
+	}
+
+	const saved = await persistRawFingerprintCustody({
+		prisma: params.prisma,
+		organizationId,
+		deviceId,
+		vendorUserId: String(row.vendorUserId || employeeNo),
+		row,
+	});
+
+	if (params.eventId) {
+		await patchEnrollmentEventRawStatus(
+			{
+				prisma: params.prisma,
+				req: params.req,
+				eventId: params.eventId,
+				deviceUserId: saved?.id || row.id,
+			},
+			{
+				status: "raw_on_device_user",
+				reason: null,
+				attempts: 0,
+				fingerprintCount: custody.fingerprintCount,
+				totalDataChars: custody.totalDataChars,
+				deviceUserId: saved?.id || row.id,
+				rawFingerprintLocation: `DeviceUser(${saved?.id || row.id}).vendorMetadata.rawFingerprints.templates[].data`,
+			},
+		).catch(() => undefined);
+	}
+
+	return {
+		ok: true,
+		rawPresent: custody.rawPresent || Boolean(faceTemplate || facePicture),
+		fingerprintCount: custody.fingerprintCount,
+		totalDataChars: custody.totalDataChars,
+		deviceUserId: saved?.id || row.id || null,
+	};
 };

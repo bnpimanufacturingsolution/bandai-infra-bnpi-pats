@@ -174,4 +174,54 @@ describe("device-user-raw-fingerprint helper", () => {
 		expect(shouldCaptureRawFingerprintForEventAction("USER_CREATED")).to.equal(true);
 		expect(shouldCaptureRawFingerprintForEventAction("TAP")).to.equal(false);
 	});
+
+	it("persists raw templates from C++ callback fingerprints array without AES", async () => {
+		const { persistRawFingerprintsFromSdkCallback, normalizeCallbackFingerprintArray } =
+			await import("../helper/device-user-raw-fingerprint.helper");
+		const list = normalizeCallbackFingerprintArray([
+			{ fingerPrintId: 1, fingerType: 0, length: 20, data: "cmF3LWZyb20tY3BwLWNhbGxiYWNr" },
+		]);
+		expect(list[0].data).to.equal("cmF3LWZyb20tY3BwLWNhbGxiYWNr");
+
+		const updates: any[] = [];
+		const prisma = {
+			deviceUser: {
+				findFirst: async () => ({
+					id: "du-15",
+					vendorUserId: "15",
+					employeeNo: "15",
+					rawPayload: {},
+					vendorMetadata: {},
+				}),
+				update: async (input: any) => {
+					updates.push(input);
+					return {
+						id: "du-15",
+						vendorUserId: "15",
+						vendorMetadata: input.data.vendorMetadata,
+						rawPayload: input.data.rawPayload,
+					};
+				},
+			},
+			deviceEvent: {
+				findUnique: async () => null,
+			},
+		};
+		const result = await persistRawFingerprintsFromSdkCallback({
+			prisma: prisma as any,
+			organizationId: "org-1",
+			deviceId: "dev-1",
+			employeeNo: "15",
+			fingerprints: [
+				{ fingerPrintId: 1, data: "cmF3LWZyb20tY3BwLWNhbGxiYWNr" },
+			],
+			source: "cpp_sdk_callback_raw",
+		});
+		expect(result.ok).to.equal(true);
+		expect(result.fingerprintCount).to.equal(1);
+		expect(updates[0].data.vendorMetadata.rawFingerprints.templates[0].data).to.equal(
+			"cmF3LWZyb20tY3BwLWNhbGxiYWNr",
+		);
+		expect(JSON.stringify(updates[0].data)).to.not.include("ciphertext");
+	});
 });

@@ -555,10 +555,21 @@ const getDisplayEmployeeNo = (
 
 const formatDeviceEventPersonRef = (
 	employeeNo?: string | null,
-	item?: Pick<UnifiedDeviceEventRow, "employeeNo" | "payload" | "deviceUserVendorUserId"> | null,
+	item?: Pick<
+		UnifiedDeviceEventRow,
+		"employeeNo" | "payload" | "deviceUserVendorUserId" | "status" | "errorMessage"
+	> | null,
 ) => {
 	const token = item ? getDisplayEmployeeNo(item) : String(employeeNo || "").trim();
-	if (!token) return "No person id on device log";
+	if (!token) {
+		const resolving =
+			String(item?.status || "").toUpperCase() === "IGNORED" ||
+			String(item?.errorMessage || "").includes("resolving") ||
+			String(item?.payload?.enrollmentSnapshot?.biometricCustody?.status || "").includes(
+				"pending",
+			);
+		return resolving ? "Resolving person id…" : "No person id on device log";
+	}
 	if (isOpaqueDevicePersonToken(token)) {
 		return "Device person token (not a readable employee no.)";
 	}

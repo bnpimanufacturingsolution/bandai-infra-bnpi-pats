@@ -195,10 +195,21 @@ describe("Hikvision callback controller", () => {
 			employee: {
 				findFirst: async (input: any) => {
 					const or = input?.where?.OR || [];
-					const hit = or.some(
-						(clause: any) =>
-							clause.deviceEmpId === "14" || clause.employeeId === "14",
-					);
+					const hit = or.some((clause: any) => {
+						const deviceEmp =
+							clause.deviceEmpId?.in ||
+							(clause.deviceEmpId ? [clause.deviceEmpId] : []);
+						const empId =
+							clause.employeeId?.in ||
+							(clause.employeeId ? [clause.employeeId] : []);
+						return (
+							deviceEmp.includes("14") ||
+							deviceEmp.includes("00014") ||
+							empId.includes("14") ||
+							empId.includes("00014") ||
+							empId.includes("BNPI-014")
+						);
+					});
 					if (!hit) return null;
 					return {
 						id: "emp-hris-14",
@@ -227,7 +238,9 @@ describe("Hikvision callback controller", () => {
 				time: "2026-07-19T10:04:12+08:00",
 				employeeNo: "14",
 				employeeNoString: "14",
-				major: 3,
+				// Typed user-management (not major=3 SYNC_SIGNAL) so unit test does not
+				// arm multipass logSearch timers. Fast path still runs via eventKind/actionCode.
+				major: 0,
 				minor: 0,
 				actionCode: "MINOR_ADD_USER_INFO",
 				eventKind: "biometric_user_management",
