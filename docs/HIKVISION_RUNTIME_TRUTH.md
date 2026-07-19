@@ -10,6 +10,7 @@ panel/SDK **user create / user update / fingerprint enroll** identity (plain dev
 person id vs opaque log token vs plain `Employee.deviceEmpId` / padded `Employee.employeeId`):
 
 - **`docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md`**
+- **Event actions / triggers / storage:** `docs/DEVICE_EVENT_ACTIONS.md` + `docs/device-event-actions.html`
 - WWG twin: `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md`
 
 Summary: live path remains HCNetSDK callback → `/api/hikvision/callback` → DeviceEvent +

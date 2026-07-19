@@ -48,7 +48,9 @@ Panel "15"
 | Device person `15` | Device Users details `vendorUserId=15` |
 | Employee (when linked) | HRIS employee; display may show `employeeId` `00015` |
 
-**Visual HTML:** [`docs/hikvision-callback-event-flows.html`](./hikvision-callback-event-flows.html)
+**Visual HTML:**  
+- Identity model: [`docs/hikvision-callback-event-flows.html`](./hikvision-callback-event-flows.html)  
+- **Event actions → storage matrix:** [`docs/DEVICE_EVENT_ACTIONS.md`](./DEVICE_EVENT_ACTIONS.md) + [`docs/device-event-actions.html`](./device-event-actions.html)
 
 ### onUserCreate — required must-happen list
 
