@@ -65,7 +65,8 @@ struct ReconcileJob {
     bool include_fingerprints = false;
     bool include_face_recognition = true;
     // Filled by enrich_hris_job_before_post when ACS person was empty or templates needed.
-    // identity_source: acs_dwEmployeeNo | inventory_delta | poll_inventory | empty
+    // identity_source: acs_dwEmployeeNo | inventory_delta | userinfo_touch |
+    //                  poll_inventory | empty
     std::string identity_source;
     // JSON array of {fingerPrintId,fingerType,length,data} with base64 fingerData (raw).
     std::string fingerprints_json;
@@ -103,10 +104,24 @@ std::mutex inventory_read_mutex;
 std::mutex inventory_baseline_mutex;
 std::map<std::string, std::chrono::steady_clock::time_point> recent_peer_apply_by_host;
 std::map<std::string, unsigned long long> delayed_reconcile_by_host;
+// last_seen timestamps (not expiry). TTL applied when reading.
 std::map<std::string, std::chrono::steady_clock::time_point> recent_employee_candidates;
 std::map<std::string, std::chrono::steady_clock::time_point> recent_poll_reconcile_by_key;
 std::map<std::string, std::set<std::string>> observed_employee_numbers_by_host;
 std::set<std::string> inventory_baseline_ready_hosts;
+// UserInfo field fingerprint per host/employee for modify detection when ACS person is empty.
+// Fingerprint = name|numOfFP|numOfFace. Detects name edits and FP count changes; does not invent ids.
+struct UserInfoTouchSnapshot {
+    std::string name;
+    int num_of_fp = -1;
+    int num_of_face = -1;
+    std::string fingerprint() const {
+        return name + "|" + std::to_string(num_of_fp) + "|" + std::to_string(num_of_face);
+    }
+};
+std::mutex userinfo_touch_mutex;
+std::map<std::string, std::map<std::string, UserInfoTouchSnapshot>> userinfo_touch_baseline_by_host;
+std::set<std::string> userinfo_touch_baseline_ready_hosts;
 std::set<std::string> pending_full_mirror_hosts;
 std::atomic<unsigned long long> delayed_reconcile_token{0};
 bool execute_mode = true;
@@ -115,12 +130,16 @@ std::string hris_api_token;
 std::string min_sdk_time;
 std::string reconcile_spool_dir = "/tmp/project-truth-hikvision-reconcile-spool";
 std::string callback_spool_dir = "/tmp/project-truth-hikvision-callback-spool";
-constexpr auto recent_employee_candidate_ttl = std::chrono::seconds(45);
+// Long enough for panel create → enroll / modify multipass without inventing ids.
+constexpr auto recent_employee_candidate_ttl = std::chrono::seconds(180);
 constexpr auto poll_reconcile_min_interval = std::chrono::seconds(3);
 constexpr auto inventory_poll_interval = std::chrono::seconds(2);
 
 bool curl_post_json(const std::string &url, const std::string &body, const std::string &event_name);
 void queue_reconcile(const ReconcileJob &job);
+std::string pick_newest_plain_employee_no(const std::vector<std::string> &candidates);
+std::vector<std::string> get_recent_employee_candidates_for_host(const std::string &host);
+void seed_userinfo_touch_baseline_for_session(DeviceSession &device);
 
 void handle_signal(int) {
     keep_running = 0;
@@ -444,8 +463,9 @@ void mark_recent_employee_candidate(const std::string &host, const std::string &
         return;
     }
     std::lock_guard<std::mutex> lock(recent_employee_candidate_mutex);
+    // Store last_seen (not absolute expiry) so we can pick the most recent candidate.
     recent_employee_candidates[recent_employee_candidate_key(host, employee_no)] =
-        std::chrono::steady_clock::now() + recent_employee_candidate_ttl;
+        std::chrono::steady_clock::now();
 }
 
 std::vector<std::string> get_recent_employee_candidates_for_host(const std::string &host) {
@@ -458,7 +478,7 @@ std::vector<std::string> get_recent_employee_candidates_for_host(const std::stri
     const auto now = std::chrono::steady_clock::now();
     std::lock_guard<std::mutex> lock(recent_employee_candidate_mutex);
     for (auto it = recent_employee_candidates.begin(); it != recent_employee_candidates.end();) {
-        if (it->second <= now) {
+        if (now - it->second > recent_employee_candidate_ttl) {
             it = recent_employee_candidates.erase(it);
             continue;
         }
@@ -903,6 +923,329 @@ std::string extract_string_field_from_json(const std::string &json, const std::s
         return match[1].str();
     }
     return "";
+}
+
+int extract_int_field_from_json(const std::string &json, const std::string &field_name) {
+    const std::regex field_regex("\"" + field_name + "\"\\s*:\\s*([0-9]+)");
+    std::smatch match;
+    if (std::regex_search(json, match, field_regex) && match.size() > 1) {
+        try {
+            return std::stoi(match[1].str());
+        } catch (...) {
+            return -1;
+        }
+    }
+    return -1;
+}
+
+// Expand from a position inside a JSON object to the full {...} object bounds.
+std::string extract_enclosing_json_object(const std::string &json, size_t pos_inside) {
+    if (json.empty() || pos_inside >= json.size()) {
+        return "";
+    }
+    // Walk left to the matching '{' for this object.
+    int depth = 0;
+    bool in_string = false;
+    bool escaped = false;
+    size_t start = pos_inside;
+    for (size_t i = pos_inside + 1; i-- > 0;) {
+        const char c = json[i];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (c == '"') {
+            in_string = true;
+            continue;
+        }
+        if (c == '}') {
+            depth += 1;
+        } else if (c == '{') {
+            if (depth == 0) {
+                start = i;
+                break;
+            }
+            depth -= 1;
+        }
+        if (i == 0) {
+            break;
+        }
+    }
+    // Walk right from start to matching '}'.
+    depth = 0;
+    in_string = false;
+    escaped = false;
+    for (size_t index = start; index < json.size(); ++index) {
+        const char c = json[index];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (c == '"') {
+            in_string = true;
+            continue;
+        }
+        if (c == '{') {
+            depth += 1;
+        } else if (c == '}') {
+            depth -= 1;
+            if (depth == 0) {
+                return json.substr(start, index - start + 1);
+            }
+        }
+    }
+    return "";
+}
+
+// Parse per-user name/numOfFP/numOfFace from a UserInfo/Search page.
+// Uses enclosing JSON object so name fields that appear BEFORE employeeNo are captured.
+void extract_userinfo_touch_from_response(
+    const std::string &response,
+    std::map<std::string, UserInfoTouchSnapshot> *out) {
+    if (out == nullptr || response.empty()) {
+        return;
+    }
+    static const std::regex employee_regex("\"employeeNo\"\\s*:\\s*\"([^\"]+)\"");
+    for (std::sregex_iterator it(response.begin(), response.end(), employee_regex), end;
+         it != end;
+         ++it) {
+        const std::string employee_no = (*it)[1].str();
+        if (employee_no.empty()) {
+            continue;
+        }
+        const size_t pos = static_cast<size_t>((*it).position(0));
+        std::string window = extract_enclosing_json_object(response, pos);
+        if (window.empty()) {
+            // Fallback: look both before and after employeeNo (name often precedes it).
+            const size_t left = pos > 250 ? pos - 250 : 0;
+            const size_t right = std::min(response.size(), pos + 500);
+            window = response.substr(left, right - left);
+        }
+        UserInfoTouchSnapshot snap;
+        snap.name = extract_string_field_from_json(window, "name");
+        snap.num_of_fp = extract_int_field_from_json(window, "numOfFP");
+        if (snap.num_of_fp < 0) {
+            snap.num_of_fp = extract_int_field_from_json(window, "numOfFingerPrint");
+        }
+        snap.num_of_face = extract_int_field_from_json(window, "numOfFace");
+        (*out)[employee_no] = snap;
+    }
+}
+
+// Full UserInfo touch map (employeeNo -> name|numOfFP|numOfFace). Shares inventory_read_mutex.
+std::map<std::string, UserInfoTouchSnapshot> read_device_userinfo_touch_map(
+    DeviceSession &device,
+    bool *complete_out = nullptr) {
+    std::lock_guard<std::mutex> inventory_lock(inventory_read_mutex);
+    if (complete_out != nullptr) {
+        *complete_out = false;
+    }
+    constexpr int request_page_size = 30;
+    std::map<std::string, UserInfoTouchSnapshot> touches;
+    int position = 0;
+    int total_matches = -1;
+    bool read_failed = false;
+
+    for (int page = 0; page < 80 && position < 4000; ++page) {
+        std::ostringstream body;
+        body << "{\"UserInfoSearchCond\":{\"searchID\":\"pt-touch-" << page << "-" << position
+             << "\",\"searchResultPosition\":" << position
+             << ",\"maxResults\":" << request_page_size << "}}";
+
+        std::string response;
+        const bool ok = stdxml_json_request(
+            device,
+            "POST /ISAPI/AccessControl/UserInfo/Search?format=json",
+            body.str(),
+            &response);
+        if (!ok) {
+            read_failed = true;
+            emit_json({
+                {"event", "source_userinfo_touch_read"},
+                {"sourceDeviceId", device.config.hris_device_id},
+                {"ok", "false"},
+                {"offset", std::to_string(position)},
+                {"lastError", std::to_string(NET_DVR_GetLastError())}
+            });
+            break;
+        }
+        {
+            static const std::regex total_regex("\"totalMatches\"\\s*:\\s*([0-9]+)");
+            std::smatch m;
+            if (std::regex_search(response, m, total_regex) && m.size() > 1) {
+                try {
+                    total_matches = std::stoi(m[1].str());
+                } catch (...) {
+                }
+            }
+        }
+        const bool more =
+            response.find("\"responseStatusStrg\"") != std::string::npos &&
+            (response.find("\"MORE\"") != std::string::npos ||
+             response.find("\"More\"") != std::string::npos ||
+             response.find(":\"MORE\"") != std::string::npos);
+
+        const size_t before = touches.size();
+        extract_userinfo_touch_from_response(response, &touches);
+        const int page_count = static_cast<int>(touches.size() - before);
+        // Prefer page employee count from employeeNo extraction when windowing misses some.
+        const int employee_page_count =
+            static_cast<int>(extract_employee_numbers_from_search_response(response).size());
+        const int advance = employee_page_count > 0 ? employee_page_count : page_count;
+
+        emit_json({
+            {"event", "source_userinfo_touch_read"},
+            {"sourceDeviceId", device.config.hris_device_id},
+            {"ok", "true"},
+            {"offset", std::to_string(position)},
+            {"pageEmployees", std::to_string(advance)},
+            {"totalSoFar", std::to_string(touches.size())},
+            {"more", more ? "true" : "false"}
+        });
+
+        if (advance <= 0) {
+            break;
+        }
+        position += advance;
+        if (total_matches >= 0 && static_cast<int>(touches.size()) >= total_matches) {
+            break;
+        }
+        if (!more && advance < request_page_size) {
+            break;
+        }
+    }
+
+    const bool complete =
+        !read_failed &&
+        (total_matches < 0 || static_cast<int>(touches.size()) >= total_matches);
+    if (complete_out != nullptr) {
+        *complete_out = complete;
+    }
+    if (!complete) {
+        emit_json({
+            {"event", "source_userinfo_touch_incomplete"},
+            {"sourceDeviceId", device.config.hris_device_id},
+            {"employeeCount", std::to_string(touches.size())}
+        });
+        return {};
+    }
+    return touches;
+}
+
+void seed_userinfo_touch_baseline_for_session(DeviceSession &device) {
+    bool complete = false;
+    const auto current = read_device_userinfo_touch_map(device, &complete);
+    if (!complete || current.empty()) {
+        emit_json({
+            {"event", "userinfo_touch_baseline_seed_failed"},
+            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceHost", device.config.host}
+        });
+        return;
+    }
+    std::lock_guard<std::mutex> lock(userinfo_touch_mutex);
+    userinfo_touch_baseline_by_host[device.config.host] = current;
+    userinfo_touch_baseline_ready_hosts.insert(device.config.host);
+    emit_json({
+        {"event", "userinfo_touch_baseline_seeded"},
+        {"sourceDeviceId", device.config.hris_device_id},
+        {"sourceHost", device.config.host},
+        {"employeeCount", std::to_string(current.size())}
+    });
+}
+
+// When ACS person empty and inventory_delta has no NEW plain (modify of existing person),
+// resolve plain id from UserInfo field changes (name / numOfFP / numOfFace). Device truth only.
+std::string resolve_plain_employee_no_from_userinfo_touch(DeviceSession &device) {
+    bool complete = false;
+    const auto current = read_device_userinfo_touch_map(device, &complete);
+    if (!complete || current.empty()) {
+        emit_json({
+            {"event", "callback_identity_userinfo_touch_incomplete"},
+            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceHost", device.config.host}
+        });
+        return "";
+    }
+
+    std::lock_guard<std::mutex> lock(userinfo_touch_mutex);
+    auto &baseline = userinfo_touch_baseline_by_host[device.config.host];
+    if (userinfo_touch_baseline_ready_hosts.find(device.config.host) ==
+        userinfo_touch_baseline_ready_hosts.end()) {
+        baseline = current;
+        userinfo_touch_baseline_ready_hosts.insert(device.config.host);
+        emit_json({
+            {"event", "callback_identity_userinfo_touch_baseline"},
+            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceHost", device.config.host},
+            {"employeeCount", std::to_string(current.size())},
+            {"note", "late_baseline"}
+        });
+        return "";
+    }
+
+    std::vector<std::string> changed;
+    for (const auto &entry : current) {
+        const auto found = baseline.find(entry.first);
+        if (found == baseline.end() ||
+            found->second.fingerprint() != entry.second.fingerprint()) {
+            changed.push_back(entry.first);
+        }
+    }
+    // Always advance baseline so the same edit is not re-reported forever.
+    baseline = current;
+
+    if (changed.empty()) {
+        emit_json({
+            {"event", "callback_identity_userinfo_touch_no_change"},
+            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceHost", device.config.host},
+            {"employeeCount", std::to_string(current.size())}
+        });
+        return "";
+    }
+
+    std::string plain;
+    if (changed.size() == 1) {
+        plain = changed.front();
+    } else {
+        // Multiple field changes are ambiguous. Resolve only when exactly one changed
+        // person is also present in the recent device-evidence candidate set.
+        const auto recent = get_recent_employee_candidates_for_host(device.config.host);
+        std::set<std::string> changed_set(changed.begin(), changed.end());
+        std::vector<std::string> intersections;
+        for (const auto &candidate : recent) {
+            if (changed_set.find(candidate) != changed_set.end()) {
+                intersections.push_back(candidate);
+            }
+        }
+        std::sort(intersections.begin(), intersections.end());
+        intersections.erase(std::unique(intersections.begin(), intersections.end()), intersections.end());
+        if (intersections.size() == 1) {
+            plain = intersections.front();
+        }
+    }
+
+    emit_json({
+        {"event", "callback_identity_userinfo_touch"},
+        {"sourceDeviceId", device.config.hris_device_id},
+        {"sourceHost", device.config.host},
+        {"changedCount", std::to_string(changed.size())},
+        {"employeeNo", plain}
+    });
+    return plain;
 }
 
 // Full UserInfo inventory. Critical: many Hikvision firmwares return at most ~30
@@ -1629,13 +1972,15 @@ std::vector<NET_DVR_FINGER_PRINT_CFG_V50> read_source_fingerprints(DeviceSession
     NET_DVR_StopRemoteConfig(handle);
     sdk_lock.unlock();
 
+    const bool have_templates = wait_ok && !ctx.failed && !ctx.templates.empty();
     emit_json({
         {"event", "source_fingerprint_read"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", job.employee_no},
         {"ok", wait_ok && !ctx.failed ? "true" : "false"},
-        {"templateCount", std::to_string(ctx.records)},
-        {"rawFingerprintTemplateStored", "false"}
+        {"templateCount", std::to_string(ctx.templates.size())},
+        // Truth: templates are held in memory for callback POST — not "false" when non-empty.
+        {"rawFingerprintTemplateStored", have_templates ? "true" : "false"}
     });
 
     return ctx.templates;
@@ -2904,6 +3249,8 @@ void seed_inventory_baseline_for_session(DeviceSession &device) {
         {"sourceHost", device.config.host},
         {"employeeCount", std::to_string(observed.size())}
     });
+    // Also seed UserInfo field fingerprints so modify (name/numOfFP) can resolve empty ACS person.
+    seed_userinfo_touch_baseline_for_session(device);
 }
 
 // When ACS dwEmployeeNo is empty (common major=3 panel create/FP enroll), resolve plain
@@ -3042,6 +3389,49 @@ void schedule_delayed_hris_identity_repost(const ReconcileJob &job, int delay_ms
     }).detach();
 }
 
+// Panel FP/face enroll often lags ACS by seconds: plain id may resolve first while
+// templates are still empty. Keep employeeNo and re-POST after delay so the
+// callback carries fingerprints[] / facePicture when device catches up.
+// Does not invent identity — only retries template attach for a known plain id.
+void schedule_delayed_template_repost(const ReconcileJob &job, int delay_ms, int attempt) {
+    if (attempt > 3 || job.employee_no.empty()) {
+        return;
+    }
+    // Avoid infinite template_repost chains.
+    if (job.event_kind.find("template_repost") != std::string::npos && attempt > 3) {
+        return;
+    }
+    ReconcileJob copy = job;
+    copy.fingerprints_json.clear();
+    copy.fingerprint_count = 0;
+    copy.face_template_b64.clear();
+    copy.face_picture_b64.clear();
+    // Keep employee_no + identity_source so enrich skips empty-id multipass and goes to templates.
+    copy.include_fingerprints = true;
+    copy.include_face_recognition = true;
+    copy.event_kind = job.event_kind.empty()
+                          ? "template_repost"
+                          : (job.event_kind.find("template_repost") != std::string::npos
+                                 ? job.event_kind
+                                 : (job.event_kind + "_template_repost"));
+    std::thread([copy, delay_ms, attempt]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        if (!keep_running) {
+            return;
+        }
+        emit_json({
+            {"event", "callback_template_repost_queued"},
+            {"sourceDeviceId", copy.source_device_id},
+            {"sourceHost", copy.source_host},
+            {"employeeNo", copy.employee_no},
+            {"attempt", std::to_string(attempt)},
+            {"delayMs", std::to_string(delay_ms)},
+            {"serialNo", copy.serial_no}
+        });
+        queue_hris_device_event(copy);
+    }).detach();
+}
+
 // ISAPI FingerPrintUpload read (raw base64) as fallback when SDK fingerprint read is empty.
 bool read_fingerprints_via_isapi(
     DeviceSession &session,
@@ -3119,6 +3509,98 @@ bool read_fingerprints_via_isapi(
     return true;
 }
 
+// Face picture via UserInfo faceURL (device truth). Used when SDK face read needs card
+// but person has face enrolled without card. Binary response base64-encoded for callback.
+bool read_face_picture_via_isapi_userinfo(
+    DeviceSession &session,
+    const std::string &employee_no,
+    std::string *face_picture_b64) {
+    if (employee_no.empty() || face_picture_b64 == nullptr) {
+        return false;
+    }
+    face_picture_b64->clear();
+    std::ostringstream body;
+    body << "{\"UserInfoSearchCond\":{"
+         << "\"searchID\":\"pt-face-" << json_escape(employee_no) << "\","
+         << "\"searchResultPosition\":0,"
+         << "\"maxResults\":1,"
+         << "\"EmployeeNoList\":[{\"employeeNo\":\"" << json_escape(employee_no) << "\"}]"
+         << "}}";
+    std::string response;
+    const bool ok = stdxml_json_request(
+        session,
+        "POST /ISAPI/AccessControl/UserInfo/Search?format=json",
+        body.str(),
+        &response);
+    if (!ok || response.empty()) {
+        emit_json({
+            {"event", "isapi_face_userinfo_read"},
+            {"sourceDeviceId", session.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"ok", "false"},
+            {"reason", "userinfo_search_failed"}
+        });
+        return false;
+    }
+    const std::string face_url = extract_string_field_from_json(response, "faceURL");
+    // numOfFace may be number in JSON — soft check via string field or presence of faceURL.
+    if (face_url.empty()) {
+        emit_json({
+            {"event", "isapi_face_userinfo_read"},
+            {"sourceDeviceId", session.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"ok", "true"},
+            {"facePictureChars", "0"},
+            {"reason", "no_faceURL"}
+        });
+        return false;
+    }
+    // faceURL is typically a device-relative path like /ISAPI/.../picture?type=...
+    std::string path = face_url;
+    if (path.rfind("http://", 0) == 0 || path.rfind("https://", 0) == 0) {
+        // Keep path+query only for stdxml.
+        const auto scheme_end = path.find("://");
+        if (scheme_end != std::string::npos) {
+            const auto path_start = path.find('/', scheme_end + 3);
+            if (path_start != std::string::npos) {
+                path = path.substr(path_start);
+            }
+        }
+    }
+    if (path.empty() || path[0] != '/') {
+        path = "/" + path;
+    }
+    std::string picture;
+    const bool pic_ok = stdxml_json_request(
+        session,
+        "GET " + path,
+        "",
+        &picture);
+    if (!pic_ok || picture.size() < 32) {
+        emit_json({
+            {"event", "isapi_face_userinfo_read"},
+            {"sourceDeviceId", session.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"ok", "false"},
+            {"reason", "faceURL_download_failed"},
+            {"faceURL", face_url}
+        });
+        return false;
+    }
+    *face_picture_b64 = base64_encode(
+        reinterpret_cast<const BYTE *>(picture.data()),
+        picture.size());
+    emit_json({
+        {"event", "isapi_face_userinfo_read"},
+        {"sourceDeviceId", session.config.hris_device_id},
+        {"employeeNo", employee_no},
+        {"ok", "true"},
+        {"facePictureChars", std::to_string(face_picture_b64->size())},
+        {"faceURL", face_url}
+    });
+    return !face_picture_b64->empty();
+}
+
 // Before POST: fill plain employeeNo when ACS left it empty; attach raw FP/face when possible.
 // This is the correct place to harden "socket always has plain id" for enroll — not inventing in UI.
 void enrich_hris_job_before_post(ReconcileJob &job) {
@@ -3153,6 +3635,9 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
             delays = first_delays_ms;
             delay_count = 4;
         }
+        // inventory_delta: stop early after one complete no-new-plain so modify path
+        // reaches userinfo_touch quickly (full inventory is expensive on 300+ user devices).
+        bool inventory_complete_no_new = false;
         for (int i = 0; i < delay_count; ++i) {
             if (delays[i] > 0) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(delays[i]));
@@ -3162,9 +3647,45 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
                 job.employee_no = plain;
                 job.identity_source = "inventory_delta";
                 mark_recent_employee_candidate(job.source_host, plain);
+                inventory_complete_no_new = false;
+                break;
+            }
+            // Second+ pass only helps when UserInfo lag creates a true NEW plain after create.
+            // If baseline is ready and inventory completed empty, further inventory multipass
+            // only delays touch/candidate resolution for modify-of-existing.
+            if (i == 0) {
+                inventory_complete_no_new = true;
+            }
+            if (inventory_complete_no_new && i >= 1 && !is_repost) {
                 break;
             }
         }
+        // Modify of existing person: inventory_delta finds no NEW plain.
+        // Prefer UserInfo field-change (name/numOfFP) device truth over recency heuristics.
+        if (job.employee_no.empty()) {
+            static const int touch_delays_ms[] = {0, 800, 2000};
+            for (int delay_ms : touch_delays_ms) {
+                if (delay_ms > 0) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+                }
+                const std::string plain = resolve_plain_employee_no_from_userinfo_touch(*session);
+                if (!plain.empty()) {
+                    job.employee_no = plain;
+                    job.identity_source = "userinfo_touch";
+                    mark_recent_employee_candidate(job.source_host, plain);
+                    break;
+                }
+            }
+        }
+        emit_json({
+            {"event", "callback_identity_resolved"},
+            {"sourceDeviceId", job.source_device_id},
+            {"sourceHost", job.source_host},
+            {"employeeNo", job.employee_no},
+            {"identitySource",
+             job.employee_no.empty() ? "empty" : job.identity_source},
+            {"isRepost", is_repost ? "true" : "false"}
+        });
         if (job.employee_no.empty()) {
             job.identity_source = "empty";
             // First incomplete pass: keep path alive, then delayed re-POST for plain id.
@@ -3177,6 +3698,14 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
     } else if (!job.employee_no.empty() && job.identity_source.empty()) {
         job.identity_source =
             job.event_kind.find("poll_") == 0 ? "poll_inventory" : "acs_dwEmployeeNo";
+        emit_json({
+            {"event", "callback_identity_resolved"},
+            {"sourceDeviceId", job.source_device_id},
+            {"sourceHost", job.source_host},
+            {"employeeNo", job.employee_no},
+            {"identitySource", job.identity_source},
+            {"isRepost", is_repost ? "true" : "false"}
+        });
     }
 
     if (!needs_callback_template_enrich(job)) {
@@ -3233,8 +3762,14 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
         }
     }
 
-    // Face template/picture when card is available (SDK face read is card-keyed on this device).
-    if (job.include_face_recognition || is_user_management_minor(job.minor)) {
+    // Face template/picture whenever we already decided templates are needed for this
+    // callback (create/enroll/op-sync with plain id). SDK face is card-keyed; ISAPI
+    // faceURL is the no-card fallback (panel face enroll without card).
+    if (job.include_face_recognition || is_user_management_minor(job.minor) ||
+        is_fingerprint_management_minor(job.minor) || job.major == 3 ||
+        job.major == MAJOR_OPERATION ||
+        job.event_kind.find("identity_repost") != std::string::npos ||
+        job.event_kind.find("template_repost") != std::string::npos) {
         std::string user_json;
         std::string card_json;
         read_source_user(*session, job, &user_json);
@@ -3263,6 +3798,13 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
                 }
             }
         }
+        // No card or SDK empty: still try UserInfo faceURL picture (raw image bytes).
+        if (job.face_picture_b64.empty()) {
+            std::string pic_b64;
+            if (read_face_picture_via_isapi_userinfo(*session, job.employee_no, &pic_b64)) {
+                job.face_picture_b64 = pic_b64;
+            }
+        }
     }
 
     emit_json({
@@ -3274,8 +3816,28 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
         {"faceTemplateChars", std::to_string(job.face_template_b64.size())},
         {"facePictureChars", std::to_string(job.face_picture_b64.size())},
         {"templatesAttached",
-         (job.fingerprint_count > 0 || !job.face_template_b64.empty()) ? "true" : "false"}
+         (job.fingerprint_count > 0 || !job.face_template_b64.empty() ||
+          !job.face_picture_b64.empty())
+             ? "true"
+             : "false"}
     });
+
+    // Enroll lag: plain id known but device FP/face not readable yet → keep id and retry.
+    // Caps at 3 template_repost attempts via schedule_delayed_template_repost.
+    const bool is_template_repost =
+        job.event_kind.find("template_repost") != std::string::npos;
+    const bool templates_empty =
+        job.fingerprint_count <= 0 && job.face_template_b64.empty() &&
+        job.face_picture_b64.empty();
+    if (!job.employee_no.empty() && templates_empty && !is_template_repost) {
+        // Only for ops that can carry templates (create/enroll/modify/op-sync).
+        if (needs_callback_template_enrich(job) || is_fingerprint_management_minor(job.minor) ||
+            job.include_fingerprints || job.include_face_recognition) {
+            schedule_delayed_template_repost(job, 2500, 1);
+            schedule_delayed_template_repost(job, 6000, 2);
+            schedule_delayed_template_repost(job, 12000, 3);
+        }
+    }
 }
 
 bool post_hikvision_callback(const ReconcileJob &job) {
