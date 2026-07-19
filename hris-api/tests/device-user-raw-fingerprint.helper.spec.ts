@@ -1,0 +1,177 @@
+import { expect } from "chai";
+import {
+	applyRawFingerprintCustodyToRow,
+	buildRawFingerprintCustody,
+	captureRawFingerprintsForEnrollment,
+	normalizeIsapiFingerprintList,
+	RAW_FINGERPRINT_SCHEMA,
+	shouldCaptureRawFingerprintForEventAction,
+} from "../helper/device-user-raw-fingerprint.helper";
+
+describe("device-user-raw-fingerprint helper", () => {
+	it("normalizes ISAPI FingerPrintList into raw base64 templates", () => {
+		// Proven TEST A shape (FingerPrintInfo.FingerPrintList[]).
+		const proven = normalizeIsapiFingerprintList({
+			FingerPrintInfo: {
+				searchID: "probe",
+				status: "OK",
+				FingerPrintList: [
+					{
+						cardReaderNo: 1,
+						fingerPrintID: 1,
+						fingerType: "normalFP",
+						fingerData: "MzAxHxodJvh8gh9xJuiE0CZlFVhUkkgFJjhsgVSZJThkC2SR",
+					},
+				],
+			},
+		});
+		expect(proven).to.have.length(1);
+		expect(proven[0].fingerPrintId).to.equal(1);
+		expect(proven[0].data).to.include("MzAxHxod");
+
+		const list = normalizeIsapiFingerprintList({
+			FingerPrintList: {
+				FingerPrint: [
+					{
+						fingerPrintID: 1,
+						fingerType: "normalFP",
+						fingerData: "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=",
+					},
+					{
+						fingerPrintID: 2,
+						fingerType: 0,
+						data: "c29tZS1vdGhlci10ZW1wbGF0ZS1ieXRlcw==",
+					},
+				],
+			},
+		});
+		expect(list).to.have.length(2);
+		expect(list[0].fingerPrintId).to.equal(1);
+		expect(list[0].data).to.equal("QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=");
+		expect(list[1].data.length).to.be.greaterThan(8);
+	});
+
+	it("builds and applies raw fingerprint custody onto DeviceUser row", () => {
+		const custody = buildRawFingerprintCustody({
+			deviceId: "dev-1",
+			vendorUserId: "15",
+			fingerprints: [
+				{
+					fingerPrintId: 1,
+					fingerType: 0,
+					length: 32,
+					data: "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=",
+				},
+			],
+			source: "unit_test",
+		});
+		expect(custody.schema).to.equal(RAW_FINGERPRINT_SCHEMA);
+		expect(custody.rawPresent).to.equal(true);
+		expect(custody.fingerprintCount).to.equal(1);
+
+		const row: any = {
+			rawPayload: { employeeNo: "15", numOfFP: 1 },
+			vendorMetadata: { credentialSummary: { fingerprintCount: 1 } },
+		};
+		applyRawFingerprintCustodyToRow(row, custody);
+		expect(row.vendorMetadata.rawFingerprintPresent).to.equal(true);
+		expect(row.vendorMetadata.rawFingerprintCount).to.equal(1);
+		expect(row.vendorMetadata.rawFingerprints.templates[0].data).to.equal(
+			"QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=",
+		);
+		// Actual raw blob path operators open in Device User details JSON.
+		expect(row.rawPayload._hrisDeviceMetadata.rawFingerprints.templates[0].data).to.include(
+			"QUJD",
+		);
+	});
+
+	it("captures raw fingerprints with injectable fetch and persists DeviceUser", async () => {
+		const updates: any[] = [];
+		const eventUpdates: any[] = [];
+		const prisma = {
+			deviceUser: {
+				findFirst: async () => ({
+					id: "du-15",
+					vendorUserId: "15",
+					employeeNo: "15",
+					rawPayload: {},
+					vendorMetadata: {},
+				}),
+				update: async (input: any) => {
+					updates.push(input);
+					return {
+						id: "du-15",
+						vendorUserId: "15",
+						employeeNo: "15",
+						vendorMetadata: input.data.vendorMetadata,
+						rawPayload: input.data.rawPayload,
+						updatedAt: new Date(),
+					};
+				},
+			},
+			deviceEvent: {
+				findUnique: async () => ({
+					id: "evt-fp-1",
+					payload: { enrollmentSnapshot: {} },
+					deviceUserId: "du-15",
+					employeeId: null,
+				}),
+				update: async (input: any) => {
+					eventUpdates.push(input);
+					return {
+						id: "evt-fp-1",
+						...input.data,
+						device: { id: "dev-1" },
+						deviceUser: { id: "du-15", vendorUserId: "15" },
+					};
+				},
+			},
+		};
+
+		const result = await captureRawFingerprintsForEnrollment({
+			prisma: prisma as any,
+			req: { io: null },
+			organizationId: "org-1",
+			deviceId: "dev-1",
+			eventId: "evt-fp-1",
+			employeeNo: "15",
+			deviceUserId: "du-15",
+			fetchFingerprints: async () => ({
+				fingerprints: [
+					{
+						fingerPrintId: 1,
+						fingerType: 0,
+						length: 24,
+						data: "cmF3LWZpbmdlci10ZW1wbGF0ZS1kYXRh",
+					},
+				],
+				attempts: 1,
+			}),
+		});
+
+		expect(result.ok).to.equal(true);
+		expect(result.rawPresent).to.equal(true);
+		expect(result.fingerprintCount).to.equal(1);
+		expect(result.totalDataChars).to.be.greaterThan(8);
+		expect(updates).to.have.length(1);
+		const savedMeta = updates[0].data.vendorMetadata;
+		expect(savedMeta.rawFingerprints.templates[0].data).to.equal(
+			"cmF3LWZpbmdlci10ZW1wbGF0ZS1kYXRh",
+		);
+		// Not AES envelope shape.
+		expect(savedMeta.rawFingerprints.templates[0].data).to.not.include("ciphertext");
+		expect(eventUpdates[0].data.payload.rawFingerprintCustody.status).to.equal(
+			"raw_on_device_user",
+		);
+		expect(eventUpdates[0].data.payload.enrollmentSnapshot.biometricTemplateStatus).to.equal(
+			"raw_on_device_user",
+		);
+	});
+
+	it("selects fingerprint enroll/update and user create for raw capture", () => {
+		expect(shouldCaptureRawFingerprintForEventAction("FINGERPRINT_ENROLLED")).to.equal(true);
+		expect(shouldCaptureRawFingerprintForEventAction("FINGERPRINT_UPDATED")).to.equal(true);
+		expect(shouldCaptureRawFingerprintForEventAction("USER_CREATED")).to.equal(true);
+		expect(shouldCaptureRawFingerprintForEventAction("TAP")).to.equal(false);
+	});
+});

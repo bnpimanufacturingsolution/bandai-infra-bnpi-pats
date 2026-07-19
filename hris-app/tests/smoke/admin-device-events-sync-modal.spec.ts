@@ -687,3 +687,133 @@ test("admin device events page uses friendly status copy without inventory strip
 		fullPage: true,
 	});
 });
+
+test("admin device events keeps plain device user id separate from padded employee code", async ({
+	page,
+}) => {
+	const hikvisionDevice = {
+		id: "device-hik-15",
+		organizationId: "org-1",
+		name: "TEST A",
+		address: "192.168.254.102",
+		port: 443,
+		protocol: "https",
+		config: { vendor: "Hikvision" },
+		access: {},
+		createdAt: timestamp,
+		updatedAt: timestamp,
+	};
+	const eventForDeviceUser15 = {
+		id: "event-device-user-15",
+		organizationId: "org-1",
+		deviceId: hikvisionDevice.id,
+		device: hikvisionDevice,
+		deviceUserId: "du-15",
+		deviceUser: {
+			id: "du-15",
+			vendorUserId: "15",
+			employeeNo: "15",
+			displayName: "User 15",
+			status: "ACTIVE",
+			employeeId: "employee-15",
+		},
+		employee: {
+			id: "employee-15",
+			employeeId: "00015",
+			deviceEmpId: "15",
+			fullName: "Employee Fifteen",
+		},
+		employeeId: "employee-15",
+		attendanceId: null,
+		eventTime: "2026-07-19T08:51:00.000Z",
+		receivedAt: "2026-07-19T08:51:01.000Z",
+		employeeNo: "15",
+		source: "EN_HCNETSDK_ALARM",
+		status: "MATCHED",
+		eventType: "UserManagement",
+		eventCategory: "USER_MANAGEMENT",
+		eventAction: "USER_CREATED",
+		eventLabel: "User created",
+		eventConfidence: "PROVEN",
+		dedupeKey: "device-user-15",
+		payload: {
+			resolvedEmployeeNo: "15",
+			resolvedDisplayName: "User 15",
+			fastEnrollmentIdentityPath: "plain_immediate",
+		},
+		createdAt: timestamp,
+		updatedAt: timestamp,
+	};
+
+	await page.addInitScript(() => {
+		window.localStorage.setItem("authToken", "smoke-token");
+		window.localStorage.setItem("userRole", "hris-admin");
+		window.localStorage.setItem("userSubRole", "hris-admin");
+	});
+
+	await page.route("**/api/**", async (route) => {
+		const path = new URL(route.request().url()).pathname;
+		if (path.endsWith("/auth/me")) {
+			await route.fulfill(json(adminUser));
+			return;
+		}
+		if (path.endsWith("/system-provisioning/status")) {
+			await route.fulfill(json(readyProvisioningStatus));
+			return;
+		}
+		if (path.endsWith("/device/events")) {
+			await route.fulfill(
+				json({
+					events: [eventForDeviceUser15],
+					summary: {
+						total: 1,
+						byStatus: { MATCHED: 1 },
+						bySource: { EN_HCNETSDK_ALARM: 1 },
+					},
+					pagination: { total: 1, page: 1, limit: 25, totalPages: 1 },
+				}),
+			);
+			return;
+		}
+		if (path.endsWith("/device")) {
+			await route.fulfill(
+				json({
+					devices: [hikvisionDevice],
+					pagination: { total: 1, page: 1, limit: 100, totalPages: 1 },
+				}),
+			);
+			return;
+		}
+		await route.fulfill(json({}));
+	});
+
+	await page.goto("/admin/configuration/devices/events?view=saved");
+	await expect(page.getByRole("heading", { name: "Device events" })).toBeVisible({
+		timeout: routeReadyTimeoutMs,
+	});
+
+	const deviceUserLink = page.getByRole("link", {
+		name: /No\. 15.*Device user/i,
+	});
+	await expect(deviceUserLink).toBeVisible();
+	await expect(deviceUserLink).toHaveAttribute(
+		"href",
+		/admin\/configuration\/devices\?.*deviceUserSearch=15.*deviceUserDetails=15/,
+	);
+	await expect(
+		page.getByRole("link", { name: "Employee Fifteen" }),
+	).toHaveAttribute("href", /\/admin\/configuration\/employees\?action=view&id=employee-15/);
+
+	await page.getByRole("button", { name: "View" }).click();
+	const dialog = page.getByRole("dialog");
+	await expect(dialog.getByRole("heading", { name: "Device event details" })).toBeVisible();
+	await expect(dialog.getByText("No. 15")).toBeVisible();
+	await expect(dialog.getByRole("link", { name: "Device user" })).toHaveAttribute(
+		"href",
+		/admin\/configuration\/devices\?.*deviceUserSearch=15.*deviceUserDetails=15/,
+	);
+	await expect(dialog.getByRole("link", { name: "Employee record" })).toHaveAttribute(
+		"href",
+		/admin\/configuration\/employees\?action=view&id=employee-15/,
+	);
+});

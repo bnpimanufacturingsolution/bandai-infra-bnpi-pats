@@ -22,7 +22,7 @@ Live enroll path is **HCNetSDK ACS callback → `/api/hikvision/callback` → De
 |---|---|---|
 | Device inventory | `DeviceUser` | plain `vendorUserId` (e.g. `15`) |
 | Event ledger | `DeviceEvent` | plain `employeeNo` when resolved; keep opaque in payload |
-| HRIS employee | `Employee` | `deviceEmpId` often **5-digit pad** (`00015`) |
+| HRIS employee | `Employee` | `deviceEmpId` plain when used as device match (`15`); `employeeId` may carry leading-zero business code (`00015`) |
 | Opaque map | `DevicePersonToken` | opaque log token → plain |
 
 ## Required behaviors
@@ -30,8 +30,16 @@ Live enroll path is **HCNetSDK ACS callback → `/api/hikvision/callback` → De
 1. Socket quickly on save (liveness).
 2. Never show opaque tokens as employee numbers.
 3. Upsert DeviceUser for new plains as soon as UserInfo inventory sees them.
-4. Link Employee when pad-aware deviceEmpId/employeeId match succeeds.
+4. Link Employee when exact `deviceEmpId` or accepted `employeeId` pad-variant match succeeds.
 5. Device Events “Device user” navigates by plain id; employee link uses HRIS employee.
+
+## Current operator note
+
+`project-truth-db-access` / Cloudflare / SSH helper access is not a general route
+to the Hikvision private LAN. ICMP ping to `192.168.254.102` can fail with TTL
+expiry while HRIS DB/API access is still healthy. The accepted pattern is
+selected TCP reverse forwards or a site agent on the device LAN posting callback
+evidence to HRIS.
 
 ## Related
 

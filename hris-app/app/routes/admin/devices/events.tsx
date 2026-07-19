@@ -91,6 +91,9 @@ type UnifiedDeviceEventRow = {
 	employeeProfileId?: string | null;
 	employeeNo?: string | null;
 	employeeName?: string | null;
+	deviceUserId?: string | null;
+	deviceUserVendorUserId?: string | null;
+	deviceUserDisplayName?: string | null;
 	businessStatus: string;
 	status: string;
 	source?: string | null;
@@ -532,7 +535,14 @@ const isOpaqueDevicePersonToken = (value?: string | null) => {
 };
 
 /** Prefer plain employeeNo after write-time map resolve; fall back to raw. */
-const getDisplayEmployeeNo = (item: Pick<UnifiedDeviceEventRow, "employeeNo" | "payload">) => {
+const getDisplayEmployeeNo = (
+	item: Pick<
+		UnifiedDeviceEventRow,
+		"employeeNo" | "payload" | "deviceUserVendorUserId"
+	>,
+) => {
+	const deviceUserId = String(item.deviceUserVendorUserId || "").trim();
+	if (deviceUserId && !isOpaqueDevicePersonToken(deviceUserId)) return deviceUserId;
 	const resolved = String(
 		item.payload?.resolvedEmployeeNo ||
 			(item.payload?.personTokenResolved ? item.employeeNo : "") ||
@@ -545,7 +555,7 @@ const getDisplayEmployeeNo = (item: Pick<UnifiedDeviceEventRow, "employeeNo" | "
 
 const formatDeviceEventPersonRef = (
 	employeeNo?: string | null,
-	item?: Pick<UnifiedDeviceEventRow, "employeeNo" | "payload"> | null,
+	item?: Pick<UnifiedDeviceEventRow, "employeeNo" | "payload" | "deviceUserVendorUserId"> | null,
 ) => {
 	const token = item ? getDisplayEmployeeNo(item) : String(employeeNo || "").trim();
 	if (!token) return "No person id on device log";
@@ -563,7 +573,8 @@ const getEmployeeDisplayName = (item: UnifiedDeviceEventRow) => {
 	// Plain device person no (e.g. panel enroll "14") — show as device user, not HRIS employee.
 	if (displayNo) {
 		const resolvedName = String(
-			item.payload?.resolvedDisplayName ||
+			item.deviceUserDisplayName ||
+				item.payload?.resolvedDisplayName ||
 				item.payload?.enrollmentSnapshot?.displayName ||
 				item.payload?.enrollmentGoal?.displayName ||
 				"",
@@ -1126,6 +1137,9 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		eventTime: event.eventTime,
 		employeeId: event.employee?.employeeId || null,
 		employeeProfileId: event.employee?.id || event.employeeId || null,
+		deviceUserId: event.deviceUser?.id || event.deviceUserId || null,
+		deviceUserVendorUserId: event.deviceUser?.vendorUserId || null,
+		deviceUserDisplayName: event.deviceUser?.displayName || null,
 		employeeNo:
 			// Write-time map: store plain employeeNo when resolved from opaque log token.
 			(payload.personTokenResolved && payload.resolvedEmployeeNo
@@ -1136,6 +1150,7 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 				: payload.resolvedEmployeeNo || event.employeeNo),
 		employeeName:
 			event.employee?.fullName ||
+			event.deviceUser?.displayName ||
 			payload.name ||
 			payload.resolvedDisplayName ||
 			zktecoAttendance.userName ||
@@ -4874,6 +4889,15 @@ export default function DeviceEventsPage() {
 				className="max-w-4xl">
 				{activeEvent ? (
 					<div className="space-y-5">
+						{(() => {
+							const activeDisplayNo = getDisplayEmployeeNo(activeEvent);
+							const activeDeviceUserUrl =
+								activeEvent.deviceId && activeDisplayNo && !isOpaqueDevicePersonToken(activeDisplayNo)
+									? getDeviceUserSyncCenterUrl(activeEvent.deviceId, activeDisplayNo)
+									: activeEvent.deviceId
+										? getDeviceUserSyncCenterUrl(activeEvent.deviceId, null)
+										: "";
+							return (
 						<div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-start sm:justify-between">
 							<div className="flex min-w-0 items-center gap-3">
 								<div
@@ -4889,16 +4913,24 @@ export default function DeviceEventsPage() {
 										{getEmployeeDisplayName(activeEvent)}
 									</p>
 									<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-										<span>{formatDeviceEventPersonRef(activeEvent.employeeNo)}</span>
+										<span>{formatDeviceEventPersonRef(null, activeEvent)}</span>
 										<Badge
 											variant={activeEvent.employeeProfileId ? "success-soft" : "warning-soft"}
 											className="px-2 py-0.5">
-											{activeEvent.employeeProfileId ? "Matched employee" : "Needs employee match"}
+											{activeEvent.employeeProfileId ? "Matched employee" : "Device user"}
 										</Badge>
 									</div>
 								</div>
 							</div>
 							<div className="flex flex-wrap items-center gap-2 sm:justify-end">
+								{activeDeviceUserUrl ? (
+									<Button asChild variant="outline" size="sm" className="h-8 px-3 text-xs">
+										<Link to={activeDeviceUserUrl}>
+											<UserRound className="h-3.5 w-3.5" />
+											Device user
+										</Link>
+									</Button>
+								) : null}
 								{activeEvent.employeeProfileId ? (
 									<Button asChild variant="outline" size="sm" className="h-8 px-3 text-xs">
 										<Link to={getEmployeeRecordUrl(activeEvent.employeeProfileId)}>
@@ -4909,6 +4941,8 @@ export default function DeviceEventsPage() {
 								) : null}
 							</div>
 						</div>
+							);
+						})()}
 
 						<div className="grid gap-3 md:grid-cols-4">
 							<div className="rounded-lg border border-slate-200 bg-white p-3">

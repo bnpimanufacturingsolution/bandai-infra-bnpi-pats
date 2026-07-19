@@ -14315,8 +14315,6 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const hasDeviceEventColumns = await getDeviceEventColumnPresence();
 			const hasDeviceUsersTable = await hasDeviceUserTable();
-			const hasDeviceUserReference =
-				hasDeviceUsersTable && hasDeviceEventColumns.deviceUserId;
 
 			if (
 				eventCategory &&
@@ -14427,8 +14425,27 @@ export const controller = (prisma: PrismaClient) => {
 			const eventConfidenceSql = hasDeviceEventColumns.eventConfidence
 				? Prisma.sql`de."eventConfidence"::text`
 				: Prisma.sql`'UNKNOWN'::text`;
-			const deviceUserJoinSql = hasDeviceUserReference
-				? Prisma.sql`LEFT JOIN device_users du ON du.id = ${deviceUserIdSql}`
+			const deviceUserJoinSql = hasDeviceUsersTable
+				? Prisma.sql`
+					LEFT JOIN device_users du ON (
+						${
+							hasDeviceEventColumns.deviceUserId
+								? Prisma.sql`du.id = de."deviceUserId"`
+								: Prisma.sql`false`
+						}
+						OR (
+							${
+								hasDeviceEventColumns.deviceUserId
+									? Prisma.sql`de."deviceUserId" IS NULL`
+									: Prisma.sql`true`
+							}
+							AND du."organizationId" = de."organizationId"
+							AND du."deviceId" = de."deviceId"
+							AND de."employeeNo" IS NOT NULL
+							AND BTRIM(de."employeeNo") <> ''
+							AND du."vendorUserId" = BTRIM(de."employeeNo")
+						)
+					)`
 				: Prisma.sql`
 					LEFT JOIN LATERAL (
 						SELECT

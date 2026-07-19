@@ -362,7 +362,8 @@ Listener modal **armed/receiving** proves transport. Person labels prove identit
 | Panel opaque → plain without inventing ids | **Yes** | logSearch + inventory delta |
 | New plain lands on DeviceUser quickly | **Yes** (2026-07-19) | inventory delta upserts new plains before map completes |
 | Plain `deviceEmpId === "15"` + optional `employeeId` pad | **Yes** | exact deviceEmpId + pad on employeeId only |
-| Raw FP template bytes on DeviceEvent | **No (by design)** | encrypted DeviceUser custody only |
+| Raw FP template bytes on DeviceEvent | **No (by design)** | pointer/status only; actual base64 fingerData on DeviceUser.rawFingerprints |
+| Raw FP template on DeviceUser after enroll | **Yes (operator expectation)** | `vendorMetadata.rawFingerprints.templates[].data` via ISAPI on FINGERPRINT_ENROLLED |
 | Device Events click → Device User 15 | **Yes** | deep-link `deviceUserDetails` |
 | Employee click → employee record (employeeId may display 00015) | **Yes when linked** | deviceEmpId plain 15 |
 | Smart reverse IP after reboot | **Yes** | resolve targets + ensure bridge |
@@ -409,7 +410,7 @@ Invoke-RestMethod -Headers $h -Uri 'http://localhost:3001/api/device/<TEST_A_ID>
 2. Within resolve window: `employeeNo` plain on those events.  
 3. `GET .../users?vendorUserId=<plain>` returns one row.  
 4. Device user deep-link opens that row.  
-5. If Employee.deviceEmpId is padded form of plain, event/DeviceUser become MATCHED/ACTIVE.
+5. If `Employee.deviceEmpId` equals the plain device id, or `Employee.employeeId` matches an accepted padded org-code variant, event/DeviceUser become MATCHED/ACTIVE.
 
 ---
 
@@ -434,7 +435,7 @@ Invoke-RestMethod -Headers $h -Uri 'http://localhost:3001/api/device/<TEST_A_ID>
 |---|---|---|
 | Ledger vs inventory | DeviceEvent vs DeviceUser | History must not be overwritten by current inventory; inventory must not invent lifecycle |
 | Opaque handling | Side table + payload keep | Device will not reverse-lookup opaque as employeeNo |
-| Pad rule | 5-digit deviceEmpId variants | BNPI-style employee device ids |
+| Pad rule | Keep `deviceEmpId` plain; allow padded `employeeId` display/match variants | Device keys stay physical; HRIS business codes may carry leading zeros |
 | Socket timing | Emit early, re-emit on resolve | Operator sees liveness immediately |
 | Plain source of truth for person | UserInfo/Search plain id | Op logs are not the person label |
 
@@ -526,3 +527,162 @@ erDiagram
 | Device Events UI | `hris-app/app/routes/admin/devices/events.tsx` | Separates Device user navigation from Employee navigation. |
 | Device Users modal | `hris-app/app/routes/admin/devices/enroll.tsx` | Opens details by plain `vendorUserId`, such as `15`. |
 | Regression proof | `hris-app/tests/smoke/admin-device-events-sync-modal.spec.ts` | Ensures Device user stays `15` while employee identity may be padded. |
+
+---
+
+## 14. Why `project-truth-db-access` cannot ping TEST A
+
+Observed command:
+
+```text
+infra@project-truth-node:~$ ping 192.168.254.102
+From 61.245.16.174 icmp_seq=1 Time to live exceeded
+From 61.245.16.174 icmp_seq=2 Time to live exceeded
+```
+
+This means the shell is not reaching the private Hikvision LAN directly. The packet is escaping toward an upstream/public route and looping or expiring at `61.245.16.174`. That is a network route symptom, not proof that the Hikvision device is down and not proof that HRIS storage failed.
+
+Important distinction:
+
+```text
+DB Access / Cloudflare / SSH helper
+  Good for: database/admin tunnel access to Project Truth
+  Not good for: ICMP ping to 192.168.254.102
+
+SSH reverse bridge
+  Good for: selected TCP ports only
+    VM:59000 -> host -> 192.168.254.102:8000  (HCNetSDK)
+    VM:59443 -> host -> 192.168.254.102:443   (ISAPI/HTTPS)
+  Not good for: general LAN routing or ping
+
+Site agent on same LAN as device
+  Good for: real device reachability, SDK alarm listener, ISAPI reads
+  Posts back to: /api/hikvision/callback
+```
+
+So the expected architecture is not "make `project-truth-db-access` ping the panel." The expected architecture is:
+
+```mermaid
+flowchart LR
+  DBAccess[project-truth-db-access shell] -. no ICMP LAN route .-> Device[Hikvision 192.168.254.102]
+  Host[Windows host on device LAN] -->|TCP 8000 / 443| Device
+  Host -->|SSH reverse forwards| VM[Project Truth VM]
+  SiteAgent[Hikvision site agent on device LAN] -->|HCNetSDK / ISAPI| Device
+  SiteAgent -->|POST callback JSON| API[hris-api /api/hikvision/callback]
+  API --> DB[(Postgres models)]
+```
+
+If you need to prove device reachability from that shell, test the actual forwarded TCP target, not ICMP to the private device IP. Ping is only valid from a machine actually on `192.168.254.0/24`.
+
+---
+
+## 15. What gets stored when user 15 is created and fingerprint enrolled
+
+### Real model storage map
+
+```mermaid
+flowchart TD
+  Panel[Hikvision panel<br/>User 15 created<br/>fingerprint enrolled] --> Callback[HCNetSDK callback<br/>or ISAPI logSearch leaf]
+
+  Callback --> UserCreated[DeviceEvent row<br/>eventAction=USER_CREATED]
+  Callback --> FpEvent[DeviceEvent row<br/>eventAction=FINGERPRINT_ENROLLED]
+  Callback --> Inventory[DeviceUser row<br/>vendorUserId=15]
+
+  UserCreated --> EventFields1[device_events<br/>employeeNo=15 when resolved<br/>deviceUserId -> DeviceUser<br/>employeeId nullable<br/>payload keeps raw evidence]
+  FpEvent --> EventFields2[device_events<br/>employeeNo=15 when resolved<br/>eventCategory=ENROLLMENT<br/>payload has fingerprint evidence summary]
+  Inventory --> UserFields[device_users<br/>employeeNo=15<br/>rawPayload=UserInfo/Search<br/>vendorMetadata=FP/user summary<br/>status UNMATCHED or ACTIVE]
+
+  Callback -->|opaque token only| Token[device_person_tokens<br/>opaqueToken -> employeeNo 15]
+  Token --> UserCreated
+  Token --> FpEvent
+
+  Employee[employees<br/>deviceEmpId=15<br/>employeeId may be 00015] -->|optional safe link| Inventory
+  Employee -->|optional safe match| EventFields1
+  Employee -->|optional safe match| EventFields2
+```
+
+### On user create
+
+When the panel creates person `15`, HRIS should create or update:
+
+| Table/model | Row created or updated | Important stored fields |
+|---|---|---|
+| `device_events` / `DeviceEvent` | One saved history row for user creation | `eventAction=USER_CREATED`, `eventCategory=USER_MANAGEMENT`, `employeeNo=15` when resolved, `deviceUserId` when linked to DeviceUser, `employeeId` only if HRIS employee safely matches, `payload` with raw callback/logSearch evidence, `dedupeKey` to avoid duplicate saves. |
+| `device_users` / `DeviceUser` | One current identity row for person-on-device | `vendorUserId=15`, `employeeNo=15`, `deviceId=<TEST A>`, `status=UNMATCHED` if no Employee link or `ACTIVE`/linked status when matched, `rawPayload` from UserInfo/Search, `vendorMetadata` with vendor/user summary. |
+| `employees` / `Employee` | Usually not created by device callback | Existing Employee may be linked by `deviceEmpId=15`; `employeeId` may display as `00015`. |
+| `device_person_tokens` / `DevicePersonToken` | Only when Hikvision logSearch gives an opaque token | `opaqueToken=<base64/log token>`, `employeeNo=15`, `source=WRITE_TIME_CAPTURE` or inventory-delta source. |
+
+### On fingerprint enroll
+
+When the fingerprint is enrolled for the same person `15`, HRIS should create or update:
+
+| Table/model | Row created or updated | Important stored fields |
+|---|---|---|
+| `device_events` / `DeviceEvent` | A second saved history row for fingerprint lifecycle | `eventAction=FINGERPRINT_ENROLLED`, `eventCategory=ENROLLMENT`, `employeeNo=15` when resolved, `deviceUserId` pointing to DeviceUser 15, `payload` with raw log/callback evidence and enrollment summary. |
+| `device_users` / `DeviceUser` | Same DeviceUser 15 updated/refreshed | `vendorMetadata` / `rawPayload` updated from UserInfo/Search (counts) **and** raw fingerprint templates at `vendorMetadata.rawFingerprints.templates[].data` (base64 finger template blobs, not AES-wrapped by default). Capture runs after FINGERPRINT_ENROLLED enrich via ISAPI FingerPrintUpload. Not stored as full blobs on DeviceEvent. |
+| `device_person_tokens` / `DevicePersonToken` | Maybe updated | Used only if the fingerprint operation log has an opaque token that needs mapping back to `15`. |
+| `employees` / `Employee` | Not created by fingerprint enroll | Existing linked employee remains linked; no employee should be fabricated from fingerprint evidence alone. |
+
+So the expected storage split is:
+
+```text
+FINGERPRINT_ENROLLED event row
+  stores: proof that fingerprint enrollment happened
+  stores: callback/log evidence + enrollment summary + rawFingerprintCustody status
+  does not store: full base64 template blobs (pointer only)
+
+DeviceUser 15 row (operator expectation — viewable here)
+  stores: current user identity and UserInfo raw metadata
+  stores: fingerprint count/status from UserInfo/Search
+  stores: RAW base64 templates at vendorMetadata.rawFingerprints.templates[].data
+           (and rawPayload._hrisDeviceMetadata.rawFingerprints)
+
+DeviceUser.vendorMetadata.rawFingerprints
+  present: true
+  fingerprintCount: 1
+  templates: [ { fingerPrintId, fingerType, length, data: "<base64 template>" } ]
+  source: isapi_FingerPrintUpload_on_enroll
+```
+
+After FINGERPRINT_ENROLLED, enrich runs UserInfo then schedules ISAPI FingerPrintUpload to pull actual templates and persist them **raw** on DeviceUser so Device user details shows the blob.
+
+### Sequence for the UI
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Panel as Hikvision panel
+  participant API as hris-api callback/log resolver
+  participant DU as DeviceUser
+  participant DE as DeviceEvent
+  participant DPT as DevicePersonToken
+  participant Emp as Employee
+  participant UI as Device Events / Device Users
+
+  Panel->>API: Create user 15
+  API->>DE: save USER_CREATED
+  API->>DU: upsert vendorUserId=15
+  API->>Emp: try safe match deviceEmpId=15 or employeeId variant
+  API-->>UI: socket row, Device user link opens 15
+
+  Panel->>API: Enroll fingerprint for user 15
+  alt plain id present
+    API->>DE: save FINGERPRINT_ENROLLED employeeNo=15
+  else opaque token only
+    API->>DPT: resolve opaque token to 15 when inventory proves it
+    API->>DE: backfill employeeNo=15 and deviceUserId
+  end
+  API->>DU: refresh rawPayload/vendorMetadata for user 15
+  API-->>UI: socket/update row, fingerprint event now belongs to Device user 15
+```
+
+### The mental model
+
+```text
+DeviceUser = "who currently exists on this physical panel?"
+DeviceEvent = "what happened, when, and from what evidence?"
+DevicePersonToken = "how do we translate Hikvision's opaque operation-log token?"
+Employee = "which HRIS person, if any, owns that device identity?"
+```
+
+That is why creating user `15` and enrolling a fingerprint can produce two DeviceEvent rows but only one DeviceUser row. The user row is the current identity; the event rows are the history.

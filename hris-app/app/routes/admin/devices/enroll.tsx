@@ -114,6 +114,7 @@ type SyncCenterDeviceItem = {
 type VisibleDeviceUserRow = {
 	key: string;
 	vendorUserId: string;
+	employeeNo?: string | null;
 	displayName?: string | null;
 	userType?: string | null;
 	status: DeviceUser["status"] | "SOURCE_ONLY" | "CHECKING_LINK" | "LINK_CHECK_FAILED";
@@ -3147,6 +3148,7 @@ export function DeviceEnrollmentPanel({
 			return {
 				key: hrisDeviceUser?.id || `source:${vendorUserId}`,
 				vendorUserId,
+				employeeNo: hrisDeviceUser?.employeeNo || vendorUserId,
 				displayName: hrisDeviceUser?.displayName || user.name || `User ${vendorUserId}`,
 				userType: hrisDeviceUser?.userType || user.userType,
 				status:
@@ -3187,6 +3189,7 @@ export function DeviceEnrollmentPanel({
 		.map<VisibleDeviceUserRow>((deviceUser) => ({
 			key: deviceUser.id,
 			vendorUserId: deviceUser.vendorUserId,
+			employeeNo: deviceUser.employeeNo,
 			displayName: deviceUser.displayName,
 			userType: deviceUser.userType,
 			status: deviceUser.status,
@@ -7745,7 +7748,7 @@ export function DeviceEnrollmentPanel({
 									</p>
 									<div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
 										<p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-											Fingerprints
+											Fingerprints (count)
 										</p>
 										<p className="mt-2 text-3xl font-semibold text-slate-950">
 											{String(
@@ -7754,10 +7757,67 @@ export function DeviceEnrollmentPanel({
 											)}
 										</p>
 										<p className="mt-2 text-xs text-slate-500">
-											Primary biometric truth for device-user matching and
-											copy verification.
+											Device UserInfo / credential summary count.
 										</p>
 									</div>
+									{(() => {
+										const rawFp =
+											(detailsDeviceUser as any)?.vendorMetadata
+												?.rawFingerprints ||
+											(detailsDeviceUser as any)?.rawPayload
+												?._hrisDeviceMetadata?.rawFingerprints ||
+											null;
+										const templates = Array.isArray(rawFp?.templates)
+											? rawFp.templates
+											: [];
+										const rawPresent =
+											Boolean(rawFp?.present) ||
+											templates.some(
+												(t: any) => String(t?.data || "").trim().length > 8,
+											);
+										return (
+											<div
+												className={`mt-3 rounded-2xl border px-4 py-3 text-xs ${
+													rawPresent
+														? "border-emerald-200 bg-emerald-50 text-emerald-950"
+														: "border-amber-200 bg-amber-50 text-amber-950"
+												}`}>
+												<p className="font-semibold uppercase tracking-wide">
+													Raw fingerprint templates
+												</p>
+												<p className="mt-2 text-2xl font-semibold">
+													{rawPresent
+														? `${templates.length || Number(rawFp?.fingerprintCount || 0) || 0} stored`
+														: "Not captured yet"}
+												</p>
+												<p className="mt-2 leading-5">
+													{rawPresent
+														? "Actual base64 fingerData blobs are stored on this DeviceUser (not AES-wrapped). Expand vendor metadata JSON below to view full data."
+														: "Count may exist from UserInfo, but raw fingerData has not been pulled yet. Enroll FP or re-open after capture completes."}
+												</p>
+												{rawPresent && templates[0]?.data ? (
+													<div className="mt-3 rounded-xl border border-emerald-200 bg-white/80 p-2">
+														<p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+															Template 1 preview (first 120 chars)
+														</p>
+														<p className="mt-1 break-all font-mono text-[10px] leading-4 text-slate-800">
+															{String(templates[0].data).slice(0, 120)}
+															{String(templates[0].data).length > 120
+																? "…"
+																: ""}
+														</p>
+														<p className="mt-1 text-[10px] text-emerald-900">
+															length={String(templates[0].data).length}{" "}
+															chars · fingerPrintId=
+															{String(
+																templates[0].fingerPrintId ?? "?",
+															)}
+														</p>
+													</div>
+												) : null}
+											</div>
+										);
+									})()}
 									{getDeviceUserSyntheticCredentialSummary(detailsDeviceUser)
 										.fingerprintCount > 0 ? (
 										<div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">
@@ -7838,10 +7898,10 @@ export function DeviceEnrollmentPanel({
 										))}
 									</div>
 									<p className="mt-3 text-xs leading-5 text-slate-500">
-										HRIS stores source counts and face-photo access here. Raw
-										fingerprint template blobs are not shown in this normal
-										record, and dev mock tallies are kept separate from physical
-										device truth.
+										Raw fingerData lives on DeviceUser.vendorMetadata.rawFingerprints
+										(and rawPayload._hrisDeviceMetadata.rawFingerprints). DeviceEvent
+										only keeps a pointer/status. Dev mock tallies stay separate from
+										physical device truth.
 									</p>
 								</div>
 							</div>

@@ -20,6 +20,10 @@ import {
 	normalizeHikvisionDeviceUser,
 } from "./device-user-sync.helper";
 import { emitDeviceEventSaved } from "./device-event-realtime.helper";
+import {
+	scheduleRawFingerprintCaptureForEnrollment,
+	shouldCaptureRawFingerprintForEventAction,
+} from "./device-user-raw-fingerprint.helper";
 
 export type DevicePersonTokenSource =
 	| "WRITE_TIME_CAPTURE"
@@ -144,6 +148,9 @@ export const buildEnrollmentSnapshot = (input: {
 		| "not_applicable"
 		| "pending_plain_employee_no"
 		| "userinfo_counts_only"
+		| "raw_capture_pending"
+		| "raw_on_device_user"
+		| "raw_capture_failed"
 		| "encrypted_on_device_user"
 		| "missing_on_device";
 }): Record<string, unknown> => {
@@ -157,6 +164,13 @@ export const buildEnrollmentSnapshot = (input: {
 			? input.fingerIdFromLog
 			: null;
 	const completeEnoughForEnrollmentIdentity = Boolean(plain && (input.displayName || input.userInfo));
+	const templateStatus =
+		input.biometricTemplateStatus ||
+		(plain
+			? credentialSummary?.hasFingerprint
+				? "userinfo_counts_only"
+				: "missing_on_device"
+			: "pending_plain_employee_no");
 	return {
 		schema: "project-truth.enrollment-snapshot.v1",
 		eventAction: input.eventAction || null,
@@ -166,27 +180,23 @@ export const buildEnrollmentSnapshot = (input: {
 		opaquePersonToken: opaque,
 		deviceUserId: input.deviceUserId || null,
 		linkedEmployeeId: input.linkedEmployeeId || null,
-		// Device UserInfo identity/credentials (safe summary + raw UserInfo, not FP blobs).
+		// Device UserInfo identity/credentials (summary + raw UserInfo).
 		userInfoPresent: Boolean(input.userInfo),
 		userInfo: input.userInfo || null,
 		credentialSummary,
 		fingerIdFromLog: fingerId,
-		// Biometric template custody plane (DeviceUser.vendorMetadata.biometricBundle).
+		// Template plane: RAW base64 fingerData on DeviceUser (operator expectation).
+		biometricTemplateStatus: templateStatus,
 		biometricCustody: {
 			plane: "DEVICE_USER",
-			templateStorage: "encrypted_on_device_user_not_device_event",
-			status:
-				input.biometricTemplateStatus ||
-				(plain
-					? credentialSummary?.hasFingerprint
-						? "userinfo_counts_only"
-						: "missing_on_device"
-					: "pending_plain_employee_no"),
+			templateStorage: "raw_base64_on_device_user",
+			status: templateStatus,
 			fingerprintCount: credentialSummary?.fingerprintCount ?? null,
 			faceCount: credentialSummary?.faceCount ?? null,
 			cardCount: credentialSummary?.cardCount ?? null,
+			location: "DeviceUser.vendorMetadata.rawFingerprints.templates[].data",
 			note:
-				"DeviceEvent keeps enrollment proof + UserInfo. Raw fingerprint/face template bytes live encrypted on DeviceUser only (AES-256-GCM), never as plaintext on the event ledger.",
+				"DeviceEvent keeps enrollment proof + UserInfo summary only. Actual base64 raw template blobs are stored on DeviceUser.vendorMetadata.rawFingerprints after enroll capture — not AES-wrapped by default.",
 		},
 		completeness: {
 			hasOpaqueToken: Boolean(opaque),
@@ -381,6 +391,8 @@ export const enrichEnrollmentLifecycleEvent = async (params: {
 	if (!existingEvent) return { ok: false, snapshot: null, reason: "event_missing" };
 
 	const priorPayload = (existingEvent.payload as any) || {};
+	const wantsRawFp =
+		Boolean(plain) && shouldCaptureRawFingerprintForEventAction(params.eventAction);
 	const snapshot = buildEnrollmentSnapshot({
 		eventAction: params.eventAction,
 		plainEmployeeNo: plain,
@@ -391,9 +403,11 @@ export const enrichEnrollmentLifecycleEvent = async (params: {
 		deviceUserId,
 		linkedEmployeeId,
 		biometricTemplateStatus: plain
-			? userInfo
-				? "userinfo_counts_only"
-				: "pending_plain_employee_no"
+			? wantsRawFp
+				? "raw_capture_pending"
+				: userInfo
+					? "userinfo_counts_only"
+					: "pending_plain_employee_no"
 			: "pending_plain_employee_no",
 	});
 
@@ -413,11 +427,12 @@ export const enrichEnrollmentLifecycleEvent = async (params: {
 			credentialSummary: snapshot.credentialSummary,
 			fingerIdFromLog: snapshot.fingerIdFromLog,
 			deviceUserId,
-			// Templates: pointer only — full encrypted blobs on DeviceUser.
+			// Templates: pointer only on event — actual base64 fingerData on DeviceUser.rawFingerprints.
 			fingerprintTemplateLocation: deviceUserId
-				? `DeviceUser(${deviceUserId}).vendorMetadata.biometricBundle`
-				: "DeviceUser.vendorMetadata.biometricBundle (after plain employeeNo + biometric export)",
+				? `DeviceUser(${deviceUserId}).vendorMetadata.rawFingerprints.templates[].data`
+				: "DeviceUser.vendorMetadata.rawFingerprints.templates[].data",
 			rawTemplateOnDeviceEvent: false,
+			rawFingerprintExpected: wantsRawFp,
 		},
 	};
 
@@ -469,6 +484,20 @@ export const enrichEnrollmentLifecycleEvent = async (params: {
 		...updated,
 		employee: employeeForSocket,
 	});
+
+	// Operator expectation: after FP enroll (or user create/update with plain id),
+	// pull actual fingerData blobs from the device and store RAW on DeviceUser.
+	if (wantsRawFp && plain) {
+		scheduleRawFingerprintCaptureForEnrollment({
+			prisma: params.prisma,
+			req: params.req,
+			organizationId,
+			deviceId,
+			eventId,
+			employeeNo: plain,
+			deviceUserId,
+		});
+	}
 
 	return { ok: true, snapshot };
 };

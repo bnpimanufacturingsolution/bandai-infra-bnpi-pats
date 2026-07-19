@@ -157,9 +157,11 @@ describe("device-person-token helper", () => {
 		expect(snap.opaquePersonToken).to.equal("EmfPTja5gq/kmy/CI1wDHA==");
 		expect((snap.credentialSummary as any)?.fingerprintCount).to.equal(1);
 		expect((snap.biometricCustody as any)?.templateStorage).to.equal(
-			"encrypted_on_device_user_not_device_event",
+			"raw_base64_on_device_user",
 		);
+		expect((snap.biometricCustody as any)?.location).to.include("rawFingerprints");
 		expect((snap.completeness as any)?.identityReady).to.equal(true);
+		// Snapshot itself must not embed raw fingerData; blobs live on DeviceUser.
 		expect(JSON.stringify(snap)).to.not.include("fingerData");
 	});
 
@@ -175,6 +177,8 @@ describe("device-person-token helper", () => {
 		expect(source).to.include("log.hikvision.com/Information/addUserInfo");
 		expect(source).to.include("log.hikvision.com/Information/addFpByEmployeeNo");
 		expect(source).to.include("applyFastEnrollmentIdentityOnSdkCallback");
+		expect(source).to.include("scheduleRawFingerprintCaptureForEnrollment");
+		expect(source).to.include("raw_base64_on_device_user");
 		expect(source).to.not.match(/Information\/deleteUserInfo/);
 		expect(source).to.not.match(/Information\/addFaceByEmployeeNo/);
 		expect(source).to.not.match(/Information\/addCardInfo/);

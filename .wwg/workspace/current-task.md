@@ -1,5 +1,21 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 Raw fingerprint template on DeviceUser (not AES)
+
+- Task mode: Bug fix / product expectation correction + live proof.
+- Operator correction: on fingerprint enroll, store **raw** base64 fingerData on DeviceUser — do **not** default to encrypted-only custody.
+- Implemented:
+  - `hris-api/helper/device-user-raw-fingerprint.helper.ts` — ISAPI FingerPrintUpload read, proven TEST A `FingerPrintInfo.FingerPrintList[]` parser, persist to `vendorMetadata.rawFingerprints.templates[].data` (and rawPayload mirror).
+  - `enrichEnrollmentLifecycleEvent` schedules raw capture after FINGERPRINT_ENROLLED / USER_CREATED / USER_UPDATED when plain person id is known.
+  - DeviceEvent gets pointer/status only (`rawFingerprintCustody`, `raw_on_device_user`); full blobs stay on DeviceUser.
+  - Device user details UI shows raw present + first 120 chars preview.
+- Live proof (TEST A person `15`, device `192.168.254.102`):
+  - `rawPresent=true`, `fingerprintCount=1`, `firstTemplateChars=684`, `isAesEnvelope=false`
+  - API `GET /api/device/<TEST A>/users?vendorUserId=15` returns raw templates under vendorMetadata + rawPayload
+  - Evidence: `.runtime/raw-fp-live-2026-07-19T09-39-38-797Z/`, `.runtime/user15-raw-fp-viewable.json`
+- Focused tests: raw-fingerprint helper + person-token 18/18 pass.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-19 Enrollment identity architecture docs
 
 - Task mode: Docs / architecture sync.
@@ -1642,3 +1658,32 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
 - Final headless Playwright downloads contained eight valid fingerprint envelopes for eight reported fingerprint users and seven valid face envelopes for seven reported face users. Vendor user 8 reports no face and correctly exports an empty face field with `not_enrolled` status.
 - The real `.xlsx` had 28 required headers, zero placeholder cells, and safe hash parity with the separately downloaded Package JSON. Correct-passphrase import preview unlocked all 15 envelopes without plaintext exposure; an incorrect passphrase was rejected.
 - Evidence: `.runtime/biometric-excel-proof-20260715-162935/`.
+
+## 2026-07-19 Device Person 15 Architecture Documentation Addendum
+
+- Task mode: docs-only architecture clarification following the Device Events / Device Users `15` vs `00015` identity repair.
+- Operator intent documented:
+  - Device user/person `15` created on the physical Hikvision device must appear as DeviceUser `vendorUserId=15`.
+  - Device Events should resolve to the plain device person id `15` when DeviceUser or callback evidence exists.
+  - Clicking `Device user` must navigate to Device User `15`, not a padded HRIS employee code.
+  - Clicking an employee record may show the HRIS-padded code/device id `00015` when that employee is safely linked.
+- Architecture verdict: the three-plane model remains correct: `DeviceUser` is physical-device identity/current inventory, `DeviceEvent` is saved event/history evidence, and `Employee` is the HRIS person record. Padding belongs only to HRIS employee matching/display; it must not rewrite `DeviceUser.vendorUserId`.
+- Documentation updated:
+  - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` now includes a modal/click flowchart, ER diagram, decision table, and implementation-owner map for this contract.
+
+## 2026-07-19 Hikvision Storage And Network Visualization Addendum
+
+- Task mode: docs-only architecture clarification from operator runtime evidence.
+- Observed network evidence:
+  - From `project-truth-db-access` / `infra@project-truth-node`, `ping 192.168.254.102` returned `Time to live exceeded` from `61.245.16.174`.
+  - Interpretation: the shell does not have a direct ICMP/L3 route to the private Hikvision device LAN. This is not proof that the panel is down and not proof that HRIS model storage failed.
+  - Architecture boundary: Cloudflare DB/SSH access is not a general LAN route; use selected TCP reverse forwards or a site agent on the device LAN for HCNetSDK/ISAPI evidence.
+- Storage documentation updated:
+  - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` now documents what is created/updated on panel user create and fingerprint enroll:
+    - `DeviceEvent` rows for `USER_CREATED` and `FINGERPRINT_ENROLLED`.
+    - one `DeviceUser` row for the current physical user identity (`vendorUserId=15`).
+    - actual fingerprint template custody belongs to encrypted `DeviceUser.vendorMetadata.biometricBundle` / `_hrisDeviceMetadata.biometricExport` after the SDK biometric export worker reads template bytes; `DeviceEvent` stores proof/evidence only.
+    - optional `DevicePersonToken` when Hikvision operation logs expose only an opaque token.
+    - optional `Employee` link when an existing HRIS employee safely matches.
+- Architecture twin updated:
+  - `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md` now records that `Employee.deviceEmpId` is plain for device matching, while `Employee.employeeId` may be padded/display-coded.
