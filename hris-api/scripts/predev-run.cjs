@@ -49,10 +49,11 @@ const STEPS = [
 	},
 	{
 		id: "ensure-bnpi-db-access",
-		label: "DB tunnel (probe 55435 first; SSH only if missing)",
+		label: "DB tunnel (probe 55435; single-port SSH only if missing)",
 		script: "ensure-bnpi-db-access.cjs",
-		typical: "<1s warm / 10–90s cold",
-		phase: "C",
+		typical: "<0.5s warm / ~5–15s cold CF SSH (no multi-port LAN)",
+		// Independent from port 3001 ownership; overlap both startup checks.
+		phase: "B",
 	},
 	{
 		id: "ensure-local-dev-services",
@@ -281,7 +282,7 @@ function main() {
 		"[predev] Machine status JSON: .runtime/predev/latest-status.json (currentStep updates live)",
 	);
 	logLine(
-		"[predev] Tip: if DB step hangs, check Cloudflare Access login for ssh project-truth-hris",
+		"[predev] Tip: DB startup tries direct LAN briefly, then falls back to the existing Cloudflare SSH login",
 	);
 
 	const t0 = Date.now();

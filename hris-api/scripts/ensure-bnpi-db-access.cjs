@@ -22,7 +22,7 @@ const remoteLanForwardScript = path.join(
 	"start-project-truth-remote-lan-forward.ps1",
 );
 
-function canConnect(port, host) {
+function canConnect(port, host, timeoutMs = 400) {
 	return new Promise((resolve) => {
 		const socket = net.createConnection({ port, host });
 		const done = (result) => {
@@ -31,7 +31,7 @@ function canConnect(port, host) {
 			resolve(result);
 		};
 
-		socket.setTimeout(1000);
+		socket.setTimeout(timeoutMs);
 		socket.once("connect", () => done(true));
 		socket.once("timeout", () => done(false));
 		socket.once("error", () => done(false));
@@ -39,11 +39,11 @@ function canConnect(port, host) {
 }
 
 /**
- * TCP-open is not enough for Prisma. A half-dead SSH hop or a LAN-style
- * loopback alias on 10.184.37.19 can accept TCP then fail under load/routing.
- * Prefer a short Postgres wire handshake (SSLRequest -> N/S/E).
+ * TCP-open is not enough for Prisma. A half-dead SSH hop can accept TCP then
+ * stall. Prefer a short Postgres wire handshake (SSLRequest -> N/S/E).
+ * Fail-closed is kept short so predev does not look hung.
  */
-function canConnectPostgres(port, host, timeoutMs = 2500) {
+function canConnectPostgres(port, host, timeoutMs = 500) {
 	return new Promise((resolve) => {
 		const socket = net.createConnection({ port, host });
 		let settled = false;
@@ -66,6 +66,12 @@ function canConnectPostgres(port, host, timeoutMs = 2500) {
 	});
 }
 
+/** Fast fail: TCP first (250ms), Postgres wire only if TCP is open. */
+async function canUseLocalPostgres(port) {
+	if (!(await canConnect(port, "127.0.0.1", 250))) return false;
+	return canConnectPostgres(port, "127.0.0.1", 500);
+}
+
 function runPowerShell(args) {
 	const command = process.platform === "win32" ? "powershell.exe" : "pwsh";
 	return spawnSync(command, args, {
@@ -77,39 +83,34 @@ function runPowerShell(args) {
 
 async function findReachableDevK8sForwardHost({
 	port,
-	remoteLanHost,
-	connect = canConnectPostgres,
+	// Injectable for unit tests. Production default: TCP+Postgres on 127.0.0.1 only.
+	connect,
 }) {
-	// Always prefer 127.0.0.1 for Prisma. 10.184.37.19 is only stable when a
-	// temporary loopback alias exists; otherwise Windows routes it to real LAN
-	// and Prisma fails with P1001 even though a CF/LAN forward is healthy.
-	if (await connect(port, "127.0.0.1")) return "127.0.0.1";
-	if (remoteLanHost && (await connect(port, remoteLanHost))) {
-		// Signal that a remote-style listener exists but localhost still needs bootstrapping.
-		return null;
-	}
+	// Prisma must use 127.0.0.1 only. Never probe 10.184.37.19 here — a dead
+	// LAN-style alias only adds timeout and cannot satisfy Prisma on this host.
+	const probe =
+		typeof connect === "function"
+			? (p, host) => connect(p, host)
+			: (p) => canUseLocalPostgres(p);
+	if (await probe(port, "127.0.0.1")) return "127.0.0.1";
 	return null;
 }
 
 function ensureProjectTruthRemoteLanForward() {
 	if (process.platform !== "win32") return;
-	if (process.env.HRIS_SKIP_PROJECT_TRUTH_REMOTE_LAN_FORWARD === "true") {
-		console.log(
-			"[bnpi-db-access] Project Truth remote LAN forward skipped because HRIS_SKIP_PROJECT_TRUTH_REMOTE_LAN_FORWARD=true.",
-		);
+	// Multi-port LAN forward is opt-in only — expensive and not needed for API DB.
+	const forceEnsure =
+		process.env.HRIS_ENSURE_PROJECT_TRUTH_REMOTE_LAN_FORWARD === "true";
+	const forceSkip =
+		process.env.HRIS_SKIP_PROJECT_TRUTH_REMOTE_LAN_FORWARD === "true";
+	if (!forceEnsure || forceSkip) {
 		return;
 	}
 	if (!fs.existsSync(remoteLanForwardScript)) return;
 
 	const t0 = Date.now();
 	console.log(
-		"[bnpi-db-access] STEP remote-lan-forward: ensuring Project Truth remote LAN URLs/DB forwards (SSH may prompt Cloudflare Access)...",
-	);
-	console.log(
-		"[bnpi-db-access]   script: scripts/start-project-truth-remote-lan-forward.ps1",
-	);
-	console.log(
-		"[bnpi-db-access]   if this sits quiet >30s, check SSH/Cloudflare Access browser login for project-truth-hris",
+		"[bnpi-db-access] STEP remote-lan-forward: ensuring multi-port LAN URLs (opt-in)...",
 	);
 	const result = runPowerShell([
 		"-NoProfile",
@@ -121,7 +122,7 @@ function ensureProjectTruthRemoteLanForward() {
 	const sec = ((Date.now() - t0) / 1000).toFixed(1);
 	if (result.status !== 0) {
 		console.warn(
-			`[bnpi-db-access] STEP remote-lan-forward: incomplete after ${sec}s; continuing with DB-specific bootstrap.`,
+			`[bnpi-db-access] STEP remote-lan-forward: incomplete after ${sec}s; continuing.`,
 		);
 	} else {
 		console.log(`[bnpi-db-access] STEP remote-lan-forward: done in ${sec}s`);
@@ -151,26 +152,23 @@ async function main() {
 	const preferredDevK8sPort = Number(process.env.PROJECT_TRUTH_DEV_K8S_DB_LOCAL_PORT || 55435);
 	const remoteLanHost = process.env.PROJECT_TRUTH_LAN_IP || "10.184.37.19";
 	console.log(
-		`[bnpi-db-access] env=${environment} preferredDevK8s=127.0.0.1:${preferredDevK8sPort} lanHost=${remoteLanHost}`,
+		`[bnpi-db-access] env=${environment} target=127.0.0.1:${preferredDevK8sPort}`,
 	);
 
 	if (
 		environment === "dev" &&
 		process.env.PROJECT_TRUTH_DEV_DB_MODE !== "docker-dev-db"
 	) {
-		// FAST PATH (target <1s): probe first. If 127.0.0.1:55435 already answers
-		// Postgres wire, write runtime override and return — do NOT re-run SSH/LAN
-		// bootstrap every npm run dev when you already have the tunnel.
+		// WARM PATH: only probe 127.0.0.1 — no SSH, no multi-port LAN.
 		console.log(
-			`[bnpi-db-access] STEP probe-first: Postgres wire on 127.0.0.1:${preferredDevK8sPort}...`,
+			`[bnpi-db-access] STEP probe-first: 127.0.0.1:${preferredDevK8sPort}...`,
 		);
 		const probeT0 = Date.now();
 		let devK8sForwardHost = await findReachableDevK8sForwardHost({
 			port: preferredDevK8sPort,
-			remoteLanHost,
 		});
 		console.log(
-			`[bnpi-db-access] STEP probe-first: host=${devK8sForwardHost || "none"} in ${((Date.now() - probeT0) / 1000).toFixed(1)}s`,
+			`[bnpi-db-access] STEP probe-first: host=${devK8sForwardHost || "none"} in ${((Date.now() - probeT0) / 1000).toFixed(2)}s`,
 		);
 
 		const writeDevK8sRuntime = () => {
@@ -194,10 +192,10 @@ async function main() {
 				"utf8",
 			);
 			console.log(
-				`[bnpi-db-access] Resolved DEV datasource to shared K3s runtime at 127.0.0.1:${preferredDevK8sPort}.`,
+				`[bnpi-db-access] Resolved DEV datasource to 127.0.0.1:${preferredDevK8sPort}.`,
 			);
 			console.log(
-				`[bnpi-db-access] DONE (fast path) in ${((Date.now() - mainT0) / 1000).toFixed(1)}s`,
+				`[bnpi-db-access] DONE (fast path) in ${((Date.now() - mainT0) / 1000).toFixed(2)}s`,
 			);
 		};
 
@@ -206,47 +204,59 @@ async function main() {
 			return;
 		}
 
-		// SLOW PATH only when tunnel is missing: remote LAN + k8s forward scripts.
-		ensureProjectTruthRemoteLanForward();
+		// COLD PATH: single-port K3s forward only (scripts/start-k8s-dev-db-access.ps1).
+		// Never starts multi-port remote-lan-forward unless explicitly opted in.
+		if (!fs.existsSync(k8sDevDbScript)) {
+			throw new Error(`Missing ${path.relative(repoRoot, k8sDevDbScript)}.`);
+		}
+
+		const k8sT0 = Date.now();
+		console.log(
+			`[bnpi-db-access] STEP k8s-db-forward: single-port 127.0.0.1:${preferredDevK8sPort} (SSH; no multi-port LAN)...`,
+		);
+		const result = runPowerShell([
+			"-NoProfile",
+			"-ExecutionPolicy",
+			"Bypass",
+			"-File",
+			k8sDevDbScript,
+			"-LocalPort",
+			String(preferredDevK8sPort),
+		]);
+
+		if (result.status !== 0) {
+			console.warn(
+				`[bnpi-db-access] STEP k8s-db-forward: failed in ${((Date.now() - k8sT0) / 1000).toFixed(1)}s; trying compose fallback.`,
+			);
+		} else {
+			console.log(
+				`[bnpi-db-access] STEP k8s-db-forward: done in ${((Date.now() - k8sT0) / 1000).toFixed(1)}s`,
+			);
+		}
 		devK8sForwardHost = await findReachableDevK8sForwardHost({
 			port: preferredDevK8sPort,
-			remoteLanHost,
 		});
 
-		// Always bootstrap localhost:55435 when missing, even if 10.184.37.19:55435
-		// already answers (remote-LAN loopback alias). Prisma must use 127.0.0.1.
-		if (devK8sForwardHost !== "127.0.0.1") {
-			if (!fs.existsSync(k8sDevDbScript)) {
-				throw new Error(`Missing ${path.relative(repoRoot, k8sDevDbScript)}.`);
+		// Opt-in multi-port LAN only after primary forward path.
+		const wantRemoteLan =
+			process.env.HRIS_ENSURE_PROJECT_TRUTH_REMOTE_LAN_FORWARD === "true" &&
+			process.env.HRIS_SKIP_PROJECT_TRUTH_REMOTE_LAN_FORWARD !== "true";
+		if (wantRemoteLan) {
+			ensureProjectTruthRemoteLanForward();
+			if (devK8sForwardHost !== "127.0.0.1") {
+				runPowerShell([
+					"-NoProfile",
+					"-ExecutionPolicy",
+					"Bypass",
+					"-File",
+					k8sDevDbScript,
+					"-LocalPort",
+					String(preferredDevK8sPort),
+				]);
+				devK8sForwardHost = await findReachableDevK8sForwardHost({
+					port: preferredDevK8sPort,
+				});
 			}
-
-			const k8sT0 = Date.now();
-			console.log(
-				`[bnpi-db-access] STEP k8s-db-forward: starting DEV K3s DB forward for 127.0.0.1:${preferredDevK8sPort} (SSH)...`,
-			);
-			const result = runPowerShell([
-				"-NoProfile",
-				"-ExecutionPolicy",
-				"Bypass",
-				"-File",
-				k8sDevDbScript,
-				"-LocalPort",
-				String(preferredDevK8sPort),
-			]);
-
-			if (result.status !== 0) {
-				console.warn(
-					`[bnpi-db-access] STEP k8s-db-forward: failed in ${((Date.now() - k8sT0) / 1000).toFixed(1)}s; will try compose DEV 15433 fallback.`,
-				);
-			} else {
-				console.log(
-					`[bnpi-db-access] STEP k8s-db-forward: done in ${((Date.now() - k8sT0) / 1000).toFixed(1)}s`,
-				);
-			}
-			devK8sForwardHost = await findReachableDevK8sForwardHost({
-				port: preferredDevK8sPort,
-				remoteLanHost,
-			});
 		}
 
 		if (devK8sForwardHost === "127.0.0.1") {
@@ -254,20 +264,17 @@ async function main() {
 			return;
 		}
 
-		// Fallback: compose-published DEV Postgres on 15433 (LAN alias or localhost).
+		// Fallback: compose-published DEV Postgres on 15433.
 		const composeDevPort = Number(process.env.PROJECT_TRUTH_DEV_COMPOSE_DB_PORT || 15433);
 		const composeHosts = ["127.0.0.1", remoteLanHost].filter(Boolean);
 		let composeHost = null;
 		for (const host of composeHosts) {
-			if (await canConnectPostgres(composeDevPort, host)) {
-				// Prefer writing 127.0.0.1 only when that host actually answered.
+			if (await canConnectPostgres(composeDevPort, host, 400)) {
 				composeHost = host === "127.0.0.1" ? "127.0.0.1" : host;
 				if (host === "127.0.0.1") break;
 			}
 		}
 		if (composeHost) {
-			// If only LAN-style alias works, still write it but warn; prefer starting
-			// a localhost forward next session.
 			const composeDatasource = {
 				...datasource,
 				hostname: composeHost,
@@ -288,13 +295,13 @@ async function main() {
 				"utf8",
 			);
 			console.log(
-				`[bnpi-db-access] Resolved DEV datasource to compose Postgres at ${composeHost}:${composeDevPort} (K3s localhost forward unavailable).`,
+				`[bnpi-db-access] Resolved DEV datasource to compose Postgres at ${composeHost}:${composeDevPort}.`,
 			);
 			return;
 		}
 
 		throw new Error(
-			`K3s DEV DB forward is still unreachable on 127.0.0.1:${preferredDevK8sPort} after bootstrap, and compose DEV ${composeDevPort} is also unreachable. Confirm ssh project-truth-hris works (Cloudflare Access) or direct LAN SSH to ${remoteLanHost}.`,
+			`K3s DEV DB forward is still unreachable on 127.0.0.1:${preferredDevK8sPort} after bootstrap, and compose DEV ${composeDevPort} is also unreachable. Confirm: ssh project-truth-hris  (Cloudflare Access) or leave scripts/start-k8s-dev-db-access.ps1 running.`,
 		);
 	}
 
@@ -381,4 +388,4 @@ if (require.main === module) {
 	});
 }
 
-module.exports = { findReachableDevK8sForwardHost };
+module.exports = { findReachableDevK8sForwardHost, canUseLocalPostgres };

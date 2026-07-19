@@ -1,5 +1,22 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 Local API predev DB fast path
+
+- Task mode: Focused startup performance repair + regression proof.
+- Goal: Make `hris-api` DEV startup claim `127.0.0.1:55435` quickly without changing the VM/K3s database architecture or disabling the VM-managed Cloudflare tunnel.
+- Implemented:
+  - The DB preflight now checks only the canonical localhost Prisma forward instead of also probing a LAN-bound alias that cannot satisfy the datasource contract.
+  - The broad multi-port remote-LAN forward is opt-in and no longer blocks the default DB-specific cold path.
+  - Direct LAN SSH is gated by a 600 ms TCP reachability check before SSH authentication; Cloudflare SSH remains the fallback.
+  - Forward startup uses readiness polling instead of a fixed multi-second sleep.
+  - Port 3001 ownership and DB access checks now run concurrently because they are independent.
+- Proof:
+  - Focused `ensure-bnpi-db-access` Mocha tests pass 2/2.
+  - PowerShell and Node syntax parsing pass.
+  - Warm real predev proof completed the DB step in 0.3 seconds and all seven predev steps in 8.9 seconds; the remaining dominant cost was the separate device-live-path check at 6.5 seconds.
+- Truth sync: No architecture or terminology change; canonical DEV datasource remains `127.0.0.1:55435` backed by the VM/K3s database forward.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-17 Device-user sync stale processing truth
 
 - Task mode: Regression repair + Playwright-first proof + API contract guard.
