@@ -561,13 +561,14 @@ const formatDeviceEventPersonRef = (
 		| "payload"
 		| "deviceUserVendorUserId"
 		| "eventAction"
-		| "errorMessage"
 	> | null,
 ) => {
 	const token = item ? getDisplayEmployeeNo(item) : String(employeeNo || "").trim();
 	if (!token) {
 		const action = String(item?.eventAction || "").toUpperCase();
-		const errorText = String(item?.errorMessage || "").toLowerCase();
+		const errorText = String(
+			item?.payload?.errorMessage || item?.payload?.processingError || "",
+		).toLowerCase();
 		if (action === "SYNC_SIGNAL" && !errorText.includes("resolving")) {
 			return "No person id on SDK signal";
 		}
@@ -576,7 +577,7 @@ const formatDeviceEventPersonRef = (
 			String(item?.payload?.enrollmentSnapshot?.biometricCustody?.status || "").includes(
 				"pending",
 			);
-		return resolving ? "Resolving person id…" : "No person id on device log";
+		return resolving ? "Identity check pending" : "No person id on device log";
 	}
 	if (isOpaqueDevicePersonToken(token)) {
 		return "Device person token (not a readable employee no.)";
