@@ -40,7 +40,7 @@ function usesReverseBridge(device) {
 }
 
 async function main() {
-	const { PrismaClient } = require("@prisma/client");
+	const { PrismaClient } = require("../generated/prisma");
 	const prisma = new PrismaClient();
 	try {
 		const devices = await prisma.device.findMany({
