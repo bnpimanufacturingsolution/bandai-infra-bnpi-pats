@@ -122,7 +122,6 @@ if (Test-Path $bridgeScript) {
 		Write-Host "[local-api-restart] Ensuring TEST A SSH reverse bridge for Live capture"
 		& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeScript `
 			-Action start `
-			-DeviceIp "192.168.254.189" `
 			-HttpDevicePort 443 `
 			-SdkDevicePort 8000 `
 			-HttpListenPort 59443 `

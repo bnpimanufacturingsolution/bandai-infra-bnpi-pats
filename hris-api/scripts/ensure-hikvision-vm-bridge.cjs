@@ -29,15 +29,16 @@ if (!enabled) {
 	process.exit(0);
 }
 
+const apiRoot = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(__dirname, "..", "..");
 const bridgeScript = path.join(repoRoot, "scripts", "start-host-hikvision-vm-ssh-bridge.ps1");
 const stateFile = path.join(repoRoot, ".runtime", "hikvision-vm-ssh-bridge", "active-ssh-bridge.json");
+const resolverScript = path.join(__dirname, "resolve-hikvision-vm-bridge-targets.cjs");
 if (!fs.existsSync(bridgeScript)) {
 	console.warn(`[hikvision-bridge] Missing ${bridgeScript}; skip.`);
 	process.exit(0);
 }
 
-const deviceIp = envValue("HIKVISION_VM_BRIDGE_DEVICE_IP", "192.168.254.189");
 const sdkDevicePort = envValue("HIKVISION_VM_BRIDGE_SDK_DEVICE_PORT", "8000");
 const httpDevicePort = envValue("HIKVISION_VM_BRIDGE_HTTP_DEVICE_PORT", "443");
 const sdkListenPort = envValue("HIKVISION_VM_BRIDGE_SDK_LISTEN_PORT", "59000");
@@ -47,6 +48,37 @@ const apiRemotePort = envValue("HIKVISION_VM_BRIDGE_API_REMOTE_PORT", "53001");
 const sshTarget = envValue("HIKVISION_VM_BRIDGE_SSH_TARGET", "project-truth-hris");
 // Listener restart needs API; during predev it is almost always wasted time.
 const restartListener = envBool("HIKVISION_VM_BRIDGE_RESTART_LISTENER", false);
+
+function resolveDeviceIps() {
+	const explicit = envValue("HIKVISION_VM_BRIDGE_DEVICE_IP", "");
+	if (explicit) {
+		return { deviceIps: [explicit], source: "env:HIKVISION_VM_BRIDGE_DEVICE_IP" };
+	}
+
+	if (fs.existsSync(resolverScript)) {
+		const result = spawnSync(process.execPath, [resolverScript], {
+			cwd: apiRoot,
+			stdio: "pipe",
+			windowsHide: true,
+			encoding: "utf8",
+			env: process.env,
+		});
+		try {
+			const parsed = JSON.parse(String(result.stdout || "{}"));
+			const deviceIps = Array.isArray(parsed.targets)
+				? parsed.targets.map((target) => String(target.deviceIp || "").trim()).filter(Boolean)
+				: [];
+			if (deviceIps.length) {
+				return { deviceIps: [...new Set(deviceIps)], source: parsed.source || "db" };
+			}
+			if (parsed.error) console.warn(`[hikvision-bridge] DB target resolve failed: ${parsed.error}`);
+		} catch (error) {
+			console.warn(`[hikvision-bridge] DB target resolve output unreadable: ${error.message}`);
+		}
+	}
+
+	return { deviceIps: ["192.168.254.189"], source: "legacy-fallback" };
+}
 
 function processAlive(pid) {
 	if (!pid || !Number.isFinite(Number(pid))) return false;
@@ -77,9 +109,39 @@ function vmPortOpen(port) {
 	return result.status === 0;
 }
 
+function localBridgeMatches(deviceIps) {
+	const expected = new Set(deviceIps.map((ip) => String(ip).trim()).filter(Boolean));
+	if (!expected.size) return false;
+	try {
+		const state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, "utf8")) : null;
+		const stateIps = Array.isArray(state?.deviceIps)
+			? state.deviceIps.map((ip) => String(ip).trim()).filter(Boolean)
+			: [];
+		if (stateIps.some((ip) => expected.has(ip)) && processAlive(state?.processId || state?.ProcessId)) {
+			return true;
+		}
+	} catch {
+		// Fall through to process command inspection.
+	}
+
+	const list = spawnSync(
+		"powershell.exe",
+		[
+			"-NoProfile",
+			"-Command",
+			"Get-CimInstance Win32_Process -Filter \"Name='ssh.exe'\" | Select-Object -ExpandProperty CommandLine",
+		],
+		{ cwd: repoRoot, stdio: "pipe", windowsHide: true, encoding: "utf8" },
+	);
+	const commands = String(list.stdout || "");
+	return [...expected].some((ip) => commands.includes(`${sdkListenPort}:${ip}:${sdkDevicePort}`));
+}
+
 const t0 = Date.now();
+const resolved = resolveDeviceIps();
+const deviceIps = resolved.deviceIps;
 console.log(
-	`[hikvision-bridge] STEP check: device=${deviceIp} sdk ${sdkListenPort}->${sdkDevicePort} via ${sshTarget}`,
+	`[hikvision-bridge] STEP check: devices=${deviceIps.join(",")} (${resolved.source}) sdk ${sdkListenPort}->${sdkDevicePort} via ${sshTarget}`,
 );
 
 // FAST PATH: VM already listening on reverse SDK port (tunnel from any prior session).
@@ -88,6 +150,24 @@ console.log(
 console.log(
 	`[hikvision-bridge] STEP check: probing VM :${sdkListenPort} (fast SSH)...`,
 );
+if (vmPortOpen(Number(sdkListenPort)) && !localBridgeMatches(deviceIps)) {
+	console.log(
+		`[hikvision-bridge] STEP check: VM :${sdkListenPort} open but local bridge target is stale - stopping old bridge for ${deviceIps.join(",")}`,
+	);
+	spawnSync(
+		"powershell.exe",
+		[
+			"-NoProfile",
+			"-ExecutionPolicy",
+			"Bypass",
+			"-File",
+			bridgeScript,
+			"-Action",
+			"stop",
+		],
+		{ cwd: repoRoot, stdio: "inherit", windowsHide: true, env: process.env },
+	);
+}
 if (vmPortOpen(Number(sdkListenPort))) {
 	console.log(
 		`[hikvision-bridge] DONE (fast path) in ${((Date.now() - t0) / 1000).toFixed(1)}s — VM :${sdkListenPort} already listening (API :${apiRemotePort} checked by ensure-device-live-path)`,
@@ -127,8 +207,8 @@ const result = spawnSync(
 		bridgeScript,
 		"-Action",
 		"start",
-		"-DeviceIp",
-		deviceIp,
+		"-DeviceIps",
+		deviceIps.join(","),
 		"-VmSshTarget",
 		sshTarget,
 		"-HttpDevicePort",

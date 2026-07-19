@@ -9,7 +9,7 @@
   - Listener restart remains an API/VM step after this script.
 #>
 param(
-  [string]$DeviceIp = "192.168.254.189",
+  [string]$DeviceIp = "",
   [int]$DbLocalPort = 55435,
   [int]$SdkListenPort = 59000,
   [int]$HttpListenPort = 59443,
@@ -21,6 +21,32 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
+
+function Resolve-HikvisionBridgeDeviceIp {
+  param([string]$Fallback = "192.168.254.102")
+
+  if (-not [string]::IsNullOrWhiteSpace($DeviceIp)) {
+    return $DeviceIp
+  }
+
+  $resolver = Join-Path $repoRoot "hris-api\scripts\resolve-hikvision-vm-bridge-targets.cjs"
+  if (Test-Path -LiteralPath $resolver) {
+    try {
+      $json = & node.exe $resolver 2>$null
+      $parsed = $json | ConvertFrom-Json
+      $first = @($parsed.targets | Where-Object { $_.deviceIp } | Select-Object -First 1)
+      if ($first.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$first[0].deviceIp)) {
+        return [string]$first[0].deviceIp
+      }
+    } catch {
+      # Fall back below so predev remains recoverable if the DB is temporarily unavailable.
+    }
+  }
+
+  return $Fallback
+}
+
+$DeviceIp = Resolve-HikvisionBridgeDeviceIp
 
 function Test-Tcp([string]$HostName, [int]$Port, [int]$TimeoutMs = 1200) {
   try {
@@ -86,7 +112,7 @@ foreach ($p in $sshProcs) {
     $bridgeOk = $true
     break
   }
-  if ($cmd -match "59000:192\.168\.254\.189:8000" -or $cmd -match "${SdkListenPort}:${DeviceIp}:8000") {
+  if ($cmd -match [regex]::Escape("${SdkListenPort}:${DeviceIp}:8000")) {
     $bridgeOk = $true
     break
   }

@@ -51,6 +51,23 @@ if ($Action -eq 'status') {
 
 Stop-ExistingBridge
 
+if ($DeviceIps.Count -eq 0 -and [string]::IsNullOrWhiteSpace($DeviceIp)) {
+  $resolver = Join-Path $repoRoot "hris-api\scripts\resolve-hikvision-vm-bridge-targets.cjs"
+  if (Test-Path -LiteralPath $resolver) {
+    try {
+      $json = & node.exe $resolver 2>$null
+      $parsed = $json | ConvertFrom-Json
+      $resolvedIps = @($parsed.targets | Where-Object { $_.deviceIp } | ForEach-Object { [string]$_.deviceIp })
+      if ($resolvedIps.Count -gt 0) {
+        $DeviceIps = $resolvedIps
+        Write-Host "Resolved Hikvision bridge target(s) from DB: $($DeviceIps -join ', ')"
+      }
+    } catch {
+      Write-Warning "Could not resolve Hikvision bridge target from DB: $($_.Exception.Message)"
+    }
+  }
+}
+
 $targetDeviceIps = @($DeviceIps)
 if (-not [string]::IsNullOrWhiteSpace($DeviceIp)) {
   $targetDeviceIps += $DeviceIp
