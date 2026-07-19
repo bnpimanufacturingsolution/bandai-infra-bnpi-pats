@@ -17,8 +17,6 @@ $vmUser = 'infra'
 $sshAlias = 'project-truth-hris'
 $targetHost = '10.43.130.9'
 $targetPort = 5432
-# Shared control socket so later predev SSH (bridge, etc.) can reuse this hop.
-$controlPath = Join-Path $env:USERPROFILE ".ssh\cm-project-truth-hris-%C"
 
 function Write-K8sDbProgress {
   param([string]$Message)
@@ -40,15 +38,18 @@ function Stop-ExistingForward {
 
 function Test-LoopbackPortFree {
   param([int]$Port)
-  # Only treat 127.0.0.1 / ::1 as busy. A remote-LAN loopback alias on 10.184.37.19:port
-  # must not block a localhost forward that Windows apps (Prisma) can always reach.
-  $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
-  foreach ($listener in $listeners) {
-    if ($listener.LocalAddress -eq '127.0.0.1' -or $listener.LocalAddress -eq '::1' -or $listener.LocalAddress -eq '0.0.0.0' -or $listener.LocalAddress -eq '::') {
-      return $false
-    }
+  # A direct bind answers the actual question and avoids the ~2s cost of
+  # Get-NetTCPConnection on Windows. A listener on 127.0.0.1 or a wildcard
+  # address makes this fail; a separate 10.184.37.19 alias does not.
+  $probe = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+  try {
+    $probe.Start()
+    return $true
+  } catch {
+    return $false
+  } finally {
+    $probe.Stop()
   }
-  return $true
 }
 
 function Test-TcpConnect {
@@ -81,9 +82,6 @@ function New-SshForwardArgs {
     '-o', 'ServerAliveInterval=30',
     '-o', 'ServerAliveCountMax=3',
     '-o', 'StrictHostKeyChecking=accept-new',
-    '-o', 'ControlMaster=auto',
-    '-o', "ControlPath=$controlPath",
-    '-o', 'ControlPersist=600',
     '-N',
     # Bind explicitly to loopback so Prisma always has a stable host even when
     # 10.184.37.19 is only a temporary LAN-style loopback alias.
@@ -219,7 +217,6 @@ $record = [pscustomobject]@{
   StopCommand = '.\scripts\start-k8s-dev-db-access.ps1 -StopExisting'
   Stdout = $stdoutPath
   Stderr = $stderrPath
-  ControlPath = $controlPath
 }
 
 $record | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $runRoot 'k8s-dev-db-access.json') -Encoding UTF8

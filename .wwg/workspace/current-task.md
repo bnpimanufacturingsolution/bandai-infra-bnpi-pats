@@ -14,6 +14,7 @@
   - Focused `ensure-bnpi-db-access` Mocha tests pass 2/2.
   - PowerShell and Node syntax parsing pass.
   - Warm real predev proof completed the DB step in 0.3 seconds and all seven predev steps in 8.9 seconds; the remaining dominant cost was the separate device-live-path check at 6.5 seconds.
+  - Controlled cold proof through the Cloudflare SSH fallback opened a replacement Postgres forward in 3.18 seconds and returned a valid Postgres SSL negotiation reply; the replacement forward remains active.
 - Truth sync: No architecture or terminology change; canonical DEV datasource remains `127.0.0.1:55435` backed by the VM/K3s database forward.
 - Recommendation capture: No new recommendations were identified.
 
