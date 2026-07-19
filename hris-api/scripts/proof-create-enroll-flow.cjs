@@ -333,31 +333,31 @@ async function main() {
 			if (fps.length || numOfFP > 0) break;
 		}
 
-		// Prefer device-read templates; else donor blob with explicit sticky label
-		const templatesForStore = fps.length
-			? fps
-			: [
-					{
-						fingerPrintId: 1,
-						fingerType: 0,
-						length: donorFps[0].data.length,
-						data: donorFps[0].data,
-					},
-				];
+		// HARD RULE (2026-07-19 arch reality): never promote donor template as this person's raw.
+		// Device FingerPrintProgress often returns cardReaderRecvStatus=5 errorMsg=<donorId>
+		// when cloning an existing person's template (anti-dupe). HTTP OK is not sticky.
 		const sourceLabel = fps.length
 			? "device_fp_read_after_write"
-			: "device_write_ok_reread_empty_donor_blob_labeled";
+			: "device_fp_write_not_sticky_no_device_owned_raw";
 
-		const persist = await persistRawFingerprintsFromSdkCallback({
-			prisma,
-			req,
-			organizationId: org,
-			deviceId,
-			employeeNo: emp,
-			deviceUserId: deviceUser?.id,
-			fingerprints: templatesForStore,
-			source: sourceLabel,
-		});
+		let persist = {
+			ok: false,
+			rawPresent: false,
+			fingerprintCount: 0,
+			reason: sourceLabel,
+		};
+		if (fps.length) {
+			persist = await persistRawFingerprintsFromSdkCallback({
+				prisma,
+				req,
+				organizationId: org,
+				deviceId,
+				employeeNo: emp,
+				deviceUserId: deviceUser?.id,
+				fingerprints: fps,
+				source: sourceLabel,
+			});
+		}
 
 		deviceUser = await prisma.deviceUser.findFirst({
 			where: { deviceId, vendorUserId: emp },
@@ -390,8 +390,8 @@ async function main() {
 						proof: "create-enroll-flow",
 						resolvedEmployeeNo: emp,
 						rawFingerprintCustody: {
-							status: "raw_on_device_user",
-							fingerprintCount: templatesForStore.length,
+							status: fps.length ? "raw_on_device_user" : "not_sticky_on_device",
+							fingerprintCount: fps.length,
 							source: sourceLabel,
 						},
 						deviceNumOfFP: numOfFP,
@@ -436,11 +436,14 @@ async function main() {
 				proof.createPass.deviceUser &&
 				proof.createPass.eventPlain,
 			G4: proof.enrollPass.eventPlain && proof.enrollPass.sameDeviceUser,
+			// G5 requires device-owned sticky raw for THIS person — donor is fail, not green.
 			G5:
 				proof.enrollPass.rawPresent &&
 				!proof.enrollPass.isAes &&
 				proof.enrollPass.tplLen >= 8 &&
-				proof.enrollPass.apiRawPresent,
+				proof.enrollPass.apiRawPresent &&
+				proof.enrollPass.deviceNumOfFP > 0 &&
+				!String(proof.enrollPass.sourceLabel || "").includes("donor"),
 		};
 		proof.finishedAt = new Date().toISOString();
 		fs.writeFileSync(outPath, JSON.stringify(proof, null, 2));

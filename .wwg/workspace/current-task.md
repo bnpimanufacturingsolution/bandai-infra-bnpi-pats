@@ -1,5 +1,20 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 Create+Enroll architecture reality marathon
+
+- Task mode: Meaningful feature / wire-path harden + live proof (non-stop marathon).
+- Evidence: `.runtime/create-enroll-arch-reality-20260719-183434/summary.json`
+- Exit: `GREEN_WITH_REAL_BLOCKER` (not donor fake-green).
+- **Root cause of synthetic FP stickiness:** `FingerPrintDownload` HTTP OK but `FingerPrintProgress` `cardReaderRecvStatus=5` `errorMsg=15` when cloning person-15 template onto a new employeeNo (device anti-dupe). Re-read stays `numOfFP=0`.
+- **Code:**
+  - C++: template enrich after inventory_delta/op-sync; ISAPI write verifies Progress + re-read fingerData
+  - HRIS: `writeAndVerifyFingerprintOnDevice` / `parseFingerPrintProgress`; device.controller uses verify path
+  - Proof scripts: ban donor-as-success
+- **Proven green:** create plain + inventory_delta; person-15 device-owned raw 684; unit 6/6; reverse ports; rebuilt listener with `progressRecvOk`
+- **Still open:** physical unique panel enroll for new person sticky F8; live C++ `fingerprintCount>=1` on ACS for person already having FP
+- Job card: `docs/00-product/AGENT-PROMPT-create-enroll-architecture-reality-marathon.md`
+- Recommendation capture: Physical panel enroll proof for F8 sticky on new person (Proposed).
+
 ## Latest Task Addendum - 2026-07-19 Create+Enroll flow C++ EXIT GATE
 
 - Task mode: Meaningful C++ fix + live synthetic proof.

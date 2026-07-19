@@ -216,6 +216,259 @@ export const fetchRawFingerprintsViaIsapi = async (params: {
 	return { fingerprints: collected, attempts, lastError };
 };
 
+/**
+ * Poll ISAPI FingerPrintProgress after FingerPrintDownload.
+ * Live TEST A (2026-07-19): Download can return statusString=OK while async reader fails.
+ * cardReaderRecvStatus=6 → applied; 5 → failed (errorMsg often donor employeeNo when clone rejected).
+ * HTTP OK alone is NOT device enrollment truth.
+ */
+export type FingerPrintWriteProgress = {
+	ok: boolean;
+	cardReaderRecvStatus: number | null;
+	errorMsg: string | null;
+	totalStatus: number | null;
+	raw: any;
+	reason: string;
+};
+
+export const parseFingerPrintProgress = (response: any): FingerPrintWriteProgress => {
+	const statusList =
+		response?.FingerPrintStatus?.StatusList ||
+		response?.FingerPrintProgress?.StatusList ||
+		response?.StatusList ||
+		[];
+	const first = Array.isArray(statusList) ? statusList[0] : statusList;
+	const cardReaderRecvStatus = first
+		? Number(first.cardReaderRecvStatus ?? first.status ?? NaN)
+		: NaN;
+	const errorMsg =
+		first?.errorMsg != null
+			? String(first.errorMsg)
+			: first?.errorCode != null
+				? String(first.errorCode)
+				: null;
+	const totalStatus =
+		response?.FingerPrintStatus?.totalStatus != null
+			? Number(response.FingerPrintStatus.totalStatus)
+			: null;
+	const statusNum = Number.isFinite(cardReaderRecvStatus) ? cardReaderRecvStatus : null;
+	// Device family evidence: 6 = success path on rewrite of existing person template.
+	if (statusNum === 6) {
+		return {
+			ok: true,
+			cardReaderRecvStatus: statusNum,
+			errorMsg,
+			totalStatus,
+			raw: response,
+			reason: "card_reader_recv_status_6_ok",
+		};
+	}
+	if (statusNum === 5) {
+		return {
+			ok: false,
+			cardReaderRecvStatus: statusNum,
+			errorMsg,
+			totalStatus,
+			raw: response,
+			reason: errorMsg
+				? `card_reader_recv_status_5_fail_errorMsg=${errorMsg}`
+				: "card_reader_recv_status_5_fail",
+		};
+	}
+	return {
+		ok: false,
+		cardReaderRecvStatus: statusNum,
+		errorMsg,
+		totalStatus,
+		raw: response,
+		reason:
+			statusNum == null
+				? "progress_status_missing"
+				: `card_reader_recv_status_${statusNum}_unknown`,
+	};
+};
+
+export const pollFingerPrintWriteProgress = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	deviceId: string;
+	timeoutMs?: number;
+	attempts?: number;
+	delayMs?: number;
+}): Promise<FingerPrintWriteProgress> => {
+	const attempts = Math.min(Math.max(Number(params.attempts) || 6, 1), 12);
+	const delayMs = Math.min(Math.max(Number(params.delayMs) || 500, 100), 5000);
+	const timeoutMs = Number(params.timeoutMs) || 10_000;
+	let last: FingerPrintWriteProgress = {
+		ok: false,
+		cardReaderRecvStatus: null,
+		errorMsg: null,
+		totalStatus: null,
+		raw: null,
+		reason: "no_progress_polls",
+	};
+	for (let i = 0; i < attempts; i += 1) {
+		if (i > 0) {
+			await new Promise((r) => setTimeout(r, delayMs * i));
+		}
+		try {
+			const raw = await hikvisionFetch(
+				"/ISAPI/AccessControl/FingerPrintProgress?format=json",
+				{
+					method: "GET",
+					deviceId: params.deviceId,
+					prisma: params.prisma,
+					request: params.req,
+					timeoutMs,
+				},
+			);
+			last = parseFingerPrintProgress(raw);
+			if (last.cardReaderRecvStatus === 6 || last.cardReaderRecvStatus === 5) {
+				return last;
+			}
+		} catch (error: any) {
+			last = {
+				ok: false,
+				cardReaderRecvStatus: null,
+				errorMsg: String(error?.message || error || "progress_fetch_failed"),
+				totalStatus: null,
+				raw: null,
+				reason: "progress_fetch_failed",
+			};
+		}
+	}
+	return last;
+};
+
+/**
+ * Write fingerprint via FingerPrintDownload then verify Progress + re-read Upload.
+ * Returns sticky=true only when device re-read yields fingerData for that employeeNo.
+ * Never treats HTTP OK alone as enrolled.
+ */
+export const writeAndVerifyFingerprintOnDevice = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	deviceId: string;
+	employeeNo: string;
+	fingerData: string;
+	fingerPrintID?: number;
+	fingerType?: string | number;
+	enableCardReader?: number[];
+	cardNo?: string;
+}): Promise<{
+	writeOk: boolean;
+	writeResponse: any;
+	progress: FingerPrintWriteProgress;
+	sticky: boolean;
+	numOfFP: number;
+	fingerprints: RawFingerprintTemplate[];
+	source: string;
+}> => {
+	const employeeNo = String(params.employeeNo || "").trim();
+	const fingerData = String(params.fingerData || "").trim();
+	const fingerPrintID = Number(params.fingerPrintID || 1) || 1;
+	const fingerType = params.fingerType != null ? params.fingerType : "normalFP";
+	const enableCardReader = params.enableCardReader || [1];
+	const cfg: Record<string, unknown> = {
+		employeeNo,
+		enableCardReader,
+		fingerPrintID,
+		fingerType,
+		fingerData,
+	};
+	if (params.cardNo) cfg.cardNo = params.cardNo;
+
+	let writeResponse: any = null;
+	let writeOk = false;
+	try {
+		writeResponse = await hikvisionFetch(
+			"/ISAPI/AccessControl/FingerPrintDownload?format=json",
+			{
+				method: "POST",
+				deviceId: params.deviceId,
+				prisma: params.prisma,
+				request: params.req,
+				timeoutMs: 25_000,
+				body: { FingerPrintCfg: cfg },
+			},
+		);
+		writeOk =
+			Number(writeResponse?.statusCode) === 1 ||
+			String(writeResponse?.statusString || "").toUpperCase() === "OK" ||
+			String(writeResponse?.subStatusCode || "").toLowerCase() === "ok";
+	} catch (error: any) {
+		writeResponse = { error: String(error?.message || error) };
+		writeOk = false;
+	}
+
+	const progress = await pollFingerPrintWriteProgress({
+		prisma: params.prisma,
+		req: params.req,
+		deviceId: params.deviceId,
+	});
+
+	// Re-read device templates for THIS person only (never promote donor).
+	let fingerprints: RawFingerprintTemplate[] = [];
+	let numOfFP = 0;
+	const delays = [500, 1500, 3000, 5000];
+	for (const d of delays) {
+		await new Promise((r) => setTimeout(r, d));
+		const fetched = await fetchRawFingerprintsViaIsapi({
+			prisma: params.prisma,
+			req: params.req,
+			deviceId: params.deviceId,
+			employeeNo,
+		});
+		fingerprints = fetched.fingerprints;
+		try {
+			const ui = await hikvisionFetch(
+				"/ISAPI/AccessControl/UserInfo/Search?format=json",
+				{
+					method: "POST",
+					deviceId: params.deviceId,
+					prisma: params.prisma,
+					request: params.req,
+					timeoutMs: 12_000,
+					body: {
+						UserInfoSearchCond: {
+							searchID: `fp-verify-${Date.now()}`,
+							searchResultPosition: 0,
+							maxResults: 2,
+							EmployeeNoList: [{ employeeNo }],
+						},
+					},
+				},
+			);
+			const uu = Array.isArray(ui?.UserInfoSearch?.UserInfo)
+				? ui.UserInfoSearch.UserInfo[0]
+				: ui?.UserInfoSearch?.UserInfo;
+			numOfFP = Number(uu?.numOfFP || 0) || 0;
+		} catch {
+			/* keep */
+		}
+		if (fingerprints.length > 0 || numOfFP > 0) break;
+	}
+
+	const sticky = fingerprints.length > 0 || numOfFP > 0;
+	const source = sticky
+		? "device_fp_read_after_write_verified"
+		: progress.cardReaderRecvStatus === 5
+			? `device_fp_write_rejected_progress5:${progress.errorMsg || "unknown"}`
+			: writeOk
+				? "device_fp_write_http_ok_reread_empty"
+				: "device_fp_write_failed";
+
+	return {
+		writeOk,
+		writeResponse,
+		progress,
+		sticky,
+		numOfFP,
+		fingerprints,
+		source,
+	};
+};
+
 export const buildRawFingerprintCustody = (params: {
 	deviceId: string;
 	vendorUserId: string;

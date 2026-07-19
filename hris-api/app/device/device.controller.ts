@@ -1845,38 +1845,45 @@ export const controller = (prisma: PrismaClient) => {
 			? params.decrypted.fingerprints
 			: [];
 		const results = [];
+		// Prefer write+progress+re-read verify. HTTP OK alone is not sticky (TEST A 2026-07-19).
+		const { writeAndVerifyFingerprintOnDevice } = await import(
+			"../../helper/device-user-raw-fingerprint.helper"
+		);
 		for (const fingerprint of fingerprints) {
 			const fingerData = String(fingerprint?.data || "").trim();
 			if (!fingerData) continue;
-			const response = await hikvisionFetch(
-				"/ISAPI/AccessControl/FingerPrintDownload?format=json",
-				{
-					method: "POST",
-					deviceId: params.targetDevice.id,
-					prisma,
-					request: params.req,
-					timeoutMs: 15000,
-					headers: { "Content-Type": "application/json" },
-					body: {
-						FingerPrintCfg: {
-							employeeNo: params.employeeNo,
-							cardReaderNo: 1,
-							fingerPrintID: Number(fingerprint.fingerPrintId || 1),
-							fingerType: Number(fingerprint.fingerType || 0),
-							enableCardReader: [1],
-							fingerData,
-						},
-					},
-				},
-			);
+			const fingerPrintId = Number(fingerprint.fingerPrintId || 1);
+			// Device accepts fingerType "normalFP" string; numeric 0 often Bad Request on TEST A.
+			const fingerType =
+				fingerprint.fingerType === 0 || fingerprint.fingerType === "0"
+					? "normalFP"
+					: fingerprint.fingerType != null && fingerprint.fingerType !== ""
+						? fingerprint.fingerType
+						: "normalFP";
+			const verified = await writeAndVerifyFingerprintOnDevice({
+				prisma,
+				req: params.req,
+				deviceId: params.targetDevice.id,
+				employeeNo: params.employeeNo,
+				fingerData,
+				fingerPrintID: fingerPrintId,
+				fingerType,
+				enableCardReader: [1],
+			});
 			results.push({
-				fingerPrintId: Number(fingerprint.fingerPrintId || 1),
-				fingerType: Number(fingerprint.fingerType || 0),
-				responseStatus:
-					response?.ResponseStatus?.statusString ||
-					response?.statusString ||
-					response?.raw ||
-					"accepted",
+				fingerPrintId,
+				fingerType,
+				responseStatus: verified.sticky
+					? "verified_sticky"
+					: verified.writeOk
+						? `http_ok_not_sticky:${verified.source}`
+						: verified.writeResponse?.error || "write_failed",
+				writeOk: verified.writeOk,
+				sticky: verified.sticky,
+				progressStatus: verified.progress.cardReaderRecvStatus,
+				progressErrorMsg: verified.progress.errorMsg,
+				numOfFP: verified.numOfFP,
+				source: verified.source,
 			});
 		}
 		return {

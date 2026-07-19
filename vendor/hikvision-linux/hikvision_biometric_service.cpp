@@ -1740,12 +1740,46 @@ bool write_fingerprint_via_isapi(
         setup.str(),
         &setup_response);
 
+    // FingerPrintDownload often returns HTTP OK while the reader still processes async.
+    // Live TEST A 2026-07-19: cloning person-15 template onto another employee returns
+    // cardReaderRecvStatus=5 errorMsg="15" (device anti-dupe) while setup statusString=OK.
+    // Status 6 observed as success when rewriting the same person's existing template.
+    bool progress_recv_ok = false;
+    int progress_status = -1;
+    std::string progress_error_msg;
     std::string progress_response;
-    const bool progress_ok = stdxml_json_request(
-        target,
-        "GET /ISAPI/AccessControl/FingerPrintProgress?format=json",
-        "",
-        &progress_response);
+    for (int attempt = 0; attempt < 6; ++attempt) {
+        if (attempt > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(400 * attempt));
+        }
+        progress_response.clear();
+        const bool progress_ok = stdxml_json_request(
+            target,
+            "GET /ISAPI/AccessControl/FingerPrintProgress?format=json",
+            "",
+            &progress_response);
+        if (!progress_ok || progress_response.empty()) {
+            continue;
+        }
+        static const std::regex status_regex("\"cardReaderRecvStatus\"\\s*:\\s*([0-9]+)");
+        static const std::regex err_regex("\"errorMsg\"\\s*:\\s*\"([^\"]*)\"");
+        std::smatch sm;
+        if (std::regex_search(progress_response, sm, status_regex)) {
+            progress_status = std::atoi(sm[1].str().c_str());
+        }
+        if (std::regex_search(progress_response, sm, err_regex)) {
+            progress_error_msg = sm[1].str();
+        }
+        // 6 = accepted/applied on this device family; 5 = failed (often duplicate template).
+        if (progress_status == 6) {
+            progress_recv_ok = true;
+            break;
+        }
+        if (progress_status == 5) {
+            progress_recv_ok = false;
+            break;
+        }
+    }
 
     std::ostringstream query;
     query << "{\"FingerPrintCond\":{";
@@ -1759,10 +1793,13 @@ bool write_fingerprint_via_isapi(
         "POST /ISAPI/AccessControl/FingerPrintUpload?format=json",
         query.str(),
         &query_response);
-    const bool verified = query_ok &&
+    const bool list_verified = query_ok &&
         query_response.find("\"status\"") != std::string::npos &&
         query_response.find("OK") != std::string::npos &&
-        query_response.find("FingerPrintList") != std::string::npos;
+        query_response.find("FingerPrintList") != std::string::npos &&
+        query_response.find("fingerData") != std::string::npos;
+    // Require re-read list verification. Progress status 5 is hard fail even if setup OK.
+    const bool verified = list_verified && progress_status != 5;
 
     emit_json({
         {"event", "peer_fingerprint_write_isapi"},
@@ -1770,9 +1807,12 @@ bool write_fingerprint_via_isapi(
         {"employeeNo", job.employee_no},
         {"fingerPrintId", std::to_string(record.byFingerPrintID)},
         {"setupOk", setup_ok ? "true" : "false"},
-        {"progressOk", progress_ok ? "true" : "false"},
+        {"progressRecvOk", progress_recv_ok ? "true" : "false"},
+        {"progressStatus", std::to_string(progress_status)},
+        {"progressErrorMsg", progress_error_msg},
         {"progressResponse", progress_response.substr(0, 1200)},
         {"queryOk", query_ok ? "true" : "false"},
+        {"listVerified", list_verified ? "true" : "false"},
         {"verified", verified ? "true" : "false"},
         {"setupResponse", setup_response.substr(0, 1200)},
         {"queryResponse", query_response.substr(0, 1200)}
@@ -2903,6 +2943,14 @@ bool needs_callback_template_enrich(const ReconcileJob &job) {
         job.event_kind == "poll_inventory_user_created") {
         return true;
     }
+    // Panel create/enroll often arrives as major=3 / operation-sync with empty ACS person.
+    // After inventory_delta (or delayed identity_repost) fills plain id, still attempt FP read.
+    // Without this gate, enrich exits early with fingerprintCount=0 even when the person has templates.
+    if (job.major == MAJOR_OPERATION || job.major == 3 ||
+        is_observed_operation_sync_minor(job.minor) ||
+        job.event_kind.find("identity_repost") != std::string::npos) {
+        return true;
+    }
     return job.include_face_recognition &&
            (job.event_kind.find("face") != std::string::npos ||
             job.event_kind == "biometric_user_management");
@@ -3092,10 +3140,10 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
         return;
     }
 
-    // Fingerprint templates (raw base64) for enroll path — SDK then ISAPI, with short retries.
-    if (is_fingerprint_management_minor(job.minor) || job.include_fingerprints ||
-        is_user_management_minor(job.minor) || is_observed_operation_sync_minor(job.minor) ||
-        is_repost) {
+    // Fingerprint templates (raw base64) when needs_callback_template_enrich passed.
+    // Always attempt SDK then ISAPI with short retries (do not re-gate on minor here —
+    // op-sync + inventory_delta plain id must reach this path).
+    {
         static const int fp_delays_ms[] = {0, 600, 1500, 3000};
         for (int delay_ms : fp_delays_ms) {
             if (delay_ms > 0) {

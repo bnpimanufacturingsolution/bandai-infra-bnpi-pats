@@ -124,11 +124,23 @@ When person **15** is created on one device:
 Before `POST /api/hikvision/callback`, `enrich_hris_job_before_post`:
 
 1. If `employeeNo` empty on enroll/op → UserInfo inventory delta (with short retries) → set plain id + `identitySource=inventory_delta`.
-2. If plain known and FP/user-management → read raw fingerprint templates into callback `fingerprints[]` (base64, not AES).
+2. If plain known and FP/user-management **or major=3 / operation-sync / identity_repost** → read raw fingerprint templates into callback `fingerprints[]` (base64, not AES).
 3. If card known → optional `faceTemplate` / `facePicture` base64.
 4. Socket/HRIS then receive plain + templates on that same POST when enrich succeeds.
 
 This matches Project Truth principles: **DeviceEvent is saved event truth; DeviceUser is inventory; evidence over assumption.**
+
+### Device FP write stickiness (proven 2026-07-19 TEST A)
+
+| Observation | Evidence |
+|---|---|
+| `FingerPrintDownload` returns HTTP `statusString=OK` | Common for both rewrite and clone |
+| Async `FingerPrintProgress` `cardReaderRecvStatus=6` | Same-person template rewrite can apply |
+| `cardReaderRecvStatus=5` + `errorMsg="<donor employeeNo>"` | **Clone of person 15 template onto new person rejected** (device anti-dupe) |
+| Re-read `numOfFP` after rejected clone | Stays `0` / Upload status `NoFP` |
+| Product rule | **Never treat HTTP OK alone as enrolled.** Never store **donor** templates as the new person's raw custody. Sticky = re-read templates for **that** `employeeNo`. |
+
+Synthetic agent enrolls that **copy another person's fingerData** cannot satisfy hard sticky goal on this device family. Physical panel enroll (unique template) or a write that Progress status=6 + re-read ≥1 is required for F8 sticky on a new person.
 
 ---
 

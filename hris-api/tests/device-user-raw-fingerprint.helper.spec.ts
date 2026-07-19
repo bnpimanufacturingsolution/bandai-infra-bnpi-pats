@@ -4,6 +4,7 @@ import {
 	buildRawFingerprintCustody,
 	captureRawFingerprintsForEnrollment,
 	normalizeIsapiFingerprintList,
+	parseFingerPrintProgress,
 	RAW_FINGERPRINT_SCHEMA,
 	shouldCaptureRawFingerprintForEventAction,
 } from "../helper/device-user-raw-fingerprint.helper";
@@ -49,6 +50,28 @@ describe("device-user-raw-fingerprint helper", () => {
 		expect(list[0].fingerPrintId).to.equal(1);
 		expect(list[0].data).to.equal("QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=");
 		expect(list[1].data.length).to.be.greaterThan(8);
+	});
+
+	it("parses FingerPrintProgress status 6 as ok and status 5 as clone/reject fail", () => {
+		const ok = parseFingerPrintProgress({
+			FingerPrintStatus: {
+				StatusList: [{ id: 1, cardReaderRecvStatus: 6 }],
+				totalStatus: 1,
+			},
+		});
+		expect(ok.ok).to.equal(true);
+		expect(ok.cardReaderRecvStatus).to.equal(6);
+
+		const fail = parseFingerPrintProgress({
+			FingerPrintStatus: {
+				StatusList: [{ id: 1, cardReaderRecvStatus: 5, errorMsg: "15" }],
+				totalStatus: 1,
+			},
+		});
+		expect(fail.ok).to.equal(false);
+		expect(fail.cardReaderRecvStatus).to.equal(5);
+		expect(fail.errorMsg).to.equal("15");
+		expect(fail.reason).to.include("errorMsg=15");
 	});
 
 	it("builds and applies raw fingerprint custody onto DeviceUser row", () => {
