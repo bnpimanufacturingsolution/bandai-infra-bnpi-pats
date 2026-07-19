@@ -688,16 +688,6 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 		row,
 	});
 
-	await patchEnrollmentEventRawStatus(params, {
-		status: "raw_on_device_user",
-		reason: null,
-		attempts,
-		fingerprintCount: custody.fingerprintCount,
-		totalDataChars: custody.totalDataChars,
-		deviceUserId: saved?.id || row.id,
-		rawFingerprintLocation: `DeviceUser(${saved?.id || row.id}).vendorMetadata.rawFingerprints.templates[].data`,
-	}).catch(() => undefined);
-
 	// Best-effort face picture when device has faceURL (does not invent face).
 	const face = await captureRawFaceForEnrollment({
 		prisma: params.prisma,
@@ -712,6 +702,52 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 		reason: String(error?.message || error || "face_capture_failed"),
 	}));
 
+	// Re-read DeviceUser for face custody after face capture.
+	const withFace = await params.prisma.deviceUser
+		.findUnique({
+			where: { id: saved?.id || row.id },
+			select: { id: true, vendorMetadata: true },
+		})
+		.catch(() => null);
+	const rawFaceMeta = (withFace?.vendorMetadata as any)?.rawFace || null;
+
+	// Primary event (if provided)
+	if (params.eventId) {
+		await patchEnrollmentEventRawStatus(
+			{
+				prisma: params.prisma,
+				req: params.req,
+				eventId: params.eventId,
+				deviceUserId: saved?.id || row.id,
+				custody,
+				rawFace: rawFaceMeta,
+				employeeNo,
+			},
+			{
+				status: "raw_on_event_and_device_user",
+				reason: null,
+				attempts,
+				fingerprintCount: custody.fingerprintCount,
+				totalDataChars: custody.totalDataChars,
+				deviceUserId: saved?.id || row.id,
+				rawFingerprintLocation: `DeviceEvent.payload.rawFingerprints + DeviceUser(${saved?.id || row.id}).vendorMetadata.rawFingerprints`,
+			},
+		).catch(() => undefined);
+	}
+
+	// Also stamp recent create/enroll ledger rows for this person (operator journey).
+	await attachRawToRecentLifecycleEventsForPerson({
+		prisma: params.prisma,
+		req: params.req,
+		organizationId,
+		deviceId,
+		employeeNo,
+		deviceUserId: saved?.id || row.id || null,
+		custody,
+		rawFace: rawFaceMeta,
+		excludeEventId: params.eventId || null,
+	}).catch(() => undefined);
+
 	return {
 		ok: true,
 		rawPresent: true,
@@ -721,6 +757,62 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 		source: custody.source,
 		face,
 	};
+};
+
+/** Stamp raw FP/face onto recent USER_CREATED / FINGERPRINT_ENROLLED rows for plain person. */
+export const attachRawToRecentLifecycleEventsForPerson = async (params: {
+	prisma: PrismaClient | any;
+	req?: any;
+	organizationId: string;
+	deviceId: string;
+	employeeNo: string;
+	deviceUserId?: string | null;
+	custody: RawFingerprintCustody;
+	rawFace?: any | null;
+	excludeEventId?: string | null;
+	windowMs?: number;
+}): Promise<number> => {
+	const organizationId = String(params.organizationId || "").trim();
+	const deviceId = String(params.deviceId || "").trim();
+	const employeeNo = String(params.employeeNo || "").trim();
+	if (!organizationId || !deviceId || !employeeNo) return 0;
+	const windowMs = Math.min(Math.max(Number(params.windowMs) || 30 * 60_000, 60_000), 2 * 60 * 60_000);
+	const rows = await params.prisma.deviceEvent.findMany({
+		where: {
+			organizationId,
+			deviceId,
+			employeeNo,
+			eventAction: {
+				in: [
+					"USER_CREATED",
+					"USER_UPDATED",
+					"FINGERPRINT_ENROLLED",
+					"FINGERPRINT_UPDATED",
+					"CARD_ENROLLED",
+				],
+			},
+			receivedAt: { gte: new Date(Date.now() - windowMs) },
+			...(params.excludeEventId ? { id: { not: String(params.excludeEventId) } } : {}),
+		},
+		select: { id: true },
+		orderBy: { receivedAt: "desc" },
+		take: 20,
+	});
+	let n = 0;
+	for (const row of rows) {
+		const ok = await attachRawBiometricsToDeviceEventPayload({
+			prisma: params.prisma,
+			req: params.req,
+			eventId: row.id,
+			deviceUserId: params.deviceUserId || null,
+			employeeNo,
+			custody: params.custody,
+			rawFace: params.rawFace || null,
+			source: params.custody.source,
+		});
+		if (ok) n += 1;
+	}
+	return n;
 };
 
 /**
@@ -922,12 +1014,159 @@ export const captureRawFaceForEnrollment = async (params: {
 	};
 };
 
+/**
+ * Write raw biometric custody onto a DeviceEvent payload (operator wants blobs
+ * visible on create/enroll ledger rows too, not only DeviceUser).
+ * Also keeps DeviceUser as inventory plane.
+ */
+export const attachRawBiometricsToDeviceEventPayload = async (params: {
+	prisma: PrismaClient | any;
+	req?: any;
+	eventId: string;
+	deviceUserId?: string | null;
+	employeeNo?: string | null;
+	custody?: RawFingerprintCustody | null;
+	rawFace?: any | null;
+	source?: string;
+}): Promise<boolean> => {
+	const eventId = String(params.eventId || "").trim();
+	if (!eventId) return false;
+	const existing = await params.prisma.deviceEvent.findUnique({
+		where: { id: eventId },
+		select: {
+			id: true,
+			payload: true,
+			deviceUserId: true,
+			employeeNo: true,
+			employeeId: true,
+			eventAction: true,
+		},
+	});
+	if (!existing) return false;
+
+	const prior = (existing.payload as any) || {};
+	const priorSnap = prior.enrollmentSnapshot || {};
+	const priorCustody = priorSnap.biometricCustody || {};
+	const custody = params.custody || null;
+	const rawFace = params.rawFace || null;
+	const fingerprintCount = custody?.fingerprintCount || 0;
+	const totalDataChars = custody?.totalDataChars || 0;
+	const rawPresent = Boolean(custody?.rawPresent && fingerprintCount > 0);
+	const facePresent = Boolean(
+		rawFace?.present ||
+			String(rawFace?.base64 || rawFace?.facePicture || rawFace?.faceTemplate || "").length >
+				32,
+	);
+
+	const nextPayload = {
+		...prior,
+		// Full usable blobs on the event ledger for create/enroll journey (operator 2026-07-19).
+		rawFingerprints: custody
+			? {
+					schema: custody.schema,
+					present: rawPresent,
+					fingerprintCount,
+					totalDataChars,
+					capturedAt: custody.capturedAt,
+					source: custody.source || params.source || "raw_capture",
+					deviceUserId: params.deviceUserId || existing.deviceUserId || null,
+					// Actual base64 fingerData templates (same as DeviceUser plane).
+					templates: custody.fingerprints || [],
+				}
+			: prior.rawFingerprints || null,
+		rawFace: facePresent
+			? {
+					present: true,
+					schema: rawFace?.schema || RAW_FACE_SCHEMA,
+					contentType: rawFace?.contentType || "image/jpeg",
+					byteLength: rawFace?.byteLength || null,
+					base64: rawFace?.base64 || rawFace?.facePicture || null,
+					faceTemplate: rawFace?.faceTemplate || null,
+					faceURL: rawFace?.faceURL || null,
+					capturedAt: rawFace?.capturedAt || new Date().toISOString(),
+					source: rawFace?.source || params.source || "raw_capture",
+					deviceUserId: params.deviceUserId || existing.deviceUserId || null,
+				}
+			: prior.rawFace || null,
+		rawFingerprintCustody: {
+			status: rawPresent ? "raw_on_event_and_device_user" : priorCustody.status || "pending",
+			reason: null,
+			attempts: priorCustody.attempts || 0,
+			fingerprintCount,
+			totalDataChars,
+			rawPresent,
+			rawTemplateOnDeviceEvent: rawPresent,
+			rawFaceOnDeviceEvent: facePresent,
+			plane: "DEVICE_EVENT_AND_DEVICE_USER",
+			location: params.deviceUserId
+				? `DeviceEvent.payload.rawFingerprints + DeviceUser(${params.deviceUserId}).vendorMetadata.rawFingerprints`
+				: "DeviceEvent.payload.rawFingerprints + DeviceUser.vendorMetadata.rawFingerprints",
+			templateStorage: "raw_base64_on_event_and_device_user",
+		},
+		enrollmentSnapshot: {
+			...priorSnap,
+			biometricCustody: {
+				...priorCustody,
+				status: rawPresent ? "raw_on_event_and_device_user" : priorCustody.status,
+				rawPresent,
+				fingerprintCount,
+				totalDataChars,
+				rawTemplateOnDeviceEvent: rawPresent,
+				rawFaceOnDeviceEvent: facePresent,
+				location: params.deviceUserId
+					? `DeviceEvent + DeviceUser(${params.deviceUserId})`
+					: "DeviceEvent + DeviceUser",
+				templateStorage: "raw_base64_on_event_and_device_user",
+			},
+		},
+		enrollmentGoal: {
+			...(prior.enrollmentGoal || {}),
+			employeeNo: params.employeeNo || prior.enrollmentGoal?.employeeNo || existing.employeeNo,
+			deviceUserId: params.deviceUserId || prior.enrollmentGoal?.deviceUserId || existing.deviceUserId,
+			rawTemplateOnDeviceEvent: rawPresent,
+			rawFaceOnDeviceEvent: facePresent,
+			rawFingerprintExpected: true,
+			fingerprintTemplateLocation:
+				"DeviceEvent.payload.rawFingerprints.templates[].data + DeviceUser.vendorMetadata.rawFingerprints",
+		},
+	};
+
+	const updated = await params.prisma.deviceEvent.update({
+		where: { id: eventId },
+		data: {
+			deviceUserId: params.deviceUserId || existing.deviceUserId || null,
+			payload: nextPayload,
+		},
+		include: {
+			device: {
+				select: { id: true, name: true, address: true, port: true, protocol: true },
+			},
+			deviceUser: {
+				select: {
+					id: true,
+					vendorUserId: true,
+					employeeNo: true,
+					displayName: true,
+					employeeId: true,
+					vendorMetadata: true,
+				},
+			},
+		},
+	});
+	emitDeviceEventSaved(params.req?.io, updated);
+	return true;
+};
+
 export const patchEnrollmentEventRawStatus = async (
 	params: {
 		prisma: PrismaClient | any;
 		req: any;
 		eventId?: string | null;
 		deviceUserId?: string | null;
+		/** When provided, full templates are also written onto the event payload. */
+		custody?: RawFingerprintCustody | null;
+		rawFace?: any | null;
+		employeeNo?: string | null;
 	},
 	status: {
 		status: string;
@@ -941,6 +1180,21 @@ export const patchEnrollmentEventRawStatus = async (
 ) => {
 	const eventId = String(params.eventId || "").trim();
 	if (!eventId) return;
+
+	// Prefer full blob attach when custody is available (create/enroll journey).
+	if (params.custody?.rawPresent || params.rawFace) {
+		await attachRawBiometricsToDeviceEventPayload({
+			prisma: params.prisma,
+			req: params.req,
+			eventId,
+			deviceUserId: status.deviceUserId || params.deviceUserId || null,
+			employeeNo: params.employeeNo || null,
+			custody: params.custody || null,
+			rawFace: params.rawFace || null,
+			source: params.custody?.source || "raw_capture",
+		});
+		return;
+	}
 
 	const existing = await params.prisma.deviceEvent.findUnique({
 		where: { id: eventId },
@@ -959,9 +1213,10 @@ export const patchEnrollmentEventRawStatus = async (
 			attempts: status.attempts,
 			fingerprintCount: status.fingerprintCount,
 			totalDataChars: status.totalDataChars,
-			rawPresent: status.status === "raw_on_device_user",
-			// Blobs live on DeviceUser only.
-			rawTemplateOnDeviceEvent: false,
+			rawPresent: status.status === "raw_on_device_user" || status.status === "raw_on_event_and_device_user",
+			rawTemplateOnDeviceEvent: Boolean(prior.rawFingerprints?.present),
+			// Prefer dual plane when blobs already on event.
+			plane: prior.rawFingerprints?.present ? "DEVICE_EVENT_AND_DEVICE_USER" : "DEVICE_USER",
 			rawFingerprintLocation:
 				status.rawFingerprintLocation ||
 				"DeviceUser.vendorMetadata.rawFingerprints.templates[].data",
@@ -1211,6 +1466,8 @@ export const persistRawFingerprintsFromSdkCallback = async (params: {
 		row,
 	});
 
+	const rawFaceMeta = (row.vendorMetadata as any)?.rawFace || null;
+
 	if (params.eventId) {
 		await patchEnrollmentEventRawStatus(
 			{
@@ -1218,18 +1475,33 @@ export const persistRawFingerprintsFromSdkCallback = async (params: {
 				req: params.req,
 				eventId: params.eventId,
 				deviceUserId: saved?.id || row.id,
+				custody,
+				rawFace: rawFaceMeta,
+				employeeNo,
 			},
 			{
-				status: "raw_on_device_user",
+				status: "raw_on_event_and_device_user",
 				reason: null,
 				attempts: 0,
 				fingerprintCount: custody.fingerprintCount,
 				totalDataChars: custody.totalDataChars,
 				deviceUserId: saved?.id || row.id,
-				rawFingerprintLocation: `DeviceUser(${saved?.id || row.id}).vendorMetadata.rawFingerprints.templates[].data`,
+				rawFingerprintLocation: `DeviceEvent.payload.rawFingerprints + DeviceUser(${saved?.id || row.id}).vendorMetadata.rawFingerprints`,
 			},
 		).catch(() => undefined);
 	}
+
+	await attachRawToRecentLifecycleEventsForPerson({
+		prisma: params.prisma,
+		req: params.req,
+		organizationId,
+		deviceId,
+		employeeNo,
+		deviceUserId: saved?.id || row.id || null,
+		custody,
+		rawFace: rawFaceMeta,
+		excludeEventId: params.eventId || null,
+	}).catch(() => undefined);
 
 	return {
 		ok: true,

@@ -96,11 +96,17 @@ std::mutex reconcile_spool_mutex;
 std::mutex callback_spool_mutex;
 std::mutex recent_employee_candidate_mutex;
 std::mutex poll_reconcile_guard_mutex;
+// UserInfo/Search behaves like a device-global cursor on the TEST A firmware.
+// Serialize full paginated inventories; interleaved searches can fail mid-page
+// and must never be mistaken for a complete baseline/delta.
+std::mutex inventory_read_mutex;
+std::mutex inventory_baseline_mutex;
 std::map<std::string, std::chrono::steady_clock::time_point> recent_peer_apply_by_host;
 std::map<std::string, unsigned long long> delayed_reconcile_by_host;
 std::map<std::string, std::chrono::steady_clock::time_point> recent_employee_candidates;
 std::map<std::string, std::chrono::steady_clock::time_point> recent_poll_reconcile_by_key;
 std::map<std::string, std::set<std::string>> observed_employee_numbers_by_host;
+std::set<std::string> inventory_baseline_ready_hosts;
 std::set<std::string> pending_full_mirror_hosts;
 std::atomic<unsigned long long> delayed_reconcile_token{0};
 bool execute_mode = true;
@@ -902,11 +908,16 @@ std::string extract_string_field_from_json(const std::string &json, const std::s
 // Full UserInfo inventory. Critical: many Hikvision firmwares return at most ~30
 // rows even when maxResults is larger. Never advance by requested page_size alone
 // and never stop just because page_count < requested maxResults when MORE remains.
-std::vector<std::string> read_device_employee_numbers(DeviceSession &device) {
+std::vector<std::string> read_device_employee_numbers(DeviceSession &device, bool *complete_out = nullptr) {
+    std::lock_guard<std::mutex> inventory_lock(inventory_read_mutex);
+    if (complete_out != nullptr) {
+        *complete_out = false;
+    }
     constexpr int request_page_size = 30;
     std::set<std::string> employee_numbers;
     int position = 0;
     int total_matches = -1;
+    bool read_failed = false;
 
     for (int page = 0; page < 80 && position < 4000; ++page) {
         std::ostringstream body;
@@ -922,6 +933,7 @@ std::vector<std::string> read_device_employee_numbers(DeviceSession &device) {
             &response);
 
         if (!ok) {
+            read_failed = true;
             emit_json({
                 {"event", "source_user_inventory_read"},
                 {"sourceDeviceId", device.config.hris_device_id},
@@ -998,8 +1010,25 @@ std::vector<std::string> read_device_employee_numbers(DeviceSession &device) {
         {"event", "source_user_inventory_complete"},
         {"sourceDeviceId", device.config.hris_device_id},
         {"employeeCount", std::to_string(employee_numbers.size())},
-        {"totalMatches", total_matches >= 0 ? std::to_string(total_matches) : ""}
+        {"totalMatches", total_matches >= 0 ? std::to_string(total_matches) : ""},
+        {"complete", (!read_failed && (total_matches < 0 || static_cast<int>(employee_numbers.size()) >= total_matches)) ? "true" : "false"}
     });
+
+    const bool complete =
+        !read_failed &&
+        (total_matches < 0 || static_cast<int>(employee_numbers.size()) >= total_matches);
+    if (!complete) {
+        emit_json({
+            {"event", "source_user_inventory_incomplete_discarded"},
+            {"sourceDeviceId", device.config.hris_device_id},
+            {"employeeCount", std::to_string(employee_numbers.size())},
+            {"totalMatches", total_matches >= 0 ? std::to_string(total_matches) : ""}
+        });
+        return {};
+    }
+    if (complete_out != nullptr) {
+        *complete_out = true;
+    }
 
     return std::vector<std::string>(employee_numbers.begin(), employee_numbers.end());
 }
@@ -2853,10 +2882,22 @@ std::string pick_newest_plain_employee_no(const std::vector<std::string> &candid
 // Seed baseline at arm-time so the first empty ACS after create does not
 // "swallow" the new person into baseline (would never appear as a delta).
 void seed_inventory_baseline_for_session(DeviceSession &device) {
-    const std::vector<std::string> current = read_device_employee_numbers(device);
+    bool complete = false;
+    const std::vector<std::string> current = read_device_employee_numbers(device, &complete);
+    if (!complete) {
+        emit_json({
+            {"event", "inventory_baseline_seed_failed"},
+            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceHost", device.config.host},
+            {"reason", "incomplete_inventory"}
+        });
+        return;
+    }
+    std::lock_guard<std::mutex> baseline_lock(inventory_baseline_mutex);
     auto &observed = observed_employee_numbers_by_host[device.config.host];
     observed.clear();
     observed.insert(current.begin(), current.end());
+    inventory_baseline_ready_hosts.insert(device.config.host);
     emit_json({
         {"event", "inventory_baseline_seeded"},
         {"sourceDeviceId", device.config.hris_device_id},
@@ -2868,11 +2909,22 @@ void seed_inventory_baseline_for_session(DeviceSession &device) {
 // When ACS dwEmployeeNo is empty (common major=3 panel create/FP enroll), resolve plain
 // person id from device UserInfo inventory delta vs baseline. Does not invent ids.
 std::string resolve_plain_employee_no_from_inventory(DeviceSession &device) {
-    const std::vector<std::string> current = read_device_employee_numbers(device);
+    bool complete = false;
+    const std::vector<std::string> current = read_device_employee_numbers(device, &complete);
+    if (!complete) {
+        emit_json({
+            {"event", "callback_identity_inventory_incomplete"},
+            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceHost", device.config.host}
+        });
+        return "";
+    }
+    std::lock_guard<std::mutex> baseline_lock(inventory_baseline_mutex);
     auto &observed = observed_employee_numbers_by_host[device.config.host];
-    if (observed.empty()) {
+    if (inventory_baseline_ready_hosts.find(device.config.host) == inventory_baseline_ready_hosts.end()) {
         // Prefer arm-time seed; late seed only if arm seed failed.
         observed.insert(current.begin(), current.end());
+        inventory_baseline_ready_hosts.insert(device.config.host);
         emit_json({
             {"event", "callback_identity_inventory_baseline"},
             {"sourceDeviceId", device.config.hris_device_id},
