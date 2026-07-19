@@ -1,5 +1,25 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 Smart reverse-bridge IP after reboot
+
+- Task mode: Bug fix + host runtime proof.
+- Goal: After PC reboot, `npm run dev` / predev / Keep-ready must auto-pick the reverse-capable Hikvision IP (currently `192.168.254.102` for TEST A) without a manual `HIKVISION_VM_BRIDGE_DEVICE_IP` override, while staying fast.
+- Root causes fixed:
+  - Fast path accepted any open VM `:59000` even when the local SSH process did not target the resolved device IP (stale after reboot / thrash).
+  - Legacy fallback still preferred historical `192.168.254.189`.
+  - Resolver ranked DB reverse rows but did not probe which candidate the **host** can reach right now.
+- Implemented:
+  - `resolve-hikvision-vm-bridge-targets.cjs` now probes host TCP (sdk/http/443/80, ~300–400ms) and ranks `reverseBridge + hostReachable` first. Source becomes `db-reverse-bridge-host-reachable` when LIVE.
+  - Fallback order when DB is down: `192.168.254.102` then `192.168.254.189`.
+  - `ensure-hikvision-vm-bridge.cjs` fast-paths only when **local bridge matches resolved IPs AND VM :59000 is open**; otherwise stop + rebind.
+  - `ensure-device-live-path.ps1` prefers host-reachable targets from the same resolver.
+- Proof (this host):
+  - Resolver: `TEST A` / `192.168.254.102` / `hostReachable=true` / openPorts `8000,443,80` / score 188.
+  - Ensure: detected stale local match, rebound tunnel to `192.168.254.102`, ready in 13.6s.
+  - Unit: `tests/resolve-hikvision-vm-bridge-targets.spec.cjs` 3/3.
+- Operator note: still no need to set the IP manually for the normal case; optional override remains `HIKVISION_VM_BRIDGE_DEVICE_IP`. After ensure, restart Hikvision listener once if UI still shows pre-reboot arm state.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-19 SDK enrollment plain person id on callback
 
 - Task mode: Bug fix / runtime identity path + unit proof.

@@ -34,9 +34,21 @@ function Resolve-HikvisionBridgeDeviceIp {
     try {
       $json = & node.exe $resolver 2>$null
       $parsed = $json | ConvertFrom-Json
-      $first = @($parsed.targets | Where-Object { $_.deviceIp } | Select-Object -First 1)
-      if ($first.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$first[0].deviceIp)) {
-        return [string]$first[0].deviceIp
+      # Prefer host-reachable reverse targets first (smart post-reboot lookup).
+      $reachable = @(
+        $parsed.targets |
+          Where-Object { $_.deviceIp -and ($_.hostReachable -eq $true) }
+      )
+      $any = @(
+        $parsed.targets |
+          Where-Object { $_.deviceIp }
+      )
+      $pick = if ($reachable.Count -gt 0) { $reachable[0] } elseif ($any.Count -gt 0) { $any[0] } else { $null }
+      if ($pick -and -not [string]::IsNullOrWhiteSpace([string]$pick.deviceIp)) {
+        $src = [string]$parsed.source
+        $open = @($pick.openPorts) -join ','
+        Write-Host "Resolved reverse-bridge deviceIp=$($pick.deviceIp) source=$src hostReachable=$($pick.hostReachable) openPorts=$open"
+        return [string]$pick.deviceIp
       }
     } catch {
       # Fall back below so predev remains recoverable if the DB is temporarily unavailable.

@@ -52,7 +52,11 @@ const restartListener = envBool("HIKVISION_VM_BRIDGE_RESTART_LISTENER", false);
 function resolveDeviceIps() {
 	const explicit = envValue("HIKVISION_VM_BRIDGE_DEVICE_IP", "");
 	if (explicit) {
-		return { deviceIps: [explicit], source: "env:HIKVISION_VM_BRIDGE_DEVICE_IP" };
+		return {
+			deviceIps: [explicit],
+			source: "env:HIKVISION_VM_BRIDGE_DEVICE_IP",
+			targets: [{ deviceIp: explicit }],
+		};
 	}
 
 	if (fs.existsSync(resolverScript)) {
@@ -65,11 +69,23 @@ function resolveDeviceIps() {
 		});
 		try {
 			const parsed = JSON.parse(String(result.stdout || "{}"));
-			const deviceIps = Array.isArray(parsed.targets)
-				? parsed.targets.map((target) => String(target.deviceIp || "").trim()).filter(Boolean)
-				: [];
+			const targets = Array.isArray(parsed.targets) ? parsed.targets : [];
+			const deviceIps = targets
+				.map((target) => String(target.deviceIp || "").trim())
+				.filter(Boolean);
 			if (deviceIps.length) {
-				return { deviceIps: [...new Set(deviceIps)], source: parsed.source || "db" };
+				const reachable = targets.filter((t) => t.hostReachable).map((t) => t.deviceIp);
+				const note = reachable.length
+					? ` host-reachable=${reachable.join(",")}`
+					: " (no host TCP hit — will still try reverse tunnel)";
+				console.log(
+					`[hikvision-bridge] Smart target source=${parsed.source || "db"}${note}`,
+				);
+				return {
+					deviceIps: [...new Set(deviceIps)],
+					source: parsed.source || "db",
+					targets,
+				};
 			}
 			if (parsed.error) console.warn(`[hikvision-bridge] DB target resolve failed: ${parsed.error}`);
 		} catch (error) {
@@ -77,7 +93,12 @@ function resolveDeviceIps() {
 		}
 	}
 
-	return { deviceIps: ["192.168.254.189"], source: "legacy-fallback" };
+	// Prefer current site TEST A LAN before historical 189.
+	return {
+		deviceIps: ["192.168.254.102"],
+		source: "host-fallback-102",
+		targets: [{ deviceIp: "192.168.254.102" }],
+	};
 }
 
 function processAlive(pid) {
@@ -144,15 +165,25 @@ console.log(
 	`[hikvision-bridge] STEP check: devices=${deviceIps.join(",")} (${resolved.source}) sdk ${sdkListenPort}->${sdkDevicePort} via ${sshTarget}`,
 );
 
-// FAST PATH: VM already listening on reverse SDK port (tunnel from any prior session).
+// FAST PATH only when BOTH:
+//  1) VM reverse SDK port is listening, AND
+//  2) local ssh bridge process actually targets the resolved device IP(s).
+// After PC reboot, (2) is false even if a stale remote listener lingers — must restart.
 // Note: API reverse :53001 is enforced by ensure-device-live-path (next predev step).
-// This script only owns the device SDK tunnel; do not claim socket-truth here.
 console.log(
-	`[hikvision-bridge] STEP check: probing VM :${sdkListenPort} (fast SSH)...`,
+	`[hikvision-bridge] STEP check: probing local bridge match + VM :${sdkListenPort}...`,
 );
-if (vmPortOpen(Number(sdkListenPort)) && !localBridgeMatches(deviceIps)) {
+const localMatches = localBridgeMatches(deviceIps);
+const remoteSdkOpen = vmPortOpen(Number(sdkListenPort));
+if (remoteSdkOpen && localMatches) {
 	console.log(
-		`[hikvision-bridge] STEP check: VM :${sdkListenPort} open but local bridge target is stale - stopping old bridge for ${deviceIps.join(",")}`,
+		`[hikvision-bridge] DONE (fast path) in ${((Date.now() - t0) / 1000).toFixed(1)}s — local bridge matches ${deviceIps.join(",")} and VM :${sdkListenPort} is open`,
+	);
+	process.exit(0);
+}
+if (remoteSdkOpen && !localMatches) {
+	console.log(
+		`[hikvision-bridge] STEP check: VM :${sdkListenPort} open but local bridge target is stale/missing for ${deviceIps.join(",")} — stopping and rebinding`,
 	);
 	spawnSync(
 		"powershell.exe",
@@ -167,12 +198,10 @@ if (vmPortOpen(Number(sdkListenPort)) && !localBridgeMatches(deviceIps)) {
 		],
 		{ cwd: repoRoot, stdio: "inherit", windowsHide: true, env: process.env },
 	);
-}
-if (vmPortOpen(Number(sdkListenPort))) {
+} else if (!remoteSdkOpen) {
 	console.log(
-		`[hikvision-bridge] DONE (fast path) in ${((Date.now() - t0) / 1000).toFixed(1)}s — VM :${sdkListenPort} already listening (API :${apiRemotePort} checked by ensure-device-live-path)`,
+		`[hikvision-bridge] STEP check: VM :${sdkListenPort} not open (typical after PC reboot) — full start for ${deviceIps.join(",")}`,
 	);
-	process.exit(0);
 }
 
 if (fs.existsSync(stateFile)) {
