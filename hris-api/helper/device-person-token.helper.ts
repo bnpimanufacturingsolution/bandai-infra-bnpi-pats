@@ -15,6 +15,7 @@ import {
 	parseHikvisionLogSearchResponse,
 } from "./hikvision-event-contract.helper";
 import {
+	buildDeviceUserEmployeeNoCandidates,
 	extractHikvisionCredentialSummary,
 	normalizeHikvisionDeviceUser,
 } from "./device-user-sync.helper";
@@ -473,35 +474,87 @@ export const enrichEnrollmentLifecycleEvent = async (params: {
 };
 
 /**
+ * Expand known plain ids so "15" and "00015" collide as the same person key.
+ */
+export const expandKnownDevicePersonPlains = (knownPlains: string[]): Set<string> => {
+	const known = new Set<string>();
+	for (const raw of knownPlains || []) {
+		const text = String(raw || "").trim();
+		if (!text) continue;
+		for (const variant of buildDeviceUserEmployeeNoCandidates(text)) {
+			known.add(variant);
+		}
+		known.add(text);
+	}
+	return known;
+};
+
+const pickNewestPlainCandidate = (
+	plains: Array<{ employeeNo: string; displayName: string | null; numOfFP?: number }>,
+) => {
+	if (!plains.length) return null;
+	if (plains.length === 1) return plains[0];
+	// Prefer pure numeric ids (panel typed person nos), then highest numeric, then lexical.
+	const scored = [...plains].map((p, index) => {
+		const no = String(p.employeeNo || "").trim();
+		const numeric = /^\d+$/.test(no) ? Number(no.replace(/^0+/, "") || "0") : -1;
+		return { p, index, numeric, isNumeric: numeric >= 0, fp: Number(p.numOfFP || 0) || 0 };
+	});
+	scored.sort((a, b) => {
+		if (a.isNumeric !== b.isNumeric) return a.isNumeric ? -1 : 1;
+		if (a.numeric !== b.numeric) return b.numeric - a.numeric;
+		if (a.fp !== b.fp) return b.fp - a.fp;
+		return b.index - a.index;
+	});
+	return scored[0]?.p || plains[0];
+};
+
+/**
  * Panel enroll correlation (no write-time map):
  * - knownPlains = DeviceUser / DevicePersonToken plain ids already in HRIS
  * - devicePlains = plain ids currently on device (UserInfo/Search)
  * - unmappedOpaques = opaque tokens from recent lifecycle logs without a map
  * If exactly one new plain and one unmapped opaque in the same resolve window → map them.
- * Reference case: plain "14" + opaque "EmfPTja5gq/kmy/CI1wDHA==".
+ * If one opaque and multiple new plains → pick the newest/highest pure-numeric plain (panel create).
+ * Reference case: plain "14" + opaque "EmfPTja5gq/kmy/CI1wDHA=="; user "15" + opaque QVEwgvx/...
  */
 export const correlateOpaqueToPlainByInventoryDelta = (input: {
-	devicePlains: Array<{ employeeNo: string; displayName: string | null }>;
+	devicePlains: Array<{ employeeNo: string; displayName: string | null; numOfFP?: number }>;
 	knownPlains: string[];
 	unmappedOpaques: string[];
 }): { opaqueToken: string; employeeNo: string; displayName: string | null } | null => {
-	const known = new Set(
-		(input.knownPlains || []).map((v) => String(v || "").trim()).filter(Boolean),
-	);
-	const newPlains = (input.devicePlains || []).filter(
-		(p) => p.employeeNo && !known.has(p.employeeNo),
-	);
+	const known = expandKnownDevicePersonPlains(input.knownPlains || []);
+	const newPlains = (input.devicePlains || []).filter((p) => {
+		const no = String(p.employeeNo || "").trim();
+		if (!no) return false;
+		const variants = buildDeviceUserEmployeeNoCandidates(no);
+		return !variants.some((v) => known.has(v)) && !known.has(no);
+	});
 	const opaques = Array.from(
 		new Set((input.unmappedOpaques || []).map((v) => String(v || "").trim()).filter(Boolean)),
 	);
-	if (newPlains.length === 1 && opaques.length === 1) {
+	if (!opaques.length || !newPlains.length) {
+		// FP-only on existing plain: no new plain, but exactly one opaque and we cannot invent id.
+		return null;
+	}
+	// One opaque + one or more new plains: map the best new plain (single-create panel path).
+	if (opaques.length === 1) {
+		const picked = pickNewestPlainCandidate(newPlains);
+		if (!picked) return null;
 		return {
 			opaqueToken: opaques[0],
+			employeeNo: picked.employeeNo,
+			displayName: picked.displayName,
+		};
+	}
+	// Multiple opaques + exactly one new plain: safe map.
+	if (newPlains.length === 1 && opaques.length > 1) {
+		return {
+			opaqueToken: opaques[opaques.length - 1],
 			employeeNo: newPlains[0].employeeNo,
 			displayName: newPlains[0].displayName,
 		};
 	}
-	// FP-only on existing plain: no new plain, but exactly one opaque and we cannot invent id.
 	return null;
 };
 
@@ -588,6 +641,7 @@ export const buildEmployeeDisplayName = (employee: any): string | null => {
 
 /**
  * Link plain device person id → HRIS Employee when deviceEmpId or employeeId matches.
+ * Device panel "15" must match Employee.deviceEmpId "00015" (leading zeros to 5 digits).
  * This is the Sync Center / Device Events name source for enroll/create rows.
  */
 export const resolveLinkedEmployeeForDevicePerson = async (
@@ -599,11 +653,16 @@ export const resolveLinkedEmployeeForDevicePerson = async (
 	if (!organizationId || !employeeNo || isOpaqueHikvisionPersonToken(employeeNo)) {
 		return null;
 	}
+	const variants = buildDeviceUserEmployeeNoCandidates(employeeNo);
+	if (!variants.length) return null;
 	const employee = await prisma.employee.findFirst({
 		where: {
 			organizationId,
 			isDeleted: false,
-			OR: [{ deviceEmpId: employeeNo }, { employeeId: employeeNo }],
+			OR: [
+				{ deviceEmpId: { in: variants } },
+				{ employeeId: { in: variants } },
+			],
 		},
 		select: {
 			id: true,
@@ -726,7 +785,8 @@ export const fetchDeviceUserInfoCandidates = async (params: {
 	pageSize?: number;
 }): Promise<Array<{ employeeNo: string; displayName: string | null; numOfFP: number }>> => {
 	const pageSize = Math.min(Math.max(Number(params.pageSize) || 50, 1), 100);
-	const maxPages = Math.min(Math.max(Number(params.maxPages) || 4, 1), 10);
+	// Panel enrolls can land past page 6 on large terminals (300+ users). Scan enough pages.
+	const maxPages = Math.min(Math.max(Number(params.maxPages) || 12, 1), 20);
 	const out: Array<{ employeeNo: string; displayName: string | null; numOfFP: number }> = [];
 	let position = 0;
 	for (let page = 0; page < maxPages; page += 1) {
@@ -803,18 +863,23 @@ export const resolveOpaqueViaDeviceUserInventoryDelta = async (params: {
 	}
 	if (stillUnmapped.length === 0) return { mapped: [], backfilledEvents: 0 };
 
-	let devicePlains: Array<{ employeeNo: string; displayName: string | null }> = [];
+	let devicePlains: Array<{
+		employeeNo: string;
+		displayName: string | null;
+		numOfFP?: number;
+	}> = [];
 	try {
 		const candidates = await fetchDeviceUserInfoCandidates({
 			prisma: params.prisma,
 			req: params.req,
 			deviceId,
-			maxPages: 6,
+			maxPages: 12,
 			pageSize: 50,
 		});
 		devicePlains = candidates.map((c) => ({
 			employeeNo: c.employeeNo,
 			displayName: c.displayName,
+			numOfFP: c.numOfFP,
 		}));
 	} catch (error: any) {
 		console.warn(
@@ -837,6 +902,112 @@ export const resolveOpaqueViaDeviceUserInventoryDelta = async (params: {
 		...knownTokenPlains.map((r: any) => String(r.employeeNo || "").trim()),
 		...knownUsers.map((r: any) => String(r.vendorUserId || r.employeeNo || "").trim()),
 	].filter(Boolean);
+	const knownSet = expandKnownDevicePersonPlains(knownPlains);
+
+	// Always land NEW device plains into DeviceUser inventory immediately so Sync Center
+	// shows panel create (e.g. "15") without waiting for opaque map success.
+	const newPlains = devicePlains.filter((p) => {
+		const no = String(p.employeeNo || "").trim();
+		if (!no) return false;
+		const variants = buildDeviceUserEmployeeNoCandidates(no);
+		return !variants.some((v) => knownSet.has(v)) && !knownSet.has(no);
+	});
+	for (const plain of newPlains) {
+		const opaqueHint = stillUnmapped.length === 1 ? stillUnmapped[0] : null;
+		// Prefer full UserInfo raw metadata; fall back to inventory stub only.
+		let savedUser = false;
+		try {
+			const userInfo = await fetchUserInfoRecordByEmployeeNo({
+				prisma: params.prisma,
+				req: params.req,
+				deviceId,
+				employeeNo: plain.employeeNo,
+			});
+			const candidate = userInfo ? normalizeHikvisionDeviceUser(userInfo) : null;
+			if (candidate) {
+				const existing = await params.prisma.deviceUser.findFirst({
+					where: {
+						organizationId,
+						deviceId,
+						vendorUserId: candidate.vendorUserId,
+					},
+				});
+				const linked = await resolveLinkedEmployeeForDevicePerson(params.prisma, {
+					organizationId,
+					employeeNo: candidate.employeeNo,
+				}).catch(() => null);
+				const priorMeta = (existing?.vendorMetadata as any) || {};
+				const vendorMetadata = {
+					...priorMeta,
+					...(candidate.vendorMetadata as any),
+					opaquePersonToken: opaqueHint || priorMeta.opaquePersonToken || null,
+					panelInventoryNewPlainAt: new Date().toISOString(),
+					plane: "DEVICE_USER_INVENTORY",
+				};
+				const status = linked?.id
+					? "ACTIVE"
+					: existing?.status === "DISABLED"
+						? "DISABLED"
+						: "UNMATCHED";
+				if (existing) {
+					await params.prisma.deviceUser.update({
+						where: { id: existing.id },
+						data: {
+							employeeNo: candidate.employeeNo,
+							displayName:
+								plain.displayName || candidate.displayName || existing.displayName,
+							userType: candidate.userType,
+							status,
+							validFrom: candidate.validFrom,
+							validTo: candidate.validTo,
+							doorRight: candidate.doorRight,
+							accessPlan: candidate.accessPlan as any,
+							rawPayload: candidate.rawPayload as any,
+							employeeId: linked?.id || existing.employeeId || null,
+							lastSyncedAt: new Date(),
+							vendorMetadata,
+						},
+					});
+				} else {
+					await params.prisma.deviceUser.create({
+						data: {
+							organizationId,
+							deviceId,
+							vendorUserId: candidate.vendorUserId,
+							employeeNo: candidate.employeeNo,
+							displayName: plain.displayName || candidate.displayName,
+							userType: candidate.userType,
+							status,
+							validFrom: candidate.validFrom,
+							validTo: candidate.validTo,
+							doorRight: candidate.doorRight,
+							accessPlan: candidate.accessPlan as any,
+							rawPayload: candidate.rawPayload as any,
+							employeeId: linked?.id || null,
+							lastSyncedAt: new Date(),
+							vendorMetadata,
+						},
+					});
+				}
+				savedUser = true;
+			}
+		} catch (error: any) {
+			console.warn(
+				"[device-person-token] new-plain UserInfo upsert failed",
+				plain.employeeNo,
+				error?.message || error,
+			);
+		}
+		if (!savedUser) {
+			await upsertDeviceUserInventoryStub(params.prisma, {
+				organizationId,
+				deviceId,
+				employeeNo: plain.employeeNo,
+				displayName: plain.displayName,
+				opaqueToken: opaqueHint,
+			}).catch(() => null);
+		}
+	}
 
 	const correlated = correlateOpaqueToPlainByInventoryDelta({
 		devicePlains,
@@ -844,6 +1015,11 @@ export const resolveOpaqueViaDeviceUserInventoryDelta = async (params: {
 		unmappedOpaques: stillUnmapped,
 	});
 	if (!correlated) {
+		if (newPlains.length) {
+			console.log(
+				`[device-person-token] panel inventory added ${newPlains.length} new DeviceUser(s) but opaque map still pending device=${deviceId}`,
+			);
+		}
 		return { mapped: [], backfilledEvents: 0 };
 	}
 

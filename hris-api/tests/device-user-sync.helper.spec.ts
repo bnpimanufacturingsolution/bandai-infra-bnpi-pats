@@ -77,6 +77,19 @@ describe("DeviceUser sync helper", () => {
 		});
 	});
 
+	it("auto-links device person 15 to Employee.deviceEmpId 00015 (5-digit pad)", () => {
+		const decision = resolveDeviceUserLinkDecision(candidate("15"), [
+			{ id: "emp-15", employeeId: "00015", deviceEmpId: "00015" },
+		]);
+		expect(decision).to.deep.equal({
+			status: "ACTIVE",
+			employeeId: "emp-15",
+			matchCount: 1,
+			matchReason: "deviceEmpId",
+		});
+		expect(buildDeviceUserEmployeeNoCandidates("15")).to.include.members(["15", "00015"]);
+	});
+
 	it("uses employeeId candidates when a direct deviceEmpId match is absent", () => {
 		expect(buildDeviceUserEmployeeNoCandidates("1360")).to.include("01360");
 		const decision = resolveDeviceUserLinkDecision(candidate("1360"), [

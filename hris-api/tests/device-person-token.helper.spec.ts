@@ -104,14 +104,27 @@ describe("device-person-token helper", () => {
 			employeeNo: "14",
 			displayName: "Panel User",
 		});
+		// One opaque + multiple new plains (panel create race): pick highest pure-numeric id.
 		expect(
 			correlateOpaqueToPlainByInventoryDelta({
 				devicePlains: [
 					{ employeeNo: "14", displayName: "A" },
-					{ employeeNo: "15", displayName: "B" },
+					{ employeeNo: "15", displayName: "B", numOfFP: 1 },
 				],
 				knownPlains: [],
-				unmappedOpaques: ["EmfPTja5gq/kmy/CI1wDHA=="],
+				unmappedOpaques: ["QVEwgvx/WIX5uNj9psBnjw=="],
+			}),
+		).to.deep.equal({
+			opaqueToken: "QVEwgvx/WIX5uNj9psBnjw==",
+			employeeNo: "15",
+			displayName: "B",
+		});
+		// Known "00015" must suppress plain "15" as already-known (5-digit pad rule).
+		expect(
+			correlateOpaqueToPlainByInventoryDelta({
+				devicePlains: [{ employeeNo: "15", displayName: "B" }],
+				knownPlains: ["00015"],
+				unmappedOpaques: ["QVEwgvx/WIX5uNj9psBnjw=="],
 			}),
 		).to.equal(null);
 	});
@@ -228,10 +241,21 @@ describe("device-person-token helper", () => {
 			employee: {
 				findFirst: async (input: any) => {
 					const or = input?.where?.OR || [];
-					const hit = or.some(
-						(clause: any) =>
-							clause.deviceEmpId === "14" || clause.employeeId === "14",
-					);
+					const hit = or.some((clause: any) => {
+						const deviceEmp =
+							clause.deviceEmpId?.in ||
+							(clause.deviceEmpId ? [clause.deviceEmpId] : []);
+						const empId =
+							clause.employeeId?.in ||
+							(clause.employeeId ? [clause.employeeId] : []);
+						return (
+							deviceEmp.includes("14") ||
+							deviceEmp.includes("00014") ||
+							empId.includes("14") ||
+							empId.includes("00014") ||
+							empId.includes("BNPI-014")
+						);
+					});
 					if (!hit) return null;
 					return {
 						id: "emp-hris-14",

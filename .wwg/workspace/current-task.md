@@ -1,5 +1,23 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 Device Events plain DeviceUser navigation
+
+- Task mode: Bug fix + focused admin UX regression proof.
+- Goal: In Device Events, keep the physical device user ID (`DeviceUser.vendorUserId` / `employeeNo`, e.g. `15`) separate from the HRIS employee code display/link (`Employee.employeeId`, e.g. `00015`) so admins can open the Device user details quickly from rows and the details modal.
+- Implemented:
+  - Saved Device Events API now falls back from `device_events.deviceUserId` to `organizationId + deviceId + employeeNo = device_users.vendorUserId`, so older/healed rows can still return the matching `deviceUser` object when the event has a plain person ID.
+  - Device Events UI now carries `deviceUserVendorUserId` separately and uses it for Sync Center deep links (`deviceUserSearch=15&deviceUserDetails=15`) while preserving the Employee record link for matched employees.
+  - Device Users panel row type now declares `employeeNo` for the existing deep-link lookup path.
+- Proof:
+  - Direct local API: `GET /api/device/events?...&query=15` returned rows where `deviceUserId` was `null` but `deviceUser.vendorUserId` was recovered from the plain saved `employeeNo`.
+  - Direct local API: `GET /api/device/<TEST A id>/users?vendorUserId=15` returned one TEST A DeviceUser with `vendorUserId=15` and `employeeNo=15`.
+  - Focused Playwright: `admin device events keeps plain device user id separate from padded employee code` passed 1/1.
+  - Focused backend Mocha: `tests/device-person-token.helper.spec.ts` + `tests/hikvision-callback.controller.spec.ts` passed 17/17.
+- Existing unrelated validation drift:
+  - Full `hris-app` typecheck remains red on many historical errors outside this Device Events fix; one local Device Users type hole surfaced by the run was fixed.
+  - Full `admin-device-events-sync-modal.spec.ts` still has an older Sync logs assertion expecting a `Category` column while the current UI renders `Business area`; the new `15`/`00015` regression passes by name.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-19 Restart-safe Hikvision reverse tunnel + in-app repair
 
 - Task mode: Regression repair + focused admin UX.
