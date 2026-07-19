@@ -15,6 +15,13 @@ describe("Device events API contract", () => {
 		expect(controllerSource).to.contain('de."eventAction" = ${eventAction}::"DeviceEventAction"');
 		});
 
+	it("supports summaryScope=facets so dropdown counts ignore taxonomy leaf filters", () => {
+		expect(controllerSource).to.contain('req.query.summaryScope');
+		expect(controllerSource).to.contain('summaryScope === "facets"');
+		expect(controllerSource).to.contain("facetWhereConditions");
+		expect(controllerSource).to.contain("facetWhereSql");
+	});
+
 		it("filters saved rows by evidence, confidence, and HRIS match result", () => {
 			expect(controllerSource).to.contain("req.query.evidenceSource");
 			expect(controllerSource).to.contain("req.query.eventConfidence");

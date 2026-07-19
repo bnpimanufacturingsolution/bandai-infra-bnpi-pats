@@ -541,10 +541,31 @@ void queue_reconcile(const ReconcileJob &job) {
     });
 }
 
+// Attendance / known-person callbacks must not sit behind empty-ACS multipass
+// inventory (userinfo_touch on 300+ users can take tens of seconds per job).
+bool is_hris_priority_job(const ReconcileJob &job) {
+    if (!job.employee_no.empty()) {
+        return true;
+    }
+    if (job.event_kind.find("attendance_") == 0) {
+        return true;
+    }
+    // Major 5 = access-control auth event family (fingerprint/face/card pass/fail).
+    if (job.major == 5) {
+        return true;
+    }
+    return false;
+}
+
 void queue_hris_device_event(const ReconcileJob &job) {
     {
         std::lock_guard<std::mutex> lock(queue_mutex);
-        hris_event_queue.push_back(job);
+        // Push priority jobs to the front so Ernest taps land before op-sync enrich.
+        if (is_hris_priority_job(job)) {
+            hris_event_queue.push_front(job);
+        } else {
+            hris_event_queue.push_back(job);
+        }
     }
     queue_cv.notify_one();
     emit_json({
@@ -554,6 +575,7 @@ void queue_hris_device_event(const ReconcileJob &job) {
         {"employeeNo", job.employee_no},
         {"minor", std::to_string(job.minor)},
         {"minorName", minor_name(job.minor)},
+        {"priority", is_hris_priority_job(job) ? "true" : "false"},
         {"mode", execute_mode ? "execute" : "dry-run"}
     });
 }
@@ -3393,6 +3415,10 @@ bool needs_callback_template_enrich(const ReconcileJob &job) {
     if (job.employee_no.empty()) {
         return false;
     }
+    // Pure attendance punches must post immediately — never wait on FP/face template reads.
+    if (job.event_kind.find("attendance_") == 0 || job.major == 5) {
+        return false;
+    }
     if (is_fingerprint_management_minor(job.minor) || job.include_fingerprints) {
         return true;
     }
@@ -4406,6 +4432,7 @@ void process_reconcile_job(const ReconcileJob &job) {
 
 // Realtime path only: never share a worker with reconcile (inventory can take seconds).
 // Enrich runs outside the queue lock so inventory/FP reads do not block ACS enqueue.
+// Prefer attendance / known-person jobs over empty-ACS multipass so taps are not starved.
 void hris_post_loop() {
     while (keep_running) {
         ReconcileJob hris_job;
@@ -4417,11 +4444,20 @@ void hris_post_loop() {
             });
             // Drain the entire HRIS queue so multi-event taps post immediately.
             while (!hris_event_queue.empty() && keep_running) {
-                hris_job = hris_event_queue.front();
-                hris_event_queue.pop_front();
+                // Prefer first priority job in queue (attendance / plain employeeNo).
+                auto it = hris_event_queue.begin();
+                for (auto cand = hris_event_queue.begin(); cand != hris_event_queue.end(); ++cand) {
+                    if (is_hris_priority_job(*cand)) {
+                        it = cand;
+                        break;
+                    }
+                }
+                hris_job = *it;
+                hris_event_queue.erase(it);
                 has_hris_job = true;
                 lock.unlock();
                 // Fill plain person id + raw templates BEFORE POST so socket/HRIS see truth.
+                // Attendance with ACS person id skips template multipass (see needs_callback_template_enrich).
                 enrich_hris_job_before_post(hris_job);
                 post_hikvision_callback(hris_job);
                 lock.lock();

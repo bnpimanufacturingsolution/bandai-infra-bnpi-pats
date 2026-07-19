@@ -229,6 +229,7 @@ export const controller = (prisma: PrismaClient) => {
 		employeeNo: string;
 		source: string;
 		dedupeKey: string;
+		req?: Request;
 	}) => {
 		const eventClient = (prisma as any).deviceEvent;
 		const existing = await eventClient.findFirst({
@@ -318,6 +319,16 @@ export const controller = (prisma: PrismaClient) => {
 				payload: data.payload,
 			},
 		});
+		// Socket immediately on create so Device Events live row lands before status/identity
+		// finish. Follow-up updateDeviceEventStatus / applyFastEnrollment re-emits the healed row.
+		try {
+			await invalidateCache.byPattern("cache:device:events:*");
+		} catch {
+			// ignore
+		}
+		if (data.req) {
+			await publishDeviceEventSaved(data.req, eventRecord);
+		}
 
 		return { eventRecord, isDuplicate: false };
 	};
@@ -538,6 +549,7 @@ export const controller = (prisma: PrismaClient) => {
 					employeeNo,
 					source,
 					dedupeKey,
+					req,
 				});
 				savedEventId = eventRecord.id;
 

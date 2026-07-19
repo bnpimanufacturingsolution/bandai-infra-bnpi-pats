@@ -223,6 +223,60 @@ export const classifyDeviceEvent = (event: {
 		});
 	}
 
+	// C++ SDK callback may set eventKind without vendor actionCode yet (UNKNOWN_MINOR).
+	// Still type the ledger row so EN_HCNETSDK_ALARM filter shows User management / Enrollment,
+	// not only Runtime SYNC_SIGNAL.
+	if (
+		eventKind === "biometric_user_management" ||
+		eventKind === "poll_inventory_user_created"
+	) {
+		return withCompatibilityConfidence({
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_CREATED",
+			eventLabel: "Device user created",
+			eventConfidence:
+				eventKind === "poll_inventory_user_created" ? "INFERRED" : "SUPPORTED",
+			processingLabel,
+			transportLabel,
+		});
+	}
+
+	if (eventKind === "biometric_fingerprint_management") {
+		return withCompatibilityConfidence({
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventLabel: "Fingerprint enrolled",
+			eventConfidence: "SUPPORTED",
+			processingLabel,
+			transportLabel,
+		});
+	}
+
+	// C++ attach raw FP templates on callback → enrollment ledger on the same SDK source.
+	const fingerprints = (event.payload as any)?.fingerprints;
+	const fingerprintCount = Number(
+		(event.payload as any)?.fingerprintCount ??
+			(Array.isArray(fingerprints) ? fingerprints.length : 0),
+	);
+	const hasRawFpBlob =
+		Array.isArray(fingerprints) &&
+		fingerprints.some((fp: any) => String(fp?.data || "").trim().length >= 8);
+	if (
+		(fingerprintCount > 0 || hasRawFpBlob) &&
+		(eventKind === "biometric_operation_sync" ||
+			eventKind === "biometric_fingerprint_management" ||
+			source === "EN_HCNETSDK_ALARM")
+	) {
+		return withCompatibilityConfidence({
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventLabel: "Fingerprint enrolled",
+			eventConfidence: "PROVEN",
+			processingLabel,
+			transportLabel,
+		});
+	}
+
 	if (actionCode === "MINOR_MODIFY_USER_INFO") {
 		return withCompatibilityConfidence({
 			eventCategory: "USER_MANAGEMENT",

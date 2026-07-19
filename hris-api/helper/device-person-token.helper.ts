@@ -2513,7 +2513,16 @@ export const applyFastEnrollmentIdentityOnSdkCallback = async (params: {
 
 	const existingEvent = await params.prisma.deviceEvent.findUnique({
 		where: { id: eventId },
-		select: { id: true, payload: true, status: true, employeeNo: true },
+		select: {
+			id: true,
+			payload: true,
+			status: true,
+			employeeNo: true,
+			source: true,
+			eventType: true,
+			major: true,
+			minor: true,
+		},
 	});
 	if (!existingEvent) {
 		return {
@@ -2543,6 +2552,39 @@ export const applyFastEnrollmentIdentityOnSdkCallback = async (params: {
 		status: "userinfo_enrich_pending",
 	};
 
+	const nextPayload = {
+		...priorPayload,
+		personTokenResolved: Boolean(opaque),
+		opaquePersonToken: opaque || priorPayload.opaquePersonToken || null,
+		resolvedEmployeeNo: plain,
+		resolvedDisplayName: displayName || priorPayload.resolvedDisplayName || null,
+		fastEnrollmentIdentityPath: path,
+		enrollmentSnapshot: initialSnapshot,
+		enrollmentGoal: {
+			employeeNo: plain,
+			displayName,
+			opaquePersonToken: opaque,
+			deviceUserId: deviceUser?.id || null,
+			rawTemplateOnDeviceEvent: false,
+			fingerprintTemplateLocation: deviceUser?.id
+				? `DeviceUser(${deviceUser.id}).vendorMetadata.biometricBundle`
+				: "DeviceUser.vendorMetadata.biometricBundle (encrypted)",
+		},
+	};
+	// Re-type ledger row from C++ eventKind / fingerprints so SYNC_SIGNAL does not stick
+	// after plain id lands (User created / Fingerprint enrolled must appear under SDK source).
+	const { buildPersistedDeviceEventTaxonomy } = await import(
+		"./device-event-taxonomy.helper.js"
+	);
+	const taxonomy = buildPersistedDeviceEventTaxonomy({
+		source: (existingEvent as any).source || "EN_HCNETSDK_ALARM",
+		status: linkedEmployeeId ? "MATCHED" : "UNMATCHED",
+		eventType: (existingEvent as any).eventType || null,
+		major: (existingEvent as any).major || null,
+		minor: (existingEvent as any).minor || null,
+		payload: nextPayload,
+	});
+
 	const updated = await params.prisma.deviceEvent.update({
 		where: { id: eventId },
 		data: {
@@ -2552,25 +2594,8 @@ export const applyFastEnrollmentIdentityOnSdkCallback = async (params: {
 			// Enrollment lifecycle is not attendance; still MATCHED/UNMATCHED for person truth.
 			status: linkedEmployeeId ? "MATCHED" : "UNMATCHED",
 			errorMessage: null,
-			payload: {
-				...priorPayload,
-				personTokenResolved: Boolean(opaque),
-				opaquePersonToken: opaque || priorPayload.opaquePersonToken || null,
-				resolvedEmployeeNo: plain,
-				resolvedDisplayName: displayName || priorPayload.resolvedDisplayName || null,
-				fastEnrollmentIdentityPath: path,
-				enrollmentSnapshot: initialSnapshot,
-				enrollmentGoal: {
-					employeeNo: plain,
-					displayName,
-					opaquePersonToken: opaque,
-					deviceUserId: deviceUser?.id || null,
-					rawTemplateOnDeviceEvent: false,
-					fingerprintTemplateLocation: deviceUser?.id
-						? `DeviceUser(${deviceUser.id}).vendorMetadata.biometricBundle`
-						: "DeviceUser.vendorMetadata.biometricBundle (encrypted)",
-				},
-			},
+			...taxonomy,
+			payload: nextPayload,
 		},
 		include: {
 			device: {

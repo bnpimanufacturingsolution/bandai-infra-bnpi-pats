@@ -14423,6 +14423,13 @@ export const controller = (prisma: PrismaClient) => {
 			const evidenceSource = String(req.query.evidenceSource || "")
 				.trim()
 				.toUpperCase();
+			// summaryScope=list (default): summary aggregates use the same filters as the page.
+			// summaryScope=facets: omit eventCategory/eventAction from summary only so Action/
+			// Category dropdowns stay ledger-truthful while the table can be leaf-filtered.
+			const summaryScope = String(req.query.summaryScope || "list")
+				.trim()
+				.toLowerCase();
+			const useFacetSummaryScope = summaryScope === "facets";
 			const query = String(req.query.query || req.query.search || "").trim();
 			const from = String(req.query.from || "").trim();
 			const to = String(req.query.to || "").trim();
@@ -14438,13 +14445,22 @@ export const controller = (prisma: PrismaClient) => {
 			const whereConditions: Prisma.Sql[] = [
 				Prisma.sql`de."organizationId" = ${String(organizationId)}`,
 			];
+			// Facet aggregates share device/time/status/source/query but never taxonomy leaf.
+			const facetWhereConditions: Prisma.Sql[] = [
+				Prisma.sql`de."organizationId" = ${String(organizationId)}`,
+			];
 
-			if (deviceId) whereConditions.push(Prisma.sql`de."deviceId" = ${deviceId}`);
+			if (deviceId) {
+				whereConditions.push(Prisma.sql`de."deviceId" = ${deviceId}`);
+				facetWhereConditions.push(Prisma.sql`de."deviceId" = ${deviceId}`);
+			}
 			if (status && status !== "all" && DEVICE_EVENT_STATUSES.has(status)) {
 				whereConditions.push(Prisma.sql`de."status" = ${status}::"DeviceEventStatus"`);
+				facetWhereConditions.push(Prisma.sql`de."status" = ${status}::"DeviceEventStatus"`);
 			}
 			if (source && source !== "all" && DEVICE_EVENT_SOURCES.has(source)) {
 				whereConditions.push(Prisma.sql`de."source" = ${source}::"DeviceEventSource"`);
+				facetWhereConditions.push(Prisma.sql`de."source" = ${source}::"DeviceEventSource"`);
 			}
 			const hasDeviceEventColumns = await getDeviceEventColumnPresence();
 			const hasDeviceUsersTable = await hasDeviceUserTable();
@@ -14478,9 +14494,15 @@ export const controller = (prisma: PrismaClient) => {
 				whereConditions.push(
 					Prisma.sql`de."eventConfidence" = ${eventConfidence}::"DeviceEventConfidence"`,
 				);
+				facetWhereConditions.push(
+					Prisma.sql`de."eventConfidence" = ${eventConfidence}::"DeviceEventConfidence"`,
+				);
 			}
 			if (evidenceSource && evidenceSource !== "ALL") {
 				whereConditions.push(
+					Prisma.sql`UPPER(COALESCE(de.payload->>'evidenceSource', '')) = ${evidenceSource}`,
+				);
+				facetWhereConditions.push(
 					Prisma.sql`UPPER(COALESCE(de.payload->>'evidenceSource', '')) = ${evidenceSource}`,
 				);
 			}
@@ -14488,11 +14510,17 @@ export const controller = (prisma: PrismaClient) => {
 			if (from || to) {
 				if (from) {
 					const fromDate = parseHikvisionBusinessDateBound(from);
-					if (fromDate) whereConditions.push(Prisma.sql`${dateColumnSql} >= ${fromDate}`);
+					if (fromDate) {
+						whereConditions.push(Prisma.sql`${dateColumnSql} >= ${fromDate}`);
+						facetWhereConditions.push(Prisma.sql`${dateColumnSql} >= ${fromDate}`);
+					}
 				}
 				if (to) {
 					const toDate = parseHikvisionBusinessDateBound(to, true);
-					if (toDate) whereConditions.push(Prisma.sql`${dateColumnSql} <= ${toDate}`);
+					if (toDate) {
+						whereConditions.push(Prisma.sql`${dateColumnSql} <= ${toDate}`);
+						facetWhereConditions.push(Prisma.sql`${dateColumnSql} <= ${toDate}`);
+					}
 				}
 			}
 
@@ -14505,7 +14533,7 @@ export const controller = (prisma: PrismaClient) => {
 				const paddedEmployeeCode = strippedNumericQuery
 					? strippedNumericQuery.padStart(5, "0")
 					: "";
-				whereConditions.push(Prisma.sql`(
+				const querySql = Prisma.sql`(
 					de."employeeNo" ILIKE ${queryLike}
 					OR de."eventType" ILIKE ${queryLike}
 					${
@@ -14539,10 +14567,16 @@ export const controller = (prisma: PrismaClient) => {
 							${paddedEmployeeCode}
 						)
 					)
-				)`);
+				)`;
+				whereConditions.push(querySql);
+				facetWhereConditions.push(querySql);
 			}
 
 			const whereSql = Prisma.sql`WHERE ${Prisma.join(whereConditions, " AND ")}`;
+			const facetWhereSql = Prisma.sql`WHERE ${Prisma.join(
+				useFacetSummaryScope ? facetWhereConditions : whereConditions,
+				" AND ",
+			)}`;
 			const deviceUserIdSql = hasDeviceEventColumns.deviceUserId
 				? Prisma.sql`de."deviceUserId"`
 				: Prisma.sql`NULL::text`;
@@ -14774,28 +14808,32 @@ export const controller = (prisma: PrismaClient) => {
 				${aggregateFromSql}
 				${whereSql}
 			`;
+			// Facet/list summary aggregates: when summaryScope=facets, taxonomy leaf
+			// filters are omitted so byAction still includes USER_CREATED while the
+			// page can be filtered to ENROLLMENT (backend contract, not client invent).
+			const summaryWhereSql = facetWhereSql;
 			const statusGroupsSql = Prisma.sql`
 				SELECT de.status::text AS status, COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${whereSql}
+				${summaryWhereSql}
 				GROUP BY de.status
 			`;
 			const sourceGroupsSql = Prisma.sql`
 				SELECT de.source::text AS source, COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${whereSql}
+				${summaryWhereSql}
 				GROUP BY de.source
 			`;
 			const categoryGroupsSql = Prisma.sql`
 				SELECT ${eventCategorySql} AS "eventCategory", COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${whereSql}
+				${summaryWhereSql}
 				GROUP BY 1
 			`;
 			const actionGroupsSql = Prisma.sql`
 				SELECT ${eventActionSql} AS "eventAction", COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${whereSql}
+				${summaryWhereSql}
 				GROUP BY 1
 			`;
 			const actionCategoryGroupsSql = Prisma.sql`
@@ -14804,20 +14842,20 @@ export const controller = (prisma: PrismaClient) => {
 					${eventCategorySql} AS "eventCategory",
 					COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${whereSql}
+				${summaryWhereSql}
 				GROUP BY 1, 2
 			`;
 			const confidenceGroupsSql = Prisma.sql`
 				SELECT ${eventConfidenceSql} AS "eventConfidence", COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${whereSql}
+				${summaryWhereSql}
 				GROUP BY 1
 			`;
 			const evidenceGroupsSql = Prisma.sql`
 				SELECT COALESCE(NULLIF(UPPER(de.payload->>'evidenceSource'), ''), 'UNKNOWN') AS "evidenceSource",
 					COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${whereSql}
+				${summaryWhereSql}
 				GROUP BY 1
 			`;
 			const evidenceTotalsSql = Prisma.sql`
@@ -14826,7 +14864,7 @@ export const controller = (prisma: PrismaClient) => {
 					COUNT(*) FILTER (WHERE ${eventConfidenceSql} = 'INFERRED')::bigint AS inferred,
 					COUNT(*) FILTER (WHERE ${eventConfidenceSql} = 'UNKNOWN')::bigint AS unknown
 				${aggregateFromSql}
-				${whereSql}
+				${summaryWhereSql}
 			`;
 
 			const [
@@ -14989,6 +15027,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			const summary = {
 				total,
+				summaryScope: useFacetSummaryScope ? "facets" : "list",
 				byCategory,
 				byAction,
 				byActionCategory,

@@ -335,6 +335,7 @@ const EVENT_CATEGORY_BY_ACTION: Record<string, string> = {
 	UNKNOWN: "UNKNOWN_VENDOR",
 };
 
+/** Options from backend summary counts only (no client-side invent / sort of catalog). */
 const getCountedSelectOptions = (
 	baseOptions: SelectOption[],
 	counts?: Record<string, number> | null,
@@ -1634,17 +1635,21 @@ export default function DeviceEventsPage() {
 		from,
 		to,
 	};
+	// Facet dropdowns: backend summaryScope=facets omits eventCategory/eventAction from
+	// groupBy so byAction still has USER_CREATED while the table is leaf-filtered.
 	const savedFacetQueryParams: ApiQueryParams = {
 		page: 1,
 		limit: 1,
 		query: viewMode === "saved" ? query : undefined,
 		deviceId: deviceId === "all" ? undefined : deviceId,
+		// Explicit: never pass taxonomy leaf filters on the facet request.
+		eventCategory: undefined,
+		eventAction: undefined,
+		summaryScope: "facets",
 		evidenceSource: evidenceSource !== "all" ? evidenceSource : undefined,
 		eventConfidence: eventConfidence !== "all" ? eventConfidence : undefined,
 		status: viewMode === "saved" && status !== "all" ? status : undefined,
 		source: viewMode === "saved" && source !== "all" ? source : undefined,
-		sort: viewMode === "saved" ? sort : undefined,
-		order: viewMode === "saved" ? order : undefined,
 		dateField: viewMode === "saved" ? "eventTime" : undefined,
 		from,
 		to,
@@ -1665,7 +1670,9 @@ export default function DeviceEventsPage() {
 		// Live ledger without hammering: only "live" when we are not socket-backed.
 		liveLedger: viewMode === "saved" && shouldPollSavedEvents,
 	});
-	const savedFacetSummary = savedFacetData?.summary || data?.summary || null;
+	// Prefer dedicated facet summary (summaryScope=facets). Never use leaf-filtered
+	// list summary for dropdowns.
+	const savedFacetSummary = savedFacetData?.summary || null;
 	const eventCategoryOptions = useMemo(
 		() =>
 			getCountedSelectOptions(
@@ -1706,6 +1713,7 @@ export default function DeviceEventsPage() {
 			string,
 			Record<string, number>
 		>;
+		// Backend byActionCategory only — empty category falls back to known map.
 		const actionValues = Object.entries(countsByActionCategory)
 			.filter(([, categoryCounts]) => Number(categoryCounts?.[categoryValue] || 0) > 0)
 			.map(([actionValue]) => actionValue);

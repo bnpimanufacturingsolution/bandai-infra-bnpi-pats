@@ -181,6 +181,22 @@ describe("Device event taxonomy helper", () => {
 			capabilityConfidence: "supported",
 		});
 
+		// C++ often posts eventKind without vendor actionCode (UNKNOWN_MINOR).
+		expect(
+			classifyDeviceEvent({
+				source: "EN_HCNETSDK_ALARM",
+				status: "MATCHED",
+				major: "3",
+				payload: {
+					eventKind: "biometric_user_management",
+					actionCode: "UNKNOWN_MINOR",
+				},
+			}),
+		).to.deep.include({
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_CREATED",
+		});
+
 		expect(
 			classifyDeviceEvent({
 				source: "EN_HCNETSDK_ALARM",
@@ -197,6 +213,26 @@ describe("Device event taxonomy helper", () => {
 			eventLabel: "Device user created",
 			eventConfidence: "INFERRED",
 			capabilityConfidence: "inferred",
+		});
+	});
+
+	it("classifies C++ raw fingerprint callback as enrollment before major=3 SYNC_SIGNAL", () => {
+		expect(
+			classifyDeviceEvent({
+				source: "EN_HCNETSDK_ALARM",
+				status: "MATCHED",
+				major: "3",
+				payload: {
+					eventKind: "biometric_operation_sync",
+					actionCode: "UNKNOWN_MINOR",
+					fingerprintCount: 1,
+					fingerprints: [{ fingerPrintId: 1, data: "MzAxHxodJvh8gh9x" }],
+				},
+			}),
+		).to.deep.include({
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventConfidence: "PROVEN",
 		});
 	});
 
