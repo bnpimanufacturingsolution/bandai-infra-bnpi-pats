@@ -899,15 +899,20 @@ std::string extract_string_field_from_json(const std::string &json, const std::s
     return "";
 }
 
+// Full UserInfo inventory. Critical: many Hikvision firmwares return at most ~30
+// rows even when maxResults is larger. Never advance by requested page_size alone
+// and never stop just because page_count < requested maxResults when MORE remains.
 std::vector<std::string> read_device_employee_numbers(DeviceSession &device) {
-    constexpr int page_size = 64;
+    constexpr int request_page_size = 30;
     std::set<std::string> employee_numbers;
+    int position = 0;
+    int total_matches = -1;
 
-    for (int offset = 0; offset < 1024; offset += page_size) {
+    for (int page = 0; page < 80 && position < 4000; ++page) {
         std::ostringstream body;
-        body << "{\"UserInfoSearchCond\":{\"searchID\":\"pt-full-mirror-" << offset
-             << "\",\"searchResultPosition\":" << offset
-             << ",\"maxResults\":" << page_size << "}}";
+        body << "{\"UserInfoSearchCond\":{\"searchID\":\"pt-inv-" << page << "-" << position
+             << "\",\"searchResultPosition\":" << position
+             << ",\"maxResults\":" << request_page_size << "}}";
 
         std::string response;
         const bool ok = stdxml_json_request(
@@ -921,27 +926,80 @@ std::vector<std::string> read_device_employee_numbers(DeviceSession &device) {
                 {"event", "source_user_inventory_read"},
                 {"sourceDeviceId", device.config.hris_device_id},
                 {"ok", "false"},
-                {"offset", std::to_string(offset)},
+                {"offset", std::to_string(position)},
                 {"lastError", std::to_string(NET_DVR_GetLastError())}
             });
             break;
         }
 
+        // Parse totals / MORE flag from this page.
+        {
+            static const std::regex total_regex("\"totalMatches\"\\s*:\\s*([0-9]+)");
+            static const std::regex num_regex("\"numOfMatches\"\\s*:\\s*([0-9]+)");
+            std::smatch m;
+            if (std::regex_search(response, m, total_regex) && m.size() > 1) {
+                try {
+                    total_matches = std::stoi(m[1].str());
+                } catch (...) {
+                }
+            }
+            (void)num_regex;
+        }
+        const bool more =
+            response.find("\"responseStatusStrg\"") != std::string::npos &&
+            (response.find("\"MORE\"") != std::string::npos ||
+             response.find("\"More\"") != std::string::npos ||
+             response.find(":\"MORE\"") != std::string::npos);
+
         const std::set<std::string> page_employee_numbers =
             extract_employee_numbers_from_search_response(response);
+        const size_t before = employee_numbers.size();
         employee_numbers.insert(page_employee_numbers.begin(), page_employee_numbers.end());
+        const int page_count = static_cast<int>(page_employee_numbers.size());
+        const int added = static_cast<int>(employee_numbers.size() - before);
+
         emit_json({
             {"event", "source_user_inventory_read"},
             {"sourceDeviceId", device.config.hris_device_id},
             {"ok", "true"},
-            {"offset", std::to_string(offset)},
-            {"pageEmployees", std::to_string(page_employee_numbers.size())}
+            {"offset", std::to_string(position)},
+            {"pageEmployees", std::to_string(page_count)},
+            {"added", std::to_string(added)},
+            {"totalSoFar", std::to_string(employee_numbers.size())},
+            {"totalMatches", total_matches >= 0 ? std::to_string(total_matches) : ""},
+            {"more", more ? "true" : "false"}
         });
 
-        if (page_employee_numbers.size() < page_size) {
+        if (page_count <= 0) {
+            break;
+        }
+
+        // Advance by actual returned row count (device page size), not request_page_size.
+        position += page_count;
+
+        if (total_matches >= 0 && static_cast<int>(employee_numbers.size()) >= total_matches) {
+            break;
+        }
+        if (!more && page_count < request_page_size && added == 0) {
+            break;
+        }
+        // If device returns a full native page, keep going even when page_count < 64.
+        if (!more && page_count < request_page_size) {
+            // Last short page without MORE → done.
+            break;
+        }
+        // Guard against infinite loops if position does not advance uniquely.
+        if (added == 0 && !more) {
             break;
         }
     }
+
+    emit_json({
+        {"event", "source_user_inventory_complete"},
+        {"sourceDeviceId", device.config.hris_device_id},
+        {"employeeCount", std::to_string(employee_numbers.size())},
+        {"totalMatches", total_matches >= 0 ? std::to_string(total_matches) : ""}
+    });
 
     return std::vector<std::string>(employee_numbers.begin(), employee_numbers.end());
 }
@@ -2752,19 +2810,35 @@ std::string pick_newest_plain_employee_no(const std::vector<std::string> &candid
     return best.empty() ? candidates.back() : best;
 }
 
+// Seed baseline at arm-time so the first empty ACS after create does not
+// "swallow" the new person into baseline (would never appear as a delta).
+void seed_inventory_baseline_for_session(DeviceSession &device) {
+    const std::vector<std::string> current = read_device_employee_numbers(device);
+    auto &observed = observed_employee_numbers_by_host[device.config.host];
+    observed.clear();
+    observed.insert(current.begin(), current.end());
+    emit_json({
+        {"event", "inventory_baseline_seeded"},
+        {"sourceDeviceId", device.config.hris_device_id},
+        {"sourceHost", device.config.host},
+        {"employeeCount", std::to_string(observed.size())}
+    });
+}
+
 // When ACS dwEmployeeNo is empty (common major=3 panel create/FP enroll), resolve plain
 // person id from device UserInfo inventory delta vs baseline. Does not invent ids.
 std::string resolve_plain_employee_no_from_inventory(DeviceSession &device) {
     const std::vector<std::string> current = read_device_employee_numbers(device);
     auto &observed = observed_employee_numbers_by_host[device.config.host];
     if (observed.empty()) {
-        // First observation establishes baseline only — do not claim a "new" person yet.
+        // Prefer arm-time seed; late seed only if arm seed failed.
         observed.insert(current.begin(), current.end());
         emit_json({
             {"event", "callback_identity_inventory_baseline"},
             {"sourceDeviceId", device.config.hris_device_id},
             {"sourceHost", device.config.host},
-            {"employeeCount", std::to_string(observed.size())}
+            {"employeeCount", std::to_string(observed.size())},
+            {"note", "late_baseline_prefer_arm_seed"}
         });
         return "";
     }
@@ -2834,6 +2908,117 @@ bool needs_callback_template_enrich(const ReconcileJob &job) {
             job.event_kind == "biometric_user_management");
 }
 
+// Schedule a delayed re-queue of the HRIS callback job so empty-ACS create/enroll
+// can get plain id after UserInfo catches up (second POST, not inventing ids).
+void schedule_delayed_hris_identity_repost(const ReconcileJob &job, int delay_ms, int attempt) {
+    if (attempt > 3) {
+        return;
+    }
+    ReconcileJob copy = job;
+    // Force identity re-resolution on the delayed pass.
+    copy.employee_no.clear();
+    copy.identity_source.clear();
+    copy.fingerprints_json.clear();
+    copy.fingerprint_count = 0;
+    copy.face_template_b64.clear();
+    copy.face_picture_b64.clear();
+    copy.event_kind = job.event_kind.empty()
+                          ? "identity_repost"
+                          : (job.event_kind + "_identity_repost");
+    std::thread([copy, delay_ms, attempt]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        if (!keep_running) {
+            return;
+        }
+        emit_json({
+            {"event", "callback_identity_repost_queued"},
+            {"sourceDeviceId", copy.source_device_id},
+            {"sourceHost", copy.source_host},
+            {"attempt", std::to_string(attempt)},
+            {"delayMs", std::to_string(delay_ms)},
+            {"serialNo", copy.serial_no}
+        });
+        queue_hris_device_event(copy);
+    }).detach();
+}
+
+// ISAPI FingerPrintUpload read (raw base64) as fallback when SDK fingerprint read is empty.
+bool read_fingerprints_via_isapi(
+    DeviceSession &session,
+    const std::string &employee_no,
+    std::string *fingerprints_json,
+    int *fingerprint_count) {
+    if (employee_no.empty() || fingerprints_json == nullptr || fingerprint_count == nullptr) {
+        return false;
+    }
+    std::ostringstream body;
+    body << "{\"FingerPrintCond\":{"
+         << "\"searchID\":\"pt-fp-" << json_escape(employee_no) << "\","
+         << "\"searchResultPosition\":0,"
+         << "\"maxResults\":32,"
+         << "\"employeeNo\":\"" << json_escape(employee_no) << "\""
+         << "}}";
+    std::string response;
+    const bool ok = stdxml_json_request(
+        session,
+        "POST /ISAPI/AccessControl/FingerPrintUpload?format=json",
+        body.str(),
+        &response);
+    if (!ok || response.empty()) {
+        emit_json({
+            {"event", "isapi_fingerprint_read"},
+            {"sourceDeviceId", session.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"ok", "false"}
+        });
+        return false;
+    }
+    // Extract fingerData base64 fields.
+    static const std::regex finger_data_regex("\"fingerData\"\\s*:\\s*\"([^\"]+)\"");
+    static const std::regex finger_id_regex("\"fingerPrintID\"\\s*:\\s*([0-9]+)");
+    std::vector<std::string> datas;
+    for (std::sregex_iterator it(response.begin(), response.end(), finger_data_regex), end;
+         it != end;
+         ++it) {
+        const std::string data = (*it)[1].str();
+        if (data.size() >= 8) {
+            datas.push_back(data);
+        }
+    }
+    if (datas.empty()) {
+        emit_json({
+            {"event", "isapi_fingerprint_read"},
+            {"sourceDeviceId", session.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"ok", "true"},
+            {"fingerprintCount", "0"}
+        });
+        return false;
+    }
+    std::ostringstream fp_json;
+    fp_json << "[";
+    for (size_t i = 0; i < datas.size(); ++i) {
+        if (i > 0) {
+            fp_json << ",";
+        }
+        fp_json << "{\"fingerPrintId\":" << (i + 1)
+                << ",\"fingerType\":0"
+                << ",\"length\":" << datas[i].size()
+                << ",\"data\":\"" << datas[i] << "\"}";
+    }
+    fp_json << "]";
+    *fingerprints_json = fp_json.str();
+    *fingerprint_count = static_cast<int>(datas.size());
+    emit_json({
+        {"event", "isapi_fingerprint_read"},
+        {"sourceDeviceId", session.config.hris_device_id},
+        {"employeeNo", employee_no},
+        {"ok", "true"},
+        {"fingerprintCount", std::to_string(*fingerprint_count)}
+    });
+    return true;
+}
+
 // Before POST: fill plain employeeNo when ACS left it empty; attach raw FP/face when possible.
 // This is the correct place to harden "socket always has plain id" for enroll — not inventing in UI.
 void enrich_hris_job_before_post(ReconcileJob &job) {
@@ -2853,12 +3038,24 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
         return;
     }
 
+    const bool is_repost = job.event_kind.find("identity_repost") != std::string::npos;
+
     if (job.employee_no.empty() && needs_callback_identity_enrich(job)) {
-        // Panel UserInfo may lag ACS major=3 by a short time — multipass inventory.
-        static const int delays_ms[] = {0, 350, 900, 1800};
-        for (int delay_ms : delays_ms) {
-            if (delay_ms > 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        // Panel UserInfo may lag ACS major=3 — multipass inventory with longer delays on repost.
+        const int *delays = nullptr;
+        int delay_count = 0;
+        static const int first_delays_ms[] = {0, 400, 1200, 2500};
+        static const int repost_delays_ms[] = {0, 800, 2000, 4000};
+        if (is_repost) {
+            delays = repost_delays_ms;
+            delay_count = 4;
+        } else {
+            delays = first_delays_ms;
+            delay_count = 4;
+        }
+        for (int i = 0; i < delay_count; ++i) {
+            if (delays[i] > 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(delays[i]));
             }
             const std::string plain = resolve_plain_employee_no_from_inventory(*session);
             if (!plain.empty()) {
@@ -2870,6 +3067,12 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
         }
         if (job.employee_no.empty()) {
             job.identity_source = "empty";
+            // First incomplete pass: keep path alive, then delayed re-POST for plain id.
+            if (!is_repost) {
+                schedule_delayed_hris_identity_repost(job, 2000, 1);
+                schedule_delayed_hris_identity_repost(job, 5000, 2);
+                schedule_delayed_hris_identity_repost(job, 10000, 3);
+            }
         }
     } else if (!job.employee_no.empty() && job.identity_source.empty()) {
         job.identity_source =
@@ -2883,33 +3086,50 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
             {"employeeNo", job.employee_no},
             {"identitySource", job.identity_source},
             {"fingerprintCount", "0"},
-            {"templatesAttached", "false"}
+            {"templatesAttached", "false"},
+            {"isRepost", is_repost ? "true" : "false"}
         });
         return;
     }
 
-    // Fingerprint templates (raw base64) for enroll path.
+    // Fingerprint templates (raw base64) for enroll path — SDK then ISAPI, with short retries.
     if (is_fingerprint_management_minor(job.minor) || job.include_fingerprints ||
-        is_user_management_minor(job.minor)) {
-        const auto templates = read_source_fingerprints(*session, job);
-        if (!templates.empty()) {
-            std::ostringstream fp_json;
-            fp_json << "[";
-            for (size_t i = 0; i < templates.size(); ++i) {
-                const auto &record = templates[i];
-                if (i > 0) {
-                    fp_json << ",";
-                }
-                const std::string data =
-                    base64_encode(record.byFingerData, record.dwFingerPrintLen);
-                fp_json << "{\"fingerPrintId\":" << static_cast<int>(record.byFingerPrintID)
-                        << ",\"fingerType\":" << static_cast<int>(record.byFingerType)
-                        << ",\"length\":" << record.dwFingerPrintLen
-                        << ",\"data\":\"" << data << "\"}";
+        is_user_management_minor(job.minor) || is_observed_operation_sync_minor(job.minor) ||
+        is_repost) {
+        static const int fp_delays_ms[] = {0, 600, 1500, 3000};
+        for (int delay_ms : fp_delays_ms) {
+            if (delay_ms > 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
             }
-            fp_json << "]";
-            job.fingerprints_json = fp_json.str();
-            job.fingerprint_count = static_cast<int>(templates.size());
+            const auto templates = read_source_fingerprints(*session, job);
+            if (!templates.empty()) {
+                std::ostringstream fp_json;
+                fp_json << "[";
+                for (size_t i = 0; i < templates.size(); ++i) {
+                    const auto &record = templates[i];
+                    if (i > 0) {
+                        fp_json << ",";
+                    }
+                    const std::string data =
+                        base64_encode(record.byFingerData, record.dwFingerPrintLen);
+                    fp_json << "{\"fingerPrintId\":" << static_cast<int>(record.byFingerPrintID)
+                            << ",\"fingerType\":" << static_cast<int>(record.byFingerType)
+                            << ",\"length\":" << record.dwFingerPrintLen
+                            << ",\"data\":\"" << data << "\"}";
+                }
+                fp_json << "]";
+                job.fingerprints_json = fp_json.str();
+                job.fingerprint_count = static_cast<int>(templates.size());
+                break;
+            }
+            std::string isapi_json;
+            int isapi_count = 0;
+            if (read_fingerprints_via_isapi(*session, job.employee_no, &isapi_json, &isapi_count) &&
+                isapi_count > 0) {
+                job.fingerprints_json = isapi_json;
+                job.fingerprint_count = isapi_count;
+                break;
+            }
         }
     }
 
@@ -3888,6 +4108,17 @@ int main(int argc, char **argv) {
                     {"attempt", std::to_string(attempt)},
                     {"peerEnabled", "true"}
                 });
+                // Seed inventory baseline ASAP so later create/enroll empty-ACS
+                // can resolve NEW plains via delta (not swallow into first baseline).
+                try {
+                    seed_inventory_baseline_for_session(sessions.back());
+                } catch (...) {
+                    emit_json({
+                        {"event", "inventory_baseline_seed_failed"},
+                        {"deviceId", config.hris_device_id},
+                        {"host", config.host}
+                    });
+                }
             } else if (session.user_id >= 0) {
                 NET_DVR_Logout_V30(session.user_id);
             }

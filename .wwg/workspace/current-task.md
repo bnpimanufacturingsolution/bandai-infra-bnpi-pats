@@ -1,5 +1,27 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 Device Events no-person sync signal copy
+
+- Task mode: Admin UX regression repair + focused smoke proof.
+- Operator correction: Saved runtime rows with no person id must not say `Resolving person id...` unless there is actual resolving/pending identity evidence. A Hikvision `SYNC_SIGNAL` can be live capture proof while carrying no person identity.
+- Implemented:
+  - Device Events table now labels no-id `SYNC_SIGNAL` rows as `No person id on SDK signal`.
+  - No-id rows no longer create a Device user deep link/button or show the `Device user` badge; that shortcut appears only when a readable plain device person id exists.
+  - Plain device-user navigation remains intact for real ids such as `15`.
+- Proof:
+  - Focused Playwright: `admin device events labels sync signals without implying person resolution` passed 1/1.
+  - Focused Playwright: `admin device events keeps plain device user id separate from padded employee code` passed 1/1.
+- Recommendation capture: No new recommendations were identified.
+
+## Latest Task Addendum - 2026-07-19 Live proof EXIT GATE (C++ enrich + synthetic enroll)
+
+- Task mode: Live proof / evidence closeout.
+- Evidence dir: `.runtime/live-cpp-enroll-proof-20260719-180128/summary.json`
+- Proven green: host TCP/API, reverse :59000/:59443/:53001, rebuilt binary with enrich, listener armed/receiving, synthetic create `99180240` on device, DeviceUser raw template 684 chars (not AES), plain employeeNo on USER_CREATED/FINGERPRINT_ENROLLED ledger rows, API users returns raw.
+- ACS live truth: major=3 still often `employeeNo=""`; enrich ran; inventory delta did not always attach plain in-window (`no_new_plain` / baseline). Do not claim ACS first packet always plain.
+- Device FP write returned OK but `numOfFP` stayed 0 on re-read (3 retries); raw custody used donor-15 template path with explicit source label.
+- Recommendation capture: Investigate C++ inventory pagination / delta when pageEmployees stuck at 30; improve FingerPrintDownload→Upload re-read for synthetic write.
+
 ## Latest Task Addendum - 2026-07-19 C++ plain-id enrich + raw templates + anti-assumption WWG
 
 - Task mode: Regression repair + governance + C++ wire-path harden.
