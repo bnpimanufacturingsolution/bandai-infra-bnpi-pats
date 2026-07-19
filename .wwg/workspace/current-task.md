@@ -1,5 +1,33 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 Create+Enroll raw blob ledger journey
+
+- Task mode: Meaningful feature / journey truth + live proof.
+- Evidence: `.runtime/create-enroll-raw-ledger-journey-20260719-194709/summary.json`
+- Exit: `GREEN_WITH_REAL_BLOCKER` (synthetic sticky clone still device anti-dupe; physical unique enroll out of scope).
+- Proven:
+  - Ledger: `USER_CREATED` + `FINGERPRINT_ENROLLED` plain `16` same DeviceUser
+  - DeviceUser raw FP: persons `15`/`16`/`1` with 684-char base64 (not AES)
+  - DeviceUser raw face: person `1` 14019-byte JPEG when `numOfFace=1`; `15`/`16` honest no-face
+  - Capture API works with `req.organizationId`
+  - UI: always refetch DeviceUser on details open; raw FP + face sections
+- Auto path: schedule raw FP (+ face when present) after plain identity; enrich preserves raw
+- Recommendation: Physical panel unique FP enroll for new person sticky (Proposed — prior REC).
+
+## Latest Task Addendum - 2026-07-19 Backend helper module resolution repair
+
+- Task mode: Backend TypeScript regression repair.
+- Reported symptom: VS Code/TypeScript showed `TS2307` in `hris-api/app/device/device.controller.ts` for dynamic imports of `device-user-raw-fingerprint.helper` and `hikvision-event-contract.helper`.
+- Root cause: `hris-api` uses `module: Node16` / `moduleResolution: node16`; dynamic imports need the emitted `.js` specifier. Static imports in the same tree remained resolvable, but the extensionless dynamic imports failed.
+- Implemented:
+  - Changed the three dynamic helper imports in `device.controller.ts` to `.helper.js`, matching existing project import style.
+  - Added a narrow local type for recent lifecycle event backfill rows in `device-person-token.helper.ts`, clearing the strict type errors exposed after the missing modules were fixed.
+- Proof:
+  - `npx tsc --noEmit --pretty false` passed in `hris-api`.
+  - Focused backend tests passed 63/63: `device-events-api-contract`, `device-person-token.helper`, `device-user-raw-fingerprint.helper`, and `hikvision-event-contract.helper`.
+  - Focused backend lint passed for `device.controller.ts` and the three helper files.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-19 Device Events saved filter facets
 
 - Task mode: Admin UI/data-truth regression repair.

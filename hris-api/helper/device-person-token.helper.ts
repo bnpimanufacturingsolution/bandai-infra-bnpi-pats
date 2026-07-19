@@ -932,6 +932,8 @@ const LIFECYCLE_EVENT_ACTIONS_FOR_PLAIN_BACKFILL = [
 type RecentLifecycleEventForPlainBackfill = {
 	id: string;
 	employeeNo?: string | null;
+	employeeId?: string | null;
+	deviceUserId?: string | null;
 	payload?: unknown;
 };
 

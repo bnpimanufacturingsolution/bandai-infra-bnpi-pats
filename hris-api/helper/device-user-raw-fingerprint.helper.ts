@@ -9,11 +9,12 @@
  * DeviceUser.vendorMetadata.rawFingerprints holds the real base64 template data.
  */
 import type { PrismaClient } from "../generated/prisma";
-import { hikvisionFetch } from "../lib/hikvision-client";
+import { hikvisionFetch, hikvisionFetchBinary } from "../lib/hikvision-client";
 import { emitDeviceEventSaved } from "./device-event-realtime.helper";
 import { isOpaqueHikvisionPersonToken } from "./hikvision-event-contract.helper";
 
 export const RAW_FINGERPRINT_SCHEMA = "project-truth.hikvision-fingerprint-raw.v1";
+export const RAW_FACE_SCHEMA = "project-truth.hikvision-face-raw.v1";
 
 export type RawFingerprintTemplate = {
 	fingerPrintId: number;
@@ -697,6 +698,20 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 		rawFingerprintLocation: `DeviceUser(${saved?.id || row.id}).vendorMetadata.rawFingerprints.templates[].data`,
 	}).catch(() => undefined);
 
+	// Best-effort face picture when device has faceURL (does not invent face).
+	const face = await captureRawFaceForEnrollment({
+		prisma: params.prisma,
+		req: params.req,
+		organizationId,
+		deviceId,
+		employeeNo,
+		deviceUserId: saved?.id || row.id || null,
+	}).catch((error: any) => ({
+		ok: false,
+		present: false,
+		reason: String(error?.message || error || "face_capture_failed"),
+	}));
+
 	return {
 		ok: true,
 		rawPresent: true,
@@ -704,6 +719,206 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 		totalDataChars: custody.totalDataChars,
 		deviceUserId: saved?.id || row.id || null,
 		source: custody.source,
+		face,
+	};
+};
+
+/**
+ * Pull face photo from UserInfo faceURL (ISAPI binary) onto DeviceUser.vendorMetadata.rawFace.
+ * Returns ok=false with reason when device has no face — do not invent.
+ */
+export const captureRawFaceForEnrollment = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	organizationId: string;
+	deviceId: string;
+	employeeNo: string;
+	deviceUserId?: string | null;
+}): Promise<{
+	ok: boolean;
+	present: boolean;
+	byteLength?: number;
+	base64Length?: number;
+	contentType?: string;
+	reason?: string;
+	deviceUserId?: string | null;
+}> => {
+	const organizationId = String(params.organizationId || "").trim();
+	const deviceId = String(params.deviceId || "").trim();
+	const employeeNo = String(params.employeeNo || "").trim();
+	if (!organizationId || !deviceId || !employeeNo || isOpaqueHikvisionPersonToken(employeeNo)) {
+		return {
+			ok: false,
+			present: false,
+			reason: "missing_ids_or_opaque",
+			deviceUserId: params.deviceUserId || null,
+		};
+	}
+
+	let faceURL = "";
+	let userInfoNode: any = null;
+	try {
+		const ui = await hikvisionFetch("/ISAPI/AccessControl/UserInfo/Search?format=json", {
+			method: "POST",
+			deviceId,
+			prisma: params.prisma,
+			request: params.req,
+			timeoutMs: 15_000,
+			body: {
+				UserInfoSearchCond: {
+					searchID: `raw-face-${Date.now()}`,
+					searchResultPosition: 0,
+					maxResults: 2,
+					EmployeeNoList: [{ employeeNo }],
+				},
+			},
+		});
+		userInfoNode = Array.isArray(ui?.UserInfoSearch?.UserInfo)
+			? ui.UserInfoSearch.UserInfo[0]
+			: ui?.UserInfoSearch?.UserInfo;
+		faceURL = String(userInfoNode?.faceURL || "").trim();
+		const numOfFace = Number(userInfoNode?.numOfFace || 0) || 0;
+		if (!faceURL || numOfFace < 1) {
+			return {
+				ok: false,
+				present: false,
+				reason: "no_face_on_device",
+				deviceUserId: params.deviceUserId || null,
+			};
+		}
+	} catch (error: any) {
+		return {
+			ok: false,
+			present: false,
+			reason: String(error?.message || error || "userinfo_face_lookup_failed"),
+			deviceUserId: params.deviceUserId || null,
+		};
+	}
+
+	let picPath = faceURL;
+	try {
+		const u = new URL(faceURL);
+		picPath = `${u.pathname}${u.search}`;
+	} catch {
+		/* relative path ok */
+	}
+
+	let buf: Buffer;
+	let contentType = "image/jpeg";
+	try {
+		const binary = await hikvisionFetchBinary(picPath, {
+			method: "GET",
+			deviceId,
+			prisma: params.prisma,
+			request: params.req,
+			timeoutMs: 20_000,
+		});
+		const raw =
+			Buffer.isBuffer(binary)
+				? binary
+				: Buffer.isBuffer((binary as any)?.buffer)
+					? (binary as any).buffer
+					: Buffer.isBuffer((binary as any)?.data)
+						? (binary as any).data
+						: Buffer.from(
+								(binary as any)?.body ||
+									(binary as any)?.data ||
+									(binary as any) ||
+									[],
+							);
+		if (!raw.length || raw.length < 32) {
+			return {
+				ok: false,
+				present: false,
+				reason: "face_binary_empty",
+				deviceUserId: params.deviceUserId || null,
+			};
+		}
+		buf = raw;
+		contentType = String(
+			(binary as any)?.contentType ||
+				(binary as any)?.headers?.["content-type"] ||
+				"image/jpeg",
+		);
+	} catch (error: any) {
+		return {
+			ok: false,
+			present: false,
+			reason: String(error?.message || error || "face_binary_fetch_failed"),
+			deviceUserId: params.deviceUserId || null,
+		};
+	}
+
+	const b64 = buf.toString("base64");
+	const rawFace = {
+		schema: RAW_FACE_SCHEMA,
+		present: b64.length > 32,
+		capturedAt: new Date().toISOString(),
+		source: "isapi_faceURL_download",
+		contentType,
+		byteLength: buf.length,
+		base64: b64,
+		faceURL,
+	};
+
+	const row =
+		(await params.prisma.deviceUser.findFirst({
+			where: {
+				organizationId,
+				deviceId,
+				OR: [{ vendorUserId: employeeNo }, { employeeNo }],
+			},
+		})) || null;
+	if (!row) {
+		return {
+			ok: false,
+			present: false,
+			reason: "device_user_missing",
+			deviceUserId: params.deviceUserId || null,
+		};
+	}
+
+	const priorVm = (row.vendorMetadata as any) || {};
+	const priorRaw = (row.rawPayload as any) || {};
+	const credentialSummary = {
+		...(priorVm.credentialSummary || {}),
+		hasFace: true,
+		faceCount: Math.max(Number(priorVm.credentialSummary?.faceCount || 0) || 0, 1),
+	};
+	const vendorMetadata = {
+		...priorVm,
+		rawFace,
+		rawFacePresent: true,
+		credentialSummary,
+	};
+	const rawPayload = {
+		...priorRaw,
+		...(userInfoNode || {}),
+		faceURL,
+		_hrisDeviceMetadata: {
+			...(priorRaw._hrisDeviceMetadata || {}),
+			rawFace,
+			credentialSummary,
+		},
+	};
+
+	const updated = await params.prisma.deviceUser.update({
+		where: { id: row.id },
+		data: {
+			vendorMetadata,
+			rawPayload,
+			lastSyncedAt: new Date(),
+		},
+		select: { id: true },
+	});
+
+	return {
+		ok: true,
+		present: true,
+		byteLength: buf.length,
+		base64Length: b64.length,
+		contentType,
+		deviceUserId: updated.id,
 	};
 };
 

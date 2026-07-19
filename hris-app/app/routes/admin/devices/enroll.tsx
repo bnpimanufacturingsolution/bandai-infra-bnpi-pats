@@ -3322,19 +3322,12 @@ export function DeviceEnrollmentPanel({
 		detailsDeviceUser?.vendorUserId,
 	]);
 
-	// When details open (esp. SOURCE_ONLY live row), merge saved HRIS DeviceUser so
-	// vendorMetadata.rawFingerprints is visible — live source row alone has no raw blobs.
+	// ALWAYS refetch saved HRIS DeviceUser when details open so rawFingerprints/rawFace
+	// from DB win over live-source-only / SOURCE_ONLY metadata (operator modal truth).
 	useEffect(() => {
 		const vendorUserId = String(detailsDeviceUser?.vendorUserId || "").trim();
 		const deviceId = String(selectedDeviceId || "").trim();
 		if (!detailsDeviceUser || !vendorUserId || !deviceId) return;
-		const alreadyHasRaw = Boolean(
-			(detailsDeviceUser as any)?.vendorMetadata?.rawFingerprints?.templates?.[0]?.data ||
-				(detailsDeviceUser as any)?.hrisDeviceUser?.vendorMetadata?.rawFingerprints
-					?.templates?.[0]?.data ||
-				(detailsDeviceUser as any)?.vendorMetadata?.rawFingerprintPresent,
-		);
-		if (alreadyHasRaw) return;
 		let cancelled = false;
 		void (async () => {
 			try {
@@ -3349,10 +3342,37 @@ export function DeviceEnrollmentPanel({
 							String(u.employeeNo || "").trim() === vendorUserId,
 					) || response.deviceUsers?.[0];
 				if (cancelled || !saved) return;
+				const savedHasRaw = Boolean(
+					(saved as any)?.vendorMetadata?.rawFingerprints?.templates?.[0]?.data ||
+						(saved as any)?.vendorMetadata?.rawFingerprintPresent,
+				);
 				setDetailsDeviceUser((prev) => {
 					if (!prev || String(prev.vendorUserId || "").trim() !== vendorUserId) {
 						return prev;
 					}
+					// Prefer saved vendorMetadata when it carries raw custody.
+					const nextVm = savedHasRaw
+						? {
+								...(prev.vendorMetadata || {}),
+								...(saved.vendorMetadata || {}),
+							}
+						: {
+								...(saved.vendorMetadata || {}),
+								...(prev.vendorMetadata || {}),
+								// Keep any raw already on prev if saved lacks it.
+								rawFingerprints:
+									(prev.vendorMetadata as any)?.rawFingerprints ||
+									(saved.vendorMetadata as any)?.rawFingerprints,
+								rawFingerprintPresent:
+									(prev.vendorMetadata as any)?.rawFingerprintPresent ??
+									(saved.vendorMetadata as any)?.rawFingerprintPresent,
+								rawFace:
+									(prev.vendorMetadata as any)?.rawFace ||
+									(saved.vendorMetadata as any)?.rawFace,
+								rawFacePresent:
+									(prev.vendorMetadata as any)?.rawFacePresent ??
+									(saved.vendorMetadata as any)?.rawFacePresent,
+							};
 					return {
 						...prev,
 						status: saved.status || prev.status,
@@ -3360,18 +3380,16 @@ export function DeviceEnrollmentPanel({
 						employee: saved.employee || prev.employee,
 						lastSyncedAt: saved.lastSyncedAt || prev.lastSyncedAt,
 						rawPayload: saved.rawPayload || prev.rawPayload,
-						vendorMetadata: {
-							...(prev.vendorMetadata || {}),
-							...(saved.vendorMetadata || {}),
-						},
+						vendorMetadata: nextVm,
 						hrisDeviceUser: {
 							...(prev.hrisDeviceUser || {}),
 							...saved,
+							vendorMetadata: nextVm,
 						} as any,
 					};
 				});
 			} catch {
-				/* keep live-only row */
+				/* keep current row */
 			}
 		})();
 		return () => {
@@ -8039,6 +8057,69 @@ export function DeviceEnrollmentPanel({
 															);
 														})
 													: null}
+											</div>
+										);
+									})()}
+									{(() => {
+										const rawFace =
+											(detailsDeviceUser as any)?.vendorMetadata?.rawFace ||
+											(detailsDeviceUser as any)?.hrisDeviceUser?.vendorMetadata
+												?.rawFace ||
+											(detailsDeviceUser as any)?.rawPayload?._hrisDeviceMetadata
+												?.rawFace ||
+											null;
+										const facePresent =
+											Boolean(rawFace?.present) ||
+											Boolean(
+												(detailsDeviceUser as any)?.vendorMetadata
+													?.rawFacePresent,
+											) ||
+											String(rawFace?.base64 || "").length > 32;
+										const faceCount = Number(
+											getDeviceUserCredentialSummary(detailsDeviceUser)
+												.faceCount || 0,
+										);
+										const contentType = String(
+											rawFace?.contentType || "image/jpeg",
+										);
+										const b64 = String(rawFace?.base64 || "");
+										return (
+											<div
+												className={`mt-3 rounded-2xl border px-4 py-3 text-xs ${
+													facePresent
+														? "border-emerald-200 bg-emerald-50 text-emerald-950"
+														: "border-slate-200 bg-slate-50 text-slate-800"
+												}`}>
+												<p className="font-semibold uppercase tracking-wide">
+													Raw face photo
+												</p>
+												<p className="mt-2 text-2xl font-semibold">
+													{facePresent
+														? "Stored on DeviceUser"
+														: faceCount > 0
+															? "Count only — raw not pulled"
+															: "No face on device"}
+												</p>
+												<p className="mt-2 leading-5">
+													{facePresent
+														? "Base64 face image custody on DeviceUser (not on DeviceEvent ledger)."
+														: faceCount > 0
+															? "UserInfo reports a face count but raw picture was not captured yet."
+															: "Device UserInfo has numOfFace=0 / no faceURL for this person — nothing to store."}
+												</p>
+												{facePresent && b64 ? (
+													<div className="mt-3 overflow-hidden rounded-xl border border-emerald-200 bg-white p-2">
+														<img
+															src={`data:${contentType};base64,${b64}`}
+															alt={`Face of device user ${detailsDeviceUser?.vendorUserId || ""}`}
+															className="mx-auto max-h-40 rounded-lg object-contain"
+														/>
+														<p className="mt-2 text-[10px] text-emerald-900">
+															bytes≈{String(rawFace?.byteLength || b64.length)} ·
+															source={String(rawFace?.source || "?")}
+														</p>
+													</div>
+												) : null}
 											</div>
 										);
 									})()}
