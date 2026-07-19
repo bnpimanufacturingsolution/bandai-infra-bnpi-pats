@@ -641,8 +641,11 @@ export const buildEmployeeDisplayName = (employee: any): string | null => {
 
 /**
  * Link plain device person id → HRIS Employee when deviceEmpId or employeeId matches.
- * Device panel "15" must match Employee.deviceEmpId "00015" (leading zeros to 5 digits).
- * This is the Sync Center / Device Events name source for enroll/create rows.
+ * Truth (live BNPI / TEST A):
+ *   DeviceUser.vendorUserId / DeviceEvent.employeeNo = plain "15"
+ *   Employee.deviceEmpId = plain "15" (same device person number)
+ *   Employee.employeeId may be zero-padded org code e.g. "00015" / "01029"
+ * Pad variants are for employeeId (and messy legacy rows), not for inventing deviceEmpId=00015.
  */
 export const resolveLinkedEmployeeForDevicePerson = async (
 	prisma: PrismaClient | any,

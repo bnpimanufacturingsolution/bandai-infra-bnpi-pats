@@ -7,7 +7,7 @@ Last updated: 2026-07-19.
 
 Canonical architecture, operator vision, sequence diagrams, and acceptance checks for
 panel/SDK **user create / user update / fingerprint enroll** identity (plain device
-person id vs opaque log token vs `Employee.deviceEmpId` 5-digit pad):
+person id vs opaque log token vs plain `Employee.deviceEmpId` / padded `Employee.employeeId`):
 
 - **`docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md`**
 - WWG twin: `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md`

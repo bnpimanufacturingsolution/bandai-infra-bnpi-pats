@@ -77,16 +77,24 @@ describe("DeviceUser sync helper", () => {
 		});
 	});
 
-	it("auto-links device person 15 to Employee.deviceEmpId 00015 (5-digit pad)", () => {
-		const decision = resolveDeviceUserLinkDecision(candidate("15"), [
-			{ id: "emp-15", employeeId: "00015", deviceEmpId: "00015" },
+	it("auto-links device person 15 to Employee.deviceEmpId 15 (plain, not padded)", () => {
+		// Operator truth: deviceEmpId IS "15" same as vendorUserId; employeeId may be "00015".
+		const byDeviceEmpId = resolveDeviceUserLinkDecision(candidate("15"), [
+			{ id: "emp-15", employeeId: "00015", deviceEmpId: "15" },
 		]);
-		expect(decision).to.deep.equal({
+		expect(byDeviceEmpId).to.deep.equal({
 			status: "ACTIVE",
 			employeeId: "emp-15",
 			matchCount: 1,
 			matchReason: "deviceEmpId",
 		});
+		// Pad applies to Employee.employeeId org code, not deviceEmpId.
+		const byEmployeeIdOnly = resolveDeviceUserLinkDecision(candidate("15"), [
+			{ id: "emp-15b", employeeId: "00015", deviceEmpId: null },
+		]);
+		expect(byEmployeeIdOnly.status).to.equal("ACTIVE");
+		expect(byEmployeeIdOnly.employeeId).to.equal("emp-15b");
+		expect(byEmployeeIdOnly.matchReason).to.equal("employeeId");
 		expect(buildDeviceUserEmployeeNoCandidates("15")).to.include.members(["15", "00015"]);
 	});
 

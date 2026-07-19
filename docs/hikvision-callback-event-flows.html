@@ -192,14 +192,20 @@
       <tr>
         <td>Employee (HRIS)</td>
         <td><code>deviceEmpId</code></td>
-        <td class="highlight">00015</td>
-        <td>5-digit pad of the device person id for matching</td>
+        <td class="highlight">15</td>
+        <td>Plain device person id — same as vendorUserId (NOT padded)</td>
       </tr>
       <tr>
         <td>Employee (HRIS)</td>
         <td><code>employeeId</code></td>
-        <td>org code (often also 00015)</td>
-        <td>Business employee code / display link target</td>
+        <td class="highlight">00015</td>
+        <td>Business / display code (may use leading zeros); not deviceEmpId</td>
+      </tr>
+      <tr>
+        <td>DeviceEvent schema</td>
+        <td><code>employeeNo</code></td>
+        <td class="highlight">String?</td>
+        <td>Yes — optional string column for plain device person id</td>
       </tr>
       <tr>
         <td>Op log only</td>
@@ -211,9 +217,9 @@
   </table>
   <p>
     <strong class="ok">Match rule:</strong>
-    device plain <code>15</code> links to Employee when
-    <code>deviceEmpId</code> or <code>employeeId</code> is in
-    <code>{15, 00015, …pad variants}</code>.
+    device plain <code>15</code> links when
+    <code>Employee.deviceEmpId === "15"</code> (exact plain).
+    Also try <code>Employee.employeeId</code> pad variants (e.g. <code>00015</code>) for org codes only.
   </p>
 
   <h2>3. Three event families from the callback</h2>
@@ -227,7 +233,7 @@
         <div class="step"><strong>2. Listener → callback</strong> — save DeviceEvent USER_CREATED (+ socket)</div>
         <div class="arrow">↓ resolve plain person id</div>
         <div class="step"><strong>3. DeviceUser upsert</strong> — <code>vendorUserId=15</code> + <code>rawPayload</code> / <code>vendorMetadata</code> from UserInfo</div>
-        <div class="step"><strong>4. Link Employee</strong> — if <code>deviceEmpId</code> matches <code>00015</code>/<code>15</code> → set <code>DeviceUser.employeeId</code> + event MATCHED</div>
+        <div class="step"><strong>4. Link Employee</strong> — if <code>deviceEmpId === "15"</code> (plain) → set FKs + MATCHED; <code>employeeId</code> may display as <code>00015</code></div>
         <div class="step"><strong>5. Socket again</strong> — UI shows <strong>User 15</strong> (or employee name if linked)</div>
       </div>
     </section>
@@ -241,7 +247,7 @@
         <div class="step"><strong>2. Listener → callback</strong> — DeviceEvent FINGERPRINT_ENROLLED (+ socket)</div>
         <div class="arrow">↓ same plain-id resolve as create</div>
         <div class="step"><strong>3. DeviceUser</strong> — ensure row <code>15</code>; refresh UserInfo counts (numOfFP) into metadata</div>
-        <div class="step"><strong>4. Link Employee</strong> — same pad rule <code>15</code> ↔ <code>00015</code></div>
+        <div class="step"><strong>4. Link Employee</strong> — same plain <code>deviceEmpId === "15"</code></div>
         <div class="step"><strong>5. Templates</strong> — raw FP bytes stay encrypted on DeviceUser custody plane, <em>not</em> on DeviceEvent</div>
       </div>
     </section>
@@ -269,9 +275,10 @@
       <li><strong>DeviceUser created/updated</strong> for that device:
         <code>vendorUserId = "15"</code>, <code>employeeNo = "15"</code>,
         plus <strong>raw vendor metadata</strong> (<code>rawPayload</code> / <code>vendorMetadata</code> from UserInfo/Search).</li>
-      <li><strong>Employee match:</strong> if an Employee exists with
-        <code>deviceEmpId</code> (or <code>employeeId</code>) in pad set of <code>15</code>
-        (includes <code>00015</code>), set <code>DeviceUser.employeeId</code> and event <code>employeeId</code> → status <span class="ok">MATCHED / ACTIVE</span>.</li>
+      <li><strong>Employee match:</strong> primary key is plain
+        <code>Employee.deviceEmpId === "15"</code> (same as device).
+        <code>Employee.employeeId</code> may be <code>00015</code> for display/org code.
+        On match set FKs → status <span class="ok">MATCHED / ACTIVE</span>.</li>
       <li><strong>If no Employee</strong> with that pad: DeviceUser stays <strong>UNMATCHED</strong>; event still shows <strong>User 15</strong> (device person), not HRIS employee name.</li>
       <li><strong>Socket</strong> so Device Events updates without refresh; Device Users list can open
         <code>deviceUserDetails=15</code>.</li>
@@ -327,13 +334,14 @@ HCNetSDK LISTENER  ──callback──►  hris-api /api/hikvision/callback
         │                                     vendorUserId: "15"◄┘
         │                                     employeeNo:   "15"
         │                                     rawPayload + vendorMetadata  ◄── UserInfo
-        │                                     employeeId → Employee(deviceEmpId "00015")
+        │                                     employeeId → Employee(deviceEmpId "15")
+        │                                                    employeeId code "00015"
         │
         ▼
 Socket device-event:saved  →  Device Events UI
    · show "User 15" or employee name
    · click device person → Device Users details for vendorUserId 15
-   · click employee → HRIS employee (display 00015)
+   · click employee → HRIS employee (employeeId may display 00015)
   </pre>
 
   <footer>

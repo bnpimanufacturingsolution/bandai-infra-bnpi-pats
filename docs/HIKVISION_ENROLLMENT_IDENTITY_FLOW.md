@@ -21,68 +21,45 @@ Three Hikvision → HRIS event families:
 | **onEnrollUser** | Fingerprint enroll (`addFp…` / FP management) | DeviceEvent `FINGERPRINT_ENROLLED` + DeviceUser credential refresh |
 | **onAttendanceTap** | Access auth pass (major=5) | DeviceEvent `TAP` + Attendance if employee linked |
 
-### Identity model (your pattern — must not collapse)
+### Identity model (operator + schema truth)
+
+**`DeviceEvent` has `employeeNo String?` in schema** (`hris-api/prisma/schema/device.prisma`).
+
+| Model field | Example | Meaning |
+|---|---|---|
+| Panel / DeviceUser.vendorUserId | `15` | Plain device person id |
+| DeviceUser.employeeNo | `15` | Same plain id |
+| DeviceEvent.employeeNo | `15` | Plain id when resolved |
+| **Employee.deviceEmpId** | **`15`** | **Plain — same as device (NOT padded)** |
+| Employee.employeeId | `00015` / `01029` | HRIS business code (may show leading zeros) |
+
+Live linked sample: vendor `1029` → `deviceEmpId=1029`, `employeeId=01029`.
 
 ```text
-Device panel person number ..............  15
-DeviceUser.vendorUserId / employeeNo ....  15     ← same plain id + raw UserInfo
-DeviceEvent.employeeNo (resolved) .......  15
-Employee.deviceEmpId ....................  00015  ← 5-digit pad for HRIS match
-Employee.employeeId .....................  often 00015 (org code / display)
-Op log opaque token .....................  QVEwgvx/…==  (never show as person no.)
+Panel "15"
+  → DeviceUser.vendorUserId = "15"  + raw UserInfo metadata
+  → DeviceEvent.employeeNo  = "15"
+  → Employee.deviceEmpId     = "15"     ← match key (exact plain)
+  → Employee.employeeId     = "00015"  ← display/org code only
 ```
 
-```text
-┌──────────────────────────────────────────────────────────────────────────┐
-│ Physical device (Hikvision panel)                                        │
-│   Plain person id:  "15"          ← typed/created on terminal            │
-│   Op log may store: opaque token  ← LogAddInfo.EmployeeNo (not readable) │
-└──────────────────────────────────────────────────────────────────────────┘
-                │                                      │
-                ▼                                      ▼
-┌─────────────────────────────┐          ┌─────────────────────────────────┐
-│ DeviceUser (HRIS inventory) │          │ DeviceEvent (ledger history)    │
-│ vendorUserId / employeeNo   │◄─────────│ employeeNo = plain "15" when    │
-│   = "15"                    │  link    │   resolved                      │
-│ rawPayload + vendorMetadata │          │ deviceUserId → DeviceUser       │
-│ employeeId → Employee (opt) │          │ payload.opaquePersonToken kept  │
-└─────────────────────────────┘          └─────────────────────────────────┘
-                │
-                │ link when deviceEmpId / employeeId matches pad variants
-                ▼
-┌─────────────────────────────┐
-│ Employee (HRIS person)      │
-│ deviceEmpId: "00015"        │  ← 5-digit pad of device person "15"
-│ employeeId:  org code       │  ← often also "00015"
-└─────────────────────────────┘
-```
+| Click | Target |
+|---|---|
+| Device person `15` | Device Users details `vendorUserId=15` |
+| Employee (when linked) | HRIS employee; display may show `employeeId` `00015` |
 
-| Concept | Canonical field | Example | UI click target |
-|---|---|---|---|
-| Device plain person id | `DeviceUser.vendorUserId` / event `employeeNo` | `15` | Device Users details (`deviceUserDetails=15`) |
-| Opaque log token | `payload.opaquePersonToken` / `DevicePersonToken` | `QVEwgvx/WIX5uNj9psBnjw==` | Never show as “employee no.” |
-| HRIS employee device link | `Employee.deviceEmpId` | `00015` | Employee record (when matched) |
-| HRIS employee business code | `Employee.employeeId` | often `00015` | Employee record |
-
-**Pad rule:** pure-numeric device person ids match HRIS via variants  
-`15` ↔ `00015` (from `buildDeviceUserEmployeeNoCandidates`).
-
-**Visual HTML cards (open in browser):**  
-[`docs/hikvision-callback-event-flows.html`](./hikvision-callback-event-flows.html)
+**Visual HTML:** [`docs/hikvision-callback-event-flows.html`](./hikvision-callback-event-flows.html)
 
 ### onUserCreate — required must-happen list
 
-When person **15** is created on **one** device (e.g. TEST A):
+When person **15** is created on one device:
 
-1. **Callback** receives create (direct ACS or major=3 → logSearch `addUserInfo` on the callback path).
-2. **DeviceEvent** `USER_CREATED` with plain `employeeNo = "15"` once resolved.
-3. **DeviceUser upsert** for that device:
-   - `vendorUserId = "15"`, `employeeNo = "15"`
-   - **raw metadata**: `rawPayload` + `vendorMetadata` from UserInfo/Search
-4. **Employee match:** if `Employee.deviceEmpId` (or `employeeId`) is in pad set of `15` (includes **`00015`**):
-   - set `DeviceUser.employeeId` + event `employeeId` → **MATCHED / ACTIVE**
-5. If no such Employee: DeviceUser **UNMATCHED**; UI still shows **User 15** (device person).
-6. **Socket** `device-event:saved` so Device Events updates live; deep-link opens Device User `15`.
+1. Callback receives create (ACS or major=3 → logSearch on callback path).
+2. **DeviceEvent.employeeNo = `"15"`** (field exists on schema).
+3. **DeviceUser** `vendorUserId="15"` + raw metadata.
+4. **Match** `Employee.deviceEmpId === "15"` (primary). Also allow `employeeId` pad match e.g. `00015` for org codes.
+5. No employee → UNMATCHED DeviceUser; still show User 15.
+6. Socket + deep-link Device User `15`.
 
 ---
 
@@ -301,7 +278,7 @@ sequenceDiagram
 | `eventAction` | `USER_CREATED` / `USER_UPDATED` / `FINGERPRINT_ENROLLED` / … |
 | `employeeNo` | **Plain** device person id when known (`15`) — never leave opaque here once mapped |
 | `deviceUserId` | FK to DeviceUser when known |
-| `employeeId` | FK to Employee when linked (`00015` deviceEmpId match) |
+| `employeeId` | FK to Employee when linked (`deviceEmpId` plain `"15"` match) |
 | `payload.opaquePersonToken` | Always keep if seen |
 | `payload.resolvedEmployeeNo` | Plain after map |
 | `payload.enrollmentSnapshot` / `enrollmentGoal` | Goal-oriented identity + UserInfo summary (no raw FP template bytes) |
@@ -382,10 +359,10 @@ Listener modal **armed/receiving** proves transport. Person labels prove identit
 | Plain id on callback when SDK sends it | **Yes** | `applyFastEnrollmentIdentityOnSdkCallback` |
 | Panel opaque → plain without inventing ids | **Yes** | logSearch + inventory delta |
 | New plain lands on DeviceUser quickly | **Yes** (2026-07-19) | inventory delta upserts new plains before map completes |
-| Pad `15` ↔ `00015` for Employee link | **Yes** | `buildDeviceUserEmployeeNoCandidates` + link helpers |
+| Plain `deviceEmpId === "15"` + optional `employeeId` pad | **Yes** | exact deviceEmpId + pad on employeeId only |
 | Raw FP template bytes on DeviceEvent | **No (by design)** | encrypted DeviceUser custody only |
 | Device Events click → Device User 15 | **Yes** | deep-link `deviceUserDetails` |
-| Employee click → padded employee | **Yes when linked** | Employee.deviceEmpId / employeeId |
+| Employee click → employee record (employeeId may display 00015) | **Yes when linked** | deviceEmpId plain 15 |
 | Smart reverse IP after reboot | **Yes** | resolve targets + ensure bridge |
 | Always sub-second plain person on panel create | **Partial** | depends on logSearch + UserInfo; often 1–10s after first socket |
 
@@ -395,7 +372,7 @@ Listener modal **armed/receiving** proves transport. Person labels prove identit
 
 1. **Panel create does not guarantee plain id on the first SDK packet.** Device firmware often sends major=3 without `dwEmployeeNo`. Spec accepts a short “path alive” row first, then plain id on resolve.
 2. **If inventory delta cannot uniquely map opaque → plain** (many new users at once), events may stay opaque until Sync device users or a later delta.
-3. **No Employee row with deviceEmpId `00015`** means DeviceUser stays **UNMATCHED** even when plain `15` is correct.
+3. **No Employee row with deviceEmpId `15`** means DeviceUser stays **UNMATCHED** even when plain `15` is correct.
 4. **Search box “15”** also matches `01515`, etc.; use `vendorUserId=15` or deep-link for exact open.
 5. **Listener STATUS UNREACHABLE** in Sync Center vs green Device Events strip means two different status probes — do not treat them as the same truth without checking the same endpoint.
 
@@ -474,20 +451,20 @@ Device person 15
   -> Device Events "Device user" click opens Device User 15
 
 HRIS employee linked to that device person
-  -> Employee.deviceEmpId may display/store as "00015"
+  -> Employee.deviceEmpId = "15" (plain, same as device)
+  -> Employee.employeeId may be "00015" (display/org code)
   -> Device Events "Employee" click opens the HRIS employee record
-  -> Employee screens may show 00015
 ```
 
-The architecture is correct only if these two links remain separate. `15` is not a short version of the DeviceUser key that should be padded before navigation. `00015` is an HRIS employee identity/display/matching variant.
+The architecture is correct only if these two links remain separate. Never pad `deviceUserDetails` to `00015`. Never treat `deviceEmpId` as padded.
 
 ```mermaid
 flowchart LR
   Device[Hikvision TEST A] -->|plain person id 15| DeviceUser[DeviceUser<br/>vendorUserId=15<br/>employeeNo=15]
   Device -->|callback/logSearch event| DeviceEvent[DeviceEvent<br/>employeeNo=15<br/>deviceUserId optional]
-  DeviceUser -->|optional safe match<br/>15 matches 00015| Employee[Employee<br/>deviceEmpId=00015]
+  DeviceUser -->|optional safe match<br/>deviceEmpId exact 15| Employee[Employee<br/>deviceEmpId=15<br/>employeeId may be 00015]
   DeviceEvent -->|Device user click| DeviceUserRoute[/Device Users modal<br/>deviceUserDetails=15/]
-  DeviceEvent -->|Employee click when linked| EmployeeRoute[/Employee record<br/>display may be 00015/]
+  DeviceEvent -->|Employee click when linked| EmployeeRoute[/Employee record<br/>employeeId may display 00015/]
 ```
 
 ### Data model diagram
@@ -523,7 +500,7 @@ erDiagram
   EMPLOYEE {
     string id
     string employeeId "HRIS code, may be 00015"
-    string deviceEmpId "device-facing employee id, may be 00015"
+    string deviceEmpId "plain device person id e.g. 15"
   }
 ```
 
@@ -533,7 +510,7 @@ erDiagram
 |---|---|---|
 | Device Events row has `employeeNo=15` and/or `deviceUserVendorUserId=15` | Show a Device user action and deep-link with `deviceUserDetails=15`. | Padding to `deviceUserDetails=00015`. |
 | Device Events row is missing `deviceUserId` but has plain `employeeNo=15` | API should resolve/fallback by `(organizationId, deviceId, vendorUserId=15)` so the row can still open Device User 15. | Leaving the row as permanently unknown when DeviceUser 15 exists. |
-| DeviceUser 15 is linked to Employee whose code/deviceEmpId is `00015` | Employee action opens the employee profile; employee UI may display `00015`. | Using the employee route when the user clicked Device user. |
+| DeviceUser 15 is linked to Employee with `deviceEmpId=15` (employeeId may be `00015`) | Employee action opens the employee profile; employee UI may display `00015`. | Using the employee route when the user clicked Device user. |
 | Callback/logSearch only has an opaque token | Keep opaque in payload and resolve through `DevicePersonToken` plus UserInfo inventory delta. | Displaying the opaque token as employee no. |
 | DeviceUser 15 exists but no safe Employee match exists | Show DeviceUser 15 as `UNMATCHED`; allow admin/manual link later. | Fabricating an Employee match by padding alone when multiple/unsafe matches exist. |
 

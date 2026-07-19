@@ -163,13 +163,16 @@ export const resolveDeviceUserLinkDecision = (
 	}
 
 	const employeeNo = normalizeText(candidate.employeeNo);
-	// Device panel person "15" must match Employee.deviceEmpId "00015" (5-digit pad rule).
+	// Truth: DeviceUser.vendorUserId / device person plain id is "15".
+	// Employee.deviceEmpId is the same plain id ("15"), not padded.
+	// Employee.employeeId may be zero-padded org code ("00015" / "01029") — pad variants apply there.
 	const personIdCandidates = new Set(buildDeviceUserEmployeeNoCandidates(employeeNo));
 	const directMatches = employees.filter((employee) => {
 		const deviceEmpId = normalizeText(employee.deviceEmpId);
 		if (!deviceEmpId) return false;
+		// Prefer exact plain match (deviceEmpId "15" === vendor "15").
+		if (deviceEmpId === employeeNo) return true;
 		if (personIdCandidates.has(deviceEmpId)) return true;
-		// Also accept when stored deviceEmpId normalizes into the same candidate set.
 		return buildDeviceUserEmployeeNoCandidates(deviceEmpId).some((c) =>
 			personIdCandidates.has(c),
 		);
