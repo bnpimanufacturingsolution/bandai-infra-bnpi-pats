@@ -10,6 +10,8 @@ const fs = require("fs");
 
 const script = path.join(__dirname, "..", "scripts", "resolve-hikvision-vm-bridge-targets.cjs");
 const ensureScript = path.join(__dirname, "..", "scripts", "ensure-hikvision-vm-bridge.cjs");
+const bridgeScript = path.join(__dirname, "..", "..", "scripts", "start-host-hikvision-vm-ssh-bridge.ps1");
+const livePathScript = path.join(__dirname, "..", "..", "scripts", "ensure-device-live-path.ps1");
 
 describe("resolve-hikvision-vm-bridge-targets", () => {
 	it("exports a resolver script that ranks host-reachable reverse targets", () => {
@@ -54,5 +56,22 @@ describe("resolve-hikvision-vm-bridge-targets", () => {
 		expect(parsed.targets[0].deviceIp).to.equal("192.168.254.102");
 		expect(parsed.targets[0]).to.have.property("hostReachable");
 		expect(parsed.targets[0]).to.have.property("openPorts");
+	});
+
+	it("keeps device and API reverse forwards independently restartable", () => {
+		const bridgeSource = fs.readFileSync(bridgeScript, "utf8");
+		const livePathSource = fs.readFileSync(livePathScript, "utf8");
+
+		// A stale API callback forward must not prevent the device SDK bridge from starting.
+		expect(bridgeSource).to.not.include('$forwardArgs.Add("${ApiRemotePort}:');
+		expect(bridgeSource).to.not.include("remoteListenPorts.Add([int]$ApiRemotePort)");
+		expect(bridgeSource).to.include("sudo -n ss -ltnp");
+		expect(bridgeSource).to.include("sudo -n kill");
+		expect(bridgeSource).to.include("'bash -s'");
+
+		// The live-path helper remains the sole owner of the VM-to-host API callback reverse.
+		expect(livePathSource).to.include('"-R", "${ApiRemotePort}:127.0.0.1:${ApiLocalPort}"');
+		expect(livePathSource).to.include("$retargetScript | & ssh.exe");
+		expect(livePathSource).to.include("'bash -s'");
 	});
 });

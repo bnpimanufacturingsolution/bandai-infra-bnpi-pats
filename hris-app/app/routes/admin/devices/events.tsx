@@ -1434,6 +1434,7 @@ export default function DeviceEventsPage() {
 		try {
 			const result = await devicesService.proveDeviceLivePath({ forceReArm });
 			await refetchLiveReadiness();
+			await refetchHikvisionListenerStatus();
 			void refetch();
 			// Truth matrix: green readiness wins over intermediate step noise / stale hints.
 			const readinessGreen =
@@ -4045,8 +4046,8 @@ export default function DeviceEventsPage() {
 								<h3 className="text-sm font-semibold text-slate-950">Per-device SDK proof</h3>
 								<p className="mt-0.5 text-xs text-slate-500">
 									{deviceId !== "all"
-										? "Selected terminal is shown first."
-										: "Each terminal reports its own login, arm, and callback state."}
+										? "Selected terminal is shown first. Reverse paths can be repaired here without rerunning predev."
+										: "Each terminal reports its own login, arm, and callback state. Reverse paths can be repaired here."}
 								</p>
 							</div>
 							<Badge variant={hikvisionSdkReceiving || hikvisionSdkArmed ? "success-soft" : "warning-soft"} className="w-fit rounded-md px-2 py-1">
@@ -4091,9 +4092,29 @@ export default function DeviceEventsPage() {
 														<p className="truncate text-sm font-semibold text-slate-950">
 															{device.name || device.host || "Hikvision device"}
 														</p>
-														<Badge variant={rowLive ? "success-soft" : "warning-soft"} className="w-fit rounded-md px-2 py-0.5">
-															{rowLabel}
-														</Badge>
+														<div className="flex shrink-0 items-center gap-2">
+															<Badge variant={rowLive ? "success-soft" : "warning-soft"} className="w-fit rounded-md px-2 py-0.5">
+																{rowLabel}
+															</Badge>
+															{(device as any).usesReverseTunnel ? (
+																<Button
+																	type="button"
+																	variant="outline"
+																	className="h-7 px-2 text-xs"
+																	disabled={isProvingLivePath}
+																	aria-label={`${rowLive ? "Check" : "Repair"} reverse tunnel for ${device.name || device.host || "Hikvision device"}`}
+																	onClick={() =>
+																		void proveLivePath({ forceReArm: !device.receivingCallbacks })
+																	}>
+																	{isProvingLivePath ? (
+																		<Loader2 className="h-3.5 w-3.5 animate-spin" />
+																	) : (
+																		<Server className="h-3.5 w-3.5" />
+																	)}
+																	{rowLive ? "Check tunnel" : "Repair tunnel"}
+																</Button>
+															) : null}
+														</div>
 													</div>
 													<div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
 														{(device as any).configuredAddress ? (

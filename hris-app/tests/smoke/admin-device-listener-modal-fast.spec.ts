@@ -89,6 +89,7 @@ test("listener modal settles quickly and shows configured address + reverse tunn
 	});
 
 	let listenerHits = 0;
+	let proveHits = 0;
 	await page.route("**/api/**", async (route) => {
 		const path = new URL(route.request().url()).pathname;
 		if (path.endsWith("/auth/me")) {
@@ -146,6 +147,37 @@ test("listener modal settles quickly and shows configured address + reverse tunn
 			);
 			return;
 		}
+		if (
+			path.endsWith("/device/events/live-readiness/prove") &&
+			route.request().method() === "POST"
+		) {
+			proveHits += 1;
+			await route.fulfill(
+				json({
+					proven: true,
+					restartAttempted: false,
+					steps: [],
+					readiness: {
+						overall: "green",
+						safeToTap: true,
+						safeToEnroll: true,
+						headline: "Safe to tap and enroll — live path is receiving",
+					},
+				}),
+			);
+			return;
+		}
+		if (path.endsWith("/device/events/live-readiness")) {
+			await route.fulfill(
+				json({
+					overall: "green",
+					safeToTap: true,
+					safeToEnroll: true,
+					headline: "Safe to tap and enroll — live path is receiving",
+				}),
+			);
+			return;
+		}
 		if (path.includes("/device/events")) {
 			await route.fulfill(
 				json({
@@ -187,6 +219,10 @@ test("listener modal settles quickly and shows configured address + reverse tunn
 	await expect(dialog.getByText("192.168.254.189")).toBeVisible();
 	await expect(dialog.getByText(/SDK via reverse tunnel 127\.0\.0\.1/i)).toBeVisible();
 	await expect(dialog.getByText(/Receiving callbacks|receiving/i).first()).toBeVisible();
+	const tunnelButton = dialog.getByRole("button", { name: /Check reverse tunnel for TEST A/i });
+	await expect(tunnelButton).toBeVisible();
+	await tunnelButton.click();
+	await expect.poll(() => proveHits).toBe(1);
 
 	const elapsedMs = Date.now() - startedAt;
 	expect(elapsedMs).toBeLessThan(8000);

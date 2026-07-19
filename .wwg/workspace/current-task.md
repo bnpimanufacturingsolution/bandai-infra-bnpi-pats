@@ -1,5 +1,23 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 Restart-safe Hikvision reverse tunnel + in-app repair
+
+- Task mode: Regression repair + focused admin UX.
+- Goal: Recover the Hikvision reverse path after a host/VM restart without requiring the operator to rerun the full API predev sequence or manually choose a device IP.
+- Root cause: The device SDK/HTTP reverse forwards and the VM-to-host API callback reverse were bundled into one SSH command. A stale VM `:53001` API listener therefore made the entire command fail before device ports `:59000` / `:59443` could bind.
+- Implemented:
+  - The host device bridge now owns only DB-resolved device HTTP/SDK forwards; `ensure-device-live-path.ps1` separately owns the API callback reverse.
+  - Stale-port recovery inspects privileged `sshd` ownership, kills only the exact stale `infra` SSH session holding the requested ports, and sends multiline repair scripts over `bash -s` to avoid Windows SSH quoting drift.
+  - The listener modal shows a compact `Check tunnel` / `Repair tunnel` action only for devices configured to use a reverse path. It calls the existing host-owned prove/repair endpoint and refreshes listener truth; it does not rerun all predev steps.
+- Live proof (this host/VM):
+  - Host can reach DB device `TEST A` at `192.168.254.102` on `:8000` and `:443`.
+  - Device and API reverse paths run as separate SSH sessions; VM loopback listeners `:59000`, `:59443`, and `:53001` are present.
+  - Admin prove endpoint returned `proven=true`, readiness green, listener `receiving=true`, and a fresh saved SDK event.
+  - Focused Playwright listener-modal smoke passed 1/1; bridge contract passed 4/4; PowerShell parsing passed.
+- Boundary: `ping 192.168.254.102` from the VM is not reverse-tunnel proof. SSH reverse forwarding exposes selected TCP ports on VM loopback; it does not route ICMP or the device subnet.
+- Existing validation drift: Full `hris-app` typecheck remains red on numerous unrelated historical errors outside the touched Device Events surface; the focused Playwright regression is green.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-19 Smart reverse-bridge IP after reboot
 
 - Task mode: Bug fix + host runtime proof.
