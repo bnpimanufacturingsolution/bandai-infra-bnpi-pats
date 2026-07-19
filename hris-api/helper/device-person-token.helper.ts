@@ -163,7 +163,9 @@ export const buildEnrollmentSnapshot = (input: {
 		typeof input.fingerIdFromLog === "number" && Number.isFinite(input.fingerIdFromLog)
 			? input.fingerIdFromLog
 			: null;
-	const completeEnoughForEnrollmentIdentity = Boolean(plain && (input.displayName || input.userInfo));
+	const completeEnoughForEnrollmentIdentity = Boolean(
+		plain && (input.displayName || input.userInfo),
+	);
 	const templateStatus =
 		input.biometricTemplateStatus ||
 		(plain
@@ -195,8 +197,7 @@ export const buildEnrollmentSnapshot = (input: {
 			faceCount: credentialSummary?.faceCount ?? null,
 			cardCount: credentialSummary?.cardCount ?? null,
 			location: "DeviceUser.vendorMetadata.rawFingerprints.templates[].data",
-			note:
-				"DeviceEvent keeps enrollment proof + UserInfo summary only. Actual base64 raw template blobs are stored on DeviceUser.vendorMetadata.rawFingerprints after enroll capture — not AES-wrapped by default.",
+			note: "DeviceEvent keeps enrollment proof + UserInfo summary only. Actual base64 raw template blobs are stored on DeviceUser.vendorMetadata.rawFingerprints after enroll capture — not AES-wrapped by default.",
 		},
 		completeness: {
 			hasOpaqueToken: Boolean(opaque),
@@ -248,6 +249,120 @@ export const fetchUserInfoRecordByEmployeeNo = async (params: {
 		list[0] ||
 		null;
 	return match || null;
+};
+
+export const mergeHikvisionDeviceUserInventoryState = (params: {
+	current: any;
+	candidate: any;
+	displayName?: string | null;
+	linkedEmployeeId?: string | null;
+	opaqueToken?: string | null;
+}) => {
+	const { current, candidate } = params;
+	const priorMeta = (current?.vendorMetadata as any) || {};
+	const priorRaw =
+		current?.rawPayload && typeof current.rawPayload === "object"
+			? (current.rawPayload as any)
+			: {};
+	const candidateMeta = (candidate?.vendorMetadata as any) || {};
+	const vendorMetadata = {
+		...priorMeta,
+		...candidateMeta,
+		rawFingerprints: priorMeta.rawFingerprints || candidateMeta.rawFingerprints || undefined,
+		rawFingerprintPresent:
+			priorMeta.rawFingerprintPresent ?? candidateMeta.rawFingerprintPresent ?? undefined,
+		rawFingerprintCount:
+			priorMeta.rawFingerprintCount ?? candidateMeta.rawFingerprintCount ?? undefined,
+		rawFace: priorMeta.rawFace || candidateMeta.rawFace || undefined,
+		rawFacePresent: priorMeta.rawFacePresent ?? candidateMeta.rawFacePresent ?? undefined,
+		credentialSummary: {
+			...(priorMeta.credentialSummary || {}),
+			...(candidateMeta.credentialSummary || {}),
+			fingerprintCount: Math.max(
+				Number(priorMeta.credentialSummary?.fingerprintCount || 0) || 0,
+				Number(candidateMeta.credentialSummary?.fingerprintCount || 0) || 0,
+				Number(priorMeta.rawFingerprintCount || 0) || 0,
+			),
+			hasFingerprint:
+				Boolean(priorMeta.credentialSummary?.hasFingerprint) ||
+				Boolean(candidateMeta.credentialSummary?.hasFingerprint) ||
+				Boolean(priorMeta.rawFingerprintPresent) ||
+				Boolean(priorMeta.rawFingerprints?.present),
+			faceCount: Math.max(
+				Number(priorMeta.credentialSummary?.faceCount || 0) || 0,
+				Number(candidateMeta.credentialSummary?.faceCount || 0) || 0,
+			),
+			hasFace:
+				Boolean(priorMeta.credentialSummary?.hasFace) ||
+				Boolean(candidateMeta.credentialSummary?.hasFace) ||
+				Boolean(priorMeta.rawFacePresent),
+		},
+		opaquePersonToken: params.opaqueToken || priorMeta.opaquePersonToken || null,
+		enrollmentEnrichedAt: new Date().toISOString(),
+		plane: "DEVICE_USER_INVENTORY",
+	};
+	const rawPayload = {
+		...priorRaw,
+		...((candidate?.rawPayload as any) || {}),
+		_hrisDeviceMetadata: {
+			...(priorRaw._hrisDeviceMetadata || {}),
+			...(((candidate?.rawPayload as any)?._hrisDeviceMetadata as any) || {}),
+			rawFingerprints:
+				priorRaw._hrisDeviceMetadata?.rawFingerprints ||
+				vendorMetadata.rawFingerprints ||
+				undefined,
+			rawFace: priorRaw._hrisDeviceMetadata?.rawFace || vendorMetadata.rawFace || undefined,
+			credentialSummary: vendorMetadata.credentialSummary,
+		},
+	};
+	return {
+		employeeNo: candidate.employeeNo,
+		displayName: params.displayName || candidate.displayName || current?.displayName,
+		userType: candidate.userType,
+		status: params.linkedEmployeeId
+			? "ACTIVE"
+			: current?.status === "DISABLED"
+				? "DISABLED"
+				: "UNMATCHED",
+		validFrom: candidate.validFrom,
+		validTo: candidate.validTo,
+		doorRight: candidate.doorRight,
+		accessPlan: candidate.accessPlan as any,
+		rawPayload: rawPayload as any,
+		employeeId: params.linkedEmployeeId || current?.employeeId || null,
+		lastSyncedAt: new Date(),
+		vendorMetadata,
+	};
+};
+
+export const updateDeviceUserWithOptimisticInventoryMerge = async (params: {
+	deviceUserClient: any;
+	current: any;
+	buildData: (current: any) => Record<string, unknown>;
+	maxAttempts?: number;
+}) => {
+	let current = params.current;
+	const maxAttempts = Math.max(1, Number(params.maxAttempts || 4));
+	for (let attempt = 0; attempt < maxAttempts && current; attempt += 1) {
+		const data = params.buildData(current);
+		if (typeof params.deviceUserClient.updateMany !== "function") {
+			return params.deviceUserClient.update({ where: { id: current.id }, data });
+		}
+		const write = await params.deviceUserClient.updateMany({
+			where: { id: current.id, updatedAt: current.updatedAt },
+			data,
+		});
+		if (Number(write?.count || 0) === 1) {
+			return (
+				(await params.deviceUserClient.findUnique({ where: { id: current.id } })) || {
+					...current,
+					...data,
+				}
+			);
+		}
+		current = await params.deviceUserClient.findFirst({ where: { id: current.id } });
+	}
+	throw new Error("device_user_inventory_merge_conflict");
 };
 
 /**
@@ -304,130 +419,49 @@ export const enrichEnrollmentLifecycleEvent = async (params: {
 			if (plainUser?.displayName) displayName = plainUser.displayName;
 			const candidate = normalizeHikvisionDeviceUser(userInfo);
 			if (candidate) {
-				const existing = await params.prisma.deviceUser.findFirst({
+				let existing = await params.prisma.deviceUser.findFirst({
 					where: {
 						organizationId,
 						deviceId,
 						vendorUserId: candidate.vendorUserId,
 					},
 				});
-				const priorMeta = (existing?.vendorMetadata as any) || {};
-				const priorRaw =
-					existing?.rawPayload && typeof existing.rawPayload === "object"
-						? (existing.rawPayload as any)
-						: {};
-				const candidateMeta = (candidate.vendorMetadata as any) || {};
-				// Never drop raw biometric custody when UserInfo enrich rewrites metadata.
-				const vendorMetadata = {
-					...priorMeta,
-					...candidateMeta,
-					// Preserve raw blobs even if candidate overwrites sibling keys.
-					rawFingerprints:
-						priorMeta.rawFingerprints || candidateMeta.rawFingerprints || undefined,
-					rawFingerprintPresent:
-						priorMeta.rawFingerprintPresent ??
-						candidateMeta.rawFingerprintPresent ??
-						undefined,
-					rawFingerprintCount:
-						priorMeta.rawFingerprintCount ??
-						candidateMeta.rawFingerprintCount ??
-						undefined,
-					rawFace: priorMeta.rawFace || candidateMeta.rawFace || undefined,
-					rawFacePresent:
-						priorMeta.rawFacePresent ?? candidateMeta.rawFacePresent ?? undefined,
-					credentialSummary: {
-						...(priorMeta.credentialSummary || {}),
-						...(candidateMeta.credentialSummary || {}),
-						fingerprintCount: Math.max(
-							Number(priorMeta.credentialSummary?.fingerprintCount || 0) || 0,
-							Number(candidateMeta.credentialSummary?.fingerprintCount || 0) || 0,
-							Number(priorMeta.rawFingerprintCount || 0) || 0,
-						),
-						hasFingerprint:
-							Boolean(priorMeta.credentialSummary?.hasFingerprint) ||
-							Boolean(candidateMeta.credentialSummary?.hasFingerprint) ||
-							Boolean(priorMeta.rawFingerprintPresent) ||
-							Boolean(priorMeta.rawFingerprints?.present),
-						faceCount: Math.max(
-							Number(priorMeta.credentialSummary?.faceCount || 0) || 0,
-							Number(candidateMeta.credentialSummary?.faceCount || 0) || 0,
-						),
-						hasFace:
-							Boolean(priorMeta.credentialSummary?.hasFace) ||
-							Boolean(candidateMeta.credentialSummary?.hasFace) ||
-							Boolean(priorMeta.rawFacePresent),
-					},
-					opaquePersonToken: opaque || priorMeta.opaquePersonToken || null,
-					enrollmentEnrichedAt: new Date().toISOString(),
-					plane: "DEVICE_USER_INVENTORY",
-				};
-				const mergedRawPayload = {
-					...priorRaw,
-					...((candidate.rawPayload as any) || {}),
-					_hrisDeviceMetadata: {
-						...(priorRaw._hrisDeviceMetadata || {}),
-						...(((candidate.rawPayload as any)?._hrisDeviceMetadata as any) || {}),
-						// Keep raw biometric mirrors for Device User modal.
-						rawFingerprints:
-							priorRaw._hrisDeviceMetadata?.rawFingerprints ||
-							vendorMetadata.rawFingerprints ||
-							undefined,
-						rawFace:
-							priorRaw._hrisDeviceMetadata?.rawFace ||
-							vendorMetadata.rawFace ||
-							undefined,
-						credentialSummary: vendorMetadata.credentialSummary,
-					},
-				};
 				const linked =
 					(await resolveLinkedEmployeeForDevicePerson(params.prisma, {
 						organizationId,
 						employeeNo: candidate.employeeNo,
 					}).catch(() => null)) || null;
 				linkedEmployeeId = linked?.id || linkedEmployeeId;
-				const status = linked?.id
-					? "ACTIVE"
-					: existing?.status === "DISABLED"
-						? "DISABLED"
-						: "UNMATCHED";
-				const saved = existing
-					? await params.prisma.deviceUser.update({
-							where: { id: existing.id },
-							data: {
-								employeeNo: candidate.employeeNo,
-								displayName:
-									displayName || candidate.displayName || existing.displayName,
-								userType: candidate.userType,
-								status,
-								validFrom: candidate.validFrom,
-								validTo: candidate.validTo,
-								doorRight: candidate.doorRight,
-								accessPlan: candidate.accessPlan as any,
-								rawPayload: mergedRawPayload as any,
-								employeeId: linked?.id || existing.employeeId || null,
-								lastSyncedAt: new Date(),
-								vendorMetadata,
-							},
-						})
-					: await params.prisma.deviceUser.create({
-							data: {
-								organizationId,
-								deviceId,
-								vendorUserId: candidate.vendorUserId,
-								employeeNo: candidate.employeeNo,
-								displayName: displayName || candidate.displayName,
-								userType: candidate.userType,
-								status,
-								validFrom: candidate.validFrom,
-								validTo: candidate.validTo,
-								doorRight: candidate.doorRight,
-								accessPlan: candidate.accessPlan as any,
-								rawPayload: mergedRawPayload as any,
-								employeeId: linked?.id || null,
-								lastSyncedAt: new Date(),
-								vendorMetadata,
-							},
-						});
+				const buildMerge = (current: any) =>
+					mergeHikvisionDeviceUserInventoryState({
+						current,
+						candidate,
+						displayName,
+						linkedEmployeeId: linked?.id || null,
+						opaqueToken: opaque,
+					});
+
+				let saved: any = null;
+				if (existing) {
+					// Optimistic merge prevents a slower UserInfo write from erasing raw
+					// templates saved concurrently by the C++ callback. Retry from the newest
+					// DeviceUser snapshot whenever updatedAt changed under us.
+					saved = await updateDeviceUserWithOptimisticInventoryMerge({
+						deviceUserClient: params.prisma.deviceUser,
+						current: existing,
+						buildData: buildMerge,
+					});
+				} else {
+					const createData = buildMerge(null);
+					saved = await params.prisma.deviceUser.create({
+						data: {
+							organizationId,
+							deviceId,
+							vendorUserId: candidate.vendorUserId,
+							...createData,
+						},
+					});
+				}
 				deviceUserId = saved?.id || deviceUserId;
 			}
 		} else {
@@ -751,10 +785,7 @@ export const resolveLinkedEmployeeForDevicePerson = async (
 		where: {
 			organizationId,
 			isDeleted: false,
-			OR: [
-				{ deviceEmpId: { in: variants } },
-				{ employeeId: { in: variants } },
-			],
+			OR: [{ deviceEmpId: { in: variants } }, { employeeId: { in: variants } }],
 		},
 		select: {
 			id: true,
@@ -797,10 +828,7 @@ export const upsertDeviceUserInventoryStub = async (
 		organizationId,
 		employeeNo,
 	});
-	const displayName =
-		String(input.displayName || "").trim() ||
-		linked?.displayName ||
-		null;
+	const displayName = String(input.displayName || "").trim() || linked?.displayName || null;
 	const opaqueToken = String(input.opaqueToken || "").trim() || null;
 	const existing = await prisma.deviceUser.findFirst({
 		where: { organizationId, deviceId, vendorUserId: employeeNo },
@@ -897,9 +925,7 @@ export const fetchDeviceUserInfoCandidates = async (params: {
 			},
 		});
 		const search =
-			(response as any)?.UserInfoSearch ||
-			(response as any)?.data?.UserInfoSearch ||
-			{};
+			(response as any)?.UserInfoSearch || (response as any)?.data?.UserInfoSearch || {};
 		const list = Array.isArray(search?.UserInfo)
 			? search.UserInfo
 			: search?.UserInfo
@@ -914,7 +940,10 @@ export const fetchDeviceUserInfoCandidates = async (params: {
 		position += num > 0 ? num : list.length;
 		if (status !== "MORE" || list.length === 0) break;
 	}
-	const map = new Map<string, { employeeNo: string; displayName: string | null; numOfFP: number }>();
+	const map = new Map<
+		string,
+		{ employeeNo: string; displayName: string | null; numOfFP: number }
+	>();
 	for (const row of out) map.set(row.employeeNo, row);
 	return Array.from(map.values());
 };
@@ -965,12 +994,7 @@ export const backfillRecentLifecycleEventsWithPlain = async (params: {
 	const deviceId = String(params.deviceId || "").trim();
 	const plain = String(params.plainEmployeeNo || "").trim();
 	const opaque = String(params.opaqueToken || "").trim() || null;
-	if (
-		!organizationId ||
-		!deviceId ||
-		!plain ||
-		isOpaqueHikvisionPersonToken(plain)
-	) {
+	if (!organizationId || !deviceId || !plain || isOpaqueHikvisionPersonToken(plain)) {
 		return { backfilledEvents: 0, eventIds: [] };
 	}
 
@@ -986,9 +1010,7 @@ export const backfillRecentLifecycleEventsWithPlain = async (params: {
 			deviceId,
 			eventAction: { in: [...LIFECYCLE_EVENT_ACTIONS_FOR_PLAIN_BACKFILL] },
 			receivedAt: { gte: new Date(Date.now() - windowMs) },
-			...(params.excludeEventId
-				? { id: { not: String(params.excludeEventId) } }
-				: {}),
+			...(params.excludeEventId ? { id: { not: String(params.excludeEventId) } } : {}),
 			OR: [{ employeeNo: null }, { employeeNo: "" }],
 		},
 		orderBy: { receivedAt: "desc" },
@@ -1073,7 +1095,12 @@ export const backfillRecentLifecycleEventsWithPlain = async (params: {
 		// If caller gave a specific opaque, only backfill matching rows (or rows with no opaque).
 		if (opaque && eventOpaque && eventOpaque !== opaque) continue;
 		// If multiple opaques and no target, we already returned; here at most one opaque family.
-		if (!opaque && uniqueOpaques.length === 1 && eventOpaque && eventOpaque !== uniqueOpaques[0]) {
+		if (
+			!opaque &&
+			uniqueOpaques.length === 1 &&
+			eventOpaque &&
+			eventOpaque !== uniqueOpaques[0]
+		) {
 			continue;
 		}
 
@@ -1083,10 +1110,7 @@ export const backfillRecentLifecycleEventsWithPlain = async (params: {
 			opaquePersonToken: resolvedOpaque || payload.opaquePersonToken || null,
 			resolvedEmployeeNo: plain,
 			resolvedDisplayName:
-				params.displayName ||
-				linked?.displayName ||
-				payload.resolvedDisplayName ||
-				null,
+				params.displayName || linked?.displayName || payload.resolvedDisplayName || null,
 			personTokenResolved: Boolean(resolvedOpaque),
 			personTokenSource: source,
 			lifecyclePlainBackfilledAt: new Date().toISOString(),
@@ -1380,10 +1404,7 @@ export const resolveOpaqueViaDeviceUserInventoryDelta = async (params: {
 				organizationId,
 				deviceId,
 				receivedAt: { gte: new Date(Date.now() - 10 * 60_000) },
-				AND: [
-					{ employeeNo: { not: null } },
-					{ NOT: { employeeNo: "" } },
-				],
+				AND: [{ employeeNo: { not: null } }, { NOT: { employeeNo: "" } }],
 				eventAction: {
 					in: ["SYNC_SIGNAL", "USER_CREATED", "USER_UPDATED", "FINGERPRINT_ENROLLED"],
 				},
@@ -1486,7 +1507,10 @@ export const resolveOpaqueViaDeviceUserInventoryDelta = async (params: {
 			opaquePersonToken: correlated.opaqueToken,
 			resolvedEmployeeNo: correlated.employeeNo,
 			resolvedDisplayName:
-				correlated.displayName || linked?.displayName || payload.resolvedDisplayName || null,
+				correlated.displayName ||
+				linked?.displayName ||
+				payload.resolvedDisplayName ||
+				null,
 			personTokenResolved: true,
 			personTokenSource: "PANEL_INVENTORY_DELTA",
 			notHrisEmployee: !linked?.id,
@@ -1518,7 +1542,8 @@ export const resolveOpaqueViaDeviceUserInventoryDelta = async (params: {
 		});
 		// DeviceEvent has employeeId but no Prisma employee relation — attach for socket UI only.
 		const employeeIdForSocket =
-			String(updated?.employeeId || linked?.id || deviceUser?.employeeId || "").trim() || null;
+			String(updated?.employeeId || linked?.id || deviceUser?.employeeId || "").trim() ||
+			null;
 		let employeeForSocket: any = null;
 		if (employeeIdForSocket) {
 			employeeForSocket = await params.prisma.employee.findUnique({
@@ -1541,7 +1566,10 @@ export const resolveOpaqueViaDeviceUserInventoryDelta = async (params: {
 			eventAction: event.eventAction,
 			plainEmployeeNo: correlated.employeeNo,
 			displayName:
-				correlated.displayName || linked?.displayName || payload.resolvedDisplayName || null,
+				correlated.displayName ||
+				linked?.displayName ||
+				payload.resolvedDisplayName ||
+				null,
 			opaqueToken: correlated.opaqueToken,
 			fingerIdFromLog: extractFingerIdFromLogEvidence(payload),
 			linkedEmployeeId: linked?.id || deviceUser?.employeeId || null,
@@ -1700,7 +1728,9 @@ export const captureOpaqueTokenAfterUserWrite = async (params: {
 /**
  * Resolve evidence.employeeNo when it is an opaque token. Mutates a shallow copy.
  */
-export const applyDevicePersonTokenToEvidence = async <T extends { employeeNo?: string | null; rawEvidence?: any }>(
+export const applyDevicePersonTokenToEvidence = async <
+	T extends { employeeNo?: string | null; rawEvidence?: any },
+>(
 	prisma: PrismaClient | any,
 	input: {
 		organizationId: string;
@@ -1981,7 +2011,9 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 						(applied as any).eventAction || evidence.eventAction || meta.eventAction,
 					);
 					const eventCategory = String(
-						(applied as any).eventCategory || evidence.eventCategory || meta.eventCategory,
+						(applied as any).eventCategory ||
+							evidence.eventCategory ||
+							meta.eventCategory,
 					);
 					const eventLabel = String(
 						(applied as any).eventLabel || evidence.eventLabel || meta.eventLabel,
@@ -2016,10 +2048,7 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 								? { employeeNo }
 								: opaque
 									? {
-											OR: [
-												{ employeeNo: null },
-												{ employeeNo: "" },
-											],
+											OR: [{ employeeNo: null }, { employeeNo: "" }],
 										}
 									: {}),
 						},
@@ -2080,11 +2109,17 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 							deviceId,
 							deviceUserId: deviceUser?.id || null,
 							employeeId: linkedEmployeeId || null,
-							eventTime: Number.isFinite(eventTime.getTime()) ? eventTime : new Date(),
+							eventTime: Number.isFinite(eventTime.getTime())
+								? eventTime
+								: new Date(),
 							// Plain device person id when known (never leave opaque as employeeNo when mapped).
 							employeeNo: employeeNo || null,
 							source: "HIKVISION_CALLBACK",
-							status: linkedEmployeeId ? "MATCHED" : employeeNo ? "UNMATCHED" : "RECEIVED",
+							status: linkedEmployeeId
+								? "MATCHED"
+								: employeeNo
+									? "UNMATCHED"
+									: "RECEIVED",
 							eventCategory,
 							eventAction,
 							eventLabel,
@@ -2181,7 +2216,9 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 								deviceId,
 								receivedAt: { gte: new Date(Date.now() - 10 * 60_000) },
 								AND: [{ employeeNo: { not: null } }, { NOT: { employeeNo: "" } }],
-								eventAction: { in: ["SYNC_SIGNAL", "USER_CREATED", "USER_UPDATED"] },
+								eventAction: {
+									in: ["SYNC_SIGNAL", "USER_CREATED", "USER_UPDATED"],
+								},
 							},
 							orderBy: { receivedAt: "desc" },
 							select: { employeeNo: true, deviceUserId: true, payload: true },
@@ -2268,10 +2305,7 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 		// After first lifecycle save, only run 2 more quick passes (catch FP after create).
 		const followUpPassesAfterSuccess = 2;
 		for (let i = 0; i < retryDelaysMs.length; i += 1) {
-			if (
-				firstSuccessPass >= 0 &&
-				i > firstSuccessPass + followUpPassesAfterSuccess
-			) {
+			if (firstSuccessPass >= 0 && i > firstSuccessPass + followUpPassesAfterSuccess) {
 				break;
 			}
 			const delay = retryDelaysMs[i] || 0;
@@ -2347,9 +2381,7 @@ export const isHikvisionEnrollmentLifecycleCallback = (event: {
 	const actionCode = String(event.actionCode ?? event.payload?.actionCode ?? "")
 		.trim()
 		.toUpperCase();
-	const eventAction = String(
-		event.eventAction ?? event.payload?.eventAction ?? "",
-	)
+	const eventAction = String(event.eventAction ?? event.payload?.eventAction ?? "")
 		.trim()
 		.toUpperCase();
 	if (
@@ -2391,11 +2423,7 @@ export type FastEnrollmentIdentityResult = {
 	opaqueToken: string | null;
 	deviceUserId: string | null;
 	linkedEmployeeId: string | null;
-	path:
-		| "plain_immediate"
-		| "opaque_mapped"
-		| "pending_log_resolve"
-		| "skipped";
+	path: "plain_immediate" | "opaque_mapped" | "pending_log_resolve" | "skipped";
 	reason?: string;
 };
 
@@ -2573,9 +2601,7 @@ export const applyFastEnrollmentIdentityOnSdkCallback = async (params: {
 	};
 	// Re-type ledger row from C++ eventKind / fingerprints so SYNC_SIGNAL does not stick
 	// after plain id lands (User created / Fingerprint enrolled must appear under SDK source).
-	const { buildPersistedDeviceEventTaxonomy } = await import(
-		"./device-event-taxonomy.helper.js"
-	);
+	const { buildPersistedDeviceEventTaxonomy } = await import("./device-event-taxonomy.helper.js");
 	const taxonomy = buildPersistedDeviceEventTaxonomy({
 		source: (existingEvent as any).source || "EN_HCNETSDK_ALARM",
 		status: linkedEmployeeId ? "MATCHED" : "UNMATCHED",

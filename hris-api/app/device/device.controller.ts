@@ -66,6 +66,7 @@ import {
 import { buildDeviceRuntimeConfig } from "../../helper/device-config-defaults.helper";
 import { summarizeHikvisionListenerLogs } from "../../helper/hikvision-listener-status.helper";
 import { resolveHikvisionDeviceHealthNetworkTarget } from "../../helper/device-health.helper";
+import { buildDeviceEventSearchTerms } from "../../helper/device-event-search.helper";
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
 import {
 	decryptPortableBiometricEnvelope,
@@ -14424,6 +14425,7 @@ export const controller = (prisma: PrismaClient) => {
 				.trim()
 				.toUpperCase();
 			const query = String(req.query.query || req.query.search || "").trim();
+			const searchTerms = buildDeviceEventSearchTerms(query);
 			const from = String(req.query.from || "").trim();
 			const to = String(req.query.to || "").trim();
 			const dateField = String(req.query.dateField || "eventTime").trim();
@@ -14448,6 +14450,18 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const hasDeviceEventColumns = await getDeviceEventColumnPresence();
 			const hasDeviceUsersTable = await hasDeviceUserTable();
+			const eventCategorySql = hasDeviceEventColumns.eventCategory
+				? Prisma.sql`de."eventCategory"::text`
+				: Prisma.sql`'UNKNOWN_VENDOR'::text`;
+			const eventActionSql = hasDeviceEventColumns.eventAction
+				? Prisma.sql`de."eventAction"::text`
+				: Prisma.sql`'UNKNOWN'::text`;
+			const eventLabelSql = hasDeviceEventColumns.eventLabel
+				? Prisma.sql`de."eventLabel"`
+				: Prisma.sql`COALESCE(de."eventType", 'Device event')`;
+			const eventConfidenceSql = hasDeviceEventColumns.eventConfidence
+				? Prisma.sql`de."eventConfidence"::text`
+				: Prisma.sql`'UNKNOWN'::text`;
 
 			if (
 				eventCategory &&
@@ -14498,66 +14512,44 @@ export const controller = (prisma: PrismaClient) => {
 
 			const hasQuery = Boolean(query);
 			if (hasQuery) {
-				const queryLike = `%${query}%`;
-				const strippedNumericQuery = /^\d+$/.test(query)
-					? query.replace(/^0+/, "") || "0"
-					: "";
-				const paddedEmployeeCode = strippedNumericQuery
-					? strippedNumericQuery.padStart(5, "0")
-					: "";
-				whereConditions.push(Prisma.sql`(
-					de."employeeNo" ILIKE ${queryLike}
-					OR de."eventType" ILIKE ${queryLike}
-					${
-						hasDeviceEventColumns.eventLabel
-							? Prisma.sql`OR de."eventLabel" ILIKE ${queryLike}`
-							: Prisma.sql``
-					}
-					OR de."doorNo" ILIKE ${queryLike}
-					OR d."name" ILIKE ${queryLike}
-					OR d."address" ILIKE ${queryLike}
-					OR du."vendorUserId" ILIKE ${queryLike}
-					OR du."displayName" ILIKE ${queryLike}
-					OR COALESCE(employee_by_id."employeeId", employee_by_device_user."employeeId", employee_by_device."employeeId", employee_by_code."employeeId") ILIKE ${queryLike}
-					OR COALESCE(employee_by_id."deviceEmpId", employee_by_device_user."deviceEmpId", employee_by_device."deviceEmpId", employee_by_code."deviceEmpId") ILIKE ${queryLike}
-					OR NULLIF(
-						BTRIM(
-							CONCAT_WS(
-								' ',
-								matched_person."personalInfo"->>'firstName',
-								matched_person."personalInfo"->>'middleName',
-								matched_person."personalInfo"->>'lastName'
-							)
-						),
-						''
-					) ILIKE ${queryLike}
-					OR (
-						${paddedEmployeeCode} <> ''
-						AND COALESCE(employee_by_id."employeeId", employee_by_device_user."employeeId", employee_by_device."employeeId", employee_by_code."employeeId") IN (
-							${query},
-							${strippedNumericQuery},
-							${paddedEmployeeCode}
-						)
-					)
-				)`);
+				whereConditions.push(Prisma.sql`
+					CONCAT_WS(
+						E'\n',
+						de."employeeNo",
+						du."vendorUserId",
+						du."employeeNo",
+						du."displayName",
+						COALESCE(employee_by_id."employeeId", employee_by_device_user."employeeId", employee_by_device."employeeId", employee_by_code."employeeId"),
+						COALESCE(employee_by_id."deviceEmpId", employee_by_device_user."deviceEmpId", employee_by_device."deviceEmpId", employee_by_code."deviceEmpId"),
+						NULLIF(BTRIM(CONCAT_WS(' ', matched_person."personalInfo"->>'firstName', matched_person."personalInfo"->>'middleName', matched_person."personalInfo"->>'lastName')), ''),
+						${eventActionSql},
+						${eventCategorySql},
+						${eventLabelSql},
+						de."eventType",
+						de.status::text,
+						de.source::text,
+						d.name,
+						d.address,
+						de."doorNo",
+						de."verifyMode",
+						de.major,
+						de.minor,
+						de.payload->>'evidenceSource',
+						de.payload->>'resolvedEmployeeNo',
+						de.payload->>'employeeNo',
+						de.payload->>'employeeNoString',
+						de.payload#>>'{event,employeeNo}',
+						de.payload#>>'{attendance,employeeNo}',
+						de.payload#>>'{EventNotificationAlert,AccessControllerEvent,employeeNoString}',
+						de.payload::text
+					) ILIKE ${searchTerms.literalContains} ESCAPE E'\\\\'
+				`);
 			}
 
 			const whereSql = Prisma.sql`WHERE ${Prisma.join(whereConditions, " AND ")}`;
 			const deviceUserIdSql = hasDeviceEventColumns.deviceUserId
 				? Prisma.sql`de."deviceUserId"`
 				: Prisma.sql`NULL::text`;
-			const eventCategorySql = hasDeviceEventColumns.eventCategory
-				? Prisma.sql`de."eventCategory"::text`
-				: Prisma.sql`'UNKNOWN_VENDOR'::text`;
-			const eventActionSql = hasDeviceEventColumns.eventAction
-				? Prisma.sql`de."eventAction"::text`
-				: Prisma.sql`'UNKNOWN'::text`;
-			const eventLabelSql = hasDeviceEventColumns.eventLabel
-				? Prisma.sql`de."eventLabel"`
-				: Prisma.sql`COALESCE(de."eventType", 'Device event')`;
-			const eventConfidenceSql = hasDeviceEventColumns.eventConfidence
-				? Prisma.sql`de."eventConfidence"::text`
-				: Prisma.sql`'UNKNOWN'::text`;
 			const deviceUserJoinSql = hasDeviceUsersTable
 				? Prisma.sql`
 					LEFT JOIN device_users du ON (
@@ -14663,11 +14655,72 @@ export const controller = (prisma: PrismaClient) => {
 					employee_by_code."personId"
 				)
 			`;
+			const searchMatchJoinSql = hasQuery
+				? Prisma.sql`
+					LEFT JOIN LATERAL (
+						SELECT
+							candidate.field,
+							candidate.label,
+							candidate.value,
+							CASE
+								WHEN candidate.is_identifier
+									AND LOWER(BTRIM(candidate.value)) IN (${Prisma.join(searchTerms.exactCandidates.map((candidate) => candidate.toLowerCase()))})
+									THEN 0
+								WHEN LOWER(BTRIM(candidate.value)) = LOWER(${searchTerms.raw}) THEN 1
+								WHEN candidate.is_identifier
+									AND candidate.value ILIKE ${searchTerms.literalPrefix} ESCAPE E'\\\\'
+									THEN 2
+								WHEN candidate.is_identifier THEN 3
+								ELSE 4
+							END AS rank,
+							CASE
+								WHEN LOWER(BTRIM(candidate.value)) IN (${Prisma.join(searchTerms.exactCandidates.map((candidate) => candidate.toLowerCase()))})
+									THEN 'exact'
+								WHEN candidate.value ILIKE ${searchTerms.literalPrefix} ESCAPE E'\\\\' THEN 'starts_with'
+								ELSE 'contains'
+							END AS "matchType"
+						FROM (VALUES
+							(0, 'event.employeeNo', 'Event person ID', de."employeeNo", true),
+							(1, 'deviceUser.vendorUserId', 'Device user ID', du."vendorUserId", true),
+							(2, 'deviceUser.employeeNo', 'Device employee number', du."employeeNo", true),
+							(3, 'employee.employeeId', 'HRIS employee ID', COALESCE(employee_by_id."employeeId", employee_by_device_user."employeeId", employee_by_device."employeeId", employee_by_code."employeeId"), true),
+							(4, 'employee.deviceEmpId', 'HRIS device ID', COALESCE(employee_by_id."deviceEmpId", employee_by_device_user."deviceEmpId", employee_by_device."deviceEmpId", employee_by_code."deviceEmpId"), true),
+							(5, 'employee.fullName', 'Employee name', NULLIF(BTRIM(CONCAT_WS(' ', matched_person."personalInfo"->>'firstName', matched_person."personalInfo"->>'middleName', matched_person."personalInfo"->>'lastName')), ''), false),
+							(6, 'deviceUser.displayName', 'Device-user name', du."displayName", false),
+							(7, 'event.eventAction', 'Event action', ${eventActionSql}, false),
+							(8, 'event.eventCategory', 'Event category', ${eventCategorySql}, false),
+							(9, 'event.eventLabel', 'Event label', ${eventLabelSql}, false),
+							(10, 'event.eventType', 'Vendor event type', de."eventType", false),
+							(11, 'event.status', 'Processing status', de.status::text, false),
+							(12, 'event.source', 'Evidence source', de.source::text, false),
+							(13, 'device.name', 'Device name', d.name, false),
+							(14, 'device.address', 'Device address', d.address, false),
+							(15, 'event.doorNo', 'Door number', de."doorNo", false),
+							(16, 'event.verifyMode', 'Verification mode', de."verifyMode", false),
+							(17, 'event.major', 'Vendor major code', de.major, false),
+							(18, 'event.minor', 'Vendor minor code', de.minor, false),
+							(19, 'event.evidenceSource', 'Evidence classification', de.payload->>'evidenceSource', false),
+							(20, 'event.payload.resolvedEmployeeNo', 'Resolved person ID', de.payload->>'resolvedEmployeeNo', true),
+							(21, 'event.payload.employeeNo', 'Evidence person ID', de.payload->>'employeeNo', true),
+							(22, 'event.payload.employeeNoString', 'Evidence person ID', de.payload->>'employeeNoString', true),
+							(23, 'event.payload.event.employeeNo', 'Evidence person ID', de.payload#>>'{event,employeeNo}', true),
+							(24, 'event.payload.attendance.employeeNo', 'Evidence person ID', de.payload#>>'{attendance,employeeNo}', true),
+							(25, 'event.payload.access.employeeNoString', 'Evidence person ID', de.payload#>>'{EventNotificationAlert,AccessControllerEvent,employeeNoString}', true),
+							(26, 'event.payload', 'Raw event evidence', de.payload::text, false)
+						) AS candidate(priority, field, label, value, is_identifier)
+						WHERE candidate.value IS NOT NULL
+							AND candidate.value ILIKE ${searchTerms.literalContains} ESCAPE E'\\\\'
+						ORDER BY rank, candidate.priority
+						LIMIT 1
+					) search_match ON true
+				`
+				: Prisma.sql``;
 			const fromSql = Prisma.sql`
 				${baseFromSql}
 				${employeeJoinSql}
 			`;
-			const pageFromSql = hasQuery ? fromSql : baseFromSql;
+			const searchFromSql = Prisma.sql`${fromSql} ${searchMatchJoinSql}`;
+			const pageFromSql = hasQuery ? searchFromSql : baseFromSql;
 			const aggregateFromSql = hasQuery ? fromSql : baseFromSql;
 			const orderColumnSqlBySort: Record<string, Prisma.Sql> = {
 				deviceName: Prisma.sql`d."name"`,
@@ -14688,10 +14741,10 @@ export const controller = (prisma: PrismaClient) => {
 			const orderDirectionSql = Prisma.raw(order === "asc" ? "ASC" : "DESC");
 			const eventsSql = Prisma.sql`
 				WITH page_events AS (
-					SELECT de.id
+					SELECT de.id${hasQuery ? Prisma.sql`, search_match.rank AS search_rank` : Prisma.sql``}
 					${pageFromSql}
 					${whereSql}
-					ORDER BY ${orderColumnSql} ${orderDirectionSql}, de."receivedAt" DESC, de."createdAt" DESC
+					ORDER BY ${hasQuery ? Prisma.sql`search_match.rank ASC,` : Prisma.sql``} ${orderColumnSql} ${orderDirectionSql}, de."receivedAt" DESC, de."createdAt" DESC
 					OFFSET ${skip}
 					LIMIT ${limit}
 				)
@@ -14721,6 +14774,11 @@ export const controller = (prisma: PrismaClient) => {
 					de."errorMessage",
 					de."createdAt",
 					de."updatedAt",
+					${
+						hasQuery
+							? Prisma.sql`JSON_BUILD_OBJECT('field', search_match.field, 'label', search_match.label, 'value', search_match.value, 'matchType', search_match."matchType", 'rank', search_match.rank)`
+							: Prisma.sql`NULL::json`
+					} AS "searchMatch",
 					CASE
 						WHEN d.id IS NULL THEN NULL
 						ELSE JSON_BUILD_OBJECT(
@@ -14765,9 +14823,9 @@ export const controller = (prisma: PrismaClient) => {
 							)
 						)
 					END AS employee
-				${fromSql}
+				${hasQuery ? searchFromSql : fromSql}
 				INNER JOIN page_events page_event ON page_event.id = de.id
-				ORDER BY ${orderColumnSql} ${orderDirectionSql}, de."receivedAt" DESC, de."createdAt" DESC
+				ORDER BY ${hasQuery ? Prisma.sql`page_event.search_rank ASC,` : Prisma.sql``} ${orderColumnSql} ${orderDirectionSql}, de."receivedAt" DESC, de."createdAt" DESC
 			`;
 			const countSql = Prisma.sql`
 				SELECT COUNT(*)::bigint AS total

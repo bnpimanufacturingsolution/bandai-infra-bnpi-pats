@@ -327,7 +327,9 @@ describe("device health ZKTeco Linux bridge", () => {
 		await deviceController.getEvents(req as any, res as any, (() => undefined) as any);
 
 		expect(statusCode).to.equal(200);
-		expect(queries[0]).to.include('ORDER BY de."eventTime"');
+		const eventsQuery = queries.find((sql) => sql.includes("WITH page_events AS"));
+		expect(eventsQuery).to.include("ORDER BY");
+		expect(eventsQuery).to.include('de."eventTime"');
 	});
 
 	it("returns a per-device ZKTeco sync preview with saved, total, and needs-sync counts", async () => {

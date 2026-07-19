@@ -98,6 +98,13 @@ export interface DeviceEvent {
 	dedupeKey: string;
 	payload?: any;
 	errorMessage?: string | null;
+	searchMatch?: {
+		field: string;
+		label: string;
+		value: string;
+		matchType: "exact" | "starts_with" | "contains";
+		rank: number;
+	} | null;
 	taxonomy?: {
 		eventCategory: string;
 		eventAction: string;

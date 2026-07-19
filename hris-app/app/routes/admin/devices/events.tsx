@@ -113,6 +113,7 @@ type UnifiedDeviceEventRow = {
 	capabilityConfidence?: string | null;
 	evidenceSource?: string | null;
 	directDeviceEvidence?: boolean;
+	searchMatch?: DeviceEvent["searchMatch"];
 	payload?: any;
 };
 
@@ -1246,6 +1247,7 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 			event.eventConfidence || event.taxonomy?.eventConfidence || event.taxonomy?.capabilityConfidence || null,
 		evidenceSource: payload.evidenceSource || null,
 		directDeviceEvidence: payload.directDeviceEvidence === true,
+		searchMatch: event.searchMatch || null,
 		payload,
 		attendanceId: event.attendanceId,
 		doorNo: event.doorNo,
@@ -3350,6 +3352,13 @@ export default function DeviceEventsPage() {
 					<p className="truncate text-xs text-slate-500">
 						{item.directDeviceEvidence ? "Direct device evidence" : "Indirect/runtime evidence"}
 					</p>
+					{query && item.searchMatch ? (
+						<p
+							className="mt-1 truncate text-[11px] font-medium text-emerald-700"
+							title={`Matched ${item.searchMatch.label}: ${item.searchMatch.value}`}>
+							Matched {item.searchMatch.label}: {item.searchMatch.value}
+						</p>
+					) : null}
 				</div>
 			),
 		},
@@ -3839,9 +3848,11 @@ export default function DeviceEventsPage() {
 						<h2 className="truncate text-sm font-semibold text-slate-950">
 							{viewMode === "live" ? "Live events" : "Saved events"}
 						</h2>
-						<p className="mt-0.5 truncate text-xs text-slate-500">
+						<p className="mt-0.5 truncate text-xs text-slate-500" aria-live="polite">
 							{viewMode === "saved"
-								? `${formatCount(totalItems)} saved row${totalItems === 1 ? "" : "s"} for this filter`
+								? isFetchingSaved && isSavedPlaceholderData
+									? `Searching ${query ? `for “${query}”` : "saved events"}…`
+									: `${formatCount(totalItems)} saved row${totalItems === 1 ? "" : "s"} for this filter${query ? " · best matches first" : ""}`
 								: `${formatCount(liveEvents.length)} live row${liveEvents.length === 1 ? "" : "s"} in view`}
 						</p>
 					</div>
@@ -3849,7 +3860,7 @@ export default function DeviceEventsPage() {
 						<div className="relative w-full min-w-0 md:w-[320px]">
 							<Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 							<Input
-								placeholder="Search employee or device..."
+							placeholder="Search person ID, name, event, or device…"
 								value={query}
 								onChange={(event) => setFilter("query", event.target.value)}
 								className="h-8 rounded-md border-slate-200 bg-white pl-8 pr-3 text-sm shadow-none focus:ring-2 focus:ring-primary/10"

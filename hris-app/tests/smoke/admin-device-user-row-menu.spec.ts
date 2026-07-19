@@ -202,6 +202,38 @@ async function installMockApi(page: Page) {
 		}
 
 		if (path.includes("/device/") && path.endsWith("/users")) {
+			if (requestUrl.searchParams.get("vendorUserId") === "19") {
+				await route.fulfill(
+					json({
+						deviceUsers: [
+							{
+								...deviceUsers[0],
+								vendorMetadata: {
+									rawFingerprintPresent: true,
+									rawFingerprints: {
+										present: true,
+										fingerprintCount: 1,
+										source: "cpp_sdk_callback_raw",
+										templates: [
+											{ fingerPrintId: 1, data: "RAW_TEMPLATE_BASE64" },
+										],
+									},
+								},
+							},
+						],
+						summary: {
+							total: 1,
+							active: 0,
+							matched: 0,
+							unmatched: 1,
+							conflict: 0,
+							disabled: 0,
+						},
+						pagination: { total: 1, page: 1, limit: 5, totalPages: 1 },
+					}),
+				);
+				return;
+			}
 			if (requestUrl.searchParams.has("vendorUserIds")) {
 				await route.fulfill(
 					json({
@@ -273,5 +305,7 @@ test("device-user row action menu opens above the Sync Center modal", async ({ p
 
 	await detailsItem.click();
 	await expect(page.getByRole("heading", { name: "Device user details" })).toBeVisible();
+	await expect(page.getByText("1 stored", { exact: true })).toBeVisible();
+	await expect(page.getByText("Not captured yet", { exact: true })).toHaveCount(0);
 	expect(consoleErrors.join("\n")).not.toContain("Maximum update depth exceeded");
 });

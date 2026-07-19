@@ -13,6 +13,8 @@ import {
 	formatHikvisionPlus08,
 	isHikvisionEnrollmentLifecycleCallback,
 	isHikvisionSdkOperationSignal,
+	mergeHikvisionDeviceUserInventoryState,
+	updateDeviceUserWithOptimisticInventoryMerge,
 } from "../helper/device-person-token.helper";
 import {
 	classifyHikvisionLogSearchRow,
@@ -141,13 +143,104 @@ describe("device-person-token helper", () => {
 		expect(extractFingerIdFromLogEvidence({ information: "{}" })).to.equal(null);
 	});
 
+	it("preserves callback raw fingerprint custody while merging later UserInfo inventory", () => {
+		const rawFingerprints = {
+			present: true,
+			fingerprintCount: 1,
+			templates: [{ fingerPrintId: 1, data: "RAW_TEMPLATE_BASE64" }],
+		};
+		const merged = mergeHikvisionDeviceUserInventoryState({
+			current: {
+				status: "UNMATCHED",
+				vendorMetadata: {
+					rawFingerprints,
+					rawFingerprintPresent: true,
+					rawFingerprintCount: 1,
+				},
+				rawPayload: {
+					_hrisDeviceMetadata: { rawFingerprints },
+				},
+			},
+			candidate: {
+				employeeNo: "18",
+				displayName: "User 18",
+				vendorMetadata: {
+					credentialSummary: { hasFingerprint: true, fingerprintCount: 1 },
+				},
+				rawPayload: { employeeNo: "18", numOfFP: 1 },
+			},
+		});
+
+		expect((merged.vendorMetadata as any).rawFingerprints).to.deep.equal(rawFingerprints);
+		expect((merged.vendorMetadata as any).rawFingerprintPresent).to.equal(true);
+		expect((merged.rawPayload as any)._hrisDeviceMetadata.rawFingerprints).to.deep.equal(
+			rawFingerprints,
+		);
+	});
+
+	it("retries a stale UserInfo write and rebuilds it from concurrent callback custody", async () => {
+		const original = {
+			id: "du-18",
+			updatedAt: new Date("2026-07-19T14:45:00.000Z"),
+			status: "UNMATCHED",
+			vendorMetadata: {},
+			rawPayload: {},
+		};
+		const rawFingerprints = {
+			present: true,
+			fingerprintCount: 1,
+			templates: [{ fingerPrintId: 1, data: "RAW_TEMPLATE_BASE64" }],
+		};
+		const afterCallback = {
+			...original,
+			updatedAt: new Date("2026-07-19T14:45:01.000Z"),
+			vendorMetadata: { rawFingerprints, rawFingerprintPresent: true },
+			rawPayload: { _hrisDeviceMetadata: { rawFingerprints } },
+		};
+		const writes: any[] = [];
+		let attempt = 0;
+		const client = {
+			updateMany: async (input: any) => {
+				writes.push(input);
+				attempt += 1;
+				return { count: attempt === 1 ? 0 : 1 };
+			},
+			findFirst: async () => afterCallback,
+			findUnique: async () => ({ ...afterCallback, ...writes[1].data }),
+		};
+		const candidate = {
+			employeeNo: "18",
+			displayName: "User 18",
+			vendorMetadata: { credentialSummary: { hasFingerprint: true, fingerprintCount: 1 } },
+			rawPayload: { employeeNo: "18", numOfFP: 1 },
+		};
+		const saved = await updateDeviceUserWithOptimisticInventoryMerge({
+			deviceUserClient: client,
+			current: original,
+			buildData: (current) => mergeHikvisionDeviceUserInventoryState({ current, candidate }),
+		});
+
+		expect(writes).to.have.length(2);
+		expect(writes[1].where.updatedAt).to.deep.equal(afterCallback.updatedAt);
+		expect((writes[1].data.vendorMetadata as any).rawFingerprints).to.deep.equal(
+			rawFingerprints,
+		);
+		expect((saved.vendorMetadata as any).rawFingerprintPresent).to.equal(true);
+	});
+
 	it("builds enrollment snapshot with identity goal fields and no raw template on event", () => {
 		const snap = buildEnrollmentSnapshot({
 			eventAction: "FINGERPRINT_ENROLLED",
 			plainEmployeeNo: "14",
 			displayName: "Panel User",
 			opaqueToken: "EmfPTja5gq/kmy/CI1wDHA==",
-			userInfo: { employeeNo: "14", name: "Panel User", numOfFP: 1, numOfFace: 0, numOfCard: 0 },
+			userInfo: {
+				employeeNo: "14",
+				name: "Panel User",
+				numOfFP: 1,
+				numOfFace: 0,
+				numOfCard: 0,
+			},
 			fingerIdFromLog: 1,
 			deviceUserId: "du1",
 		});
@@ -184,10 +277,14 @@ describe("device-person-token helper", () => {
 		expect(source).to.not.match(/Information\/deleteUserInfo/);
 		expect(source).to.not.match(/Information\/addFaceByEmployeeNo/);
 		expect(source).to.not.match(/Information\/addCardInfo/);
-		expect(classifyHikvisionLogSearchRow({ metaId: "log.hikvision.com/Information/clearUserInfo" }))
-			.to.include({ eventAction: "USER_DELETED" });
-		expect(classifyHikvisionLogSearchRow({ metaId: "log.hikvision.com/Information/addUserInfo" }))
-			.to.include({ eventAction: "USER_CREATED" });
+		expect(
+			classifyHikvisionLogSearchRow({
+				metaId: "log.hikvision.com/Information/clearUserInfo",
+			}),
+		).to.include({ eventAction: "USER_DELETED" });
+		expect(
+			classifyHikvisionLogSearchRow({ metaId: "log.hikvision.com/Information/addUserInfo" }),
+		).to.include({ eventAction: "USER_CREATED" });
 		expect(
 			classifyHikvisionLogSearchRow({
 				metaId: "log.hikvision.com/Information/addFpByEmployeeNo",
@@ -252,8 +349,7 @@ describe("device-person-token helper", () => {
 							clause.deviceEmpId?.in ||
 							(clause.deviceEmpId ? [clause.deviceEmpId] : []);
 						const empId =
-							clause.employeeId?.in ||
-							(clause.employeeId ? [clause.employeeId] : []);
+							clause.employeeId?.in || (clause.employeeId ? [clause.employeeId] : []);
 						return (
 							deviceEmp.includes("14") ||
 							deviceEmp.includes("00014") ||
