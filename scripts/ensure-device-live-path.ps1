@@ -264,7 +264,7 @@ if (-not $apiReverseOk) {
 # Only restart when drift is proven — keep warm predev fast.
 if ($apiReverseOk) {
   try {
-    $retarget = ssh -o ConnectTimeout=20 -o BatchMode=yes $VmSshTarget @"
+    $retargetScript = @"
 set -e
 TARGET_BASE='http://127.0.0.1:$ApiRemotePort'
 DROP_DIR=/etc/systemd/system/project-truth-hikvision-hot-reload-listener.service.d
@@ -312,7 +312,8 @@ sudo -n systemctl restart "`$UNIT"
 sleep 3
 systemctl is-active "`$UNIT"
 sudo -n journalctl -u "`$UNIT" -n 40 --no-pager 2>/dev/null | grep -E 'service_started|hrisApiBase|apiBase' | tail -n 4 || true
-"@ 2>&1
+"@
+    $retarget = $retargetScript | & ssh.exe -o ConnectTimeout=20 -o BatchMode=yes $VmSshTarget 'bash -s' 2>&1
     $retargetText = ($retarget | Out-String)
     $listenerActive = $retargetText -match "(?m)^active\s*$|LISTENER_ALREADY_HOST_API|is-active"
     if ($retargetText -match "LISTENER_ALREADY_HOST_API") {

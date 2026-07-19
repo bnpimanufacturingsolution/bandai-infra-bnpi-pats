@@ -60,24 +60,28 @@ function Clear-RemoteReversePorts {
   )
   if (-not $Ports -or $Ports.Count -eq 0) { return }
   $portPattern = ($Ports | ForEach-Object { [string]$_ }) -join '|'
-  $script = @"
+$script = @"
 set -e
-ports='$portPattern'
-ss -ltnp 2>/dev/null | grep -E ":(\$ports)[[:space:]]" || true
-pids=`$(ss -ltnp 2>/dev/null | grep -E ":(\$ports)[[:space:]]" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u)
+listeners=`$(sudo -n ss -ltnp 2>/dev/null || ss -ltnp 2>/dev/null || true)
+echo "`$listeners" | grep -E ":($portPattern)[[:space:]]" || true
+pids=`$(echo "`$listeners" | grep -E ":($portPattern)[[:space:]]" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u)
 for p in `$pids; do
   # Only kill infra reverse-forward sshd sessions, never the main sshd daemon.
-  cmd=`$(ps -o cmd= -p `$p 2>/dev/null || true)
+  cmd=`$(sudo -n ps -o cmd= -p `$p 2>/dev/null || ps -o cmd= -p `$p 2>/dev/null || true)
   if echo "`$cmd" | grep -q 'sshd: infra'; then
     echo "CLEAR_REMOTE_PID=`$p"
-    kill `$p 2>/dev/null || true
+    sudo -n kill `$p 2>/dev/null || kill `$p 2>/dev/null || true
   fi
 done
-sleep 1
-ss -ltn 2>/dev/null | grep -E ":(\$ports)[[:space:]]" || echo REMOTE_PORTS_CLEAR
+for i in 1 2 3 4 5; do
+  remaining=`$(ss -ltn 2>/dev/null | grep -E ":($portPattern)[[:space:]]" || true)
+  [ -z "`$remaining" ] && break
+  sleep 0.2
+done
+ss -ltn 2>/dev/null | grep -E ":($portPattern)[[:space:]]" || echo REMOTE_PORTS_CLEAR
 "@
   try {
-    $out = ssh -o ConnectTimeout=20 -o BatchMode=yes $Target $script 2>&1 | Out-String
+    $out = $script | & ssh.exe -o ConnectTimeout=20 -o BatchMode=yes $Target 'bash -s' 2>&1 | Out-String
     if ($out.Trim()) { Write-Host $out.Trim() }
   } catch {
     Write-Warning "Could not clear remote reverse ports on ${Target}: $($_.Exception.Message)"
@@ -131,13 +135,9 @@ foreach ($arg in @(
   $forwardArgs.Add([string]$arg) | Out-Null
 }
 
-$forwardArgs.Add('-R')
-$forwardArgs.Add("${ApiRemotePort}:127.0.0.1:${ApiLocalPort}")
-
 $records = New-Object System.Collections.Generic.List[object]
 $runtimeProtocol = if ($HttpDevicePort -eq 443) { 'https' } else { 'http' }
 $remoteListenPorts = New-Object System.Collections.Generic.List[int]
-$remoteListenPorts.Add([int]$ApiRemotePort) | Out-Null
 
 for ($deviceIndex = 0; $deviceIndex -lt $targetDeviceIps.Count; $deviceIndex++) {
   $targetDeviceIp = $targetDeviceIps[$deviceIndex]
@@ -190,7 +190,6 @@ $verifyPorts = @($records | ForEach-Object {
   $_.RuntimeConfigHint.hikvisionRuntimePort
   $_.RuntimeConfigHint.hikvisionSdkRuntimePort
 } | Sort-Object -Unique)
-$verifyPorts += $ApiRemotePort
 $verifyPattern = ($verifyPorts | ForEach-Object { [string]$_ }) -join '|'
 $verifyOutput = ssh $VmSshTarget "ss -ltn | grep -E ':($verifyPattern)[[:space:]]'" 2>&1
 if ($LASTEXITCODE -ne 0) {
@@ -204,11 +203,6 @@ $state = [pscustomobject]@{
   vmSshTarget = $VmSshTarget
   processId = $proc.Id
   deviceIps = $targetDeviceIps
-  apiRuntimeHint = [pscustomobject]@{
-    hrisApiBase = "http://127.0.0.1:$ApiRemotePort"
-    localApiPort = $ApiLocalPort
-    remoteApiPort = $ApiRemotePort
-  }
   bridges = $records
   evidenceDir = $runRoot
   stopCommand = '.\scripts\project-truth.ps1 start-host-hikvision-vm-ssh-bridge stop'
