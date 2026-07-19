@@ -110,6 +110,55 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("MINOR_ADD_FINGER_BY_EMPLOYEE_NO", text)
         self.assertIn("MINOR_MOD_FINGER_BY_EMPLOYEE_NO", text)
 
+    def test_attendance_posts_on_an_independent_non_enriching_lane(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
+        text = source.read_text(encoding="utf-8")
+
+        self.assertIn("std::deque<ReconcileJob> hris_immediate_event_queue", text)
+        self.assertIn("std::deque<ReconcileJob> hris_enrichment_event_queue", text)
+        self.assertIn("constexpr size_t HRIS_IMMEDIATE_WORKER_COUNT = 2", text)
+        self.assertIn("hris_immediate_posters.emplace_back(hris_immediate_post_loop)", text)
+        self.assertIn("std::thread hris_enrichment_poster(hris_enrichment_post_loop)", text)
+
+        immediate_loop = text.split("void hris_immediate_post_loop()", 1)[1].split(
+            "void hris_enrichment_post_loop()", 1
+        )[0]
+        self.assertIn("post_hikvision_callback(hris_job)", immediate_loop)
+        self.assertNotIn("enrich_hris_job_before_post", immediate_loop)
+
+        enrichment_loop = text.split("void hris_enrichment_post_loop()", 1)[1].split(
+            "void reconcile_worker_loop()", 1
+        )[0]
+        self.assertIn("enrich_hris_job_before_post(hris_job)", enrichment_loop)
+        self.assertIn("post_hikvision_callback(hris_job)", enrichment_loop)
+
+    def test_callback_http_retries_do_not_hold_the_spool_mutex(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
+        text = source.read_text(encoding="utf-8")
+
+        post_body = text.split("bool post_hikvision_callback(const ReconcileJob &job)", 1)[1].split(
+            "bool post_hris_contract(", 1
+        )[0]
+        retry_position = post_body.index("post_json_with_retries(")
+        last_lock_before_retry = post_body.rfind(
+            "std::lock_guard<std::mutex> lock(callback_spool_mutex)", 0, retry_position
+        )
+        last_scope_end_before_retry = post_body.rfind("}", 0, retry_position)
+
+        self.assertGreater(last_lock_before_retry, -1)
+        self.assertGreater(last_scope_end_before_retry, last_lock_before_retry)
+        self.assertIn("callback_posts_in_flight.insert(spool_path)", post_body)
+        self.assertIn("callback_posts_in_flight.erase(spool_path)", post_body)
+        self.assertIn("immediate ? 1 : 3", post_body)
+        self.assertIn("immediate ? 5 : 30", post_body)
+
+    def test_lane_specific_workers_are_woken_without_polling_only(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
+        text = source.read_text(encoding="utf-8")
+
+        self.assertNotIn("queue_cv.notify_one()", text)
+        self.assertIn("queue_cv.notify_all()", text)
+
     def test_build_script_produces_project_truth_named_service(self) -> None:
         script = Path(__file__).resolve().parents[1] / "scripts" / "build-hikvision-biometric-service.sh"
         text = script.read_text(encoding="utf-8")

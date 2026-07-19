@@ -84,7 +84,8 @@ bool retry_peer_operation(
 
 std::mutex queue_mutex;
 std::condition_variable queue_cv;
-std::deque<ReconcileJob> hris_event_queue;
+std::deque<ReconcileJob> hris_immediate_event_queue;
+std::deque<ReconcileJob> hris_enrichment_event_queue;
 std::deque<ReconcileJob> reconcile_queue;
 std::vector<DeviceSession> sessions;
 std::ofstream evidence_stream;
@@ -95,6 +96,7 @@ std::mutex delayed_reconcile_guard_mutex;
 std::mutex full_mirror_guard_mutex;
 std::mutex reconcile_spool_mutex;
 std::mutex callback_spool_mutex;
+std::set<std::string> callback_posts_in_flight;
 std::mutex recent_employee_candidate_mutex;
 std::mutex poll_reconcile_guard_mutex;
 // UserInfo/Search behaves like a device-global cursor on the TEST A firmware.
@@ -124,6 +126,8 @@ std::map<std::string, std::map<std::string, UserInfoTouchSnapshot>> userinfo_tou
 std::set<std::string> userinfo_touch_baseline_ready_hosts;
 std::set<std::string> pending_full_mirror_hosts;
 std::atomic<unsigned long long> delayed_reconcile_token{0};
+std::atomic<unsigned long long> callback_spool_token{0};
+constexpr size_t HRIS_IMMEDIATE_WORKER_COUNT = 2;
 bool execute_mode = true;
 std::string hris_api_base;
 std::string hris_api_token;
@@ -529,7 +533,9 @@ void queue_reconcile(const ReconcileJob &job) {
         std::lock_guard<std::mutex> lock(queue_mutex);
         reconcile_queue.push_back(job);
     }
-    queue_cv.notify_one();
+    // The condition variable is shared by lane-specific workers. notify_all avoids
+    // waking a worker whose queue predicate is false while the intended worker sleeps.
+    queue_cv.notify_all();
     emit_json({
         {"event", "reconcile_queued"},
         {"sourceDeviceId", job.source_device_id},
@@ -541,33 +547,26 @@ void queue_reconcile(const ReconcileJob &job) {
     });
 }
 
-// Attendance / known-person callbacks must not sit behind empty-ACS multipass
-// inventory (userinfo_touch on 300+ users can take tens of seconds per job).
-bool is_hris_priority_job(const ReconcileJob &job) {
-    if (!job.employee_no.empty()) {
-        return true;
-    }
-    if (job.event_kind.find("attendance_") == 0) {
-        return true;
-    }
-    // Major 5 = access-control auth event family (fingerprint/face/card pass/fail).
-    if (job.major == 5) {
-        return true;
-    }
-    return false;
+// Authentication events contain all identity evidence that the device supplied and
+// must be posted without an SDK inventory/template read. A separate worker owns this
+// lane so a slow empty operation callback cannot delay a later attendance tap.
+bool is_immediate_hris_job(const ReconcileJob &job) {
+    return job.event_kind.find("attendance_") == 0 || job.major == 5;
 }
 
 void queue_hris_device_event(const ReconcileJob &job) {
+    const bool immediate = is_immediate_hris_job(job);
     {
         std::lock_guard<std::mutex> lock(queue_mutex);
-        // Push priority jobs to the front so Ernest taps land before op-sync enrich.
-        if (is_hris_priority_job(job)) {
-            hris_event_queue.push_front(job);
+        if (immediate) {
+            hris_immediate_event_queue.push_back(job);
         } else {
-            hris_event_queue.push_back(job);
+            hris_enrichment_event_queue.push_back(job);
         }
     }
-    queue_cv.notify_one();
+    // Multiple queue consumers have different predicates; wake each so the owner of
+    // this lane runs now instead of relying on its polling timeout.
+    queue_cv.notify_all();
     emit_json({
         {"event", "hris_device_event_queued"},
         {"sourceDeviceId", job.source_device_id},
@@ -575,7 +574,8 @@ void queue_hris_device_event(const ReconcileJob &job) {
         {"employeeNo", job.employee_no},
         {"minor", std::to_string(job.minor)},
         {"minorName", minor_name(job.minor)},
-        {"priority", is_hris_priority_job(job) ? "true" : "false"},
+        {"lane", immediate ? "immediate" : "enrichment"},
+        {"priority", immediate ? "true" : "false"},
         {"mode", execute_mode ? "execute" : "dry-run"}
     });
 }
@@ -2987,6 +2987,8 @@ std::string build_callback_spool_path(const ReconcileJob &job) {
          << "/"
          << unix_time_ms()
          << "_"
+         << (callback_spool_token.fetch_add(1) + 1)
+         << "_"
          << sanitize_filename_token(job.source_device_id)
          << "_"
          << sanitize_filename_token(job.serial_no)
@@ -3114,14 +3116,32 @@ void replay_pending_hikvision_callbacks() {
     if (!execute_mode || hris_api_base.empty()) {
         return;
     }
-    std::lock_guard<std::mutex> lock(callback_spool_mutex);
-    if (!ensure_callback_spool_dir()) {
-        return;
-    }
     const std::string url = hris_api_base + "/api/hikvision/callback";
-    for (const auto &path : list_callback_spool_files()) {
+    std::vector<std::string> paths;
+    {
+        std::lock_guard<std::mutex> lock(callback_spool_mutex);
+        if (!ensure_callback_spool_dir()) {
+            return;
+        }
+        paths = list_callback_spool_files();
+    }
+    for (const auto &path : paths) {
         std::string body;
-        if (!read_text_file(path, &body)) {
+        {
+            std::lock_guard<std::mutex> lock(callback_spool_mutex);
+            if (callback_posts_in_flight.find(path) != callback_posts_in_flight.end()) {
+                continue;
+            }
+            callback_posts_in_flight.insert(path);
+            if (!read_text_file(path, &body)) {
+                callback_posts_in_flight.erase(path);
+                emit_json({{"event", "hikvision_callback_spool_read_failed"}, {"path", path}});
+                continue;
+            }
+        }
+        if (body.empty()) {
+            std::lock_guard<std::mutex> lock(callback_spool_mutex);
+            callback_posts_in_flight.erase(path);
             emit_json({{"event", "hikvision_callback_spool_read_failed"}, {"path", path}});
             continue;
         }
@@ -3137,8 +3157,12 @@ void replay_pending_hikvision_callbacks() {
             {"path", path},
             {"ok", ok ? "true" : "false"}
         });
-        if (ok) {
-            std::remove(path.c_str());
+        {
+            std::lock_guard<std::mutex> lock(callback_spool_mutex);
+            if (ok) {
+                std::remove(path.c_str());
+            }
+            callback_posts_in_flight.erase(path);
         }
     }
 }
@@ -3946,24 +3970,36 @@ bool post_hikvision_callback(const ReconcileJob &job) {
         return true;
     }
 
-    std::lock_guard<std::mutex> lock(callback_spool_mutex);
     std::string spool_path;
-    if (ensure_callback_spool_dir()) {
-        spool_path = build_callback_spool_path(job);
-        const std::string temporary_path = spool_path + ".tmp";
-        if (!write_text_file(temporary_path, body) || std::rename(temporary_path.c_str(), spool_path.c_str()) != 0) {
-            std::remove(temporary_path.c_str());
-            emit_json({{"event", "hikvision_callback_spool_write_failed"}, {"path", spool_path}});
-            spool_path.clear();
-        } else {
-            emit_json({{"event", "hikvision_callback_spool_written"}, {"path", spool_path}});
+    {
+        std::lock_guard<std::mutex> lock(callback_spool_mutex);
+        if (ensure_callback_spool_dir()) {
+            spool_path = build_callback_spool_path(job);
+            const std::string temporary_path = spool_path + ".tmp";
+            if (!write_text_file(temporary_path, body) || std::rename(temporary_path.c_str(), spool_path.c_str()) != 0) {
+                std::remove(temporary_path.c_str());
+                emit_json({{"event", "hikvision_callback_spool_write_failed"}, {"path", spool_path}});
+                spool_path.clear();
+            } else {
+                callback_posts_in_flight.insert(spool_path);
+                emit_json({{"event", "hikvision_callback_spool_written"}, {"path", spool_path}});
+            }
         }
     }
 
     const std::string url = hris_api_base + "/api/hikvision/callback";
     // Raw biometric custody can require DeviceUser + DeviceEvent writes before the API
-    // acknowledges. Keep contract polling fast, but allow callback persistence to finish.
-    const bool ok = post_json_with_retries(url, body, "hikvision_callback_post", 3, 1500, 30);
+    // acknowledges. Attendance uses one short live attempt; its durable spool is the
+    // retry mechanism. This prevents one unhealthy API request from head-of-line
+    // blocking later taps. Enrichment callbacks retain the longer retry budget.
+    const bool immediate = is_immediate_hris_job(job);
+    const bool ok = post_json_with_retries(
+        url,
+        body,
+        "hikvision_callback_post",
+        immediate ? 1 : 3,
+        immediate ? 0 : 1500,
+        immediate ? 5 : 30);
     emit_json({
         {"event", "hikvision_callback_post_result"},
         {"sourceDeviceId", job.source_device_id},
@@ -3972,9 +4008,13 @@ bool post_hikvision_callback(const ReconcileJob &job) {
         {"serialNo", job.serial_no},
         {"ok", ok ? "true" : "false"}
     });
-    if (ok && !spool_path.empty()) {
-        std::remove(spool_path.c_str());
-        emit_json({{"event", "hikvision_callback_spool_cleared"}, {"path", spool_path}});
+    if (!spool_path.empty()) {
+        std::lock_guard<std::mutex> lock(callback_spool_mutex);
+        if (ok) {
+            std::remove(spool_path.c_str());
+            emit_json({{"event", "hikvision_callback_spool_cleared"}, {"path", spool_path}});
+        }
+        callback_posts_in_flight.erase(spool_path);
     }
     return ok;
 }
@@ -4430,42 +4470,59 @@ void process_reconcile_job(const ReconcileJob &job) {
     });
 }
 
-// Realtime path only: never share a worker with reconcile (inventory can take seconds).
-// Enrich runs outside the queue lock so inventory/FP reads do not block ACS enqueue.
-// Prefer attendance / known-person jobs over empty-ACS multipass so taps are not starved.
-void hris_post_loop() {
+void prepare_immediate_hris_job_for_post(ReconcileJob &job) {
+    if (job.identity_source.empty()) {
+        job.identity_source = job.employee_no.empty() ? "empty" : "acs_dwEmployeeNo";
+    }
+    emit_json({
+        {"event", "callback_immediate_ready"},
+        {"sourceDeviceId", job.source_device_id},
+        {"employeeNo", job.employee_no},
+        {"identitySource", job.identity_source},
+        {"serialNo", job.serial_no},
+        {"sdkReads", "0"}
+    });
+}
+
+// Dedicated auth/attendance lane. It never calls enrich_hris_job_before_post,
+// therefore it cannot wait on inventory, fingerprint, face, or reconciliation SDK work.
+void hris_immediate_post_loop() {
     while (keep_running) {
         ReconcileJob hris_job;
-        bool has_hris_job = false;
         {
             std::unique_lock<std::mutex> lock(queue_mutex);
             queue_cv.wait_for(lock, std::chrono::milliseconds(50), [] {
-                return !hris_event_queue.empty() || !keep_running;
+                return !hris_immediate_event_queue.empty() || !keep_running;
             });
-            // Drain the entire HRIS queue so multi-event taps post immediately.
-            while (!hris_event_queue.empty() && keep_running) {
-                // Prefer first priority job in queue (attendance / plain employeeNo).
-                auto it = hris_event_queue.begin();
-                for (auto cand = hris_event_queue.begin(); cand != hris_event_queue.end(); ++cand) {
-                    if (is_hris_priority_job(*cand)) {
-                        it = cand;
-                        break;
-                    }
-                }
-                hris_job = *it;
-                hris_event_queue.erase(it);
-                has_hris_job = true;
-                lock.unlock();
-                // Fill plain person id + raw templates BEFORE POST so socket/HRIS see truth.
-                // Attendance with ACS person id skips template multipass (see needs_callback_template_enrich).
-                enrich_hris_job_before_post(hris_job);
-                post_hikvision_callback(hris_job);
-                lock.lock();
+            if (!keep_running || hris_immediate_event_queue.empty()) {
+                continue;
             }
+            hris_job = hris_immediate_event_queue.front();
+            hris_immediate_event_queue.pop_front();
         }
-        if (!has_hris_job) {
-            continue;
+        prepare_immediate_hris_job_for_post(hris_job);
+        post_hikvision_callback(hris_job);
+    }
+}
+
+// Lifecycle/operation lane. SDK identity and biometric enrichment can be slow,
+// but it is isolated from authentication delivery.
+void hris_enrichment_post_loop() {
+    while (keep_running) {
+        ReconcileJob hris_job;
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            queue_cv.wait_for(lock, std::chrono::milliseconds(200), [] {
+                return !hris_enrichment_event_queue.empty() || !keep_running;
+            });
+            if (!keep_running || hris_enrichment_event_queue.empty()) {
+                continue;
+            }
+            hris_job = hris_enrichment_event_queue.front();
+            hris_enrichment_event_queue.pop_front();
         }
+        enrich_hris_job_before_post(hris_job);
+        post_hikvision_callback(hris_job);
     }
 }
 
@@ -4492,7 +4549,7 @@ void reconcile_worker_loop() {
 
 // Back-compat name used by older call sites if any.
 void worker_loop() {
-    hris_post_loop();
+    hris_enrichment_post_loop();
 }
 
 bool parse_device_spec(const std::string &spec, DeviceConfig *config) {
@@ -4817,8 +4874,14 @@ int main(int argc, char **argv) {
     // Start HRIS post workers BEFORE arming every device. Otherwise a live TEST A
     // can queue taps during arm, then wait ~60-90s while 6 off-LAN devices fail
     // login (3 retries each) before workers start — that is the "tap lag".
-    // Realtime posts and reconcile are separate threads so inventory never blocks taps.
-    std::thread hris_poster(hris_post_loop);
+    // Auth delivery has its own worker. Lifecycle enrichment, peer reconciliation,
+    // and spool replay cannot occupy the attendance lane.
+    std::vector<std::thread> hris_immediate_posters;
+    hris_immediate_posters.reserve(HRIS_IMMEDIATE_WORKER_COUNT);
+    for (size_t i = 0; i < HRIS_IMMEDIATE_WORKER_COUNT; ++i) {
+        hris_immediate_posters.emplace_back(hris_immediate_post_loop);
+    }
+    std::thread hris_enrichment_poster(hris_enrichment_post_loop);
     std::thread reconcile_worker(reconcile_worker_loop);
     std::thread callback_spool_replayer(callback_spool_replay_loop);
 
@@ -4942,8 +5005,13 @@ int main(int argc, char **argv) {
     if (sessions.empty()) {
         keep_running = 0;
         queue_cv.notify_all();
-        if (hris_poster.joinable()) {
-            hris_poster.join();
+        for (auto &poster : hris_immediate_posters) {
+            if (poster.joinable()) {
+                poster.join();
+            }
+        }
+        if (hris_enrichment_poster.joinable()) {
+            hris_enrichment_poster.join();
         }
         if (reconcile_worker.joinable()) {
             reconcile_worker.join();
@@ -5128,8 +5196,13 @@ int main(int argc, char **argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
 
-    if (hris_poster.joinable()) {
-        hris_poster.join();
+    for (auto &poster : hris_immediate_posters) {
+        if (poster.joinable()) {
+            poster.join();
+        }
+    }
+    if (hris_enrichment_poster.joinable()) {
+        hris_enrichment_poster.join();
     }
     if (reconcile_worker.joinable()) {
         reconcile_worker.join();
