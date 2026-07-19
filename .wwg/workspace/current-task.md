@@ -1,5 +1,15 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 Create+Enroll flow C++ EXIT GATE
+
+- Task mode: Meaningful C++ fix + live synthetic proof.
+- Commit: `05f4320` on `develop`.
+- Evidence: `.runtime/create-enroll-flow-proof-20260719-181730/summary.json`
+- C++: full inventory (319 users), delayed identity re-POST, ISAPI FP fallback, arm baseline seed.
+- Live G6 quote: `callback_identity_inventory_delta employeeNo=99182448` then `post_result employeeNo=99182448` with `identitySource=inventory_delta`.
+- G3–G5: create/enroll plain DeviceUser+events + raw 684-char template (API). Device synthetic FP re-read may still show numOfFP=0 (labeled donor blob path).
+- Recommendation capture: Device FP write stickiness after FingerPrintDownload.
+
 ## Latest Task Addendum - 2026-07-19 Device Events no-person sync signal copy
 
 - Task mode: Admin UX regression repair + focused smoke proof.
