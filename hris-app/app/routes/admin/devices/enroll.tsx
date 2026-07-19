@@ -798,6 +798,8 @@ export function DeviceEnrollmentPanel({
 	);
 	const deviceUserSyncJobStatus = deviceUserSyncJobProgress?.status;
 	const [detailsDeviceUser, setDetailsDeviceUser] = useState<VisibleDeviceUserRow | null>(null);
+	const detailsDeviceUserVendorUserId = String(detailsDeviceUser?.vendorUserId || "").trim();
+	const [detailsDeviceUserSavedLoading, setDetailsDeviceUserSavedLoading] = useState(false);
 	const [rawFpCaptureBusy, setRawFpCaptureBusy] = useState(false);
 	const [rawFpExpandIds, setRawFpExpandIds] = useState<Set<string>>(new Set());
 	const [detailsPhotoUrl, setDetailsPhotoUrl] = useState<string | null>(null);
@@ -3325,10 +3327,14 @@ export function DeviceEnrollmentPanel({
 	// ALWAYS refetch saved HRIS DeviceUser when details open so rawFingerprints/rawFace
 	// from DB win over live-source-only / SOURCE_ONLY metadata (operator modal truth).
 	useEffect(() => {
-		const vendorUserId = String(detailsDeviceUser?.vendorUserId || "").trim();
+		const vendorUserId = detailsDeviceUserVendorUserId;
 		const deviceId = String(selectedDeviceId || "").trim();
-		if (!detailsDeviceUser || !vendorUserId || !deviceId) return;
+		if (!vendorUserId || !deviceId) {
+			setDetailsDeviceUserSavedLoading(false);
+			return;
+		}
 		let cancelled = false;
+		setDetailsDeviceUserSavedLoading(true);
 		void (async () => {
 			try {
 				const response = await deviceService.getDeviceUsers(deviceId, {
@@ -3390,12 +3396,14 @@ export function DeviceEnrollmentPanel({
 				});
 			} catch {
 				/* keep current row */
+			} finally {
+				if (!cancelled) setDetailsDeviceUserSavedLoading(false);
 			}
 		})();
 		return () => {
 			cancelled = true;
 		};
-	}, [detailsDeviceUser?.vendorUserId, selectedDeviceId]);
+	}, [detailsDeviceUserVendorUserId, selectedDeviceId]);
 
 	const selectedExportVendorUserIdSet = new Set(selectedExportVendorUserIds);
 	const allPagedRowsSelected =
@@ -7873,19 +7881,25 @@ export function DeviceEnrollmentPanel({
 												className={`mt-3 rounded-2xl border px-4 py-3 text-xs ${
 													rawPresent
 														? "border-emerald-200 bg-emerald-50 text-emerald-950"
+														: detailsDeviceUserSavedLoading
+															? "border-slate-200 bg-slate-50 text-slate-700"
 														: "border-amber-200 bg-amber-50 text-amber-950"
 												}`}>
 												<p className="font-semibold uppercase tracking-wide">
 													Raw fingerprint templates
 												</p>
-												<p className="mt-2 text-2xl font-semibold">
+												<p className="mt-2 flex items-center gap-2 text-2xl font-semibold">
 													{rawPresent
 														? `${templates.length || Number(rawFp?.fingerprintCount || 0) || 0} stored`
+														: detailsDeviceUserSavedLoading
+															? <><Loader2 className="h-5 w-5 animate-spin" />Checking saved templates…</>
 														: "Not captured yet"}
 												</p>
 												<p className="mt-2 leading-5">
 													{rawPresent
 														? "Actual base64 fingerData blobs saved on this DeviceUser (not AES). Create/enroll ledger events keep the same usable templates when captured."
+														: detailsDeviceUserSavedLoading
+															? "Comparing this live device row with the saved HRIS DeviceUser record."
 														: "No raw fingerData is saved yet. Create/enroll normally captures it automatically after the plain device user is resolved; use the repair action below only if that path did not complete."}
 												</p>
 												{sourceLabel ? (

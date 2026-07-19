@@ -3311,6 +3311,13 @@ export default function DeviceEventsPage() {
 											: "No person id"}
 							</Badge>
 						</div>
+						{query && item.searchMatch ? (
+							<p
+								className="mt-1 truncate text-[11px] font-medium text-emerald-700"
+								title={`Matched ${item.searchMatch.label}: ${item.searchMatch.value}`}>
+								Matched {item.searchMatch.label}: {item.searchMatch.value}
+							</p>
+						) : null}	
 					</div>
 				</div>
 				);
@@ -3344,6 +3351,7 @@ export default function DeviceEventsPage() {
 			key: "evidenceSource",
 			label: "Evidence",
 			width: "180px",
+			required: true,
 			render: (_value, item) => (
 				<div className="min-w-0">
 					<p className="truncate text-sm font-medium text-slate-900">
@@ -3352,13 +3360,6 @@ export default function DeviceEventsPage() {
 					<p className="truncate text-xs text-slate-500">
 						{item.directDeviceEvidence ? "Direct device evidence" : "Indirect/runtime evidence"}
 					</p>
-					{query && item.searchMatch ? (
-						<p
-							className="mt-1 truncate text-[11px] font-medium text-emerald-700"
-							title={`Matched ${item.searchMatch.label}: ${item.searchMatch.value}`}>
-							Matched {item.searchMatch.label}: {item.searchMatch.value}
-						</p>
-					) : null}
 				</div>
 			),
 		},

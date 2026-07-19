@@ -14541,7 +14541,11 @@ export const controller = (prisma: PrismaClient) => {
 						de.payload#>>'{event,employeeNo}',
 						de.payload#>>'{attendance,employeeNo}',
 						de.payload#>>'{EventNotificationAlert,AccessControllerEvent,employeeNoString}',
-						de.payload::text
+						de.payload->>'serialNo',
+						de.payload->>'eventKind',
+						de.payload->>'actionCode',
+						de.payload->>'parameter',
+						de.payload->>'information'
 					) ILIKE ${searchTerms.literalContains} ESCAPE E'\\\\'
 				`);
 			}
@@ -14706,7 +14710,11 @@ export const controller = (prisma: PrismaClient) => {
 							(23, 'event.payload.event.employeeNo', 'Evidence person ID', de.payload#>>'{event,employeeNo}', true),
 							(24, 'event.payload.attendance.employeeNo', 'Evidence person ID', de.payload#>>'{attendance,employeeNo}', true),
 							(25, 'event.payload.access.employeeNoString', 'Evidence person ID', de.payload#>>'{EventNotificationAlert,AccessControllerEvent,employeeNoString}', true),
-							(26, 'event.payload', 'Raw event evidence', de.payload::text, false)
+							(26, 'event.payload.serialNo', 'Event serial', de.payload->>'serialNo', true),
+							(27, 'event.payload.eventKind', 'Vendor event kind', de.payload->>'eventKind', false),
+							(28, 'event.payload.actionCode', 'Vendor action code', de.payload->>'actionCode', false),
+							(29, 'event.payload.parameter', 'Vendor event parameter', de.payload->>'parameter', false),
+							(30, 'event.payload.information', 'Vendor event information', de.payload->>'information', false)
 						) AS candidate(priority, field, label, value, is_identifier)
 						WHERE candidate.value IS NOT NULL
 							AND candidate.value ILIKE ${searchTerms.literalContains} ESCAPE E'\\\\'

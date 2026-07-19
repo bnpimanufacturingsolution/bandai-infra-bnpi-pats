@@ -422,3 +422,10 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Select: C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH.
 - Start your chosen coding agent.
 - Use the recommended first prompt above.
+# 2026-07-19 — Raw fingerprint enrollment custody race repaired
+
+- The C++ listener was not the failing layer: TEST A person `18` produced one raw template, attached it to the callback, and received HTTP success.
+- Root cause was a last-writer-wins race in API UserInfo enrichment. A stale inventory snapshot could overwrite the DeviceUser raw metadata after the callback, while DeviceEvent still retained the template.
+- API repair uses optimistic `updatedAt` merge/retry and preserves raw fingerprint/face custody. Exact evidenced-event replay remained present after the delayed enrichment window.
+- Modal repair suppresses the false `Not captured yet` state while its saved DeviceUser refetch is pending. Users `15` and `18` render `1 stored` in headless proof.
+- Evidence and boundary: `.runtime/fingerprint-enroll-raw-race-20260719/summary.md`.

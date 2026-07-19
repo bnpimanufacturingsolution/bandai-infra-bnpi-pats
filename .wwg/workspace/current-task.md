@@ -1843,3 +1843,13 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
   - `node hris-api/scripts/ensure-device-live-path.cjs` fast-passed with VM `53001=true` and VM `59000=true`, and listener `service_started` showed `hrisApiBase=http://127.0.0.1:53001`.
   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensure-device-live-path.ps1` returned `ok=true`, DB tunnel open, VM reverse ports open, API reverse open, and listener API base already host-aligned.
   - Listener status after hardening showed TEST A on `127.0.0.1:59000` with `lastLoginOk=true`, `armed=true`, `receivingCallbacks=true`, and `postingToHris=true`.
+# Latest Task Addendum - 2026-07-19 Raw fingerprint callback/UserInfo race repair
+
+- Task mode: Biometric persistence regression repair plus operator-journey hardening.
+- Root cause: the C++ listener successfully read and posted the raw template, and the enrollment DeviceEvent retained it, but a slower UserInfo enrichment could overwrite DeviceUser with metadata read before the callback completed.
+- Repair: DeviceUser UserInfo enrichment now uses an `updatedAt` optimistic merge/retry and preserves current raw fingerprint/face custody across a concurrent callback write.
+- User journey: the Device Users details modal refetches the saved HRIS row and shows `Checking saved templates…` during that read; it does not show `Not captured yet` until absence is confirmed.
+- Live TEST A proof: exact event `cmrrwqkpc009l7zaogna1hbkd` for person `18` replayed successfully; after 20 seconds DeviceUser retained one 684-character raw template from `cpp_sdk_callback_raw`. Users `15` and `18` both rendered `1 stored` in headless browser proof.
+- Verification: 22 focused backend tests, 14 C++ source-contract tests, and 1 modal Playwright regression passed. The current C++ source also built/linked against the VM HCNetSDK in an isolated output path.
+- Evidence: `.runtime/fingerprint-enroll-raw-race-20260719/summary.md` and screenshots in the same directory.
+- Boundary: do not infer a person id from an empty first major=3 callback; raw capture starts after plain device-person identity is evidenced.

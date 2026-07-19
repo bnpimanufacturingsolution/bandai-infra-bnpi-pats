@@ -51,7 +51,9 @@ describe("device event smart search", () => {
 		expect(getEventsSource).to.include("'event.eventAction', 'Event action'");
 		expect(getEventsSource).to.include("'device.name', 'Device name'");
 		expect(getEventsSource).to.include("'event.evidenceSource', 'Evidence classification'");
-		expect(getEventsSource).to.include("'event.payload', 'Raw event evidence'");
+		expect(getEventsSource).to.include("'event.payload.serialNo', 'Event serial'");
+		expect(getEventsSource).to.include("'event.payload.parameter', 'Vendor event parameter'");
+		expect(getEventsSource).to.not.include("'event.payload', 'Raw event evidence'");
 		expect(getEventsSource).to.include("Prisma.join(searchTerms.exactCandidates");
 		expect(getEventsSource).to.not.include("$queryRawUnsafe");
 	});
