@@ -658,8 +658,26 @@ void CALLBACK alarm_callback(
         return;
     }
 
+    // Attempt template enrich only on evidenced biometric/user/card operation paths.
+    // Observed TEST A minors (112/121/122) are not always vendor management macros;
+    // ordinary attendance taps must not trigger template reads.
     job.include_fingerprints = is_fingerprint_management_minor(acs->dwMinor) ||
-        is_user_management_minor(acs->dwMinor) || is_card_management_minor(acs->dwMinor);
+        is_user_management_minor(acs->dwMinor) || is_card_management_minor(acs->dwMinor) ||
+        is_observed_operation_sync_minor(acs->dwMinor);
+    job.include_face_recognition = job.include_fingerprints;
+    // Fastest face path when ACS already carries a picture buffer (SDK COMM_ALARM_ACS).
+    if (job.include_face_recognition && acs->dwPicDataLen > 0 && acs->pPicData != nullptr) {
+        job.face_picture_b64 = base64_encode(
+            reinterpret_cast<const BYTE *>(acs->pPicData),
+            static_cast<size_t>(acs->dwPicDataLen));
+        emit_json({
+            {"event", "acs_alarm_pic_attached"},
+            {"sourceDeviceId", source_device_id},
+            {"serialNo", serial_no},
+            {"facePictureChars", std::to_string(job.face_picture_b64.size())},
+            {"picTransType", std::to_string(acs->byPicTransType)}
+        });
+    }
     if (!job.employee_no.empty()) {
         mark_recent_employee_candidate(job.source_host, job.employee_no);
     }

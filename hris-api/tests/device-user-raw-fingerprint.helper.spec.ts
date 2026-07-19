@@ -109,6 +109,8 @@ describe("device-user-raw-fingerprint helper", () => {
 	});
 
 	it("captures raw fingerprints with injectable fetch and persists DeviceUser", async () => {
+		const previousFallback = process.env.HIKVISION_ENROLL_RAW_FINGERPRINT;
+		process.env.HIKVISION_ENROLL_RAW_FINGERPRINT = "true";
 		const updates: any[] = [];
 		const eventUpdates: any[] = [];
 		const prisma = {
@@ -155,26 +157,32 @@ describe("device-user-raw-fingerprint helper", () => {
 			},
 		};
 
-		const result = await captureRawFingerprintsForEnrollment({
-			prisma: prisma as any,
-			req: { io: null },
-			organizationId: "org-1",
-			deviceId: "dev-1",
-			eventId: "evt-fp-1",
-			employeeNo: "15",
-			deviceUserId: "du-15",
-			fetchFingerprints: async () => ({
-				fingerprints: [
-					{
-						fingerPrintId: 1,
-						fingerType: 0,
-						length: 24,
-						data: "cmF3LWZpbmdlci10ZW1wbGF0ZS1kYXRh",
-					},
-				],
-				attempts: 1,
-			}),
-		});
+		let result: Awaited<ReturnType<typeof captureRawFingerprintsForEnrollment>>;
+		try {
+			result = await captureRawFingerprintsForEnrollment({
+				prisma: prisma as any,
+				req: { io: null },
+				organizationId: "org-1",
+				deviceId: "dev-1",
+				eventId: "evt-fp-1",
+				employeeNo: "15",
+				deviceUserId: "du-15",
+				fetchFingerprints: async () => ({
+					fingerprints: [
+						{
+							fingerPrintId: 1,
+							fingerType: 0,
+							length: 24,
+							data: "cmF3LWZpbmdlci10ZW1wbGF0ZS1kYXRh",
+						},
+					],
+					attempts: 1,
+				}),
+			});
+		} finally {
+			if (previousFallback === undefined) delete process.env.HIKVISION_ENROLL_RAW_FINGERPRINT;
+			else process.env.HIKVISION_ENROLL_RAW_FINGERPRINT = previousFallback;
+		}
 
 		expect(result.ok).to.equal(true);
 		expect(result.rawPresent).to.equal(true);

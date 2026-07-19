@@ -581,7 +581,7 @@ export const persistRawFingerprintCustody = async (params: {
 
 /**
  * Capture raw fingerprint templates from the physical device and store them on DeviceUser.
- * Updates DeviceEvent enrollment snapshot with presence summary (not the raw blobs).
+ * Updates create/enroll DeviceEvent payloads with the same evidenced usable blobs.
  */
 export const captureRawFingerprintsForEnrollment = async (params: {
 	prisma: PrismaClient | any;
@@ -601,6 +601,7 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 	deviceUserId: string | null;
 	reason?: string;
 	source?: string;
+	face?: unknown;
 }> => {
 	if (!isRawFingerprintEnrollCaptureEnabled()) {
 		return {

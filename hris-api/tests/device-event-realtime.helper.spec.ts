@@ -74,6 +74,7 @@ describe("device event realtime helper", () => {
 			employeeId: "BNPI-001",
 			deviceEmpId: "1",
 			fullName: "Codex Hikvision Probe",
+			person: { personalInfo: { firstName: "Codex Hikvision Probe" } },
 		});
 		expect(event).to.include({
 			eventCategory: "USER_MANAGEMENT",

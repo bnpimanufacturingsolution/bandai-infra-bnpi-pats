@@ -242,6 +242,10 @@ describe("Hikvision biometric sync contract", () => {
 
 	it("keeps Linux callback work queued and attaches raw templates only after evidenced reads", () => {
 		const service = serviceSource();
+		const alarmCallback = service.slice(
+			service.indexOf("void CALLBACK alarm_callback("),
+			service.indexOf("std::string build_status_contract_json("),
+		);
 
 		expect(service).to.include("NET_DVR_SetDVRMessageCallBack_V51(0, alarm_callback, nullptr)");
 		expect(service).to.include("NET_DVR_SetupAlarmChan_V50");
@@ -284,6 +288,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include("MINOR_CLR_USER_INFO");
 		expect(service).to.include("MINOR_CLR_FINGER_BY_CARD");
 		expect(service).to.include("is_observed_operation_sync_minor");
+		expect(service).to.include("is_observed_operation_sync_minor(acs->dwMinor)");
+		expect(service).to.include("job.include_face_recognition = job.include_fingerprints;");
+		expect(alarmCallback).to.not.include("job.include_fingerprints = true;");
 		expect(service).to.include("build_user_setup_payload_from_search_response");
 		expect(service).to.include("read_device_employee_numbers");
 		expect(service).to.include("inventory_read_mutex");
