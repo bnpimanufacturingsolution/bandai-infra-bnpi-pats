@@ -1,7 +1,21 @@
 # Hikvision Runtime Truth
 
 Task mode: Linux-first SDK/runtime truth.
-Last updated: 2026-07-09.
+Last updated: 2026-07-19.
+
+## Enrollment identity flow (spec)
+
+Canonical architecture, operator vision, sequence diagrams, and acceptance checks for
+panel/SDK **user create / user update / fingerprint enroll** identity (plain device
+person id vs opaque log token vs `Employee.deviceEmpId` 5-digit pad):
+
+- **`docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md`**
+- WWG twin: `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md`
+
+Summary: live path remains HCNetSDK callback → `/api/hikvision/callback` → DeviceEvent +
+`device-event:saved`. Plain person id and DeviceUser inventory are applied on the
+callback when the SDK sends them, otherwise via multipass logSearch + UserInfo
+inventory delta (not invented polling).
 
 ## 2026-07-09 Host-Test VM Real-Tap Continuation
 

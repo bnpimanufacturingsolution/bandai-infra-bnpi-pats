@@ -1,5 +1,16 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 Enrollment identity architecture docs
+
+- Task mode: Docs / architecture sync.
+- Goal: Capture operator vision for panel/SDK user create + enroll identity, verify architecture correctness, document exact flows, and provide diagrams so agents stay synced to the spec.
+- Written:
+  - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` — full spec, identity planes, Flow A/B/C/D, mermaid sequence, acceptance, gaps.
+  - `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md` — WWG architecture twin.
+  - Pointer in `docs/HIKVISION_RUNTIME_TRUTH.md`.
+- Architecture verdict: Operator vision is correct; implementation is aligned with the happy path and panel-opaque path, with explicit boundary that plain person id may trail the first socket by a few seconds when major=3 has empty `dwEmployeeNo`.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-19 Device Events plain DeviceUser navigation
 
 - Task mode: Bug fix + focused admin UX regression proof.
