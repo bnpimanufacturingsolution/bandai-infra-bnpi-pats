@@ -13612,7 +13612,7 @@ export const controller = (prisma: PrismaClient) => {
 		const show = parseSystemctlShow(showChunk);
 		const activeState = show.ActiveState || activeText || "unknown";
 		const subState = show.SubState || "unknown";
-		const running = activeState === "active" && subState !== "failed";
+		const mainPid = Number(show.MainPID || 0) || 0;
 		const evidenceLogLines = logChunk
 			.split(/\r?\n/)
 			.map((line) => line.trim())
@@ -13620,6 +13620,19 @@ export const controller = (prisma: PrismaClient) => {
 			.slice(-HIKVISION_LISTENER_STATUS_EVIDENCE_LINES);
 		const recentLogLines = evidenceLogLines.slice(-HIKVISION_LISTENER_STATUS_RESPONSE_LINES);
 		const sdk = summarizeHikvisionListenerLogs(evidenceLogLines);
+		// Service-enabled truth for the admin toggle:
+		// - systemctl "active" is the happy path
+		// - Keep ready restarts briefly report activating/reloading/deactivating while the
+		//   binary is still up — do not flip the toggle OFF mid-restart
+		// - When SDK is actively receiving callbacks, the path is live even if ActiveState
+		//   lags (empty device rows / false "Service enabled" OFF was a real operator bug)
+		const systemdLooksUp =
+			activeState === "active" ||
+			activeState === "activating" ||
+			activeState === "reloading" ||
+			(activeState === "deactivating" && mainPid > 0);
+		const running =
+			(systemdLooksUp && subState !== "failed") || Boolean(sdk?.receivingCallbacks);
 		const resolvedTarget = bundled.exitCode === 0 || evidenceLogLines.length || activeText
 			? bundled.target
 			: fallbackTarget;
@@ -13645,7 +13658,7 @@ export const controller = (prisma: PrismaClient) => {
 			sdk,
 			activeState,
 			subState,
-			mainPid: Number(show.MainPID || 0) || null,
+			mainPid: mainPid || null,
 			restarts: Number(show.NRestarts || 0) || 0,
 			execMainStatus: Number(show.ExecMainStatus || 0) || 0,
 			result: show.Result || null,

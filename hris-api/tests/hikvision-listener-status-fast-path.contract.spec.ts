@@ -32,4 +32,13 @@ describe("hikvision listener status fast path contract", () => {
 		expect(lanIndex).to.be.greaterThan(-1);
 		expect(aliasIndex).to.be.lessThan(lanIndex);
 	});
+
+	it("treats SDK receiving / restarting unit as service-enabled for the admin toggle", () => {
+		// Must not only use active+not-failed — Keep ready restarts flip deactivating
+		// while TEST A still receives, which previously left Service enabled OFF.
+		expect(controllerSource).to.contain("systemdLooksUp");
+		expect(controllerSource).to.contain("sdk?.receivingCallbacks");
+		expect(controllerSource).to.contain('activeState === "deactivating"');
+		expect(controllerSource).to.contain('activeState === "activating"');
+	});
 });

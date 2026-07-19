@@ -2799,10 +2799,15 @@ export default function DeviceEventsPage() {
 			: isLatestSavedFresh
 				? "New saved row"
 				: "No recent saved event";
-	const hikvisionListenerRunning = Boolean(hikvisionListenerStatus?.running);
 	const hikvisionSdkState = hikvisionListenerStatus?.sdk?.state || "unknown";
 	const hikvisionSdkReceiving = Boolean(hikvisionListenerStatus?.sdk?.receivingCallbacks);
 	const hikvisionSdkArmed = Boolean(hikvisionListenerStatus?.sdk?.armed);
+	// Toggle must match live capture truth: receiving callbacks means the service path
+	// is on, even if a Keep-ready restart briefly reports systemd deactivating.
+	// Do not use sticky "armed" alone (quiet arm can outlive a true stop).
+	const hikvisionListenerRunning = Boolean(
+		hikvisionListenerStatus?.running || hikvisionSdkReceiving,
+	);
 	const hikvisionListenerUnavailable =
 		isSdkAlarmSavedScope &&
 		Boolean(
