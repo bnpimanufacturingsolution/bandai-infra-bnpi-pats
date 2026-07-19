@@ -152,6 +152,8 @@ const DEVICE_USER_ADMIN_ROLES = new Set(["hris-admin", "admin", "super_admin", "
 const DEVICE_ADDRESS_PORT_CONFLICT_MESSAGE = "Another device already uses this address and port.";
 const HIKVISION_HOT_RELOAD_LISTENER_SERVICE = "project-truth-hikvision-hot-reload-listener.service";
 const HIKVISION_LISTENER_CONTROL_ACTIONS = new Set(["start", "stop", "restart"]);
+const HIKVISION_LISTENER_STATUS_EVIDENCE_LINES = 400;
+const HIKVISION_LISTENER_STATUS_RESPONSE_LINES = 80;
 const HIKVISION_VM_WRAPPER_REMOTE_PATH =
 	"/usr/local/bin/project-truth-hikvision-hot-reload-listener";
 const HIKVISION_VM_DAEMON_REMOTE_PATH = "/usr/local/bin/project-truth-hikvision-hot-reload-daemon";
@@ -13484,7 +13486,7 @@ export const controller = (prisma: PrismaClient) => {
 					`echo '---SHOW---'`,
 					`systemctl show ${HIKVISION_HOT_RELOAD_LISTENER_SERVICE} --property=ActiveState,SubState,MainPID,NRestarts,ExecMainStatus,Result --no-pager 2>/dev/null || true`,
 					`echo '---LOG---'`,
-					`sudo tail -n 80 /var/log/project-truth/hikvision-hot-reload-listener.jsonl 2>/dev/null || true`,
+					`sudo tail -n ${HIKVISION_LISTENER_STATUS_EVIDENCE_LINES} /var/log/project-truth/hikvision-hot-reload-listener.jsonl 2>/dev/null || true`,
 				].join("; "),
 			],
 			HIKVISION_LISTENER_STATUS_TIMEOUT_MS,
@@ -13501,13 +13503,14 @@ export const controller = (prisma: PrismaClient) => {
 		const activeState = show.ActiveState || activeText || "unknown";
 		const subState = show.SubState || "unknown";
 		const running = activeState === "active" && subState !== "failed";
-		const recentLogLines = logChunk
+		const evidenceLogLines = logChunk
 			.split(/\r?\n/)
 			.map((line) => line.trim())
 			.filter(Boolean)
-			.slice(-80);
-		const sdk = summarizeHikvisionListenerLogs(recentLogLines);
-		const resolvedTarget = bundled.exitCode === 0 || recentLogLines.length || activeText
+			.slice(-HIKVISION_LISTENER_STATUS_EVIDENCE_LINES);
+		const recentLogLines = evidenceLogLines.slice(-HIKVISION_LISTENER_STATUS_RESPONSE_LINES);
+		const sdk = summarizeHikvisionListenerLogs(evidenceLogLines);
+		const resolvedTarget = bundled.exitCode === 0 || evidenceLogLines.length || activeText
 			? bundled.target
 			: fallbackTarget;
 		const controlAvailable =
@@ -13542,10 +13545,10 @@ export const controller = (prisma: PrismaClient) => {
 				actions: ["start", "stop", "restart"],
 			},
 			logs: {
-				available: recentLogLines.length > 0,
+				available: evidenceLogLines.length > 0,
 				recent: recentLogLines,
 				error:
-					recentLogLines.length > 0
+					evidenceLogLines.length > 0
 						? null
 						: statusError || "No listener log lines returned by the VM status check.",
 			},

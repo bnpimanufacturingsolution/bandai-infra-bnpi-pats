@@ -60,6 +60,7 @@ import { DeviceLiveReadinessStrip } from "~/components/molecules/DeviceLiveReadi
 import devicesService from "~/services/devices.service";
 import {
 	DEVICE_LIVE_KEEP_READY_INTERVAL_MS,
+	decideDeviceLiveKeepReadyRepair,
 	readDeviceLiveKeepReady,
 	writeDeviceLiveKeepReady,
 } from "~/lib/device-live-keep-ready";
@@ -1450,7 +1451,7 @@ export default function DeviceEventsPage() {
 			toast.success("Keep ready ON", {
 				id: "device-live-keep-ready",
 				description:
-					"Stays quiet while green. Only auto-repairs if the live path goes red. Saved after refresh.",
+					"Repairs real tunnel or listener failures without restarting an armed listener. Saved after refresh.",
 			});
 		} else {
 			toast.message("Keep ready OFF", {
@@ -1524,34 +1525,33 @@ export default function DeviceEventsPage() {
 		}
 	};
 
-	// Keep ready: repair ONLY when path is red / not safe. Never thrash a green path.
+	// Keep ready repairs real dependencies, but preserves an armed listener while quiet.
 	// No healthy-path interval prove (readiness already polls calmly).
 	const keepReadyLastProveAtRef = useRef(0);
 	useEffect(() => {
 		if (viewMode !== "saved" || !keepLiveReady) return;
 		if (typeof window === "undefined") return;
 		if (!liveReadiness) return; // wait for first snapshot — do not prove into a loading gap
-		// Healthy ONLY when really receiving (1+), same gate as modal "1 receiving / …".
-		// 0 receiving / 1 armed is NOT healthy — Keep ready must re-arm.
-		const pathHealthy =
-			liveReadiness.database?.ok === true &&
-			liveReadiness.listener?.receiving === true &&
-			liveReadiness.overall === "green" &&
-			liveReadiness.safeToEnroll === true;
-		if (pathHealthy) return;
-		// Not receiving → always try force re-arm (host ensure + listener restart).
-		const needsForceReArm = liveReadiness.listener?.receiving !== true;
+		// Quiet is normal: only a real dependency/listener failure should trigger repair.
+		const decision = decideDeviceLiveKeepReadyRepair({
+			databaseOk: liveReadiness.database?.ok === true,
+			listenerRunning: liveReadiness.listener?.running === true,
+			listenerReceiving: liveReadiness.listener?.receiving === true,
+			listenerArmed: liveReadiness.listener?.armed === true,
+			listenerState: liveReadiness.listener?.state,
+		});
+		if (!decision.shouldRepair) return;
 		let cancelled = false;
 		const run = () => {
 			if (cancelled || isProvingLivePath || isQuietKeepReadyRepair) return;
 			const now = Date.now();
 			// Min 2 minutes between auto-proves — no spinner thrash.
-			if (now - keepReadyLastProveAtRef.current < 120_000) return;
+			if (now - keepReadyLastProveAtRef.current < DEVICE_LIVE_KEEP_READY_INTERVAL_MS) return;
 			keepReadyLastProveAtRef.current = now;
-			void proveLivePath({ quiet: true, forceReArm: needsForceReArm });
+			void proveLivePath({ quiet: true, forceReArm: decision.forceReArm });
 		};
 		const t = window.setTimeout(run, 2_000);
-		const intervalId = window.setInterval(run, 120_000);
+		const intervalId = window.setInterval(run, DEVICE_LIVE_KEEP_READY_INTERVAL_MS);
 		return () => {
 			cancelled = true;
 			window.clearTimeout(t);

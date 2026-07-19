@@ -123,6 +123,20 @@ export const summarizeHikvisionListenerLogs = (
 		const device = deviceKey ? getOrCreateDeviceEvidence(devicesByKey, deviceKey) : null;
 
 		if (device) {
+			// A new configuration load starts a new SDK attempt for this device. Do
+			// not let an armed event from an older daemon cycle mask a current login
+			// failure when the evidence window contains more than one cycle.
+			if (event === "device_config_loaded") {
+				device.lastLoginAt = null;
+				device.lastLoginOk = null;
+				device.lastLoginError = null;
+				device.armed = false;
+				device.lastFailureReason = null;
+				device._lastAlarmAt = null;
+				device._lastPostAt = null;
+				device.lastAlarmAt = null;
+				device.lastPostAt = null;
+			}
 			device.deviceId = String(entry.deviceId || entry.sourceDeviceId || device.deviceId || "").trim() || null;
 			device.name = String(entry.deviceName || entry.name || device.name || "").trim() || null;
 			device.host =

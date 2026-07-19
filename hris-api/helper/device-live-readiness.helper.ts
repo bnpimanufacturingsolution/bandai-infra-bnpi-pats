@@ -144,7 +144,7 @@ export const buildDeviceLiveReadiness = (input: {
 
 	// Operator truth (TEST A path):
 	//   1 receiving / 1 armed / 6 login_failed  → WORKS (green)
-	//   0 receiving / 1 armed / 6 login_failed  → NOT fully live (yellow — Keep ready re-arms)
+	//   0 receiving / 1 armed / 6 login_failed  → quiet but attached (yellow — tap proves receiving)
 	// Full green requires REAL receiving, not just armed or old proof.
 
 	let liveCaptureCheck: ReadinessCheck;
@@ -172,7 +172,7 @@ export const buildDeviceLiveReadiness = (input: {
 			ok: true,
 			label: "Live capture armed (not receiving)",
 			detail:
-				"Armed but 0 receiving right now. Keep ready / Prove re-arms until a device is receiving callbacks.",
+				"Armed and waiting for the next physical device signal. No listener restart is needed.",
 		};
 	} else {
 		liveCaptureCheck = {
@@ -202,7 +202,7 @@ export const buildDeviceLiveReadiness = (input: {
 			level: "yellow",
 			ok: true,
 			label: "Proof recent but not receiving",
-			detail: `Last proof ${formatAge(proofAge)} but live receiving is off (0 receiving). Tap once or Prove / Keep ready to re-arm.`,
+			detail: `Last proof ${formatAge(proofAge)}. The listener is quiet; tap once to refresh receiving proof.`,
 		};
 	} else if (!stale && lastSdkEventAt) {
 		eventProofCheck = {
@@ -210,7 +210,7 @@ export const buildDeviceLiveReadiness = (input: {
 			level: "yellow",
 			ok: true,
 			label: "Proof getting old",
-			detail: `Last proof ${formatAge(proofAge)}. Path is quiet — re-arm until receiving is 1+.`,
+			detail: `Last proof ${formatAge(proofAge)}. Path is quiet; tap once to refresh receiving proof.`,
 		};
 	} else {
 		eventProofCheck = {
@@ -256,7 +256,7 @@ export const buildDeviceLiveReadiness = (input: {
 	} else if (!listenerRunning) {
 		headline = "Not safe for live events — restart Hikvision listener";
 	} else if (!listenerReceiving && listenerArmed) {
-		headline = "Armed but not receiving — Keep ready / Prove until receiving is 1+";
+		headline = "Armed and waiting — tap once to refresh live receiving proof";
 	} else if (stale) {
 		headline = "Not fully safe yet — re-arm / tap once for fresh proof before enroll";
 	} else {

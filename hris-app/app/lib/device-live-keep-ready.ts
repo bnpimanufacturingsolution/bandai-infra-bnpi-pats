@@ -22,5 +22,39 @@ export const writeDeviceLiveKeepReady = (on: boolean) => {
 	}
 };
 
-/** How often Keep ready auto-runs prove/re-arm when not green. */
-export const DEVICE_LIVE_KEEP_READY_INTERVAL_MS = 45_000;
+/** Minimum delay between automatic repair attempts while a real dependency is down. */
+export const DEVICE_LIVE_KEEP_READY_INTERVAL_MS = 120_000;
+
+export type DeviceLiveKeepReadySnapshot = {
+	databaseOk: boolean;
+	listenerRunning: boolean;
+	listenerReceiving: boolean;
+	listenerArmed: boolean;
+	listenerState?: string | null;
+};
+
+export type DeviceLiveKeepReadyDecision = {
+	shouldRepair: boolean;
+	forceReArm: boolean;
+};
+
+/** Preserve a healthy SDK attachment while it quietly waits for the next event. */
+export const decideDeviceLiveKeepReadyRepair = (
+	snapshot: DeviceLiveKeepReadySnapshot,
+): DeviceLiveKeepReadyDecision => {
+	const state = String(snapshot.listenerState || "").toLowerCase();
+	const listenerFailed = !snapshot.listenerRunning || state === "login_failed";
+	const listenerStable =
+		snapshot.listenerRunning &&
+		state !== "login_failed" &&
+		(snapshot.listenerReceiving || snapshot.listenerArmed);
+
+	if (snapshot.databaseOk && listenerStable) {
+		return { shouldRepair: false, forceReArm: false };
+	}
+
+	return {
+		shouldRepair: true,
+		forceReArm: listenerFailed || !snapshot.listenerArmed,
+	};
+};

@@ -127,4 +127,43 @@ describe("hikvision-listener-status helper", () => {
 		expect(status.devices[0]?.armed).to.equal(true);
 		expect(status.devices[0]?.state).to.equal("armed");
 	});
+
+	it("keeps an earlier armed reverse device visible beyond the old 80-line window", () => {
+		const now = new Date("2026-07-19T10:59:00.000Z");
+		const noise = Array.from({ length: 100 }, (_, index) =>
+			JSON.stringify({
+				ts: `2026-07-19T10:58:${String(index % 60).padStart(2, "0")}Z`,
+				deviceId: `lan-${index % 6}`,
+				deviceName: `LAN ${index % 6}`,
+				event: "sdk_login",
+				host: `10.184.38.${160 + (index % 6)}`,
+				lastError: "7",
+				ok: "false",
+			}),
+		);
+		const status = summarizeHikvisionListenerLogs([
+			'{"ts":"2026-07-19T10:57:44Z","deviceId":"test-a","event":"device_config_loaded","host":"127.0.0.1","name":"TEST A","sdkPort":"59000"}',
+			'{"ts":"2026-07-19T10:57:45Z","deviceId":"test-a","event":"sdk_login","host":"127.0.0.1","lastError":"0","ok":"true","sdkPort":"59000"}',
+			'{"ts":"2026-07-19T10:57:45Z","deviceId":"test-a","event":"sdk_alarm_arm","host":"127.0.0.1","ok":"true"}',
+			...noise,
+		]);
+
+		expect(status.armed).to.equal(true);
+		expect(status.state).to.equal("armed");
+		expect(status.devices.find((device) => device.deviceId === "test-a")?.armed).to.equal(true);
+	});
+
+	it("does not keep stale armed state after the same device begins a failed attempt", () => {
+		const status = summarizeHikvisionListenerLogs([
+			'{"ts":"2026-07-19T10:57:44Z","deviceId":"test-a","event":"device_config_loaded","host":"127.0.0.1","name":"TEST A","sdkPort":"59000"}',
+			'{"ts":"2026-07-19T10:57:45Z","deviceId":"test-a","event":"sdk_login","host":"127.0.0.1","lastError":"0","ok":"true","sdkPort":"59000"}',
+			'{"ts":"2026-07-19T10:57:45Z","deviceId":"test-a","event":"sdk_alarm_arm","host":"127.0.0.1","ok":"true"}',
+			'{"ts":"2026-07-19T10:58:44Z","deviceId":"test-a","event":"device_config_loaded","host":"127.0.0.1","name":"TEST A","sdkPort":"59000"}',
+			'{"ts":"2026-07-19T10:58:45Z","deviceId":"test-a","event":"sdk_login","host":"127.0.0.1","lastError":"7","ok":"false","sdkPort":"59000"}',
+		]);
+
+		expect(status.armed).to.equal(false);
+		expect(status.state).to.equal("login_failed");
+		expect(status.devices[0]?.armed).to.equal(false);
+	});
 });
