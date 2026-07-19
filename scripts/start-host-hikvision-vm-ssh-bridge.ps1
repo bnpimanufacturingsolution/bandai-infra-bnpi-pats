@@ -51,6 +51,39 @@ if ($Action -eq 'status') {
 
 Stop-ExistingBridge
 
+# Free stale reverse listeners on the VM so -R rebinds cleanly after a crashed
+# or elevated host SSH left remote ports occupied (common after thrash).
+function Clear-RemoteReversePorts {
+  param(
+    [string]$Target,
+    [int[]]$Ports
+  )
+  if (-not $Ports -or $Ports.Count -eq 0) { return }
+  $portPattern = ($Ports | ForEach-Object { [string]$_ }) -join '|'
+  $script = @"
+set -e
+ports='$portPattern'
+ss -ltnp 2>/dev/null | grep -E ":(\$ports)[[:space:]]" || true
+pids=`$(ss -ltnp 2>/dev/null | grep -E ":(\$ports)[[:space:]]" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u)
+for p in `$pids; do
+  # Only kill infra reverse-forward sshd sessions, never the main sshd daemon.
+  cmd=`$(ps -o cmd= -p `$p 2>/dev/null || true)
+  if echo "`$cmd" | grep -q 'sshd: infra'; then
+    echo "CLEAR_REMOTE_PID=`$p"
+    kill `$p 2>/dev/null || true
+  fi
+done
+sleep 1
+ss -ltn 2>/dev/null | grep -E ":(\$ports)[[:space:]]" || echo REMOTE_PORTS_CLEAR
+"@
+  try {
+    $out = ssh -o ConnectTimeout=20 -o BatchMode=yes $Target $script 2>&1 | Out-String
+    if ($out.Trim()) { Write-Host $out.Trim() }
+  } catch {
+    Write-Warning "Could not clear remote reverse ports on ${Target}: $($_.Exception.Message)"
+  }
+}
+
 if ($DeviceIps.Count -eq 0 -and [string]::IsNullOrWhiteSpace($DeviceIp)) {
   $resolver = Join-Path $repoRoot "hris-api\scripts\resolve-hikvision-vm-bridge-targets.cjs"
   if (Test-Path -LiteralPath $resolver) {
@@ -103,12 +136,16 @@ $forwardArgs.Add("${ApiRemotePort}:127.0.0.1:${ApiLocalPort}")
 
 $records = New-Object System.Collections.Generic.List[object]
 $runtimeProtocol = if ($HttpDevicePort -eq 443) { 'https' } else { 'http' }
+$remoteListenPorts = New-Object System.Collections.Generic.List[int]
+$remoteListenPorts.Add([int]$ApiRemotePort) | Out-Null
 
 for ($deviceIndex = 0; $deviceIndex -lt $targetDeviceIps.Count; $deviceIndex++) {
   $targetDeviceIp = $targetDeviceIps[$deviceIndex]
   $portOffset = $deviceIndex * 100
   $httpPort = $HttpListenPort + $portOffset
   $sdkPort = $SdkListenPort + $portOffset
+  $remoteListenPorts.Add([int]$httpPort) | Out-Null
+  $remoteListenPorts.Add([int]$sdkPort) | Out-Null
 
   $forwardArgs.Add('-R')
   $forwardArgs.Add("${httpPort}:${targetDeviceIp}:${HttpDevicePort}")
@@ -128,6 +165,8 @@ for ($deviceIndex = 0; $deviceIndex -lt $targetDeviceIps.Count; $deviceIndex++) 
 }
 
 $forwardArgs.Add($VmSshTarget)
+Clear-RemoteReversePorts -Target $VmSshTarget -Ports @($remoteListenPorts | Select-Object -Unique)
+
 $sshStdout = Join-Path $runRoot 'ssh-bridge.stdout.log'
 $sshStderr = Join-Path $runRoot 'ssh-bridge.stderr.log'
 $proc = Start-Process -FilePath 'ssh.exe' `
