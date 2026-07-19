@@ -1687,7 +1687,11 @@ export default function DeviceEventsPage() {
 		[savedFacetSummary?.byAction, eventAction],
 	);
 	const getSavedCategoryForAction = (actionValue: string) => {
-		const countsByCategory = (savedFacetSummary?.byActionCategory as any)?.[actionValue];
+		const countsByCategory = (
+			savedFacetSummary?.byActionCategory as
+				| Record<string, Record<string, number>>
+				| undefined
+		)?.[actionValue];
 		if (countsByCategory && typeof countsByCategory === "object") {
 			const categories = Object.entries(countsByCategory)
 				.filter(([, count]) => Number(count || 0) > 0)

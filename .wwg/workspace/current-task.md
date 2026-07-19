@@ -1,5 +1,24 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 Device Events saved filter facets
+
+- Task mode: Admin UI/data-truth regression repair.
+- Operator correction: Category and Action dropdowns on `/admin/configuration/devices/events?view=saved` must come from the saved `DeviceEvent` ledger/schema truth, not a guessed hard-coded action-to-category map.
+- Implemented:
+  - Saved events API summary now returns `byActionCategory`, grouped from persisted `device_events.eventAction + eventCategory`.
+  - Device Events UI loads a separate saved-ledger facet query for the current device/time/search/status/source scope, excluding Category/Action filters, so dropdown choices reflect the whole saved row set for that scope.
+  - Selecting an action now uses the saved-row action/category aggregate when it has one real parent category. Live proof showed `SYNC_SIGNAL -> RUNTIME`, so the UI no longer forces the stale `DEVICE_HEALTH` mapping.
+- Proof:
+  - API contract: `tests/device-events-api-contract.spec.ts` passed 6/6.
+  - Live endpoint: `.runtime/device-events-filter-facets-20260719-192707/saved-events-facets-proof.json` showed total `9,759`, `SYNC_SIGNAL: { RUNTIME: 6,344 }`, and real category/action counts.
+  - Headless browser: `.runtime/device-events-filter-ui-20260719-192858/ui-proof.json` showed Category options from saved rows (`Attendance`, `Enrollment`, `Runtime`, `Unknown vendor`, `User management`) and no empty `Device health`; Action options included `Sync signal`.
+  - Headless browser selection: `.runtime/device-events-filter-select-20260719-193038/select-proof.json` showed selecting `Sync signal` sets `eventAction=SYNC_SIGNAL&eventCategory=RUNTIME`.
+- Existing unrelated validation drift:
+  - `hris-app` focused lint still fails on the two pre-existing `jsx-a11y/label-has-associated-control` errors in Device Events and many existing warnings.
+  - `hris-app` source-contract test still fails on a pre-existing expectation that `events.tsx` contains `useDeviceHealthMap`.
+  - `hris-api` typecheck remains blocked by pre-existing missing module `../../helper/device-user-raw-fingerprint.helper` and existing helper type errors.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-19 Keep-ready reverse-tunnel stability
 
 - Task mode: Regression repair + live VM/API proof.

@@ -360,7 +360,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(events).not.toContain("VM listener unknown");
 		expect(events).not.toContain("Current inventory");
 		expect(events).toContain("deviceId: device.deviceId,");
-		expect(events).toContain("getOptionLabel(eventActionOptions, event.eventAction || event.taxonomy?.eventAction || \"\")");
+		expect(events).toContain("getOptionLabel(eventActionOptionsStatic, event.eventAction || event.taxonomy?.eventAction || \"\")");
 		expect(events).toContain("skipMissingEmployeeNo,");
 		expect(events).toContain("targetImportCount: device.targetImportCount,");
 	});

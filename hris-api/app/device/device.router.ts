@@ -35,6 +35,11 @@ interface IController {
 	executeDeviceUserImport(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceUserImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	listDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	captureDeviceUserRawFingerprints(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
 	getDeviceUserPhoto(req: Request, res: Response, next: NextFunction): Promise<void>;
 	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	backfillDeviceUserLifecycleEvents(
@@ -98,6 +103,10 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/users/import/execute", controller.executeDeviceUserImport);
 	routes.get("/users/import/jobs/:jobId", controller.getDeviceUserImportJob);
 	routes.get("/:id/users", controller.listDeviceUsers);
+	routes.post(
+		"/:id/users/:vendorUserId/raw-fingerprints/capture",
+		controller.captureDeviceUserRawFingerprints,
+	);
 	routes.get("/users/:userId/photo", controller.getDeviceUserPhoto);
 	routes.post("/:id/users/sync", controller.syncDeviceUsers);
 	routes.post("/:id/users/lifecycle-backfill", controller.backfillDeviceUserLifecycleEvents);

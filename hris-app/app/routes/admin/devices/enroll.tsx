@@ -798,6 +798,8 @@ export function DeviceEnrollmentPanel({
 	);
 	const deviceUserSyncJobStatus = deviceUserSyncJobProgress?.status;
 	const [detailsDeviceUser, setDetailsDeviceUser] = useState<VisibleDeviceUserRow | null>(null);
+	const [rawFpCaptureBusy, setRawFpCaptureBusy] = useState(false);
+	const [rawFpExpandIds, setRawFpExpandIds] = useState<Set<string>>(new Set());
 	const [detailsPhotoUrl, setDetailsPhotoUrl] = useState<string | null>(null);
 	const [detailsPhotoState, setDetailsPhotoState] = useState<
 		"idle" | "loading" | "ready" | "error"
@@ -3319,6 +3321,63 @@ export function DeviceEnrollmentPanel({
 		visibleDeviceUserRows,
 		detailsDeviceUser?.vendorUserId,
 	]);
+
+	// When details open (esp. SOURCE_ONLY live row), merge saved HRIS DeviceUser so
+	// vendorMetadata.rawFingerprints is visible — live source row alone has no raw blobs.
+	useEffect(() => {
+		const vendorUserId = String(detailsDeviceUser?.vendorUserId || "").trim();
+		const deviceId = String(selectedDeviceId || "").trim();
+		if (!detailsDeviceUser || !vendorUserId || !deviceId) return;
+		const alreadyHasRaw = Boolean(
+			(detailsDeviceUser as any)?.vendorMetadata?.rawFingerprints?.templates?.[0]?.data ||
+				(detailsDeviceUser as any)?.hrisDeviceUser?.vendorMetadata?.rawFingerprints
+					?.templates?.[0]?.data ||
+				(detailsDeviceUser as any)?.vendorMetadata?.rawFingerprintPresent,
+		);
+		if (alreadyHasRaw) return;
+		let cancelled = false;
+		void (async () => {
+			try {
+				const response = await deviceService.getDeviceUsers(deviceId, {
+					vendorUserId,
+					limit: 5,
+				});
+				const saved =
+					response.deviceUsers?.find(
+						(u) =>
+							String(u.vendorUserId || "").trim() === vendorUserId ||
+							String(u.employeeNo || "").trim() === vendorUserId,
+					) || response.deviceUsers?.[0];
+				if (cancelled || !saved) return;
+				setDetailsDeviceUser((prev) => {
+					if (!prev || String(prev.vendorUserId || "").trim() !== vendorUserId) {
+						return prev;
+					}
+					return {
+						...prev,
+						status: saved.status || prev.status,
+						employeeId: saved.employeeId || prev.employeeId,
+						employee: saved.employee || prev.employee,
+						lastSyncedAt: saved.lastSyncedAt || prev.lastSyncedAt,
+						rawPayload: saved.rawPayload || prev.rawPayload,
+						vendorMetadata: {
+							...(prev.vendorMetadata || {}),
+							...(saved.vendorMetadata || {}),
+						},
+						hrisDeviceUser: {
+							...(prev.hrisDeviceUser || {}),
+							...saved,
+						} as any,
+					};
+				});
+			} catch {
+				/* keep live-only row */
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [detailsDeviceUser?.vendorUserId, selectedDeviceId]);
 
 	const selectedExportVendorUserIdSet = new Set(selectedExportVendorUserIds);
 	const allPagedRowsSelected =
@@ -7683,6 +7742,8 @@ export function DeviceEnrollmentPanel({
 				onOpenChange={(open) => {
 					if (!open) {
 						setDetailsDeviceUser(null);
+						setRawFpExpandIds(new Set());
+						setRawFpCaptureBusy(false);
 						// Drop deep-link param so closing details does not re-open.
 						if (deviceUserDetailsParam) {
 							setSearchParams((prev) => {
@@ -7764,7 +7825,11 @@ export function DeviceEnrollmentPanel({
 										const rawFp =
 											(detailsDeviceUser as any)?.vendorMetadata
 												?.rawFingerprints ||
+											(detailsDeviceUser as any)?.hrisDeviceUser
+												?.vendorMetadata?.rawFingerprints ||
 											(detailsDeviceUser as any)?.rawPayload
+												?._hrisDeviceMetadata?.rawFingerprints ||
+											(detailsDeviceUser as any)?.hrisDeviceUser?.rawPayload
 												?._hrisDeviceMetadata?.rawFingerprints ||
 											null;
 										const templates = Array.isArray(rawFp?.templates)
@@ -7772,9 +7837,19 @@ export function DeviceEnrollmentPanel({
 											: [];
 										const rawPresent =
 											Boolean(rawFp?.present) ||
+											Boolean(
+												(detailsDeviceUser as any)?.vendorMetadata
+													?.rawFingerprintPresent,
+											) ||
 											templates.some(
 												(t: any) => String(t?.data || "").trim().length > 8,
 											);
+										const sourceLabel = String(
+											rawFp?.source ||
+												(detailsDeviceUser as any)?.vendorMetadata
+													?.rawFingerprints?.source ||
+												"",
+										);
 										return (
 											<div
 												className={`mt-3 rounded-2xl border px-4 py-3 text-xs ${
@@ -7792,29 +7867,178 @@ export function DeviceEnrollmentPanel({
 												</p>
 												<p className="mt-2 leading-5">
 													{rawPresent
-														? "Actual base64 fingerData blobs are stored on this DeviceUser (not AES-wrapped). Expand vendor metadata JSON below to view full data."
-														: "Count may exist from UserInfo, but raw fingerData has not been pulled yet. Enroll FP or re-open after capture completes."}
+														? "Actual base64 fingerData blobs on this DeviceUser (not AES). Full blob is below — this is the enroll custody plane."
+														: "UserInfo may show numOfFP count, but raw fingerData was not pulled yet. Click Capture raw from device."}
 												</p>
-												{rawPresent && templates[0]?.data ? (
-													<div className="mt-3 rounded-xl border border-emerald-200 bg-white/80 p-2">
-														<p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
-															Template 1 preview (first 120 chars)
-														</p>
-														<p className="mt-1 break-all font-mono text-[10px] leading-4 text-slate-800">
-															{String(templates[0].data).slice(0, 120)}
-															{String(templates[0].data).length > 120
-																? "…"
-																: ""}
-														</p>
-														<p className="mt-1 text-[10px] text-emerald-900">
-															length={String(templates[0].data).length}{" "}
-															chars · fingerPrintId=
-															{String(
-																templates[0].fingerPrintId ?? "?",
-															)}
-														</p>
-													</div>
+												{sourceLabel ? (
+													<p className="mt-1 text-[10px] text-slate-600">
+														source: {sourceLabel}
+													</p>
 												) : null}
+												<div className="mt-3 flex flex-wrap gap-2">
+													<Button
+														type="button"
+														size="sm"
+														variant="outline"
+														className="h-8 bg-white text-xs"
+														disabled={
+															rawFpCaptureBusy ||
+															!selectedDeviceId ||
+															!detailsDeviceUser?.vendorUserId
+														}
+														onClick={async () => {
+															if (
+																!selectedDeviceId ||
+																!detailsDeviceUser?.vendorUserId
+															)
+																return;
+															setRawFpCaptureBusy(true);
+															try {
+																const result =
+																	await deviceService.captureDeviceUserRawFingerprints(
+																		selectedDeviceId,
+																		String(
+																			detailsDeviceUser.vendorUserId,
+																		),
+																	);
+																const refreshed =
+																	result.deviceUser ||
+																	(
+																		await deviceService.getDeviceUsers(
+																			selectedDeviceId,
+																			{
+																				vendorUserId: String(
+																					detailsDeviceUser.vendorUserId,
+																				),
+																				limit: 1,
+																			},
+																		)
+																	).deviceUsers?.[0];
+																if (refreshed) {
+																	setDetailsDeviceUser((prev) =>
+																		prev
+																			? {
+																					...prev,
+																					vendorMetadata:
+																						refreshed.vendorMetadata ||
+																						prev.vendorMetadata,
+																					rawPayload:
+																						refreshed.rawPayload ||
+																						prev.rawPayload,
+																					hrisDeviceUser: {
+																						...(prev.hrisDeviceUser ||
+																							{}),
+																						...refreshed,
+																					} as any,
+																				}
+																			: prev,
+																	);
+																}
+																await refetchDeviceUserSummary();
+																toast.success(
+																	result.capture?.rawPresent
+																		? `Raw fingerprint captured (${result.capture.totalDataChars || 0} chars)`
+																		: "Capture finished without templates",
+																);
+															} catch (error: any) {
+																toast.error(
+																	error?.message ||
+																		"Failed to capture raw fingerprints",
+																);
+															} finally {
+																setRawFpCaptureBusy(false);
+															}
+														}}>
+														{rawFpCaptureBusy
+															? "Capturing…"
+															: rawPresent
+																? "Re-capture raw from device"
+																: "Capture raw from device"}
+													</Button>
+												</div>
+												{rawPresent && templates.length
+													? templates.map((tpl: any, idx: number) => {
+															const data = String(tpl?.data || "");
+															const open = rawFpExpandIds.has(
+																`${idx}`,
+															);
+															return (
+																<div
+																	key={`raw-fp-${idx}-${tpl?.fingerPrintId || 0}`}
+																	className="mt-3 rounded-xl border border-emerald-200 bg-white/80 p-2">
+																	<p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+																		Template {idx + 1}
+																		{open
+																			? " · full base64"
+																			: " · preview"}
+																	</p>
+																	<p className="mt-1 break-all font-mono text-[10px] leading-4 text-slate-800">
+																		{open
+																			? data
+																			: `${data.slice(0, 120)}${data.length > 120 ? "…" : ""}`}
+																	</p>
+																	<p className="mt-1 text-[10px] text-emerald-900">
+																		length={data.length} chars ·
+																		fingerPrintId=
+																		{String(
+																			tpl?.fingerPrintId ?? "?",
+																		)}{" "}
+																		· type=
+																		{String(tpl?.fingerType ?? "?")}
+																	</p>
+																	<div className="mt-2 flex flex-wrap gap-2">
+																		<button
+																			type="button"
+																			className="text-[11px] font-semibold text-emerald-800 underline"
+																			onClick={() => {
+																				setRawFpExpandIds(
+																					(prev) => {
+																						const next =
+																							new Set(prev);
+																						if (
+																							next.has(
+																								`${idx}`,
+																							)
+																						)
+																							next.delete(
+																								`${idx}`,
+																							);
+																						else
+																							next.add(
+																								`${idx}`,
+																							);
+																						return next;
+																					},
+																				);
+																			}}>
+																			{open
+																				? "Collapse"
+																				: "Show full base64 blob"}
+																		</button>
+																		<button
+																			type="button"
+																			className="text-[11px] font-semibold text-emerald-800 underline"
+																			onClick={async () => {
+																				try {
+																					await navigator.clipboard.writeText(
+																						data,
+																					);
+																					toast.success(
+																						"Raw fingerprint base64 copied",
+																					);
+																				} catch {
+																					toast.error(
+																						"Copy failed",
+																					);
+																				}
+																			}}>
+																			Copy base64
+																		</button>
+																	</div>
+																</div>
+															);
+														})
+													: null}
 											</div>
 										);
 									})()}

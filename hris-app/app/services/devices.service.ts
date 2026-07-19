@@ -115,6 +115,7 @@ export interface DeviceEventsResponse {
 		total: number;
 		byCategory: Partial<Record<DeviceEventCategory | string, number>>;
 		byAction: Partial<Record<DeviceEventAction | string, number>>;
+		byActionCategory?: Partial<Record<DeviceEventAction | string, Partial<Record<DeviceEventCategory | string, number>>>>;
 		byProcessingResult: Partial<Record<DeviceEventStatus | string, number>>;
 		byRuntimePath: Partial<Record<DeviceEventSource | string, number>>;
 		byConfidence: Partial<Record<DeviceEventConfidence | string, number>>;
@@ -1317,6 +1318,7 @@ class DevicesService extends APIService {
 					total: 0,
 					byCategory: {},
 					byAction: {},
+					byActionCategory: {},
 					byProcessingResult: {},
 					byRuntimePath: {},
 					byConfidence: {},
@@ -1430,6 +1432,25 @@ class DevicesService extends APIService {
 				error.data?.errors?.[0]?.message || error.message || "Error loading device users",
 			);
 		}
+	}
+
+	/** Pull raw ISAPI fingerData for one plain person and store on DeviceUser. */
+	async captureDeviceUserRawFingerprints(
+		deviceId: string,
+		vendorUserId: string,
+	): Promise<{ capture: any; deviceUser: DeviceUser | null }> {
+		const device = String(deviceId || "").trim();
+		const person = String(vendorUserId || "").trim();
+		if (!device || !person) throw new Error("deviceId and vendorUserId required");
+		const response = await hrisApiClient.post<any>(
+			`/api/device/${device}/users/${encodeURIComponent(person)}/raw-fingerprints/capture`,
+			{},
+		);
+		const data = response.data?.data || response.data;
+		return {
+			capture: data?.capture || null,
+			deviceUser: (data?.deviceUser as DeviceUser) || null,
+		};
 	}
 
 	async getEmployeeDeviceUsers(

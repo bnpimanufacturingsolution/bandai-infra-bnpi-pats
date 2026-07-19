@@ -312,12 +312,72 @@ export const enrichEnrollmentLifecycleEvent = async (params: {
 					},
 				});
 				const priorMeta = (existing?.vendorMetadata as any) || {};
+				const priorRaw =
+					existing?.rawPayload && typeof existing.rawPayload === "object"
+						? (existing.rawPayload as any)
+						: {};
+				const candidateMeta = (candidate.vendorMetadata as any) || {};
+				// Never drop raw biometric custody when UserInfo enrich rewrites metadata.
 				const vendorMetadata = {
 					...priorMeta,
-					...(candidate.vendorMetadata as any),
+					...candidateMeta,
+					// Preserve raw blobs even if candidate overwrites sibling keys.
+					rawFingerprints:
+						priorMeta.rawFingerprints || candidateMeta.rawFingerprints || undefined,
+					rawFingerprintPresent:
+						priorMeta.rawFingerprintPresent ??
+						candidateMeta.rawFingerprintPresent ??
+						undefined,
+					rawFingerprintCount:
+						priorMeta.rawFingerprintCount ??
+						candidateMeta.rawFingerprintCount ??
+						undefined,
+					rawFace: priorMeta.rawFace || candidateMeta.rawFace || undefined,
+					rawFacePresent:
+						priorMeta.rawFacePresent ?? candidateMeta.rawFacePresent ?? undefined,
+					credentialSummary: {
+						...(priorMeta.credentialSummary || {}),
+						...(candidateMeta.credentialSummary || {}),
+						fingerprintCount: Math.max(
+							Number(priorMeta.credentialSummary?.fingerprintCount || 0) || 0,
+							Number(candidateMeta.credentialSummary?.fingerprintCount || 0) || 0,
+							Number(priorMeta.rawFingerprintCount || 0) || 0,
+						),
+						hasFingerprint:
+							Boolean(priorMeta.credentialSummary?.hasFingerprint) ||
+							Boolean(candidateMeta.credentialSummary?.hasFingerprint) ||
+							Boolean(priorMeta.rawFingerprintPresent) ||
+							Boolean(priorMeta.rawFingerprints?.present),
+						faceCount: Math.max(
+							Number(priorMeta.credentialSummary?.faceCount || 0) || 0,
+							Number(candidateMeta.credentialSummary?.faceCount || 0) || 0,
+						),
+						hasFace:
+							Boolean(priorMeta.credentialSummary?.hasFace) ||
+							Boolean(candidateMeta.credentialSummary?.hasFace) ||
+							Boolean(priorMeta.rawFacePresent),
+					},
 					opaquePersonToken: opaque || priorMeta.opaquePersonToken || null,
 					enrollmentEnrichedAt: new Date().toISOString(),
 					plane: "DEVICE_USER_INVENTORY",
+				};
+				const mergedRawPayload = {
+					...priorRaw,
+					...((candidate.rawPayload as any) || {}),
+					_hrisDeviceMetadata: {
+						...(priorRaw._hrisDeviceMetadata || {}),
+						...(((candidate.rawPayload as any)?._hrisDeviceMetadata as any) || {}),
+						// Keep raw biometric mirrors for Device User modal.
+						rawFingerprints:
+							priorRaw._hrisDeviceMetadata?.rawFingerprints ||
+							vendorMetadata.rawFingerprints ||
+							undefined,
+						rawFace:
+							priorRaw._hrisDeviceMetadata?.rawFace ||
+							vendorMetadata.rawFace ||
+							undefined,
+						credentialSummary: vendorMetadata.credentialSummary,
+					},
 				};
 				const linked =
 					(await resolveLinkedEmployeeForDevicePerson(params.prisma, {
@@ -343,7 +403,7 @@ export const enrichEnrollmentLifecycleEvent = async (params: {
 								validTo: candidate.validTo,
 								doorRight: candidate.doorRight,
 								accessPlan: candidate.accessPlan as any,
-								rawPayload: candidate.rawPayload as any,
+								rawPayload: mergedRawPayload as any,
 								employeeId: linked?.id || existing.employeeId || null,
 								lastSyncedAt: new Date(),
 								vendorMetadata,
@@ -362,7 +422,7 @@ export const enrichEnrollmentLifecycleEvent = async (params: {
 								validTo: candidate.validTo,
 								doorRight: candidate.doorRight,
 								accessPlan: candidate.accessPlan as any,
-								rawPayload: candidate.rawPayload as any,
+								rawPayload: mergedRawPayload as any,
 								employeeId: linked?.id || null,
 								lastSyncedAt: new Date(),
 								vendorMetadata,
@@ -869,6 +929,12 @@ const LIFECYCLE_EVENT_ACTIONS_FOR_PLAIN_BACKFILL = [
 	"CARD_ENROLLED",
 ] as const;
 
+type RecentLifecycleEventForPlainBackfill = {
+	id: string;
+	employeeNo?: string | null;
+	payload?: unknown;
+};
+
 /**
  * Operator truth: USER_CREATED / FINGERPRINT_ENROLLED must show the plain person id.
  * Race (TEST A 2026-07-19): C++ inventory_delta attaches plain to SYNC_SIGNAL first and
@@ -912,7 +978,7 @@ export const backfillRecentLifecycleEventsWithPlain = async (params: {
 	);
 	const source = params.source || "SDK_PLAIN_LIFECYCLE_BACKFILL";
 
-	const recent = await params.prisma.deviceEvent.findMany({
+	const recent = (await params.prisma.deviceEvent.findMany({
 		where: {
 			organizationId,
 			deviceId,
@@ -925,11 +991,14 @@ export const backfillRecentLifecycleEventsWithPlain = async (params: {
 		},
 		orderBy: { receivedAt: "desc" },
 		take: 40,
-	});
+	})) as RecentLifecycleEventForPlainBackfill[];
 
 	// Collect unique opaques among empty-person lifecycle rows.
-	const withOpaqueMeta = recent.map((event: any) => {
-		const payload = (event.payload as any) || {};
+	const withOpaqueMeta = recent.map((event) => {
+		const payload =
+			event.payload && typeof event.payload === "object"
+				? (event.payload as Record<string, any>)
+				: {};
 		const eventOpaque = String(
 			payload.opaquePersonToken ||
 				payload?.enrollmentGoal?.opaquePersonToken ||
@@ -942,8 +1011,8 @@ export const backfillRecentLifecycleEventsWithPlain = async (params: {
 	const uniqueOpaques = Array.from(
 		new Set(
 			withOpaqueMeta
-				.map((r) => r.eventOpaque)
-				.filter((v) => v && isOpaqueHikvisionPersonToken(v)),
+				.map((r: { eventOpaque: string }) => r.eventOpaque)
+				.filter((v: string) => Boolean(v) && isOpaqueHikvisionPersonToken(v)),
 		),
 	);
 
@@ -1090,6 +1159,19 @@ export const backfillRecentLifecycleEventsWithPlain = async (params: {
 			employee: employeeForSocket,
 		});
 		eventIds.push(String(event.id));
+	}
+
+	// After plain is known on create/enroll ledger, pull raw fingerData onto DeviceUser.
+	if (eventIds.length || plain) {
+		scheduleRawFingerprintCaptureForEnrollment({
+			prisma: params.prisma,
+			req: params.req,
+			organizationId,
+			deviceId,
+			eventId: eventIds[0] || params.excludeEventId || undefined,
+			employeeNo: plain,
+			deviceUserId,
+		});
 	}
 
 	if (eventIds.length) {
@@ -2546,6 +2628,18 @@ export const applyFastEnrollmentIdentityOnSdkCallback = async (params: {
 			eventId,
 			error?.message || error,
 		);
+	});
+
+	// Always attempt raw FP pull when plain person id is known (create/enroll/signal).
+	// Operator goal: Device User details must show fingerData base64, not only numOfFP.
+	scheduleRawFingerprintCaptureForEnrollment({
+		prisma: params.prisma,
+		req: params.req,
+		organizationId,
+		deviceId,
+		eventId,
+		employeeNo: plain,
+		deviceUserId: deviceUser?.id || null,
 	});
 
 	// Second wave: full UserInfo raw metadata always lands on DeviceUser, then re-socket.

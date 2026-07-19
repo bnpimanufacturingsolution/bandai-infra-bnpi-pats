@@ -1849,7 +1849,7 @@ export const controller = (prisma: PrismaClient) => {
 		const results = [];
 		// Prefer write+progress+re-read verify. HTTP OK alone is not sticky (TEST A 2026-07-19).
 		const { writeAndVerifyFingerprintOnDevice } = await import(
-			"../../helper/device-user-raw-fingerprint.helper"
+			"../../helper/device-user-raw-fingerprint.helper.js"
 		);
 		for (const fingerprint of fingerprints) {
 			const fingerData = String(fingerprint?.data || "").trim();
@@ -3396,6 +3396,116 @@ export const controller = (prisma: PrismaClient) => {
 					status,
 				),
 			);
+		}
+	};
+
+	/**
+	 * Pull raw ISAPI fingerData for one plain device person and store on DeviceUser
+	 * (vendorMetadata.rawFingerprints). Operator Device User details modal expects this.
+	 */
+	const captureDeviceUserRawFingerprints = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			// Same org resolution as listDeviceUsers — middleware sets req.organizationId.
+			const organizationId = String(
+				(req as any).organizationId ||
+					(req as any).user?.organizationId ||
+					"",
+			).trim();
+			const deviceId = String(
+				req.params.id ||
+					req.params.deviceId ||
+					req.body?.deviceId ||
+					req.query?.deviceId ||
+					"",
+			).trim();
+			const vendorUserId = String(
+				req.params.vendorUserId ||
+					req.body?.vendorUserId ||
+					req.body?.employeeNo ||
+					req.query?.vendorUserId ||
+					"",
+			).trim();
+			if (!organizationId || !deviceId || !vendorUserId) {
+				res.status(400).json(
+					buildErrorResponse(
+						`deviceId and vendorUserId (plain person id) required (org=${Boolean(organizationId)} device=${Boolean(deviceId)} person=${Boolean(vendorUserId)})`,
+						400,
+					),
+				);
+				return;
+			}
+			if (!/^\d+$/.test(vendorUserId) && vendorUserId.length > 32) {
+				// Allow non-numeric plain ids; reject obvious opaque tokens.
+				const { isOpaqueHikvisionPersonToken } = await import(
+					"../../helper/hikvision-event-contract.helper.js"
+				);
+				if (isOpaqueHikvisionPersonToken(vendorUserId)) {
+					res
+						.status(400)
+						.json(buildErrorResponse("vendorUserId must be plain person id, not opaque token", 400));
+					return;
+				}
+			}
+			const device = await prisma.device.findFirst({
+				where: { id: deviceId, organizationId },
+				select: { id: true },
+			});
+			if (!device) {
+				res.status(404).json(buildErrorResponse("Device not found", 404));
+				return;
+			}
+			const existing = await (prisma as any).deviceUser.findFirst({
+				where: {
+					organizationId,
+					deviceId,
+					OR: [{ vendorUserId }, { employeeNo: vendorUserId }],
+				},
+				select: { id: true },
+			});
+			const { captureRawFingerprintsForEnrollment } = await import(
+				"../../helper/device-user-raw-fingerprint.helper.js"
+			);
+			const result = await captureRawFingerprintsForEnrollment({
+				prisma,
+				req,
+				organizationId,
+				deviceId,
+				employeeNo: vendorUserId,
+				deviceUserId: existing?.id || null,
+			});
+			const row = await (prisma as any).deviceUser.findFirst({
+				where: {
+					organizationId,
+					deviceId,
+					OR: [{ vendorUserId }, { employeeNo: vendorUserId }],
+				},
+				select: buildDeviceUserSelect({ includeVendorMetadata: true }),
+			});
+			res.status(result.ok ? 200 : 422).json(
+				buildSuccessResponse(
+					result.ok
+						? "Raw fingerprints captured on DeviceUser"
+						: result.reason || "Raw fingerprint capture failed",
+					{
+						capture: result,
+						deviceUser: row ? decorateDeviceUser(row) : null,
+					},
+					result.ok ? 200 : 422,
+				),
+			);
+		} catch (error: any) {
+			res
+				.status(500)
+				.json(
+					buildErrorResponse(
+						error?.message || "Failed to capture raw fingerprints",
+						500,
+					),
+				);
 		}
 	};
 
@@ -14675,6 +14785,15 @@ export const controller = (prisma: PrismaClient) => {
 				${whereSql}
 				GROUP BY 1
 			`;
+			const actionCategoryGroupsSql = Prisma.sql`
+				SELECT
+					${eventActionSql} AS "eventAction",
+					${eventCategorySql} AS "eventCategory",
+					COUNT(*)::bigint AS count
+				${aggregateFromSql}
+				${whereSql}
+				GROUP BY 1, 2
+			`;
 			const confidenceGroupsSql = Prisma.sql`
 				SELECT ${eventConfidenceSql} AS "eventConfidence", COUNT(*)::bigint AS count
 				${aggregateFromSql}
@@ -14704,6 +14823,7 @@ export const controller = (prisma: PrismaClient) => {
 				sourceGroups,
 				categoryGroups,
 				actionGroups,
+				actionCategoryGroups,
 				confidenceGroups,
 				evidenceGroups,
 				evidenceTotals,
@@ -14723,6 +14843,13 @@ export const controller = (prisma: PrismaClient) => {
 					prisma.$queryRaw<Array<{ eventAction: string; count: bigint | number }>>(
 						actionGroupsSql,
 					),
+					prisma.$queryRaw<
+						Array<{
+							eventAction: string;
+							eventCategory: string;
+							count: bigint | number;
+						}>
+					>(actionCategoryGroupsSql),
 					prisma.$queryRaw<Array<{ eventConfidence: string; count: bigint | number }>>(
 						confidenceGroupsSql,
 					),
@@ -14828,6 +14955,17 @@ export const controller = (prisma: PrismaClient) => {
 			const byAction = Object.fromEntries(
 				actionGroups.map((item: any) => [item.eventAction, Number(item.count || 0)]),
 			);
+			const byActionCategory = actionCategoryGroups.reduce(
+				(acc: Record<string, Record<string, number>>, item: any) => {
+					const action = String(item.eventAction || "UNKNOWN").trim() || "UNKNOWN";
+					const category =
+						String(item.eventCategory || "UNKNOWN_VENDOR").trim() || "UNKNOWN_VENDOR";
+					if (!acc[action]) acc[action] = {};
+					acc[action][category] = Number(item.count || 0);
+					return acc;
+				},
+				{},
+			);
 			const byConfidence = Object.fromEntries(
 				confidenceGroups.map((item: any) => [item.eventConfidence, Number(item.count || 0)]),
 			);
@@ -14840,6 +14978,7 @@ export const controller = (prisma: PrismaClient) => {
 				total,
 				byCategory,
 				byAction,
+				byActionCategory,
 				byProcessingResult,
 				byRuntimePath,
 				byConfidence,
@@ -15805,6 +15944,7 @@ export const controller = (prisma: PrismaClient) => {
 		getDeviceSyncRuns,
 		getDeviceActivity,
 		listDeviceUsers,
+		captureDeviceUserRawFingerprints,
 		getDeviceUserPhoto,
 		syncDeviceUsers,
 		previewDeviceUserExport,

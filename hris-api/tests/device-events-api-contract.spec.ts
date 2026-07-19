@@ -26,6 +26,7 @@ describe("Device events API contract", () => {
 		it("returns event-first summaries while keeping raw source/status aliases compatible", () => {
 		expect(controllerSource).to.contain("byCategory");
 		expect(controllerSource).to.contain("byAction");
+		expect(controllerSource).to.contain("byActionCategory");
 		expect(controllerSource).to.contain("byProcessingResult");
 			expect(controllerSource).to.contain("byRuntimePath");
 			expect(controllerSource).to.contain("byEvidenceSource");
