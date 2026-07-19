@@ -63,7 +63,7 @@ Socket shows saved row truth. It does not invent plain id missing from the POST 
 
 - Prefer C++ inventory delta + template read **before** POST when ACS person is empty.
 - HRIS multipass is fallback, not a license to claim “callback always had 15.”
-- Store raw FP/face templates on DeviceUser when read; pointer/status on DeviceEvent only.
+- Store raw FP/face templates on DeviceUser when read. For USER_CREATED / FINGERPRINT_ENROLLED, also attach the same evidenced usable blobs to the DeviceEvent payload so the ledger journey is complete; never fabricate bytes or identity when capture is empty.
 
 Also see: `.grok/rules/02-sdk-callback-wire-truth.md`.
 

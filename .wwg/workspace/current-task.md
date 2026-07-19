@@ -1,5 +1,14 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 C++-first create/enroll raw wire truth
+
+- Task mode: Mixed regression repair across C++ listener identity enrichment, biometric custody, realtime, and admin UI truth.
+- Evidence: `.runtime/cpp-first-create-enroll-raw-20260719-200043/`.
+- Listener truth: major=3 create/enroll ACS may carry empty `dwEmployeeNo`; do not claim first-callback plain identity. Serialized, completion-checked UserInfo inventory scans now prevent interleaved partial baselines from producing false deltas. A post-rebuild create of `99200129` resolved through a one-person inventory delta and posted plain identity; that new user honestly had `numOfFP=0` and no face.
+- Enrollment truth: TEST A person `15` has `numOfFP=1`, `numOfFace=0`. Rewriting person 15's own template (donor=false) proved status 6, sticky read-back, and one 684-character raw template. Existing-person ACS remained empty/zero-template, then HRIS logSearch resolved plain `15` and automatic ISAPI capture stored the raw template on DeviceUser and FINGERPRINT_ENROLLED DeviceEvent payloads without manual Capture.
+- Realtime/UI truth: `device-event:saved` delivered saved lifecycle rows with plain `employeeNo=15`; opaque tokens stayed only in payload evidence. Device user details renders stored raw fingerprint data and labels manual capture as repair-only.
+- Face boundary: person `15` has no face on the device, so raw face remains honestly absent. Earlier person `1` face proof is historical and is not reused as proof for this path.
+
 ## Latest Task Addendum - 2026-07-19 Create+Enroll raw blob ledger journey
 
 - Task mode: Meaningful feature / journey truth + live proof.

@@ -7885,8 +7885,8 @@ export function DeviceEnrollmentPanel({
 												</p>
 												<p className="mt-2 leading-5">
 													{rawPresent
-														? "Actual base64 fingerData blobs on this DeviceUser (not AES). Full blob is below — this is the enroll custody plane."
-														: "UserInfo may show numOfFP count, but raw fingerData was not pulled yet. Click Capture raw from device."}
+														? "Actual base64 fingerData blobs saved on this DeviceUser (not AES). Create/enroll ledger events keep the same usable templates when captured."
+														: "No raw fingerData is saved yet. Create/enroll normally captures it automatically after the plain device user is resolved; use the repair action below only if that path did not complete."}
 												</p>
 												{sourceLabel ? (
 													<p className="mt-1 text-[10px] text-slate-600">
@@ -7970,8 +7970,8 @@ export function DeviceEnrollmentPanel({
 														{rawFpCaptureBusy
 															? "Capturing…"
 															: rawPresent
-																? "Re-capture raw from device"
-																: "Capture raw from device"}
+																? "Repair: re-capture raw"
+																: "Repair: capture raw"}
 													</Button>
 												</div>
 												{rawPresent && templates.length
@@ -8203,10 +8203,11 @@ export function DeviceEnrollmentPanel({
 										))}
 									</div>
 									<p className="mt-3 text-xs leading-5 text-slate-500">
-										Raw fingerData lives on DeviceUser.vendorMetadata.rawFingerprints
-										(and rawPayload._hrisDeviceMetadata.rawFingerprints). DeviceEvent
-										only keeps a pointer/status. Dev mock tallies stay separate from
-										physical device truth.
+									DeviceUser is the current biometric custody plane. Create/enroll
+									events also retain the same usable raw fingerprint or face data
+									when capture succeeds, so the ledger journey is complete without a
+									manual repair action. Dev mock tallies stay separate from physical
+									device truth.
 									</p>
 								</div>
 							</div>

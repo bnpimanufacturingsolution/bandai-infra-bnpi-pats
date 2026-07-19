@@ -5,8 +5,8 @@
  * (e.g. "15"), HRIS must store the actual fingerData blobs on DeviceUser so
  * they are viewable and usable — NOT only encrypted envelopes or numOfFP counts.
  *
- * DeviceEvent keeps a pointer/summary only (no multi-KB fingerData on ledger).
- * DeviceUser.vendorMetadata.rawFingerprints holds the real base64 template data.
+ * DeviceUser remains the inventory custody plane, while create/enroll DeviceEvent
+ * payloads also keep the same usable base64 templates for a complete ledger journey.
  */
 import type { PrismaClient } from "../generated/prisma";
 import { hikvisionFetch, hikvisionFetchBinary } from "../lib/hikvision-client";
@@ -45,9 +45,14 @@ export const envBool = (name: string, defaultValue: boolean) => {
 	return defaultValue;
 };
 
-/** Default ON — operator wants raw templates on enroll. Set HIKVISION_ENROLL_RAW_FINGERPRINT=false to skip. */
+/**
+ * Legacy JS/ISAPI device pull after enroll identity.
+ * Default OFF (C++-first): raw templates must arrive on SDK callback
+ * (`fingerprints[]` / faceTemplate from C++ listener). Set
+ * HIKVISION_ENROLL_RAW_FINGERPRINT=true only as temporary fallback — not product truth.
+ */
 export const isRawFingerprintEnrollCaptureEnabled = () =>
-	envBool("HIKVISION_ENROLL_RAW_FINGERPRINT", true);
+	envBool("HIKVISION_ENROLL_RAW_FINGERPRINT", false);
 
 export const extractFingerDataFromIsapiNode = (node: any): string => {
 	if (!node || typeof node !== "object") return "";
@@ -1285,9 +1290,16 @@ export const scheduleRawFingerprintCaptureForEnrollment = (params: {
 	employeeNo: string;
 	deviceUserId?: string | null;
 }): void => {
-	if (!isRawFingerprintEnrollCaptureEnabled()) return;
+	if (!isRawFingerprintEnrollCaptureEnabled()) {
+		// C++-first: templates must arrive on /api/hikvision/callback fingerprints[] from listener.
+		return;
+	}
 	const employeeNo = String(params.employeeNo || "").trim();
 	if (!employeeNo || isOpaqueHikvisionPersonToken(employeeNo)) return;
+
+	console.warn(
+		`[raw-fingerprint] LEGACY JS/ISAPI fallback capture scheduled for ${employeeNo} device=${params.deviceId} (HIKVISION_ENROLL_RAW_FINGERPRINT=true)`,
+	);
 
 	void captureRawFingerprintsForEnrollment(params)
 		.then((result) => {

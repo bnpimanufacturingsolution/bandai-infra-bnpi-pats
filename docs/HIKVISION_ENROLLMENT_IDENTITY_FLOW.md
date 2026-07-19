@@ -384,7 +384,7 @@ Listener modal **armed/receiving** proves transport. Person labels prove identit
 | Panel opaque → plain without inventing ids | **Yes** | logSearch + inventory delta |
 | New plain lands on DeviceUser quickly | **Yes** (2026-07-19) | inventory delta upserts new plains before map completes |
 | Plain `deviceEmpId === "15"` + optional `employeeId` pad | **Yes** | exact deviceEmpId + pad on employeeId only |
-| Raw FP template bytes on DeviceEvent | **No (by design)** | pointer/status only; actual base64 fingerData on DeviceUser.rawFingerprints |
+| Raw FP template bytes on create/enroll DeviceEvent | **Yes** (2026-07-19 operator contract) | `payload.rawFingerprints.templates[].data`; DeviceUser remains the inventory custody plane |
 | Raw FP template on DeviceUser after enroll | **Yes (operator expectation)** | `vendorMetadata.rawFingerprints.templates[].data` via ISAPI on FINGERPRINT_ENROLLED |
 | Device Events click → Device User 15 | **Yes** | deep-link `deviceUserDetails` |
 | Employee click → employee record (employeeId may display 00015) | **Yes when linked** | deviceEmpId plain 15 |
@@ -640,8 +640,8 @@ When the fingerprint is enrolled for the same person `15`, HRIS should create or
 
 | Table/model | Row created or updated | Important stored fields |
 |---|---|---|
-| `device_events` / `DeviceEvent` | A second saved history row for fingerprint lifecycle | `eventAction=FINGERPRINT_ENROLLED`, `eventCategory=ENROLLMENT`, `employeeNo=15` when resolved, `deviceUserId` pointing to DeviceUser 15, `payload` with raw log/callback evidence and enrollment summary. |
-| `device_users` / `DeviceUser` | Same DeviceUser 15 updated/refreshed | `vendorMetadata` / `rawPayload` updated from UserInfo/Search (counts) **and** raw fingerprint templates at `vendorMetadata.rawFingerprints.templates[].data` (base64 finger template blobs, not AES-wrapped by default). Capture runs after FINGERPRINT_ENROLLED enrich via ISAPI FingerPrintUpload. Not stored as full blobs on DeviceEvent. |
+| `device_events` / `DeviceEvent` | A second saved history row for fingerprint lifecycle | `eventAction=FINGERPRINT_ENROLLED`, `eventCategory=ENROLLMENT`, `employeeNo=15` when resolved, `deviceUserId` pointing to DeviceUser 15, and usable raw templates at `payload.rawFingerprints.templates[].data` after callback or automatic ISAPI capture. |
+| `device_users` / `DeviceUser` | Same DeviceUser 15 updated/refreshed | `vendorMetadata` / `rawPayload` updated from UserInfo/Search (counts) **and** raw fingerprint templates at `vendorMetadata.rawFingerprints.templates[].data` (base64 finger template blobs, not AES-wrapped by default). Capture runs automatically after FINGERPRINT_ENROLLED enrich via ISAPI FingerPrintUpload. |
 | `device_person_tokens` / `DevicePersonToken` | Maybe updated | Used only if the fingerprint operation log has an opaque token that needs mapping back to `15`. |
 | `employees` / `Employee` | Not created by fingerprint enroll | Existing linked employee remains linked; no employee should be fabricated from fingerprint evidence alone. |
 
@@ -651,7 +651,7 @@ So the expected storage split is:
 FINGERPRINT_ENROLLED event row
   stores: proof that fingerprint enrollment happened
   stores: callback/log evidence + enrollment summary + rawFingerprintCustody status
-  does not store: full base64 template blobs (pointer only)
+  stores: full usable base64 templates at payload.rawFingerprints.templates[].data
 
 DeviceUser 15 row (operator expectation — viewable here)
   stores: current user identity and UserInfo raw metadata
@@ -666,7 +666,7 @@ DeviceUser.vendorMetadata.rawFingerprints
   source: isapi_FingerPrintUpload_on_enroll
 ```
 
-After FINGERPRINT_ENROLLED, enrich runs UserInfo then schedules ISAPI FingerPrintUpload to pull actual templates and persist them **raw** on DeviceUser so Device user details shows the blob.
+After FINGERPRINT_ENROLLED, enrich runs UserInfo then schedules ISAPI FingerPrintUpload to pull actual templates and persist them **raw** on DeviceUser and the create/enroll DeviceEvent payload. Device user details therefore shows the blob without a manual Capture action; Capture remains a repair tool.
 
 ### Sequence for the UI
 

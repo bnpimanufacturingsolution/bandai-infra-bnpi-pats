@@ -240,7 +240,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("derivedFromReconcile: true");
 	});
 
-	it("keeps Linux callback work queued and omits raw fingerprint templates from evidence", () => {
+	it("keeps Linux callback work queued and attaches raw templates only after evidenced reads", () => {
 		const service = serviceSource();
 
 		expect(service).to.include("NET_DVR_SetDVRMessageCallBack_V51(0, alarm_callback, nullptr)");
@@ -286,11 +286,22 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include("is_observed_operation_sync_minor");
 		expect(service).to.include("build_user_setup_payload_from_search_response");
 		expect(service).to.include("read_device_employee_numbers");
+		expect(service).to.include("inventory_read_mutex");
+		expect(service).to.include("inventory_baseline_ready_hosts");
+		expect(service).to.include("source_user_inventory_incomplete_discarded");
+		expect(service).to.include("callback_identity_inventory_incomplete");
+		expect(service).to.include("inventory_baseline_seed_failed");
+		expect(service).to.include("resolve_plain_employee_no_from_userinfo_touch");
+		expect(service).to.include("intersections.size() == 1");
+		expect(service).to.not.include('job.identity_source = "recent_employee_candidate"');
+		expect(service).to.not.include("plain = pick_newest_plain_employee_no(changed)");
 		expect(service).to.include("reconcile_full_mirror_completed");
 		expect(service).to.include("reconcile_suppressed_recent_peer_apply");
 		expect(service).to.include("target.config.hris_device_id == source.config.hris_device_id");
 		expect(service).to.include("target.config.hris_device_id == source->config.hris_device_id");
-		expect(service).to.not.include('"fingerData"');
+		expect(service).to.include("read_fingerprints_via_isapi");
+		expect(service).to.include('<< "\\\"fingerprints\\\":"');
+		expect(service).to.include('"fingerData"');
 	});
 
 	it("exposes fixed local VM listener status and control endpoints for admin recovery", () => {
@@ -333,7 +344,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(wrapper).to.include('password = clean(access.get("password")) or clean(os.environ.get("HIKVISION_PASSWORD"))');
 		expect(wrapper).to.include("hikvisionSdkRuntimeAddress");
 		expect(wrapper).to.include("hikvisionSdkRuntimePort");
-		expect(wrapper).to.include('LOCAL_API_BASE=${HIKVISION_HOT_RELOAD_API_BASE:-http://localhost:3101}');
+		expect(wrapper).to.include('HOST_REVERSE_API_BASE=${HIKVISION_HOST_REVERSE_API_BASE:-http://127.0.0.1:53001}');
+		expect(wrapper).to.include('LOCAL_API_BASE="$(resolve_local_api_base)"');
 		expect(wrapper).to.include('DEVICE_SOURCE=${HIKVISION_HOT_RELOAD_DEVICE_SOURCE:-postgres}');
 		expect(wrapper).to.include('fetch_hikvision_device_rows_from_api()');
 		expect(wrapper).to.include('/api/device?page=1&limit=${DEVICE_FETCH_LIMIT}&document=true');
@@ -418,7 +430,7 @@ describe("Hikvision biometric sync contract", () => {
 
 		expect(controller).to.include("const hasDeviceUsersTable = await hasDeviceUserTable()");
 		expect(controller).to.include("const hasDeviceEventColumns = await getDeviceEventColumnPresence()");
-		expect(controller).to.include("const hasDeviceUserReference =");
+		expect(controller).to.include("const deviceUserJoinSql =");
 		expect(controller).to.include("hasDeviceUsersTable && hasDeviceEventColumns.deviceUserId");
 		expect(controller).to.include('LEFT JOIN LATERAL (');
 		expect(controller).to.include('NULL::text AS \"vendorUserId\"');
@@ -427,6 +439,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("'UNKNOWN_VENDOR'::text");
 		expect(controller).to.include("GROUP BY 1");
 		expect(controller).to.include('migrationState: "device_users_table_missing"');
-		expect(controller).to.include("const deviceUserRows = (await hasDeviceUserTable())");
+		expect(controller).to.include("if (!(await hasDeviceUserTable()))");
+		expect(controller).to.include("const includeVendorMetadata = await hasDeviceUserVendorMetadataColumn()");
 	});
 });

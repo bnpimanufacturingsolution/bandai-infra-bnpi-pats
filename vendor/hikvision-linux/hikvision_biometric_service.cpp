@@ -576,8 +576,28 @@ void CALLBACK alarm_callback(
     }
 
     auto *acs = reinterpret_cast<NET_DVR_ACS_ALARM_INFO *>(alarm_info);
-    const std::string employee_no =
-        acs->struAcsEventInfo.dwEmployeeNo > 0 ? std::to_string(acs->struAcsEventInfo.dwEmployeeNo) : "";
+    // Identity from ACS (SDK docs: Person/Card-Based Access Control):
+    // 1) dwEmployeeNo DWORD on struAcsEventInfo (0 = invalid)
+    // 2) byEmployeeNo string on NET_DVR_ACS_EVENT_INFO_EXTEND when byAcsEventInfoExtend=1
+    // Prefer non-empty string/plain; do not invent when both empty.
+    const std::string employee_no_dw =
+        acs->struAcsEventInfo.dwEmployeeNo > 0
+            ? std::to_string(acs->struAcsEventInfo.dwEmployeeNo)
+            : "";
+    std::string employee_no_ext;
+    if (acs->byAcsEventInfoExtend == 1 && acs->pAcsEventInfoExtend != nullptr) {
+        auto *ext =
+            reinterpret_cast<NET_DVR_ACS_EVENT_INFO_EXTEND *>(acs->pAcsEventInfoExtend);
+        employee_no_ext =
+            fixed_bytes_to_string(ext->byEmployeeNo, NET_SDK_EMPLOYEE_NO_LEN);
+    }
+    std::string employee_no = !employee_no_ext.empty() ? employee_no_ext : employee_no_dw;
+    std::string identity_from_acs = "empty";
+    if (!employee_no_ext.empty()) {
+        identity_from_acs = "acs_byEmployeeNo_extend";
+    } else if (!employee_no_dw.empty()) {
+        identity_from_acs = "acs_dwEmployeeNo";
+    }
     const std::string card_no =
         fixed_bytes_to_string(acs->struAcsEventInfo.byCardNo, ACS_CARD_NO_LEN);
     const std::string kind = classify_event(acs->dwMajor, acs->dwMinor);
@@ -596,6 +616,10 @@ void CALLBACK alarm_callback(
         {"minor", minor_name(acs->dwMinor)},
         {"eventKind", kind},
         {"employeeNo", employee_no},
+        {"employeeNoDw", employee_no_dw},
+        {"employeeNoExt", employee_no_ext},
+        {"acsIdentitySource", identity_from_acs},
+        {"acsEventInfoExtend", acs->byAcsEventInfoExtend == 1 ? "true" : "false"},
         {"cardNo", card_no},
         {"doorNo", door_no},
         {"verifyMode", verify_mode},
@@ -607,6 +631,9 @@ void CALLBACK alarm_callback(
     job.source_host = host;
     job.source_device_id = source_device_id;
     job.employee_no = employee_no;
+    if (!employee_no.empty()) {
+        job.identity_source = identity_from_acs;
+    }
     job.card_no = card_no;
     job.door_no = door_no;
     job.verify_mode = verify_mode;

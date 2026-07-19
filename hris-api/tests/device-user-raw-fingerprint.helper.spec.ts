@@ -131,6 +131,10 @@ describe("device-user-raw-fingerprint helper", () => {
 						updatedAt: new Date(),
 					};
 				},
+				findUnique: async () => ({
+					id: "du-15",
+					vendorMetadata: {},
+				}),
 			},
 			deviceEvent: {
 				findUnique: async () => ({
@@ -184,10 +188,13 @@ describe("device-user-raw-fingerprint helper", () => {
 		// Not AES envelope shape.
 		expect(savedMeta.rawFingerprints.templates[0].data).to.not.include("ciphertext");
 		expect(eventUpdates[0].data.payload.rawFingerprintCustody.status).to.equal(
-			"raw_on_device_user",
+			"raw_on_event_and_device_user",
 		);
-		expect(eventUpdates[0].data.payload.enrollmentSnapshot.biometricTemplateStatus).to.equal(
-			"raw_on_device_user",
+		expect(eventUpdates[0].data.payload.rawFingerprints.templates[0].data).to.equal(
+			"cmF3LWZpbmdlci10ZW1wbGF0ZS1kYXRh",
+		);
+		expect(eventUpdates[0].data.payload.enrollmentSnapshot.biometricCustody.status).to.equal(
+			"raw_on_event_and_device_user",
 		);
 	});
 
