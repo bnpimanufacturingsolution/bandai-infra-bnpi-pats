@@ -125,12 +125,12 @@ if (Test-TcpConnect -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 250) {
   New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
   $reuseRecord | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $runRoot 'k8s-dev-db-access.json') -Encoding UTF8
   $reuseRecord | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $pidFile -Encoding UTF8
-  Write-K8sDbProgress "REUSE OK — 127.0.0.1:$LocalPort already listening (no SSH)"
+  Write-K8sDbProgress "REUSE OK -- 127.0.0.1:$LocalPort already listening (no SSH)"
   Write-Host "DATABASE_URL=$($reuseRecord.DatabaseUrl)"
   return
 }
 
-Write-K8sDbProgress "cold path — open single-port SSH forward only (no multi-port LAN)"
+Write-K8sDbProgress "cold path -- open single-port SSH forward only (no multi-port LAN)"
 
 if (-not (Test-LoopbackPortFree -Port $LocalPort)) {
   throw "Local port $LocalPort is already in use on 127.0.0.1/0.0.0.0. Stop the existing listener or choose another port."
@@ -140,7 +140,7 @@ New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
 $stdoutPath = Join-Path $runRoot 'dev-k8s-db.stdout.log'
 $stderrPath = Join-Path $runRoot 'dev-k8s-db.stderr.log'
 
-# Path selection: cheap TCP first. Do NOT run a separate `ssh true` probe —
+# Path selection: cheap TCP first. Do NOT run a separate `ssh true` probe --
 # that doubles Cloudflare SSH cost. Start the real -L forward immediately.
 $preferAlias = $env:PROJECT_TRUTH_SSH_PREFER_ALIAS -eq 'true'
 $forceLan = $env:PROJECT_TRUTH_SSH_FORCE_LAN -eq 'true'
@@ -157,7 +157,7 @@ if (-not $preferAlias -or $forceLan) {
     $argumentList = New-SshForwardArgs -Target $selectedTarget -UseKey -ConnectTimeoutSec 8
     Write-K8sDbProgress "selected direct LAN $selectedTarget"
   } else {
-    Write-K8sDbProgress "LAN :22 not open in 300ms — using Cloudflare alias (skip wasted SSH probe)"
+    Write-K8sDbProgress "LAN :22 not open in 300ms -- using Cloudflare alias (skip wasted SSH probe)"
   }
 }
 
@@ -165,7 +165,7 @@ if (-not $selectedTarget) {
   $selectedPath = "alias:$sshAlias"
   $selectedTarget = $sshAlias
   $argumentList = New-SshForwardArgs -Target $selectedTarget -ConnectTimeoutSec 15
-  Write-K8sDbProgress "selected $selectedTarget — if quiet >15s complete Cloudflare Access in browser"
+  Write-K8sDbProgress "selected $selectedTarget -- if quiet >15s complete Cloudflare Access in browser"
 }
 
 Write-K8sDbProgress "start ssh -N -L 127.0.0.1:${LocalPort}:${targetHost}:${targetPort} via $selectedPath"
@@ -225,7 +225,7 @@ $record = [pscustomobject]@{
 $record | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $runRoot 'k8s-dev-db-access.json') -Encoding UTF8
 $record | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $pidFile -Encoding UTF8
 
-Write-K8sDbProgress "OK — forward running (leave it up for instant next predev)"
+Write-K8sDbProgress "OK -- forward running (leave it up for instant next predev)"
 Write-Host "DATABASE_URL=$($record.DatabaseUrl)"
 Write-Host "Stop with: .\scripts\start-k8s-dev-db-access.ps1 -StopExisting"
 Write-Host "Evidence: $(Join-Path $runRoot 'k8s-dev-db-access.json')"

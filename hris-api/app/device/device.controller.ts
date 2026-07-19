@@ -13573,7 +13573,7 @@ export const controller = (prisma: PrismaClient) => {
 			if (!admin) return;
 
 			const { buildDeviceLiveReadiness } = await import(
-				"../../helper/device-live-readiness.helper"
+				"../../helper/device-live-readiness.helper.js"
 			);
 
 			let databaseOk = false;
@@ -13796,7 +13796,7 @@ export const controller = (prisma: PrismaClient) => {
 				(req.query as any)?.forceReArm === "true";
 
 			const { buildDeviceLiveReadiness } = await import(
-				"../../helper/device-live-readiness.helper"
+				"../../helper/device-live-readiness.helper.js"
 			);
 			const steps: Array<{
 				step: string;
