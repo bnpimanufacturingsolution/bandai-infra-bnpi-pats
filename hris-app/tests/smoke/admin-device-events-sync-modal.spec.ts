@@ -817,3 +817,99 @@ test("admin device events keeps plain device user id separate from padded employ
 		/admin\/configuration\/employees\?action=view&id=employee-15/,
 	);
 });
+
+test("admin device events labels sync signals without implying person resolution", async ({
+	page,
+}) => {
+	const hikvisionDevice = {
+		id: "device-hik-sync",
+		organizationId: "org-1",
+		name: "TEST A",
+		address: "192.168.254.102",
+		port: 443,
+		protocol: "https",
+		config: { vendor: "Hikvision" },
+		access: {},
+		createdAt: timestamp,
+		updatedAt: timestamp,
+	};
+	const syncSignalEvent = {
+		id: "event-sync-signal",
+		organizationId: "org-1",
+		deviceId: hikvisionDevice.id,
+		device: hikvisionDevice,
+		deviceUserId: null,
+		deviceUser: null,
+		employee: null,
+		employeeId: null,
+		attendanceId: null,
+		eventTime: "2026-07-19T09:59:00.000Z",
+		receivedAt: "2026-07-19T09:59:01.000Z",
+		employeeNo: null,
+		source: "EN_HCNETSDK_ALARM",
+		status: "IGNORED",
+		eventType: "Runtime",
+		eventCategory: "RUNTIME",
+		eventAction: "SYNC_SIGNAL",
+		eventLabel: "Sync signal",
+		eventConfidence: "PROVEN",
+		errorMessage: null,
+		dedupeKey: "sync-signal",
+		payload: {},
+		createdAt: timestamp,
+		updatedAt: timestamp,
+	};
+
+	await page.addInitScript(() => {
+		window.localStorage.setItem("authToken", "smoke-token");
+		window.localStorage.setItem("userRole", "hris-admin");
+		window.localStorage.setItem("userSubRole", "hris-admin");
+	});
+
+	await page.route("**/api/**", async (route) => {
+		const path = new URL(route.request().url()).pathname;
+		if (path.endsWith("/auth/me")) {
+			await route.fulfill(json(adminUser));
+			return;
+		}
+		if (path.endsWith("/system-provisioning/status")) {
+			await route.fulfill(json(readyProvisioningStatus));
+			return;
+		}
+		if (path.endsWith("/device/events")) {
+			await route.fulfill(
+				json({
+					events: [syncSignalEvent],
+					summary: {
+						total: 1,
+						byStatus: { IGNORED: 1 },
+						bySource: { EN_HCNETSDK_ALARM: 1 },
+					},
+					pagination: { total: 1, page: 1, limit: 25, totalPages: 1 },
+				}),
+			);
+			return;
+		}
+		if (path.endsWith("/device")) {
+			await route.fulfill(
+				json({
+					devices: [hikvisionDevice],
+					pagination: { total: 1, page: 1, limit: 100, totalPages: 1 },
+				}),
+			);
+			return;
+		}
+		await route.fulfill(json({}));
+	});
+
+	await page.goto("/admin/configuration/devices/events?view=saved");
+	await expect(page.getByRole("heading", { name: "Device events" })).toBeVisible({
+		timeout: routeReadyTimeoutMs,
+	});
+
+	await expect(page.getByText("No person id on SDK signal").first()).toBeVisible();
+	await expect(page.getByRole("link", { name: /No person id on SDK signal/i })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Device user" })).toHaveCount(0);
+	await expect(page.getByText("No person id", { exact: true }).first()).toBeVisible();
+	await expect(page.getByText(/Resolving person id/i)).toHaveCount(0);
+});

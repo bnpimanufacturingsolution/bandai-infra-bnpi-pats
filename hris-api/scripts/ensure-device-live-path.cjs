@@ -110,16 +110,16 @@ async function main() {
 		`[device-live-path] STEP check: host API must be :${apiLocalPort}; listener must post VM :${apiRemotePort}→host (not :3101)`,
 	);
 
-	const [dbOk, sdkOk] = await Promise.all([tcpOpen(dbPort), tcpOpen(sdkPort)]);
+	const [dbOk, hostSdkOk] = await Promise.all([tcpOpen(dbPort), tcpOpen(sdkPort)]);
 	const apiOk = await tcpOpen(apiLocalPort);
 	const vmApi = vmSsHasPort(apiRemotePort);
 	const vmSdk = vmSsHasPort(sdkPort);
 
 	console.log(
-		`[device-live-path] probes host db:${dbPort}=${dbOk} sdk:${sdkPort}=${sdkOk} api:${apiLocalPort}=${apiOk} | vm :${apiRemotePort}=${vmApi} :${sdkPort}=${vmSdk}`,
+		`[device-live-path] probes host db:${dbPort}=${dbOk} sdk:${sdkPort}=${hostSdkOk} api:${apiLocalPort}=${apiOk} | vm :${apiRemotePort}=${vmApi} :${sdkPort}=${vmSdk}`,
 	);
 
-	if (dbOk && (sdkOk || vmSdk) && apiOk && vmApi) {
+	if (dbOk && vmSdk && apiOk && vmApi) {
 		const listener = listenerPostsHostApi();
 		if (listener.ok) {
 			console.log(

@@ -76,6 +76,27 @@ function Test-Tcp([string]$HostName, [int]$Port, [int]$TimeoutMs = 1200) {
   }
 }
 
+function Test-VmListenPort([int]$Port, [int]$TimeoutSeconds = 12) {
+  try {
+    $probe = @"
+set -e
+if ss -ltn 2>/dev/null | grep -Eq '(^|[[:space:]])(127\.0\.0\.1|\[::1\]|\*|0\.0\.0\.0):$Port[[:space:]]'; then
+  echo LISTEN
+  exit 0
+fi
+if timeout 4 bash -lc '</dev/tcp/127.0.0.1/$Port' >/dev/null 2>&1; then
+  echo CONNECT
+  exit 0
+fi
+exit 1
+"@
+    $out = $probe | & ssh.exe -o ConnectTimeout=$TimeoutSeconds -o BatchMode=yes $VmSshTarget 'bash -s' 2>$null
+    return (($out | Out-String) -match "LISTEN|CONNECT")
+  } catch {
+    return $false
+  }
+}
+
 $result = [ordered]@{
   ok = $false
   generatedAt = (Get-Date).ToString("o")
@@ -115,30 +136,45 @@ if (Test-Tcp "127.0.0.1" $DbLocalPort) {
 }
 
 # --- 2) Reverse bridge (VM listens → host reaches device) ---
-# Prove from VM is expensive; host-side we only ensure SSH process exists with the right -R flags.
-$bridgeOk = $false
+# A stale local ssh.exe process is not enough proof after sleep, Wi-Fi change, or
+# Cloudflare reconnect. Prove the VM localhost ports that the listener uses.
+$bridgeProcessMatches = $false
 $sshProcs = Get-CimInstance Win32_Process -Filter "Name='ssh.exe'" -ErrorAction SilentlyContinue
 foreach ($p in $sshProcs) {
   $cmd = [string]$p.CommandLine
   if ($cmd -match [regex]::Escape("${SdkListenPort}:") -and $cmd -match [regex]::Escape($DeviceIp)) {
-    $bridgeOk = $true
+    $bridgeProcessMatches = $true
     break
   }
   if ($cmd -match [regex]::Escape("${SdkListenPort}:${DeviceIp}:8000")) {
-    $bridgeOk = $true
+    $bridgeProcessMatches = $true
     break
   }
 }
 
-if ($bridgeOk) {
+$vmSdkOpen = Test-VmListenPort $SdkListenPort
+$vmHttpOpen = Test-VmListenPort $HttpListenPort
+
+if ($bridgeProcessMatches -and $vmSdkOpen -and $vmHttpOpen) {
   $result.reverseBridge = $true
-  $result.steps += [pscustomobject]@{ step = "reverse_bridge"; ok = $true; detail = "SSH reverse for $DeviceIp / SDK $SdkListenPort already running" }
+  $result.steps += [pscustomobject]@{
+    step = "reverse_bridge"
+    ok = $true
+    detail = "VM reverse ports open for $DeviceIp (SDK $SdkListenPort, HTTP $HttpListenPort)"
+  }
 } else {
   $bridgeScript = Join-Path $repoRoot "scripts\start-host-hikvision-vm-ssh-bridge.ps1"
   if (-not (Test-Path $bridgeScript)) {
     $result.steps += [pscustomobject]@{ step = "reverse_bridge"; ok = $false; detail = "start-host-hikvision-vm-ssh-bridge.ps1 missing" }
   } else {
     try {
+      if ($bridgeProcessMatches -and -not ($vmSdkOpen -and $vmHttpOpen)) {
+        $result.steps += [pscustomobject]@{
+          step = "reverse_bridge_stale"
+          ok = $false
+          detail = "Local ssh bridge exists, but VM ports are not proven (SDK=$vmSdkOpen HTTP=$vmHttpOpen); rebinding"
+        }
+      }
       & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeScript `
         -Action start `
         -DeviceIp $DeviceIp `
@@ -150,22 +186,17 @@ if ($bridgeOk) {
         -HttpDevicePort 443 `
         -SdkDevicePort 8000 2>&1 | Out-Null
       Start-Sleep -Seconds 3
-      $bridgeOk = $false
-      foreach ($p in (Get-CimInstance Win32_Process -Filter "Name='ssh.exe'" -ErrorAction SilentlyContinue)) {
-        $cmd = [string]$p.CommandLine
-        if ($cmd -match [regex]::Escape($DeviceIp) -and ($cmd -match "$SdkListenPort" -or $cmd -match "58000")) {
-          $bridgeOk = $true
-          break
-        }
-      }
+      $vmSdkOpen = Test-VmListenPort $SdkListenPort
+      $vmHttpOpen = Test-VmListenPort $HttpListenPort
+      $bridgeOk = [bool]($vmSdkOpen -and $vmHttpOpen)
       $result.reverseBridge = $bridgeOk
       $result.steps += [pscustomobject]@{
         step = "reverse_bridge"
         ok = $bridgeOk
         detail = if ($bridgeOk) {
-          "Started reverse bridge $DeviceIp SDK port $SdkListenPort HTTP $HttpListenPort"
+          "Started and proved VM reverse ports for $DeviceIp (SDK $SdkListenPort, HTTP $HttpListenPort)"
         } else {
-          "Bridge script finished but SSH process for $DeviceIp not found (Cloudflare SSH may need browser login)"
+          "Bridge script finished but VM ports not proven (SDK=$vmSdkOpen HTTP=$vmHttpOpen); Cloudflare SSH may need login"
         }
       }
     } catch {
@@ -174,10 +205,10 @@ if ($bridgeOk) {
   }
 }
 
-# SDK listen port open means TEST A reverse path is usable even if SSH process
-# detection or optional remote API port (53001) failed during re-ensure.
-$sdkPortOpen = Test-Tcp "127.0.0.1" $SdkListenPort
-if ($sdkPortOpen) {
+# VM SDK/HTTP listen ports mean TEST A reverse path is usable even if host
+# process detection failed during re-ensure.
+$sdkPortOpen = $vmSdkOpen
+if ($sdkPortOpen -and $vmHttpOpen) {
   $result.reverseBridge = $true
   $fixedSteps = @()
   foreach ($s in $result.steps) {
@@ -196,14 +227,14 @@ if ($sdkPortOpen) {
     $result.steps += [pscustomobject]@{
       step = "reverse_bridge_sdk_port"
       ok = $true
-      detail = "127.0.0.1:$SdkListenPort is listening - TEST A SDK reverse path is available"
+      detail = "VM 127.0.0.1:$SdkListenPort and :$HttpListenPort are listening - TEST A reverse path is available"
     }
   }
 } elseif (-not $result.reverseBridge) {
   $result.steps += [pscustomobject]@{
     step = "reverse_bridge_sdk_port"
     ok = $false
-    detail = "127.0.0.1:$SdkListenPort not listening - device reverse tunnel missing"
+    detail = "VM reverse ports missing (SDK=$vmSdkOpen HTTP=$vmHttpOpen) - device reverse tunnel missing"
   }
 }
 

@@ -557,14 +557,22 @@ const formatDeviceEventPersonRef = (
 	employeeNo?: string | null,
 	item?: Pick<
 		UnifiedDeviceEventRow,
-		"employeeNo" | "payload" | "deviceUserVendorUserId" | "status" | "errorMessage"
+		| "employeeNo"
+		| "payload"
+		| "deviceUserVendorUserId"
+		| "eventAction"
+		| "errorMessage"
 	> | null,
 ) => {
 	const token = item ? getDisplayEmployeeNo(item) : String(employeeNo || "").trim();
 	if (!token) {
+		const action = String(item?.eventAction || "").toUpperCase();
+		const errorText = String(item?.errorMessage || "").toLowerCase();
+		if (action === "SYNC_SIGNAL" && !errorText.includes("resolving")) {
+			return "No person id on SDK signal";
+		}
 		const resolving =
-			String(item?.status || "").toUpperCase() === "IGNORED" ||
-			String(item?.errorMessage || "").includes("resolving") ||
+			errorText.includes("resolving") ||
 			String(item?.payload?.enrollmentSnapshot?.biometricCustody?.status || "").includes(
 				"pending",
 			);
@@ -3090,9 +3098,7 @@ export default function DeviceEventsPage() {
 				const deviceUserUrl =
 					item.deviceId && displayNo && !isOpaqueDevicePersonToken(displayNo)
 						? getDeviceUserSyncCenterUrl(item.deviceId, displayNo)
-						: item.deviceId
-							? getDeviceUserSyncCenterUrl(item.deviceId, null)
-							: "";
+						: "";
 				return (
 				<div className="flex min-w-0 items-center gap-3">
 					<div
@@ -3150,7 +3156,9 @@ export default function DeviceEventsPage() {
 									? "Matched HRIS"
 									: isOpaqueDevicePersonToken(displayNo)
 										? "Needs link"
-										: "Device user"}
+										: displayNo
+											? "Device user"
+											: "No person id"}
 							</Badge>
 						</div>
 					</div>
@@ -3781,9 +3789,7 @@ export default function DeviceEventsPage() {
 						const deviceUserUrl =
 							item.deviceId && displayNo && !isOpaqueDevicePersonToken(displayNo)
 								? getDeviceUserSyncCenterUrl(item.deviceId, displayNo)
-								: item.deviceId
-									? getDeviceUserSyncCenterUrl(item.deviceId, null)
-									: "";
+								: "";
 						return (
 							<div className="flex flex-col gap-1">
 								<Button
