@@ -1,5 +1,26 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-19 Keep-ready reverse-tunnel stability
+
+- Task mode: Regression repair + live VM/API proof.
+- Reported symptom: TEST A repeatedly appeared to lose its reverse tunnel while the VM-side `ping 192.168.254.102` hung and the listener modal alternated between armed and login-failed states.
+- Root cause:
+  - SSH reverse forwarding exposes selected TCP ports on VM loopback; it does not route ICMP or make `192.168.254.102` pingable from the VM.
+  - Listener status read only 80 JSONL lines. One seven-device SDK cycle can exceed that window, so working TEST A evidence scrolled out while later off-LAN login failures remained.
+  - `Keep ready ON` treated every armed-but-quiet period as a forced re-arm condition, restarting a healthy listener every two minutes.
+- Implemented:
+  - Listener status summarizes a 400-line evidence window (while returning only 80 recent lines) and resets per-device sticky state at each new `device_config_loaded` attempt.
+  - Keep-ready decision logic preserves a running armed listener while quiet and force-rearms only a stopped, unarmed, or genuinely login-failed listener. Database-only repair does not restart an armed listener.
+  - Armed/quiet readiness copy now asks for one physical tap to refresh receiving proof instead of instructing repeated re-arms.
+- Live proof:
+  - Windows reached TEST A `192.168.254.102` on TCP `8000` and `443`.
+  - VM loopback `53001`, `59000`, and `59443` stayed open; listener and VM-managed Cloudflare services stayed active.
+  - Listener PID `2458362` remained unchanged from `11:04:27Z` through `11:09:55Z`, beyond the former two-minute restart cycle.
+  - Admin status returned running/armed, safe-to-tap, and fresh successful HRIS callback posts; quiet remained yellow rather than being misreported as tunnel failure.
+  - Focused tests: Keep-ready 3/3, listener/readiness 17/17, listener-modal Playwright 1/1.
+- Existing unrelated validation drift: Full backend typecheck is blocked by the pre-existing missing module `helper/device-user-raw-fingerprint.helper`; targeted lint reaches two pre-existing empty-label accessibility errors in Device Events. Focused changed behavior is green.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-19 Create+Enroll architecture reality marathon
 
 - Task mode: Meaningful feature / wire-path harden + live proof (non-stop marathon).
