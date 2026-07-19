@@ -1,19 +1,18 @@
 /**
  * Truthful live/enroll readiness for Device Events + Sync Center enroll.
  *
- * Important: listener "armed" alone is NOT enough. Host auth + DeviceEvent save
- * need Postgres; live taps need the VM listener path. Operators need RYG that
- * combines those gates so green means "safe to tap/enroll for realtime truth".
+ * Green means the FULL realtime path is healthy:
+ *   host Postgres + VM listener armed/receiving + VM→host callback post path
+ *   (typically VM :53001 reverse → host :3001).
  *
- * Critical UX: while Live is actively receiving, overall must stay green.
- * "Proof aging" is only for quiet armed path — never demote a receiving path
- * just because the last saved row crossed a short timer.
+ * ACS "receiving" alone is NOT enough for green enroll — if :53001 is down,
+ * taps may never hit HRIS even while SDK alarms look alive.
  */
 
 export type ReadinessLevel = "green" | "yellow" | "red";
 
 export type ReadinessCheck = {
-	id: "database" | "liveCapture" | "eventProof";
+	id: "database" | "liveCapture" | "eventProof" | "callbackPost";
 	level: ReadinessLevel;
 	ok: boolean;
 	label: string;
@@ -41,6 +40,11 @@ export type DeviceLiveReadiness = {
 		lastAlarmAt: string | null;
 		lastPostAt: string | null;
 	};
+	callbackPost: {
+		pathOk: boolean | null;
+		lastPostAt: string | null;
+		postFresh: boolean;
+	};
 	proof: {
 		lastSdkEventAt: string | null;
 		ageMs: number | null;
@@ -49,10 +53,12 @@ export type DeviceLiveReadiness = {
 	};
 };
 
-/** Fresh saved/alarm proof window (quiet path). Receiving overrides this. */
+/** Fresh saved/alarm proof window (quiet path). */
 const FRESH_PROOF_MS = 10 * 60 * 1000;
 /** Stale: too old to trust quiet armed path without a re-tap. */
 const STALE_PROOF_MS = 30 * 60 * 1000;
+/** Successful C++ → HRIS post must be this fresh for full green enroll. */
+const FRESH_POST_MS = 10 * 60 * 1000;
 
 const ageMs = (iso: string | null | undefined, now: Date): number | null => {
 	if (!iso) return null;
@@ -94,6 +100,8 @@ export const buildDeviceLiveReadiness = (input: {
 	lastAlarmAt?: string | null;
 	lastPostAt?: string | null;
 	lastSdkEventAt?: string | null;
+	/** VM loopback :53001 → host API reverse is healthy (curl /health). null = not probed. */
+	callbackPostPathOk?: boolean | null;
 	now?: Date;
 }): DeviceLiveReadiness => {
 	const now = input.now || new Date();
@@ -104,20 +112,28 @@ export const buildDeviceLiveReadiness = (input: {
 			: null;
 	const databaseError = input.databaseError ? String(input.databaseError) : null;
 
-	// systemd "running" can lag; recent receive/arm evidence means the path is alive.
 	const listenerReceiving = Boolean(input.listenerReceiving);
 	const listenerRunning =
 		Boolean(input.listenerRunning) || listenerReceiving || Boolean(input.listenerArmed);
 	const listenerArmed = Boolean(input.listenerArmed) || listenerReceiving;
 	const lastAlarmAt = input.lastAlarmAt || null;
 	const lastPostAt = input.lastPostAt || null;
-	// Use newest of saved SDK row + listener alarm/post clocks (not first non-null only).
 	const lastSdkEventAt = newestIso(input.lastSdkEventAt, lastAlarmAt, lastPostAt);
 	const proofAge = ageMs(lastSdkEventAt, now);
+	const postAge = ageMs(lastPostAt, now);
+	const postFresh =
+		postAge !== null && postAge >= -60_000 && postAge <= FRESH_POST_MS;
+	const callbackPostPathOk =
+		input.callbackPostPathOk === undefined ? null : input.callbackPostPathOk;
+	// Path healthy if reverse probe ok OR we have a recent successful post log.
+	const callbackPathHealthy =
+		callbackPostPathOk === true || (callbackPostPathOk !== false && postFresh);
+	const callbackPathDown = callbackPostPathOk === false;
 	const timedFresh =
 		proofAge !== null && proofAge >= -60_000 && proofAge <= FRESH_PROOF_MS;
-	// Live receiving IS current proof — do not flip yellow mid-stream after a timer.
-	const fresh = timedFresh || (listenerRunning && listenerReceiving);
+	const fresh =
+		(timedFresh || (listenerRunning && listenerReceiving)) &&
+		(callbackPathHealthy || postFresh);
 	const stale =
 		!listenerReceiving && (proofAge === null || proofAge > STALE_PROOF_MS);
 
@@ -141,11 +157,6 @@ export const buildDeviceLiveReadiness = (input: {
 					databaseError ||
 					"Host API cannot reach Postgres (often local tunnel port 55435). Auth and saved events will fail until restored.",
 			};
-
-	// Operator truth (TEST A path):
-	//   1 receiving / 1 armed / 6 login_failed  → WORKS (green)
-	//   0 receiving / 1 armed / 6 login_failed  → quiet but attached (yellow — tap proves receiving)
-	// Full green requires REAL receiving, not just armed or old proof.
 
 	let liveCaptureCheck: ReadinessCheck;
 	if (!listenerRunning) {
@@ -184,19 +195,82 @@ export const buildDeviceLiveReadiness = (input: {
 		};
 	}
 
+	// Callback post path: C++ must reach host API via VM :53001 (or equivalent).
+	let callbackPostCheck: ReadinessCheck;
+	if (callbackPathDown) {
+		callbackPostCheck = {
+			id: "callbackPost",
+			level: "red",
+			ok: false,
+			label: "HRIS callback path down",
+			detail:
+				"VM :53001 does not reach host API (reverse tunnel 53001→3001). Device signals may still appear in logs, but rows will not land in HRIS until the reverse is restored.",
+		};
+	} else if (postFresh) {
+		callbackPostCheck = {
+			id: "callbackPost",
+			level: "green",
+			ok: true,
+			label: "HRIS callback posts OK",
+			detail: `Last successful C++→HRIS post ${formatAge(postAge)}.`,
+		};
+	} else if (callbackPostPathOk === true) {
+		callbackPostCheck = {
+			id: "callbackPost",
+			level: "yellow",
+			ok: true,
+			label: "Callback path open (no recent post)",
+			detail:
+				"VM :53001 health is OK, but no recent successful post log yet. Tap once to prove end-to-end save.",
+		};
+	} else if (lastPostAt) {
+		callbackPostCheck = {
+			id: "callbackPost",
+			level: "yellow",
+			ok: false,
+			label: "HRIS callback posts stale",
+			detail: `Last post ${formatAge(postAge)}. Re-check reverse 53001→3001 and restart listener if needed.`,
+		};
+	} else {
+		callbackPostCheck = {
+			id: "callbackPost",
+			level: "yellow",
+			ok: false,
+			label: "No HRIS callback post proof",
+			detail:
+				"No recent hikvision_callback_post success. Ensure predev reverse 53001→host:3001 is up before trusting green.",
+		};
+	}
+
 	let eventProofCheck: ReadinessCheck;
-	if (listenerReceiving && listenerRunning) {
+	if (listenerReceiving && listenerRunning && callbackPathHealthy && postFresh) {
 		eventProofCheck = {
 			id: "eventProof",
 			level: "green",
 			ok: true,
 			label: "Live path proving now",
+			detail: `SDK receiving + HRIS post fresh (last post ${formatAge(postAge)}).`,
+		};
+	} else if (listenerReceiving && listenerRunning && !callbackPathHealthy) {
+		eventProofCheck = {
+			id: "eventProof",
+			level: "yellow",
+			ok: false,
+			label: "Device signal only — HRIS path weak",
+			detail:
+				"SDK is receiving on the VM, but HRIS callback post proof is missing/stale. Do not treat empty Sync Signal rows as named attendance.",
+		};
+	} else if (listenerReceiving && listenerRunning) {
+		eventProofCheck = {
+			id: "eventProof",
+			level: "yellow",
+			ok: true,
+			label: "Receiving — await post proof",
 			detail: lastSdkEventAt
-				? `SDK is receiving callbacks now (last proof ${formatAge(proofAge)}).`
-				: "SDK is receiving callbacks now.",
+				? `SDK receiving (last alarm ${formatAge(proofAge)}); need a successful post to fully green enroll.`
+				: "SDK receiving; need a successful C++→HRIS post.",
 		};
 	} else if (timedFresh) {
-		// Recent row without active receiving = yellow (not full green).
 		eventProofCheck = {
 			id: "eventProof",
 			level: "yellow",
@@ -224,43 +298,57 @@ export const buildDeviceLiveReadiness = (input: {
 		};
 	}
 
-	// Can attempt a tap when armed; full enroll safety still wants receiving (overall green).
+	// Tap: need DB + listener + (receiving OR fresh armed) + not callback path hard-down.
 	const safeToTap =
 		databaseOk &&
 		listenerRunning &&
+		!callbackPathDown &&
 		(listenerReceiving || (listenerArmed && !stale));
-	const safeToEnroll = databaseOk && listenerRunning && listenerReceiving;
+	// Enroll green: DB + receiving + healthy post path (probe or fresh post).
+	const safeToEnroll =
+		databaseOk &&
+		listenerRunning &&
+		listenerReceiving &&
+		callbackPathHealthy &&
+		(postFresh || callbackPostPathOk === true);
 
-	const checksFinal = [databaseCheck, liveCaptureCheck, eventProofCheck];
+	const checksFinal = [databaseCheck, liveCaptureCheck, callbackPostCheck, eventProofCheck];
 	const hasRedFinal = checksFinal.some((c) => c.level === "red");
+	const allGreen = checksFinal.every((c) => c.level === "green");
 
-	// STRICT: overall green only when DB ok AND really receiving.
 	let overall: ReadinessLevel = "yellow";
 	if (!databaseOk || !listenerRunning || hasRedFinal) overall = "red";
-	else if (databaseOk && listenerReceiving) overall = "green";
+	else if (allGreen && listenerReceiving && callbackPathHealthy) overall = "green";
 	else overall = "yellow";
 
 	const reasons: string[] = [];
 	for (const check of checksFinal) {
 		if (check.level !== "green") reasons.push(`${check.label}: ${check.detail}`);
 	}
-	if (overall === "green" && listenerReceiving) {
-		reasons.push("DB ok + live receiving (1+ device callbacks) — path is truthful.");
+	if (overall === "green") {
+		reasons.push(
+			"DB ok + SDK receiving + HRIS callback post path healthy — safe for realtime truth.",
+		);
 	}
 
 	let headline: string;
 	if (overall === "green") {
-		headline = "Safe to tap and enroll — live path is receiving";
+		headline = "Safe to tap and enroll — live path is receiving and posting";
 	} else if (!databaseOk) {
 		headline = "Not safe — database tunnel/path is down (events/auth will fail)";
+	} else if (callbackPathDown) {
+		headline = "Not safe — VM:53001 callback reverse is down (posts cannot reach host API)";
 	} else if (!listenerRunning) {
 		headline = "Not safe for live events — restart Hikvision listener";
+	} else if (listenerReceiving && !callbackPathHealthy) {
+		headline =
+			"Device signals OK but HRIS post path weak — fix reverse 53001→3001 before trusting enroll";
 	} else if (!listenerReceiving && listenerArmed) {
 		headline = "Armed and waiting — tap once to refresh live receiving proof";
 	} else if (stale) {
 		headline = "Not fully safe yet — re-arm / tap once for fresh proof before enroll";
 	} else {
-		headline = "Partially ready — need live receiving before trusting enroll realtime";
+		headline = "Partially ready — need receiving + successful HRIS post before full green";
 	}
 
 	return {
@@ -283,6 +371,11 @@ export const buildDeviceLiveReadiness = (input: {
 			state: input.listenerState || null,
 			lastAlarmAt,
 			lastPostAt,
+		},
+		callbackPost: {
+			pathOk: callbackPostPathOk,
+			lastPostAt,
+			postFresh,
 		},
 		proof: {
 			lastSdkEventAt,

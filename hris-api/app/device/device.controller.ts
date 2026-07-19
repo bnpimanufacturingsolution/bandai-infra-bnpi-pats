@@ -13593,6 +13593,10 @@ export const controller = (prisma: PrismaClient) => {
 					`printf 'ACTIVE='`,
 					`systemctl is-active ${HIKVISION_HOT_RELOAD_LISTENER_SERVICE} 2>/dev/null || true`,
 					`printf '\\n'`,
+					// Same SSH round-trip: probe VM loopback reverse that C++ uses for HRIS posts.
+					`echo '---API_REVERSE---'`,
+					`curl -sS -m 2 -o /dev/null -w 'code=%{http_code}' http://127.0.0.1:53001/health 2>/dev/null || echo 'code=000'`,
+					`printf '\\n'`,
 					`echo '---SHOW---'`,
 					`systemctl show ${HIKVISION_HOT_RELOAD_LISTENER_SERVICE} --property=ActiveState,SubState,MainPID,NRestarts,ExecMainStatus,Result --no-pager 2>/dev/null || true`,
 					`echo '---LOG---'`,
@@ -13607,6 +13611,16 @@ export const controller = (prisma: PrismaClient) => {
 			? raw.split("---SHOW---")[1]?.split("---LOG---")[0] || ""
 			: "";
 		const logChunk = raw.includes("---LOG---") ? raw.split("---LOG---").slice(1).join("---LOG---") : "";
+		const apiReverseChunk = raw.includes("---API_REVERSE---")
+			? raw.split("---API_REVERSE---")[1]?.split("---SHOW---")[0] || ""
+			: "";
+		const apiReverseCodeMatch = apiReverseChunk.match(/code=(\d+)/);
+		const apiReverseHttpCode = apiReverseCodeMatch
+			? Number(apiReverseCodeMatch[1])
+			: null;
+		// true when VM can reach host API via reverse (C++ LOCAL_API_BASE :53001).
+		const callbackPostPathOk =
+			apiReverseHttpCode !== null ? apiReverseHttpCode >= 200 && apiReverseHttpCode < 500 : null;
 		const activeMatch = raw.match(/ACTIVE=([^\r\n]*)/);
 		const activeText = String(activeMatch?.[1] || "").trim();
 		const show = parseSystemctlShow(showChunk);
@@ -13656,6 +13670,9 @@ export const controller = (prisma: PrismaClient) => {
 			running,
 			status: running ? "running" : activeState === "inactive" ? "stopped" : activeState,
 			sdk,
+			// Operator truth: C++ posts to http://127.0.0.1:53001 on VM (host reverse).
+			callbackPostPathOk,
+			apiReverseHttpCode,
 			activeState,
 			subState,
 			mainPid: mainPid || null,
@@ -13763,6 +13780,10 @@ export const controller = (prisma: PrismaClient) => {
 				lastAlarmAt: listener?.sdk?.lastAlarmAt || null,
 				lastPostAt: listener?.sdk?.lastPostAt || null,
 				lastSdkEventAt: lastSdkEventAt || listener?.sdk?.lastAlarmAt || null,
+				callbackPostPathOk:
+					typeof listener?.callbackPostPathOk === "boolean"
+						? listener.callbackPostPathOk
+						: null,
 			});
 
 			res.status(200).json(
@@ -13775,6 +13796,8 @@ export const controller = (prisma: PrismaClient) => {
 								checkedAt: listener.checkedAt,
 								error: listener.error,
 								vm: listener.vm,
+								callbackPostPathOk: listener.callbackPostPathOk,
+								apiReverseHttpCode: listener.apiReverseHttpCode,
 							}
 						: null,
 				}, 200),
@@ -14103,11 +14126,14 @@ export const controller = (prisma: PrismaClient) => {
 				lastAlarmAt: listener?.sdk?.lastAlarmAt || null,
 				lastPostAt: listener?.sdk?.lastPostAt || null,
 				lastSdkEventAt: lastSdkEventAt || listener?.sdk?.lastAlarmAt || null,
+				callbackPostPathOk:
+					typeof listener?.callbackPostPathOk === "boolean"
+						? listener.callbackPostPathOk
+						: null,
 			});
 
-			// Proven is final readiness truth only. Host ensure / restart step noise
-			// (e.g. optional reverse API port 53001, brief systemd lag) must not flip
-			// proven=false while DB + live path + proof are green for the operator.
+			// Proven only when full matrix is green: DB + receiving + HRIS post path.
+			// VM :53001 reverse is NOT optional noise — without it C++ cannot save rows.
 			const proven =
 				readiness.overall === "green" &&
 				readiness.safeToTap === true &&
