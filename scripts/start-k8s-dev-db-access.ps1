@@ -15,8 +15,13 @@ $sshExe = (Get-Command ssh.exe -ErrorAction Stop).Source
 $vmHost = '10.184.37.19'
 $vmUser = 'infra'
 $sshAlias = 'project-truth-hris'
-$targetHost = '10.43.130.9'
-$targetPort = 5432
+# Preferred: K3s DEV ClusterIP. Fallback: compose DEV published on VM loopback.
+$k8sTargetHost = '10.43.130.9'
+$k8sTargetPort = 5432
+$composeTargetHost = '127.0.0.1'
+$composeTargetPort = 15433
+$targetHost = $k8sTargetHost
+$targetPort = $k8sTargetPort
 
 function Write-K8sDbProgress {
   param([string]$Message)
@@ -69,9 +74,42 @@ function Test-TcpConnect {
   }
 }
 
+function Test-PostgresWire {
+  param(
+    [string]$HostName = '127.0.0.1',
+    [int]$Port,
+    [int]$TimeoutMs = 800
+  )
+  # TCP open is not enough: a half-dead SSH -L can accept then refuse the remote.
+  # Postgres SSLRequest -> reply N/S proves a live server.
+  try {
+    $client = [System.Net.Sockets.TcpClient]::new()
+    $async = $client.BeginConnect($HostName, $Port, $null, $null)
+    if (-not $async.AsyncWaitHandle.WaitOne($TimeoutMs, $false)) {
+      $client.Close()
+      return $false
+    }
+    $client.EndConnect($async)
+    $client.ReceiveTimeout = $TimeoutMs
+    $client.SendTimeout = $TimeoutMs
+    $stream = $client.GetStream()
+    $sslRequest = [byte[]](0, 0, 0, 8, 4, 210, 22, 47)
+    $stream.Write($sslRequest, 0, $sslRequest.Length)
+    $buf = New-Object byte[] 1
+    $n = $stream.Read($buf, 0, 1)
+    $client.Close()
+    # 78 = 'N' (no SSL), 83 = 'S' (SSL)
+    return ($n -eq 1 -and ($buf[0] -eq 78 -or $buf[0] -eq 83))
+  } catch {
+    return $false
+  }
+}
+
 function New-SshForwardArgs {
   param(
     [string]$Target,
+    [string]$RemoteHost,
+    [int]$RemotePort,
     [switch]$UseKey,
     [int]$ConnectTimeoutSec = 12
   )
@@ -85,7 +123,7 @@ function New-SshForwardArgs {
     '-N',
     # Bind explicitly to loopback so Prisma always has a stable host even when
     # 10.184.37.19 is only a temporary LAN-style loopback alias.
-    '-L', "127.0.0.1:${LocalPort}:${targetHost}:${targetPort}",
+    '-L', "127.0.0.1:${LocalPort}:${RemoteHost}:${RemotePort}",
     $Target
   )
   if ($UseKey) {
@@ -104,11 +142,14 @@ if (-not (Test-Path -LiteralPath $sshKey)) {
 }
 
 # --- WARM PATH: no PowerShell SSH, no Cloudflare ---
-Write-K8sDbProgress "probe 127.0.0.1:$LocalPort (reuse if open)..."
-if (Test-TcpConnect -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 250) {
+Write-K8sDbProgress "probe 127.0.0.1:$LocalPort (reuse if open + live Postgres wire)..."
+if (
+  (Test-TcpConnect -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 250) -and
+  (Test-PostgresWire -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 800)
+) {
   $reuseRecord = [pscustomobject]@{
     GeneratedAt = (Get-Date).ToString('o')
-    Environment = 'dev-k8s-runtime'
+    Environment = 'dev-db-runtime'
     LocalPort = $LocalPort
     ProcessId = $null
     VmHost = $vmHost
@@ -118,14 +159,29 @@ if (Test-TcpConnect -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 250) {
     TargetPort = $targetPort
     DatabaseUrl = "postgresql://postgres:postgres@127.0.0.1:$LocalPort/hris?schema=public"
     StopCommand = '.\scripts\start-k8s-dev-db-access.ps1 -StopExisting'
-    Note = 'Existing 127.0.0.1 listener reused; no new ssh process started.'
+    Note = 'Existing 127.0.0.1 listener reused after Postgres wire check; no new ssh process started.'
   }
   New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
   $reuseRecord | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $runRoot 'k8s-dev-db-access.json') -Encoding UTF8
   $reuseRecord | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $pidFile -Encoding UTF8
-  Write-K8sDbProgress "REUSE OK -- 127.0.0.1:$LocalPort already listening (no SSH)"
+  Write-K8sDbProgress "REUSE OK -- 127.0.0.1:$LocalPort already serving Postgres (no SSH)"
   Write-Host "DATABASE_URL=$($reuseRecord.DatabaseUrl)"
   return
+}
+
+if (Test-TcpConnect -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 250) {
+  Write-K8sDbProgress "127.0.0.1:$LocalPort is open but not Postgres (stale/half-dead) -- replacing"
+  Stop-ExistingForward
+  # Also kill any leftover ssh -L on this port not tracked in the pid file.
+  Get-CimInstance Win32_Process -Filter "Name = 'ssh.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match [regex]::Escape("-L") -and $_.CommandLine -match [regex]::Escape("127.0.0.1:${LocalPort}:") } |
+    ForEach-Object {
+      try {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
+        Write-K8sDbProgress "Stopped stale ssh PID $($_.ProcessId)"
+      } catch {}
+    }
+  Start-Sleep -Milliseconds 300
 }
 
 Write-K8sDbProgress "cold path -- open single-port SSH forward only (no multi-port LAN)"
@@ -144,7 +200,8 @@ $preferAlias = $env:PROJECT_TRUTH_SSH_PREFER_ALIAS -eq 'true'
 $forceLan = $env:PROJECT_TRUTH_SSH_FORCE_LAN -eq 'true'
 $selectedPath = $null
 $selectedTarget = $null
-$argumentList = $null
+$useKey = $false
+$connectTimeoutSec = 15
 
 if (-not $preferAlias -or $forceLan) {
   Write-K8sDbProgress "TCP probe ${vmHost}:22 (300ms)..."
@@ -152,7 +209,8 @@ if (-not $preferAlias -or $forceLan) {
   if ($lanOpen -or $forceLan) {
     $selectedPath = 'direct-lan'
     $selectedTarget = "${vmUser}@${vmHost}"
-    $argumentList = New-SshForwardArgs -Target $selectedTarget -UseKey -ConnectTimeoutSec 8
+    $useKey = $true
+    $connectTimeoutSec = 8
     Write-K8sDbProgress "selected direct LAN $selectedTarget"
   } else {
     Write-K8sDbProgress "LAN :22 not open in 300ms -- using Cloudflare alias (skip wasted SSH probe)"
@@ -162,50 +220,122 @@ if (-not $preferAlias -or $forceLan) {
 if (-not $selectedTarget) {
   $selectedPath = "alias:$sshAlias"
   $selectedTarget = $sshAlias
-  $argumentList = New-SshForwardArgs -Target $selectedTarget -ConnectTimeoutSec 15
+  $useKey = $false
+  $connectTimeoutSec = 15
   Write-K8sDbProgress "selected $selectedTarget -- if quiet >15s complete Cloudflare Access in browser"
 }
 
-Write-K8sDbProgress "start ssh -N -L 127.0.0.1:${LocalPort}:${targetHost}:${targetPort} via $selectedPath"
-$process = Start-Process -FilePath $sshExe `
-  -ArgumentList $argumentList `
-  -RedirectStandardOutput $stdoutPath `
-  -RedirectStandardError $stderrPath `
-  -WindowStyle Hidden `
-  -PassThru
+function Start-ForwardAndWait {
+  param(
+    [string]$RemoteHost,
+    [int]$RemotePort,
+    [string]$Label,
+    [int]$MaxWaitSec = 20
+  )
 
-# Poll fast; Cloudflare cold can take several seconds after Access is warm.
-$readyTimer = [System.Diagnostics.Stopwatch]::StartNew()
-$listening = $false
-$lastTick = -1
-$maxWaitSec = 20
-do {
-  $process.Refresh()
-  if ($process.HasExited) { break }
-  $listening = Test-TcpConnect -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 120
-  if ($listening) { break }
-  $sec = [int][math]::Floor($readyTimer.Elapsed.TotalSeconds)
-  if ($sec -ne $lastTick -and $sec -gt 0) {
-    Write-K8sDbProgress "waiting for 127.0.0.1:$LocalPort ($sec/${maxWaitSec}s)..."
-    $lastTick = $sec
+  $argumentList = New-SshForwardArgs `
+    -Target $selectedTarget `
+    -RemoteHost $RemoteHost `
+    -RemotePort $RemotePort `
+    -UseKey:$useKey `
+    -ConnectTimeoutSec $connectTimeoutSec
+
+  Write-K8sDbProgress "start ssh -N -L 127.0.0.1:${LocalPort}:${RemoteHost}:${RemotePort} via $selectedPath ($Label)"
+  $process = Start-Process -FilePath $sshExe `
+    -ArgumentList $argumentList `
+    -RedirectStandardOutput $stdoutPath `
+    -RedirectStandardError $stderrPath `
+    -WindowStyle Hidden `
+    -PassThru
+
+  $readyTimer = [System.Diagnostics.Stopwatch]::StartNew()
+  $listening = $false
+  $lastTick = -1
+  do {
+    $process.Refresh()
+    if ($process.HasExited) { break }
+    $listening = Test-TcpConnect -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 120
+    if ($listening) { break }
+    $sec = [int][math]::Floor($readyTimer.Elapsed.TotalSeconds)
+    if ($sec -ne $lastTick -and $sec -gt 0) {
+      Write-K8sDbProgress "waiting for 127.0.0.1:$LocalPort ($sec/${MaxWaitSec}s)..."
+      $lastTick = $sec
+    }
+    Start-Sleep -Milliseconds 100
+  } while ($readyTimer.Elapsed.TotalSeconds -lt $MaxWaitSec)
+
+  if (-not $listening) {
+    $stderrText = Get-Content -Raw -LiteralPath $stderrPath -ErrorAction SilentlyContinue
+    try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
+    return [pscustomobject]@{
+      Ok = $false
+      Process = $null
+      ElapsedSec = $readyTimer.Elapsed.TotalSeconds
+      Stderr = $stderrText
+      WireOk = $false
+    }
   }
-  Start-Sleep -Milliseconds 100
-} while ($readyTimer.Elapsed.TotalSeconds -lt $maxWaitSec)
 
-if ($listening) {
-  Write-K8sDbProgress ("LISTEN OK after {0:N1}s via $selectedPath" -f $readyTimer.Elapsed.TotalSeconds)
+  Write-K8sDbProgress ("LISTEN OK after {0:N1}s via $selectedPath ($Label)" -f $readyTimer.Elapsed.TotalSeconds)
+  # Give the first remote hop a brief moment, then require Postgres wire.
+  Start-Sleep -Milliseconds 200
+  $wireOk = Test-PostgresWire -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 900
+  if (-not $wireOk) {
+    Write-K8sDbProgress "LISTEN but Postgres wire failed for $Label -- remote $RemoteHost`:$RemotePort not serving"
+    try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
+    Start-Sleep -Milliseconds 250
+    $stderrText = Get-Content -Raw -LiteralPath $stderrPath -ErrorAction SilentlyContinue
+    return [pscustomobject]@{
+      Ok = $false
+      Process = $null
+      ElapsedSec = $readyTimer.Elapsed.TotalSeconds
+      Stderr = $stderrText
+      WireOk = $false
+    }
+  }
+
+  return [pscustomobject]@{
+    Ok = $true
+    Process = $process
+    ElapsedSec = $readyTimer.Elapsed.TotalSeconds
+    Stderr = $null
+    WireOk = $true
+  }
+}
+
+# 1) Prefer K3s DEV ClusterIP. 2) Fall back to compose DEV on VM :15433 when
+# ClusterIP is down (common split-runtime: compose healthy, K3s pending).
+$attempt = Start-ForwardAndWait -RemoteHost $k8sTargetHost -RemotePort $k8sTargetPort -Label 'k8s-clusterip'
+$environment = 'dev-k8s-runtime'
+$targetHost = $k8sTargetHost
+$targetPort = $k8sTargetPort
+$process = $null
+
+if ($attempt.Ok) {
+  $process = $attempt.Process
 } else {
-  $stderrText = Get-Content -Raw -LiteralPath $stderrPath -ErrorAction SilentlyContinue
-  if ($process.HasExited) {
-    throw "K3s DEV DB forward ssh exited before 127.0.0.1:$LocalPort opened. stderr: $stderrText"
+  Write-K8sDbProgress "K3s $k8sTargetHost`:$k8sTargetPort unreachable through tunnel -- falling back to compose DEV ${composeTargetHost}:${composeTargetPort}"
+  if (-not (Test-LoopbackPortFree -Port $LocalPort)) {
+    Get-CimInstance Win32_Process -Filter "Name = 'ssh.exe'" -ErrorAction SilentlyContinue |
+      Where-Object { $_.CommandLine -match [regex]::Escape("127.0.0.1:${LocalPort}:") } |
+      ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Milliseconds 300
   }
-  try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
-  throw "K3s DEV DB forward did not open 127.0.0.1:$LocalPort within ${maxWaitSec}s via $selectedPath. stderr: $stderrText"
+  $stdoutPath = Join-Path $runRoot 'dev-compose-db.stdout.log'
+  $stderrPath = Join-Path $runRoot 'dev-compose-db.stderr.log'
+  $attempt = Start-ForwardAndWait -RemoteHost $composeTargetHost -RemotePort $composeTargetPort -Label 'compose-dev-15433'
+  if (-not $attempt.Ok) {
+    throw "DEV DB forward failed for both K3s $k8sTargetHost`:$k8sTargetPort and compose $composeTargetHost`:$composeTargetPort. Confirm: ssh project-truth-hris and that VM Postgres is up on 15433. stderr: $($attempt.Stderr)"
+  }
+  $process = $attempt.Process
+  $environment = 'dev-compose-runtime'
+  $targetHost = $composeTargetHost
+  $targetPort = $composeTargetPort
 }
 
 $record = [pscustomobject]@{
   GeneratedAt = (Get-Date).ToString('o')
-  Environment = 'dev-k8s-runtime'
+  Environment = $environment
   LocalPort = $LocalPort
   ProcessId = $process.Id
   VmHost = $vmHost
@@ -217,12 +347,17 @@ $record = [pscustomobject]@{
   StopCommand = '.\scripts\start-k8s-dev-db-access.ps1 -StopExisting'
   Stdout = $stdoutPath
   Stderr = $stderrPath
+  Note = if ($environment -eq 'dev-compose-runtime') {
+    "Fell back to compose DEV because K3s ClusterIP $k8sTargetHost`:$k8sTargetPort did not answer Postgres wire."
+  } else {
+    $null
+  }
 }
 
 $record | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $runRoot 'k8s-dev-db-access.json') -Encoding UTF8
 $record | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $pidFile -Encoding UTF8
 
-Write-K8sDbProgress "OK -- forward running (leave it up for instant next predev)"
+Write-K8sDbProgress "OK -- forward running env=$environment remote=${targetHost}:${targetPort} (leave it up for instant next predev)"
 Write-Host "DATABASE_URL=$($record.DatabaseUrl)"
 Write-Host "Stop with: .\scripts\start-k8s-dev-db-access.ps1 -StopExisting"
 Write-Host "Evidence: $(Join-Path $runRoot 'k8s-dev-db-access.json')"

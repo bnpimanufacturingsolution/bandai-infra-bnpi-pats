@@ -137,6 +137,25 @@ To start all three deployed database forwards at once:
 It prints the exact `DATABASE_URL` to use and stores the background
 `cloudflared` PID under `.runtime\cloudflare-db-tcp`.
 
+### Local `hris-api` DEV via SSH `-L` (2026-07-20)
+
+When the Windows workstation cannot reach VM LAN `10.184.37.19` but
+`ssh project-truth-hris` works through Cloudflare Access, prefer:
+
+```powershell
+.\scripts\start-k8s-dev-db-access.ps1 -LocalPort 55435
+```
+
+Behavior (updated 2026-07-20):
+
+1. Reuse `127.0.0.1:55435` only if **Postgres wire** answers (not TCP alone).
+2. Prefer SSH forward to K3s DEV ClusterIP `10.43.130.9:5432`.
+3. If that remote target refuses, **fall back** to compose DEV on the VM:
+   `127.0.0.1:15433` (local Prisma URL remains `postgresql://postgres:postgres@127.0.0.1:55435/hris`).
+
+Operator bootstrap log for a full remote Windows workstation (key, cloudflared,
+SSH alias, `npm run dev` skips): `docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md`.
+
 The URL the user requested:
 
 ```text

@@ -53,35 +53,21 @@ Stop-ExistingBridge
 
 # Free stale reverse listeners on the VM so -R rebinds cleanly after a crashed
 # or elevated host SSH left remote ports occupied (common after thrash).
+# Prefer `fuser` (works with sudo -n on this appliance). Avoid PowerShell
+# here-string `$(...)` mangling that previously broke remote `set -e`.
 function Clear-RemoteReversePorts {
   param(
     [string]$Target,
     [int[]]$Ports
   )
   if (-not $Ports -or $Ports.Count -eq 0) { return }
-  $portPattern = ($Ports | ForEach-Object { [string]$_ }) -join '|'
-$script = @"
-set -e
-listeners=`$(sudo -n ss -ltnp 2>/dev/null || ss -ltnp 2>/dev/null || true)
-echo "`$listeners" | grep -E ":($portPattern)[[:space:]]" || true
-pids=`$(echo "`$listeners" | grep -E ":($portPattern)[[:space:]]" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u)
-for p in `$pids; do
-  # Only kill infra reverse-forward sshd sessions, never the main sshd daemon.
-  cmd=`$(sudo -n ps -o cmd= -p `$p 2>/dev/null || ps -o cmd= -p `$p 2>/dev/null || true)
-  if echo "`$cmd" | grep -q 'sshd: infra'; then
-    echo "CLEAR_REMOTE_PID=`$p"
-    sudo -n kill `$p 2>/dev/null || kill `$p 2>/dev/null || true
-  fi
-done
-for i in 1 2 3 4 5; do
-  remaining=`$(ss -ltn 2>/dev/null | grep -E ":($portPattern)[[:space:]]" || true)
-  [ -z "`$remaining" ] && break
-  sleep 0.2
-done
-ss -ltn 2>/dev/null | grep -E ":($portPattern)[[:space:]]" || echo REMOTE_PORTS_CLEAR
-"@
+
+  $fuserArgs = ($Ports | ForEach-Object { "$_/tcp" }) -join ' '
+  # Single-line remote command: print holders, kill them, re-check.
+  $remoteCmd = "echo CLEAR_PORTS; sudo -n fuser -v $fuserArgs 2>&1 || fuser -v $fuserArgs 2>&1 || true; sudo -n fuser -k $fuserArgs 2>&1 || fuser -k $fuserArgs 2>&1 || true; sleep 0.5; remaining=`$(ss -ltn 2>/dev/null | grep -E ':($(($Ports | ForEach-Object { [string]$_ }) -join '|'))[[:space:]]' || true); if [ -z `"`$remaining`" ]; then echo REMOTE_PORTS_CLEAR; else echo STILL_HELD; echo `"`$remaining`"; fi"
+
   try {
-    $out = $script | & ssh.exe -o ConnectTimeout=20 -o BatchMode=yes $Target 'bash -s' 2>&1 | Out-String
+    $out = & ssh.exe -o ConnectTimeout=20 -o BatchMode=yes $Target $remoteCmd 2>&1 | Out-String
     if ($out.Trim()) { Write-Host $out.Trim() }
   } catch {
     Write-Warning "Could not clear remote reverse ports on ${Target}: $($_.Exception.Message)"

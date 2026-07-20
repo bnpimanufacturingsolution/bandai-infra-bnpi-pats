@@ -1,5 +1,18 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-20 Local Windows remote-dev CF SSH / DB tunnel bootstrap
+
+- Task mode: Regression repair + workstation bootstrap (docs + scripts).
+- Problem: Remote Windows host could not complete `hris-api` `npm run dev` / login because LAN SSH to `10.184.37.19` is closed, K3s DEV ClusterIP `10.43.130.9:5432` refused Postgres, local `55435` tunnel half-died, and Hikvision reverse port `59443` was held by stale VM `sshd`.
+- Repo changes:
+  - `scripts/start-k8s-dev-db-access.ps1` — Postgres wire check + compose DEV `127.0.0.1:15433` fallback for SSH `-L` to local `55435`.
+  - `scripts/start-host-hikvision-vm-ssh-bridge.ps1` — clear reverse ports with `fuser -k`.
+  - `docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md` — operator log.
+- Workstation-only (not git): `node-health-appliance_ed25519`, SSH config `project-truth-hris`, cloudflared install, VM `authorized_keys` public key append.
+- Operator recipe for API-only local dev: `HIKVISION_VM_BRIDGE_ENABLED=false`, `HRIS_SKIP_DEVICE_LIVE_PATH=true`, `npm.cmd run dev`; success = `Server running at http://localhost:3001`.
+- Evidence: `.runtime/local-dev-cf-ssh-db-tunnel-20260720/`.
+- Boundary: not a push to `origin/develop`; not a K3s health claim; UI "Unable to connect" was empty `:3001`, not auth body.
+
 ## Latest Task Addendum - 2026-07-20 Raw biometric package export/import alignment
 
 - Task mode: Mixed owner-requirement correction across Device Users export/import API, admin UI, contracts, and WWG truth.
