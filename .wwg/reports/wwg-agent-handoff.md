@@ -612,17 +612,20 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Evidence root: `.runtime/device-user-raw-export-proof-20260720-110129/`.
 - Recommendations recorded: `REC-20260720-HIKVISION-RAW-SYNC-STALE-JOB-CANCEL` and `REC-20260720-HIKVISION-RAW-SYNC-DEVICE-PREFLIGHT`.
 
-# 2026-07-21 Hikvision Four-Device Listener Runtime Proof
+# 2026-07-21 Overnight Hikvision Listener Self-Repair Handoff
 
-- Status: `LOCALHOST_AND_REMOTE_SETTLED_GREEN` for the admin listener modal at `/admin/configuration/devices/events?view=saved&action=listener-control`.
-- The user-visible stale symptom was `2 receiving / 3 armed / 0 login failed` plus `SDK login failed against 10.184.37.22`; the settled localhost API, localhost browser, and remote VM evidence now show 4 Hikvision rows loaded, 4 receiving SDK callbacks, 4 armed, and 0 login failed.
-- Saved Device rows are configuration truth only and were compared against the VM listener runtime spec. The four active Hikvision rows were Main Entrance Devices A/B/C/D at `10.184.37.21`, `.20`, `.22`, and `.23`, SDK port `8000`.
-- Remote runtime proof used `ssh project-truth-hris` after direct LAN SSH timed out. The VM-managed Cloudflare tunnel was observed active and was not stopped or disabled. The listener spec loaded the same four rows and recent logs showed per-device `sdk_login ok`, `sdk_alarm_arm ok`, `device_armed`, and `acs_alarm_received`.
-- Callback/DeviceEvent proof found saved `EN_HCNETSDK_ALARM` rows for all four devices. Most recent major-3 operation-signal rows had empty person identity, so no plain `employeeNo` was inferred from those callbacks.
-- Localhost Playwright proof opened the same admin page, authenticated as admin, opened the listener modal, and captured all four device rows with truthful settled text: no `2 receiving`, no `3 armed`, no `.22` login failure, and no idle row.
-- Focused validation passed: backend listener/readiness contracts, backend saved-events API contract, and frontend Device Events contracts.
-- Evidence root: `.runtime/hikvision-4-device-listener-repair-20260721-070801/`.
-- No new recommendations were identified.
+- Status: `GREEN_WITH_BOUNDARY`. Runtime is software-green and truthful UI state settled to `Ready for tap proof`; physical fresh-tap evidence remains the only boundary for changing quiet armed devices to `receiving`.
+- Direct LAN SSH to `infra@10.184.37.19` timed out from the Windows host; fallback `ssh project-truth-hris` worked and was used for runtime proof. The VM kept `cloudflared-bnpi-hris.service` active/running, PID `1842402`.
+- Listener recovery: VM reverse/API ports were restored/proven on `127.0.0.1:53001`, `59000`, and `59443`; `project-truth-hikvision-hot-reload-listener.service` is active/running, PID `2912473`, with no `bad_alloc`, `length_error`, `Aborted`, or wrapper `Usage:` crashes after the patched restart window.
+- C++ runtime repair deployed on the VM: the active work tree and `/opt/project-truth/vendor/hikvision-linux/hikvision_biometric_service.cpp` contain the session-list mutex/callback source-device copy fix, and the rebuilt binary hash is recorded. This checkout has no tracked C++ diff for that file, so the durable repo source boundary must be reviewed before a production promotion claim.
+- Device classification from final listener/API proof: Main Entrance Device A `10.184.37.21`, B `10.184.37.20`, C `10.184.37.22`, and D `10.184.37.23` all logged `sdk_login ok`, `sdk_alarm_arm ok`, and `device_armed`; final API classified them as `armed_waiting_for_tap`. D/C/A also have fresh HRIS post proof in the final window; B is armed and waiting for a new physical callback/post proof.
+- HRIS callback post path is proven: listener logs show successful `hikvision_callback_post_result` rows and `hris_contract_post ok=true` through `apiBase=http://127.0.0.1:53001`.
+- Saved Device Events performance/truth proof: final API timings were `summaryScope=facets` 3178ms, listener 5745ms, live-readiness 1793ms, saved-events 2288ms. Saved view returned real DeviceEvent rows and did not block on listener proof.
+- UI proof: Playwright opened `http://localhost:5175/admin/configuration/devices/events?view=saved&action=listener-control`, showed the listener modal, `Service enabled`, `Ready for tap proof`, saved events, and no stale `Live path needs proof` or `not checked for a long time` wording. Evidence screenshot: `.runtime/overnight-hikvision-listener-green-20260721-065548/playwright-listener-modal-saved-events-final.png`.
+- Code repair in this checkout: `hris-api/app/device/device.controller.ts` restores `summaryScope=facets` handling so facet counts are not collapsed by selected taxonomy leaf filters.
+- Validation: API typecheck passed; focused API contracts passed 32/32; focused frontend Vitest contracts passed 31/31; live Playwright proof passed after three recoverable script/tooling retries. Python/C++ local tests could not run on Windows because `python`/`py` were unavailable, but the VM build/rebuild proof passed.
+- Evidence root: `.runtime/overnight-hikvision-listener-green-20260721-065548/`.
+- Recommendations: no new recommendations were added; existing `REC-20260721-HIKVISION-API-REVERSE-ENSURE-BUG` already covers the direct recovery issue observed in this run.
 
 ## Next Steps
 

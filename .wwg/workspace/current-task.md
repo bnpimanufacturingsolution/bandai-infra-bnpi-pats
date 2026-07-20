@@ -1991,3 +1991,13 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
 - UI proof: export modal shows the current action, scope, row count, and biometric readiness while preview/export is running; CSV import modal shows preview-first wording and package-data status without raw/developer copy.
 - Remaining boundary: 46 rows still have `Reported biometric enrollment exists but no evidenced raw blob is stored`; this is retained as `partial_missing_requested_raw_blobs`, not fabricated from counts.
 - Evidence: `.runtime/device-user-raw-export-proof-20260720-110129/final-evidence-summary.json`, `browser-export-download-proof.json`, `api-import-proof-3002-summary.json`, and screenshots in the same directory.
+
+# Latest Task Addendum - 2026-07-21 Overnight Hikvision Listener Green Loop
+
+- Task mode: mixed admin runtime repair, Hikvision listener/device-event proof, API/UI validation, and focused code repair.
+- Final status for this run: `GREEN_WITH_BOUNDARY`.
+- Runtime truth: direct LAN SSH to `infra@10.184.37.19` timed out from the Windows host, but fallback `ssh project-truth-hris` worked. `cloudflared-bnpi-hris.service` stayed active. VM reverse/API ports `53001`, `59000`, and `59443` were proven listening.
+- Listener truth: `project-truth-hikvision-hot-reload-listener.service` is active/running with PID `2912473`. Final logs show four intended Hikvision devices A/B/C/D logged in, SDK-armed, and free of unhandled login failures. Final UI/API state is truthful `Ready for tap proof` after callback freshness aged out.
+- Callback truth: HRIS post path through `http://127.0.0.1:53001` is proven by successful `hikvision_callback_post_result` and `hris_contract_post ok=true` logs. Fresh physical tap proof remains the boundary for changing quiet devices from armed to receiving.
+- Code truth: `hris-api/app/device/device.controller.ts` restored `summaryScope=facets` handling for saved Device Events facet counts. The VM listener source/binary contains a session-list concurrency repair, but this checkout has no tracked C++ diff for `vendor/hikvision-linux/hikvision_biometric_service.cpp`; review durable source promotion before claiming repo-level C++ completion.
+- Validation: API typecheck passed; focused API contracts passed 32/32; focused frontend contracts passed 31/31; live API/browser proof passed. Evidence root: `.runtime/overnight-hikvision-listener-green-20260721-065548/`.
