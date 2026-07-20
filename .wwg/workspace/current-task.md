@@ -1,5 +1,16 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-20 Raw biometric package export/import alignment
+
+- Task mode: Mixed owner-requirement correction across Device Users export/import API, admin UI, contracts, and WWG truth.
+- Owner correction: the active Hikvision Device Users sync/export/import journey must not require encrypted bundles or passphrases. It must copy/export evidenced raw fingerprint `fingerData` blobs and raw face/image blobs when present.
+- Required custody behavior:
+  - DeviceUser remains the durable current raw biometric custody plane.
+  - Matching DeviceEvent payloads can provide fallback raw custody for lifecycle ledger journeys.
+  - CSV/Excel/Package JSON use raw blob columns/statuses, not `encrypted:v2` envelope cells.
+  - Missing bytes stay explicit as `not_enrolled`, `missing_raw_blob`, or `not_requested`; no values are fabricated from credential counts.
+- Stale context: 2026-07-14/2026-07-15 encrypted envelope/passphrase export proof is historical for this journey and must not drive current modal copy, API requirements, or tests.
+
 ## Latest Task Addendum - 2026-07-19 C++-first create/enroll raw wire truth
 
 - Task mode: Mixed regression repair across C++ listener identity enrichment, biometric custody, realtime, and admin UI truth.

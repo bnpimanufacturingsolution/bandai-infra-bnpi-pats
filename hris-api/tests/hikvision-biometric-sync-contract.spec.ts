@@ -115,9 +115,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include('"currentPage", "selectedRows"');
 		expect(controller).to.include("const filterDeviceUserExportRows =");
 		expect(controller).to.include("vendorUserIds");
-		expect(controller).to.include("encryptedBiometricBundle");
-		expect(controller).to.include("DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM");
-		expect(controller).to.include('"aes-256-gcm"');
+		expect(controller).to.include("rawBiometricPackage");
+		expect(controller).to.include("rawBiometricPackageRequested");
+		expect(controller).to.include("raw_evidenced_blobs_allowed_for_admin_device_user_sync_package");
 		expect(controller).to.include("BIOMETRIC_TEMPLATE_KEY_PATTERN");
 		expect(controller).to.include("[redacted-biometric-template]");
 		expect(controller).to.include("sanitizeDeviceUserPortableValue");
@@ -128,28 +128,26 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("DEVICE_USER_IMPORT_ROW_TIMEOUT_MS");
 		expect(controller).to.include("withDeviceUserImportTimeout");
 		expect(controller).to.include("Timed out copying device user");
-		expect(controller).to.include("raw fingerprint and face template bytes are never exported in normal JSON");
-		expect(controller).to.include("cached_from_device_user_metadata");
-		expect(controller).to.include("refreshBiometricBundle");
+		expect(controller).to.include("raw fingerprint/face blobs are exported only when evidenced");
+		expect(controller).to.include("raw_blobs_from_device_user_or_event");
+		expect(controller).to.include("loadLatestRawBiometricEventPayload");
 		expect(controller).to.include("backfillDeviceUserBiometricMetadata");
 		expect(controller).to.include("hikvision_sdk_biometric_metadata_backfill");
 		expect(controller).to.include('modality?: "fingerprint" | "face" | "combined"');
-		expect(controller).to.include("encryptedFingerprintTemplate");
-		expect(controller).to.include("encryptedFaceTemplate");
-		expect(controller).to.include("fingerprintTemplateKeySource");
-		expect(controller).to.include("faceTemplateKeySource");
-		expect(controller).to.include("parseImportedEncryptedBiometricTemplates");
+		expect(controller).to.include("rawFingerprintBlobCount");
+		expect(controller).to.include("rawFaceBlobCount");
+		expect(controller).to.include("buildRawDeviceUserBiometricCustody");
 		expect(router).to.include(
 			'/:id/users/biometric-metadata/backfill", controller.backfillDeviceUserBiometricMetadata',
 		);
 		expect(controller).to.include("const buildDeviceUserImportPreviewToken =");
 		expect(controller).to.include("previewToken from this preview response");
 		expect(controller).to.include("Import execute requires a fresh previewToken from import preview");
-		expect(controller).to.include("Encrypted biometric bundle import requires a passphrase");
-		expect(controller).to.include("Portable biometric import requires an encrypted bundle passphrase");
+		expect(controller).to.include("biometricTransferMode=sdkPeerCopy, rawPackage, or metadataOnly");
+		expect(controller).to.include('"rawPackage"');
 		expect(controller).to.include("const sanitizeDeviceUserImportPayloadForBackup =");
-		expect(controller).to.include("[encrypted-bundle-redacted]");
-		expect(controller).to.include("plaintextBiometricExposed: false");
+		expect(controller).to.include("rawBiometricPackage: payload?.rawBiometricPackage || null");
+		expect(controller).to.include('plaintextBiometricExposed: biometricTransferMode === "rawPackage"');
 		expect(controller).to.include("rawUser?: unknown");
 		expect(controller).to.include("copyHikvisionUserToPeerWithRetry({");
 		expect(controller).to.include('strategy: "delayed_target_reread"');
@@ -160,8 +158,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("const settled = await Promise.allSettled(");
 		expect(controller).to.include("preferredHikvisionListenerVmTargetLabel");
 		expect(controller).to.include("HIKVISION_VM_SSH_CONNECT_TIMEOUT_SECONDS");
-		expect(controller).to.include("PORTABLE_BIOMETRIC_ENVELOPE_FORMAT");
-		expect(controller).to.include("encryptPortableBiometricEnvelope");
+		expect(controller).to.include("rawPayload.facePicture");
+		expect(controller).to.include("No raw biometric blob was found on this import row");
 		expect(envelopeHelperSource()).to.include("passphrase-scrypt");
 		expect(envelopeHelperSource()).to.include(
 			"Encrypted biometric bundle source binding mismatch",

@@ -384,11 +384,11 @@ type CopyDeviceUserState = {
 type DeviceUserExportFormat = "csv" | "excel" | "json";
 type DeviceUserImportFormat = "csv" | "json";
 const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = [
-	"fingerprintTemplate",
-	"faceTemplate",
+	"rawFingerprintBlob",
+	"rawFaceBlob",
 ] as const;
-const DEVICE_USER_CSV_NO_PLAINTEXT_POLICY = "no_plaintext_biometric_templates";
-const DEVICE_USER_SPREADSHEET_TEMPLATE_PREFIX = "encrypted:v2:";
+const DEVICE_USER_RAW_BIOMETRIC_PACKAGE_POLICY =
+	"raw_evidenced_blobs_allowed_for_admin_device_user_sync_package";
 
 type DeviceUserPeerTallyRow = {
 	deviceId: string;
@@ -845,9 +845,7 @@ export function DeviceEnrollmentPanel({
 		includeCards: boolean;
 		includeFingerprints: boolean;
 		includeFaces: boolean;
-		encryptedBiometricBundle: boolean;
-		refreshBiometricBundle: boolean;
-		biometricBundlePassphrase: string;
+		rawBiometricPackage: boolean;
 		format: DeviceUserExportFormat;
 		preview: DeviceUserExportPayload | null;
 		result: DeviceUserExportPayload | null;
@@ -857,9 +855,7 @@ export function DeviceEnrollmentPanel({
 		includeCards: true,
 		includeFingerprints: true,
 		includeFaces: true,
-		encryptedBiometricBundle: true,
-		refreshBiometricBundle: true,
-		biometricBundlePassphrase: "",
+		rawBiometricPackage: true,
 		format: "csv",
 		preview: null,
 		result: null,
@@ -874,8 +870,7 @@ export function DeviceEnrollmentPanel({
 		preview: DeviceUserImportPreviewResponse | null;
 		result: DeviceUserImportExecuteResponse | null;
 		confirmation: string;
-		biometricTransferMode: "sdkPeerCopy" | "metadataOnly" | "encryptedBundle";
-		biometricBundlePassphrase: string;
+		biometricTransferMode: "sdkPeerCopy" | "metadataOnly" | "rawPackage";
 		runAsJob: boolean;
 	}>({
 		open: false,
@@ -888,7 +883,6 @@ export function DeviceEnrollmentPanel({
 		result: null,
 		confirmation: "",
 		biometricTransferMode: "sdkPeerCopy",
-		biometricBundlePassphrase: "",
 		runAsJob: true,
 	});
 	const [selectedExportVendorUserIds, setSelectedExportVendorUserIds] = useState<string[]>([]);
@@ -3680,7 +3674,7 @@ export function DeviceEnrollmentPanel({
 	const deviceUserSyncJobSummary = effectiveDeviceUserSyncJobProgress
 		? deviceUserSyncJobIsProcessing
 			? `${deviceUserSyncCurrentModality} custody for user ${effectiveDeviceUserSyncJobProgress.currentVendorUserId || "—"} on ${effectiveDeviceUserSyncJobProgress.currentDeviceName || "the selected device"}.`
-			: `${metricValue(effectiveDeviceUserSyncJobProgress.biometricCaptured)} encrypted biometric payloads captured; ${metricValue(effectiveDeviceUserSyncJobProgress.biometricFailed)} still need attention.`
+			: `${metricValue(effectiveDeviceUserSyncJobProgress.biometricCaptured)} raw biometric payloads captured; ${metricValue(effectiveDeviceUserSyncJobProgress.biometricFailed)} still need attention.`
 		: "";
 	const bulkDeviceUserSyncToneClass =
 		bulkDeviceUserSyncState.status === "error"
@@ -3861,7 +3855,7 @@ export function DeviceEnrollmentPanel({
 		const normalized = String(value || "").trim().toLowerCase();
 		return ["true", "yes", "1", "present"].includes(normalized);
 	};
-	const normalizeEncryptedTemplateValue = (value: unknown) => {
+	const normalizeRawBiometricBlobValue = (value: unknown) => {
 		if (!value) return "";
 		if (typeof value === "string") return value.trim();
 		try {
@@ -3870,71 +3864,31 @@ export function DeviceEnrollmentPanel({
 			return "";
 		}
 	};
-	const getRawTemplateColumnValue = (user: any, key: string) => {
-		const directValue =
-			user?.[key] ||
-			user?.rawPayload?.[key] ||
-			user?.vendorMetadata?.[key] ||
-			user?.rawPayload?._hrisDeviceMetadata?.[key] ||
-			user?.vendorMetadata?.biometricBundle?.[key];
-		return normalizeEncryptedTemplateValue(directValue);
+	const getRawFingerprintBlobCell = (user: any, credentialCount: number) => {
+		const templates = Array.isArray(user?.rawBiometricCustody?.fingerprint?.templates)
+			? user.rawBiometricCustody.fingerprint.templates
+			: [];
+		const firstTemplate = templates.find((template: any) =>
+			String(template?.data || template?.fingerData || "").trim(),
+		);
+		const raw = normalizeRawBiometricBlobValue(firstTemplate?.data || firstTemplate?.fingerData || "");
+		if (raw) return raw;
+		const status = String(user?.rawBiometricCustody?.fingerprint?.status || "").trim();
+		if (status) return status;
+		return credentialCount > 0 ? "missing_raw_blob" : "not_enrolled";
 	};
-	const getPortableTemplateEnvelopeValue = (
-		value: string,
-		expected: {
-			modality: "fingerprint" | "face";
-			deviceId: string;
-			vendorUserId: string;
-		},
-	) => {
-		if (!value.startsWith("{")) return "";
-		try {
-			const envelope = JSON.parse(value) as Record<string, any>;
-			const valid =
-				envelope.format === "project-truth.hikvision-biometric-template.v2" &&
-				envelope.algorithm === "aes-256-gcm" &&
-				envelope.keySource === "passphrase-scrypt" &&
-				envelope.modality === expected.modality &&
-				String(envelope.deviceId || "") === expected.deviceId &&
-				String(envelope.vendorUserId || "") === expected.vendorUserId &&
-				Boolean(envelope.salt && envelope.iv && envelope.authTag && envelope.ciphertext) &&
-				/^[a-f0-9]{64}$/i.test(String(envelope.plaintextSha256 || ""));
-			return valid ? JSON.stringify(envelope) : "";
-		} catch {
-			return "";
-		}
+	const getRawFaceBlobCell = (user: any, credentialCount: number) => {
+		const blob = user?.rawBiometricCustody?.face?.blob || {};
+		const raw = normalizeRawBiometricBlobValue(blob.base64 || blob.facePicture || blob.faceTemplate || "");
+		if (raw) return raw;
+		const status = String(user?.rawBiometricCustody?.face?.status || "").trim();
+		if (status) return status;
+		return credentialCount > 0 ? "missing_raw_blob" : "not_enrolled";
 	};
-	const encodeSpreadsheetTemplateValue = (envelopeJson: string) => {
-		if (!envelopeJson) return "";
-		const bytes = new TextEncoder().encode(envelopeJson);
-		let binary = "";
-		for (const byte of bytes) binary += String.fromCharCode(byte);
-		return `${DEVICE_USER_SPREADSHEET_TEMPLATE_PREFIX}${btoa(binary)
-			.replace(/\+/g, "-")
-			.replace(/\//g, "_")
-			.replace(/=+$/g, "")}`;
-	};
-	const decodeSpreadsheetTemplateValue = (value: unknown) => {
+	const decodeRawBiometricBlobCell = (value: unknown) => {
 		const raw = String(value || "").trim();
-		if (!raw || raw === "not_enrolled" || raw === "missing_encrypted_template" || raw === "not_requested") {
-			return "";
-		}
-		if (raw.startsWith("{")) return raw;
-		if (!raw.startsWith(DEVICE_USER_SPREADSHEET_TEMPLATE_PREFIX)) return "";
-		try {
-			const encoded = raw.slice(DEVICE_USER_SPREADSHEET_TEMPLATE_PREFIX.length);
-			const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
-			const padded = `${base64}${"=".repeat((4 - (base64.length % 4)) % 4)}`;
-			const binary = atob(padded);
-			const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-			return new TextDecoder().decode(bytes);
-		} catch {
-			return "";
-		}
-	};
-	const getSpreadsheetTemplateValue = (envelopeJson: string, credentialCount: number) => {
-		if (envelopeJson) return encodeSpreadsheetTemplateValue(envelopeJson);
-		return credentialCount > 0 ? "missing_encrypted_template" : "not_enrolled";
+		if (!raw || ["not_enrolled", "missing_raw_blob", "not_requested"].includes(raw)) return "";
+		return raw;
 	};
 	const getDeviceUserCsvHeaders = () => [
 		"sourceDeviceName",
@@ -3962,8 +3916,8 @@ export function DeviceEnrollmentPanel({
 			.map((row) => {
 				const sourceDeviceId = String(row.sourceDeviceId || "csv-import").trim();
 				const vendorUserId = String(row.vendorUserId || "").trim();
-				const fingerprintRawTemplateBlob = decodeSpreadsheetTemplateValue(row.fingerprintTemplate);
-				const faceRawTemplateBlob = decodeSpreadsheetTemplateValue(row.faceTemplate);
+				const fingerprintRawTemplateBlob = decodeRawBiometricBlobCell(row.rawFingerprintBlob);
+				const faceRawTemplateBlob = decodeRawBiometricBlobCell(row.rawFaceBlob);
 				return {
 					sourceDeviceName: String(row.sourceDeviceName || "CSV import").trim(),
 					sourceDeviceId,
@@ -3977,30 +3931,20 @@ export function DeviceEnrollmentPanel({
 					cardCount: parseCsvNumber(row.cardCount),
 					fingerprintCount: parseCsvNumber(row.fingerprintCount),
 					faceCount: parseCsvNumber(row.faceCount),
-					fingerprintTemplate: String(row.fingerprintTemplate || "not_requested").trim(),
-					faceTemplate: String(row.faceTemplate || "not_requested").trim(),
-					biometricBundleStatus:
-						fingerprintRawTemplateBlob || faceRawTemplateBlob
-							? "spreadsheet_encrypted_templates"
-							: "not_present",
-					biometricBundlePresent: Boolean(fingerprintRawTemplateBlob || faceRawTemplateBlob),
-					biometricBundleAlgorithm:
-						fingerprintRawTemplateBlob || faceRawTemplateBlob ? "aes-256-gcm" : "",
-					biometricBundleRequiredForRawImport: Boolean(
-						fingerprintRawTemplateBlob || faceRawTemplateBlob,
-					),
+					rawFingerprintBlob: String(row.rawFingerprintBlob || "not_requested").trim(),
+					rawFaceBlob: String(row.rawFaceBlob || "not_requested").trim(),
 					biometricTransferMode: String(
 						row.biometricTransferMode ||
 							(fingerprintRawTemplateBlob || faceRawTemplateBlob
-								? "encryptedBundle"
+								? "rawPackage"
 								: "metadataOnly"),
 					).trim(),
 					fingerprintRawTemplateBlob,
 					faceRawTemplateBlob,
-					rawBiometricPlaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
+					rawBiometricPlaintextPolicy: DEVICE_USER_RAW_BIOMETRIC_PACKAGE_POLICY,
 					rawBiometricSource:
 						fingerprintRawTemplateBlob || faceRawTemplateBlob
-							? "csv_compact_encrypted_template"
+							? "csv_raw_blob_columns"
 							: "csv_review_sheet",
 				};
 			})
@@ -4025,30 +3969,25 @@ export function DeviceEnrollmentPanel({
 			},
 			policy: {
 				importedFrom: "csv",
-				plaintextBiometricExposed: false,
-				note: "CSV import carries compact encrypted biometric template values in fingerprintTemplate and faceTemplate. The passphrase is supplied separately during preview/import.",
+				plaintextBiometricExposed: true,
+				note: "CSV import carries raw evidenced biometric blobs in rawFingerprintBlob and rawFaceBlob. Missing cells must stay explicit.",
 				rawTemplateColumns: DEVICE_USER_BIOMETRIC_CSV_COLUMNS,
 			},
-			biometricBundle: {
+			rawBiometricPackage: {
 				present: importRows.some((row) =>
 					Boolean(row.fingerprintRawTemplateBlob || row.faceRawTemplateBlob),
 				),
 				requiredForPortableTemplateImport: importRows.some((row) =>
 					Boolean(row.fingerprintRawTemplateBlob || row.faceRawTemplateBlob),
 				),
-				algorithm: importRows.some((row) =>
-					Boolean(row.fingerprintRawTemplateBlob || row.faceRawTemplateBlob),
-				)
-					? "aes-256-gcm"
-					: null,
 				status: importRows.some((row) =>
 					Boolean(row.fingerprintRawTemplateBlob || row.faceRawTemplateBlob),
 				)
-					? "spreadsheet_encrypted_templates"
+					? "spreadsheet_raw_blobs"
 					: "not_present",
 				reason:
-					"CSV/Excel compact template cells are decoded internally and validated by the guarded encrypted bundle import preview.",
-				plaintextPolicy: DEVICE_USER_CSV_NO_PLAINTEXT_POLICY,
+					"CSV/Excel raw biometric blob cells are passed through for non-mutating preview and explicit rawPackage execute.",
+				plaintextPolicy: DEVICE_USER_RAW_BIOMETRIC_PACKAGE_POLICY,
 			},
 			devices: Array.from(devicesById.entries()).map(([sourceDeviceId, deviceRows]) => ({
 				device: {
@@ -4122,13 +4061,8 @@ export function DeviceEnrollmentPanel({
 							},
 							plaintextBiometricExposed: false,
 							biometricCsvColumns: {
-								fingerprintTemplate: row.fingerprintTemplate,
-								faceTemplate: row.faceTemplate,
-								biometricBundleStatus: row.biometricBundleStatus,
-								biometricBundlePresent: row.biometricBundlePresent,
-								biometricBundleAlgorithm: row.biometricBundleAlgorithm || null,
-								biometricBundleRequiredForRawImport:
-									row.biometricBundleRequiredForRawImport,
+								rawFingerprintBlob: row.rawFingerprintBlob,
+								rawFaceBlob: row.rawFaceBlob,
 								biometricTransferMode: row.biometricTransferMode,
 								fingerprintRawTemplateBlob: row.fingerprintRawTemplateBlob,
 								faceRawTemplateBlob: row.faceRawTemplateBlob,
@@ -4136,6 +4070,21 @@ export function DeviceEnrollmentPanel({
 								rawBiometricSource: row.rawBiometricSource,
 							},
 						},
+					},
+					rawBiometricCustody: {
+						fingerprint: {
+							status: row.fingerprintRawTemplateBlob ? "raw_blob_present" : row.rawFingerprintBlob,
+							templates: row.fingerprintRawTemplateBlob
+								? [{ fingerPrintId: 1, fingerType: "normalFP", data: row.fingerprintRawTemplateBlob }]
+								: [],
+						},
+						face: {
+							status: row.faceRawTemplateBlob ? "raw_blob_present" : row.rawFaceBlob,
+							blob: row.faceRawTemplateBlob
+								? { contentType: "image/jpeg", base64: row.faceRawTemplateBlob }
+								: null,
+						},
+						plaintextPolicy: DEVICE_USER_RAW_BIOMETRIC_PACKAGE_POLICY,
 					},
 				})),
 			})),
@@ -4166,13 +4115,13 @@ export function DeviceEnrollmentPanel({
 					cardCount: sampleCredentialSummary.cardCount,
 					fingerprintCount: sampleCredentialSummary.fingerprintCount,
 					faceCount: sampleCredentialSummary.faceCount,
-					fingerprintTemplate:
+					rawFingerprintBlob:
 						sampleCredentialSummary.fingerprintCount > 0
-							? "missing_encrypted_template"
+							? "missing_raw_blob"
 							: "not_enrolled",
-					faceTemplate:
+					rawFaceBlob:
 						sampleCredentialSummary.faceCount > 0
-							? "missing_encrypted_template"
+							? "missing_raw_blob"
 							: "not_enrolled",
 					exportedAt: new Date().toISOString(),
 				}
@@ -4190,8 +4139,8 @@ export function DeviceEnrollmentPanel({
 					cardCount: 1,
 					fingerprintCount: 1,
 					faceCount: 0,
-					fingerprintTemplate: "missing_encrypted_template",
-					faceTemplate: "not_enrolled",
+					rawFingerprintBlob: "missing_raw_blob",
+					rawFaceBlob: "not_enrolled",
 					exportedAt: new Date().toISOString(),
 				};
 		return [
@@ -4209,24 +4158,13 @@ export function DeviceEnrollmentPanel({
 					{};
 				const sourceDeviceId = String(device.device?.id || "");
 				const vendorUserId = String(user.vendorUserId || user.employeeNo || "");
-				const fingerprintRawTemplateBlob = getPortableTemplateEnvelopeValue(
-					getRawTemplateColumnValue(user, "fingerprintRawTemplateBlob"),
-					{ modality: "fingerprint", deviceId: sourceDeviceId, vendorUserId },
-				);
-				const faceRawTemplateBlob = getPortableTemplateEnvelopeValue(
-					getRawTemplateColumnValue(user, "faceRawTemplateBlob"),
-					{ modality: "face", deviceId: sourceDeviceId, vendorUserId },
-				);
-				const fingerprintBundlePresent = fingerprintRawTemplateBlob.trim().startsWith("{");
-				const faceBundlePresent = faceRawTemplateBlob.trim().startsWith("{");
-				const fingerprintTemplate = getSpreadsheetTemplateValue(
-					fingerprintBundlePresent ? fingerprintRawTemplateBlob : "",
+				void sourceDeviceId;
+				void vendorUserId;
+				const rawFingerprintBlob = getRawFingerprintBlobCell(
+					user,
 					Number(credentialSummary.fingerprintCount || 0),
 				);
-				const faceTemplate = getSpreadsheetTemplateValue(
-					faceBundlePresent ? faceRawTemplateBlob : "",
-					Number(credentialSummary.faceCount || 0),
-				);
+				const rawFaceBlob = getRawFaceBlobCell(user, Number(credentialSummary.faceCount || 0));
 				return {
 					sourceDeviceName: device.device?.name || "",
 					sourceDeviceId: device.device?.id || "",
@@ -4241,8 +4179,8 @@ export function DeviceEnrollmentPanel({
 					cardCount: Number(credentialSummary.cardCount || 0),
 					fingerprintCount: Number(credentialSummary.fingerprintCount || 0),
 					faceCount: Number(credentialSummary.faceCount || 0),
-					fingerprintTemplate,
-					faceTemplate,
+					rawFingerprintBlob,
+					rawFaceBlob,
 					exportedAt: payload.exportedAt || "",
 				};
 			}),
@@ -4306,23 +4244,21 @@ export function DeviceEnrollmentPanel({
 		includeCards: deviceUserExportState.includeCards,
 		includeFingerprints: deviceUserExportState.includeFingerprints,
 		includeFaces: deviceUserExportState.includeFaces,
-		encryptedBiometricBundle: deviceUserExportState.encryptedBiometricBundle,
-		refreshBiometricBundle: deviceUserExportState.refreshBiometricBundle,
-		biometricBundlePassphrase: deviceUserExportState.biometricBundlePassphrase,
+		rawBiometricPackage: deviceUserExportState.rawBiometricPackage,
 	});
 	const getDeviceUserExportBiometricGaps = (payload: DeviceUserExportPayload) => {
 		const biometrics = payload.summary?.biometrics;
 		const fingerprintMissing = deviceUserExportState.includeFingerprints
 			? Math.max(
 					Number(biometrics?.fingerprintCountReported || 0) -
-						Number(biometrics?.fingerprintEnvelopesCaptured || 0),
+						Number((biometrics as any)?.fingerprintRawBlobsCaptured || 0),
 					0,
 			)
 			: 0;
 		const faceMissing = deviceUserExportState.includeFaces
 			? Math.max(
 					Number(biometrics?.faceCountReported || 0) -
-						Number(biometrics?.faceEnvelopesCaptured || 0),
+						Number((biometrics as any)?.faceRawBlobsCaptured || 0),
 					0,
 			)
 			: 0;
@@ -4342,7 +4278,6 @@ export function DeviceEnrollmentPanel({
 		}
 		const preview = await previewDeviceUserExportMutation.mutateAsync({
 			...buildDeviceUserExportRequest(),
-			refreshBiometricBundle: false,
 		});
 		setDeviceUserExportState((current) => ({ ...current, preview, result: null }));
 	};
@@ -4358,59 +4293,14 @@ export function DeviceEnrollmentPanel({
 			toast.error("Select at least one row before exporting selected rows");
 			return;
 		}
-		if (
-			deviceUserExportState.encryptedBiometricBundle &&
-			(deviceUserExportState.includeFingerprints || deviceUserExportState.includeFaces) &&
-			!deviceUserExportState.biometricBundlePassphrase
-		) {
-			toast.error("Enter a package passphrase before exporting portable biometrics");
-			return;
-		}
 		const cachedPreview = await previewDeviceUserExportMutation.mutateAsync({
 			...buildDeviceUserExportRequest(),
-			refreshBiometricBundle: false,
 		});
 		setDeviceUserExportState((current) => ({ ...current, preview: cachedPreview, result: null }));
 		const biometricGaps = getDeviceUserExportBiometricGaps(cachedPreview);
-		if (biometricGaps.total > 0) {
-			if (!deviceUserExportState.refreshBiometricBundle) {
-				setDeviceUserExportState((current) => ({
-					...current,
-					refreshBiometricBundle: true,
-				}));
-				toast.error(
-					`${biometricGaps.total} requested biometric template${biometricGaps.total === 1 ? " is" : "s are"} not captured. Capture missing templates is now enabled; export again to start the background custody job.`,
-				);
-				return;
-			}
-			setDeviceUserExportState((current) => ({ ...current, open: false }));
-			if (deviceUserSyncJobIsProcessing) {
-				setBulkDeviceUserSyncState((current) => ({
-					...current,
-					open: true,
-					message: "Biometric custody is already running. Reopen Export after it completes.",
-				}));
-				return;
-			}
-			const captureJob = await startDeviceUserSyncJobMutation.mutateAsync({
-				mode: "full_refresh",
-				deviceIds: [selectedDeviceId],
-			});
-			setActiveDeviceUserSyncJob({ jobId: captureJob.jobId });
-			setBulkDeviceUserSyncState({
-				open: true,
-				status: "idle",
-				message: `${biometricGaps.fingerprintMissing} fingerprint and ${biometricGaps.faceMissing} face template${biometricGaps.total === 1 ? "" : "s"} must be captured before export.`,
-				lastProgress: captureJob.progress || null,
-			});
-			toast.warning("Biometric capture started before export", {
-				description: "You can close the status window and reopen it from Sync status.",
-			});
-			return;
-		}
+		void biometricGaps;
 		const result = await exportDeviceUsersMutation.mutateAsync({
 			...buildDeviceUserExportRequest(),
-			refreshBiometricBundle: false,
 		});
 		const deviceSlug = (selectedDevice?.name || selectedDeviceId || "device")
 			.toLowerCase()
@@ -4423,10 +4313,10 @@ export function DeviceEnrollmentPanel({
 			`device-users-${deviceSlug || "export"}-${datePart}`,
 		);
 		setDeviceUserExportState((current) => ({ ...current, result }));
-		const missingBiometricRows = Number(result.biometricBundle?.errors?.length || 0);
+		const missingBiometricRows = Number(result.rawBiometricPackage?.errors?.length || 0);
 		if (missingBiometricRows > 0) {
 			toast.warning(
-				`Export is partial: ${missingBiometricRows} requested biometric row${missingBiometricRows === 1 ? " is" : "s are"} missing encrypted payloads`,
+				`Export is partial: ${missingBiometricRows} requested biometric row${missingBiometricRows === 1 ? " is" : "s are"} missing raw blobs`,
 			);
 		} else {
 			toast.success(
@@ -4462,15 +4352,9 @@ export function DeviceEnrollmentPanel({
 			}));
 			return;
 		}
-		if (payload.biometricBundle?.present && !deviceUserImportState.biometricBundlePassphrase) {
-			toast.error("Enter the package passphrase before previewing encrypted biometrics");
-			return;
-		}
 		const preview = await previewDeviceUserImportMutation.mutateAsync({
 			targetDeviceId: selectedDeviceId,
 			payload,
-			biometricBundlePassphrase:
-				deviceUserImportState.biometricBundlePassphrase || undefined,
 		});
 		setDeviceUserImportState((current) => ({
 			...current,
@@ -4494,7 +4378,6 @@ export function DeviceEnrollmentPanel({
 			confirmation: deviceUserImportState.confirmation,
 			execute: true,
 			biometricTransferMode: deviceUserImportState.biometricTransferMode,
-			biometricBundlePassphrase: deviceUserImportState.biometricBundlePassphrase || undefined,
 			runAsJob: deviceUserImportState.runAsJob,
 		});
 		setDeviceUserImportState((current) => ({ ...current, result }));
@@ -6343,7 +6226,7 @@ export function DeviceEnrollmentPanel({
 									</div>
 									<div>
 										<span className="block text-orange-700">Privacy</span>
-										<span className="font-medium">Encrypted custody only</span>
+										<span className="font-medium">Raw custody when evidenced</span>
 									</div>
 								</div>
 							</>
@@ -8648,10 +8531,9 @@ export function DeviceEnrollmentPanel({
 									{selectedDevice?.name || "Selected device"}
 								</p>
 								<p className="mt-1 text-xs text-slate-600">
-									CSV and Excel use two biometric template columns with compact
-									encrypted values or clear empty states. The passphrase is entered
-									separately. Plaintext biometric bytes are never written to
-									spreadsheet cells.
+									CSV and Excel use explicit raw biometric blob columns. Empty
+									cells stay truthful with not_enrolled, missing_raw_blob, or
+									not_requested.
 								</p>
 							</div>
 							<Badge variant="secondary" className="self-start">
@@ -8745,14 +8627,13 @@ export function DeviceEnrollmentPanel({
 					<div className="rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-950">
 						<p className="font-semibold">Biometric handling</p>
 						<p className="mt-1 text-cyan-900">
-							Use SDK peer copy when both devices are reachable. Use an encrypted
-							bundle only for portable template payloads; its passphrase encrypts the
-							download and must be entered again at import. It is never stored.
+							Use SDK peer copy when both devices are reachable. Package exports copy
+							only evidenced raw fingerData and face/image blobs already stored on
+							DeviceUser or the matching DeviceEvent payload.
 						</p>
 						<p className="mt-2 font-mono text-[11px] text-cyan-950">
-							Spreadsheet template columns: fingerprintTemplate and faceTemplate.
-							They contain encrypted:v2 compact values when templates are available,
-							or not_enrolled / missing_encrypted_template when they are not.
+							Spreadsheet columns: rawFingerprintBlob and rawFaceBlob. Missing
+							bytes are not_enrolled, missing_raw_blob, or not_requested.
 						</p>
 					</div>
 					<div className="grid gap-2 text-sm sm:grid-cols-3">
@@ -8760,8 +8641,7 @@ export function DeviceEnrollmentPanel({
 							["includeCards", "Cards"],
 							["includeFingerprints", "Fingerprints"],
 							["includeFaces", "Faces"],
-							["encryptedBiometricBundle", "Encrypted bundle contract"],
-							["refreshBiometricBundle", "Capture missing templates"],
+							["rawBiometricPackage", "Raw biometric package"],
 						].map(([key, label]) => (
 							<label
 								key={key}
@@ -8783,24 +8663,6 @@ export function DeviceEnrollmentPanel({
 							</label>
 						))}
 					</div>
-					{deviceUserExportState.encryptedBiometricBundle ? (
-						<label className="block space-y-1 text-sm">
-							<span className="font-medium text-slate-800">Package passphrase</span>
-							<input
-								type="password"
-								value={deviceUserExportState.biometricBundlePassphrase}
-								onChange={(event) =>
-									setDeviceUserExportState((current) => ({
-										...current,
-										biometricBundlePassphrase: event.target.value,
-										result: null,
-									}))
-								}
-								placeholder="Required for portable biometric export"
-								className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200"
-							/>
-						</label>
-					) : null}
 					{deviceUserExportState.preview ? (
 						<div className="space-y-2">
 						<div className="grid gap-2 sm:grid-cols-4">
@@ -8821,9 +8683,9 @@ export function DeviceEnrollmentPanel({
 							))}
 						</div>
 							<div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-								<p className="font-semibold text-slate-950">Encrypted biometric readiness</p>
+								<p className="font-semibold text-slate-950">Raw biometric readiness</p>
 								<p className="mt-1">
-									Fingerprints: {deviceUserExportState.preview.summary.biometrics?.fingerprintEnvelopesCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.fingerprintCountReported || 0} encrypted envelopes. Faces: {deviceUserExportState.preview.summary.biometrics?.faceEnvelopesCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.faceCountReported || 0} encrypted envelopes.
+									Fingerprints: {(deviceUserExportState.preview.summary.biometrics as any)?.fingerprintRawBlobsCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.fingerprintCountReported || 0} raw blobs. Faces: {(deviceUserExportState.preview.summary.biometrics as any)?.faceRawBlobsCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.faceCountReported || 0} raw blobs.
 								</p>
 							</div>
 						</div>
@@ -8832,14 +8694,14 @@ export function DeviceEnrollmentPanel({
 						<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
 							<p className="font-semibold">Credential custody</p>
 							<p className="mt-1 text-amber-900">
-								Fingerprint encrypted envelopes: {deviceUserExportState.preview.summary.biometrics?.fingerprintEnvelopesCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.fingerprintCountReported || 0} reported users.
+								Fingerprint raw blobs: {(deviceUserExportState.preview.summary.biometrics as any)?.fingerprintRawBlobsCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.fingerprintCountReported || 0} reported users.
 							</p>
 							<p className="mt-1 text-amber-900">
-								Face encrypted envelopes: {deviceUserExportState.preview.summary.biometrics?.faceEnvelopesCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.faceCountReported || 0} reported users.
+								Face raw blobs: {(deviceUserExportState.preview.summary.biometrics as any)?.faceRawBlobsCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.faceCountReported || 0} reported users.
 							</p>
 							<p className="mt-1 text-amber-900">
-								Bundle status:{" "}
-								{deviceUserExportState.preview.biometricBundle?.status ||
+								Package status:{" "}
+								{deviceUserExportState.preview.rawBiometricPackage?.status ||
 									"not requested"}
 							</p>
 						</div>
@@ -8847,13 +8709,13 @@ export function DeviceEnrollmentPanel({
 					{deviceUserExportState.result ? (
 						<div
 							className={`rounded-md border px-3 py-2 text-sm ${
-								deviceUserExportState.result.biometricBundle?.errors?.length
+								deviceUserExportState.result.rawBiometricPackage?.errors?.length
 									? "border-amber-200 bg-amber-50 text-amber-950"
 									: "border-emerald-200 bg-emerald-50 text-emerald-950"
 							}`}>
-							{deviceUserExportState.result.biometricBundle?.errors?.length ? (
+							{deviceUserExportState.result.rawBiometricPackage?.errors?.length ? (
 								<p className="font-semibold">
-									Partial export: {deviceUserExportState.result.biometricBundle.errors.length} requested biometric payloads are missing.
+									Partial export: {deviceUserExportState.result.rawBiometricPackage.errors.length} requested raw biometric payloads are missing.
 								</p>
 							) : null}
 							{deviceUserExportState.format === "json"
@@ -8914,14 +8776,13 @@ export function DeviceEnrollmentPanel({
 						</p>
 						<p className="mt-1 text-xs text-slate-600">
 							Use the CSV export from another Hikvision device to compare users and
-							preview encrypted biometric templates without writing to the device.
-							The passphrase is entered separately for validation.
+							preview raw biometric blobs without writing to the device.
 						</p>
 					</div>
 					<div className="grid gap-2 sm:grid-cols-2">
 						{[
-							["csv", "CSV", "Two template columns"],
-							["json", "Package JSON", "Advanced encrypted bundle import"],
+							["csv", "CSV", "Raw blob columns"],
+							["json", "Package JSON", "Raw biometric package import"],
 						].map(([value, label, description]) => (
 							<button
 								key={value}
@@ -9028,7 +8889,7 @@ export function DeviceEnrollmentPanel({
 								}))
 							}
 							className="min-h-[140px] w-full rounded-md border border-slate-200 bg-white p-3 font-mono text-xs text-slate-900 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200"
-							placeholder="{ ... encrypted package export ... }"
+							placeholder="{ ... raw biometric package export ... }"
 						/>
 					) : deviceUserImportState.fileName ? (
 						<div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800">
@@ -9069,15 +8930,15 @@ export function DeviceEnrollmentPanel({
 								<p className="font-semibold">Transfer proof</p>
 								<p className="mt-1 text-amber-900">
 									{deviceUserImportState.preview.executeBlockedReason ||
-										"Execute is available after typed confirmation. SDK peer copy transfers templates device-to-device without exposing raw bytes."}
+										"Execute is available after typed confirmation. SDK peer copy reads from a reachable source; rawPackage writes evidenced blobs from the file."}
 								</p>
 								<p className="mt-1 text-amber-900">
-									Bundle:{" "}
-									{deviceUserImportState.preview.biometricBundle?.present
-										? "encrypted bundle present"
-										: "no encrypted bundle in JSON package"}
+									Raw package:{" "}
+									{deviceUserImportState.preview.rawBiometricPackage?.present
+										? `${deviceUserImportState.preview.rawBiometricPackage.rawFingerprintBlobCount || 0} fingerprint / ${deviceUserImportState.preview.rawBiometricPackage.rawFaceBlobCount || 0} face blobs`
+										: "no raw biometric blobs in file"}
 									{" / "}
-									{deviceUserImportState.preview.biometricBundle?.transferModes?.join(
+									{deviceUserImportState.preview.rawBiometricPackage?.transferModes?.join(
 										", ",
 									) || "metadataOnly"}
 								</p>
@@ -9129,33 +8990,16 @@ export function DeviceEnrollmentPanel({
 											biometricTransferMode: event.target.value as
 												| "sdkPeerCopy"
 												| "metadataOnly"
-												| "encryptedBundle",
+												| "rawPackage",
 										}))
 									}
 									className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200">
 									<option value="sdkPeerCopy">SDK peer copy</option>
-									<option value="encryptedBundle">Encrypted bundle</option>
+									<option value="rawPackage">Raw package</option>
 									<option value="metadataOnly">Metadata only</option>
 								</select>
 							</label>
 							<label className="space-y-1 text-sm">
-								<span className="font-medium text-slate-800">
-									Encrypted bundle passphrase
-								</span>
-								<input
-									type="password"
-									value={deviceUserImportState.biometricBundlePassphrase}
-									onChange={(event) =>
-										setDeviceUserImportState((current) => ({
-											...current,
-											biometricBundlePassphrase: event.target.value,
-										}))
-									}
-									placeholder="Only needed for encrypted bundles"
-									className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200"
-								/>
-							</label>
-							<label className="space-y-1 text-sm sm:col-span-2">
 								<span className="font-medium text-slate-800">
 									Type IMPORT DEVICE USERS
 								</span>
@@ -9220,7 +9064,7 @@ export function DeviceEnrollmentPanel({
 								</>
 							)}
 							<p className="mt-1 text-xs text-emerald-900">
-								Plain biometric exposed:{" "}
+								Raw package used:{" "}
 								{String(deviceUserImportState.result.plaintextBiometricExposed)}
 							</p>
 						</div>

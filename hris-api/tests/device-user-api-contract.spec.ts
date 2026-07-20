@@ -42,7 +42,7 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("DEVICE_USER_EXPORT_SCHEMA_VERSION");
 		expect(controller).to.include("discoverHikvisionUserExportCapabilities");
 		expect(controller).to.include("fingerprintTemplateExport");
-		expect(controller).to.include("blocked_until_encrypted_biometric_custody_design_is_approved");
+		expect(controller).to.include("raw_blob_package_from_device_user_or_event");
 		expect(controller).to.include("const previewDeviceUserImport = async");
 		expect(controller).to.include("executeAvailable: false");
 		expect(controller).to.include("DEVICE_USER_IMPORT_CONFIRMATION");

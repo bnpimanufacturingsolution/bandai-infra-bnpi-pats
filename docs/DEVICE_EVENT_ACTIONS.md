@@ -227,7 +227,8 @@ SDK LISTENER ──POST──► /api/hikvision/callback
         │
         ├─► DeviceUser (same plain "15")
         │      refresh credential counts from UserInfo
-        │      FP template bytes: DeviceUser custody only (encrypted), NOT DeviceEvent
+        │      FP template bytes: raw DeviceUser custody when evidenced; matching
+        │      DeviceEvent payload may also retain the raw lifecycle blob
         │
         └─► socket
 ```

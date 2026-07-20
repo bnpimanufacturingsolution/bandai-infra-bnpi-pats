@@ -984,10 +984,8 @@ export interface DeviceUserExportRequest {
 	includeCards?: boolean;
 	includeFingerprints?: boolean;
 	includeFaces?: boolean;
-	encryptedBiometricBundle?: boolean;
+	rawBiometricPackage?: boolean;
 	refreshSourceUsers?: boolean;
-	refreshBiometricBundle?: boolean;
-	biometricBundlePassphrase?: string;
 }
 
 export interface DeviceUserExportPayload {
@@ -1004,29 +1002,20 @@ export interface DeviceUserExportPayload {
 		limit?: number | null;
 	};
 	policy?: Record<string, unknown>;
-	biometricBundle?: {
+	rawBiometricPackage?: {
 		present: boolean;
 		requiredForPortableTemplateImport?: boolean;
-		algorithm?: string | null;
 		status?: string;
 		reason?: string;
 		plaintextPolicy?: string;
-		ciphertext?: string;
-		encryptedPayload?: string;
-		encryptedBlob?: string;
 		users?: Array<{
 			sourceDeviceId: string;
 			vendorUserId: string;
 			source?: string;
-			fingerprintCount?: number;
-			faceTemplateSize?: number;
-			facePictureSize?: number;
-			fingerprintPlaintextSha256?: string | null;
-			fingerprintCiphertextLength?: number;
-			fingerprintKeySource?: string | null;
-			facePlaintextSha256?: string | null;
-			faceCiphertextLength?: number;
-			faceKeySource?: string | null;
+			fingerprintStatus?: string;
+			fingerprintRawBlobCount?: number;
+			faceStatus?: string;
+			faceRawBlobPresent?: boolean;
 		}>;
 		errors?: Array<{
 			sourceDeviceId: string;
@@ -1090,11 +1079,11 @@ export interface DeviceUserExportPayload {
 		unlinked: number;
 		biometrics?: {
 			fingerprintCountReported: number;
-			fingerprintEnvelopesCaptured: number;
+			fingerprintRawBlobsCaptured: number;
 			faceCountReported: number;
-			faceEnvelopesCaptured: number;
+			faceRawBlobsCaptured: number;
 			captureFailures: number;
-			portableDecryptable: boolean;
+			portableRawPackageReady: boolean;
 		};
 	};
 }
@@ -1102,7 +1091,6 @@ export interface DeviceUserExportPayload {
 export interface DeviceUserImportPreviewRequest {
 	targetDeviceId: string;
 	payload: DeviceUserExportPayload;
-	biometricBundlePassphrase?: string;
 }
 
 export interface DeviceUserImportPreviewResponse {
@@ -1122,13 +1110,13 @@ export interface DeviceUserImportPreviewResponse {
 		missingHrisEmployees: number;
 	};
 	unsupportedCredentialTypes: string[];
-	biometricBundle?: {
+	rawBiometricPackage?: {
 		present: boolean;
 		requiredForPortableTemplateImport?: boolean;
-		algorithm?: string | null;
 		status?: string;
-		unlockable?: boolean;
 		plaintextExposed?: boolean;
+		rawFingerprintBlobCount?: number;
+		rawFaceBlobCount?: number;
 		transferModes?: string[];
 	};
 	previewToken?: string;
@@ -1154,8 +1142,7 @@ export interface DeviceUserImportExecuteRequest {
 	previewToken: string;
 	confirmation: string;
 	execute: true;
-	biometricTransferMode?: "sdkPeerCopy" | "metadataOnly" | "encryptedBundle";
-	biometricBundlePassphrase?: string;
+	biometricTransferMode?: "sdkPeerCopy" | "metadataOnly" | "rawPackage";
 	runAsJob?: boolean;
 }
 
@@ -1167,7 +1154,7 @@ export interface DeviceUserImportExecuteResponse {
 	message?: string;
 	backupDir?: string | null;
 	biometricTransferMode?: string;
-	plaintextBiometricExposed: false;
+	plaintextBiometricExposed: boolean;
 	counts?: {
 		planned: number;
 		imported: number;
@@ -1602,9 +1589,6 @@ class DevicesService extends APIService {
 				targetDeviceId: payload.targetDeviceId,
 				payload: payload.payload,
 				execute: false,
-				...(payload.biometricBundlePassphrase
-					? { biometricBundlePassphrase: payload.biometricBundlePassphrase }
-					: {}),
 			});
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Failed to preview device-user import");
@@ -1630,9 +1614,6 @@ class DevicesService extends APIService {
 				execute: true,
 				biometricTransferMode: payload.biometricTransferMode || "sdkPeerCopy",
 				runAsJob: payload.runAsJob === true,
-				...(payload.biometricBundlePassphrase
-					? { biometricBundlePassphrase: payload.biometricBundlePassphrase }
-					: {}),
 			});
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Failed to execute device-user import");
