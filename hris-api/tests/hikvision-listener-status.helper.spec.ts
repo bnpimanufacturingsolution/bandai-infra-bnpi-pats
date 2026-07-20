@@ -128,6 +128,25 @@ describe("hikvision-listener-status helper", () => {
 		expect(status.devices[0]?.state).to.equal("armed");
 	});
 
+	it("counts successful callback spool replay as HRIS post proof for that device", () => {
+		const now = new Date("2026-07-20T13:20:00.000Z");
+		const status = summarizeHikvisionListenerLogs(
+			[
+				'{"ts":"2026-07-20T13:19:32Z","deviceId":"cmripjwbx00ewl001ihcke210","deviceName":"Main Entrance Device C","event":"sdk_login","host":"10.184.37.22","lastError":"0","ok":"true","sdkPort":"8000"}',
+				'{"ts":"2026-07-20T13:19:32Z","deviceId":"cmripjwbx00ewl001ihcke210","event":"sdk_alarm_arm","host":"10.184.37.22","lastError":"0","ok":"true"}',
+				'{"ts":"2026-07-20T13:19:34Z","event":"hikvision_callback_spool_replay_result","ok":"true","path":"/tmp/project-truth-hikvision-callback-spool/1784538258876_16_cmripjwbx00ewl001ihcke210_5127.json"}',
+			],
+			now,
+		);
+
+		const deviceC = status.devices.find(
+			(device) => device.deviceId === "cmripjwbx00ewl001ihcke210",
+		);
+		expect(status.postingToHris).to.equal(true);
+		expect(deviceC?.postingToHris).to.equal(true);
+		expect(deviceC?.lastPostAt).to.equal("2026-07-20T13:19:34.000Z");
+	});
+
 	it("keeps an earlier armed reverse device visible beyond the old 80-line window", () => {
 		const now = new Date("2026-07-19T10:59:00.000Z");
 		const noise = Array.from({ length: 100 }, (_, index) =>

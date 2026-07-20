@@ -1414,12 +1414,19 @@ class DevicesService extends APIService {
 		}
 	}
 
-	async getDeviceHealth(deviceId: string): Promise<DeviceHealthResponse> {
+	async getDeviceHealth(
+		deviceId: string,
+		options: { quick?: boolean; timeoutMs?: number } = {},
+	): Promise<DeviceHealthResponse> {
 		try {
 			if (!String(deviceId || "").trim()) {
 				throw new Error("Select a device before checking health");
 			}
-			const response = await hrisApiClient.get<any>(`/api/device/${deviceId}/health`);
+			const response = await hrisApiClient.get<any>(
+				`/api/device/${deviceId}/health`,
+				options.quick ? { quick: "true" } : undefined,
+				{ timeoutMs: options.timeoutMs ?? 6000 },
+			);
 			let healthData = response.data;
 			if (healthData && typeof healthData === "object" && "data" in healthData) {
 				healthData = healthData.data;
@@ -2234,9 +2241,11 @@ class DevicesService extends APIService {
 	async getHikvisionListenerStatus(): Promise<HikvisionListenerStatus> {
 		try {
 			// Cap client wait so the Listener modal never spins forever if SSH stalls.
-			const response = await hrisApiClient.get<any>("/api/device/hikvision/listener", {
-				timeoutMs: 8000,
-			} as any);
+			const response = await hrisApiClient.get<any>(
+				"/api/device/hikvision/listener",
+				undefined,
+				{ timeoutMs: 8000 },
+			);
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Failed to load Hikvision listener status");
 			return data as HikvisionListenerStatus;

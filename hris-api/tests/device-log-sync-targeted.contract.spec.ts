@@ -36,7 +36,8 @@ describe("device log sync targeted import contract", () => {
 	it("runs independent ZKTeco and Hikvision availability probes concurrently", () => {
 		expect(controllerSource).to.contain("HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS || 1800");
 		expect(controllerSource).to.contain("const zktecoPreviewPromise =");
-		expect(controllerSource).to.contain("const hikvisionTotalsPromise = Promise.all(");
+		expect(controllerSource).to.contain("const hikvisionTotalsPromise = withDeviceUserImportTimeout(");
+		expect(controllerSource).to.contain("Promise.allSettled(");
 		expect(controllerSource).to.contain("const [zktecoPreview] = await Promise.all([");
 		expect(controllerSource).to.contain("zktecoPreviewPromise,");
 		expect(controllerSource).to.contain("hikvisionTotalsPromise,");
@@ -63,7 +64,7 @@ describe("device log sync targeted import contract", () => {
 		// Device UI Log tab uses Information major: Add Fingerprint / Add Person Info.
 		expect(controllerSource).to.contain('log.hikvision.com/Information');
 		expect(controllerSource).to.contain("sampleClassify");
-		expect(controllerSource).to.contain("Only exact rows read from logSearch may become Ready to add");
+		expect(controllerSource).to.contain("Ready to add excludes Needs review rows.");
 		expect(controllerSource).not.to.contain("extrapolatedByAction");
 		expect(controllerSource).not.to.contain("Math.round((Number(sampleCount) / sampleSize) * total)");
 	});
@@ -78,7 +79,7 @@ describe("device log sync targeted import contract", () => {
 		expect(controllerSource).to.contain("attendanceImported");
 		expect(controllerSource).to.contain("persistNormalizedHikvisionEvidence");
 		expect(controllerSource).to.contain(
-			"Reading user & enrollment activity from device operation logs",
+			"Reading user & enrollment activity from classified device operation logs",
 		);
 		expect(controllerSource).to.contain("Reading attendance taps from the device access log");
 		// Old 200-row cap made large residuals stall at 0/200.

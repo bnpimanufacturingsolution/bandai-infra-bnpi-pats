@@ -33,6 +33,7 @@ import { Switch } from "~/components/ui/switch";
 import {
 	useDeviceEvents,
 	useDeviceHealth,
+	useDeviceHealthMap,
 	useDeviceImportJob,
 	useDeviceSyncPreview,
 	useCancelDeviceImportJob,
@@ -1373,6 +1374,15 @@ export default function DeviceEventsPage() {
 	const syncCapableDevices = useMemo(
 		() => devices.filter((device: any) => isZktecoDevice(device) || isHikvisionDevice(device)),
 		[devices],
+	);
+	const healthSummaryDeviceIds = useMemo(
+		() => syncCapableDevices.map((device: any) => String(device.id || "")).filter(Boolean),
+		[syncCapableDevices],
+	);
+	const healthSummaryMap = useDeviceHealthMap(
+		healthSummaryDeviceIds,
+		viewMode === "saved" && healthSummaryDeviceIds.length > 0,
+		{ staleTime: 2 * 60 * 1000, refetchInterval: false, quick: true },
 	);
 	const selectedSyncDevice =
 		deviceId === "all"
@@ -2920,6 +2930,30 @@ export default function DeviceEventsPage() {
 				hikvisionListenerDevices.filter((device) => device.armed).length
 			} armed / ${hikvisionListenerDevices.filter((device) => device.state === "login_failed").length} login failed`
 		: "No per-device listener rows";
+	const healthSummaryEntries = useMemo(
+		() =>
+			healthSummaryDeviceIds.map((id) => ({
+				id,
+				device: syncCapableDevices.find((device: any) => String(device.id || "") === id),
+				entry: healthSummaryMap.get(id),
+			})),
+		[healthSummaryDeviceIds, healthSummaryMap, syncCapableDevices],
+	);
+	const healthSummaryChecked = healthSummaryEntries.filter((row) => row.entry?.health);
+	const healthSummaryOnline = healthSummaryChecked.filter(
+		(row) => row.entry?.health?.summary?.status === "online",
+	).length;
+	const healthSummaryDegraded = healthSummaryChecked.filter(
+		(row) => row.entry?.health?.summary?.status === "degraded",
+	).length;
+	const healthSummaryOffline = healthSummaryChecked.filter(
+		(row) => row.entry?.health?.summary?.status === "offline",
+	).length;
+	const healthSummaryLabel = healthSummaryMap.isLoadingAny && healthSummaryChecked.length === 0
+		? `Checking ${healthSummaryDeviceIds.length} device${healthSummaryDeviceIds.length === 1 ? "" : "s"}...`
+		: healthSummaryChecked.length
+			? `${healthSummaryOnline} online / ${healthSummaryDegraded} degraded / ${healthSummaryOffline} offline`
+			: "Device health not checked yet";
 	const focusedHikvisionStatus = selectedHikvisionListenerDevice
 		? selectedHikvisionListenerDevice.receivingCallbacks
 			? `${selectedHikvisionListenerDevice.name || selectedHikvisionListenerDevice.host || "Selected device"} is receiving callbacks.`
@@ -3002,7 +3036,7 @@ export default function DeviceEventsPage() {
 				? "Live path blocked"
 				: // Do not override a green readiness strip with "needs proof" mid-panel.
 					isSdkAlarmSavedScope && livePathHealthCaution && liveReadiness?.overall !== "green"
-					? "Live path needs proof"
+					? "Ready for tap proof"
 					: realtimePanelStatusLabelFromSignals;
 	const realtimePanelUpdateLabel =
 		isSdkAlarmSavedScope && liveReadinessErrorMessage && !liveReadiness
@@ -3479,6 +3513,20 @@ export default function DeviceEventsPage() {
 						(liveReadiness?.overall === "red" || liveReadiness?.safeToTap === false)
 					}
 				/>
+			) : null}
+
+			{viewMode === "saved" ? (
+				<div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700">
+					<span className="inline-flex items-center gap-1.5 font-semibold text-slate-900">
+						<Wifi className="h-3.5 w-3.5 text-emerald-600" />
+						Device health
+					</span>
+					<span>{healthSummaryLabel}</span>
+					<span className="text-slate-400">/</span>
+					<span className="text-slate-500">
+						Reachability is separate from listener armed state and tap proof.
+					</span>
+				</div>
 			) : null}
 
 			{isSyncLogsDebugView && canUseDebugReset ? (
@@ -4146,7 +4194,9 @@ export default function DeviceEventsPage() {
 										<span className="mt-1 block text-xs text-slate-600">
 											{hikvisionListenerRunning
 												? hikvisionSdkReceiving
-													? "Live capture is receiving callbacks and posting to HRIS."
+													? hikvisionListenerStatus?.sdk?.postingToHris
+														? "Live capture is receiving callbacks and posting to HRIS."
+														: "Live capture is receiving callbacks; HRIS post proof is not fresh."
 													: "Live capture service is on; use the status above for tap truth."
 												: "Turn this on before testing physical taps."}
 										</span>

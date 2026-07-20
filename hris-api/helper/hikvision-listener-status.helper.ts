@@ -60,6 +60,8 @@ const getEntryDeviceKey = (entry: Record<string, unknown>) => {
 	if (id) return `id:${id}`;
 	const host = String(entry.host || entry.sourceHost || entry.deviceIP || "").trim();
 	if (host) return `host:${host}`;
+	const pathDeviceId = String(entry.path || "").match(/_(cm[a-z0-9]+)_/i)?.[1];
+	if (pathDeviceId) return `id:${pathDeviceId}`;
 	return null;
 };
 
@@ -199,7 +201,12 @@ export const summarizeHikvisionListenerLogs = (
 			}
 		}
 
-		if (event === "hikvision_callback_post_result" && ok !== false) {
+		if (
+			(event === "hikvision_callback_post_result" ||
+				event === "hikvision_callback_spool_replay_result" ||
+				event === "hris_contract_post") &&
+			ok !== false
+		) {
 			lastPostAt = ts;
 			if (device) {
 				device._lastPostAt = ts;
@@ -207,7 +214,13 @@ export const summarizeHikvisionListenerLogs = (
 			}
 		}
 
-		if ((event === "hikvision_callback_post" || event === "hikvision_callback_post_result") && ok === false) {
+		if (
+			(event === "hikvision_callback_post" ||
+				event === "hikvision_callback_post_result" ||
+				event === "hikvision_callback_spool_replay_result" ||
+				event === "hris_contract_post") &&
+			ok === false
+		) {
 			sawPostFailure = true;
 			lastError = String(entry.error || entry.stderr || "HRIS callback post failed").trim();
 			if (device) {

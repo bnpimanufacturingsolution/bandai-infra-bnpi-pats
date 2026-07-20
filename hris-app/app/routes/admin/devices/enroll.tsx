@@ -583,8 +583,8 @@ export function DeviceEnrollmentPanel({
 		error: hikvisionListenerStatusError,
 		refetch: refetchHikvisionListenerStatus,
 	} = useHikvisionListenerStatus(
-		// Overview badge once; poll only while listener details modal is open.
-		activePanel === "overview" || isListenerDetailsOpen,
+		// Overview/Device Users render the listener card; poll only while details is open.
+		activePanel === "overview" || activePanel === "users" || isListenerDetailsOpen,
 		{
 			staleTime: isListenerDetailsOpen ? 8 * 1000 : 60 * 1000,
 			refetchInterval: isListenerDetailsOpen ? 12 * 1000 : false,

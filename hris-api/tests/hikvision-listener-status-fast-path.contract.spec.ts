@@ -12,25 +12,34 @@ const controllerSource = readFileSync(
 describe("hikvision listener status fast path contract", () => {
 	it("uses one SSH status round-trip with a hard budget", () => {
 		expect(controllerSource).to.contain("HIKVISION_LISTENER_STATUS_TIMEOUT_MS");
-		expect(controllerSource).to.contain("HIKVISION_LISTENER_STATUS_TIMEOUT_MS || 4500");
+		expect(controllerSource).to.contain("HIKVISION_LISTENER_STATUS_TIMEOUT_MS || 9000");
 		expect(controllerSource).to.contain("ACTIVE=");
 		expect(controllerSource).to.contain("---SHOW---");
+		expect(controllerSource).to.contain("---SPEC---");
 		expect(controllerSource).to.contain("---LOG---");
+		expect(controllerSource).to.contain("---KEYLOG---");
+		expect(controllerSource).to.contain("HIKVISION_LISTENER_STATUS_KEY_EVENT_LINES = 20000");
 		// Must not open three independent SSH sessions for status.
 		expect(controllerSource).not.to.match(
 			/Promise\.all\(\[\s*runHikvisionListenerVmCommand\(\s*\[\s*"systemctl",\s*"is-active"/,
 		);
 	});
 
-	it("prefers Cloudflare SSH alias before dead LAN SSH on host operators", () => {
+	it("prefers direct LAN SSH before Cloudflare alias on host-local operators", () => {
 		expect(controllerSource).to.contain("alias:${configuredAlias}");
-		expect(controllerSource).to.contain("Prefer the SSH alias first");
-		// Alias target is pushed before the LAN target in the builder.
+		expect(controllerSource).to.contain("Host-local runtime checks use direct LAN first");
+		// LAN target is pushed before the alias fallback in the builder.
 		const aliasIndex = controllerSource.indexOf("label: `alias:${configuredAlias}`");
 		const lanIndex = controllerSource.indexOf("label: `lan:${host}`");
 		expect(aliasIndex).to.be.greaterThan(-1);
 		expect(lanIndex).to.be.greaterThan(-1);
-		expect(aliasIndex).to.be.lessThan(lanIndex);
+		expect(lanIndex).to.be.lessThan(aliasIndex);
+	});
+
+	it("caches listener status briefly so readiness and listener UI share one VM read", () => {
+		expect(controllerSource).to.contain("hikvisionListenerStatusCache");
+		expect(controllerSource).to.contain("HIKVISION_LISTENER_STATUS_CACHE_MS || 5000");
+		expect(controllerSource).to.contain("cache: {");
 	});
 
 	it("treats SDK receiving / restarting unit as service-enabled for the admin toggle", () => {

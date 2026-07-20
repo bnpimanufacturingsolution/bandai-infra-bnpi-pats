@@ -1,5 +1,42 @@
 # WWG Agent Handoff
 
+## 2026-07-20 - Device Events saved view fast/truthful listener UX handoff
+
+- Task mode: Mixed admin UX/performance regression repair.
+- User symptom repaired:
+  - `/admin/configuration/devices/events?view=saved` felt stale/slow because saved ledger truth, device health, listener armed state, and live receiving proof were collapsed in the UI.
+  - Armed-but-quiet listener proof now reads as `Ready for tap proof`, not `Live path needs proof` or `not checked for a long time`.
+- Implementation:
+  - `hris-api/app/device/device.controller.ts`:
+    - `GET /api/device/:id/health?quick=true` now uses bounded TCP reachability (`tcpReachability`) and skips slow Hikvision system-time/source-count reads.
+    - Hikvision listener status prefers direct LAN SSH first, uses one bounded VM read, and caches status briefly for readiness/listener consumers.
+  - `hris-api/helper/device-live-readiness.helper.ts` and `hris-app/app/lib/device-live-readiness-shared.ts`:
+    - Armed-but-quiet/no-fresh-tap state is yellow `Ready for tap proof`; DB ok + armed listener is safe to tap but not safe to enroll until fresh receiving/post proof exists.
+  - `hris-app/app/routes/admin/devices/events.tsx`:
+    - Saved ledger render is independent of background listener/proof checks.
+    - Added separate quick device-health summary with copy: `Reachability is separate from listener armed state and tap proof.`
+  - Frontend device service/hooks now pass `quick=true` and short client timeouts for saved-view health summaries.
+- Runtime proof:
+  - Evidence dir: `.runtime/device-events-stale-fast-20260720-211150/`.
+  - API timing summary:
+    - saved rows `2.629s`, saved facets `1.924s`, exact device list `0.561s`.
+    - listener status cached repeat exposed `cache.hit=true`, TTL `5000ms`.
+    - quick health server durations for sampled devices: `1327ms`, `1214ms`, `1ms`, `0ms`; all used `provenBy=tcpReachability`.
+  - Browser proof:
+    - `.runtime/device-events-stale-fast-20260720-211150/browser/playwright-settled-clean-result.json`.
+    - Settled page showed saved rows for the current saved-ledger filter.
+    - Clean follow-up proof showed the new health strip as `4 online / 0 degraded / 3 offline` followed by `/` and the reachability separation copy.
+    - Page text included `Ready for tap proof` and saved rows.
+    - Page text did not include `Live path needs proof` or `not checked for a long time`.
+- Validation:
+  - Backend typecheck passed: `npx tsc --noEmit --pretty false --incremental false --listFiles false`.
+  - Backend focused tests passed: `25` passing for listener-status helper, readiness, listener fast-path, and quick-health contracts.
+  - Frontend focused contract passed: `12` passing for `app/lib/device-events-page-contract.test.ts`.
+  - Frontend `npx tsc -p tsconfig.test.json --noEmit --pretty false` still fails on unrelated existing `app/routes/employee/dashboard/TimesheetsTab.test.tsx` `UseQueryResult` fixture drift.
+- Worktree note:
+  - `hris-api/tests/device-log-sync-targeted.contract.spec.ts` had pre-existing unrelated edits and was not changed for this repair.
+- Recommendation capture: No new recommendations were identified.
+
 ## 2026-07-20 - Remote local-dev Hikvision tunnel handoff
 
 - Task mode: Focused local-dev runtime access repair.

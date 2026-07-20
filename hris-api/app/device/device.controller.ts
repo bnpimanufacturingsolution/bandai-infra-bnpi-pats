@@ -154,7 +154,8 @@ const DEVICE_USER_ADMIN_ROLES = new Set(["hris-admin", "admin", "super_admin", "
 const DEVICE_ADDRESS_PORT_CONFLICT_MESSAGE = "Another device already uses this address and port.";
 const HIKVISION_HOT_RELOAD_LISTENER_SERVICE = "project-truth-hikvision-hot-reload-listener.service";
 const HIKVISION_LISTENER_CONTROL_ACTIONS = new Set(["start", "stop", "restart"]);
-const HIKVISION_LISTENER_STATUS_EVIDENCE_LINES = 400;
+const HIKVISION_LISTENER_STATUS_EVIDENCE_LINES = 5000;
+const HIKVISION_LISTENER_STATUS_KEY_EVENT_LINES = 20000;
 const HIKVISION_LISTENER_STATUS_RESPONSE_LINES = 80;
 const HIKVISION_VM_WRAPPER_REMOTE_PATH =
 	"/usr/local/bin/project-truth-hikvision-hot-reload-listener";
@@ -177,6 +178,14 @@ const HIKVISION_PREVIEW_TOTAL_TIMEOUT_MS = Math.max(
 const HIKVISION_PREVIEW_DEVICE_BUDGET_MS = Math.max(
 	800,
 	Math.min(Number(process.env.HIKVISION_PREVIEW_DEVICE_BUDGET_MS || 1800), 3500),
+);
+/** Overall source-total budget for Sync Center preview. DB/HRIS counts still return. */
+const HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS = Math.max(
+	1000,
+	Math.min(
+		Number(process.env.HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS || 1500),
+		4000,
+	),
 );
 const HIKVISION_PEER_COPY_RETRY_LIMIT = Math.max(
 	1,
@@ -584,7 +593,7 @@ const HIKVISION_VM_SSH_CONNECT_TIMEOUT_SECONDS = Math.min(
 );
 const HIKVISION_LISTENER_STATUS_TIMEOUT_MS = Math.max(
 	2000,
-	Math.min(Number(process.env.HIKVISION_LISTENER_STATUS_TIMEOUT_MS || 4500), 12000),
+	Math.min(Number(process.env.HIKVISION_LISTENER_STATUS_TIMEOUT_MS || 9000), 12000),
 );
 
 const isHikvisionTransportFailure = (value: unknown) =>
@@ -629,11 +638,19 @@ const getHikvisionListenerVmTargets = (): HikvisionListenerVmTarget[] => {
 			},
 		];
 	}
-	// Prefer the SSH alias first on Windows/host operators. Direct LAN
-	// (`10.184.37.19`) often times out from this workstation while
-	// `project-truth-hris` (Cloudflare Access SSH) still works. Trying LAN
-	// first made the Listener modal sit on "Checking…" for many seconds.
 	const targets: HikvisionListenerVmTarget[] = [];
+	// Host-local runtime checks use direct LAN first. The Cloudflare SSH alias is
+	// still retained as fallback for remote/off-LAN work, but should not add edge
+	// latency to every local saved-events status refresh.
+	targets.push({
+		mode: "ssh",
+		host,
+		port: configuredPort,
+		user,
+		key,
+		destination: `${user}@${host}`,
+		label: `lan:${host}`,
+	});
 	if (configuredAlias && configuredAlias !== host && configuredAlias !== `${user}@${host}`) {
 		targets.push({
 			mode: "ssh",
@@ -644,19 +661,11 @@ const getHikvisionListenerVmTargets = (): HikvisionListenerVmTarget[] => {
 			label: `alias:${configuredAlias}`,
 		});
 	}
-	targets.push({
-		mode: "ssh",
-		host,
-		port: configuredPort,
-		user,
-		key,
-		destination: `${user}@${host}`,
-		label: `lan:${host}`,
-	});
 	return targets;
 };
 
 let preferredHikvisionListenerVmTargetLabel = "";
+let hikvisionListenerStatusCache: { expiresAt: number; value: any } | null = null;
 
 const prioritizeHikvisionListenerVmTargets = () => {
 	const targets = getHikvisionListenerVmTargets();
@@ -13730,7 +13739,9 @@ export const controller = (prisma: PrismaClient) => {
 						deviceUserSummaryByDeviceId.set(deviceId, summary as any);
 						biometricCustodyByDeviceId.set(deviceId, emptyBiometricCustody());
 					}
-					if (await hasDeviceUserVendorMetadataColumn()) {
+					const shouldLoadDetailedCustody =
+						Boolean(selectedDeviceId) && selectedDeviceId !== "all";
+					if (shouldLoadDetailedCustody && (await hasDeviceUserVendorMetadataColumn())) {
 						const biometricRows = await (prisma as any).deviceUser.findMany({
 							where: {
 								organizationId: String(organizationId),
@@ -13838,16 +13849,51 @@ export const controller = (prisma: PrismaClient) => {
 				string,
 				Awaited<ReturnType<typeof getHikvisionSourceTotal>>
 			>();
-			const hikvisionTotalsPromise = Promise.all(
-				syncDevices
-					.filter((device) => device.vendor === "Hikvision")
-					.map(async (device) => {
-						hikvisionTotals.set(
-							device.id,
-							await getHikvisionSourceTotal(req, device.id, { mode: "sync-preview" }),
-						);
+			const hikvisionPreviewTimeout = (message: string) => ({
+				ok: false,
+				totalEvents: null,
+				operationLogTotal: null,
+				userCount: null,
+				latencyMs: HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS,
+				error: message,
+				eventProbe: { ok: false, count: null, error: message },
+				operationLogProbe: { ok: false, count: null, error: message },
+			});
+			const shouldProbeLiveSourceTotals =
+				Boolean(selectedDeviceId) && selectedDeviceId !== "all";
+			const hikvisionDevices = shouldProbeLiveSourceTotals
+				? syncDevices.filter((device) => device.vendor === "Hikvision")
+				: [];
+			if (!shouldProbeLiveSourceTotals) {
+				for (const device of syncDevices.filter((item) => item.vendor === "Hikvision")) {
+					hikvisionTotals.set(
+						device.id,
+						hikvisionPreviewTimeout(
+							"Live source totals skipped for fast all-device overview",
+						),
+					);
+				}
+			}
+			const hikvisionTotalsPromise = withDeviceUserImportTimeout(
+				Promise.allSettled(
+					hikvisionDevices.map(async (device) => {
+						const total = await getHikvisionSourceTotal(req, device.id, {
+							mode: "sync-preview",
+						});
+						hikvisionTotals.set(device.id, total);
 					}),
-			);
+				),
+				HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS,
+				"Source totals timed out; using saved HRIS evidence for preview",
+			).catch((error: any) => {
+				const message =
+					error?.message || "Source totals timed out; using saved HRIS evidence for preview";
+				for (const device of hikvisionDevices) {
+					if (!hikvisionTotals.has(device.id)) {
+						hikvisionTotals.set(device.id, hikvisionPreviewTimeout(message));
+					}
+				}
+			});
 			const [zktecoPreview] = await Promise.all([
 				zktecoPreviewPromise,
 				hikvisionTotalsPromise,
@@ -14215,6 +14261,9 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const isZkteco = isZktecoDevice(device);
+			const quickHealth =
+				String((req.query as any)?.quick || "").toLowerCase() === "true" ||
+				String((req.query as any)?.mode || "").toLowerCase() === "quick";
 			const parsedAddress = /^https?:\/\//i.test(device.address)
 				? new URL(device.address).hostname
 				: device.address;
@@ -14233,7 +14282,7 @@ export const controller = (prisma: PrismaClient) => {
 			const startedAt = Date.now();
 
 			const [network, zktecoBridge, lastZktecoEvent, hikvisionSourceCounts] = await Promise.all([
-				checkTcpReachability(healthHost, healthPort),
+				checkTcpReachability(healthHost, healthPort, quickHealth ? 1200 : 2500),
 				isZkteco ? getZktecoBridgeStatus() : Promise.resolve(null),
 				isZkteco
 					? (prisma as any).deviceEvent.findFirst({
@@ -14252,14 +14301,16 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						})
 					: Promise.resolve(null),
-				isZkteco ? Promise.resolve(null) : getHikvisionSourceCounts(req, id),
+				isZkteco || quickHealth
+					? Promise.resolve(null)
+					: getHikvisionSourceCounts(req, id),
 			]);
 
 			let deviceApi: {
 				ok: boolean;
 				status: "online" | "offline";
 				latencyMs: number | null;
-				provenBy?: "systemTime" | "userRead" | "eventHistory";
+				provenBy?: "systemTime" | "userRead" | "eventHistory" | "tcpReachability";
 				error?: string;
 				time?: unknown;
 			} | null = null;
@@ -14283,58 +14334,74 @@ export const controller = (prisma: PrismaClient) => {
 			} | null = null;
 			if (!isZkteco) {
 				const apiStartedAt = Date.now();
-				try {
-					const time = await hikvisionFetch(hikvisionEndpoint.system.time, {
-						method: "GET",
-						deviceId: id,
-						prisma,
-						request: req,
-						timeoutMs: 3500,
-					});
-					systemTime = {
-						ok: true,
-						status: "readable",
-						latencyMs: Date.now() - apiStartedAt,
-					};
-					deviceApi = {
-						ok: true,
-						status: "online",
-						latencyMs: Date.now() - apiStartedAt,
-						provenBy: "systemTime",
-						time,
-					};
-				} catch (error: any) {
-					const systemTimeError =
-						error?.data?.errorCode ||
-						error?.data?.errorCause ||
-						error?.message ||
-						"Device API did not respond";
+				if (quickHealth) {
 					systemTime = {
 						ok: false,
 						status: "unreachable",
 						latencyMs: null,
-						error: systemTimeError,
+						error: "Skipped in quick health mode",
 					};
-					const fallbackProof =
-						hikvisionSourceCounts?.userProbe?.ok
-							? "userRead"
-							: hikvisionSourceCounts?.eventProbe?.ok
-								? "eventHistory"
-								: null;
-					deviceApi = fallbackProof
-						? {
-								ok: true,
-								status: "online",
-								latencyMs: hikvisionSourceCounts?.latencyMs ?? null,
-								provenBy: fallbackProof,
-								error: systemTimeError,
-							}
-						: {
-								ok: false,
-								status: "offline",
-								latencyMs: null,
-								error: systemTimeError,
-							};
+					deviceApi = {
+						ok: network.ok,
+						status: network.ok ? "online" : "offline",
+						latencyMs: network.latencyMs,
+						provenBy: "tcpReachability",
+						...(network.error ? { error: network.error } : {}),
+					};
+				} else {
+					try {
+						const time = await hikvisionFetch(hikvisionEndpoint.system.time, {
+							method: "GET",
+							deviceId: id,
+							prisma,
+							request: req,
+							timeoutMs: 3500,
+						});
+						systemTime = {
+							ok: true,
+							status: "readable",
+							latencyMs: Date.now() - apiStartedAt,
+						};
+						deviceApi = {
+							ok: true,
+							status: "online",
+							latencyMs: Date.now() - apiStartedAt,
+							provenBy: "systemTime",
+							time,
+						};
+					} catch (error: any) {
+						const systemTimeError =
+							error?.data?.errorCode ||
+							error?.data?.errorCause ||
+							error?.message ||
+							"Device API did not respond";
+						systemTime = {
+							ok: false,
+							status: "unreachable",
+							latencyMs: null,
+							error: systemTimeError,
+						};
+						const fallbackProof =
+							hikvisionSourceCounts?.userProbe?.ok
+								? "userRead"
+								: hikvisionSourceCounts?.eventProbe?.ok
+									? "eventHistory"
+									: null;
+						deviceApi = fallbackProof
+							? {
+									ok: true,
+									status: "online",
+									latencyMs: hikvisionSourceCounts?.latencyMs ?? null,
+									provenBy: fallbackProof,
+									error: systemTimeError,
+								}
+							: {
+									ok: false,
+									status: "offline",
+									latencyMs: null,
+									error: systemTimeError,
+								};
+					}
 				}
 				userRead = {
 					ok: Boolean(hikvisionSourceCounts?.userProbe?.ok),
@@ -14343,7 +14410,9 @@ export const controller = (prisma: PrismaClient) => {
 						hikvisionSourceCounts?.userProbe?.count ??
 						hikvisionSourceCounts?.userCount ??
 						null,
-					...(hikvisionSourceCounts?.userProbe?.error
+					...(quickHealth
+						? { error: "Skipped in quick health mode" }
+						: hikvisionSourceCounts?.userProbe?.error
 						? { error: hikvisionSourceCounts.userProbe.error }
 						: {}),
 				};
@@ -14354,7 +14423,9 @@ export const controller = (prisma: PrismaClient) => {
 						hikvisionSourceCounts?.eventProbe?.count ??
 						hikvisionSourceCounts?.totalEvents ??
 						null,
-					...(hikvisionSourceCounts?.eventProbe?.error
+					...(quickHealth
+						? { error: "Skipped in quick health mode" }
+						: hikvisionSourceCounts?.eventProbe?.error
 						? { error: hikvisionSourceCounts.eventProbe.error }
 						: {}),
 				};
@@ -14453,7 +14524,7 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const readHikvisionListenerStatus = async () => {
+	const readHikvisionListenerStatusUncached = async () => {
 		const fallbackTarget = getHikvisionListenerVmTargets()[0];
 		// One SSH round-trip only. Three parallel SSH sessions previously
 		// stacked ConnectTimeout on a dead LAN target and left the modal on
@@ -14468,8 +14539,12 @@ export const controller = (prisma: PrismaClient) => {
 					`printf '\\n'`,
 					`echo '---SHOW---'`,
 					`systemctl show ${HIKVISION_HOT_RELOAD_LISTENER_SERVICE} --property=ActiveState,SubState,MainPID,NRestarts,ExecMainStatus,Result --no-pager 2>/dev/null || true`,
+					`echo '---SPEC---'`,
+					`sudo awk -F'|' 'NF >= 5 { print $1 "|" $3 "|" $4 "|" $5 }' /run/project-truth/hikvision-hot-reload-device.spec 2>/dev/null || true`,
 					`echo '---LOG---'`,
 					`sudo tail -n ${HIKVISION_LISTENER_STATUS_EVIDENCE_LINES} /var/log/project-truth/hikvision-hot-reload-listener.jsonl 2>/dev/null || true`,
+					`echo '---KEYLOG---'`,
+					`sudo grep -E 'device_config_loaded|sdk_login|sdk_alarm_arm|device_armed|device_arming_failed_after_retries|device_login_locked_backoff|device_login_auth_failed_backoff|acs_alarm_received|hikvision_callback_post|hikvision_callback_post_result|hikvision_callback_spool_replay_result|hris_contract_post|sdk_callback_register' /var/log/project-truth/hikvision-hot-reload-listener.jsonl 2>/dev/null | tail -n ${HIKVISION_LISTENER_STATUS_KEY_EVENT_LINES} || true`,
 				].join("; "),
 			],
 			HIKVISION_LISTENER_STATUS_TIMEOUT_MS,
@@ -14477,9 +14552,17 @@ export const controller = (prisma: PrismaClient) => {
 
 		const raw = String(bundled.stdout || "");
 		const showChunk = raw.includes("---SHOW---")
-			? raw.split("---SHOW---")[1]?.split("---LOG---")[0] || ""
+			? raw.split("---SHOW---")[1]?.split("---SPEC---")[0] || ""
 			: "";
-		const logChunk = raw.includes("---LOG---") ? raw.split("---LOG---").slice(1).join("---LOG---") : "";
+		const specChunk = raw.includes("---SPEC---")
+			? raw.split("---SPEC---")[1]?.split("---LOG---")[0] || ""
+			: "";
+		const logChunk = raw.includes("---LOG---")
+			? raw.split("---LOG---")[1]?.split("---KEYLOG---")[0] || ""
+			: "";
+		const keyLogChunk = raw.includes("---KEYLOG---")
+			? raw.split("---KEYLOG---").slice(1).join("---KEYLOG---")
+			: "";
 		const activeMatch = raw.match(/ACTIVE=([^\r\n]*)/);
 		const activeText = String(activeMatch?.[1] || "").trim();
 		const show = parseSystemctlShow(showChunk);
@@ -14492,7 +14575,55 @@ export const controller = (prisma: PrismaClient) => {
 			.filter(Boolean)
 			.slice(-HIKVISION_LISTENER_STATUS_EVIDENCE_LINES);
 		const recentLogLines = evidenceLogLines.slice(-HIKVISION_LISTENER_STATUS_RESPONSE_LINES);
-		const sdk = summarizeHikvisionListenerLogs(evidenceLogLines);
+		const keyLogLines = keyLogChunk
+			.split(/\r?\n/)
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.slice(-HIKVISION_LISTENER_STATUS_KEY_EVENT_LINES);
+		const sdkEvidenceLogLines = [...keyLogLines, ...evidenceLogLines].slice(
+			-(HIKVISION_LISTENER_STATUS_KEY_EVENT_LINES + HIKVISION_LISTENER_STATUS_EVIDENCE_LINES),
+		);
+		const activeSpecDevices = specChunk
+			.split(/\r?\n/)
+			.map((line) => {
+				const [deviceId, name, host, sdkPort] = line.split("|").map((part) => part?.trim() || "");
+				return deviceId ? { deviceId, name: name || null, host: host || null, sdkPort: sdkPort || null } : null;
+			})
+			.filter(Boolean) as Array<{ deviceId: string; name: string | null; host: string | null; sdkPort: string | null }>;
+		const activeSpecDeviceIds = new Set(activeSpecDevices.map((device) => device.deviceId));
+		const sdk = summarizeHikvisionListenerLogs(sdkEvidenceLogLines);
+		if (activeSpecDeviceIds.size > 0) {
+			const devicesById = new Map(sdk.devices.map((device) => [device.deviceId, device]));
+			sdk.devices = activeSpecDevices.map((specDevice) => {
+				const device = devicesById.get(specDevice.deviceId);
+				return {
+					...(device || {
+						deviceId: specDevice.deviceId,
+						lastLogAt: null,
+						lastLoginAt: null,
+						lastLoginOk: null,
+						lastLoginError: null,
+						armed: false,
+						receivingCallbacks: false,
+						postingToHris: false,
+						lastAlarmAt: null,
+						lastPostAt: null,
+						lastFailureReason: null,
+						state: "unknown" as const,
+					}),
+					deviceId: specDevice.deviceId,
+					name: device?.name || specDevice.name,
+					host: device?.host || specDevice.host,
+					sdkPort: device?.sdkPort || specDevice.sdkPort,
+				};
+			});
+			const scopedReceiving = sdk.devices.some((device) => device.receivingCallbacks);
+			const scopedArmed = scopedReceiving || sdk.devices.some((device) => device.armed);
+			sdk.receivingCallbacks = scopedReceiving;
+			sdk.armed = scopedArmed;
+			sdk.state = scopedReceiving ? "receiving" : scopedArmed ? "armed" : sdk.state;
+			sdk.diagnosis = scopedArmed ? null : sdk.diagnosis;
+		}
 		// Service-enabled truth for the admin toggle:
 		// - systemctl "active" is the happy path
 		// - Keep ready restarts briefly report activating/reloading/deactivating while the
@@ -14549,6 +14680,39 @@ export const controller = (prisma: PrismaClient) => {
 						: statusError || "No listener log lines returned by the VM status check.",
 			},
 			error: statusError,
+		};
+	};
+
+	const readHikvisionListenerStatus = async (options: { force?: boolean } = {}) => {
+		const ttlMs = Math.max(
+			1000,
+			Math.min(Number(process.env.HIKVISION_LISTENER_STATUS_CACHE_MS || 5000), 15000),
+		);
+		const now = Date.now();
+		const cached = hikvisionListenerStatusCache;
+		if (!options.force && cached && cached.expiresAt > now) {
+			return {
+				...cached.value,
+				cache: {
+					hit: true,
+					ttlMs,
+					expiresAt: new Date(cached.expiresAt).toISOString(),
+				},
+				mode: "cached",
+			};
+		}
+		const value = await readHikvisionListenerStatusUncached();
+		hikvisionListenerStatusCache = {
+			expiresAt: Date.now() + ttlMs,
+			value,
+		};
+		return {
+			...value,
+			cache: {
+				hit: false,
+				ttlMs,
+				expiresAt: new Date(hikvisionListenerStatusCache.expiresAt).toISOString(),
+			},
 		};
 	};
 
@@ -15084,7 +15248,8 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const status = await readHikvisionListenerStatus();
+			hikvisionListenerStatusCache = null;
+			const status = await readHikvisionListenerStatus({ force: true });
 			logActivity(req, {
 				userId: String((req as any).userId || "unknown"),
 				action: "HIKVISION_LISTENER_CONTROL",

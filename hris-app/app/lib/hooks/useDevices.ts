@@ -43,7 +43,8 @@ export const queryKeys = {
 		detail: (id: string) => [...queryKeys.devices.details(), id] as const,
 		events: (params?: ApiQueryParams) =>
 			[...queryKeys.devices.all, "events", { params }] as const,
-		health: (id?: string) => [...queryKeys.devices.all, "health", id] as const,
+		health: (id?: string, mode: "quick" | "full" = "quick") =>
+			[...queryKeys.devices.all, "health", id, mode] as const,
 		hikvisionListener: () => [...queryKeys.devices.all, "hikvision-listener"] as const,
 		liveReadiness: () => [...queryKeys.devices.all, "live-readiness"] as const,
 		syncPreview: (params?: { deviceId?: string; source?: string }) =>
@@ -148,11 +149,16 @@ export const useDeviceEvents = (
 export const useDeviceHealth = (
 	deviceId?: string,
 	enabled = true,
-	options: { refetchInterval?: number | false; staleTime?: number } = {},
+	options: { refetchInterval?: number | false; staleTime?: number; quick?: boolean } = {},
 ) => {
+	const healthMode = options.quick === false ? "full" : "quick";
 	return useQuery<DeviceHealthResponse>({
-		queryKey: queryKeys.devices.health(deviceId),
-		queryFn: () => devicesService.getDeviceHealth(deviceId || ""),
+		queryKey: queryKeys.devices.health(deviceId, healthMode),
+		queryFn: () =>
+			devicesService.getDeviceHealth(deviceId || "", {
+				quick: options.quick !== false,
+				timeoutMs: options.quick === false ? 10000 : 6000,
+			}),
 		enabled: Boolean(deviceId) && enabled,
 		staleTime: options.staleTime ?? 60 * 1000,
 		// Default off: health is expensive (device probe). Opt-in poll only.
@@ -184,7 +190,7 @@ export type DeviceHealthMapEntry = {
 export const useDeviceHealthMap = (
 	deviceIds: string[],
 	enabled = true,
-	options: { refetchInterval?: number | false; staleTime?: number } = {},
+	options: { refetchInterval?: number | false; staleTime?: number; quick?: boolean } = {},
 ) => {
 	// Stabilize identity so parent .map() arrays do not thrash useQueries.
 	const deviceIdsKey = (deviceIds || [])
@@ -197,14 +203,19 @@ export const useDeviceHealthMap = (
 		[deviceIdsKey],
 	);
 	const staleTime = options.staleTime ?? 120 * 1000;
+	const healthMode = options.quick === false ? "full" : "quick";
 	// Default: one shot for filter dots. Continuous multi-device health polls overload the API.
 	const refetchInterval =
 		options.refetchInterval === undefined ? false : options.refetchInterval;
 
 	const queries = useQueries({
 		queries: uniqueIds.map((deviceId) => ({
-			queryKey: queryKeys.devices.health(deviceId),
-			queryFn: () => devicesService.getDeviceHealth(deviceId),
+			queryKey: queryKeys.devices.health(deviceId, healthMode),
+			queryFn: () =>
+				devicesService.getDeviceHealth(deviceId, {
+					quick: options.quick !== false,
+					timeoutMs: options.quick === false ? 10000 : 6000,
+				}),
 			enabled: enabled && Boolean(deviceId),
 			staleTime,
 			refetchInterval: enabled ? refetchInterval : false,

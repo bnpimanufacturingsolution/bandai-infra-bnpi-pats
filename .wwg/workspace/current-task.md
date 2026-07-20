@@ -1,5 +1,29 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-20 Device Events saved view fast/truthful listener UX
+
+- Task mode: Mixed admin UX/performance regression repair.
+- Implemented:
+  - Saved Device Events row/facet loading remains separate from listener/live-proof and quick device-health checks.
+  - Hikvision listener status now uses direct LAN SSH before Cloudflare fallback and a short cache so readiness/listener UI do not stack repeated VM reads.
+  - Device health `quick=true` now uses bounded TCP reachability (`tcpReachability`) and skips slow Hikvision system-time/source-count reads; full health can still perform deeper reads.
+  - Armed-but-quiet live proof copy now says `Ready for tap proof` / `listener armed, waiting for a fresh tap` instead of stale/broken wording.
+  - Saved Events UI now shows a separate `Device health` line and explicitly states reachability is separate from listener armed state and tap proof.
+- Evidence:
+  - API timing proof: `.runtime/device-events-stale-fast-20260720-211150/summary.json`.
+  - Browser proof: `.runtime/device-events-stale-fast-20260720-211150/browser/playwright-settled-clean-result.json` and `saved-events-settled-clean.png`.
+- Proof highlights:
+  - Saved rows endpoint returned in `2.629s`; facets in `1.924s`.
+  - Listener status repeat call used the short cache; listener/readiness no longer blocks the saved ledger render.
+  - Quick health server durations for sampled devices were `0ms`, `1ms`, `1214ms`, and `1327ms`, all with `provenBy=tcpReachability` and `Skipped in quick health mode`.
+  - Browser settled text showed `Ready for tap proof`, `4 online / 0 degraded / 3 offline`, the clean `/` health separator, and saved rows; it did not contain `Live path needs proof` or `not checked for a long time`.
+- Validation:
+  - `hris-api` `npx tsc --noEmit --pretty false --incremental false --listFiles false` passed.
+  - Backend focused tests passed: `25` passing for listener-status helper, readiness, listener fast-path, and quick-health contracts.
+  - Frontend focused contract passed: `12` passing for `app/lib/device-events-page-contract.test.ts`.
+  - Frontend `typecheck:test` remains blocked by unrelated existing `TimesheetsTab.test.tsx` `UseQueryResult` fixture drift.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-20 Remote local-dev Hikvision tunnel proof
 
 - Task mode: Focused local-dev runtime access repair for far-away work against a LAN-only Hikvision device.

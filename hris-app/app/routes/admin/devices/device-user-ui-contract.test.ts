@@ -55,6 +55,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("source");
 		expect(enroll).toContain("saved");
 		expect(enroll).toContain("Listener");
+		expect(enroll).toContain('activePanel === "overview" || activePanel === "users" || isListenerDetailsOpen');
 		expect(enroll).toContain("Open");
 		expect(enroll).toContain("<span>Last sync</span>");
 		expect(enroll).toContain("Actions</span>");
