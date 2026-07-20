@@ -297,7 +297,8 @@ describe("EmployeeList agency advanced filter", () => {
 		expect(
 			screen.getAllByTestId("avatar-image").map((node) => node.getAttribute("src")),
 		).toContain("https://example.test/avatar.png");
-		expect(screen.getAllByText("JD").length).toBeGreaterThan(0);
+		// Every employee row has an avatar root (image or logo fallback)
+		expect(screen.getAllByTestId("avatar-root").length).toBeGreaterThanOrEqual(2);
 	}, 15_000);
 
 	it("keeps department and manager filters visible outside advanced filters", async () => {
