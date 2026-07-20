@@ -47,7 +47,7 @@ export const queryKeys = {
 			[...queryKeys.devices.all, "health", id, mode] as const,
 		hikvisionListener: () => [...queryKeys.devices.all, "hikvision-listener"] as const,
 		liveReadiness: () => [...queryKeys.devices.all, "live-readiness"] as const,
-		syncPreview: (params?: { deviceId?: string; source?: string }) =>
+		syncPreview: (params?: { deviceId?: string; source?: string; quick?: boolean }) =>
 			[...queryKeys.devices.all, "sync-preview", { params }] as const,
 		importJob: (jobId?: string) => [...queryKeys.devices.all, "import-job", jobId] as const,
 		users: (
@@ -459,7 +459,7 @@ export const useCancelDeviceUserSyncJob = () => {
 };
 
 export const useDeviceSyncPreview = (
-	params: { deviceId?: string; source?: string },
+	params: { deviceId?: string; source?: string; quick?: boolean },
 	enabled = true,
 	options?: { refetchIntervalMs?: number | false; staleTime?: number },
 ) => {

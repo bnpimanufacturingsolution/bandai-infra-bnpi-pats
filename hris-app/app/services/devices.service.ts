@@ -341,6 +341,7 @@ export interface DeviceSyncPreviewResponse {
 	scope: {
 		deviceId: string;
 		source: string;
+		quick?: boolean;
 	};
 	bridge?: {
 		ok: boolean;
@@ -1444,13 +1445,14 @@ class DevicesService extends APIService {
 	}
 
 	async getDeviceSyncPreview(
-		params: { deviceId?: string; source?: string } = {},
+		params: { deviceId?: string; source?: string; quick?: boolean } = {},
 	): Promise<DeviceSyncPreviewResponse> {
 		try {
 			const query = new URLSearchParams();
 			if (params.deviceId && params.deviceId !== "all")
 				query.set("deviceId", params.deviceId);
 			if (params.source && params.source !== "all") query.set("source", params.source);
+			if (params.quick) query.set("quick", "true");
 			const endpoint = `/api/device/sync-preview${query.toString() ? `?${query.toString()}` : ""}`;
 			// Sync logs / Sync Center must not hang the UI. Abort if preview exceeds budget.
 			const response = await hrisApiClient.get<any>(endpoint, undefined, { timeoutMs: 8000 });

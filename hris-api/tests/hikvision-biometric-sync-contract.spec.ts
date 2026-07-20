@@ -455,8 +455,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("response.data = {");
 		expect(controller).to.include("capture: result");
 		expect(controller).to.include("res.status(422).json(response)");
-		expect(controller).to.include('buildSuccessResponse(\n\t\t\t\t\t"Raw fingerprints captured on DeviceUser"');
-		expect(controller).to.include('buildSuccessResponse(\n\t\t\t\t\t"Raw face captured on DeviceUser"');
+		expect(controller).to.include('"Raw fingerprints captured on DeviceUser"');
+		expect(controller).to.include('"Raw face captured on DeviceUser"');
 	});
 
 	it("exposes selected-device activity for Sync Center observability without mutating devices", () => {

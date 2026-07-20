@@ -1,5 +1,30 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-21 Four Hikvision devices online/armed
+
+- Task mode: Mixed live runtime repair, native listener regression repair, and evidence closeout.
+- Evidence: `.runtime/hikvision-four-device-online-20260721-064751/`.
+- Runtime repaired:
+  - Canonical VM access used `ssh project-truth-hris` after direct LAN SSH to `10.184.37.19` timed out from the Windows host.
+  - VM direct TCP to `10.184.37.20`, `.21`, `.22`, and `.23` passed on ports `80`, `443`, and `8000`; no extra device bridge was required for the VM listener.
+  - Host local API reverse `VM 127.0.0.1:53001 -> Windows 127.0.0.1:3001` was restored; VM `/health` through `53001` returned healthy.
+  - The managed `project-truth-hikvision-hot-reload-listener.service` was rebuilt/restarted after deploying the fixed native listener source.
+- Device proof:
+  - HRIS config contains the four target Hikvision rows only as saved addresses `10.184.37.20`, `.21`, `.22`, `.23`, all HTTPS `443` with SDK `8000`.
+  - Final API health returned `online` for all four target devices using the local tunnel map while preserving saved addresses.
+  - Final listener/readiness API returned green readiness and all four listener devices with `lastLoginOk=true`, `armed=true`, and `receivingCallbacks=true`.
+  - Raw VM logs show fresh `sdk_login`, `sdk_alarm_arm`, `device_armed`, `acs_alarm_received`, and successful callback post results for the target devices in this run.
+  - Playwright against `http://127.0.0.1:5175/admin/configuration/devices` found all four target IPs present with online/ready/armed text nearby.
+- Validation:
+  - VM native build passed: `HIKVISION_LINUX_SDK_ROOT=... bash scripts/build-hikvision-biometric-service.sh`.
+  - Focused backend contract passed: `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` (`14` passing).
+  - Focused listener-status helper passed: `hris-api/tests/hikvision-listener-status.helper.spec.ts` (`10` passing).
+  - Broad `npm --prefix hris-api test -- ...` was accidentally expansive and failed on unrelated existing suite drift plus stale compose DB `10.184.37.19:15433`; focused reruns above passed.
+- Boundary:
+  - Cloudflare tunnel remained active.
+  - No stale `.167`, `.168`, `.102`, or old rows were used as the four-device proof.
+  - A recommendation was added for the `ensure-device-live-path.ps1` API reverse bridge argument-list bug discovered during recovery.
+
 ## Latest Task Addendum - 2026-07-20 Device Events saved view fast/truthful listener UX
 
 - Task mode: Mixed admin UX/performance regression repair.

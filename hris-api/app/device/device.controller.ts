@@ -208,12 +208,19 @@ const DEVICE_USER_PACKAGE_IMPORT_JOB_DIR = path.join(
 	".runtime",
 	"device-user-import-jobs",
 );
+const DEVICE_IMPORT_JOB_DIR = path.join(
+	process.cwd(),
+	"..",
+	".runtime",
+	"device-import-jobs",
+);
 const DEVICE_USER_SYNC_JOB_DIR = path.join(
 	process.cwd(),
 	"..",
 	".runtime",
 	"device-user-sync-jobs",
 );
+const DEVICE_IMPORT_JOB_PROCESSING_STALE_MS = 30 * 60 * 1000;
 const DEVICE_USER_SYNC_PROCESSING_STALE_MS = 30 * 60 * 1000;
 
 type DeviceImportJobStatus = "processing" | "completed" | "failed" | "cancelled";
@@ -230,6 +237,8 @@ type DeviceImportJob = {
 	attendanceSourceTotal?: number | null;
 	operationSourceTotal?: number | null;
 	targetImportCount?: number | null;
+	targetAttendanceCount?: number | null;
+	targetOperationsCount?: number | null;
 	scanLimit?: number | null;
 	processed: number;
 	imported: number;
@@ -257,7 +266,9 @@ type DeviceImportJob = {
 	message: string;
 	errors: Array<{ row: number; error: string }>;
 	startedAt: Date;
+	updatedAt?: Date;
 	completedAt?: Date;
+	stale?: boolean;
 };
 
 const deviceImportJobs = new Map<string, DeviceImportJob>();
@@ -434,10 +445,126 @@ const cleanupDeviceUserMergeJobs = () => {
 	}
 };
 
+const serializeDeviceImportJob = (job: DeviceImportJob) => ({
+	...job,
+	startedAt: job.startedAt instanceof Date ? job.startedAt.toISOString() : job.startedAt,
+	updatedAt: job.updatedAt instanceof Date ? job.updatedAt.toISOString() : job.updatedAt || null,
+	cancelRequestedAt:
+		job.cancelRequestedAt instanceof Date
+			? job.cancelRequestedAt.toISOString()
+			: job.cancelRequestedAt || null,
+	completedAt:
+		job.completedAt instanceof Date ? job.completedAt.toISOString() : job.completedAt || null,
+});
+
+const persistDeviceImportJob = (job: DeviceImportJob) => {
+	try {
+		fsSync.mkdirSync(DEVICE_IMPORT_JOB_DIR, { recursive: true });
+		fsSync.writeFileSync(
+			path.join(DEVICE_IMPORT_JOB_DIR, `${job.jobId}.json`),
+			JSON.stringify(serializeDeviceImportJob(job), null, 2),
+		);
+	} catch (error) {
+		deviceLogger.warn(`Failed to persist device import job snapshot: ${error}`);
+	}
+};
+
+const readDeviceImportJob = (jobId: string): DeviceImportJob | null => {
+	try {
+		const filePath = path.join(DEVICE_IMPORT_JOB_DIR, `${jobId}.json`);
+		if (!fsSync.existsSync(filePath)) return null;
+		const parsed = JSON.parse(fsSync.readFileSync(filePath, "utf8"));
+		const startedAt = parsed.startedAt ? new Date(parsed.startedAt) : new Date();
+		const completedAt = parsed.completedAt ? new Date(parsed.completedAt) : undefined;
+		const updatedAt = parsed.updatedAt
+			? new Date(parsed.updatedAt)
+			: completedAt || startedAt;
+		return {
+			...parsed,
+			total: Number(parsed.total || 0),
+			sourceTotal:
+				parsed.sourceTotal === null || parsed.sourceTotal === undefined
+					? null
+					: Number(parsed.sourceTotal || 0),
+			attendanceSourceTotal:
+				parsed.attendanceSourceTotal === null || parsed.attendanceSourceTotal === undefined
+					? null
+					: Number(parsed.attendanceSourceTotal || 0),
+			operationSourceTotal:
+				parsed.operationSourceTotal === null || parsed.operationSourceTotal === undefined
+					? null
+					: Number(parsed.operationSourceTotal || 0),
+			targetImportCount:
+				parsed.targetImportCount === null || parsed.targetImportCount === undefined
+					? null
+					: Number(parsed.targetImportCount || 0),
+			targetAttendanceCount:
+				parsed.targetAttendanceCount === null || parsed.targetAttendanceCount === undefined
+					? null
+					: Number(parsed.targetAttendanceCount || 0),
+			targetOperationsCount:
+				parsed.targetOperationsCount === null || parsed.targetOperationsCount === undefined
+					? null
+					: Number(parsed.targetOperationsCount || 0),
+			processed: Number(parsed.processed || 0),
+			imported: Number(parsed.imported || 0),
+			skipped: Number(parsed.skipped || 0),
+			alreadySaved: Number(parsed.alreadySaved || 0),
+			knownSkipped: Number(parsed.knownSkipped || 0),
+			attendanceImported: Number(parsed.attendanceImported || 0),
+			operationsImported: Number(parsed.operationsImported || 0),
+			failed: Number(parsed.failed || 0),
+			errors: Array.isArray(parsed.errors) ? parsed.errors : [],
+			startedAt,
+			updatedAt,
+			cancelRequestedAt: parsed.cancelRequestedAt
+				? new Date(parsed.cancelRequestedAt)
+				: undefined,
+			completedAt,
+		};
+	} catch (error) {
+		deviceLogger.warn(`Failed to read device import job snapshot: ${error}`);
+		return null;
+	}
+};
+
+const isDeviceImportJobStale = (job: DeviceImportJob) => {
+	if (job.status !== "processing") return false;
+	const lastProgressAt = job.updatedAt || job.startedAt;
+	const lastProgressTime = lastProgressAt instanceof Date ? lastProgressAt.getTime() : NaN;
+	return (
+		!Number.isFinite(lastProgressTime) ||
+		Date.now() - lastProgressTime > DEVICE_IMPORT_JOB_PROCESSING_STALE_MS
+	);
+};
+
+const markDeviceImportJobStale = (job: DeviceImportJob) => {
+	const now = new Date();
+	const staleJob: DeviceImportJob = {
+		...job,
+		status: "failed",
+		stale: true,
+		message:
+			"Device log sync stopped updating after a runtime restart. Start Sync logs again; saved rows remain durable and the next preview will continue from saved truth.",
+		updatedAt: now,
+		completedAt: now,
+	};
+	deviceImportJobs.set(job.jobId, staleJob);
+	persistDeviceImportJob(staleJob);
+	return staleJob;
+};
+
 const updateDeviceImportJob = (jobId: string, patch: Partial<Omit<DeviceImportJob, "jobId">>) => {
-	const job = deviceImportJobs.get(jobId);
+	const job = deviceImportJobs.get(jobId) || readDeviceImportJob(jobId);
 	if (!job) return;
-	deviceImportJobs.set(jobId, { ...job, ...patch });
+	const nextJob = {
+		...job,
+		...patch,
+		updatedAt: new Date(),
+		errors: patch.errors || job.errors || [],
+	};
+	deviceImportJobs.set(jobId, nextJob);
+	persistDeviceImportJob(nextJob);
 };
 
 const updateDeviceUserPackageImportJob = (
@@ -11972,7 +12099,99 @@ export const controller = (prisma: PrismaClient) => {
 
 	const getHikvisionImportProgress = (jobId: string) => {
 		cleanupDeviceImportJobs();
-		return deviceImportJobs.get(jobId) || null;
+		const job = deviceImportJobs.get(jobId) || readDeviceImportJob(jobId);
+		if (!job) return null;
+		deviceImportJobs.set(jobId, job);
+		if (isDeviceImportJobStale(job)) return markDeviceImportJobStale(job);
+		return job;
+	};
+
+	const isTransientHikvisionImportError = (error: any) => {
+		const status = Number(error?.status || error?.data?.status || 0);
+		const message = [
+			error?.message,
+			error?.data?.message,
+			error?.data?.raw,
+			error?.data?.errorName,
+			error?.data?.errorCode,
+			error?.data?.errorCause,
+		]
+			.filter(Boolean)
+			.join(" ");
+		return (
+			status === 401 ||
+			status === 408 ||
+			status === 429 ||
+			status === 500 ||
+			status === 502 ||
+			status === 503 ||
+			status === 504 ||
+			/(unauthorized|aborted|aborterror|timed out|timeout|fetch failed|socket hang up|econnreset|etimedout)/i.test(
+				message,
+			)
+		);
+	};
+
+	const buildRetryableHikvisionImportOptions = (
+		options: NonNullable<Parameters<typeof hikvisionFetch>[1]>,
+		pageSize?: number | null,
+	) => {
+		const headers = {
+			...((options.headers as Record<string, string>) || {}),
+			Connection: "close",
+			"Cache-Control": "no-cache",
+		};
+		if (!pageSize || !options.body || typeof options.body === "string") {
+			return { ...options, headers };
+		}
+		const body: any = JSON.parse(JSON.stringify(options.body));
+		if (body?.AcsEventCond) {
+			body.AcsEventCond.maxResults = pageSize;
+		}
+		return { ...options, headers, body };
+	};
+
+	const fetchHikvisionImportPageWithRetry = async (params: {
+		endpoint: string;
+		options: NonNullable<Parameters<typeof hikvisionFetch>[1]>;
+		pageSize?: number | null;
+		row: number;
+		label: string;
+	}) => {
+		const maxAttempts = Math.max(
+			1,
+			Math.min(Number(process.env.HIKVISION_IMPORT_PAGE_RETRY_LIMIT || 4), 6),
+		);
+		const minPageSize = Math.max(
+			1,
+			Math.min(Number(process.env.HIKVISION_IMPORT_RETRY_MIN_PAGE_SIZE || 10), 50),
+		);
+		let pageSize =
+			params.pageSize && Number.isFinite(Number(params.pageSize))
+				? Math.max(1, Number(params.pageSize))
+				: null;
+		let lastError: any = null;
+		for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+			try {
+				const data = await hikvisionFetch(
+					params.endpoint,
+					buildRetryableHikvisionImportOptions(params.options, pageSize),
+				);
+				return { data, pageSize, attempts: attempt };
+			} catch (error: any) {
+				lastError = error;
+				if (attempt >= maxAttempts || !isTransientHikvisionImportError(error)) break;
+				const delayMs = Math.min(5000, 350 * attempt * attempt);
+				deviceLogger.warn(
+					`Retrying Hikvision ${params.label} page at row ${params.row} after transient failure attempt ${attempt}/${maxAttempts}: ${error?.message || error}`,
+				);
+				if (pageSize && pageSize > minPageSize) {
+					pageSize = Math.max(minPageSize, Math.floor(pageSize / 2));
+				}
+				await sleep(delayMs);
+			}
+		}
+		throw lastError;
 	};
 
 	const buildHikvisionImportEventFingerprint = (device: any, event: any) => {
@@ -12316,28 +12535,33 @@ export const controller = (prisma: PrismaClient) => {
 						const pageSizeOp = Math.min(pageSize, opMax - opProcessed);
 						let rawXml = "";
 						try {
-							const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
-								method: "POST",
-								deviceId: device.id,
-								prisma,
-								request: req,
-								timeoutMs: 15000,
-								ensureJsonFormat: false,
-								rawResponse: true,
-								headers: {
-									Accept: "application/xml, text/xml, */*",
-									"Content-Type": "application/xml; charset=UTF-8",
+							const response = await fetchHikvisionImportPageWithRetry({
+								endpoint: "/ISAPI/ContentMgmt/logSearch",
+								row: opProcessed + 1,
+								label: operationMeta.label,
+								options: {
+									method: "POST",
+									deviceId: device.id,
+									prisma,
+									request: req,
+									timeoutMs: 15000,
+									ensureJsonFormat: false,
+									rawResponse: true,
+									headers: {
+										Accept: "application/xml, text/xml, */*",
+										"Content-Type": "application/xml; charset=UTF-8",
+									},
+									body: buildHikvisionLogSearchXml({
+										searchId: operationSearchId,
+										startTime,
+										endTime,
+										maxResults: pageSizeOp,
+										searchResultPosition: opPosition,
+										metaId: operationMeta.metaId,
+									}),
 								},
-								body: buildHikvisionLogSearchXml({
-									searchId: operationSearchId,
-									startTime,
-									endTime,
-									maxResults: pageSizeOp,
-									searchResultPosition: opPosition,
-									metaId: operationMeta.metaId,
-								}),
 							});
-							rawXml = String(response?.raw || "");
+							rawXml = String(response.data?.raw || "");
 						} catch (error: any) {
 							failed += 1;
 							const job = deviceImportJobs.get(jobId);
@@ -12474,11 +12698,12 @@ export const controller = (prisma: PrismaClient) => {
 				) {
 					break;
 				}
+				const pageMaxResults = Math.min(effectivePageSize, maxEvents - attendanceProcessed);
 				const payload = {
 					AcsEventCond: {
 						searchID: `${jobId}-att-${position}`,
 						searchResultPosition: position,
-						maxResults: Math.min(effectivePageSize, maxEvents - attendanceProcessed),
+						maxResults: pageMaxResults,
 						major: 0,
 						minor: 0,
 						startTime,
@@ -12486,14 +12711,20 @@ export const controller = (prisma: PrismaClient) => {
 						timeReverseOrder: true,
 					},
 				};
-				const data = await hikvisionFetch(hikvisionEndpoint.accessControl.acsEvent.list, {
-					method: "POST",
-					deviceId: device.id,
-					prisma,
-					request: req,
-					timeoutMs: 10000,
-					headers: { "Content-Type": "application/json" },
-					body: payload,
+				const { data } = await fetchHikvisionImportPageWithRetry({
+					endpoint: hikvisionEndpoint.accessControl.acsEvent.list,
+					row: attendanceProcessed + 1,
+					label: "attendance",
+					pageSize: pageMaxResults,
+					options: {
+						method: "POST",
+						deviceId: device.id,
+						prisma,
+						request: req,
+						timeoutMs: 10000,
+						headers: { "Content-Type": "application/json" },
+						body: payload,
+					},
 				});
 				const pageEvents = getAcsEventList(data);
 				const totalFromDevice = firstNumericValueForKeys(data, [
@@ -13126,6 +13357,14 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 			const jobId = randomUUID();
+			const journalImportableRecords =
+				targetImportCount !== null && targetImportCount !== undefined
+					? Math.max(Number(targetImportCount) || 0, 0)
+					: Math.max(
+							(Number(targetAttendanceCount) || 0) +
+								(Number(targetOperationsCount) || 0),
+							0,
+						);
 			let run: { id: string } | null = null;
 			try {
 				run = await (prisma as any).deviceSyncRun.create({
@@ -13137,7 +13376,7 @@ export const controller = (prisma: PrismaClient) => {
 						source: "HIKVISION_CALLBACK",
 						startedByUserId: (req as any).userId || null,
 						totalSourceRecords: selectedSourceTotal || totalHint,
-						importableRecords: targetImportCount,
+						importableRecords: journalImportableRecords,
 						rawSummary: {
 							totalHint,
 							selectedSourceTotal,
@@ -13192,6 +13431,8 @@ export const controller = (prisma: PrismaClient) => {
 				attendanceSourceTotal,
 				operationSourceTotal,
 				targetImportCount,
+				targetAttendanceCount,
+				targetOperationsCount,
 				includeAttendance,
 				includeOperations,
 				timeWindow,
@@ -13213,8 +13454,10 @@ export const controller = (prisma: PrismaClient) => {
 					: "Sync queued — will save attendance taps",
 				errors: [],
 				startedAt: new Date(),
+				updatedAt: new Date(),
 			};
 			deviceImportJobs.set(jobId, job);
+			persistDeviceImportJob(job);
 			processHikvisionImportJob({
 				jobId,
 				runId: run?.id || undefined,
@@ -13543,6 +13786,10 @@ export const controller = (prisma: PrismaClient) => {
 
 			const selectedDeviceId = String(req.query.deviceId || "").trim();
 			const selectedSource = String(req.query.source || "all").trim();
+			const quickSavedPreview =
+				String(req.query.quick || req.query.savedOnly || "")
+					.trim()
+					.toLowerCase() === "true";
 			const devices = await prisma.device.findMany({
 				where: {
 					organizationId: String(organizationId),
@@ -13708,6 +13955,21 @@ export const controller = (prisma: PrismaClient) => {
 						},
 						_count: { _all: true },
 					});
+					const linkedGroups = await (prisma as any).deviceUser.groupBy({
+						by: ["deviceId"],
+						where: {
+							organizationId: String(organizationId),
+							deviceId: { in: syncDevices.map((device) => device.id) },
+							employeeId: { not: null },
+						},
+						_count: { _all: true },
+					});
+					const linkedCountByDeviceId = new Map<string, number>();
+					for (const row of linkedGroups || []) {
+						const deviceId = String(row.deviceId || "").trim();
+						if (!deviceId) continue;
+						linkedCountByDeviceId.set(deviceId, Number(row?._count?._all || 0));
+					}
 					const byDevice = new Map<
 						string,
 						{ total: number; active: number; matched: number; unmatched: number; conflict: number; disabled: number }
@@ -13736,11 +13998,12 @@ export const controller = (prisma: PrismaClient) => {
 						else if (status === "DISABLED") bucket.disabled += count;
 					}
 					for (const [deviceId, summary] of byDevice.entries()) {
+						summary.matched = Math.max(summary.active, linkedCountByDeviceId.get(deviceId) || 0);
 						deviceUserSummaryByDeviceId.set(deviceId, summary as any);
 						biometricCustodyByDeviceId.set(deviceId, emptyBiometricCustody());
 					}
 					const shouldLoadDetailedCustody =
-						Boolean(selectedDeviceId) && selectedDeviceId !== "all";
+						Boolean(selectedDeviceId) && selectedDeviceId !== "all" && !quickSavedPreview;
 					if (shouldLoadDetailedCustody && (await hasDeviceUserVendorMetadataColumn())) {
 						const biometricRows = await (prisma as any).deviceUser.findMany({
 							where: {
@@ -13860,7 +14123,7 @@ export const controller = (prisma: PrismaClient) => {
 				operationLogProbe: { ok: false, count: null, error: message },
 			});
 			const shouldProbeLiveSourceTotals =
-				Boolean(selectedDeviceId) && selectedDeviceId !== "all";
+				Boolean(selectedDeviceId) && selectedDeviceId !== "all" && !quickSavedPreview;
 			const hikvisionDevices = shouldProbeLiveSourceTotals
 				? syncDevices.filter((device) => device.vendor === "Hikvision")
 				: [];
@@ -13869,7 +14132,9 @@ export const controller = (prisma: PrismaClient) => {
 					hikvisionTotals.set(
 						device.id,
 						hikvisionPreviewTimeout(
-							"Live source totals skipped for fast all-device overview",
+							quickSavedPreview
+								? "Live source totals skipped for quick saved HRIS preview"
+								: "Live source totals skipped for fast all-device overview",
 						),
 					);
 				}
@@ -14207,6 +14472,7 @@ export const controller = (prisma: PrismaClient) => {
 						scope: {
 							deviceId: selectedDeviceId || "all",
 							source: selectedSource,
+							quick: quickSavedPreview,
 						},
 						bridge: zktecoPreview
 							? {

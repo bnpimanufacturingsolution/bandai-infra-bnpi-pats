@@ -515,6 +515,15 @@ export function DeviceEnrollmentPanel({
 		: "overview";
 	const deviceUserStatus = searchParams.get("deviceUserStatus") || "all";
 	const deviceUserSearch = searchParams.get("deviceUserSearch") || "";
+	const deviceUserVendorRange = searchParams.get("deviceUserVendorRange") || "";
+	const scopedDeviceUserVendorIds = useMemo(
+		() =>
+			deviceUserVendorRange === "0-20"
+				? Array.from({ length: 21 }, (_, index) => String(index))
+				: [],
+		[deviceUserVendorRange],
+	);
+	const hasScopedDeviceUserVendorIds = scopedDeviceUserVendorIds.length > 0;
 	const [summaryDeviceSearch, setSummaryDeviceSearch] = useState("");
 	// Declared early so listener query can poll only while the details modal is open.
 	const [isListenerDetailsOpen, setIsListenerDetailsOpen] = useState(false);
@@ -557,7 +566,10 @@ export function DeviceEnrollmentPanel({
 		isFetching: isFetchingSyncPreview,
 		refetch: refetchSyncPreview,
 	} = useDeviceSyncPreview(
-		{ deviceId: activePanel === "overview" ? "all" : selectedDeviceId || "all" },
+		{
+			deviceId: activePanel === "overview" ? "all" : selectedDeviceId || "all",
+			quick: activePanel !== "overview" && Boolean(selectedDeviceId),
+		},
 		// Only while Sync Center panels that need counts are visible — no background poll.
 		activePanel === "overview" || activePanel === "users" || Boolean(selectedDeviceId),
 		{ refetchIntervalMs: false, staleTime: 60 * 1000 },
@@ -1011,9 +1023,9 @@ export function DeviceEnrollmentPanel({
 			? selectedDeviceId
 			: watchedDeviceId || selectedDeviceId;
 	const shouldFetchDeviceUsers =
-		(watchedDeviceId && action === "enroll") ||
-		action === "import" ||
-		(activePanel === "users" && Boolean(selectedDeviceId)) ||
+		(watchedDeviceId && action === "enroll" && !hasScopedDeviceUserVendorIds) ||
+		(action === "import" && !hasScopedDeviceUserVendorIds) ||
+		(activePanel === "users" && Boolean(selectedDeviceId) && !hasScopedDeviceUserVendorIds) ||
 		(deviceUserExportState.open && Boolean(selectedDeviceId));
 	const {
 		data: deviceUsersData = [],
@@ -1071,7 +1083,8 @@ export function DeviceEnrollmentPanel({
 		!isSourceMatchedDeviceUsersError &&
 		deviceUserStatus === "all" &&
 		!deviceUserSearch &&
-		deviceUserView !== "hris";
+		deviceUserView !== "hris" &&
+		!hasScopedDeviceUserVendorIds;
 	const {
 		data: dbDeviceUsers,
 		isLoading: isLoadingDbDeviceUsers,
@@ -1082,6 +1095,7 @@ export function DeviceEnrollmentPanel({
 			limit: 50,
 			status: deviceUserStatus,
 			query: deviceUserSearch,
+			vendorUserIds: hasScopedDeviceUserVendorIds ? scopedDeviceUserVendorIds : undefined,
 		},
 		Boolean(selectedDeviceId) && (!shouldUseSourceScopedDeviceUsers || activePanel !== "users"),
 	);
@@ -1102,6 +1116,7 @@ export function DeviceEnrollmentPanel({
 			limit: 50,
 			status: "UNMATCHED",
 			query: deviceUserSearch,
+			vendorUserIds: hasScopedDeviceUserVendorIds ? scopedDeviceUserVendorIds : undefined,
 		},
 		Boolean(selectedDeviceId) &&
 			activePanel === "users" &&
@@ -5526,6 +5541,12 @@ export function DeviceEnrollmentPanel({
 											(selectedDevice ? getDeviceVendor(selectedDevice) : ""),
 									)}
 									.
+								</div>
+							) : null}
+							{hasScopedDeviceUserVendorIds ? (
+								<div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+									Saved HRIS DeviceUser filter: vendor person IDs 0-20 only. Live
+									device reads are not used for this bounded view.
 								</div>
 							) : null}
 

@@ -88,6 +88,7 @@ std::deque<ReconcileJob> hris_immediate_event_queue;
 std::deque<ReconcileJob> hris_enrichment_event_queue;
 std::deque<ReconcileJob> reconcile_queue;
 std::vector<DeviceSession> sessions;
+std::mutex sessions_mutex;
 std::ofstream evidence_stream;
 std::mutex evidence_mutex;
 std::mutex sdk_request_mutex;
@@ -454,12 +455,23 @@ std::string base64_encode(const BYTE *data, size_t length) {
 }
 
 DeviceSession *find_session_by_host(const std::string &host) {
+    std::lock_guard<std::mutex> lock(sessions_mutex);
     for (auto &session : sessions) {
         if (session.config.host == host) {
             return &session;
         }
     }
     return nullptr;
+}
+
+std::string find_session_device_id_by_host(const std::string &host) {
+    std::lock_guard<std::mutex> lock(sessions_mutex);
+    for (const auto &session : sessions) {
+        if (session.config.host == host) {
+            return session.config.hris_device_id;
+        }
+    }
+    return "";
 }
 
 std::string recent_employee_candidate_key(const std::string &host, const std::string &employee_no) {
@@ -627,8 +639,7 @@ void CALLBACK alarm_callback(
     const std::string card_no =
         fixed_bytes_to_string(acs->struAcsEventInfo.byCardNo, ACS_CARD_NO_LEN);
     const std::string kind = classify_event(acs->dwMajor, acs->dwMinor);
-    const std::string source_device_id =
-        find_session_by_host(host) != nullptr ? find_session_by_host(host)->config.hris_device_id : "";
+    const std::string source_device_id = find_session_device_id_by_host(host);
     const std::string door_no = std::to_string(acs->struAcsEventInfo.dwDoorNo);
     const std::string verify_mode =
         acs->struAcsEventInfo.byCardReaderKind == 4 ? "fingerprint" : "";
@@ -4870,21 +4881,6 @@ int main(int argc, char **argv) {
         replay_pending_hikvision_callbacks();
     }
 
-    // CRITICAL latency fix (host-local + multi-device):
-    // Start HRIS post workers BEFORE arming every device. Otherwise a live TEST A
-    // can queue taps during arm, then wait ~60-90s while 6 off-LAN devices fail
-    // login (3 retries each) before workers start — that is the "tap lag".
-    // Auth delivery has its own worker. Lifecycle enrichment, peer reconciliation,
-    // and spool replay cannot occupy the attendance lane.
-    std::vector<std::thread> hris_immediate_posters;
-    hris_immediate_posters.reserve(HRIS_IMMEDIATE_WORKER_COUNT);
-    for (size_t i = 0; i < HRIS_IMMEDIATE_WORKER_COUNT; ++i) {
-        hris_immediate_posters.emplace_back(hris_immediate_post_loop);
-    }
-    std::thread hris_enrichment_poster(hris_enrichment_post_loop);
-    std::thread reconcile_worker(reconcile_worker_loop);
-    std::thread callback_spool_replayer(callback_spool_replay_loop);
-
     // Arm reverse-tunnel / local hosts first (127.0.0.1 TEST A) so live path is ready
     // before wasting time on unreachable LAN peers.
     std::vector<DeviceConfig> arm_order = configs;
@@ -4896,6 +4892,10 @@ int main(int argc, char **argv) {
         };
         return score(a) < score(b);
     });
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex);
+        sessions.reserve(arm_order.size());
+    }
 
     for (const auto &config : arm_order) {
         emit_json({
@@ -4922,7 +4922,10 @@ int main(int argc, char **argv) {
             DeviceSession session;
             session.config = config;
             if (login_device(session) && (arm_alarm(session) || manual_reconcile_mode)) {
-                sessions.push_back(session);
+                {
+                    std::lock_guard<std::mutex> lock(sessions_mutex);
+                    sessions.push_back(session);
+                }
                 armed = true;
                 emit_json({
                     {"event", "device_armed"},
@@ -4934,7 +4937,10 @@ int main(int argc, char **argv) {
                 // Seed inventory baseline ASAP so later create/enroll empty-ACS
                 // can resolve NEW plains via delta (not swallow into first baseline).
                 try {
-                    seed_inventory_baseline_for_session(sessions.back());
+                    DeviceSession *seed_session = find_session_by_host(config.host);
+                    if (seed_session != nullptr) {
+                        seed_inventory_baseline_for_session(*seed_session);
+                    }
                 } catch (...) {
                     emit_json({
                         {"event", "inventory_baseline_seed_failed"},
@@ -5002,27 +5008,30 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (sessions.empty()) {
+    bool has_sessions = false;
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex);
+        has_sessions = !sessions.empty();
+    }
+    if (!has_sessions) {
         keep_running = 0;
         queue_cv.notify_all();
-        for (auto &poster : hris_immediate_posters) {
-            if (poster.joinable()) {
-                poster.join();
-            }
-        }
-        if (hris_enrichment_poster.joinable()) {
-            hris_enrichment_poster.join();
-        }
-        if (reconcile_worker.joinable()) {
-            reconcile_worker.join();
-        }
-        if (callback_spool_replayer.joinable()) {
-            callback_spool_replayer.join();
-        }
         emit_json({{"event", "service_start_failed"}, {"reason", "no_armed_devices"}});
         NET_DVR_Cleanup();
         return 1;
     }
+
+    // Start worker threads after the initial session list is stable. SDK callbacks
+    // can arrive during arming; they queue jobs, then workers process them once
+    // all reachable devices are added, avoiding arm-time session-vector races.
+    std::vector<std::thread> hris_immediate_posters;
+    hris_immediate_posters.reserve(HRIS_IMMEDIATE_WORKER_COUNT);
+    for (size_t i = 0; i < HRIS_IMMEDIATE_WORKER_COUNT; ++i) {
+        hris_immediate_posters.emplace_back(hris_immediate_post_loop);
+    }
+    std::thread hris_enrichment_poster(hris_enrichment_post_loop);
+    std::thread reconcile_worker(reconcile_worker_loop);
+    std::thread callback_spool_replayer(callback_spool_replay_loop);
 
     std::thread poller(polling_loop);
     if (manual_fingerprint_clone_mode) {

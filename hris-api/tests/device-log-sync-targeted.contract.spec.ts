@@ -116,4 +116,25 @@ describe("device log sync targeted import contract", () => {
 		expect(controllerSource).to.contain("operationSourceTotal");
 		expect(controllerSource).to.contain("attendanceSourceTotal");
 	});
+
+	it("persists device log import progress so runtime restarts do not lose queued jobs", () => {
+		expect(controllerSource).to.contain("DEVICE_IMPORT_JOB_DIR");
+		expect(controllerSource).to.contain("persistDeviceImportJob(nextJob)");
+		expect(controllerSource).to.contain("readDeviceImportJob(jobId)");
+		expect(controllerSource).to.contain("markDeviceImportJobStale(job)");
+		expect(controllerSource).to.contain("Start Sync logs again; saved rows remain durable");
+		expect(controllerSource).to.contain("persistDeviceImportJob(job)");
+		expect(controllerSource).to.contain("updatedAt: new Date()");
+	});
+
+	it("retries transient Hikvision import page failures before failing the whole job", () => {
+		expect(controllerSource).to.contain("fetchHikvisionImportPageWithRetry");
+		expect(controllerSource).to.contain("HIKVISION_IMPORT_PAGE_RETRY_LIMIT || 4");
+		expect(controllerSource).to.contain("HIKVISION_IMPORT_RETRY_MIN_PAGE_SIZE || 10");
+		expect(controllerSource).to.contain("isTransientHikvisionImportError");
+		expect(controllerSource).to.contain("status === 401");
+		expect(controllerSource).to.contain("unauthorized|aborted|aborterror|timed out|timeout");
+		expect(controllerSource).to.contain("body.AcsEventCond.maxResults = pageSize");
+		expect(controllerSource).to.contain("Connection: \"close\"");
+	});
 });

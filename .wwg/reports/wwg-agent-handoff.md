@@ -1,5 +1,38 @@
 # WWG Agent Handoff
 
+## 2026-07-21 - Four Hikvision devices online/armed handoff
+
+- Task mode: Mixed live runtime repair, native listener regression repair, and evidence closeout.
+- Evidence directory: `.runtime/hikvision-four-device-online-20260721-064751/`.
+- Final runtime state:
+  - Direct Windows-to-VM LAN SSH and TCP to `10.184.37.19` timed out, so the verified path used `ssh project-truth-hris`.
+  - VM `cloudflared-bnpi-hris.service` stayed active and K3s stayed Ready.
+  - VM direct device probes passed for all four target devices on TCP `80`, `443`, and SDK `8000`.
+  - Host API reverse `VM 127.0.0.1:53001 -> Windows 127.0.0.1:3001` was restored and returned `/health`.
+  - Managed `project-truth-hikvision-hot-reload-listener.service` is active again; temporary per-device listener units used during recovery were stopped.
+- Final four-device truth:
+  - `10.184.37.20` / Main Entrance Device B / `cmpxw13hx002h7zwso7dyedrn`: API health `online`; SDK login OK; armed; receiving callbacks; callback post success in VM log.
+  - `10.184.37.21` / Main Entrance Device A / `cmrht5s2w00ei7zgsre8y3o5n`: API health `online`; SDK login OK; armed; receiving callbacks; callback post success in VM log.
+  - `10.184.37.22` / Main Entrance Device C / `cmripjwbx00ewl001ihcke210`: API health `online`; SDK login OK; armed; receiving callbacks; callback post success in VM log.
+  - `10.184.37.23` / Main Entrance Device D / `cmripjwkw00ffl0013lfxcbxw`: API health `online`; SDK login OK; armed; receiving callbacks; callback post success in VM log.
+- Key evidence files:
+  - `phase3-local-api-target-devices.json`: saved HRIS config rows for `.20`-`.23`.
+  - `phase4-vm-device-network-fixed.txt`: VM TCP proof to all four devices on `80/443/8000`.
+  - `phase6-vm-53001-after-simple-reverse.txt`: callback reverse `/health` proof.
+  - `phase7-aggregate-per-device-log-proof.txt`: per-device login/arm/receive/callback log proof.
+  - `phase10-final-api-health-listener-readiness.json` and `phase10-final-four-device-table.json`: final API health/listener/readiness proof.
+  - `phase10-devices-page-findings.json` and `phase10-devices-page.png`: browser proof for `/admin/configuration/devices`.
+- Code/runtime repair:
+  - The deployed native listener source includes the session-vector race fix already present in the worktree: session mutex, safer callback host-to-device lookup, reserved session storage, and worker startup after initial arming.
+  - This fixed source was copied to the VM listener source/work tree and rebuilt by the managed wrapper.
+- Validation:
+  - VM native C++ build passed with the Hikvision SDK.
+  - Focused backend contract passed: `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` (`14` passing).
+  - Focused listener-status helper passed: `hris-api/tests/hikvision-listener-status.helper.spec.ts` (`10` passing).
+  - Broad `npm --prefix hris-api test -- ...` accidentally expanded to the full suite and failed on unrelated existing suite drift plus stale compose DB `10.184.37.19:15433`; use the focused rerun artifacts for this task.
+- Remaining warning:
+  - `scripts/ensure-device-live-path.ps1` failed to start the API reverse bridge because `Start-Process -ArgumentList` received an object array. The reverse was started manually and proven; recommendation `REC-20260721-HIKVISION-API-REVERSE-ENSURE-BUG` captures durable hardening.
+
 ## 2026-07-20 - Device Events saved view fast/truthful listener UX handoff
 
 - Task mode: Mixed admin UX/performance regression repair.

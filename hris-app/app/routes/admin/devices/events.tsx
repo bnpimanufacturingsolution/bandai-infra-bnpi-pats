@@ -45,6 +45,7 @@ import {
 	useTriggerHikvisionAttendanceImport,
 	useTriggerZktecoAttendanceSync,
 	queryKeys,
+	type DeviceHealthMapEntry,
 } from "~/lib/hooks/useDevices";
 import { useAcsEvents } from "~/lib/hooks/use-hikvision";
 import { useAuth } from "~/lib/hooks/use-auth";
@@ -70,9 +71,11 @@ import type {
 	DeviceEvent,
 	DeviceEventStatus,
 	DeviceEventsResetResponse,
+	Device,
 	DeviceHealthResponse,
 	DeviceSyncPreviewEventRow,
 	DeviceSyncPreviewRow,
+	HikvisionListenerStatus,
 } from "~/services/devices.service";
 import type { ApiQueryParams } from "~/services/api-service";
 import type { AcsEventInfo } from "~/types/hikvision";
@@ -116,6 +119,21 @@ type UnifiedDeviceEventRow = {
 	directDeviceEvidence?: boolean;
 	searchMatch?: DeviceEvent["searchMatch"];
 	payload?: any;
+};
+
+type HikvisionListenerDeviceRow = NonNullable<
+	NonNullable<HikvisionListenerStatus["sdk"]>["devices"]
+>[number];
+
+type EnrichedHikvisionListenerDeviceRow = HikvisionListenerDeviceRow & {
+	configuredAddress: string | null;
+	usesReverseTunnel: boolean;
+};
+
+type HealthSummaryEntry = {
+	id: string;
+	device?: Device;
+	entry?: DeviceHealthMapEntry;
 };
 
 type DeviceEventSavedPayload = {
@@ -2887,13 +2905,13 @@ export default function DeviceEventsPage() {
 		(hikvisionListenerStatus?.sdk?.lastError
 			? `SDK login failed${hikvisionListenerStatus.sdk.lastTargetHost ? ` against ${hikvisionListenerStatus.sdk.lastTargetHost}` : ""}.`
 			: "");
-	const hikvisionListenerDevices = useMemo(() => {
+	const hikvisionListenerDevices = useMemo<EnrichedHikvisionListenerDeviceRow[]>(() => {
 		const rows = hikvisionListenerStatus?.sdk?.devices || [];
 		const selectedId = deviceId !== "all" ? deviceId : "";
-		const catalogById = new Map<string, any>(
-			devices.map((device: any) => [String(device.id || ""), device] as const),
+		const catalogById = new Map<string, Device>(
+			devices.map((device: Device) => [String(device.id || ""), device] as const),
 		);
-		const enriched = rows.map((row) => {
+		const enriched = rows.map((row: HikvisionListenerDeviceRow) => {
 			const catalog = row.deviceId ? catalogById.get(String(row.deviceId)) : null;
 			const configuredAddress = String(catalog?.address || "").trim() || null;
 			const config =
@@ -2923,31 +2941,35 @@ export default function DeviceEventsPage() {
 	}, [deviceId, devices, hikvisionListenerStatus?.sdk?.devices]);
 	const selectedHikvisionListenerDevice =
 		deviceId !== "all"
-			? hikvisionListenerDevices.find((device) => device.deviceId === deviceId) || null
+			? hikvisionListenerDevices.find(
+					(device: EnrichedHikvisionListenerDeviceRow) => device.deviceId === deviceId,
+				) || null
 			: null;
 	const hikvisionListenerDeviceSummary = hikvisionListenerDevices.length
-		? `${hikvisionListenerDevices.filter((device) => device.receivingCallbacks).length} receiving / ${
-				hikvisionListenerDevices.filter((device) => device.armed).length
-			} armed / ${hikvisionListenerDevices.filter((device) => device.state === "login_failed").length} login failed`
+		? `${hikvisionListenerDevices.filter((device: EnrichedHikvisionListenerDeviceRow) => device.receivingCallbacks).length} receiving / ${
+				hikvisionListenerDevices.filter((device: EnrichedHikvisionListenerDeviceRow) => device.armed).length
+			} armed / ${hikvisionListenerDevices.filter((device: EnrichedHikvisionListenerDeviceRow) => device.state === "login_failed").length} login failed`
 		: "No per-device listener rows";
-	const healthSummaryEntries = useMemo(
+	const healthSummaryEntries = useMemo<HealthSummaryEntry[]>(
 		() =>
-			healthSummaryDeviceIds.map((id) => ({
+			healthSummaryDeviceIds.map((id: string) => ({
 				id,
-				device: syncCapableDevices.find((device: any) => String(device.id || "") === id),
+				device: syncCapableDevices.find((device: Device) => String(device.id || "") === id),
 				entry: healthSummaryMap.get(id),
 			})),
 		[healthSummaryDeviceIds, healthSummaryMap, syncCapableDevices],
 	);
-	const healthSummaryChecked = healthSummaryEntries.filter((row) => row.entry?.health);
+	const healthSummaryChecked = healthSummaryEntries.filter(
+		(row: HealthSummaryEntry) => row.entry?.health,
+	);
 	const healthSummaryOnline = healthSummaryChecked.filter(
-		(row) => row.entry?.health?.summary?.status === "online",
+		(row: HealthSummaryEntry) => row.entry?.health?.summary?.status === "online",
 	).length;
 	const healthSummaryDegraded = healthSummaryChecked.filter(
-		(row) => row.entry?.health?.summary?.status === "degraded",
+		(row: HealthSummaryEntry) => row.entry?.health?.summary?.status === "degraded",
 	).length;
 	const healthSummaryOffline = healthSummaryChecked.filter(
-		(row) => row.entry?.health?.summary?.status === "offline",
+		(row: HealthSummaryEntry) => row.entry?.health?.summary?.status === "offline",
 	).length;
 	const healthSummaryLabel = healthSummaryMap.isLoadingAny && healthSummaryChecked.length === 0
 		? `Checking ${healthSummaryDeviceIds.length} device${healthSummaryDeviceIds.length === 1 ? "" : "s"}...`
