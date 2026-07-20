@@ -45,16 +45,31 @@ Verify:
 ssh project-truth-hris "echo SSH_OK; hostname; whoami"
 ```
 
-## Daily local API recipe (this class of workstation)
+## Daily local API recipes
+
+### Normal (shared VM DEV via tunnel `55435`) — default
 
 ```powershell
 cd <repo>\hris-api
-$env:HIKVISION_VM_BRIDGE_ENABLED = 'false'
-$env:HRIS_SKIP_DEVICE_LIVE_PATH = 'true'
 npm.cmd run dev
 ```
 
-Success line:
+Uses `.env` + predev tunnel bootstrap (`.env.development.local` regenerated for `127.0.0.1:55435`).
+Writes to **shared DEV** — do not use for experimental mutations.
+
+### Local clone (isolated Docker Postgres on `5433`)
+
+```powershell
+docker start hris-local-dev-clone   # if needed
+cd <repo>\hris-api
+# first time: copy .env.local-clone.example → .env.local-clone
+npm.cmd run dev:local
+```
+
+Uses `.env` + `.env.local-clone` and `predev:local` (skips BNPI tunnel + device bridges).
+Writes only to **local clone** — safe for destructive local testing.
+
+Success line (both):
 
 ```text
 Server running at http://localhost:3001

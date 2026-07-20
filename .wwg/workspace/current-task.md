@@ -1,5 +1,13 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-20 `npm run dev:local` for isolated local DB clone
+
+- Task mode: Dev ergonomics — keep default `npm run dev` on shared tunnel; add separate local-clone path.
+- `npm run dev` — normal predev + `.env.development.local` → shared DEV via `55435` (unchanged intent).
+- `npm run dev:local` — `predev:local` + `.env.local-clone` → Docker `hris-local-dev-clone` on `5433`; skips BNPI tunnel / Hikvision bridge.
+- Files: `hris-api/scripts/predev-local.cjs`, `hris-api/.env.local-clone.example`, package.json scripts, `.env.local-clone` gitignored.
+- Boundary: local clone data is a snapshot; re-dump to refresh.
+
 ## Latest Task Addendum - 2026-07-20 Local Windows remote-dev CF SSH / DB tunnel bootstrap
 
 - Task mode: Regression repair + workstation bootstrap (docs + scripts).
