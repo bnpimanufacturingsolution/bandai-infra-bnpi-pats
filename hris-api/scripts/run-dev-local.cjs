@@ -195,57 +195,38 @@ function runPredevLocal() {
 
 function startApiWatch() {
 	log("Starting API against local clone (.env + .env.local-clone)...");
-	const dotenvCli = path.join(
-		apiRoot,
-		"node_modules",
-		".bin",
-		isWin ? "dotenv.cmd" : "dotenv",
-	);
-	const watchScript = path.join(__dirname, "run-dev-api-watch.cjs");
+	// Avoid Windows dotenv.cmd quoting breakage (cmd.exe + quoted .bin path).
+	// Match package.json order: base .env then local-clone overwrites (dotenv -o).
+	loadEnvFile(path.join(apiRoot, ".env"), { overwrite: true });
+	loadEnvFile(localCloneEnv, { overwrite: true });
 
-	// Prefer local dotenv-cli; fall back to npx-style node invocation.
-	let child;
-	if (fs.existsSync(dotenvCli)) {
-		const args = isWin
-			? [
-					"/d",
-					"/s",
-					"/c",
-					`"${dotenvCli}" -o -e .env -e .env.local-clone -- node scripts/run-dev-api-watch.cjs`,
-				]
-			: [
-					"-o",
-					"-e",
-					".env",
-					"-e",
-					".env.local-clone",
-					"--",
-					"node",
-					"scripts/run-dev-api-watch.cjs",
-				];
-		child = isWin
-			? spawn("cmd.exe", args, {
-					cwd: apiRoot,
-					stdio: "inherit",
-					windowsHide: true,
-					env: process.env,
-				})
-			: spawn(dotenvCli, args, {
-					cwd: apiRoot,
-					stdio: "inherit",
-					env: process.env,
-				});
-	} else {
-		// Manual load already applied local clone env; start watch directly.
-		loadEnvFile(path.join(apiRoot, ".env"), { overwrite: false });
-		loadEnvFile(localCloneEnv, { overwrite: true });
-		child = spawn(process.execPath, [watchScript], {
-			cwd: apiRoot,
-			stdio: "inherit",
-			windowsHide: true,
-			env: process.env,
-		});
-	}
+	// Keep local-clone isolation flags even if .env set otherwise.
+	process.env.HRIS_SKIP_BNPI_DB_ACCESS = "true";
+	process.env.HRIS_SKIP_PROJECT_TRUTH_REMOTE_LAN_FORWARD = "true";
+	process.env.HIKVISION_VM_BRIDGE_ENABLED =
+		process.env.HIKVISION_VM_BRIDGE_ENABLED || "false";
+	process.env.HRIS_SKIP_DEVICE_LIVE_PATH =
+		process.env.HRIS_SKIP_DEVICE_LIVE_PATH || "true";
+
+	const dbUrl =
+		process.env.DATABASE_URL ||
+		process.env.WRITE_DATABASE_URL ||
+		process.env.PG_DATABASE_URL ||
+		"";
+	log(`DATABASE_URL host target: ${dbUrl.replace(/:[^:@/]+@/, ":***@") || "(unset)"}`);
+
+	const watchScript = path.join(__dirname, "run-dev-api-watch.cjs");
+	const child = spawn(process.execPath, [watchScript], {
+		cwd: apiRoot,
+		stdio: "inherit",
+		windowsHide: true,
+		env: process.env,
+	});
+
+	child.on("error", (err) => {
+		console.error(`[dev:local] failed to start API watcher: ${err.message}`);
+		process.exit(1);
+	});
 
 	child.on("exit", (code, signal) => {
 		if (signal) {
