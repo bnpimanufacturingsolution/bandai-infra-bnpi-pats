@@ -6035,12 +6035,12 @@ export function DeviceEnrollmentPanel({
 								<div className="grid gap-2 sm:grid-cols-2">
 									{[
 										[
-											"Fingerprint encrypted envelope",
-											`${metricValue(selectedSyncCenterItem?.preview?.fingerprintEnvelopePresent)} present · ${metricValue(selectedSyncCenterItem?.preview?.fingerprintEnvelopeMissing)} missing`,
+											"Fingerprint raw blob custody",
+											`${metricValue(selectedSyncCenterItem?.preview?.fingerprintReported)} enrolled · ${metricValue(selectedSyncCenterItem?.preview?.fingerprintRawPresent ?? selectedSyncCenterItem?.preview?.fingerprintEnvelopePresent)} raw · ${metricValue(selectedSyncCenterItem?.preview?.fingerprintRawMissing ?? selectedSyncCenterItem?.preview?.fingerprintEnvelopeMissing)} missing_raw_blob`,
 										],
 										[
-											"Face encrypted envelope",
-											`${metricValue(selectedSyncCenterItem?.preview?.faceEnvelopePresent)} present · ${metricValue(selectedSyncCenterItem?.preview?.faceEnvelopeMissing)} missing`,
+											"Face raw blob custody",
+											`${metricValue(selectedSyncCenterItem?.preview?.faceReported)} enrolled · ${metricValue(selectedSyncCenterItem?.preview?.faceRawPresent ?? selectedSyncCenterItem?.preview?.faceEnvelopePresent)} raw · ${metricValue(selectedSyncCenterItem?.preview?.faceRawMissing ?? selectedSyncCenterItem?.preview?.faceEnvelopeMissing)} missing_raw_blob`,
 										],
 									].map(([label, value]) => (
 										<div key={label} className="rounded-md border border-slate-200 px-2 py-1.5">

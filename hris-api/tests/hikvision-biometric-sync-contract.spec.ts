@@ -265,9 +265,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include(
 			'std::fprintf(config_file, "max-time = %d\\n", std::max(1, max_time_seconds));',
 		);
-		expect(service).to.include(
-			'post_json_with_retries(url, body, "hikvision_callback_post", 3, 1500, 30)',
-		);
+		expect(service).to.include('"hikvision_callback_post"');
+		expect(service).to.include("immediate ? 1 : 3");
+		expect(service).to.include("immediate ? 5 : 30");
 		expect(service).to.include('arg == "--replay-spool-only"');
 		expect(service).to.include('arg == "--post-contract-file"');
 		expect(service).to.include('std::getenv("HIKVISION_HRIS_API_TOKEN")');
@@ -409,6 +409,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("includeFingerprints: false");
 		expect(controller).to.include("includeFaces: true");
 		expect(controller).to.include("for (let attempt = 1; attempt <= 3; attempt += 1)");
+		expect(controller).to.include("summarizeDeviceUserRawBiometricCustody");
+		expect(controller).to.include("fingerprintRawMissing");
+		expect(controller).to.include("faceRawMissing");
 		expect(controller).to.include("fingerprintEnvelopeMissing");
 		expect(controller).to.include("faceEnvelopeMissing");
 	});

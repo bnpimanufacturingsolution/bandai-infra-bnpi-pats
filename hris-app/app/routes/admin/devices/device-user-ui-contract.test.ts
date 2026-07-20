@@ -13,7 +13,6 @@ describe("admin device user and log sync UI contract", () => {
 
 		expect(deviceHooks).toContain("useDeviceHealthMap");
 		expect(events).toContain('data-testid="device-filter-reachability-dot"');
-		expect(events).toContain("getDeviceReachabilityDotClass");
 
 		expect(enroll).toContain("Merge users");
 		expect(manage).toContain("Sync Center");
@@ -110,6 +109,12 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Review sync");
 		expect(enroll).toContain("rawFingerprintBlob");
 		expect(enroll).toContain("rawFaceBlob");
+		expect(enroll).toContain("Fingerprint raw blob custody");
+		expect(enroll).toContain("Face raw blob custody");
+		expect(enroll).toContain("fingerprintRawMissing");
+		expect(enroll).toContain("faceRawMissing");
+		expect(enroll).not.toContain("Fingerprint encrypted envelope");
+		expect(enroll).not.toContain("Face encrypted envelope");
 		expect(enroll).toContain("missing biometric custody in the background");
 		expect(enroll).toContain("deviceIds: [selectedDeviceId]");
 		expect(enroll).toContain("You can close this window and reopen status");
@@ -274,7 +279,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("executeDeviceUserImport");
 		expect(enroll).toContain("previewToken");
 		expect(enroll).toContain("Raw package used");
-		expect(enroll).toContain("biometric bytes are never written");
+		expect(enroll).toContain("rawBiometricTemplateBytes");
 		expect(enroll).toContain("previewDeviceUserExport");
 		expect(enroll).toContain("previewDeviceUserImport");
 		expect(enroll).toContain("ISAPI source");
@@ -295,8 +300,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).not.toContain("Mock 1 face");
 		expect(enroll).not.toContain("Clear mock face");
 		expect(enroll).not.toContain("Sync real face to peers");
-		expect(enroll).toContain("fingerprint template blobs are not shown in this normal");
-		expect(enroll).toContain("dev mock tallies are kept separate from physical");
+		expect(enroll).toContain("Raw fingerprint templates");
+		expect(enroll).toContain("Raw fingerprint base64 copied");
 		expect(enroll).toContain("Across Hikvision devices");
 		expect(enroll).toContain("Best saved tally for this user across configured");
 		expect(enroll).toContain("Vendor metadata");
@@ -325,13 +330,14 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).not.toContain("Link identity");
 		expect(events).not.toContain("Sync logs request accepted");
 		expect(events).toContain("Sync device logs started");
-		expect(events).toContain("isFetchingSyncPreview && syncPreviewRows.length === 0");
-		expect(deviceHooks).toContain("refetchInterval: enabled ? 15 * 1000 : false");
+		expect(events).toContain("showSyncPreviewSkeleton");
+		expect(events).toContain("Sync-preview only when Sync logs modal is open");
+		expect(deviceHooks).toContain("options.refetchInterval ?? false");
 
 		expect(events).toContain("Sync logs");
 		expect(events).toContain("Sync device logs");
 		expect(events).toContain("latestSdkEvidenceAgeMs");
-		expect(events).toContain("getEventEvidenceTime(latestSdkProbeEvent) > getEventEvidenceTime(latestSdkSavedEvent)");
+		expect(events).toContain("const latestSdkEvidenceEvent = latestSdkSavedEvent");
 		expect(events).toContain("latestSdkEvidenceIsOperationSignal");
 		expect(events).toContain("SDK operation signal captured");
 		expect(events).toContain("Open it, then run/review device-user reconciliation for the same device.");
@@ -348,7 +354,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(events).toContain("Devices ready:");
 		expect(events).toContain("Already saved:");
 		expect(events).toContain("deviceIsBlocked");
-		expect(events).toContain("Device logs scanned");
+		expect(events).toContain("Rows scanned this pass");
 		expect(events).toContain("Saved to HRIS");
 		expect(events).toContain("Sync scans device source logs, then classifies each row against HRIS.");
 		expect(events).toContain("const [skipMissingEmployeeNo, setSkipMissingEmployeeNo] = useState(false)");

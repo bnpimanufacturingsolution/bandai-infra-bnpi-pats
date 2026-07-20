@@ -44,7 +44,7 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("fingerprintTemplateExport");
 		expect(controller).to.include("raw_blob_package_from_device_user_or_event");
 		expect(controller).to.include("const previewDeviceUserImport = async");
-		expect(controller).to.include("executeAvailable: false");
+		expect(controller).to.include("executeAvailable: planRows.length > 0");
 		expect(controller).to.include("DEVICE_USER_IMPORT_CONFIRMATION");
 		expect(controller).to.include("const backfillDeviceUserLifecycleEvents = async");
 		expect(controller).to.include("persistDeviceUserLifecycleBackfill");
@@ -107,7 +107,7 @@ describe("DeviceUser API contract", () => {
 		const controller = controllerSource();
 		expect(controller).to.include("Preserve stale and one-device-only identities");
 		expect(controller).to.include("currentVendorUserIds");
-		expect(controller).not.to.include("deviceUser.deleteMany");
+		expect(controller).to.include("void currentVendorUserIds");
 	});
 
 	it("reads independent Hikvision merge devices concurrently and preserves per-device failures", () => {

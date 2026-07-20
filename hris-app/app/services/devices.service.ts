@@ -257,9 +257,15 @@ export interface DeviceSyncPreviewRow {
 	linkedUserCount?: number;
 	openUserCount?: number;
 	fingerprintReported?: number;
+	fingerprintRawPresent?: number;
+	fingerprintRawMissing?: number;
+	fingerprintTemplateReportedTotal?: number;
 	fingerprintEnvelopePresent?: number;
 	fingerprintEnvelopeMissing?: number;
 	faceReported?: number;
+	faceRawPresent?: number;
+	faceRawMissing?: number;
+	faceTemplateReportedTotal?: number;
 	faceEnvelopePresent?: number;
 	faceEnvelopeMissing?: number;
 	conflictUserCount?: number;

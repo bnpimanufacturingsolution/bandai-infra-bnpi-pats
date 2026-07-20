@@ -1042,6 +1042,7 @@ type SavedDeviceUserTruthRow = {
 	deviceId?: string | null;
 	vendorUserId?: string | null;
 	rawPayload?: any;
+	vendorMetadata?: any;
 	status?: string | null;
 	employeeId?: string | null;
 };
@@ -6293,6 +6294,61 @@ export const controller = (prisma: PrismaClient) => {
 			},
 			plaintextPolicy:
 				"raw_evidenced_blobs_allowed_for_admin_device_user_sync_package",
+		};
+	};
+
+	const summarizeDeviceUserRawBiometricCustody = (rows: any[]) => {
+		const summary = {
+			fingerprintReported: 0,
+			fingerprintRawPresent: 0,
+			fingerprintRawMissing: 0,
+			fingerprintTemplateReportedTotal: 0,
+			faceReported: 0,
+			faceRawPresent: 0,
+			faceRawMissing: 0,
+			faceTemplateReportedTotal: 0,
+		};
+		for (const row of rows || []) {
+			const credentialSummary =
+				row?.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
+				row?.vendorMetadata?.credentialSummary ||
+				extractHikvisionCredentialSummary(row?.rawPayload || {});
+			const fingerprintCount = Number(credentialSummary?.fingerprintCount || 0);
+			const faceCount = Number(credentialSummary?.faceCount || 0);
+			const rawFingerprints = getRawFingerprintTemplatesFromValue(row?.vendorMetadata?.rawFingerprints)
+				.length
+				? getRawFingerprintTemplatesFromValue(row?.vendorMetadata?.rawFingerprints)
+				: getRawFingerprintTemplatesFromValue(row?.rawPayload?._hrisDeviceMetadata?.rawFingerprints);
+			const rawFace =
+				getRawFaceFromValue(row?.vendorMetadata?.rawFace) ||
+				getRawFaceFromValue(row?.rawPayload?._hrisDeviceMetadata?.rawFace);
+			const hasRawFingerprint =
+				rawFingerprints.length > 0 || Boolean(row?.vendorMetadata?.rawFingerprintPresent);
+			const hasRawFace =
+				Boolean(rawFace) ||
+				Boolean(row?.vendorMetadata?.rawFacePresent) ||
+				Boolean(row?.rawPayload?._hrisDeviceMetadata?.rawFacePresent);
+			if (fingerprintCount > 0) {
+				summary.fingerprintReported += 1;
+				summary.fingerprintTemplateReportedTotal += fingerprintCount;
+				if (hasRawFingerprint) summary.fingerprintRawPresent += 1;
+				else summary.fingerprintRawMissing += 1;
+			}
+			if (faceCount > 0) {
+				summary.faceReported += 1;
+				summary.faceTemplateReportedTotal += faceCount;
+				if (hasRawFace) summary.faceRawPresent += 1;
+				else summary.faceRawMissing += 1;
+			}
+		}
+		return {
+			...summary,
+			// Backward-compatible aliases for older app builds while the UI copy moves
+			// from encrypted envelopes to raw blob custody.
+			fingerprintEnvelopePresent: summary.fingerprintRawPresent,
+			fingerprintEnvelopeMissing: summary.fingerprintRawMissing,
+			faceEnvelopePresent: summary.faceRawPresent,
+			faceEnvelopeMissing: summary.faceRawMissing,
 		};
 	};
 
@@ -13163,18 +13219,30 @@ export const controller = (prisma: PrismaClient) => {
 				string,
 				{
 					fingerprintReported: number;
+					fingerprintRawPresent?: number;
+					fingerprintRawMissing?: number;
+					fingerprintTemplateReportedTotal?: number;
 					fingerprintEnvelopePresent: number;
 					fingerprintEnvelopeMissing: number;
 					faceReported: number;
+					faceRawPresent?: number;
+					faceRawMissing?: number;
+					faceTemplateReportedTotal?: number;
 					faceEnvelopePresent: number;
 					faceEnvelopeMissing: number;
 				}
 			>();
 			const emptyBiometricCustody = () => ({
 				fingerprintReported: 0,
+				fingerprintRawPresent: 0,
+				fingerprintRawMissing: 0,
+				fingerprintTemplateReportedTotal: 0,
 				fingerprintEnvelopePresent: 0,
 				fingerprintEnvelopeMissing: 0,
 				faceReported: 0,
+				faceRawPresent: 0,
+				faceRawMissing: 0,
+				faceTemplateReportedTotal: 0,
 				faceEnvelopePresent: 0,
 				faceEnvelopeMissing: 0,
 			});
@@ -13218,6 +13286,41 @@ export const controller = (prisma: PrismaClient) => {
 					for (const [deviceId, summary] of byDevice.entries()) {
 						deviceUserSummaryByDeviceId.set(deviceId, summary as any);
 						biometricCustodyByDeviceId.set(deviceId, emptyBiometricCustody());
+					}
+					if (await hasDeviceUserVendorMetadataColumn()) {
+						const biometricRows = await (prisma as any).deviceUser.findMany({
+							where: {
+								organizationId: String(organizationId),
+								deviceId: { in: syncDevices.map((device) => device.id) },
+							},
+							select: {
+								deviceId: true,
+								vendorUserId: true,
+								status: true,
+								employeeId: true,
+								rawPayload: true,
+								vendorMetadata: true,
+							},
+						});
+						const rowsByDevice = new Map<string, any[]>();
+						for (const row of biometricRows || []) {
+							const deviceId = String(row?.deviceId || "").trim();
+							if (!deviceId) continue;
+							const bucket = rowsByDevice.get(deviceId) || [];
+							bucket.push(row);
+							rowsByDevice.set(deviceId, bucket);
+						}
+						for (const device of syncDevices) {
+							const deviceRows = rowsByDevice.get(device.id) || [];
+							deviceUserSummaryByDeviceId.set(
+								device.id,
+								summarizeDeviceUserStatuses(deviceRows) as any,
+							);
+							biometricCustodyByDeviceId.set(
+								device.id,
+								summarizeDeviceUserRawBiometricCustody(deviceRows),
+							);
+						}
 					}
 				} catch {
 					for (const device of syncDevices) {
@@ -13316,9 +13419,15 @@ export const controller = (prisma: PrismaClient) => {
 				};
 				const biometricCustody = biometricCustodyByDeviceId.get(device.id) || {
 					fingerprintReported: 0,
+					fingerprintRawPresent: 0,
+					fingerprintRawMissing: 0,
+					fingerprintTemplateReportedTotal: 0,
 					fingerprintEnvelopePresent: 0,
 					fingerprintEnvelopeMissing: 0,
 					faceReported: 0,
+					faceRawPresent: 0,
+					faceRawMissing: 0,
+					faceTemplateReportedTotal: 0,
 					faceEnvelopePresent: 0,
 					faceEnvelopeMissing: 0,
 				};
