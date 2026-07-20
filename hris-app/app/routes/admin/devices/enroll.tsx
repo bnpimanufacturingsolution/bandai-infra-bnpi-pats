@@ -3931,18 +3931,39 @@ export function DeviceEnrollmentPanel({
 			return "";
 		}
 	};
+	const isRawBiometricStatusValue = (value: string) =>
+		["not_enrolled", "missing_raw_blob", "not_requested"].includes(value.trim());
+	const escapeRawFingerprintTemplateCell = (value: unknown) =>
+		String(value || "")
+			.trim()
+			.replace(/\\/g, "\\\\")
+			.replace(/"/g, '\\"');
+	const encodeRawFingerprintBlobCell = (templates: any[], credentialCount: number, status: string) => {
+		const rawTemplates = templates
+			.map((template: any, index: number) => ({
+				fingerPrintId: template?.fingerPrintId ?? template?.fingerPrintID ?? index + 1,
+				fingerType: template?.fingerType || "normalFP",
+				data: normalizeRawBiometricBlobValue(template?.data || template?.fingerData || ""),
+			}))
+			.filter((template) => template.data);
+		if (rawTemplates.length === 1) return rawTemplates[0].data;
+		if (rawTemplates.length > 1) {
+			return rawTemplates
+				.map((template, index) => {
+					const fingerPrintId = Number(template.fingerPrintId || index + 1) || index + 1;
+					return `FP${fingerPrintId}("${escapeRawFingerprintTemplateCell(template.data)}")`;
+				})
+				.join(";");
+		}
+		if (status) return status;
+		return credentialCount > 0 ? "missing_raw_blob" : "not_enrolled";
+	};
 	const getRawFingerprintBlobCell = (user: any, credentialCount: number) => {
 		const templates = Array.isArray(user?.rawBiometricCustody?.fingerprint?.templates)
 			? user.rawBiometricCustody.fingerprint.templates
 			: [];
-		const firstTemplate = templates.find((template: any) =>
-			String(template?.data || template?.fingerData || "").trim(),
-		);
-		const raw = normalizeRawBiometricBlobValue(firstTemplate?.data || firstTemplate?.fingerData || "");
-		if (raw) return raw;
 		const status = String(user?.rawBiometricCustody?.fingerprint?.status || "").trim();
-		if (status) return status;
-		return credentialCount > 0 ? "missing_raw_blob" : "not_enrolled";
+		return encodeRawFingerprintBlobCell(templates, credentialCount, status);
 	};
 	const getRawFaceBlobCell = (user: any, credentialCount: number) => {
 		const blob = user?.rawBiometricCustody?.face?.blob || {};
@@ -3954,8 +3975,52 @@ export function DeviceEnrollmentPanel({
 	};
 	const decodeRawBiometricBlobCell = (value: unknown) => {
 		const raw = String(value || "").trim();
-		if (!raw || ["not_enrolled", "missing_raw_blob", "not_requested"].includes(raw)) return "";
+		if (!raw || isRawBiometricStatusValue(raw)) return "";
 		return raw;
+	};
+	const decodeRawFingerprintBlobCell = (value: unknown) => {
+		const raw = String(value || "").trim();
+		if (!raw || isRawBiometricStatusValue(raw)) return [];
+		const fromJson = (() => {
+			if (!raw.startsWith("[") && !raw.startsWith("{")) return null;
+			try {
+				const parsed = JSON.parse(raw);
+				const list = Array.isArray(parsed)
+					? parsed
+					: Array.isArray(parsed?.templates)
+						? parsed.templates
+						: Array.isArray(parsed?.fingerprints)
+							? parsed.fingerprints
+							: [];
+				return list
+					.map((item: any, index: number) => ({
+						fingerPrintId: item?.fingerPrintId ?? item?.fingerPrintID ?? index + 1,
+						fingerType: item?.fingerType || "normalFP",
+						data: normalizeRawBiometricBlobValue(item?.data || item?.fingerData || item),
+					}))
+					.filter((item: any) => item.data);
+			} catch {
+				return null;
+			}
+		})();
+		if (fromJson) return fromJson;
+		const patterned = Array.from(raw.matchAll(/FP\s*(\d*)\s*\(\s*"((?:\\.|[^"\\])*)"\s*\)/gi)).map(
+			(match, index) => ({
+				fingerPrintId: Number(match[1] || index + 1) || index + 1,
+				fingerType: "normalFP",
+				data: match[2].replace(/\\"/g, '"').replace(/\\\\/g, "\\").trim(),
+			}),
+		).filter((item) => item.data);
+		if (patterned.length) return patterned;
+		const parts = raw
+			.split(/[;,]/)
+			.map((part) => part.trim())
+			.filter(Boolean);
+		return (parts.length > 1 ? parts : [raw]).map((data, index) => ({
+			fingerPrintId: index + 1,
+			fingerType: "normalFP",
+			data,
+		}));
 	};
 	const getDeviceUserCsvHeaders = () => [
 		"sourceDeviceName",
@@ -3983,7 +4048,8 @@ export function DeviceEnrollmentPanel({
 			.map((row) => {
 				const sourceDeviceId = String(row.sourceDeviceId || "csv-import").trim();
 				const vendorUserId = String(row.vendorUserId || "").trim();
-				const fingerprintRawTemplateBlob = decodeRawBiometricBlobCell(row.rawFingerprintBlob);
+				const fingerprintRawTemplates = decodeRawFingerprintBlobCell(row.rawFingerprintBlob);
+				const fingerprintRawTemplateBlob = fingerprintRawTemplates[0]?.data || "";
 				const faceRawTemplateBlob = decodeRawBiometricBlobCell(row.rawFaceBlob);
 				return {
 					sourceDeviceName: String(row.sourceDeviceName || "CSV import").trim(),
@@ -4002,11 +4068,12 @@ export function DeviceEnrollmentPanel({
 					rawFaceBlob: String(row.rawFaceBlob || "not_requested").trim(),
 					biometricTransferMode: String(
 						row.biometricTransferMode ||
-							(fingerprintRawTemplateBlob || faceRawTemplateBlob
+							(fingerprintRawTemplates.length || faceRawTemplateBlob
 								? "rawPackage"
 								: "metadataOnly"),
 					).trim(),
 					fingerprintRawTemplateBlob,
+					fingerprintRawTemplates,
 					faceRawTemplateBlob,
 					rawBiometricPlaintextPolicy: DEVICE_USER_RAW_BIOMETRIC_PACKAGE_POLICY,
 					rawBiometricSource:
@@ -4132,6 +4199,7 @@ export function DeviceEnrollmentPanel({
 								rawFaceBlob: row.rawFaceBlob,
 								biometricTransferMode: row.biometricTransferMode,
 								fingerprintRawTemplateBlob: row.fingerprintRawTemplateBlob,
+								fingerprintRawTemplates: row.fingerprintRawTemplates,
 								faceRawTemplateBlob: row.faceRawTemplateBlob,
 								rawBiometricPlaintextPolicy: row.rawBiometricPlaintextPolicy,
 								rawBiometricSource: row.rawBiometricSource,
@@ -4140,10 +4208,8 @@ export function DeviceEnrollmentPanel({
 					},
 					rawBiometricCustody: {
 						fingerprint: {
-							status: row.fingerprintRawTemplateBlob ? "raw_blob_present" : row.rawFingerprintBlob,
-							templates: row.fingerprintRawTemplateBlob
-								? [{ fingerPrintId: 1, fingerType: "normalFP", data: row.fingerprintRawTemplateBlob }]
-								: [],
+							status: row.fingerprintRawTemplates.length ? "raw_blob_present" : row.rawFingerprintBlob,
+							templates: row.fingerprintRawTemplates,
 						},
 						face: {
 							status: row.faceRawTemplateBlob ? "raw_blob_present" : row.rawFaceBlob,

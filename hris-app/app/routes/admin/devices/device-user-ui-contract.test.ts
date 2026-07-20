@@ -236,6 +236,10 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Raw biometric readiness");
 		expect(enroll).toContain("getRawFingerprintBlobCell");
 		expect(enroll).toContain("decodeRawBiometricBlobCell");
+		expect(enroll).toContain("encodeRawFingerprintBlobCell");
+		expect(enroll).toContain("decodeRawFingerprintBlobCell");
+		expect(enroll).toContain("FP${fingerPrintId}");
+		expect(enroll).toContain("fingerprintRawTemplates");
 		expect(enroll).toContain("getDeviceUserExportBiometricGaps");
 		expect(enroll).not.toContain("Biometric capture started before export");
 		expect(enroll).not.toContain("Enter the package passphrase before previewing encrypted biometrics");

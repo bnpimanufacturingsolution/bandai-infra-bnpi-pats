@@ -131,6 +131,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("raw fingerprint/face blobs are exported only when evidenced");
 		expect(controller).to.include("raw_blobs_from_device_user_or_event");
 		expect(controller).to.include("loadLatestRawBiometricEventPayload");
+		expect(controller).to.include("parseRawFingerprintTemplatesFromCell");
+		expect(controller).to.include("normalizeRawPackageFingerprintTemplates");
+		expect(controller).to.include("FP\\s*(\\d*)");
+		expect(controller).to.include("raw_blobs_allowed_when_evidenced_on_device_user_or_event");
+		expect(controller).to.include("raw_package_or_sdk_peer_copy_allowed_with_admin_preview_and_confirmation");
 		expect(controller).to.include("backfillDeviceUserBiometricMetadata");
 		expect(controller).to.include("hikvision_sdk_biometric_metadata_backfill");
 		expect(controller).to.include('modality?: "fingerprint" | "face" | "combined"');

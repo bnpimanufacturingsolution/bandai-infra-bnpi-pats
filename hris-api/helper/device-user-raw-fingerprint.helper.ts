@@ -81,6 +81,7 @@ export const normalizeIsapiFingerprintList = (response: any): RawFingerprintTemp
 		response?.FingerPrintCfg,
 		response?.FingerPrintUpload,
 		response?.FingerPrint,
+		response?.templates,
 		response?.data?.FingerPrintInfo?.FingerPrintList,
 		response?.data?.FingerPrintList,
 		response,
@@ -134,6 +135,33 @@ export const normalizeIsapiFingerprintList = (response: any): RawFingerprintTemp
 	return out;
 };
 
+const mergeRawFingerprintTemplates = (
+	...lists: Array<RawFingerprintTemplate[] | null | undefined>
+): RawFingerprintTemplate[] => {
+	const out: RawFingerprintTemplate[] = [];
+	const seen = new Set<string>();
+	for (const list of lists) {
+		for (const fp of list || []) {
+			const data = String(fp?.data || "").trim();
+			if (!data) continue;
+			const fingerPrintId = Number(fp.fingerPrintId || out.length + 1);
+			const key = `${Number.isFinite(fingerPrintId) && fingerPrintId > 0 ? fingerPrintId : out.length + 1}:${data.slice(0, 48)}`;
+			if (seen.has(key)) continue;
+			seen.add(key);
+			out.push({
+				fingerPrintId:
+					Number.isFinite(fingerPrintId) && fingerPrintId > 0
+						? fingerPrintId
+						: out.length + 1,
+				fingerType: fp.fingerType ?? null,
+				length: Number(fp.length || data.length) || data.length,
+				data,
+			});
+		}
+	}
+	return out;
+};
+
 /**
  * Read fingerprint templates from device via ISAPI FingerPrintUpload (query shape).
  * Tries per-finger ids 1..maxFingerId plus a bulk-style cond when maxResults is accepted.
@@ -144,6 +172,7 @@ export const fetchRawFingerprintsViaIsapi = async (params: {
 	deviceId: string;
 	employeeNo: string;
 	maxFingerId?: number;
+	expectedFingerprintCount?: number;
 	timeoutMs?: number;
 }): Promise<{ fingerprints: RawFingerprintTemplate[]; attempts: number; lastError?: string }> => {
 	const employeeNo = String(params.employeeNo || "").trim();
@@ -151,6 +180,10 @@ export const fetchRawFingerprintsViaIsapi = async (params: {
 		return { fingerprints: [], attempts: 0, lastError: "invalid_employee_no" };
 	}
 	const maxFingerId = Math.min(Math.max(Number(params.maxFingerId) || 10, 1), 10);
+	const expectedFingerprintCount = Math.min(
+		Math.max(Number(params.expectedFingerprintCount || 0) || 0, 0),
+		maxFingerId,
+	);
 	const timeoutMs = Number(params.timeoutMs) || 12_000;
 	const collected: RawFingerprintTemplate[] = [];
 	const seen = new Set<string>();
@@ -190,11 +223,12 @@ export const fetchRawFingerprintsViaIsapi = async (params: {
 		lastError = String(error?.message || error || "bulk_isapi_failed");
 	}
 
-	if (collected.length > 0) {
+	if (collected.length > 0 && (!expectedFingerprintCount || collected.length >= expectedFingerprintCount)) {
 		return { fingerprints: collected, attempts, lastError };
 	}
 
-	// Per-finger probe (common when bulk cond is ignored).
+	// Per-finger probe (common when bulk cond is ignored or returns only one
+	// template while UserInfo reports multiple enrolled fingers).
 	for (let fingerPrintID = 1; fingerPrintID <= maxFingerId; fingerPrintID += 1) {
 		try {
 			attempts += 1;
@@ -628,15 +662,38 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 		};
 	}
 
+	let row =
+		(await params.prisma.deviceUser.findFirst({
+			where: {
+				organizationId,
+				deviceId,
+				OR: [{ vendorUserId: employeeNo }, { employeeNo }],
+			},
+		})) || null;
+	const priorRaw = row?.rawPayload && typeof row.rawPayload === "object" ? row.rawPayload : {};
+	const priorVendor =
+		row?.vendorMetadata && typeof row.vendorMetadata === "object" ? row.vendorMetadata : {};
+	const priorSummary =
+		priorVendor.credentialSummary || priorRaw?._hrisDeviceMetadata?.credentialSummary || {};
+	const expectedFingerprintCount = Math.max(
+		Number(priorSummary.fingerprintCount || 0) || 0,
+		0,
+	);
+	const priorFingerprints = mergeRawFingerprintTemplates(
+		normalizeIsapiFingerprintList(priorVendor.rawFingerprints),
+		normalizeIsapiFingerprintList(priorRaw?._hrisDeviceMetadata?.rawFingerprints),
+	);
 	const fetchFn = params.fetchFingerprints || fetchRawFingerprintsViaIsapi;
 	const { fingerprints, attempts, lastError } = await fetchFn({
 		prisma: params.prisma,
 		req: params.req,
 		deviceId,
 		employeeNo,
+		expectedFingerprintCount,
 	});
+	const mergedFingerprints = mergeRawFingerprintTemplates(priorFingerprints, fingerprints);
 
-	if (!fingerprints.length) {
+	if (!mergedFingerprints.length) {
 		await patchEnrollmentEventRawStatus(params, {
 			status: "raw_capture_failed",
 			reason: lastError || "no_fingerprint_data_from_device",
@@ -657,18 +714,9 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 	const custody = buildRawFingerprintCustody({
 		deviceId,
 		vendorUserId: employeeNo,
-		fingerprints,
+		fingerprints: mergedFingerprints,
 		source: "isapi_FingerPrintUpload_on_enroll",
 	});
-
-	let row =
-		(await params.prisma.deviceUser.findFirst({
-			where: {
-				organizationId,
-				deviceId,
-				OR: [{ vendorUserId: employeeNo }, { employeeNo }],
-			},
-		})) || null;
 
 	if (!row) {
 		row = await params.prisma.deviceUser.create({

@@ -6104,9 +6104,9 @@ export const controller = (prisma: PrismaClient) => {
 			},
 			policy: {
 				fingerprintTemplateExport:
-					"blocked_until_encrypted_biometric_custody_design_is_approved",
+					"raw_blobs_allowed_when_evidenced_on_device_user_or_event",
 				fingerprintTemplateImport:
-					"blocked_until_encrypted_biometric_custody_design_is_approved",
+					"raw_package_or_sdk_peer_copy_allowed_with_admin_preview_and_confirmation",
 			},
 		};
 	};
@@ -6310,6 +6310,9 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const getRawFingerprintTemplatesFromValue = (value: any): any[] => {
+		if (typeof value === "string") {
+			return parseRawFingerprintTemplatesFromCell(value);
+		}
 		const templates = Array.isArray(value?.templates)
 			? value.templates
 			: Array.isArray(value?.fingerprints)
@@ -6323,6 +6326,57 @@ export const controller = (prisma: PrismaClient) => {
 				source: template?.source || value?.source || "device_user_raw_custody",
 			}))
 			.filter((template: { data: string }) => template.data);
+	};
+
+	const isRawBiometricStatusValue = (value: string) =>
+		["not_enrolled", "missing_raw_blob", "not_requested"].includes(value.trim());
+
+	const parseRawFingerprintTemplatesFromCell = (value: unknown): any[] => {
+		const raw = String(value || "").trim();
+		if (!raw || isRawBiometricStatusValue(raw)) return [];
+		if (raw.startsWith("[") || raw.startsWith("{")) {
+			try {
+				return getRawFingerprintTemplatesFromValue(JSON.parse(raw));
+			} catch {
+				/* fall through to pattern parsing */
+			}
+		}
+		const patterned = Array.from(raw.matchAll(/FP\s*(\d*)\s*\(\s*"((?:\\.|[^"\\])*)"\s*\)/gi))
+			.map((match, index) => ({
+				fingerPrintId: Number(match[1] || index + 1) || index + 1,
+				fingerType: "normalFP",
+				data: match[2].replace(/\\"/g, '"').replace(/\\\\/g, "\\").trim(),
+				source: "raw_package_cell",
+			}))
+			.filter((template) => template.data);
+		if (patterned.length) return patterned;
+		const parts = raw
+			.split(/[;,]/)
+			.map((part) => part.trim())
+			.filter(Boolean);
+		return (parts.length > 1 ? parts : [raw]).map((data, index) => ({
+			fingerPrintId: index + 1,
+			fingerType: "normalFP",
+			data,
+			source: "raw_package_cell",
+		}));
+	};
+
+	const normalizeRawPackageFingerprintTemplates = (user: any): any[] => {
+		const rawCustody = user?.rawBiometricCustody || {};
+		const directTemplates = Array.isArray(rawCustody?.fingerprint?.templates)
+			? rawCustody.fingerprint.templates
+			: [];
+		const csvColumns = user?.rawPayload?._hrisDeviceMetadata?.biometricCsvColumns || {};
+		return getRawFingerprintTemplatesFromValue({
+			templates: [
+				...directTemplates,
+				...parseRawFingerprintTemplatesFromCell(user?.rawFingerprintBlob),
+				...parseRawFingerprintTemplatesFromCell(user?.fingerprintRawTemplateBlob),
+				...parseRawFingerprintTemplatesFromCell(csvColumns?.rawFingerprintBlob),
+				...parseRawFingerprintTemplatesFromCell(csvColumns?.fingerprintRawTemplateBlob),
+			],
+		});
 	};
 
 	const getRawFaceFromValue = (value: any) => {
@@ -7698,9 +7752,7 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			} else if (biometricTransferMode === "rawPackage") {
 				const rawCustody = row.rawUser?.rawBiometricCustody || {};
-				const fingerprints = Array.isArray(rawCustody?.fingerprint?.templates)
-					? rawCustody.fingerprint.templates
-					: [];
+				const fingerprints = normalizeRawPackageFingerprintTemplates(row.rawUser);
 				const face = rawCustody?.face?.blob || null;
 				if (!fingerprints.length && !face) {
 					results.push(
