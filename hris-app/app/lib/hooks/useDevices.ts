@@ -16,6 +16,8 @@ import devicesService, {
 	type DeviceUserImportPreviewRequest,
 	type DeviceUserImportExecuteRequest,
 	type DeviceUsersResponse,
+	type DeleteDeviceUserRequest,
+	type DeleteDeviceUsersRequest,
 	type DeviceEventsResetScope,
 	type HikvisionListenerAction,
 	type HikvisionListenerStatus,
@@ -697,6 +699,187 @@ export const useUnlinkDeviceUser = () => {
 		},
 		onError: (error: any) => {
 			sonnerToast.error(error?.message || "Failed to unlink device user");
+		},
+	});
+};
+
+export const useDeleteDeviceUser = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (payload: DeleteDeviceUserRequest) => {
+			return await devicesService.deleteDeviceUser(payload);
+		},
+		onMutate: async (payload) => {
+			const vendorUserId = String(payload.vendorUserId || "").trim();
+			const deviceId = String(payload.deviceId || "").trim();
+			await Promise.all([
+				queryClient.cancelQueries({ queryKey: ["devices", "users", deviceId] }),
+				queryClient.cancelQueries({ queryKey: ["hikvision", "device-users", deviceId] }),
+			]);
+			const hrisSnapshots = queryClient.getQueriesData<DeviceUsersResponse>({
+				queryKey: ["devices", "users", deviceId],
+			});
+			const sourceSnapshot = queryClient.getQueryData<any[]>([
+				"hikvision",
+				"device-users",
+				deviceId,
+			]);
+			queryClient.setQueriesData<DeviceUsersResponse>(
+				{ queryKey: ["devices", "users", deviceId] },
+				(current) => {
+					if (!current?.deviceUsers) return current;
+					const removed = current.deviceUsers.some(
+						(row) => String(row.vendorUserId || "").trim() === vendorUserId,
+					);
+					return {
+						...current,
+						deviceUsers: current.deviceUsers.filter(
+							(row) => String(row.vendorUserId || "").trim() !== vendorUserId,
+						),
+						pagination: current.pagination
+							? {
+									...current.pagination,
+									total: Math.max((current.pagination.total || 0) - (removed ? 1 : 0), 0),
+								}
+							: current.pagination,
+					};
+				},
+			);
+			queryClient.setQueryData<any[]>(
+				["hikvision", "device-users", deviceId],
+				(current) =>
+					Array.isArray(current)
+						? current.filter(
+								(row) =>
+									String(row?.employeeNo || row?.employeeNoString || row?.userId || "").trim() !==
+									vendorUserId,
+							)
+						: current,
+			);
+			return { hrisSnapshots, sourceSnapshot, deviceId };
+		},
+		onSuccess: (_data, payload) => {
+			const deviceId = String(payload.deviceId || "").trim();
+			queryClient.invalidateQueries({ queryKey: ["devices", "users", deviceId] });
+			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users", deviceId] });
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.syncPreview({ deviceId }) });
+			sonnerToast.success("Device user deleted");
+		},
+		onError: (error: any, _payload, context) => {
+			context?.hrisSnapshots?.forEach(([queryKey, data]) => {
+				queryClient.setQueryData(queryKey, data);
+			});
+			if (context?.deviceId) {
+				queryClient.setQueryData(
+					["hikvision", "device-users", context.deviceId],
+					context.sourceSnapshot,
+				);
+			}
+			sonnerToast.error(error?.message || "Failed to delete device user");
+		},
+		onSettled: (_data, _error, payload) => {
+			const deviceId = String(payload?.deviceId || "").trim();
+			if (!deviceId) return;
+			queryClient.refetchQueries({ queryKey: ["devices", "users", deviceId], type: "active" });
+			queryClient.refetchQueries({
+				queryKey: ["hikvision", "device-users", deviceId],
+				type: "active",
+			});
+		},
+	});
+};
+
+export const useDeleteDeviceUsers = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (payload: DeleteDeviceUsersRequest) => {
+			return await devicesService.deleteDeviceUsers(payload);
+		},
+		onMutate: async (payload) => {
+			const deviceId = String(payload.deviceId || "").trim();
+			const vendorUserIds = new Set(
+				(payload.vendorUserIds || []).map((value) => String(value || "").trim()).filter(Boolean),
+			);
+			await Promise.all([
+				queryClient.cancelQueries({ queryKey: ["devices", "users", deviceId] }),
+				queryClient.cancelQueries({ queryKey: ["hikvision", "device-users", deviceId] }),
+			]);
+			const hrisSnapshots = queryClient.getQueriesData<DeviceUsersResponse>({
+				queryKey: ["devices", "users", deviceId],
+			});
+			const sourceSnapshot = queryClient.getQueryData<any[]>([
+				"hikvision",
+				"device-users",
+				deviceId,
+			]);
+			queryClient.setQueriesData<DeviceUsersResponse>(
+				{ queryKey: ["devices", "users", deviceId] },
+				(current) => {
+					if (!current?.deviceUsers) return current;
+					const removedCount = current.deviceUsers.filter((row) =>
+						vendorUserIds.has(String(row.vendorUserId || "").trim()),
+					).length;
+					return {
+						...current,
+						deviceUsers: current.deviceUsers.filter(
+							(row) => !vendorUserIds.has(String(row.vendorUserId || "").trim()),
+						),
+						pagination: current.pagination
+							? {
+									...current.pagination,
+									total: Math.max((current.pagination.total || 0) - removedCount, 0),
+								}
+							: current.pagination,
+					};
+				},
+			);
+			queryClient.setQueryData<any[]>(
+				["hikvision", "device-users", deviceId],
+				(current) =>
+					Array.isArray(current)
+						? current.filter(
+								(row) =>
+									!vendorUserIds.has(
+										String(row?.employeeNo || row?.employeeNoString || row?.userId || "").trim(),
+									),
+							)
+						: current,
+			);
+			return { hrisSnapshots, sourceSnapshot, deviceId };
+		},
+		onSuccess: (data, payload) => {
+			const deviceId = String(payload.deviceId || "").trim();
+			queryClient.invalidateQueries({ queryKey: ["devices", "users", deviceId] });
+			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users", deviceId] });
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.syncPreview({ deviceId }) });
+			if (data.failed) {
+				sonnerToast.warning(`Deleted ${data.deleted}; ${data.failed} need attention`);
+			} else {
+				sonnerToast.success(`Deleted ${data.deleted} device users`);
+			}
+		},
+		onError: (error: any, _payload, context) => {
+			context?.hrisSnapshots?.forEach(([queryKey, data]) => {
+				queryClient.setQueryData(queryKey, data);
+			});
+			if (context?.deviceId) {
+				queryClient.setQueryData(
+					["hikvision", "device-users", context.deviceId],
+					context.sourceSnapshot,
+				);
+			}
+			sonnerToast.error(error?.message || "Failed to delete selected device users");
+		},
+		onSettled: (_data, _error, payload) => {
+			const deviceId = String(payload?.deviceId || "").trim();
+			if (!deviceId) return;
+			queryClient.refetchQueries({ queryKey: ["devices", "users", deviceId], type: "active" });
+			queryClient.refetchQueries({
+				queryKey: ["hikvision", "device-users", deviceId],
+				type: "active",
+			});
 		},
 	});
 };

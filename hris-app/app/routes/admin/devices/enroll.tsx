@@ -30,6 +30,7 @@ import {
 	HelpCircle,
 	CheckCircle2,
 	Search,
+	Trash2,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -59,6 +60,8 @@ import {
 	usePreviewDeviceUserImport,
 	useExecuteDeviceUserImport,
 	useUnlinkDeviceUser,
+	useDeleteDeviceUser,
+	useDeleteDeviceUsers,
 } from "~/lib/hooks/useDevices";
 import { useHikvisionDeviceUsers } from "~/lib/hooks/use-hikvision";
 import { useQueryClient } from "@tanstack/react-query";
@@ -732,6 +735,8 @@ export function DeviceEnrollmentPanel({
 	const startHikvisionSdkUserMergeJobMutation = useStartHikvisionSdkUserMergeJob();
 	const linkDeviceUserMutation = useLinkDeviceUser();
 	const unlinkDeviceUserMutation = useUnlinkDeviceUser();
+	const deleteDeviceUserMutation = useDeleteDeviceUser();
+	const deleteDeviceUsersMutation = useDeleteDeviceUsers();
 	const [deviceUserSyncState, setDeviceUserSyncState] = useState<{
 		open: boolean;
 		status: "idle" | "review" | "syncing" | "complete" | "error";
@@ -814,6 +819,16 @@ export function DeviceEnrollmentPanel({
 	const [detailsPeerTallyError, setDetailsPeerTallyError] = useState("");
 	const [linkTarget, setLinkTarget] = useState<VisibleDeviceUserRow | null>(null);
 	const [unlinkTarget, setUnlinkTarget] = useState<VisibleDeviceUserRow | null>(null);
+	const [deleteTarget, setDeleteTarget] = useState<VisibleDeviceUserRow | null>(null);
+	const [deleteSelectedTargets, setDeleteSelectedTargets] = useState<VisibleDeviceUserRow[]>([]);
+	const [recentDeletedDeviceUser, setRecentDeletedDeviceUser] = useState<{
+		vendorUserId: string;
+		displayName?: string | null;
+		sourceDeleted: boolean;
+		hrisDeleted: boolean;
+		count?: number;
+		failed?: number;
+	} | null>(null);
 	const [copyDeviceUserState, setCopyDeviceUserState] = useState<CopyDeviceUserState>({
 		open: false,
 		sourceDeviceUser: null,
@@ -2588,6 +2603,86 @@ export function DeviceEnrollmentPanel({
 		}
 	};
 
+	const openDeleteDeviceUser = (deviceUser: VisibleDeviceUserRow) => {
+		setDeleteTarget(deviceUser);
+		setDeleteSelectedTargets([]);
+	};
+
+	const openDeleteSelectedDeviceUsers = () => {
+		if (selectedDeletableDeviceUserRows.length === 0) {
+			toast.error("Select unlinked device users before deleting");
+			return;
+		}
+		setDeleteTarget(null);
+		setDeleteSelectedTargets(selectedDeletableDeviceUserRows);
+	};
+
+	const confirmDeleteDeviceUser = async () => {
+		if (!selectedDeviceId) {
+			toast.error("Select a device before deleting");
+			return;
+		}
+		if (deleteSelectedTargets.length > 0) {
+			const vendorUserIds = deleteSelectedTargets.map((row) => row.vendorUserId);
+			try {
+				const result = await deleteDeviceUsersMutation.mutateAsync({
+					deviceId: selectedDeviceId,
+					vendorUserIds,
+					execute: true,
+				});
+				const deletedIds = result.results
+					.filter((row) => row.ok)
+					.map((row) => row.vendorUserId);
+				setSelectedExportVendorUserIds((current) =>
+					current.filter((vendorUserId) => !deletedIds.includes(vendorUserId)),
+				);
+				setRecentDeletedDeviceUser({
+					vendorUserId: deletedIds.slice(0, 3).join(", "),
+					displayName:
+						deletedIds.length === 1 ? deleteSelectedTargets[0]?.displayName || null : null,
+					sourceDeleted: result.results
+						.filter((row) => row.ok)
+						.every((row) => row.data?.after?.sourceFound === false),
+					hrisDeleted: result.results
+						.filter((row) => row.ok)
+						.every((row) => row.data?.after?.hrisFound === false),
+					count: result.deleted,
+					failed: result.failed,
+				});
+				setDeleteSelectedTargets([]);
+			} catch (error: any) {
+				toast.error(error?.message || "Failed to delete selected device users");
+			}
+			return;
+		}
+		if (!deleteTarget) return;
+		const vendorUserId = String(deleteTarget.vendorUserId || "").trim();
+		if (!vendorUserId) {
+			toast.error("Device user ID is required");
+			return;
+		}
+		try {
+			const result = await deleteDeviceUserMutation.mutateAsync({
+				deviceId: selectedDeviceId,
+				vendorUserId,
+				execute: true,
+				confirmation: vendorUserId,
+			});
+			setRecentDeletedDeviceUser({
+				vendorUserId,
+				displayName: deleteTarget.displayName || null,
+				sourceDeleted: result?.after?.sourceFound === false,
+				hrisDeleted: result?.after?.hrisFound === false,
+			});
+			setSelectedExportVendorUserIds((current) =>
+				current.filter((selectedVendorUserId) => selectedVendorUserId !== vendorUserId),
+			);
+			setDeleteTarget(null);
+		} catch (error: any) {
+			toast.error(error?.message || "Failed to delete device user");
+		}
+	};
+
 	const copyTargetDeviceOptions = useMemo(
 		(): Array<{ value: string; label: string }> =>
 			devices
@@ -3427,6 +3522,12 @@ export function DeviceEnrollmentPanel({
 			return Array.from(next);
 		});
 	};
+	const selectedDeviceUserRows = visibleDeviceUserRows.filter((row) =>
+		selectedExportVendorUserIdSet.has(row.vendorUserId),
+	);
+	const selectedDeletableDeviceUserRows = selectedDeviceUserRows.filter(
+		(row) => !row.employeeId,
+	);
 	const deviceUserSummary = deviceUserSummaryData?.summary;
 	const physicalSourceCount =
 		selectedSyncCenterItem?.preview?.vendorUserCount ?? sourceDeviceUserRows.length;
@@ -5188,6 +5289,32 @@ export function DeviceEnrollmentPanel({
 									<Button
 										type="button"
 										variant="outline"
+										className="h-8 w-8 bg-white p-0 text-red-700 hover:bg-red-50 hover:text-red-800"
+										disabled={
+											!selectedDeviceId ||
+											selectedDeletableDeviceUserRows.length === 0 ||
+											deleteDeviceUsersMutation.isPending
+										}
+										aria-label={
+											selectedDeviceUserRows.length > 0 &&
+											selectedDeletableDeviceUserRows.length === 0
+												? "Selected users are linked and cannot be deleted"
+												: "Delete selected device users"
+										}
+										title={
+											selectedDeviceUserRows.length > 0 &&
+											selectedDeletableDeviceUserRows.length === 0
+												? "Unlink selected users before deleting"
+												: selectedDeletableDeviceUserRows.length
+													? `Delete ${selectedDeletableDeviceUserRows.length} selected`
+													: "Select unlinked device users to delete"
+										}
+										onClick={openDeleteSelectedDeviceUsers}>
+										<Trash2 className="h-4 w-4" />
+									</Button>
+									<Button
+										type="button"
+										variant="outline"
 										className="h-8 px-3"
 										disabled={!selectedDeviceId || isReadingDeviceUsers}
 										onClick={refreshSourceDeviceUsers}>
@@ -5317,6 +5444,35 @@ export function DeviceEnrollmentPanel({
 								</div>
 							) : null}
 
+							{recentDeletedDeviceUser ? (
+								<div className="flex flex-col gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950 sm:flex-row sm:items-center sm:justify-between">
+									<div>
+										<span className="font-semibold">
+											{recentDeletedDeviceUser.count && recentDeletedDeviceUser.count > 1
+												? `Deleted ${recentDeletedDeviceUser.count} device users`
+												: `Deleted ${recentDeletedDeviceUser.displayName || "device user"} (${recentDeletedDeviceUser.vendorUserId})`}
+										</span>
+										<span className="mt-1 block text-xs text-emerald-800">
+											Device:{" "}
+											{recentDeletedDeviceUser.sourceDeleted ? "not found" : "needs check"} ·
+											HRIS row:{" "}
+											{recentDeletedDeviceUser.hrisDeleted ? "removed" : "needs check"}
+											{recentDeletedDeviceUser.failed
+												? ` · ${recentDeletedDeviceUser.failed} failed`
+												: ""}
+										</span>
+									</div>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="h-8 border-emerald-200 bg-white text-emerald-900 hover:bg-emerald-100"
+										onClick={() => setRecentDeletedDeviceUser(null)}>
+										Dismiss
+									</Button>
+								</div>
+							) : null}
+
 							<div className="overflow-hidden rounded-lg border border-slate-200">
 								<table className="min-w-full table-fixed divide-y divide-slate-200 text-sm">
 									<colgroup>
@@ -5378,7 +5534,24 @@ export function DeviceEnrollmentPanel({
 												</td>
 											</tr>
 										) : (
-											pagedDeviceUserRows.map((deviceUser) => (
+											pagedDeviceUserRows.map((deviceUser) => {
+												const deletingVendorUserId = String(
+													(deleteDeviceUserMutation.variables as any)?.vendorUserId || "",
+												).trim();
+												const bulkDeletingVendorUserIds = new Set(
+													(
+														(deleteDeviceUsersMutation.variables as any)?.vendorUserIds ||
+														[]
+													).map((value: unknown) => String(value || "").trim()),
+												);
+												const isDeletingThisDeviceUser =
+													(deleteDeviceUserMutation.isPending &&
+														deletingVendorUserId === String(deviceUser.vendorUserId || "").trim()) ||
+													(deleteDeviceUsersMutation.isPending &&
+														bulkDeletingVendorUserIds.has(
+															String(deviceUser.vendorUserId || "").trim(),
+														));
+												return (
 												<tr key={deviceUser.key} className="align-middle">
 													<td className="px-3 py-2">
 														<input
@@ -5424,6 +5597,11 @@ export function DeviceEnrollmentPanel({
 																	{deviceUser.employee.employeeId}
 																</p>
 															</div>
+														) : isDeletingThisDeviceUser ? (
+															<span className="inline-flex items-center gap-1.5 text-red-700">
+																<Loader2 className="h-3.5 w-3.5 animate-spin" />
+																Deleting device user
+															</span>
 														) : deviceUser.status ===
 														  "CHECKING_LINK" ? (
 															<span className="inline-flex items-center gap-1.5 text-slate-500">
@@ -5445,14 +5623,18 @@ export function DeviceEnrollmentPanel({
 														<div className="flex flex-wrap items-center gap-1.5">
 															<Badge
 																variant={
-																	getDeviceUserBadgeVariant(
-																		deviceUser.status,
-																	) as any
+																	(isDeletingThisDeviceUser
+																		? "destructive"
+																		: getDeviceUserBadgeVariant(
+																				deviceUser.status,
+																			)) as any
 																}
 																className="h-6 items-center">
-																{getDeviceUserStatusLabel(
-																	deviceUser.status,
-																)}
+																{isDeletingThisDeviceUser
+																	? "Deleting"
+																	: getDeviceUserStatusLabel(
+																			deviceUser.status,
+																		)}
 															</Badge>
 														</div>
 													</td>
@@ -5472,6 +5654,7 @@ export function DeviceEnrollmentPanel({
 																		variant="outline"
 																		size="sm"
 																		className="h-8 w-8 bg-white p-0"
+																		disabled={isDeletingThisDeviceUser}
 																		aria-label={`More actions for device user ${deviceUser.displayName || deviceUser.vendorUserId}`}>
 																		<MoreVertical className="h-4 w-4" />
 																	</Button>
@@ -5540,7 +5723,8 @@ export function DeviceEnrollmentPanel({
 																			<DropdownMenuSeparator />
 																			<DropdownMenuItem
 																				disabled={
-																					unlinkDeviceUserMutation.isPending
+																					unlinkDeviceUserMutation.isPending ||
+																					isDeletingThisDeviceUser
 																				}
 																				className="text-red-700 focus:text-red-700"
 																				onClick={() =>
@@ -5553,12 +5737,28 @@ export function DeviceEnrollmentPanel({
 																			</DropdownMenuItem>
 																		</>
 																	) : null}
+																	<DropdownMenuSeparator />
+																	<DropdownMenuItem
+																		disabled={
+																			isDeletingThisDeviceUser ||
+																			Boolean(deviceUser.employeeId)
+																		}
+																		className="text-red-700 focus:text-red-700"
+																		onClick={() =>
+																			openDeleteDeviceUser(deviceUser)
+																		}>
+																		<Trash2 className="mr-2 h-4 w-4" />
+																		{deviceUser.employeeId
+																			? "Unlink before delete"
+																			: "Delete from device"}
+																	</DropdownMenuItem>
 																</DropdownMenuContent>
 															</DropdownMenu>
 														</div>
 													</td>
 												</tr>
-											))
+												);
+											})
 										)}
 									</tbody>
 								</table>
@@ -9444,6 +9644,131 @@ export function DeviceEnrollmentPanel({
 								<Unlink className="h-4 w-4" />
 							)}
 							Unlink employee
+						</Button>
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
+				open={Boolean(deleteTarget) || deleteSelectedTargets.length > 0}
+				onOpenChange={(open) => {
+					if (
+						!open &&
+						!deleteDeviceUserMutation.isPending &&
+						!deleteDeviceUsersMutation.isPending
+					) {
+						setDeleteTarget(null);
+						setDeleteSelectedTargets([]);
+					}
+				}}
+				title={
+					deleteSelectedTargets.length > 0
+						? "Delete selected device users"
+						: "Delete device user"
+				}
+				description={
+					deleteSelectedTargets.length > 0
+						? "Delete the selected unlinked users from this Hikvision device and remove their saved HRIS DeviceUser rows."
+						: "Delete this user from the selected Hikvision device and remove its saved HRIS DeviceUser row."
+				}
+				className="max-w-lg"
+				showCloseButton={
+					!deleteDeviceUserMutation.isPending && !deleteDeviceUsersMutation.isPending
+				}
+				closeOnBackdropClick={
+					!deleteDeviceUserMutation.isPending && !deleteDeviceUsersMutation.isPending
+				}>
+				<div className="space-y-4">
+					{deleteTarget ? (
+						<div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-950">
+							<p className="font-semibold">Confirm this exact device user should be deleted.</p>
+							<div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+								<div>
+									<span className="block text-red-700">Device user</span>
+									<span className="font-semibold">
+										{deleteTarget.displayName || deleteTarget.vendorUserId}
+									</span>
+								</div>
+								<div>
+									<span className="block text-red-700">Vendor user ID</span>
+									<span className="font-semibold">{deleteTarget.vendorUserId}</span>
+								</div>
+								<div>
+									<span className="block text-red-700">HRIS row</span>
+									<span className="font-semibold">
+										{deleteTarget.hrisDeviceUser ? "Will be removed" : "No saved row"}
+									</span>
+								</div>
+								<div>
+									<span className="block text-red-700">Device</span>
+									<span className="font-semibold">{selectedDevice?.name || "-"}</span>
+								</div>
+							</div>
+						</div>
+					) : null}
+					{deleteSelectedTargets.length > 0 ? (
+						<div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-950">
+							<p className="font-semibold">
+								Confirm {deleteSelectedTargets.length} selected unlinked device users should
+								be deleted.
+							</p>
+							<div className="mt-3 max-h-36 space-y-1 overflow-auto text-xs">
+								{deleteSelectedTargets.slice(0, 12).map((row) => (
+									<div key={row.vendorUserId} className="flex justify-between gap-3">
+										<span className="truncate">
+											{row.displayName || "Unnamed device user"}
+										</span>
+										<span className="font-semibold">{row.vendorUserId}</span>
+									</div>
+								))}
+								{deleteSelectedTargets.length > 12 ? (
+									<p className="pt-1 text-red-700">
+										+{deleteSelectedTargets.length - 12} more selected users
+									</p>
+								) : null}
+							</div>
+						</div>
+					) : null}
+					<p className="text-sm font-medium text-slate-800">
+						Are you sure you want to delete{" "}
+						{deleteSelectedTargets.length > 0 ? "these device users" : "this device user"}?
+					</p>
+					<p className="text-xs text-slate-600">
+						This calls the selected Hikvision device over HTTP, then removes only the matching
+						HRIS DeviceUser inventory row after the device no longer returns that user. It
+						does not delete employee records or saved DeviceEvent history. Linked device users
+						must be unlinked first.
+					</p>
+					<div className="flex flex-col-reverse gap-2 border-t pt-3 sm:flex-row sm:justify-end">
+						<Button
+							type="button"
+							variant="outline"
+							disabled={
+								deleteDeviceUserMutation.isPending || deleteDeviceUsersMutation.isPending
+							}
+							onClick={() => {
+								setDeleteTarget(null);
+								setDeleteSelectedTargets([]);
+							}}>
+							Cancel
+						</Button>
+						<Button
+							type="button"
+							className="bg-red-700 text-white hover:bg-red-800"
+							disabled={
+								deleteDeviceUserMutation.isPending ||
+								deleteDeviceUsersMutation.isPending ||
+								(!deleteTarget && deleteSelectedTargets.length === 0)
+							}
+							onClick={confirmDeleteDeviceUser}>
+							{deleteDeviceUserMutation.isPending || deleteDeviceUsersMutation.isPending ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<Trash2 className="h-4 w-4" />
+							)}
+							{deleteSelectedTargets.length > 0
+								? `Delete ${deleteSelectedTargets.length} users`
+								: "Delete device user"}
 						</Button>
 					</div>
 				</div>

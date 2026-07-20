@@ -4627,6 +4627,370 @@ export const controller = (prisma: PrismaClient) => {
 		};
 	};
 
+	const deleteHikvisionSourceUser = async (params: {
+		req: Request;
+		deviceId: string;
+		employeeNo: string;
+	}) => {
+		const primaryBody = {
+			UserInfoDetail: {
+				mode: "byEmployeeNo",
+				EmployeeNoList: [{ employeeNo: params.employeeNo }],
+			},
+		};
+		const fallbackBody = {
+			UserInfo: {
+				employeeNo: params.employeeNo,
+				deleteUser: true,
+			},
+		};
+		const attempts: any[] = [];
+		try {
+			const response = await hikvisionFetch(hikvisionEndpoint.accessControl.userInfoDetail.delete, {
+				method: "POST",
+				deviceId: params.deviceId,
+				prisma,
+				request: params.req,
+				timeoutMs: 15000,
+				headers: { "Content-Type": "application/json" },
+				body: primaryBody,
+			});
+			attempts.push({
+				endpoint: "POST /ISAPI/AccessControl/UserInfoDetail/Delete?format=json",
+				ok: true,
+				response,
+			});
+			return { method: "UserInfoDetail.Delete", attempts };
+		} catch (error: any) {
+			attempts.push({
+				endpoint: "POST /ISAPI/AccessControl/UserInfoDetail/Delete?format=json",
+				ok: false,
+				status: error?.status || null,
+				message: error?.message || String(error),
+				data: error?.data || null,
+			});
+		}
+
+		const response = await hikvisionFetch(hikvisionEndpoint.accessControl.userInfo.setUp, {
+			method: "PUT",
+			deviceId: params.deviceId,
+			prisma,
+			request: params.req,
+			timeoutMs: 15000,
+			headers: { "Content-Type": "application/json" },
+			body: fallbackBody,
+		});
+		attempts.push({
+			endpoint: "PUT /ISAPI/AccessControl/UserInfo/SetUp?format=json",
+			ok: true,
+			response,
+		});
+		return { method: "UserInfo.SetUp.deleteUser", attempts };
+	};
+
+	const performDeviceUserDelete = async (params: {
+		req: Request;
+		organizationId: string;
+		device: any;
+		vendorUserId: string;
+		execute: boolean;
+		confirmation?: string;
+		requireExactConfirmation?: boolean;
+	}) => {
+		const deviceId = String(params.device.id || "").trim();
+		const vendorUserId = String(params.vendorUserId || "").trim();
+		if (!deviceId || !vendorUserId) {
+			throw { status: 400, message: "Device and device user are required" };
+		}
+		const includeVendorMetadata = await hasDeviceUserVendorMetadataColumn();
+			const hrisBefore = await (prisma as any).deviceUser.findUnique({
+				where: {
+					organizationId_deviceId_vendorUserId: {
+					organizationId: params.organizationId,
+						deviceId,
+						vendorUserId,
+					},
+				},
+				select: buildDeviceUserSelect({ includeVendorMetadata }),
+			});
+		const sourceBefore = await loadSingleHikvisionDeviceUserSnapshot(
+			params.req,
+			params.device,
+			vendorUserId,
+		);
+			const sourceBeforeExact = sourceBefore.rawUsers.filter(
+				(user) =>
+					String(user?.employeeNo || user?.employeeNoString || user?.userId || "").trim() ===
+					vendorUserId,
+			);
+
+			const before = {
+				hrisFound: Boolean(hrisBefore),
+				sourceFound: sourceBeforeExact.length > 0,
+				sourceMatchCount: sourceBeforeExact.length,
+				hrisDeviceUser: hrisBefore ? decorateDeviceUser(hrisBefore) : null,
+				sourceUsers: sourceBeforeExact,
+			};
+
+		const base = {
+			device: {
+				id: params.device.id,
+				name: params.device.name,
+				address: params.device.address,
+				protocol: params.device.protocol,
+			},
+			vendorUserId,
+			execute: params.execute,
+			before,
+			requiresConfirmation: vendorUserId,
+		};
+		if (!params.execute) return base;
+
+		if (params.requireExactConfirmation !== false && params.confirmation !== vendorUserId) {
+			throw { status: 400, message: "Type the exact device user ID to confirm deletion" };
+			}
+			if (hrisBefore?.employeeId) {
+			throw { status: 409, message: "Unlink this device user before deleting it" };
+			}
+			if (!hrisBefore && sourceBeforeExact.length === 0) {
+			throw { status: 404, message: "Device user was not found" };
+			}
+
+			let sourceDelete: any = null;
+			if (sourceBeforeExact.length > 0) {
+				sourceDelete = await deleteHikvisionSourceUser({
+				req: params.req,
+					deviceId,
+					employeeNo: vendorUserId,
+				});
+			}
+
+		const sourceAfter = await loadSingleHikvisionDeviceUserSnapshot(
+			params.req,
+			params.device,
+			vendorUserId,
+		);
+			const sourceAfterExact = sourceAfter.rawUsers.filter(
+				(user) =>
+					String(user?.employeeNo || user?.employeeNoString || user?.userId || "").trim() ===
+					vendorUserId,
+			);
+			if (sourceAfterExact.length > 0) {
+			throw {
+				status: 502,
+				message: "Hikvision user still exists after delete attempt",
+				data: {
+							before,
+							sourceDelete,
+							after: {
+								sourceFound: true,
+								sourceMatchCount: sourceAfterExact.length,
+								sourceUsers: sourceAfterExact,
+							},
+						},
+			};
+			}
+
+			const hrisDeleteResult = await (prisma as any).deviceUser.deleteMany({
+				where: {
+				organizationId: params.organizationId,
+					deviceId,
+					vendorUserId,
+					employeeId: null,
+				},
+			});
+			const hrisDelete: any = {
+				deleted: hrisDeleteResult.count > 0,
+				count: hrisDeleteResult.count,
+			};
+			const hrisAfter = await (prisma as any).deviceUser.findUnique({
+				where: {
+					organizationId_deviceId_vendorUserId: {
+					organizationId: params.organizationId,
+						deviceId,
+						vendorUserId,
+					},
+				},
+				select: { id: true },
+			});
+
+		return {
+			...base,
+			sourceDelete,
+			hrisDelete,
+			after: {
+				sourceFound: false,
+				sourceMatchCount: 0,
+				sourceUsers: [],
+				hrisFound: Boolean(hrisAfter),
+			},
+		};
+	};
+
+	const deleteDeviceUser = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			const deviceId = String(req.params.id || req.body?.deviceId || "").trim();
+			const vendorUserId = String(req.params.vendorUserId || req.body?.vendorUserId || "").trim();
+			const execute = req.body?.execute === true;
+			const confirmation = String(req.body?.confirmation || "").trim();
+			if (!(await hasDeviceUserTable())) {
+				res.status(409).json(buildErrorResponse("Device users table is not available", 409));
+				return;
+			}
+			const device = await getDeviceForUserSync(gate.organizationId, deviceId);
+			if (!device) {
+				res.status(404).json(buildErrorResponse("Device not found", 404));
+				return;
+			}
+			if (!isHikvisionDevice(device)) {
+				res.status(400).json(
+					buildErrorResponse("Device user delete is currently supported for Hikvision devices", 400),
+				);
+				return;
+			}
+			const data = await performDeviceUserDelete({
+				req,
+				organizationId: gate.organizationId,
+				device,
+				vendorUserId,
+				execute,
+				confirmation,
+			});
+			if (execute) {
+				try {
+					await invalidateCache.byPattern("cache:device:*");
+					await invalidateCache.byPattern("cache:devices:*");
+				} catch (error) {
+					deviceLogger.warn(`Device user delete cache invalidation failed: ${error}`);
+				}
+				logActivity(req, {
+					userId: String((req as any).userId || (req as any).user?.id || "unknown"),
+					action: "DELETE_DEVICE_USER",
+					description: `Deleted Hikvision device user ${vendorUserId} from ${device.name}`,
+					page: { url: req.originalUrl, title: "Device Users" },
+				});
+			}
+			res.status(200).json(
+				buildSuccessResponse(
+					execute ? "Device user deleted" : "Device user delete preview",
+					data,
+					200,
+				),
+			);
+		} catch (error: any) {
+			const response: any = buildErrorResponse(
+				error?.message || "Failed to delete device user",
+				error?.status || 500,
+			);
+			if (error?.data) response.data = error.data;
+			res.status(error?.status || 500).json(
+				response,
+			);
+		}
+	};
+
+	const deleteDeviceUsers = async (req: Request, res: Response, _next: NextFunction) => {
+		const gate = assertDeviceUserAdmin(req, res);
+		if (!gate) return;
+		try {
+			const deviceId = String(req.params.id || req.body?.deviceId || "").trim();
+			const execute = req.body?.execute === true;
+			const vendorUserIds = Array.from(
+				new Set(
+					([] as any[])
+						.concat(req.body?.vendorUserIds || req.body?.vendorUserId || [])
+						.flatMap((value) => String(value || "").split(","))
+						.map((value) => value.trim())
+						.filter(Boolean),
+				),
+			).slice(0, 50);
+			if (!deviceId || vendorUserIds.length === 0) {
+				res.status(400).json(buildErrorResponse("Device and selected device users are required", 400));
+				return;
+			}
+			if (!(await hasDeviceUserTable())) {
+				res.status(409).json(buildErrorResponse("Device users table is not available", 409));
+				return;
+			}
+			const device = await getDeviceForUserSync(gate.organizationId, deviceId);
+			if (!device) {
+				res.status(404).json(buildErrorResponse("Device not found", 404));
+				return;
+			}
+			if (!isHikvisionDevice(device)) {
+				res.status(400).json(
+					buildErrorResponse("Device user delete is currently supported for Hikvision devices", 400),
+				);
+				return;
+			}
+			const results = [];
+			for (const vendorUserId of vendorUserIds) {
+				try {
+					const data = await performDeviceUserDelete({
+						req,
+						organizationId: gate.organizationId,
+						device,
+						vendorUserId,
+						execute,
+						confirmation: vendorUserId,
+						requireExactConfirmation: false,
+					});
+					results.push({ vendorUserId, ok: true, data });
+				} catch (error: any) {
+					results.push({
+						vendorUserId,
+						ok: false,
+						status: error?.status || 500,
+						message: error?.message || "Failed to delete device user",
+						data: error?.data || null,
+					});
+				}
+			}
+			if (execute) {
+				try {
+					await invalidateCache.byPattern("cache:device:*");
+					await invalidateCache.byPattern("cache:devices:*");
+				} catch (error) {
+					deviceLogger.warn(`Device users delete cache invalidation failed: ${error}`);
+				}
+				logActivity(req, {
+					userId: String((req as any).userId || (req as any).user?.id || "unknown"),
+					action: "DELETE_DEVICE_USERS",
+					description: `Deleted ${results.filter((result) => result.ok).length} Hikvision device users from ${device.name}`,
+					page: { url: req.originalUrl, title: "Device Users" },
+				});
+			}
+			const failed = results.filter((result) => !result.ok).length;
+			const okCount = results.filter((result) => result.ok).length;
+			res.status(failed && execute ? 207 : 200).json(
+				buildSuccessResponse(
+					execute ? "Device users delete completed" : "Device users delete preview",
+					{
+						device: {
+							id: device.id,
+							name: device.name,
+							address: device.address,
+							protocol: device.protocol,
+						},
+						execute,
+						requested: vendorUserIds.length,
+						previewed: execute ? 0 : okCount,
+						deleted: execute ? okCount : 0,
+						failed,
+						results,
+					},
+					failed && execute ? 207 : 200,
+				),
+			);
+		} catch (error: any) {
+			res.status(error?.status || 500).json(
+				buildErrorResponse(error?.message || "Failed to delete selected device users", error?.status || 500),
+			);
+		}
+	};
+
 	const mirrorDeviceUserLinkToPeer = async (params: {
 		organizationId: string;
 		sourceDeviceId: string;
@@ -16023,6 +16387,8 @@ export const controller = (prisma: PrismaClient) => {
 		getDeviceSyncRuns,
 		getDeviceActivity,
 		listDeviceUsers,
+		deleteDeviceUser,
+		deleteDeviceUsers,
 		captureDeviceUserRawFingerprints,
 		getDeviceUserPhoto,
 		syncDeviceUsers,

@@ -881,6 +881,57 @@ export interface DeviceUsersResponse {
 	};
 }
 
+export interface DeleteDeviceUserRequest {
+	deviceId: string;
+	vendorUserId: string;
+	execute?: boolean;
+	confirmation?: string;
+}
+
+export interface DeleteDeviceUserResponse {
+	device?: Pick<Device, "id" | "name" | "address" | "protocol">;
+	vendorUserId: string;
+	execute: boolean;
+	before?: {
+		hrisFound: boolean;
+		sourceFound: boolean;
+		sourceMatchCount: number;
+		hrisDeviceUser?: DeviceUser | null;
+		sourceUsers?: any[];
+	};
+	after?: {
+		hrisFound: boolean;
+		sourceFound: boolean;
+		sourceMatchCount: number;
+		sourceUsers?: any[];
+	};
+	sourceDelete?: any;
+	hrisDelete?: any;
+	requiresConfirmation?: string;
+}
+
+export interface DeleteDeviceUsersRequest {
+	deviceId: string;
+	vendorUserIds: string[];
+	execute?: boolean;
+}
+
+export interface DeleteDeviceUsersResponse {
+	device?: Pick<Device, "id" | "name" | "address" | "protocol">;
+	execute: boolean;
+	requested: number;
+	previewed?: number;
+	deleted: number;
+	failed: number;
+	results: Array<{
+		vendorUserId: string;
+		ok: boolean;
+		status?: number;
+		message?: string;
+		data?: DeleteDeviceUserResponse;
+	}>;
+}
+
 export interface DeviceUserCredentialSummary {
 	fingerprintCount: number;
 	cardCount: number;
@@ -1848,6 +1899,58 @@ class DevicesService extends APIService {
 			console.error("Error unlinking device user:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error unlinking device user",
+			);
+		}
+	}
+
+	async deleteDeviceUser(payload: DeleteDeviceUserRequest): Promise<DeleteDeviceUserResponse> {
+		try {
+			const deviceId = String(payload.deviceId || "").trim();
+			const vendorUserId = String(payload.vendorUserId || "").trim();
+			if (!deviceId || !vendorUserId) throw new Error("Device and device user are required");
+			const response = await hrisApiClient.post<any>(
+				`/api/device/${deviceId}/users/${encodeURIComponent(vendorUserId)}/delete`,
+				{
+					execute: payload.execute === true,
+					confirmation: payload.confirmation || "",
+				},
+			);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to delete device user");
+			return data as DeleteDeviceUserResponse;
+		} catch (error: any) {
+			console.error("Error deleting device user:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error deleting device user",
+			);
+		}
+	}
+
+	async deleteDeviceUsers(payload: DeleteDeviceUsersRequest): Promise<DeleteDeviceUsersResponse> {
+		try {
+			const deviceId = String(payload.deviceId || "").trim();
+			const vendorUserIds = Array.from(
+				new Set((payload.vendorUserIds || []).map((value) => String(value || "").trim()).filter(Boolean)),
+			);
+			if (!deviceId || vendorUserIds.length === 0) {
+				throw new Error("Device and selected device users are required");
+			}
+			const response = await hrisApiClient.post<any>(
+				`/api/device/${deviceId}/users/delete`,
+				{
+					execute: payload.execute === true,
+					vendorUserIds,
+				},
+			);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to delete selected device users");
+			return data as DeleteDeviceUsersResponse;
+		} catch (error: any) {
+			console.error("Error deleting selected device users:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error deleting selected device users",
 			);
 		}
 	}

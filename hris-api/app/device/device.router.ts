@@ -35,6 +35,8 @@ interface IController {
 	executeDeviceUserImport(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceUserImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	listDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	deleteDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
+	deleteDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	captureDeviceUserRawFingerprints(
 		req: Request,
 		res: Response,
@@ -103,6 +105,8 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/users/import/execute", controller.executeDeviceUserImport);
 	routes.get("/users/import/jobs/:jobId", controller.getDeviceUserImportJob);
 	routes.get("/:id/users", controller.listDeviceUsers);
+	routes.post("/:id/users/delete", controller.deleteDeviceUsers);
+	routes.post("/:id/users/:vendorUserId/delete", controller.deleteDeviceUser);
 	routes.post(
 		"/:id/users/:vendorUserId/raw-fingerprints/capture",
 		controller.captureDeviceUserRawFingerprints,
