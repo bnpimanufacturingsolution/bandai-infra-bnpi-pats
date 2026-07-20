@@ -56,7 +56,6 @@ import {
 	AdminConfigCodeChip,
 	AdminConfigDateText,
 	AdminConfigMutedDash,
-	AdminConfigPrimaryCell,
 	AdminConfigSourceChip,
 } from "~/lib/ui/admin-configuration-table";
 import { EmployeeAvatar } from "~/components/atoms/EmployeeAvatar";
@@ -272,8 +271,6 @@ export default function EmployeeList({
 	const usesReportingTreeScope =
 		usesManagerScope &&
 		(teamScopeFilter === "reporting-tree" || teamScopeFilter === "supervisor-tree");
-	const isHrEmployeesPage = basePath === "/hr/employees";
-
 	useEffect(() => {
 		if (useTeamOverviewScope) return;
 		if (!defaultManagerId) return;
@@ -762,7 +759,9 @@ export default function EmployeeList({
 				const nameClassName = disableEmployeeDeepLinks
 					? "font-medium text-gray-900"
 					: "font-medium text-gray-900 hover:text-primary hover:underline";
-				const content = isHrEmployeesPage ? (
+				// Avatar + name + employee code for every EmployeeList surface
+				// (admin configuration, HR employees, team scopes, etc.).
+				const content = (
 					<div className="min-w-0">
 						<div className="flex min-w-0 items-center gap-3">
 							<EmployeeAvatar
@@ -781,16 +780,6 @@ export default function EmployeeList({
 							</div>
 						</div>
 					</div>
-				) : (
-					<AdminConfigPrimaryCell
-						primary={
-							<span className={nameClassName} title={value}>
-								{value}
-							</span>
-						}
-						secondary={<AdminConfigCodeChip>{item.employeeId}</AdminConfigCodeChip>}
-						title={value}
-					/>
 				);
 
 				if (disableEmployeeDeepLinks) {

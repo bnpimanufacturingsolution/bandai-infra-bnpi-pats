@@ -263,6 +263,11 @@ describe("EmployeeList agency advanced filter", () => {
 				.getAllByText("DIRECT")
 				.some((element) => element.closest("[data-testid='badge']")),
 		).toBe(true);
+
+		// Name column shows employee avatar on admin configuration list
+		expect(
+			screen.getAllByTestId("avatar-image").map((node) => node.getAttribute("src")),
+		).toContain("https://example.test/avatar.png");
 	}, 15_000);
 
 	it("renders hr employment status as dot text while workforce remains a badge", async () => {
