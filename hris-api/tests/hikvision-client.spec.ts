@@ -46,7 +46,8 @@ describe("hikvision client endpoint resolution", () => {
 		process.env.PROJECT_TRUTH_HIKVISION_TUNNEL_MAP =
 			"10.184.37.20:443=127.0.0.1:10443,10.184.37.20:8000=127.0.0.1:18000," +
 			"10.184.37.21:443=127.0.0.1:10444,10.184.37.21:8000=127.0.0.1:18001," +
-			"10.184.37.22:443=127.0.0.1:10445,10.184.37.22:8000=127.0.0.1:18002";
+			"10.184.37.22:443=127.0.0.1:10445,10.184.37.22:8000=127.0.0.1:18002," +
+			"10.184.37.23:443=127.0.0.1:10446,10.184.37.23:8000=127.0.0.1:18003";
 		try {
 			const baseUrl = buildHikvisionDeviceBaseUrl({
 				address: "10.184.37.21",
@@ -60,6 +61,12 @@ describe("hikvision client endpoint resolution", () => {
 			expect(sdkTarget).to.deep.equal({
 				host: "127.0.0.1",
 				port: 18001,
+				protocol: undefined,
+				source: "env_tunnel_map",
+			});
+			expect(resolveHikvisionTunnelTarget("10.184.37.23", 443)).to.deep.equal({
+				host: "127.0.0.1",
+				port: 10446,
 				protocol: undefined,
 				source: "env_tunnel_map",
 			});

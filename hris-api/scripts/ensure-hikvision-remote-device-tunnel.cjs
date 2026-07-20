@@ -25,7 +25,7 @@ if (!fs.existsSync(scriptPath)) {
 
 const deviceIps = String(
 	process.env.PROJECT_TRUTH_HIKVISION_REMOTE_DEVICE_IPS ||
-		"10.184.37.20,10.184.37.21,10.184.37.22",
+		"10.184.37.20,10.184.37.21,10.184.37.22,10.184.37.23",
 )
 	.split(/[,\s;]+/)
 	.map((value) => value.trim())
