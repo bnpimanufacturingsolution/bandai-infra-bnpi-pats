@@ -206,6 +206,15 @@ as a Project Truth network dependency. Removing it means disabling/removing the
 WSL/Docker Desktop host path, while preserving Hyper-V and the VM switch needed
 for `project-truth-local-vhdx-proof`.
 
+For Windows-host localhost hot reload, the canonical DEV database is the K3s DEV
+Postgres forward on `127.0.0.1:55435` (`dev/hris-postgres`, service
+`10.43.130.9:5432`). Do not silently switch localhost dev to compose DEV
+`10.184.37.19:15433`: that is a duplicate drift-prone diagnostic database and
+has previously shown only the stale `192.168.18.39` device while the real DEV
+runtime had 7 devices including TEST A at `192.168.254.102`. If `55435` is down,
+recover K3s/disk pressure/forwarding first, or require an explicit
+`PROJECT_TRUTH_ALLOW_COMPOSE_DEV_DB_FALLBACK=true` diagnostic override.
+
 ## Banned Fake Blockers
 
 Do not stop just because:

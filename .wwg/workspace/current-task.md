@@ -331,7 +331,9 @@
   - PowerShell and Node syntax parsing pass.
   - Warm real predev proof completed the DB step in 0.3 seconds and all seven predev steps in 8.9 seconds; the remaining dominant cost was the separate device-live-path check at 6.5 seconds.
   - Controlled cold proof through the Cloudflare SSH fallback opened a replacement Postgres forward in 3.18 seconds and returned a valid Postgres SSL negotiation reply; the replacement forward remains active.
-- Truth sync: No architecture or terminology change; canonical DEV datasource remains `127.0.0.1:55435` backed by the VM/K3s database forward.
+- 2026-07-20 follow-up: `dev.bnpi-hris.tech` and K3s DEV proved the correct local DEV runtime: 7 active devices including `TEST A` (`cmrlgqsjv000oob01165tbd8n`, `192.168.254.102:443`), 394 TEST A DeviceUser rows, and 1924 TEST A DeviceEvent rows. Compose DEV at `10.184.37.19:15433` proved stale/drifted with only one old `192.168.18.39` device. Localhost hot reload must point at the K3s DEV forward `127.0.0.1:55435`; compose DEV `15433` is diagnostic-only unless explicitly requested.
+- Recovery evidence: K3s was blocked by `DiskPressure=True` because old retained VHDX snapshots under `/var/lib/project-truth/retained-vhdx` consumed about 194 GB. Removing those retained snapshots increased free space from about 28 GB to about 193 GB; after K3s restart, node `DiskPressure=False`, and DEV `hris-postgres-0`, `hris-api`, `hris-app`, and `hris-hikvision-watcher` returned to `Running`.
+- Truth sync: Architecture clarification; canonical DEV datasource remains `127.0.0.1:55435` backed by the VM/K3s database forward. Compose DEV `10.184.37.19:15433` must not be silently selected for normal localhost hot reload because it is a duplicate drift-prone runtime.
 - Recommendation capture: No new recommendations were identified.
 
 ## Latest Task Addendum - 2026-07-17 Device-user sync stale processing truth

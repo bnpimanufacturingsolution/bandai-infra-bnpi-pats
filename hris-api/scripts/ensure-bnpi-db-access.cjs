@@ -265,6 +265,14 @@ async function main() {
 		}
 
 		// Fallback: compose-published DEV Postgres on 15433.
+		// This is an explicit escape hatch only. The host-local DEV truth is the
+		// K3s DEV Postgres forward on 127.0.0.1:55435; compose DEV has drifted
+		// independently before and can show the wrong device set in localhost.
+		if (process.env.PROJECT_TRUTH_ALLOW_COMPOSE_DEV_DB_FALLBACK !== "true") {
+			throw new Error(
+				`K3s DEV DB forward is still unreachable on 127.0.0.1:${preferredDevK8sPort} after bootstrap. Refusing automatic compose DEV fallback because 10.184.37.19:15433 is a separate drift-prone database. Set PROJECT_TRUTH_ALLOW_COMPOSE_DEV_DB_FALLBACK=true only for an intentional stale-compose diagnostic.`,
+			);
+		}
 		const composeDevPort = Number(process.env.PROJECT_TRUTH_DEV_COMPOSE_DB_PORT || 15433);
 		const composeHosts = ["127.0.0.1", remoteLanHost].filter(Boolean);
 		let composeHost = null;

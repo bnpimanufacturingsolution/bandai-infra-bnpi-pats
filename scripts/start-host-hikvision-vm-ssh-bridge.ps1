@@ -90,26 +90,26 @@ function Clear-RemoteReversePorts {
   )
   if (-not $Ports -or $Ports.Count -eq 0) { return }
   $portPattern = ($Ports | ForEach-Object { [string]$_ }) -join '|'
-$script = @"
-set -e
-listeners=`$(sudo -n ss -ltnp 2>/dev/null || ss -ltnp 2>/dev/null || true)
-echo "`$listeners" | grep -E ":($portPattern)[[:space:]]" || true
-pids=`$(echo "`$listeners" | grep -E ":($portPattern)[[:space:]]" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u)
-for p in `$pids; do
+$script = @'
+listeners=$(sudo -n ss -ltnp 2>/dev/null || ss -ltnp 2>/dev/null || true)
+echo "$listeners" | grep -E ":(__PORT_PATTERN__)[[:space:]]" || true
+pids=$(echo "$listeners" | grep -E ":(__PORT_PATTERN__)[[:space:]]" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u)
+for p in $pids; do
   # Only kill infra reverse-forward sshd sessions, never the main sshd daemon.
-  cmd=`$(sudo -n ps -o cmd= -p `$p 2>/dev/null || ps -o cmd= -p `$p 2>/dev/null || true)
-  if echo "`$cmd" | grep -q 'sshd: infra'; then
-    echo "CLEAR_REMOTE_PID=`$p"
-    sudo -n kill `$p 2>/dev/null || kill `$p 2>/dev/null || true
+  cmd=$(sudo -n ps -o cmd= -p $p 2>/dev/null || ps -o cmd= -p $p 2>/dev/null || true)
+  if echo "$cmd" | grep -q 'sshd: infra'; then
+    echo "CLEAR_REMOTE_PID=$p"
+    sudo -n kill $p 2>/dev/null || kill $p 2>/dev/null || true
   fi
 done
 for i in 1 2 3 4 5; do
-  remaining=`$(ss -ltn 2>/dev/null | grep -E ":($portPattern)[[:space:]]" || true)
-  [ -z "`$remaining" ] && break
+  remaining=$(ss -ltn 2>/dev/null | grep -E ":(__PORT_PATTERN__)[[:space:]]" || true)
+  [ -z "$remaining" ] && break
   sleep 0.2
 done
-ss -ltn 2>/dev/null | grep -E ":($portPattern)[[:space:]]" || echo REMOTE_PORTS_CLEAR
-"@
+ss -ltn 2>/dev/null | grep -E ":(__PORT_PATTERN__)[[:space:]]" || echo REMOTE_PORTS_CLEAR
+'@
+  $script = $script.Replace('__PORT_PATTERN__', $portPattern)
   try {
     $sshArgs = @('-o', 'ConnectTimeout=20', '-o', 'BatchMode=yes') + @($Target.Args) + @('bash -s')
     $out = $script | & ssh.exe @sshArgs 2>&1 | Out-String
