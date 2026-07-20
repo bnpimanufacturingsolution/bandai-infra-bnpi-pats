@@ -9,7 +9,18 @@ interface HikvisionFetchOptions extends Omit<RequestInit, "body"> {
 	prisma?: PrismaClient;
 	request?: Request;
 	timeoutMs?: number;
+	/** Keep endpoints such as ContentMgmt/logSearch on their native XML contract. */
+	ensureJsonFormat?: boolean;
+	/** Return the response body verbatim instead of attempting JSON parsing. */
+	rawResponse?: boolean;
 }
+
+export type HikvisionBinaryResponse = {
+	status: number;
+	contentType: string;
+	contentLength: number;
+	buffer: Buffer;
+};
 
 type HikvisionDeviceConnection = {
 	id?: string;
@@ -17,6 +28,11 @@ type HikvisionDeviceConnection = {
 	baseUrl: string;
 	username: string;
 	password: string;
+};
+
+type HikvisionEndpointResolutionOptions = {
+	allowLoopbackRuntime?: boolean;
+	runtimePlatform?: string;
 };
 
 const getRequestOrganizationId = (request?: Request) =>
@@ -47,20 +63,90 @@ export const getHikvisionDeviceHttpPort = (device: {
 	protocol: string;
 	config?: unknown;
 }) => {
-	const config = device.config && typeof device.config === "object" ? (device.config as any) : {};
-	const configuredPort =
-		config.httpPort ??
-		config.isapiPort ??
-		config.webPort ??
-		config.restPort;
-	if (configuredPort !== undefined && configuredPort !== null && configuredPort !== "") {
-		const parsed = Number(configuredPort);
-		if (Number.isFinite(parsed) && parsed > 0) return parsed;
-	}
-
 	if (device.protocol !== "https" && Number(device.port) === 8000) return 80;
 	if (device.protocol === "https" && Number(device.port) === 8000) return 443;
 	return Number(device.port);
+};
+
+const normalizeRuntimeHost = (value: string) => {
+	const text = String(value || "").trim();
+	if (!text) return "";
+	try {
+		return new URL(text).hostname.toLowerCase();
+	} catch {
+		return text
+			.replace(/^https?:\/\//i, "")
+			.split("/")[0]
+			.split(":")[0]
+			.trim()
+			.toLowerCase();
+	}
+};
+
+const isLoopbackRuntimeHost = (value: string) => {
+	const host = normalizeRuntimeHost(value);
+	return host === "127.0.0.1" || host === "localhost" || host === "::1";
+};
+
+const shouldUseLoopbackRuntimeEndpoint = (options?: HikvisionEndpointResolutionOptions) => {
+	if (options?.allowLoopbackRuntime) return true;
+	if (process.env.PROJECT_TRUTH_ALLOW_LOOPBACK_HIKVISION_RUNTIME === "1") return true;
+	return String(options?.runtimePlatform || process.platform).trim().toLowerCase() === "linux";
+};
+
+const getHikvisionRuntimeEndpoint = (device: {
+	address: string;
+	port: number;
+	protocol: string;
+	config?: unknown;
+}, options?: HikvisionEndpointResolutionOptions) => {
+	const config = device.config && typeof device.config === "object" ? (device.config as any) : {};
+	const runtimeBaseUrl = String(
+		config.hikvisionRuntimeBaseUrl ||
+			config.hikvisionProxyBaseUrl ||
+			config.runtimeBaseUrl ||
+			"",
+	).trim();
+	if (runtimeBaseUrl) {
+		if (!isLoopbackRuntimeHost(runtimeBaseUrl) || shouldUseLoopbackRuntimeEndpoint(options)) {
+			return runtimeBaseUrl.replace(/\/$/, "");
+		}
+	}
+
+	const runtimeAddress = String(
+		config.hikvisionRuntimeAddress ||
+			config.hikvisionProxyAddress ||
+			config.runtimeAddress ||
+			"",
+	).trim();
+	if (!runtimeAddress) return "";
+	if (isLoopbackRuntimeHost(runtimeAddress) && !shouldUseLoopbackRuntimeEndpoint(options)) {
+		return "";
+	}
+
+	const runtimePort = Number(
+		config.hikvisionRuntimePort ||
+			config.hikvisionProxyPort ||
+			config.runtimePort ||
+			getHikvisionDeviceHttpPort(device),
+	);
+	const runtimeProtocol = String(
+		config.hikvisionRuntimeProtocol ||
+			config.hikvisionProxyProtocol ||
+			config.runtimeProtocol ||
+			device.protocol ||
+			"http",
+	).toLowerCase() === "https"
+		? "https"
+		: "http";
+
+	if (/^https?:\/\//i.test(runtimeAddress)) {
+		const parsed = new URL(runtimeAddress);
+		if (!parsed.port && runtimePort) parsed.port = String(runtimePort);
+		return parsed.toString().replace(/\/$/, "");
+	}
+
+	return `${runtimeProtocol}://${runtimeAddress}:${runtimePort}`;
 };
 
 export const buildHikvisionDeviceBaseUrl = (device: {
@@ -68,7 +154,10 @@ export const buildHikvisionDeviceBaseUrl = (device: {
 	port: number;
 	protocol: string;
 	config?: unknown;
-}) => {
+}, options?: HikvisionEndpointResolutionOptions) => {
+	const runtimeEndpoint = getHikvisionRuntimeEndpoint(device, options);
+	if (runtimeEndpoint) return runtimeEndpoint;
+
 	const address = String(device.address || "").trim();
 	const httpPort = getHikvisionDeviceHttpPort(device);
 	if (/^https?:\/\//i.test(address)) {
@@ -178,14 +267,18 @@ class HikvisionClient {
 		}
 	}
 
+	private buildRequestUrl(connection: HikvisionDeviceConnection, endpoint: string, ensureJsonFormat = true) {
+		if (/^https?:\/\//i.test(endpoint)) return endpoint;
+		const normalizedEndpoint = ensureJsonFormat ? this.normalizeEndpoint(endpoint) : endpoint;
+		return `${connection.baseUrl}${normalizedEndpoint}`;
+	}
+
 	/**
 	 * Main fetch method - handles digest authentication automatically
 	 */
 	async fetch(endpoint: string, options: HikvisionFetchOptions = {}): Promise<any> {
 		const connection = await this.resolveDeviceConnection(options);
-		// Normalize endpoint to ensure ?format=json is present
-		const normalizedEndpoint = this.normalizeEndpoint(endpoint);
-		const url = `${connection.baseUrl}${normalizedEndpoint}`;
+		const url = this.buildRequestUrl(connection, endpoint, options.ensureJsonFormat !== false);
 
 		// Prepare headers from curl example
 		const headers: Record<string, string> = {
@@ -220,7 +313,7 @@ class HikvisionClient {
 				typeof body === "string" ? body : JSON.stringify(body);
 		}
 
-		// For HTTPS with self-signed certificates, we need to configure the agent
+		// For HTTPS with self-signed certificates, we need to configure the agent.
 		if (url.startsWith("https")) {
 			const httpsAgent = new https.Agent({
 				rejectUnauthorized: false,
@@ -229,7 +322,11 @@ class HikvisionClient {
 			fetchOptions.agent = httpsAgent;
 		}
 
+		const previousTlsBypass = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
 		try {
+			if (url.startsWith("https")) {
+				process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+			}
 			const client = await this.createClient(connection.username, connection.password);
 			const response = await client.fetch(url, fetchOptions);
 
@@ -249,6 +346,9 @@ class HikvisionClient {
 			}
 
 			const responseText = await response.text();
+			if (options.rawResponse) {
+				return { raw: responseText };
+			}
 			try {
 				return responseText ? JSON.parse(responseText) : {};
 			} catch {
@@ -276,6 +376,96 @@ class HikvisionClient {
 				},
 			};
 		} finally {
+			if (url.startsWith("https")) {
+				if (previousTlsBypass === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+				else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTlsBypass;
+			}
+			clearTimeout(timeout);
+		}
+	}
+
+	async fetchBinary(
+		endpoint: string,
+		options: HikvisionFetchOptions = {},
+	): Promise<HikvisionBinaryResponse> {
+		const connection = await this.resolveDeviceConnection(options);
+		const url = this.buildRequestUrl(connection, endpoint, false);
+		const headers: Record<string, string> = {
+			Accept: "image/*,*/*",
+			"Accept-Language": "en-US,en;q=0.9",
+			"Cache-Control": "no-cache",
+			Connection: "keep-alive",
+			Origin: connection.baseUrl,
+			"X-Requested-With": "XMLHttpRequest",
+			...((options.headers as Record<string, string>) || {}),
+		};
+		const timeoutMs = Math.max(Number(options.timeoutMs || HIKVISION_CONFIG.timeout || 10000), 1000);
+		const abortController = new AbortController();
+		const timeout = setTimeout(() => abortController.abort(), timeoutMs);
+		const fetchOptions: RequestInit = {
+			method: options.method || "GET",
+			headers,
+			signal: abortController.signal,
+		};
+
+		if (url.startsWith("https")) {
+			const httpsAgent = new https.Agent({
+				rejectUnauthorized: false,
+			});
+			// @ts-ignore - digest-fetch supports agent option
+			fetchOptions.agent = httpsAgent;
+		}
+
+		const previousTlsBypass = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+		try {
+			if (url.startsWith("https")) {
+				process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+			}
+			const client = await this.createClient(connection.username, connection.password);
+			const response = await client.fetch(url, fetchOptions);
+
+			if (!response.ok) {
+				const errorText = await response.text().catch(() => "");
+				throw {
+					status: response.status,
+					message: errorText || response.statusText || "Failed to fetch Hikvision binary content",
+					data: {
+						deviceId: connection.id,
+						deviceName: connection.name,
+						baseUrl: connection.baseUrl,
+					},
+				};
+			}
+
+			const buffer = Buffer.from(await response.arrayBuffer());
+			return {
+				status: response.status,
+				contentType: response.headers.get("content-type") || "application/octet-stream",
+				contentLength: Number(response.headers.get("content-length") || buffer.length || 0),
+				buffer,
+			};
+		} catch (error: any) {
+			if (error.status) throw error;
+			throw {
+				status: 502,
+				message: error.message
+					? `Hikvision binary request failed: ${error.message}`
+					: "Hikvision binary request failed",
+				data: {
+					deviceId: connection.id,
+					deviceName: connection.name,
+					baseUrl: connection.baseUrl,
+					timeoutMs,
+					errorName: error?.name,
+					errorCode: error?.code || error?.cause?.code,
+					errorCause: error?.cause?.message,
+				},
+			};
+		} finally {
+			if (url.startsWith("https")) {
+				if (previousTlsBypass === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+				else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTlsBypass;
+			}
 			clearTimeout(timeout);
 		}
 	}
@@ -292,4 +482,11 @@ export const hikvisionFetch = async (
 	options: HikvisionFetchOptions = {},
 ): Promise<any> => {
 	return hikvisionClient.fetch(endpoint, options);
+};
+
+export const hikvisionFetchBinary = async (
+	endpoint: string,
+	options: HikvisionFetchOptions = {},
+): Promise<HikvisionBinaryResponse> => {
+	return hikvisionClient.fetchBinary(endpoint, options);
 };

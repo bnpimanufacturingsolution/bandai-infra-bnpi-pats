@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/docs/design-system.md) -->
 # HRIS App Design System
 
 Status: ACTIVE

@@ -9,6 +9,12 @@ import {
 	getHikvisionObservedClockSkewSeconds,
 	normalizeHikvisionAcsEventListTimes,
 } from "../../../helper/hikvision-event-contract.helper";
+import {
+	captureOpaqueTokenAfterUserWrite,
+	extractDisplayNameFromUserInfoBody,
+	extractPlainEmployeeNoFromUserInfoBody,
+	scheduleOperationLogResolveAfterSdkSignal,
+} from "../../../helper/device-person-token.helper";
 import { controller as callbackController } from "./callback.controller";
 
 export const controller = (prisma: PrismaClient) => {
@@ -17,6 +23,66 @@ export const controller = (prisma: PrismaClient) => {
 		endpoint: string,
 		options: Parameters<typeof hikvisionFetch>[1] = {},
 	) => hikvisionFetch(endpoint, { ...options, prisma, request: req });
+
+	const scheduleWriteTimePersonTokenCapture = (params: {
+		req: Request;
+		userInfoBody: unknown;
+		source: "USER_INFO_RECORD" | "USER_INFO_MODIFY";
+	}) => {
+		const plainEmployeeNo = extractPlainEmployeeNoFromUserInfoBody(params.userInfoBody);
+		const deviceId = String(
+			params.req.body?.deviceId ||
+				params.req.query?.deviceId ||
+				(params.req.body as any)?.UserInfo?.deviceId ||
+				"",
+		).trim();
+		const organizationId = getRequestOrganizationId(params.req);
+		if (!plainEmployeeNo || !deviceId || !organizationId) return;
+		const writeMs = Date.now();
+		const displayName = extractDisplayNameFromUserInfoBody(params.userInfoBody);
+		// Fire-and-forget: never block enroll response on logSearch capture.
+		void captureOpaqueTokenAfterUserWrite({
+			prisma,
+			req: params.req,
+			deviceId,
+			organizationId,
+			plainEmployeeNo,
+			displayName,
+			source: params.source,
+			writeMs,
+			settleMs: 1200,
+		}).catch((error) => {
+			console.warn(
+				"[device-person-token] write-time capture failed",
+				params.source,
+				plainEmployeeNo,
+				error?.message || error,
+			);
+		});
+		// Also pull typed DeviceEvents (USER_CREATED / FP / deletes) from ISAPI logSearch
+		// so Device Events FE shows the same truth as FE enroll actions.
+		const deviceName = String(
+			(params.req.body as any)?.deviceName || (params.req as any).device?.name || "",
+		).trim();
+		const deviceAddress = String(
+			(params.req.body as any)?.deviceAddress || (params.req as any).device?.address || "",
+		).trim();
+		scheduleOperationLogResolveAfterSdkSignal({
+			prisma,
+			req: params.req,
+			deviceId,
+			organizationId,
+			deviceName: deviceName || null,
+			deviceAddress: deviceAddress || null,
+			triggerMinor: params.source,
+			// FE write just completed — hammer logSearch for 1–5s socket target.
+			settleMs: 200,
+			retryDelaysMs: [200, 500, 1_000, 1_800, 3_000, 5_000],
+			windowBeforeMs: 2 * 60_000,
+			windowAfterMs: 3 * 60_000,
+			cooldownMs: 800,
+		});
+	};
 
 	const normalizeUserInfoSearchCond = (body: any) => {
 		const cond = body?.UserInfoSearchCond || {};
@@ -137,6 +203,8 @@ export const controller = (prisma: PrismaClient) => {
 				})
 			: null;
 		const knownSkewSeconds = Number((device?.config as any)?.hikvisionClockSkewSeconds || 0);
+		const allowClockSkewCorrection =
+			(device?.config as any)?.hikvisionAllowClockSkewCorrection === true;
 		let deviceClockSkewSeconds = 0;
 		try {
 			const timePayload = await fetchFromDevice(req, hikvisionEndpoint.system.time, {
@@ -151,8 +219,10 @@ export const controller = (prisma: PrismaClient) => {
 			deviceClockSkewSeconds = 0;
 		}
 		const observedSkewSeconds = getHikvisionObservedClockSkewSeconds(events, referenceDate);
-		const skewSeconds = deviceClockSkewSeconds || knownSkewSeconds || observedSkewSeconds;
-		if (device?.id && skewSeconds > 0 && skewSeconds !== knownSkewSeconds) {
+		const skewSeconds = allowClockSkewCorrection
+			? deviceClockSkewSeconds || knownSkewSeconds || observedSkewSeconds
+			: 0;
+		if (allowClockSkewCorrection && device?.id && skewSeconds > 0 && skewSeconds !== knownSkewSeconds) {
 			await (prisma as any).device.update({
 				where: { id: device.id },
 				data: {
@@ -172,6 +242,10 @@ export const controller = (prisma: PrismaClient) => {
 					events,
 					referenceDate,
 					skewSeconds,
+					{
+						allowStoredSkew: allowClockSkewCorrection,
+						allowAutoAdjust: allowClockSkewCorrection,
+					},
 				),
 			},
 		};
@@ -549,6 +623,24 @@ export const controller = (prisma: PrismaClient) => {
 					body: deleteData,
 				});
 
+				const deviceId = String(
+					req.body?.deviceId || req.query?.deviceId || "",
+				).trim();
+				const organizationId = getRequestOrganizationId(req);
+				if (deviceId && organizationId) {
+					scheduleOperationLogResolveAfterSdkSignal({
+						prisma,
+						req,
+						deviceId,
+						organizationId,
+						triggerMinor: "USER_INFO_DELETE",
+						settleMs: 1_800,
+						windowBeforeMs: 2 * 60_000,
+						windowAfterMs: 3 * 60_000,
+						cooldownMs: 2_000,
+					});
+				}
+
 				return res
 					.status(200)
 					.json(buildSuccessResponse("UserInfo deleted successfully", data, 200));
@@ -571,6 +663,12 @@ export const controller = (prisma: PrismaClient) => {
 				const data = await fetchFromDevice(req, hikvisionEndpoint.accessControl.userInfo.modify, {
 					method: "PUT",
 					body: userInfoData,
+				});
+				// Real field changes may emit op-logs; no-op re-apply often does not.
+				scheduleWriteTimePersonTokenCapture({
+					req,
+					userInfoBody: userInfoData,
+					source: "USER_INFO_MODIFY",
 				});
 
 				return res
@@ -595,6 +693,12 @@ export const controller = (prisma: PrismaClient) => {
 				const data = await fetchFromDevice(req, hikvisionEndpoint.accessControl.userInfo.record, {
 					method: "POST",
 					body: userInfoData,
+				});
+				// Proven path: Record plain employeeNo → logSearch opaque token within seconds.
+				scheduleWriteTimePersonTokenCapture({
+					req,
+					userInfoBody: userInfoData,
+					source: "USER_INFO_RECORD",
 				});
 
 				return res
@@ -744,6 +848,25 @@ export const controller = (prisma: PrismaClient) => {
 						body: deleteData,
 					},
 				);
+
+				const deviceId = String(
+					req.body?.deviceId || req.query?.deviceId || "",
+				).trim();
+				const organizationId = getRequestOrganizationId(req);
+				if (deviceId && organizationId) {
+					// Fingerprint/face/card deletes on device → typed DeviceEvents via logSearch.
+					scheduleOperationLogResolveAfterSdkSignal({
+						prisma,
+						req,
+						deviceId,
+						organizationId,
+						triggerMinor: "USER_INFO_DETAIL_DELETE",
+						settleMs: 1_800,
+						windowBeforeMs: 2 * 60_000,
+						windowAfterMs: 3 * 60_000,
+						cooldownMs: 2_000,
+					});
+				}
 
 				return res
 					.status(200)

@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/workspace/context/chain-state-template.md) -->
 # Chain State Template
 
 Status: ACTIVE
@@ -11,6 +12,9 @@ Use this instead of long narrative handoffs for intermediate passes inside an ac
 
 This packet is a companion to `.wwg/workspace/prompts/agent-meta-prompt-template.md`, not a replacement for chain kickoff planning or final handoff formatting.
 
+### bandai-infra develop notes (same section: Purpose)
+
+Use this instead of long narrative handoffs. Keep one state packet per active chain in local scratch space or the agent message. Commit only reusable templates and durable outcomes.
 ## State Packet
 
 ```yaml

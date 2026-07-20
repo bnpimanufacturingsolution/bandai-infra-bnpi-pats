@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/06-domain/rules.md) -->
 # Domain Rules
 
 Status: INFERRED_FROM_EXISTING_PROJECT
@@ -72,4 +73,3 @@ Based on `docs/employee-status-changes-eligibility.md`:
 - Bug fixes require regression tests when practical.
 - Auth, authorization, employee data, attendance, timesheets, payroll, billing, deployment, and destructive scripts require higher scrutiny.
 - Proposed WWG regression tests are drafts until reviewed, implemented, and passing.
-

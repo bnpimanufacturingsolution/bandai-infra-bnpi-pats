@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/.wwg/wiki/project-truth.md) -->
 # Project Truth
 
 Adoption status: INFERRED_FROM_EXISTING_PROJECT
@@ -286,6 +287,9 @@ Avoid drifting into:
   - Why it matters: HR import/UI, payslip labels, and seed data currently diverge; agents must not invent auto-award or rename casually.
   - Evidence / uncertainty: implementation confirms money path by code `PFA`; seed name and default reconciliation action are **CONFLICTING** / **NEEDS_CONFIRMATION** relative to Bandai register/post-net treatment.
 
+### bandai-infra develop notes (same section: Open Questions)
+
+  - Evidence / uncertainty: payroll/timesheet modules and the source-of-truth PRD define core source selection but not every workflow policy.
 ## Update Rules
 
 Update this file when:

@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/06-domain/entities.md) -->
 # Domain Entities
 
 Status: INFERRED_FROM_EXISTING_PROJECT
@@ -65,4 +66,3 @@ Status: INFERRED_FROM_EXISTING_PROJECT
 - Activity Log: operational activity trace.
 - Device: enrolled attendance or time logging device.
 - Document: employee, applicant, request, or organization file and its review/approval state.
-

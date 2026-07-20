@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { hikvisionService } from "../../services/hikvision.service";
 import type {
+	HikvisionUserInfo,
 	HikvisionUserInfoSearchResult,
 	AcsEventResult,
 	AcsEventCond,
@@ -55,6 +56,16 @@ export function useHikvisionUserSearchMutation() {
 				params.maxResults || 10,
 				params.deviceId,
 			),
+	});
+}
+
+export function useHikvisionDeviceUsers(deviceId?: string, enabled = true) {
+	return useQuery<HikvisionUserInfo[]>({
+		queryKey: ["hikvision", "device-users", deviceId],
+		queryFn: () => hikvisionService.searchAllUsers(deviceId),
+		enabled: Boolean(deviceId) && enabled,
+		staleTime: 30 * 1000,
+		retry: 1,
 	});
 }
 

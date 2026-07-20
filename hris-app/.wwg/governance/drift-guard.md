@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/governance/drift-guard.md) -->
 # Drift Guard
 
 This file protects the project from context drift.

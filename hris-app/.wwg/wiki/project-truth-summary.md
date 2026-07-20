@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/project-truth-summary.md) -->
 # Project Truth Summary
 
 Status: INFERRED_FROM_EXISTING_PROJECT
@@ -29,6 +30,10 @@ Last reviewed: 2026-07-17
 - Payroll-locked timesheets use **Request payroll correction** (in-modal panel: Time In/Time Out). Applied retro lines appear on payslips and in HR **Payroll summary** (prior-period accordion + daily detail category). Domain SOT is `../hris-api` `PayrollCorrection` next-period apply.
 - Dual-app UI parity: timesheets/attendance/payroll/shared surfaces that exist in both `hris-app` and `hris-emp-app` must be updated together (see `AGENTS.md`, monorepo `AGENTS.md`, `.grok/rules/hris-dual-app-ui-parity.md`).
 
+### bandai-infra develop notes (same section: Accepted With Evidence)
+
+- Current app quality gate: `.github/workflows/app-ci.yml` blocks PR/push verification for `develop` and `uat` on `npm run quality:ci`, which runs app test-obligation enforcement, focused app CI tests, and a production build.
+- Firebase preview and branch deploy workflows run or depend on `npm run quality:ci` before publishing; manual image deploys run `npm run quality:ci` before building/pushing the image.
 ## Needs Confirmation
 
 - Canonical product name.

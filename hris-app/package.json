@@ -22,8 +22,6 @@
     "test:e2e": "playwright test tests/*.spec.ts",
     "test:e2e:dm4-fresh-db": "playwright test tests/dm4-fresh-db-migration.e2e.spec.ts",
     "test:e2e:smoke": "playwright test -c playwright.smoke.config.ts",
-    "test:e2e:payroll-correction": "playwright test tests/smoke/payroll-correction-modal.spec.ts",
-    "test:payroll-correction": "vitest run app/lib/utils/payroll-correction-form.test.ts app/lib/utils/payroll-correction-day-markers.test.ts",
     "test:regression": "vitest run app --passWithNoTests",
     "test:ci": "npm run typecheck:test && npm test",
     "quality:ci": "npm run test:obligations && npm run test:ci && npm run test:e2e:smoke && npm run build",
@@ -122,6 +120,7 @@
     "tw-animate-css": "^1.2.5",
     "vaul": "^1.1.2",
     "vite-tsconfig-paths": "^5.1.4",
+    "xlsx": "^0.18.5",
     "zod": "^4.1.13"
   },
   "devDependencies": {

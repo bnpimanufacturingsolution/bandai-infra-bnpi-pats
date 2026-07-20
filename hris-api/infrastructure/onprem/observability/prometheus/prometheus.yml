@@ -30,6 +30,16 @@ scrape_configs:
     static_configs:
       - targets: ['loki:3100']
 
+  - job_name: tempo
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['tempo:3200']
+
+  - job_name: otel_collector
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['otel-collector:8889']
+
   - job_name: promtail
     metrics_path: /metrics
     static_configs:
@@ -43,15 +53,30 @@ scrape_configs:
     static_configs:
       - targets: ['cadvisor:8080']
 
+  - job_name: hris_api
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - hris-api-dev:3001
+          - hris-api-uat:3001
+          - host.docker.internal:3001
+          - host.docker.internal:3101
+          - host.docker.internal:3201
+
   - job_name: blackbox_http
     metrics_path: /probe
     params:
       module: [http_2xx]
     static_configs:
       - targets:
+          - http://hris-api-dev:3001/health
+          - http://hris-api-uat:3001/health
+          - http://hris-app-dev:3000/health
+          - http://hris-app-uat:3000/health
           - http://host.docker.internal:3001/health
           - http://host.docker.internal:3101/health
           - http://host.docker.internal:3201/health
+          - http://host.docker.internal:58001/health
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/governance/development-operating-model.md) -->
 # Development Operating Model
 
 Status: ACTIVE

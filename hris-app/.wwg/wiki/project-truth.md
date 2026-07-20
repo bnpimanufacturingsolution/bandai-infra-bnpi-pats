@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/project-truth.md) -->
 # Project Truth
 
 Adoption status: INFERRED_FROM_EXISTING_PROJECT

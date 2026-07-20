@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/07-ux/screens.md) -->
 # Screens And Routes
 
 Status: INFERRED_FROM_EXISTING_PROJECT
@@ -80,4 +81,3 @@ Public/utility routes include:
 The product is an operational HRIS/workforce tool. Screens should prioritize dense but scannable data, reliable workflow actions, explicit states, clear approval context, and predictable navigation across repeated HR operations.
 
 Marketing-style layouts are not the default UX shape for this application.
-

@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/index.md) -->
 # WWG Wiki Index
 
 Status: ACTIVE
@@ -35,4 +36,3 @@ Status: ACTIVE
 ## Accuracy Rule
 
 Inferred context must stay labeled until reviewed. Do not promote inferred payroll, auth, authorization, deployment, credential, or employee-policy details to accepted truth without owner confirmation.
-

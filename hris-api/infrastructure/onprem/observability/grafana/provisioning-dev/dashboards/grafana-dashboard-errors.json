@@ -1,0 +1,67 @@
+{
+  "title": "Error Dashboard",
+  "uid": "errors",
+  "tags": ["errors", "failures"],
+  "panels": [
+    {
+      "title": "Error Rate by Endpoint",
+      "targets": [
+        {
+          "expr": "sum(rate(hris_api_http_requests_total{status_code=~\"5..\"}[5m])) by (route)"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "type": "timeseries"
+    },
+    {
+      "title": "HTTP 4xx vs 5xx",
+      "targets": [
+        {
+          "expr": "sum(rate(hris_api_http_requests_total{status_code=~\"4..\"}[5m]))",
+          "legendFormat": "4xx Errors"
+        },
+        {
+          "expr": "sum(rate(hris_api_http_requests_total{status_code=~\"5..\"}[5m]))",
+          "legendFormat": "5xx Errors"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "type": "timeseries"
+    },
+    {
+      "title": "Top Failing Endpoints",
+      "targets": [
+        {
+          "expr": "topk(5, sum(rate(hris_api_http_requests_total{status_code=~\"5..\"}[5m])) by (route))"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "type": "bargauge"
+    },
+    {
+      "title": "Error Distribution by Type",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "sum by (error_type) (count_over_time({job=\"hris-api\"} | json | level=\"error\" | error_type!=\"\" [$__range]))"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "type": "piechart"
+    },
+    {
+      "title": "Recent Errors (Logs)",
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{job=\"hris-api\"} | json | level=\"error\""
+        }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "type": "logs"
+    }
+  ],
+  "schemaVersion": 37,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" }
+}

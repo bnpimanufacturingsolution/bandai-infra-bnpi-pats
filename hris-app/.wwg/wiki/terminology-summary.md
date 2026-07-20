@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/terminology-summary.md) -->
 # Terminology Summary
 
 Status: INFERRED_FROM_EXISTING_PROJECT
@@ -52,4 +53,3 @@ Last reviewed: 2026-07-15
 Use these terms for agent orientation, but treat final user-facing labels and policy terms as NEEDS_CONFIRMATION until reviewed by the project owner.
 
 Keep the app/API ownership split explicit: this repo owns frontend routes, UI, client payloads, browser E2E, and app-side regressions; `../hris-api` owns backend authorization, persistence, DB invariants, API contracts, load tests, and soak tests.
-

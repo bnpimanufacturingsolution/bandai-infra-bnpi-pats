@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/.wwg/wiki/terminology.md) -->
 # Terminology
 
 This file defines canonical and observed project language.
@@ -97,6 +98,9 @@ Update 2026-07-17: Perfect Attendance payroll benefit (`PFA` / `perfectAttendanc
 | Audit logging | Compliance trail for CUD mutations only via `logAudit()` → `AuditLogging`. Reads are excluded. | CONFIRMED | `utils/auditLogger.ts`, `shouldSkipAuditLog()`, `docs/LOGGING_STANDARDS.md`. |
 | Metrics / reports | Backend reporting and aggregate API surface. | CONFIRMED | metrics and report modules. |
 
+### bandai-infra develop notes (same section: HRIS Domain Terms)
+
+| Audit logging | Server-side audit trail behavior for sensitive actions. | INFERRED | auditLogging and activityLogging modules/schemas. |
 ## Incorrect Or Stale Language
 
 | Term | Status | Rule | Evidence |

@@ -1,5 +1,9 @@
 # Changelog
 
+> Merged during bandai-infra union recombine. Standalone history is primary; develop-only bullets appended if unique.
+
+## From standalone develop snapshot
+
 All notable changes to this project will be documented in this file.
 
 ## Unreleased
@@ -13,4 +17,3 @@ All notable changes to this project will be documented in this file.
 - Governance and WWG adoption scaffolding added for project readiness.
 - Validation and audit reports generated and synchronized.
 - Controller logging contract documentation was synchronized with the current `logActivity()` / `logAudit()` rollout.
-

@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/03-requirements/functional-requirements.md) -->
 # Functional Requirements
 
 Status: INFERRED_FROM_EXISTING_PROJECT
@@ -94,4 +95,3 @@ Source basis: route map, service clients, type models, tests, docs, Firebase con
 - CONFIRMED: Admin configuration includes departments, agencies, positions, levels, employees, users, shift types, schedules, schedule templates, loan types, calendar items, holidays, workflows, guide content, devices, audit logs, activity logs, disciplinary actions, messages, notifications, and help.
 - CONFIRMED: Destructive employee deletion scripts exist and must remain approval-gated.
 - NEEDS_CONFIRMATION: Final admin permission matrix and production-safe operation policy.
-

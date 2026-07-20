@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/.wwg/wiki/project-truth-summary.md) -->
 # Project Truth Summary
 
 Status: RECONCILED_FROM_EXISTING_PROJECT
@@ -52,6 +53,9 @@ The repository clearly represents the HRIS backend API and the stale Web3/eComme
 - A task touches API behavior, persistence, Prisma schemas, authorization, attendance, timesheets, payroll, employee benefits schedule modes, migrations, deployment, tests, load/soak infrastructure, or cross-repo app/API responsibilities.
 - This summary appears to conflict with `.wwg/wiki/project-truth.md`.
 
+### bandai-infra develop notes (same section: Load Full Truth When)
+
+- A task touches API behavior, persistence, Prisma schemas, authorization, attendance, timesheets, payroll, migrations, deployment, tests, load/soak infrastructure, or cross-repo app/API responsibilities.
 ## References
 
 - `.wwg/wiki/project-truth.md`

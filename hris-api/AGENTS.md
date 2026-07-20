@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/AGENTS.md) -->
 # Adopted Project Agent Guide
 
 ## Purpose
@@ -172,4 +173,3 @@ Before adding or changing controller handlers, follow [docs/LOGGING_STANDARDS.md
 - `.wwg/workspace/current-task.md`
 - `.wwg/governance/drift-guard.md`
 - `.wwg/governance/test-enforcement.md`
-

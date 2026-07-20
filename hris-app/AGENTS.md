@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/AGENTS.md) -->
 # Adopted Project Agent Guide
 
 ## Purpose

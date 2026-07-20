@@ -1,14 +1,51 @@
 services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    container_name: hris-otel-collector
+    command:
+      - --config=/etc/otelcol-contrib/otel-collector.yml
+    ports:
+      - "${OTEL_COLLECTOR_GRPC_HOST_PORT:-4317}:4317"
+      - "${OTEL_COLLECTOR_HTTP_HOST_PORT:-4318}:4318"
+      - "${OTEL_COLLECTOR_METRICS_HOST_PORT:-8889}:8889"
+    volumes:
+      - ./otel-collector/otel-collector.yml:/etc/otelcol-contrib/otel-collector.yml:ro
+    depends_on:
+      - tempo
+      - loki
+    restart: unless-stopped
+    networks:
+      - observability
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: hris-tempo
+    user: "0"
+    command:
+      - -config.file=/etc/tempo/tempo.yml
+      - -config.expand-env=true
+    environment:
+      - TEMPO_RETENTION=${TEMPO_RETENTION:-168h}
+    ports:
+      - "${TEMPO_HOST_PORT:-3202}:3200"
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/tempo:/var/tempo
+    restart: unless-stopped
+    networks:
+      - observability
+
   loki:
     image: grafana/loki:3.1.1
     container_name: hris-loki
+    user: "0"
     command:
       - -config.file=/etc/loki/loki-config.yml
     ports:
       - "${LOKI_HOST_PORT:-3110}:3100"
     volumes:
       - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
-      - loki_data:/loki
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/loki:/loki
     restart: unless-stopped
     networks:
       - observability
@@ -32,6 +69,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.54.1
     container_name: hris-prometheus
+    user: "0"
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
@@ -43,13 +81,17 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
-      - prometheus_data:/prometheus
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/prometheus:/prometheus
     depends_on:
       - cadvisor
       - node-exporter
       - alertmanager
       - blackbox-exporter
+      - otel-collector
+      - tempo
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - observability
 
@@ -63,7 +105,7 @@ services:
       - "${ALERTMANAGER_HOST_PORT:-9093}:9093"
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-      - alertmanager_data:/alertmanager
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/alertmanager:/alertmanager
     restart: unless-stopped
     networks:
       - observability
@@ -81,9 +123,31 @@ services:
     networks:
       - observability
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: hris-observability-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_GRAFANA_DB:-grafana}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_OBSERVABILITY_HOST_PORT:-15435}:5432"
+    volumes:
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/postgres:/var/lib/postgresql/data
+      - ./grafana/init-grafana-db.sh:/docker-entrypoint-initdb.d/init-grafana-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_GRAFANA_DB:-grafana}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - observability
+
   grafana:
     image: grafana/grafana:11.2.0
     container_name: hris-grafana
+    user: "0"
     ports:
       - "${GRAFANA_HOST_PORT:-53000}:3000"
     environment:
@@ -96,13 +160,28 @@ services:
       - GF_LOG_LEVEL=info
       - GF_SECURITY_ALLOW_EMBEDDING=false
       - GF_AUTH_ANONYMOUS_ENABLED=false
+      # Use dedicated PostgreSQL database instead of local SQLite
+      - GF_DATABASE_TYPE=postgres
+      - GF_DATABASE_HOST=postgres
+      - GF_DATABASE_NAME=${POSTGRES_GRAFANA_DB:-grafana}
+      - GF_DATABASE_USER=${POSTGRES_USER:-postgres}
+      - GF_DATABASE_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - GF_DATABASE_SSL_MODE=disable
     volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./grafana/provisioning-prod:/etc/grafana/provisioning:ro
+      # Database is now PostgreSQL (grafana DB). No local SQLite file used for core data.
     depends_on:
-      - prometheus
-      - loki
-      - alertmanager
+      postgres:
+        condition: service_healthy
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+      alertmanager:
+        condition: service_started
     restart: unless-stopped
     networks:
       - observability
@@ -111,7 +190,7 @@ services:
     image: alpine:3.20
     container_name: hris-observability-backup
     working_dir: /backup
-    command: ["/bin/sh", "/backup/loop.sh"]
+    command: ["sh", "/backup/loop.sh"]
     environment:
       - BACKUP_INTERVAL_SECONDS=${BACKUP_INTERVAL_SECONDS:-3600}
       - BACKUP_KEEP_ROLLING=${BACKUP_KEEP_ROLLING:-48}
@@ -120,15 +199,17 @@ services:
       - BACKUP_ROOT=/backups
     volumes:
       - ./backup:/backup:ro
-      - ./backups:/backups
-      - grafana_data:/data/grafana:ro
-      - prometheus_data:/data/prometheus:ro
-      - loki_data:/data/loki:ro
-      - alertmanager_data:/data/alertmanager:ro
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/backups:/backups
+      # grafana data is now in PostgreSQL database, no longer using local volume
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/prometheus:/data/prometheus:ro
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/loki:/data/loki:ro
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/tempo:/data/tempo:ro
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/alertmanager:/data/alertmanager:ro
     depends_on:
       - grafana
       - prometheus
       - loki
+      - tempo
       - alertmanager
     restart: unless-stopped
     networks:
@@ -137,28 +218,22 @@ services:
   backup-replicator:
     image: rclone/rclone:1.68.2
     container_name: hris-observability-replicator
-    entrypoint:
-      - /bin/sh
+    entrypoint: ["/bin/sh"]
+    command:
       - -c
       - |
         while true; do
-          if [ "${REMOTE_REPLICATION_ENABLED:-false}" = "true" ]; then
-            if [ -z "${RCLONE_REMOTE_PATH:-}" ]; then
-              echo "replication_skipped reason=missing_rclone_remote_path";
-            else
-              rclone copy /backups "${RCLONE_REMOTE_PATH}" \
-                --config /config/rclone/rclone.conf \
-                --create-empty-src-dirs \
-                --fast-list \
-                --transfers "${RCLONE_TRANSFERS:-4}" \
-                --checkers "${RCLONE_CHECKERS:-8}" \
-                --log-level "${RCLONE_LOG_LEVEL:-INFO}" \
-                --stats 30s || true;
-            fi;
-          else
-            echo "replication_disabled";
+          if [ "$${REMOTE_REPLICATION_ENABLED:-false}" = "true" ]; then
+            rclone copy /backups "$${RCLONE_REMOTE_PATH}" \
+              --config /config/rclone/rclone.conf \
+              --create-empty-src-dirs \
+              --fast-list \
+              --transfers "$${RCLONE_TRANSFERS:-4}" \
+              --checkers "$${RCLONE_CHECKERS:-8}" \
+              --log-level "$${RCLONE_LOG_LEVEL:-INFO}" \
+              --stats 30s || true;
           fi;
-          sleep "${REPLICATION_INTERVAL_SECONDS:-1800}";
+          sleep "$${REPLICATION_INTERVAL_SECONDS:-1800}";
         done
     environment:
       - REMOTE_REPLICATION_ENABLED=${REMOTE_REPLICATION_ENABLED:-false}
@@ -168,7 +243,7 @@ services:
       - RCLONE_CHECKERS=${RCLONE_CHECKERS:-8}
       - RCLONE_LOG_LEVEL=${RCLONE_LOG_LEVEL:-INFO}
     volumes:
-      - ./backups:/backups:ro
+      - ${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}/backups:/backups:ro
       - ./rclone:/config/rclone:ro
     depends_on:
       - backup
@@ -204,13 +279,7 @@ services:
     networks:
       - observability
 
-volumes:
-  loki_data:
-  prometheus_data:
-  grafana_data:
-  alertmanager_data:
-
 networks:
   observability:
-    name: hris-observability
     external: true
+    name: hris-observability

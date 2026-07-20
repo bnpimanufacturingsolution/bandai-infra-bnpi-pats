@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/.wwg/wiki/terminology-summary.md) -->
 # Terminology Summary
 
 Status: RECONCILED_FROM_EXISTING_PROJECT
@@ -63,6 +64,9 @@ Last reviewed: 2026-07-17
 - A task changes naming, layer boundaries, governance terms, source-of-truth terms, benefit schedule modes, test ownership, or cross-repo handoff language.
 - This summary appears to conflict with `.wwg/wiki/terminology.md`.
 
+### bandai-infra develop notes (same section: Load Full Terminology When)
+
+- A task changes naming, layer boundaries, governance terms, source-of-truth terms, test ownership, or cross-repo handoff language.
 ## References
 
 - `.wwg/wiki/terminology.md`

@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/terminology.md) -->
 # Terminology
 
 This file defines canonical and observed project language.

@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/06-domain/workflows.md) -->
 # Domain Workflows
 
 Status: INFERRED_FROM_EXISTING_PROJECT
@@ -74,6 +75,11 @@ Status: INFERRED_FROM_EXISTING_PROJECT
 5. Payslips are generated for employees.
 6. Billing or statement of account artifacts may be generated where applicable.
 
+### bandai-infra develop notes (same section: Payroll And Billing)
+
+3. Payroll run or HR payroll screen processes or previews payroll.
+4. Payslips are generated for employees.
+5. Billing or statement of account artifacts may be generated where applicable.
 ## Firebase Deployment
 
 1. Build runs with React Router build output.
@@ -81,4 +87,3 @@ Status: INFERRED_FROM_EXISTING_PROJECT
 3. GitHub workflow or local Firebase tooling deploys hosting assets.
 4. Secrets and service-account material must be provided safely.
 5. Production or public deployment requires explicit approval.
-

@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/docs/Create a New Service Guide.md) -->
 ## Service Scaffolding Guide
 
 This guide covers the script that scaffolds services and wires them into the app.
