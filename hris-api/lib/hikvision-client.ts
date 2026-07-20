@@ -35,6 +35,13 @@ type HikvisionEndpointResolutionOptions = {
 	runtimePlatform?: string;
 };
 
+export type HikvisionTunnelTarget = {
+	host: string;
+	port: number;
+	protocol?: "http" | "https";
+	source: "env_tunnel_map";
+};
+
 const getRequestOrganizationId = (request?: Request) =>
 	String((request as any)?.organizationId || (request as any)?.userOrganizationId || "").trim();
 
@@ -86,6 +93,66 @@ const normalizeRuntimeHost = (value: string) => {
 const isLoopbackRuntimeHost = (value: string) => {
 	const host = normalizeRuntimeHost(value);
 	return host === "127.0.0.1" || host === "localhost" || host === "::1";
+};
+
+const parseEndpointHostPort = (value: string) => {
+	const text = String(value || "").trim();
+	if (!text) return null;
+	try {
+		const parsed = new URL(/^https?:\/\//i.test(text) ? text : `tcp://${text}`);
+		const port = Number(parsed.port);
+		if (!parsed.hostname || !port) return null;
+		return {
+			host: parsed.hostname,
+			port,
+			protocol:
+				parsed.protocol === "https:"
+					? ("https" as const)
+					: parsed.protocol === "http:"
+						? ("http" as const)
+						: undefined,
+		};
+	} catch {
+		const match = text.match(/^([^:]+):(\d+)$/);
+		if (!match) return null;
+		return {
+			host: match[1].trim(),
+			port: Number(match[2]),
+			protocol: undefined,
+		};
+	}
+};
+
+export const resolveHikvisionTunnelTarget = (
+	host: string,
+	port: number,
+	env: NodeJS.ProcessEnv = process.env,
+): HikvisionTunnelTarget | null => {
+	const sourceHost = normalizeRuntimeHost(host);
+	const sourcePort = Number(port);
+	if (!sourceHost || !sourcePort) return null;
+
+	const entries = String(env.PROJECT_TRUTH_HIKVISION_TUNNEL_MAP || "")
+		.split(/[,\n;]/)
+		.map((entry) => entry.trim())
+		.filter(Boolean);
+
+	for (const entry of entries) {
+		const [fromRaw, toRaw] = entry.split("=").map((part) => part?.trim());
+		const from = parseEndpointHostPort(fromRaw || "");
+		const to = parseEndpointHostPort(toRaw || "");
+		if (!from || !to) continue;
+		if (normalizeRuntimeHost(from.host) === sourceHost && Number(from.port) === sourcePort) {
+			return {
+				host: to.host,
+				port: to.port,
+				protocol: to.protocol,
+				source: "env_tunnel_map",
+			};
+		}
+	}
+
+	return null;
 };
 
 const shouldUseLoopbackRuntimeEndpoint = (options?: HikvisionEndpointResolutionOptions) => {
@@ -160,6 +227,15 @@ export const buildHikvisionDeviceBaseUrl = (device: {
 
 	const address = String(device.address || "").trim();
 	const httpPort = getHikvisionDeviceHttpPort(device);
+	const physicalProtocol = device.protocol === "https" ? "https" : "http";
+	const physicalHost = /^https?:\/\//i.test(address)
+		? new URL(address).hostname
+		: address;
+	const tunnelTarget = resolveHikvisionTunnelTarget(physicalHost, httpPort);
+	if (tunnelTarget) {
+		return `${tunnelTarget.protocol || physicalProtocol}://${tunnelTarget.host}:${tunnelTarget.port}`;
+	}
+
 	if (/^https?:\/\//i.test(address)) {
 		const parsed = new URL(address);
 		if (!parsed.port && httpPort) {
@@ -168,8 +244,7 @@ export const buildHikvisionDeviceBaseUrl = (device: {
 		return parsed.toString().replace(/\/$/, "");
 	}
 
-	const protocol = device.protocol === "https" ? "https" : "http";
-	return `${protocol}://${address}:${httpPort}`;
+	return `${physicalProtocol}://${address}:${httpPort}`;
 };
 
 /**

@@ -1,5 +1,24 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-20 Remote local-dev Hikvision tunnel proof
+
+- Task mode: Focused local-dev runtime access repair for far-away work against a LAN-only Hikvision device.
+- Goal: Keep the saved HRIS device row visible as `10.184.37.21:443` / SDK `8000`, while allowing a Windows localhost API launched by `npm run dev` to reach the device through SSH forwards.
+- Implemented:
+  - Added `PROJECT_TRUTH_HIKVISION_TUNNEL_MAP` support for Hikvision HTTP/ISAPI base URL resolution, device health network probes, and SDK endpoint selection.
+  - Added `scripts/start-hikvision-remote-device-tunnel.ps1`, which starts `127.0.0.1:10080 -> 10.184.37.21:80`, `127.0.0.1:10443 -> 10.184.37.21:443`, and `127.0.0.1:18000 -> 10.184.37.21:8000`, then writes the ignored local API env line.
+  - Preserved the tunnel-map line when `hris-api/scripts/ensure-bnpi-db-access.cjs` regenerates `hris-api/.env.development.local`.
+- Proof:
+  - Tunnel helper returned `running`, PID `17684`, with TCP OK for `127.0.0.1:10080`, `:10443`, and `:18000`.
+  - Local API `GET /api/device/cmrht5s2w00ei7zgsre8y3o5n/health` returned `summary.status=online` for Main Entrance Device A, while the response still showed saved device address `10.184.37.21` and `checks.network.source=env_tunnel_map`.
+  - Playwright against `http://localhost:5175/admin/configuration/devices` found Main Entrance Device A and `Online`; all seven device health calls returned HTTP 200.
+- Evidence:
+  - `.runtime/hikvision-remote-device-tunnel-last.json`
+  - `.runtime/remote-device-tunnel-proof-20260720-161455/device-a-health-with-tunnel-map.json`
+  - `.runtime/remote-device-browser-proof-20260720082234/summary.json`
+- Boundary:
+  - On the current LAN, `ssh project-truth-hris` through Cloudflare still reset at the edge, so the helper used direct LAN fallback `infra@10.184.37.19` for this proof. Far-away work should use `project-truth-hris` when Cloudflare Access is reachable from that network.
+
 ## Latest Task Addendum - 2026-07-20 TEST A zero-missing recovery boundary
 
 - Task mode: Agent-owned live recovery attempt, root-cause classification, and UI clarity repair.

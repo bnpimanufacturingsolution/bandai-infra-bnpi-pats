@@ -251,6 +251,11 @@ function renderRuntimeOverride(result) {
 		lines.push(`PROJECT_TRUTH_GUEST_IP=${result.selectedVmHost}`);
 		lines.push(`PROJECT_TRUTH_PREFERRED_GUEST_IP=${result.selectedVmHost}`);
 	}
+	if (process.env.PROJECT_TRUTH_HIKVISION_TUNNEL_MAP) {
+		lines.push(
+			`PROJECT_TRUTH_HIKVISION_TUNNEL_MAP=${process.env.PROJECT_TRUTH_HIKVISION_TUNNEL_MAP}`,
+		);
+	}
 
 	return `${lines.join("\n")}\n`;
 }

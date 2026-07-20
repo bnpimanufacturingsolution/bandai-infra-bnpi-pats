@@ -21,6 +21,20 @@ const remoteLanForwardScript = path.join(
 	"scripts",
 	"start-project-truth-remote-lan-forward.ps1",
 );
+const hikvisionTunnelMapKey = "PROJECT_TRUTH_HIKVISION_TUNNEL_MAP";
+
+function readEnvFileValue(filePath, key) {
+	if (!fs.existsSync(filePath)) return "";
+	for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+		const trimmed = line.trim();
+		if (!trimmed || trimmed.startsWith("#")) continue;
+		const equalsIndex = trimmed.indexOf("=");
+		if (equalsIndex === -1) continue;
+		if (trimmed.slice(0, equalsIndex).trim() !== key) continue;
+		return trimmed.slice(equalsIndex + 1).trim();
+	}
+	return "";
+}
 
 function canConnect(port, host, timeoutMs = 400) {
 	return new Promise((resolve) => {
@@ -137,6 +151,12 @@ async function main() {
 	}
 
 	console.log("[bnpi-db-access] START — resolve Postgres for local hris-api dev");
+	const preservedHikvisionTunnelMap =
+		process.env[hikvisionTunnelMapKey] ||
+		readEnvFileValue(runtimeEnvPath, hikvisionTunnelMapKey);
+	if (preservedHikvisionTunnelMap) {
+		process.env[hikvisionTunnelMapKey] = preservedHikvisionTunnelMap;
+	}
 	loadEnvFile(envPath, { overwrite: true });
 	const datasource = parseDatasourceUrl(
 		process.env.WRITE_DATABASE_URL ||

@@ -56,6 +56,13 @@ const STEPS = [
 		phase: "B",
 	},
 	{
+		id: "ensure-hikvision-remote-device-tunnel",
+		label: "Hikvision remote device tunnels (.20/.21/.22 -> localhost)",
+		script: "ensure-hikvision-remote-device-tunnel.cjs",
+		typical: "<2s warm / 5-30s cold SSH",
+		phase: "C",
+	},
+	{
 		id: "ensure-local-dev-services",
 		label: "Local postgres/services if needed",
 		script: "ensure-local-dev-services.cjs",

@@ -48,6 +48,7 @@ import {
 	getHikvisionDeviceHttpPort,
 	hikvisionFetch,
 	hikvisionFetchBinary,
+	resolveHikvisionTunnelTarget,
 } from "../../lib/hikvision-client";
 import {
 	buildDeviceUserEmployeeNoCandidates,
@@ -1196,11 +1197,18 @@ export const controller = (prisma: PrismaClient) => {
 
 	const getHikvisionSdkEndpoint = (device: any) => {
 		const config = device?.config || {};
-		return {
-			host: cleanHikvisionDeviceSpecValue(config.hikvisionSdkRuntimeAddress || device?.address),
-			port: cleanHikvisionDeviceSpecValue(
+		const physicalHost = cleanHikvisionDeviceSpecValue(
+			config.hikvisionSdkRuntimeAddress || device?.address,
+		);
+		const physicalPort = Number(
+			cleanHikvisionDeviceSpecValue(
 				config.hikvisionSdkRuntimePort || config.sdkPort || "8000",
 			),
+		);
+		const tunnelTarget = resolveHikvisionTunnelTarget(physicalHost, physicalPort);
+		return {
+			host: tunnelTarget?.host || physicalHost,
+			port: cleanHikvisionDeviceSpecValue(tunnelTarget?.port || physicalPort || "8000"),
 		};
 	};
 

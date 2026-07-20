@@ -1,5 +1,23 @@
 # WWG Agent Handoff
 
+## 2026-07-20 - Remote local-dev Hikvision tunnel handoff
+
+- Task mode: Focused local-dev runtime access repair.
+- Implemented:
+  - `PROJECT_TRUTH_HIKVISION_TUNNEL_MAP` now lets local `hris-api` route Hikvision HTTP/ISAPI and SDK probes through localhost SSH forwards while preserving the saved device address shown in HRIS.
+  - `scripts/start-hikvision-remote-device-tunnel.ps1` starts forwards for Main Entrance Device A `10.184.37.21` on HTTP `80`, HTTPS `443`, and SDK `8000`, and writes the ignored local API env override into `hris-api/.env.development.local`.
+  - `hris-api/scripts/ensure-bnpi-db-access.cjs` preserves that tunnel-map env line when it regenerates local DB overrides.
+- Runtime proof:
+  - Tunnel proof saved to `.runtime/hikvision-remote-device-tunnel-last.json`: PID `17684`, TCP OK on `127.0.0.1:10080`, `127.0.0.1:10443`, and `127.0.0.1:18000`.
+  - Local API health proof saved to `.runtime/remote-device-tunnel-proof-20260720-161455/device-a-health-with-tunnel-map.json`: Main Entrance Device A returned `summary.status=online`, `device.address=10.184.37.21`, `baseUrl=https://127.0.0.1:10443`, `network.source=env_tunnel_map`, and `deviceApi.provenBy=systemTime`.
+  - Browser proof saved to `.runtime/remote-device-browser-proof-20260720082234/summary.json`: `localhost:5175/admin/configuration/devices` showed Main Entrance Device A and `Online`; device health API responses were HTTP 200.
+- Validation:
+  - Focused backend tests passed: `6` passing for `device health helper` and `hikvision client endpoint resolution`.
+  - `hris-api` `npx tsc --noEmit --pretty false` passed.
+- Boundary:
+  - `ssh project-truth-hris` from the current network reset through Cloudflare edge during this session. The helper therefore used direct LAN fallback `infra@10.184.37.19` for proof. Far-away usage depends on Cloudflare Access SSH being reachable from that network.
+- Recommendation capture: No new recommendations were identified.
+
 ## 2026-07-20 - TEST A zero-missing recovery boundary handoff
 
 - Task mode: Agent-owned live biometric recovery attempt, truth classification, and UI clarity repair.
