@@ -69,6 +69,29 @@ function Test-TcpConnect {
   }
 }
 
+function Test-PostgresHandshake {
+  param([string]$HostName, [int]$Port, [int]$TimeoutMs = 500)
+  try {
+    $client = [System.Net.Sockets.TcpClient]::new()
+    $async = $client.BeginConnect($HostName, $Port, $null, $null)
+    if (-not $async.AsyncWaitHandle.WaitOne($TimeoutMs, $false)) {
+      $client.Close()
+      return $false
+    }
+    $client.EndConnect($async)
+    $stream = $client.GetStream()
+    $stream.ReadTimeout = $TimeoutMs
+    $sslRequest = [byte[]](0, 0, 0, 8, 4, 210, 22, 47)
+    $stream.Write($sslRequest, 0, $sslRequest.Length)
+    $buffer = New-Object byte[] 1
+    $read = $stream.Read($buffer, 0, 1)
+    $client.Close()
+    return ($read -gt 0)
+  } catch {
+    return $false
+  }
+}
+
 function New-SshForwardArgs {
   param(
     [string]$Target,
@@ -106,6 +129,10 @@ if (-not (Test-Path -LiteralPath $sshKey)) {
 # --- WARM PATH: no PowerShell SSH, no Cloudflare ---
 Write-K8sDbProgress "probe 127.0.0.1:$LocalPort (reuse if open)..."
 if (Test-TcpConnect -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 250) {
+  if (-not (Test-PostgresHandshake -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 500)) {
+    Write-K8sDbProgress "127.0.0.1:$LocalPort accepts TCP but did not answer Postgres handshake; not reusing stale listener"
+    Stop-ExistingForward
+  } else {
   $reuseRecord = [pscustomobject]@{
     GeneratedAt = (Get-Date).ToString('o')
     Environment = 'dev-k8s-runtime'
@@ -126,6 +153,7 @@ if (Test-TcpConnect -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 250) {
   Write-K8sDbProgress "REUSE OK -- 127.0.0.1:$LocalPort already listening (no SSH)"
   Write-Host "DATABASE_URL=$($reuseRecord.DatabaseUrl)"
   return
+  }
 }
 
 Write-K8sDbProgress "cold path -- open single-port SSH forward only (no multi-port LAN)"

@@ -3,6 +3,7 @@ import {
 	applyRawFingerprintCustodyToRow,
 	buildRawFingerprintCustody,
 	captureRawFingerprintsForEnrollment,
+	isRawFingerprintEnrollCaptureEnabled,
 	normalizeIsapiFingerprintList,
 	parseFingerPrintProgress,
 	RAW_FINGERPRINT_SCHEMA,
@@ -72,6 +73,23 @@ describe("device-user-raw-fingerprint helper", () => {
 		expect(fail.cardReaderRecvStatus).to.equal(5);
 		expect(fail.errorMsg).to.equal("15");
 		expect(fail.reason).to.include("errorMsg=15");
+	});
+
+	it("keeps raw fingerprint fallback enabled even when env tries to disable it", () => {
+		const previousFallback = process.env.HIKVISION_ENROLL_RAW_FINGERPRINT;
+		try {
+			delete process.env.HIKVISION_ENROLL_RAW_FINGERPRINT;
+			expect(isRawFingerprintEnrollCaptureEnabled()).to.equal(true);
+
+			process.env.HIKVISION_ENROLL_RAW_FINGERPRINT = "false";
+			expect(isRawFingerprintEnrollCaptureEnabled()).to.equal(true);
+
+			process.env.HIKVISION_ENROLL_RAW_FINGERPRINT = "off";
+			expect(isRawFingerprintEnrollCaptureEnabled()).to.equal(true);
+		} finally {
+			if (previousFallback === undefined) delete process.env.HIKVISION_ENROLL_RAW_FINGERPRINT;
+			else process.env.HIKVISION_ENROLL_RAW_FINGERPRINT = previousFallback;
+		}
 	});
 
 	it("builds and applies raw fingerprint custody onto DeviceUser row", () => {

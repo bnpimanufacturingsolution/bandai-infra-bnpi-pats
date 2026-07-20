@@ -37,22 +37,13 @@ export type RawFingerprintCustody = {
 	totalDataChars: number;
 };
 
-export const envBool = (name: string, defaultValue: boolean) => {
-	const raw = String(process.env[name] || "").trim().toLowerCase();
-	if (!raw) return defaultValue;
-	if (["0", "false", "no", "off"].includes(raw)) return false;
-	if (["1", "true", "yes", "on"].includes(raw)) return true;
-	return defaultValue;
-};
-
 /**
  * Legacy JS/ISAPI device pull after enroll identity.
- * Default OFF (C++-first): raw templates must arrive on SDK callback
- * (`fingerprints[]` / faceTemplate from C++ listener). Set
- * HIKVISION_ENROLL_RAW_FINGERPRINT=true only as temporary fallback — not product truth.
+ * Always enabled: when the C++ listener does not provide raw template bytes,
+ * HRIS must still try the ISAPI fallback so environment defaults cannot
+ * suppress biometric custody.
  */
-export const isRawFingerprintEnrollCaptureEnabled = () =>
-	envBool("HIKVISION_ENROLL_RAW_FINGERPRINT", false);
+export const isRawFingerprintEnrollCaptureEnabled = () => true;
 
 export const markDeviceUserRawBiometricFailure = async (params: {
 	prisma: PrismaClient | any;
@@ -709,17 +700,6 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 	source?: string;
 	face?: unknown;
 }> => {
-	if (!isRawFingerprintEnrollCaptureEnabled()) {
-		return {
-			ok: false,
-			rawPresent: false,
-			fingerprintCount: 0,
-			totalDataChars: 0,
-			deviceUserId: params.deviceUserId || null,
-			reason: "disabled_by_env",
-		};
-	}
-
 	const organizationId = String(params.organizationId || "").trim();
 	const deviceId = String(params.deviceId || "").trim();
 	const employeeNo = String(params.employeeNo || "").trim();
@@ -1465,15 +1445,11 @@ export const scheduleRawFingerprintCaptureForEnrollment = (params: {
 	employeeNo: string;
 	deviceUserId?: string | null;
 }): void => {
-	if (!isRawFingerprintEnrollCaptureEnabled()) {
-		// C++-first: templates must arrive on /api/hikvision/callback fingerprints[] from listener.
-		return;
-	}
 	const employeeNo = String(params.employeeNo || "").trim();
 	if (!employeeNo || isOpaqueHikvisionPersonToken(employeeNo)) return;
 
 	console.warn(
-		`[raw-fingerprint] LEGACY JS/ISAPI fallback capture scheduled for ${employeeNo} device=${params.deviceId} (HIKVISION_ENROLL_RAW_FINGERPRINT=true)`,
+		`[raw-fingerprint] ISAPI fallback capture scheduled for ${employeeNo} device=${params.deviceId}`,
 	);
 
 	void captureRawFingerprintsForEnrollment(params)

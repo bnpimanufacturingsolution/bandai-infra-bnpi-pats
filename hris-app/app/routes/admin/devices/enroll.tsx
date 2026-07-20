@@ -742,6 +742,7 @@ export function DeviceEnrollmentPanel({
 		status: "idle" | "review" | "syncing" | "complete" | "error";
 		message: string;
 		summary?: DeviceUserSyncSummary;
+		preview?: DeviceSyncPreviewRow;
 	}>({
 		open: false,
 		status: "idle",
@@ -2471,7 +2472,7 @@ export function DeviceEnrollmentPanel({
 		cancelDeviceUserSyncJobMutation.mutate(activeDeviceUserSyncJob.jobId);
 	};
 
-	const openDeviceUserSyncReview = (deviceIdOverride?: string) => {
+	const openDeviceUserSyncReview = async (deviceIdOverride?: string) => {
 		const targetDeviceId = deviceIdOverride || selectedDeviceId;
 		if (!targetDeviceId) {
 			toast.error("Select a device before syncing users");
@@ -2480,9 +2481,30 @@ export function DeviceEnrollmentPanel({
 		if (deviceIdOverride) setSelectedDeviceId(deviceIdOverride);
 		setDeviceUserSyncState({
 			open: true,
-			status: "review",
-			message: "Sync physical device users into HRIS identity records.",
+			status: "syncing",
+			message: "Reading current sync preview before review.",
 		});
+		try {
+			const previewResponse = await deviceService.getDeviceSyncPreview({
+				deviceId: targetDeviceId,
+			});
+			const preview =
+				previewResponse.devices.find((row) => row.deviceId === targetDeviceId) ||
+				previewResponse.devices[0];
+			setDeviceUserSyncState({
+				open: true,
+				status: "review",
+				message: "Sync physical device users into HRIS identity records.",
+				preview,
+			});
+			void refetchSyncPreview();
+		} catch (error: any) {
+			setDeviceUserSyncState({
+				open: true,
+				status: "error",
+				message: error?.message || "Unable to read device sync preview.",
+			});
+		}
 	};
 
 	const handleDeviceUserSearch = (query: string) => {
@@ -3114,6 +3136,8 @@ export function DeviceEnrollmentPanel({
 	const selectedSyncCenterItem = syncCenterDevices.find(
 		(item) => item.device.id === selectedDeviceId,
 	);
+	const deviceUserSyncReviewPreview =
+		deviceUserSyncState.preview || selectedSyncCenterItem?.preview;
 	const syncCenterHasHikvisionDevices = syncCenterDevices.some(
 		(item) => item.vendor === "Hikvision",
 	);
@@ -5041,7 +5065,7 @@ export function DeviceEnrollmentPanel({
 														</DropdownMenuItem>
 														<DropdownMenuItem
 															onClick={() =>
-																openDeviceUserSyncReview(device.id)
+																void openDeviceUserSyncReview(device.id)
 															}>
 															<RefreshCw className="mr-2 h-4 w-4" />
 															Review user sync
@@ -5396,7 +5420,7 @@ export function DeviceEnrollmentPanel({
 										onClick={() =>
 											hasEffectiveDeviceUserSyncJobProgress
 												? openBulkDeviceUserSyncReview()
-												: openDeviceUserSyncReview()
+												: void openDeviceUserSyncReview()
 										}>
 										{deviceUserSyncJobIsProcessing || startDeviceUserSyncJobMutation.isPending ? (
 											<Loader2 className="h-4 w-4 shrink-0 animate-spin" />
@@ -5772,7 +5796,7 @@ export function DeviceEnrollmentPanel({
 																	{!deviceUser.hrisDeviceUser ? (
 																		<DropdownMenuItem
 																			onClick={() =>
-																				openDeviceUserSyncReview()
+																				void openDeviceUserSyncReview()
 																			}>
 																			<RefreshCw className="mr-2 h-4 w-4" />
 																			Review sync
@@ -6203,11 +6227,11 @@ export function DeviceEnrollmentPanel({
 									{[
 										[
 											"Current live users: fingerprint inventory vs HRIS raw",
-											`${metricValue(selectedSyncCenterItem?.preview?.fingerprintReported)} inventory slots / ${metricValue(selectedSyncCenterItem?.preview?.fingerprintRawPresent ?? selectedSyncCenterItem?.preview?.fingerprintEnvelopePresent)} HRIS raw stored / ${metricValue(selectedSyncCenterItem?.preview?.fingerprintRawMissing ?? selectedSyncCenterItem?.preview?.fingerprintEnvelopeMissing)} raw missing`,
+											`${metricValue(deviceUserSyncReviewPreview?.fingerprintReported)} inventory slots / ${metricValue(deviceUserSyncReviewPreview?.fingerprintRawPresent ?? deviceUserSyncReviewPreview?.fingerprintEnvelopePresent)} HRIS raw stored / ${metricValue(deviceUserSyncReviewPreview?.fingerprintRawMissing ?? deviceUserSyncReviewPreview?.fingerprintEnvelopeMissing)} raw missing`,
 										],
 										[
 											"Current live users: face inventory vs HRIS raw",
-											`${metricValue(selectedSyncCenterItem?.preview?.faceReported)} inventory claims / ${metricValue(selectedSyncCenterItem?.preview?.faceRawPresent ?? selectedSyncCenterItem?.preview?.faceEnvelopePresent)} HRIS raw stored / ${metricValue(selectedSyncCenterItem?.preview?.faceRawMissing ?? selectedSyncCenterItem?.preview?.faceEnvelopeMissing)} raw missing`,
+											`${metricValue(deviceUserSyncReviewPreview?.faceReported)} inventory claims / ${metricValue(deviceUserSyncReviewPreview?.faceRawPresent ?? deviceUserSyncReviewPreview?.faceEnvelopePresent)} HRIS raw stored / ${metricValue(deviceUserSyncReviewPreview?.faceRawMissing ?? deviceUserSyncReviewPreview?.faceEnvelopeMissing)} raw missing`,
 										],
 									].map(([label, value]) => (
 										<div key={label} className="rounded-md border border-slate-200 px-2 py-1.5">
@@ -6216,16 +6240,16 @@ export function DeviceEnrollmentPanel({
 										</div>
 									))}
 								</div>
-								{Number(selectedSyncCenterItem?.preview?.staleHrisOnlyRows || 0) > 0 ? (
+								{Number(deviceUserSyncReviewPreview?.staleHrisOnlyRows || 0) > 0 ? (
 									<div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5">
 										<span className="block text-slate-500">Stale HRIS-only inventory</span>
 										<span className="font-semibold text-slate-950">
-											{metricValue(selectedSyncCenterItem?.preview?.staleHrisOnlyRows)} rows /{" "}
-											{metricValue(selectedSyncCenterItem?.preview?.staleFingerprintReported)} fingerprint claims /{" "}
-											{metricValue(selectedSyncCenterItem?.preview?.staleFingerprintRawBlobCount ?? selectedSyncCenterItem?.preview?.staleFingerprintRawPresent)} HRIS raw stored /{" "}
-											{metricValue(selectedSyncCenterItem?.preview?.staleFingerprintRawMissing)} fingerprint raw missing /{" "}
-											{metricValue(selectedSyncCenterItem?.preview?.staleFaceReported)} face claims /{" "}
-											{metricValue(selectedSyncCenterItem?.preview?.staleFaceRawMissing)} face raw missing
+											{metricValue(deviceUserSyncReviewPreview?.staleHrisOnlyRows)} rows /{" "}
+											{metricValue(deviceUserSyncReviewPreview?.staleFingerprintReported)} fingerprint claims /{" "}
+											{metricValue(deviceUserSyncReviewPreview?.staleFingerprintRawBlobCount ?? deviceUserSyncReviewPreview?.staleFingerprintRawPresent)} HRIS raw stored /{" "}
+											{metricValue(deviceUserSyncReviewPreview?.staleFingerprintRawMissing)} fingerprint raw missing /{" "}
+											{metricValue(deviceUserSyncReviewPreview?.staleFaceReported)} face claims /{" "}
+											{metricValue(deviceUserSyncReviewPreview?.staleFaceRawMissing)} face raw missing
 										</span>
 									</div>
 								) : null}

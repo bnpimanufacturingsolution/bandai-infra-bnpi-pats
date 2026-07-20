@@ -18,7 +18,9 @@ function Assert-Contains {
   }
 }
 
-Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'VmSshTarget\s*=\s*''project-truth-hris''' -Message 'SSH bridge must default to the public Project Truth VM alias'
+Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'VmSshTarget\s*=\s*''auto''' -Message 'SSH bridge must default to automatic VM SSH target selection'
+Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'infra@10\.184\.37\.19' -Message 'SSH bridge auto mode must try direct LAN first'
+Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'project-truth-hris' -Message 'SSH bridge auto mode must retain public Project Truth VM alias fallback'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'ExitOnForwardFailure=yes' -Message 'SSH bridge must fail fast if remote forwards are not established'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'ServerAliveInterval=30' -Message 'SSH bridge must keep the remote forward session alive'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern '58080' -Message 'SSH bridge must preserve the default forwarded HTTPS port base'

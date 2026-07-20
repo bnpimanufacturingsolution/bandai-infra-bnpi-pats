@@ -3,7 +3,7 @@ param(
   [string]$Action = 'start',
   [string]$DeviceIp = '',
   [string[]]$DeviceIps = @(),
-  [string]$VmSshTarget = 'project-truth-hris',
+  [string]$VmSshTarget = 'auto',
   [int]$ApiLocalPort = 3001,
   [int]$ApiRemotePort = 53001,
   [int]$HttpDevicePort = 443,
@@ -18,6 +18,36 @@ $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $runtimeRoot = Join-Path $repoRoot '.runtime\hikvision-vm-ssh-bridge'
 $stateFile = Join-Path $runtimeRoot 'active-ssh-bridge.json'
 New-Item -ItemType Directory -Force -Path $runtimeRoot | Out-Null
+
+function Get-VmSshCandidates {
+  if ($VmSshTarget -and $VmSshTarget -ne 'auto') {
+    return @([pscustomobject]@{ Label = $VmSshTarget; Args = @($VmSshTarget) })
+  }
+
+  $keyPath = Join-Path $env:USERPROFILE '.ssh\node-health-appliance_ed25519'
+  $directArgs = if (Test-Path -LiteralPath $keyPath) {
+    @('-i', $keyPath, 'infra@10.184.37.19')
+  } else {
+    @('infra@10.184.37.19')
+  }
+
+  @(
+    [pscustomobject]@{ Label = 'lan:infra@10.184.37.19'; Args = $directArgs },
+    [pscustomobject]@{ Label = 'alias:project-truth-hris'; Args = @('project-truth-hris') }
+  )
+}
+
+function Select-VmSshCandidate {
+  foreach ($candidate in Get-VmSshCandidates) {
+    $args = @('-o', 'ConnectTimeout=5', '-o', 'BatchMode=yes') + @($candidate.Args) + @('echo SSH_OK')
+    $out = & ssh.exe @args 2>$null
+    if ($LASTEXITCODE -eq 0 -and (($out | Out-String) -match 'SSH_OK')) {
+      Write-Host "Using VM SSH target $($candidate.Label)"
+      return $candidate
+    }
+  }
+  throw "No VM SSH target reachable (tried direct LAN 10.184.37.19, then project-truth-hris)."
+}
 
 function Stop-ExistingBridge {
   if (-not (Test-Path -LiteralPath $stateFile)) { return }
@@ -55,7 +85,7 @@ Stop-ExistingBridge
 # or elevated host SSH left remote ports occupied (common after thrash).
 function Clear-RemoteReversePorts {
   param(
-    [string]$Target,
+    [object]$Target,
     [int[]]$Ports
   )
   if (-not $Ports -or $Ports.Count -eq 0) { return }
@@ -81,10 +111,11 @@ done
 ss -ltn 2>/dev/null | grep -E ":($portPattern)[[:space:]]" || echo REMOTE_PORTS_CLEAR
 "@
   try {
-    $out = $script | & ssh.exe -o ConnectTimeout=20 -o BatchMode=yes $Target 'bash -s' 2>&1 | Out-String
+    $sshArgs = @('-o', 'ConnectTimeout=20', '-o', 'BatchMode=yes') + @($Target.Args) + @('bash -s')
+    $out = $script | & ssh.exe @sshArgs 2>&1 | Out-String
     if ($out.Trim()) { Write-Host $out.Trim() }
   } catch {
-    Write-Warning "Could not clear remote reverse ports on ${Target}: $($_.Exception.Message)"
+    Write-Warning "Could not clear remote reverse ports on $($Target.Label): $($_.Exception.Message)"
   }
 }
 
@@ -119,6 +150,8 @@ $targetDeviceIps = @(
 if ($targetDeviceIps.Count -eq 0) {
   throw 'Pass -DeviceIp or -DeviceIps with at least one Hikvision device address.'
 }
+
+$sshCandidate = Select-VmSshCandidate
 
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $runRoot = Join-Path $runtimeRoot $stamp
@@ -164,8 +197,8 @@ for ($deviceIndex = 0; $deviceIndex -lt $targetDeviceIps.Count; $deviceIndex++) 
   }) | Out-Null
 }
 
-$forwardArgs.Add($VmSshTarget)
-Clear-RemoteReversePorts -Target $VmSshTarget -Ports @($remoteListenPorts | Select-Object -Unique)
+$forwardArgs.AddRange([string[]]@($sshCandidate.Args))
+Clear-RemoteReversePorts -Target $sshCandidate -Ports @($remoteListenPorts | Select-Object -Unique)
 
 $sshStdout = Join-Path $runRoot 'ssh-bridge.stdout.log'
 $sshStderr = Join-Path $runRoot 'ssh-bridge.stderr.log'
@@ -191,7 +224,8 @@ $verifyPorts = @($records | ForEach-Object {
   $_.RuntimeConfigHint.hikvisionSdkRuntimePort
 } | Sort-Object -Unique)
 $verifyPattern = ($verifyPorts | ForEach-Object { [string]$_ }) -join '|'
-$verifyOutput = ssh $VmSshTarget "ss -ltn | grep -E ':($verifyPattern)[[:space:]]'" 2>&1
+$verifyArgs = @($sshCandidate.Args) + @("ss -ltn | grep -E ':($verifyPattern)[[:space:]]'")
+$verifyOutput = & ssh.exe @verifyArgs 2>&1
 if ($LASTEXITCODE -ne 0) {
   Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
   throw "SSH bridge started but VM did not expose the forwarded ports. ${verifyOutput}"
@@ -200,7 +234,7 @@ $verifyOutput | Set-Content -LiteralPath (Join-Path $runRoot 'vm-port-proof.txt'
 
 $state = [pscustomobject]@{
   generatedAt = (Get-Date).ToString('o')
-  vmSshTarget = $VmSshTarget
+  vmSshTarget = $sshCandidate.Label
   processId = $proc.Id
   deviceIps = $targetDeviceIps
   bridges = $records

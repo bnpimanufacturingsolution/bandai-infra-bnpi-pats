@@ -15,12 +15,67 @@ param(
   [int]$HttpListenPort = 59443,
   [int]$ApiLocalPort = 3001,
   [int]$ApiRemotePort = 53001,
-  [string]$VmSshTarget = "project-truth-hris"
+  [string]$VmSshTarget = "auto"
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
+
+function Get-VmSshCandidates {
+  if ($VmSshTarget -and $VmSshTarget -ne 'auto') {
+    return @([pscustomobject]@{ Label = $VmSshTarget; Args = @($VmSshTarget) })
+  }
+
+  $keyPath = Join-Path $env:USERPROFILE '.ssh\node-health-appliance_ed25519'
+  $directArgs = if (Test-Path -LiteralPath $keyPath) {
+    @('-i', $keyPath, 'infra@10.184.37.19')
+  } else {
+    @('infra@10.184.37.19')
+  }
+
+  @(
+    [pscustomobject]@{ Label = 'lan:infra@10.184.37.19'; Args = $directArgs },
+    [pscustomobject]@{ Label = 'alias:project-truth-hris'; Args = @('project-truth-hris') }
+  )
+}
+
+function Select-VmSshCandidate {
+  foreach ($candidate in Get-VmSshCandidates) {
+    $args = @('-o', 'ConnectTimeout=5', '-o', 'BatchMode=yes') + @($candidate.Args) + @('echo SSH_OK')
+    $out = & ssh.exe @args 2>$null
+    if ($LASTEXITCODE -eq 0 -and (($out | Out-String) -match 'SSH_OK')) {
+      return $candidate
+    }
+  }
+  return $null
+}
+
+$script:VmSshCandidate = Select-VmSshCandidate
+
+function Invoke-VmSsh {
+  param(
+    [string]$Command,
+    [int]$ConnectTimeoutSeconds = 12
+  )
+  if (-not $script:VmSshCandidate) {
+    throw "No VM SSH target reachable (tried direct LAN 10.184.37.19, then project-truth-hris)."
+  }
+  $args = @('-o', "ConnectTimeout=$ConnectTimeoutSeconds", '-o', 'BatchMode=yes') + @($script:VmSshCandidate.Args) + @($Command)
+  & ssh.exe @args
+}
+
+function Invoke-VmSshScript {
+  param(
+    [string]$Script,
+    [int]$ConnectTimeoutSeconds = 20
+  )
+  if (-not $script:VmSshCandidate) {
+    throw "No VM SSH target reachable (tried direct LAN 10.184.37.19, then project-truth-hris)."
+  }
+  $args = @('-o', "ConnectTimeout=$ConnectTimeoutSeconds", '-o', 'BatchMode=yes') + @($script:VmSshCandidate.Args) + @('bash -s')
+  $Script | & ssh.exe @args
+}
 
 function Resolve-HikvisionBridgeDeviceIp {
   param([string]$Fallback = "192.168.254.102")
@@ -90,7 +145,7 @@ if timeout 4 bash -lc '</dev/tcp/127.0.0.1/$Port' >/dev/null 2>&1; then
 fi
 exit 1
 "@
-    $out = $probe | & ssh.exe -o ConnectTimeout=$TimeoutSeconds -o BatchMode=yes $VmSshTarget 'bash -s' 2>$null
+    $out = Invoke-VmSshScript -Script $probe -ConnectTimeoutSeconds $TimeoutSeconds 2>$null
     return (($out | Out-String) -match "LISTEN|CONNECT")
   } catch {
     return $false
@@ -243,7 +298,7 @@ if ($sdkPortOpen -and $vmHttpOpen) {
 # events save to DB (reload works) but device-event:saved never reaches the browser.
 $apiReverseOk = $false
 try {
-  $vmApiListen = ssh -o ConnectTimeout=12 -o BatchMode=yes $VmSshTarget "ss -ltn 2>/dev/null | grep -E ':$ApiRemotePort\s' || true" 2>$null
+  $vmApiListen = Invoke-VmSsh -ConnectTimeoutSeconds 12 -Command "ss -ltn 2>/dev/null | grep -E ':$ApiRemotePort\s' || true" 2>$null
   if ($vmApiListen -match [string]$ApiRemotePort) {
     $apiReverseOk = $true
     $result.steps += [pscustomobject]@{
@@ -269,20 +324,21 @@ if (-not $apiReverseOk) {
     }
     $stdout = Join-Path $apiBridgeRoot "ssh.stdout.log"
     $stderr = Join-Path $apiBridgeRoot "ssh.stderr.log"
-    $proc = Start-Process -FilePath "ssh.exe" -ArgumentList @(
+    $apiForwardArgs = @(
       "-N", "-T",
       "-o", "ExitOnForwardFailure=yes",
       "-o", "ServerAliveInterval=30",
       "-o", "ServerAliveCountMax=3",
       "-R", "${ApiRemotePort}:127.0.0.1:${ApiLocalPort}",
-      $VmSshTarget
-    ) -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+      @($script:VmSshCandidate.Args)
+    )
+    $proc = Start-Process -FilePath "ssh.exe" -ArgumentList $apiForwardArgs -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
     Start-Sleep -Seconds 3
     if ($proc.HasExited) {
       $err = if (Test-Path $stderr) { Get-Content -Raw $stderr } else { "ssh exited" }
       $result.steps += [pscustomobject]@{ step = "api_reverse_bridge"; ok = $false; detail = "Failed to start API reverse: $err".Trim() }
     } else {
-      $vmApiListen2 = ssh -o ConnectTimeout=12 -o BatchMode=yes $VmSshTarget "ss -ltn 2>/dev/null | grep -E ':$ApiRemotePort\s' || true" 2>$null
+      $vmApiListen2 = Invoke-VmSsh -ConnectTimeoutSeconds 12 -Command "ss -ltn 2>/dev/null | grep -E ':$ApiRemotePort\s' || true" 2>$null
       $apiReverseOk = $vmApiListen2 -match [string]$ApiRemotePort
       @{ ProcessId = $proc.Id; ApiRemotePort = $ApiRemotePort; ApiLocalPort = $ApiLocalPort; generatedAt = (Get-Date).ToString("o") } |
         ConvertTo-Json | Set-Content -LiteralPath $apiState -Encoding UTF8
@@ -356,7 +412,7 @@ sleep 3
 systemctl is-active "`$UNIT"
 sudo -n journalctl -u "`$UNIT" -n 40 --no-pager 2>/dev/null | grep -E 'service_started|hrisApiBase|apiBase' | tail -n 4 || true
 "@
-    $retarget = $retargetScript | & ssh.exe -o ConnectTimeout=20 -o BatchMode=yes $VmSshTarget 'bash -s' 2>&1
+    $retarget = Invoke-VmSshScript -Script $retargetScript -ConnectTimeoutSeconds 20 2>&1
     $retargetText = ($retarget | Out-String)
     $listenerActive = $retargetText -match "(?m)^active\s*$|LISTENER_ALREADY_HOST_API|is-active"
     if ($retargetText -match "LISTENER_ALREADY_HOST_API") {
@@ -396,7 +452,7 @@ $result.message = if ($result.ok -and $apiReverseOk) {
 } elseif (-not $result.dbOpen) {
   "Database tunnel not ready on port $DbLocalPort"
 } else {
-  "Reverse tunnel to device not ready - check ssh $VmSshTarget / Cloudflare Access"
+  "Reverse tunnel to device not ready - check direct LAN SSH or project-truth-hris / Cloudflare Access"
 }
 
 # Compact single-line JSON so host API parsers do not choke on pretty multi-line output.

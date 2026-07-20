@@ -31,6 +31,19 @@ const SKIP_PROBE = ["1", "true", "yes", "on"].includes(
 /** Last-known local reverse-path defaults when DB is empty/unavailable. */
 const HOST_FALLBACK_IPS = ["192.168.254.102", "192.168.254.189"];
 
+function hostFallbackTargets() {
+	return HOST_FALLBACK_IPS.map((deviceIp, index) => ({
+		deviceId: null,
+		name: deviceIp === "192.168.254.102" ? "TEST A" : null,
+		deviceIp,
+		httpDevicePort: 443,
+		sdkDevicePort: 8000,
+		protocol: "https",
+		reverseBridge: true,
+		_rank: index,
+	}));
+}
+
 function asObject(value) {
 	return value && typeof value === "object" ? value : {};
 }
@@ -207,6 +220,25 @@ async function resolveFromDb() {
 		const candidates = pool.map((device, index) => toTarget(device, index));
 		const probed = await enrichWithProbes(candidates);
 		const selected = pickTargets(probed);
+		if (
+			!SKIP_PROBE &&
+			selected.length > 0 &&
+			!selected.some((t) => t.hostReachable)
+		) {
+			const fallbackProbed = await enrichWithProbes(hostFallbackTargets());
+			const fallbackSelected = pickTargets(fallbackProbed);
+			if (fallbackSelected.some((t) => t.hostReachable)) {
+				return {
+					ok: true,
+					source: "host-fallback-reachable-over-db-stale",
+					targets: fallbackSelected.map(({ _rank, ...rest }) => rest),
+					candidates: [
+						...fallbackProbed.map(({ _rank, ...rest }) => rest),
+						...probed.map(({ _rank, ...rest }) => rest),
+					],
+				};
+			}
+		}
 		const source = reverse.length
 			? selected.some((t) => t.hostReachable)
 				? "db-reverse-bridge-host-reachable"
@@ -227,18 +259,7 @@ async function resolveFromDb() {
 }
 
 async function resolveFallbackOnly() {
-	const candidates = await enrichWithProbes(
-		HOST_FALLBACK_IPS.map((deviceIp, index) => ({
-			deviceId: null,
-			name: null,
-			deviceIp,
-			httpDevicePort: 443,
-			sdkDevicePort: 8000,
-			protocol: "https",
-			reverseBridge: true,
-			_rank: index,
-		})),
-	);
+	const candidates = await enrichWithProbes(hostFallbackTargets());
 	const selected = pickTargets(candidates);
 	return {
 		ok: selected.length > 0,

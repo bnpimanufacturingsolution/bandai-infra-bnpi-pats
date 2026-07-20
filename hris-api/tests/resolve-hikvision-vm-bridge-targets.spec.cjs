@@ -10,6 +10,8 @@ const fs = require("fs");
 
 const script = path.join(__dirname, "..", "scripts", "resolve-hikvision-vm-bridge-targets.cjs");
 const ensureScript = path.join(__dirname, "..", "scripts", "ensure-hikvision-vm-bridge.cjs");
+const portOwnershipScript = path.join(__dirname, "..", "scripts", "ensure-dev-port-ownership.cjs");
+const devWatchScript = path.join(__dirname, "..", "scripts", "run-dev-api-watch.cjs");
 const bridgeScript = path.join(__dirname, "..", "..", "scripts", "start-host-hikvision-vm-ssh-bridge.ps1");
 const livePathScript = path.join(__dirname, "..", "..", "scripts", "ensure-device-live-path.ps1");
 
@@ -19,7 +21,9 @@ describe("resolve-hikvision-vm-bridge-targets", () => {
 		const source = fs.readFileSync(script, "utf8");
 		expect(source).to.include("hostReachable");
 		expect(source).to.include("db-reverse-bridge-host-reachable");
+		expect(source).to.include("host-fallback-reachable-over-db-stale");
 		expect(source).to.include("192.168.254.102");
+		expect(source).to.include("TEST A");
 		expect(source).to.include("probeTcp");
 	});
 
@@ -28,6 +32,9 @@ describe("resolve-hikvision-vm-bridge-targets", () => {
 		expect(source).to.include("localBridgeMatches");
 		expect(source).to.include("localMatches");
 		expect(source).to.include("host-fallback-102");
+		expect(source).to.include('envValue("HIKVISION_VM_BRIDGE_SSH_TARGET", "auto")');
+		expect(source).to.include("infra@10.184.37.19");
+		expect(source).to.include("project-truth-hris");
 		// Must not exit fast solely because VM :59000 is open.
 		expect(source).to.match(/remoteSdkOpen && localMatches/);
 		expect(source).to.not.match(
@@ -71,7 +78,24 @@ describe("resolve-hikvision-vm-bridge-targets", () => {
 
 		// The live-path helper remains the sole owner of the VM-to-host API callback reverse.
 		expect(livePathSource).to.include('"-R", "${ApiRemotePort}:127.0.0.1:${ApiLocalPort}"');
-		expect(livePathSource).to.include("$retargetScript | & ssh.exe");
-		expect(livePathSource).to.include("'bash -s'");
+		expect(livePathSource).to.include("Invoke-VmSshScript -Script $retargetScript");
+		expect(livePathSource).to.include("Select-VmSshCandidate");
+	});
+
+	it("does not fast-ok a healthy old API before the new watcher starts", () => {
+		const source = fs.readFileSync(portOwnershipScript, "utf8");
+		expect(source).to.include("EADDRINUSE");
+		expect(source).to.include("reclaiming it before the new watcher starts");
+		expect(source).to.not.include("fast OK (login ready)");
+	});
+
+	it("defers socket live-path repair until the dev API is actually listening", () => {
+		const livePathSource = fs.readFileSync(path.join(__dirname, "..", "scripts", "ensure-device-live-path.cjs"), "utf8");
+		const watchSource = fs.readFileSync(devWatchScript, "utf8");
+
+		expect(livePathSource).to.include("HRIS_DEVICE_LIVE_PATH_REQUIRE_API");
+		expect(livePathSource).to.include("DONE (pre-api defer)");
+		expect(watchSource).to.include("runLivePathAfterHealth");
+		expect(watchSource).to.include("HRIS_DEVICE_LIVE_PATH_REQUIRE_API: \"true\"");
 	});
 });

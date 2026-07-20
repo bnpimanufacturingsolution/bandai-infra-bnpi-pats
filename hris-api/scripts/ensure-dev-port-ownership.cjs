@@ -1,4 +1,4 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const net = require("net");
 const path = require("path");
 const { spawnSync } = require("child_process");
@@ -247,9 +247,9 @@ async function main() {
 	const hasExistingListener =
 		(await canConnect(apiPort, "127.0.0.1")) || (await canConnect(apiPort, "::1"));
 
-	// Fast path: if something already serves a healthy hris-api on this port,
-	// predev continues (user can login now). npm run dev will still start a
-	// watcher; port reclaim below handles same-repo processes when possible.
+	// Health is useful evidence, but npm run dev starts a new watcher next.
+	// Returning here leaves the old listener on 3001 and the watcher hits
+	// EADDRINUSE. Keep going into the ownership/reclaim logic below.
 	if (hasExistingListener) {
 		try {
 			const healthUrl = `http://127.0.0.1:${apiPort}/health`;
@@ -271,12 +271,11 @@ async function main() {
 			});
 			if (res.status === 200 && /healthy/i.test(res.body || "")) {
 				console.log(
-					`[dev-port-check] Port ${apiPort} already serves healthy hris-api — fast OK (login ready).`,
+					`[dev-port-check] Port ${apiPort} already serves healthy hris-api; reclaiming it before the new watcher starts.`,
 				);
-				return;
 			}
 		} catch {
-			// not healthy — fall through to reclaim/fail logic
+			// not healthy â€” fall through to reclaim/fail logic
 		}
 	}
 
@@ -408,3 +407,4 @@ async function main() {
 main().catch((error) => {
 	fail(error instanceof Error ? error.message : String(error));
 });
+

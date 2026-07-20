@@ -43,7 +43,9 @@ const dbPort = Number(envValue("HRIS_DEV_DB_LOCAL_PORT", "55435")) || 55435;
 const sdkPort = Number(envValue("HIKVISION_VM_BRIDGE_SDK_LISTEN_PORT", "59000")) || 59000;
 const apiLocalPort = Number(envValue("HIKVISION_VM_BRIDGE_API_LOCAL_PORT", "3001")) || 3001;
 const apiRemotePort = Number(envValue("HIKVISION_VM_BRIDGE_API_REMOTE_PORT", "53001")) || 53001;
-const sshTarget = envValue("HIKVISION_VM_BRIDGE_SSH_TARGET", "project-truth-hris");
+const sshTarget = envValue("HIKVISION_VM_BRIDGE_SSH_TARGET", "auto");
+const directSshKey = path.join(process.env.USERPROFILE || "", ".ssh", "node-health-appliance_ed25519");
+const requireApiBeforeExit = envBool("HRIS_DEVICE_LIVE_PATH_REQUIRE_API", false);
 
 function tcpOpen(port, host = "127.0.0.1", timeoutMs = 700) {
 	return new Promise((resolve) => {
@@ -60,48 +62,66 @@ function tcpOpen(port, host = "127.0.0.1", timeoutMs = 700) {
 	});
 }
 
+function sshTargetCandidates() {
+	if (sshTarget !== "auto") return [{ label: sshTarget, args: [sshTarget] }];
+	const direct = fs.existsSync(directSshKey)
+		? ["-i", directSshKey, "infra@10.184.37.19"]
+		: ["infra@10.184.37.19"];
+	return [
+		{ label: "lan:infra@10.184.37.19", args: direct },
+		{ label: "alias:project-truth-hris", args: ["project-truth-hris"] },
+	];
+}
+
 function vmSsHasPort(port) {
-	const result = spawnSync(
-		"ssh.exe",
-		[
+	for (const target of sshTargetCandidates()) {
+		const result = spawnSync(
+			"ssh.exe",
+			[
 			"-o",
 			"BatchMode=yes",
 			"-o",
 			"ConnectTimeout=3",
 			"-o",
 			"StrictHostKeyChecking=accept-new",
-			sshTarget,
+			...target.args,
 			`ss -ltn 2>/dev/null | grep -q ':${port} ' || netstat -ltn 2>/dev/null | grep -q ':${port} '`,
-		],
-		{ cwd: repoRoot, stdio: "pipe", windowsHide: true, encoding: "utf8" },
-	);
-	return result.status === 0;
+			],
+			{ cwd: repoRoot, stdio: "pipe", windowsHide: true, encoding: "utf8" },
+		);
+		if (result.status === 0) return true;
+	}
+	return false;
 }
 
 function listenerPostsHostApi() {
 	// Prove last service_started / contract post targets reverse, not VM K3s 3101.
-	const result = spawnSync(
-		"ssh.exe",
-		[
+	for (const target of sshTargetCandidates()) {
+		const result = spawnSync(
+			"ssh.exe",
+			[
 			"-o",
 			"BatchMode=yes",
 			"-o",
 			"ConnectTimeout=4",
 			"-o",
 			"StrictHostKeyChecking=accept-new",
-			sshTarget,
+			...target.args,
 			`sudo -n journalctl -u project-truth-hikvision-hot-reload-listener.service -n 40 --no-pager 2>/dev/null | grep -E 'service_started|hrisApiBase|apiBase' | tail -n 5`,
-		],
-		{ cwd: repoRoot, stdio: "pipe", windowsHide: true, encoding: "utf8" },
-	);
-	const out = `${result.stdout || ""}\n${result.stderr || ""}`;
-	if (/127\.0\.0\.1:53001|localhost:53001/.test(out) && !/localhost:3101/.test(out)) {
-		return { ok: true, detail: out.trim().split("\n").slice(-2).join(" | ") };
+			],
+			{ cwd: repoRoot, stdio: "pipe", windowsHide: true, encoding: "utf8" },
+		);
+		if (result.status !== 0) continue;
+		const out = `${result.stdout || ""}\n${result.stderr || ""}`;
+		if (/127\.0\.0\.1:53001|localhost:53001/.test(out) && !/localhost:3101/.test(out)) {
+			return { ok: true, detail: out.trim().split("\n").slice(-2).join(" | ") };
+		}
+		if (/localhost:3101/.test(out)) {
+			return { ok: false, detail: "listener still posting localhost:3101" };
+		}
+		return { ok: false, detail: out.trim().slice(0, 240) || "no recent listener apiBase log" };
 	}
-	if (/localhost:3101/.test(out)) {
-		return { ok: false, detail: "listener still posting localhost:3101" };
-	}
-	return { ok: false, detail: out.trim().slice(0, 240) || "no recent listener apiBase log" };
+	return { ok: false, detail: "no reachable VM SSH target for listener apiBase proof" };
 }
 
 async function main() {
@@ -118,6 +138,16 @@ async function main() {
 	console.log(
 		`[device-live-path] probes host db:${dbPort}=${dbOk} sdk:${sdkPort}=${hostSdkOk} api:${apiLocalPort}=${apiOk} | vm :${apiRemotePort}=${vmApi} :${sdkPort}=${vmSdk}`,
 	);
+
+	if (!apiOk && !requireApiBeforeExit) {
+		const bridgeState = vmSdk
+			? `VM SDK reverse :${sdkPort} is ready`
+			: `VM SDK reverse :${sdkPort} is not ready yet`;
+		console.log(
+			`[device-live-path] DONE (pre-api defer) in ${((Date.now() - t0) / 1000).toFixed(1)}s — host API :${apiLocalPort} is not listening yet, so socket reverse/listener retarget will run after dev server health. ${bridgeState}.`,
+		);
+		process.exit(0);
+	}
 
 	if (dbOk && vmSdk && apiOk && vmApi) {
 		const listener = listenerPostsHostApi();
