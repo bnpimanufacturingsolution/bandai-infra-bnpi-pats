@@ -464,7 +464,11 @@ export interface DeviceImportJobProgress {
 	completedAt?: string;
 }
 
-export type DeviceUserSyncMode = "full_refresh" | "needs_attention_only" | "peer_converge";
+export type DeviceUserSyncMode =
+	| "full_refresh"
+	| "needs_attention_only"
+	| "peer_converge"
+	| "biometrics_only";
 
 export type DeviceUserMergeField =
 	| "vendorUserId"
@@ -574,6 +578,14 @@ export interface DeviceUserSyncJobProgress {
 	biometricCaptured: number;
 	biometricCached: number;
 	biometricFailed: number;
+	biometricFailureLog?: Array<{
+		deviceId: string;
+		deviceName?: string | null;
+		vendorUserId: string;
+		modality: "fingerprint" | "face";
+		reason: string;
+		at: string;
+	}>;
 	currentDeviceId?: string | null;
 	currentDeviceName?: string | null;
 	currentVendorUserId?: string | null;
@@ -585,7 +597,7 @@ export interface DeviceUserSyncJobProgress {
 	results: Array<{
 		deviceId: string;
 		deviceName: string;
-		status: "success" | "error" | "cancelled";
+		status: "success" | "needs_attention" | "error" | "cancelled";
 		runId?: string | null;
 		summary?: DeviceUserSyncResponse["summary"];
 		error?: string | null;
@@ -1495,6 +1507,24 @@ class DevicesService extends APIService {
 		if (!device || !person) throw new Error("deviceId and vendorUserId required");
 		const response = await hrisApiClient.post<any>(
 			`/api/device/${device}/users/${encodeURIComponent(person)}/raw-fingerprints/capture`,
+			{},
+		);
+		const data = response.data?.data || response.data;
+		return {
+			capture: data?.capture || null,
+			deviceUser: (data?.deviceUser as DeviceUser) || null,
+		};
+	}
+
+	async captureDeviceUserRawFace(
+		deviceId: string,
+		vendorUserId: string,
+	): Promise<{ capture: any; deviceUser: DeviceUser | null }> {
+		const device = String(deviceId || "").trim();
+		const person = String(vendorUserId || "").trim();
+		if (!device || !person) throw new Error("deviceId and vendorUserId required");
+		const response = await hrisApiClient.post<any>(
+			`/api/device/${device}/users/${encodeURIComponent(person)}/raw-face/capture`,
 			{},
 		);
 		const data = response.data?.data || response.data;

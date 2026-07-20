@@ -402,18 +402,22 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("biometricProcessed");
 		expect(controller).to.include("biometricCaptured");
 		expect(controller).to.include("biometricFailed");
+		expect(controller).to.include("biometricFailureLog");
+		expect(controller).to.include("missingRawCount");
+		expect(controller).to.include("storedCount");
 		expect(controller).to.include("persistDeviceUserSyncJob(nextJob)");
 		expect(controller).to.include("readDeviceUserSyncJob(jobId)");
-		expect(controller).to.include("includeFingerprints: true");
-		expect(controller).to.include("includeFaces: false");
-		expect(controller).to.include("includeFingerprints: false");
-		expect(controller).to.include("includeFaces: true");
-		expect(controller).to.include("for (let attempt = 1; attempt <= 3; attempt += 1)");
+		expect(controller).to.include("captureRawFingerprintsForEnrollment");
+		expect(controller).to.include("captureRawFaceForEnrollment");
+		expect(controller).to.include("captureDeviceUserRawFace");
+		expect(controller).to.include("HIKVISION_RAW_BIOMETRIC_SYNC_CONCURRENCY");
+		expect(controller).to.include("await Promise.all(workers)");
 		expect(controller).to.include("summarizeDeviceUserRawBiometricCustody");
 		expect(controller).to.include("fingerprintRawMissing");
 		expect(controller).to.include("faceRawMissing");
 		expect(controller).to.include("fingerprintEnvelopeMissing");
 		expect(controller).to.include("faceEnvelopeMissing");
+		expect(controller).to.include("Raw biometric custody repair completed; some credentials still need missing_raw_blob review.");
 	});
 
 	it("exposes selected-device activity for Sync Center observability without mutating devices", () => {

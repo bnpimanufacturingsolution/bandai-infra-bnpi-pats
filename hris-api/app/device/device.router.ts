@@ -42,6 +42,11 @@ interface IController {
 		res: Response,
 		next: NextFunction,
 	): Promise<void>;
+	captureDeviceUserRawFace(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
 	getDeviceUserPhoto(req: Request, res: Response, next: NextFunction): Promise<void>;
 	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	backfillDeviceUserLifecycleEvents(
@@ -110,6 +115,10 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post(
 		"/:id/users/:vendorUserId/raw-fingerprints/capture",
 		controller.captureDeviceUserRawFingerprints,
+	);
+	routes.post(
+		"/:id/users/:vendorUserId/raw-face/capture",
+		controller.captureDeviceUserRawFace,
 	);
 	routes.get("/users/:userId/photo", controller.getDeviceUserPhoto);
 	routes.post("/:id/users/sync", controller.syncDeviceUsers);

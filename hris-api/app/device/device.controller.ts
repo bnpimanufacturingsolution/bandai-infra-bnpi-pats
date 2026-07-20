@@ -313,12 +313,12 @@ const readDeviceUserPackageImportJob = (jobId: string): DeviceUserPackageImportJ
 };
 
 type DeviceUserSyncJobStatus = "processing" | "completed" | "failed" | "cancelled";
-type DeviceUserSyncMode = "full_refresh" | "needs_attention_only" | "peer_converge";
+type DeviceUserSyncMode = "full_refresh" | "needs_attention_only" | "peer_converge" | "biometrics_only";
 
 type DeviceUserSyncJobResult = {
 	deviceId: string;
 	deviceName: string;
-	status: "success" | "error" | "cancelled";
+	status: "success" | "needs_attention" | "error" | "cancelled";
 	summary?: Record<string, any>;
 	runId?: string | null;
 	error?: string | null;
@@ -338,6 +338,14 @@ type DeviceUserSyncJob = {
 	biometricCaptured: number;
 	biometricCached: number;
 	biometricFailed: number;
+	biometricFailureLog?: Array<{
+		deviceId: string;
+		deviceName?: string | null;
+		vendorUserId: string;
+		modality: "fingerprint" | "face";
+		reason: string;
+		at: string;
+	}>;
 	currentDeviceId?: string | null;
 	currentDeviceName?: string | null;
 	currentVendorUserId?: string | null;
@@ -496,6 +504,9 @@ const readDeviceUserSyncJob = (jobId: string): DeviceUserSyncJob | null => {
 			biometricCaptured: Number(parsed.biometricCaptured || 0),
 			biometricCached: Number(parsed.biometricCached || 0),
 			biometricFailed: Number(parsed.biometricFailed || 0),
+			biometricFailureLog: Array.isArray(parsed.biometricFailureLog)
+				? parsed.biometricFailureLog
+				: [],
 		};
 	} catch (error) {
 		deviceLogger.warn(`Failed to read device-user sync job snapshot: ${error}`);
@@ -3511,6 +3522,105 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const captureDeviceUserRawFace = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const organizationId = String(
+				(req as any).organizationId ||
+					(req as any).user?.organizationId ||
+					"",
+			).trim();
+			const deviceId = String(
+				req.params.id ||
+					req.params.deviceId ||
+					req.body?.deviceId ||
+					req.query?.deviceId ||
+					"",
+			).trim();
+			const vendorUserId = String(
+				req.params.vendorUserId ||
+					req.body?.vendorUserId ||
+					req.body?.employeeNo ||
+					req.query?.vendorUserId ||
+					"",
+			).trim();
+			if (!organizationId || !deviceId || !vendorUserId) {
+				res.status(400).json(
+					buildErrorResponse(
+						`deviceId and vendorUserId (plain person id) required (org=${Boolean(organizationId)} device=${Boolean(deviceId)} person=${Boolean(vendorUserId)})`,
+						400,
+					),
+				);
+				return;
+			}
+			if (!/^\d+$/.test(vendorUserId) && vendorUserId.length > 32) {
+				const { isOpaqueHikvisionPersonToken } = await import(
+					"../../helper/hikvision-event-contract.helper.js"
+				);
+				if (isOpaqueHikvisionPersonToken(vendorUserId)) {
+					res
+						.status(400)
+						.json(buildErrorResponse("vendorUserId must be plain person id, not opaque token", 400));
+					return;
+				}
+			}
+			const device = await prisma.device.findFirst({
+				where: { id: deviceId, organizationId },
+				select: { id: true },
+			});
+			if (!device) {
+				res.status(404).json(buildErrorResponse("Device not found", 404));
+				return;
+			}
+			const existing = await (prisma as any).deviceUser.findFirst({
+				where: {
+					organizationId,
+					deviceId,
+					OR: [{ vendorUserId }, { employeeNo: vendorUserId }],
+				},
+				select: { id: true },
+			});
+			const { captureRawFaceForEnrollment } = await import(
+				"../../helper/device-user-raw-fingerprint.helper.js"
+			);
+			const result = await captureRawFaceForEnrollment({
+				prisma,
+				req,
+				organizationId,
+				deviceId,
+				employeeNo: vendorUserId,
+				deviceUserId: existing?.id || null,
+			});
+			const row = await (prisma as any).deviceUser.findFirst({
+				where: {
+					organizationId,
+					deviceId,
+					OR: [{ vendorUserId }, { employeeNo: vendorUserId }],
+				},
+				select: buildDeviceUserSelect({ includeVendorMetadata: true }),
+			});
+			res.status(result.ok ? 200 : 422).json(
+				buildSuccessResponse(
+					result.ok
+						? "Raw face captured on DeviceUser"
+						: result.reason || "Raw face capture failed",
+					{
+						capture: result,
+						deviceUser: row ? decorateDeviceUser(row) : null,
+					},
+					result.ok ? 200 : 422,
+				),
+			);
+		} catch (error: any) {
+			res
+				.status(500)
+				.json(buildErrorResponse(error?.message || "Failed to capture raw face", 500));
+		}
+	};
+
 	const listDeviceUsers = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
 			const organizationId = String((req as any).organizationId || "").trim();
@@ -3895,7 +4005,8 @@ export const controller = (prisma: PrismaClient) => {
 				job.processedDevices < job.totalDevices &&
 				(job.syncMode === "full_refresh" ||
 					job.syncMode === "needs_attention_only" ||
-					job.syncMode === "peer_converge");
+					job.syncMode === "peer_converge" ||
+					job.syncMode === "biometrics_only");
 			if (result || isPendingDevice) {
 				return {
 					jobId: job.jobId,
@@ -6267,22 +6378,32 @@ export const controller = (prisma: PrismaClient) => {
 			getRawFaceFromValue(params.row?._rawBiometricSource?.rawPayload?._hrisDeviceMetadata?.rawFace) ||
 			getRawFaceFromValue(params.row?.rawPayload?._hrisDeviceMetadata?.rawFace) ||
 			getRawFaceFromValue(params.eventPayload?.rawFace);
+		const storedFingerprintCount = Math.min(rawFingerprints.length, Math.max(fingerprintCount, rawFingerprints.length));
+		const missingFingerprintCount = Math.max(fingerprintCount - rawFingerprints.length, 0);
+		const storedFaceCount = rawFace ? Math.max(faceCount, 1) : 0;
+		const missingFaceCount = Math.max(faceCount - (rawFace ? 1 : 0), 0);
 		return {
 			fingerprint: {
 				status: !params.includeFingerprints
 					? "not_requested"
+					: fingerprintCount > 0 && missingFingerprintCount > 0
+						? "missing_raw_blob"
 					: rawFingerprints.length
 						? "raw_blob_present"
-						: fingerprintCount > 0
+					: fingerprintCount > 0
 							? "missing_raw_blob"
 							: "not_enrolled",
 				countReported: fingerprintCount,
 				rawBlobCount: rawFingerprints.length,
+				storedCount: storedFingerprintCount,
+				missingRawCount: missingFingerprintCount,
 				templates: params.includeFingerprints ? rawFingerprints : [],
 			},
 			face: {
 				status: !params.includeFaces
 					? "not_requested"
+					: faceCount > 0 && missingFaceCount > 0
+						? "missing_raw_blob"
 					: rawFace
 						? "raw_blob_present"
 						: faceCount > 0
@@ -6290,6 +6411,8 @@ export const controller = (prisma: PrismaClient) => {
 							: "not_enrolled",
 				countReported: faceCount,
 				rawBlobPresent: Boolean(rawFace),
+				storedCount: storedFaceCount,
+				missingRawCount: missingFaceCount,
 				blob: params.includeFaces ? rawFace : null,
 			},
 			plaintextPolicy:
@@ -6300,13 +6423,19 @@ export const controller = (prisma: PrismaClient) => {
 	const summarizeDeviceUserRawBiometricCustody = (rows: any[]) => {
 		const summary = {
 			fingerprintReported: 0,
+			fingerprintEnrolledRows: 0,
 			fingerprintRawPresent: 0,
 			fingerprintRawMissing: 0,
 			fingerprintTemplateReportedTotal: 0,
+			fingerprintRawPresentRows: 0,
+			fingerprintRawMissingRows: 0,
 			faceReported: 0,
+			faceEnrolledRows: 0,
 			faceRawPresent: 0,
 			faceRawMissing: 0,
 			faceTemplateReportedTotal: 0,
+			faceRawPresentRows: 0,
+			faceRawMissingRows: 0,
 		};
 		for (const row of rows || []) {
 			const credentialSummary =
@@ -6329,16 +6458,26 @@ export const controller = (prisma: PrismaClient) => {
 				Boolean(row?.vendorMetadata?.rawFacePresent) ||
 				Boolean(row?.rawPayload?._hrisDeviceMetadata?.rawFacePresent);
 			if (fingerprintCount > 0) {
-				summary.fingerprintReported += 1;
+				const storedCount = Math.min(rawFingerprints.length, fingerprintCount);
+				const missingCount = Math.max(fingerprintCount - storedCount, 0);
+				summary.fingerprintEnrolledRows += 1;
+				summary.fingerprintReported += fingerprintCount;
 				summary.fingerprintTemplateReportedTotal += fingerprintCount;
-				if (hasRawFingerprint) summary.fingerprintRawPresent += 1;
-				else summary.fingerprintRawMissing += 1;
+				summary.fingerprintRawPresent += storedCount;
+				summary.fingerprintRawMissing += missingCount;
+				if (hasRawFingerprint) summary.fingerprintRawPresentRows += 1;
+				if (missingCount > 0) summary.fingerprintRawMissingRows += 1;
 			}
 			if (faceCount > 0) {
-				summary.faceReported += 1;
+				const storedCount = hasRawFace ? Math.max(faceCount, 1) : 0;
+				const missingCount = Math.max(faceCount - (hasRawFace ? 1 : 0), 0);
+				summary.faceEnrolledRows += 1;
+				summary.faceReported += faceCount;
 				summary.faceTemplateReportedTotal += faceCount;
-				if (hasRawFace) summary.faceRawPresent += 1;
-				else summary.faceRawMissing += 1;
+				summary.faceRawPresent += storedCount;
+				summary.faceRawMissing += missingCount;
+				if (hasRawFace) summary.faceRawPresentRows += 1;
+				if (missingCount > 0) summary.faceRawMissingRows += 1;
 			}
 		}
 		return {
@@ -10683,6 +10822,7 @@ export const controller = (prisma: PrismaClient) => {
 		if (syncMode === "needs_attention_only")
 			return "Needs-attention device-user refresh queued";
 		if (syncMode === "peer_converge") return "Cross-device convergence queued";
+		if (syncMode === "biometrics_only") return "Raw biometric custody repair queued";
 		return "Full device-user refresh queued";
 	};
 
@@ -10692,6 +10832,9 @@ export const controller = (prisma: PrismaClient) => {
 		}
 		if (syncMode === "peer_converge") {
 			return "Cancel requested. Cross-device convergence stopped before the next device.";
+		}
+		if (syncMode === "biometrics_only") {
+			return "Cancel requested. Raw biometric custody repair stopped before the next device.";
 		}
 		return "Cancel requested. The full source refresh stopped before the next device.";
 	};
@@ -10710,6 +10853,9 @@ export const controller = (prisma: PrismaClient) => {
 			if (syncMode === "peer_converge") {
 				return `Refreshed ${deviceName} before peer convergence (${index}/${total}).`;
 			}
+			if (syncMode === "biometrics_only") {
+				return `Repaired raw biometric custody for ${deviceName} (${index}/${total}).`;
+			}
 			return `Refreshed ${deviceName} from live source truth (${index}/${total}).`;
 		}
 		if (syncMode === "needs_attention_only") {
@@ -10717,6 +10863,9 @@ export const controller = (prisma: PrismaClient) => {
 		}
 		if (syncMode === "peer_converge") {
 			return `Review needed for ${deviceName} before peer convergence (${index}/${total}).`;
+		}
+		if (syncMode === "biometrics_only") {
+			return `Raw biometric custody still needs review for ${deviceName} (${index}/${total}).`;
 		}
 		return `Review needed for ${deviceName} during the full source refresh (${index}/${total}).`;
 	};
@@ -10786,18 +10935,44 @@ export const controller = (prisma: PrismaClient) => {
 		device: any;
 	}) => {
 		const rows = (await loadDeviceUsersForExport(params.organizationId, params.device.id)) as any[];
+		const concurrency = Math.min(
+			Math.max(Number(process.env.HIKVISION_RAW_BIOMETRIC_SYNC_CONCURRENCY || 8) || 8, 1),
+			16,
+		);
 		const tasks = rows.flatMap((row) => {
 			const summary =
 				row.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
 				row.vendorMetadata?.credentialSummary ||
 				extractHikvisionCredentialSummary(row.rawPayload || {});
-			const cached = parseCachedDeviceUserBiometricTemplates(row);
-			const result: Array<{ row: any; modality: "fingerprint" | "face" }> = [];
-			if (Number(summary.fingerprintCount || 0) > 0 && !cached.fingerprint) {
-				result.push({ row, modality: "fingerprint" });
+			const rawCustody = buildRawDeviceUserBiometricCustody({
+				row,
+				includeFingerprints: true,
+				includeFaces: true,
+			});
+			const result: Array<{
+				row: any;
+				modality: "fingerprint" | "face";
+				missingCount: number;
+				priorRawCount: number;
+			}> = [];
+			if (
+				Number(summary.fingerprintCount || 0) > 0 &&
+				rawCustody.fingerprint.status !== "raw_blob_present"
+			) {
+				result.push({
+					row,
+					modality: "fingerprint",
+					missingCount: Math.max(Number(rawCustody.fingerprint.missingRawCount || 0), 1),
+					priorRawCount: Number(rawCustody.fingerprint.rawBlobCount || 0),
+				});
 			}
-			if (Number(summary.faceCount || 0) > 0 && !cached.face) {
-				result.push({ row, modality: "face" });
+			if (Number(summary.faceCount || 0) > 0 && rawCustody.face.status !== "raw_blob_present") {
+				result.push({
+					row,
+					modality: "face",
+					missingCount: Math.max(Number(rawCustody.face.missingRawCount || 0), 1),
+					priorRawCount: Number(rawCustody.face.rawBlobPresent ? 1 : 0),
+				});
 			}
 			return result;
 		});
@@ -10806,24 +10981,45 @@ export const controller = (prisma: PrismaClient) => {
 				row.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
 				row.vendorMetadata?.credentialSummary ||
 				extractHikvisionCredentialSummary(row.rawPayload || {});
-			const templates = parseCachedDeviceUserBiometricTemplates(row);
+			const rawCustody = buildRawDeviceUserBiometricCustody({
+				row,
+				includeFingerprints: true,
+				includeFaces: true,
+			});
 			return (
 				count +
-				(Number(summary.fingerprintCount || 0) > 0 && templates.fingerprint ? 1 : 0) +
-				(Number(summary.faceCount || 0) > 0 && templates.face ? 1 : 0)
+				(Number(summary.fingerprintCount || 0) > 0
+					? Number(rawCustody.fingerprint.storedCount || 0)
+					: 0) +
+				(Number(summary.faceCount || 0) > 0
+					? Number(rawCustody.face.storedCount || 0)
+					: 0)
 			);
 		}, 0);
 		const initial = deviceUserSyncJobs.get(params.jobId);
 		updateDeviceUserSyncJob(params.jobId, {
-			biometricTotal: Number(initial?.biometricTotal || 0) + tasks.length,
+			biometricTotal:
+				Number(initial?.biometricTotal || 0) +
+				tasks.reduce((sum, task) => sum + Math.max(Number(task.missingCount || 0), 1), 0),
 			biometricCached: Number(initial?.biometricCached || 0) + cached,
 		});
 		let captured = 0;
 		let failed = 0;
-		for (const task of tasks) {
+		const failureReasons: Record<string, number> = {};
+		const { captureRawFingerprintsForEnrollment, captureRawFaceForEnrollment } = await import(
+			"../../helper/device-user-raw-fingerprint.helper.js"
+		);
+		let cursor = 0;
+		const runTask = async (task: {
+			row: any;
+			modality: "fingerprint" | "face";
+			missingCount: number;
+			priorRawCount: number;
+		}) => {
 			const current = deviceUserSyncJobs.get(params.jobId);
-			if (!current || current.cancelRequested) break;
+			if (!current || current.cancelRequested) return;
 			const vendorUserId = String(task.row.vendorUserId || task.row.employeeNo || "").trim();
+			const missingCount = Math.max(Number(task.missingCount || 0), 1);
 			updateDeviceUserSyncJob(params.jobId, {
 				message: `Capturing ${task.modality} custody for ${params.device.name || params.device.address} (${current.biometricProcessed + 1}/${current.biometricTotal}).`,
 				currentDeviceId: params.device.id,
@@ -10832,76 +11028,102 @@ export const controller = (prisma: PrismaClient) => {
 				currentModality: task.modality,
 			});
 			let lastError: any = null;
-			for (let attempt = 1; attempt <= 3; attempt += 1) {
-				try {
-					let biometricExport;
-					if (task.modality === "fingerprint") {
-						biometricExport = await runHikvisionBiometricExportOnVm({
-							device: params.device,
-							organizationId: params.organizationId,
-							vendorUserId,
-							includeFingerprints: true,
-							includeFaces: false,
-						});
-						if (!biometricExport.encryptedFingerprint) {
-							throw new Error("SDK returned no fingerprint template bytes");
-						}
-					} else {
-						try {
-							biometricExport = await runHikvisionBiometricExportOnVm({
-								device: params.device,
-								organizationId: params.organizationId,
-								vendorUserId,
-								includeFingerprints: false,
-								includeFaces: true,
-							});
-							if (!biometricExport.encryptedFace) throw new Error("SDK returned no face template bytes");
-						} catch (sdkError) {
-							biometricExport = await captureDeviceUserFacePhotoForEncryptedCustody({
-								req: params.req,
-								device: params.device,
-								row: task.row,
-								organizationId: params.organizationId,
-								vendorUserId,
-							});
-							if (!biometricExport.encryptedFace) throw sdkError;
-						}
-					}
-					const metadata = buildDeviceUserBiometricMetadata(
-						biometricExport,
-						task.modality === "fingerprint"
-							? "hikvision_sdk_device_user_sync_job"
-							: "hikvision_sdk_or_isapi_device_user_sync_job",
-					);
-					applyDeviceUserBiometricMetadataToRow(task.row, metadata);
-					await persistDeviceUserBiometricMetadata({
+			let capturedCount = 0;
+			try {
+				if (task.modality === "fingerprint") {
+					const raw = await captureRawFingerprintsForEnrollment({
+						prisma,
+						req: params.req,
 						organizationId: params.organizationId,
 						deviceId: params.device.id,
-						vendorUserId,
-						row: task.row,
+						employeeNo: vendorUserId,
+						deviceUserId: task.row.id || null,
 					});
-					captured += 1;
-					lastError = null;
-					break;
-				} catch (error) {
-					lastError = error;
+					if (!raw.ok || !raw.rawPresent) {
+						throw new Error(raw.reason || "raw_fingerprint_capture_failed");
+					}
+					const returnedCount = Math.max(Number(raw.fingerprintCount || 0), 0);
+					capturedCount = Math.min(
+						Math.max(returnedCount - Math.max(Number(task.priorRawCount || 0), 0), 0),
+						missingCount,
+					);
+					if (capturedCount <= 0) {
+						throw new Error("no_new_fingerprint_data_from_device");
+					}
+				} else {
+					const raw = await captureRawFaceForEnrollment({
+						prisma,
+						req: params.req,
+						organizationId: params.organizationId,
+						deviceId: params.device.id,
+						employeeNo: vendorUserId,
+						deviceUserId: task.row.id || null,
+					});
+					if (!raw.ok || !raw.present) {
+						throw new Error(raw.reason || "raw_face_capture_failed");
+					}
+					capturedCount = missingCount;
 				}
+				lastError = null;
+			} catch (error) {
+				lastError = error;
 			}
 			if (lastError) {
-				failed += 1;
+				failed += missingCount;
+				const reason = String(lastError?.message || lastError || "unknown_failure");
+				failureReasons[reason] = (failureReasons[reason] || 0) + missingCount;
 				deviceLogger.warn(
 					`Biometric custody capture failed for ${params.device.id}/${vendorUserId}/${task.modality}: ${lastError?.message || lastError}`,
 				);
+			} else {
+				captured += capturedCount;
+				failed += Math.max(missingCount - capturedCount, 0);
 			}
 			const next = deviceUserSyncJobs.get(params.jobId);
-			if (!next) break;
+			if (!next) return;
+			const partialMissingCount = lastError ? missingCount : Math.max(missingCount - capturedCount, 0);
+			const partialReason = lastError
+				? String(lastError?.message || lastError || "unknown_failure")
+				: "partial_raw_blob_capture";
+			const failureLog = partialMissingCount > 0
+				? [
+						...(next.biometricFailureLog || []),
+						{
+							deviceId: params.device.id,
+							deviceName: params.device.name || params.device.address || null,
+							vendorUserId,
+							modality: task.modality,
+							reason: partialReason,
+							at: new Date().toISOString(),
+						},
+					].slice(-250)
+				: next.biometricFailureLog || [];
 			updateDeviceUserSyncJob(params.jobId, {
-				biometricProcessed: next.biometricProcessed + 1,
-				biometricCaptured: next.biometricCaptured + (lastError ? 0 : 1),
-				biometricFailed: next.biometricFailed + (lastError ? 1 : 0),
+				biometricProcessed: next.biometricProcessed + missingCount,
+				biometricCaptured: next.biometricCaptured + capturedCount,
+				biometricFailed: next.biometricFailed + partialMissingCount,
+				biometricFailureLog: failureLog,
 			});
-		}
-		return { biometricTasks: tasks.length, biometricCached: cached, biometricCaptured: captured, biometricFailed: failed };
+		};
+		const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
+			while (true) {
+				const current = deviceUserSyncJobs.get(params.jobId);
+				if (!current || current.cancelRequested) return;
+				const task = tasks[cursor];
+				cursor += 1;
+				if (!task) return;
+				await runTask(task);
+			}
+		});
+		await Promise.all(workers);
+		return {
+			biometricTasks: tasks.length,
+			biometricCached: cached,
+			biometricCaptured: captured,
+			biometricFailed: failed,
+			biometricFailureReasons: failureReasons,
+			biometricFailureLog: deviceUserSyncJobs.get(params.jobId)?.biometricFailureLog || [],
+		};
 	};
 
 	const processBulkDeviceUserSyncJob = async (params: {
@@ -10933,24 +11155,42 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			try {
-				const { run, summary } = await syncHikvisionDeviceUsersFromSource({
-					req: params.req,
-					organizationId: params.organizationId,
-					device,
-					startedByUserId: params.startedByUserId || null,
-				});
+				const sourceResult =
+					params.syncMode === "biometrics_only"
+						? {
+								run: null,
+								summary: {
+									mode: "biometrics_only",
+									sourceRefreshSkipped: true,
+									reason: "using_saved_device_user_truth_for_raw_custody_repair",
+								},
+							}
+						: await syncHikvisionDeviceUsersFromSource({
+								req: params.req,
+								organizationId: params.organizationId,
+								device,
+								startedByUserId: params.startedByUserId || null,
+							});
 				const biometricSummary = await captureMissingBiometricCustodyForDevice({
 					jobId: params.jobId,
 					req: params.req,
 					organizationId: params.organizationId,
 					device,
 				});
+				const biometricFailed = Number((biometricSummary as any)?.biometricFailed || 0);
+				const deviceStatus = biometricFailed > 0 ? "needs_attention" : "success";
 				setDeviceUserSyncJobResult(results, {
 					deviceId: device.id,
 					deviceName: device.name || device.address || "Hikvision device",
-					status: "success",
-					runId: run?.id || null,
-					summary: { ...summary, ...biometricSummary },
+					status: deviceStatus,
+					runId: sourceResult.run?.id || null,
+					summary: { ...sourceResult.summary, ...biometricSummary },
+					error:
+						biometricFailed > 0
+							? `${biometricFailed} biometric credential(s) still missing raw blobs: ${Object.entries((biometricSummary as any)?.biometricFailureReasons || {})
+									.map(([reason, count]) => `${reason}=${count}`)
+									.join(", ") || "reason_unknown"}`
+							: null,
 				});
 				successfulDevices += 1;
 				updateDeviceUserSyncJob(params.jobId, {
@@ -11180,6 +11420,9 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		await invalidateCache.byPattern("cache:device:*").catch(() => undefined);
+		const rawGapDevices = results.filter(
+			(result) => Number((result.summary as any)?.biometricFailed || 0) > 0,
+		).length;
 		updateDeviceUserSyncJob(params.jobId, {
 			status: failedDevices > 0 ? "failed" : "completed",
 			message:
@@ -11188,12 +11431,20 @@ export const controller = (prisma: PrismaClient) => {
 						? "Needs-attention device-user refresh finished with devices still needing review."
 						: params.syncMode === "peer_converge"
 							? "Cross-device convergence finished with devices still needing review."
-							: "Full device-user refresh finished with devices still needing review."
+							: params.syncMode === "biometrics_only"
+								? "Raw biometric custody repair finished with credentials still needing review."
+								: "Full device-user refresh finished with devices still needing review."
+					: rawGapDevices > 0
+						? params.syncMode === "biometrics_only"
+							? "Raw biometric custody repair completed; some credentials still need missing_raw_blob review."
+							: "Device-user refresh completed; some credentials still need missing_raw_blob review."
 					: params.syncMode === "needs_attention_only"
 						? "Needs-attention device-user refresh finished."
 						: params.syncMode === "peer_converge"
 							? "Cross-device convergence finished."
-							: "Full device-user refresh finished across configured devices.",
+							: params.syncMode === "biometrics_only"
+								? "Raw biometric custody repair finished."
+								: "Full device-user refresh finished across configured devices.",
 			processedDevices: results.length,
 			successfulDevices,
 			failedDevices,
@@ -11218,7 +11469,9 @@ export const controller = (prisma: PrismaClient) => {
 					? "needs_attention_only"
 					: requestedMode === "peer_converge"
 						? "peer_converge"
-						: "full_refresh";
+						: requestedMode === "biometrics_only"
+							? "biometrics_only"
+							: "full_refresh";
 			const requestedDeviceIds = Array.isArray((req.body as any)?.deviceIds)
 				? Array.from(
 						new Set(
@@ -11291,6 +11544,7 @@ export const controller = (prisma: PrismaClient) => {
 				biometricCaptured: 0,
 				biometricCached: 0,
 				biometricFailed: 0,
+				biometricFailureLog: [],
 				message: getBulkSyncModeQueuedMessage(syncMode),
 				results: [],
 				startedAt,
@@ -16429,6 +16683,7 @@ export const controller = (prisma: PrismaClient) => {
 		deleteDeviceUser,
 		deleteDeviceUsers,
 		captureDeviceUserRawFingerprints,
+		captureDeviceUserRawFace,
 		getDeviceUserPhoto,
 		syncDeviceUsers,
 		previewDeviceUserExport,

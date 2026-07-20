@@ -2389,26 +2389,32 @@ export function DeviceEnrollmentPanel({
 		}
 		return message || "Device-user sync could not be started.";
 	};
-	const runBulkDeviceUserSync = async () => {
+	const runBulkDeviceUserSync = async (modeOverride?: DeviceUserSyncMode) => {
 		if (syncCenterDevices.length === 0) {
 			toast.error("No configured devices are available to sync");
 			return;
 		}
+		const requestedMode = modeOverride || bulkDeviceUserSyncMode;
 		const request =
-			bulkDeviceUserSyncMode === "needs_attention_only"
+			requestedMode === "needs_attention_only"
 				? {
 						mode: "needs_attention_only" as const,
 						deviceIds: needsAttentionDeviceIds,
 					}
-				: bulkDeviceUserSyncMode === "peer_converge"
+				: requestedMode === "peer_converge"
 					? {
 							mode: "peer_converge" as const,
 						}
+					: requestedMode === "biometrics_only"
+						? {
+								mode: "biometrics_only" as const,
+								deviceIds: selectedDeviceId ? [selectedDeviceId] : undefined,
+							}
 					: {
 							mode: "full_refresh" as const,
 						};
 		if (
-			bulkDeviceUserSyncMode === "needs_attention_only" &&
+			requestedMode === "needs_attention_only" &&
 			needsAttentionDeviceIds.length === 0
 		) {
 			setBulkDeviceUserSyncState({
@@ -3591,8 +3597,26 @@ export function DeviceEnrollmentPanel({
 		deviceUserSyncBiometricTotal - deviceUserSyncBiometricProcessed,
 		0,
 	);
+	const deviceUserSyncBiometricFailed = Number(
+		effectiveDeviceUserSyncJobProgress?.biometricFailed || 0,
+	);
+	const deviceUserSyncHasRawGaps =
+		deviceUserSyncBiometricFailed > 0 || deviceUserSyncBiometricRemaining > 0;
+	const deviceUserSyncJobIsProcessing = effectiveDeviceUserSyncJobStatus === "processing";
+	const deviceUserSyncIsPlanningBiometrics =
+		deviceUserSyncJobIsProcessing &&
+		deviceUserSyncJobMode === "biometrics_only" &&
+		deviceUserSyncBiometricTotal === 0;
+	const deviceUserSyncJobIsTerminal =
+		effectiveDeviceUserSyncJobStatus === "completed" ||
+		effectiveDeviceUserSyncJobStatus === "failed" ||
+		effectiveDeviceUserSyncJobStatus === "cancelled";
 	const deviceUserSyncJobPercent = effectiveDeviceUserSyncJobProgress
-		? effectiveDeviceUserSyncJobStatus === "completed"
+		? deviceUserSyncIsPlanningBiometrics
+			? 5
+			: deviceUserSyncJobIsTerminal &&
+			deviceUserSyncBiometricTotal > 0 &&
+			deviceUserSyncBiometricProcessed >= deviceUserSyncBiometricTotal
 			? 100
 			: deviceUserSyncBiometricTotal > 0
 			? Math.min(
@@ -3604,13 +3628,34 @@ export function DeviceEnrollmentPanel({
 				)
 			: Math.min(100, Math.round((deviceUserSyncJobProcessed / deviceUserSyncJobTotal) * 100))
 		: 0;
-	const deviceUserSyncJobIsProcessing = effectiveDeviceUserSyncJobStatus === "processing";
+	const deviceUserSyncPrimaryResult = effectiveDeviceUserSyncJobProgress?.results?.[0] || null;
 	const deviceUserSyncCurrentModality =
-		effectiveDeviceUserSyncJobProgress?.currentModality === "fingerprint"
+		deviceUserSyncJobIsTerminal
+			? deviceUserSyncHasRawGaps
+				? "Finished"
+				: "Complete"
+			: effectiveDeviceUserSyncJobProgress?.currentModality === "fingerprint"
 			? "Fingerprint"
 			: effectiveDeviceUserSyncJobProgress?.currentModality === "face"
 				? "Face"
 				: "Preparing";
+	const deviceUserSyncCurrentDeviceLabel =
+		effectiveDeviceUserSyncJobProgress?.currentDeviceName ||
+		deviceUserSyncPrimaryResult?.deviceName ||
+		(deviceUserSyncIsPlanningBiometrics
+			? "Building raw-custody plan"
+			: deviceUserSyncJobIsTerminal
+				? "Selected device"
+				: "Reading source device");
+	const deviceUserSyncCurrentCredentialLabel = deviceUserSyncJobIsTerminal
+		? deviceUserSyncHasRawGaps
+			? `${metricValue(deviceUserSyncBiometricFailed)} missing_raw_blob`
+			: "No remaining raw gaps"
+		: deviceUserSyncIsPlanningBiometrics
+			? "Finding missing raw blobs"
+		: `${deviceUserSyncCurrentModality} - ${
+				effectiveDeviceUserSyncJobProgress?.currentVendorUserId || "-"
+			}`;
 	const deviceUserSyncElapsed = formatDeviceUserSyncElapsed(
 		effectiveDeviceUserSyncJobProgress?.startedAt,
 		effectiveDeviceUserSyncJobProgress?.completedAt,
@@ -3621,12 +3666,16 @@ export function DeviceEnrollmentPanel({
 		effectiveDeviceUserSyncJobProgress?.startedAt ||
 		null;
 	const deviceUserSyncStatusBubble = deviceUserSyncJobIsProcessing
-		? deviceUserSyncBiometricTotal > 0
+		? deviceUserSyncIsPlanningBiometrics
+			? "Planning"
+			: deviceUserSyncBiometricTotal > 0
 			? metricValue(deviceUserSyncBiometricRemaining)
 			: "Live"
 		: hasEffectiveDeviceUserSyncJobProgress
 			? effectiveDeviceUserSyncJobStatus === "completed"
-				? "Done"
+				? deviceUserSyncHasRawGaps
+					? metricValue(deviceUserSyncBiometricFailed || deviceUserSyncBiometricRemaining)
+					: "Done"
 				: metricValue(effectiveDeviceUserSyncJobProgress?.biometricFailed || 0)
 			: null;
 	const deviceUserSyncJobCancelRequested = Boolean(
@@ -3637,7 +3686,7 @@ export function DeviceEnrollmentPanel({
 			? "border-red-200 bg-red-50 text-red-950"
 			: effectiveDeviceUserSyncJobStatus === "cancelled"
 				? "border-amber-200 bg-amber-50 text-amber-950"
-				: effectiveDeviceUserSyncJobStatus === "completed"
+				: effectiveDeviceUserSyncJobStatus === "completed" && !deviceUserSyncHasRawGaps
 					? "border-emerald-200 bg-emerald-50 text-emerald-950"
 					: "border-orange-200 bg-orange-50 text-orange-950";
 	const deviceUserSyncJobFillClass =
@@ -3645,7 +3694,7 @@ export function DeviceEnrollmentPanel({
 			? "bg-red-600"
 			: effectiveDeviceUserSyncJobStatus === "cancelled"
 				? "bg-amber-600"
-				: effectiveDeviceUserSyncJobStatus === "completed"
+				: effectiveDeviceUserSyncJobStatus === "completed" && !deviceUserSyncHasRawGaps
 					? "bg-emerald-600"
 					: "bg-orange-600";
 	const deviceUserSyncJobTitle =
@@ -3654,7 +3703,9 @@ export function DeviceEnrollmentPanel({
 			: effectiveDeviceUserSyncJobStatus === "failed"
 				? "Sync needs attention"
 				: effectiveDeviceUserSyncJobStatus === "completed"
-					? "Sync finished"
+					? deviceUserSyncHasRawGaps
+						? "Raw custody needs repair"
+						: "Sync finished"
 					: deviceUserSyncJobIsProcessing
 						? deviceUserSyncJobCancelRequested
 							? "Cancelling device-user refresh"
@@ -3662,19 +3713,32 @@ export function DeviceEnrollmentPanel({
 								? "Refreshing mismatches"
 								: deviceUserSyncJobMode === "peer_converge"
 									? "Making peers match best truth"
-									: "Refreshing all device users"
+									: deviceUserSyncJobMode === "biometrics_only"
+										? "Repairing raw biometric blobs"
+										: deviceUserSyncBiometricTotal > 0
+											? "Repairing raw biometric blobs"
+											: "Reading source device users"
 						: "Device-user sync status";
 	const bulkDeviceUserSyncSummaryItems = [
 		["Captured", effectiveDeviceUserSyncJobProgress?.biometricCaptured ?? 0],
-		["Failed", effectiveDeviceUserSyncJobProgress?.biometricFailed ?? 0],
+		["Missing raw", effectiveDeviceUserSyncJobProgress?.biometricFailed ?? 0],
 		["Already present", effectiveDeviceUserSyncJobProgress?.biometricCached ?? 0],
 		["Remaining", deviceUserSyncBiometricRemaining],
 	] as const;
+	const deviceUserSyncFailureLog = (
+		effectiveDeviceUserSyncJobProgress?.biometricFailureLog || []
+	).slice(-6);
 	const bulkDeviceUserSyncResults = effectiveDeviceUserSyncJobProgress?.results || [];
 	const deviceUserSyncJobSummary = effectiveDeviceUserSyncJobProgress
 		? deviceUserSyncJobIsProcessing
-			? `${deviceUserSyncCurrentModality} custody for user ${effectiveDeviceUserSyncJobProgress.currentVendorUserId || "—"} on ${effectiveDeviceUserSyncJobProgress.currentDeviceName || "the selected device"}.`
-			: `${metricValue(effectiveDeviceUserSyncJobProgress.biometricCaptured)} raw biometric payloads captured; ${metricValue(effectiveDeviceUserSyncJobProgress.biometricFailed)} still need attention.`
+			? deviceUserSyncBiometricTotal > 0
+				? `${deviceUserSyncCurrentModality} custody for user ${effectiveDeviceUserSyncJobProgress.currentVendorUserId || "-"} on ${effectiveDeviceUserSyncJobProgress.currentDeviceName || "the selected device"}.`
+				: deviceUserSyncJobMode === "biometrics_only"
+					? "Preparing saved DeviceUser raw-custody repair; no live source reread is needed."
+					: "Reading live source users before raw-custody repair starts."
+			: deviceUserSyncHasRawGaps
+				? `${metricValue(effectiveDeviceUserSyncJobProgress.biometricCaptured)} raw payloads captured; ${metricValue(deviceUserSyncBiometricFailed)} missing_raw_blob items still need repair.`
+				: `${metricValue(effectiveDeviceUserSyncJobProgress.biometricCaptured)} raw biometric payloads captured; no raw gaps reported by this job.`
 		: "";
 	const bulkDeviceUserSyncToneClass =
 		bulkDeviceUserSyncState.status === "error"
@@ -3694,11 +3758,14 @@ export function DeviceEnrollmentPanel({
 			? "Refresh only devices with count gaps, peer drift, open links, conflicts, or errors."
 			: bulkDeviceUserSyncMode === "peer_converge"
 				? "Refresh all devices, pick the recommended source device, then copy missing peer users with retries."
+				: bulkDeviceUserSyncMode === "biometrics_only"
+					? "Skip source reread and repair missing raw fingerprint and face blobs from saved DeviceUser truth."
 				: "Reread every configured device user and refresh saved biometric counts.";
 	const bulkDeviceUserSyncScopeItems = [
 		["All devices", syncCenterDevices.length],
 		["Only mismatches", needsAttentionSyncCenterDevices.length],
 		["Best-truth converge", syncCenterDevices.length],
+		["Raw blobs only", selectedDeviceId ? 1 : syncCenterDevices.length],
 	] as const;
 	const getSyncStatusLabel = (status: string) => {
 		if (status === "synced") return "Synced";
@@ -6050,9 +6117,9 @@ export function DeviceEnrollmentPanel({
 									))}
 								</div>
 								<p className="text-slate-600">
-									The background job rereads every source user, then serially captures
-									missing fingerprint and face custody. You can close this window and
-									return while it continues.
+									Full sync rereads source users, then repairs missing raw custody.
+									For the fastest repair, use Sync Center - Raw blobs only.
+									Remaining gaps stay marked missing_raw_blob; no blobs are fabricated.
 								</p>
 							</div>
 						) : null}
@@ -6129,7 +6196,11 @@ export function DeviceEnrollmentPanel({
 								<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin align-middle" />
 							) : null}
 							{hasEffectiveDeviceUserSyncJobProgress && deviceUserSyncBiometricTotal > 0
-								? `${deviceUserSyncJobIsProcessing ? "Processing" : "Processed"} ${metricValue(deviceUserSyncBiometricProcessed)} of ${metricValue(deviceUserSyncBiometricTotal)} biometric credentials`
+								? deviceUserSyncJobIsProcessing
+									? `Processing ${metricValue(deviceUserSyncBiometricProcessed)} of ${metricValue(deviceUserSyncBiometricTotal)} biometric credentials`
+									: deviceUserSyncHasRawGaps
+										? `Finished with ${metricValue(deviceUserSyncBiometricFailed)} missing raw blobs`
+										: `Processed ${metricValue(deviceUserSyncBiometricProcessed)} of ${metricValue(deviceUserSyncBiometricTotal)} biometric credentials`
 								: hasEffectiveDeviceUserSyncJobProgress
 									? deviceUserSyncJobTitle
 									: bulkDeviceUserSyncTitle}
@@ -6187,13 +6258,13 @@ export function DeviceEnrollmentPanel({
 									<div>
 										<span className="block text-orange-700">Current device</span>
 										<span className="font-semibold">
-											{effectiveDeviceUserSyncJobProgress?.currentDeviceName || "Preparing device"}
+											{deviceUserSyncCurrentDeviceLabel}
 										</span>
 									</div>
 									<div>
 										<span className="block text-orange-700">Current credential</span>
 										<span className="font-semibold">
-											{deviceUserSyncCurrentModality} · {effectiveDeviceUserSyncJobProgress?.currentVendorUserId || "—"}
+											{deviceUserSyncCurrentCredentialLabel}
 										</span>
 									</div>
 								</div>
@@ -6229,6 +6300,35 @@ export function DeviceEnrollmentPanel({
 										<span className="font-medium">Raw custody when evidenced</span>
 									</div>
 								</div>
+								{deviceUserSyncFailureLog.length > 0 ? (
+									<div className="mt-3 rounded-md border border-orange-100 bg-white/70 px-3 py-2">
+										<div className="flex items-center justify-between gap-3">
+											<p className="text-xs font-semibold uppercase tracking-wide text-orange-700">
+												Recent missing raw
+											</p>
+											<p className="text-xs text-orange-800">
+												Latest {metricValue(deviceUserSyncFailureLog.length)}
+											</p>
+										</div>
+										<div className="mt-2 space-y-1">
+											{deviceUserSyncFailureLog.map((failure) => (
+												<div
+													key={`${failure.vendorUserId}-${failure.modality}-${failure.at}`}
+													className="grid gap-2 text-xs text-orange-950 sm:grid-cols-[90px_90px_minmax(0,1fr)]">
+													<span className="font-semibold">
+														{failure.vendorUserId}
+													</span>
+													<span className="capitalize">
+														{failure.modality}
+													</span>
+													<span className="min-w-0 truncate">
+														{failure.reason || "missing_raw_blob"}
+													</span>
+												</div>
+											))}
+										</div>
+									</div>
+								) : null}
 							</>
 						) : null}
 						{!hasEffectiveDeviceUserSyncJobProgress ? (
@@ -6244,7 +6344,7 @@ export function DeviceEnrollmentPanel({
 											current truth.
 										</p>
 									</div>
-									<div className="grid gap-2 sm:grid-cols-3 lg:min-w-[640px]">
+									<div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 xl:min-w-[820px]">
 										<button
 											type="button"
 											onClick={() =>
@@ -6312,6 +6412,27 @@ export function DeviceEnrollmentPanel({
 											<p className="mt-1 text-xs text-current/80">
 												Only refresh devices with count gaps, missing links,
 												conflicts, or errors.
+											</p>
+										</button>
+										<button
+											type="button"
+											onClick={() =>
+												setBulkDeviceUserSyncMode("biometrics_only")
+											}
+											className={`rounded-xl border px-4 py-3 text-left transition ${
+												bulkDeviceUserSyncMode === "biometrics_only"
+													? "border-sky-300 bg-sky-50 text-sky-950 shadow-sm"
+													: "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+											}`}>
+											<div className="flex items-center justify-between gap-3">
+												<span className="text-sm font-semibold">
+													Raw blobs only
+												</span>
+												<Badge variant="outline">Fast repair</Badge>
+											</div>
+											<p className="mt-1 text-xs text-current/80">
+												Skip source reread and capture missing raw fingerprint
+												and face custody for the open device.
 											</p>
 										</button>
 									</div>
@@ -6456,6 +6577,8 @@ export function DeviceEnrollmentPanel({
 										{result.status === "success"
 											? result.summary?.mode === "peer_converge"
 												? `${metricValue(result.summary?.copiedUsers)} copied, ${metricValue(result.summary?.retryCount)} retries, ${metricValue(result.summary?.failedCopies)} failed, ${metricValue(result.summary?.syntheticFaceMirrors)} mock-face mirrors.`
+												: result.summary?.mode === "biometrics_only"
+													? `${metricValue(result.summary?.biometricCaptured)} captured, ${metricValue(result.summary?.biometricCached)} already present, ${metricValue(result.summary?.biometricFailed)} missing_raw_blob.`
 												: `${metricValue(result.summary?.created)} created, ${metricValue(result.summary?.updated)} updated, ${metricValue(result.summary?.unmatched)} need link.`
 											: result.status === "cancelled"
 												? "Sync was cancelled before this device was completed."
@@ -6505,7 +6628,14 @@ export function DeviceEnrollmentPanel({
 								type="button"
 								className="gap-2 bg-orange-500 text-white hover:bg-orange-600"
 								disabled={startDeviceUserSyncJobMutation.isPending}
-								onClick={() => void runBulkDeviceUserSync()}>
+								onClick={() => {
+									const retryMode =
+										deviceUserSyncJobMode === "biometrics_only"
+											? "biometrics_only"
+											: bulkDeviceUserSyncMode;
+									setBulkDeviceUserSyncMode(retryMode);
+									void runBulkDeviceUserSync(retryMode);
+								}}>
 								{startDeviceUserSyncJobMutation.isPending ? (
 									<Loader2 className="h-4 w-4 animate-spin" />
 								) : (
@@ -6513,7 +6643,9 @@ export function DeviceEnrollmentPanel({
 								)}
 								{startDeviceUserSyncJobMutation.isPending
 									? "Starting..."
-									: "Run another refresh"}
+									: deviceUserSyncJobMode === "biometrics_only"
+										? "Retry raw blobs only"
+										: "Run another refresh"}
 							</Button>
 						) : null}
 						{hasEffectiveDeviceUserSyncJobProgress && !deviceUserSyncJobIsProcessing ? (
@@ -6555,10 +6687,18 @@ export function DeviceEnrollmentPanel({
 								disabled={
 									startDeviceUserSyncJobMutation.isPending ||
 									syncCenterDevices.length === 0 ||
-									(bulkDeviceUserSyncMode === "needs_attention_only" &&
+									(deviceUserSyncJobMode !== "biometrics_only" &&
+										bulkDeviceUserSyncMode === "needs_attention_only" &&
 										needsAttentionSyncCenterDevices.length === 0)
 								}
-								onClick={() => void runBulkDeviceUserSync()}>
+								onClick={() => {
+									const retryMode =
+										deviceUserSyncJobMode === "biometrics_only"
+											? "biometrics_only"
+											: bulkDeviceUserSyncMode;
+									setBulkDeviceUserSyncMode(retryMode);
+									void runBulkDeviceUserSync(retryMode);
+								}}>
 								{startDeviceUserSyncJobMutation.isPending ? (
 									<Loader2 className="h-4 w-4 animate-spin" />
 								) : (
@@ -6566,7 +6706,9 @@ export function DeviceEnrollmentPanel({
 								)}
 								{startDeviceUserSyncJobMutation.isPending
 									? "Starting..."
-									: bulkDeviceUserSyncMode === "needs_attention_only"
+									: deviceUserSyncJobMode === "biometrics_only"
+										? "Retry raw blobs only"
+										: bulkDeviceUserSyncMode === "needs_attention_only"
 										? "Refresh mismatches"
 										: bulkDeviceUserSyncMode === "peer_converge"
 											? "Make devices match"
@@ -7975,6 +8117,20 @@ export function DeviceEnrollmentPanel({
 													?.rawFingerprints?.source ||
 												"",
 										);
+										const enrolledCount = Math.max(
+											Number(
+												getDeviceUserCredentialSummary(detailsDeviceUser)
+													.fingerprintCount || 0,
+											),
+											0,
+										);
+										const storedCount = Math.min(
+											templates.length ||
+												Number(rawFp?.fingerprintCount || 0) ||
+												0,
+											Math.max(enrolledCount, templates.length || 0),
+										);
+										const missingCount = Math.max(enrolledCount - storedCount, 0);
 										return (
 											<div
 												className={`mt-3 rounded-2xl border px-4 py-3 text-xs ${
@@ -7989,10 +8145,17 @@ export function DeviceEnrollmentPanel({
 												</p>
 												<p className="mt-2 flex items-center gap-2 text-2xl font-semibold">
 													{rawPresent
-														? `${templates.length || Number(rawFp?.fingerprintCount || 0) || 0} stored`
+														? `${storedCount} of ${enrolledCount} stored`
 														: detailsDeviceUserSavedLoading
 															? <><Loader2 className="h-5 w-5 animate-spin" />Checking saved templates…</>
 														: "Not captured yet"}
+												</p>
+												<p className="mt-1 text-xs font-semibold">
+													{enrolledCount <= 0
+														? "not_enrolled"
+														: missingCount > 0
+															? `${missingCount} missing_raw_blob`
+															: "All enrolled fingerprint templates stored"}
 												</p>
 												<p className="mt-2 leading-5">
 													{rawPresent
@@ -8220,6 +8383,89 @@ export function DeviceEnrollmentPanel({
 															? "UserInfo reports a face count but raw picture was not captured yet."
 															: "Device UserInfo has numOfFace=0 / no faceURL for this person — nothing to store."}
 												</p>
+												{faceCount > 0 ? (
+													<div className="mt-3 flex flex-wrap gap-2">
+														<Button
+															type="button"
+															size="sm"
+															variant="outline"
+															className="h-8 bg-white text-xs"
+															disabled={
+																rawFpCaptureBusy ||
+																!selectedDeviceId ||
+																!detailsDeviceUser?.vendorUserId
+															}
+															onClick={async () => {
+																if (
+																	!selectedDeviceId ||
+																	!detailsDeviceUser?.vendorUserId
+																)
+																	return;
+																setRawFpCaptureBusy(true);
+																try {
+																	const result =
+																		await deviceService.captureDeviceUserRawFace(
+																			selectedDeviceId,
+																			String(
+																				detailsDeviceUser.vendorUserId,
+																			),
+																		);
+																	const refreshed =
+																		result.deviceUser ||
+																		(
+																			await deviceService.getDeviceUsers(
+																				selectedDeviceId,
+																				{
+																					vendorUserId: String(
+																						detailsDeviceUser.vendorUserId,
+																					),
+																					limit: 1,
+																				},
+																			)
+																		).deviceUsers?.[0];
+																	if (refreshed) {
+																		setDetailsDeviceUser((prev) =>
+																			prev
+																				? {
+																						...prev,
+																						vendorMetadata:
+																							refreshed.vendorMetadata ||
+																							prev.vendorMetadata,
+																						rawPayload:
+																							refreshed.rawPayload ||
+																							prev.rawPayload,
+																						hrisDeviceUser: {
+																							...(prev.hrisDeviceUser ||
+																								{}),
+																							...refreshed,
+																						} as any,
+																					}
+																				: prev,
+																		);
+																	}
+																	await refetchDeviceUserSummary();
+																	toast.success(
+																		result.capture?.present
+																			? "Raw face captured"
+																			: "Face capture finished without a raw blob",
+																	);
+																} catch (error: any) {
+																	toast.error(
+																		error?.message ||
+																			"Failed to capture raw face",
+																	);
+																} finally {
+																	setRawFpCaptureBusy(false);
+																}
+															}}>
+															{rawFpCaptureBusy
+																? "Capturing..."
+																: facePresent
+																	? "Repair: re-capture face"
+																	: "Repair: capture face"}
+														</Button>
+													</div>
+												) : null}
 												{facePresent && b64 ? (
 													<div className="mt-3 overflow-hidden rounded-xl border border-emerald-200 bg-white p-2">
 														<img
