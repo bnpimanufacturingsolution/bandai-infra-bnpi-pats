@@ -15727,6 +15727,10 @@ export const controller = (prisma: PrismaClient) => {
 			const evidenceSource = String(req.query.evidenceSource || "")
 				.trim()
 				.toUpperCase();
+			const summaryScope = String(req.query.summaryScope || "")
+				.trim()
+				.toLowerCase();
+			const useFacetSummaryScope = summaryScope === "facets";
 			const query = String(req.query.query || req.query.search || "").trim();
 			const searchTerms = buildDeviceEventSearchTerms(query);
 			const from = String(req.query.from || "").trim();
@@ -15854,6 +15858,13 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const whereSql = Prisma.sql`WHERE ${Prisma.join(whereConditions, " AND ")}`;
+			const facetWhereConditions = useFacetSummaryScope
+				? whereConditions.filter((condition) => {
+						const text = String((condition as any)?.strings?.join(" ") || condition);
+						return !text.includes('de."eventCategory"') && !text.includes('de."eventAction"');
+					})
+				: whereConditions;
+			const facetWhereSql = Prisma.sql`WHERE ${Prisma.join(facetWhereConditions, " AND ")}`;
 			const deviceUserIdSql = hasDeviceEventColumns.deviceUserId
 				? Prisma.sql`de."deviceUserId"`
 				: Prisma.sql`NULL::text`;
@@ -16158,13 +16169,13 @@ export const controller = (prisma: PrismaClient) => {
 			const categoryGroupsSql = Prisma.sql`
 				SELECT ${eventCategorySql} AS "eventCategory", COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${whereSql}
+				${facetWhereSql}
 				GROUP BY 1
 			`;
 			const actionGroupsSql = Prisma.sql`
 				SELECT ${eventActionSql} AS "eventAction", COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${whereSql}
+				${facetWhereSql}
 				GROUP BY 1
 			`;
 			const actionCategoryGroupsSql = Prisma.sql`
@@ -16173,7 +16184,7 @@ export const controller = (prisma: PrismaClient) => {
 					${eventCategorySql} AS "eventCategory",
 					COUNT(*)::bigint AS count
 				${aggregateFromSql}
-				${whereSql}
+				${facetWhereSql}
 				GROUP BY 1, 2
 			`;
 			const confidenceGroupsSql = Prisma.sql`

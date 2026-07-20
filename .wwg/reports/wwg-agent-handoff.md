@@ -612,6 +612,18 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Evidence root: `.runtime/device-user-raw-export-proof-20260720-110129/`.
 - Recommendations recorded: `REC-20260720-HIKVISION-RAW-SYNC-STALE-JOB-CANCEL` and `REC-20260720-HIKVISION-RAW-SYNC-DEVICE-PREFLIGHT`.
 
+# 2026-07-21 Hikvision Four-Device Listener Runtime Proof
+
+- Status: `LOCALHOST_AND_REMOTE_SETTLED_GREEN` for the admin listener modal at `/admin/configuration/devices/events?view=saved&action=listener-control`.
+- The user-visible stale symptom was `2 receiving / 3 armed / 0 login failed` plus `SDK login failed against 10.184.37.22`; the settled localhost API, localhost browser, and remote VM evidence now show 4 Hikvision rows loaded, 4 receiving SDK callbacks, 4 armed, and 0 login failed.
+- Saved Device rows are configuration truth only and were compared against the VM listener runtime spec. The four active Hikvision rows were Main Entrance Devices A/B/C/D at `10.184.37.21`, `.20`, `.22`, and `.23`, SDK port `8000`.
+- Remote runtime proof used `ssh project-truth-hris` after direct LAN SSH timed out. The VM-managed Cloudflare tunnel was observed active and was not stopped or disabled. The listener spec loaded the same four rows and recent logs showed per-device `sdk_login ok`, `sdk_alarm_arm ok`, `device_armed`, and `acs_alarm_received`.
+- Callback/DeviceEvent proof found saved `EN_HCNETSDK_ALARM` rows for all four devices. Most recent major-3 operation-signal rows had empty person identity, so no plain `employeeNo` was inferred from those callbacks.
+- Localhost Playwright proof opened the same admin page, authenticated as admin, opened the listener modal, and captured all four device rows with truthful settled text: no `2 receiving`, no `3 armed`, no `.22` login failure, and no idle row.
+- Focused validation passed: backend listener/readiness contracts, backend saved-events API contract, and frontend Device Events contracts.
+- Evidence root: `.runtime/hikvision-4-device-listener-repair-20260721-070801/`.
+- No new recommendations were identified.
+
 ## Next Steps
 
 - Open VSCode.
