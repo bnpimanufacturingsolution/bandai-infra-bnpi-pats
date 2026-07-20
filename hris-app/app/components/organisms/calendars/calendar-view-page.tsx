@@ -111,8 +111,8 @@ export default function Home() {
 									: item.updatedAt,
 							metadata: item.metadata ?? undefined,
 							description: item.description ?? undefined,
-							location: item.location ?? undefined,
-							meetingUrl: item.meetingUrl ?? undefined,
+							location: (item as any).location ?? undefined,
+							meetingUrl: (item as any).meetingUrl ?? undefined,
 						})) || []
 					}
 					year={calendarData.year}

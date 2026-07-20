@@ -1,6 +1,6 @@
 {
   "summary": {
-    "target": "C:\\Users\\1biss\\Documents\\Projects\\hris-app",
+    "target": "C:\\Users\\User\\Desktop\\DEVS PROJECTS\\BANDAI\\hris-app",
     "targetDisplay": ".",
     "githubRepository": "Not published.",
     "selectedProfiles": [],
@@ -71,7 +71,7 @@
   "runtimeSkillCandidates": {
     "version": 1,
     "generated_by": "wwg",
-    "generated_at": "2026-05-25T02:59:22.275Z",
+    "generated_at": "2026-06-30T08:09:20.922Z",
     "activation_owner": "vorter",
     "activation_status": "candidate_only",
     "project": {
@@ -1210,7 +1210,7 @@
     "notes": "Review whether this task revealed useful future work outside the approved scope.\nIf yes, add or update `.wwg/governance/recommendation-registry.md`.\nIf no, state that no new recommendations were identified.\n\nRecommendations are candidate work only. They are not project truth, active work, or commitments until reviewed and promoted."
   },
   "wwgReadiness": {
-    "target": "C:\\Users\\1biss\\Documents\\Projects\\hris-app",
+    "target": "C:\\Users\\User\\Desktop\\DEVS PROJECTS\\BANDAI\\hris-app",
     "targetDisplay": ".",
     "context": "brief",
     "mustHave": [

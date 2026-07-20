@@ -1,6 +1,8 @@
+import { Request } from "express";
 import { PrismaClient } from "../generated/prisma";
 import { findShiftForDay } from "./schedule.helper";
 import { resolveEmployeeActiveSchedule } from "./employee-schedule.helper";
+import { config as appConfig } from "../config/config";
 
 /**
  * Interface for Metrics Breakdown
@@ -30,6 +32,7 @@ export interface EligibilityMetrics {
 export interface EligibilityCandidate {
 	employeeId: string;
 	employeeName: string;
+	avatar?: string;
 	department: string;
 	position: string;
 	currentEmploymentStatus: string;
@@ -129,12 +132,67 @@ async function calculateEmployeeAttendanceStats(
 	return { stats: { PRESENT: present, LEAVE: leave, ABSENT: absent }, records };
 }
 
+async function fetchEmployeeAvatar(
+	prisma: PrismaClient,
+	userId: string | null | undefined,
+	req?: Request,
+) {
+	const resolvedUserId = String(userId || "").trim();
+	if (!resolvedUserId) return undefined;
+
+	if (!appConfig.idpEnabled) {
+		const localUser = await prisma.user.findUnique({
+			where: { id: resolvedUserId },
+			select: {
+				metadata: true,
+			},
+		});
+
+		const localAvatar =
+			localUser?.metadata && typeof localUser.metadata === "object"
+				? (localUser.metadata as Record<string, any>).avatar
+				: undefined;
+
+		return typeof localAvatar === "string" && localAvatar.trim().length > 0
+			? localAvatar.trim()
+			: undefined;
+	}
+
+	if (!req) return undefined;
+
+	const headers: Record<string, string> = {};
+	const cookieToken = (req as any)?.cookies?.token as string | undefined;
+	const authHeader = req.headers.authorization;
+	const token =
+		cookieToken ||
+		(authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : authHeader || undefined);
+	if (token) {
+		headers.Authorization = `Bearer ${token}`;
+	}
+
+	const resp = await fetch(`${appConfig.authBaseUrl}/api/user/${resolvedUserId}`, {
+		method: "GET",
+		headers,
+	});
+	if (!resp.ok) return undefined;
+
+	const json = await resp.json();
+	const user = json?.data || json?.user || json;
+	const avatar =
+		typeof user?.avatar === "string" && user.avatar.trim().length > 0
+			? user.avatar.trim()
+			: undefined;
+	return avatar;
+}
+
 /**
  * Check if employee is eligible for Promotion
  */
 async function checkPromotionEligibility(
+	prisma: PrismaClient,
 	employee: any,
 	referenceDate: Date = new Date(),
+	req?: Request,
 ): Promise<EligibilityCandidate | null> {
 	const name = `${employee.person?.personalInfo?.firstName}`;
 
@@ -182,6 +240,7 @@ async function checkPromotionEligibility(
 		employeeId: employee.employeeId,
 		id: employee.id,
 		employeeName: `${employee.person?.personalInfo?.firstName} ${employee.person?.personalInfo?.lastName}`,
+		avatar: await fetchEmployeeAvatar(prisma, employee.userId, req),
 		department: employee.department?.name || "N/A",
 		position: employee.position?.title || "N/A",
 		currentEmploymentStatus: employee.employmentStatus,
@@ -206,8 +265,10 @@ async function checkPromotionEligibility(
  * Check if employee is eligible for Regularization
  */
 async function checkRegularizationEligibility(
+	prisma: PrismaClient,
 	employee: any,
 	referenceDate: Date = new Date(),
+	req?: Request,
 ): Promise<EligibilityCandidate | null> {
 	const name = `${employee.person?.personalInfo?.firstName}`;
 
@@ -263,6 +324,7 @@ async function checkRegularizationEligibility(
 		employeeId: employee.employeeId,
 		id: employee.id,
 		employeeName: `${employee.person?.personalInfo?.firstName} ${employee.person?.personalInfo?.lastName}`,
+		avatar: await fetchEmployeeAvatar(prisma, employee.userId, req),
 		department: employee.department?.name || "N/A",
 		position: employee.position?.title || "N/A",
 		currentEmploymentStatus: employee.employmentStatus,
@@ -287,8 +349,10 @@ async function checkRegularizationEligibility(
  * Check if employee is candidate for Termination
  */
 async function checkTerminationEligibility(
+	prisma: PrismaClient,
 	employee: any,
 	referenceDate: Date = new Date(),
+	req?: Request,
 ): Promise<EligibilityCandidate | null> {
 	const name = `${employee.person?.personalInfo?.firstName}`;
 
@@ -326,6 +390,7 @@ async function checkTerminationEligibility(
 			employeeId: employee.employeeId,
 			id: employee.id,
 			employeeName: `${employee.person?.personalInfo?.firstName} ${employee.person?.personalInfo?.lastName}`,
+			avatar: await fetchEmployeeAvatar(prisma, employee.userId, req),
 			department: employee.department?.name || "N/A",
 			position: employee.position?.title || "N/A",
 			currentEmploymentStatus: employee.employmentStatus,
@@ -355,6 +420,7 @@ async function checkTerminationEligibility(
 export async function getEligibilityCandidates(
 	prisma: PrismaClient,
 	organizationId: string,
+	req?: Request,
 ): Promise<EligibilityCandidate[]> {
 	console.log(`[Eligibility] Starting check for Organization: ${organizationId}`);
 
@@ -393,21 +459,21 @@ export async function getEligibilityCandidates(
 
 	for (const emp of employees) {
 		// Check Termination first (critical)
-		const termCandidate = await checkTerminationEligibility(emp, referenceDate);
+		const termCandidate = await checkTerminationEligibility(prisma, emp, referenceDate, req);
 		if (termCandidate) {
 			candidates.push(termCandidate);
 			continue;
 		}
 
 		// Check Regularization
-		const regCandidate = await checkRegularizationEligibility(emp, referenceDate);
+		const regCandidate = await checkRegularizationEligibility(prisma, emp, referenceDate, req);
 		if (regCandidate) {
 			candidates.push(regCandidate);
 			continue;
 		}
 
 		// Check Promotion
-		const promoCandidate = await checkPromotionEligibility(emp, referenceDate);
+		const promoCandidate = await checkPromotionEligibility(prisma, emp, referenceDate, req);
 		if (promoCandidate) {
 			candidates.push(promoCandidate);
 			continue;

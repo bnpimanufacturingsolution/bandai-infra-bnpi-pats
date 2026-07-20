@@ -27,11 +27,20 @@ Status: INFERRED_FROM_EXISTING_PROJECT
 - Request types include leave, overtime, time adjustment, document request, promotion, regularization, transfer, salary change, termination, expense reimbursement, and other.
 - Workflow rules and approval routing are configuration-driven or service-backed, but final routing rules are not canonical in this repository.
 
+## Benefit Payroll Schedule Rules
+
+- New employee benefit create payloads must send an explicit `scheduleMode` (`TIME_BOUND` | `FIXED_INSTALLMENTS` | `RECURRING`).
+- Time-bound requires end date and uses **total** amount; fixed installments require positive count and **total** amount; recurring uses **per-period** amount with optional end date.
+- Frontend owns conditional fields and previews; API owns installment generation/ensure and payroll apply. Visibility is not authorization.
+- Recurring does not require end date; open-ended means continuous while ACTIVE/APPROVED and `isActive` until cancelled, deactivated, or end date passes.
+- Product contract: `docs/BENEFIT_SCHEDULE_MODES.md` (backend authority `../hris-api/docs/BENEFIT_SCHEDULE_MODES.md`).
+
 ## Timesheet State Rules
 
 - Timesheet statuses include DRAFT, SUBMITTED, APPROVED, REJECTED, and REVISED.
 - Timesheets support submit, approve, reject, revise, and update actions.
 - Edit-permission workflow exists for controlled post-lock or exception edits.
+- When `requireManagerApprovedOvertime` is enabled, detected overtime is tagged as an OT candidate, effective `overtimeHours` stays `0:00` until a manager approves an `OVERTIME` request, and employees must file OT requests for every candidate day before timesheet submit.
 - Timesheet approval can be payroll-relevant and should be tested when changed.
 
 ## Employee Status Change Rules

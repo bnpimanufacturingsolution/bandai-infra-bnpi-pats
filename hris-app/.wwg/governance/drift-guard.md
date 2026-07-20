@@ -31,6 +31,14 @@ Before modifying code, read:
 9. `README.md`
 10. Relevant source files
 
+## Dual-app UI parity drift (hris-app ↔ hris-emp-app)
+
+**Drift risk:** Implementing timesheet, attendance, payroll/payslip, leave-request, or shared molecule/util changes in only one of `hris-app` / `hris-emp-app` when the surface exists in both.
+
+**Guard:** Before claiming done on those domains, confirm the sibling package was updated or document an explicit single-app exception. Canonical rule: root `AGENTS.md`, package `AGENTS.md`, `.grok/rules/hris-dual-app-ui-parity.md`.
+
+**Treat as regression/quality drift** when a dual surface diverges unintentionally (behavior, validation, testids, or UX).
+
 ## Principle Drift Guard
 
 When a change affects product architecture, naming, positioning, agent behavior, governance behavior, project structure, UX philosophy, or long-term design direction, agents must check whether relevant principle files in `.wwg/wiki/principles/` need to be updated.
@@ -62,6 +70,12 @@ If uncertain, add a candidate principle or record the issue in the handoff/repor
 - Bug fixes require regression tests whenever practical.
 - Tests should verify behavior, not only file existence, static structure, or build smoke.
 - Non-software work may use decision logs, manual verification, approval checklists, or Project Truth updates when software tests are not the right evidence.
+
+## UI Design Drift Guard
+
+- Use the app design-token foundation for new UI work when a matching token or brand utility exists.
+- Treat untouched legacy styling as accepted debt until it is intentionally refactored.
+- Treat new hardcoded visual values outside the token foundation as drift unless the exception is explicitly justified in active docs or task reporting.
 
 ## Output Guidance
 

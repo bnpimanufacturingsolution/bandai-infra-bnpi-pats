@@ -1,14 +1,6 @@
-import { useState } from "react";
-import { useSearchParams, useNavigate, useParams, Link } from "react-router-dom";
-import {
-	Download,
-	ChevronRight,
-	FileText,
-	ShieldCheck,
-	CreditCard,
-	HelpCircle,
-	Filter,
-} from "lucide-react";
+import type { MouseEvent } from "react";
+import { useSearchParams, useNavigate } from "react-router";
+import { Download, ChevronRight, FileText, Filter } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
 import { format } from "date-fns";
 
@@ -20,6 +12,13 @@ import { Skeleton } from "~/components/ui/skeleton";
 
 interface EmployeePayrollDashboardProps {
 	employeeIdOverride?: string;
+}
+
+function safeFormatDate(value?: string | Date | null, pattern = "MMM dd, yyyy") {
+	if (!value) return "";
+	const date = value instanceof Date ? value : new Date(value);
+	if (Number.isNaN(date.getTime())) return "";
+	return format(date, pattern);
 }
 
 function EmployeePayrollDashboardSkeleton() {
@@ -125,7 +124,6 @@ export default function EmployeePayrollDashboard({
 	employeeIdOverride,
 }: EmployeePayrollDashboardProps = {}) {
 	const navigate = useNavigate();
-	const { id: paramId } = useParams();
 	const [searchParams] = useSearchParams();
 	const { user } = useAuth();
 	const employeeId = employeeIdOverride || user?.metadata?.employee?.id;
@@ -135,42 +133,45 @@ export default function EmployeePayrollDashboard({
 	const pageParam = Number(searchParams.get("page")) || 1;
 	const limitParam = Number(searchParams.get("limit")) || 10;
 
-	// Fetch payrolls
+	// Fetch payrolls only when we know which employee to load
 	const { data: payrollsData, isLoading } = useEmployeePayrolls({
 		page: pageParam,
-		limit: limitParam, // Fetch more for better summary? Keeping 10 for now.
+		limit: limitParam,
 		filter: employeeId ? `employeeId:${employeeId}` : undefined,
 		sort: "payrollPeriod.endDate",
 		order: "desc",
+		enabled: Boolean(employeeId),
 	});
 
 	const items = (payrollsData as any)?.employeePayrolls || [];
-	const pagination = (payrollsData as any)?.pagination;
 
 	// Calculate Summary Data (from available items)
 	// In a real app, this should come from a dedicated "year-to-date" endpoint
 	const currentYear = new Date().getFullYear();
-	const thisYearItems = items.filter(
-		(item: any) => new Date(item.payrollPeriod.endDate).getFullYear() === currentYear,
-	);
+	const thisYearItems = items.filter((item: any) => {
+		const endDate = item?.payrollPeriod?.endDate;
+		if (!endDate) return false;
+		const year = new Date(endDate).getFullYear();
+		return !Number.isNaN(year) && year === currentYear;
+	});
 
-	const totalNet = thisYearItems.reduce((acc: number, item: any) => acc + item.netPay, 0);
-	const totalTax = thisYearItems.reduce((acc: number, item: any) => acc + item.taxAmount, 0);
-	const totalDeductions = thisYearItems.reduce(
-		(acc: number, item: any) => acc + item.totalDeductions,
+	const totalNet = thisYearItems.reduce(
+		(acc: number, item: any) => acc + Number(item?.netPay || 0),
 		0,
 	);
-	const totalGross = thisYearItems.reduce((acc: number, item: any) => acc + item.grossPay, 0);
-
-	// Estimate Next Payday (e.g., from the latest OPEN payroll, or 15 days from last closed)
-	// For mockup purposes:
-	const upcomingPayroll = items.find(
-		(item: any) =>
-			item.payrollPeriod?.status === "OPEN" || item.payrollPeriod?.status === "DRAFT",
+	const totalTax = thisYearItems.reduce(
+		(acc: number, item: any) => acc + Number(item?.taxAmount || 0),
+		0,
 	);
-	const nextPayDate = upcomingPayroll?.payrollPeriod?.payDate
-		? new Date(upcomingPayroll.payrollPeriod.payDate)
-		: null;
+	const totalDeductions = thisYearItems.reduce(
+		(acc: number, item: any) => acc + Number(item?.totalDeductions || 0),
+		0,
+	);
+	const totalGross = thisYearItems.reduce(
+		(acc: number, item: any) => acc + Number(item?.grossPay || 0),
+		0,
+	);
+	const otherDeductions = Math.max(totalDeductions - totalTax, 0);
 
 	const formatCurrency = (amount: number) => {
 		return new Intl.NumberFormat("en-PH", {
@@ -180,31 +181,36 @@ export default function EmployeePayrollDashboard({
 	};
 
 	const chartData = [
-		{ name: "Net Pay", value: totalNet, color: "#E60000" }, // Bandai Red
-		{ name: "Taxes", value: totalTax, color: "#F97316" }, // Orange
-		{ name: "Deductions", value: totalDeductions - totalTax, color: "#E5E7EB" }, // Gray
-	];
+		{ name: "Net Pay", value: Math.max(totalNet, 0), color: "#E60000" }, // Bandai Red
+		{ name: "Taxes", value: Math.max(totalTax, 0), color: "#F97316" }, // Orange
+		{ name: "Deductions", value: otherDeductions, color: "#E5E7EB" }, // Gray
+	].filter((entry) => entry.value > 0);
 
-	// Helper to get first name
-	const getFirstName = () => {
-		if (items.length > 0) {
-			return items[0].employee.person.personalInfo.firstName;
-		}
-		// Fallback if no items yet
-		// @ts-ignore - The user type definition might vary from employee type
-		return user?.metadata?.employee?.personalInfo?.firstName || "Employee";
-	};
-
-	const handleDownload = (e: React.MouseEvent, item: any) => {
+	const handleDownload = (e: MouseEvent, item: any) => {
 		e.stopPropagation();
+		const firstName =
+			item?.employee?.person?.personalInfo?.firstName ||
+			(user as any)?.metadata?.employee?.personalInfo?.firstName ||
+			"Employee";
+		const periodName = item?.payrollPeriod?.name || "payslip";
 		downloadPayslip({
 			id: item.id,
-			name: `${item.employee.person.personalInfo.firstName}-${item.payrollPeriod.name}`,
+			name: `${firstName}-${periodName}`,
 		});
 	};
 
-	if (isLoading) {
+	if (employeeId && isLoading) {
 		return <EmployeePayrollDashboardSkeleton />;
+	}
+
+	if (!employeeId) {
+		return (
+			<div className="bg-gray-50/30 min-h-screen pb-12">
+				<div className="rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center text-gray-500">
+					No employee profile is linked to this account, so payslips cannot be loaded.
+				</div>
+			</div>
+		);
 	}
 
 	return (
@@ -227,45 +233,40 @@ export default function EmployeePayrollDashboard({
 					</div>
 
 					<div className="space-y-4">
-						{items.map((item: any) => (
+						{items.map((item: any) => {
+							const employeeRecordId = item?.employee?.id || employeeId;
+							const periodEnd = item?.payrollPeriod?.endDate;
+							const periodDay = periodEnd
+								? new Date(periodEnd).getDate()
+								: null;
+
+							return (
 							<div
 								key={item.id}
-								onClick={() =>
-									navigate(`/employee/${item.employee.id}/payroll/${item.id}`)
-								}
+								onClick={() => {
+									if (!employeeRecordId || !item?.id) return;
+									navigate(
+										`/employee/${employeeRecordId}/payroll/${item.id}`,
+									);
+								}}
 								className="group bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4">
 								<div className="flex items-center gap-4">
 									<div className="bg-gray-50 rounded-lg p-3 text-center min-w-[60px]">
 										<div className="text-xs font-bold text-gray-500 uppercase">
-											{item.payrollPeriod.endDate
-												? format(
-														new Date(item.payrollPeriod.endDate),
-														"MMM",
-													)
-												: ""}
+											{safeFormatDate(periodEnd, "MMM")}
 										</div>
 										<div className="text-xl font-bold text-gray-900 leading-none mt-0.5">
-											{new Date(item.payrollPeriod.endDate).getDate()}
+											{periodDay && !Number.isNaN(periodDay) ? periodDay : "—"}
 										</div>
 									</div>
 									<div>
 										<h3 className="mb-1 font-semibold text-gray-900">
-											{item.payrollPeriod.name || "Regular Salary"}
+											{item?.payrollPeriod?.name || "Regular Salary"}
 										</h3>
 										<p className="text-xs text-gray-500 flex items-center gap-1">
-											{item.payrollPeriod.startDate
-												? format(
-														new Date(item.payrollPeriod.startDate),
-														"MMM dd, yyyy",
-													)
-												: ""}{" "}
+											{safeFormatDate(item?.payrollPeriod?.startDate)}{" "}
 											-{" "}
-											{item.payrollPeriod.endDate
-												? format(
-														new Date(item.payrollPeriod.endDate),
-														"MMM dd, yyyy",
-													)
-												: ""}
+											{safeFormatDate(item?.payrollPeriod?.endDate)}
 										</p>
 									</div>
 								</div>
@@ -276,7 +277,7 @@ export default function EmployeePayrollDashboard({
 											Gross
 										</div>
 										<div className="text-sm font-medium text-gray-600">
-											{formatCurrency(item.grossPay)}
+											{formatCurrency(Number(item?.grossPay || 0))}
 										</div>
 									</div>
 									<div className="text-right min-w-[100px]">
@@ -284,7 +285,7 @@ export default function EmployeePayrollDashboard({
 											Net Pay
 										</div>
 										<div className="text-lg font-bold text-gray-900">
-											{formatCurrency(item.netPay)}
+											{formatCurrency(Number(item?.netPay || 0))}
 										</div>
 									</div>
 									<div className="flex items-center gap-2">
@@ -300,7 +301,8 @@ export default function EmployeePayrollDashboard({
 									</div>
 								</div>
 							</div>
-						))}
+							);
+						})}
 
 						{items.length === 0 && (
 							<div className="text-center py-10 text-gray-500 bg-white rounded-xl border border-dashed">
@@ -339,21 +341,25 @@ export default function EmployeePayrollDashboard({
 						</p>
 
 						<div className="relative h-48 w-full flex items-center justify-center mb-6">
-							<ResponsiveContainer width="100%" height="100%">
-								<PieChart>
-									<Pie
-										data={chartData}
-										innerRadius={60}
-										outerRadius={80}
-										paddingAngle={5}
-										dataKey="value">
-										{chartData.map((entry, index) => (
-											<Cell key={`cell-${index}`} fill={entry.color} />
-										))}
-									</Pie>
-									<RechartsTooltip />
-								</PieChart>
-							</ResponsiveContainer>
+							{chartData.length > 0 ? (
+								<ResponsiveContainer width="100%" height="100%">
+									<PieChart>
+										<Pie
+											data={chartData}
+											innerRadius={60}
+											outerRadius={80}
+											paddingAngle={5}
+											dataKey="value">
+											{chartData.map((entry, index) => (
+												<Cell key={`cell-${index}`} fill={entry.color} />
+											))}
+										</Pie>
+										<RechartsTooltip />
+									</PieChart>
+								</ResponsiveContainer>
+							) : (
+								<div className="h-40 w-40 rounded-full border-8 border-gray-100" />
+							)}
 							{/* Center Text */}
 							<div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
 								<div className="text-[10px] uppercase text-gray-400 font-semibold">
@@ -395,7 +401,7 @@ export default function EmployeePayrollDashboard({
 									<span className="text-gray-600">Deductions</span>
 								</div>
 								<span className="font-bold text-gray-900">
-									{formatCurrency(totalDeductions - totalTax)}
+									{formatCurrency(otherDeductions)}
 								</span>
 							</div>
 						</div>

@@ -24,7 +24,7 @@ import {
 import CompanyIntroduction from "~/components/organisms/onboarding/company-introduction";
 import { Input } from "~/components/ui/input";
 import { StepRail, type SetupRailStep } from "~/components/setup/StepRail";
-import { bandaiLogo, resolveCompanyLogo } from "~/lib/company-logo";
+import bandaiLogo from "~/assets/bandai_logo.png";
 import { useAuth } from "~/lib/hooks/use-auth";
 import {
 	useBootstrapAdmin,
@@ -282,7 +282,9 @@ function buildTimezoneOptions(selectedTimezone?: string | null): SelectOption[] 
 }
 
 function resolveSetupLogo(value?: string | null) {
-	return resolveCompanyLogo(value);
+	const logo = String(value || "").trim();
+	if (!logo || logo === "assets/images/bandai_logo.png") return bandaiLogo;
+	return logo;
 }
 
 function createUtcDate(year: number, month: number, day: number) {
@@ -965,7 +967,7 @@ export default function SetupRoute() {
 		[preview?.documentTypes],
 	);
 	if (isLoading || !status) {
-		return <LoadingScreen message="Loading setup workspace" />;
+		return <LoadingScreen message="Loading" subtitle="Setup workspace" />;
 	}
 
 	if (status.mode === "READY") {

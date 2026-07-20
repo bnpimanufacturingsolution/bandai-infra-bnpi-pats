@@ -52,13 +52,13 @@ export const SidebarItem = ({ item, activeId, level = 0, onNavigate }: SidebarIt
 					/>
 				)}
 				{!hasChildren && level > 0 && <span className="w-4" />}
-				{item.icon && <Icon name={item.icon as any} size={16} />}
+				{item.icon && <Icon icon={item.icon as any} size={16} />}
 				<span className="text-sm truncate">{item.title}</span>
 			</Button>
 
 			{hasChildren && isExpanded && (
 				<div className="mt-1 space-y-1">
-					{item.children?.map((child) => (
+					{item.children?.map((child: NavItem) => (
 						<SidebarItem
 							key={child.id}
 							item={child}

@@ -1,2 +1,1 @@
-// Export all organisms by domain
-export * from "./shared";
+// Export all organisms from concrete modules only; no shared barrel exists here.

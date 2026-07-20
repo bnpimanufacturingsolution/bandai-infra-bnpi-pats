@@ -13,7 +13,7 @@ export default function LoginDebug() {
 			setDebugInfo(result);
 		} catch (error) {
 			console.error("Login error:", error);
-			setDebugInfo({ error: error.message });
+			setDebugInfo({ error: error instanceof Error ? error.message : String(error) });
 		}
 	};
 

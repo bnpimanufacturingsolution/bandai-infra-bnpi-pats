@@ -124,13 +124,9 @@ export const getLogger = () => {
 	}
 
 	const fileLogging = resolveFileLoggingStatus();
-	const consoleLoggingFormat =
-		process.env.LOG_FORMAT === "json"
-			? combine(otelTraceFormat(), timestamp(), errors({ stack: true }), json())
-			: combine(colorize(), timestamp(), consoleFormat);
 	const logTransports: (winston.transport | LogtailTransport)[] = [
 		new winston.transports.Console({
-			format: consoleLoggingFormat,
+			format: combine(colorize(), timestamp(), consoleFormat),
 		}),
 	];
 

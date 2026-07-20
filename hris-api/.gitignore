@@ -145,8 +145,6 @@ crash.log
 # Local export artifacts
 exports/
 prisma/seeds/exports/
-storage/backups/
-backups/
 
 # Local spreadsheet/reference files
 *.xls

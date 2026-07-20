@@ -1,15 +1,15 @@
 import { NavItem } from "./NavItem";
 import { Button } from "~/components/atoms/Button";
 import { Avatar } from "~/components/atoms/Avatar";
-import { Bell, Settings, LogOut, User } from "lucide-react";
+import { Bell, Settings, LogOut } from "lucide-react";
 
-interface NavigationItem {
+export interface NavigationItem {
 	to: string;
 	label: string;
 	icon?: React.ComponentType<{ className?: string }>;
 }
 
-interface NavigationProps {
+export interface NavigationProps {
 	items: NavigationItem[];
 	user?: {
 		name: string;

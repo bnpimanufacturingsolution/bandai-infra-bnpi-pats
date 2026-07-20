@@ -11,6 +11,10 @@ import {
 	isVirtualAbsentLikeRecord,
 } from "~/lib/utils/attendance-status";
 import { TimesheetDayTooltipContent } from "~/components/molecules/TimesheetDayTooltipContent";
+import {
+	getOvertimeCandidateBadge,
+	readOvertimeCandidateFromMetadata,
+} from "~/lib/utils/overtime-candidate";
 
 // Extend the base breakdown type with optional leaveType
 export type TimesheetBreakdownDay = TimesheetBreakdown & {
@@ -130,6 +134,7 @@ export function TimesheetCalendarApproval({
 		const d = String(date.getDate()).padStart(2, "0");
 		return `${y}-${m}-${d}`;
 	};
+	const todayLocalDateKey = toLocalDateKey(toLocalMidnight(new Date()));
 
 	const getWeekStartMonday = (date: Date) => {
 		const midnight = toLocalMidnight(date);
@@ -516,6 +521,7 @@ export function TimesheetCalendarApproval({
 														? day.primaryMarker
 														: "HOURS";
 									const dayBusinessKey = getDayBusinessKey(day);
+									const isPastDay = dayBusinessKey < todayLocalDateKey;
 									const dayNum = Number(dayBusinessKey.slice(8, 10));
 									const dayStatus = getDayStatus(day);
 									const hasEmployeeNote =
@@ -546,6 +552,11 @@ export function TimesheetCalendarApproval({
 															: primaryMarker === "HOLIDAY"
 																? "marker"
 																: "hours";
+									const overtimeCandidate = readOvertimeCandidateFromMetadata(day.metadata);
+									const overtimeBadge =
+										day.overtimeHours && day.overtimeHours !== "0:00"
+											? { label: "+OT", tone: "ot-approved" as const }
+											: getOvertimeCandidateBadge(overtimeCandidate);
 									const cellBadges = [
 										...(hasHoliday
 											? [{ label: "HOL", tone: "meta" as const }]
@@ -559,9 +570,7 @@ export function TimesheetCalendarApproval({
 										...(day.nightShift?.isNightShiftDay
 											? [{ label: "NS", tone: "night" as const }]
 											: []),
-										...(day.overtimeHours && day.overtimeHours !== "0:00"
-											? [{ label: "+OT", tone: "ot" as const }]
-											: []),
+										...(overtimeBadge ? [overtimeBadge] : []),
 										...(day.metadata?.withinGrace
 											? [{ label: "GRACE", tone: "meta" as const }]
 											: []),
@@ -600,6 +609,7 @@ export function TimesheetCalendarApproval({
 													<TimesheetDayCell
 														dayNumber={dayNum}
 														kind={cellKind}
+														isPastDay={isPastDay}
 														hoursLabel={formatDuration(day.hoursWorked)}
 														leaveLabel={(
 															leaveEntries[0]?.leaveType ||

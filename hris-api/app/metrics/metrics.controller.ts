@@ -16,6 +16,7 @@ import {
 } from "../../helper/attendance-metrics-detailed.helper";
 import {
 	calculateAttendanceObligationDetailed,
+	calculateAttendanceDailyTrendByDepartment,
 	calculateAttendanceObligationSummary,
 	calculateAttendanceObligationTodayOpsSummary,
 } from "../../helper/attendance-obligation-metrics.helper";
@@ -23,6 +24,7 @@ import { calculatePerfectAttendanceMetrics } from "../../helper/perfect-attendan
 import { calculateTardinessMetrics } from "../../helper/tardiness-metrics.helper";
 import { calculateOvertimeMetrics } from "../../helper/overtime-metrics.helper";
 import { calculateLeaveBalanceMetrics } from "../../helper/leave-balance-metrics.helper";
+import { calculateTurnoverAttritionReport } from "../../helper/turnover-attrition-metrics.helper";
 import {
 	getAttendanceSummaryReport,
 	getCustomAttendanceSummary,
@@ -71,6 +73,7 @@ const AVAILABLE_METRICS = {
 		"attendanceObligationTodayOpsSummary", // Lightweight today cards from live attendance obligations
 		"attendanceTimesheetLineSummary", // Summary-only counts from persisted timesheet lines
 		"attendanceTodayOpsSummary", // Lightweight today dashboard cards from timesheet lines
+		"attendanceDailyTrendByDepartment", // Day-by-department attendance trend chart data
 		"perfectAttendanceMetrics", // Perfect attendance (zero absences + zero tardiness)
 		"tardinessMetrics", // Tardiness, undertime, and early out metrics
 		"overtimeMetrics", // Overtime metrics
@@ -81,7 +84,12 @@ const AVAILABLE_METRICS = {
 		"attendanceSummaryReport", // Attendance summary for today, this week, and this month
 	],
 	CalendarItem: ["birthdaysSummary"],
-	Employee: ["documentComplianceMetrics", "eligibilityCandidates", "leaveBalanceMetrics"],
+	Employee: [
+		"documentComplianceMetrics",
+		"eligibilityCandidates",
+		"leaveBalanceMetrics",
+		"turnoverAttritionReport",
+	],
 	PayrollPeriod: [
 		"payrollPeriodByCode",
 		"payrollRunSummary",
@@ -134,7 +142,7 @@ export const controller = (prisma: PrismaClient) => {
 				if (!metricPromises.has(metric)) {
 					metricPromises.set(
 						metric,
-						generateMetric(prisma, model, metric, whereFilter, req),
+						generateMetric(prisma, model, metric, whereFilter, req, filter),
 					);
 				}
 				return metricPromises.get(metric)!;
@@ -331,6 +339,7 @@ function buildFilter(
 	const reservedFields = [
 		"dateFrom",
 		"dateTo",
+		"groupBy",
 		"periodFrom",
 		"periodTo",
 		"leaveType",
@@ -449,6 +458,11 @@ async function generateMetric(
 	metric: string,
 	whereFilter: any,
 	req?: AuthRequest,
+	rawFilter?: {
+		dateFrom?: string;
+		dateTo?: string;
+		[key: string]: string | number | boolean | null | undefined;
+	},
 ) {
 	switch (model) {
 		case "Request":
@@ -458,7 +472,7 @@ async function generateMetric(
 		case "CalendarItem":
 			return generateCalendarItemMetric(prisma, metric, whereFilter);
 		case "Employee":
-			return generateEmployeeMetric(prisma, metric, whereFilter, req);
+			return generateEmployeeMetric(prisma, metric, whereFilter, req, rawFilter);
 		case "PayrollPeriod":
 			return generatePayrollPeriodMetric(prisma, metric, whereFilter, req);
 		case "Timesheet":
@@ -1180,8 +1194,11 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 					(whereFilter.search || whereFilter.query) as string,
 					whereFilter.status as string,
 					undefined,
-					undefined,
-					undefined,
+					whereFilter.sectionId as string,
+					whereFilter.positionId as string,
+					whereFilter.levelId as string,
+					(whereFilter.reportToId || whereFilter.managerId) as string,
+					whereFilter.employeeId as string,
 					whereFilter.shiftType as string,
 				);
 			}
@@ -1256,6 +1273,9 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				searchQuery as string,
 				status as string,
 				departmentId as string,
+				whereFilter.sectionId as string,
+				whereFilter.positionId as string,
+				whereFilter.levelId as string,
 				reportToId as string,
 				employeeId as string,
 				shiftType as string,
@@ -1312,6 +1332,9 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				(whereFilter.search || whereFilter.query) as string,
 				whereFilter.status as string,
 				whereFilter.departmentId as string,
+				whereFilter.sectionId as string,
+				whereFilter.positionId as string,
+				whereFilter.levelId as string,
 				(whereFilter.reportToId || whereFilter.managerId) as string,
 				whereFilter.employeeId as string,
 				whereFilter.shiftType as string,
@@ -1367,6 +1390,9 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				(whereFilter.search || whereFilter.query) as string,
 				whereFilter.status as string,
 				whereFilter.departmentId as string,
+				whereFilter.sectionId as string,
+				whereFilter.positionId as string,
+				whereFilter.levelId as string,
 				(whereFilter.reportToId || whereFilter.managerId) as string,
 				whereFilter.employeeId as string,
 				whereFilter.shiftType as string,
@@ -1410,6 +1436,9 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				targetDate,
 				(whereFilter.search || whereFilter.query) as string,
 				whereFilter.departmentId as string,
+				whereFilter.sectionId as string,
+				whereFilter.positionId as string,
+				whereFilter.levelId as string,
 				(whereFilter.reportToId || whereFilter.managerId) as string,
 				whereFilter.employeeId as string,
 				whereFilter.shiftType as string,
@@ -1460,6 +1489,9 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				(whereFilter.search || whereFilter.query) as string,
 				whereFilter.status as string,
 				whereFilter.departmentId as string,
+				whereFilter.sectionId as string,
+				whereFilter.positionId as string,
+				whereFilter.levelId as string,
 				(whereFilter.reportToId || whereFilter.managerId) as string,
 				whereFilter.employeeId as string,
 			);
@@ -1498,6 +1530,48 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				whereFilter.departmentId as string,
 				(whereFilter.reportToId || whereFilter.managerId) as string,
 				whereFilter.employeeId as string,
+			);
+		}
+		case "attendanceDailyTrendByDepartment": {
+			const dateFrom = whereFilter.date?.gte ? new Date(whereFilter.date.gte) : null;
+			const dateTo = whereFilter.date?.lte ? new Date(whereFilter.date.lte) : null;
+			const endDate = dateTo || new Date();
+			endDate.setUTCHours(23, 59, 59, 999);
+			const startDate = dateFrom || new Date(endDate);
+			if (!dateFrom) startDate.setDate(startDate.getDate() - 7);
+			startDate.setUTCHours(0, 0, 0, 0);
+
+			const organizationId =
+				whereFilter.organizationId ||
+				(
+					await prisma.employee.findFirst({
+						where: { isDeleted: false },
+						select: { organizationId: true },
+					})
+				)?.organizationId;
+
+			if (!organizationId) {
+				return {
+					startDate,
+					endDate,
+					totalDays: 0,
+					totalRecords: 0,
+					departments: [],
+					series: [],
+				};
+			}
+
+			return await calculateAttendanceDailyTrendByDepartment(
+				prisma,
+				organizationId,
+				startDate,
+				endDate,
+				(whereFilter.search || whereFilter.query) as string,
+				whereFilter.status as string,
+				whereFilter.departmentId as string,
+				(whereFilter.reportToId || whereFilter.managerId) as string,
+				whereFilter.employeeId as string,
+				whereFilter.shiftType as string,
 			);
 		}
 		case "perfectAttendanceMetrics": {
@@ -1805,8 +1879,50 @@ async function generateEmployeeMetric(
 	metric: string,
 	whereFilter: any,
 	req?: AuthRequest,
+	rawFilter?: {
+		dateFrom?: string;
+		dateTo?: string;
+		[key: string]: string | number | boolean | null | undefined;
+	},
 ) {
 	switch (metric) {
+		case "turnoverAttritionReport": {
+			const organizationId =
+				whereFilter.organizationId ||
+				req?.organizationId ||
+				(
+					await prisma.employee.findFirst({
+						where: { isDeleted: false },
+						select: { organizationId: true },
+					})
+				)?.organizationId;
+
+			const startDate = rawFilter?.dateFrom ? parseDateInputToUTC(String(rawFilter.dateFrom)) : null;
+			const endDate = rawFilter?.dateTo ? parseDateInputToUTC(String(rawFilter.dateTo)) : null;
+			if (!startDate || !endDate) {
+				throw new Error("Date range is required for turnover and attrition metrics");
+			}
+
+			const normalizedGroupBy = String(rawFilter?.groupBy || "month").toLowerCase();
+			const groupBy =
+				normalizedGroupBy === "day" ||
+				normalizedGroupBy === "week" ||
+				normalizedGroupBy === "month" ||
+				normalizedGroupBy === "year"
+					? normalizedGroupBy
+					: "month";
+
+			return await calculateTurnoverAttritionReport(prisma, {
+				organizationId,
+				dateFrom: startDate,
+				dateTo: endDate,
+				groupBy,
+				departmentId: whereFilter.departmentId,
+				sectionId: whereFilter.sectionId,
+				positionId: whereFilter.positionId,
+				levelId: whereFilter.levelId,
+			});
+		}
 		case "eligibilityCandidates": {
 			// Extract organizationId from request if not in filter
 			const organizationId = whereFilter.organizationId || req?.organizationId;
@@ -1815,7 +1931,7 @@ async function generateEmployeeMetric(
 				throw new Error("Organization ID is required for eligibility metrics");
 			}
 
-			return await getEligibilityCandidates(prisma, organizationId);
+			return await getEligibilityCandidates(prisma, organizationId, req);
 		}
 		case "documentComplianceMetrics": {
 			// Fetch active employees with documents
@@ -2335,6 +2451,8 @@ async function generateEmployeeMetric(
 				organizationId,
 				whereFilter.departmentId,
 				whereFilter.sectionId,
+				whereFilter.positionId,
+				whereFilter.levelId,
 				whereFilter.reportToId || whereFilter.managerId,
 				whereFilter.employeeId,
 				whereFilter.leaveType,

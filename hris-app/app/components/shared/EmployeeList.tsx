@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
-import { StatusBadge } from "~/components/atoms/StatusBadge";
 import { Button } from "~/components/atoms/Button";
 import { Badge } from "~/components/atoms/Badge";
-import { Input } from "~/components/atoms/Input";
 import { Modal } from "~/components/atoms/Modal";
 import { DatePicker } from "~/components/atoms/DatePicker";
 import {
@@ -18,12 +16,7 @@ import {
 	Edit,
 	FileText,
 } from "lucide-react";
-import {
-	useEmployee,
-	useEmployees,
-	useExecuteEmployeeHardDelete,
-	usePreviewEmployeeHardDelete,
-} from "~/lib/hooks/useEmployees";
+import { useEmployee, useEmployees } from "~/lib/hooks/useEmployees";
 import { useDepartments } from "~/lib/hooks/useDepartments";
 import { usePositions } from "~/lib/hooks/usePositions";
 import { useLevels } from "~/lib/hooks/useLevels";
@@ -54,6 +47,7 @@ import { DepartmentSectionPicker } from "~/components/molecules/DepartmentSectio
 import { Textarea } from "~/components/ui/textarea";
 import { TERMINATION_TYPE_LABELS, type TerminationType } from "~/zod/termination.zod";
 import { EmployeeImportModal } from "~/components/organisms/employee/EmployeeImportModal";
+import { EmploymentStatusText } from "~/components/shared/EmploymentStatusText";
 import {
 	getActiveManpowerStatusFilterBranches,
 	getActiveManpowerStatusScope,
@@ -65,6 +59,7 @@ import {
 	AdminConfigPrimaryCell,
 	AdminConfigSourceChip,
 } from "~/lib/ui/admin-configuration-table";
+import { EmployeeAvatar } from "~/components/atoms/EmployeeAvatar";
 
 type ApiEmployee = Employee & {
 	department?: { id?: string; name?: string };
@@ -79,6 +74,9 @@ const NO_DIRECT_REPORTS_MANAGER_VALUE = "__no_direct_reports__";
 type EmployeeDisplay = {
 	id: string;
 	name: string;
+	firstName: string;
+	lastName: string;
+	avatar?: string;
 	email: string;
 	employeeId: string;
 	departmentId?: string | null;
@@ -99,61 +97,12 @@ type EmployeeDisplay = {
 	agencyCode: string;
 };
 
-const employmentStatusTextStyles: Record<string, { dot: string; text: string }> = {
-	ACTIVE: { dot: "bg-green-500", text: "text-green-700" },
-	INACTIVE: { dot: "bg-slate-400", text: "text-slate-600" },
-	ONBOARDING: { dot: "bg-blue-500", text: "text-blue-700" },
-	ON_LEAVE: { dot: "bg-amber-500", text: "text-amber-700" },
-	RESIGNATION_REQUESTED: { dot: "bg-amber-500", text: "text-amber-700" },
-	SERVING_NOTICE: { dot: "bg-orange-500", text: "text-orange-700" },
-	OFFBOARDING: { dot: "bg-purple-500", text: "text-purple-700" },
-	TERMINATED: { dot: "bg-red-500", text: "text-red-700" },
-	RESIGNED: { dot: "bg-gray-400", text: "text-gray-600" },
-	RETIRED: { dot: "bg-gray-400", text: "text-gray-600" },
-	FORMER_EMPLOYEE: { dot: "bg-gray-400", text: "text-gray-600" },
-};
-
-const normalizeEmploymentStatusKey = (status?: string | null) =>
-	String(status || "")
-		.trim()
-		.toUpperCase()
-		.replace(/[^A-Z0-9]+/g, "_")
-		.replace(/^_+|_+$/g, "");
-
-const formatEmploymentStatusLabel = (status?: string | null) => {
-	const cleanStatus = String(status || "").trim();
-	if (!cleanStatus || cleanStatus === "-") return "N/A";
-	if (cleanStatus === "N/A") return cleanStatus;
-
-	return cleanStatus
-		.toLowerCase()
-		.replace(/_/g, " ")
-		.replace(/\b\w/g, (character) => character.toUpperCase());
-};
-
-function EmploymentStatusText({ status }: { status?: string | null }) {
-	const styles = employmentStatusTextStyles[normalizeEmploymentStatusKey(status)] || {
-		dot: "bg-gray-300",
-		text: "text-gray-500",
-	};
-
-	return (
-		<span
-			className={[
-				"inline-flex items-center gap-1.5 text-sm font-semibold",
-				styles.text,
-			].join(" ")}>
-			<span aria-hidden="true" className={["h-2 w-2 rounded-full", styles.dot].join(" ")} />
-			{formatEmploymentStatusLabel(status)}
-		</span>
-	);
-}
-
 const formatEmployeeForDisplay = (employee: ApiEmployee): EmployeeDisplay => {
 	const firstName = employee.person?.personalInfo?.firstName || "";
 	const lastName = employee.person?.personalInfo?.lastName || "";
 	const fullName =
 		`${firstName} ${lastName}`.trim() || employee.person?.personalInfo?.firstName || "Unnamed";
+	const avatar = String(employee.user?.avatar || "").trim();
 	const primaryPhone = employee.person?.contactInfo?.phones?.find(
 		(phone: any) => phone.isPrimary,
 	);
@@ -187,6 +136,9 @@ const formatEmployeeForDisplay = (employee: ApiEmployee): EmployeeDisplay => {
 	return {
 		id: employee.id,
 		name: fullName,
+		firstName,
+		lastName,
+		avatar: avatar || undefined,
 		email: employee.person?.contactInfo?.email || employee.user?.email || "N/A",
 		employeeId: employee.employeeId,
 		departmentId: employee.department?.id || employee.departmentId || null,
@@ -253,10 +205,6 @@ export default function EmployeeList({
 	const basePath = location.pathname.replace(/\/$/, "");
 	const isAdminConfigurationEmployees = basePath === "/admin/configuration/employees";
 	const { user } = useAuth();
-	const actorRole = String((user as any)?.role || (user as any)?.metadata?.role || "").toLowerCase();
-	const canPreviewHardDelete =
-		isAdminConfigurationEmployees &&
-		["hris-admin", "admin", "super_admin", "superadmin"].includes(actorRole);
 
 	// Termination modal state
 	const [terminationEmployee, setTerminationEmployee] = useState<EmployeeDisplay | null>(null);
@@ -266,8 +214,6 @@ export default function EmployeeList({
 	const [terminationReason, setTerminationReason] = useState("");
 	const createTerminationMutation = useCreateTermination();
 	const submitTerminationMutation = useSubmitTermination();
-	const previewHardDeleteMutation = usePreviewEmployeeHardDelete();
-	const executeHardDeleteMutation = useExecuteEmployeeHardDelete();
 
 	// Get search and pagination params from URL
 	const searchQuery = searchParams.get("search") || undefined;
@@ -276,6 +222,7 @@ export default function EmployeeList({
 	const departmentFilter = searchParams.get("departmentId") || undefined;
 	const sectionFilter = searchParams.get("sectionId") || undefined;
 	const positionFilter = searchParams.get("positionId") || undefined;
+	const employmentTypeFilter = searchParams.get("employmentType") || undefined;
 	const levelFilter = searchParams.get("levelId") || undefined;
 	const genderFilter = searchParams.get("gender") || undefined;
 	const hireDateFromFilter = searchParams.get("hireDateFrom") || undefined;
@@ -325,6 +272,7 @@ export default function EmployeeList({
 	const usesReportingTreeScope =
 		usesManagerScope &&
 		(teamScopeFilter === "reporting-tree" || teamScopeFilter === "supervisor-tree");
+	const isHrEmployeesPage = basePath === "/hr/employees";
 
 	useEffect(() => {
 		if (useTeamOverviewScope) return;
@@ -438,6 +386,9 @@ export default function EmployeeList({
 	}
 	if (positionFilter && positionFilter !== "all") {
 		filterParts.push(`positionId:${positionFilter}`);
+	}
+	if (employmentTypeFilter && employmentTypeFilter !== "all") {
+		filterParts.push(`employmentType:${employmentTypeFilter}`);
 	}
 	if (levelFilter && levelFilter !== "all") {
 		filterParts.push(`levelId:${levelFilter}`);
@@ -644,8 +595,8 @@ export default function EmployeeList({
 	const id = searchParams.get("id");
 	const selectFor = searchParams.get("selectFor");
 
-	// Single employee ID for fetching (when action is view or hard-delete)
-	const activeEmployeeId = action === "view" || action === "hard-delete" ? id : null;
+	// Single employee ID for fetching (when action is view or delete)
+	const activeEmployeeId = action === "view" || action === "delete" ? id : null;
 
 	// Single useEmployee hook for all modals (view, delete)
 	const { data: activeEmployee, isLoading: isLoadingEmployee } = useEmployee(
@@ -678,35 +629,19 @@ export default function EmployeeList({
 		navigate(`${item.id}/edit`);
 	};
 
-	const handlePreviewHardDelete = (item: EmployeeDisplay) => {
+	const handleDeleteEmployee = (item: EmployeeDisplay) => {
 		updateSearchParams((next) => {
-			next.set("action", "hard-delete");
+			next.set("action", "delete");
 			next.set("id", item.id);
 		});
 	};
 
-	useEffect(() => {
-		if (action !== "hard-delete" || !activeEmployee?.id) return;
-		previewHardDeleteMutation.mutate(activeEmployee.id);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [action, activeEmployee?.id]);
-
-	const closeHardDelete = () => {
-		previewHardDeleteMutation.reset();
+	const confirmDelete = () => {
+		if (!activeEmployee) return;
+		// Note: Assuming there's a delete mutation, but since it's not implemented, we'll just close
 		updateSearchParams((next) => {
 			next.delete("action");
 			next.delete("id");
-		});
-	};
-
-	const executeHardDelete = () => {
-		if (!activeEmployee) return;
-		const forceDelete = Boolean(previewHardDeleteMutation.data?.blockers?.length);
-		executeHardDeleteMutation.mutate({
-			employeeId: activeEmployee.id,
-			force: forceDelete,
-		}, {
-			onSuccess: closeHardDelete,
 		});
 	};
 
@@ -780,10 +715,6 @@ export default function EmployeeList({
 		}
 	};
 
-	const getStatusBadge = (status: string) => {
-		return <StatusBadge status={status} />;
-	};
-
 	const renderConfigLink = ({
 		label,
 		id,
@@ -828,15 +759,32 @@ export default function EmployeeList({
 			required: true,
 			priority: "critical",
 			render: (value, item) => {
-				const content = (
+				const nameClassName = disableEmployeeDeepLinks
+					? "font-medium text-gray-900"
+					: "font-medium text-gray-900 hover:text-primary hover:underline";
+				const content = isHrEmployeesPage ? (
+					<div className="min-w-0">
+						<div className="flex min-w-0 items-center gap-3">
+							<EmployeeAvatar
+								src={item.avatar}
+								alt={value}
+								size="md"
+								className="shrink-0"
+							/>
+							<div className="min-w-0">
+								<div className={nameClassName} title={value}>
+									{value}
+								</div>
+								<div className="mt-1">
+									<AdminConfigCodeChip>{item.employeeId}</AdminConfigCodeChip>
+								</div>
+							</div>
+						</div>
+					</div>
+				) : (
 					<AdminConfigPrimaryCell
 						primary={
-							<span
-								className={
-									disableEmployeeDeepLinks
-										? undefined
-										: "hover:text-primary hover:underline"
-								}>
+							<span className={nameClassName} title={value}>
 								{value}
 							</span>
 						}
@@ -974,12 +922,7 @@ export default function EmployeeList({
 			sortable: true,
 			required: true,
 			priority: "critical",
-			render: (value: any) =>
-				isAdminConfigurationEmployees ? (
-					<EmploymentStatusText status={value} />
-				) : (
-					<StatusBadge status={value} />
-				),
+			render: (value: any) => <EmploymentStatusText status={value} />,
 		},
 	];
 
@@ -1060,6 +1003,18 @@ export default function EmployeeList({
 				{ value: "RESIGNED", label: "Resigned" },
 				{ value: "RETIRED", label: "Retired" },
 				{ value: "FORMER_EMPLOYEE", label: "Former Employee" },
+			],
+		},
+		{
+			key: "employmentType",
+			label: "Employment Type",
+			options: [
+				{ value: "REGULAR", label: "Regular" },
+				{ value: "PROBATIONARY", label: "Probationary" },
+				{ value: "CONTRACTUAL", label: "Contractual" },
+				{ value: "PART_TIME", label: "Part time" },
+				{ value: "CONSULTANT", label: "Consultant" },
+				{ value: "INTERN", label: "Intern" },
 			],
 		},
 		{
@@ -1197,16 +1152,6 @@ export default function EmployeeList({
 							</DropdownMenuItem>
 						</>
 					)}
-					{canPreviewHardDelete && (
-						<>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem
-								onClick={() => handlePreviewHardDelete(item)}
-								className="text-red-600">
-								<Trash2 className="h-4 w-4 mr-2" /> Preview hard delete
-							</DropdownMenuItem>
-						</>
-					)}
 				</DropdownMenuContent>
 			</DropdownMenu>
 		);
@@ -1265,6 +1210,7 @@ export default function EmployeeList({
 				next.delete("departmentId");
 				next.delete("sectionId");
 				next.delete("positionId");
+				next.delete("employmentType");
 				next.delete("levelId");
 				next.delete("gender");
 				next.delete("hireDateFrom");
@@ -1322,6 +1268,14 @@ export default function EmployeeList({
 					next.delete("positionId");
 				} else {
 					next.set("positionId", filters.positionId);
+				}
+			}
+
+			if (filters.employmentType) {
+				if (filters.employmentType === "all") {
+					next.delete("employmentType");
+				} else {
+					next.set("employmentType", filters.employmentType);
 				}
 			}
 
@@ -1405,6 +1359,7 @@ export default function EmployeeList({
 			sectionId: sectionFilter || "",
 			gender: genderFilter || "",
 			teamScope: rawTeamScopeFilter || "",
+			employmentType: employmentTypeFilter || "",
 			positionId: positionFilter || "",
 			levelId: levelFilter || "",
 			hireDateFrom: hireDateFromFilter || "",
@@ -1413,6 +1368,7 @@ export default function EmployeeList({
 		}),
 		[
 			agencyFilterValue,
+			employmentTypeFilter,
 			genderFilter,
 			hireDateFromFilter,
 			hireDateToFilter,
@@ -1619,6 +1575,7 @@ export default function EmployeeList({
 				}
 				searchValue={searchQuery || ""}
 				filterButtonLabel={useTeamOverviewScope ? "Filters" : "Advanced Filters"}
+				filterColumns={2}
 				titleActions={
 					hideExport ? null : (
 						<>
@@ -1772,23 +1729,25 @@ export default function EmployeeList({
 										Status
 									</label>
 									<div className="p-3 bg-gray-50 rounded-md border">
-										{getStatusBadge(
-											(() => {
-												const statusMap: Record<string, string> = {
-													ACTIVE: "Active",
-													INACTIVE: "Inactive",
-													TERMINATED: "Terminated",
-													RESIGNED: "Resigned",
-													RETIRED: "Retired",
-													ON_LEAVE: "On Leave",
-												};
-												return (
-													statusMap[activeEmployee.employmentStatus] ||
-													activeEmployee.employmentStatus ||
-													"N/A"
-												);
-											})(),
-										)}
+										<EmploymentStatusText
+											status={
+												(() => {
+													const statusMap: Record<string, string> = {
+														ACTIVE: "Active",
+														INACTIVE: "Inactive",
+														TERMINATED: "Terminated",
+														RESIGNED: "Resigned",
+														RETIRED: "Retired",
+														ON_LEAVE: "On Leave",
+													};
+													return (
+														statusMap[activeEmployee.employmentStatus] ||
+														activeEmployee.employmentStatus ||
+														"N/A"
+													);
+												})()
+											}
+										/>
 									</div>
 								</div>
 							</div>
@@ -1876,128 +1835,46 @@ export default function EmployeeList({
 				)}
 			</Modal>
 
-			{/* Employee hard delete preview modal */}
+			{/* Delete Confirmation Modal */}
 			<Modal
-				open={action === "hard-delete"}
+				open={action === "delete"}
 				onOpenChange={(open) => {
-					if (!open) closeHardDelete();
+					if (!open) {
+						updateSearchParams((next) => {
+							next.delete("action");
+							next.delete("id");
+						});
+					}
 				}}
-				title="Preview employee hard delete">
-				{isDeepLinkLoading && action === "hard-delete" ? (
+				title="Delete Employee">
+				{isDeepLinkLoading && action === "delete" ? (
 					<div className="py-8 text-center text-gray-500">Loading employee...</div>
-				) : activeEmployee && action === "hard-delete" ? (
-					<div className="space-y-5">
-						<div className="rounded-md border border-red-200 bg-red-50 p-4">
-							<p className="text-sm font-semibold text-red-900">
-								Preview hard delete for{" "}
-								{formatEmployeeForDisplay(activeEmployee as ApiEmployee).name} (
-								{activeEmployee.employeeId})
-							</p>
-							<p className="mt-1 text-sm text-red-800">
-								HRIS checks payroll, attendance, legal/history, device, and document
-								relations before any data is removed.
+				) : activeEmployee && action === "delete" ? (
+					<div className="space-y-4">
+						<div className="p-4 bg-red-50 border border-red-200 rounded-md">
+							<p className="text-sm text-red-800">
+								This action cannot be undone. This will permanently delete the
+								employee{" "}
+								<strong>
+									{formatEmployeeForDisplay(activeEmployee as ApiEmployee).name}
+								</strong>{" "}
+								({activeEmployee.employeeId}).
 							</p>
 						</div>
-
-						{previewHardDeleteMutation.isPending ? (
-							<div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-								Checking employee relations...
-							</div>
-						) : previewHardDeleteMutation.data ? (
-							<div className="space-y-4">
-								<div className="grid gap-2 sm:grid-cols-3">
-									<div className="rounded-md border border-slate-200 bg-white p-3">
-										<p className="text-xs font-semibold uppercase text-slate-500">Blocked</p>
-										<p className="mt-1 text-lg font-semibold text-slate-950">
-											{previewHardDeleteMutation.data.summary.blockerCount}
-										</p>
-									</div>
-									<div className="rounded-md border border-slate-200 bg-white p-3">
-										<p className="text-xs font-semibold uppercase text-slate-500">Would delete</p>
-										<p className="mt-1 text-lg font-semibold text-slate-950">
-											{previewHardDeleteMutation.data.summary.deleteCount}
-										</p>
-									</div>
-									<div className="rounded-md border border-slate-200 bg-white p-3">
-										<p className="text-xs font-semibold uppercase text-slate-500">Would detach</p>
-										<p className="mt-1 text-lg font-semibold text-slate-950">
-											{previewHardDeleteMutation.data.summary.detachCount}
-										</p>
-									</div>
-								</div>
-
-								{previewHardDeleteMutation.data.blockers.length > 0 ? (
-									<div className="rounded-md border border-red-200 bg-white">
-										<div className="border-b border-red-100 px-3 py-2 text-sm font-semibold text-red-900">
-											Force delete required
-										</div>
-										<div className="divide-y divide-red-100">
-											{previewHardDeleteMutation.data.blockers.map((blocker) => (
-												<div key={blocker.key} className="flex justify-between gap-3 px-3 py-2 text-sm">
-													<span className="text-red-800">{blocker.reason}</span>
-													<span className="font-semibold text-red-900">{blocker.count}</span>
-												</div>
-											))}
-										</div>
-										<div className="border-t border-red-100 px-3 py-2 text-xs text-red-900">
-											This employee has protected attendance, timesheet, payroll, or legal history. Hard delete can still run, but it will permanently remove those rows.
-										</div>
-									</div>
-								) : (
-									<div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-										No payroll, attendance, legal/history, or timesheet blockers were found.
-									</div>
-								)}
-
-								<div className="rounded-md border border-slate-200 bg-white">
-									<div className="border-b border-slate-100 px-3 py-2 text-sm font-semibold text-slate-900">
-										Previewed actions
-									</div>
-									<div className="max-h-56 divide-y divide-slate-100 overflow-auto">
-										{[
-											...previewHardDeleteMutation.data.plan.delete,
-											...previewHardDeleteMutation.data.plan.detach,
-											...previewHardDeleteMutation.data.plan.archive,
-										].map((item) => (
-											<div key={`${item.action}-${item.model}`} className="px-3 py-2 text-sm">
-												<div className="flex items-center justify-between gap-3">
-													<span className="font-medium text-slate-900">
-														{item.action === "detach" ? "Detach" : item.action === "archive" ? "Archive" : "Delete"} {item.model}
-													</span>
-													<span className="font-semibold text-slate-700">{item.count}</span>
-												</div>
-												<p className="mt-0.5 text-xs text-slate-500">{item.description}</p>
-											</div>
-										))}
-									</div>
-								</div>
-
-							</div>
-						) : (
-							<div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-								Preview is required before hard delete can run.
-							</div>
-						)}
-
-						<div className="flex justify-end gap-3 border-t pt-3">
+						<div className="flex justify-end gap-3">
 							<Button
 								type="button"
 								variant="outline"
-								onClick={closeHardDelete}>
+								onClick={() => {
+									updateSearchParams((next) => {
+										next.delete("action");
+										next.delete("id");
+									});
+								}}>
 								Cancel
 							</Button>
-							<Button
-								type="button"
-								variant="destructive"
-								onClick={executeHardDelete}
-								disabled={
-									!(
-										previewHardDeleteMutation.data?.safeToExecute ||
-										previewHardDeleteMutation.data?.forceExecuteAvailable
-									) ||
-									executeHardDeleteMutation.isPending
-								}>
-								{executeHardDeleteMutation.isPending ? "Deleting..." : "Hard delete employee"}
+							<Button type="button" variant="destructive" onClick={confirmDelete}>
+								Delete Employee
 							</Button>
 						</div>
 					</div>

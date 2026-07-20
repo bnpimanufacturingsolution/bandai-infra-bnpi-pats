@@ -39,6 +39,7 @@ Status: INFERRED_FROM_EXISTING_PROJECT
 - Leave Balance: available and used leave amounts by type.
 - Leave Policy: rules for leave eligibility and use.
 - Benefit Type / Benefit Enrollment: employee benefits configuration and enrollment records.
+- Benefit schedule mode: enrollment/adjustment schedule type — `TIME_BOUND` (date range + total amount), `FIXED_INSTALLMENTS` (count + total amount), or `RECURRING` (per-period amount, optional end date). Installment rows and payroll apply are API-owned.
 
 ## Payroll And Billing
 

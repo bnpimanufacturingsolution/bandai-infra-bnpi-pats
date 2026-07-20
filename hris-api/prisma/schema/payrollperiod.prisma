@@ -27,6 +27,7 @@ model PayrollPeriod {
 
   notes               String?
   generationMetadata  Json?
+  payslipReleaseAttachmentUrl String?
   processedBy         String?   @db.ObjectId
   processedByEmployee Employee? @relation("PayrollPeriodProcessedBy", fields: [processedBy], references: [id])
   processedAt         DateTime?

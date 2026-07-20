@@ -13,6 +13,9 @@ import { transformFormDataToObject } from "../../helper/transformObject";
 import { validateQueryParams } from "../../helper/validation-helper";
 import { CreateDocumentTypeSchema, UpdateDocumentTypeSchema } from "../../zod/documentType.zod";
 import { applyInferredDocumentFieldValidation } from "../../helper/document-field-validation.helper";
+import { logActivity } from "../../utils/activityLogger";
+import { logAudit } from "../../utils/auditLogger";
+import { config } from "../../config/constant";
 
 const normalizeRequestData = (req: Request) => {
 	const contentType = req.get("Content-Type") || "";
@@ -61,6 +64,36 @@ export const controller = (prisma: PrismaClient) => {
 			const created = await prisma.documentType.create({
 				data: validation.data as Prisma.DocumentTypeCreateInput,
 			});
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.DOCUMENT_TYPE.ACTIONS.CREATE_DOCUMENT_TYPE,
+				description: `${config.ACTIVITY_LOG.DOCUMENT_TYPE.DESCRIPTIONS.DOCUMENT_TYPE_CREATED}: ${created.name || created.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.DOCUMENT_TYPE.PAGES.DOCUMENT_TYPE_CREATION,
+				},
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.CREATE,
+				resource: config.AUDIT_LOG.RESOURCES.DOCUMENT_TYPE,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.DOCUMENT_TYPE,
+				entityId: created.id,
+				changesBefore: null,
+				changesAfter: {
+					id: created.id,
+					name: created.name,
+					code: created.code,
+					category: created.category,
+					createdAt: created.createdAt,
+					updatedAt: created.updatedAt,
+				},
+				description: `${config.AUDIT_LOG.DOCUMENT_TYPE.DESCRIPTIONS.DOCUMENT_TYPE_CREATED}: ${created.name || created.id}`,
+			});
+
 			res.status(201).json(
 				buildSuccessResponse("Document type created successfully", created, 201),
 			);
@@ -152,6 +185,16 @@ export const controller = (prisma: PrismaClient) => {
 				applyInferredDocumentFieldValidation(documentType as any),
 			);
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.DOCUMENT_TYPE.ACTIONS.GET_ALL_DOCUMENT_TYPE,
+				description: config.ACTIVITY_LOG.DOCUMENT_TYPE.DESCRIPTIONS.DOCUMENT_TYPES_RETRIEVED,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.DOCUMENT_TYPE.PAGES.DOCUMENT_TYPE_LIST,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Document types retrieved successfully",
@@ -200,6 +243,16 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const documentType = applyInferredDocumentFieldValidation(documentTypeResult as any);
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.DOCUMENT_TYPE.ACTIONS.GET_DOCUMENT_TYPE,
+				description: `${config.ACTIVITY_LOG.DOCUMENT_TYPE.DESCRIPTIONS.DOCUMENT_TYPE_RETRIEVED}: ${documentType.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.DOCUMENT_TYPE.PAGES.DOCUMENT_TYPE_DETAILS,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse("Document type retrieved successfully", documentType, 200),
 			);
@@ -238,6 +291,29 @@ export const controller = (prisma: PrismaClient) => {
 				where: { id },
 				data: validation.data as Prisma.DocumentTypeUpdateInput,
 			});
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.DOCUMENT_TYPE.ACTIONS.UPDATE_DOCUMENT_TYPE,
+				description: `${config.ACTIVITY_LOG.DOCUMENT_TYPE.DESCRIPTIONS.DOCUMENT_TYPE_UPDATED}: ${updated.name || updated.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.DOCUMENT_TYPE.PAGES.DOCUMENT_TYPE_UPDATE,
+				},
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.DOCUMENT_TYPE,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.DOCUMENT_TYPE,
+				entityId: updated.id,
+				changesBefore: existing,
+				changesAfter: updated,
+				description: `${config.AUDIT_LOG.DOCUMENT_TYPE.DESCRIPTIONS.DOCUMENT_TYPE_UPDATED}: ${updated.name || updated.id}`,
+			});
+
 			res.status(200).json(
 				buildSuccessResponse("Document type updated successfully", updated, 200),
 			);
@@ -261,6 +337,28 @@ export const controller = (prisma: PrismaClient) => {
 			await prisma.documentType.update({
 				where: { id },
 				data: { isDeleted: true, isActive: false },
+			});
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.DOCUMENT_TYPE.ACTIONS.DELETE_DOCUMENT_TYPE,
+				description: `${config.ACTIVITY_LOG.DOCUMENT_TYPE.DESCRIPTIONS.DOCUMENT_TYPE_DELETED}: ${existing.name || id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.DOCUMENT_TYPE.PAGES.DOCUMENT_TYPE_DELETION,
+				},
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.DELETE,
+				resource: config.AUDIT_LOG.RESOURCES.DOCUMENT_TYPE,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.DOCUMENT_TYPE,
+				entityId: id,
+				changesBefore: existing,
+				changesAfter: null,
+				description: `${config.AUDIT_LOG.DOCUMENT_TYPE.DESCRIPTIONS.DOCUMENT_TYPE_DELETED}: ${existing.name || id}`,
 			});
 
 			res.status(200).json(

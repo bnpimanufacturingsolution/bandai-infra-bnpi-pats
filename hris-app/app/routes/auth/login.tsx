@@ -104,31 +104,16 @@ export default function LoginPage() {
 
 	// If authenticated, show loading while the effect handles redirection
 	if (isAuthenticated && user) {
-		return (
-			<LoadingScreen
-				message="Redirecting to dashboard"
-				subtitle="Finalizing your access and sending you to the right workspace"
-			/>
-		);
+		return <LoadingScreen message="Redirecting" subtitle="Finalizing access" />;
 	}
 
 	// Show branded loading while checking authentication
 	if (isLoading) {
-		return (
-			<LoadingScreen
-				message="Checking session"
-				subtitle="Verifying your Bandai HR access before sign in"
-			/>
-		);
+		return <LoadingScreen message="Signing in" subtitle="Checking session" />;
 	}
 
 	if (isProvisioningLoading) {
-		return (
-			<LoadingScreen
-				message="Checking system setup"
-				subtitle="Determining whether this workspace still needs bootstrap or guided provisioning"
-			/>
-		);
+		return <LoadingScreen message="Setting up" subtitle="Checking system setup" />;
 	}
 
 	if (

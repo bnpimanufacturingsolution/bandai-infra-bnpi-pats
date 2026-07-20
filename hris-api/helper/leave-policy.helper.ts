@@ -288,7 +288,12 @@ export const validateLeaveRequestPolicy = (params: {
 		);
 	}
 
-	if (startDate && policy.minAdvanceNoticeDays > 0) {
+	const normalizedLeaveType = normalizeLeaveType(leaveType);
+	if (
+		normalizedLeaveType !== "SICK" &&
+		startDate &&
+		policy.minAdvanceNoticeDays > 0
+	) {
 		const today = startOfDay(now || new Date());
 		const requestStart = startOfDay(startDate);
 		const diffDays = Math.floor((requestStart.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));

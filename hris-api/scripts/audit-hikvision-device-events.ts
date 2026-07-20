@@ -7,7 +7,6 @@ import {
 	extractHikvisionEventData,
 	getHikvisionClockSkewSecondsFromSystemTime,
 	getHikvisionObservedClockSkewSeconds,
-	isHikvisionBiometricVerificationEvent,
 	normalizeHikvisionAcsEventListTimes,
 	normalizeHikvisionDeviceEventSource,
 	parseHikvisionBodyPayload,
@@ -37,17 +36,8 @@ const parseArgs = () => {
 			options[normalizedKey] = value;
 		}
 	}
-	const envOptionMap: Record<string, string> = {
-		DEVICE_ID: "deviceId",
-		HIKVISION_DEVICE_ID: "deviceId",
-		HIKVISION_DEVICE_NAME: "deviceName",
-		HIKVISION_DEVICE_ADDRESS: "deviceAddress",
-		HIKVISION_DEVICE_PORT: "devicePort",
-	};
-	for (const [envName, optionName] of Object.entries(envOptionMap)) {
-		if (!options[optionName] && process.env[envName]) {
-			options[optionName] = String(process.env[envName]);
-		}
+	if (!options.deviceId && process.env.DEVICE_ID) {
+		options.deviceId = process.env.DEVICE_ID;
 	}
 	return options;
 };
@@ -108,31 +98,6 @@ const getSerialNoFromPayload = (payload: any) =>
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const getPositiveIntegerOption = (
-	options: Record<string, string | boolean>,
-	keys: string[],
-	fallback = 0,
-) => {
-	for (const key of keys) {
-		const value = Number(options[key]);
-		if (Number.isFinite(value) && value > 0) return Math.floor(value);
-	}
-	return fallback;
-};
-
-const resolveCallbackUrl = (options: Record<string, string | boolean>) => {
-	const configured = String(
-		options["callback-url"] ||
-			process.env.HIKVISION_CALLBACK_URL ||
-			"",
-	).trim();
-	if (configured) return configured;
-	if (process.env.KUBERNETES_SERVICE_HOST) {
-		return "http://hris-api:3001/api/hikvision/callback";
-	}
-	return "";
-};
-
 const callCallback = async (payload: Record<string, any>) => {
 	const ctrl = callbackController(prisma);
 	let statusCode = 200;
@@ -157,129 +122,20 @@ const callCallback = async (payload: Record<string, any>) => {
 	return { statusCode, body: jsonBody };
 };
 
-const postCallback = async (
-	payload: Record<string, any>,
-	options: Record<string, string | boolean>,
-) => {
-	const callbackUrl = resolveCallbackUrl(options);
-	if (!callbackUrl) return callCallback(payload);
-
-	const response = await fetch(callbackUrl, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify(payload),
-	});
-	let body: any = null;
-	try {
-		body = await response.json();
-	} catch {
-		body = await response.text();
-	}
-	return { statusCode: response.status, body };
-};
-
-const isHikvisionDevice = (device: any) => {
-	const config = (device?.config || {}) as Record<string, any>;
-	const haystack = [
-		device?.name,
-		device?.source,
-		device?.vendor,
-		config.vendor,
-		config.source,
-		config.model,
-	]
-		.map((value) => String(value || "").toLowerCase())
-		.join(" ");
-	return haystack.includes("hikvision") || haystack.includes("vendor/hikvision-linux");
-};
-
-const resolveAuditDevice = async (options: Record<string, string | boolean>) => {
+const runAudit = async (options: Record<string, string | boolean>) => {
 	const deviceId = String(options.deviceId || "").trim();
-	const deviceName = String(options.deviceName || options["device-name"] || "").trim();
-	const deviceAddress = String(
-		options.deviceAddress || options["device-address"] || "",
-	).trim();
-	const devicePort = Number(options.devicePort || options["device-port"] || 0);
-
-	const select = {
-		id: true,
-		organizationId: true,
-		name: true,
-		address: true,
-		port: true,
-		protocol: true,
-		config: true,
-	};
-	const candidates = [
-		deviceId ? { id: deviceId, isDeleted: false } : null,
-		deviceName && deviceAddress && devicePort
-			? { name: deviceName, address: deviceAddress, port: devicePort, isDeleted: false }
-			: null,
-		deviceName && deviceAddress
-			? { name: deviceName, address: deviceAddress, isDeleted: false }
-			: null,
-		deviceAddress && devicePort
-			? { address: deviceAddress, port: devicePort, isDeleted: false }
-			: null,
-		deviceName ? { name: deviceName, isDeleted: false } : null,
-	].filter(Boolean) as any[];
-
-	if (candidates.length === 0) {
-		throw new Error(
-			"Missing device selector: provide --deviceId=<id>, --deviceName=<name>, or --deviceAddress=<address>",
-		);
+	if (!deviceId) {
+		throw new Error("Missing --deviceId=<id>");
 	}
 
-	for (const where of candidates) {
-		const device = await prisma.device.findFirst({ where, select });
-		if (device) return device;
-	}
-
-	throw new Error(
-		`Device not found for selector: ${JSON.stringify({
-			deviceId: deviceId || undefined,
-			deviceName: deviceName || undefined,
-			deviceAddress: deviceAddress || undefined,
-			devicePort: devicePort || undefined,
-		})}`,
-	);
-};
-
-const resolveAuditDevices = async (options: Record<string, string | boolean>) => {
-	const allHikvision = options["all-hikvision"] === true || options.allHikvision === true;
-	if (!allHikvision) return [await resolveAuditDevice(options)];
-
-	const devices = await (prisma as any).device.findMany({
-		where: { isDeleted: false },
-		select: {
-			id: true,
-			organizationId: true,
-			name: true,
-			address: true,
-			port: true,
-			protocol: true,
-			config: true,
-		},
-		orderBy: { name: "asc" },
-	});
-	const hikvisionDevices = devices.filter(isHikvisionDevice);
-	if (hikvisionDevices.length === 0) {
-		throw new Error("No configured Hikvision devices found in HRIS device config.");
-	}
-	return hikvisionDevices;
-};
-
-const runAuditForDevice = async (
-	options: Record<string, string | boolean>,
-	device: Awaited<ReturnType<typeof resolveAuditDevice>>,
-) => {
 	const apply = options.apply === true;
-	const targetUnsaved = getPositiveIntegerOption(options, [
-		"target-unsaved",
-		"targetUnsaved",
-		"target",
-	]);
-	const deviceId = device.id;
+	const device = await prisma.device.findFirst({
+		where: { id: deviceId, isDeleted: false },
+		select: { id: true, organizationId: true, name: true, address: true, port: true, config: true },
+	});
+	if (!device) {
+		throw new Error(`Device not found: ${deviceId}`);
+	}
 
 	if (!options.organizationId) {
 		options.organizationId = device.organizationId;
@@ -288,8 +144,6 @@ const runAuditForDevice = async (
 	const livePayload = await loadLivePayload(options, deviceId);
 	const rawLiveEvents = getAcsEvents(livePayload);
 	const knownSkewSeconds = Number((device.config as any)?.hikvisionClockSkewSeconds || 0);
-	const allowClockSkewCorrection =
-		(device.config as any)?.hikvisionAllowClockSkewCorrection === true;
 	let deviceClockSkewSeconds = 0;
 	try {
 		const timePayload = await hikvisionFetch(hikvisionEndpoint.system.time, {
@@ -303,10 +157,8 @@ const runAuditForDevice = async (
 		deviceClockSkewSeconds = 0;
 	}
 	const observedSkewSeconds = getHikvisionObservedClockSkewSeconds(rawLiveEvents);
-	const skewSeconds = allowClockSkewCorrection
-		? deviceClockSkewSeconds || knownSkewSeconds || observedSkewSeconds
-		: 0;
-	if (allowClockSkewCorrection && skewSeconds > 0 && skewSeconds !== knownSkewSeconds) {
+	const skewSeconds = deviceClockSkewSeconds || knownSkewSeconds || observedSkewSeconds;
+	if (skewSeconds > 0 && skewSeconds !== knownSkewSeconds) {
 		await (prisma as any).device.update({
 			where: { id: device.id },
 			data: {
@@ -326,17 +178,9 @@ const runAuditForDevice = async (
 		rawLiveEvents,
 		new Date(),
 		skewSeconds,
-		{
-			allowStoredSkew: allowClockSkewCorrection,
-			allowAutoAdjust: allowClockSkewCorrection,
-		},
 	);
 	const normalized = liveEvents.map((item: any) => {
-		const payload = parseHikvisionBodyPayload({
-			deviceId,
-			deviceIP: device.address,
-			AcsEventInfo: item,
-		});
+		const payload = parseHikvisionBodyPayload({ deviceId, AcsEventInfo: item });
 		const event = extractHikvisionEventData(payload);
 		const employeeNo = String(event.employeeNo || "").trim();
 		const eventTime = parseHikvisionEventTime(event.time);
@@ -426,32 +270,17 @@ const runAuditForDevice = async (
 		return serialMatch && serialMatch.dedupeKey !== item.dedupeKey;
 	});
 	const missingWithEmployeeNo = missing.filter((item) => item.employeeNo);
-	const missingVisibleBiometric = missing.filter(
-		(item) => !item.employeeNo && isHikvisionBiometricVerificationEvent(item.event),
-	);
-	const missingEmployeeNo = missing.filter(
-		(item) => !item.employeeNo && !isHikvisionBiometricVerificationEvent(item.event),
-	);
+	const missingEmployeeNo = missing.filter((item) => !item.employeeNo);
 
 	const applied: any[] = [];
 	if (apply) {
-		const applyCandidates = [
-			...missingWithEmployeeNo,
-			...missingVisibleBiometric,
-			...needsClockNormalization,
-		];
-		for (const item of (targetUnsaved > 0 ? applyCandidates.slice(0, targetUnsaved) : applyCandidates)) {
-			const reason = missingWithEmployeeNo.includes(item)
-				? "missing"
-				: missingVisibleBiometric.includes(item)
-					? "visible_biometric_missing_employee_no"
-					: "clock_normalization";
+		for (const item of [...missingWithEmployeeNo, ...needsClockNormalization]) {
 			applied.push({
 				dedupeKey: item.dedupeKey,
 				employeeNo: item.employeeNo,
 				eventTime: item.eventTime.toISOString(),
-				reason,
-				result: await postCallback(item.payload, options),
+				reason: missingWithEmployeeNo.includes(item) ? "missing" : "clock_normalization",
+				result: await callCallback(item.payload),
 			});
 		}
 	}
@@ -463,21 +292,12 @@ const runAuditForDevice = async (
 	const report = {
 		mode: apply ? "apply" : "dry-run",
 		checkedAt: new Date().toISOString(),
-		target: {
-			unsaved: targetUnsaved || null,
-			appliesAtMostTarget: apply && targetUnsaved > 0,
-			note:
-				targetUnsaved > 0
-					? "This checks the latest ACS page from the device and compares fingerprints against HRIS; Hikvision does not filter by HRIS-unsaved server-side."
-					: null,
-		},
 		device: {
 			id: device.id,
 			organizationId: device.organizationId,
 			name: device.name,
 			address: device.address,
 			port: device.port,
-			protocol: device.protocol,
 			hikvisionClockSkewSeconds: Number(
 				((device as any).config as any)?.hikvisionClockSkewSeconds || 0,
 			),
@@ -494,7 +314,6 @@ const runAuditForDevice = async (
 		gap: {
 			missing: missing.length,
 			missingWithEmployeeNo: missingWithEmployeeNo.length,
-			missingVisibleBiometric: missingVisibleBiometric.length,
 			missingEmployeeNo: missingEmployeeNo.length,
 			needsClockNormalization: needsClockNormalization.length,
 			sample: missing.slice(0, 10).map((item) => ({
@@ -514,37 +333,6 @@ const runAuditForDevice = async (
 	return report;
 };
 
-const runAudit = async (options: Record<string, string | boolean>) => {
-	const devices = await resolveAuditDevices(options);
-	if (devices.length === 1) {
-		return runAuditForDevice(options, devices[0]);
-	}
-
-	const reports = [];
-	for (const device of devices) {
-		reports.push(await runAuditForDevice({ ...options, organizationId: device.organizationId }, device));
-	}
-	const totals = reports.reduce(
-		(acc, report) => {
-			acc.live += report.live.total;
-			acc.missing += report.gap.missing;
-			acc.missingWithEmployeeNo += report.gap.missingWithEmployeeNo;
-			acc.applied += report.applied.length;
-			return acc;
-		},
-		{ live: 0, missing: 0, missingWithEmployeeNo: 0, applied: 0 },
-	);
-
-	return {
-		mode: options.apply === true ? "apply" : "dry-run",
-		checkedAt: new Date().toISOString(),
-		scope: "all-configured-hikvision-devices",
-		deviceCount: reports.length,
-		totals,
-		reports,
-	};
-};
-
 const main = async () => {
 	const options = parseArgs();
 	const watch = options.watch === true;
@@ -557,23 +345,11 @@ const main = async () => {
 	do {
 		loop += 1;
 		const report = await runAudit(options);
-		const liveTotal =
-			"live" in report
-				? report.live.total
-				: "totals" in report
-					? report.totals.live
-					: 0;
-		const missingWithEmployeeNo =
-			"gap" in report
-				? report.gap.missingWithEmployeeNo
-				: "totals" in report
-					? report.totals.missingWithEmployeeNo
-					: 0;
-		sawLiveEvents = sawLiveEvents || liveTotal > 0;
+		sawLiveEvents = sawLiveEvents || report.live.total > 0;
 		console.log(JSON.stringify({ loop, ...report }, null, 2));
 
 		if (!watch) break;
-		if (untilClean && sawLiveEvents && missingWithEmployeeNo === 0) break;
+		if (untilClean && sawLiveEvents && report.gap.missingWithEmployeeNo === 0) break;
 		if (maxLoops > 0 && loop >= maxLoops) break;
 
 		await wait(intervalSeconds * 1000);

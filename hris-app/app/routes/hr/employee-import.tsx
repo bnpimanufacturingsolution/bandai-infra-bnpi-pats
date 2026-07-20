@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/atoms/Card";
 import { Button } from "~/components/atoms/Button";
@@ -12,7 +12,7 @@ import {
 	ArrowLeft,
 } from "lucide-react";
 import { Badge } from "~/components/atoms/Badge";
-import { useAuth } from "~/context/AuthContext";
+import { useAuth } from "~/lib/hooks/use-auth";
 type ImportResult = {
 	success: boolean;
 	employeeId: string;
@@ -24,7 +24,7 @@ type ImportResult = {
 
 export default function EmployeeImport() {
 	const navigate = useNavigate();
-	const { token } = useAuth();
+	const { user } = useAuth();
 	const [file, setFile] = useState<File | null>(null);
 	const [isProcessing, setIsProcessing] = useState(false);
 	const [importResults, setImportResults] = useState<ImportResult[] | null>(null);
@@ -67,8 +67,7 @@ export default function EmployeeImport() {
 			const response = await fetch("/api/employee/import", {
 				method: "POST",
 				headers: {
-					Authorization: `Bearer ${token}`,
-					// Content-Type is auto-set by browser for FormData
+					Authorization: `Bearer ${user?.token ?? ""}`,
 				},
 				body: formData,
 			});

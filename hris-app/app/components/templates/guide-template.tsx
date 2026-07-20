@@ -19,7 +19,7 @@ export function GuideLayout({ title, sections, currentPage, onPageChange }: Guid
 
 	const tocItems = useMemo<TocItem[]>(() => {
 		return currentPage.blocks
-			.filter((block): block is Block => block.type === "heading")
+			.filter((block): block is Block & { id: string } => block.type === "heading" && !!block.id)
 			.map((block) => ({
 				id: block.id,
 				text: block.content,

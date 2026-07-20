@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 
 interface ICelebrationsController {
 	getBirthdays(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getPublicBirthdays(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: ICelebrationsController): Router => {
@@ -53,6 +54,7 @@ export const router = (route: Router, controller: ICelebrationsController): Rout
 	 *         description: Internal server error
 	 */
 	routes.get("/birthdays", controller.getBirthdays);
+	routes.get("/public/birthdays", controller.getPublicBirthdays);
 
 	route.use(path, routes);
 	return route;

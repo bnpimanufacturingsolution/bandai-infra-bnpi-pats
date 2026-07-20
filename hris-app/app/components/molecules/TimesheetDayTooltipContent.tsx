@@ -2,6 +2,9 @@ import { Edit } from "lucide-react";
 import { format12HourTime, formatDuration } from "~/lib/utils";
 import { isVirtualAbsentLikeRecord } from "~/lib/utils/attendance-status";
 import { formatNightWindow } from "~/lib/utils/night-shift";
+import { readOvertimeCandidateFromMetadata } from "~/lib/utils/overtime-candidate";
+import type { DayPayrollCorrectionMarker } from "~/lib/utils/payroll-correction-day-markers";
+import { formatMinutesShort } from "~/lib/utils/payroll-correction-day-markers";
 
 export interface TimesheetTooltipDayData {
 	date: string;
@@ -49,6 +52,11 @@ export interface TimesheetTooltipDayData {
 		rawEarlyOutMinutes?: number | null;
 		graceEarlyOutMinutes?: number | null;
 		withinGrace?: boolean | null;
+		overtimeCandidate?: boolean;
+		pendingOvertimeMinutes?: number;
+		pendingOvertimeHours?: string;
+		overtimeApprovalStatus?: "NONE" | "REQUESTED" | "APPROVED" | "REJECTED";
+		overtimeRequestId?: string | null;
 	};
 	businessDate?: string | null;
 	nightShift?: {
@@ -66,6 +74,8 @@ interface TimesheetDayTooltipContentProps {
 	day: TimesheetTooltipDayData;
 	modified?: boolean;
 	onEdit?: () => void;
+	/** Requested / approved payroll correction deltas for this day (locked timesheets) */
+	payrollCorrection?: DayPayrollCorrectionMarker | null;
 }
 
 const parseHours = (timeStr?: string | null): number => {
@@ -174,6 +184,7 @@ export function TimesheetDayTooltipContent({
 	day,
 	modified = false,
 	onEdit,
+	payrollCorrection = null,
 }: TimesheetDayTooltipContentProps) {
 	const hours = parseHours(day.hoursWorked || "0:00");
 	const hasRecordedTime = Boolean(day.timeIn) || Boolean(day.timeOut) || hours > 0;
@@ -224,10 +235,24 @@ export function TimesheetDayTooltipContent({
 	const employeeNote = String(day.employeeNotes || "").trim();
 	const hasApproverNote = approverNote.length > 0;
 	const hasEmployeeNote = employeeNote.length > 0;
+	const overtimeCandidate = readOvertimeCandidateFromMetadata(day.metadata);
 	const approvalReasonLabel =
 		day.approvalStatus === "APPROVED" && parseDurationToMinutes(day.overtimeHours || "0:00") > 0
 			? "Approval reason"
 			: "Approver note";
+	const overtimeCandidateStatusLabel = (() => {
+		if (!overtimeCandidate.isCandidate) return null;
+		switch (overtimeCandidate.overtimeApprovalStatus) {
+			case "REQUESTED":
+				return "Pending manager approval";
+			case "APPROVED":
+				return "Approved for payroll";
+			case "REJECTED":
+				return "Rejected — file again";
+			default:
+				return "File overtime request before submit";
+		}
+	})();
 
 	return (
 		<div className="min-w-[260px] max-w-[320px] space-y-3">
@@ -336,6 +361,19 @@ export function TimesheetDayTooltipContent({
 							</p>
 						</div>
 					</div>
+					{overtimeCandidate.isCandidate ? (
+						<div className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm">
+							<p className="text-xs font-semibold uppercase tracking-wide text-orange-800">
+								Overtime candidate
+							</p>
+							<p className="mt-0.5 font-semibold text-orange-900">
+								{overtimeCandidate.pendingOvertimeHours} detected
+							</p>
+							{overtimeCandidateStatusLabel ? (
+								<p className="mt-0.5 text-orange-800">{overtimeCandidateStatusLabel}</p>
+							) : null}
+						</div>
+					) : null}
 					{hasExceptionDetail ? (
 						<div className="border-t border-dashed pt-1.5">
 							<p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -446,6 +484,47 @@ export function TimesheetDayTooltipContent({
 							</span>
 						</div>
 					</div>
+				</div>
+			) : null}
+			{payrollCorrection && payrollCorrection.deltas.length > 0 ? (
+				<div
+					className="rounded-md border border-neutral-200 bg-neutral-50 px-2.5 py-2 space-y-1.5"
+					data-testid="payroll-correction-tooltip">
+					<p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-700">
+						Payroll correction
+					</p>
+					<p className="text-xs text-neutral-600">{payrollCorrection.statusLabel}</p>
+					<div className="space-y-1">
+						{payrollCorrection.deltas.map((delta, index) => {
+							const sign = delta.deltaMinutes > 0 ? "+" : "";
+							return (
+								<div
+									key={`${delta.correctionId}-${delta.hoursType}-${index}`}
+									className="text-xs text-neutral-800">
+									<div className="flex justify-between gap-2">
+										<span className="font-medium">{delta.hoursType}</span>
+										<span className="font-semibold tabular-nums">
+											{sign}
+											{formatMinutesShort(delta.deltaMinutes)}
+										</span>
+									</div>
+									<p className="text-neutral-500 tabular-nums">
+										Paid {formatMinutesShort(delta.beforeMinutes)} → proposed{" "}
+										{formatMinutesShort(delta.afterMinutes)}
+									</p>
+								</div>
+							);
+						})}
+					</div>
+					{payrollCorrection.deltas[0]?.reason ? (
+						<p className="text-[11px] text-neutral-500 line-clamp-2">
+							{payrollCorrection.deltas[0].reason}
+						</p>
+					) : null}
+					<p className="text-[10px] text-neutral-500">
+						Paid day totals stay as processed; deltas apply on a later payslip after
+						approval.
+					</p>
 				</div>
 			) : null}
 			{modified && (

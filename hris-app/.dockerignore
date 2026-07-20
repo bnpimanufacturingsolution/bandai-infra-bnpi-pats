@@ -17,8 +17,6 @@ playwright-report
 test-results
 *.log
 *.tmp
-.env
-.env.*
 AGENTS.md
 DOCUMENTATION_INDEX.md
 .impeccable.md

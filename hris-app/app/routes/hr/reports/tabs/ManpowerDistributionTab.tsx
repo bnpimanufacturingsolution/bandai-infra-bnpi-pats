@@ -11,6 +11,13 @@ import {
 	type ManpowerEmployeeListLinkInput,
 } from "~/lib/utils/manpower-distribution-links";
 import {
+	buildManpowerDatabank,
+	formatEmploymentTypeLabel,
+	getActiveManpowerEmployees,
+	type ManpowerDatabankEmploymentTypeRow,
+	type ManpowerDatabankPositionRow,
+} from "~/lib/utils/manpower-databank";
+import {
 	buildReportFileName,
 	exportReport,
 	type ReportExportColumn,
@@ -20,6 +27,7 @@ import reportsService from "~/services/reports.service";
 import type { Employee } from "~/services/employees.service";
 import { ReportExportDialog } from "../components/ReportExportDialog";
 import { ReportTable } from "../components/ReportTable";
+import { ManpowerDatabankSection } from "./ManpowerDatabankSection";
 
 type GenderRow = {
 	department: string;
@@ -171,12 +179,19 @@ export function ManpowerDistributionTab() {
 		staleTime: 60 * 60 * 1000,
 	});
 
-	const employees = useMemo(
-		() =>
-			getEmployeesFromResponse(employeesData).filter((employee) =>
-				ACTIVE_EMPLOYEE_STATUSES.has(employee.employmentStatus),
-			),
+	const rosterEmployees = useMemo(
+		() => getEmployeesFromResponse(employeesData),
 		[employeesData],
+	);
+
+	const employees = useMemo(
+		() => getActiveManpowerEmployees(rosterEmployees),
+		[rosterEmployees],
+	);
+
+	const databank = useMemo(
+		() => buildManpowerDatabank(rosterEmployees),
+		[rosterEmployees],
 	);
 
 	const distribution = useMemo(() => {
@@ -335,6 +350,27 @@ const totalManpowerExportColumns: ReportExportColumn<TotalManpowerRow>[] = [
 	{ header: "Headcount", accessor: "headcount", align: "right", valueType: "number" },
 	{ header: "Share", accessor: "share", align: "right" },
 ];
+
+const positionExportColumns: ReportExportColumn<ManpowerDatabankPositionRow>[] = [
+	{ header: "Position", accessor: "position" },
+	{ header: "Headcount", accessor: "headcount", align: "right", valueType: "number" },
+	{ header: "Direct", accessor: "direct", align: "right", valueType: "number" },
+	{ header: "Agency", accessor: "agency", align: "right", valueType: "number" },
+	{ header: "Departments", accessor: "departments", align: "right", valueType: "number" },
+	{ header: "Sections", accessor: "sections", align: "right", valueType: "number" },
+	{ header: "Employment Type Mix", accessor: "employmentTypeMix" },
+];
+
+const employmentTypeExportColumns: ReportExportColumn<ManpowerDatabankEmploymentTypeRow>[] = [
+	{
+		header: "Employment Type",
+		accessor: (row) => formatEmploymentTypeLabel(row.employmentType),
+	},
+	{ header: "Headcount", accessor: "headcount", align: "right", valueType: "number" },
+	{ header: "Direct", accessor: "direct", align: "right", valueType: "number" },
+	{ header: "Agency", accessor: "agency", align: "right", valueType: "number" },
+	{ header: "Positions", accessor: "positions", align: "right", valueType: "number" },
+];
 	const exportReferenceNotes = [
 		{ label: "Report basis", value: "Active employees in HRIS" },
 		reference?.directAgencySnapshot
@@ -352,7 +388,12 @@ const totalManpowerExportColumns: ReportExportColumn<TotalManpowerRow>[] = [
 	].filter(Boolean) as Array<{ label: string; value: string }>;
 
 	const openExportModal = () => {
-		if (!distribution.genderRows.length && !distribution.agencyRows.length) {
+		if (
+			!distribution.genderRows.length &&
+			!distribution.agencyRows.length &&
+			!databank.positionRows.length &&
+			!databank.employmentTypeRows.length
+		) {
 			toast.error("No manpower distribution rows available to export.");
 			return;
 		}
@@ -417,6 +458,28 @@ const totalManpowerExportColumns: ReportExportColumn<TotalManpowerRow>[] = [
 						rows: distribution.totalManpowerRows,
 						columns: totalManpowerExportColumns,
 						summaryRows: [{ label: "Total Manpower", value: distribution.total }],
+					},
+					{
+						name: "Position Summary",
+						title: "Position Summary",
+						rows: databank.positionRows,
+						columns: positionExportColumns,
+						summaryRows: [
+							{ label: "Position Rows", value: databank.positionRows.length },
+							{ label: "Total Headcount", value: distribution.total },
+						],
+						emptyStateMessage: "No position summary rows found",
+					},
+					{
+						name: "Employment Type Summary",
+						title: "Employment Type Summary",
+						rows: databank.employmentTypeRows,
+						columns: employmentTypeExportColumns,
+						summaryRows: [
+							{ label: "Employment Type Rows", value: databank.employmentTypeRows.length },
+							{ label: "Total Headcount", value: distribution.total },
+						],
+						emptyStateMessage: "No employment type summary rows found",
 					},
 				],
 			},
@@ -599,7 +662,7 @@ const totalManpowerExportColumns: ReportExportColumn<TotalManpowerRow>[] = [
 										render: (row) => (
 											<EmployeeDrillLink
 												count={row.headcount}
-												input={{ workforceSource: "AGENCY", agencyName: row.agency }}>
+												input={{ workforceSource: "AGENCY", agency: row.agency }}>
 												{row.agency}
 											</EmployeeDrillLink>
 										),
@@ -611,7 +674,7 @@ const totalManpowerExportColumns: ReportExportColumn<TotalManpowerRow>[] = [
 										render: (row) => (
 											<EmployeeDrillLink
 												count={row.headcount}
-												input={{ workforceSource: "AGENCY", agencyName: row.agency }}>
+												input={{ workforceSource: "AGENCY", agency: row.agency }}>
 												{formatNumber(row.headcount)}
 											</EmployeeDrillLink>
 										),
@@ -623,7 +686,7 @@ const totalManpowerExportColumns: ReportExportColumn<TotalManpowerRow>[] = [
 										render: (row) => (
 											<EmployeeDrillLink
 												count={row.female}
-												input={{ workforceSource: "AGENCY", agencyName: row.agency, gender: "Female" }}>
+												input={{ workforceSource: "AGENCY", agency: row.agency, gender: "Female" }}>
 												{formatNumber(row.female)}
 											</EmployeeDrillLink>
 										),
@@ -635,7 +698,7 @@ const totalManpowerExportColumns: ReportExportColumn<TotalManpowerRow>[] = [
 										render: (row) => (
 											<EmployeeDrillLink
 												count={row.male}
-												input={{ workforceSource: "AGENCY", agencyName: row.agency, gender: "Male" }}>
+												input={{ workforceSource: "AGENCY", agency: row.agency, gender: "Male" }}>
 												{formatNumber(row.male)}
 											</EmployeeDrillLink>
 										),
@@ -723,6 +786,11 @@ const totalManpowerExportColumns: ReportExportColumn<TotalManpowerRow>[] = [
 								emptyMessage="No direct/agency headcount rows found"
 							/>
 						</section>
+
+						<ManpowerDatabankSection
+							positionRows={databank.positionRows}
+							employmentTypeRows={databank.employmentTypeRows}
+						/>
 
 						<section className="space-y-3">
 							<h3 className="text-sm font-semibold text-neutral-900">Total Manpower</h3>

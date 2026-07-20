@@ -1,155 +1,102 @@
 import React from "react";
 
+const BANDAI_LOGO_URL =
+	"https://res.cloudinary.com/dyal0wstg/image/upload/v1759107126/Bandai_Ni_Bryan_1_1_ruj2ty.webp";
+
 interface LoadingScreenProps {
+	/** Short status line shown under the loader. Prefer 1–4 words. */
 	message?: string;
+	/** Screen-reader only context; not shown visually. */
 	subtitle?: string;
 	variant?: "full" | "minimal";
+	/** Optional logo override; defaults to login Bandai mark. */
+	logoUrl?: string;
 }
 
-const resolvePhaseLabel = (message?: string): string => {
-	const normalized = (message || "").toLowerCase();
-
-	if (normalized.includes("redirect")) return "Route handoff";
-	if (normalized.includes("workspace")) return "Workspace load";
-	if (normalized.includes("profile")) return "Profile sync";
-	if (normalized.includes("permission")) return "Permission gate";
-	if (normalized.includes("session")) return "Session validation";
-
-	return "Authenticating";
-};
-
-const ProgressRing = ({ compact = false }: { compact?: boolean }) => {
-	const size = compact ? 74 : 110;
-	const strokeWidth = compact ? 6 : 8;
-	const radius = (size - strokeWidth) / 2;
-	const circumference = 2 * Math.PI * radius;
-
-	return (
-		<div className="relative flex items-center justify-center">
-			<svg
-				className={`${compact ? "h-[74px] w-[74px]" : "h-[110px] w-[110px]"} animate-[spin_1.8s_linear_infinite]`}
-				viewBox={`0 0 ${size} ${size}`}
-				fill="none"
-				aria-hidden="true">
-				<circle
-					cx={size / 2}
-					cy={size / 2}
-					r={radius}
-					stroke="#eee6dc"
-					strokeWidth={strokeWidth}
-				/>
-				<circle
-					cx={size / 2}
-					cy={size / 2}
-					r={radius}
-					stroke="url(#bandai-loader-gradient)"
-					strokeWidth={strokeWidth}
-					strokeLinecap="round"
-					strokeDasharray={`${circumference * 0.34} ${circumference}`}
-					strokeDashoffset={circumference * 0.12}
-				/>
-				<defs>
-					<linearGradient
-						id="bandai-loader-gradient"
-						x1="0"
-						y1={size / 2}
-						x2={size}
-						y2={size / 2}
-						gradientUnits="userSpaceOnUse">
-						<stop stopColor="#e60012" />
-						<stop offset="0.55" stopColor="#ff7200" />
-						<stop offset="1" stopColor="#ffb35e" />
-					</linearGradient>
-				</defs>
-			</svg>
-
-			<div className="absolute inset-0 flex items-center justify-center">
-				<div
-					className={`rounded-full border border-orange-100 bg-white/92 shadow-inner ${
-						compact ? "h-11 w-11" : "h-16 w-16"
-					} flex items-center justify-center`}>
-					<div className="flex items-center gap-1.5">
-						<span className="h-2.5 w-2.5 rounded-full bg-[#e60012] animate-pulse" />
-						<span className="h-2.5 w-2.5 rounded-full bg-[#ff8200] animate-pulse [animation-delay:180ms]" />
-						<span className="h-2.5 w-2.5 rounded-full bg-[#ffbf7f] animate-pulse [animation-delay:360ms]" />
-					</div>
-				</div>
-			</div>
-		</div>
-	);
-};
-
+/**
+ * Branded full-screen loader — logo + soft indeterminate bar.
+ * Intentionally sparse: no phase labels, cards, or status chrome.
+ */
 const LoadingScreen: React.FC<LoadingScreenProps> = ({
-	message = "Preparing workspace",
-	subtitle = "Syncing your Bandai HR experience",
+	message,
+	subtitle,
 	variant = "full",
+	logoUrl = BANDAI_LOGO_URL,
 }) => {
-	const phaseLabel = resolvePhaseLabel(message);
 	const isMinimal = variant === "minimal";
+	const statusId = React.useId();
+	const descriptionId = React.useId();
 
 	return (
 		<div
-			className={`relative overflow-hidden ${
-				isMinimal
-					? "flex min-h-screen items-center justify-center bg-[#f1eee9]"
-					: "min-h-screen bg-[#ece9e2]"
-			}`}>
-			<div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(230,0,18,0.06),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(255,130,0,0.09),_transparent_28%)]" />
+			role="status"
+			aria-live="polite"
+			aria-busy="true"
+			aria-labelledby={message ? statusId : undefined}
+			aria-describedby={subtitle ? descriptionId : undefined}
+			className="relative flex min-h-screen items-center justify-center overflow-hidden bg-white">
+			{/* Soft ambient wash — matches login neutrality, brand-primary whisper only */}
 			<div
-				className={`relative z-10 w-full px-6 ${
-					isMinimal
-						? "mx-auto max-w-sm"
-						: "mx-auto flex min-h-screen max-w-3xl items-center justify-center py-10"
-				}`}>
+				className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_40%,_color-mix(in_oklab,var(--primary)_6%,transparent),_transparent_55%)]"
+				aria-hidden
+			/>
+
+			{/* Motion keyframes scoped to this screen */}
+			<style>{`
+				@keyframes bandai-loader-fade {
+					from { opacity: 0; transform: translateY(8px); }
+					to { opacity: 1; transform: translateY(0); }
+				}
+				@keyframes bandai-loader-bar {
+					0% { transform: translateX(-120%); }
+					100% { transform: translateX(320%); }
+				}
+				@keyframes bandai-loader-logo {
+					0%, 100% { opacity: 1; }
+					50% { opacity: 0.72; }
+				}
+			`}</style>
+
+			<div
+				className="relative z-10 flex w-full max-w-xs flex-col items-center px-6"
+				style={{ animation: "bandai-loader-fade 480ms cubic-bezier(0.22, 1, 0.36, 1) both" }}>
+				<img
+					src={logoUrl}
+					alt="Bandai Namco"
+					className={`w-auto object-contain ${isMinimal ? "h-8" : "h-10"}`}
+					style={{ animation: "bandai-loader-logo 2.4s ease-in-out infinite" }}
+					draggable={false}
+				/>
+
+				{/* Indeterminate bar — smooth, continuous, low visual weight */}
 				<div
-					className={`rounded-[28px] border border-white/80 bg-white/92 shadow-[0_24px_70px_rgba(56,44,18,0.10)] backdrop-blur-sm ${
-						isMinimal ? "p-6" : "w-full max-w-xl p-8 sm:p-10"
-					}`}>
+					className={`relative mt-10 w-full overflow-hidden rounded-full bg-neutral-100 ${
+						isMinimal ? "h-[2px] max-w-[9rem]" : "h-[2.5px] max-w-[11rem]"
+					}`}
+					aria-hidden>
 					<div
-						className={`flex ${
-							isMinimal
-								? "flex-col items-center gap-5 text-center"
-								: "flex-col gap-7 text-center"
-						}`}>
-						<div className="space-y-3">
-							<div className="inline-flex items-center justify-center rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-[10px] font-black uppercase tracking-[0.28em] text-orange-700">
-								Bandai Namco HRIS
-							</div>
-						</div>
-
-						<div className="flex flex-col items-center gap-4">
-							<ProgressRing compact={isMinimal} />
-							<div className="space-y-2">
-								<div className="text-[11px] font-black uppercase tracking-[0.24em] text-orange-600">
-									{phaseLabel}
-								</div>
-								{message && (
-									<h1
-										className={`font-black tracking-tight text-neutral-900 ${
-											isMinimal ? "text-xl" : "text-3xl sm:text-[2rem]"
-										}`}>
-										{message}
-									</h1>
-								)}
-								{subtitle && (
-									<p
-										className={`mx-auto max-w-md font-medium leading-6 text-neutral-500 ${
-											isMinimal ? "text-sm" : "text-sm sm:text-base"
-										}`}>
-										{subtitle}
-									</p>
-								)}
-							</div>
-						</div>
-
-						<div className="flex items-center justify-between text-[11px] font-semibold text-neutral-500">
-							<span>Securing your access</span>
-							<span className="rounded-full bg-neutral-100 px-3 py-1 text-neutral-700">
-								In progress
-							</span>
-						</div>
-					</div>
+						className="absolute inset-y-0 left-0 w-[42%] rounded-full bg-brand-primary"
+						style={{
+							animation: "bandai-loader-bar 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite",
+						}}
+					/>
 				</div>
+
+				{message ? (
+					<p
+						id={statusId}
+						className={`mt-6 text-center font-medium tracking-tight text-neutral-400 ${
+							isMinimal ? "text-xs" : "text-sm"
+						}`}>
+						{message}
+					</p>
+				) : null}
+
+				{subtitle ? (
+					<span id={descriptionId} className="sr-only">
+						{subtitle}
+					</span>
+				) : null}
 			</div>
 		</div>
 	);

@@ -7,7 +7,12 @@ import { AttendanceStatus } from "../generated/prisma";
 import { findShiftForDay } from "./schedule.helper";
 import { calculateStrictScheduleMetrics } from "./schedule-work-metrics.helper";
 import type { EmployeeScheduleSnapshot as EmployeeSchedule } from "./employee-schedule.helper";
-export const ATTENDANCE_BEHAVIOR_FLAGS = ["TARDINESS", "EARLY_OUT", "OVERTIME"] as const;
+export const ATTENDANCE_BEHAVIOR_FLAGS = [
+	"TARDINESS",
+	"EARLY_OUT",
+	"OVERTIME",
+	"OT_CANDIDATE",
+] as const;
 export type AttendanceBehaviorFlag = (typeof ATTENDANCE_BEHAVIOR_FLAGS)[number];
 
 export interface TimeSlot {

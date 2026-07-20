@@ -107,7 +107,7 @@ CREATE TYPE "PhoneType" AS ENUM ('mobile', 'home', 'work', 'emergency', 'fax', '
 CREATE TYPE "IdentificationType" AS ENUM ('passport', 'drivers_license', 'national_id', 'postal_id', 'voters_id', 'senior_citizen_id', 'company_id', 'school_id');
 
 -- CreateEnum
-CREATE TYPE "RequestType" AS ENUM ('LEAVE', 'TIMESHEET', 'ATTENDANCE_CORRECTION', 'EXPENSE_REIMBURSEMENT', 'DOCUMENT_REQUEST', 'RESIGNATION', 'TERMINATION', 'REGULARIZATION', 'PROMOTION', 'SALARY_CHANGE', 'TRANSFER', 'SCHEDULE_CHANGE', 'OTHER');
+CREATE TYPE "RequestType" AS ENUM ('LEAVE', 'OVERTIME', 'TIMESHEET', 'ATTENDANCE_CORRECTION', 'EXPENSE_REIMBURSEMENT', 'DOCUMENT_REQUEST', 'RESIGNATION', 'TERMINATION', 'REGULARIZATION', 'PROMOTION', 'SALARY_CHANGE', 'TRANSFER', 'SCHEDULE_CHANGE', 'OTHER');
 
 -- CreateEnum
 CREATE TYPE "RequestTransactionEventCategory" AS ENUM ('LIFECYCLE', 'WORKFLOW', 'ASSIGNMENT', 'BUSINESS_CHANGE', 'ARTIFACT', 'SYSTEM');
@@ -1492,6 +1492,7 @@ CREATE TABLE "timesheet_configs" (
     "enableEditBeforeSubmission" BOOLEAN NOT NULL DEFAULT true,
     "rejectBehavior" "TimesheetRejectBehavior" NOT NULL DEFAULT 'REVISE',
     "overtimeFlagThresholdMinutes" INTEGER NOT NULL DEFAULT 60,
+    "requireManagerApprovedOvertime" BOOLEAN NOT NULL DEFAULT true,
     "workTimeRounding" JSONB,
     "overtimeQualification" JSONB,
     "payrollFinalization" JSONB,
@@ -1978,9 +1979,6 @@ CREATE INDEX "employees_organizationId_isDeleted_employmentStatus_payFreq_idx" O
 
 -- CreateIndex
 CREATE INDEX "employees_organizationId_agencyId_idx" ON "employees"("organizationId", "agencyId");
-
--- CreateIndex
-CREATE INDEX "employees_organizationId_deviceEmpId_isDeleted_idx" ON "employees"("organizationId", "deviceEmpId", "isDeleted");
 
 -- CreateIndex
 CREATE INDEX "employees_organizationId_employeeId_isDeleted_idx" ON "employees"("organizationId", "employeeId", "isDeleted");

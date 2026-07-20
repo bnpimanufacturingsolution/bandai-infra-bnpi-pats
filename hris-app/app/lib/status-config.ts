@@ -10,6 +10,7 @@ export const getStatusConfig = (status: ApplicantStatus) => {
 		interview: "Interview Stage",
 		rejected: "Rejected",
 		accepted: "Accepted Stage",
+		completed: "Completed",
 		hired: "Hired",
 	};
 
@@ -20,6 +21,7 @@ export const getStatusConfig = (status: ApplicantStatus) => {
 		interview: "bg-purple-50 text-purple-700 border-purple-200",
 		rejected: "bg-red-50 text-red-700 border-red-200",
 		accepted: "bg-orange-50 text-orange-700 border-orange-200",
+		completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
 		hired: "bg-green-50 text-green-700 border-green-200",
 	};
 

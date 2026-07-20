@@ -18,7 +18,6 @@ const BoardingTemplateBuilder = () => {
 		name: "",
 		description: "",
 		type: "ONBOARDING",
-		department: "",
 		isDefault: false,
 		isActive: true,
 		organizationId: "", // This should come from auth context

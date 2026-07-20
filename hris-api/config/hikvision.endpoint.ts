@@ -1,27 +1,16 @@
-type HikvisionConfigEnv = {
-	HIKVISION_BASE_URL?: string;
-	HIKVISION_USERNAME?: string;
-	HIKVISION_PASSWORD?: string;
-	HIKVISION_PROTOCOL?: string;
-};
-
 // Hikvision API Configuration
-export const buildHikvisionConfig = (
-	env: HikvisionConfigEnv = process.env as HikvisionConfigEnv,
-) => ({
-	baseUrl: env.HIKVISION_BASE_URL || "",
-	username: env.HIKVISION_USERNAME || "",
-	password: env.HIKVISION_PASSWORD || "",
-	protocol: env.HIKVISION_PROTOCOL || "https",
+export const HIKVISION_CONFIG = {
+	baseUrl: process.env.HIKVISION_BASE_URL || "http://192.168.110.24",
+	username: process.env.HIKVISION_USERNAME || "admin",
+	password: process.env.HIKVISION_PASSWORD || "Admin123",
+	protocol: process.env.HIKVISION_PROTOCOL || "https",
 	timeout: 10000,
 	retryCount: 3,
 	retryDelay: 1000,
 	retryBackoff: true,
 	retryBackoffFactor: 2,
 	retryBackoffMax: 10000,
-});
-
-export const HIKVISION_CONFIG = buildHikvisionConfig();
+};
 
 // Hikvision API Endpoints
 export const hikvisionEndpoint = {

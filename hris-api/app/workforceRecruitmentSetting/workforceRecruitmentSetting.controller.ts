@@ -9,7 +9,6 @@ import {
 	buildHiringRequisitionDescription,
 	countCurrentHeadcount,
 	getOrCreateWorkforceRecruitmentSetting,
-	listCurrentHeadcounts,
 	resolveWorkforcePolicy,
 	serializeWorkforceRecruitmentSetting,
 	WORKFORCE_REQUISITION_REQUEST_SUBTYPE,
@@ -19,6 +18,9 @@ import {
 	WorkforceRecruitmentRequestContextQuerySchema,
 	WorkforceRecruitmentSettingsSchema,
 } from "../../zod/workforceRecruitmentSetting.zod";
+import { logActivity } from "../../utils/activityLogger";
+import { logAudit } from "../../utils/auditLogger";
+import { config } from "../../config/constant";
 
 const ADMIN_ROLES = new Set(["hris-admin", "hris-hr-manager", "admin", "super_admin"]);
 const PROVISIONING_ORG_CODE = "bnei";
@@ -92,6 +94,18 @@ export const controller = (prisma: PrismaClient) => {
 				String(organization.id),
 			);
 			const settings = serializeWorkforceRecruitmentSetting(settingsRecord);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.WORKFORCE_RECRUITMENT_SETTING.ACTIONS.GET_WORKFORCE_RECRUITMENT_SETTINGS,
+				description:
+					config.ACTIVITY_LOG.WORKFORCE_RECRUITMENT_SETTING.DESCRIPTIONS.WORKFORCE_SETTINGS_RETRIEVED,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.WORKFORCE_RECRUITMENT_SETTING.PAGES.WORKFORCE_SETTINGS,
+				},
+				organizationId: organization.id,
+			});
 
 			res.status(200).json(
 				buildSuccessResponse(
@@ -196,11 +210,38 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
+			const serializedUpdated = serializeWorkforceRecruitmentSetting(updated);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.WORKFORCE_RECRUITMENT_SETTING.ACTIONS.UPDATE_WORKFORCE_RECRUITMENT_SETTINGS,
+				description:
+					config.ACTIVITY_LOG.WORKFORCE_RECRUITMENT_SETTING.DESCRIPTIONS.WORKFORCE_SETTINGS_UPDATED,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.WORKFORCE_RECRUITMENT_SETTING.PAGES.WORKFORCE_SETTINGS,
+				},
+				organizationId: organization.id,
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.WORKFORCE_RECRUITMENT_SETTING,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.WORKFORCE_RECRUITMENT_SETTING,
+				entityId: updated.id,
+				changesBefore: serializeWorkforceRecruitmentSetting(current),
+				changesAfter: serializedUpdated,
+				description: config.AUDIT_LOG.WORKFORCE_RECRUITMENT_SETTING.DESCRIPTIONS.WORKFORCE_SETTINGS_UPDATED,
+				organizationId: organization.id,
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Workforce recruitment settings updated successfully",
 					{
-						settings: serializeWorkforceRecruitmentSetting(updated),
+						settings: serializedUpdated,
 					},
 					200,
 				),
@@ -209,28 +250,6 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(500).json(
 				buildErrorResponse(
 					error?.message || "Failed to update workforce recruitment settings",
-					500,
-				),
-			);
-		}
-	};
-
-	const getHeadcounts = async (req: AuthRequest, res: Response) => {
-		try {
-			const organization = await resolveOrganization(prisma, req.organizationId);
-			const headcounts = await listCurrentHeadcounts(prisma, String(organization.id));
-
-			res.status(200).json(
-				buildSuccessResponse(
-					"Workforce recruitment headcounts retrieved successfully",
-					{ headcounts },
-					200,
-				),
-			);
-		} catch (error: any) {
-			res.status(500).json(
-				buildErrorResponse(
-					error?.message || "Failed to retrieve workforce recruitment headcounts",
 					500,
 				),
 			);
@@ -363,6 +382,18 @@ export const controller = (prisma: PrismaClient) => {
 					: isPrivilegedRole(requester.role) ||
 						(isDepartmentManager && isOwnDepartmentScope));
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.WORKFORCE_RECRUITMENT_SETTING.ACTIONS.GET_WORKFORCE_REQUEST_CONTEXT,
+				description:
+					config.ACTIVITY_LOG.WORKFORCE_RECRUITMENT_SETTING.DESCRIPTIONS.WORKFORCE_REQUEST_CONTEXT_RETRIEVED,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.WORKFORCE_RECRUITMENT_SETTING.PAGES.WORKFORCE_REQUEST_CONTEXT,
+				},
+				organizationId: organization.id,
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Workforce requisition context retrieved successfully",
@@ -446,7 +477,6 @@ export const controller = (prisma: PrismaClient) => {
 	return {
 		getSettings,
 		updateSettings,
-		getHeadcounts,
 		getRequestContext,
 	};
 };

@@ -1,5 +1,11 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { getLogger } from "./logger.helper";
+import {
+	asPayrollSourceDetails,
+	formatPayrollSourceLabelWithCategory,
+	getCoveredRegisterFieldsFromSourceDetails,
+	groupPayrollSourceDetailsByRole,
+} from "./payroll-source-display.helper";
 
 const logger = getLogger();
 const payslipPdfLogger = logger.child({ module: "payslip-pdf-helper" });
@@ -44,6 +50,7 @@ type PayslipPayrollLike = {
 	obAllowance?: number;
 	deMinimisAllowance?: number;
 	adjustmentOtNd?: number;
+	otherCompensation?: number;
 	grossPay: number;
 	taxAmount: number;
 	sssContribution: number;
@@ -62,6 +69,18 @@ type PayslipPayrollLike = {
 	mealAllowance?: number;
 	lineLeaderAllowance?: number;
 	totalReceivable?: number;
+	metadata?: {
+		payrollSourceDetails?: unknown;
+		/** Explicit next-period retro lines from PayrollCorrection apply */
+		payrollCorrections?: Array<{
+			correctionId?: string;
+			label?: string;
+			amount?: number;
+			sourcePayrollPeriodName?: string | null;
+			[key: string]: unknown;
+		}>;
+		[key: string]: unknown;
+	} | null;
 };
 
 type PayslipRowKind = "group" | "item" | "subtotal";
@@ -79,6 +98,20 @@ type PayslipComputationRow = {
 type PayslipAmountRow = {
 	label: string;
 	amount: number;
+};
+
+/** Map applied PayrollCorrection lines into payslip earnings rows (label + amount). */
+export const extractPayrollCorrectionEarningsRows = (
+	metadata?: PayslipPayrollLike["metadata"] | null,
+): Array<PayslipAmountRow & { operation: "ADD" }> => {
+	const lines = Array.isArray(metadata?.payrollCorrections) ? metadata!.payrollCorrections! : [];
+	return lines
+		.map((line) => {
+			const label = String(line?.label || "Prior-period correction").trim() || "Prior-period correction";
+			const amount = Number(line?.amount) || 0;
+			return { label, amount, operation: "ADD" as const };
+		})
+		.filter((row) => Math.abs(row.amount) >= 0.005);
 };
 type PayslipFormulaProof = {
 	grossRows: Array<PayslipAmountRow & { operation: "ADD" | "SUBTRACT" }>;
@@ -202,10 +235,27 @@ const nonZeroPayslipAmount = (value: unknown) => Math.abs(Number(value || 0)) >=
 export const buildPayslipFormulaProof = (payroll: PayslipPayrollLike): PayslipFormulaProof => {
 	const sssSalaryLoan = Number(payroll.sssSalaryLoan ?? payroll.loanDeductions ?? 0);
 	const modifiedHdmf2 = Number(payroll.modifiedHdmf2 ?? payroll.otherDeductions ?? 0);
+	const sourceDetails = asPayrollSourceDetails(payroll.metadata?.payrollSourceDetails);
+	const sourceByRole = groupPayrollSourceDetailsByRole(sourceDetails);
+	const coveredRegisterFields = getCoveredRegisterFieldsFromSourceDetails(sourceDetails);
+	const includeRegisterField = (field: string) => !coveredRegisterFields.has(field);
+	const sourceAmountRows = (details: typeof sourceByRole.gross) =>
+		details.map((detail) => ({
+			label: formatPayrollSourceLabelWithCategory(detail),
+			amount: Number(detail.amount || 0),
+		}));
+
 	const postNetRows = [
-		{ label: "Perfect Attendance", amount: Number(payroll.perfectAttendance || 0) },
-		{ label: "Meal Allowance", amount: Number(payroll.mealAllowance || 0) },
-		{ label: "Line Leader Allowance", amount: Number(payroll.lineLeaderAllowance || 0) },
+		...(includeRegisterField("perfectAttendance")
+			? [{ label: "Perfect Attendance", amount: Number(payroll.perfectAttendance || 0) }]
+			: []),
+		...(includeRegisterField("mealAllowance")
+			? [{ label: "Meal Allowance", amount: Number(payroll.mealAllowance || 0) }]
+			: []),
+		...(includeRegisterField("lineLeaderAllowance")
+			? [{ label: "Line Leader Allowance", amount: Number(payroll.lineLeaderAllowance || 0) }]
+			: []),
+		...sourceAmountRows(sourceByRole.postNet),
 	].filter((row) => nonZeroPayslipAmount(row.amount));
 	const postNetTotal = roundPayslipMoney(
 		postNetRows.reduce((sum, row) => sum + row.amount, 0),
@@ -227,17 +277,69 @@ export const buildPayslipFormulaProof = (payroll: PayslipPayrollLike): PayslipFo
 			operation: "ADD" as const,
 		},
 		{ label: "Holiday Pay", amount: Number(payroll.holidayPay || 0), operation: "ADD" as const },
-		{ label: "OB Allowance", amount: Number(payroll.obAllowance || 0), operation: "ADD" as const },
-		{
-			label: "De Minimis Allowance",
-			amount: Number(payroll.deMinimisAllowance || 0),
+		...(includeRegisterField("obAllowance")
+			? [
+					{
+						label: "OB Allowance",
+						amount: Number(payroll.obAllowance || 0),
+						operation: "ADD" as const,
+					},
+				]
+			: []),
+		...(includeRegisterField("deMinimisAllowance")
+			? [
+					{
+						label: "De Minimis Allowance",
+						amount: Number(payroll.deMinimisAllowance || 0),
+						operation: "ADD" as const,
+					},
+				]
+			: []),
+		...(includeRegisterField("adjustmentOtNd")
+			? [
+					{
+						label: "Adjustment OT/ND",
+						amount: Number(payroll.adjustmentOtNd || 0),
+						operation: "ADD" as const,
+					},
+				]
+			: []),
+		...sourceAmountRows(sourceByRole.gross).map((row) => ({
+			...row,
 			operation: "ADD" as const,
-		},
-		{
-			label: "Adjustment OT/ND",
-			amount: Number(payroll.adjustmentOtNd || 0),
-			operation: "ADD" as const,
-		},
+		})),
+		// Explicit next-period retro lines (PayrollCorrection apply → metadata.payrollCorrections)
+		...extractPayrollCorrectionEarningsRows(payroll.metadata),
+		// Fallback when compensation was increased without labeled correction lines
+		...(() => {
+			const correctionRows = extractPayrollCorrectionEarningsRows(payroll.metadata);
+			const correctionTotal = roundPayslipMoney(
+				correctionRows.reduce((sum, row) => sum + row.amount, 0),
+			);
+			const otherCompensation = roundPayslipMoney(payroll.otherCompensation || 0);
+			const residual = roundPayslipMoney(otherCompensation - correctionTotal);
+			if (Math.abs(residual) < 0.005) return [];
+			// Only surface residual when there are no explicit correction lines, or residual is extra
+			if (correctionRows.length === 0) {
+				return [
+					{
+						label: "Other Compensation",
+						amount: otherCompensation,
+						operation: "ADD" as const,
+					},
+				];
+			}
+			if (Math.abs(residual) >= 0.005) {
+				return [
+					{
+						label: "Other Compensation",
+						amount: residual,
+						operation: "ADD" as const,
+					},
+				];
+			}
+			return [];
+		})(),
 	].filter((row) => row.label === "Basic Pay" || row.label === "Absent Deduction" || nonZeroPayslipAmount(row.amount));
 	const grossRowsTotal = roundPayslipMoney(
 		grossRows.reduce(
@@ -245,13 +347,19 @@ export const buildPayslipFormulaProof = (payroll: PayslipPayrollLike): PayslipFo
 			0,
 		),
 	);
+	const hasLoanSourceDetails = sourceByRole.deduction.some(
+		(detail) => String(detail.direction || "").toUpperCase() === "LOAN",
+	);
 	const deductionRows = [
 		{ label: "W/Tax", amount: Number(payroll.taxAmount || 0) },
 		{ label: "SSS Contribution", amount: Number(payroll.sssContribution || 0) },
 		{ label: "PhilHealth Contribution", amount: Number(payroll.philHealthContribution || 0) },
 		{ label: "Pag-IBIG Contribution", amount: Number(payroll.pagibigContribution || 0) },
-		{ label: "SSS Salary Loan", amount: sssSalaryLoan },
-		{ label: "Modified HDMF 2", amount: modifiedHdmf2 },
+		...(hasLoanSourceDetails ? [] : [{ label: "SSS Salary Loan", amount: sssSalaryLoan }]),
+		...(includeRegisterField("modifiedHdmf2")
+			? [{ label: "Modified HDMF 2", amount: modifiedHdmf2 }]
+			: []),
+		...sourceAmountRows(sourceByRole.deduction),
 	];
 	const deductionRowsTotal = roundPayslipMoney(
 		deductionRows.reduce((sum, row) => sum + row.amount, 0),

@@ -43,6 +43,7 @@ export const useEmployeePayrolls = (params?: ApiQueryParams) => {
 					"employee.basicSalary",
 					"employee.payFrequency",
 					"employee.id",
+					"employee.user.avatar",
 					"payrollPeriod",
 					"basicPay",
 					"taxAmount",

@@ -695,6 +695,8 @@ model EmployeePayroll {
 
 Links employees to their assigned benefits.
 
+> **Schedule modes (2026-07-14):** production schemas also persist optional `scheduleMode` (`TIME_BOUND` | `FIXED_INSTALLMENTS` | `RECURRING`) and use `EmployeeBenefitInstallment` rows as the payroll execution source. Finite modes bulk-generate installments; `RECURRING` ensures one installment per payroll period lazily at run time. See `docs/BENEFIT_SCHEDULE_MODES.md` for the current contract. The block below is a historical snapshot and may lag the live Prisma models.
+
 ```prisma
 model EmployeeBenefit {
   id             String      @id @default(auto()) @map("_id") @db.ObjectId

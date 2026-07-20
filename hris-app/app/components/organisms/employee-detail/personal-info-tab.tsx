@@ -1,246 +1,358 @@
+import type { ReactNode } from "react";
+import { Button } from "~/components/atoms/Button";
+import { StatusBadge } from "~/components/atoms/StatusBadge";
+import { EmployeeAvatar } from "~/components/atoms/EmployeeAvatar";
 import type { Employee } from "~/services/employees.service";
-import { Mail, Phone, MapPin, User, Globe, Calendar, Languages } from "lucide-react";
+import {
+	Calendar,
+	FileText,
+	Globe,
+	IdCard,
+	KeyRound,
+	Languages,
+	Mail,
+	MapPin,
+	Phone,
+	Settings,
+	User,
+} from "lucide-react";
 
 interface PersonalInfoTabProps {
 	employee: Employee;
+	isOwnProfile?: boolean;
+	avatarUrl?: string;
+	onUpdateProfile?: () => void;
+	onChangePassword?: () => void;
+	onResignationFlow?: () => void;
 }
 
-export function PersonalInfoTab({ employee }: PersonalInfoTabProps) {
+const formatDate = (date?: string | null) => {
+	if (!date) return "N/A";
+	return new Date(date).toLocaleDateString("en-US", {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+	});
+};
+
+const formatEnumLabel = (value?: string | null) => {
+	const normalized = String(value || "").trim();
+	if (!normalized) return "N/A";
+	return normalized
+		.toLowerCase()
+		.replace(/_/g, " ")
+		.replace(/\b\w/g, (character) => character.toUpperCase());
+};
+
+const calculateAge = (dob?: string | null) => {
+	if (!dob) return null;
+	const today = new Date();
+	const birthDate = new Date(dob);
+	let age = today.getFullYear() - birthDate.getFullYear();
+	const monthDiff = today.getMonth() - birthDate.getMonth();
+	if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+		age--;
+	}
+	return age;
+};
+
+const formatLocationSummary = (employee: Employee) => {
+	const parts = [formatEnumLabel(employee.workLocation), employee.department?.name]
+		.filter((value) => value && value !== "N/A")
+		.map((value) => String(value).trim());
+	return parts.length > 0 ? parts.join(" • ") : "Location not assigned";
+};
+
+const formatAddressLines = (address?: {
+	street?: string;
+	address2?: string;
+	city?: string;
+	state?: string;
+	postalCode?: string;
+	country?: string;
+} | null) => {
+	if (!address) return null;
+	const lines = [
+		address.street,
+		address.address2,
+		[address.city, address.state, address.postalCode].filter(Boolean).join(", "),
+		address.country,
+	].filter(Boolean);
+	return lines.length > 0 ? lines : null;
+};
+
+export function PersonalInfoTab({
+	employee,
+	isOwnProfile = false,
+	avatarUrl,
+	onUpdateProfile,
+	onChangePassword,
+	onResignationFlow,
+}: PersonalInfoTabProps) {
 	const personalInfo = employee.person?.personalInfo || {};
 	const contactInfo = employee.person?.contactInfo || {};
 	const primaryAddress = contactInfo.address?.[0];
-	const primaryPhone = contactInfo.phones?.find((p) => p.isPrimary);
-	const otherPhones = contactInfo.phones?.filter((p) => !p.isPrimary) || [];
+	const primaryPhone = contactInfo.phones?.find((phone) => phone.isPrimary);
+	const otherPhones = contactInfo.phones?.filter((phone) => !phone.isPrimary) || [];
 
-	const formatDate = (date: string | undefined) => {
-		if (!date) return "N/A";
-		return new Date(date).toLocaleDateString("en-US", {
-			year: "numeric",
-			month: "long",
-			day: "numeric",
+	const firstName = personalInfo.firstName || "";
+	const middleName = personalInfo.middleName || "";
+	const lastName = personalInfo.lastName || "";
+	const fullName = [firstName, middleName, lastName].filter(Boolean).join(" ");
+	const roleLine = [employee.level?.name, employee.position?.title]
+		.filter(Boolean)
+		.map((value) => String(value).trim())
+		.join(" • ");
+
+	const addressLines = formatAddressLines(primaryAddress);
+	const age = calculateAge(personalInfo.dateOfBirth);
+
+	const contactRows: Array<{
+		label: string;
+		value: ReactNode;
+		hint?: ReactNode;
+	}> = [];
+
+	if (contactInfo.email) {
+		contactRows.push({
+			label: "Email",
+			value: (
+				<a
+					href={`mailto:${contactInfo.email}`}
+					className="text-foreground transition-colors hover:text-primary">
+					{contactInfo.email}
+				</a>
+			),
 		});
-	};
+	}
 
-	const calculateAge = (dob: string | undefined) => {
-		if (!dob) return null;
-		const today = new Date();
-		const birthDate = new Date(dob);
-		let age = today.getFullYear() - birthDate.getFullYear();
-		const monthDiff = today.getMonth() - birthDate.getMonth();
-		if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-			age--;
-		}
-		return age;
-	};
+	if (primaryPhone) {
+		contactRows.push({
+			label: "Phone (Primary)",
+			value: (
+				<a
+					href={`tel:${primaryPhone.countryCode}${primaryPhone.number}`}
+					className="text-foreground transition-colors hover:text-primary">
+					{primaryPhone.countryCode} {primaryPhone.number}
+				</a>
+			),
+			hint: primaryPhone.type ? formatEnumLabel(primaryPhone.type) : undefined,
+		});
+	}
+
+	for (const phone of otherPhones) {
+		contactRows.push({
+			label: `Phone (${formatEnumLabel(phone.type)})`,
+			value: (
+				<a
+					href={`tel:${phone.countryCode}${phone.number}`}
+					className="text-foreground transition-colors hover:text-primary">
+					{phone.countryCode} {phone.number}
+				</a>
+			),
+		});
+	}
+
+	contactRows.push({
+		label: "Work Location",
+		value: formatLocationSummary(employee),
+	});
+
+	if (addressLines) {
+		contactRows.push({
+			label: "Address",
+			value: (
+				<div className="space-y-0.5">
+					{addressLines.map((line) => (
+						<p key={line}>{line}</p>
+					))}
+				</div>
+			),
+		});
+	}
+
+	const personalRows: Array<{
+		label: string;
+		value: ReactNode;
+		hint?: ReactNode;
+	}> = [];
+
+	if (personalInfo.dateOfBirth) {
+		personalRows.push({
+			label: "Date of Birth",
+			value: formatDate(personalInfo.dateOfBirth),
+			hint: age ? `${age} years old` : undefined,
+		});
+	}
+
+	if (personalInfo.placeOfBirth) {
+		personalRows.push({
+			label: "Place of Birth",
+			value: personalInfo.placeOfBirth,
+		});
+	}
+
+	if (personalInfo.gender) {
+		personalRows.push({
+			label: "Gender",
+			value: <span className="capitalize">{personalInfo.gender}</span>,
+		});
+	}
+
+	if (personalInfo.nationality) {
+		personalRows.push({
+			label: "Nationality",
+			value: personalInfo.nationality,
+		});
+	}
+
+	if (personalInfo.primaryLanguage) {
+		personalRows.push({
+			label: "Primary Language",
+			value: <span className="capitalize">{personalInfo.primaryLanguage}</span>,
+		});
+	}
 
 	return (
-		<div className="space-y-8">
-			{/* Contact Information Section */}
-			<section>
-				<div className="flex items-center gap-2 mb-4">
-					<div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
-						<Phone className="w-4 h-4 text-orange-600" />
-					</div>
-					<h3 className="text-base font-semibold text-gray-900">Contact Information</h3>
-				</div>
-
-				<div className="border border-gray-200 rounded-xl overflow-hidden">
-					<div className="divide-y divide-gray-100">
-						{/* Email */}
-						{contactInfo.email && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Mail className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">Email</span>
-								</div>
-								<a
-									href={`mailto:${contactInfo.email}`}
-									className="text-sm text-gray-600 hover:text-orange-600 transition-colors">
-									{contactInfo.email}
-								</a>
-							</div>
-						)}
-
-						{/* Primary Phone */}
-						{primaryPhone && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Phone className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Phone (Primary)
-									</span>
-								</div>
-								<a
-									href={`tel:${primaryPhone.countryCode}${primaryPhone.number}`}
-									className="text-sm text-gray-600 hover:text-orange-600 transition-colors">
-									{primaryPhone.countryCode} {primaryPhone.number}
-								</a>
-							</div>
-						)}
-
-						{/* Other Phones */}
-						{otherPhones.map((phone, idx) => (
-							<div
-								key={idx}
-								className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Phone className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Phone ({phone.type})
-									</span>
-								</div>
-								<a
-									href={`tel:${phone.countryCode}${phone.number}`}
-									className="text-sm text-gray-600 hover:text-orange-600 transition-colors">
-									{phone.countryCode} {phone.number}
-								</a>
-							</div>
-						))}
-
-						{/* Address */}
-						{primaryAddress && (
-							<div className="flex items-start justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
-									<span className="text-sm font-medium text-gray-700">
-										Address
-									</span>
-								</div>
-								<div className="text-sm text-gray-600 text-right max-w-xs">
-									<p>{primaryAddress.street}</p>
-									{primaryAddress.address2 && <p>{primaryAddress.address2}</p>}
-									<p>
-										{primaryAddress.city}, {primaryAddress.state}{" "}
-										{primaryAddress.postalCode}
-									</p>
-									<p>{primaryAddress.country}</p>
-								</div>
-							</div>
-						)}
-
-						{/* Show empty state if no contact info */}
-						{!contactInfo.email &&
-							!primaryPhone &&
-							otherPhones.length === 0 &&
-							!primaryAddress && (
-								<div className="px-4 py-8 text-center">
-									<Mail className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-									<p className="text-sm text-gray-500">
-										No contact information available
-									</p>
-								</div>
-							)}
+		<div className="space-y-4">
+			<section
+				className="rounded-2xl border border-border bg-white px-5 py-5 shadow-sm"
+				data-testid="employee-profile-hero">
+				<div className="flex flex-col gap-4 md:flex-row md:items-center">
+					<EmployeeAvatar
+						src={avatarUrl}
+						alt={fullName || "Employee avatar"}
+						size="xl"
+						className="h-20 w-20 shrink-0 border border-primary/20 shadow-sm"
+					/>
+					<div className="min-w-0 space-y-2">
+						<h1 className="text-xl font-semibold text-foreground">
+							{fullName || "Unnamed employee"}
+						</h1>
+						<p className="text-sm text-muted-foreground">
+							{roleLine || "Position not assigned"}
+						</p>
+						<div className="flex flex-wrap items-center gap-2">
+							<StatusBadge status={employee.employmentStatus} className="text-[11px]" />
+							{employee.employeeId ? (
+								<span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+									<IdCard className="h-3 w-3" />
+									{employee.employeeId}
+								</span>
+							) : null}
+						</div>
 					</div>
 				</div>
 			</section>
 
-			{/* Personal Details Section */}
-			<section>
-				<div className="flex items-center gap-2 mb-4">
-					<div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
-						<User className="w-4 h-4 text-orange-600" />
+			<div className="grid gap-4 xl:grid-cols-2">
+				<PersonalInfoCard
+					icon={Mail}
+					title="Contact Information"
+					rows={contactRows}
+					emptyMessage="No contact information available."
+				/>
+				<PersonalInfoCard
+					icon={User}
+					title="Personal Details"
+					rows={personalRows}
+					emptyMessage="No personal details available."
+				/>
+			</div>
+
+			{isOwnProfile ? (
+				<section
+					className="rounded-2xl border border-border bg-muted/20 px-5 py-5"
+					data-testid="employee-profile-actions">
+					<h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+						Profile Actions
+					</h2>
+					<div className="grid gap-2">
+						<Button
+							variant="outline"
+							onClick={onUpdateProfile}
+							className="justify-start">
+							<Settings className="h-4 w-4" />
+							Update Profile
+						</Button>
+						<Button
+							variant="outline"
+							onClick={onChangePassword}
+							className="justify-start">
+							<KeyRound className="h-4 w-4" />
+							Change Password
+						</Button>
+						<Button
+							variant="outline"
+							onClick={onResignationFlow}
+							className="justify-start border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800">
+							<FileText className="h-4 w-4" />
+							Resignation Requests
+						</Button>
 					</div>
-					<h3 className="text-base font-semibold text-gray-900">Personal Details</h3>
-				</div>
-
-				<div className="border border-gray-200 rounded-xl overflow-hidden">
-					<div className="divide-y divide-gray-100">
-						{/* Date of Birth */}
-						{personalInfo.dateOfBirth && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Calendar className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Date of Birth
-									</span>
-								</div>
-								<div className="text-sm text-gray-600">
-									{formatDate(personalInfo.dateOfBirth)}
-									{calculateAge(personalInfo.dateOfBirth) && (
-										<span className="text-gray-400 ml-2">
-											({calculateAge(personalInfo.dateOfBirth)} years old)
-										</span>
-									)}
-								</div>
-							</div>
-						)}
-
-						{/* Place of Birth */}
-						{personalInfo.placeOfBirth && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<MapPin className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Place of Birth
-									</span>
-								</div>
-								<span className="text-sm text-gray-600">
-									{personalInfo.placeOfBirth}
-								</span>
-							</div>
-						)}
-
-						{/* Gender */}
-						{personalInfo.gender && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<User className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Gender
-									</span>
-								</div>
-								<span className="text-sm text-gray-600 capitalize">
-									{personalInfo.gender}
-								</span>
-							</div>
-						)}
-
-						{/* Nationality */}
-						{personalInfo.nationality && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Globe className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Nationality
-									</span>
-								</div>
-								<span className="text-sm text-gray-600">
-									{personalInfo.nationality}
-								</span>
-							</div>
-						)}
-
-						{/* Primary Language */}
-						{personalInfo.primaryLanguage && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Languages className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Primary Language
-									</span>
-								</div>
-								<span className="text-sm text-gray-600 capitalize">
-									{personalInfo.primaryLanguage}
-								</span>
-							</div>
-						)}
-
-						{/* Show empty state if no personal details */}
-						{!personalInfo.dateOfBirth &&
-							!personalInfo.placeOfBirth &&
-							!personalInfo.gender &&
-							!personalInfo.nationality &&
-							!personalInfo.primaryLanguage && (
-								<div className="px-4 py-8 text-center">
-									<User className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-									<p className="text-sm text-gray-500">
-										No personal details available
-									</p>
-								</div>
-							)}
-					</div>
-				</div>
-			</section>
+				</section>
+			) : null}
 		</div>
+	);
+}
+
+function PersonalInfoCard({
+	icon: Icon,
+	title,
+	rows,
+	emptyMessage,
+}: {
+	icon: typeof Mail;
+	title: string;
+	rows: Array<{
+		label: string;
+		value: ReactNode;
+		hint?: ReactNode;
+	}>;
+	emptyMessage?: string;
+}) {
+	const visibleRows = rows.filter((row) => {
+		if (typeof row.value === "string") {
+			return row.value.trim().length > 0;
+		}
+		return row.value !== null && row.value !== undefined;
+	});
+
+	return (
+		<section className="rounded-2xl border border-border bg-white shadow-sm">
+			<div className="flex items-center gap-3 border-b border-border bg-muted/30 px-5 py-4">
+				<div className="rounded-xl bg-primary/10 p-2 text-primary">
+					<Icon className="h-4 w-4" />
+				</div>
+				<h3 className="text-base font-semibold text-foreground">{title}</h3>
+			</div>
+
+			{visibleRows.length > 0 ? (
+				<div className="divide-y divide-border/70 px-5">
+					{visibleRows.map((row) => (
+						<div
+							key={`${title}-${row.label}`}
+							className="flex items-start justify-between gap-4 py-4">
+							<div className="min-w-0 space-y-1">
+								<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+									{row.label}
+								</p>
+								{row.hint ? (
+									<p className="text-sm text-muted-foreground">{row.hint}</p>
+								) : null}
+							</div>
+							<div className="min-w-0 text-right text-sm font-medium text-foreground">
+								{row.value}
+							</div>
+						</div>
+					))}
+				</div>
+			) : (
+				<div className="px-5 py-8 text-center text-sm text-muted-foreground">
+					<Icon className="mx-auto mb-2 h-5 w-5 opacity-40" />
+					<p>{emptyMessage || "No information available."}</p>
+				</div>
+			)}
+		</section>
 	);
 }

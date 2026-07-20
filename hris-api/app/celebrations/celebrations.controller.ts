@@ -5,6 +5,7 @@ import { getLogger } from "../../helper/logger.helper";
 import { buildSuccessResponse } from "../../helper/success-handler.helper";
 import { buildErrorResponse, formatZodErrors } from "../../helper/error-handler";
 import { BirthdaysQuerySchema, BirthdayFilterType } from "../../zod/celebrations.zod";
+import { resolvePublicKioskOrganizationId } from "../../helper/public-kiosk-org.helper";
 
 type BirthdayItemType = "EMPLOYEE_BIRTHDAY" | "CHILD_BIRTHDAY";
 
@@ -18,17 +19,29 @@ type BirthdayCelebrantItem = {
 	employeeId?: string | null;
 	parentDisplayName?: string | null;
 	department?: string | null;
+	/** Public-safe avatar URL when available (employee user metadata). */
+	avatar?: string | null;
 };
 
 type EmployeeBirthdayRow = {
 	personId?: unknown;
 	employeeId?: unknown;
+	userId?: unknown;
 	firstName?: string | null;
 	middleName?: string | null;
 	lastName?: string | null;
 	month?: number;
 	day?: number;
 	department?: string | null;
+	avatar?: string | null;
+};
+
+const extractUserAvatar = (user: { metadata?: unknown } | null | undefined): string | null => {
+	if (!user?.metadata || typeof user.metadata !== "object" || Array.isArray(user.metadata)) {
+		return null;
+	}
+	const avatar = (user.metadata as Record<string, unknown>).avatar;
+	return typeof avatar === "string" && avatar.trim() ? avatar.trim() : null;
 };
 
 type ChildBirthdayRow = {
@@ -121,6 +134,7 @@ const getEmployeeBirthdays = async (
 		},
 		select: {
 			id: true,
+			userId: true,
 			person: {
 				select: {
 					id: true,
@@ -136,6 +150,20 @@ const getEmployeeBirthdays = async (
 			},
 		},
 	});
+
+	const userIds = employees
+		.map((employee) => (typeof employee.userId === "string" ? employee.userId.trim() : ""))
+		.filter(Boolean);
+	const users =
+		userIds.length > 0
+			? await prisma.user.findMany({
+					where: { id: { in: userIds }, isDeleted: false },
+					select: { id: true, metadata: true },
+				})
+			: [];
+	const avatarByUserId = new Map(
+		users.map((user) => [user.id, extractUserAvatar(user)] as const),
+	);
 
 	return employees
 		.map((employee) => {
@@ -158,15 +186,18 @@ const getEmployeeBirthdays = async (
 				return null;
 			}
 			if (dob.getUTCMonth() + 1 !== month) return null;
+			const userId = typeof employee.userId === "string" ? employee.userId.trim() : "";
 			return {
 				personId: employee.person.id,
 				employeeId: employee.id,
+				userId: userId || null,
 				firstName: toSafeString(personalInfo.firstName) || null,
 				middleName: toSafeString(personalInfo.middleName) || null,
 				lastName: toSafeString(personalInfo.lastName) || null,
 				month: dob.getUTCMonth() + 1,
 				day: dob.getUTCDate(),
 				department: employee.department?.name || null,
+				avatar: userId ? avatarByUserId.get(userId) || null : null,
 			} as EmployeeBirthdayRow;
 		})
 		.filter((row): row is EmployeeBirthdayRow => Boolean(row));
@@ -291,6 +322,119 @@ const groupByDay = (
 };
 
 export const controller = (prisma: PrismaClient) => {
+	const buildBirthdaySuccessPayload = async (params: {
+		organizationId: string;
+		month: number;
+		year: number;
+		type: BirthdayFilterType;
+		search: string;
+	}) => {
+		const { organizationId, month, year, type, search } = params;
+
+		const [employeeRows, childRows] = await Promise.all([
+			getEmployeeBirthdays(prisma, organizationId, month),
+			getChildBirthdays(prisma, organizationId, month),
+		]);
+
+		const employeeItems: BirthdayCelebrantItem[] = [];
+		for (const row of employeeRows) {
+			if (!isValidBirthday(row.month, row.day)) {
+				continue;
+			}
+
+			const personId = extractId(row.personId);
+			if (!personId) {
+				continue;
+			}
+
+			const displayName = buildFullName(row.firstName, row.middleName, row.lastName);
+			if (!displayName) {
+				continue;
+			}
+
+			employeeItems.push({
+				id: `EMP:${personId}`,
+				type: "EMPLOYEE_BIRTHDAY",
+				month: Number(row.month),
+				day: Number(row.day),
+				displayName,
+				personId,
+				employeeId: extractId(row.employeeId),
+				parentDisplayName: null,
+				department: toSafeString(row.department) || null,
+				avatar: toSafeString(row.avatar) || null,
+			});
+		}
+
+		const childItems: BirthdayCelebrantItem[] = [];
+		for (const row of childRows) {
+			if (!isValidBirthday(row.month, row.day)) {
+				continue;
+			}
+
+			const parentPersonId = extractId(row.parentPersonId);
+			if (!parentPersonId) {
+				continue;
+			}
+
+			const displayName = buildChildDisplayName(row.childFirstName, row.childLastName);
+			const parentDisplayName = buildFullName(
+				row.parentFirstName,
+				row.parentMiddleName,
+				row.parentLastName,
+			);
+
+			childItems.push({
+				id: `CHILD:${parentPersonId}:${row.childIndex ?? 0}`,
+				type: "CHILD_BIRTHDAY",
+				month: Number(row.month),
+				day: Number(row.day),
+				displayName,
+				personId: parentPersonId,
+				employeeId: extractId(row.parentEmployeeId),
+				parentDisplayName: parentDisplayName || null,
+				department: toSafeString(row.department) || null,
+				avatar: null,
+			});
+		}
+
+		const mergedItems = [...employeeItems, ...childItems];
+		const typeFilteredItems = filterByType(mergedItems, type);
+		const searchFilteredItems = filterBySearch(typeFilteredItems, search);
+
+		searchFilteredItems.sort((a, b) => {
+			if (a.day !== b.day) {
+				return a.day - b.day;
+			}
+			return a.displayName.localeCompare(b.displayName, undefined, {
+				sensitivity: "base",
+			});
+		});
+
+		const employeesCount = searchFilteredItems.filter(
+			(item) => item.type === "EMPLOYEE_BIRTHDAY",
+		).length;
+		const kidsCount = searchFilteredItems.filter(
+			(item) => item.type === "CHILD_BIRTHDAY",
+		).length;
+
+		return {
+			month,
+			year,
+			organizationId,
+			state: "OK" as const,
+			message: null,
+			filters: { type, search },
+			counts: {
+				employees: employeesCount,
+				kids: kidsCount,
+				total: searchFilteredItems.length,
+			},
+			items: searchFilteredItems,
+			groups: groupByDay(searchFilteredItems),
+		};
+	};
+
 	const getBirthdays = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		const parsed = BirthdaysQuerySchema.safeParse(req.query);
 		if (!parsed.success) {
@@ -321,107 +465,17 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		try {
-			const [employeeRows, childRows] = await Promise.all([
-				getEmployeeBirthdays(prisma, organizationId, month),
-				getChildBirthdays(prisma, organizationId, month),
-			]);
-
-			const employeeItems: BirthdayCelebrantItem[] = [];
-			for (const row of employeeRows) {
-				if (!isValidBirthday(row.month, row.day)) {
-					continue;
-				}
-
-				const personId = extractId(row.personId);
-				if (!personId) {
-					continue;
-				}
-
-				const displayName = buildFullName(row.firstName, row.middleName, row.lastName);
-				if (!displayName) {
-					continue;
-				}
-
-				employeeItems.push({
-					id: `EMP:${personId}`,
-					type: "EMPLOYEE_BIRTHDAY",
-					month: Number(row.month),
-					day: Number(row.day),
-					displayName,
-					personId,
-					employeeId: extractId(row.employeeId),
-					parentDisplayName: null,
-					department: toSafeString(row.department) || null,
-				});
-			}
-
-			const childItems: BirthdayCelebrantItem[] = [];
-			for (const row of childRows) {
-				if (!isValidBirthday(row.month, row.day)) {
-					continue;
-				}
-
-				const parentPersonId = extractId(row.parentPersonId);
-				if (!parentPersonId) {
-					continue;
-				}
-
-				const displayName = buildChildDisplayName(row.childFirstName, row.childLastName);
-				const parentDisplayName = buildFullName(
-					row.parentFirstName,
-					row.parentMiddleName,
-					row.parentLastName,
-				);
-
-				childItems.push({
-					id: `CHILD:${parentPersonId}:${row.childIndex ?? 0}`,
-					type: "CHILD_BIRTHDAY",
-					month: Number(row.month),
-					day: Number(row.day),
-					displayName,
-					personId: parentPersonId,
-					employeeId: extractId(row.parentEmployeeId),
-					parentDisplayName: parentDisplayName || null,
-					department: toSafeString(row.department) || null,
-				});
-			}
-
-			const mergedItems = [...employeeItems, ...childItems];
-			const typeFilteredItems = filterByType(mergedItems, type);
-			const searchFilteredItems = filterBySearch(typeFilteredItems, search);
-
-			searchFilteredItems.sort((a, b) => {
-				if (a.day !== b.day) {
-					return a.day - b.day;
-				}
-				return a.displayName.localeCompare(b.displayName, undefined, {
-					sensitivity: "base",
-				});
-			});
-
-			const employeesCount = searchFilteredItems.filter(
-				(item) => item.type === "EMPLOYEE_BIRTHDAY",
-			).length;
-			const kidsCount = searchFilteredItems.filter(
-				(item) => item.type === "CHILD_BIRTHDAY",
-			).length;
-
 			res.status(200).json(
-				buildSuccessResponse(SUCCESS_MESSAGE, {
-					month,
-					year,
-					organizationId,
-					state: "OK",
-					message: null,
-					filters: { type, search },
-					counts: {
-						employees: employeesCount,
-						kids: kidsCount,
-						total: searchFilteredItems.length,
-					},
-					items: searchFilteredItems,
-					groups: groupByDay(searchFilteredItems),
-				}),
+				buildSuccessResponse(
+					SUCCESS_MESSAGE,
+					await buildBirthdaySuccessPayload({
+						organizationId,
+						month,
+						year,
+						type,
+						search,
+					}),
+				),
 			);
 		} catch (error: any) {
 			celebrationsLogger.error("Failed to get birthday celebrations:", error);
@@ -436,7 +490,57 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const getPublicBirthdays = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		const parsed = BirthdaysQuerySchema.safeParse(req.query);
+		if (!parsed.success) {
+			const formattedErrors = formatZodErrors(parsed.error.format());
+			res.status(400).json(buildErrorResponse("Validation failed", 400, formattedErrors));
+			return;
+		}
+
+		try {
+			const orgResolution = await resolvePublicKioskOrganizationId(prisma, {
+				organizationId: parsed.data.organizationId,
+				organizationCode: parsed.data.organizationCode,
+			});
+			if (!orgResolution.ok) {
+				res.status(400).json(
+					buildErrorResponse(orgResolution.message, 400, [
+						{ field: orgResolution.field, message: orgResolution.message },
+					]),
+				);
+				return;
+			}
+
+			const payload = await buildBirthdaySuccessPayload({
+				organizationId: orgResolution.organizationId,
+				month: parsed.data.month,
+				year: parsed.data.year,
+				type: parsed.data.type,
+				search: parsed.data.search,
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(SUCCESS_MESSAGE, {
+					...payload,
+					resolvedBy: orgResolution.resolvedBy,
+				}),
+			);
+		} catch (error: any) {
+			celebrationsLogger.error("Failed to get public birthday celebrations:", error);
+			res.status(500).json(
+				buildErrorResponse("Failed to retrieve birthday celebrations", 500, [
+					{
+						field: "system",
+						message: error?.message || "Unexpected error",
+					},
+				]),
+			);
+		}
+	};
+
 	return {
 		getBirthdays,
+		getPublicBirthdays,
 	};
 };

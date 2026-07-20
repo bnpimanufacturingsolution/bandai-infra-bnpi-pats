@@ -57,6 +57,7 @@ import {
 	deriveBehaviorFlags,
 	deriveGracePeriodStatus,
 } from "../../helper/timekeeping.helper";
+import { resolveOvertimePolicyApplication } from "../../helper/overtime-approval.helper";
 import {
 	ensureCurrentPayrollPeriodDraftTimesheet,
 	refreshTimesheetForAttendanceDate,
@@ -161,190 +162,6 @@ const applyEmployeeDocumentSelectionDefaults = (fieldSelections: Record<string, 
 };
 
 const MAX_EMPLOYEE_CREATE_VALIDATION_ERRORS = 6;
-const EMPLOYEE_HARD_DELETE_ADMIN_ROLES = new Set([
-	"hris-admin",
-	"admin",
-	"super_admin",
-	"superadmin",
-]);
-
-const isEmployeeHardDeleteAdmin = (req: Request) => {
-	const role = String(
-		(req as any)?.role ||
-			(req as any)?.user?.role ||
-			(req as any)?.metadata?.role ||
-			(req as any)?.metadata?.employee?.role ||
-			"",
-	)
-		.trim()
-		.toLowerCase();
-	return EMPLOYEE_HARD_DELETE_ADMIN_ROLES.has(role);
-};
-
-const countEmployeeRelation = async (
-	prisma: PrismaClient,
-	delegateName: string,
-	where: Record<string, unknown>,
-) => {
-	const delegate = (prisma as any)[delegateName];
-	if (!delegate?.count) return 0;
-	return delegate.count({ where });
-};
-
-const buildEmployeeHardDeletePreview = async (prisma: PrismaClient, employee: any) => {
-	const employeeId = employee.id;
-	const organizationId = employee.organizationId;
-	const relationCounts = {
-		attendanceRecords: await countEmployeeRelation(prisma, "attendance", { employeeId }),
-		attendanceObligations: await countEmployeeRelation(prisma, "attendanceObligation", {
-			employeeId,
-		}),
-		timesheets: await countEmployeeRelation(prisma, "timesheet", { employeeId }),
-		timesheetLines: await countEmployeeRelation(prisma, "timesheetline", { employeeId }),
-		employeePayrolls: await countEmployeeRelation(prisma, "employeePayroll", { employeeId }),
-		terminations: await countEmployeeRelation(prisma, "termination", { employeeId }),
-		scheduleOverrides: await countEmployeeRelation(prisma, "scheduleOverride", { employeeId }),
-		scheduleHistoryRecords: await countEmployeeRelation(prisma, "employeeScheduleHistory", {
-			employeeId,
-		}),
-		soaLineItems: await countEmployeeRelation(prisma, "sOALineItem", { employeeId }),
-		deviceEvents: await countEmployeeRelation(prisma, "deviceEvent", { employeeId }),
-		deviceUsers: await countEmployeeRelation(prisma, "deviceUser", { employeeId }),
-		documents: await countEmployeeRelation(prisma, "document", { employeeId }),
-		documentFolders: await countEmployeeRelation(prisma, "documentFolder", { employeeId }),
-		employeeBenefits: await countEmployeeRelation(prisma, "employeeBenefit", { employeeId }),
-		employeeLoans: await countEmployeeRelation(prisma, "employeeLoan", { employeeId }),
-		leaveBalances: await countEmployeeRelation(prisma, "employeeLeaveBalance", {
-			employeeId,
-		}),
-		boardingProcesses: await countEmployeeRelation(prisma, "boardingProcess", { employeeId }),
-		activityLogs: await countEmployeeRelation(prisma, "activityLogging", { employeeId }),
-		auditLogs: await countEmployeeRelation(prisma, "auditLogging", { employeeId }),
-	};
-
-	const blockerDefinitions = [
-		["attendanceRecords", "attendance records exist"],
-		["attendanceObligations", "attendance obligations exist"],
-		["timesheets", "timesheets exist"],
-		["timesheetLines", "timesheet lines exist"],
-		["employeePayrolls", "payroll records exist"],
-		["terminations", "termination history exists"],
-		["scheduleOverrides", "schedule overrides exist"],
-		["scheduleHistoryRecords", "schedule history exists"],
-		["soaLineItems", "statement of account line items exist"],
-	] as const;
-	const blockers = blockerDefinitions
-		.map(([key, reason]) => ({
-			key,
-			reason,
-			count: relationCounts[key],
-			severity: "blocked" as const,
-		}))
-		.filter((item) => item.count > 0);
-
-	const protectedDeletes = [
-		["Attendance", relationCounts.attendanceRecords, "Delete attendance rows for this employee."],
-		[
-			"AttendanceObligation",
-			relationCounts.attendanceObligations,
-			"Delete attendance obligation rows tied to this employee.",
-		],
-		["Timesheet", relationCounts.timesheets, "Delete employee timesheets."],
-		["Timesheetline", relationCounts.timesheetLines, "Delete employee timesheet line rows."],
-		["EmployeePayroll", relationCounts.employeePayrolls, "Delete employee payroll rows."],
-		["Termination", relationCounts.terminations, "Delete termination records for this employee."],
-		["ScheduleOverride", relationCounts.scheduleOverrides, "Delete employee schedule overrides."],
-		[
-			"EmployeeScheduleHistory",
-			relationCounts.scheduleHistoryRecords,
-			"Delete employee schedule history rows.",
-		],
-		["SOALineItem", relationCounts.soaLineItems, "Delete statement-of-account line items."],
-	]
-		.map(([model, count, description]) => ({
-			model,
-			action: "delete" as const,
-			count,
-			description,
-		}))
-		.filter((item) => item.count > 0);
-
-	const detach = [
-		{
-			model: "DeviceEvent",
-			action: "detach",
-			count: relationCounts.deviceEvents,
-			description: "Clear employee link and keep the device event audit row.",
-		},
-		{
-			model: "DeviceUser",
-			action: "detach",
-			count: relationCounts.deviceUsers,
-			description: "Clear employee link and keep the device user identity record.",
-		},
-		{
-			model: "ActivityLogging",
-			action: "detach",
-			count: relationCounts.activityLogs,
-			description: "Clear employee link and keep the activity log.",
-		},
-		{
-			model: "AuditLogging",
-			action: "detach",
-			count: relationCounts.auditLogs,
-			description: "Clear employee link and keep the audit log.",
-		},
-	].filter((item) => item.count > 0);
-
-	const deleted = [
-		["Employee", 1, "Delete the employee record."],
-		["Document", relationCounts.documents, "Delete employee documents through cascade/delete."],
-		["DocumentFolder", relationCounts.documentFolders, "Delete employee document folders."],
-		["EmployeeBenefit", relationCounts.employeeBenefits, "Delete employee benefit rows."],
-		["EmployeeLoan", relationCounts.employeeLoans, "Delete employee loan rows."],
-		["EmployeeLeaveBalance", relationCounts.leaveBalances, "Delete leave balance rows."],
-		["BoardingProcess", relationCounts.boardingProcesses, "Delete onboarding/offboarding process rows."],
-	].map(([model, count, description]) => ({
-		model,
-		action: "delete",
-		count,
-		description,
-	}));
-	const deletePlan = [...deleted, ...protectedDeletes];
-	const forceExecuteAvailable = blockers.length > 0;
-
-	return {
-		employee: {
-			id: employee.id,
-			employeeId: employee.employeeId,
-			organizationId,
-			name: [
-				employee.person?.personalInfo?.firstName,
-				employee.person?.personalInfo?.middleName,
-				employee.person?.personalInfo?.lastName,
-			]
-				.filter(Boolean)
-				.join(" ")
-				.trim(),
-		},
-		safeToExecute: blockers.length === 0,
-		forceExecuteAvailable,
-		blockers,
-		relationCounts,
-		plan: {
-			delete: deletePlan,
-			detach,
-			archive: [],
-			blocked: blockers,
-		},
-		summary: {
-			blockerCount: blockers.length,
-			deleteCount: deletePlan.reduce((sum, item) => sum + Number(item.count || 0), 0),
-			detachCount: detach.reduce((sum, item) => sum + Number(item.count || 0), 0),
-			archiveCount: 0,
-		},
-	};
-};
 
 const normalizeValidationFieldPath = (field: string) => field.replace(/\[(\d+)\]/g, ".$1");
 
@@ -1761,6 +1578,15 @@ export const controller = (prisma: PrismaClient) => {
 
 		try {
 			const reserved = await reserveNextEmployeeId(prisma, organizationId);
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.RESERVE_EMPLOYEE_ID,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_ID_RESERVED}: ${reserved.employeeId}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_ID_RESERVATION,
+				},
+			});
 			const successResponse = buildSuccessResponse(
 				"Employee ID reserved successfully",
 				{
@@ -2034,6 +1860,30 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.SET_EMPLOYEE_SCHEDULE,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_SCHEDULE_SET}: ${targetEmployee.employeeId || employeeId} (${parsed.scheduleCode})`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_SCHEDULE,
+				},
+			});
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.EMPLOYEE,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.EMPLOYEE,
+				entityId: employeeId,
+				changesBefore: { embeddedSchedule: previousEmbeddedSchedule },
+				changesAfter: {
+					embeddedSchedule: (updatedEmployee as any)?.embeddedSchedule || null,
+				},
+				description: `${config.AUDIT_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_SCHEDULE_SET}: ${targetEmployee.employeeId || employeeId} (${parsed.scheduleCode})`,
+				organizationId,
+			});
+
 			const successResponse = buildSuccessResponse(
 				"Employee active schedule updated successfully",
 				{
@@ -2213,6 +2063,15 @@ export const controller = (prisma: PrismaClient) => {
 			}));
 
 			if (employeeIds.length === 0) {
+				logActivity(req, {
+					userId: (req as any).user?.id || "unknown",
+					action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.GET_TEAM_SCHEDULE_CALENDAR,
+					description: config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.TEAM_SCHEDULE_CALENDAR_RETRIEVED,
+					page: {
+						url: req.originalUrl,
+						title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.TEAM_SCHEDULE,
+					},
+				});
 				res.status(200).json(
 					buildSuccessResponse(
 						"Team schedule calendar retrieved successfully",
@@ -2258,6 +2117,15 @@ export const controller = (prisma: PrismaClient) => {
 				}));
 			});
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.GET_TEAM_SCHEDULE_CALENDAR,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.TEAM_SCHEDULE_CALENDAR_RETRIEVED}: ${items.length} item(s)`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.TEAM_SCHEDULE,
+				},
+			});
 			res.status(200).json(
 				buildSuccessResponse(
 					"Team schedule calendar retrieved successfully",
@@ -2775,6 +2643,15 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.GET_TEAM_SCHEDULE_CALENDAR_GRID,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.TEAM_SCHEDULE_CALENDAR_GRID_RETRIEVED}: ${rows.length} row(s)`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.TEAM_SCHEDULE,
+				},
+			});
 			res.status(200).json(
 				buildSuccessResponse(
 					"Team schedule calendar grid retrieved successfully",
@@ -2879,6 +2756,15 @@ export const controller = (prisma: PrismaClient) => {
 				});
 			}
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.GET_TEAM_SCHEDULE_COLLECTIONS,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.TEAM_SCHEDULE_COLLECTIONS_RETRIEVED}: ${data.length} department(s)`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.TEAM_SCHEDULE,
+				},
+			});
 			res.status(200).json(
 				buildSuccessResponse(
 					"Team schedule collections retrieved successfully",
@@ -3355,6 +3241,15 @@ export const controller = (prisma: PrismaClient) => {
 				after: row.afterSchedule || null,
 			}));
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.GET_EMPLOYEE_SCHEDULES,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_SCHEDULES_RETRIEVED}: ${targetEmployee.employeeId || employeeId}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_SCHEDULE,
+				},
+			});
 			const successResponse = buildSuccessResponse(
 				"Employee schedules retrieved successfully",
 				{
@@ -3442,6 +3337,28 @@ export const controller = (prisma: PrismaClient) => {
 			await invalidateCache.byPattern("cache:attendance:*");
 			await invalidateCache.byPattern("cache:timesheet:*");
 			await invalidateCache.byPattern("cache:metrics:*");
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.DEACTIVATE_EMPLOYEE_SCHEDULE,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_SCHEDULE_DEACTIVATED}: ${employeeId}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_SCHEDULE,
+				},
+			});
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.EMPLOYEE,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.EMPLOYEE,
+				entityId: employeeId,
+				changesBefore: { embeddedSchedule: previousEmbeddedSchedule },
+				changesAfter: { embeddedSchedule: null },
+				description: `${config.AUDIT_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_SCHEDULE_DEACTIVATED}: ${employeeId}`,
+				organizationId,
+			});
 
 			res.status(200).json(
 				buildSuccessResponse(
@@ -4579,6 +4496,16 @@ export const controller = (prisma: PrismaClient) => {
 				...(groupBy && { groupedBy: groupBy }),
 			};
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.GET_ALL_EMPLOYEE,
+				description: config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEES_RETRIEVED,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_LIST,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(config.SUCCESS.EMPLOYEE.RETRIEVED_ALL, responseData, 200),
 			);
@@ -4750,6 +4677,15 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			employeeLogger.info(`${config.SUCCESS.EMPLOYEE.RETRIEVED}: ${(employee as any).id}`);
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.GET_EMPLOYEE,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_RETRIEVED}: ${(employee as any).employeeId || id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_DETAILS,
+				},
+			});
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.EMPLOYEE.RETRIEVED,
 				employee,
@@ -5755,6 +5691,27 @@ export const controller = (prisma: PrismaClient) => {
 			await helpers.invalidateEmployeeCaches(id);
 			employeeLogger.info(`Cache invalidated after employee ${id} deletion`);
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.DELETE_EMPLOYEE,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_DELETED}: ${existingEmployee.employeeId || id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_DELETION,
+				},
+			});
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.DELETE,
+				resource: config.AUDIT_LOG.RESOURCES.EMPLOYEE,
+				severity: config.AUDIT_LOG.SEVERITY.HIGH,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.EMPLOYEE,
+				entityId: id,
+				changesBefore: existingEmployee,
+				changesAfter: null,
+				description: `${config.AUDIT_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_DELETED}: ${existingEmployee.employeeId || id}`,
+			});
+
 			employeeLogger.info(`${config.SUCCESS.EMPLOYEE.DELETED}: ${id}`);
 			const successResponse = buildSuccessResponse(config.SUCCESS.EMPLOYEE.DELETED, {}, 200);
 			res.status(200).json(successResponse);
@@ -5765,180 +5722,6 @@ export const controller = (prisma: PrismaClient) => {
 				500,
 			);
 			res.status(500).json(errorResponse);
-		}
-	};
-
-	const previewHardDelete = async (req: Request, res: Response, _next: NextFunction) => {
-		const { id } = req.params;
-		const execute = req.body?.execute === true;
-		const dryRun = req.body?.dryRun !== false && !execute;
-		const force = req.body?.force === true;
-		const confirmation = String(req.body?.confirmation || "").trim();
-
-		try {
-			if (!id) {
-				res.status(400).json(buildErrorResponse("Employee ID is required", 400));
-				return;
-			}
-
-			if (!isEmployeeHardDeleteAdmin(req)) {
-				res.status(403).json(
-					buildErrorResponse("Only HRIS admins can preview or execute employee hard delete.", 403),
-				);
-				return;
-			}
-
-			const existingEmployee = await prisma.employee.findFirst({
-				where: { id },
-				include: {
-					person: {
-						select: {
-							personalInfo: true,
-						},
-					},
-				},
-			});
-
-			if (!existingEmployee) {
-				res.status(404).json(buildErrorResponse(config.ERROR.EMPLOYEE.NOT_FOUND, 404));
-				return;
-			}
-
-			const preview = await buildEmployeeHardDeletePreview(prisma, existingEmployee);
-			if (!execute || dryRun) {
-				res.status(200).json(
-					buildSuccessResponse("Employee hard delete preview complete", {
-						mode: "preview",
-						execute: false,
-						requiresConfirmation: null,
-						...preview,
-					}, 200),
-				);
-				return;
-			}
-
-			if (preview.blockers.length > 0 && !force) {
-				const firstReason =
-					preview.blockers[0]?.reason || "protected history requires force confirmation";
-				res.status(409).json(
-					buildErrorResponse(`Cannot hard delete employee without force confirmation: ${firstReason}`, 409, [
-						{
-							field: "employeeId",
-							message: `${preview.summary.blockerCount} protected relation type(s) found. Run preview and confirm force delete to remove them.`,
-						},
-					]),
-				);
-				return;
-			}
-
-			await prisma.$transaction(async (tx) => {
-				await tx.employee.updateMany({
-					where: { reportToId: id },
-					data: { reportToId: null },
-				});
-				await (tx as any).calendarItem?.updateMany?.({
-					where: { assignedEmployeeId: id },
-					data: { assignedEmployeeId: null },
-				});
-				await (tx as any).workflowStepExecution?.updateMany?.({
-					where: { assigneeId: id },
-					data: { assigneeId: null },
-				});
-				await (tx as any).request?.updateMany?.({
-					where: { targetEmployeeId: id },
-					data: { targetEmployeeId: null },
-				});
-				await (tx as any).notification?.updateMany?.({
-					where: { sourceEmployeeId: id },
-					data: { sourceEmployeeId: null },
-				});
-				await (tx as any).employeeScheduleHistory?.updateMany?.({
-					where: { actorEmployeeId: id },
-					data: { actorEmployeeId: null },
-				});
-				await (tx as any).scheduleOverride?.updateMany?.({
-					where: { createdByEmployeeId: id },
-					data: { createdByEmployeeId: null },
-				});
-				await (tx as any).termination?.updateMany?.({
-					where: { hrDirectorId: id },
-					data: { hrDirectorId: null },
-				});
-				await (tx as any).termination?.updateMany?.({
-					where: { legalApproverId: id },
-					data: { legalApproverId: null },
-				});
-				await (tx as any).deviceEvent?.updateMany?.({
-					where: { employeeId: id },
-					data: { employeeId: null },
-				});
-				await (tx as any).deviceUser?.updateMany?.({
-					where: { employeeId: id },
-					data: { employeeId: null, status: "UNMATCHED" },
-				});
-				await (tx as any).activityLogging?.updateMany?.({
-					where: { employeeId: id },
-					data: { employeeId: null },
-				});
-				await (tx as any).auditLogging?.updateMany?.({
-					where: { employeeId: id },
-					data: { employeeId: null },
-				});
-				await (tx as any).attendanceObligation?.deleteMany?.({
-					where: { employeeId: id },
-				});
-				await (tx as any).timesheetline?.deleteMany?.({
-					where: { employeeId: id },
-				});
-				await (tx as any).attendance?.deleteMany?.({
-					where: { employeeId: id },
-				});
-				await (tx as any).sOALineItem?.deleteMany?.({
-					where: { employeeId: id },
-				});
-				await (tx as any).employeePayroll?.deleteMany?.({
-					where: { employeeId: id },
-				});
-				await (tx as any).timesheet?.deleteMany?.({
-					where: { employeeId: id },
-				});
-				await (tx as any).termination?.deleteMany?.({
-					where: { employeeId: id },
-				});
-				await (tx as any).employeeScheduleHistory?.deleteMany?.({
-					where: { employeeId: id },
-				});
-				await (tx as any).scheduleOverride?.deleteMany?.({
-					where: { employeeId: id },
-				});
-				await tx.employee.delete({ where: { id } });
-			});
-
-			await helpers.invalidateEmployeeCaches(id);
-			logAudit(req, {
-				userId: (req as any).user?.id || "unknown",
-				action: config.AUDIT_LOG.ACTIONS.DELETE,
-				resource: config.AUDIT_LOG.RESOURCES.EMPLOYEE,
-				severity: config.AUDIT_LOG.SEVERITY.HIGH,
-				entityType: config.AUDIT_LOG.ENTITY_TYPES.EMPLOYEE,
-				entityId: id,
-				changesBefore: existingEmployee,
-				changesAfter: null,
-				description: `Employee hard deleted: ${existingEmployee.employeeId || id}`,
-			});
-
-			res.status(200).json(
-				buildSuccessResponse("Employee hard deleted", {
-					mode: "executed",
-					execute: true,
-					...preview,
-				}, 200),
-			);
-		} catch (error) {
-			employeeLogger.error(`Employee hard delete preview failed: ${error}`);
-			res.status(500).json(
-				buildErrorResponse("Employee hard delete failed before completion", 500),
-			);
 		}
 	};
 
@@ -6322,6 +6105,16 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			};
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.GET_ATTENDANCE_RECORDS,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.ATTENDANCE_RECORDS_RETRIEVED}: ${employeeId}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_ATTENDANCE_LIST,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Employee attendance records retrieved successfully",
@@ -6388,6 +6181,15 @@ export const controller = (prisma: PrismaClient) => {
 					employmentHireDate: employee.employmentHireDate || null,
 				} as any;
 
+				logActivity(req, {
+					userId: (req as any).user?.id || "unknown",
+					action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.GET_TODAY_ATTENDANCE,
+					description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.TODAY_ATTENDANCE_RETRIEVED}: ${employeeId} (pre-start)`,
+					page: {
+						url: req.originalUrl,
+						title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_ATTENDANCE,
+					},
+				});
 				res.status(200).json(
 					buildSuccessResponse(
 						"Today's attendance status retrieved successfully",
@@ -6451,21 +6253,24 @@ export const controller = (prisma: PrismaClient) => {
 					todayScheduleSnapshot,
 					todayAttendance.date || today,
 				);
-				const overtimeFlagThresholdMinutes = await getOvertimeFlagThresholdMinutes(
+				const overtimeApplication = await resolveOvertimePolicyApplication(
+					prisma,
 					employee.organizationId,
+					{
+						calc: timekeepingCalc,
+						timeIn: todayAttendance.timeIn,
+						timeOut: todayAttendance.timeOut || null,
+						schedule: todayScheduleSnapshot,
+						date: todayAttendance.date || today,
+						attendanceStatus: todayAttendance.status,
+					},
 				);
 				todayAttendance = await prisma.attendance.update({
 					where: { id: todayAttendance.id },
 					data: {
 						scheduleSnapshot: todayScheduleSnapshot as any,
-						behaviorFlags: deriveBehaviorFlags({
-							timeIn: todayAttendance.timeIn,
-							timeOut: todayAttendance.timeOut || null,
-							schedule: todayScheduleSnapshot,
-							date: todayAttendance.date || today,
-							overtimeThresholdMinutes: overtimeFlagThresholdMinutes,
-						}),
-						...buildAttendanceTimekeepingFields(timekeepingCalc),
+						behaviorFlags: overtimeApplication.behaviorFlags,
+						...overtimeApplication.timekeepingFields,
 					},
 				});
 				await applyAttendanceToObligation(prisma, {
@@ -6567,6 +6372,16 @@ export const controller = (prisma: PrismaClient) => {
 				hasTimeOut: enrichedTodayAttendance?.timeOut ? true : false,
 			};
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.GET_TODAY_ATTENDANCE,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.TODAY_ATTENDANCE_RETRIEVED}: ${employeeId}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_ATTENDANCE,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Today's attendance status retrieved successfully",
@@ -6640,6 +6455,16 @@ export const controller = (prisma: PrismaClient) => {
 			employeeLogger.info(
 				`Retrieved attendance record ${attendanceId} for employee ${employeeId}`,
 			);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.GET_ATTENDANCE,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.ATTENDANCE_RETRIEVED}: ${attendanceId}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_ATTENDANCE,
+				},
+			});
 
 			res.status(200).json(
 				buildSuccessResponse(
@@ -6761,10 +6586,6 @@ export const controller = (prisma: PrismaClient) => {
 					: hasTimeOutInput
 						? (validatedData.timeOut ?? null)
 						: existingAttendance.timeOut;
-				const overtimeFlagThresholdMinutes = await getOvertimeFlagThresholdMinutes(
-					existingAttendance.organizationId,
-				);
-
 				// Recalculate timekeeping metrics with the effective attendance values.
 				const timekeepingCalc = calculateTimekeeping(
 					nextTimeIn,
@@ -6777,6 +6598,19 @@ export const controller = (prisma: PrismaClient) => {
 				const finalStatus =
 					validatedData.status ||
 					determineAttendanceStatus(timekeepingCalc, Boolean(nextTimeOut));
+				const overtimeApplication = await resolveOvertimePolicyApplication(
+					prisma,
+					existingAttendance.organizationId,
+					{
+						calc: timekeepingCalc,
+						timeIn: nextTimeIn,
+						timeOut: nextTimeOut,
+						schedule: scheduleSnapshot,
+						date: attendanceDate,
+						isNonWorked: isNonWorkedStatus,
+						attendanceStatus: finalStatus,
+					},
+				);
 
 				// Add calculated fields to update data
 				finalUpdateData = {
@@ -6784,18 +6618,8 @@ export const controller = (prisma: PrismaClient) => {
 					timeIn: nextTimeIn,
 					timeOut: nextTimeOut,
 					status: finalStatus,
-					behaviorFlags: isNonWorkedStatus
-						? []
-						: deriveBehaviorFlags({
-								timeIn: nextTimeIn,
-								timeOut: nextTimeOut,
-								schedule: scheduleSnapshot,
-								date: attendanceDate,
-								overtimeThresholdMinutes: overtimeFlagThresholdMinutes,
-							}),
-					...buildAttendanceTimekeepingFields(timekeepingCalc, {
-						isNonWorked: isNonWorkedStatus,
-					}),
+					behaviorFlags: isNonWorkedStatus ? [] : overtimeApplication.behaviorFlags,
+					...overtimeApplication.timekeepingFields,
 				};
 
 				employeeLogger.info(
@@ -6835,6 +6659,27 @@ export const controller = (prisma: PrismaClient) => {
 			});
 			await helpers.invalidateAttendanceCaches(attendanceId, employeeId);
 			employeeLogger.info(`Cache invalidated after attendance ${attendanceId} update`);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.UPDATE_ATTENDANCE,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.ATTENDANCE_UPDATED}: ${attendanceId}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_ATTENDANCE,
+				},
+			});
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.ATTENDANCE,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.ATTENDANCE,
+				entityId: attendanceId,
+				changesBefore: existingAttendance,
+				changesAfter: updatedAttendance,
+				description: `${config.AUDIT_LOG.EMPLOYEE.DESCRIPTIONS.ATTENDANCE_UPDATED}: ${attendanceId}`,
+			});
 
 			res.status(200).json(
 				buildSuccessResponse(
@@ -6916,6 +6761,27 @@ export const controller = (prisma: PrismaClient) => {
 			employeeLogger.info(
 				`Deleted attendance record ${attendanceId} for employee ${employeeId}`,
 			);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.DELETE_ATTENDANCE,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.ATTENDANCE_DELETED}: ${attendanceId}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_ATTENDANCE,
+				},
+			});
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.DELETE,
+				resource: config.AUDIT_LOG.RESOURCES.ATTENDANCE,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.ATTENDANCE,
+				entityId: attendanceId,
+				changesBefore: existingAttendance,
+				changesAfter: null,
+				description: `${config.AUDIT_LOG.EMPLOYEE.DESCRIPTIONS.ATTENDANCE_DELETED}: ${attendanceId}`,
+			});
 
 			res.status(200).json(
 				buildSuccessResponse("Attendance record deleted successfully", {}, 200),
@@ -7209,8 +7075,18 @@ export const controller = (prisma: PrismaClient) => {
 				// Determine status based on calculations (unless explicitly provided)
 				const finalStatus =
 					validation.data.status || determineAttendanceStatus(timekeepingCalc, true);
-				const overtimeFlagThresholdMinutes =
-					await getOvertimeFlagThresholdMinutes(organizationId);
+				const overtimeApplication = await resolveOvertimePolicyApplication(
+					prisma,
+					organizationId,
+					{
+						calc: timekeepingCalc,
+						timeIn: fullAttendance.timeIn,
+						timeOut: requestedTimeOut,
+						schedule: fullAttendance.scheduleSnapshot,
+						date: fullAttendance.date || new Date(),
+						attendanceStatus: finalStatus,
+					},
+				);
 
 				const updatedAttendance = await prisma.attendance.update({
 					where: { id: existingAttendance.id },
@@ -7219,18 +7095,10 @@ export const controller = (prisma: PrismaClient) => {
 						timeOutLocation: validation.data.timeOutLocation,
 						status: finalStatus,
 						behaviorFlags:
-							finalStatus === "LEAVE"
-								? []
-								: deriveBehaviorFlags({
-										timeIn: fullAttendance.timeIn,
-										timeOut: requestedTimeOut,
-										schedule: fullAttendance.scheduleSnapshot,
-										date: fullAttendance.date || new Date(),
-										overtimeThresholdMinutes: overtimeFlagThresholdMinutes,
-									}),
+							finalStatus === "LEAVE" ? [] : overtimeApplication.behaviorFlags,
 						notes: validation.data.notes || existingAttendance.notes,
 						...(await fetchAttendanceEmployeeSnapshotFields(prisma, employeeId)),
-						...buildAttendanceTimekeepingFields(timekeepingCalc),
+						...overtimeApplication.timekeepingFields,
 					},
 					include: {
 						employee: {
@@ -7272,6 +7140,27 @@ export const controller = (prisma: PrismaClient) => {
 					await invalidateCache.byPattern("cache:timesheet:*");
 				}
 
+				logActivity(req, {
+					userId: (req as any).user?.id || "unknown",
+					action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.MARK_ATTENDANCE,
+					description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.ATTENDANCE_MARKED}: ${updatedAttendance.id} (clock-out)`,
+					page: {
+						url: req.originalUrl,
+						title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_ATTENDANCE,
+					},
+				});
+				logAudit(req, {
+					userId: (req as any).user?.id || "unknown",
+					action: config.AUDIT_LOG.ACTIONS.UPDATE,
+					resource: config.AUDIT_LOG.RESOURCES.ATTENDANCE,
+					severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+					entityType: config.AUDIT_LOG.ENTITY_TYPES.ATTENDANCE,
+					entityId: updatedAttendance.id,
+					changesBefore: fullAttendance,
+					changesAfter: updatedAttendance,
+					description: `${config.AUDIT_LOG.EMPLOYEE.DESCRIPTIONS.ATTENDANCE_MARKED}: ${updatedAttendance.id} (clock-out)`,
+				});
+
 				const successResponse = buildSuccessResponse(
 					"Clock out successful",
 					{ attendance: updatedAttendance },
@@ -7312,8 +7201,18 @@ export const controller = (prisma: PrismaClient) => {
 			const finalStatus =
 				validation.data.status ||
 				determineAttendanceStatus(timekeepingCalc, !!validation.data.timeOut);
-			const overtimeFlagThresholdMinutes =
-				await getOvertimeFlagThresholdMinutes(organizationId);
+			const overtimeApplication = await resolveOvertimePolicyApplication(
+				prisma,
+				organizationId,
+				{
+					calc: timekeepingCalc,
+					timeIn: validation.data.timeIn || new Date(),
+					timeOut: validation.data.timeOut || null,
+					schedule: scheduleSnapshot,
+					date: attendanceDate,
+					attendanceStatus: finalStatus,
+				},
+			);
 
 			// Create new attendance record with scheduleSnapshot and timekeeping calculations
 			// Default isManualEntry to false (biometric) if not explicitly provided
@@ -7321,21 +7220,13 @@ export const controller = (prisma: PrismaClient) => {
 				...validation.data,
 				status: finalStatus,
 				behaviorFlags:
-					finalStatus === "LEAVE"
-						? []
-						: deriveBehaviorFlags({
-								timeIn: validation.data.timeIn || new Date(),
-								timeOut: validation.data.timeOut || null,
-								schedule: scheduleSnapshot,
-								date: attendanceDate,
-								overtimeThresholdMinutes: overtimeFlagThresholdMinutes,
-							}),
+					finalStatus === "LEAVE" ? [] : overtimeApplication.behaviorFlags,
 				...(scheduleSnapshot ? { scheduleSnapshot: scheduleSnapshot as any } : {}),
 				// If isManualEntry is not provided, default to false (biometric)
 				// Only set to true if explicitly provided in the request
 				isManualEntry: validation.data.isManualEntry ?? false,
 				...(await fetchAttendanceEmployeeSnapshotFields(prisma, employeeId)),
-				...buildAttendanceTimekeepingFields(timekeepingCalc),
+				...overtimeApplication.timekeepingFields,
 			};
 
 			const attendance = await prisma.attendance.create({
@@ -7365,6 +7256,32 @@ export const controller = (prisma: PrismaClient) => {
 				await invalidateCache.byPattern("cache:timesheet:*");
 			}
 			employeeLogger.info("Cache invalidated after attendance creation");
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.MARK_ATTENDANCE,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.ATTENDANCE_MARKED}: ${attendance.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_ATTENDANCE,
+				},
+			});
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.CREATE,
+				resource: config.AUDIT_LOG.RESOURCES.ATTENDANCE,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.ATTENDANCE,
+				entityId: attendance.id,
+				changesBefore: null,
+				changesAfter: {
+					id: attendance.id,
+					employeeId: attendance.employeeId,
+					date: attendance.date,
+					status: attendance.status,
+				},
+				description: `${config.AUDIT_LOG.EMPLOYEE.DESCRIPTIONS.ATTENDANCE_MARKED}: ${attendance.id}`,
+			});
 
 			const successResponse = buildSuccessResponse(
 				"Attendance marked successfully",
@@ -7763,6 +7680,16 @@ export const controller = (prisma: PrismaClient) => {
 				organizationId: employee.organizationId,
 			});
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.GET_DOCUMENT_PRIORITIES,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.DOCUMENT_PRIORITIES_RETRIEVED}: ${employeeId}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_DOCUMENT_PRIORITIES,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Employee document priorities retrieved successfully",
@@ -7937,15 +7864,31 @@ export const controller = (prisma: PrismaClient) => {
 					}
 				});
 
-			// Log activity
 			logActivity(req, {
 				userId: (req as any).user?.id || "unknown",
-				action: "START_IMPORT_EMPLOYEES",
-				description: `Started import of ${rows.length} employees (Job ID: ${jobId})`,
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.IMPORT_EMPLOYEES,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEES_IMPORTED}: ${rows.length} row(s), jobId=${jobId}`,
 				page: {
 					url: req.originalUrl,
-					title: "Employee Import",
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_IMPORT,
 				},
+			});
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.CREATE,
+				resource: config.AUDIT_LOG.RESOURCES.EMPLOYEE,
+				severity: config.AUDIT_LOG.SEVERITY.LOW,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.EMPLOYEE,
+				entityId: jobId,
+				changesBefore: null,
+				changesAfter: {
+					jobId,
+					totalRows: rows.length,
+					organizationId,
+					importMode,
+				},
+				description: `${config.AUDIT_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEES_IMPORTED}: ${rows.length} row(s), jobId=${jobId}`,
+				organizationId,
 			});
 
 			// Return jobId immediately (202 Accepted for async operation)
@@ -8377,6 +8320,22 @@ export const controller = (prisma: PrismaClient) => {
 				beforeDocuments,
 				afterDocuments: updatedEmployee?.documents || [],
 			});
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.CREATE,
+				resource: config.AUDIT_LOG.RESOURCES.DOCUMENT,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.DOCUMENT,
+				entityId: createdDocument.id,
+				changesBefore: null,
+				changesAfter: {
+					id: createdDocument.id,
+					type: createdDocument.type,
+					employeeId: id,
+				},
+				description: `${config.AUDIT_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_DOCUMENT_UPLOADED}: ${createdDocument.id}`,
+				organizationId: existingEmployee.organizationId,
+			});
 
 			// Invalidate cache
 			try {
@@ -8389,12 +8348,14 @@ export const controller = (prisma: PrismaClient) => {
 				);
 			}
 
-			// Log activity
 			logActivity(req, {
-				userId: (req as any).user?.userId || "system",
-				action: "upload_document",
-				description: `Document ${type} uploaded for employee`,
-				organizationId: existingEmployee.organizationId,
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.UPLOAD_EMPLOYEE_DOCUMENT,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_DOCUMENT_UPLOADED}: ${createdDocument.id} (${documentType})`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_DOCUMENT,
+				},
 			});
 
 			employeeLogger.info(`Document uploaded successfully for employee: ${id}`);
@@ -8727,6 +8688,26 @@ export const controller = (prisma: PrismaClient) => {
 				beforeDocuments,
 				afterDocuments: updatedEmployee?.documents || [],
 			});
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.DOCUMENT,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.DOCUMENT,
+				entityId: updatedDocument.id,
+				changesBefore: {
+					id: existingDocument.id,
+					type: existingDocument.type,
+					number: existingDocument.number,
+				},
+				changesAfter: {
+					id: updatedDocument.id,
+					type: updatedDocument.type,
+					number: updatedDocument.number,
+				},
+				description: `${config.AUDIT_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_DOCUMENT_UPDATED}: ${updatedDocument.id}`,
+				organizationId: existingEmployee.organizationId,
+			});
 
 			// Invalidate cache
 			try {
@@ -8743,10 +8724,13 @@ export const controller = (prisma: PrismaClient) => {
 
 			// Log activity
 			logActivity(req, {
-				userId: (req as any).user?.userId || "system",
-				action: "update_document",
-				description: `Document ${updatedDocument.type} updated`,
-				organizationId: existingEmployee.organizationId,
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.UPDATE_EMPLOYEE_DOCUMENT,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_DOCUMENT_UPDATED}: ${updatedDocument.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_DOCUMENT,
+				},
 			});
 
 			employeeLogger.info(`Document updated successfully: ${documentNumber}`);
@@ -8934,6 +8918,34 @@ export const controller = (prisma: PrismaClient) => {
 				beforeDocuments: [existingDocument],
 				afterDocuments: [updatedDocument],
 			});
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.DOCUMENT,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.DOCUMENT,
+				entityId: updatedDocument.id,
+				changesBefore: {
+					id: existingDocument.id,
+					reviewStatus: existingDocument.reviewStatus,
+				},
+				changesAfter: {
+					id: updatedDocument.id,
+					reviewStatus: updatedDocument.reviewStatus,
+				},
+				description: `${config.AUDIT_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_DOCUMENT_REVIEWED}: ${updatedDocument.id} (${action})`,
+				organizationId: existingEmployee.organizationId,
+			});
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.REVIEW_EMPLOYEE_DOCUMENT,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_DOCUMENT_REVIEWED}: ${updatedDocument.id} (${action})`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_DOCUMENT,
+				},
+			});
 
 			res.status(200).json(
 				buildSuccessResponse("Document review saved", { document: updatedDocument }, 200),
@@ -9033,6 +9045,22 @@ export const controller = (prisma: PrismaClient) => {
 				beforeDocuments,
 				afterDocuments,
 			});
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.DELETE,
+				resource: config.AUDIT_LOG.RESOURCES.DOCUMENT,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.DOCUMENT,
+				entityId: existingDocument.id,
+				changesBefore: {
+					id: existingDocument.id,
+					type: existingDocument.type,
+					employeeId: existingEmployee.id,
+				},
+				changesAfter: null,
+				description: `${config.AUDIT_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_DOCUMENT_DELETED}: ${existingDocument.id}`,
+				organizationId: existingEmployee.organizationId,
+			});
 
 			// Invalidate cache
 			try {
@@ -9047,12 +9075,14 @@ export const controller = (prisma: PrismaClient) => {
 				);
 			}
 
-			// Log activity
 			logActivity(req, {
-				userId: (req as any).user?.userId || "system",
-				action: "delete_document",
-				description: `Document ${existingDocument.type} deleted`,
-				organizationId: existingEmployee.organizationId,
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.DELETE_EMPLOYEE_DOCUMENT,
+				description: `${config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEE_DOCUMENT_DELETED}: ${existingDocument.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_DOCUMENT,
+				},
 			});
 
 			employeeLogger.info(`Document deleted successfully: ${documentLookupValue}`);
@@ -9078,7 +9108,6 @@ export const controller = (prisma: PrismaClient) => {
 		getAll,
 		getById,
 		update,
-		previewHardDelete,
 		setActiveEmployeeSchedule,
 		getEmployeeSchedules,
 		deactivateEmployeeSchedule,

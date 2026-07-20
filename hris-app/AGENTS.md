@@ -6,15 +6,44 @@ Provide the active operating contract for agents working in this adopted WWG pro
 
 Project: react-app-template
 
+## Mandatory Grok Skill: WWG Auto-Sync
+
+For every meaningful task in this package, load and follow the monorepo skill:
+
+- `../.grok/skills/wwg-auto-sync/SKILL.md` (slash: `/wwg-auto-sync`)
+- Always-on rule: `../.grok/rules/wwg-auto-sync.md`
+
+**START gate** — read important `.wwg` MDs before code changes (and `../hris-api/.wwg/wiki/project-truth.md` + `terminology.md` for attendance/timesheet/payroll).  
+**CLOSE gate** — update package `.wwg` MDs when truth/terminology/UX/architecture changed; always update `.wwg/workspace/current-task.md`. Sync backend wiki when backend truth changed.  
+Do not leave new truth only in code. Include a short `## WWG Auto-Sync` section in the final response after meaningful work.
+
 ## HRIS Attendance/Timesheet/Payroll Source-Of-Truth Addendum
 
-Before modifying HR Attendance, HR Timesheets, manager approval, approved OT, payroll tally, or backfill-facing UI, read `../docs/attendance-timesheet-payroll-tally-prd.md`.
+Before modifying HR Attendance, HR Timesheets, manager approval, approved OT, payroll tally, or backfill-facing UI, read `../hris-api/.wwg/wiki/project-truth.md` (Canonical Terminology, Architecture Truth) and `../hris-api/.wwg/wiki/terminology.md` (HR Attendance / Timesheet / Payroll Source Terms).
+
+`../docs/attendance-timesheet-payroll-tally-prd.md` was the original binding spec for this split but is confirmed permanently unrecoverable as of 2026-06-26 (never committed in either repo's git history). The terms below are re-grounded directly against the backend's Prisma schemas and service code; see the wiki files above for evidence.
 
 Binding split:
 - `AttendanceObligation` is live/current/future operational attendance truth.
 - `Attendance` is biometric/raw/effective clock ledger truth.
 - Past submitted/approved/payroll-ready totals and approved OT tally from effective `Timesheetline` rows.
 - Paid payroll history reads `EmployeePayroll.timesheetSnapshot`.
+
+## Mandatory: Dual-app UI parity with hris-emp-app
+
+`hris-app` and `../hris-emp-app` share parallel implementations of timesheets, attendance, payroll/payslips, leave-request patterns, and many molecules/utils.
+
+**Rule:** If you change a surface that exists (or has a counterpart) in `hris-emp-app`, update **both** packages in the same task unless the user explicitly scopes to one app.
+
+1. Search `../hris-emp-app` for the same component/util/route before coding.
+2. Mirror behavior, UX, validation, and tests.
+3. Do not mark the task complete after a one-app-only dual-surface change without an explicit exception.
+4. Close report must state: `both updated` | `single-app exception (reason)` | `HR-only (no emp counterpart)`.
+
+**HR-only exceptions (no mirror required):** run payroll, payroll period generate, HR payroll register/management, org/admin config, and other admin-only routes without an employee-app counterpart.
+
+Always-on monorepo rule: `../.grok/rules/hris-dual-app-ui-parity.md`  
+Monorepo overview: `../AGENTS.md`
 
 ## Existing Project Adoption Rule
 

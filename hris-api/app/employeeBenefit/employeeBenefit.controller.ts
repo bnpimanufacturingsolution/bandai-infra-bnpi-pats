@@ -20,6 +20,7 @@ import { config } from "../../config/constant";
 import { redisClient } from "../../config/redis";
 import { invalidateCache } from "../../middleware/cache";
 import {
+	BulkCreateEmployeeBenefitSchema,
 	CreateEmployeeBenefitSchema,
 	UpdateEmployeeBenefitSchema,
 } from "../../zod/employeebenefit.zod";
@@ -27,10 +28,100 @@ import {
 	normalizeEmployeeBenefitPayload,
 	buildBenefitInstallments,
 	BENEFIT_PROGRAM_ACTIVE_STATUSES,
+	type BenefitSchedulePeriod,
 } from "../../helper/employee-benefit-program.helper";
 
 const logger = getLogger();
 const employeeBenefitLogger = logger.child({ module: "employeeBenefit" });
+
+const getTimeBoundPayrollPeriods = async (
+	prisma: PrismaClient,
+	benefit: Record<string, any>,
+): Promise<BenefitSchedulePeriod[] | undefined> => {
+	if (benefit.scheduleMode !== "TIME_BOUND") {
+		return undefined;
+	}
+
+	const startValue = benefit.startPayrollCutOff ?? benefit.startDate;
+	const endValue = benefit.endPayrollCutOff ?? benefit.endDate;
+	const startDate = new Date(startValue);
+	const endDate = new Date(endValue);
+	if (
+		!benefit.organizationId ||
+		Number.isNaN(startDate.getTime()) ||
+		Number.isNaN(endDate.getTime()) ||
+		startDate > endDate
+	) {
+		return [];
+	}
+
+	const periods = await prisma.payrollPeriod.findMany({
+		where: {
+			organizationId: benefit.organizationId,
+			isDeleted: false,
+			startDate: { lte: endDate },
+			endDate: { gte: startDate },
+		},
+		select: { id: true, startDate: true, endDate: true },
+		orderBy: { startDate: "asc" },
+	});
+
+	return periods.filter((period) => {
+		const periodStart = new Date(period.startDate);
+		const periodEnd = new Date(period.endDate);
+		return (
+			!Number.isNaN(periodStart.getTime()) &&
+			!Number.isNaN(periodEnd.getTime()) &&
+			periodStart <= periodEnd &&
+			periodStart <= endDate &&
+			periodEnd >= startDate
+		);
+	});
+};
+
+/**
+ * Shared create path for single and bulk employee benefit enrollments.
+ * Creates the program row and non-RECURRING installments when active.
+ */
+const createEmployeeBenefitRecord = async (
+	prisma: PrismaClient,
+	validatedData: Record<string, any>,
+) => {
+	const candidatePayload = normalizeEmployeeBenefitPayload({
+		...validatedData,
+		totalInstallments:
+			validatedData.scheduleMode === "TIME_BOUND" ||
+			validatedData.scheduleMode === "RECURRING"
+				? undefined
+				: validatedData.totalInstallments,
+	});
+	const periods = BENEFIT_PROGRAM_ACTIVE_STATUSES.has(candidatePayload.status)
+		? await getTimeBoundPayrollPeriods(prisma, candidatePayload)
+		: undefined;
+	const createPayload = normalizeEmployeeBenefitPayload({
+		...candidatePayload,
+		totalInstallments:
+			candidatePayload.scheduleMode === "RECURRING"
+				? 0
+				: candidatePayload.scheduleMode === "TIME_BOUND"
+					? (periods?.length ?? 0)
+					: candidatePayload.totalInstallments,
+	}) as Prisma.EmployeeBenefitUncheckedCreateInput;
+	const employeeBenefit = await prisma.employeeBenefit.create({ data: createPayload });
+
+	// RECURRING installments are ensured lazily during payroll; do not bulk-create.
+	if (
+		BENEFIT_PROGRAM_ACTIVE_STATUSES.has(employeeBenefit.status) &&
+		employeeBenefit.scheduleMode !== "RECURRING"
+	) {
+		const installments = buildBenefitInstallments(employeeBenefit.id, employeeBenefit, periods);
+		for (const row of installments) {
+			await prisma.employeeBenefitInstallment.create({ data: row });
+		}
+	}
+
+	return employeeBenefit;
+};
 
 export const controller = (prisma: PrismaClient) => {
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
@@ -59,17 +150,10 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		try {
-			const createPayload = normalizeEmployeeBenefitPayload(
-				validation.data as any,
-			) as Prisma.EmployeeBenefitUncheckedCreateInput;
-			const employeeBenefit = await prisma.employeeBenefit.create({ data: createPayload });
-
-			if (BENEFIT_PROGRAM_ACTIVE_STATUSES.has(employeeBenefit.status)) {
-				const installments = buildBenefitInstallments(employeeBenefit.id, employeeBenefit);
-				for (const row of installments) {
-					await prisma.employeeBenefitInstallment.create({ data: row });
-				}
-			}
+			const employeeBenefit = await createEmployeeBenefitRecord(
+				prisma,
+				validation.data as Record<string, any>,
+			);
 			employeeBenefitLogger.info(
 				`EmployeeBenefit created successfully: ${employeeBenefit.id}`,
 			);
@@ -116,6 +200,141 @@ export const controller = (prisma: PrismaClient) => {
 				201,
 			);
 			res.status(201).json(successResponse);
+		} catch (error) {
+			employeeBenefitLogger.error(`${config.ERROR.EMPLOYEEBENEFIT.CREATE_FAILED}: ${error}`);
+			const errorResponse = buildErrorResponse(
+				config.ERROR.COMMON.INTERNAL_SERVER_ERROR,
+				500,
+			);
+			res.status(500).json(errorResponse);
+		}
+	};
+
+	const bulkCreate = async (req: Request, res: Response, _next: NextFunction) => {
+		let requestData = req.body;
+		const contentType = req.get("Content-Type") || "";
+
+		if (
+			contentType.includes("application/x-www-form-urlencoded") ||
+			contentType.includes("multipart/form-data")
+		) {
+			requestData = transformFormDataToObject(req.body);
+		}
+
+		const validation = BulkCreateEmployeeBenefitSchema.safeParse(requestData);
+		if (!validation.success) {
+			const formattedErrors = formatZodErrors(validation.error.format());
+			employeeBenefitLogger.error(
+				`Bulk validation failed: ${JSON.stringify(formattedErrors)}`,
+			);
+			const errorResponse = buildErrorResponse("Validation failed", 400, formattedErrors);
+			res.status(400).json(errorResponse);
+			return;
+		}
+
+		const bulkData = validation.data as unknown as Record<string, any> & {
+			employeeIds: string[];
+		};
+		const { employeeIds, ...sharedFields } = bulkData;
+		const uniqueEmployeeIds = Array.from(
+			new Set(
+				(employeeIds || [])
+					.map((id) => String(id || "").trim())
+					.filter(Boolean),
+			),
+		);
+
+		if (uniqueEmployeeIds.length === 0) {
+			const errorResponse = buildErrorResponse(
+				"Validation failed",
+				400,
+				[{ field: "employeeIds", message: "At least one employee is required" }],
+			);
+			res.status(400).json(errorResponse);
+			return;
+		}
+
+		const created: any[] = [];
+		const failed: { employeeId: string; message: string }[] = [];
+
+		try {
+			for (const employeeId of uniqueEmployeeIds) {
+				try {
+					const employeeBenefit = await createEmployeeBenefitRecord(prisma, {
+						...sharedFields,
+						employeeId,
+					});
+					created.push(employeeBenefit);
+				} catch (error: any) {
+					const message =
+						error?.message ||
+						(typeof error === "string" ? error : "Failed to create employee benefit");
+					employeeBenefitLogger.warn(
+						`Bulk create failed for employee ${employeeId}: ${message}`,
+					);
+					failed.push({ employeeId, message });
+				}
+			}
+
+			if (created.length === 0) {
+				const errorResponse = buildErrorResponse(
+					"Failed to create employee benefits for all selected employees",
+					400,
+					failed.map((row) => ({
+						field: row.employeeId,
+						message: row.message,
+					})),
+				);
+				res.status(400).json(errorResponse);
+				return;
+			}
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEEBENEFIT.ACTIONS.CREATE_EMPLOYEEBENEFIT,
+				description: `Bulk created ${created.length} employee benefit(s)${
+					failed.length ? `; ${failed.length} failed` : ""
+				}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEEBENEFIT.PAGES.EMPLOYEEBENEFIT_CREATION,
+				},
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.CREATE,
+				resource: config.AUDIT_LOG.RESOURCES.EMPLOYEEBENEFIT,
+				severity: config.AUDIT_LOG.SEVERITY.LOW,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.EMPLOYEEBENEFIT,
+				entityId: created[0]?.id,
+				changesBefore: null,
+				changesAfter: {
+					createdCount: created.length,
+					failedCount: failed.length,
+					ids: created.map((row) => row.id),
+				},
+				description: `Bulk created ${created.length} employee benefit(s)`,
+			});
+
+			try {
+				await invalidateCache.byPattern("cache:employeeBenefit:list:*");
+			} catch (cacheError) {
+				employeeBenefitLogger.warn(
+					"Failed to invalidate cache after bulk employeeBenefit creation:",
+					cacheError,
+				);
+			}
+
+			const statusCode = failed.length > 0 ? 207 : 201;
+			const successResponse = buildSuccessResponse(
+				failed.length > 0
+					? `Created ${created.length} benefit(s); ${failed.length} failed`
+					: `Created ${created.length} employee benefit(s)`,
+				{ created, failed },
+				statusCode,
+			);
+			res.status(statusCode).json(successResponse);
 		} catch (error) {
 			employeeBenefitLogger.error(`${config.ERROR.EMPLOYEEBENEFIT.CREATE_FAILED}: ${error}`);
 			const errorResponse = buildErrorResponse(
@@ -363,9 +582,43 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const prismaData = normalizeEmployeeBenefitPayload({
+			const scheduleMode = validatedData.scheduleMode ?? existingEmployeeBenefit.scheduleMode;
+			const candidatePayload = normalizeEmployeeBenefitPayload({
 				...existingEmployeeBenefit,
 				...validatedData,
+				totalInstallments:
+					scheduleMode === "TIME_BOUND" || scheduleMode === "RECURRING"
+						? undefined
+						: validatedData.totalInstallments ?? existingEmployeeBenefit.totalInstallments,
+			});
+			const candidateValidation = UpdateEmployeeBenefitSchema.safeParse({
+				scheduleMode: candidatePayload.scheduleMode,
+				startDate: candidatePayload.startDate,
+				endDate: candidatePayload.endDate,
+				...(candidatePayload.scheduleMode === "FIXED_INSTALLMENTS"
+					? { totalInstallments: candidatePayload.totalInstallments }
+					: {}),
+			});
+			if (!candidateValidation.success) {
+				const formattedErrors = formatZodErrors(candidateValidation.error.format());
+				employeeBenefitLogger.error(
+					`Validation failed: ${JSON.stringify(formattedErrors)}`,
+				);
+				const errorResponse = buildErrorResponse("Validation failed", 400, formattedErrors);
+				res.status(400).json(errorResponse);
+				return;
+			}
+			const periods = BENEFIT_PROGRAM_ACTIVE_STATUSES.has(candidatePayload.status)
+				? await getTimeBoundPayrollPeriods(prisma, candidatePayload)
+				: undefined;
+			const prismaData = normalizeEmployeeBenefitPayload({
+				...candidatePayload,
+				totalInstallments:
+					candidatePayload.scheduleMode === "RECURRING"
+						? 0
+						: candidatePayload.scheduleMode === "TIME_BOUND"
+							? (periods?.length ?? 0)
+							: candidatePayload.totalInstallments,
 			}) as Prisma.EmployeeBenefitUncheckedUpdateInput;
 
 			const updatedEmployeeBenefit = await prisma.employeeBenefit.update({
@@ -373,12 +626,16 @@ export const controller = (prisma: PrismaClient) => {
 				data: prismaData,
 			});
 
-			if (BENEFIT_PROGRAM_ACTIVE_STATUSES.has(updatedEmployeeBenefit.status)) {
+			// RECURRING installments are ensured lazily during payroll; never bulk-regenerate.
+			if (
+				BENEFIT_PROGRAM_ACTIVE_STATUSES.has(updatedEmployeeBenefit.status) &&
+				updatedEmployeeBenefit.scheduleMode !== "RECURRING"
+			) {
 				const existingInstallments = await prisma.employeeBenefitInstallment.count({
 					where: { employeeBenefitId: id },
 				});
 				if (existingInstallments === 0) {
-					const installments = buildBenefitInstallments(id, updatedEmployeeBenefit);
+					const installments = buildBenefitInstallments(id, updatedEmployeeBenefit, periods);
 					for (const row of installments) {
 						await prisma.employeeBenefitInstallment.create({ data: row });
 					}
@@ -668,5 +925,5 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	return { create, getAll, getById, update, remove, importBenefits };
+	return { create, bulkCreate, getAll, getById, update, remove, importBenefits };
 };

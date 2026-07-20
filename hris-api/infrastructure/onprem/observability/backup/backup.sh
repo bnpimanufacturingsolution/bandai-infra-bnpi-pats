@@ -17,7 +17,7 @@ TODAY="$(date +%Y%m%d)"
 WEEK_KEY="$(date +%G-W%V)"
 MONTH_KEY="$(date +%Y-%m)"
 
-SRC_PATHS="/data/grafana /data/prometheus /data/loki /data/tempo /data/alertmanager"
+SRC_PATHS="/data/grafana /data/prometheus /data/loki /data/alertmanager"
 
 create_archive() {
   out_file="$1"
@@ -36,9 +36,12 @@ prune_keep_n() {
   ls -1t "$dir"/*.tar.gz.sha256 2>/dev/null | awk "NR>${keep}" | xargs -r rm -f
 }
 
+# 1) Rolling backup every run
+echo "backup_start ts=$TS"
 ROLLING_FILE="${ROLLING_DIR}/observability-rolling-${TS}.tar.gz"
 create_archive "$ROLLING_FILE"
 
+# 2) Full backup based on policy
 DO_FULL="false"
 FULL_SUFFIX=""
 
@@ -76,6 +79,7 @@ if [ "$DO_FULL" = "true" ]; then
   create_archive "$FULL_FILE"
 fi
 
+# 3) Retention
 prune_keep_n "$ROLLING_DIR" "$BACKUP_KEEP_ROLLING"
 prune_keep_n "$FULL_DIR" "$BACKUP_KEEP_FULL"
 

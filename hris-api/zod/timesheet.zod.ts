@@ -47,6 +47,12 @@ export const DailyBreakdownSchema = z.object({
 
 export type DailyBreakdown = z.infer<typeof DailyBreakdownSchema>;
 
+export const EditedDayKeysSchema = z
+	.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/))
+	.optional();
+
+export type EditedDayKeys = z.infer<typeof EditedDayKeysSchema>;
+
 // Timesheet Schema (full, including ID)
 export const TimesheetSchema = z.object({
 	id: z.string().refine((val) => isValidObjectId(val)),
@@ -178,7 +184,11 @@ export const UpdateTimesheetSchema = TimesheetSchema.omit({
 	lockReason: true,
 	lockRunId: true,
 	lockedEmployeePayrollId: true,
-}).partial();
+})
+	.partial()
+	.extend({
+		editedDayKeys: EditedDayKeysSchema,
+	});
 
 export type UpdateTimesheet = z.infer<typeof UpdateTimesheetSchema>;
 
@@ -193,7 +203,16 @@ export const TimesheetActionSchema = z.object({
 	rejectionReason: z.string().trim().min(1).max(1000).optional(),
 	notes: z.string().trim().max(1000).optional(),
 	breakdown: z.array(z.any()).optional(),
+	editedDayKeys: EditedDayKeysSchema,
 });
+
+export const SubmitTimesheetSchema = z.object({
+	notes: z.string().trim().max(1000).optional(),
+	breakdown: z.array(z.any()).optional(),
+	editedDayKeys: EditedDayKeysSchema,
+});
+
+export type SubmitTimesheet = z.infer<typeof SubmitTimesheetSchema>;
 
 export type TimesheetAction = z.infer<typeof TimesheetActionSchema>;
 

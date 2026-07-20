@@ -95,7 +95,8 @@ export const CreateNotificationSchema = z.object({
 	description: z.string().min(1, "Description is required").max(1000, "Description too long"),
 	type: NotificationTypeSchema.default("INFO"),
 	eventKey: z.string().optional(),
-	recipientEmployeeIds: z.array(z.string()).min(1, "At least one recipient is required"),
+	recipientEmployeeIds: z.array(z.string()).optional(),
+	broadcast: z.boolean().default(false),
 	metadata: z
 		.object({
 			entityType: z.string().optional(),
@@ -110,7 +111,18 @@ export const CreateNotificationSchema = z.object({
 		})
 		.catchall(z.any())
 		.optional(),
-});
+}).refine(
+	(data) => {
+		if (data.broadcast) {
+			return true;
+		}
+		return data.recipientEmployeeIds && data.recipientEmployeeIds.length > 0;
+	},
+	{
+		message: "recipientEmployeeIds must contain at least one ID when broadcast is false",
+		path: ["recipientEmployeeIds"],
+	}
+);
 
 export type CreateNotificationInput = z.infer<typeof CreateNotificationSchema>;
 

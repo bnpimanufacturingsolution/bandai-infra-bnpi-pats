@@ -294,6 +294,12 @@ export const queryKeys = {
 			dateFrom?: string,
 			dateTo?: string,
 			groupBy?: TurnoverAttritionGroupBy,
+			filters?: {
+				departmentId?: string;
+				sectionId?: string;
+				positionId?: string;
+				levelId?: string;
+			},
 		) =>
 			[
 				...queryKeys.metrics.all,
@@ -301,6 +307,10 @@ export const queryKeys = {
 				dateFrom,
 				dateTo,
 				groupBy,
+				filters?.departmentId,
+				filters?.sectionId,
+				filters?.positionId,
+				filters?.levelId,
 			] as const,
 		bir1601CMetrics: (filter: {
 			month: number;
@@ -817,14 +827,21 @@ export const useTurnoverAttritionReport = (
 	dateFrom?: string,
 	dateTo?: string,
 	groupBy?: TurnoverAttritionGroupBy,
+	filters?: {
+		departmentId?: string;
+		sectionId?: string;
+		positionId?: string;
+		levelId?: string;
+	},
 ) => {
 	return useQuery<TurnoverAttritionReportResponse>({
-		queryKey: queryKeys.metrics.turnoverAttritionReport(dateFrom, dateTo, groupBy),
+		queryKey: queryKeys.metrics.turnoverAttritionReport(dateFrom, dateTo, groupBy, filters),
 		queryFn: () =>
 			metricsService.getTurnoverAttritionReport(
 				dateFrom || "",
 				dateTo || "",
 				groupBy || "month",
+				filters,
 			),
 		enabled: !!dateFrom && !!dateTo,
 		staleTime: 5 * 60 * 1000,

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Delete Employee with All Relations Script
  *

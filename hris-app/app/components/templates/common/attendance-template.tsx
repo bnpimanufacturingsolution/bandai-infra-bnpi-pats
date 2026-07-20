@@ -1656,7 +1656,7 @@ export default function AttendanceTemplate({
 									className="w-full flex items-center justify-center gap-2"
 									onClick={handleOpenTimesheetModal}>
 									<CheckCircle className="w-4 h-4" />
-									Submit Timesheet
+									View Timesheet
 								</Button>
 							)}
 						</div>

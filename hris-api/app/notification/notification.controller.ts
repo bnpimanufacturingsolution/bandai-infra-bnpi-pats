@@ -49,8 +49,22 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		try {
-			// Build recipients object from recipientEmployeeIds
-			const { recipientEmployeeIds, ...notificationData } = validation.data;
+			// Build recipients object from recipientEmployeeIds or resolve active employees if broadcast is true
+			const { recipientEmployeeIds, broadcast, ...notificationData } = validation.data;
+			let resolvedRecipientIds = recipientEmployeeIds || [];
+			if (broadcast) {
+				const activeEmployees = await prisma.employee.findMany({
+					where: {
+						organizationId: notificationData.organizationId,
+						isDeleted: false,
+					},
+					select: {
+						id: true,
+					},
+				});
+				resolvedRecipientIds = activeEmployees.map((emp) => emp.id);
+			}
+
 			const notification = await prisma.notification.create({
 				data: {
 					...notificationData,
@@ -63,7 +77,7 @@ export const controller = (prisma: PrismaClient) => {
 					},
 					recipients: {
 						read: [],
-						unread: recipientEmployeeIds.map((employeeId: string) => ({
+						unread: resolvedRecipientIds.map((employeeId: string) => ({
 							employeeId,
 							readAt: null,
 						})),
@@ -153,6 +167,11 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			// Base where clause (archive filtering is applied in-memory due null/missing archive behavior)
 			const whereClause: Prisma.NotificationWhereInput = {};
+
+			const categoryQuery = req.query.category as string | undefined;
+			if (categoryQuery) {
+				whereClause.category = categoryQuery;
+			}
 
 			// search fields for notification
 			const searchFields = ["title", "description", "category"];

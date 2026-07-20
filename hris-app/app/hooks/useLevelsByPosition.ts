@@ -7,6 +7,9 @@ interface PositionLevel {
 	levelId: string;
 }
 
+const hasNestedLevel = (value: PositionLevel | Level): value is PositionLevel & { level: Level } =>
+	typeof value === "object" && value !== null && "level" in value && Boolean(value.level);
+
 export function useLevelsByPosition(positionId: string | undefined, positions: Position[]) {
 	const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
 	const [availableLevels, setAvailableLevels] = useState<Level[]>([]);
@@ -42,9 +45,8 @@ function extractLevelsFromPosition(position: Position): Level[] {
 	}
 
 	return position.levels
-		.map((pl: PositionLevel | Level) => {
-			// Handle both junction table format (pl.level) and direct level format
-			return "level" in pl ? pl.level : pl;
-		})
+		.map((pl) =>
+			hasNestedLevel(pl as PositionLevel | Level) ? pl.level : (pl as unknown as Level),
+		)
 		.filter((level): level is Level => Boolean(level?.id));
 }

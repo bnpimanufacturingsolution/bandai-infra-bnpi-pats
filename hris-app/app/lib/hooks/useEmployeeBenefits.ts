@@ -3,6 +3,8 @@ import employeeBenefitService, {
 	type EmployeeBenefit,
 	type EmployeeBenefitsResponse,
 	type CreateEmployeeBenefitRequest,
+	type BulkCreateEmployeeBenefitRequest,
+	type BulkCreateEmployeeBenefitResult,
 	type UpdateEmployeeBenefitRequest,
 } from "~/services/employee-benefit.service";
 import { toast as sonnerToast } from "sonner";
@@ -44,6 +46,7 @@ export const useEmployeeBenefits = (params?: ApiQueryParams) => {
 					"employee.employeeId",
 					"employee.person.personalInfo",
 					"employee.person.email",
+					"employee.user.avatar",
 					"employee.position.id",
 					"employee.position.title",
 					"employee.position.code",
@@ -97,6 +100,45 @@ export const useCreateEmployeeBenefit = () => {
 				});
 			} else {
 				sonnerToast.error(error?.message || "Failed to create employee benefit");
+			}
+		},
+	});
+};
+
+export const useBulkCreateEmployeeBenefits = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: (data: BulkCreateEmployeeBenefitRequest) =>
+			employeeBenefitService.bulkCreateEmployeeBenefits(data),
+		onSuccess: (result: BulkCreateEmployeeBenefitResult) => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.employeeBenefits.all });
+			const createdCount = result.created?.length || 0;
+			const failedCount = result.failed?.length || 0;
+			if (createdCount > 0 && failedCount === 0) {
+				sonnerToast.success(
+					createdCount === 1
+						? "Employee benefit created successfully"
+						: `Created benefit for ${createdCount} employees`,
+				);
+			} else if (createdCount > 0 && failedCount > 0) {
+				sonnerToast.warning(
+					`Created ${createdCount} benefit(s); ${failedCount} failed`,
+				);
+				result.failed.slice(0, 3).forEach((row) => {
+					sonnerToast.error(row.message || `Failed for employee ${row.employeeId}`);
+				});
+			} else {
+				sonnerToast.error("Failed to create employee benefits");
+			}
+		},
+		onError: (error: any) => {
+			if (error.errors && Array.isArray(error.errors)) {
+				error.errors.forEach((err: any) => {
+					sonnerToast.error(err.message || "Validation error");
+				});
+			} else {
+				sonnerToast.error(error?.message || "Failed to bulk create employee benefits");
 			}
 		},
 	});

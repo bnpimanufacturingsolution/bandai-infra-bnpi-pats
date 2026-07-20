@@ -80,4 +80,25 @@ describe("TimesheetDayTooltipContent overtime notes", () => {
 		expect(screen.queryByText("Approver note")).not.toBeInTheDocument();
 		expect(screen.queryByText("Employee note")).not.toBeInTheDocument();
 	});
+
+	it("shows overtime candidate guidance when pending OT is detected", () => {
+		render(
+			<TimesheetDayTooltipContent
+				day={{
+					...manilaBusinessDay,
+					overtimeHours: "0:00",
+					metadata: {
+						overtimeCandidate: true,
+						pendingOvertimeMinutes: 120,
+						pendingOvertimeHours: "2:00",
+						overtimeApprovalStatus: "NONE",
+					},
+				}}
+			/>,
+		);
+
+		expect(screen.getByText("Overtime candidate")).toBeInTheDocument();
+		expect(screen.getByText("2:00 detected")).toBeInTheDocument();
+		expect(screen.getByText("File overtime request before submit")).toBeInTheDocument();
+	});
 });

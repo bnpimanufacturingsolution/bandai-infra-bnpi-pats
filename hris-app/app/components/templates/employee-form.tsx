@@ -1778,7 +1778,7 @@ export function EmployeeForm({ presentation = "page", onRequestClose }: Employee
 			const selectedAgencyId = form.getValues("employee.agencyId");
 			const selectedEmploymentType = form.getValues("employee.employmentType");
 			const probationEndDate = form.getValues("employee.probationEndDate");
-			if (!isEditMode && selectedEmploymentType === "PROBATIONARY" && !probationEndDate) {
+			if (selectedEmploymentType === "PROBATIONARY" && !probationEndDate) {
 				form.setError("employee.probationEndDate", {
 					type: "required",
 					message: "Probation end date is required for probationary hires",
@@ -3432,7 +3432,6 @@ export function EmployeeForm({ presentation = "page", onRequestClose }: Employee
 				return (
 					<SystemAccessForm
 						form={form}
-						employeeRecordId={id}
 						isEditMode={isEditMode}
 						showDefaultPassword={shouldShowEditDefaultPassword}
 					/>

@@ -102,9 +102,10 @@ export async function handleCOEDownload(request: Request): Promise<void> {
  */
 export async function handleDocumentDownload(request: Request): Promise<void> {
 	const docType = getMetadataField(request, "documentType");
+	const requestStatus = String(request.currentWorkflowStateKey || "").toUpperCase();
 
 	// Only allow downloads for approved requests
-	if (request.status !== "APPROVED" && request.status !== "COMPLETED") {
+	if (requestStatus !== "APPROVED" && requestStatus !== "COMPLETED") {
 		toast.warning("Document can only be downloaded when approved");
 		return;
 	}

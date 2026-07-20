@@ -29,21 +29,11 @@ const IndexPage: React.FC = () => {
 
 	// Show loading while checking authentication
 	if (isLoading) {
-		return (
-			<LoadingScreen
-				message="Checking session"
-				subtitle="Verifying your Bandai HR access and restoring your session"
-			/>
-		);
+		return <LoadingScreen message="Signing in" subtitle="Checking session" />;
 	}
 
 	if (!isAuthenticated && isProvisioningLoading) {
-		return (
-			<LoadingScreen
-				message="Checking system setup"
-				subtitle="Looking for bootstrap requirements before routing this workspace"
-			/>
-		);
+		return <LoadingScreen message="Setting up" subtitle="Checking system setup" />;
 	}
 
 	// If not authenticated, redirect to login
@@ -57,12 +47,7 @@ const IndexPage: React.FC = () => {
 
 	// If authenticated but no user data, show loading
 	if (!user) {
-		return (
-			<LoadingScreen
-				message="Preparing workspace"
-				subtitle="Loading your profile and routing your dashboard access"
-			/>
-		);
+		return <LoadingScreen message="Loading" subtitle="Preparing workspace" />;
 	}
 
 	// If authenticated with user data, redirect based on role

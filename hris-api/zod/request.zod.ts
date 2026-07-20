@@ -8,6 +8,7 @@ import type { Department } from "./department.zod";
 export const RequestType = z.enum([
 	"LEAVE",
 	"TIMESHEET",
+	"OVERTIME",
 	"ATTENDANCE_CORRECTION",
 	"EXPENSE_REIMBURSEMENT",
 	"DOCUMENT_REQUEST",

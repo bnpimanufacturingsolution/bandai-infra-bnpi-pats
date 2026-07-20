@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { FileText, Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import { EmployeeAvatar } from "~/components/atoms/EmployeeAvatar";
 import { Button } from "~/components/atoms/Button";
 import { Modal } from "~/components/atoms/Modal";
 import { Select, type SelectOption } from "~/components/atoms/Select";
@@ -1031,13 +1032,6 @@ export function EmployeeDocumentActionModal({
 		resolvedTargetEmployeeLabel.endsWith(`(${resolvedTargetEmployeeCode})`)
 			? resolvedTargetEmployeeLabel.replace(` (${resolvedTargetEmployeeCode})`, "").trim()
 			: resolvedTargetEmployeeLabel;
-	const targetEmployeeInitials =
-		resolvedTargetEmployeeName
-			.split(/\s+/)
-			.filter(Boolean)
-			.slice(0, 2)
-			.map((part) => part.charAt(0).toUpperCase())
-			.join("") || "E";
 	const latestReviewEvent = latestReviewEventsData?.events?.[0] || null;
 	const latestReviewActor = latestReviewEvent
 		? getActorName(latestReviewEventsData?.actors?.[latestReviewEvent.actorEmployeeId || ""])
@@ -1132,9 +1126,11 @@ export function EmployeeDocumentActionModal({
 								type="button"
 								onClick={() => navigate(`/employee/${employeeId}`)}
 								className="flex w-full items-center gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5 text-left transition-colors hover:border-orange-200 hover:bg-orange-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2">
-								<span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">
-									{targetEmployeeInitials}
-								</span>
+								<EmployeeAvatar
+									alt={resolvedTargetEmployeeName}
+									size="md"
+									className="shrink-0"
+								/>
 								<span className="min-w-0">
 									<span className="block truncate text-sm font-semibold text-gray-900">
 										{resolvedTargetEmployeeName}

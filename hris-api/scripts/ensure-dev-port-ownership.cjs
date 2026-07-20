@@ -246,54 +246,7 @@ async function main() {
 
 	const hasExistingListener =
 		(await canConnect(apiPort, "127.0.0.1")) || (await canConnect(apiPort, "::1"));
-
-	// Fast path: if something already serves a healthy hris-api on this port,
-	// predev continues (user can login now). npm run dev will still start a
-	// watcher; port reclaim below handles same-repo processes when possible.
-	if (hasExistingListener) {
-		try {
-			const healthUrl = `http://127.0.0.1:${apiPort}/health`;
-			const res = await new Promise((resolve, reject) => {
-				const req = require("http").get(healthUrl, { timeout: 1200 }, (response) => {
-					let body = "";
-					response.on("data", (chunk) => {
-						body += chunk;
-					});
-					response.on("end", () =>
-						resolve({ status: response.statusCode || 0, body }),
-					);
-				});
-				req.on("error", reject);
-				req.on("timeout", () => {
-					req.destroy();
-					reject(new Error("health timeout"));
-				});
-			});
-			if (res.status === 200 && /healthy/i.test(res.body || "")) {
-				console.log(
-					`[dev-port-check] Port ${apiPort} already serves healthy hris-api — fast OK (login ready).`,
-				);
-				return;
-			}
-		} catch {
-			// not healthy — fall through to reclaim/fail logic
-		}
-	}
-
 	if (!hasExistingListener) {
-		if (process.platform === "win32") {
-			const staleRepoDevProcesses = getWindowsRepoDevProcesses();
-			if (staleRepoDevProcesses.length > 0) {
-				console.log(
-					`[dev-port-check] Found stale hris-api watcher processes even though port ${apiPort} is currently free. Stopping them before startup.`,
-				);
-				for (const listener of staleRepoDevProcesses) {
-					console.log(`[dev-port-check] stopping ${formatListener(listener)}`);
-					stopWindowsProcessTree(listener.pid);
-				}
-				await new Promise((resolve) => setTimeout(resolve, 750));
-			}
-		}
 		console.log(
 			`[dev-port-check] Port ${apiPort} is available for the Windows hris-api dev server. Docker app host port is ${appHostPort}.`,
 		);

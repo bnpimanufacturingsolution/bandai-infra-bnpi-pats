@@ -5,6 +5,8 @@ This file defines canonical and observed project language.
 Adoption status: INFERRED_FROM_EXISTING_PROJECT
 Status: Inferred from repository evidence. Requires human/agent review before becoming accepted project truth.
 
+Update 2026-07-14: Benefit schedule mode terminology (`TIME_BOUND` / `FIXED_INSTALLMENTS` / `RECURRING`) and per-period amount language for recurring payroll adjustments; see observed terms and `docs/BENEFIT_SCHEDULE_MODES.md`.
+
 ## Observed Terms
 
 | Observed Term | Where Found | Inferred Meaning | Status |
@@ -16,6 +18,9 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | form | app/components/atoms/form/FormFieldGroup.tsx, app/components/atoms/form/form-input.tsx, app/components/atoms/form/form-number-input.tsx, app/components/atoms/form/form-select.tsx | Observed project term; confirm canonical meaning before broad use. | INFERRED |
 | timesheet | app/components/atoms/TimesheetDayCell.tsx, app/components/molecules/TimesheetCalendar.tsx, app/components/molecules/TimesheetCalendarApproval.tsx, app/components/molecules/TimesheetDayEditor.tsx | Observed project term; confirm canonical meaning before broad use. | INFERRED |
 | request | app/components/dashboards/shared/cards/request-list-card.tsx, app/components/dashboards/shared/request-helpers.ts, app/components/modals/EligibilityRequestModal.tsx, app/components/modals/JobRequisitionRequestModal.tsx | Observed project term; confirm canonical meaning before broad use. | INFERRED |
+| leave request prefill | app/lib/utils/requests-route.ts, app/components/organisms/leave-request-modal.tsx | URL-driven initial leave form state (`date`, `startDate`, `endDate`, `leaveType`) passed into the leave request modal. | IMPLEMENTED_FROM_USER_REQUEST |
+| honor prefilled dates | app/components/organisms/leave-request-modal.tsx | Timesheet-origin leave flow that keeps the selected past date instead of applying advance-notice date bumps. | IMPLEMENTED_FROM_USER_REQUEST |
+| advance notice restriction | app/lib/utils/leave-request-policy.ts | Leave-type date policy applied to vacation and personal leave; sick leave is exempt and may select any calendar day. | IMPLEMENTED_FROM_USER_REQUEST |
 | input | app/components/atoms/Input.tsx, app/components/atoms/form/form-input.tsx, app/components/atoms/form/form-number-input.tsx, app/components/molecules/PasswordInput.tsx | Observed project term; confirm canonical meaning before broad use. | INFERRED |
 | loading | app/assets/loading-logo.gif, app/assets/loading-logo1.gif, app/assets/loading-logo2.gif, app/assets/loading-logo3.gif | Observed project term; confirm canonical meaning before broad use. | INFERRED |
 | status | app/components/atoms/StatusBadge.tsx, app/components/atoms/form/status-button.tsx, app/components/atoms/status-badge.tsx, app/components/dashboards/shared/cards/attendance-status-card.tsx | Observed project term; confirm canonical meaning before broad use. | INFERRED |
@@ -31,6 +36,16 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | workforce | firebase/README.md, firebase/scripts/manage-firebase-projects.ps1, app/lib/hooks/useWorkforceRecruitmentSettings.ts | Workforce-related project naming and recruitment settings context. | INFERRED |
 | attendance | app/routes/hr/attendance.tsx, app/routes/site/attendance.tsx, app/services/attendance.service.ts, tests/perf/hr-attendance.spec.ts | Employee attendance workflows and records. | INFERRED |
 | payroll | app/routes/hr/payroll.tsx, app/routes/hr/payroll-settings.tsx, app/services/payroll.service.ts, app/types/payroll.ts | Payroll-related HR workflows, settings, reports, and employee payslip surfaces. | INFERRED |
+| PayrollCorrection / PAYROLL_CORRECTION | TimesheetViewModal, TimesheetPayrollCorrectionPanel, useCreatePayrollCorrection, requests-time-requests-template | Post-lock payable delta request/ledger path. UI files from payroll-locked timesheet; domain SOT is API `PayrollCorrection` applied as next-open payroll retro lines (not timesheet day rewrite). | CONFIRMED_FROM_IMPLEMENTATION |
+| Request payroll correction (UI) | TimesheetPayrollCorrectionPanel; payroll-correction-form | Multi-select calendar days; proposed **Time In / Time Out**; auto hours type; reason required; submits minute dayDeltas. | CONFIRMED_FROM_IMPLEMENTATION |
+| Retro line label | payslip-detail; payroll-management-template; API buildRetroPayslipLabel | e.g. `Retro OT (Period 1 - Jun 2026 correction)` — money for **source** period shown on **apply** period payslip/summary. | CONFIRMED_FROM_IMPLEMENTATION |
+| Prior-period corrections (HR summary) | payroll-management-template Payroll summary modal | Accordion + Daily detail category listing dayDeltas and correction totals included in GrossPay. | CONFIRMED_FROM_IMPLEMENTATION |
+| Processed in payroll | TimesheetViewModal banner/chip; TimesheetsTab status column | Neutral lock UX label when timesheet is payroll-locked (`lockedAt` / `lockedEmployeePayrollId` / `lockReason`). | CONFIRMED_FROM_IMPLEMENTATION |
+| benefit schedule mode | app/components/templates/hr/employee-benefit-form.tsx, app/zod/employee-benefit.zod.ts, docs/BENEFIT_SCHEDULE_MODES.md | Explicit payroll benefit schedule: `TIME_BOUND`, `FIXED_INSTALLMENTS`, or `RECURRING`. Frontend owns field visibility; API owns generation/apply. | CONFIRMED_FROM_IMPLEMENTATION |
+| recurring benefit | app/components/templates/hr/employee-benefit-form.tsx, docs/BENEFIT_SCHEDULE_MODES.md | Same per-period amount every payroll period from start until optional end date or cancel/deactivate; no installment count field. | CONFIRMED_FROM_IMPLEMENTATION |
+| payroll adjustment (create page) | `/hr/benefits-management/new`, benefits-management-create-template.tsx | Full-page create for employee benefit payroll adjustments; replaces former `?action=create` modal. | CONFIRMED_FROM_IMPLEMENTATION |
+| bulk employee benefit create | `POST /api/employeeBenefit/bulk`, EmployeeMultiSelectModal | Apply one benefit schedule/amount/type to many employees; one enrollment row per employee. | CONFIRMED_FROM_IMPLEMENTATION |
+| amount per payroll period | benefits create page / edit modal amount label for `RECURRING` | Recurring amount semantic (not a program total). Finite modes still use total amount. | CONFIRMED_FROM_IMPLEMENTATION |
 | recruitment | app/routes/hr/recruitment-page.tsx, app/routes/hr/jobs.tsx, app/components/organisms/hr/RecruitmentJobsManager.tsx, app/lib/hooks/useWorkforceRecruitmentSettings.ts | Job and applicant management workflows. | INFERRED |
 | onboarding | app/routes/onboarding.tsx, app/routes/hr/onboarding-setup.tsx, tests/document-onboarding-real-scenario.spec.ts, app/components/templates/onboarding-template.tsx | Employee onboarding and document/setup workflows. | INFERRED |
 | design system | docs/design-system.md | Repository term for app-side UI visual and interaction standards. | INFERRED |

@@ -112,6 +112,7 @@ export const PayrollPeriodSchema = z.object({
 	periodNumber: z.number().int().min(1).optional(),
 	notes: z.string().optional(),
 	generationMetadata: z.record(z.string(), z.any()).optional(),
+	payslipReleaseAttachmentUrl: z.string().optional().nullable(),
 	processedBy: z
 		.string()
 		.refine((val) => isValidObjectId(val))

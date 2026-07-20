@@ -1,7 +1,7 @@
 # Development Operating Model
 
 Status: ACTIVE
-Last reviewed: 2026-05-26
+Last reviewed: 2026-06-26
 
 ## Purpose
 
@@ -22,6 +22,8 @@ This model makes WWG a context router first and a document archive second.
 ### Must
 
 - Use prompt chaining for medium-risk, high-risk, multi-step, or cross-repo work.
+- Use `.wwg/workspace/prompts/agent-meta-prompt-template.md` to frame chain kickoff, chain-level planning, and final close-out when a task uses prompt chaining.
+- Use `.wwg/workspace/prompts/chain-pass-template.md` plus `.wwg/workspace/context/chain-state-template.md` for intermediate pass execution and pass-to-pass handoff inside an active chain.
 - Keep prompt chains delta-oriented: stable rules live in canonical WWG files, while each pass carries only current goal, state, changed files, risks, and validation.
 - Read WWG summaries before full docs unless the task has an immediate conflict or high-risk domain requirement.
 - Use `.wwg/workspace/context/task-context-index.md` to choose task-specific context.
@@ -44,6 +46,7 @@ This model makes WWG a context router first and a document archive second.
 
 ### Prefer
 
+- Full meta-template framing at chain start and final handoff, with compact pass templates between them.
 - Small state packets over narrative handoffs.
 - Task-specific context slices over broad doc sweeps.
 - Structured YAML-style handoffs for machine continuity.
@@ -74,6 +77,7 @@ Stable, shippable artifacts:
 - `.wwg/workspace/context/task-context-index.md`
 - `.wwg/workspace/context/chain-state-template.md`
 - `.wwg/workspace/prompts/chain-pass-template.md`
+- `.wwg/workspace/prompts/agent-meta-prompt-template.md`
 - `.wwg/workspace/current-task.md`
 - Curated quality reports under `output/reports/`
 
@@ -91,6 +95,7 @@ Scratch artifacts should be ignored or removed before shipping.
 - `.wwg/workspace/context/task-context-index.md`
 - `.wwg/workspace/context/chain-state-template.md`
 - `.wwg/workspace/prompts/chain-pass-template.md`
+- `.wwg/workspace/prompts/agent-meta-prompt-template.md`
 - `.wwg/governance/test-enforcement.md`
 - `.wwg/governance/quality-gates.md`
 - `.wwg/governance/drift-guard.md`

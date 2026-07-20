@@ -56,6 +56,7 @@ import { useAttendanceImportProgress } from "~/lib/hooks/useAttendanceImportProg
 import { useAuth } from "~/lib/hooks/use-auth";
 import { useSocket } from "~/contexts/socket-context";
 import { DataTable, type Column, type FilterOption } from "~/components/atoms/DataTable";
+import { EmployeeAvatar } from "~/components/atoms/EmployeeAvatar";
 import { EmployeeTableCell } from "~/components/molecules/EmployeeTableCell";
 import { Card, CardContent } from "~/components/atoms/Card";
 import { Modal } from "~/components/atoms/Modal";
@@ -1671,16 +1672,6 @@ export function AttendanceManagement({
 		return `Within grace (${formatMinutesDuration(totalMinutes, { compact: true })})`;
 	};
 
-	const getEmployeeInitials = (name?: string | null) => {
-		const parts = String(name || "")
-			.trim()
-			.split(/\s+/)
-			.filter(Boolean);
-		if (parts.length === 0) return "U";
-		if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-		return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-	};
-
 	const renderDetailMetric = (
 		label: string,
 		value: ReactNode,
@@ -1743,13 +1734,17 @@ export function AttendanceManagement({
 								type="button"
 								onClick={() => openEmployeeProfile(selectedRecord)}
 								disabled={!employeeProfileId}
-								className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-orange-600 text-base font-bold text-white transition-colors hover:bg-orange-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 disabled:cursor-default disabled:hover:bg-orange-600"
+								className="shrink-0 transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 disabled:cursor-default disabled:opacity-100"
 								aria-label={
 									employeeProfileId
 										? `Open ${selectedRecord.employeeName || "employee"} profile`
 										: "Employee profile unavailable"
 								}>
-								{getEmployeeInitials(selectedRecord.employeeName)}
+								<EmployeeAvatar
+									alt={selectedRecord.employeeName || "Employee avatar"}
+									size="lg"
+									className="h-14 w-14"
+								/>
 							</button>
 							<div className="min-w-0">
 								<div className="flex flex-wrap items-center gap-2">
@@ -3239,7 +3234,7 @@ export function AttendanceManagement({
 					/>
 				</div>
 			</div>
-
+			
 			<Card className="overflow-hidden rounded-md border border-neutral-200 bg-white py-0 shadow-none">
 				<CardContent className="p-0">
 					<div className="grid divide-y divide-neutral-200 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)] xl:divide-y-0">

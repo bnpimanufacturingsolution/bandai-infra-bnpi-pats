@@ -1,7 +1,7 @@
 import { APIService } from "./api-service";
 import { API_CONFIG } from "../lib/api/config";
-import type { PayrollRecord, PaginatedResponse, ApiResponse } from "../lib/api/config";
 import { hrisApiClient } from "../lib/api-client";
+import type { PayrollRecord, PaginatedResponse, ApiResponse } from "../lib/api/config";
 
 const buildEndpoint = (template: string, params: Record<string, string>) =>
 	Object.entries(params).reduce(

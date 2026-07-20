@@ -1,4 +1,4 @@
-﻿import { Calendar, Heart } from "lucide-react";
+import { Calendar, Heart } from "lucide-react";
 import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "~/components/atoms/Button";

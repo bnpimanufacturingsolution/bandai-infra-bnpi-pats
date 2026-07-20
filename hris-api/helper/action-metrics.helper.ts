@@ -675,7 +675,11 @@ async function getAttendanceClockInActionItem(params: {
 		undefined,
 		undefined,
 		undefined,
+		undefined,
+		undefined,
+		undefined,
 		params.employeeId,
+		undefined,
 	);
 
 	const record = todayAttendance.records[0];

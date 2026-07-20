@@ -1,4 +1,4 @@
-﻿import { useParams, useNavigate, useSearchParams } from "react-router";
+import { useParams, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { useDebugDeleteTodayAttendance, useEmployee } from "~/lib/hooks/useEmployees";
 import { useAuth } from "~/lib/hooks/use-auth";

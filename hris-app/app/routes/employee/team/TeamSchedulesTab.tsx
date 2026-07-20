@@ -110,7 +110,7 @@ export default function TeamSchedulesTab() {
 	const assignments = (assignmentsData as any)?.schedules || [];
 	const teamAssignments =
 		scopedEmployeeIdSet.size > 0
-			? assignments.filter((assignment) =>
+			? assignments.filter((assignment: any) =>
 					scopedEmployeeIdSet.has(String(assignment.employeeId)),
 				)
 			: assignments;

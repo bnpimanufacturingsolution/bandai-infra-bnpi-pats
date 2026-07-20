@@ -1205,6 +1205,9 @@ export function RunPayrollTemplate() {
 	);
 	const previewAdvisoryCount =
 		missingInfoCount + timesheetNotSubmittedCount + pendingApprovalCount;
+	const zeroGrossEmployeeCount = previewIncludedEmployees.filter(
+		(e) => e.metadata?.zeroSalaryGuardrailApplied === true,
+	).length;
 	const previewPagination = timesheetPayrollPreview?.pagination;
 	const activePreviewEmployee = useMemo(() => {
 		const detailEmployee = previewEmployeeDetail?.includedEmployees?.[0];
@@ -1734,12 +1737,18 @@ export function RunPayrollTemplate() {
 			label: "Payroll Computation",
 			width: "18%",
 			sortable: false,
-			render: () => (
-				<div className="min-w-0">
-					<p className="truncate text-xs font-medium text-gray-800">On demand</p>
-					<p className="truncate text-xs text-gray-500">View to calculate</p>
-				</div>
-			),
+			render: (_value, employee) =>
+				employee.metadata?.zeroSalaryGuardrailApplied ? (
+					<div className="min-w-0">
+						<p className="truncate text-xs font-medium text-blue-700">Zero pay</p>
+						<p className="truncate text-xs text-blue-500">Deductions waived</p>
+					</div>
+				) : (
+					<div className="min-w-0">
+						<p className="truncate text-xs font-medium text-gray-800">On demand</p>
+						<p className="truncate text-xs text-gray-500">View to calculate</p>
+					</div>
+				),
 		},
 	];
 
@@ -1819,19 +1828,24 @@ export function RunPayrollTemplate() {
 
 		clearPayrollProgressCache(payrollJobId);
 		setPayrollJobId(null);
+		// Switch the open start-payroll modal into progress content (no second modal).
+		setShowProgressModal(true);
 		generatePayrollMutation.mutate({
 			id: payrollPeriodId,
 			...payrollScope,
 		}, {
 			onSuccess: (data) => {
-				updateSearchParams((next) => {
-					next.delete("action");
-					next.delete("tab");
-				});
-
-				if (data?.jobId) {
-					openPayrollProgress(data.jobId);
+				const jobId = data?.jobId;
+				if (jobId) {
+					setPayrollJobId(jobId);
+					setHandledPayrollJobId(null);
+					updateSearchParams((next) => {
+						next.set("payrollJobId", jobId);
+					});
+					return;
 				}
+				// No job id returned — keep progress view so the user can close cleanly.
+				setShowProgressModal(true);
 			},
 		});
 	};
@@ -1865,6 +1879,8 @@ export function RunPayrollTemplate() {
 				clearPayrollProgressCache(payrollJobId);
 				setPayrollJobId(null);
 				updateSearchParams((next) => {
+					next.delete("action");
+					next.delete("tab");
 					next.delete("payrollJobId");
 				});
 				queryClient.invalidateQueries({
@@ -1996,9 +2012,16 @@ export function RunPayrollTemplate() {
 		if (isPayrollActionPending) return;
 		setShowProgressModal(false);
 		updateSearchParams((next) => {
+			next.delete("action");
+			next.delete("tab");
 			next.delete("payrollJobId");
 		});
 	};
+
+	/** Single modal hosts confirm + live progress (avoids stacked dialogs). */
+	const isStartOrProgressModalOpen =
+		action === "start-payroll" || showProgressModal;
+	const showPayrollProgressContent = showProgressModal;
 
 	const autoPausePayrollRef = useRef<{
 		payrollPeriodId?: string | null;
@@ -2146,7 +2169,7 @@ export function RunPayrollTemplate() {
 
 					<div
 						ref={periodScrollRef}
-						className="flex gap-3 overflow-x-auto pb-2 flex-1 scroll-smooth"
+						className="flex flex-1 gap-3 overflow-x-auto scroll-smooth pb-0.5 [scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.35)_transparent] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300/60 hover:[&::-webkit-scrollbar-thumb]:bg-slate-400/70"
 						style={{ scrollBehavior: "smooth" }}>
 						{payPeriods.length > 0 ? (
 							payPeriods.map((p: any) => {
@@ -2495,6 +2518,25 @@ export function RunPayrollTemplate() {
 							</div>
 						</div>
 					)}
+					{!previewLoading && zeroGrossEmployeeCount > 0 && (
+						<div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+							<div className="flex items-start gap-2">
+								<AlertTriangle className="mt-0.5 h-4 w-4 text-blue-600" />
+								<div>
+									<h3 className="text-sm font-semibold text-blue-800">
+										{zeroGrossEmployeeCount}{" "}
+										{zeroGrossEmployeeCount === 1 ? "employee" : "employees"} with zero gross pay
+									</h3>
+									<p className="mt-1 text-xs text-blue-700">
+										Non-statutory deductions (loans and benefit deductions) were waived for{" "}
+										{zeroGrossEmployeeCount === 1 ? "this employee" : "these employees"}{" "}
+										because their gross pay for this period is ₱0.00. Statutory contributions are
+										unaffected. Uncollected amounts should be carried over manually if needed.
+									</p>
+								</div>
+							</div>
+						</div>
+					)}
 				</div>
 			) : (
 				<div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -2523,20 +2565,20 @@ export function RunPayrollTemplate() {
 
 						{/* Blockers Alert - Hide if completed */}
 						{totalBlockers > 0 && !isPeriodCompleted && (
-							<div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
-								<div className="flex items-start justify-between gap-4">
-									<div className="flex items-start gap-3">
-										<div className="p-1.5 bg-red-100 rounded-lg mt-0.5">
-											<AlertTriangle className="w-5 h-5 text-red-600" />
+							<div className="rounded-xl border border-rose-200 bg-white p-4">
+								<div className="flex items-start justify-between gap-3">
+									<div className="flex min-w-0 items-start gap-3">
+										<div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rose-50">
+											<AlertTriangle className="h-4 w-4 text-rose-600" />
 										</div>
-										<div>
-											<h3 className="font-semibold text-red-700">
-												{totalBlockers} Blockers Preventing Payroll
-												Completion
+										<div className="min-w-0">
+											<h3 className="text-sm font-semibold text-gray-900">
+												{totalBlockers}{" "}
+												{totalBlockers === 1 ? "blocker" : "blockers"}{" "}
+												preventing payroll completion
 											</h3>
-											<p className="text-sm text-red-600 mt-1">
-												Hard blockers must be resolved before payroll can be
-												processed.
+											<p className="mt-0.5 text-xs text-gray-500">
+												Resolve hard blockers before payroll can be processed.
 											</p>
 										</div>
 									</div>
@@ -2544,62 +2586,47 @@ export function RunPayrollTemplate() {
 										variant="outline"
 										size="sm"
 										onClick={() => updateURL("issues", "all")}
-										className="shrink-0 border-red-300 text-red-700 hover:bg-red-100">
-										View All Issues
+										className="h-8 shrink-0 border-gray-200 px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">
+										View all issues
 									</Button>
 								</div>
 
-								{/* Blocker Summary */}
-								<div className="grid grid-cols-3 gap-2 pt-2 border-t border-red-200">
+								{/* Blocker summary chips */}
+								<div className="mt-3 flex flex-wrap gap-2">
 									{missingInfoCount > 0 && (
 										<button
+											type="button"
 											onClick={() => updateURL("issues", "missing_info")}
-											className="flex items-center gap-2 p-2 rounded-lg bg-white border border-red-200 hover:border-red-400 transition-colors">
-											<div className="p-1 bg-red-100 rounded">
-												<AlertCircle className="w-3.5 h-3.5 text-red-600" />
-											</div>
-											<div className="text-left">
-												<p className="text-xs font-semibold text-red-700">
-													{missingInfoCount} Missing Data
-												</p>
-												<p className="text-[10px] text-red-500">
-													Incomplete profiles
-												</p>
-											</div>
+											className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700 transition-colors hover:border-gray-300 hover:bg-white">
+											<AlertCircle className="h-3 w-3 shrink-0 text-rose-500" />
+											<span className="font-semibold tabular-nums text-gray-900">
+												{missingInfoCount}
+											</span>
+											<span className="text-gray-500">Missing data</span>
 										</button>
 									)}
 									{timesheetNotSubmittedCount > 0 && (
 										<button
+											type="button"
 											onClick={() => updateURL("issues", "timesheet")}
-											className="flex items-center gap-2 p-2 rounded-lg bg-white border border-orange-200 hover:border-orange-400 transition-colors">
-											<div className="p-1 bg-orange-100 rounded">
-												<Clock className="w-3.5 h-3.5 text-orange-600" />
-											</div>
-											<div className="text-left">
-												<p className="text-xs font-semibold text-orange-700">
-													{timesheetNotSubmittedCount} Not Submitted
-												</p>
-												<p className="text-[10px] text-orange-500">
-													Timesheet pending
-												</p>
-											</div>
+											className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700 transition-colors hover:border-gray-300 hover:bg-white">
+											<Clock className="h-3 w-3 shrink-0 text-amber-500" />
+											<span className="font-semibold tabular-nums text-gray-900">
+												{timesheetNotSubmittedCount}
+											</span>
+											<span className="text-gray-500">Not submitted</span>
 										</button>
 									)}
 									{pendingApprovalCount > 0 && (
 										<button
+											type="button"
 											onClick={() => updateURL("issues", "approval")}
-											className="flex items-center gap-2 p-2 rounded-lg bg-white border border-yellow-200 hover:border-yellow-400 transition-colors">
-											<div className="p-1 bg-yellow-100 rounded">
-												<CheckCircle className="w-3.5 h-3.5 text-yellow-600" />
-											</div>
-											<div className="text-left">
-												<p className="text-xs font-semibold text-yellow-700">
-													{pendingApprovalCount} Pending Approval
-												</p>
-												<p className="text-[10px] text-yellow-600">
-													Advisory only
-												</p>
-											</div>
+											className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700 transition-colors hover:border-gray-300 hover:bg-white">
+											<CheckCircle className="h-3 w-3 shrink-0 text-amber-500" />
+											<span className="font-semibold tabular-nums text-gray-900">
+												{pendingApprovalCount}
+											</span>
+											<span className="text-gray-500">Pending approval</span>
 										</button>
 									)}
 								</div>
@@ -2805,8 +2832,22 @@ export function RunPayrollTemplate() {
 										const isExpanded = expandedAdjustmentId === benefit.id;
 										const isSourceFilterContext =
 											adjustmentFilter !== "all" && adjustmentFilter === source.filter;
+										const adjustmentDisplayName =
+											String(benefit.name || "").trim() ||
+											String(benefit.benefitType?.name || "").trim() ||
+											source.label ||
+											"Payroll adjustment";
+										const adjustmentCategoryName =
+											String(benefit.benefitType?.name || "").trim() || null;
 										const sourceMetaParts = [
-											isSourceFilterContext ? null : source.label,
+											adjustmentCategoryName &&
+											adjustmentCategoryName.toLowerCase() !==
+												adjustmentDisplayName.toLowerCase()
+												? adjustmentCategoryName
+												: null,
+											isSourceFilterContext ? null : source.label !== adjustmentDisplayName
+												? source.label
+												: null,
 											benefit.benefitType?.code,
 											hasGeneratedPayrollRow ? "Generated row" : "Source only",
 										].filter(Boolean);
@@ -2854,10 +2895,11 @@ export function RunPayrollTemplate() {
 													/>
 														<span className="min-w-0">
 															<span className="block truncate text-sm font-medium text-gray-900">
-																{employeeName}
+																{adjustmentDisplayName}
 															</span>
 															<span className="mt-0.5 block truncate text-xs text-gray-500">
-																{employeeCode || "No employee code"}
+																{employeeName}
+																{employeeCode ? ` · ${employeeCode}` : ""}
 															</span>
 															<span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1 text-[11px] text-gray-400">
 																{sourceMetaParts.map((part, partIndex) => (
@@ -3005,8 +3047,7 @@ export function RunPayrollTemplate() {
 									size="sm"
 									onClick={() => {
 										const params = buildPayrollAdjustmentParams();
-										params.set("action", "create");
-										navigate(`/hr/benefits-management?${params.toString()}`);
+										navigate(`/hr/benefits-management/new?${params.toString()}`);
 									}}
 									className="shrink-0 text-gray-700 hover:bg-orange-50 hover:text-orange-600">
 									<ExternalLink className="mr-2 h-4 w-4" />
@@ -3395,16 +3436,21 @@ export function RunPayrollTemplate() {
 													{detail.name}
 												</span>
 												<span className="block truncate text-xs text-gray-400">
-													{detail.code || "Adjustment"}{" "}
-													{detail.payrollPeriodCode
-														? `/ ${detail.payrollPeriodCode}`
-														: detail.startDate
-															? `/ ${formatDate(detail.startDate, "short")}${
-																	detail.endDate
-																		? ` - ${formatDate(detail.endDate, "short")}`
-																		: ""
-																}`
-															: ""}
+													{[
+														detail.benefitTypeName || null,
+														detail.code || null,
+														detail.payrollPeriodCode
+															? detail.payrollPeriodCode
+															: detail.startDate
+																? `${formatDate(detail.startDate, "short")}${
+																		detail.endDate
+																			? ` - ${formatDate(detail.endDate, "short")}`
+																			: ""
+																	}`
+																: null,
+													]
+														.filter(Boolean)
+														.join(" · ") || "Adjustment"}
 												</span>
 											</span>
 											<span className="text-left font-medium tabular-nums text-gray-900 sm:text-right">
@@ -3436,7 +3482,9 @@ export function RunPayrollTemplate() {
 														{detail.name}
 													</span>
 													<span className="block truncate text-xs text-gray-400">
-														{detail.code || "Benefit"}
+														{[detail.benefitTypeName || null, detail.code || null]
+															.filter(Boolean)
+															.join(" · ") || "Benefit"}
 													</span>
 												</span>
 												<span className="text-left font-medium tabular-nums text-emerald-700 sm:text-right">
@@ -3486,16 +3534,21 @@ export function RunPayrollTemplate() {
 													{detail.name}
 												</span>
 												<span className="block truncate text-xs text-gray-400">
-													{detail.code || detail.direction}{" "}
-													{detail.payrollPeriodCode
-														? `/ ${detail.payrollPeriodCode}`
-														: detail.startDate
-															? `/ ${formatDate(detail.startDate, "short")}${
-																	detail.endDate
-																		? ` - ${formatDate(detail.endDate, "short")}`
-																		: ""
-																}`
-															: ""}
+													{[
+														detail.benefitTypeName || null,
+														detail.code || detail.direction || null,
+														detail.payrollPeriodCode
+															? detail.payrollPeriodCode
+															: detail.startDate
+																? `${formatDate(detail.startDate, "short")}${
+																		detail.endDate
+																			? ` - ${formatDate(detail.endDate, "short")}`
+																			: ""
+																	}`
+																: null,
+													]
+														.filter(Boolean)
+														.join(" · ")}
 												</span>
 											</span>
 											<span className="text-left font-medium tabular-nums text-rose-600 sm:text-right">
@@ -3803,560 +3856,815 @@ export function RunPayrollTemplate() {
 				</div>
 			</Modal>
 
-			{/* Start Payroll Confirmation Modal */}
+			{/* Start Payroll + Progress (single modal, content switches after start) */}
 			<Modal
-				open={action === "start-payroll"}
+				open={isStartOrProgressModalOpen}
 				onOpenChange={(open) => {
-					if (!open) {
-						updateSearchParams((next) => {
-							next.delete("action");
-							next.delete("tab");
-						});
+					if (!open && !isPayrollActionPending) {
+						handleCloseProgressModal();
 					}
 				}}
-				title={
-					isSelectedPeriodProcessing
-						? "Check Payroll Run Status"
-						: "Start Payroll Processing"
-				}
-				description={
-					isSelectedPeriodProcessing
-						? "This period is marked processing. Check the active background job before taking another action."
-						: payrollCoverageLabel !== "N/A"
-							? `Start payroll for ${payrollCoverageLabel}`
-							: "Processing payroll..."
-				}
-				className="max-w-lg">
-				<div className="space-y-4">
-					{isSelectedPeriodProcessing && (
-						<div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-							<div className="flex items-start gap-2">
-								<AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
-								<div>
-									<p className="text-sm font-medium text-amber-800">
-										Verify the current job first
-									</p>
-									<p className="text-xs text-amber-700 mt-1">
-										Open progress to confirm whether there is an active job or a
-										stale processing state that needs to be reopened.
-									</p>
-								</div>
-							</div>
-						</div>
-					)}
-					{/* Warning if there are issues */}
-					{!isSelectedPeriodProcessing && payrollIssues.employeeCount > 0 && (
-						<div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-							<div className="flex items-start gap-2">
-								<AlertTriangle className="w-5 h-5 text-orange-600 mt-0.5" />
-								<div>
-									<p className="text-sm font-medium text-orange-700">
-										{payrollIssues.employeeCount} employees are not payroll-ready
-									</p>
-									<p className="text-xs text-orange-600 mt-1">
-										Resolve missing payroll data or unsubmitted timesheets before
-										processing.
-									</p>
-								</div>
-							</div>
-						</div>
-					)}
-
-					{!isSelectedPeriodProcessing && (
-						<div className="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 bg-white p-3 sm:grid-cols-2">
-							<div className="space-y-1">
-								<span className="block text-xs font-medium text-gray-600">
-									Department
-								</span>
-								<Select
-									value={selectedDepartmentId}
-									onValueChange={handlePayrollDepartmentChange}>
-									<SelectTrigger className="h-9 w-full rounded-md border-gray-200 bg-white text-xs shadow-sm">
-										<SelectValue placeholder="All departments" />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="all">All departments</SelectItem>
-										{departments.map((department: any) => (
-											<SelectItem key={department.id} value={department.id}>
-												{department.name}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
-							<div className="space-y-1">
-								<span className="block text-xs font-medium text-gray-600">Section</span>
-								<Select
-									value={selectedSectionId}
-									onValueChange={handlePayrollSectionChange}>
-									<SelectTrigger className="h-9 w-full rounded-md border-gray-200 bg-white text-xs shadow-sm">
-										<SelectValue placeholder="All sections" />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="all">All sections</SelectItem>
-										{scopedSections.map((section: any) => (
-											<SelectItem key={section.id} value={section.id}>
-												{section.name}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
-						</div>
-					)}
-
-					{/* Payroll Summary */}
-					<div className="bg-gray-50 rounded-lg p-4 space-y-3">
-						<h4 className="font-medium text-gray-900">Payroll Summary</h4>
-						<div className="grid grid-cols-2 gap-3 text-sm">
-							<div>
-								<p className="text-gray-500">Coverage Period</p>
-								<p className="font-medium text-gray-900">
-									{payrollCoverageLabel}
-								</p>
-							</div>
-							<div>
-								<p className="text-gray-500">Pay Date</p>
-								<p className="font-medium text-gray-900">
-									{period
-										? `${period.dayOfWeek}, ${getMonthName(period.month).slice(0, 3)} ${period.day}`
-										: "N/A"}
-								</p>
-							</div>
-							<div>
-								<p className="text-gray-500">
-									{isSelectedPeriodProcessing
-										? "Current Status"
-										: "Employees Included"}
-								</p>
-								{isSelectedPeriodProcessing ? (
-									<p className="font-medium text-amber-700">
-										{selectedPeriod?.status || "PROCESSING"}
-									</p>
-								) : (
-									<button
-										type="button"
-										onClick={handlePreviewPayroll}
-										className="font-medium text-green-700 underline-offset-2 transition-colors hover:text-green-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2">
-										{payableEmployeesCount} employees
-									</button>
-								)}
-							</div>
-							<div>
-								<p className="text-gray-500">
-									{isSelectedPeriodProcessing
-										? "Next Action"
-										: "Employees Excluded"}
-								</p>
-								{isSelectedPeriodProcessing ? (
-									<p className="font-medium text-amber-700">Open progress</p>
-								) : (
-									<button
-										type="button"
-										onClick={() => updateURL("issues", "all")}
-										className="font-medium text-red-700 underline-offset-2 transition-colors hover:text-red-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">
-										{payrollIssues.employeeCount} employees
-									</button>
-								)}
-							</div>
-							{!isSelectedPeriodProcessing && (
-								<div className="col-span-2">
-									<p className="text-gray-500">Run Scope</p>
-									<p className="font-medium text-gray-900">
-										{selectedDepartmentName} / {selectedSectionName}
-									</p>
-								</div>
-							)}
-						</div>
-					</div>
-
-					{/* Actions */}
-					<div className="flex justify-end gap-3 pt-4 border-t">
-						<Button
-							variant="outline"
-							onClick={() => {
-								updateSearchParams((next) => {
-									next.delete("action");
-									next.delete("tab");
-								});
-							}}>
-							Back
-						</Button>
-						<Button
-							onClick={
-								isSelectedPeriodProcessing
-									? () => {
-											updateSearchParams((next) => {
-												next.delete("action");
-												next.delete("tab");
-											});
-											handleStartPayroll();
-										}
-									: handleConfirmStartPayroll
-							}
-							disabled={isPayrollActionPending}
-							className="bg-orange-500 hover:bg-orange-600 text-white gap-2">
-							{isSelectedPeriodProcessing ? (
-								<RefreshCw className="w-4 h-4" />
-							) : (
-								<CheckCircle className="w-4 h-4" />
-							)}
-							{isPayrollActionPending
-								? "Processing..."
-								: isSelectedPeriodProcessing
-									? "Open Progress"
-									: "Confirm & Start Payroll"}
-						</Button>
-					</div>
-				</div>
-			</Modal>
-
-			<Modal
-				open={showProgressModal}
-				onOpenChange={(open) => {
-					if (!open && !isPayrollActionPending) handleCloseProgressModal();
-				}}
-				title="Payroll status"
-				description="You can close this window and reopen status from Run Payroll."
-				className="max-w-lg"
 				showCloseButton={!isPayrollActionPending}
-				closeOnBackdropClick={!isPayrollActionPending}>
-				<div className="space-y-4">
-					{isPayrollProgressUnavailable ? (
-						<div className="min-h-[230px] rounded-lg border border-red-200 bg-red-50 p-4">
-							<div className="flex items-start gap-2">
-								<AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
-								<div>
-									<p className="text-sm font-medium text-red-900">
-										Processing is stuck
-									</p>
-									<p className="mt-1 text-sm text-red-700">
-										This period is marked as processing, but there is no active
-										payroll job to follow. Resume to continue from existing
-										payroll rows, or reopen only when you want to clear the
-										stale state.
-									</p>
-								</div>
-							</div>
-							{lastPayrollGenerationSnapshot && (
-								<div className="mt-4 grid grid-cols-1 gap-2 border-t border-red-200 pt-3 text-xs text-red-900 sm:grid-cols-2">
-									<div>
-										<span className="block text-red-700">Saved job</span>
-										<span className="font-medium">
-											{formatJobId(lastPayrollGenerationSnapshot.jobId)}
-										</span>
-									</div>
-									<div>
-										<span className="block text-red-700">Saved state</span>
-										<span className="font-medium">
-											{lastPayrollGenerationSnapshot.status || "Not saved"}
-										</span>
-									</div>
-									<div>
-										<span className="block text-red-700">Saved progress</span>
-										<span className="font-medium">
-											{Number(lastPayrollGenerationSnapshot.processed || 0)}{" "}
-											of {Number(lastPayrollGenerationSnapshot.total || 0)}
-										</span>
-									</div>
-									<div>
-										<span className="block text-red-700">Last saved</span>
-										<span className="font-medium">
-											{formatDateTime(
-												lastPayrollGenerationSnapshot.updatedAt ||
-													lastPayrollGenerationSnapshot.completedAt,
-											)}
-										</span>
-									</div>
-								</div>
-							)}
-						</div>
-					) : !payrollJobId && (isActiveProgressLoading || isActiveProgressFetching) ? (
-						<div className="min-h-[230px] rounded-lg border border-orange-200 bg-orange-50 p-4">
-							<div className="flex items-center gap-2 text-orange-900 text-sm font-medium">
-								<Loader2 className="w-4 h-4 animate-spin" />
-								Looking for the running payroll job...
-							</div>
-						</div>
-					) : payrollJobId && isProgressLoading && !visiblePayrollProgress ? (
-						<div className="min-h-[230px] rounded-lg border border-orange-200 bg-orange-50 p-4">
-							<div className="flex items-center gap-2 text-orange-900 text-sm font-medium">
-								<Loader2 className="w-4 h-4 animate-spin" />
-								Loading payroll job...
-							</div>
-						</div>
-					) : (
-						<>
-							<div className="min-h-[230px] rounded-lg border border-orange-200 bg-orange-50 p-4 space-y-3">
-								<div className="flex items-center justify-between text-sm">
-									<span className="font-medium text-orange-900">
-										{isPayrollRunProcessing ? (
-											<>
-												<Loader2 className="w-4 h-4 animate-spin inline-block mr-2 align-middle" />
-												{isPayrollStopRequested
-													? "Stopping after current employee"
-														: isPayrollPauseRequested
-															? "Pausing after current employee"
-															: `Processing ${
-																	payrollProgressDisplayProcessed
-																} of ${
-																	payrollProgressDisplayTotal
-																} payable`}
-											</>
-										) : (
-											<>
-												Processed {payrollProgressDisplayProcessed} of{" "}
-												{payrollProgressDisplayTotal} payable
-											</>
-										)}
-									</span>
-									<span className="font-semibold text-orange-900">
-										{payrollProgressPercentage}%
-									</span>
-								</div>
-								<Progress value={payrollProgressPercentage} className="h-2" />
-								<div className="grid grid-cols-2 gap-2 text-xs">
-									<div className="text-green-700">
-										Success:{" "}
-										<span className="font-semibold">
-											{visiblePayrollProgress?.success || 0}
-										</span>
-									</div>
-									<div className="text-red-700">
-										Failed:{" "}
-										<span className="font-semibold">
-											{visiblePayrollProgress?.failed || 0}
-										</span>
-									</div>
-								</div>
-								<div className="grid grid-cols-2 gap-2 rounded-md border border-orange-100 bg-white/70 px-3 py-2 text-xs text-orange-900">
-									<div>
-										<span className="block text-orange-700">Payable</span>
-										<span className="font-semibold">
-											{formatCount(payrollProgressDisplayTotal)}
-										</span>
-									</div>
-									<div>
-										<span className="block text-orange-700">
-											Not payroll-ready
-										</span>
-										{notReadyCount > 0 ? (
-											<button
-												type="button"
-												aria-label="View employees not payroll-ready"
-												onClick={() => {
-													setShowProgressModal(false);
-													updateURL("issues", "all");
-												}}
-												className="font-semibold text-orange-900 underline underline-offset-4 transition-colors hover:text-orange-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2">
-												{formatCount(notReadyCount)}
-											</button>
-										) : (
-											<span className="font-semibold">0</span>
-										)}
-									</div>
-								</div>
-								<div className="grid grid-cols-1 gap-2 border-t border-orange-200 pt-3 text-xs text-orange-900 sm:grid-cols-2">
-									<div>
-										<span className="block text-orange-700">Job ID</span>
-										<span className="font-medium">
-											{formatJobId(
-												visiblePayrollProgress?.jobId || payrollJobId,
-											)}
-										</span>
-									</div>
-									<div>
-										<span className="block text-orange-700">Started</span>
-										<span className="font-medium">
-											{formatDateTime(visiblePayrollProgress?.startedAt)}
-										</span>
-									</div>
-									<div>
-										<span className="block text-orange-700">Elapsed</span>
-										<span className="font-medium">
-											{payrollProgressElapsed}
-										</span>
-									</div>
-									<div>
-										<span className="block text-orange-700">Last update</span>
-										<span className="font-medium">
-											{formatDateTime(
-												visiblePayrollProgress?.completedAt ||
-													visiblePayrollProgress?.pauseRequestedAt ||
-													visiblePayrollProgress?.cancellationRequestedAt ||
-													visiblePayrollProgress?.startedAt,
-											)}
-										</span>
-									</div>
-									<div>
-										<span className="block text-orange-700">Run state</span>
-										<span className="font-medium">
-											{visiblePayrollProgress?.status === "failed"
-												? "Retryable after fixing errors"
+				closeOnBackdropClick={!isPayrollActionPending}
+				className="max-h-[90vh] max-w-3xl gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-4xl">
+				<div className="flex min-h-0 max-h-[90vh] flex-col">
+					{/* Header */}
+					<div className="shrink-0 border-b border-neutral-100 px-6 py-5 pr-12">
+						<h2 className="text-base font-semibold tracking-tight text-neutral-900">
+							{showPayrollProgressContent
+								? isPayrollProgressUnavailable
+									? "Payroll run stuck"
+									: isPayrollRunProcessing
+										? "Payroll running"
+										: visiblePayrollProgress?.status === "completed"
+											? "Payroll completed"
+											: visiblePayrollProgress?.status === "failed"
+												? "Payroll failed"
 												: visiblePayrollProgress?.status === "paused"
-													? "Paused; ready to resume"
-												: visiblePayrollProgress?.status === "cancelled"
-													? "Can run again"
-													: isPayrollStopRequested
-														? "Stop requested"
-														: isPayrollPauseRequested
-															? "Pause requested"
-															: visiblePayrollProgress?.status ===
-																  "processing"
-																? "Background run active"
-																: "Complete"}
-										</span>
+													? "Payroll paused"
+													: visiblePayrollProgress?.status === "cancelled"
+														? "Payroll cancelled"
+														: "Payroll status"
+								: isSelectedPeriodProcessing
+									? "Check Payroll Run Status"
+									: "Start Payroll Processing"}
+						</h2>
+						<p className="mt-1 text-sm text-neutral-500">
+							{showPayrollProgressContent
+								? "You can close this window and reopen status from Run Payroll."
+								: isSelectedPeriodProcessing
+									? "This period is marked processing. Check the active background job before taking another action."
+									: payrollCoverageLabel !== "N/A"
+										? `Start payroll for ${payrollCoverageLabel}`
+										: "Processing payroll..."}
+						</p>
+					</div>
+
+					{showPayrollProgressContent ? (
+						<>
+							{/* Scrollable progress body */}
+							<div className="min-h-0 flex-1 overflow-y-auto modern-scroll">
+							{/* Progress body — horizontal modern layout */}
+							<div className="grid grid-cols-1 divide-y divide-neutral-100 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] md:divide-x md:divide-y-0">
+								{/* Left: primary progress */}
+								<div className="flex flex-col gap-5 p-6">
+									{isPayrollProgressUnavailable ? (
+										<div className="flex flex-1 flex-col gap-4">
+											<div className="flex items-start gap-3 rounded-xl border border-red-200/80 bg-red-50/70 p-4">
+												<div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-100">
+													<AlertCircle className="h-4 w-4 text-red-700" />
+												</div>
+												<div className="min-w-0">
+													<p className="text-sm font-medium text-red-900">
+														Processing is stuck
+													</p>
+													<p className="mt-1 text-xs leading-relaxed text-red-800/80">
+														This period is marked as processing, but there is no
+														active payroll job to follow. Resume to continue from
+														existing payroll rows, or reopen only when you want to
+														clear the stale state.
+													</p>
+												</div>
+											</div>
+											{lastPayrollGenerationSnapshot && (
+												<div className="grid grid-cols-2 gap-3">
+													<div className="rounded-xl border border-neutral-200/80 bg-white px-3.5 py-3">
+														<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+															Saved job
+														</p>
+														<p className="mt-1 text-sm font-medium text-neutral-900">
+															{formatJobId(lastPayrollGenerationSnapshot.jobId)}
+														</p>
+													</div>
+													<div className="rounded-xl border border-neutral-200/80 bg-white px-3.5 py-3">
+														<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+															Saved state
+														</p>
+														<p className="mt-1 text-sm font-medium text-neutral-900">
+															{lastPayrollGenerationSnapshot.status || "Not saved"}
+														</p>
+													</div>
+													<div className="rounded-xl border border-neutral-200/80 bg-white px-3.5 py-3">
+														<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+															Saved progress
+														</p>
+														<p className="mt-1 text-sm font-medium text-neutral-900">
+															{Number(lastPayrollGenerationSnapshot.processed || 0)}{" "}
+															of {Number(lastPayrollGenerationSnapshot.total || 0)}
+														</p>
+													</div>
+													<div className="rounded-xl border border-neutral-200/80 bg-white px-3.5 py-3">
+														<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+															Last saved
+														</p>
+														<p className="mt-1 text-sm font-medium text-neutral-900">
+															{formatDateTime(
+																lastPayrollGenerationSnapshot.updatedAt ||
+																	lastPayrollGenerationSnapshot.completedAt,
+															)}
+														</p>
+													</div>
+												</div>
+											)}
+										</div>
+									) : (!payrollJobId &&
+											(isActiveProgressLoading || isActiveProgressFetching)) ||
+									  (payrollJobId &&
+											isProgressLoading &&
+											!visiblePayrollProgress) ||
+									  (generatePayrollMutation.isPending && !visiblePayrollProgress) ? (
+										<div className="flex min-h-[220px] flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-neutral-100 bg-neutral-50/60">
+											<Loader2 className="h-6 w-6 animate-spin text-neutral-500" />
+											<p className="text-sm font-medium text-neutral-700">
+												{generatePayrollMutation.isPending && !payrollJobId
+													? "Starting payroll run..."
+													: !payrollJobId
+														? "Looking for the running payroll job..."
+														: "Loading payroll job..."}
+											</p>
+											<p className="text-xs text-neutral-400">
+												Progress updates live once the job is ready.
+											</p>
+										</div>
+									) : (
+										<>
+											<div className="flex items-start justify-between gap-4">
+												<div className="min-w-0">
+													<p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-400">
+														Progress
+													</p>
+													<p className="mt-1.5 flex items-center gap-2 text-sm font-medium text-neutral-900">
+														{isPayrollRunProcessing && (
+															<Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-neutral-500" />
+														)}
+														{isPayrollRunProcessing
+															? isPayrollStopRequested
+																? "Stopping after current employee"
+																: isPayrollPauseRequested
+																	? "Pausing after current employee"
+																	: `Processing ${payrollProgressDisplayProcessed} of ${payrollProgressDisplayTotal} payable`
+															: `Processed ${payrollProgressDisplayProcessed} of ${payrollProgressDisplayTotal} payable`}
+													</p>
+												</div>
+												<div className="text-right">
+													<p className="text-3xl font-semibold tracking-tight text-neutral-900">
+														{payrollProgressPercentage}
+														<span className="text-lg font-medium text-neutral-400">
+															%
+														</span>
+													</p>
+												</div>
+											</div>
+
+											<div className="space-y-2">
+												<Progress
+													value={payrollProgressPercentage}
+													className="h-2 bg-neutral-100"
+												/>
+												<div className="flex items-center justify-between text-[11px] text-neutral-400">
+													<span>
+														{formatCount(payrollProgressDisplayProcessed)} done
+													</span>
+													<span>
+														{formatCount(
+															Math.max(
+																0,
+																payrollProgressDisplayTotal -
+																	payrollProgressDisplayProcessed,
+															),
+														)}{" "}
+														remaining
+													</span>
+												</div>
+											</div>
+
+											<div className="grid grid-cols-2 gap-3">
+												<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5">
+													<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+														Success
+													</p>
+													<p className="mt-1.5 text-xl font-semibold tracking-tight text-emerald-700">
+														{visiblePayrollProgress?.success || 0}
+													</p>
+												</div>
+												<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5">
+													<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+														Failed
+													</p>
+													<p className="mt-1.5 text-xl font-semibold tracking-tight text-red-600">
+														{visiblePayrollProgress?.failed || 0}
+													</p>
+												</div>
+												<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5">
+													<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+														Payable
+													</p>
+													<p className="mt-1.5 text-xl font-semibold tracking-tight text-neutral-900">
+														{formatCount(payrollProgressDisplayTotal)}
+													</p>
+												</div>
+												<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5">
+													<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+														Not ready
+													</p>
+													{notReadyCount > 0 ? (
+														<button
+															type="button"
+															aria-label="View employees not payroll-ready"
+															onClick={() => {
+																setShowProgressModal(false);
+																updateURL("issues", "all");
+															}}
+															className="mt-1.5 text-left text-xl font-semibold tracking-tight text-orange-700 underline-offset-2 transition-colors hover:text-orange-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/40 focus-visible:ring-offset-2">
+															{formatCount(notReadyCount)}
+														</button>
+													) : (
+														<p className="mt-1.5 text-xl font-semibold tracking-tight text-neutral-900">
+															0
+														</p>
+													)}
+												</div>
+											</div>
+
+											{visiblePayrollProgress?.message && (
+												<p className="rounded-lg border border-neutral-100 bg-neutral-50/80 px-3 py-2 text-xs leading-relaxed text-neutral-600">
+													{visiblePayrollProgress.message}
+												</p>
+											)}
+
+											{visiblePayrollProgress?.status === "completed" && (
+												<div className="flex items-center gap-2.5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-3.5 py-3">
+													<div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-100">
+														<CheckCircle className="h-3.5 w-3.5 text-emerald-700" />
+													</div>
+													<p className="text-sm font-medium text-emerald-900">
+														Payroll generation completed.
+													</p>
+												</div>
+											)}
+											{visiblePayrollProgress?.status === "failed" && (
+												<div className="space-y-2">
+													<div className="flex items-center gap-2.5 rounded-xl border border-red-200/80 bg-red-50/70 px-3.5 py-3">
+														<div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-red-100">
+															<AlertCircle className="h-3.5 w-3.5 text-red-700" />
+														</div>
+														<p className="text-sm font-medium text-red-900">
+															Payroll generation failed.
+														</p>
+													</div>
+													{visiblePayrollProgress.errors?.length > 0 && (
+														<div className="rounded-xl border border-red-200/80 bg-white px-3.5 py-3">
+															<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-red-500">
+																Error detail
+																{visiblePayrollProgress.errors.length > 1
+																	? ` · ${visiblePayrollProgress.errors.length}`
+																	: ""}
+															</p>
+															<ul className="mt-2 space-y-2">
+																{visiblePayrollProgress.errors
+																	.slice(0, 3)
+																	.map((error, idx) => (
+																		<li
+																			key={`preview-${error.row}-${error.employeeId}-${idx}`}
+																			className="text-xs leading-relaxed text-red-800">
+																			{(error.row != null || error.employeeId) && (
+																				<span className="font-medium">
+																					{error.row != null
+																						? `Row ${error.row}`
+																						: ""}
+																					{error.row != null && error.employeeId
+																						? " — "
+																						: ""}
+																					{error.employeeId || ""}
+																					{(error.row != null ||
+																						error.employeeId) &&
+																						": "}
+																				</span>
+																			)}
+																			<span className="break-words text-red-700">
+																				{error.error}
+																			</span>
+																		</li>
+																	))}
+															</ul>
+															{visiblePayrollProgress.errors.length > 3 && (
+																<p className="mt-2 text-[11px] text-red-600/80">
+																	+{visiblePayrollProgress.errors.length - 3}{" "}
+																	more in the list below
+																</p>
+															)}
+														</div>
+													)}
+												</div>
+											)}
+											{visiblePayrollProgress?.status === "paused" && (
+												<div className="flex items-center gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/70 px-3.5 py-3">
+													<div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-100">
+														<Pause className="h-3.5 w-3.5 text-amber-700" />
+													</div>
+													<p className="text-sm font-medium text-amber-900">
+														Paused. Resume when you are ready.
+													</p>
+												</div>
+											)}
+											{visiblePayrollProgress?.status === "cancelled" && (
+												<div className="flex items-center gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/70 px-3.5 py-3">
+													<div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-100">
+														<X className="h-3.5 w-3.5 text-amber-700" />
+													</div>
+													<p className="text-sm font-medium text-amber-900">
+														Cancelled and period reopened.
+													</p>
+												</div>
+											)}
+										</>
+									)}
+								</div>
+
+								{/* Right: run metadata */}
+								<div className="flex flex-col gap-4 bg-neutral-50/50 p-6">
+									<div>
+										<p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-400">
+											Run details
+										</p>
+										<p className="mt-1 text-sm text-neutral-500">
+											Background job metadata for this period.
+										</p>
+									</div>
+									<div className="space-y-3">
+										<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3">
+											<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+												Job ID
+											</p>
+											<p className="mt-1 font-mono text-sm font-medium text-neutral-900">
+												{formatJobId(
+													visiblePayrollProgress?.jobId ||
+														payrollJobId ||
+														lastPayrollGenerationSnapshot?.jobId,
+												)}
+											</p>
+										</div>
+										<div className="grid grid-cols-2 gap-3">
+											<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3">
+												<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+													Started
+												</p>
+												<p className="mt-1 text-sm font-medium text-neutral-900">
+													{formatDateTime(
+														visiblePayrollProgress?.startedAt ||
+															lastPayrollGenerationSnapshot?.startedAt,
+													)}
+												</p>
+											</div>
+											<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3">
+												<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+													Elapsed
+												</p>
+												<p className="mt-1 text-sm font-medium text-neutral-900">
+													{payrollProgressElapsed || "—"}
+												</p>
+											</div>
+										</div>
+										<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3">
+											<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+												Last update
+											</p>
+											<p className="mt-1 text-sm font-medium text-neutral-900">
+												{formatDateTime(
+													visiblePayrollProgress?.completedAt ||
+														visiblePayrollProgress?.pauseRequestedAt ||
+														visiblePayrollProgress?.cancellationRequestedAt ||
+														visiblePayrollProgress?.startedAt ||
+														lastPayrollGenerationSnapshot?.updatedAt ||
+														lastPayrollGenerationSnapshot?.completedAt,
+												)}
+											</p>
+										</div>
+										<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3">
+											<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+												Run state
+											</p>
+											<p className="mt-1 text-sm font-medium text-neutral-900">
+												{isPayrollProgressUnavailable
+													? "No active job"
+													: visiblePayrollProgress?.status === "failed"
+														? "Retryable after fixing errors"
+														: visiblePayrollProgress?.status === "paused"
+															? "Paused; ready to resume"
+															: visiblePayrollProgress?.status === "cancelled"
+																? "Can run again"
+																: isPayrollStopRequested
+																	? "Stop requested"
+																	: isPayrollPauseRequested
+																		? "Pause requested"
+																		: visiblePayrollProgress?.status ===
+																			  "processing"
+																			? "Background run active"
+																			: generatePayrollMutation.isPending
+																				? "Starting..."
+																				: "Complete"}
+											</p>
+										</div>
+										{payrollCoverageLabel !== "N/A" && (
+											<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3">
+												<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+													Coverage
+												</p>
+												<p className="mt-1 text-sm font-medium text-neutral-900">
+													{payrollCoverageLabel}
+												</p>
+											</div>
+										)}
 									</div>
 								</div>
-								{visiblePayrollProgress?.message && (
-									<p className="text-xs text-orange-800">
-										{visiblePayrollProgress.message}
-									</p>
-								)}
-								{visiblePayrollProgress?.status === "completed" && (
-									<div className="text-green-700 text-sm font-medium text-center">
-										Payroll generation completed.
-									</div>
-								)}
-								{visiblePayrollProgress?.status === "failed" && (
-									<div className="text-red-700 text-sm font-medium text-center">
-										Payroll generation failed.
-									</div>
-								)}
-								{visiblePayrollProgress?.status === "paused" && (
-									<div className="text-amber-700 text-sm font-medium text-center">
-										Payroll generation paused. Resume when you are ready.
-									</div>
-								)}
-								{visiblePayrollProgress?.status === "cancelled" && (
-									<div className="text-amber-700 text-sm font-medium text-center">
-										Payroll generation cancelled and period reopened.
-									</div>
-								)}
 							</div>
 
+							{/* Errors — kept inside scroll area so they stay reachable */}
 							{visiblePayrollProgress?.errors &&
 								visiblePayrollProgress.errors.length > 0 && (
-									<div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-2">
-										<div>
-											<p className="text-sm font-medium text-red-900">
-												Errors ({visiblePayrollProgress.errors.length})
-											</p>
-											<p className="text-xs text-red-700">
-												Fix these rows, then retry. Existing payroll rows
-												for this period are upserted, so the rerun continues
-												safely for the same period instead of duplicating
-												records.
-											</p>
-										</div>
-										<div className="max-h-40 overflow-y-auto space-y-1 text-xs">
-											{visiblePayrollProgress.errors.map((error, idx) => (
-												<div
-													key={`${error.row}-${error.employeeId}-${idx}`}
-													className="bg-white border border-red-100 rounded p-2">
-													<p className="font-medium text-red-800">
-														Row {error.row} - {error.employeeId}
-													</p>
-													<p className="text-red-700">{error.error}</p>
-												</div>
-											))}
+									<div className="border-t border-neutral-100 px-6 py-4">
+										<div className="rounded-xl border border-red-200/80 bg-red-50/60 p-4">
+											<div className="mb-3">
+												<p className="text-sm font-medium text-red-900">
+													Errors ({visiblePayrollProgress.errors.length})
+												</p>
+												<p className="mt-0.5 text-xs leading-relaxed text-red-700/80">
+													Fix these rows, then retry. Existing payroll rows for
+													this period are upserted, so the rerun continues safely
+													instead of duplicating records.
+												</p>
+											</div>
+											<div className="space-y-2">
+												{visiblePayrollProgress.errors.map((error, idx) => (
+													<div
+														key={`${error.row}-${error.employeeId}-${idx}`}
+														className="rounded-lg border border-red-100 bg-white px-3.5 py-2.5 text-xs">
+														<p className="font-medium text-red-800">
+															{error.row != null ? `Row ${error.row}` : "Error"}
+															{error.employeeId
+																? ` — ${error.employeeId}`
+																: ""}
+														</p>
+														<p className="mt-1 break-words leading-relaxed text-red-700/90">
+															{error.error}
+														</p>
+													</div>
+												))}
+											</div>
 										</div>
 									</div>
 								)}
-						</>
-					)}
+							</div>
 
-					<div className="flex flex-col-reverse gap-2 border-t pt-2 sm:flex-row sm:justify-end">
-						<Button
-							variant="outline"
-							onClick={handleCloseProgressModal}
-							disabled={isPayrollActionPending}>
-							Close
-						</Button>
-						{isPayrollProgressUnavailable && (
-							<>
+							{/* Progress footer — pinned */}
+							<div className="flex shrink-0 flex-col-reverse items-stretch justify-end gap-2 border-t border-neutral-100 bg-white px-6 py-4 sm:flex-row sm:items-center">
 								<Button
 									variant="outline"
-									onClick={handleRequestPayrollStop}
+									onClick={handleCloseProgressModal}
 									disabled={isPayrollActionPending}
-									className="gap-2 border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800">
-									{isPayrollActionPending ? (
-										<Loader2 className="h-4 w-4 animate-spin" />
-									) : (
-										<X className="h-4 w-4" />
+									className="h-9 rounded-lg border-neutral-200 px-4 text-sm font-medium text-neutral-700 shadow-none hover:bg-neutral-50">
+									Close
+								</Button>
+								{isPayrollProgressUnavailable && (
+									<>
+										<Button
+											variant="outline"
+											onClick={handleRequestPayrollStop}
+											disabled={isPayrollActionPending}
+											className="h-9 gap-2 rounded-lg border-neutral-200 px-4 text-sm font-medium text-neutral-700 shadow-none hover:bg-neutral-50">
+											{isPayrollActionPending ? (
+												<Loader2 className="h-3.5 w-3.5 animate-spin" />
+											) : (
+												<X className="h-3.5 w-3.5" />
+											)}
+											{isPayrollActionPending ? "Reopening..." : "Reopen period"}
+										</Button>
+										<Button
+											onClick={handleRetryPayrollJob}
+											disabled={isPayrollActionPending}
+											className="h-9 gap-2 rounded-lg bg-neutral-900 px-4 text-sm font-medium text-white shadow-none hover:bg-neutral-800">
+											{isPayrollActionPending ? (
+												<Loader2 className="h-3.5 w-3.5 animate-spin" />
+											) : (
+												<RefreshCw className="h-3.5 w-3.5" />
+											)}
+											{isPayrollActionPending ? "Starting..." : "Resume processing"}
+										</Button>
+									</>
+								)}
+								{(visiblePayrollProgress?.status === "failed" ||
+									visiblePayrollProgress?.status === "paused" ||
+									visiblePayrollProgress?.status === "cancelled") && (
+									<Button
+										onClick={handleRetryPayrollJob}
+										disabled={isPayrollActionPending}
+										className="h-9 gap-2 rounded-lg bg-neutral-900 px-4 text-sm font-medium text-white shadow-none hover:bg-neutral-800">
+										{isPayrollActionPending ? (
+											<Loader2 className="h-3.5 w-3.5 animate-spin" />
+										) : (
+											<RefreshCw
+												className={`h-3.5 w-3.5 ${
+													isPayrollActionPending ? "animate-spin" : ""
+												}`}
+											/>
+										)}
+										{isPayrollActionPending
+											? "Starting..."
+											: visiblePayrollProgress?.status === "paused"
+												? "Resume processing"
+												: "Run again"}
+									</Button>
+								)}
+								{isPayrollRunProcessing && (
+									<Button
+										variant="outline"
+										onClick={handleRequestPayrollPause}
+										disabled={
+											isPayrollActionPending ||
+											isPayrollPauseRequested ||
+											isPayrollStopRequested
+										}
+										className="h-9 gap-2 rounded-lg border-neutral-200 px-4 text-sm font-medium text-neutral-700 shadow-none hover:bg-neutral-50">
+										{isPayrollActionPending ? (
+											<Loader2 className="h-3.5 w-3.5 animate-spin" />
+										) : (
+											<Pause className="h-3.5 w-3.5" />
+										)}
+										{isPayrollActionPending
+											? "Pausing..."
+											: isPayrollStopRequested
+												? "Stop requested"
+												: isPayrollPauseRequested
+													? "Pause requested"
+													: "Pause processing"}
+									</Button>
+								)}
+								{canViewPayrollReport && (
+									<Button
+										onClick={() => {
+											navigate(getPayrollManagementUrl(payrollPeriodId));
+										}}
+										className="h-9 rounded-lg bg-neutral-900 px-4 text-sm font-medium text-white shadow-none hover:bg-neutral-800">
+										View payroll report
+									</Button>
+								)}
+							</div>
+						</>
+					) : (
+						<>
+							{/* Confirm body — horizontal: scope / alerts + summary */}
+							<div className="grid grid-cols-1 divide-y divide-neutral-100 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:divide-x md:divide-y-0">
+								{/* Left panel — scope & alerts */}
+								<div className="flex flex-col gap-5 p-6">
+									{!isSelectedPeriodProcessing && (
+										<div className="space-y-4">
+											<div>
+												<p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-400">
+													Run scope
+												</p>
+												<p className="mt-1 text-sm text-neutral-500">
+													Limit this run to a department or section.
+												</p>
+											</div>
+											<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-1">
+												<div className="space-y-1.5">
+													<label className="block text-xs font-medium text-neutral-600">
+														Department
+													</label>
+													<Select
+														value={selectedDepartmentId}
+														onValueChange={handlePayrollDepartmentChange}>
+														<SelectTrigger className="h-10 w-full rounded-lg border-neutral-200 bg-white text-sm shadow-none focus:ring-1 focus:ring-neutral-300">
+															<SelectValue placeholder="All departments" />
+														</SelectTrigger>
+														<SelectContent>
+															<SelectItem value="all">All departments</SelectItem>
+															{departments.map((department: any) => (
+																<SelectItem
+																	key={department.id}
+																	value={department.id}>
+																	{department.name}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</div>
+												<div className="space-y-1.5">
+													<label className="block text-xs font-medium text-neutral-600">
+														Section
+													</label>
+													<Select
+														value={selectedSectionId}
+														onValueChange={handlePayrollSectionChange}>
+														<SelectTrigger className="h-10 w-full rounded-lg border-neutral-200 bg-white text-sm shadow-none focus:ring-1 focus:ring-neutral-300">
+															<SelectValue placeholder="All sections" />
+														</SelectTrigger>
+														<SelectContent>
+															<SelectItem value="all">All sections</SelectItem>
+															{scopedSections.map((section: any) => (
+																<SelectItem key={section.id} value={section.id}>
+																	{section.name}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</div>
+											</div>
+											<div className="rounded-lg border border-neutral-100 bg-neutral-50/80 px-3 py-2.5">
+												<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
+													Active scope
+												</p>
+												<p className="mt-0.5 text-sm font-medium text-neutral-800">
+													{selectedDepartmentName}
+													<span className="mx-1.5 text-neutral-300">/</span>
+													{selectedSectionName}
+												</p>
+											</div>
+										</div>
 									)}
-									{isPayrollActionPending ? "Reopening..." : "Reopen period"}
+
+									{isSelectedPeriodProcessing && (
+										<div className="flex items-start gap-3 rounded-xl border border-amber-200/80 bg-amber-50/70 p-4">
+											<div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100">
+												<AlertCircle className="h-4 w-4 text-amber-700" />
+											</div>
+											<div className="min-w-0">
+												<p className="text-sm font-medium text-amber-900">
+													Verify the current job first
+												</p>
+												<p className="mt-1 text-xs leading-relaxed text-amber-800/80">
+													Open progress to confirm whether there is an active job
+													or a stale processing state that needs to be reopened.
+												</p>
+											</div>
+										</div>
+									)}
+
+									{!isSelectedPeriodProcessing &&
+										payrollIssues.employeeCount > 0 && (
+											<div className="flex flex-col gap-3 rounded-xl border border-orange-200/80 bg-orange-50/60 p-4">
+												<div className="flex items-start gap-3">
+													<div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-100">
+														<AlertTriangle className="h-4 w-4 text-orange-700" />
+													</div>
+													<div className="min-w-0">
+														<p className="text-sm font-medium text-orange-900">
+															{payrollIssues.employeeCount} employees are not
+															payroll-ready
+														</p>
+														<p className="mt-1 text-xs leading-relaxed text-orange-800/80">
+															Resolve missing payroll data or unsubmitted
+															timesheets before processing.
+														</p>
+													</div>
+												</div>
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													onClick={() => updateURL("issues", "all")}
+													className="h-8 w-full rounded-lg border-orange-300 bg-white text-xs font-medium text-orange-800 shadow-none hover:bg-orange-100 hover:text-orange-900">
+													View Issues
+													<ExternalLink className="ml-1.5 h-3 w-3" />
+												</Button>
+											</div>
+										)}
+
+									{!isSelectedPeriodProcessing &&
+										payrollIssues.employeeCount === 0 && (
+											<div className="mt-auto flex items-center gap-2.5 rounded-xl border border-neutral-100 bg-neutral-50/60 px-3.5 py-3">
+												<div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-50">
+													<CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+												</div>
+												<p className="text-xs leading-relaxed text-neutral-500">
+													All scoped employees are payroll-ready.
+												</p>
+											</div>
+										)}
+								</div>
+
+								{/* Right panel — summary metrics */}
+								<div className="flex flex-col gap-4 bg-neutral-50/50 p-6">
+									<div>
+										<p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-400">
+											Payroll summary
+										</p>
+										<p className="mt-1 text-sm text-neutral-500">
+											Review coverage and headcount before confirming.
+										</p>
+									</div>
+
+									<div className="grid grid-cols-2 gap-3">
+										<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5">
+											<div className="flex items-center gap-2 text-neutral-400">
+												<Calendar className="h-3.5 w-3.5" />
+												<p className="text-[11px] font-medium uppercase tracking-[0.06em]">
+													Coverage
+												</p>
+											</div>
+											<p className="mt-2 text-sm font-semibold tracking-tight text-neutral-900">
+												{payrollCoverageLabel}
+											</p>
+										</div>
+										<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5">
+											<div className="flex items-center gap-2 text-neutral-400">
+												<Clock className="h-3.5 w-3.5" />
+												<p className="text-[11px] font-medium uppercase tracking-[0.06em]">
+													Pay date
+												</p>
+											</div>
+											<p className="mt-2 text-sm font-semibold tracking-tight text-neutral-900">
+												{period
+													? `${period.dayOfWeek}, ${getMonthName(period.month).slice(0, 3)} ${period.day}`
+													: "N/A"}
+											</p>
+										</div>
+										<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5">
+											<div className="flex items-center gap-2 text-neutral-400">
+												<Users className="h-3.5 w-3.5" />
+												<p className="text-[11px] font-medium uppercase tracking-[0.06em]">
+													{isSelectedPeriodProcessing ? "Status" : "Included"}
+												</p>
+											</div>
+											{isSelectedPeriodProcessing ? (
+												<p className="mt-2 text-sm font-semibold tracking-tight text-amber-700">
+													{selectedPeriod?.status || "PROCESSING"}
+												</p>
+											) : (
+												<button
+													type="button"
+													onClick={handlePreviewPayroll}
+													className="mt-2 text-left text-sm font-semibold tracking-tight text-emerald-700 underline-offset-2 transition-colors hover:text-emerald-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2">
+													{payableEmployeesCount} employees
+												</button>
+											)}
+										</div>
+										<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5">
+											<div className="flex items-center gap-2 text-neutral-400">
+												{isSelectedPeriodProcessing ? (
+													<RefreshCw className="h-3.5 w-3.5" />
+												) : (
+													<AlertTriangle className="h-3.5 w-3.5" />
+												)}
+												<p className="text-[11px] font-medium uppercase tracking-[0.06em]">
+													{isSelectedPeriodProcessing ? "Next" : "Excluded"}
+												</p>
+											</div>
+											{isSelectedPeriodProcessing ? (
+												<p className="mt-2 text-sm font-semibold tracking-tight text-amber-700">
+													Open progress
+												</p>
+											) : (
+												<button
+													type="button"
+													onClick={() => updateURL("issues", "all")}
+													className="mt-2 text-left text-sm font-semibold tracking-tight text-red-600 underline-offset-2 transition-colors hover:text-red-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 focus-visible:ring-offset-2">
+													{payrollIssues.employeeCount} employees
+												</button>
+											)}
+										</div>
+									</div>
+								</div>
+							</div>
+
+							{/* Confirm footer */}
+							<div className="flex items-center justify-end gap-2.5 border-t border-neutral-100 bg-white px-6 py-4">
+								<Button
+									variant="outline"
+									onClick={() => {
+										updateSearchParams((next) => {
+											next.delete("action");
+											next.delete("tab");
+										});
+									}}
+									className="h-9 rounded-lg border-neutral-200 px-4 text-sm font-medium text-neutral-700 shadow-none hover:bg-neutral-50">
+									Back
 								</Button>
 								<Button
-									onClick={handleRetryPayrollJob}
+									onClick={
+										isSelectedPeriodProcessing
+											? () => {
+													// Stay in this modal; switch content to live progress.
+													handleStartPayroll();
+												}
+											: handleConfirmStartPayroll
+									}
 									disabled={isPayrollActionPending}
-									className="gap-2 bg-orange-500 text-white hover:bg-orange-600">
-									{isPayrollActionPending ? (
-										<Loader2 className="h-4 w-4 animate-spin" />
+									className="h-9 gap-2 rounded-lg bg-neutral-900 px-4 text-sm font-medium text-white shadow-none hover:bg-neutral-800 disabled:opacity-60">
+									{isSelectedPeriodProcessing ? (
+										<RefreshCw className="h-3.5 w-3.5" />
 									) : (
-										<RefreshCw className="h-4 w-4" />
+										<CheckCircle className="h-3.5 w-3.5" />
 									)}
-									{isPayrollActionPending ? "Starting..." : "Resume processing"}
+									{isPayrollActionPending
+										? "Processing..."
+										: isSelectedPeriodProcessing
+											? "Open Progress"
+											: "Confirm & Start Payroll"}
 								</Button>
-							</>
-						)}
-						{(visiblePayrollProgress?.status === "failed" ||
-							visiblePayrollProgress?.status === "paused" ||
-							visiblePayrollProgress?.status === "cancelled") && (
-							<Button
-								onClick={handleRetryPayrollJob}
-								disabled={isPayrollActionPending}
-								className="gap-2 bg-orange-500 text-white hover:bg-orange-600">
-								{isPayrollActionPending ? (
-									<Loader2 className="h-4 w-4 animate-spin" />
-								) : (
-									<RefreshCw
-										className={`w-4 h-4 ${
-											isPayrollActionPending ? "animate-spin" : ""
-										}`}
-									/>
-								)}
-								{isPayrollActionPending
-									? "Starting..."
-									: visiblePayrollProgress?.status === "paused"
-										? "Resume processing"
-										: "Run again"}
-							</Button>
-						)}
-						{isPayrollRunProcessing && (
-							<Button
-								variant="outline"
-								onClick={handleRequestPayrollPause}
-								disabled={
-									isPayrollActionPending ||
-									isPayrollPauseRequested ||
-									isPayrollStopRequested
-								}
-								className="gap-2 border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800">
-								{isPayrollActionPending ? (
-									<Loader2 className="h-4 w-4 animate-spin" />
-								) : (
-									<Pause className="h-4 w-4" />
-								)}
-								{isPayrollActionPending
-									? "Pausing..."
-									: isPayrollStopRequested
-										? "Stop requested"
-										: isPayrollPauseRequested
-											? "Pause requested"
-											: "Pause processing"}
-							</Button>
-						)}
-						{canViewPayrollReport && (
-							<Button
-								onClick={() => {
-									navigate(getPayrollManagementUrl(payrollPeriodId));
-								}}
-								className="bg-orange-500 hover:bg-orange-600 text-white">
-								View payroll report
-							</Button>
-						)}
-					</div>
+							</div>
+						</>
+					)}
 				</div>
 			</Modal>
 		</div>

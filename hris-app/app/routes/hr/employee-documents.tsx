@@ -64,6 +64,10 @@ import type {
 	EmployeeDocumentReviewEvent,
 } from "~/services/employees.service";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/dialog";
+import {
+	DESIGN_SYSTEM_COMPLIANCE_SUMMARY_COLORS,
+	getDesignSystemChartColorByKey,
+} from "~/lib/chart-colors";
 
 type ComplianceTab = "non-compliant" | "pending-approval" | "history" | "compliant" | "warnings";
 
@@ -1767,7 +1771,7 @@ export default function EmployeeDocumentsPage() {
 										percent={Math.round(
 											100 - (documentMetrics?.compliancePercentage || 0),
 										)}
-										color="#ef4444"
+										color={DESIGN_SYSTEM_COMPLIANCE_SUMMARY_COLORS.nonCompliant}
 										count={documentMetrics?.nonCompliantEmployeesCount || 0}
 										total={documentMetrics?.totalEmployees || 0}
 										description="Employees non-compliant"
@@ -1779,7 +1783,7 @@ export default function EmployeeDocumentsPage() {
 												Math.max(documentMetrics?.totalEmployees || 0, 1)) *
 												100,
 										)}
-										color="#d97706"
+										color={DESIGN_SYSTEM_COMPLIANCE_SUMMARY_COLORS.warnings}
 										count={warningEmployeesCount}
 										total={documentMetrics?.totalEmployees || 0}
 										description="Employees with warnings"
@@ -1789,7 +1793,7 @@ export default function EmployeeDocumentsPage() {
 										percent={Math.round(
 											documentMetrics?.compliancePercentage || 0,
 										)}
-										color="#16a34a"
+										color={DESIGN_SYSTEM_COMPLIANCE_SUMMARY_COLORS.overall}
 										count={documentMetrics?.compliantEmployeesCount || 0}
 										total={documentMetrics?.totalEmployees || 0}
 										description="Employees compliant on mandated docs"
@@ -1818,17 +1822,9 @@ export default function EmployeeDocumentsPage() {
 							<div className="mx-auto flex w-full max-w-4xl flex-1 flex-col justify-center gap-3 lg:max-w-3xl">
 								{(documentMetrics?.documentBreakdown || [])
 									.slice(0, 6)
-									.map((doc, index) => {
-										const colors = [
-											"#3b82f6",
-											"#8b5cf6",
-											"#06b6d4",
-											"#ec4899",
-											"#f97316",
-											"#14b8a6",
-										];
-										const color = colors[index % colors.length];
+									.map((doc) => {
 										const percent = Math.round(doc.percentage);
+										const color = getDesignSystemChartColorByKey(doc.id || doc.name);
 										return (
 											<div
 												key={doc.id}

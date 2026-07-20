@@ -83,12 +83,7 @@ export function AuthGuard({
 
 	// Show loading while checking auth
 	if (isLoading) {
-		return (
-			<LoadingScreen
-				message="Checking permissions"
-				subtitle="Verifying your role access and workspace permissions"
-			/>
-		);
+		return <LoadingScreen message="Loading" subtitle="Checking permissions" />;
 	}
 
 	// Show nothing while redirecting

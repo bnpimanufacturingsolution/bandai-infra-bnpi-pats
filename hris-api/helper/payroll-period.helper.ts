@@ -27,6 +27,25 @@ import {
 	resolveEffectiveShiftFromEmployeeData,
 } from "./employee-schedule.helper";
 import { buildBreakdownFromTimesheetLines } from "./timesheet.helper";
+import {
+	resolvePayrollBenefitSources,
+	type PayrollBenefitSourceInput,
+} from "./payroll-benefit-source.helper";
+import {
+	ensureAttendanceBenefitInstallmentForPeriod,
+	ensureRecurringBenefitInstallmentForPeriod,
+} from "./employee-benefit-program.helper";
+import {
+	computeAttendanceBenefitAmount,
+	countAttendanceBenefitDaysFromBreakdown,
+	type BenefitAttendanceAmountBasis,
+} from "./attendance-benefit-amount.helper";
+import { getUtcMonthRangeContaining } from "./benefit-recurrence.helper";
+import { getMergedCycleRules } from "../app/payrollperiod/payroll-cycle.helper";
+import {
+	applyReadyPayrollCorrectionsToEmployeePayroll,
+	buildUpdatedPayrollMoneyAfterCorrections,
+} from "../app/payrollCorrection/payroll-correction.service";
 
 const logger = getLogger();
 const asRecord = (value: unknown): Record<string, any> =>
@@ -438,6 +457,19 @@ export function convertTimeToDecimal(timeString: string | null | undefined): num
 	if (isNaN(hours) || isNaN(minutes)) return 0;
 
 	return hours + minutes / 60;
+}
+
+export function applyZeroSalaryGuardrail(
+	grossPayWithSources: number,
+	loanDeductions: number,
+	deductionBenefits: number,
+): { guardedLoanDeductions: number; guardedDeductionBenefits: number; applied: boolean } {
+	const applied = grossPayWithSources <= 0;
+	return {
+		guardedLoanDeductions: applied ? 0 : loanDeductions,
+		guardedDeductionBenefits: applied ? 0 : deductionBenefits,
+		applied,
+	};
 }
 
 /**
@@ -1341,6 +1373,7 @@ export async function generatePayrollFromTimesheets(
 	let payslipSuccessCount = 0;
 	let payslipErrorCount = 0;
 	let processedCount = resumeProcessedCount;
+	let payrollCorrectionsAppliedCount = 0;
 
 	options?.onStart?.({ total: timesheets.length + resumeProcessedCount });
 
@@ -1859,9 +1892,10 @@ export async function generatePayrollFromTimesheets(
 				payrollSourceAmountsByEmployeeId.get(employee.id) || {
 					amounts: emptyPayrollSourceAmounts(),
 					details: emptyPayrollSourceDetails(),
+					installmentIds: [],
 				};
 			const payrollSourceAmounts = payrollSource.amounts;
-			const grossPayWithSources = roundToCentavo(
+			let grossPayWithSources = roundToCentavo(
 				grossPay + payrollSourceAmounts.grossIncludedBenefits,
 			);
 
@@ -1958,19 +1992,25 @@ export async function generatePayrollFromTimesheets(
 						periodContributions.pagIbig),
 			);
 
-			// Total deductions
+			// Total deductions — loan and benefit deductions are waived when gross pay is zero
+			const zeroSalaryGuardrail = applyZeroSalaryGuardrail(
+				grossPayWithSources,
+				payrollSourceAmounts.loanDeductions,
+				payrollSourceAmounts.deductionBenefits,
+			);
 			const totalDeductions = roundToCentavo(
 					periodContributions.sss +
 					periodContributions.philHealth +
 					periodContributions.pagIbig +
 					withholdingTax +
-					payrollSourceAmounts.loanDeductions +
-					payrollSourceAmounts.deductionBenefits,
+					zeroSalaryGuardrail.guardedLoanDeductions +
+					zeroSalaryGuardrail.guardedDeductionBenefits,
 			);
 
-			// Calculate net pay
-			const netPay = roundToCentavo(
-				grossPayWithSources - totalDeductions + payrollSourceAmounts.netAdjustments,
+			// Calculate net pay (clamped to zero — net pay can never be negative)
+			let netPay = Math.max(
+				0,
+				roundToCentavo(grossPayWithSources - totalDeductions + payrollSourceAmounts.netAdjustments),
 			);
 
 			const payrollAttendanceSnapshot = validatedDays.map((day: any) => ({
@@ -2047,7 +2087,7 @@ export async function generatePayrollFromTimesheets(
 			});
 
 			// 4. Create or update employee payroll record
-			const employeePayroll = await prisma.employeePayroll.upsert({
+			let employeePayroll = await prisma.employeePayroll.upsert({
 				where: {
 					employeeId_payrollPeriodId: {
 						employeeId: employee.id,
@@ -2072,10 +2112,10 @@ export async function generatePayrollFromTimesheets(
 					philHealthContribution: periodContributions.philHealth,
 					pagibigContribution: periodContributions.pagIbig,
 					taxAmount: withholdingTax,
-					loanDeductions: payrollSourceAmounts.loanDeductions,
+					loanDeductions: zeroSalaryGuardrail.guardedLoanDeductions,
 					lateDeduction,
 					earlyOutDeduction,
-					otherDeductions: payrollSourceAmounts.deductionBenefits,
+					otherDeductions: zeroSalaryGuardrail.guardedDeductionBenefits,
 
 					// Totals
 					grossPay: grossPayWithSources,
@@ -2164,6 +2204,7 @@ export async function generatePayrollFromTimesheets(
 							periodNumber,
 							method: contributionSchedule.method,
 						},
+						zeroSalaryGuardrailApplied: zeroSalaryGuardrail.applied,
 					},
 
 					// Rate calculation breakdown - detailed formulas
@@ -2237,10 +2278,10 @@ export async function generatePayrollFromTimesheets(
 					philHealthContribution: periodContributions.philHealth,
 					pagibigContribution: periodContributions.pagIbig,
 					taxAmount: withholdingTax,
-					loanDeductions: payrollSourceAmounts.loanDeductions,
+					loanDeductions: zeroSalaryGuardrail.guardedLoanDeductions,
 					lateDeduction,
 					earlyOutDeduction,
-					otherDeductions: payrollSourceAmounts.deductionBenefits,
+					otherDeductions: zeroSalaryGuardrail.guardedDeductionBenefits,
 
 					// Totals
 					grossPay: grossPayWithSources,
@@ -2327,6 +2368,7 @@ export async function generatePayrollFromTimesheets(
 							splitFactor: contributionSplitFactor,
 							periodNumber,
 						},
+						zeroSalaryGuardrailApplied: zeroSalaryGuardrail.applied,
 					},
 
 					// Rate calculation breakdown - detailed formulas
@@ -2386,6 +2428,68 @@ export async function generatePayrollFromTimesheets(
 					notes: `Regenerated from approved timesheet: ${timesheet.code}`,
 				},
 			});
+
+			// Post-payroll corrections (READY ledger) → explicit retro lines on this period.
+			// Does not rewrite source (locked) timesheet snapshots or Period A payroll rows.
+			let payrollCorrectionLines: Awaited<
+				ReturnType<typeof applyReadyPayrollCorrectionsToEmployeePayroll>
+			>["applied"] = [];
+			let payrollCorrectionAppliedAmount = 0;
+			try {
+				const correctionApply = await applyReadyPayrollCorrectionsToEmployeePayroll({
+					prisma,
+					organizationId,
+					employeeId: employee.id,
+					targetPayrollPeriodId: payrollPeriodId,
+					employeePayrollId: employeePayroll.id,
+					existingMetadata: employeePayroll.metadata,
+					rateContext: {
+						hourlyRate: roundToCentavo(dailyRate / workingHoursPerDay),
+						otMultiplier: baseOtMultiplier,
+						ndPremiumMultiplier: baseNightDiffPremiumMultiplier,
+					},
+				});
+				if (correctionApply.applied.length > 0) {
+					const money = buildUpdatedPayrollMoneyAfterCorrections({
+						existingMetadata: employeePayroll.metadata,
+						lines: correctionApply.applied,
+						otherCompensation: Number((employeePayroll as any).otherCompensation) || 0,
+						grossPay: Number(employeePayroll.grossPay) || grossPayWithSources,
+						netPay: Number(employeePayroll.netPay) || netPay,
+						totalReceivable:
+							Number((employeePayroll as any).totalReceivable) ||
+							Number(employeePayroll.netPay) ||
+							netPay,
+					});
+					employeePayroll = await prisma.employeePayroll.update({
+						where: { id: employeePayroll.id },
+						data: {
+							otherCompensation: money.otherCompensation,
+							grossPay: money.grossPay,
+							netPay: money.netPay,
+							...(money.totalReceivable != null
+								? { totalReceivable: money.totalReceivable }
+								: {}),
+							metadata: money.metadata as any,
+						},
+					});
+					payrollCorrectionLines = correctionApply.applied;
+					payrollCorrectionAppliedAmount = money.appliedAmount;
+					grossPayWithSources = money.grossPay;
+					netPay = money.netPay;
+					payrollCorrectionsAppliedCount += correctionApply.applied.length;
+				}
+			} catch (correctionError) {
+				payrollLogger.error(
+					`Payroll correction apply failed for employee ${employee.employeeId}: ${correctionError}`,
+				);
+			}
+
+			await markPayrollBenefitInstallmentsDeducted(
+				prisma,
+				payrollSource.installmentIds,
+				{ payrollPeriodId, payrollRunId: options?.generationRunId },
+			);
 			await (prisma as any).timesheet.updateMany({
 				where: {
 					id: timesheet.id,
@@ -2458,6 +2562,7 @@ export async function generatePayrollFromTimesheets(
 						obAllowance: employeePayroll.obAllowance,
 						deMinimisAllowance: employeePayroll.deMinimisAllowance,
 						adjustmentOtNd: employeePayroll.adjustmentOtNd,
+						otherCompensation: (employeePayroll as any).otherCompensation,
 						grossPay: employeePayroll.grossPay,
 						taxAmount: employeePayroll.taxAmount,
 						sssContribution: employeePayroll.sssContribution,
@@ -2476,6 +2581,17 @@ export async function generatePayrollFromTimesheets(
 						mealAllowance: employeePayroll.mealAllowance,
 						lineLeaderAllowance: employeePayroll.lineLeaderAllowance,
 						totalReceivable: employeePayroll.totalReceivable,
+						// Required so PDF expands enrollment lines (Rice Subsidy, etc.)
+						// instead of only register totals like "De Minimis Allowance".
+						metadata: {
+							...(((employeePayroll.metadata as Record<string, any> | null) ||
+								{}) as Record<string, any>),
+							payrollSourceDetails:
+								((employeePayroll.metadata as any)?.payrollSourceDetails as
+									| unknown[]
+									| undefined) ||
+								payrollSource.details,
+						},
 					},
 					payslipReferenceNumber,
 					organizationName: "Bandai",
@@ -2584,6 +2700,8 @@ export async function generatePayrollFromTimesheets(
 				grossPay: grossPayWithSources,
 				totalDeductions,
 				netPay,
+				payrollCorrectionsApplied: payrollCorrectionLines.length,
+				payrollCorrectionAmount: payrollCorrectionAppliedAmount,
 				payslipDocumentNumber: buildPayslipDocumentNumber(payrollPeriodId, employee.id, {
 					payrollPeriodName: payrollPeriodData.name,
 					employeeCode: employee.employeeId,
@@ -2692,6 +2810,7 @@ export async function generatePayrollFromTimesheets(
 					lockedTimesheetsCount: lockedCount,
 					payslipsGeneratedCount: payslipSuccessCount,
 					payslipErrorCount,
+					payrollCorrectionsAppliedCount,
 					savedAt: completedAt.toISOString(),
 				},
 			},
@@ -2699,7 +2818,7 @@ export async function generatePayrollFromTimesheets(
 	});
 
 	payrollLogger.info(
-		`Payroll generation completed: ${successCount} success, ${errorCount} errors`,
+		`Payroll generation completed: ${successCount} success, ${errorCount} errors, ${payrollCorrectionsAppliedCount} payroll corrections applied`,
 	);
 
 	return {
@@ -2713,6 +2832,7 @@ export async function generatePayrollFromTimesheets(
 		locked: lockedCount,
 		payslipsGenerated: payslipSuccessCount,
 		payslipErrors: payslipErrorCount,
+		payrollCorrectionsApplied: payrollCorrectionsAppliedCount,
 		total: timesheets.length + resumeProcessedCount,
 		payrolls: generatedPayrolls,
 	};
@@ -3453,7 +3573,10 @@ type PayrollSourceDetail = {
 	id: string;
 	source: "employeeBenefit" | "employeeLoan";
 	code: string | null;
+	/** Primary display label (enrollment / payroll adjustment name). */
 	name: string;
+	/** Benefit type name used as category and Bandai register name matching. */
+	benefitTypeName?: string | null;
 	direction: "COMPENSATION" | "DEDUCTION" | "LOAN";
 	reconciliationAction: string | null;
 	amount: number;
@@ -3461,6 +3584,7 @@ type PayrollSourceDetail = {
 	endDate: Date | null;
 	payrollPeriodId: string | null;
 	payrollPeriodCode: string | null;
+	installmentIds?: string[];
 };
 
 const emptyPayrollSourceAmounts = (): PayrollSourceAmounts => ({
@@ -3519,7 +3643,14 @@ function sumPayrollSourceDetails(
 			if (directionKeys.size && !directionKeys.has(detail.direction)) return sum;
 			const codeKey = normalizePayrollRegisterKey(detail.code);
 			const nameKey = normalizePayrollRegisterKey(detail.name);
-			if ((codeKey && codeKeys.has(codeKey)) || (nameKey && nameKeys.has(nameKey))) {
+			const typeNameKey = normalizePayrollRegisterKey(detail.benefitTypeName);
+			// Match code, enrollment name, or benefit type name so register columns
+			// (e.g. De Minimis) still roll up when display name is enrollment-specific.
+			if (
+				(codeKey && codeKeys.has(codeKey)) ||
+				(nameKey && nameKeys.has(nameKey)) ||
+				(typeNameKey && nameKeys.has(typeNameKey))
+			) {
 				return sum + Number(detail.amount || 0);
 			}
 			return sum;
@@ -3679,7 +3810,7 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 	};
 }
 
-async function buildPayrollSourceAmountsByEmployeeId(
+export async function buildPayrollSourceAmountsByEmployeeId(
 	prisma: PrismaClient,
 	params: {
 		employeeIds: string[];
@@ -3692,7 +3823,7 @@ async function buildPayrollSourceAmountsByEmployeeId(
 	const uniqueEmployeeIds = Array.from(new Set(params.employeeIds.filter(Boolean)));
 	const sourceByEmployeeId = new Map<
 		string,
-		{ amounts: PayrollSourceAmounts; details: PayrollSourceDetail[] }
+		{ amounts: PayrollSourceAmounts; details: PayrollSourceDetail[]; installmentIds: string[] }
 	>();
 	if (uniqueEmployeeIds.length === 0) return sourceByEmployeeId;
 
@@ -3707,7 +3838,45 @@ async function buildPayrollSourceAmountsByEmployeeId(
 		],
 	};
 
-	const [compensationBenefits, deductionBenefits, loans] = await Promise.all([
+	const monthRange = getUtcMonthRangeContaining(params.endDate);
+	const loadCycleConfig = async () => {
+		try {
+			if (!(prisma as any).payrollCycleConfig?.findFirst) return null;
+			return await (prisma as any).payrollCycleConfig.findFirst({
+				where: { organizationId: params.organizationId, isDeleted: false },
+				select: {
+					defaultPayFrequency: true,
+					payDateOffsetDays: true,
+					businessDayRule: true,
+					includeHolidaysInBusinessDayCheck: true,
+					cycleRules: true,
+				},
+			});
+		} catch {
+			return null;
+		}
+	};
+	const [currentPayrollPeriod, cycleConfig, periodsInMonthCount, employeeBenefits, loans, timesheetsForAttendance] =
+		await Promise.all([
+		(prisma as any).payrollPeriod.findUnique({
+			where: { id: params.payrollPeriodId },
+			select: {
+				id: true,
+				periodNumber: true,
+				payFrequency: true,
+				startDate: true,
+				endDate: true,
+			},
+		}),
+		loadCycleConfig(),
+		(prisma as any).payrollPeriod.count({
+			where: {
+				organizationId: params.organizationId,
+				isDeleted: false,
+				// Periods whose end falls in the same UTC calendar month as the current period end.
+				endDate: { gte: monthRange.start, lte: monthRange.end },
+			},
+		}),
 		(prisma as any).employeeBenefit.findMany({
 			where: {
 				organizationId: params.organizationId,
@@ -3716,15 +3885,31 @@ async function buildPayrollSourceAmountsByEmployeeId(
 				isActive: true,
 				status: { in: ["ACTIVE", "APPROVED"] },
 				...periodSourceWhere,
-				benefitType: { payrollDirection: "COMPENSATION", isDeleted: false },
+				benefitType: {
+					payrollDirection: { in: ["COMPENSATION", "DEDUCTION"] },
+					isDeleted: false,
+				},
 			},
 			select: {
 				id: true,
+				organizationId: true,
 				employeeId: true,
+				// Enrollment / payroll adjustment display name (not benefit type name).
+				name: true,
+				status: true,
+				isActive: true,
+				isDeleted: true,
 				amount: true,
 				totalAmount: true,
+				installmentAmount: true,
+				scheduleMode: true,
+				recurrenceFrequency: true,
+				attendanceBased: true,
+				attendanceAmountBasis: true,
 				startDate: true,
 				endDate: true,
+				startPayrollCutOff: true,
+				endPayrollCutOff: true,
 				payrollPeriodId: true,
 				payrollPeriod: {
 					select: {
@@ -3737,38 +3922,18 @@ async function buildPayrollSourceAmountsByEmployeeId(
 						name: true,
 						reconciliationAction: true,
 						isTaxable: true,
+						payrollDirection: true,
+						isDeleted: true,
 					},
 				},
-			},
-		}),
-		(prisma as any).employeeBenefit.findMany({
-			where: {
-				organizationId: params.organizationId,
-				employeeId: { in: uniqueEmployeeIds },
-				isDeleted: false,
-				isActive: true,
-				status: { in: ["ACTIVE", "APPROVED"] },
-				...periodSourceWhere,
-				benefitType: { payrollDirection: "DEDUCTION", isDeleted: false },
-			},
-			select: {
-				id: true,
-				employeeId: true,
-				amount: true,
-				totalAmount: true,
-				startDate: true,
-				endDate: true,
-				payrollPeriodId: true,
-				payrollPeriod: {
+				installments: {
 					select: {
-						code: true,
-					},
-				},
-				benefitType: {
-					select: {
-						code: true,
-						name: true,
-						reconciliationAction: true,
+						id: true,
+						installmentNumber: true,
+						amount: true,
+						scheduledDate: true,
+						status: true,
+						payrollCutOffId: true,
 					},
 				},
 			},
@@ -3797,90 +3962,195 @@ async function buildPayrollSourceAmountsByEmployeeId(
 				},
 			},
 		}),
+		// Timesheet day breakdowns for attendance-based benefit amount computation.
+		// Built here because benefit sources resolve before the per-employee payroll loop.
+		(prisma as any).timesheet.findMany({
+			where: {
+				organizationId: params.organizationId,
+				employeeId: { in: uniqueEmployeeIds },
+				payrollPeriodId: params.payrollPeriodId,
+				isDeleted: false,
+			},
+			select: {
+				employeeId: true,
+				timesheetlines: {
+					where: {
+						isDeleted: false,
+						isEffective: true,
+					},
+					orderBy: {
+						date: "asc",
+					},
+					select: {
+						// Timesheetline has hoursWorked (String?), not hours; rest days are status === REST_DAY.
+						// Attendance-based benefits only need status (ABSENT vs scheduled vs REST_DAY).
+						date: true,
+						status: true,
+						hoursWorked: true,
+						isDeleted: true,
+						isEffective: true,
+					},
+				},
+			},
+		}),
 	]);
 
 	const currentFor = (employeeId: string) => {
 		const current = sourceByEmployeeId.get(employeeId) || {
 			amounts: emptyPayrollSourceAmounts(),
 			details: emptyPayrollSourceDetails(),
+			installmentIds: [],
 		};
 		sourceByEmployeeId.set(employeeId, current);
 		return current;
 	};
 
-	for (const row of compensationBenefits) {
-		const employeeId = row.employeeId;
-		if (!employeeId) continue;
-		const amount = Number(row.amount ?? row.totalAmount ?? 0);
-		if (!Number.isFinite(amount) || amount <= 0) continue;
-		const current = currentFor(employeeId);
-		const action = String(row.benefitType?.reconciliationAction || "").toUpperCase();
-		const code = String(row.benefitType?.code || "").toUpperCase();
-		current.details.push({
-			id: row.id,
-			source: "employeeBenefit",
-			code: row.benefitType?.code || null,
-			name: row.benefitType?.name || row.benefitType?.code || "Employee benefit",
-			direction: "COMPENSATION",
-			reconciliationAction: row.benefitType?.reconciliationAction || null,
-			amount: roundToCentavo(amount),
-			startDate: row.startDate || null,
-			endDate: row.endDate || null,
-			payrollPeriodId: row.payrollPeriodId || null,
-			payrollPeriodCode: row.payrollPeriod?.code || null,
-		});
-		if (code === "LVP") {
-			current.amounts.leavePay = roundToCentavo(current.amounts.leavePay + amount);
-		} else {
-			current.amounts.totalCompensationBenefits = roundToCentavo(
-				current.amounts.totalCompensationBenefits + amount,
-			);
+	let fiscalYearStartMonth = 1;
+	try {
+		if (cycleConfig) {
+			const merged = getMergedCycleRules({
+				defaultPayFrequency: cycleConfig.defaultPayFrequency || "SEMI_MONTHLY",
+				payDateOffsetDays: Number(cycleConfig.payDateOffsetDays ?? 5),
+				businessDayRule: cycleConfig.businessDayRule || "NEXT_BUSINESS_DAY",
+				includeHolidaysInBusinessDayCheck:
+					cycleConfig.includeHolidaysInBusinessDayCheck !== false,
+				cycleRules: cycleConfig.cycleRules,
+			});
+			fiscalYearStartMonth = Number(merged.ANNUALLY?.startMonth) || 1;
 		}
-		if (action === "GROSS_INCLUDED" && code !== "LVP") {
-			current.amounts.grossIncludedBenefits = roundToCentavo(
-				current.amounts.grossIncludedBenefits + amount,
-			);
-			if (row.benefitType?.isTaxable === false) {
-				current.amounts.nonTaxableGrossIncludedBenefits = roundToCentavo(
-					current.amounts.nonTaxableGrossIncludedBenefits + amount,
-				);
+	} catch {
+		fiscalYearStartMonth = 1;
+	}
+
+	const periodForEnsure = {
+		id: params.payrollPeriodId,
+		startDate: params.startDate,
+		endDate: params.endDate,
+		periodNumber: currentPayrollPeriod?.periodNumber ?? null,
+		payFrequency:
+			currentPayrollPeriod?.payFrequency ||
+			cycleConfig?.defaultPayFrequency ||
+			null,
+		isOnlyPeriodInMonth: Number(periodsInMonthCount || 0) <= 1,
+		fiscalYearStartMonth,
+	};
+
+	const attendanceMetricsByEmployeeId = new Map<
+		string,
+		ReturnType<typeof countAttendanceBenefitDaysFromBreakdown>
+	>();
+	for (const timesheet of timesheetsForAttendance as any[]) {
+		const employeeId = String(timesheet.employeeId || "");
+		if (!employeeId) continue;
+		const breakdown = getTimesheetReportingBreakdown(timesheet);
+		attendanceMetricsByEmployeeId.set(
+			employeeId,
+			countAttendanceBenefitDaysFromBreakdown(breakdown),
+		);
+	}
+
+	// Lazy-create / recompute installments before resolve.
+	for (const row of employeeBenefits as any[]) {
+		if (!Array.isArray(row.installments)) {
+			row.installments = [];
+		}
+
+		if (row.attendanceBased === true) {
+			const basis = String(row.attendanceAmountBasis || "").toUpperCase();
+			if (basis !== "PER_DAY" && basis !== "PER_CUTOFF") {
+				continue;
 			}
-		} else if (action === "NET_ADJUSTMENT") {
-			current.amounts.netAdjustments = roundToCentavo(current.amounts.netAdjustments + amount);
-		} else if (action === "RECEIVABLE_ONLY") {
-			current.amounts.receivableOnlyBenefits = roundToCentavo(
-				current.amounts.receivableOnlyBenefits + amount,
+			const metrics = attendanceMetricsByEmployeeId.get(String(row.employeeId || "")) || {
+				scheduledWorkDays: 0,
+				absentDays: 0,
+				presentDays: 0,
+			};
+			const enrolledAmount = Number(
+				row.installmentAmount ?? row.amount ?? row.totalAmount ?? 0,
 			);
+			const computedAmount = computeAttendanceBenefitAmount({
+				basis: basis as BenefitAttendanceAmountBasis,
+				enrolledAmount,
+				scheduledWorkDays: metrics.scheduledWorkDays,
+				absentDays: metrics.absentDays,
+			});
+			await ensureAttendanceBenefitInstallmentForPeriod(
+				prisma as any,
+				row,
+				periodForEnsure,
+				computedAmount,
+			);
+			continue;
+		}
+
+		if (row.scheduleMode === "RECURRING") {
+			await ensureRecurringBenefitInstallmentForPeriod(prisma as any, row, periodForEnsure);
 		}
 	}
 
-	for (const row of deductionBenefits) {
-		const employeeId = row.employeeId;
-		if (!employeeId) continue;
-		const amount = Number(row.amount ?? row.totalAmount ?? 0);
-		if (!Number.isFinite(amount) || amount <= 0) continue;
-		const current = currentFor(employeeId);
-		const code = String(row.benefitType?.code || "").toUpperCase();
-		current.details.push({
-			id: row.id,
-			source: "employeeBenefit",
-			code: row.benefitType?.code || null,
-			name: row.benefitType?.name || row.benefitType?.code || "Employee deduction",
-			direction: "DEDUCTION",
-			reconciliationAction: row.benefitType?.reconciliationAction || null,
-			amount: roundToCentavo(amount),
-			startDate: row.startDate || null,
-			endDate: row.endDate || null,
-			payrollPeriodId: row.payrollPeriodId || null,
+	const resolvedBenefits = resolvePayrollBenefitSources(
+		employeeBenefits.map((row: any) => ({
+			...row,
 			payrollPeriodCode: row.payrollPeriod?.code || null,
+		})) as PayrollBenefitSourceInput[],
+		periodForEnsure,
+	);
+
+	for (const source of resolvedBenefits) {
+		const current = currentFor(source.employeeId);
+		const amount = source.amount;
+		const action = String(source.reconciliationAction || "").toUpperCase();
+		const code = String(source.code || "").toUpperCase();
+		current.details.push({
+			id: source.id,
+			source: "employeeBenefit",
+			code: source.code,
+			name: source.name,
+			benefitTypeName: source.benefitTypeName,
+			direction: source.direction,
+			reconciliationAction: source.reconciliationAction,
+			amount: roundToCentavo(amount),
+			startDate: source.startDate,
+			endDate: source.endDate,
+			payrollPeriodId: source.payrollPeriodId,
+			payrollPeriodCode: source.payrollPeriodCode,
+			installmentIds: source.installmentIds,
 		});
-		current.amounts.deductionBenefits = roundToCentavo(
-			current.amounts.deductionBenefits + amount,
-		);
-		if (code === "UFD") {
-			current.amounts.uniformDeductionBenefits = roundToCentavo(
-				current.amounts.uniformDeductionBenefits + amount,
+		current.installmentIds.push(...source.installmentIds);
+
+		if (source.direction === "COMPENSATION") {
+			if (code === "LVP") {
+				current.amounts.leavePay = roundToCentavo(current.amounts.leavePay + amount);
+			} else {
+				current.amounts.totalCompensationBenefits = roundToCentavo(
+					current.amounts.totalCompensationBenefits + amount,
+				);
+			}
+			if (action === "GROSS_INCLUDED" && code !== "LVP") {
+				current.amounts.grossIncludedBenefits = roundToCentavo(
+					current.amounts.grossIncludedBenefits + amount,
+				);
+				if (!source.isTaxable) {
+					current.amounts.nonTaxableGrossIncludedBenefits = roundToCentavo(
+						current.amounts.nonTaxableGrossIncludedBenefits + amount,
+					);
+				}
+			} else if (action === "NET_ADJUSTMENT") {
+				current.amounts.netAdjustments = roundToCentavo(current.amounts.netAdjustments + amount);
+			} else if (action === "RECEIVABLE_ONLY") {
+				current.amounts.receivableOnlyBenefits = roundToCentavo(
+					current.amounts.receivableOnlyBenefits + amount,
+				);
+			}
+		} else {
+			current.amounts.deductionBenefits = roundToCentavo(
+				current.amounts.deductionBenefits + amount,
 			);
+			if (code === "UFD") {
+				current.amounts.uniformDeductionBenefits = roundToCentavo(
+					current.amounts.uniformDeductionBenefits + amount,
+				);
+			}
 		}
 	}
 
@@ -3895,6 +4165,7 @@ async function buildPayrollSourceAmountsByEmployeeId(
 			source: "employeeLoan",
 			code: null,
 			name: row.loanType?.name || "Employee loan",
+			benefitTypeName: row.loanType?.name || null,
 			direction: "LOAN",
 			reconciliationAction: "DEDUCTION",
 			amount: roundToCentavo(amount),
@@ -3907,6 +4178,57 @@ async function buildPayrollSourceAmountsByEmployeeId(
 	}
 
 	return sourceByEmployeeId;
+}
+
+export async function markPayrollBenefitInstallmentsDeducted(
+	prisma: PrismaClient,
+	installmentIds: string[],
+	params: { payrollPeriodId: string; payrollRunId?: string | null },
+): Promise<number> {
+	const uniqueIds = Array.from(new Set(installmentIds.filter(Boolean)));
+	if (uniqueIds.length === 0) return 0;
+
+	let updatedCount = 0;
+	for (const installmentId of uniqueIds) {
+		const alreadyApplied = await (prisma as any).employeeBenefitInstallment.findFirst({
+			where: {
+				id: installmentId,
+				status: "DEDUCTED",
+				payrollCutOffId: params.payrollPeriodId,
+			},
+		});
+		if (alreadyApplied) continue;
+
+		const result = await (prisma as any).employeeBenefitInstallment.updateMany({
+			where: {
+				id: installmentId,
+				status: "SCHEDULED",
+			},
+			data: {
+				status: "DEDUCTED",
+				processedDate: new Date(),
+				payrollCutOffId: params.payrollPeriodId,
+				payrollRunId: params.payrollRunId || null,
+			},
+		});
+
+		if (result.count !== 1) {
+			const appliedDuringUpdate = await (prisma as any).employeeBenefitInstallment.findFirst({
+				where: {
+					id: installmentId,
+					status: "DEDUCTED",
+					payrollCutOffId: params.payrollPeriodId,
+				},
+			});
+			if (appliedDuringUpdate) continue;
+			throw new Error(
+				`Payroll benefit installment ${installmentId} was already processed or is unavailable`,
+			);
+		}
+		updatedCount += result.count;
+	}
+
+	return updatedCount;
 }
 
 async function buildEmployeePayrollsByEmployeeId(
@@ -4184,6 +4506,7 @@ function calculatePayrollPreviewDataset(params: {
 				params.payrollSourceAmountsByEmployeeId.get(employee.id) || {
 					amounts: emptyPayrollSourceAmounts(),
 					details: emptyPayrollSourceDetails(),
+					installmentIds: [],
 				};
 			const payrollSourceAmounts = payrollSource.amounts;
 			const previousPeriodsGross = employeePayrollsThisMonth
@@ -4234,16 +4557,22 @@ function calculatePayrollPreviewDataset(params: {
 				employee.payFrequency === "SEMI_MONTHLY",
 			);
 			const taxableIncome = roundToCentavo(periodTaxableIncome);
+			const zeroSalaryGuardrail = applyZeroSalaryGuardrail(
+				grossPayWithSources,
+				payrollSourceAmounts.loanDeductions,
+				payrollSourceAmounts.deductionBenefits,
+			);
 			const totalDeductions = roundToCentavo(
 				periodContributions.sss +
 					periodContributions.philHealth +
 					periodContributions.pagIbig +
 					withholdingTax +
-					payrollSourceAmounts.loanDeductions +
-					payrollSourceAmounts.deductionBenefits,
+					zeroSalaryGuardrail.guardedLoanDeductions +
+					zeroSalaryGuardrail.guardedDeductionBenefits,
 			);
-			const netPay = roundToCentavo(
-				grossPayWithSources - totalDeductions + payrollSourceAmounts.netAdjustments,
+			const netPay = Math.max(
+				0,
+				roundToCentavo(grossPayWithSources - totalDeductions + payrollSourceAmounts.netAdjustments),
 			);
 			const payrollRegister = buildBandaiPayrollRegister({
 				employee,
@@ -4291,8 +4620,8 @@ function calculatePayrollPreviewDataset(params: {
 				nightDiffPay,
 				holidayPay,
 				allowances: payrollSourceAmounts.totalCompensationBenefits,
-				loanDeductions: payrollSourceAmounts.loanDeductions,
-				otherDeductions: payrollSourceAmounts.deductionBenefits,
+				loanDeductions: zeroSalaryGuardrail.guardedLoanDeductions,
+				otherDeductions: zeroSalaryGuardrail.guardedDeductionBenefits,
 				totalReceivable: roundToCentavo(
 					netPay + payrollSourceAmounts.receivableOnlyBenefits,
 				),
@@ -4310,8 +4639,8 @@ function calculatePayrollPreviewDataset(params: {
 					absentDeduction,
 					lateDeduction,
 					earlyOutDeduction,
-					loanDeductions: payrollSourceAmounts.loanDeductions,
-					otherDeductions: payrollSourceAmounts.deductionBenefits,
+					loanDeductions: zeroSalaryGuardrail.guardedLoanDeductions,
+					otherDeductions: zeroSalaryGuardrail.guardedDeductionBenefits,
 				},
 				metadata: {
 					estimatedMonthlyRate: roundToCentavo(estimatedMonthlyRate),
@@ -4336,6 +4665,7 @@ function calculatePayrollPreviewDataset(params: {
 					totalOvertimeHours: roundToCentavo(overtimeHours),
 					overtimeRate: roundToCentavo(hourlyRate * baseOtMultiplier),
 					nightDiffRate: roundToCentavo(hourlyRate * baseNightDiffPremiumMultiplier),
+					zeroSalaryGuardrailApplied: zeroSalaryGuardrail.applied,
 				},
 			});
 		} catch (error) {

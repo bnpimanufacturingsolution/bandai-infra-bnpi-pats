@@ -46,6 +46,8 @@ import {
 	importDm3ReportingLines as importDm3ReportingLinesService,
 	importOpeningLeaveBalances,
 } from "./dm3-workbook-import.service";
+import { logActivity } from "../../utils/activityLogger";
+import { logAudit } from "../../utils/auditLogger";
 
 const logger = getLogger();
 const migrationLogger = logger.child({ module: "migration" });
@@ -1711,6 +1713,102 @@ async function ensureDm3EmployeeScheduleTemplates(
 	};
 }
 
+const getMigrationRequestUserId = (req: Request): string =>
+	(typeof (req as any).userId === "string" && (req as any).userId) ||
+	(typeof (req as any).user?.id === "string" && (req as any).user.id) ||
+	"unknown";
+
+const logMigrationActivity = (
+	req: Request,
+	action: string,
+	description: string,
+	pageTitle: string,
+): void => {
+	logActivity(req, {
+		userId: getMigrationRequestUserId(req),
+		action,
+		description,
+		page: {
+			url: req.originalUrl,
+			title: pageTitle,
+		},
+	});
+};
+
+const logMigrationAudit = (
+	req: Request,
+	params: {
+		auditAction: string;
+		entityId: string;
+		description: string;
+		changesAfter: Record<string, unknown> | null;
+	},
+): void => {
+	logAudit(req, {
+		userId: getMigrationRequestUserId(req),
+		action: params.auditAction,
+		resource: config.AUDIT_LOG.RESOURCES.MIGRATION,
+		severity: config.AUDIT_LOG.SEVERITY.HIGH,
+		entityType: config.AUDIT_LOG.ENTITY_TYPES.MIGRATION,
+		entityId: params.entityId,
+		changesBefore: null,
+		changesAfter: params.changesAfter,
+		description: params.description,
+	});
+};
+
+const summarizeImportSummary = (summary: {
+	total?: number;
+	created?: number;
+	updated?: number;
+	skipped?: number;
+	failed?: number;
+	blocked?: number;
+	[key: string]: unknown;
+}) => ({
+	total: summary.total ?? 0,
+	created: summary.created ?? 0,
+	updated: summary.updated ?? 0,
+	skipped: summary.skipped ?? 0,
+	failed: summary.failed ?? 0,
+	blocked: summary.blocked ?? 0,
+});
+
+const logDm3ImportSuccess = (
+	req: Request,
+	organizationId: string,
+	sourceId: string,
+	importType: string,
+	summary: {
+		total?: number;
+		created?: number;
+		updated?: number;
+		skipped?: number;
+		failed?: number;
+		blocked?: number;
+		[key: string]: unknown;
+	},
+): void => {
+	const summaryCounts = summarizeImportSummary(summary);
+	logMigrationActivity(
+		req,
+		config.ACTIVITY_LOG.MIGRATION.ACTIONS.IMPORT_MIGRATION_DATA,
+		`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_DATA_IMPORTED}: ${importType}`,
+		config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_IMPORT,
+	);
+	logMigrationAudit(req, {
+		auditAction: config.AUDIT_LOG.ACTIONS.CREATE,
+		entityId: organizationId,
+		description: `${config.AUDIT_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_DATA_IMPORTED}: ${importType}`,
+		changesAfter: {
+			organizationId,
+			sourceId,
+			importType,
+			summary: summaryCounts,
+		},
+	});
+};
+
 export const controller = (prisma: PrismaClient) => {
 	const migrationRunService = new MigrationOrchestratorService(prisma);
 	const migrationReconciliationReportService = new MigrationReconciliationReportService(prisma);
@@ -1792,6 +1890,26 @@ export const controller = (prisma: PrismaClient) => {
 				? `Migration completed successfully. ${result.summary.employees.created} employees created.`
 				: `Migration completed with ${result.errors.length} errors. ${result.summary.employees.created} created, ${result.summary.employees.failed} failed.`;
 
+			const organizationId = validation.data.config.organizationId;
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.EXECUTE_MIGRATION,
+				`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_EXECUTED}: ${result.summary.employees.created} created`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_EXECUTE,
+			);
+			logMigrationAudit(req, {
+				auditAction: config.AUDIT_LOG.ACTIONS.UPDATE,
+				entityId: organizationId,
+				description: `${config.AUDIT_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_EXECUTED}: ${result.summary.employees.created} employees created`,
+				changesAfter: {
+					organizationId,
+					success: result.success,
+					employeeCount: validation.data.employees.length,
+					summary: result.summary,
+					errorCount: result.errors?.length ?? 0,
+				},
+			});
+
 			const successResponse = buildSuccessResponse(message, result, statusCode);
 			res.status(statusCode).json(successResponse);
 		} catch (error: any) {
@@ -1827,6 +1945,25 @@ export const controller = (prisma: PrismaClient) => {
 
 		try {
 			const result = await service.executeMigration(validation.data);
+			const organizationId = validation.data.config.organizationId;
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.DRY_RUN_MIGRATION,
+				`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_DRY_RUN}: ${validation.data.employees.length} employees`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_DRY_RUN,
+			);
+			logMigrationAudit(req, {
+				auditAction: config.AUDIT_LOG.ACTIONS.UPDATE,
+				entityId: organizationId,
+				description: `${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_DRY_RUN}: ${validation.data.employees.length} employees`,
+				changesAfter: {
+					organizationId,
+					dryRun: true,
+					employeeCount: validation.data.employees.length,
+					summary: result.summary,
+					errorCount: result.errors?.length ?? 0,
+				},
+			});
 			const successResponse = buildSuccessResponse(
 				"Dry run completed. No data was modified.",
 				result,
@@ -1855,6 +1992,12 @@ export const controller = (prisma: PrismaClient) => {
 
 		try {
 			const data = await service.getMigrationStats(organizationId);
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.GET_MIGRATION_STATS,
+				`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_STATS_RETRIEVED}: ${organizationId}`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_STATS,
+			);
 			const successResponse = buildSuccessResponse("Migration stats retrieved", data, 200);
 			res.status(200).json(successResponse);
 		} catch (error: any) {
@@ -1881,6 +2024,12 @@ export const controller = (prisma: PrismaClient) => {
 
 		try {
 			const tree = await service.getHierarchyTree(organizationId, departmentCode);
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.GET_MIGRATION_HIERARCHY,
+				`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_HIERARCHY_RETRIEVED}: ${organizationId}`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_STATS,
+			);
 			const successResponse = buildSuccessResponse("Hierarchy tree retrieved", tree, 200);
 			res.status(200).json(successResponse);
 		} catch (error: any) {
@@ -1916,6 +2065,23 @@ export const controller = (prisma: PrismaClient) => {
 		const payload = validation.data;
 
 		if (payload.dryRun) {
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.EXECUTE_MIGRATION,
+				`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_DRY_RUN}: credentials email test`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_EXECUTE,
+			);
+			logMigrationAudit(req, {
+				auditAction: config.AUDIT_LOG.ACTIONS.UPDATE,
+				entityId: payload.employeeId,
+				description: "Credentials email dry-run completed",
+				changesAfter: {
+					employeeId: payload.employeeId,
+					to: payload.to,
+					dryRun: true,
+					configured: isEmployeeEmailConfigured,
+				},
+			});
 			const successResponse = buildSuccessResponse(
 				isEmployeeEmailConfigured
 					? "Credentials email dry-run passed"
@@ -1959,6 +2125,23 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.EXECUTE_MIGRATION,
+				`Sent credentials test email to ${payload.to}`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_EXECUTE,
+			);
+			logMigrationAudit(req, {
+				auditAction: config.AUDIT_LOG.ACTIONS.UPDATE,
+				entityId: payload.employeeId,
+				description: `Sent credentials test email to ${payload.to}`,
+				changesAfter: {
+					employeeId: payload.employeeId,
+					to: payload.to,
+					sent: true,
+					messageId: emailResult.messageId,
+				},
+			});
 			const successResponse = buildSuccessResponse(
 				"Credentials test email sent successfully",
 				{
@@ -2259,6 +2442,25 @@ export const controller = (prisma: PrismaClient) => {
 			const responseData =
 				rowErrors.length > 0 ? { ...result, mappingErrors: rowErrors } : result;
 
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.UPLOAD_MIGRATION_CSV,
+				`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_CSV_UPLOADED}: ${uploadedFile.originalname}`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_IMPORT,
+			);
+			logMigrationAudit(req, {
+				auditAction: config.AUDIT_LOG.ACTIONS.CREATE,
+				entityId: configValidation.data.organizationId,
+				description: `${config.AUDIT_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_DATA_IMPORTED}: ${uploadedFile.originalname}`,
+				changesAfter: {
+					organizationId: configValidation.data.organizationId,
+					sourceId: uploadedFile.originalname,
+					summary: result.summary,
+					errorCount: result.errors?.length ?? 0,
+					mappingErrorCount: rowErrors.length,
+				},
+			});
+
 			const successResponse = buildSuccessResponse(message, responseData, statusCode);
 			res.status(statusCode).json(successResponse);
 		} catch (error: any) {
@@ -2301,6 +2503,13 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			const merged = mergeExtractedBuckets(extractedFiles);
+
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.IMPORT_MIGRATION_DATA,
+				`Extracted structural values from ${uploadedFiles.length} source file${uploadedFiles.length === 1 ? "" : "s"}`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_IMPORT,
+			);
 
 			const successResponse = buildSuccessResponse(
 				`Extracted structural values from ${uploadedFiles.length} file${uploadedFiles.length === 1 ? "" : "s"}.`,
@@ -2356,6 +2565,13 @@ export const controller = (prisma: PrismaClient) => {
 			const populatedRowCount = normalizedRows.filter((row) =>
 				headers.some((header) => String(row?.[header] ?? "").trim()),
 			).length;
+
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.IMPORT_MIGRATION_DATA,
+				`Transformed sheet "${sheetName}" from "${uploadedFile.originalname}"`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_IMPORT,
+			);
 
 			const successResponse = buildSuccessResponse(
 				`Transformed sheet "${sheetName}" from "${uploadedFile.originalname}".`,
@@ -2624,6 +2840,14 @@ export const controller = (prisma: PrismaClient) => {
 				(summary as any).attendanceObligations = materialization;
 			}
 
+			logDm3ImportSuccess(
+				req,
+				organizationId,
+				uploadedFile.originalname,
+				"dm3-employee-schedules",
+				summary,
+			);
+
 			res.status(summary.failed > 0 ? 207 : 200).json(
 				buildSuccessResponse(
 					summary.failed > 0
@@ -2687,6 +2911,14 @@ export const controller = (prisma: PrismaClient) => {
 					sourceWorkbook: uploadedFile.originalname,
 				},
 				rows,
+			);
+
+			logDm3ImportSuccess(
+				req,
+				organizationId,
+				uploadedFile.originalname,
+				"dm3-reporting-lines",
+				summary,
 			);
 
 			res.status(summary.failed > 0 ? 207 : 200).json(
@@ -2878,6 +3110,14 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 
+			logDm3ImportSuccess(
+				req,
+				organizationId,
+				uploadedFile.originalname,
+				"dm3-employee-documents",
+				summary,
+			);
+
 			res.status(summary.failed > 0 ? 207 : 200).json(
 				buildSuccessResponse(
 					summary.failed > 0
@@ -2954,6 +3194,14 @@ export const controller = (prisma: PrismaClient) => {
 				},
 				rows,
 				employeesByExternalId,
+			);
+
+			logDm3ImportSuccess(
+				req,
+				organizationId,
+				uploadedFile.originalname,
+				"dm3-opening-leave-balances",
+				summary,
 			);
 
 			res.status(summary.failed > 0 ? 207 : 200).json(
@@ -3287,6 +3535,14 @@ export const controller = (prisma: PrismaClient) => {
 				});
 			}
 
+			logDm3ImportSuccess(
+				req,
+				organizationId,
+				uploadedFile.originalname,
+				"dm3-employee-benefits-loans",
+				summary,
+			);
+
 			res.status(summary.failed > 0 ? 207 : 200).json(
 				buildSuccessResponse(
 					summary.failed > 0
@@ -3584,6 +3840,29 @@ export const controller = (prisma: PrismaClient) => {
 				missingEmployeeIds,
 			});
 
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.IMPORT_MIGRATION_DATA,
+				`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_DATA_IMPORTED}: DM3 employee finalization queued`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_IMPORT,
+			);
+			logMigrationAudit(req, {
+				auditAction: config.AUDIT_LOG.ACTIONS.CREATE,
+				entityId: organizationId,
+				description: `${config.AUDIT_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_DATA_IMPORTED}: DM3 employee finalization`,
+				changesAfter: {
+					organizationId,
+					runId: runId || null,
+					sourceId: uploadedFile.originalname,
+					jobId,
+					summary: {
+						total: rows.length,
+						queued: createdEmployees.length,
+						missing: missingEmployeeIds.length,
+					},
+				},
+			});
+
 			res.setHeader("Location", `/api/migration/dm3/employee-post-actions/jobs/${jobId}`);
 			res.setHeader("Retry-After", "2");
 			res.status(202).json(
@@ -3697,6 +3976,30 @@ export const controller = (prisma: PrismaClient) => {
 					sourceMatched: sourceMatchedEmployees.length,
 					fallbackToAllDm3Employees:
 						Boolean(sourceFilename) && sourceMatchedEmployees.length === 0,
+				},
+			});
+
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.RECOVER_MIGRATION_RUN,
+				`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_RUN_RECOVERED}: DM3 employee post-actions`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_RUN,
+			);
+			logMigrationAudit(req, {
+				auditAction: config.AUDIT_LOG.ACTIONS.UPDATE,
+				entityId: organizationId,
+				description: `${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_RUN_RECOVERED}: DM3 employee post-actions`,
+				changesAfter: {
+					organizationId,
+					runId: runId || null,
+					sourceId: sourceFilename || null,
+					jobId,
+					summary: {
+						total: createdEmployees.length,
+						sourceMatched: sourceMatchedEmployees.length,
+						fallbackToAllDm3Employees:
+							Boolean(sourceFilename) && sourceMatchedEmployees.length === 0,
+					},
 				},
 			});
 
@@ -3856,6 +4159,29 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.IMPORT_MIGRATION_DATA,
+				`Workbook migration audit ${event}: ${workbookId}`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_IMPORT,
+			);
+			logMigrationAudit(req, {
+				auditAction: config.AUDIT_LOG.ACTIONS.UPDATE,
+				entityId: runId,
+				description: `Workbook migration ${event}: ${workbookId}`,
+				changesAfter: {
+					runId,
+					workbookId,
+					workbookName: workbookName || null,
+					sourceId: sourceFilename || null,
+					organizationId: organizationId || null,
+					event,
+					status: body.status || null,
+					totals: body.totals || null,
+					sheet: safeSheet || null,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Workbook migration audit event logged.",
@@ -3924,6 +4250,13 @@ export const controller = (prisma: PrismaClient) => {
 				byWorkbook[report.workbookId] = report;
 			}
 
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.GET_MIGRATION_STATS,
+				`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_STATS_RETRIEVED}: workbook audit reports`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_STATS,
+			);
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Workbook migration audit reports retrieved.",
@@ -3987,14 +4320,29 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
+		logMigrationActivity(
+			req,
+			config.ACTIVITY_LOG.MIGRATION.ACTIONS.GET_MIGRATION_STATS,
+			`Downloaded workbook template: ${fileName}`,
+			config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_STATS,
+		);
+
 		res.download(filePath, fileName);
 	};
 
 	const getSourceInputs = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
 			const phase = String(req.query.phase || "").trim().toLowerCase();
-			const items = getExpandedSourceInputPayloads()
-				.filter((item) => !phase || String(item.dmPhase || "").toLowerCase() === phase)
+			const items = getExpandedSourceInputPayloads().filter(
+				(item) => !phase || String(item.dmPhase || "").toLowerCase() === phase,
+			);
+
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.GET_MIGRATION_STATS,
+				`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_STATS_RETRIEVED}: source inputs`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_STATS,
+			);
 
 			res.status(200).json(
 				buildSuccessResponse(
@@ -4026,6 +4374,13 @@ export const controller = (prisma: PrismaClient) => {
 				res.status(404).json(buildErrorResponse("Migration source file was not found.", 404));
 				return;
 			}
+
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.GET_MIGRATION_STATS,
+				`Downloaded migration source input: ${sourceId}`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_STATS,
+			);
 
 			res.download(sourcePath, path.basename(sourcePath));
 		} catch (error: any) {
@@ -4101,6 +4456,25 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 			const run = await migrationRunService.dryRun(request);
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.DRY_RUN_MIGRATION,
+				`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_DRY_RUN}: ${request.workbookId}`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_DRY_RUN,
+			);
+			logMigrationAudit(req, {
+				auditAction: config.AUDIT_LOG.ACTIONS.UPDATE,
+				entityId: run.id,
+				description: `${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_DRY_RUN}: ${request.workbookId}`,
+				changesAfter: {
+					runId: run.id,
+					organizationId: request.organizationId,
+					workbookId: request.workbookId,
+					sourceId: request.sourceFilename || null,
+					status: run.status,
+					summary: run.summary || null,
+				},
+			});
 			res.status(200).json(buildSuccessResponse("Migration dry-run completed.", { run }, 200));
 		} catch (error: any) {
 			migrationLogger.error(`Migration run dry-run failed: ${error.message}`, { error });
@@ -4120,6 +4494,25 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const run = await migrationRunService.startRun(request);
 			const statusUrl = `/api/migration/runs/${run.id}`;
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.START_MIGRATION_RUN,
+				`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_RUN_STARTED}: ${request.workbookId}`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_RUN,
+			);
+			logMigrationAudit(req, {
+				auditAction: config.AUDIT_LOG.ACTIONS.CREATE,
+				entityId: run.id,
+				description: `${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_RUN_STARTED}: ${request.workbookId}`,
+				changesAfter: {
+					runId: run.id,
+					organizationId: request.organizationId,
+					workbookId: request.workbookId,
+					sourceId: request.sourceFilename || null,
+					idempotencyKey: request.idempotencyKey || null,
+					status: run.status,
+				},
+			});
 			res.setHeader("Location", statusUrl);
 			res.setHeader("Retry-After", "2");
 			res.status(202).json(
@@ -4143,6 +4536,12 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(404).json(buildErrorResponse("Migration run was not found.", 404));
 			return;
 		}
+		logMigrationActivity(
+			req,
+			config.ACTIVITY_LOG.MIGRATION.ACTIONS.GET_MIGRATION_STATS,
+			`Retrieved migration run: ${run.id}`,
+			config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_RUN,
+		);
 		res.status(200).json(buildSuccessResponse("Migration run loaded.", { run }, 200));
 	};
 
@@ -4175,12 +4574,25 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 		const run = await migrationRunService.findLatestRun(organizationId, workbookId, { includeDryRun });
+		logMigrationActivity(
+			req,
+			config.ACTIVITY_LOG.MIGRATION.ACTIONS.GET_MIGRATION_STATS,
+			`Retrieved latest migration run: ${workbookId}`,
+			config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_RUN,
+		);
 		res.status(200).json(buildSuccessResponse("Latest migration run loaded.", { run }, 200));
 	};
 
 	const getMigrationRunEvents = async (req: Request, res: Response, _next: NextFunction) => {
 		const limit = Number(req.query.limit || 500);
-		const events = await migrationRunService.getEvents(String(req.params.runId || ""), limit);
+		const runId = String(req.params.runId || "");
+		const events = await migrationRunService.getEvents(runId, limit);
+		logMigrationActivity(
+			req,
+			config.ACTIVITY_LOG.MIGRATION.ACTIONS.GET_MIGRATION_STATS,
+			`Retrieved migration run events: ${runId}`,
+			config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_RUN,
+		);
 		res.status(200).json(buildSuccessResponse("Migration run events loaded.", { events }, 200));
 	};
 
@@ -4193,6 +4605,13 @@ export const controller = (prisma: PrismaClient) => {
 				res.status(404).json(buildErrorResponse("Migration run was not found.", 404));
 				return;
 			}
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.GET_MIGRATION_STATS,
+				`Downloaded migration reconciliation report: ${req.params.runId}`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_RUN,
+			);
+
 			res.setHeader(
 				"Content-Type",
 				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -4217,6 +4636,24 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(404).json(buildErrorResponse("Migration run was not found.", 404));
 			return;
 		}
+		logMigrationActivity(
+			req,
+			config.ACTIVITY_LOG.MIGRATION.ACTIONS.RECOVER_MIGRATION_RUN,
+			`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_RUN_RECOVERED}: ${run.id}`,
+			config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_RUN,
+		);
+		logMigrationAudit(req, {
+			auditAction: config.AUDIT_LOG.ACTIONS.UPDATE,
+			entityId: run.id,
+			description: `${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_RUN_RECOVERED}: ${run.id}`,
+			changesAfter: {
+				runId: run.id,
+				organizationId: run.organizationId,
+				workbookId: run.workbookId,
+				status: run.status,
+			},
+		});
+
 		res.status(202).json(
 			buildSuccessResponse(
 				"Migration run recovery queued.",
@@ -4233,6 +4670,24 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(404).json(buildErrorResponse("Migration run was not found.", 404));
 			return;
 		}
+		logMigrationActivity(
+			req,
+			config.ACTIVITY_LOG.MIGRATION.ACTIONS.RERUN_MIGRATION_RUN,
+			`${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_RUN_RERUN}: ${run.id}`,
+			config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_RUN,
+		);
+		logMigrationAudit(req, {
+			auditAction: config.AUDIT_LOG.ACTIONS.UPDATE,
+			entityId: run.id,
+			description: `${config.ACTIVITY_LOG.MIGRATION.DESCRIPTIONS.MIGRATION_RUN_RERUN}: ${run.id}`,
+			changesAfter: {
+				runId: run.id,
+				organizationId: run.organizationId,
+				workbookId: run.workbookId,
+				status: run.status,
+			},
+		});
+
 		res.status(202).json(
 			buildSuccessResponse(
 				"Migration rerun created.",
@@ -4286,6 +4741,13 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const sourceWorkbookFiles = sourceResolution.workbookFiles.map(toRepoDisplayPath);
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.GET_MIGRATION_STATS,
+				`Resolved DM4 source workbooks: ${sourceWorkbookFiles.length} files`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_STATS,
+			);
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"DM4 source workbooks resolved.",

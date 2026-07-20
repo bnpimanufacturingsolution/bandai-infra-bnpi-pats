@@ -1,9 +1,9 @@
 import { PrismaClient } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger.helper";
 import { resolveEffectiveShift } from "../../helper/employee-schedule.helper";
-import { calculateTimekeeping, deriveBehaviorFlags } from "../../helper/timekeeping.helper";
+import { calculateTimekeeping } from "../../helper/timekeeping.helper";
+import { resolveOvertimePolicyApplication } from "../../helper/overtime-approval.helper";
 import {
-	buildAttendanceTimekeepingFields,
 	fetchAttendanceEmployeeSnapshotFields,
 	normalizeToStartOfDay,
 } from "../../helper/attendance.helper";
@@ -55,6 +55,7 @@ export interface AttendanceBackfillMutationParams {
 	notesFallbacks?: readonly unknown[];
 	dependencies?: AttendanceCorrectionMutationDependencies & {
 		resolveEffectiveShift?: typeof resolveEffectiveShift;
+		resolveOvertimePolicyApplication?: typeof resolveOvertimePolicyApplication;
 	};
 }
 
@@ -104,13 +105,12 @@ export async function applyAttendanceBackfill(
 	}
 
 	const normalized = normalizeResult.payload;
-	const buildAttendanceTimekeepingFieldsFn =
-		dependencies.buildAttendanceTimekeepingFields || buildAttendanceTimekeepingFields;
 	const fetchAttendanceEmployeeSnapshotFieldsFn =
 		dependencies.fetchAttendanceEmployeeSnapshotFields || fetchAttendanceEmployeeSnapshotFields;
 	const calculateTimekeepingFn = dependencies.calculateTimekeeping || calculateTimekeeping;
-	const deriveBehaviorFlagsFn = dependencies.deriveBehaviorFlags || deriveBehaviorFlags;
 	const resolveEffectiveShiftFn = dependencies.resolveEffectiveShift || resolveEffectiveShift;
+	const resolveOvertimePolicyApplicationFn =
+		dependencies.resolveOvertimePolicyApplication || resolveOvertimePolicyApplication;
 	const applyAttendanceToObligationFn =
 		dependencies.applyAttendanceToObligation || applyAttendanceToObligation;
 	const refreshTimesheetForAttendanceDateFn =
@@ -156,21 +156,25 @@ export async function applyAttendanceBackfill(
 		scheduleSnapshot,
 		normalized.correctionDate,
 	);
-	const behaviorFlags = isNonWorkedCorrection
-		? []
-		: deriveBehaviorFlagsFn({
-				timeIn: correctedTimeIn,
-				timeOut: correctedTimeOut,
-				schedule: scheduleSnapshot,
-				date: normalized.correctionDate,
-			});
 	const employeeSnapshotFields = await fetchAttendanceEmployeeSnapshotFieldsFn(
 		params.prisma,
 		normalized.employeeId,
 	);
-	const timekeepingFields = buildAttendanceTimekeepingFieldsFn(timekeepingCalc, {
-		isNonWorked: isNonWorkedCorrection,
-	});
+	const overtimeApplication = await resolveOvertimePolicyApplicationFn(
+		params.prisma,
+		params.organizationId,
+		{
+			calc: timekeepingCalc,
+			timeIn: correctedTimeIn,
+			timeOut: correctedTimeOut,
+			schedule: scheduleSnapshot,
+			date: normalized.correctionDate,
+			isNonWorked: isNonWorkedCorrection,
+			attendanceStatus: normalized.status,
+		},
+	);
+	const behaviorFlags = isNonWorkedCorrection ? [] : overtimeApplication.behaviorFlags;
+	const timekeepingFields = overtimeApplication.timekeepingFields;
 
 	const createdAttendance = await params.prisma.attendance.create({
 		data: {

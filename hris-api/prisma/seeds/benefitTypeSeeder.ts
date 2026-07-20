@@ -2,7 +2,7 @@ import { PrismaClient, BenefitCategory, BenefitPayrollDirection } from "../../ge
 import { resolveDefaultSeedOrganizationId } from "./seedOrganizationResolver";
 
 export interface BenefitTypeDefinition {
-	code?: string;
+	code: string;
 	name: string;
 	description: string;
 	category: BenefitCategory;

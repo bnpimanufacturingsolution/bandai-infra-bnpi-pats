@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
 import { themeColors } from "~/lib/config/theme";
 import { formatDuration } from "~/lib/utils";
@@ -8,8 +8,14 @@ import {
 } from "~/lib/utils/attendance-status";
 import type { TimesheetBreakdown } from "~/services/timesheet.service";
 import { TimesheetDayCell } from "~/components/atoms/TimesheetDayCell";
+import {
+	canFileOvertimeRequest,
+	getOvertimeCandidateBadge,
+	readOvertimeCandidateFromDay,
+} from "~/lib/utils/overtime-candidate";
 import { TimesheetDayTooltipContent } from "~/components/molecules/TimesheetDayTooltipContent";
-import { Calendar, CalendarClock, Pencil } from "lucide-react";
+import type { DayPayrollCorrectionMarker } from "~/lib/utils/payroll-correction-day-markers";
+import { Calendar, CalendarClock, Pencil, Wallet } from "lucide-react";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -23,7 +29,11 @@ export type TimesheetBreakdownDay = TimesheetBreakdown & {
 	businessDate?: string | null;
 };
 
-export type TimesheetDayRequestAction = "leave" | "schedule-change";
+export type TimesheetDayRequestAction =
+	| "leave"
+	| "schedule-change"
+	| "overtime"
+	| "payroll-correction";
 
 interface TimesheetCalendarProps {
 	breakdown?: TimesheetBreakdownDay[];
@@ -33,6 +43,18 @@ interface TimesheetCalendarProps {
 	modifiedDayKeys?: string[];
 	payrollPeriodStartDate?: string | null;
 	payrollPeriodEndDate?: string | null;
+	/** Suppress hover tooltips while a day editor modal is open */
+	disableDayTooltips?: boolean;
+	/** When true, day menu prioritizes payroll correction (period already processed) */
+	isPayrollLocked?: boolean;
+	/** Map of YYYY-MM-DD → payroll correction marker for requested/approved deltas */
+	payrollCorrectionByDate?: Map<string, DayPayrollCorrectionMarker> | null;
+	/** Multi-select days by click (used by inline payroll correction mode) */
+	selectionMode?: boolean;
+	/** Selected day keys (YYYY-MM-DD) when selectionMode is on */
+	selectedDayKeys?: string[] | Set<string> | null;
+	/** Toggle a day in multi-select mode */
+	onToggleDaySelect?: (day: TimesheetBreakdownDay) => void;
 }
 
 // Helper function to convert "HH:MM" to decimal hours
@@ -85,7 +107,21 @@ export function TimesheetCalendar({
 	modifiedDayKeys,
 	payrollPeriodStartDate,
 	payrollPeriodEndDate,
+	disableDayTooltips = false,
+	isPayrollLocked = false,
+	payrollCorrectionByDate = null,
+	selectionMode = false,
+	selectedDayKeys = null,
+	onToggleDaySelect,
 }: TimesheetCalendarProps) {
+	const [openDayMenuKey, setOpenDayMenuKey] = useState<string | null>(null);
+	const showDayTooltips =
+		!disableDayTooltips && openDayMenuKey === null && !selectionMode;
+	const selectedDaysSet = useMemo(() => {
+		if (!selectedDayKeys) return new Set<string>();
+		if (selectedDayKeys instanceof Set) return selectedDayKeys;
+		return new Set(selectedDayKeys.filter(Boolean));
+	}, [selectedDayKeys]);
 	const toLocalMidnight = (date: Date) =>
 		new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
@@ -329,9 +365,7 @@ export function TimesheetCalendar({
 								const calendarDate = getBreakdownCalendarDate(day);
 								const dayNum = calendarDate.getDate();
 								const dayKey = toLocalDateKey(calendarDate);
-								const isUpcomingOpenShift = isOpenShift && dayKey > todayLocalDateKey;
-								const pendingLabel = "Open Shift";
-								const pendingTone = isUpcomingOpenShift ? "upcoming" : "today";
+								const isPastDay = dayKey < todayLocalDateKey;
 								const isModified = modifiedDaysSet.has(dayKey);
 								const canRequestScheduleChange = dayKey >= todayLocalDateKey;
 
@@ -358,6 +392,14 @@ export function TimesheetCalendar({
 														? "pending"
 														: "hours";
 
+								const overtimeCandidate = readOvertimeCandidateFromDay(day);
+								const overtimeBadge =
+									day.overtimeHours && day.overtimeHours !== "0:00"
+										? { label: "+OT", tone: "ot-approved" as const }
+										: getOvertimeCandidateBadge(overtimeCandidate);
+								const correctionMarker =
+									payrollCorrectionByDate?.get(dayKey) || null;
+								const isDaySelected = selectedDaysSet.has(dayKey);
 								const cellBadges = [
 									...(isNightShiftDay
 										? [{ label: "NS", tone: "night" as const }]
@@ -372,9 +414,7 @@ export function TimesheetCalendar({
 									...(isRestDay && hasWorkedHours
 										? [{ label: "OFF", tone: "meta" as const }]
 										: []),
-									...(day.overtimeHours && day.overtimeHours !== "0:00"
-										? [{ label: "+OT", tone: "ot" as const }]
-										: []),
+									...(overtimeBadge ? [overtimeBadge] : []),
 									...(day.metadata?.withinGrace
 										? [{ label: "GRACE", tone: "meta" as const }]
 										: []),
@@ -386,15 +426,22 @@ export function TimesheetCalendar({
 									...(day.earlyOutHours && day.earlyOutHours !== "0:00"
 										? [{ label: "EO", tone: "eo" as const }]
 										: []),
+									...(correctionMarker
+										? [
+												{
+													label: correctionMarker.badgeLabel,
+													tone: correctionMarker.badgeTone,
+												},
+											]
+										: []),
 								];
 								const dayCell = (
 									<TimesheetDayCell
 										dayNumber={dayNum}
 										kind={kind}
+										isPastDay={isPastDay}
 										markerLabel={primaryMarker === "HOLIDAY" ? "H" : "M"}
 										hoursLabel={formatDuration(day.hoursWorked)}
-										pendingLabel={pendingLabel}
-										pendingTone={pendingTone}
 										leaveLabel={
 											(
 												leaveEntries[0]?.leaveType ||
@@ -405,22 +452,59 @@ export function TimesheetCalendar({
 												.slice(0, 4) || undefined
 										}
 										modified={isModified}
-										onClick={
-											onDayRequestAction
-												? undefined
-												: onDayClick
-													? () => onDayClick(day)
-													: undefined
+										selected={isDaySelected}
+										hasPayrollCorrection={Boolean(correctionMarker)}
+										payrollCorrectionTone={
+											correctionMarker?.badgeTone || "correction-ready"
 										}
-										className={onDayRequestAction ? "cursor-pointer" : ""}
+										onClick={
+											selectionMode && onToggleDaySelect
+												? () => onToggleDaySelect(day)
+												: onDayRequestAction
+													? undefined
+													: onDayClick
+														? () => onDayClick(day)
+														: undefined
+										}
+										className={
+											selectionMode
+												? isDaySelected
+													? "cursor-pointer bg-orange-50/70"
+													: "cursor-pointer"
+												: onDayRequestAction
+													? "cursor-pointer"
+													: ""
+										}
 										badges={cellBadges}
 									/>
 								);
-								const dayTrigger = onDayRequestAction ? (
-									<DropdownMenu>
+								const dayTrigger =
+									selectionMode ? (
+										dayCell
+									) : onDayRequestAction ? (
+									<DropdownMenu
+										open={openDayMenuKey === dayKey}
+										onOpenChange={(open) =>
+											setOpenDayMenuKey(open ? dayKey : null)
+										}>
 										<DropdownMenuTrigger asChild>{dayCell}</DropdownMenuTrigger>
 										<DropdownMenuContent align="center" className="w-52">
-											{onDayClick && (
+											{isPayrollLocked && (
+												<>
+													<DropdownMenuItem
+														onClick={() =>
+															onDayRequestAction(
+																"payroll-correction",
+																day,
+															)
+														}>
+														<Wallet className="mr-2 h-4 w-4" />
+														Request payroll correction
+													</DropdownMenuItem>
+													<DropdownMenuSeparator />
+												</>
+											)}
+											{onDayClick && !isPayrollLocked && (
 												<>
 													<DropdownMenuItem onClick={() => onDayClick(day)}>
 														<Pencil className="mr-2 h-4 w-4" />
@@ -429,25 +513,48 @@ export function TimesheetCalendar({
 													<DropdownMenuSeparator />
 												</>
 											)}
-											<DropdownMenuItem
-												onClick={() => onDayRequestAction("leave", day)}>
-												<Calendar className="mr-2 h-4 w-4" />
-												Leave Request
-											</DropdownMenuItem>
-											{canRequestScheduleChange && (
-												<DropdownMenuItem
-													onClick={() =>
-														onDayRequestAction("schedule-change", day)
-													}>
-													<CalendarClock className="mr-2 h-4 w-4" />
-													Schedule Change Request
-												</DropdownMenuItem>
+											{!isPayrollLocked && (
+												<>
+													<DropdownMenuItem
+														onClick={() =>
+															onDayRequestAction("leave", day)
+														}>
+														<Calendar className="mr-2 h-4 w-4" />
+														Leave Request
+													</DropdownMenuItem>
+													{canFileOvertimeRequest(overtimeCandidate) && (
+														<DropdownMenuItem
+															onClick={() =>
+																onDayRequestAction("overtime", day)
+															}>
+															<CalendarClock className="mr-2 h-4 w-4" />
+															File Overtime Request (
+															{overtimeCandidate.pendingOvertimeHours})
+														</DropdownMenuItem>
+													)}
+													{canRequestScheduleChange && (
+														<DropdownMenuItem
+															onClick={() =>
+																onDayRequestAction(
+																	"schedule-change",
+																	day,
+																)
+															}>
+															<CalendarClock className="mr-2 h-4 w-4" />
+															Schedule Change Request
+														</DropdownMenuItem>
+													)}
+												</>
 											)}
 										</DropdownMenuContent>
 									</DropdownMenu>
 								) : (
 									dayCell
 								);
+
+								if (!showDayTooltips) {
+									return <div key={i}>{dayTrigger}</div>;
+								}
 
 								return (
 									<Tooltip key={i}>
@@ -487,8 +594,11 @@ export function TimesheetCalendar({
 													nightShift: day.nightShift,
 												}}
 												modified={isModified}
+												payrollCorrection={correctionMarker}
 												onEdit={
-													onDayClick ? () => onDayClick(day) : undefined
+													onDayClick && !isPayrollLocked
+														? () => onDayClick(day)
+														: undefined
 												}
 											/>
 										</TooltipContent>

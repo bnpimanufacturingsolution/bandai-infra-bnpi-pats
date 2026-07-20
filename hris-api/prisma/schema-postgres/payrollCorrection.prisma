@@ -1,0 +1,77 @@
+// Post-payroll timesheet correction ledger.
+// Durable payable deltas applied on a future open payroll period.
+// Does NOT rewrite locked timesheet lines or paid EmployeePayroll.timesheetSnapshot.
+
+enum PayrollCorrectionStatus {
+  REQUESTED
+  READY
+  APPLIED
+  REJECTED
+  VOID
+  APPROVED_HOLD
+}
+
+model PayrollCorrection {
+  id             String @id @default(cuid())
+  organizationId String
+
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+
+  // Source (locked) period truth
+  sourcePayrollPeriod   PayrollPeriod @relation("PayrollCorrectionSourcePeriod", fields: [sourcePayrollPeriodId], references: [id], onDelete: Restrict)
+  sourcePayrollPeriodId String
+
+  sourceTimesheet   Timesheet @relation(fields: [sourceTimesheetId], references: [id], onDelete: Restrict)
+  sourceTimesheetId String
+
+  sourceEmployeePayrollId String?
+  sourceEmployeePayroll   EmployeePayroll? @relation("PayrollCorrectionSourcePayroll", fields: [sourceEmployeePayrollId], references: [id], onDelete: SetNull)
+
+  // Target period (pinned at generate if null)
+  targetPayrollPeriodId String?
+  targetPayrollPeriod   PayrollPeriod? @relation("PayrollCorrectionTargetPeriod", fields: [targetPayrollPeriodId], references: [id], onDelete: SetNull)
+
+  requestId String?  @unique
+  request   Request? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  status PayrollCorrectionStatus @default(REQUESTED)
+
+  reason String
+
+  requestedAt DateTime  @default(now())
+  approvedAt  DateTime?
+  approvedBy  String?
+  rejectedAt  DateTime?
+  rejectedBy  String?
+  rejectionReason String?
+
+  appliedAt                 DateTime?
+  appliedPayrollPeriodId    String?
+  appliedPayrollPeriod      PayrollPeriod?   @relation("PayrollCorrectionAppliedPeriod", fields: [appliedPayrollPeriodId], references: [id], onDelete: SetNull)
+  appliedEmployeePayrollId  String?
+  appliedEmployeePayroll    EmployeePayroll? @relation("PayrollCorrectionAppliedPayroll", fields: [appliedEmployeePayrollId], references: [id], onDelete: SetNull)
+
+  /// Day-level deltas: [{ date, hoursType, beforeMinutes, afterMinutes, deltaMinutes, notes? }]
+  dayDeltas Json
+
+  estimatedAmount Float?
+  appliedAmount   Float?
+
+  /// Audit / rates snapshot / UI labels
+  metadata Json?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([employeeId])
+  @@index([organizationId, status, isDeleted])
+  @@index([organizationId, employeeId, status, isDeleted])
+  @@index([sourceTimesheetId])
+  @@index([sourcePayrollPeriodId])
+  @@index([targetPayrollPeriodId])
+  @@index([appliedPayrollPeriodId])
+  @@map("payroll_corrections")
+}

@@ -24,6 +24,7 @@ export interface SummaryCardProps extends React.ComponentProps<"div"> {
 	};
 	color?: "blue" | "green" | "orange" | "red" | "purple" | "gray" | "rose";
 	variant?: "blue" | "green" | "orange" | "red" | "purple" | "gray" | "yellow" | "rose";
+	appearance?: "default" | "minimal";
 	className?: string;
 	loading?: boolean;
 	onClick?: () => void;
@@ -96,6 +97,81 @@ const colorVariants = {
 	},
 };
 
+const minimalColorVariants = {
+	blue: {
+		icon: "text-sky-600",
+		iconBg: "bg-sky-50",
+		value: "text-neutral-900",
+		title: "text-neutral-500",
+		bg: "bg-white",
+		border: "border-neutral-200/80",
+		useInline: false,
+	},
+	green: {
+		icon: "text-emerald-600",
+		iconBg: "bg-emerald-50",
+		value: "text-neutral-900",
+		title: "text-neutral-500",
+		bg: "bg-white",
+		border: "border-neutral-200/80",
+		useInline: false,
+	},
+	orange: {
+		icon: "text-amber-600",
+		iconBg: "bg-amber-50",
+		value: "text-neutral-900",
+		title: "text-neutral-500",
+		bg: "bg-white",
+		border: "border-neutral-200/80",
+		useInline: false,
+	},
+	red: {
+		icon: "text-rose-600",
+		iconBg: "bg-rose-50",
+		value: "text-neutral-900",
+		title: "text-neutral-500",
+		bg: "bg-white",
+		border: "border-neutral-200/80",
+		useInline: false,
+	},
+	purple: {
+		icon: "text-violet-600",
+		iconBg: "bg-violet-50",
+		value: "text-neutral-900",
+		title: "text-neutral-500",
+		bg: "bg-white",
+		border: "border-neutral-200/80",
+		useInline: false,
+	},
+	gray: {
+		icon: "text-neutral-600",
+		iconBg: "bg-neutral-100",
+		value: "text-neutral-900",
+		title: "text-neutral-500",
+		bg: "bg-white",
+		border: "border-neutral-200/80",
+		useInline: false,
+	},
+	yellow: {
+		icon: "text-amber-600",
+		iconBg: "bg-amber-50",
+		value: "text-neutral-900",
+		title: "text-neutral-500",
+		bg: "bg-white",
+		border: "border-neutral-200/80",
+		useInline: false,
+	},
+	rose: {
+		icon: "text-rose-600",
+		iconBg: "bg-rose-50",
+		value: "text-neutral-900",
+		title: "text-neutral-500",
+		bg: "bg-white",
+		border: "border-neutral-200/80",
+		useInline: false,
+	},
+};
+
 const SummaryCard = React.forwardRef<HTMLDivElement, SummaryCardProps>(
 	(
 		{
@@ -107,6 +183,7 @@ const SummaryCard = React.forwardRef<HTMLDivElement, SummaryCardProps>(
 			trend,
 			color = "blue",
 			variant,
+			appearance = "default",
 			className,
 			loading = false,
 			onClick,
@@ -115,7 +192,10 @@ const SummaryCard = React.forwardRef<HTMLDivElement, SummaryCardProps>(
 		ref,
 	) => {
 		const selectedColor = variant || color;
-		const colorVariant = colorVariants[selectedColor];
+		const isMinimal = appearance === "minimal";
+		const colorVariant = isMinimal
+			? minimalColorVariants[selectedColor]
+			: colorVariants[selectedColor];
 		const isClickable = !!onClick;
 
 		if (loading) {
@@ -168,7 +248,8 @@ const SummaryCard = React.forwardRef<HTMLDivElement, SummaryCardProps>(
 			<Card
 				ref={ref}
 				className={cn(
-					"hover:shadow-md transition-shadow border",
+					"transition-shadow border",
+					isMinimal ? "shadow-none hover:shadow-sm" : "hover:shadow-md",
 					!useInlineStyles && colorVariant.bg,
 					!useInlineStyles && colorVariant.border,
 					isClickable && "cursor-pointer hover:shadow-lg",
@@ -182,26 +263,36 @@ const SummaryCard = React.forwardRef<HTMLDivElement, SummaryCardProps>(
 						<CardTitle
 							className={cn(
 								"text-sm font-medium mb-0",
-								!useInlineStyles && colorVariant.value,
+								isMinimal && "font-normal",
+								!useInlineStyles && (isMinimal ? colorVariant.title : colorVariant.value),
 							)}
 							style={titleStyle}>
 							{title}
 						</CardTitle>
 						<div
 							className={cn(
-								"text-4xl font-bold -mt-1",
+								isMinimal ? "text-3xl font-semibold tracking-tight" : "text-4xl font-bold -mt-1",
 								!useInlineStyles && colorVariant.value,
 							)}
 							style={valueStyle}>
 							{value}
 						</div>
 					</div>
-					{Icon && (
-						<Icon
-							className={cn("h-9 w-9", !useInlineStyles && colorVariant.icon)}
-							style={iconStyle}
-						/>
-					)}
+					{Icon &&
+						(isMinimal ? (
+							<div
+								className={cn(
+									"flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+									colorVariant.iconBg,
+								)}>
+								<Icon className={cn("h-5 w-5", colorVariant.icon)} />
+							</div>
+						) : (
+							<Icon
+								className={cn("h-9 w-9", !useInlineStyles && colorVariant.icon)}
+								style={iconStyle}
+							/>
+						))}
 				</CardHeader>
 				<CardContent className="pt-0">
 					{description && <p className="text-xs text-gray-500 mt-1">{description}</p>}

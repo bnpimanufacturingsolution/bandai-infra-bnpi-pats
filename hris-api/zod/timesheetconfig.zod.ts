@@ -87,6 +87,7 @@ export const TimesheetConfigSchema = z.object({
 	enableEditBeforeSubmission: z.boolean(),
 	rejectBehavior: z.enum(["REVISE", "REJECT"]),
 	overtimeFlagThresholdMinutes: z.number().int(),
+	requireManagerApprovedOvertime: z.boolean().optional(),
 	workTimeRounding: WorkTimeRoundingRuleSchema.optional().nullable(),
 	overtimeQualification: OvertimeQualificationRuleSchema.optional().nullable(),
 	payrollFinalization: PayrollFinalizationRuleSchema.optional().nullable(),

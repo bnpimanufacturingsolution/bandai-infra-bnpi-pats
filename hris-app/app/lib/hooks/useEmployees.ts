@@ -21,7 +21,6 @@ import employeesService, {
 	type TeamScheduleCalendarResponse,
 	type TeamScheduleCalendarGridResponse,
 	type TeamScheduleCollectionsResponse,
-	type EmployeeHardDeletePreview,
 } from "~/services/employees.service";
 import { toast as sonnerToast } from "sonner";
 import type { ApiQueryParams } from "~/services/api-service";
@@ -160,6 +159,8 @@ export const useEmployees = (
 					"reportToId",
 					"reportTo.person.personalInfo",
 					"reportTo.id",
+					// Avatar is not a Prisma relation on Employee; user data is enriched
+					// client/API-side when document=true (do not select user.* here).
 				])
 				.search(params?.query)
 				.paginate(params?.page || 1, params?.limit || 10)
@@ -590,45 +591,6 @@ export const useDeleteEmployee = () => {
 		},
 		onError: (error: any) => {
 			sonnerToast.error(error?.message || "Failed to delete employee");
-		},
-	});
-};
-
-export const usePreviewEmployeeHardDelete = () => {
-	return useMutation({
-		mutationFn: async (employeeId: string) => {
-			return await employeesService.previewEmployeeHardDelete(employeeId);
-		},
-		onSuccess: (result: EmployeeHardDeletePreview) => {
-			sonnerToast.success(
-				`Preview complete: ${result.summary.blockerCount} blocker${result.summary.blockerCount === 1 ? "" : "s"} found`,
-			);
-		},
-		onError: (error: any) => {
-			sonnerToast.error(error?.message || "Failed to preview employee hard delete");
-		},
-	});
-};
-
-export const useExecuteEmployeeHardDelete = () => {
-	const queryClient = useQueryClient();
-
-	return useMutation({
-		mutationFn: async ({
-			employeeId,
-			force,
-		}: {
-			employeeId: string;
-			force?: boolean;
-		}) => {
-			return await employeesService.executeEmployeeHardDelete(employeeId, force);
-		},
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: employeesQueryKeys.employees.all });
-			sonnerToast.success("Employee hard deleted");
-		},
-		onError: (error: any) => {
-			sonnerToast.error(error?.message || "Cannot hard delete employee");
 		},
 	});
 };

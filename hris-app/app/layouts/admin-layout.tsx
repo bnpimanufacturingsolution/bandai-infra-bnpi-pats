@@ -21,7 +21,7 @@ import {
 	adminLoggingItems,
 	adminRulesPolicyItems,
 } from "~/lib/admin-navigation";
-import { bandaiLogo, resolveCompanyLogo } from "~/lib/company-logo";
+import bandaiLogo from "~/assets/bandai_logo.png";
 
 interface AdminLayoutProps {
 	children?: React.ReactNode;
@@ -40,7 +40,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
 	const department = user?.metadata?.employee?.department;
 	const rawOrganizationLogo = user?.organization?.branding?.logo;
-	const organizationLogo = resolveCompanyLogo(rawOrganizationLogo);
+	const organizationLogo =
+		!rawOrganizationLogo || rawOrganizationLogo === "assets/images/bandai_logo.png"
+			? bandaiLogo
+			: rawOrganizationLogo;
 	const organizationName = user?.organization?.name || "Company";
 
 	// Auto-open menus if on respective pages
@@ -102,13 +105,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 								<img
 									src={organizationLogo}
 									alt={`${organizationName} logo`}
-									onError={(event) => {
-										if (event.currentTarget.dataset.fallbackLogo !== "true") {
-											event.currentTarget.dataset.fallbackLogo = "true";
-											event.currentTarget.src = bandaiLogo;
-										}
-									}}
-									className="block h-9 w-44 max-w-full object-contain object-left"
+									className="block h-10 w-40 object-cover object-center"
 								/>
 								<button
 									onClick={() => setSidebarOpen(false)}
@@ -357,7 +354,6 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 								helpPath="/admin/help"
 								profilePath="/admin/profile"
 								settingsPath="/admin/settings"
-								notificationCount={3}
 								department={department}
 							/>
 

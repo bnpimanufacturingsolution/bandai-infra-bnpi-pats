@@ -127,8 +127,8 @@
     "docs/EMPLOYEE_MIGRATION_PDF_REVIEW.md",
     "docs/EMPLOYEE_MIGRATION_REUSABLE_GUIDE.md",
     "docs/ENTERPRISE_CSV_MIGRATION.md",
-    "docs/FUNCTION_TRACING_TARGETS.md",
     "docs/LOCAL_TAILSCALE_DEPLOY.md",
+    "docs/LOGGING_STANDARDS.md",
     "docs/MD Files/MIGRATION_GUIDE.md",
     "docs/MD Files/REFACTORING_SUMMARY.md",
     "docs/MD Files/TAX_CALCULATOR_REFACTORING.md",
@@ -136,10 +136,7 @@
     "docs/MIGRATION_CSV_UPLOAD_TESTING.md",
     "docs/MIGRATION_GUIDE.md",
     "docs/MIGRATION_TO_SINGLE_TABLE.md",
-    "docs/OBSERVABILITY.md",
-    "docs/OBSERVABILITY_EXAMPLES.md",
-    "docs/OBSERVABILITY_SETUP.md",
-    "docs/OBSERVABILITY_SUMMARY.md",
+    "docs/OVERTIME_APPROVAL_WORKFLOW_PLAN.md",
     "docs/PAYROLL_CYCLE_RULES_CONFIG.md",
     "docs/PAYROLL_SCHEMA_DESIGN.md",
     "docs/POSTGRES_MIGRATION_HANDOFF_2026-05-16.md",
@@ -158,11 +155,9 @@
     "docs/TIMESHEET_EDIT_PERMISSION_WORKFLOW_PRD.md",
     "docs/TIMESHEET_UNIFIED_REQUEST_WORKFLOW_PLAN.md",
     "docs/WWG_TEST_CONVERSION_HANDOFF_2026-05-17.md",
-    "docs/docker-vm-backup-rollback-feature-prompt.md",
-    "docs/docker-vm-backup-rollback-guide.md",
-    "docs/docker-vm-otel-lgtm-observability-feature-prompt.md",
     "docs/enterprise-dm-quality-accomplishment.md",
     "docs/grouping-functionality.md",
+    "docs/logging-audit.md",
     "docs/migration-dm-quality-masterlist.md",
     "docs/multi-period-tax-calculation-plan.md",
     "docs/template.md",
@@ -176,6 +171,7 @@
     "reports/archive/wwg-doctor-report.md",
     "reports/archive/wwg-upgrade-plan.md",
     "reports/archive/wwg-upgrade-report.md",
+    "security_best_practices_report.md",
     "wiki-template/base/08-operations/monitoring.md",
     "wiki-template/base/09-agent-context/canonical-context-policy.md",
     "wiki-template/base/12-maintenance/context-maintenance-matrix.md",
@@ -818,12 +814,12 @@
       "reason": "Public documentation path."
     },
     {
-      "path": "docs/FUNCTION_TRACING_TARGETS.md",
+      "path": "docs/LOCAL_TAILSCALE_DEPLOY.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
     {
-      "path": "docs/LOCAL_TAILSCALE_DEPLOY.md",
+      "path": "docs/LOGGING_STANDARDS.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -863,22 +859,7 @@
       "reason": "Public documentation path."
     },
     {
-      "path": "docs/OBSERVABILITY.md",
-      "fileType": "public_doc",
-      "reason": "Public documentation path."
-    },
-    {
-      "path": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "reason": "Public documentation path."
-    },
-    {
-      "path": "docs/OBSERVABILITY_SETUP.md",
-      "fileType": "public_doc",
-      "reason": "Public documentation path."
-    },
-    {
-      "path": "docs/OBSERVABILITY_SUMMARY.md",
+      "path": "docs/OVERTIME_APPROVAL_WORKFLOW_PLAN.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -973,27 +954,17 @@
       "reason": "Public documentation path."
     },
     {
-      "path": "docs/docker-vm-backup-rollback-feature-prompt.md",
-      "fileType": "public_doc",
-      "reason": "Public documentation path."
-    },
-    {
-      "path": "docs/docker-vm-backup-rollback-guide.md",
-      "fileType": "public_doc",
-      "reason": "Public documentation path."
-    },
-    {
-      "path": "docs/docker-vm-otel-lgtm-observability-feature-prompt.md",
-      "fileType": "public_doc",
-      "reason": "Public documentation path."
-    },
-    {
       "path": "docs/enterprise-dm-quality-accomplishment.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
     {
       "path": "docs/grouping-functionality.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/logging-audit.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -1061,6 +1032,11 @@
       "path": "reports/archive/wwg-upgrade-report.md",
       "fileType": "report",
       "reason": "Report directory path."
+    },
+    {
+      "path": "security_best_practices_report.md",
+      "fileType": "unknown",
+      "reason": "No deterministic classification signal matched."
     },
     {
       "path": "wiki-template/base/08-operations/monitoring.md",
@@ -2250,7 +2226,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/FUNCTION_TRACING_TARGETS.md",
+      "affectedFile": "docs/LOCAL_TAILSCALE_DEPLOY.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -2259,7 +2235,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/LOCAL_TAILSCALE_DEPLOY.md",
+      "affectedFile": "docs/LOGGING_STANDARDS.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -2331,34 +2307,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/OBSERVABILITY.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/OBSERVABILITY_SETUP.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/OBSERVABILITY_SUMMARY.md",
+      "affectedFile": "docs/OVERTIME_APPROVAL_WORKFLOW_PLAN.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -2528,33 +2477,6 @@
     {
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/docker-vm-backup-rollback-feature-prompt.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/docker-vm-backup-rollback-guide.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/docker-vm-otel-lgtm-observability-feature-prompt.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Examples.",
       "affectedFile": "docs/enterprise-dm-quality-accomplishment.md",
       "fileType": "public_doc",
@@ -2566,6 +2488,15 @@
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/grouping-functionality.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/logging-audit.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -3217,6 +3148,14 @@
       "severity": "suggestion",
       "code": "markdown-possible-vague-pronouns",
       "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
       "affectedFile": ".wwg/workspace/AGENTS.md",
       "fileType": "agent_instruction",
       "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
@@ -3263,6 +3202,15 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/workspace/current-task.md",
+      "fileType": "unknown",
+      "line": 326,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/skills/context-skill-maintenance.skill.md",
       "fileType": "skill",
       "line": 65,
@@ -3299,7 +3247,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 95,
+      "line": 97,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3380,82 +3328,6 @@
       "affectedFile": "docs/MIGRATION_GUIDE.md",
       "fileType": "public_doc",
       "line": 420,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-repeated-heading",
-      "message": "Heading 'Installation' repeats at the same level.",
-      "affectedFile": "docs/OBSERVABILITY.md",
-      "fileType": "public_doc",
-      "affectedSection": "Installation",
-      "line": 215,
-      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/OBSERVABILITY.md",
-      "fileType": "public_doc",
-      "line": 82,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-repeated-heading",
-      "message": "Heading 'Available Information' repeats at the same level.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "affectedSection": "Available Information",
-      "line": 138,
-      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-repeated-heading",
-      "message": "Heading 'Scenario 1: Normal Operation' repeats at the same level.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "affectedSection": "Scenario 1: Normal Operation",
-      "line": 161,
-      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-repeated-heading",
-      "message": "Heading 'Available Information' repeats at the same level.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "affectedSection": "Available Information",
-      "line": 249,
-      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "line": 79,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "line": 122,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "line": 149,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3698,6 +3570,16 @@
       "fileType": "public_doc",
       "affectedSection": "Basic Request",
       "line": 238,
+      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-repeated-heading",
+      "message": "Heading 'High Severity' repeats at the same level.",
+      "affectedFile": "security_best_practices_report.md",
+      "fileType": "unknown",
+      "affectedSection": "High Severity",
+      "line": 41,
       "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     }
   ],
@@ -4831,7 +4713,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/FUNCTION_TRACING_TARGETS.md",
+      "affectedFile": "docs/LOCAL_TAILSCALE_DEPLOY.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -4840,7 +4722,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/LOCAL_TAILSCALE_DEPLOY.md",
+      "affectedFile": "docs/LOGGING_STANDARDS.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -4912,34 +4794,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/OBSERVABILITY.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/OBSERVABILITY_SETUP.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/OBSERVABILITY_SUMMARY.md",
+      "affectedFile": "docs/OVERTIME_APPROVAL_WORKFLOW_PLAN.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -5109,33 +4964,6 @@
     {
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/docker-vm-backup-rollback-feature-prompt.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/docker-vm-backup-rollback-guide.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/docker-vm-otel-lgtm-observability-feature-prompt.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Examples.",
       "affectedFile": "docs/enterprise-dm-quality-accomplishment.md",
       "fileType": "public_doc",
@@ -5147,6 +4975,15 @@
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/grouping-functionality.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/logging-audit.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -5397,6 +5234,14 @@
       "fileType": "context",
       "affectedSection": "Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References",
       "recommendedFix": "Add the missing context section or mark it explicitly not applicable."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
     },
     {
       "severity": "warning",
@@ -7179,7 +7024,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/FUNCTION_TRACING_TARGETS.md",
+      "affectedFile": "docs/LOCAL_TAILSCALE_DEPLOY.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -7188,7 +7033,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/LOCAL_TAILSCALE_DEPLOY.md",
+      "affectedFile": "docs/LOGGING_STANDARDS.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -7286,110 +7131,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/OBSERVABILITY.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-repeated-heading",
-      "message": "Heading 'Installation' repeats at the same level.",
-      "affectedFile": "docs/OBSERVABILITY.md",
-      "fileType": "public_doc",
-      "affectedSection": "Installation",
-      "line": 215,
-      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/OBSERVABILITY.md",
-      "fileType": "public_doc",
-      "line": 82,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-repeated-heading",
-      "message": "Heading 'Available Information' repeats at the same level.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "affectedSection": "Available Information",
-      "line": 138,
-      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-repeated-heading",
-      "message": "Heading 'Scenario 1: Normal Operation' repeats at the same level.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "affectedSection": "Scenario 1: Normal Operation",
-      "line": 161,
-      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-repeated-heading",
-      "message": "Heading 'Available Information' repeats at the same level.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "affectedSection": "Available Information",
-      "line": 249,
-      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "line": 79,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "line": 122,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "line": 149,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/OBSERVABILITY_SETUP.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/OBSERVABILITY_SUMMARY.md",
+      "affectedFile": "docs/OVERTIME_APPROVAL_WORKFLOW_PLAN.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -7725,33 +7467,6 @@
     {
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/docker-vm-backup-rollback-feature-prompt.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/docker-vm-backup-rollback-guide.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
-      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/docker-vm-otel-lgtm-observability-feature-prompt.md",
-      "fileType": "public_doc",
-      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
-      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
-    },
-    {
-      "severity": "warning",
-      "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Examples.",
       "affectedFile": "docs/enterprise-dm-quality-accomplishment.md",
       "fileType": "public_doc",
@@ -7763,6 +7478,15 @@
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/grouping-functionality.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/logging-audit.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -7939,7 +7663,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 95,
+      "line": 97,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     }
   ],
@@ -8401,6 +8125,14 @@
       "severity": "suggestion",
       "code": "markdown-possible-vague-pronouns",
       "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": ".wwg/wiki/project-truth.md",
+      "fileType": "context",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
       "affectedFile": ".wwg/workspace/AGENTS.md",
       "fileType": "agent_instruction",
       "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
@@ -8477,6 +8209,15 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/workspace/current-task.md",
+      "fileType": "unknown",
+      "line": 326,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/skills/context-skill-maintenance.skill.md",
       "fileType": "skill",
       "line": 65,
@@ -8513,7 +8254,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 95,
+      "line": 97,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -8594,82 +8335,6 @@
       "affectedFile": "docs/MIGRATION_GUIDE.md",
       "fileType": "public_doc",
       "line": 420,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-repeated-heading",
-      "message": "Heading 'Installation' repeats at the same level.",
-      "affectedFile": "docs/OBSERVABILITY.md",
-      "fileType": "public_doc",
-      "affectedSection": "Installation",
-      "line": 215,
-      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/OBSERVABILITY.md",
-      "fileType": "public_doc",
-      "line": 82,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-repeated-heading",
-      "message": "Heading 'Available Information' repeats at the same level.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "affectedSection": "Available Information",
-      "line": 138,
-      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-repeated-heading",
-      "message": "Heading 'Scenario 1: Normal Operation' repeats at the same level.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "affectedSection": "Scenario 1: Normal Operation",
-      "line": 161,
-      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-repeated-heading",
-      "message": "Heading 'Available Information' repeats at the same level.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "affectedSection": "Available Information",
-      "line": 249,
-      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "line": 79,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "line": 122,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/OBSERVABILITY_EXAMPLES.md",
-      "fileType": "public_doc",
-      "line": 149,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -8922,6 +8587,16 @@
       "fileType": "public_doc",
       "line": 22,
       "recommendedFix": "Split long prose into bullets, tables, or shorter paragraphs."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-repeated-heading",
+      "message": "Heading 'High Severity' repeats at the same level.",
+      "affectedFile": "security_best_practices_report.md",
+      "fileType": "unknown",
+      "affectedSection": "High Severity",
+      "line": 41,
+      "recommendedFix": "Rename repeated headings or add a qualifier when repeated sections could confuse agents."
     }
   ],
   "vorterBoundaryFindings": [],
@@ -9007,23 +8682,23 @@
   ],
   "metadataPolicyApplied": "Option C: Skill Registry metadata is canonical; skill files may include lightweight metadata when beneficial, and package-side skills do not require frontmatter.",
   "summary": {
-    "checkedFileCount": 180,
+    "checkedFileCount": 176,
     "skippedFileCount": 1,
     "errorCount": 0,
-    "warningCount": 185,
-    "suggestionCount": 102,
+    "warningCount": 180,
+    "suggestionCount": 97,
     "classificationCounts": {
       "context": 17,
       "skill": 5,
       "governance": 32,
       "report": 44,
-      "public_doc": 58,
+      "public_doc": 53,
       "agent_instruction": 2,
       "changelog_governance": 0,
       "changelog_or_release_note": 3,
       "design_contract": 0,
       "template": 0,
-      "unknown": 19
+      "unknown": 20
     }
   },
   "validationStatus": "warn",

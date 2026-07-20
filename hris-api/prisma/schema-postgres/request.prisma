@@ -1,6 +1,7 @@
 enum RequestType {
   LEAVE
   TIMESHEET
+  OVERTIME
   ATTENDANCE_CORRECTION
   EXPENSE_REIMBURSEMENT
   DOCUMENT_REQUEST
@@ -11,6 +12,7 @@ enum RequestType {
   SALARY_CHANGE
   TRANSFER
   SCHEDULE_CHANGE
+  PAYROLL_CORRECTION
   OTHER
 }
 
@@ -43,6 +45,7 @@ model Request {
   // Timesheet edit-permission targets using this request
   timesheetEditPermissionTargets Timesheet[] @relation("TimesheetEditPermissionRequest")
   createdJobs                    Job[]       @relation("JobSourceRequest")
+  payrollCorrection              PayrollCorrection?
 
   // Current step execution reference (many-to-one: multiple requests could theoretically point to same step, though unlikely)
   // This avoids the @unique requirement that causes issues with nullable fields

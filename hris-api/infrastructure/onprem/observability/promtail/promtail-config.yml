@@ -19,18 +19,6 @@ scrape_configs:
         target_label: container
       - source_labels: [__meta_docker_container_label_com_docker_compose_service]
         target_label: service
-      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
-        regex: 'hris-(api|app|postgres|grafana)$'
-        target_label: environment
-        replacement: prod
-      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
-        regex: 'hris-(api|app|postgres|grafana)-dev$'
-        target_label: environment
-        replacement: dev
-      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
-        regex: 'hris-(api|app|postgres|grafana)-uat$'
-        target_label: environment
-        replacement: uat
       - source_labels: [__meta_docker_container_label_com_docker_compose_project]
         target_label: compose_project
       - source_labels: [__meta_docker_container_log_stream]
@@ -42,7 +30,6 @@ scrape_configs:
       - labels:
           container:
           service:
-          environment:
           compose_project:
           stream:
           stack:

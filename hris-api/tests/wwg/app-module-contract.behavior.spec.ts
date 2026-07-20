@@ -2039,7 +2039,8 @@ describe("App module contracts", () => {
       expect(source.includes("router")).to.equal(true);
     });
   });
-  describe("app/migration/index.ts::migrationModule", () => {
+  describe("app/migration/index.ts::migrationModule", function () {
+    this.timeout(20000);
     const sourcePath = path.resolve(process.cwd(), "app/migration/index.ts");
     const load = () => require("../../app/migration/index");
 

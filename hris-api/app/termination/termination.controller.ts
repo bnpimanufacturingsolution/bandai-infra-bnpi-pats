@@ -12,6 +12,8 @@ import {
 	CompleteTerminationSchema,
 } from "../../zod/termination.zod";
 import { config } from "../../config/constant";
+import { logActivity } from "../../utils/activityLogger";
+import { logAudit } from "../../utils/auditLogger";
 import { invalidateCache } from "../../middleware/cache";
 import { validateQueryParams } from "../../helper/validation-helper";
 import {
@@ -33,6 +35,9 @@ const getJsonString = (value: unknown, key: string): string => {
 	const raw = asRecord(value)[key];
 	return typeof raw === "string" ? raw : "";
 };
+
+const resolveTerminationActorId = (req: Request | AuthRequest): string =>
+	(req as AuthRequest).user?.id || (req as AuthRequest & { userId?: string }).userId || "unknown";
 
 // Generate the next termination number in the format TRM-YYYY-XXXXX
 async function generateTerminationNumber(
@@ -185,6 +190,37 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			terminationLogger.info(`Termination created: ${termination.id}`);
+
+			logActivity(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.ACTIVITY_LOG.TERMINATION.ACTIONS.CREATE_TERMINATION,
+				description: `${config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_CREATED}: ${termination.terminationNumber}`,
+				organizationId: organizationId,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TERMINATION.PAGES.TERMINATION_CREATION,
+				},
+			});
+
+			logAudit(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.AUDIT_LOG.ACTIONS.CREATE,
+				resource: config.AUDIT_LOG.RESOURCES.TERMINATION,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.TERMINATION,
+				entityId: termination.id,
+				changesBefore: null,
+				changesAfter: {
+					id: termination.id,
+					terminationNumber: termination.terminationNumber,
+					employeeId: termination.employeeId,
+					status: termination.status,
+					terminationType: termination.terminationType,
+				},
+				description: config.AUDIT_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_CREATED,
+				organizationId,
+			});
+
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.TERMINATION.CREATED,
 				termination,
@@ -290,6 +326,16 @@ export const controller = (prisma: PrismaClient) => {
 				}),
 			};
 
+			logActivity(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.ACTIVITY_LOG.TERMINATION.ACTIONS.GET_ALL_TERMINATION,
+				description: config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATIONS_RETRIEVED,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TERMINATION.PAGES.TERMINATION_LIST,
+				},
+			});
+
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.TERMINATION.RETRIEVED_ALL,
 				responseData,
@@ -381,6 +427,17 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			logActivity(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.ACTIVITY_LOG.TERMINATION.ACTIONS.GET_TERMINATION,
+				description: `${config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_RETRIEVED}: ${termination.terminationNumber}`,
+				organizationId: termination.organizationId,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TERMINATION.PAGES.TERMINATION_DETAILS,
+				},
+			});
+
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.TERMINATION.RETRIEVED,
 				termination,
@@ -469,6 +526,40 @@ export const controller = (prisma: PrismaClient) => {
 				terminationLogger.warn("Failed to invalidate cache:", cacheError);
 			}
 
+			logActivity(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.ACTIVITY_LOG.TERMINATION.ACTIONS.UPDATE_TERMINATION,
+				description: `${config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_UPDATED}: ${termination.terminationNumber}`,
+				organizationId: existing.organizationId,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TERMINATION.PAGES.TERMINATION_UPDATE,
+				},
+			});
+
+			logAudit(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.TERMINATION,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.TERMINATION,
+				entityId: termination.id,
+				changesBefore: {
+					id: existing.id,
+					status: existing.status,
+					terminationNumber: existing.terminationNumber,
+					employeeId: existing.employeeId,
+				},
+				changesAfter: {
+					id: termination.id,
+					status: termination.status,
+					terminationNumber: termination.terminationNumber,
+					employeeId: termination.employeeId,
+				},
+				description: config.AUDIT_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_UPDATED,
+				organizationId: existing.organizationId,
+			});
+
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.TERMINATION.UPDATED,
 				termination,
@@ -525,6 +616,39 @@ export const controller = (prisma: PrismaClient) => {
 			} catch (cacheError) {
 				terminationLogger.warn("Failed to invalidate cache:", cacheError);
 			}
+
+			logActivity(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.ACTIVITY_LOG.TERMINATION.ACTIONS.DELETE_TERMINATION,
+				description: `${config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_DELETED}: ${existing.terminationNumber}`,
+				organizationId: existing.organizationId,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TERMINATION.PAGES.TERMINATION_DELETION,
+				},
+			});
+
+			logAudit(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.AUDIT_LOG.ACTIONS.DELETE,
+				resource: config.AUDIT_LOG.RESOURCES.TERMINATION,
+				severity: config.AUDIT_LOG.SEVERITY.HIGH,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.TERMINATION,
+				entityId: existing.id,
+				changesBefore: {
+					id: existing.id,
+					status: existing.status,
+					terminationNumber: existing.terminationNumber,
+					employeeId: existing.employeeId,
+					isDeleted: false,
+				},
+				changesAfter: {
+					id: existing.id,
+					isDeleted: true,
+				},
+				description: config.AUDIT_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_DELETED,
+				organizationId: existing.organizationId,
+			});
 
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.TERMINATION.DELETED,
@@ -610,6 +734,30 @@ export const controller = (prisma: PrismaClient) => {
 			} catch (cacheError) {
 				terminationLogger.warn("Failed to invalidate cache:", cacheError);
 			}
+
+			logActivity(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.ACTIVITY_LOG.TERMINATION.ACTIONS.SUBMIT_TERMINATION,
+				description: `${config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_SUBMITTED}: ${existing.terminationNumber}`,
+				organizationId: existing.organizationId,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TERMINATION.PAGES.TERMINATION_WORKFLOW,
+				},
+			});
+
+			logAudit(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.TERMINATION,
+				severity: config.AUDIT_LOG.SEVERITY.HIGH,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.TERMINATION,
+				entityId: id,
+				changesBefore: { status: "DRAFT" },
+				changesAfter: { status: "PENDING_HR_DIRECTOR" },
+				description: config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_SUBMITTED,
+				organizationId: existing.organizationId,
+			});
 
 			const successResponse = buildSuccessResponse(
 				"Termination submitted for approval",
@@ -712,6 +860,34 @@ export const controller = (prisma: PrismaClient) => {
 				terminationLogger.warn("Failed to invalidate cache:", cacheError);
 			}
 
+			logActivity(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.ACTIVITY_LOG.TERMINATION.ACTIONS.HR_DIRECTOR_APPROVAL,
+				description: `${config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_HR_APPROVED}: ${existing.terminationNumber}`,
+				organizationId: existing.organizationId,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TERMINATION.PAGES.TERMINATION_WORKFLOW,
+				},
+			});
+
+			logAudit(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.TERMINATION,
+				severity: config.AUDIT_LOG.SEVERITY.HIGH,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.TERMINATION,
+				entityId: id,
+				changesBefore: { status: "PENDING_HR_DIRECTOR" },
+				changesAfter: {
+					status: newStatus,
+					action: validation.data.action,
+					approverId: validation.data.approverId,
+				},
+				description: config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_HR_APPROVED,
+				organizationId: existing.organizationId,
+			});
+
 			const successResponse = buildSuccessResponse(
 				`Termination ${validation.data.action}d by HR Director`,
 				termination,
@@ -808,6 +984,34 @@ export const controller = (prisma: PrismaClient) => {
 				terminationLogger.warn("Failed to invalidate cache:", cacheError);
 			}
 
+			logActivity(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.ACTIVITY_LOG.TERMINATION.ACTIONS.LEGAL_APPROVAL,
+				description: `${config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_LEGAL_APPROVED}: ${existing.terminationNumber}`,
+				organizationId: existing.organizationId,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TERMINATION.PAGES.TERMINATION_WORKFLOW,
+				},
+			});
+
+			logAudit(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.TERMINATION,
+				severity: config.AUDIT_LOG.SEVERITY.HIGH,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.TERMINATION,
+				entityId: id,
+				changesBefore: { status: "PENDING_LEGAL" },
+				changesAfter: {
+					status: newStatus,
+					action: validation.data.action,
+					approverId: validation.data.approverId,
+				},
+				description: config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_LEGAL_APPROVED,
+				organizationId: existing.organizationId,
+			});
+
 			const successResponse = buildSuccessResponse(
 				`Termination ${validation.data.action}d by Legal`,
 				termination,
@@ -889,6 +1093,35 @@ export const controller = (prisma: PrismaClient) => {
 			} catch (cacheError) {
 				terminationLogger.warn("Failed to invalidate cache:", cacheError);
 			}
+
+			logActivity(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.ACTIVITY_LOG.TERMINATION.ACTIONS.START_PROCESSING,
+				description: `${config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_PROCESSING_STARTED}: ${existing.terminationNumber}`,
+				organizationId: existing.organizationId,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TERMINATION.PAGES.TERMINATION_WORKFLOW,
+				},
+			});
+
+			logAudit(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.TERMINATION,
+				severity: config.AUDIT_LOG.SEVERITY.HIGH,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.TERMINATION,
+				entityId: id,
+				changesBefore: { status: "APPROVED" },
+				changesAfter: {
+					status: "PROCESSING",
+					employeeId: existing.employeeId,
+					employmentStatus: "TERMINATED",
+				},
+				description:
+					config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_PROCESSING_STARTED,
+				organizationId: existing.organizationId,
+			});
 
 			const successResponse = buildSuccessResponse(
 				"Termination processing started",
@@ -977,6 +1210,34 @@ export const controller = (prisma: PrismaClient) => {
 			} catch (cacheError) {
 				terminationLogger.warn("Failed to invalidate cache:", cacheError);
 			}
+
+			logActivity(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.ACTIVITY_LOG.TERMINATION.ACTIONS.COMPLETE_TERMINATION,
+				description: `${config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_COMPLETED}: ${existing.terminationNumber}`,
+				organizationId: existing.organizationId,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TERMINATION.PAGES.TERMINATION_WORKFLOW,
+				},
+			});
+
+			logAudit(req, {
+				userId: resolveTerminationActorId(req),
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.TERMINATION,
+				severity: config.AUDIT_LOG.SEVERITY.HIGH,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.TERMINATION,
+				entityId: id,
+				changesBefore: { status: "PROCESSING" },
+				changesAfter: {
+					status: "COMPLETED",
+					finalPayCalculated: validation.data.finalPayCalculated,
+					clearanceCompleted: validation.data.clearanceCompleted,
+				},
+				description: config.ACTIVITY_LOG.TERMINATION.DESCRIPTIONS.TERMINATION_COMPLETED,
+				organizationId: existing.organizationId,
+			});
 
 			const successResponse = buildSuccessResponse("Termination completed", termination, 200);
 			res.status(200).json(successResponse);

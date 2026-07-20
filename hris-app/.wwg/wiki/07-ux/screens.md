@@ -5,6 +5,7 @@ Status: INFERRED_FROM_EXISTING_PROJECT
 ## Auth, Legal, Support, And Profile
 
 - Login: `/auth/login`.
+- Auth / session splash (`LoadingScreen` atom): full-screen white, Bandai logo (same Cloudinary mark as login), soft indeterminate brand-red bar, optional short message only. Subtitle is screen-reader only. No card, phase labels, or status chrome. Parity: `hris-emp-app` same atom.
 - Legal: `/terms`, `/privacy`.
 - Support: `/help`, `/faq`.
 - Profile/user utilities: `/home`, `/profile/:id`, `/notifications`, `/history`.
@@ -40,7 +41,7 @@ HR routes include:
 - Attendance and time corrections.
 - Performance, tasks, messages, notifications.
 - Payroll, HR payroll, billings, payroll periods, run payroll.
-- Benefit types and benefit enrollments.
+- Benefit types and benefit enrollments / benefits management (create page at `/hr/benefits-management/new` with multi-employee select modal; edit modal with single-employee picker; schedule modes: time-bound, fixed installments, recurring).
 - Announcements and document viewer.
 - Add user.
 - Reports for attendance, workforce, and payroll.

@@ -15,6 +15,22 @@ vi.mock("~/components/atoms/Badge", () => ({
 	),
 }));
 
+vi.mock("~/components/ui/avatar", () => ({
+	Avatar: ({ children, ...props }: any) => (
+		<div data-testid="avatar-root" {...props}>
+			{children}
+		</div>
+	),
+	AvatarImage: ({ src, alt, ...props }: any) => (
+		<img data-testid="avatar-image" src={src} alt={alt} {...props} />
+	),
+	AvatarFallback: ({ children, ...props }: any) => (
+		<div data-testid="avatar-fallback" {...props}>
+			{children}
+		</div>
+	),
+}));
+
 vi.mock("~/lib/hooks/use-auth", () => ({
 	useAuth: () => ({
 		user: {
@@ -66,12 +82,40 @@ vi.mock("~/lib/hooks/useEmployees", () => ({
 						position: { id: "position-1", title: "Operator" },
 						section: { id: "section-1", name: "Assembly" },
 						level: { id: "level-1", name: "Level 1" },
+						user: {
+							avatar: "https://example.test/avatar.png",
+						},
 						person: {
 							personalInfo: { firstName: "Ana", lastName: "Reyes" },
 							contactInfo: {
 								email: "ana.reyes@example.test",
 								phones: [
 									{ countryCode: "+63", number: "9000000000", isPrimary: true },
+								],
+							},
+						},
+					},
+					{
+						id: "employee-2",
+						employeeId: "EMP-002",
+						employmentStatus: "ACTIVE",
+						employmentHireDate: "2026-02-10",
+						employmentType: "REGULAR",
+						workforceSource: "DIRECT",
+						departmentId: "dept-1",
+						positionId: "position-1",
+						sectionId: "section-1",
+						levelId: "level-1",
+						department: { id: "dept-1", name: "Manufacturing" },
+						position: { id: "position-1", title: "Operator" },
+						section: { id: "section-1", name: "Assembly" },
+						level: { id: "level-1", name: "Level 1" },
+						person: {
+							personalInfo: { firstName: "Juan", lastName: "Dela Cruz" },
+							contactInfo: {
+								email: "juan.delacruz@example.test",
+								phones: [
+									{ countryCode: "+63", number: "9000000001", isPrimary: true },
 								],
 							},
 						},
@@ -170,6 +214,31 @@ const openAgencyFilter = async () => {
 	return user;
 };
 
+describe("EmployeeList manpower databank deep links", () => {
+	it("replays manpower databank deep links into the employee API filter contract", async () => {
+		renderEmployeeList(
+			"/hr/employees?view=list&statusScope=active-manpower&page=1&positionId=position-1&employmentType=REGULAR&workforceSource=AGENCY&agency=agency-1",
+		);
+
+		await waitFor(() => {
+			const employeeListCalls = vi
+				.mocked(useEmployees)
+				.mock.calls.map(([params]) => params)
+				.filter((params) => params?.count === true);
+
+			expect(
+				employeeListCalls.some(
+					(params) =>
+						String(params?.filter || "").includes("positionId:position-1") &&
+						String(params?.filter || "").includes("employmentType:REGULAR") &&
+						String(params?.filter || "").includes("workforceSource:AGENCY") &&
+						String(params?.filter || "").includes("agencyId:agency-1"),
+				),
+			).toBe(true);
+		});
+	}, 15_000);
+});
+
 describe("EmployeeList agency advanced filter", () => {
 	it("renders admin employment status as dot text while workforce remains a badge", async () => {
 		renderEmployeeList("/admin/configuration/employees");
@@ -194,6 +263,36 @@ describe("EmployeeList agency advanced filter", () => {
 				.getAllByText("DIRECT")
 				.some((element) => element.closest("[data-testid='badge']")),
 		).toBe(true);
+	}, 15_000);
+
+	it("renders hr employment status as dot text while workforce remains a badge", async () => {
+		renderEmployeeList("/hr/employees");
+
+		const activeStatusElements = await screen.findAllByText("Active");
+		const activeStatusText = activeStatusElements.find(
+			(element) =>
+				element.className.includes("inline-flex") &&
+				element.className.includes("text-green-700"),
+		);
+
+		expect(activeStatusText).toBeTruthy();
+		expect(activeStatusText).not.toHaveClass("status-badge");
+		expect(activeStatusText?.closest("[data-testid='badge']")).toBeNull();
+		expect(activeStatusText?.querySelector("[aria-hidden='true']")).toHaveClass("bg-green-500");
+		expect(
+			activeStatusElements.some((element) => element.closest("[data-testid='badge']")),
+		).toBe(false);
+
+		expect(
+			screen
+				.getAllByText("DIRECT")
+				.some((element) => element.closest("[data-testid='badge']")),
+		).toBe(true);
+
+		expect(
+			screen.getAllByTestId("avatar-image").map((node) => node.getAttribute("src")),
+		).toContain("https://example.test/avatar.png");
+		expect(screen.getAllByText("JD").length).toBeGreaterThan(0);
 	}, 15_000);
 
 	it("keeps department and manager filters visible outside advanced filters", async () => {

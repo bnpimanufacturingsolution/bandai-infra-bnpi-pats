@@ -4,13 +4,14 @@ export type CalendarItemType =
 	| "COMPANY_EVENT"
 	| "MEETING"
 	| "DEADLINE"
-	| "REMINDER";
+	| "REMINDER"
+	| "BIRTHDAY";
 
 export type ItemStatus = "ACTIVE" | "CANCELLED" | "COMPLETED" | "DRAFT";
 
 export interface CalendarItem {
 	id: string;
-	calendarId: string;
+	calendarId?: string;
 	organizationId: string;
 	title: string;
 	description?: string;
@@ -25,8 +26,9 @@ export interface CalendarItem {
 		daysOfWeek?: number[];
 	} | null;
 	location?: string;
-	isVirtual: boolean;
+	isVirtual?: boolean;
 	meetingUrl?: string;
+	assignedUserIds?: string[];
 	metadata?: Record<string, any>;
 	reminders?:
 		| {

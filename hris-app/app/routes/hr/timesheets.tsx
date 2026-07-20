@@ -384,10 +384,17 @@ export default function TimesheetsPage() {
 
 	// Single timesheet ID for fetching the view modal.
 	const activeTimesheetId = action === "view" ? id : null;
+	const isTimesheetViewOpen = action === "view" && Boolean(activeTimesheetId);
 
 	// Single useTimesheet hook for all modals (edit, view, delete)
 	const { data: activeTimesheet, isLoading: isLoadingTimesheet } = useTimesheet(
 		activeTimesheetId || "",
+		{
+			enabled: Boolean(activeTimesheetId),
+			...(isTimesheetViewOpen
+				? { staleTime: 0, refetchOnMount: "always" as const }
+				: {}),
+		},
 	);
 
 	// Sync tab state from URL if not present (separate effect to avoid dependency issues)
@@ -1892,6 +1899,7 @@ export default function TimesheetsPage() {
 				timesheet={activeTimesheet || null}
 				isLoading={isDeepLinkLoading}
 				showActions={false}
+				approvedEditedDaysSummary={activeTimesheet?.approvedEditedDaysSummary ?? null}
 			/>
 
 			<ReportExportDialog

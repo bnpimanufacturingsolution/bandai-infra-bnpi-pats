@@ -9,9 +9,14 @@ import {
 import {
 	calculateTimekeeping,
 	determineAttendanceStatus,
-	deriveBehaviorFlags,
 	formatMinutesAsTime,
 } from "../../helper/timekeeping.helper";
+import {
+	applyOvertimeApprovalPolicyToTimekeepingFields,
+	deriveOvertimeAwareBehaviorFlags,
+	readOvertimeCandidateFromMetadata,
+} from "../../helper/overtime-approval.helper";
+import { createOvertimeRequestForTimesheetLine } from "../../app/timesheet/overtime-request.service";
 import {
 	appendEmployeeScheduleHistory,
 	copyTemplateToEmployeeEmbeddedSchedule,
@@ -149,6 +154,11 @@ export type SeedEmployeeDefinition = {
 	reportsToEmail?: string;
 	isDepartmentManager?: boolean;
 	includeOvertime?: boolean;
+	/**
+	 * When true, seed on-time attendance every scheduled workday (no late/undertime/early-out,
+	 * no virtual AWOL). Used so demo accounts like ceo@seed.local show on Perfect Attendance reports.
+	 */
+	perfectAttendance?: boolean;
 };
 
 export const LEVEL_DEFINITIONS: LevelDefinition[] = [
@@ -785,8 +795,9 @@ const BULK_POSITION_DEFINITIONS = [
 
 export const EMPLOYEE_DEFINITIONS: SeedEmployeeDefinition[] = [
 	{
-		firstName: "Test",
-		lastName: "CEO",
+		// Display names only — login remains email/userName from email local-part.
+		firstName: "Ramon",
+		lastName: "Villanueva",
 		email: "ceo@seed.local",
 		employeeCode: "EMP-EXEC-CEO-001",
 		role: "hris-employee-manager",
@@ -797,10 +808,12 @@ export const EMPLOYEE_DEFINITIONS: SeedEmployeeDefinition[] = [
 		salary: 100000,
 		isDepartmentManager: true,
 		includeOvertime: false,
+		// Demo CEO: clean attendance for Perfect Attendance report / QA.
+		perfectAttendance: true,
 	},
 	{
-		firstName: "Test",
-		lastName: "HR Manager",
+		firstName: "Maria",
+		lastName: "Santos",
 		email: "hr-manager@seed.local",
 		employeeCode: "EMP-HR-MGR-001",
 		role: "hris-hr-manager",
@@ -814,8 +827,8 @@ export const EMPLOYEE_DEFINITIONS: SeedEmployeeDefinition[] = [
 		includeOvertime: true,
 	},
 	{
-		firstName: "Test",
-		lastName: "HR User",
+		firstName: "Ana",
+		lastName: "Reyes",
 		email: "hr-user@seed.local",
 		employeeCode: "EMP-HR-STAFF-001",
 		role: "hris-hr-user",
@@ -828,8 +841,8 @@ export const EMPLOYEE_DEFINITIONS: SeedEmployeeDefinition[] = [
 		includeOvertime: true,
 	},
 	{
-		firstName: "Test",
-		lastName: "Manager",
+		firstName: "Carlos",
+		lastName: "Dela Cruz",
 		email: "manager@seed.local",
 		employeeCode: "EMP-SW-MGR-001",
 		role: "hris-employee-manager",
@@ -843,8 +856,8 @@ export const EMPLOYEE_DEFINITIONS: SeedEmployeeDefinition[] = [
 		includeOvertime: false,
 	},
 	{
-		firstName: "Test",
-		lastName: "Supervisor",
+		firstName: "Jose",
+		lastName: "Garcia",
 		email: "supervisor@seed.local",
 		employeeCode: "EMP-SW-SUP-001",
 		role: "hris-employee-manager",
@@ -857,8 +870,8 @@ export const EMPLOYEE_DEFINITIONS: SeedEmployeeDefinition[] = [
 		includeOvertime: false,
 	},
 	{
-		firstName: "Test",
-		lastName: "Supervisor Report",
+		firstName: "Miguel",
+		lastName: "Torres",
 		email: "supervisor-report@seed.local",
 		employeeCode: "EMP-SW-DEV-002",
 		role: "hris-employee",
@@ -871,8 +884,8 @@ export const EMPLOYEE_DEFINITIONS: SeedEmployeeDefinition[] = [
 		includeOvertime: true,
 	},
 	{
-		firstName: "Test",
-		lastName: "Employee",
+		firstName: "Juan",
+		lastName: "Mendoza",
 		email: "employee@seed.local",
 		employeeCode: "EMP-SW-DEV-001",
 		role: "hris-employee",
@@ -929,7 +942,6 @@ const createDateAtPhilippineMinutes = (base: Date, philippineTotalMinutes: numbe
 };
 
 const DEFAULT_SEED_PASSWORD = "Password123!";
-export const ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED = true;
 const DEFAULT_GENERAL_SEED_TIMESHEETS_PER_EMPLOYEE = 2;
 const GOVERNMENT_DOCUMENT_TYPES = ["TIN", "SSS", "PHILHEALTH", "PAGIBIG"] as const;
 const SEEDED_EMPLOYEE_DOCUMENT_TYPES = [
@@ -1576,7 +1588,7 @@ const resolveExistingProjectDefaultsForResume = async (
 	if (mode === "idp") {
 		return seedProjectDefaults(prisma, {
 			organizationId: options?.organizationId,
-			ensureAdminUsers: ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED,
+			ensureAdminUsers: false,
 		});
 	}
 
@@ -1597,7 +1609,7 @@ const resolveExistingProjectDefaultsForResume = async (
 	if (!organization) {
 		return seedProjectDefaults(prisma, {
 			organizationId: options?.organizationId,
-			ensureAdminUsers: ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED,
+			ensureAdminUsers: false,
 		});
 	}
 
@@ -1673,6 +1685,11 @@ const buildSeedIdentification = (employeeCode: string) => {
 	};
 };
 
+/**
+ * Varied seed DOBs (month from employeeCode hash).
+ * Kiosk login shows a single current-month birthday via `kioskLoginSeeder`
+ * (one parent employee), not every seeded employee.
+ */
 const buildSeedDateOfBirth = (employeeCode: string) => {
 	const base = hashSeed(employeeCode);
 	const year = 1988 + (base % 10);
@@ -3901,11 +3918,6 @@ const ensureScheduleResources = async (organizationId: string, departmentIds: st
 	return { template };
 };
 
-const normalizeZktecoDeviceEmpId = (employeeCode: string) => {
-	if (!/^\d+$/.test(employeeCode)) return employeeCode;
-	return employeeCode.replace(/^0+/, "") || "0";
-};
-
 const ensureEmployee = async (params: {
 	organizationId: string;
 	authOrganizationId: string;
@@ -3959,7 +3971,6 @@ const ensureEmployee = async (params: {
 		},
 	});
 	const employeeAction: "created" | "updated" = existingEmployee ? "updated" : "created";
-	const deviceEmpId = normalizeZktecoDeviceEmpId(employeeCode);
 
 	let person = existingEmployee?.person || null;
 	const seedPhone = buildSeedPhoneNumber(employeeCode);
@@ -4016,7 +4027,8 @@ const ensureEmployee = async (params: {
 					firstName,
 					middleName: existingPersonalInfo.middleName || "Seed",
 					lastName,
-					dateOfBirth: existingPersonalInfo.dateOfBirth || seedDateOfBirth,
+					// Always refresh seed DOB so re-seed keeps kiosk birthday month current.
+					dateOfBirth: seedDateOfBirth,
 					placeOfBirth: existingPersonalInfo.placeOfBirth || "Metro Manila",
 					nationality: existingPersonalInfo.nationality || "Filipino",
 					primaryLanguage: existingPersonalInfo.primaryLanguage || "English",
@@ -4120,7 +4132,6 @@ const ensureEmployee = async (params: {
 				workforceSource: (existingEmployee as any).workforceSource || "DIRECT",
 				employer:
 					(existingEmployee as any).employer || (buildSeedEmployer(sourceLabel) as any),
-				deviceEmpId,
 				leaveBalances: leaveBalancePayload.leaveBalances as any,
 				leaveBalancesLastUpdated: hasLeaveBalances
 					? ((existingEmployee as any).leaveBalancesLastUpdated ?? null)
@@ -4171,7 +4182,6 @@ const ensureEmployee = async (params: {
 		data: {
 			organizationId,
 			employeeId: employeeCode,
-			deviceEmpId,
 			personId: person.id,
 			userId: seedUser.userId,
 			role,
@@ -4330,11 +4340,14 @@ const generateAttendanceRecords = async (params: {
 	startDate: Date;
 	endDate: Date;
 	includeOvertime?: boolean;
+	/** On-time every workday; no virtual AWOL; zero late/undertime fields for metrics. */
+	perfectAttendance?: boolean;
 	targetPayrollPeriods?: Array<{
 		id: string;
 		startDate: Date;
 		endDate: Date;
 		allowVirtualAwol?: boolean;
+		maxVirtualAwolCount?: number;
 	}>;
 	forceSkippedDateKeys?: string[];
 }) => {
@@ -4345,6 +4358,7 @@ const generateAttendanceRecords = async (params: {
 		startDate,
 		endDate,
 		includeOvertime = false,
+		perfectAttendance = false,
 		targetPayrollPeriods = [],
 		forceSkippedDateKeys = [],
 	} = params;
@@ -4360,10 +4374,15 @@ const generateAttendanceRecords = async (params: {
 		id: period.id,
 		startKey: period.startDate.toISOString().split("T")[0],
 		endKey: period.endDate.toISOString().split("T")[0],
+		// Perfect-attendance employees never get intentional unpunched workdays.
 		desiredVirtualAwolCount:
-			period.allowVirtualAwol === false
+			perfectAttendance || period.allowVirtualAwol === false
 				? 0
-				: deterministicInt(`${employeeCode}-${period.id}-virtual-awol`, 0, 3),
+				: deterministicInt(
+						`${employeeCode}-${period.id}-virtual-awol`,
+						0,
+						period.maxVirtualAwolCount ?? 3,
+					),
 	}));
 	const workdayCandidatesByPeriod = new Map<string, string[]>();
 
@@ -4398,9 +4417,12 @@ const generateAttendanceRecords = async (params: {
 					? shiftEndMinutes + 24 * 60
 					: shiftEndMinutes;
 			const graceLateMinutes = Math.max(0, Number(shift.graceLateMinutes ?? 0));
+			// Perfect attendance: punch exactly on schedule (stable, zero late/undertime).
+			// Other employees: deterministic varied in/out for realistic demo noise.
 			const latePatternRoll = deterministicInt(`${seedPrefix}-late-pattern`, 0, 99);
-			const timeInOffsetMinutes =
-				latePatternRoll < 35
+			const timeInOffsetMinutes = perfectAttendance
+				? 0
+				: latePatternRoll < 35
 					? deterministicInt(`${seedPrefix}-arrive-early-window`, -15, -3)
 					: latePatternRoll < 70
 						? deterministicInt(`${seedPrefix}-arrive-near-start`, -7, 7)
@@ -4423,14 +4445,17 @@ const generateAttendanceRecords = async (params: {
 									);
 
 			const outPatternRoll = deterministicInt(`${seedPrefix}-out-pattern`, 0, 99);
-			const timeOutOffsetMinutes =
-				outPatternRoll < 20
+			const timeOutOffsetMinutes = perfectAttendance
+				? 0
+				: outPatternRoll < 20
 					? deterministicInt(`${seedPrefix}-out-early`, -35, -10)
 					: outPatternRoll < 80
 						? deterministicInt(`${seedPrefix}-out-normal`, -10, 8)
 						: deterministicInt(`${seedPrefix}-out-late`, 8, 18);
 			const hasOvertime =
-				includeOvertime && deterministicInt(`${seedPrefix}-ot-flag`, 0, 99) < 40;
+				!perfectAttendance &&
+				includeOvertime &&
+				deterministicInt(`${seedPrefix}-ot-flag`, 0, 99) < 40;
 			const overtimeMinutes = hasOvertime
 				? deterministicInt(`${seedPrefix}-ot-minutes`, 1, 2) * 60
 				: 0;
@@ -4445,26 +4470,44 @@ const generateAttendanceRecords = async (params: {
 				scheduleEndMinutes + timeOutOffsetMinutes + overtimeMinutes,
 			);
 			const calc = calculateTimekeeping(timeIn, timeOut, shift as any, dateOnly);
-			const status = determineAttendanceStatus(calc, true);
+			// Metrics treat non-empty "0:00" strings as violations; store null when zero so
+			// perfect-attendance rows qualify for perfectAttendanceMetrics.
+			const lateMinutes = perfectAttendance ? 0 : calc.lateMinutes;
+			const undertimeMinutes = perfectAttendance ? 0 : calc.undertimeMinutes;
+			const earlyOutMinutes = perfectAttendance ? 0 : calc.earlyOutMinutes;
+			const status = perfectAttendance ? "PRESENT" : determineAttendanceStatus(calc, true);
 			const scheduleSnapshot = toAttendanceScheduleSnapshot(shift);
+			const overtimeApplication = applyOvertimeApprovalPolicyToTimekeepingFields({
+				calc,
+				requireManagerApprovedOvertime: true,
+			});
 			attendanceCount++;
 			const attendanceWriteData = {
 				timeIn,
 				timeOut,
 				status,
-				behaviorFlags: deriveBehaviorFlags({
+				behaviorFlags: deriveOvertimeAwareBehaviorFlags({
 					timeIn,
 					timeOut,
 					schedule: shift as any,
 					date: dateOnly,
+					calc,
+					requireManagerApprovedOvertime: true,
 				}),
 				breakMinutes: calc.breakMinutes,
 				hoursWorked: formatMinutesAsTime(calc.totalMinutesWorked),
 				regularHours: formatMinutesAsTime(calc.regularMinutes),
-				overtimeHours: formatMinutesAsTime(calc.overtimeMinutes),
-				undertimeHours: formatMinutesAsTime(calc.undertimeMinutes),
-				lateHours: formatMinutesAsTime(calc.lateMinutes),
-				earlyOutHours: formatMinutesAsTime(calc.earlyOutMinutes),
+				overtimeHours: perfectAttendance
+					? null
+					: overtimeApplication.timekeepingFields.overtimeHours,
+				overtimeMinutes: perfectAttendance
+					? null
+					: overtimeApplication.timekeepingFields.overtimeMinutes,
+				undertimeHours:
+					undertimeMinutes > 0 ? formatMinutesAsTime(undertimeMinutes) : null,
+				lateHours: lateMinutes > 0 ? formatMinutesAsTime(lateMinutes) : null,
+				earlyOutHours:
+					earlyOutMinutes > 0 ? formatMinutesAsTime(earlyOutMinutes) : null,
 				scheduleSnapshot: { set: scheduleSnapshot } as any,
 				isManualEntry: true,
 			};
@@ -4498,6 +4541,14 @@ const generateAttendanceRecords = async (params: {
 	const intentionallySkippedDateKeys = new Set(
 		forceSkippedDateKeys.filter((dateKey) => attendancePayloadDateKeys.has(dateKey)),
 	);
+	// Real offices skew absences toward the edges of the work week (Monday/Friday)
+	// rather than spreading them uniformly. Biasing selection this way turns the
+	// per-employee AWOL budget into a believable weekly dip instead of arbitrary noise.
+	const awolWeekdayBias = (dateKey: string) => {
+		const dayOfWeek = new Date(`${dateKey}T00:00:00.000Z`).getUTCDay();
+		return dayOfWeek === 1 || dayOfWeek === 5 ? 0.4 : 1;
+	};
+
 	for (const periodConfig of periodWindowConfigs) {
 		if (periodConfig.desiredVirtualAwolCount <= 0) continue;
 		const candidates = workdayCandidatesByPeriod.get(periodConfig.id) || [];
@@ -4505,11 +4556,13 @@ const generateAttendanceRecords = async (params: {
 
 		const selectedCount = Math.min(periodConfig.desiredVirtualAwolCount, candidates.length);
 		const selectedDateKeys = [...candidates]
-			.sort(
-				(left, right) =>
-					hashSeed(`${employeeCode}-${periodConfig.id}-${left}-awol`) -
-					hashSeed(`${employeeCode}-${periodConfig.id}-${right}-awol`),
-			)
+			.sort((left, right) => {
+				const leftScore =
+					hashSeed(`${employeeCode}-${periodConfig.id}-${left}-awol`) * awolWeekdayBias(left);
+				const rightScore =
+					hashSeed(`${employeeCode}-${periodConfig.id}-${right}-awol`) * awolWeekdayBias(right);
+				return leftScore - rightScore;
+			})
 			.slice(0, selectedCount);
 
 		for (const dateKey of selectedDateKeys) {
@@ -4632,6 +4685,7 @@ const generateSeedEmployeeArtifacts = async (params: {
 		`${employeeProgressLabel}schedule assigned for ${params.definition.email} using template ${params.scheduleTemplateId}.`,
 	);
 
+	const wantsPerfectAttendance = Boolean(params.definition.perfectAttendance);
 	const attendanceSummary = await generateAttendanceRecords({
 		organizationId: params.organizationId,
 		employeeId: params.employee.id,
@@ -4639,6 +4693,7 @@ const generateSeedEmployeeArtifacts = async (params: {
 		startDate: params.backdateStartDate,
 		endDate: params.demoAttendanceEndDate,
 		includeOvertime: params.definition.includeOvertime,
+		perfectAttendance: wantsPerfectAttendance,
 		forceSkippedDateKeys: params.skipTodayAttendance
 			? [params.demoAttendanceEndDate.toISOString().split("T")[0]]
 			: [],
@@ -4647,18 +4702,23 @@ const generateSeedEmployeeArtifacts = async (params: {
 				id: period.id,
 				startDate: period.startDate,
 				endDate: period.endDate,
-				allowVirtualAwol: true,
+				// Perfect-attendance employees keep a full punched workday set.
+				allowVirtualAwol: !wantsPerfectAttendance,
 			})),
 			{
 				id: params.currentTargetPeriod.id,
 				startDate: params.currentTargetPeriod.startDate,
 				endDate: params.currentTargetPeriod.endDate,
-				allowVirtualAwol: false,
+				// Allow a couple of occasional unpunched days in the open period so day-by-day
+				// metrics (e.g. the attendance trend chart) show movement, not a flat line.
+				// CEO (perfectAttendance) never gets these intentional gaps.
+				allowVirtualAwol: !wantsPerfectAttendance,
+				maxVirtualAwolCount: 2,
 			},
 		],
 	});
 	logSeedStep(
-		`${employeeProgressLabel}attendance generated for ${params.definition.email}: ${attendanceSummary.attendanceCount} records across ${attendanceSummary.workdayCount} workdays (${attendanceSummary.intentionalVirtualAwolDays} intentionally unpunched day(s)).`,
+		`${employeeProgressLabel}attendance generated for ${params.definition.email}: ${attendanceSummary.attendanceCount} records across ${attendanceSummary.workdayCount} workdays (${attendanceSummary.intentionalVirtualAwolDays} intentionally unpunched day(s))${wantsPerfectAttendance ? " [perfectAttendance]" : ""}.`,
 	);
 
 	const targetPayrollPeriodIds = params.backdatedTargetPeriods.map((period) => period.id);
@@ -4907,9 +4967,88 @@ const generateSeedEmployeeArtifacts = async (params: {
 			notes: `Auto-generated current demo draft from ${params.sourceLabel}`,
 		},
 	});
+	await materializeTimesheetLinesFromObligations(prisma, {
+		organizationId: params.organizationId,
+		employeeId: params.employee.id,
+		payrollPeriodId: params.currentTargetPeriod.id,
+		timesheetId: currentTimesheet.id,
+		fromDate: params.currentTargetPeriod.startDate,
+		toDate: params.demoAttendanceEndDate,
+	});
+	if (params.definition.includeOvertime) {
+		await seedOvertimeDemoRequestsForCurrentDraft({
+			organizationId: params.organizationId,
+			employeeId: params.employee.id,
+			timesheetId: currentTimesheet.id,
+			email: params.definition.email,
+			sourceLabel: params.sourceLabel,
+			employeeProgressLabel,
+		});
+	}
 	logSeedStep(
 		`${employeeProgressLabel}current-period draft timesheet ready for ${params.definition.email}: ${currentTimesheet.code} (${params.currentTargetPeriod.code}, attendance through ${params.demoAttendanceEndDate.toISOString().split("T")[0]}).`,
 	);
+};
+
+const seedOvertimeDemoRequestsForCurrentDraft = async (params: {
+	organizationId: string;
+	employeeId: string;
+	timesheetId: string;
+	email: string;
+	sourceLabel: string;
+	employeeProgressLabel: string;
+}) => {
+	if (params.email !== "employee@seed.local") return;
+
+	const lines = await prisma.timesheetline.findMany({
+		where: {
+			organizationId: params.organizationId,
+			timesheetId: params.timesheetId,
+			isDeleted: false,
+			isEffective: true,
+		},
+		orderBy: { date: "asc" },
+		select: {
+			id: true,
+			date: true,
+			metadata: true,
+		},
+	});
+
+	const candidates = lines.filter((line) => {
+		const candidate = readOvertimeCandidateFromMetadata(line.metadata);
+		return candidate.isCandidate && !candidate.overtimeRequestId;
+	});
+	if (!candidates.length) {
+		logSeedStep(
+			`${params.employeeProgressLabel}no overtime candidates to demo-seed for ${params.email}.`,
+		);
+		return;
+	}
+
+	const targetLine = candidates[0];
+	try {
+		await createOvertimeRequestForTimesheetLine({
+			prisma,
+			organizationId: params.organizationId,
+			employeeId: params.employeeId,
+			timesheetId: params.timesheetId,
+			timesheetLineId: targetLine.id,
+			date: targetLine.date,
+			description: `Seeded overtime demo for ${targetLine.date.toISOString().split("T")[0]}`,
+			notes: `Auto-generated from ${params.sourceLabel}`,
+			generateRequestCode: async () => nextSeedRequestCode(),
+		});
+		logSeedStep(
+			`${params.employeeProgressLabel}seeded overtime request for ${params.email} on ${targetLine.date.toISOString().split("T")[0]} (${candidates.length - 1} candidate day(s) left for manual filing).`,
+		);
+	} catch (error) {
+		const message = String((error as Error)?.message || error);
+		if (message === "OVERTIME_REQUEST_ALREADY_FILED") return;
+		logSeedStep(
+			`${params.employeeProgressLabel}skipped overtime demo seed for ${params.email}: ${message}`,
+		);
+	}
 };
 
 const repairPastSeededTimesheetSnapshots = async (params: {
@@ -5024,7 +5163,7 @@ async function seedEmployeePopulation(options?: SeedScenarioOptions) {
 			  })
 			: await seedProjectDefaults(prisma, {
 					organizationId: options?.organizationId,
-					ensureAdminUsers: ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED,
+					ensureAdminUsers: false,
 			  }));
 	const organizationId = projectDefaults.organizationId;
 	logSeedStep(
@@ -5773,29 +5912,6 @@ async function seedEmployeePopulation(options?: SeedScenarioOptions) {
 				data: { managerId: employee.id },
 			});
 		}
-
-		const syncedDeviceEmpIds = await prisma.$executeRaw`
-			update employees
-			set "deviceEmpId" = case
-					when "employeeId" ~ '^[0-9]+$'
-						then coalesce(nullif(regexp_replace("employeeId", '^0+', ''), ''), '0')
-					else "employeeId"
-				end,
-				"updatedAt" = now()
-			where "organizationId" = ${organizationId}
-				and "isDeleted" = false
-				and (
-					"deviceEmpId" is null
-					or "deviceEmpId" <> case
-						when "employeeId" ~ '^[0-9]+$'
-							then coalesce(nullif(regexp_replace("employeeId", '^0+', ''), ''), '0')
-						else "employeeId"
-					end
-				)
-		`;
-		logSeedStep(
-			`ZKTeco employee device IDs verified: ${syncedDeviceEmpIds} live employee row(s) now use ZKTeco enroll IDs as deviceEmpId. Real ZKTeco events remain device-originated only.`,
-		);
 
 		if (scenario.seedConfig.generateDemoRequests) {
 			await executeRequestCreationSequentially(() =>

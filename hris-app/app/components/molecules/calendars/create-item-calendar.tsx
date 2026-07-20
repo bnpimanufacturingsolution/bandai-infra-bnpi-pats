@@ -34,7 +34,14 @@ export function CreateItemSidebar({
 	interface FormData {
 		title: string;
 		description: string;
-		type: "EVENT" | "HOLIDAY" | "COMPANY_EVENT" | "MEETING" | "DEADLINE" | "REMINDER";
+		type:
+			| "EVENT"
+			| "HOLIDAY"
+			| "COMPANY_EVENT"
+			| "MEETING"
+			| "DEADLINE"
+			| "REMINDER"
+			| "BIRTHDAY";
 		startDate: string;
 		endDate: string;
 		isAllDay: boolean;
@@ -84,7 +91,6 @@ export function CreateItemSidebar({
 			endDate: new Date(formData.endDate),
 			isAllDay: formData.isAllDay,
 			timezone: "Asia/Manila",
-			assignedUserIds: [],
 			location: formData.location,
 			isVirtual: formData.isVirtual,
 			meetingUrl: formData.meetingUrl || "",

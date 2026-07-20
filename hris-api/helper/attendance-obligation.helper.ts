@@ -68,6 +68,10 @@ import {
 	getDateKeyInBusinessTimeZone,
 } from "./attendance.helper";
 import { calculateTimekeeping, determineAttendanceStatus } from "./timekeeping.helper";
+import {
+	mergeOvertimeMetadata,
+	resolveOvertimePolicyApplication,
+} from "./overtime-approval.helper";
 import { resolveEffectiveShift } from "./employee-schedule.helper";
 import {
 	buildTimesheetDaySnapshotMetadata,
@@ -906,10 +910,22 @@ export async function applyAttendanceToObligation(
 		scheduleSnapshot,
 		attendance.date || date,
 	);
+	const existingObligationMetadata =
+		obligation?.metadata && typeof obligation.metadata === "object" ? obligation.metadata : {};
+	const overtimeApplication = await resolveOvertimePolicyApplication(prisma, params.organizationId, {
+		calc: timekeepingCalc,
+		timeIn: attendance.timeIn,
+		timeOut: attendance.timeOut,
+		schedule: scheduleSnapshot,
+		date: attendance.date || date,
+		existingMetadata: existingObligationMetadata as Record<string, unknown>,
+		attendanceStatus: attendance.status,
+	});
 	const clockFields = buildClockTimekeepingFields({
 		...attendance,
 		date: attendance.date || date,
 		scheduleSnapshot,
+		...overtimeApplication.timekeepingFields,
 	});
 	const existingNonWorkStatus = NON_WORK_STATUSES.has(
 		String(obligation?.status || "").toUpperCase(),
@@ -943,7 +959,10 @@ export async function applyAttendanceToObligation(
 		regularHours:
 			clockFields?.regularHours || attendance.regularHours || minutesToTimeString(timekeepingCalc.regularMinutes),
 		overtimeHours:
-			clockFields?.overtimeHours || attendance.overtimeHours || minutesToTimeString(timekeepingCalc.overtimeMinutes),
+			overtimeApplication.timekeepingFields.overtimeHours ||
+			clockFields?.overtimeHours ||
+			attendance.overtimeHours ||
+			"0:00",
 		undertimeHours:
 			clockFields?.undertimeHours || attendance.undertimeHours || minutesToTimeString(timekeepingCalc.undertimeMinutes),
 		lateHours:
@@ -951,13 +970,22 @@ export async function applyAttendanceToObligation(
 		earlyOutHours:
 			clockFields?.earlyOutHours || attendance.earlyOutHours || minutesToTimeString(timekeepingCalc.earlyOutMinutes),
 		breakMinutes: clockFields?.breakMinutes ?? attendance.breakMinutes ?? timekeepingCalc.breakMinutes ?? null,
-		behaviorFlags: Array.isArray(attendance.behaviorFlags) ? attendance.behaviorFlags : [],
+		behaviorFlags: overtimeApplication.behaviorFlags.length
+			? overtimeApplication.behaviorFlags
+			: Array.isArray(attendance.behaviorFlags)
+				? attendance.behaviorFlags
+				: [],
 		scheduleSnapshot: scheduleSnapshot as any,
 		scheduleFingerprint: getScheduleFingerprint(scheduleSnapshot),
 		source: String((attendance as any).ledgerType || "ATTENDANCE").toUpperCase(),
 		sourceRequestId: attendance.sourceRequestId || null,
 		metadata: {
-			...((obligation?.metadata && typeof obligation.metadata === "object") ? obligation.metadata : {}),
+			...mergeOvertimeMetadata(
+				(obligation?.metadata && typeof obligation.metadata === "object")
+					? obligation.metadata
+					: {},
+				overtimeApplication.metadata,
+			),
 			attendanceAppliedAt: new Date().toISOString(),
 		},
 		...employeeSnapshot,

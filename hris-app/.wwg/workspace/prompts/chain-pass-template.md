@@ -1,13 +1,15 @@
 # Chain Pass Prompt Template
 
 Status: ACTIVE
-Last reviewed: 2026-05-26
+Last reviewed: 2026-06-26
 
 ## Purpose
 
 Reusable prompt structure for context-efficient WWG prompt chains.
 
-Use this template for medium-risk, high-risk, multi-step, or cross-repo work. The template should stay small; stable rules live in WWG governance and context files.
+Use this template for intermediate passes in medium-risk, high-risk, multi-step, or cross-repo prompt chains. The template should stay small; stable rules live in WWG governance and context files.
+
+Use `.wwg/workspace/prompts/agent-meta-prompt-template.md` for chain kickoff framing and final close-out. Use this file only for the in-between execution passes.
 
 ## Prompt
 
@@ -57,5 +59,6 @@ Return an updated compact state packet. Summarize passing tests by command and r
 
 - One pass should have one clear job.
 - Passes should hand off decisions and changed files, not transcript history.
+- This is the compact execution-pass companion to the full agent meta-template, not a standalone replacement for kickoff planning or final handoff.
 - Full standalone prompts are reserved for external agent runs where WWG context is unavailable.
 - If the next pass is in the same conversation, paste only the updated state packet and next pass goal.

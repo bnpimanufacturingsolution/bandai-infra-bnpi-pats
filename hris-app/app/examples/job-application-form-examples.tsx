@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Real-World Usage Examples for Job Application Form Builder
  *

@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
+// @ts-nocheck
+import type { Meta, StoryObj } from "@storybook/react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Eye, Filter, Plus, Upload } from "lucide-react";

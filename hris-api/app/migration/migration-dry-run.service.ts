@@ -25,7 +25,6 @@ const DM4_TIMESHEET_REVIEW_LINK = "/hr/timesheets";
 const APPROVED_OT_WORKBOOK_PATTERN = /2026\s+rptOvertimeDetails\.xlsx$/i;
 const ANY_APPROVED_OT_WORKBOOK_PATTERN = /\d{4}\s+rptOvertimeDetails\.xlsx$/i;
 const DEFAULT_APPROVED_OT_WORKBOOK = ["docs", "Bandai Payroll", "2026 rptOvertimeDetails.xlsx"];
-const API_PACKAGE_NAME = "hris-api";
 
 function normalizeSheetKey(value: string) {
 	return String(value || "")
@@ -71,46 +70,10 @@ function parseMoney(value: unknown) {
 	return Number.isFinite(parsed) ? parsed : null;
 }
 
-function isHrisApiRoot(candidate: string) {
-	try {
-		const packagePath = path.join(candidate, "package.json");
-		if (!fs.existsSync(packagePath)) return false;
-		const parsed = JSON.parse(fs.readFileSync(packagePath, "utf8"));
-		return parsed?.name === API_PACKAGE_NAME;
-	} catch {
-		return false;
-	}
-}
-
-export function getMigrationApiRoot() {
+function resolveRepoPath(...segments: string[]) {
 	const candidates = [
-		process.cwd(),
-		path.resolve(process.cwd(), API_PACKAGE_NAME),
-		path.resolve(__dirname, "..", "..", ".."),
-		path.resolve(__dirname, "..", "..", "..", API_PACKAGE_NAME),
-	];
-	return candidates.find(isHrisApiRoot) || process.cwd();
-}
-
-export function getMigrationRepoRoot() {
-	const apiRoot = getMigrationApiRoot();
-	const parent = path.resolve(apiRoot, "..");
-	const candidates = [parent, process.cwd(), path.resolve(process.cwd(), "..")];
-	return candidates.find((candidate) => fs.existsSync(path.join(candidate, "AGENTS.md"))) || parent;
-}
-
-export function resolveMigrationApiPath(...segments: string[]) {
-	return path.resolve(getMigrationApiRoot(), ...segments);
-}
-
-export function resolveMigrationRepoPath(...segments: string[]) {
-	const repoRoot = getMigrationRepoRoot();
-	const apiRoot = getMigrationApiRoot();
-	const candidates = [
-		path.resolve(repoRoot, ...segments),
-		path.resolve(apiRoot, ...segments),
-		path.resolve(process.cwd(), ...segments),
 		path.resolve(process.cwd(), "..", ...segments),
+		path.resolve(process.cwd(), ...segments),
 	];
 	return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0];
 }
@@ -129,7 +92,7 @@ function collectWorkbookFiles(sourcePath: string): string[] {
 }
 
 function toRepoDisplayPath(filePath: string) {
-	const repoRoot = getMigrationRepoRoot();
+	const repoRoot = path.resolve(process.cwd(), "..");
 	const relative = path.relative(repoRoot, filePath);
 	return relative && !relative.startsWith("..") && !path.isAbsolute(relative)
 		? relative.replace(/\\/g, "/")
@@ -140,8 +103,8 @@ export function resolveMigrationDm4SourceFiles(rawSourceFiles: unknown[]) {
 	const resolvedInputs = rawSourceFiles
 		.map((item) => String(item || "").trim())
 		.filter(Boolean)
-		.map((filePath) => (path.isAbsolute(filePath) ? filePath : resolveMigrationRepoPath(filePath)));
-	const defaultApprovedOtWorkbook = resolveMigrationRepoPath(...DEFAULT_APPROVED_OT_WORKBOOK);
+		.map((filePath) => (path.isAbsolute(filePath) ? filePath : resolveRepoPath(filePath)));
+	const defaultApprovedOtWorkbook = resolveRepoPath(...DEFAULT_APPROVED_OT_WORKBOOK);
 	if (
 		resolvedInputs.length > 0 &&
 		fs.existsSync(defaultApprovedOtWorkbook) &&
@@ -176,8 +139,7 @@ export function resolveMigrationDm4SourceFiles(rawSourceFiles: unknown[]) {
 }
 
 async function runDm4DryRunProofScript(resolution: ReturnType<typeof resolveMigrationDm4SourceFiles>) {
-	const apiRoot = getMigrationApiRoot();
-	const scriptPath = resolveMigrationApiPath("scripts", "bnpi-demo-attendance-proof.cjs");
+	const scriptPath = path.resolve(process.cwd(), "scripts", "bnpi-demo-attendance-proof.cjs");
 	if (!fs.existsSync(scriptPath)) {
 		throw new Error("DM4 proof script was not found.");
 	}
@@ -192,7 +154,7 @@ async function runDm4DryRunProofScript(resolution: ReturnType<typeof resolveMigr
 		let stdout = "";
 		let stderr = "";
 		const child = spawn(process.execPath, args, {
-			cwd: apiRoot,
+			cwd: process.cwd(),
 			windowsHide: true,
 			stdio: ["ignore", "pipe", "pipe"],
 		});
@@ -226,17 +188,16 @@ async function runApprovedOvertimeDryRun(workbookPath?: string) {
 	if (!workbookPath) {
 		return { mode: "dry-run", plannedLineUpdates: 0, touchedTimesheets: 0, missingSourceRows: 0 };
 	}
-	const apiRoot = getMigrationApiRoot();
-	const scriptPath = resolveMigrationApiPath("scripts", "repair-bandai-payroll-source-timesheet-lines.ts");
+	const scriptPath = path.resolve(process.cwd(), "scripts", "repair-bandai-payroll-source-timesheet-lines.ts");
 	if (!fs.existsSync(scriptPath)) {
 		return { mode: "dry-run", skipped: true, reason: "script_missing", plannedLineUpdates: 0 };
 	}
 	return new Promise<Record<string, any>>((resolve, reject) => {
 		let stdout = "";
 		let stderr = "";
-		const tsxCliPath = resolveMigrationApiPath("node_modules", "tsx", "dist", "cli.mjs");
+		const tsxCliPath = path.resolve(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
 		const child = spawn(process.execPath, [tsxCliPath, scriptPath, `--overtime-workbook=${workbookPath}`], {
-			cwd: apiRoot,
+			cwd: process.cwd(),
 			windowsHide: true,
 			stdio: ["ignore", "pipe", "pipe"],
 		});

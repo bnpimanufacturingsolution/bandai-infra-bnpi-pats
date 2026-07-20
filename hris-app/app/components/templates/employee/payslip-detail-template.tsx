@@ -84,10 +84,58 @@ export default function PayslipDetailTemplate() {
 		absentDeduction = 0,
 		loanDeductions = 0,
 		otherDeductions = 0,
+		metadata,
 	} = payroll;
 	const attendanceAdjustments = absentDeduction + lateDeduction + earlyOutDeduction;
-	const totalEarnings = basicPay + overtimePay + nightDiffPay + holidayPay + allowances + bonuses;
+	const payrollSourceDetails = (
+		Array.isArray(metadata?.payrollSourceDetails) ? metadata.payrollSourceDetails : []
+	).filter((detail: any) => Math.abs(Number(detail?.amount || 0)) >= 0.005);
+	const getSourceRole = (detail: any) => {
+		const direction = String(detail?.direction || "").toUpperCase();
+		const action = String(detail?.reconciliationAction || "").toUpperCase();
+		if (direction === "LOAN" || direction === "DEDUCTION") return "deduction";
+		if (action === "RECEIVABLE_ONLY") return "postNet";
+		return "gross";
+	};
+	const grossSourceDetails = payrollSourceDetails.filter(
+		(detail: any) => getSourceRole(detail) === "gross",
+	);
+	const postNetSourceDetails = payrollSourceDetails.filter(
+		(detail: any) => getSourceRole(detail) === "postNet",
+	);
+	const deductionSourceDetails = payrollSourceDetails.filter(
+		(detail: any) => getSourceRole(detail) === "deduction",
+	);
+	const hasSourceBenefitLines = grossSourceDetails.length > 0;
+	const grossSourceTotal = grossSourceDetails.reduce(
+		(sum: number, detail: any) => sum + Number(detail.amount || 0),
+		0,
+	);
+	const lumpedAllowancesBonuses = hasSourceBenefitLines ? 0 : allowances + bonuses;
+	// Next-period retro lines from approved PayrollCorrection apply (API metadata).
+	const payrollCorrections: Array<{
+		correctionId?: string;
+		label?: string;
+		amount?: number;
+		sourcePayrollPeriodName?: string | null;
+		requestId?: string | null;
+	}> = Array.isArray(metadata?.payrollCorrections) ? metadata.payrollCorrections : [];
+	const payrollCorrectionTotal = payrollCorrections.reduce(
+		(sum, line) => sum + (Number(line.amount) || 0),
+		0,
+	);
+	const totalEarnings =
+		basicPay +
+		overtimePay +
+		nightDiffPay +
+		holidayPay +
+		lumpedAllowancesBonuses +
+		grossSourceTotal +
+		payrollCorrectionTotal;
 	const displayPayrollDeductions = totalDeductions;
+	const hasLoanSourceDetails = deductionSourceDetails.some(
+		(detail: any) => String(detail?.direction || "").toUpperCase() === "LOAN",
+	);
 
 	const person = employee.person.personalInfo;
 	const fullName = `${person.firstName} ${person.lastName}`;
@@ -278,18 +326,90 @@ export default function PayslipDetailTemplate() {
 									</div>
 								</div>
 							)}
-							{(allowances > 0 || bonuses > 0) && (
-								<div className="flex justify-between items-center py-2 border-b border-gray-50 text-sm">
-									<div>
-										<div className="font-medium text-gray-800">
-											Allowances & Bonuses
+							{hasSourceBenefitLines
+								? grossSourceDetails.map((detail: any) => (
+										<div
+											key={`${detail.source || "benefit"}-${detail.id || detail.name}`}
+											className="flex justify-between items-center py-2 border-b border-gray-50 text-sm">
+											<div>
+												<div className="font-medium text-gray-800">
+													{String(detail.name || "Benefit").trim() || "Benefit"}
+												</div>
+												{detail.benefitTypeName &&
+													String(detail.benefitTypeName).trim().toLowerCase() !==
+														String(detail.name || "")
+															.trim()
+															.toLowerCase() && (
+														<div className="text-xs text-gray-500">
+															{detail.benefitTypeName}
+														</div>
+													)}
+											</div>
+											<div className="font-semibold text-gray-900 tabular-nums">
+												{formatCurrency(Number(detail.amount || 0))}
+											</div>
 										</div>
+									))
+								: (allowances > 0 || bonuses > 0) && (
+										<div className="flex justify-between items-center py-2 border-b border-gray-50 text-sm">
+											<div>
+												<div className="font-medium text-gray-800">
+													Allowances & Bonuses
+												</div>
+											</div>
+											<div className="font-semibold text-gray-900 tabular-nums">
+												{formatCurrency(allowances + bonuses)}
+											</div>
+										</div>
+									)}
+							{payrollCorrections.length > 0 && (
+								<div className="pt-2 space-y-2">
+									<div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">
+										Adjustments / Retro
 									</div>
-									<div className="font-semibold text-gray-900 tabular-nums">
-										{formatCurrency(allowances + bonuses)}
-									</div>
+									{payrollCorrections.map((line, index) => (
+										<div
+											key={line.correctionId || `retro-${index}`}
+											className="flex justify-between items-start py-2 border-b border-neutral-100 text-sm">
+											<div>
+												<div className="font-medium text-neutral-800">
+													{line.label || "Prior-period correction"}
+												</div>
+												{(line.sourcePayrollPeriodName || line.requestId) && (
+													<div className="text-xs text-neutral-500">
+														{line.sourcePayrollPeriodName
+															? `Source: ${line.sourcePayrollPeriodName}`
+															: ""}
+														{line.requestId
+															? `${line.sourcePayrollPeriodName ? " · " : ""}Req ${String(line.requestId).slice(0, 8)}…`
+															: ""}
+													</div>
+												)}
+											</div>
+											<div className="font-semibold text-neutral-900 tabular-nums">
+												{formatCurrency(Number(line.amount) || 0)}
+											</div>
+										</div>
+									))}
 								</div>
 							)}
+							{postNetSourceDetails.map((detail: any) => (
+								<div
+									key={`postnet-${detail.source || "benefit"}-${detail.id || detail.name}`}
+									className="flex justify-between items-center py-2 border-b border-gray-50 text-sm">
+									<div>
+										<div className="font-medium text-gray-800">
+											{String(detail.name || "Benefit").trim() || "Benefit"}
+										</div>
+										<div className="text-xs text-gray-500">
+											{[detail.benefitTypeName, "After net pay"].filter(Boolean).join(" · ")}
+										</div>
+									</div>
+									<div className="font-semibold text-emerald-700 tabular-nums">
+										{formatCurrency(Number(detail.amount || 0))}
+									</div>
+								</div>
+							))}
 							<div className="flex justify-between items-center py-2 border-t border-gray-200 text-sm">
 								<div className="font-semibold text-gray-800">TOTAL EARNINGS</div>
 								<div className="font-bold text-gray-900 tabular-nums">
@@ -397,7 +517,32 @@ export default function PayslipDetailTemplate() {
 									</div>
 								</div>
 							</div>
-							{loanDeductions > 0 && (
+							{deductionSourceDetails.length > 0
+								? deductionSourceDetails.map((detail: any) => (
+										<div
+											key={`deduction-${detail.source || "benefit"}-${detail.id || detail.name}`}
+											className="flex justify-between items-start text-sm">
+											<div className="min-w-0 pr-3">
+												<div className="text-gray-700 font-medium">
+													{String(detail.name || "Deduction").trim() || "Deduction"}
+												</div>
+												{detail.benefitTypeName &&
+													String(detail.benefitTypeName).trim().toLowerCase() !==
+														String(detail.name || "")
+															.trim()
+															.toLowerCase() && (
+														<div className="text-xs text-gray-500">
+															{detail.benefitTypeName}
+														</div>
+													)}
+											</div>
+											<span className="font-semibold text-red-700 tabular-nums">
+												-{formatCurrency(Number(detail.amount || 0))}
+											</span>
+										</div>
+									))
+								: null}
+							{!hasLoanSourceDetails && loanDeductions > 0 && (
 								<div className="flex justify-between items-center text-sm">
 									<span className="text-gray-600">Loan Deductions</span>
 									<span className="font-semibold text-red-700 tabular-nums">
@@ -405,7 +550,7 @@ export default function PayslipDetailTemplate() {
 									</span>
 								</div>
 							)}
-							{otherDeductions > 0 && (
+							{deductionSourceDetails.length === 0 && otherDeductions > 0 && (
 								<div className="flex justify-between items-center text-sm">
 									<span className="text-gray-600">Other Deductions</span>
 									<span className="font-semibold text-red-700 tabular-nums">

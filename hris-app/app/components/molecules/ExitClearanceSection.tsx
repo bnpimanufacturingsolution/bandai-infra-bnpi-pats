@@ -14,10 +14,10 @@ import {
 	ChevronUp,
 } from "lucide-react";
 import { useBoardingProcessByEmployee } from "~/lib/hooks/useBoardingProcess";
-import { useBoardingTemplates } from "~/lib/hooks/useBoardingTemplates";
-import { useStartOffboarding } from "~/lib/hooks/useResignations";
+import { useStartOffboarding } from "~/lib/hooks/useRequests";
 import { useUpdateChecklistItem } from "~/lib/hooks/useChecklistItems";
 import { Progress } from "../ui/progress";
+import { ChecklistStatus } from "~/zod/checklist-item";
 
 interface ChecklistItem {
 	id: string;
@@ -100,19 +100,15 @@ export function ExitClearanceSection({
 
 	// Handle starting exit clearance
 	const handleStartExitClearance = () => {
-		startOffboardingMutation.mutate(
-			{ requestId },
-			{
-				onSuccess: () => {
-					// Success handled by mutation
-				},
-			},
-		);
+		startOffboardingMutation.mutate({ requestId });
 	};
 
 	// Handle updating checklist item status
 	const handleToggleItem = (item: any) => {
-		const newStatus = item.status === "COMPLETED" ? "PENDING" : "COMPLETED";
+		const newStatus =
+			item.status === ChecklistStatus.COMPLETED
+				? ChecklistStatus.PENDING
+				: ChecklistStatus.COMPLETED;
 		updateChecklistItemMutation.mutate({
 			id: item.id,
 			payload: {

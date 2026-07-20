@@ -12,33 +12,26 @@ import {
 import { buildPagination, buildSuccessResponse } from "../../helper/success-handler.helper";
 import { uploadToCloudinary } from "../../helper/cloudinary.helper";
 import { AuthRequest } from "../../middleware/verifyToken";
+import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
+import { buildUserActivityFeed } from "../../helper/user-activity-logs.helper";
+import { buildHrAuditFeed } from "../../helper/hr-audit-logs.helper";
 import jwt from "jsonwebtoken";
-import { getLogger } from "../../helper/logger.helper";
-import { redisClient } from "../../config/redis";
 
 const DEFAULT_ME_MESSAGE = "User profile retrieved successfully";
 const DEFAULT_LOGIN_MESSAGE = "Login successful";
 const DEFAULT_LOGOUT_MESSAGE = "Logout successful";
 const DEFAULT_PASSWORD_CHANGE_MESSAGE = "Password updated successfully";
 const DEFAULT_AVATAR_UPDATED_MESSAGE = "Avatar updated successfully";
-const DEFAULT_AVATAR_RETRIEVED_MESSAGE = "Avatar retrieved successfully";
 const REQUEST_TIMEOUT_MS = 8000;
 const bcrypt: {
 	compare(data: string, encrypted: string): Promise<boolean>;
 	hash(data: string, saltOrRounds: number): Promise<string>;
 } = require("bcryptjs");
-const logger = getLogger().child({ module: "auth" });
 
 type AnyRecord = Record<string, any>;
 type AuthRoleSource = "local" | "idp";
 type LocalUserStatus = "active" | "inactive" | "suspended" | "archived";
-type EmployeeKioskLoginConfig = {
-	enabled: boolean;
-	windowSeconds: number;
-	appCode: string;
-	audience: string;
-};
 type UnifiedAuthRole = {
 	id: string;
 	name: string;
@@ -183,23 +176,11 @@ const uploadUserAvatarFile = async (params: { file: Express.Multer.File; userId:
 		String(params.userId || "user")
 			.trim()
 			.replace(/[^a-zA-Z0-9_-]+/g, "_") || "user";
-	const extensionFromName = (params.file.originalname || "").match(/\.[a-zA-Z0-9]+$/)?.[0] || "";
-	const extensionFromMime =
-		params.file.mimetype === "image/png"
-			? ".png"
-			: params.file.mimetype === "image/webp"
-				? ".webp"
-				: params.file.mimetype === "image/gif"
-					? ".gif"
-					: params.file.mimetype === "image/jpeg"
-						? ".jpg"
-						: "";
-	const avatarExtension = (extensionFromMime || extensionFromName || ".jpg").toLowerCase();
 
 	return uploadToCloudinary(params.file.buffer, {
 		folder: `hris/users/${safeUserId}/avatar`,
 		resourceType: "image",
-		publicId: `avatar_${safeUserId}_${Date.now()}${avatarExtension}`,
+		publicId: `avatar_${safeUserId}_${Date.now()}`,
 		overwrite: true,
 		transformation: {
 			width: 512,
@@ -741,66 +722,6 @@ const buildLoginTokenPayload = (params: { profile: AnyRecord }): Record<string, 
 	};
 };
 
-const EMPLOYEE_KIOSK_LOGIN_DEFAULT_WINDOW_SECONDS = 12;
-const EMPLOYEE_KIOSK_LOGIN_MIN_WINDOW_SECONDS = 3;
-const EMPLOYEE_KIOSK_LOGIN_MAX_WINDOW_SECONDS = 120;
-const EMPLOYEE_KIOSK_LOGIN_DEFAULT_APP_CODE = "hris";
-const EMPLOYEE_KIOSK_LOGIN_DEFAULT_AUDIENCE = "employee-portal";
-
-const asJsonRecord = (value: unknown): Record<string, any> =>
-	value && typeof value === "object" && !Array.isArray(value) ? { ...(value as Record<string, any>) } : {};
-
-export const normalizeEmployeeKioskLoginConfig = (config: unknown): EmployeeKioskLoginConfig => {
-	const record = asJsonRecord(config);
-	const parsedWindowSeconds = Number(record.employeeKioskLoginWindowSeconds);
-	const windowSeconds = Number.isFinite(parsedWindowSeconds)
-		? Math.min(
-				EMPLOYEE_KIOSK_LOGIN_MAX_WINDOW_SECONDS,
-				Math.max(EMPLOYEE_KIOSK_LOGIN_MIN_WINDOW_SECONDS, Math.floor(parsedWindowSeconds)),
-			)
-		: EMPLOYEE_KIOSK_LOGIN_DEFAULT_WINDOW_SECONDS;
-	return {
-		enabled: record.employeeKioskLoginEnabled === true,
-		windowSeconds,
-		appCode:
-			String(record.employeeKioskLoginAppCode || "").trim() ||
-			EMPLOYEE_KIOSK_LOGIN_DEFAULT_APP_CODE,
-		audience:
-			String(record.employeeKioskLoginAudience || "").trim() ||
-			EMPLOYEE_KIOSK_LOGIN_DEFAULT_AUDIENCE,
-	};
-};
-
-export const isClaimableEmployeeKioskLoginEvent = (params: {
-	event: {
-		eventTime?: Date | string | null;
-		eventCategory?: string | null;
-		eventAction?: string | null;
-		status?: string | null;
-		employeeId?: string | null;
-	} | null | undefined;
-	now?: Date;
-	windowSeconds?: number;
-}): boolean => {
-	const event = params.event;
-	if (!event?.employeeId) return false;
-	if (!['ATTENDANCE', 'ACCESS_CONTROL'].includes(String(event.eventCategory || "").trim().toUpperCase())) return false;
-	if (!['TAP', 'UNKNOWN'].includes(String(event.eventAction || "").trim().toUpperCase())) return false;
-	const status = String(event.status || "").trim().toUpperCase();
-	if (!["MATCHED", "ATTENDANCE_CREATED", "ATTENDANCE_UPDATED"].includes(status)) return false;
-	const eventTime = event.eventTime ? new Date(event.eventTime) : null;
-	if (!eventTime || Number.isNaN(eventTime.getTime())) return false;
-	const now = params.now || new Date();
-	const windowSeconds = Math.max(
-		EMPLOYEE_KIOSK_LOGIN_MIN_WINDOW_SECONDS,
-		Math.floor(params.windowSeconds || EMPLOYEE_KIOSK_LOGIN_DEFAULT_WINDOW_SECONDS),
-	);
-	return now.getTime() - eventTime.getTime() <= windowSeconds * 1000;
-};
-
-export const buildEmployeeKioskLoginClaimKey = (eventId: string) =>
-	`kiosk-login-claim:${String(eventId || "").trim()}`;
-
 type LocalLoginUser = {
 	id: string;
 	email: string;
@@ -814,56 +735,6 @@ const normalizeLoginIdentifier = (value: unknown): string =>
 		.toLowerCase();
 
 const isEmailIdentifier = (value: string): boolean => value.includes("@");
-
-const getClientIp = (req: AuthRequest): string => {
-	const forwardedFor = req.get?.("x-forwarded-for");
-	if (forwardedFor) return forwardedFor.split(",")[0].trim();
-	return req.ip || req.socket?.remoteAddress || "unknown";
-};
-
-const getRedactedLoginPayload = (req: AuthRequest): AnyRecord => {
-	const body = asRecord(req.body);
-	return {
-		identifier: normalizeLoginIdentifier(body.identifier),
-		email: normalizeLoginIdentifier(body.email),
-		employeeId: normalizeLoginIdentifier(body.employeeId),
-		has_password: Boolean(body.password),
-		password: body.password ? "[REDACTED]" : "",
-	};
-};
-
-const logLoginFailure = (
-	req: AuthRequest,
-	params: {
-		identifier: string;
-		reason: string;
-		statusCode: number;
-		userId?: string;
-	},
-) => {
-	const normalizedIdentifier = normalizeLoginIdentifier(params.identifier);
-	const requestPayload = getRedactedLoginPayload(req);
-	logger.warn("auth.login.failed", {
-		event: "auth.login.failed",
-		login_identifier: normalizedIdentifier,
-		login_identifier_type: normalizedIdentifier
-			? isEmailIdentifier(normalizedIdentifier)
-				? "email"
-				: "employee_id"
-			: "missing",
-		login_failure_reason: params.reason,
-		status_code: params.statusCode,
-		user_id: params.userId || "",
-		has_password: Boolean((req.body as AnyRecord)?.password),
-		request_payload_summary: `identifier=${normalizedIdentifier || "missing"} has_password=${requestPayload.has_password}`,
-		request_payload_redacted: JSON.stringify(requestPayload),
-		request_payload: requestPayload,
-		ip: getClientIp(req),
-		user_agent: req.get?.("User-Agent") || "unknown",
-		path: req.originalUrl || req.url,
-		method: req.method,
-	});
-};
 
 const selectLocalLoginUser = {
 	id: true,
@@ -1033,6 +904,29 @@ const logAuthEvent = async (params: {
 				.trim()
 				.toLowerCase() || undefined;
 
+		const activityAction =
+			params.action === "LOGIN"
+				? appConstants.ACTIVITY_LOG.AUTH.ACTIONS.USER_LOGIN
+				: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.USER_LOGOUT;
+		const activityDescription =
+			params.action === "LOGIN"
+				? appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USER_LOGGED_IN
+				: appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USER_LOGGED_OUT;
+		const activityPage =
+			params.action === "LOGIN"
+				? appConstants.ACTIVITY_LOG.AUTH.PAGES.USER_LOGIN
+				: appConstants.ACTIVITY_LOG.AUTH.PAGES.USER_LOGOUT;
+
+		logActivity(actor.auditReq, {
+			userId: actor.userId,
+			action: activityAction,
+			description: activityDescription,
+			page: {
+				url: actor.auditReq.originalUrl,
+				title: activityPage,
+			},
+		});
+
 		await logAudit(actor.auditReq, {
 			userId: actor.userId,
 			action: appConstants.AUDIT_LOG.ACTIONS[params.action],
@@ -1063,72 +957,6 @@ const logAuthEvent = async (params: {
 };
 
 export const controller = (prisma: PrismaClient) => {
-	const issueAuthenticatedSession = async (params: {
-		req: AuthRequest;
-		res: Response;
-		profile: AnyRecord;
-		message?: string;
-	}): Promise<string> => {
-		const jwtSecret = String(process.env.JWT_SECRET || "").trim();
-		if (!jwtSecret) {
-			throw Object.assign(new Error("JWT_SECRET is not configured"), { statusCode: 500 });
-		}
-
-		const token = jwt.sign(buildLoginTokenPayload({ profile: params.profile }), jwtSecret, {
-			expiresIn: "24h",
-		});
-
-		params.res.cookie("token", token, buildAuthCookieOptions(params.req));
-		params.res.status(200).json(
-			buildSuccessResponse(params.message || DEFAULT_LOGIN_MESSAGE, { ...params.profile, token }, 200),
-		);
-		return token;
-	};
-
-	const claimEmployeeKioskLoginEvent = async (params: {
-		eventId: string;
-		deviceId: string;
-		payload: unknown;
-		now: Date;
-		windowSeconds: number;
-	}): Promise<"claimed" | "duplicate"> => {
-		const claimKey = buildEmployeeKioskLoginClaimKey(params.eventId);
-		if (redisClient.isClientConnected()) {
-			const result = await redisClient.set(
-				claimKey,
-				JSON.stringify({
-					eventId: params.eventId,
-					deviceId: params.deviceId,
-					claimedAt: params.now.toISOString(),
-				}),
-				{ ttl: Math.max(params.windowSeconds * 10, 120), nx: true },
-			);
-			return result === "OK" ? "claimed" : "duplicate";
-		}
-
-		const payloadRecord = asJsonRecord(params.payload);
-		const kioskLogin = asJsonRecord(payloadRecord.kioskLogin);
-		if (kioskLogin.claimedAt) {
-			return "duplicate";
-		}
-
-		await (prisma as any).deviceEvent.update({
-			where: { id: params.eventId },
-			data: {
-				payload: {
-					...payloadRecord,
-					kioskLogin: {
-						...kioskLogin,
-						claimedAt: params.now.toISOString(),
-						deviceId: params.deviceId,
-						audience: EMPLOYEE_KIOSK_LOGIN_DEFAULT_AUDIENCE,
-					},
-				},
-			},
-		});
-		return "claimed";
-	};
-
 	const login = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		try {
 			const rawIdentifier =
@@ -1140,11 +968,6 @@ export const controller = (prisma: PrismaClient) => {
 			const password = String((req.body as AnyRecord)?.password || "");
 
 			if (!identifier || !password) {
-				logLoginFailure(req, {
-					identifier,
-					reason: !identifier ? "missing_identifier" : "missing_password",
-					statusCode: 400,
-				});
 				res.status(400).json(
 					buildErrorResponse("Employee ID or email and password are required", 400),
 				);
@@ -1193,35 +1016,17 @@ export const controller = (prisma: PrismaClient) => {
 			const localUser = await resolveLocalLoginUserByIdentifier(prisma, identifier);
 
 			if (!localUser?.password) {
-				logLoginFailure(req, {
-					identifier,
-					reason: localUser ? "password_not_set" : "user_not_found",
-					statusCode: 401,
-					userId: localUser?.id,
-				});
 				res.status(401).json(buildErrorResponse("Invalid credentials", 401));
 				return;
 			}
 
 			const isValidPassword = await bcrypt.compare(password, localUser.password);
 			if (!isValidPassword) {
-				logLoginFailure(req, {
-					identifier,
-					reason: "invalid_password",
-					statusCode: 401,
-					userId: localUser.id,
-				});
 				res.status(401).json(buildErrorResponse("Invalid credentials", 401));
 				return;
 			}
 
 			if (String(localUser.status || "").toLowerCase() !== "active") {
-				logLoginFailure(req, {
-					identifier,
-					reason: "account_not_active",
-					statusCode: 403,
-					userId: localUser.id,
-				});
 				res.status(403).json(buildErrorResponse("Account is not active", 403));
 				return;
 			}
@@ -1244,412 +1049,23 @@ export const controller = (prisma: PrismaClient) => {
 				profile,
 			});
 
-			try {
-				await issueAuthenticatedSession({
-					req,
-					res,
-					profile,
-					message: DEFAULT_LOGIN_MESSAGE,
-				});
-			} catch (sessionError: any) {
-				logLoginFailure(req, {
-					identifier,
-					reason: "jwt_secret_missing",
-					statusCode: sessionError?.statusCode || 500,
-					userId: localUser.id,
-				});
-				throw sessionError;
-			}
-		} catch (error: any) {
-			const statusCode =
-				typeof error?.statusCode === "number" && error.statusCode >= 400
-					? error.statusCode
-					: 500;
-			res.status(statusCode).json(buildErrorResponse(error?.message || "Failed to login", statusCode));
-		}
-	};
-
-	const claimBiometricKioskLogin = async (
-		req: AuthRequest,
-		res: Response,
-		_next: NextFunction,
-	) => {
-		try {
-			const deviceId = String((req.body as AnyRecord)?.deviceId || "").trim();
-			const appCode = String((req.body as AnyRecord)?.appCode || "").trim() || "hris";
-			const now = new Date();
-			let enabledKioskDevices: Array<{
-				id: string;
-				organizationId: string;
-				name: string;
-				config: any;
-				isDeleted: boolean;
-			}> = [];
-			let device = deviceId
-				? await prisma.device.findFirst({
-						where: { id: deviceId },
-						select: { id: true, organizationId: true, name: true, config: true, isDeleted: true },
-					})
-				: null;
-			if (deviceId && (!device || device.isDeleted === true)) {
-				res.status(404).json(buildErrorResponse("Device not found", 404));
-				return;
-			}
-			if (device) {
-				const requestedDeviceConfig = normalizeEmployeeKioskLoginConfig(device.config);
-				if (!requestedDeviceConfig.enabled || appCode !== requestedDeviceConfig.appCode) {
-					res.status(403).json(buildErrorResponse("Employee kiosk biometric login is disabled for this device", 403));
-					return;
-				}
-				enabledKioskDevices = [device];
-			} else {
-				const candidateDevices = await prisma.device.findMany({
-					where: { isDeleted: false },
-					select: { id: true, organizationId: true, name: true, config: true, isDeleted: true },
-				});
-				enabledKioskDevices = candidateDevices.filter((candidate) => {
-					const candidateConfig = normalizeEmployeeKioskLoginConfig(candidate.config);
-					return candidateConfig.enabled && appCode === candidateConfig.appCode;
-				});
-				if (enabledKioskDevices.length === 0) {
-					res.status(404).json(buildErrorResponse("No enabled kiosk device has a fresh biometric tap", 404));
-					return;
-				}
-			}
-			const eventRecords = await (prisma as any).deviceEvent.findMany({
-				where: {
-					deviceId: { in: enabledKioskDevices.map((candidate) => candidate.id) },
-					eventCategory: { in: ["ATTENDANCE", "ACCESS_CONTROL"] },
-					eventAction: { in: ["TAP", "UNKNOWN"] },
-					status: {
-						in: ["MATCHED", "ATTENDANCE_CREATED", "ATTENDANCE_UPDATED"],
-					},
-					employeeId: {
-						not: null,
-					},
-					eventTime: { gte: new Date(now.getTime() - EMPLOYEE_KIOSK_LOGIN_MAX_WINDOW_SECONDS * 1000) },
-				},
-				orderBy: [
-					{ eventTime: "desc" },
-					{ updatedAt: "desc" },
-				],
-				take: 25,
-				select: {
-					id: true,
-					organizationId: true,
-					deviceId: true,
-					employeeId: true,
-					eventTime: true,
-					eventCategory: true,
-					eventAction: true,
-					status: true,
-					payload: true,
-				},
-			});
-			const enabledDevicesById = new Map(
-				enabledKioskDevices.map((candidate) => [candidate.id, candidate]),
-			);
-			const eventRecord = eventRecords.find((candidate: any) => {
-				const candidateDevice = enabledDevicesById.get(String(candidate.deviceId || ""));
-				const candidateConfig = normalizeEmployeeKioskLoginConfig(candidateDevice?.config);
-				return (
-					Boolean(candidateDevice) &&
-					isClaimableEmployeeKioskLoginEvent({
-						event: candidate,
-						now,
-						windowSeconds: candidateConfig.windowSeconds,
-					})
-				);
-			});
-			device = device || (eventRecord ? enabledDevicesById.get(String(eventRecord.deviceId || "")) || null : null);
-			if (!device || device.isDeleted === true) {
-				res.status(404).json(
-					buildErrorResponse(
-						enabledKioskDevices.length > 0
-							? "No fresh biometric kiosk login tap is available"
-							: "No enabled kiosk device has a fresh biometric tap",
-						404,
-					),
-				);
-				return;
-			}
-			const kioskConfig = normalizeEmployeeKioskLoginConfig(device.config);
-			if (!kioskConfig.enabled || appCode !== kioskConfig.appCode) {
-				res.status(403).json(buildErrorResponse("Employee kiosk biometric login is disabled for this device", 403));
+			const jwtSecret = String(process.env.JWT_SECRET || "").trim();
+			if (!jwtSecret) {
+				res.status(500).json(buildErrorResponse("JWT_SECRET is not configured", 500));
 				return;
 			}
 
-			if (
-				!isClaimableEmployeeKioskLoginEvent({
-					event: eventRecord,
-					now,
-					windowSeconds: kioskConfig.windowSeconds,
-				})
-			) {
-				res.status(404).json(buildErrorResponse("No fresh biometric kiosk login tap is available", 404));
-				return;
-			}
-
-			const claimResult = await claimEmployeeKioskLoginEvent({
-				eventId: eventRecord.id,
-				deviceId: device.id,
-				payload: eventRecord.payload,
-				now,
-				windowSeconds: kioskConfig.windowSeconds,
-			});
-			if (claimResult === "duplicate") {
-				res.status(409).json(buildErrorResponse("This biometric tap has already been used for kiosk login", 409));
-				return;
-			}
-
-			const employee = await prisma.employee.findFirst({
-				where: {
-					id: String(eventRecord.employeeId || ""),
-					isDeleted: false,
-					organizationId: device.organizationId,
-				},
-				select: {
-					id: true,
-					userId: true,
-				},
-			});
-			const userId = String(employee?.userId || "").trim();
-			if (!employee?.id || !userId) {
-				res.status(404).json(buildErrorResponse("No user account is linked to the tapped employee", 404));
-				return;
-			}
-
-			const localUser = await prisma.user.findFirst({
-				where: {
-					id: userId,
-					isDeleted: false,
-				},
-				select: selectLocalLoginUser,
-			});
-			if (!localUser) {
-				res.status(404).json(buildErrorResponse("User not found", 404));
-				return;
-			}
-			if (String(localUser.status || "").toLowerCase() !== "active") {
-				res.status(403).json(buildErrorResponse("Account is not active", 403));
-				return;
-			}
-
-			await prisma.user.update({
-				where: { id: localUser.id },
-				data: { lastLogin: now },
+			const token = jwt.sign(buildLoginTokenPayload({ profile }), jwtSecret, {
+				expiresIn: "24h",
 			});
 
-			const localReq = { ...req, userId: localUser.id } as AuthRequest;
-			const profile = normalizeProfile(await loadLocalUserProfile(prisma, localReq));
-			await logAuthEvent({
-				prisma,
-				req: localReq,
-				action: "LOGIN",
-				description: `Employee kiosk biometric login succeeded via device ${device.name || device.id}`,
-				email: localUser.email,
-				userId: localUser.id,
-				profile,
-			});
-
-			await issueAuthenticatedSession({
-				req,
-				res,
-				profile,
-				message: "Biometric kiosk login successful",
-			});
-		} catch (error: any) {
-			const statusCode =
-				typeof error?.statusCode === "number" && error.statusCode >= 400
-					? error.statusCode
-					: 500;
-			res.status(statusCode).json(
-				buildErrorResponse(error?.message || "Failed to claim biometric kiosk login", statusCode),
-			);
-		}
-	};
-
-	/**
-	 * Public kiosk wait-state diagnosis for employee portal / Playwright.
-	 * Does not claim a tap. Returns structured classification so UIs can show
-	 * "waiting for tap" without treating 404 claim polls as hard failures.
-	 */
-	const getBiometricKioskLoginStatus = async (
-		req: AuthRequest,
-		res: Response,
-		_next: NextFunction,
-	) => {
-		try {
-			const deviceId = String((req.query as AnyRecord)?.deviceId || "").trim();
-			const appCode =
-				String((req.query as AnyRecord)?.appCode || "").trim() || EMPLOYEE_KIOSK_LOGIN_DEFAULT_APP_CODE;
-			const now = new Date();
-
-			let enabledKioskDevices: Array<{
-				id: string;
-				organizationId: string;
-				name: string;
-				config: any;
-				isDeleted: boolean;
-			}> = [];
-
-			if (deviceId) {
-				const device = await prisma.device.findFirst({
-					where: { id: deviceId },
-					select: { id: true, organizationId: true, name: true, config: true, isDeleted: true },
-				});
-				if (!device || device.isDeleted === true) {
-					res.status(404).json(buildErrorResponse("Device not found", 404));
-					return;
-				}
-				const requestedConfig = normalizeEmployeeKioskLoginConfig(device.config);
-				if (requestedConfig.enabled && appCode === requestedConfig.appCode) {
-					enabledKioskDevices = [device];
-				}
-			} else {
-				const candidateDevices = await prisma.device.findMany({
-					where: { isDeleted: false },
-					select: { id: true, organizationId: true, name: true, config: true, isDeleted: true },
-				});
-				enabledKioskDevices = candidateDevices.filter((candidate) => {
-					const candidateConfig = normalizeEmployeeKioskLoginConfig(candidate.config);
-					return candidateConfig.enabled && appCode === candidateConfig.appCode;
-				});
-			}
-
-			if (enabledKioskDevices.length === 0) {
-				res.status(200).json(
-					buildSuccessResponse("No enabled kiosk devices for biometric login", {
-						waiting: true,
-						freshTapAvailable: false,
-						classification: "NO_ENABLED_KIOSK_DEVICE",
-						appCode,
-						enabledKioskDeviceCount: 0,
-						enabledKioskDevices: [],
-						newestFreshCandidate: null,
-						newestRelatedTap: null,
-						syntheticTapSupported: true,
-						syntheticTapPath: "POST /api/device/kiosk/synthetic-tap",
-						claimPath: "POST /api/auth/biometric/kiosk-login/claim",
-					}),
-				);
-				return;
-			}
-
-			const enabledDevicesById = new Map(
-				enabledKioskDevices.map((candidate) => [candidate.id, candidate]),
-			);
-			const maxWindowSeconds = Math.max(
-				...enabledKioskDevices.map(
-					(candidate) => normalizeEmployeeKioskLoginConfig(candidate.config).windowSeconds,
-				),
-				EMPLOYEE_KIOSK_LOGIN_DEFAULT_WINDOW_SECONDS,
-			);
-			// Look beyond the claim window so operators can see "stale but related" taps.
-			const lookbackSeconds = Math.max(maxWindowSeconds * 30, 3600);
-			const eventRecords = await (prisma as any).deviceEvent.findMany({
-				where: {
-					deviceId: { in: enabledKioskDevices.map((candidate) => candidate.id) },
-					eventCategory: { in: ["ATTENDANCE", "ACCESS_CONTROL"] },
-					eventAction: { in: ["TAP", "UNKNOWN"] },
-					status: {
-						in: ["MATCHED", "ATTENDANCE_CREATED", "ATTENDANCE_UPDATED"],
-					},
-					employeeId: { not: null },
-					eventTime: { gte: new Date(now.getTime() - lookbackSeconds * 1000) },
-				},
-				orderBy: [{ eventTime: "desc" }, { updatedAt: "desc" }],
-				take: 25,
-				select: {
-					id: true,
-					deviceId: true,
-					employeeId: true,
-					employeeNo: true,
-					eventTime: true,
-					eventCategory: true,
-					eventAction: true,
-					status: true,
-					source: true,
-					payload: true,
-				},
-			});
-
-			const summarizeEvent = (event: any, windowSeconds: number) => {
-				const eventTime = event?.eventTime ? new Date(event.eventTime) : null;
-				const ageSeconds =
-					eventTime && !Number.isNaN(eventTime.getTime())
-						? Math.max(0, Math.round((now.getTime() - eventTime.getTime()) / 1000))
-						: null;
-				const payload = asJsonRecord(event?.payload);
-				return {
-					eventId: event.id,
-					deviceId: event.deviceId,
-					employeeId: event.employeeId,
-					employeeNo: event.employeeNo,
-					eventTime: event.eventTime,
-					eventCategory: event.eventCategory,
-					eventAction: event.eventAction,
-					status: event.status,
-					source: event.source,
-					ageSeconds,
-					windowSeconds,
-					withinWindow: isClaimableEmployeeKioskLoginEvent({
-						event,
-						now,
-						windowSeconds,
-					}),
-					synthetic: payload.synthetic === true || String(event.source || "") === "EN_SYNTHETIC_KIOSK_TAP",
-					physicalDeviceTruth: payload.physicalDeviceTruth !== false && payload.synthetic !== true,
-				};
-			};
-
-			let newestFreshCandidate: ReturnType<typeof summarizeEvent> | null = null;
-			let newestRelatedTap: ReturnType<typeof summarizeEvent> | null = null;
-			for (const event of eventRecords) {
-				const device = enabledDevicesById.get(String(event.deviceId || ""));
-				const windowSeconds = normalizeEmployeeKioskLoginConfig(device?.config).windowSeconds;
-				const summary = summarizeEvent(event, windowSeconds);
-				if (!newestRelatedTap) newestRelatedTap = summary;
-				if (!newestFreshCandidate && summary.withinWindow) {
-					newestFreshCandidate = summary;
-					break;
-				}
-			}
-
-			const classification = newestFreshCandidate
-				? "FRESH_TAP_AVAILABLE"
-				: newestRelatedTap
-					? "NO_FRESH_TAP_STALE_ONLY"
-					: "NO_FRESH_TAP";
+			res.cookie("token", token, buildAuthCookieOptions(req));
 
 			res.status(200).json(
-				buildSuccessResponse("Biometric kiosk login status loaded", {
-					waiting: !newestFreshCandidate,
-					freshTapAvailable: Boolean(newestFreshCandidate),
-					classification,
-					appCode,
-					enabledKioskDeviceCount: enabledKioskDevices.length,
-					enabledKioskDevices: enabledKioskDevices.map((device) => {
-						const cfg = normalizeEmployeeKioskLoginConfig(device.config);
-						return {
-							id: device.id,
-							name: device.name,
-							windowSeconds: cfg.windowSeconds,
-							appCode: cfg.appCode,
-						};
-					}),
-					newestFreshCandidate,
-					newestRelatedTap,
-					syntheticTapSupported: true,
-					syntheticTapPath: "POST /api/device/kiosk/synthetic-tap",
-					claimPath: "POST /api/auth/biometric/kiosk-login/claim",
-					checkedAt: now.toISOString(),
-				}),
+				buildSuccessResponse(DEFAULT_LOGIN_MESSAGE, { ...profile, token }, 200),
 			);
 		} catch (error: any) {
-			res.status(500).json(
-				buildErrorResponse(error?.message || "Failed to load biometric kiosk login status", 500),
-			);
+			res.status(500).json(buildErrorResponse(error?.message || "Failed to login", 500));
 		}
 	};
 
@@ -1714,6 +1130,35 @@ export const controller = (prisma: PrismaClient) => {
 				} catch {
 					parsed = { message: text };
 				}
+				if (upstream.ok) {
+					logActivity(req, {
+						userId: req.userId || "unknown",
+						action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.CHANGE_PASSWORD,
+						description: appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.PASSWORD_CHANGED,
+						organizationId: req.organizationId || undefined,
+						page: {
+							url: req.originalUrl,
+							title: appConstants.ACTIVITY_LOG.AUTH.PAGES.PASSWORD_CHANGE,
+						},
+					});
+
+					logAudit(req, {
+						userId: req.userId || "unknown",
+						action: appConstants.AUDIT_LOG.ACTIONS.UPDATE,
+						resource: appConstants.AUDIT_LOG.RESOURCES.AUTH,
+						severity: appConstants.AUDIT_LOG.SEVERITY.CRITICAL,
+						entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.USER,
+						entityId: req.userId || "unknown",
+						changesBefore: null,
+						changesAfter: {
+							passwordChanged: true,
+							requirePasswordChange: false,
+						},
+						description: appConstants.AUDIT_LOG.AUTH.DESCRIPTIONS.PASSWORD_CHANGED,
+						organizationId: req.organizationId || undefined,
+					});
+				}
+
 				res.status(upstream.status || 500).json(parsed);
 				return;
 			}
@@ -1739,6 +1184,11 @@ export const controller = (prisma: PrismaClient) => {
 				where: { id: userId },
 				select: {
 					id: true,
+					email: true,
+					userName: true,
+					role: true,
+					status: true,
+					organizationId: true,
 					password: true,
 					metadata: true,
 				},
@@ -1762,16 +1212,52 @@ export const controller = (prisma: PrismaClient) => {
 
 			const hashed = await bcrypt.hash(newPassword, 10);
 			const existingMetadata = (localUser.metadata as Record<string, any> | null) || {};
+			const nextMetadata = {
+				...existingMetadata,
+				requirePasswordChange: false,
+				isFirstLogin: false,
+			};
+
 			await prisma.user.update({
 				where: { id: userId },
 				data: {
 					password: hashed,
-					metadata: {
-						...existingMetadata,
-						requirePasswordChange: false,
-						isFirstLogin: false,
-					},
+					metadata: nextMetadata,
 				},
+			});
+
+			logActivity(req, {
+				userId,
+				action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.CHANGE_PASSWORD,
+				description: appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.PASSWORD_CHANGED,
+				organizationId: localUser.organizationId || req.organizationId || undefined,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.AUTH.PAGES.PASSWORD_CHANGE,
+				},
+			});
+
+			logAudit(req, {
+				userId,
+				action: appConstants.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: appConstants.AUDIT_LOG.RESOURCES.AUTH,
+				severity: appConstants.AUDIT_LOG.SEVERITY.CRITICAL,
+				entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.USER,
+				entityId: userId,
+				changesBefore: {
+					id: localUser.id,
+					email: localUser.email,
+					metadata: localUser.metadata || null,
+				},
+				changesAfter: {
+					id: localUser.id,
+					email: localUser.email,
+					metadata: nextMetadata,
+					passwordChanged: true,
+					requirePasswordChange: false,
+				},
+				description: appConstants.AUDIT_LOG.AUTH.DESCRIPTIONS.PASSWORD_CHANGED,
+				organizationId: localUser.organizationId || req.organizationId || undefined,
 			});
 
 			res.status(200).json(buildSuccessResponse(DEFAULT_PASSWORD_CHANGE_MESSAGE, {}, 200));
@@ -1850,6 +1336,16 @@ export const controller = (prisma: PrismaClient) => {
 				data: {
 					password: hashedPassword,
 					metadata: nextMetadata,
+				},
+			});
+
+			logActivity(req, {
+				userId: req.userId || "unknown",
+				action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.RESET_USER_PASSWORD,
+				description: appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USER_PASSWORD_RESET,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.AUTH.PAGES.PASSWORD_RESET,
 				},
 			});
 
@@ -1939,12 +1435,37 @@ export const controller = (prisma: PrismaClient) => {
 					normalized,
 					localProfile,
 				);
+
+				logActivity(req, {
+					userId: req.userId || String(mergedProfile.id || "unknown"),
+					action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.GET_CURRENT_USER,
+					description: appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.CURRENT_USER_RETRIEVED,
+					organizationId:
+						mergedProfile.organizationId || req.organizationId || undefined,
+					page: {
+						url: req.originalUrl,
+						title: appConstants.ACTIVITY_LOG.AUTH.PAGES.CURRENT_USER,
+					},
+				});
+
 				res.status(200).json(buildSuccessResponse(DEFAULT_ME_MESSAGE, mergedProfile, 200));
 				return;
 			}
 
 			const localProfile = await loadLocalUserProfile(prisma, req);
 			const normalized = normalizeProfile(localProfile);
+
+			logActivity(req, {
+				userId: req.userId || String(normalized.id || "unknown"),
+				action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.GET_CURRENT_USER,
+				description: appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.CURRENT_USER_RETRIEVED,
+				organizationId: normalized.organizationId || req.organizationId || undefined,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.AUTH.PAGES.CURRENT_USER,
+				},
+			});
+
 			res.status(200).json(buildSuccessResponse(DEFAULT_ME_MESSAGE, normalized, 200));
 		} catch (error: any) {
 			const statusCode =
@@ -2019,6 +1540,16 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
+			logActivity(req, {
+				userId,
+				action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.UPDATE_USER_AVATAR,
+				description: appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USER_AVATAR_UPDATED,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.AUTH.PAGES.AVATAR_UPDATE,
+				},
+			});
+
 			await logAudit(req, {
 				userId,
 				action: appConstants.AUDIT_LOG.ACTIONS.UPDATE,
@@ -2053,53 +1584,6 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const getCurrentUserAvatar = async (
-		req: AuthRequest,
-		res: Response,
-		_next: NextFunction,
-	) => {
-		try {
-			const userId = String(req.userId || "").trim();
-			if (!userId) {
-				res.status(401).json(buildErrorResponse("Unauthorized", 401));
-				return;
-			}
-
-			const user = await prisma.user.findFirst({
-				where: { id: userId, isDeleted: false },
-				select: {
-					id: true,
-					metadata: true,
-					updatedAt: true,
-				},
-			});
-
-			if (!user) {
-				res.status(404).json(buildErrorResponse("User not found", 404));
-				return;
-			}
-
-			const metadata = asRecord(user.metadata);
-			const avatar = typeof metadata.avatar === "string" ? metadata.avatar : null;
-
-			res.status(200).json(
-				buildSuccessResponse(
-					DEFAULT_AVATAR_RETRIEVED_MESSAGE,
-					{
-						userId: user.id,
-						avatar,
-						updatedAt: user.updatedAt,
-					},
-					200,
-				),
-			);
-		} catch (error: any) {
-			res.status(500).json(
-				buildErrorResponse(error?.message || "Failed to retrieve avatar", 500),
-			);
-		}
-	};
-
 	const getRoles = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		try {
 			const token = extractTokenFromRequest(req);
@@ -2115,6 +1599,17 @@ export const controller = (prisma: PrismaClient) => {
 					// Keep local fallback when IDP role endpoint is unavailable.
 				}
 			}
+
+			logActivity(req, {
+				userId: req.userId || "unknown",
+				action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.GET_ROLES,
+				description: appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.ROLES_RETRIEVED,
+				organizationId: req.organizationId || undefined,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.AUTH.PAGES.ROLES_LIST,
+				},
+			});
 
 			res.status(200).json(
 				buildSuccessResponse(
@@ -2143,6 +1638,20 @@ export const controller = (prisma: PrismaClient) => {
 					path: `/api/user${queryString}`,
 					method: "GET",
 				});
+
+				if (upstream.status >= 200 && upstream.status < 300) {
+					logActivity(req, {
+						userId: req.userId || "unknown",
+						action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.GET_USERS,
+						description: appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USERS_RETRIEVED,
+						organizationId: req.organizationId || undefined,
+						page: {
+							url: req.originalUrl,
+							title: appConstants.ACTIVITY_LOG.AUTH.PAGES.USERS_LIST,
+						},
+					});
+				}
+
 				res.status(upstream.status).json(upstream.body);
 				return;
 			}
@@ -2172,6 +1681,17 @@ export const controller = (prisma: PrismaClient) => {
 					take: limit,
 				}),
 			]);
+
+			logActivity(req, {
+				userId: req.userId || "unknown",
+				action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.GET_USERS,
+				description: appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USERS_RETRIEVED,
+				organizationId: req.organizationId || undefined,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.AUTH.PAGES.USERS_LIST,
+				},
+			});
 
 			res.status(200).json(
 				buildSuccessResponse(
@@ -2205,6 +1725,20 @@ export const controller = (prisma: PrismaClient) => {
 					path: `/api/user/${id}`,
 					method: "GET",
 				});
+
+				if (upstream.status >= 200 && upstream.status < 300) {
+					logActivity(req, {
+						userId: req.userId || "unknown",
+						action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.GET_USER,
+						description: `${appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USER_RETRIEVED}: ${id}`,
+						organizationId: req.organizationId || undefined,
+						page: {
+							url: req.originalUrl,
+							title: appConstants.ACTIVITY_LOG.AUTH.PAGES.USER_DETAILS,
+						},
+					});
+				}
+
 				res.status(upstream.status).json(upstream.body);
 				return;
 			}
@@ -2217,12 +1751,145 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			logActivity(req, {
+				userId: req.userId || "unknown",
+				action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.GET_USER,
+				description: `${appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USER_RETRIEVED}: ${user.id}`,
+				organizationId: user.organizationId || req.organizationId || undefined,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.AUTH.PAGES.USER_DETAILS,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(DEFAULT_USER_MESSAGE, mapLocalUser(user), 200),
 			);
 		} catch (error: any) {
 			res.status(500).json(
 				buildErrorResponse(error?.message || "Failed to retrieve user", 500),
+			);
+		}
+	};
+
+	const getUserActivityLogs = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		try {
+			const userId = String(req.params.id || "").trim();
+			if (!userId) {
+				res.status(400).json(buildErrorResponse("User id is required", 400));
+				return;
+			}
+
+			const page = Math.max(Number.parseInt(String(req.query.page || "1"), 10) || 1, 1);
+			const limit = Math.min(
+				Math.max(Number.parseInt(String(req.query.limit || "10"), 10) || 10, 1),
+				100,
+			);
+			const query = String(req.query.query || req.query.search || "").trim() || undefined;
+			const source = String(req.query.source || "").trim() || undefined;
+			const category = String(req.query.category || "").trim() || undefined;
+			const from = String(req.query.from || "").trim() || undefined;
+			const to = String(req.query.to || "").trim() || undefined;
+			const sort = String(req.query.sort || "timestamp").trim() || "timestamp";
+			const order = String(req.query.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+
+			const feed = await buildUserActivityFeed(prisma, {
+				userId,
+				organizationId: req.organizationId || undefined,
+				page,
+				limit,
+				query,
+				source,
+				category,
+				from,
+				to,
+				sort,
+				order,
+			});
+
+			logActivity(req, {
+				userId: req.userId || "unknown",
+				action: "GET_USER_ACTIVITY_LOGS",
+				description: `User activity logs retrieved: ${userId}`,
+				organizationId: feed.user.organizationId || req.organizationId || undefined,
+				page: {
+					url: req.originalUrl,
+					title: "User Activity Logs",
+				},
+			});
+
+			res.status(200).json(
+				buildSuccessResponse("User activity logs retrieved successfully", {
+					user: feed.user,
+					employee: feed.employee,
+					activityLogs: feed.activityLogs,
+					count: feed.total,
+					pagination: buildPagination(feed.total, page, limit),
+				}, 200),
+			);
+		} catch (error: any) {
+			const statusCode = Number(error?.statusCode || 500);
+			res.status(statusCode).json(
+				buildErrorResponse(error?.message || "Failed to retrieve user activity logs", statusCode),
+			);
+		}
+	};
+
+	const getHrAuditLogs = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		try {
+			const page = Math.max(Number.parseInt(String(req.query.page || "1"), 10) || 1, 1);
+			const limit = Math.min(
+				Math.max(Number.parseInt(String(req.query.limit || "10"), 10) || 10, 1),
+				100,
+			);
+			const query = String(req.query.query || req.query.search || "").trim() || undefined;
+			const type = String(req.query.type || req.query.source || "").trim() || undefined;
+			const severity = String(req.query.severity || req.query.category || "").trim() || undefined;
+			const from = String(req.query.from || "").trim() || undefined;
+			const to = String(req.query.to || "").trim() || undefined;
+			const sort = String(req.query.sort || "occurredAt").trim() || "occurredAt";
+			const order = String(req.query.order || "desc").toLowerCase() === "asc" ? "asc" : "desc";
+
+			const feed = await buildHrAuditFeed(prisma, {
+				organizationId: req.organizationId || undefined,
+				page,
+				limit,
+				query,
+				type,
+				severity,
+				from,
+				to,
+				sort,
+				order,
+			});
+
+			logActivity(req, {
+				userId: req.userId || "unknown",
+				action: "GET_HR_AUDIT_LOGS",
+				description: "HR audit logs retrieved",
+				organizationId: req.organizationId || undefined,
+				page: {
+					url: req.originalUrl,
+					title: "HR Audit Logs",
+				},
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"HR audit logs retrieved successfully",
+					{
+						auditLoggings: feed.auditLoggings,
+						count: feed.total,
+						pagination: feed.pagination,
+						summary: feed.summary,
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			const statusCode = Number(error?.statusCode || 500);
+			res.status(statusCode).json(
+				buildErrorResponse(error?.message || "Failed to retrieve HR audit logs", statusCode),
 			);
 		}
 	};
@@ -2274,6 +1941,16 @@ export const controller = (prisma: PrismaClient) => {
 									requirePasswordChange: false,
 									isFirstLogin: false,
 								},
+				},
+			});
+
+			logActivity(req, {
+				userId: req.userId || "unknown",
+				action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.CREATE_USER,
+				description: appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USER_CREATED,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.AUTH.PAGES.USER_CREATION,
 				},
 			});
 
@@ -2329,7 +2006,62 @@ export const controller = (prisma: PrismaClient) => {
 					method: "PATCH",
 					body: (req.body || {}) as AnyRecord,
 				});
+
+				if (upstream.status >= 200 && upstream.status < 300) {
+					const passwordUpdated = Boolean(
+						typeof (req.body as AnyRecord)?.password === "string" &&
+							String((req.body as AnyRecord).password).trim().length > 0,
+					);
+
+					logActivity(req, {
+						userId: req.userId || "unknown",
+						action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.UPDATE_USER,
+						description: `${appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USER_UPDATED}: ${id}`,
+						organizationId: req.organizationId || undefined,
+						page: {
+							url: req.originalUrl,
+							title: appConstants.ACTIVITY_LOG.AUTH.PAGES.USER_UPDATE,
+						},
+					});
+
+					logAudit(req, {
+						userId: req.userId || "unknown",
+						action: appConstants.AUDIT_LOG.ACTIONS.UPDATE,
+						resource: appConstants.AUDIT_LOG.RESOURCES.USERS,
+						severity: passwordUpdated
+							? appConstants.AUDIT_LOG.SEVERITY.CRITICAL
+							: appConstants.AUDIT_LOG.SEVERITY.MEDIUM,
+						entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.USER,
+						entityId: id,
+						changesBefore: null,
+						changesAfter: {
+							id,
+							...(passwordUpdated ? { passwordChanged: true } : {}),
+						},
+						description: appConstants.AUDIT_LOG.AUTH.DESCRIPTIONS.USER_UPDATED,
+						organizationId: req.organizationId || undefined,
+					});
+				}
+
 				res.status(upstream.status).json(upstream.body);
+				return;
+			}
+
+			const existingUser = await prisma.user.findFirst({
+				where: { id, isDeleted: false },
+				select: {
+					id: true,
+					email: true,
+					userName: true,
+					role: true,
+					status: true,
+					organizationId: true,
+					metadata: true,
+					loginMethod: true,
+				},
+			});
+			if (!existingUser) {
+				res.status(404).json(buildErrorResponse("User not found", 404));
 				return;
 			}
 
@@ -2354,7 +2086,9 @@ export const controller = (prisma: PrismaClient) => {
 			if (typeof payload.organizationId === "string") {
 				updateData.organizationId = payload.organizationId.trim() || null;
 			}
-			if (typeof payload.password === "string" && payload.password.trim().length > 0) {
+			const passwordUpdated =
+				typeof payload.password === "string" && payload.password.trim().length > 0;
+			if (passwordUpdated) {
 				updateData.password = await bcrypt.hash(payload.password.trim(), 10);
 			}
 
@@ -2363,8 +2097,48 @@ export const controller = (prisma: PrismaClient) => {
 				data: updateData,
 			});
 
+			const mappedUpdated = mapLocalUser(updated);
+
+			logActivity(req, {
+				userId: req.userId || "unknown",
+				action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.UPDATE_USER,
+				description: `${appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USER_UPDATED}: ${updated.id}`,
+				organizationId: updated.organizationId || req.organizationId || undefined,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.AUTH.PAGES.USER_UPDATE,
+				},
+			});
+
+			logAudit(req, {
+				userId: req.userId || "unknown",
+				action: appConstants.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: appConstants.AUDIT_LOG.RESOURCES.USERS,
+				severity: passwordUpdated
+					? appConstants.AUDIT_LOG.SEVERITY.CRITICAL
+					: appConstants.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.USER,
+				entityId: updated.id,
+				changesBefore: {
+					id: existingUser.id,
+					email: existingUser.email,
+					userName: existingUser.userName,
+					role: existingUser.role,
+					status: existingUser.status,
+					organizationId: existingUser.organizationId,
+					metadata: existingUser.metadata || null,
+					loginMethod: existingUser.loginMethod,
+				},
+				changesAfter: {
+					...mappedUpdated,
+					...(passwordUpdated ? { passwordChanged: true } : {}),
+				},
+				description: appConstants.AUDIT_LOG.AUTH.DESCRIPTIONS.USER_UPDATED,
+				organizationId: updated.organizationId || req.organizationId || undefined,
+			});
+
 			res.status(200).json(
-				buildSuccessResponse(DEFAULT_USER_UPDATED_MESSAGE, mapLocalUser(updated), 200),
+				buildSuccessResponse(DEFAULT_USER_UPDATED_MESSAGE, mappedUpdated, 200),
 			);
 		} catch (error: any) {
 			if (String(error?.code || "") === "P2025") {
@@ -2391,7 +2165,52 @@ export const controller = (prisma: PrismaClient) => {
 					path: `/api/user/${id}`,
 					method: "DELETE",
 				});
+
+				if (upstream.status >= 200 && upstream.status < 300) {
+					logActivity(req, {
+						userId: req.userId || "unknown",
+						action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.DELETE_USER,
+						description: `${appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USER_DELETED}: ${id}`,
+						organizationId: req.organizationId || undefined,
+						page: {
+							url: req.originalUrl,
+							title: appConstants.ACTIVITY_LOG.AUTH.PAGES.USER_DELETION,
+						},
+					});
+
+					logAudit(req, {
+						userId: req.userId || "unknown",
+						action: appConstants.AUDIT_LOG.ACTIONS.DELETE,
+						resource: appConstants.AUDIT_LOG.RESOURCES.USERS,
+						severity: appConstants.AUDIT_LOG.SEVERITY.CRITICAL,
+						entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.USER,
+						entityId: id,
+						changesBefore: { id },
+						changesAfter: { id, isDeleted: true, status: "archived" },
+						description: appConstants.AUDIT_LOG.AUTH.DESCRIPTIONS.USER_DELETED,
+						organizationId: req.organizationId || undefined,
+					});
+				}
+
 				res.status(upstream.status).json(upstream.body);
+				return;
+			}
+
+			const existingUser = await prisma.user.findFirst({
+				where: { id, isDeleted: false },
+				select: {
+					id: true,
+					email: true,
+					userName: true,
+					role: true,
+					status: true,
+					organizationId: true,
+					metadata: true,
+					loginMethod: true,
+				},
+			});
+			if (!existingUser) {
+				res.status(404).json(buildErrorResponse("User not found", 404));
 				return;
 			}
 
@@ -2403,8 +2222,43 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
+			const mappedUpdated = mapLocalUser(updated);
+
+			logActivity(req, {
+				userId: req.userId || "unknown",
+				action: appConstants.ACTIVITY_LOG.AUTH.ACTIONS.DELETE_USER,
+				description: `${appConstants.ACTIVITY_LOG.AUTH.DESCRIPTIONS.USER_DELETED}: ${updated.id}`,
+				organizationId: updated.organizationId || req.organizationId || undefined,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.AUTH.PAGES.USER_DELETION,
+				},
+			});
+
+			logAudit(req, {
+				userId: req.userId || "unknown",
+				action: appConstants.AUDIT_LOG.ACTIONS.DELETE,
+				resource: appConstants.AUDIT_LOG.RESOURCES.USERS,
+				severity: appConstants.AUDIT_LOG.SEVERITY.CRITICAL,
+				entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.USER,
+				entityId: updated.id,
+				changesBefore: {
+					id: existingUser.id,
+					email: existingUser.email,
+					userName: existingUser.userName,
+					role: existingUser.role,
+					status: existingUser.status,
+					organizationId: existingUser.organizationId,
+					metadata: existingUser.metadata || null,
+					loginMethod: existingUser.loginMethod,
+				},
+				changesAfter: mappedUpdated,
+				description: appConstants.AUDIT_LOG.AUTH.DESCRIPTIONS.USER_DELETED,
+				organizationId: updated.organizationId || req.organizationId || undefined,
+			});
+
 			res.status(200).json(
-				buildSuccessResponse(DEFAULT_USER_DELETED_MESSAGE, mapLocalUser(updated), 200),
+				buildSuccessResponse(DEFAULT_USER_DELETED_MESSAGE, mappedUpdated, 200),
 			);
 		} catch (error: any) {
 			if (String(error?.code || "") === "P2025") {
@@ -2419,17 +2273,17 @@ export const controller = (prisma: PrismaClient) => {
 
 	return {
 		login,
-		claimBiometricKioskLogin,
-		getBiometricKioskLoginStatus,
 		logout,
 		changePassword,
 		resetUserPassword,
 		getCurrentUser,
-		getCurrentUserAvatar,
 		updateCurrentUserAvatar,
 		getRoles,
 		getUsers,
 		getUserById,
+		getUserActivityLogs,
+		getHrActivityLogs: getHrAuditLogs,
+		getHrAuditLogs,
 		createUser,
 		updateUser,
 		deleteUser,

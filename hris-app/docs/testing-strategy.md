@@ -1,7 +1,7 @@
 # HRIS App Testing Strategy
 
 Status: ACTIVE_DRAFT
-Last reviewed: 2026-05-28
+Last reviewed: 2026-07-13
 
 ## Scope
 
@@ -36,6 +36,33 @@ See `docs/testing-coverage-matrix.md` for the domain-by-domain coverage map and 
 | Strict quality hardening | npm scripts | Release-candidate debt-burndown gate for lint, full typecheck, route audits, and browser E2E | `npm run quality:strict` |
 | Typecheck | TypeScript | Existing explicit gate; currently has unrelated project debt to resolve before enabling in CI baseline | `npm run typecheck` |
 | Route audits | Vitest | Existing route hygiene checks; currently separate from CI baseline until the route backlog is resolved | `npm run test:routes`, `npm run test:unreachable` |
+
+## Rendering Components in Tests (Providers & Mocks)
+
+Most real components and route pages depend on:
+
+- `@tanstack/react-query` (`QueryClientProvider`)
+- `react-router` (`MemoryRouter` + `useSearchParams` / `useNavigate`)
+- `useAuth()` (via `AuthContext`)
+
+**Always use the shared helper** when writing component or route tests that render actual UI:
+
+```ts
+import { renderWithProviders } from "~/test/render";
+// ...
+const result = renderWithProviders(<MyComponent prop={x} />, {
+  routerProps: { initialEntries: ["/employee/123?tab=timesheets"] },
+});
+```
+
+You are still expected to `vi.mock(...)` the data-fetching hooks (`useEmployees`, `useTimesheets`, `useAuth`, service modules, etc.) so tests stay fast, deterministic, and do not perform real network calls.
+
+See:
+- `app/test/render.tsx` (the helper + `createTestQueryClient`)
+- `app/routes/employee/dashboard/TimesheetsTab.test.tsx` (example using the helper + mocks)
+- `app/components/shared/EmployeeList.test.tsx` and hook tests for prior patterns
+
+This pattern was added to close a recurring source of "No QueryClient set" and "useAuth must be used within AuthProvider" failures.
 
 ## Source-Of-Truth Regression Rules
 
@@ -74,6 +101,17 @@ The app-side suite includes focused tests for:
 - Recruitment requisition modal WARN/BLOCK behavior, requisition state reset, public job modal query preservation, job-detail apply navigation, public jobs/apply browser smoke coverage, and HR recruitment jobs-manager browser smoke coverage for server-side search/filter state.
 - Attendance import route template columns, allowed status guidance, and source-of-truth contract labels.
 - Import progress timing helpers for started/completed/elapsed display and compact error rows.
+- Employee benefit schedule modes in the HR benefits modal: default `TIME_BOUND` mode, conditional end-date vs installment-count fields, `RECURRING` optional end date and per-period amount, mode-switch cleanup, missing end date and invalid count validation, informational installment previews including final-centavo remainder and open-ended recurring copy, create payload shaping, legacy edit compatibility, and payroll-period prefill. Client Zod and service projection tests cover `scheduleMode` / `totalInstallments` / recurring contracts.
+
+Product behavior for the three schedule modes is documented in `docs/BENEFIT_SCHEDULE_MODES.md`. The API remains authoritative for installment generation (and lazy recurring ensure) and payroll deduction; backend coverage lives in `../hris-api`.
+
+Focused benefit-schedule app evidence:
+
+```bash
+npx vitest run app/zod/employee-benefit.zod.test.ts app/services/employee-benefit.service.test.ts app/components/templates/hr/benefits-management-template.test.tsx
+```
+
+Latest focused result: 21 passing tests.
 
 This app-side evidence is now linked into the API DM masterlist/map in `../hris-api/docs/migration-dm-quality-masterlist.md`. The app rows prove UI/client contracts only: admin setup import route wiring for holidays, leave types, benefit types, shift types, departments/sections, levels, positions, and employees; attendance import payload/template/status/source-truth labels; create-timesheets option propagation; and import progress display. Backend migration correctness, persistence, authorization, and DB invariants remain API-owned.
 

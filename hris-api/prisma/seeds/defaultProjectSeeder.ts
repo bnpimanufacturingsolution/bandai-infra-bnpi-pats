@@ -225,6 +225,7 @@ export const DEFAULT_TIMESHEET_CONFIG_SEED = {
 	enableEditBeforeSubmission: true,
 	rejectBehavior: "REVISE" as const,
 	overtimeFlagThresholdMinutes: 60,
+	requireManagerApprovedOvertime: true,
 	workTimeRounding:
 		DEFAULT_TIMESHEET_RULES_CONFIG.workTimeRounding as unknown as Prisma.InputJsonValue,
 	overtimeQualification:

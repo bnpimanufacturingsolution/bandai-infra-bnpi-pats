@@ -34,6 +34,7 @@ const ATTENDANCE_METRICS = z.enum([
 	"attendanceObligationTodayOpsSummary", // Today operational cards from live attendance obligations
 	"attendanceTimesheetLineSummary", // Summary-only metrics from persisted timesheet lines
 	"attendanceTodayOpsSummary", // Lightweight today cards from persisted timesheet lines
+	"attendanceDailyTrendByDepartment", // Day-by-department attendance trend chart data
 	"perfectAttendanceMetrics", // Perfect attendance (zero absences + zero tardiness)
 	"tardinessMetrics", // Tardiness, undertime, and overtime metrics
 	"overtimeMetrics", // Overtime metrics
@@ -51,6 +52,7 @@ const EMPLOYEE_METRICS = z.enum([
 	"documentComplianceMetrics",
 	"eligibilityCandidates",
 	"leaveBalanceMetrics",
+	"turnoverAttritionReport",
 ]);
 
 // Define available metrics for PayrollPeriod model

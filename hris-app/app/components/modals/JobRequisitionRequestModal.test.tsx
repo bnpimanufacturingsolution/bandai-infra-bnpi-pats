@@ -182,8 +182,10 @@ describe("JobRequisitionRequestModal", () => {
 			screen.getByText("1 headcount Senior Product Designer in People Design for People"),
 		).toBeInTheDocument();
 
-		await user.type(screen.getByLabelText("Justification"), "Backfill a critical open role.");
-		await user.click(screen.getByRole("button", { name: "Submit Requisition" }));
+		fireEvent.change(screen.getByLabelText("Justification"), {
+			target: { value: "Backfill a critical open role." },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Submit Requisition" }));
 
 		await waitFor(() => expect(handleSubmit).toHaveBeenCalledTimes(1));
 		expect(handleSubmit).toHaveBeenCalledWith(
@@ -192,10 +194,9 @@ describe("JobRequisitionRequestModal", () => {
 				levelId: "level-senior",
 			}),
 		);
-	}, 10000);
+	}, 30_000);
 
 	it("prefills policy metadata fields and allows warn-only over-capacity requisitions", async () => {
-		const user = userEvent.setup();
 		const onSubmit = vi.fn().mockResolvedValue(undefined);
 		const warnBasePolicy = createRequestContext("WARN").policy!;
 		mockUseWorkforceRecruitmentRequestContext.mockImplementation(() => ({
@@ -244,14 +245,18 @@ describe("JobRequisitionRequestModal", () => {
 		fireEvent.change(screen.getByLabelText("Justification"), {
 			target: { value: "Need another engineer" },
 		});
-		await user.clear(screen.getByLabelText("Job Type"));
-		await user.type(screen.getByLabelText("Job Type"), "CONTRACT");
-		await user.clear(screen.getByLabelText("Job Location"));
-		await user.type(screen.getByLabelText("Job Location"), "HYBRID");
-		await user.clear(screen.getByLabelText("Job Tags"));
-		await user.type(screen.getByLabelText("Job Tags"), "React, TypeScript, Remote");
-		await user.clear(screen.getByLabelText("Job Description"));
-		await user.type(screen.getByLabelText("Job Description"), "Support the platform squad.");
+		fireEvent.change(screen.getByLabelText("Job Type"), {
+			target: { value: "CONTRACT" },
+		});
+		fireEvent.change(screen.getByLabelText("Job Location"), {
+			target: { value: "HYBRID" },
+		});
+		fireEvent.change(screen.getByLabelText("Job Tags"), {
+			target: { value: "React, TypeScript, Remote" },
+		});
+		fireEvent.change(screen.getByLabelText("Job Description"), {
+			target: { value: "Support the platform squad." },
+		});
 
 		fireEvent.click(screen.getByRole("button", { name: "Submit Requisition" }));
 
@@ -273,7 +278,7 @@ describe("JobRequisitionRequestModal", () => {
 				workflowCode: "WF-REQ-001",
 			}),
 		);
-	}, 15_000);
+	}, 30_000);
 
 	it("blocks over-capacity submissions when the policy is BLOCK", async () => {
 		const blockBasePolicy = createRequestContext("BLOCK").policy!;

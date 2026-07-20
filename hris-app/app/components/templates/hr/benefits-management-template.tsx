@@ -1,23 +1,17 @@
 import { useEffect, useMemo } from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useForm, Controller, type Resolver } from "react-hook-form";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Edit, Eye, Loader2, MoreVertical, Trash2 } from "lucide-react";
-import { toast as sonnerToast } from "sonner";
 import { Button } from "~/components/atoms/Button";
 import { Badge } from "~/components/atoms/Badge";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
-import { DatePicker } from "~/components/atoms/DatePicker";
-import { Input } from "~/components/atoms/Input";
 import { Modal } from "~/components/atoms/Modal";
-import { Select, type SelectOption } from "~/components/atoms/Select";
+import { type SelectOption } from "~/components/atoms/Select";
 import { StatusBadge } from "~/components/atoms/StatusBadge";
 import { DepartmentSectionPicker } from "~/components/molecules/DepartmentSectionPicker";
+import { EmployeeTableCell } from "~/components/molecules/EmployeeTableCell";
 import {
 	HrDataTableManagerFilter,
-	hrDataTableDepartmentFilterClass,
-	hrDataTableFilterClass,
+	hrDataTablePopoverSelectTriggerClass,
 } from "~/components/molecules/HrDataTableFilters";
 import {
 	DropdownMenu,
@@ -26,76 +20,27 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
+import {
+	EmployeeBenefitForm,
+	getPayrollPeriodOptionLabel,
+} from "~/components/templates/hr/employee-benefit-form";
 import { useBenefitTypes } from "~/lib/hooks/useBenefitTypes";
 import { useDepartments } from "~/lib/hooks/useDepartments";
 import { useEmployees } from "~/lib/hooks/useEmployees";
 import { useSections } from "~/lib/hooks/useSections";
 import {
-	queryKeys as employeeBenefitQueryKeys,
-	useCreateEmployeeBenefit,
 	useDeleteEmployeeBenefit,
 	useEmployeeBenefit,
 	useEmployeeBenefits,
-	useUpdateEmployeeBenefit,
 } from "~/lib/hooks/useEmployeeBenefits";
-import { usePayrollPeriods } from "~/lib/hooks/usePayrollPeriods";
-import { useAuth } from "~/lib/hooks/use-auth";
-import { useQueryClient } from "@tanstack/react-query";
-import { formatDate, formatDateForInput } from "~/lib/utils/text-utils";
-import type {
-	EmployeeBenefit,
-	CreateEmployeeBenefitRequest,
-	UpdateEmployeeBenefitRequest,
-} from "~/services/employee-benefit.service";
+import { formatDate } from "~/lib/utils/text-utils";
+import type { EmployeeBenefit } from "~/services/employee-benefit.service";
 import type { Employee } from "~/services/employees.service";
-import type { PayrollPeriod } from "~/services/payroll-periods.service";
 
 interface BenefitsManagementProps {
 	title?: string;
 	description?: string;
 }
-
-const BenefitStatusSchema = z.enum([
-	"PENDING",
-	"APPROVED",
-	"ACTIVE",
-	"COMPLETED",
-	"CANCELLED",
-	"DEFAULTED",
-]);
-
-const EmployeeBenefitFormSchema = z
-	.object({
-		employeeId: z.string().trim().min(1, "Employee is required"),
-		benefitTypeId: z.string().trim().min(1, "Benefit type is required"),
-		payrollPeriodId: z.string().trim().optional(),
-		name: z.string().trim().min(1, "Name is required").max(160, "Name is too long"),
-		description: z.string().trim().max(500, "Description is too long").optional(),
-		amount: z.coerce.number().positive("Amount must be greater than zero"),
-		startDate: z.string().trim().min(1, "Start date is required"),
-		endDate: z.string().trim().optional(),
-		status: BenefitStatusSchema.default("ACTIVE"),
-		isActive: z.boolean().default(true),
-		notes: z.string().trim().max(500, "Notes are too long").optional(),
-	})
-	.superRefine((data, ctx) => {
-		if (!data.endDate) return;
-		const start = new Date(data.startDate);
-		const end = new Date(data.endDate);
-		if (
-			!Number.isNaN(start.getTime()) &&
-			!Number.isNaN(end.getTime()) &&
-			end < start
-		) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				message: "End date cannot be before start date",
-				path: ["endDate"],
-			});
-		}
-	});
-
-type EmployeeBenefitFormData = z.infer<typeof EmployeeBenefitFormSchema>;
 
 const statusOptions: SelectOption[] = [
 	{ value: "ACTIVE", label: "Active" },
@@ -106,7 +51,6 @@ const statusOptions: SelectOption[] = [
 	{ value: "DEFAULTED", label: "Defaulted" },
 ];
 
-const PAYROLL_PERIOD_NONE_VALUE = "__none__";
 const BENEFIT_CODE_PRESETS: Record<string, string[]> = {
 	attendance: ["PFA"],
 	allowance: ["DMA", "HYS", "LLA", "LVP", "MLA", "OBA", "OTM", "TSA"],
@@ -141,41 +85,36 @@ const formatCurrency = (value: number | string | null | undefined) =>
 		maximumFractionDigits: 2,
 	}).format(Number(value || 0));
 
-const normalizeOptional = (value?: string | null) => {
-	const trimmed = String(value || "").trim();
-	return trimmed.length > 0 ? trimmed : undefined;
-};
-
-type PayrollPeriodLabelInput = {
-	name?: string | null;
-	code?: string | null;
-	startDate?: string | null;
-	endDate?: string | null;
-	status?: PayrollPeriod["status"] | null;
-};
-
-const getPayrollPeriodOptionLabel = (period: PayrollPeriodLabelInput) => {
-	const name = String(period.name || period.code || "Payroll period").trim();
-	const code = period.code && period.code !== name ? ` (${period.code})` : "";
-	const dateRange =
-		period.startDate && period.endDate
-			? ` - ${formatDate(period.startDate, "short")} to ${formatDate(period.endDate, "short")}`
-			: "";
-	const status = period.status ? ` - ${period.status}` : "";
-	return `${name}${code}${dateRange}${status}`;
-};
+/** Context params preserved when opening the create page or returning from it. */
+const CREATE_CONTEXT_PARAMS = [
+	"payrollPeriodId",
+	"periodCode",
+	"periodView",
+	"periodStart",
+	"periodEnd",
+	"departmentId",
+	"sectionId",
+	"managerId",
+	"adjustment",
+	"sourceCategory",
+	"code",
+	"direction",
+	"returnTo",
+	"status",
+	"benefitTypeId",
+	"search",
+] as const;
 
 export function BenefitsManagement({
 	title = "Benefits Management",
-	description = "Manage employee payroll benefits and adjustments",
+	description = "Manage employee benefit enrollments and coverage",
 }: BenefitsManagementProps) {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const navigate = useNavigate();
-	const queryClient = useQueryClient();
-	const { user } = useAuth();
 
 	const searchQuery = searchParams.get("search") || "";
 	const statusFilter = searchParams.get("status") || "";
+	const benefitTypeIdFilter = searchParams.get("benefitTypeId") || "";
 	const departmentFilter = searchParams.get("departmentId") || "";
 	const sectionFilter = searchParams.get("sectionId") || "";
 	const managerFilter = searchParams.get("managerId") || "";
@@ -202,13 +141,25 @@ export function BenefitsManagement({
 	const limitParam = Number(searchParams.get("limit")) || 10;
 	const activeId = action === "edit" || action === "view" || action === "delete" ? id : null;
 	const isEditing = action === "edit";
-	const isCreateOrEdit = action === "create" || action === "edit";
+
+	// Legacy deep link: ?action=create → dedicated create page
+	useEffect(() => {
+		if (action !== "create") return;
+		const params = new URLSearchParams();
+		for (const key of CREATE_CONTEXT_PARAMS) {
+			const value = searchParams.get(key);
+			if (value) params.set(key, value);
+		}
+		const query = params.toString();
+		navigate(`/hr/benefits-management/new${query ? `?${query}` : ""}`, { replace: true });
+	}, [action, navigate, searchParams]);
 
 	const benefitFilterParts = [
 		departmentFilter ? `employee.departmentId:${departmentFilter}` : "",
 		sectionFilter ? `employee.sectionId:${sectionFilter}` : "",
 		managerFilter ? `employee.reportToId:${managerFilter}` : "",
 		statusFilter ? `status:${statusFilter}` : "",
+		benefitTypeIdFilter ? `benefitTypeId:${benefitTypeIdFilter}` : "",
 		payrollPeriodIdParam ? `payrollPeriodId:${payrollPeriodIdParam}` : "",
 		!payrollPeriodIdParam && periodCodeParam
 			? `payrollPeriod.code:${periodCodeParam}`
@@ -231,7 +182,7 @@ export function BenefitsManagement({
 		count: true,
 	});
 	const { data: activeItem, isLoading: isLoadingItem } = useEmployeeBenefit(activeId || "");
-	const { data: benefitTypesData, isLoading: benefitTypesLoading } = useBenefitTypes({
+	const { data: benefitTypesData } = useBenefitTypes({
 		page: 1,
 		limit: 500,
 		filter: "isActive:true",
@@ -239,7 +190,7 @@ export function BenefitsManagement({
 		order: "asc",
 		count: true,
 	});
-	const { data: employeesData, isLoading: employeesLoading } = useEmployees({
+	const { data: employeesData } = useEmployees({
 		page: 1,
 		limit: 1000,
 		sort: "employeeId",
@@ -259,23 +210,7 @@ export function BenefitsManagement({
 		order: "asc",
 		count: true,
 	});
-	const {
-		data: payrollPeriodsData,
-		isLoading: payrollPeriodsLoading,
-		isError: payrollPeriodsError,
-	} = usePayrollPeriods(
-		{
-			page: 1,
-			limit: 1000,
-			sort: "startDate",
-			order: "desc",
-			count: true,
-		},
-		isCreateOrEdit,
-	);
 
-	const createMutation = useCreateEmployeeBenefit();
-	const updateMutation = useUpdateEmployeeBenefit();
 	const deleteMutation = useDeleteEmployeeBenefit();
 
 	const benefitTypes = useMemo(
@@ -293,19 +228,6 @@ export function BenefitsManagement({
 	const sections = useMemo(
 		() => (sectionsData as any)?.sections || [],
 		[sectionsData],
-	);
-	const payrollPeriods = useMemo<PayrollPeriod[]>(() => {
-		const payload = payrollPeriodsData as any;
-		return payload?.payrollPeriods || payload?.data?.payrollPeriods || [];
-	}, [payrollPeriodsData]);
-
-	const employeeOptions = useMemo<SelectOption[]>(
-		() =>
-			(employees as Employee[]).map((employee) => ({
-				value: employee.id,
-				label: getEmployeeLabel(employee),
-			})),
-		[employees],
 	);
 
 	const benefitTypeOptions = useMemo<SelectOption[]>(
@@ -342,6 +264,11 @@ export function BenefitsManagement({
 	];
 	const benefitAdvancedFilters = [
 		{
+			key: "benefitTypeId",
+			label: "Benefit type",
+			options: benefitTypeOptions,
+		},
+		{
 			key: "code",
 			label: "Source",
 			options: benefitCodeOptions.filter((option) => option.value !== "all"),
@@ -358,41 +285,31 @@ export function BenefitsManagement({
 		},
 	];
 	const benefitAdvancedFilterValues = {
+		benefitTypeId: benefitTypeIdFilter || "",
 		code: codeParam && !codeParam.includes(",") ? codeParam.toUpperCase() : "",
 		direction: directionParam || "",
 		status: statusFilter || "",
+		departmentId: departmentFilter || "",
+		sectionId: sectionFilter || "",
+		managerId: managerFilter || "",
 	};
 
-	const managerOptions = useMemo<SelectOption[]>(
-		() => {
-			const managerIds = new Set(
-				(employees as Employee[])
-					.map((employee) => employee.reportToId)
-					.filter((id): id is string => Boolean(id)),
-			);
-			return [
-				{ value: "all", label: "All Manager" },
-				...(employees as Employee[])
-					.filter((employee) => managerIds.has(employee.id) || Boolean(employee.isManager))
-					.map((employee) => ({
-						value: employee.id,
-						label: getEmployeeLabel(employee),
-					})),
-			];
-		},
-		[employees],
-	);
-
-	const payrollPeriodOptions = useMemo<SelectOption[]>(
-		() => [
-			{ value: PAYROLL_PERIOD_NONE_VALUE, label: "Date range only" },
-			...payrollPeriods.map((period) => ({
-				value: period.id,
-				label: getPayrollPeriodOptionLabel(period),
-			})),
-		],
-		[payrollPeriods],
-	);
+	const managerOptions = useMemo<SelectOption[]>(() => {
+		const managerIds = new Set(
+			(employees as Employee[])
+				.map((employee) => employee.reportToId)
+				.filter((id): id is string => Boolean(id)),
+		);
+		return [
+			{ value: "all", label: "All Manager" },
+			...(employees as Employee[])
+				.filter((employee) => managerIds.has(employee.id) || Boolean(employee.isManager))
+				.map((employee) => ({
+					value: employee.id,
+					label: getEmployeeLabel(employee),
+				})),
+		];
+	}, [employees]);
 
 	const updateSearchParams = (mutator: (next: URLSearchParams) => void) => {
 		setSearchParams((prev) => {
@@ -402,6 +319,66 @@ export function BenefitsManagement({
 		});
 	};
 
+	const handleDepartmentFilterChange = (departmentId: string) => {
+		updateSearchParams((next) => {
+			if (departmentId === "all") {
+				next.delete("departmentId");
+				next.delete("sectionId");
+			} else {
+				next.set("departmentId", departmentId);
+				next.delete("sectionId");
+			}
+			next.set("page", "1");
+		});
+	};
+
+	const handleSectionFilterChange = (departmentId: string, sectionId: string) => {
+		updateSearchParams((next) => {
+			next.set("departmentId", departmentId);
+			next.set("sectionId", sectionId);
+			next.set("page", "1");
+		});
+	};
+
+	const handleManagerFilterChange = (managerId: string) => {
+		updateSearchParams((next) => {
+			if (managerId === "all") {
+				next.delete("managerId");
+			} else {
+				next.set("managerId", managerId);
+			}
+			next.set("page", "1");
+		});
+	};
+
+	const benefitPopoverFilters = (
+		<>
+			<div className="w-full space-y-1.5">
+				<label className="text-xs font-medium text-gray-600">Department</label>
+				<DepartmentSectionPicker
+					variant="datatable"
+					departments={departments}
+					sections={sections}
+					departmentId={departmentFilter || "all"}
+					sectionId={sectionFilter || "all"}
+					className={hrDataTablePopoverSelectTriggerClass}
+					onDepartmentChange={handleDepartmentFilterChange}
+					onSectionChange={handleSectionFilterChange}
+				/>
+			</div>
+			<div className="w-full space-y-1.5">
+				<label className="text-xs font-medium text-gray-600">Manager</label>
+				<HrDataTableManagerFilter
+					value={managerFilter || "all"}
+					onValueChange={handleManagerFilterChange}
+					options={managerOptions}
+					dataUi="benefits-manager-trigger"
+					triggerClassName={hrDataTablePopoverSelectTriggerClass}
+				/>
+			</div>
+		</>
+	);
+
 	const closeModal = () => {
 		updateSearchParams((next) => {
 			next.delete("action");
@@ -409,94 +386,6 @@ export function BenefitsManagement({
 		});
 	};
 
-	const {
-		register,
-		handleSubmit,
-		reset,
-		setValue,
-		control,
-		watch,
-		formState: { errors },
-	} = useForm<EmployeeBenefitFormData>({
-		resolver: zodResolver(EmployeeBenefitFormSchema) as Resolver<EmployeeBenefitFormData>,
-		defaultValues: {
-			employeeId: "",
-			benefitTypeId: "",
-			payrollPeriodId: payrollPeriodIdParam,
-			name: "",
-			description: "",
-			amount: 0,
-			startDate: periodStartParam || formatDateForInput(new Date()),
-			endDate: periodEndParam,
-			status: "ACTIVE",
-			isActive: true,
-			notes: "",
-		},
-	});
-
-	const watchedBenefitTypeId = watch("benefitTypeId");
-	const watchedPayrollPeriodId = watch("payrollPeriodId");
-	const watchedStatus = watch("status");
-	const watchedIsActive = watch("isActive");
-
-	useEffect(() => {
-		if (isEditing && !isLoadingItem && activeItem) {
-			reset({
-				employeeId: activeItem.employeeId || "",
-				benefitTypeId: activeItem.benefitTypeId || "",
-				payrollPeriodId: activeItem.payrollPeriodId || payrollPeriodIdParam,
-				name: activeItem.name || activeItem.benefitType?.name || "",
-				description: activeItem.description || "",
-				amount: Number(activeItem.amount || 0),
-				startDate:
-					formatDateForInput(activeItem.startDate) ||
-					periodStartParam ||
-					formatDateForInput(new Date()),
-				endDate: formatDateForInput(activeItem.endDate) || "",
-				status: (activeItem.status as EmployeeBenefitFormData["status"]) || "ACTIVE",
-				isActive: activeItem.isActive ?? true,
-				notes: activeItem.notes || "",
-			});
-		}
-	}, [activeItem, isEditing, isLoadingItem, payrollPeriodIdParam, periodStartParam, reset]);
-
-	useEffect(() => {
-		if (action !== "create") return;
-		reset({
-			employeeId: "",
-			benefitTypeId: "",
-			payrollPeriodId: payrollPeriodIdParam,
-			name: "",
-			description: "",
-			amount: 0,
-			startDate: periodStartParam || formatDateForInput(new Date()),
-			endDate: periodEndParam,
-			status: "ACTIVE",
-			isActive: true,
-			notes: "",
-		});
-	}, [action, payrollPeriodIdParam, periodEndParam, periodStartParam, reset]);
-
-	useEffect(() => {
-		if (!watchedBenefitTypeId || isEditing) return;
-		const benefitType = benefitTypes.find((item) => item.id === watchedBenefitTypeId);
-		if (!benefitType) return;
-		setValue("name", benefitType.name, { shouldValidate: true });
-		if (benefitType.fixedAmount !== undefined && benefitType.fixedAmount !== null) {
-			setValue("amount", Number(benefitType.fixedAmount), { shouldValidate: true });
-		}
-	}, [benefitTypes, isEditing, setValue, watchedBenefitTypeId]);
-
-	const selectedBenefitType = benefitTypes.find((item) => item.id === watchedBenefitTypeId);
-	const selectedActiveItem = activeItem || null;
-	const selectedPayrollPeriod =
-		payrollPeriods.find((period) => String(period.id) === String(watchedPayrollPeriodId)) ||
-		selectedActiveItem?.payrollPeriod ||
-		null;
-	const periodContext =
-		(selectedPayrollPeriod ? getPayrollPeriodOptionLabel(selectedPayrollPeriod) : "") ||
-		periodCodeParam ||
-		(watchedPayrollPeriodId ? "Selected payroll period" : "No payroll period selected");
 	const runPayrollReturnUrl = useMemo(() => {
 		const params = new URLSearchParams();
 		if (periodCodeParam) params.set("periodCode", periodCodeParam);
@@ -514,10 +403,13 @@ export function BenefitsManagement({
 	]);
 
 	const openCreate = () => {
-		updateSearchParams((next) => {
-			next.set("action", "create");
-			next.delete("id");
-		});
+		const params = new URLSearchParams();
+		for (const key of CREATE_CONTEXT_PARAMS) {
+			const value = searchParams.get(key);
+			if (value) params.set(key, value);
+		}
+		const query = params.toString();
+		navigate(`/hr/benefits-management/new${query ? `?${query}` : ""}`);
 	};
 
 	const openEdit = (item: EmployeeBenefit) => {
@@ -541,60 +433,6 @@ export function BenefitsManagement({
 		});
 	};
 
-	const onSubmit = (data: EmployeeBenefitFormData) => {
-		const payload = {
-			employeeId: data.employeeId,
-			benefitTypeId: data.benefitTypeId,
-			payrollPeriodId:
-				data.payrollPeriodId === PAYROLL_PERIOD_NONE_VALUE
-					? undefined
-					: normalizeOptional(data.payrollPeriodId),
-			name: data.name.trim(),
-			description: normalizeOptional(data.description),
-			amount: Number(data.amount),
-			startDate: data.startDate,
-			endDate: normalizeOptional(data.endDate),
-			status: data.status,
-			isActive: data.isActive,
-			notes: normalizeOptional(data.notes),
-		};
-
-		if (isEditing && activeItem) {
-			updateMutation.mutate(
-				{ id: activeItem.id, data: payload as UpdateEmployeeBenefitRequest },
-				{
-					onSuccess: () => {
-						queryClient.invalidateQueries({
-							queryKey: employeeBenefitQueryKeys.employeeBenefits.all,
-						});
-						closeModal();
-					},
-				},
-			);
-			return;
-		}
-
-		if (!user?.organizationId) {
-			sonnerToast.error("Organization not found. Please refresh.");
-			return;
-		}
-
-		createMutation.mutate(
-			{
-				...payload,
-				organizationId: user.organizationId,
-			} as CreateEmployeeBenefitRequest,
-			{
-			onSuccess: () => {
-				queryClient.invalidateQueries({
-					queryKey: employeeBenefitQueryKeys.employeeBenefits.all,
-				});
-				closeModal();
-			},
-			},
-		);
-	};
-
 	const confirmDelete = () => {
 		if (!activeItem) return;
 		deleteMutation.mutate(activeItem.id, {
@@ -602,26 +440,36 @@ export function BenefitsManagement({
 		});
 	};
 
+	const periodContext =
+		(activeItem?.payrollPeriod
+			? getPayrollPeriodOptionLabel(activeItem.payrollPeriod)
+			: "") ||
+		periodCodeParam ||
+		(payrollPeriodIdParam ? "Selected payroll period" : "No payroll period selected");
+
+	// Percentage widths leave room for the sticky Actions col (~132px) so table-fixed
+	// stays within the content shell and does not force horizontal scroll.
 	const columns: Column<EmployeeBenefit>[] = [
 		{
 			key: "employee",
 			label: "Employee",
-			width: "240px",
+			width: "20%",
+			className: "max-w-0 overflow-hidden",
 			render: (_value, item) => (
-				<div className="min-w-0">
-					<p className="truncate text-sm font-medium text-gray-900">
-						{getEmployeeName(item.employee)}
-					</p>
-					<p className="truncate text-xs text-gray-500">
-						{(item.employee as any)?.employeeId || item.employeeId || "-"}
-					</p>
-				</div>
+				<EmployeeTableCell
+					profileId={item.employee?.id || item.employeeId}
+					fullName={getEmployeeName(item.employee)}
+					employeeId={item.employee?.employeeId || item.employeeId || "-"}
+					avatar={item.employee?.user?.avatar ?? null}
+					className="min-w-0"
+				/>
 			),
 		},
 		{
 			key: "benefitType",
-			label: "Benefit Type",
-			width: "220px",
+			label: "Benefit",
+			width: "16%",
+			className: "max-w-0 overflow-hidden",
 			render: (_value, item) => (
 				<div className="min-w-0">
 					<p className="truncate text-sm font-medium text-gray-900">
@@ -635,8 +483,10 @@ export function BenefitsManagement({
 		},
 		{
 			key: "payrollPeriod",
-			label: "Payroll Period",
-			width: "180px",
+			label: "Period",
+			width: "12%",
+			className: "max-w-0 overflow-hidden",
+			hideBelow: "lg",
 			render: (_value, item) => (
 				<div className="min-w-0">
 					<p className="truncate text-sm text-gray-900">
@@ -654,13 +504,17 @@ export function BenefitsManagement({
 		{
 			key: "amount",
 			label: "Amount",
-			width: "130px",
+			width: "11%",
+			className: "whitespace-nowrap",
 			render: (value, item) => {
 				const isDeduction = item.benefitType?.payrollDirection === "DEDUCTION";
+				const amount = Number(value || 0).toLocaleString("en-PH", {
+					minimumFractionDigits: 2,
+					maximumFractionDigits: 2,
+				});
 				return (
 					<span className="font-semibold tabular-nums text-gray-900">
-						{isDeduction ? "-" : "+"}
-						{formatCurrency(value as number)}
+						{isDeduction ? "-" : "+"}₱{amount}
 					</span>
 				);
 			},
@@ -668,20 +522,29 @@ export function BenefitsManagement({
 		{
 			key: "status",
 			label: "Status",
-			width: "120px",
+			width: "11%",
+			className: "overflow-hidden",
 			render: (value, item) => (
-				<div className="flex flex-wrap gap-1">
+				<div className="flex min-w-0 items-center gap-1">
 					<StatusBadge status={String(value || "PENDING")} />
-					{!item.isActive && <Badge variant="secondary">Inactive</Badge>}
+					{!item.isActive && (
+						<span className="truncate text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+							Off
+						</span>
+					)}
 				</div>
 			),
 		},
 		{
 			key: "notes",
 			label: "Notes",
-			width: "220px",
+			width: "14%",
+			className: "max-w-0 overflow-hidden",
+			hideBelow: "xl",
 			render: (value) => (
-				<span className="block max-w-[220px] truncate text-sm text-gray-600" title={String(value || "")}>
+				<span
+					className="block truncate text-sm text-gray-600"
+					title={String(value || "")}>
 					{value ? String(value) : "-"}
 				</span>
 			),
@@ -713,12 +576,22 @@ export function BenefitsManagement({
 		</DropdownMenu>
 	);
 
-	const isMutationPending =
-		createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
-	const modalTitle = isEditing ? "Edit Payroll Adjustment" : "Add Payroll Adjustment";
 	const activeSourceLabel =
 		sourceCategoryLabels[sourceCategoryParam] ||
 		(codeParam ? codeParam.toUpperCase() : "");
+	const activeBenefitTypeLabel =
+		benefitTypeOptions.find((option) => option.value === benefitTypeIdFilter)?.label ||
+		"";
+
+	// Avoid flashing list UI while redirecting legacy create deep links
+	if (action === "create") {
+		return (
+			<div className="flex h-40 items-center justify-center text-sm text-neutral-500">
+				<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+				Opening create form...
+			</div>
+		);
+	}
 
 	return (
 		<div className="space-y-6">
@@ -736,10 +609,17 @@ export function BenefitsManagement({
 				</Button>
 			)}
 
-			{(activeSourceLabel || directionParam || periodCodeParam || payrollPeriodIdParam) && (
+			{(activeSourceLabel ||
+				activeBenefitTypeLabel ||
+				directionParam ||
+				periodCodeParam ||
+				payrollPeriodIdParam) && (
 				<div className="flex flex-wrap items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
 					<span className="font-medium text-gray-800">Filtered source</span>
 					{activeSourceLabel && <Badge variant="secondary">{activeSourceLabel}</Badge>}
+					{activeBenefitTypeLabel && (
+						<Badge variant="outline">{activeBenefitTypeLabel}</Badge>
+					)}
 					{codeParam && <Badge variant="outline">{codeParam.toUpperCase()}</Badge>}
 					{directionParam && <Badge variant="outline">{directionParam}</Badge>}
 					{(periodCodeParam || payrollPeriodIdParam) && (
@@ -756,9 +636,10 @@ export function BenefitsManagement({
 				renderActions={renderActions}
 				isLoading={isLoading}
 				emptyMessage="No payroll benefits found"
-				emptyDescription="Add a payroll-period benefit or adjustment to make it available to Run Payroll."
+				emptyDescription="Add an employee benefit to schedule installments for payroll."
 				searchWidth="w-80"
 				searchPlaceholder="Search employees or benefits..."
+				toolbarAlign="right"
 				itemsPerPage={limitParam}
 				currentPage={pageParam}
 				totalItems={benefitsData?.pagination?.total || 0}
@@ -778,10 +659,20 @@ export function BenefitsManagement({
 				}}
 				filters={benefitAdvancedFilters}
 				filterValues={benefitAdvancedFilterValues}
-				filterButtonLabel="Advanced Filters"
+				filterButtonLabel="Filters"
+				filterColumns={2}
+				filterPopoverExtra={benefitPopoverFilters}
 				onFilterChange={(filters) => {
 					updateSearchParams((next) => {
-						const keys = ["code", "direction", "status"] as const;
+						const keys = [
+							"benefitTypeId",
+							"code",
+							"direction",
+							"status",
+							"departmentId",
+							"sectionId",
+							"managerId",
+						] as const;
 						keys.forEach((key) => {
 							const value = filters[key];
 							if (!value || value === "all") {
@@ -794,362 +685,29 @@ export function BenefitsManagement({
 					});
 				}}
 				onAdd={openCreate}
-				addButtonLabel="Add Adjustment"
+				addButtonLabel="Add benefit"
 				addButtonClassName="bg-orange-600 hover:bg-orange-700 text-white"
-				customFilters={
-					<>
-						<div className={hrDataTableDepartmentFilterClass}>
-							<DepartmentSectionPicker
-								variant="datatable"
-								departments={departments}
-								sections={sections}
-								departmentId={departmentFilter}
-								sectionId={sectionFilter}
-								className="w-full sm:w-full"
-								onDepartmentChange={(value) => {
-									updateSearchParams((next) => {
-										if (value === "all") {
-											next.delete("departmentId");
-											next.delete("sectionId");
-										} else {
-											next.set("departmentId", value);
-											next.delete("sectionId");
-										}
-										next.set("page", "1");
-									});
-								}}
-								onSectionChange={(departmentId, sectionId) => {
-									updateSearchParams((next) => {
-										next.set("departmentId", departmentId);
-										next.set("sectionId", sectionId);
-										next.set("page", "1");
-									});
-								}}
-							/>
-						</div>
-						<div className={hrDataTableFilterClass}>
-							<HrDataTableManagerFilter
-								value={managerFilter || "all"}
-								onValueChange={(value) => {
-									updateSearchParams((next) => {
-										if (value === "all") {
-											next.delete("managerId");
-										} else {
-											next.set("managerId", value);
-										}
-										next.set("page", "1");
-									});
-								}}
-								options={managerOptions}
-								dataUi="timesheet-manager-trigger"
-							/>
-						</div>
-					</>
-				}
 			/>
 
 			<Modal
-				open={isCreateOrEdit}
+				open={isEditing}
 				onOpenChange={(open) => {
 					if (!open) closeModal();
 				}}
-				title={modalTitle}
+				title="Edit benefit"
 				description={periodContext}
-				className="max-h-[min(88vh,760px)] w-[calc(100vw-1rem)] max-w-3xl overflow-hidden p-0 [&>div:first-child]:px-6 [&>div:first-child]:pb-3 [&>div:first-child]:pt-5 [&>div:first-child]:pr-14">
-				{isEditing && isLoadingItem ? (
-					<div className="flex h-56 items-center justify-center text-sm text-gray-500">
-						<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-						Loading adjustment...
-					</div>
-				) : (
-					<form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-col">
-						<div className="max-h-[calc(min(88vh,760px)-9rem)] space-y-4 overflow-y-auto px-6 py-4 pr-8">
-							{payrollPeriodIdParam && (
-								<div className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-800">
-									This adjustment will be linked to payroll period{" "}
-									<span className="font-semibold">
-										{periodCodeParam || payrollPeriodIdParam}
-									</span>
-									.
-								</div>
-							)}
-
-							<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-								<div>
-									<span className="mb-1 block text-sm font-medium text-gray-700">
-										Employee *
-									</span>
-									<Controller
-										control={control}
-										name="employeeId"
-										render={({ field }) => (
-											<Select
-												options={employeeOptions}
-												value={field.value}
-												onChange={field.onChange}
-												placeholder={
-													employeesLoading ? "Loading employees..." : "Select employee"
-												}
-												error={!!errors.employeeId}
-												disabled={employeesLoading || isEditing}
-											/>
-										)}
-									/>
-									{errors.employeeId && (
-										<p className="mt-1 text-xs text-red-600">
-											{errors.employeeId.message}
-										</p>
-									)}
-								</div>
-								<div>
-									<span className="mb-1 block text-sm font-medium text-gray-700">
-										Benefit Type *
-									</span>
-									<Controller
-										control={control}
-										name="benefitTypeId"
-										render={({ field }) => (
-											<Select
-												options={benefitTypeOptions}
-												value={field.value}
-												onChange={field.onChange}
-												placeholder={
-													benefitTypesLoading
-														? "Loading benefit types..."
-														: "Select benefit type"
-												}
-												error={!!errors.benefitTypeId}
-												disabled={benefitTypesLoading}
-											/>
-										)}
-									/>
-									{errors.benefitTypeId && (
-										<p className="mt-1 text-xs text-red-600">
-											{errors.benefitTypeId.message}
-										</p>
-									)}
-								</div>
-								<div>
-									<label
-										htmlFor="benefit-adjustment-name"
-										className="mb-1 block text-sm font-medium text-gray-700">
-										Name *
-									</label>
-									<Input
-										id="benefit-adjustment-name"
-										className="h-10"
-										placeholder="e.g. De Minimis Allowance"
-										{...register("name")}
-									/>
-									{errors.name && (
-										<p className="mt-1 text-xs text-red-600">{errors.name.message}</p>
-									)}
-								</div>
-								<div>
-									<label
-										htmlFor="benefit-adjustment-amount"
-										className="mb-1 block text-sm font-medium text-gray-700">
-										Amount *
-									</label>
-									<Input
-										id="benefit-adjustment-amount"
-										className="h-10"
-										type="number"
-										min="0"
-										step="0.01"
-										placeholder="0.00"
-										{...register("amount")}
-									/>
-									{errors.amount && (
-										<p className="mt-1 text-xs text-red-600">
-											{errors.amount.message}
-										</p>
-									)}
-								</div>
-								<div>
-									<span className="mb-1 block text-sm font-medium text-gray-700">
-										Start Date *
-									</span>
-									<Controller
-										control={control}
-										name="startDate"
-										render={({ field }) => (
-											<DatePicker
-												value={field.value}
-												onChange={field.onChange}
-												placeholder="Select start date"
-												className={errors.startDate ? "border-red-300" : ""}
-											/>
-										)}
-									/>
-									{errors.startDate && (
-										<p className="mt-1 text-xs text-red-600">
-											{errors.startDate.message}
-										</p>
-									)}
-								</div>
-								<div>
-									<span className="mb-1 block text-sm font-medium text-gray-700">
-										End Date
-									</span>
-									<Controller
-										control={control}
-										name="endDate"
-										render={({ field }) => (
-											<DatePicker
-												value={field.value}
-												onChange={field.onChange}
-												placeholder="Select end date"
-												className={errors.endDate ? "border-red-300" : ""}
-											/>
-										)}
-									/>
-									{errors.endDate && (
-										<p className="mt-1 text-xs text-red-600">
-											{errors.endDate.message}
-										</p>
-									)}
-								</div>
-								<div>
-									<span className="mb-1 block text-sm font-medium text-gray-700">
-										Status *
-									</span>
-									<Controller
-										control={control}
-										name="status"
-										render={({ field }) => (
-											<Select
-												options={statusOptions}
-												value={field.value}
-												onChange={(value) => {
-													field.onChange(value);
-													setValue("isActive", value !== "CANCELLED");
-												}}
-												error={!!errors.status}
-											/>
-										)}
-									/>
-								</div>
-								<div>
-									<span className="mb-1 block text-sm font-medium text-gray-700">
-										Payroll Period
-									</span>
-									<Controller
-										control={control}
-										name="payrollPeriodId"
-										render={({ field }) => (
-											<Select
-												options={payrollPeriodOptions}
-												value={field.value || PAYROLL_PERIOD_NONE_VALUE}
-												onChange={(value) => {
-													field.onChange(
-														value === PAYROLL_PERIOD_NONE_VALUE ? "" : value,
-													);
-												}}
-												placeholder={
-													payrollPeriodsLoading
-														? "Loading payroll periods..."
-														: "Select payroll period"
-												}
-												disabled={payrollPeriodsLoading}
-												error={!!errors.payrollPeriodId}
-											/>
-										)}
-									/>
-									{payrollPeriodsError && (
-										<p className="mt-1 text-xs text-red-600">
-											Payroll periods could not be loaded.
-										</p>
-									)}
-									{errors.payrollPeriodId && (
-										<p className="mt-1 text-xs text-red-600">
-											{errors.payrollPeriodId.message}
-										</p>
-									)}
-								</div>
-								<div className="md:col-span-2">
-									<label
-										htmlFor="benefit-adjustment-description"
-										className="mb-1 block text-sm font-medium text-gray-700">
-										Description
-									</label>
-									<Input
-										id="benefit-adjustment-description"
-										className="h-10"
-										placeholder="Optional source or payroll context"
-										{...register("description")}
-									/>
-									{errors.description && (
-										<p className="mt-1 text-xs text-red-600">
-											{errors.description.message}
-										</p>
-									)}
-								</div>
-								<div className="md:col-span-2">
-									<label
-										htmlFor="benefit-adjustment-notes"
-										className="mb-1 block text-sm font-medium text-gray-700">
-										Notes
-									</label>
-									<textarea
-										id="benefit-adjustment-notes"
-										className="min-h-[76px] w-full resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-										placeholder="Optional payroll note"
-										{...register("notes")}
-									/>
-									{errors.notes && (
-										<p className="mt-1 text-xs text-red-600">{errors.notes.message}</p>
-									)}
-								</div>
-							</div>
-
-							<div className="grid gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600 sm:grid-cols-3">
-								<div className="min-w-0">
-									<span className="block text-gray-500">Direction</span>
-									<span className="truncate font-medium text-gray-900">
-										{selectedBenefitType?.payrollDirection || "From benefit type"}
-									</span>
-								</div>
-								<div className="min-w-0">
-									<span className="block text-gray-500">Status</span>
-									<span className="truncate font-medium text-gray-900">
-										{watchedStatus}
-									</span>
-								</div>
-								<div className="min-w-0">
-									<span className="block text-gray-500">Active</span>
-									<span className="truncate font-medium text-gray-900">
-										{watchedIsActive ? "Yes" : "No"}
-									</span>
-								</div>
-							</div>
-						</div>
-						<div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4 pr-7">
-							<Button
-								type="button"
-								variant="outline"
-								onClick={closeModal}
-								disabled={isMutationPending}>
-								Cancel
-							</Button>
-							<Button
-								type="submit"
-								className="bg-orange-600 text-white hover:bg-orange-700"
-								disabled={isMutationPending}>
-								{isMutationPending ? (
-									<>
-										<Loader2 className="h-4 w-4 animate-spin" />
-										Saving
-									</>
-								) : isEditing ? (
-									"Update Adjustment"
-								) : (
-									"Add Adjustment"
-								)}
-							</Button>
-						</div>
-					</form>
-				)}
+				className="max-h-[min(90vh,820px)] w-[calc(100vw-1rem)] max-w-2xl gap-0 overflow-hidden rounded-2xl border-neutral-200 p-0 shadow-xl [&>div:first-child]:border-b [&>div:first-child]:border-neutral-100 [&>div:first-child]:bg-neutral-50/80 [&>div:first-child]:px-6 [&>div:first-child]:pb-4 [&>div:first-child]:pt-5 [&>div:first-child]:pr-14">
+				<EmployeeBenefitForm
+					mode="edit"
+					presentation="modal"
+					benefitId={id}
+					payrollPeriodId={payrollPeriodIdParam}
+					periodCode={periodCodeParam}
+					periodStart={periodStartParam}
+					periodEnd={periodEndParam}
+					onCancel={closeModal}
+					onSuccess={closeModal}
+				/>
 			</Modal>
 
 			<Modal
@@ -1157,28 +715,75 @@ export function BenefitsManagement({
 				onOpenChange={(open) => {
 					if (!open) closeModal();
 				}}
-				title="Payroll Adjustment Details"
+				title="Benefit details"
 				description={activeItem?.payrollPeriod?.code || periodContext}
 				className="max-h-[min(86vh,680px)] overflow-hidden">
 				{isLoadingItem ? (
 					<div className="flex h-40 items-center justify-center text-sm text-gray-500">
 						<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-						Loading adjustment...
+						Loading benefit...
 					</div>
 				) : activeItem ? (
 					<div className="max-h-[calc(min(86vh,680px)-7rem)] space-y-4 overflow-y-auto pr-1">
 						<div className="grid gap-3 sm:grid-cols-2">
 							{[
 								["Employee", getEmployeeName(activeItem.employee)],
-								["Employee ID", (activeItem.employee as any)?.employeeId || activeItem.employeeId],
+								[
+									"Employee ID",
+									(activeItem.employee as any)?.employeeId || activeItem.employeeId,
+								],
 								["Benefit type", activeItem.benefitType?.name || activeItem.name],
-								["Amount", formatCurrency(activeItem.amount)],
-								["Payroll period", activeItem.payrollPeriod?.code || activeItem.payrollPeriodId || "-"],
+								[
+									activeItem.attendanceBased
+										? activeItem.attendanceAmountBasis === "PER_DAY"
+											? "Rate per present day"
+											: "Full cut-off amount"
+										: activeItem.scheduleMode === "RECURRING"
+											? "Amount per period"
+											: "Amount",
+									formatCurrency(activeItem.amount),
+								],
+								[
+									"Attendance",
+									activeItem.attendanceBased
+										? activeItem.attendanceAmountBasis === "PER_DAY"
+											? "Yes · per present day"
+											: activeItem.attendanceAmountBasis === "PER_CUTOFF"
+												? "Yes · full cut-off (deduct absences)"
+												: "Yes"
+										: "No (fixed amount)",
+								],
+								[
+									"Schedule",
+									activeItem.scheduleMode === "RECURRING"
+										? "Recurring"
+										: activeItem.scheduleMode === "FIXED_INSTALLMENTS"
+											? "Fixed installments"
+											: activeItem.scheduleMode === "TIME_BOUND"
+												? "Time-bound"
+												: "—",
+								],
+								[
+									"End date",
+									activeItem.endDate
+										? formatDate(activeItem.endDate, "short")
+										: activeItem.scheduleMode === "RECURRING"
+											? "Open-ended"
+											: "—",
+								],
+								[
+									"Payroll period",
+									activeItem.payrollPeriod?.code || activeItem.payrollPeriodId || "-",
+								],
 								["Status", activeItem.status || "PENDING"],
 							].map(([label, value]) => (
-								<div key={label} className="min-w-0 rounded-md border border-gray-200 bg-gray-50 p-3">
+								<div
+									key={label}
+									className="min-w-0 rounded-md border border-gray-200 bg-gray-50 p-3">
 									<p className="text-xs text-gray-500">{label}</p>
-									<p className="mt-1 truncate text-sm font-medium text-gray-900" title={String(value)}>
+									<p
+										className="mt-1 truncate text-sm font-medium text-gray-900"
+										title={String(value)}>
 										{value}
 									</p>
 								</div>
@@ -1203,7 +808,7 @@ export function BenefitsManagement({
 					</div>
 				) : (
 					<div className="py-8 text-center text-sm text-gray-500">
-						Adjustment not found.
+						Benefit not found.
 					</div>
 				)}
 			</Modal>
@@ -1213,13 +818,13 @@ export function BenefitsManagement({
 				onOpenChange={(open) => {
 					if (!open) closeModal();
 				}}
-				title="Delete Payroll Adjustment"
-				description="Remove this EmployeeBenefit source row from payroll adjustment reads.">
+				title="Delete benefit"
+				description="This removes the employee benefit and its scheduled payroll installments from future runs.">
 				<div className="space-y-4">
 					<p className="text-sm text-gray-600">
 						Delete{" "}
 						<span className="font-medium text-gray-900">
-							{activeItem?.name || activeItem?.benefitType?.name || "this adjustment"}
+							{activeItem?.name || activeItem?.benefitType?.name || "this benefit"}
 						</span>
 						?
 					</p>

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
 	buildPayslipComputationRows,
 	buildPayslipFormulaProof,
+	extractPayrollCorrectionEarningsRows,
 	generatePayslipPdfBuffer,
 } from "../helper/payslip-pdf.helper";
 
@@ -103,6 +104,60 @@ describe("payslip PDF calculation proof", () => {
 		assert.equal(findAmount(rows, "TotalReceivable"), 13075.59);
 	});
 
+	it("expands De Minimis enrollments from payrollSourceDetails instead of one total line", () => {
+		const payroll = {
+			id: "payroll-dma-breakdown",
+			basicPay: 25000,
+			absentDeduction: 0,
+			overtimePay: 7872.16,
+			nightDiffPay: 1351.04,
+			deMinimisAllowance: 6500,
+			grossPay: 34152.18,
+			taxAmount: 4475.8,
+			sssContribution: 0,
+			philHealthContribution: 0,
+			pagibigContribution: 0,
+			totalDeductions: 4475.8,
+			netPay: 29676.38,
+			metadata: {
+				payrollSourceDetails: [
+					{
+						id: "b1",
+						source: "employeeBenefit",
+						code: "DMA",
+						name: "Rice Subsidy",
+						benefitTypeName: "De Minimis Allowance",
+						direction: "COMPENSATION",
+						reconciliationAction: "GROSS_INCLUDED",
+						amount: 3000,
+					},
+					{
+						id: "b2",
+						source: "employeeBenefit",
+						code: "DMA",
+						name: "Travel Allowance",
+						benefitTypeName: "De Minimis Allowance",
+						direction: "COMPENSATION",
+						reconciliationAction: "GROSS_INCLUDED",
+						amount: 3500,
+					},
+				],
+			},
+		};
+
+		const proof = buildPayslipFormulaProof(payroll);
+		const labels = proof.grossRows.map((row) => row.label);
+		assert.ok(!labels.includes("De Minimis Allowance"), "register total must not appear");
+		assert.ok(labels.some((label) => label.startsWith("Rice Subsidy")));
+		assert.ok(labels.some((label) => label.startsWith("Travel Allowance")));
+		assert.equal(
+			proof.grossRows
+				.filter((row) => row.label.startsWith("Rice Subsidy") || row.label.startsWith("Travel Allowance"))
+				.reduce((sum, row) => sum + row.amount, 0),
+			6500,
+		);
+	});
+
 	it("surfaces saved total receivable mismatches instead of replacing them with a fallback", () => {
 		const payroll = {
 			id: "payroll-mismatch",
@@ -125,6 +180,100 @@ describe("payslip PDF calculation proof", () => {
 		assert.equal(proof.totalReceivable, 0);
 		assert.equal(proof.totalReceivableGap, 975);
 
+	});
+
+	it("includes approved payroll correction retro lines in earnings (closes payslip display gap)", () => {
+		const retroLabel = "Retro OT (Period 1 - Jun 2026 correction)";
+		const retroAmount = 500;
+		// Coherent formula: basic - absent + OT + ND + retro = gross
+		const basicPay = 10000;
+		const absentDeduction = 0;
+		const overtimePay = 1000;
+		const nightDiffPay = 200;
+		const grossPay = basicPay + overtimePay + nightDiffPay + retroAmount; // 11700
+		const totalDeductions = 100;
+		const netPay = grossPay - totalDeductions;
+		const payroll = {
+			id: "payroll-with-retro",
+			basicPay,
+			absentDeduction,
+			overtimePay,
+			nightDiffPay,
+			holidayPay: 0,
+			otherCompensation: retroAmount,
+			grossPay,
+			taxAmount: totalDeductions,
+			sssContribution: 0,
+			philHealthContribution: 0,
+			pagibigContribution: 0,
+			sssSalaryLoan: 0,
+			modifiedHdmf2: 0,
+			totalDeductions,
+			netPay,
+			totalReceivable: netPay,
+			metadata: {
+				payrollCorrections: [
+					{
+						correctionId: "corr-1",
+						label: retroLabel,
+						amount: retroAmount,
+						sourcePayrollPeriodName: "Period 1 - Jun 2026",
+						status: "APPLIED",
+					},
+				],
+			},
+		};
+
+		const extracted = extractPayrollCorrectionEarningsRows(payroll.metadata);
+		assert.equal(extracted.length, 1);
+		assert.equal(extracted[0].label, retroLabel);
+		assert.equal(extracted[0].amount, retroAmount);
+
+		const proof = buildPayslipFormulaProof(payroll);
+		const retroRow = proof.grossRows.find((row) => row.label === retroLabel);
+		assert.ok(retroRow, "Expected retro correction line in PDF earnings");
+		assert.equal(retroRow!.amount, retroAmount);
+		assert.equal(proof.grossGap, 0);
+
+		const rows = buildPayslipComputationRows(payroll);
+		assert.equal(findAmount(rows, retroLabel), retroAmount);
+		assert.equal(findAmount(rows, "GrossPay"), payroll.grossPay);
+	});
+
+	it("does not double-count otherCompensation when payrollCorrections already cover it", () => {
+		const payroll = {
+			id: "payroll-no-double",
+			basicPay: 10000,
+			absentDeduction: 0,
+			otherCompensation: 500,
+			grossPay: 10500,
+			taxAmount: 0,
+			sssContribution: 0,
+			philHealthContribution: 0,
+			pagibigContribution: 0,
+			totalDeductions: 0,
+			netPay: 10500,
+			totalReceivable: 10500,
+			metadata: {
+				payrollCorrections: [
+					{
+						correctionId: "c1",
+						label: "Retro hours (P1 correction)",
+						amount: 500,
+					},
+				],
+			},
+		};
+		const proof = buildPayslipFormulaProof(payroll);
+		const retroCount = proof.grossRows.filter((r) =>
+			r.label.startsWith("Retro"),
+		).length;
+		const otherCompCount = proof.grossRows.filter(
+			(r) => r.label === "Other Compensation",
+		).length;
+		assert.equal(retroCount, 1);
+		assert.equal(otherCompCount, 0);
+		assert.equal(proof.grossGap, 0);
 	});
 
 	it("generates a PDF buffer with a post-net receivable proof path", async () => {
