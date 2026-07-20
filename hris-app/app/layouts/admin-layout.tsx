@@ -98,10 +98,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 			<SocketProvider>
 				<NotificationProvider>
 					<div className="h-screen bg-gray-50 flex overflow-hidden">
-						{/* Sidebar */}
+						{/* Sidebar — `sidebar` + `sidebar-scroll` enable hover-only scrollbar (app.css) */}
 						<div
-							className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-100 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto`}>
-							<div className="flex items-center justify-between h-16 px-6 border-b border-gray-100">
+							className={`sidebar ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} fixed inset-y-0 left-0 z-50 flex h-full w-64 flex-col overflow-hidden bg-white border-r border-gray-100 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen`}>
+							<div className="flex items-center justify-between h-16 px-6 border-b border-gray-100 shrink-0">
 								<img
 									src={organizationLogo}
 									alt={`${organizationName} logo`}
@@ -115,7 +115,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 							</div>
 
 							{/* User Profile Section */}
-							<div className="px-5 py-5 border-b border-gray-100">
+							<div className="px-5 py-5 border-b border-gray-100 shrink-0">
 								<div className="flex items-start gap-3">
 									{/* Avatar */}
 									<div className="flex-shrink-0">
@@ -148,7 +148,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 								</div>
 							</div>
 
-							<nav ref={navScrollRef} className="mt-4 px-3 overflow-y-auto">
+							<nav
+								ref={navScrollRef}
+								className="sidebar-scroll mt-4 flex-1 overflow-y-auto px-3 pb-4">
 								{/* Working space section */}
 								<div className="mb-6">
 									<h3 className="px-3 text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
