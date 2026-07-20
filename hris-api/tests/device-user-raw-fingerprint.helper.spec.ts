@@ -188,8 +188,12 @@ describe("device-user-raw-fingerprint helper", () => {
 		expect(result.rawPresent).to.equal(true);
 		expect(result.fingerprintCount).to.equal(1);
 		expect(result.totalDataChars).to.be.greaterThan(8);
-		expect(updates).to.have.length(1);
-		const savedMeta = updates[0].data.vendorMetadata;
+		expect(updates.length).to.be.greaterThan(0);
+		const fingerprintUpdate = updates.find((update) =>
+			Boolean(update.data.vendorMetadata?.rawFingerprints?.templates?.length),
+		);
+		expect(fingerprintUpdate).to.exist;
+		const savedMeta = fingerprintUpdate.data.vendorMetadata;
 		expect(savedMeta.rawFingerprints.templates[0].data).to.equal(
 			"cmF3LWZpbmdlci10ZW1wbGF0ZS1kYXRh",
 		);

@@ -112,8 +112,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("${storedCount} of ${enrolledCount} stored");
 		expect(enroll).toContain("All enrolled fingerprint templates stored");
 		expect(enroll).toContain("Repair: capture face");
-		expect(enroll).toContain("Fingerprint raw blob custody");
-		expect(enroll).toContain("Face raw blob custody");
+		expect(enroll).toContain("Raw fingerprint templates");
+		expect(enroll).toContain("Raw face photo");
 		expect(enroll).toContain("fingerprintRawMissing");
 		expect(enroll).toContain("faceRawMissing");
 		expect(enroll).toContain("Raw blobs only");
@@ -233,7 +233,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("deviceUserExportState.open && Boolean(selectedDeviceId)");
 		expect(enroll).toContain('activePanel === "users" || deviceUserExportState.open');
 		expect(enroll).toContain("isLoadingDeviceUserExportRows");
-		expect(enroll).toContain("Raw biometric readiness");
+		expect(enroll).toContain("Biometric readiness");
+		expect(enroll).toContain("Checking export readiness");
+		expect(enroll).toContain("Preview or export will not change the device.");
 		expect(enroll).toContain("getRawFingerprintBlobCell");
 		expect(enroll).toContain("decodeRawBiometricBlobCell");
 		expect(enroll).toContain("encodeRawFingerprintBlobCell");
@@ -249,7 +251,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("selectedExportVendorUserIds");
 		expect(enroll).toContain("togglePagedExportVendorUserIds");
 		expect(enroll).toContain("rawBiometricPackage");
-		expect(enroll).toContain("Raw biometric package");
+		expect(enroll).toContain("Biometric custody package");
 		expect(enroll).toMatch(
 			/const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = \[\s*"rawFingerprintBlob",\s*"rawFaceBlob",\s*\] as const;/,
 		);
@@ -275,16 +277,17 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("biometricCsvColumns");
 		expect(enroll).toContain("raw_evidenced_blobs_allowed_for_admin_device_user_sync_package");
 		expect(enroll).toContain("Missing cells must stay explicit");
-		expect(enroll).toContain("Use SDK peer copy when both devices are reachable");
+		expect(enroll).toContain("Package exports carry only custody data already proven in HRIS");
+		expect(enroll).toContain("preview fingerprint or face custody data before any write is allowed");
 		expect(enroll).toContain("Preview import");
 		expect(enroll).toContain("Import CSV file");
 		expect(enroll).toContain("Package JSON");
 		expect(enroll).toContain("CSV template");
 		expect(enroll).toContain("buildDeviceUserImportPayloadFromCsv");
-		expect(enroll).toContain("Raw blob columns");
+		expect(enroll).toContain("Spreadsheet import");
 		expect(enroll).toContain("Transfer mode");
-		expect(enroll).toContain("SDK peer copy");
-		expect(enroll).toContain("Raw package");
+		expect(enroll).toContain("Reachable source copy");
+		expect(enroll).toContain("Package data");
 		expect(enroll).not.toContain("Encrypted bundle passphrase");
 		expect(enroll).toContain("Type IMPORT DEVICE USERS");
 		expect(enroll).toContain("Run execute as background job");
@@ -292,7 +295,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Poll:");
 		expect(enroll).toContain("executeDeviceUserImport");
 		expect(enroll).toContain("previewToken");
-		expect(enroll).toContain("Raw package used");
+		expect(enroll).toContain("Package data used");
 		expect(enroll).toContain("rawBiometricTemplateBytes");
 		expect(enroll).toContain("previewDeviceUserExport");
 		expect(enroll).toContain("previewDeviceUserImport");

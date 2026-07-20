@@ -7,7 +7,7 @@ export const securityConfig = {
 	},
 
 	requestLimits: {
-		maxSize: 10 * 1024 * 1020,
+		maxSize: 75 * 1024 * 1024,
 		maxFields: 1000,
 		maxFileSize: 5 * 1024 * 1024,
 	},

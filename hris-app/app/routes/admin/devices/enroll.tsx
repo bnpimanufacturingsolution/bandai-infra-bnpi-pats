@@ -3846,7 +3846,7 @@ export function DeviceEnrollmentPanel({
 			isLoadingDbDeviceUsers ||
 			isCheckingSourceDeviceUserLinks);
 	const deviceUserExportCountLabel = (count: number) =>
-		isLoadingDeviceUserExportRows ? "Loading…" : `${count} rows`;
+		isLoadingDeviceUserExportRows ? "Loading..." : `${count} rows`;
 	const deviceUserExportScopeCountLabel =
 		deviceUserExportState.selection === "selectedRows"
 			? `${deviceUserExportScopeCount} rows`
@@ -3859,6 +3859,40 @@ export function DeviceEnrollmentPanel({
 				: deviceUserExportState.selection === "filtered"
 					? "Current filter"
 					: "All device users";
+	const isDeviceUserExportPreviewing = previewDeviceUserExportMutation.isPending;
+	const isDeviceUserExportDownloading = exportDeviceUsersMutation.isPending;
+	const isDeviceUserExportBusy =
+		isLoadingDeviceUserExportRows ||
+		isDeviceUserExportPreviewing ||
+		isDeviceUserExportDownloading;
+	const deviceUserExportActionLabel = isDeviceUserExportDownloading
+		? `Creating ${
+				deviceUserExportState.format === "json"
+					? "package"
+					: deviceUserExportState.format === "excel"
+						? "Excel workbook"
+						: "CSV file"
+			}`
+		: isDeviceUserExportPreviewing
+			? "Checking export readiness"
+			: isLoadingDeviceUserExportRows
+				? "Loading device users"
+				: "Ready to export";
+	const deviceUserExportBiometricLoadingLabel = isDeviceUserExportDownloading
+		? "Preparing biometric custody data for the download."
+		: isDeviceUserExportPreviewing
+			? "Checking saved fingerprint and face custody before download."
+			: isLoadingDeviceUserExportRows
+				? "Loading the selected rows and enrollment counts."
+				: "Preview or export will not change the device.";
+	const formatDeviceUserExportReadiness = (status?: string | null) => {
+		if (!status || status === "not_requested") return "Not requested";
+		if (status === "ready" || status === "complete") return "Ready";
+		if (status === "spreadsheet_raw_blobs") return "Ready from spreadsheet";
+		if (status === "partial_missing_requested_raw_blobs") return "Needs review";
+		if (status === "missing_requested_raw_blobs") return "Missing custody data";
+		return status.replace(/_/g, " ");
+	};
 	const escapeCsvValue = (value: unknown) => {
 		const text = value === null || value === undefined ? "" : String(value);
 		return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
@@ -6168,12 +6202,12 @@ export function DeviceEnrollmentPanel({
 								<div className="grid gap-2 sm:grid-cols-2">
 									{[
 										[
-											"Fingerprint raw blob custody",
-											`${metricValue(selectedSyncCenterItem?.preview?.fingerprintReported)} enrolled · ${metricValue(selectedSyncCenterItem?.preview?.fingerprintRawPresent ?? selectedSyncCenterItem?.preview?.fingerprintEnvelopePresent)} raw · ${metricValue(selectedSyncCenterItem?.preview?.fingerprintRawMissing ?? selectedSyncCenterItem?.preview?.fingerprintEnvelopeMissing)} missing_raw_blob`,
+											"Current live users: fingerprint inventory vs HRIS raw",
+											`${metricValue(selectedSyncCenterItem?.preview?.fingerprintReported)} inventory slots / ${metricValue(selectedSyncCenterItem?.preview?.fingerprintRawPresent ?? selectedSyncCenterItem?.preview?.fingerprintEnvelopePresent)} HRIS raw stored / ${metricValue(selectedSyncCenterItem?.preview?.fingerprintRawMissing ?? selectedSyncCenterItem?.preview?.fingerprintEnvelopeMissing)} raw missing`,
 										],
 										[
-											"Face raw blob custody",
-											`${metricValue(selectedSyncCenterItem?.preview?.faceReported)} enrolled · ${metricValue(selectedSyncCenterItem?.preview?.faceRawPresent ?? selectedSyncCenterItem?.preview?.faceEnvelopePresent)} raw · ${metricValue(selectedSyncCenterItem?.preview?.faceRawMissing ?? selectedSyncCenterItem?.preview?.faceEnvelopeMissing)} missing_raw_blob`,
+											"Current live users: face inventory vs HRIS raw",
+											`${metricValue(selectedSyncCenterItem?.preview?.faceReported)} inventory claims / ${metricValue(selectedSyncCenterItem?.preview?.faceRawPresent ?? selectedSyncCenterItem?.preview?.faceEnvelopePresent)} HRIS raw stored / ${metricValue(selectedSyncCenterItem?.preview?.faceRawMissing ?? selectedSyncCenterItem?.preview?.faceEnvelopeMissing)} raw missing`,
 										],
 									].map(([label, value]) => (
 										<div key={label} className="rounded-md border border-slate-200 px-2 py-1.5">
@@ -6182,10 +6216,23 @@ export function DeviceEnrollmentPanel({
 										</div>
 									))}
 								</div>
+								{Number(selectedSyncCenterItem?.preview?.staleHrisOnlyRows || 0) > 0 ? (
+									<div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5">
+										<span className="block text-slate-500">Stale HRIS-only inventory</span>
+										<span className="font-semibold text-slate-950">
+											{metricValue(selectedSyncCenterItem?.preview?.staleHrisOnlyRows)} rows /{" "}
+											{metricValue(selectedSyncCenterItem?.preview?.staleFingerprintReported)} fingerprint claims /{" "}
+											{metricValue(selectedSyncCenterItem?.preview?.staleFingerprintRawBlobCount ?? selectedSyncCenterItem?.preview?.staleFingerprintRawPresent)} HRIS raw stored /{" "}
+											{metricValue(selectedSyncCenterItem?.preview?.staleFingerprintRawMissing)} fingerprint raw missing /{" "}
+											{metricValue(selectedSyncCenterItem?.preview?.staleFaceReported)} face claims /{" "}
+											{metricValue(selectedSyncCenterItem?.preview?.staleFaceRawMissing)} face raw missing
+										</span>
+									</div>
+								) : null}
 								<p className="text-slate-600">
-									Full sync rereads source users, then repairs missing raw custody.
-									For the fastest repair, use Sync Center - Raw blobs only.
-									Remaining gaps stay marked missing_raw_blob; no blobs are fabricated.
+									Current counts are scoped to users still present in the live device
+									inventory. Stale HRIS-only rows are preserved separately for cleanup
+									review; no blobs are fabricated from old counts.
 								</p>
 							</div>
 						) : null}
@@ -8843,9 +8890,9 @@ export function DeviceEnrollmentPanel({
 									{selectedDevice?.name || "Selected device"}
 								</p>
 								<p className="mt-1 text-xs text-slate-600">
-									CSV and Excel use explicit raw biometric blob columns. Empty
-									cells stay truthful with not_enrolled, missing_raw_blob, or
-									not_requested.
+									Preview checks the selected rows first. Exports include device
+									IDs, HRIS links, card totals, and available fingerprint or face
+									custody data without changing the device.
 								</p>
 							</div>
 							<Badge variant="secondary" className="self-start">
@@ -8853,6 +8900,27 @@ export function DeviceEnrollmentPanel({
 							</Badge>
 						</div>
 					</div>
+					{isDeviceUserExportBusy ? (
+						<div className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-950">
+							<div className="flex items-start gap-2">
+								<Loader2 className="mt-0.5 h-4 w-4 animate-spin shrink-0" />
+								<div className="min-w-0">
+									<p className="font-semibold">{deviceUserExportActionLabel}</p>
+									<p className="mt-1 text-xs text-orange-900">
+										{deviceUserExportScopeLabel} · {deviceUserExportScopeCountLabel} ·{" "}
+										{deviceUserExportState.format === "json"
+											? "Package JSON"
+											: deviceUserExportState.format === "excel"
+												? "Excel workbook"
+												: "CSV file"}
+									</p>
+									<p className="mt-1 text-xs text-orange-900">
+										{deviceUserExportBiometricLoadingLabel}
+									</p>
+								</div>
+							</div>
+						</div>
+					) : null}
 					<div className="grid gap-2 sm:grid-cols-4">
 						{[
 							[
@@ -8939,13 +9007,9 @@ export function DeviceEnrollmentPanel({
 					<div className="rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-950">
 						<p className="font-semibold">Biometric handling</p>
 						<p className="mt-1 text-cyan-900">
-							Use SDK peer copy when both devices are reachable. Package exports copy
-							only evidenced raw fingerData and face/image blobs already stored on
-							DeviceUser or the matching DeviceEvent payload.
-						</p>
-						<p className="mt-2 font-mono text-[11px] text-cyan-950">
-							Spreadsheet columns: rawFingerprintBlob and rawFaceBlob. Missing
-							bytes are not_enrolled, missing_raw_blob, or not_requested.
+							Package exports carry only custody data already proven in HRIS.
+							When a fingerprint or face is not available, the spreadsheet keeps an
+							explicit status so reviewers can see what still needs attention.
 						</p>
 					</div>
 					<div className="grid gap-2 text-sm sm:grid-cols-3">
@@ -8953,7 +9017,7 @@ export function DeviceEnrollmentPanel({
 							["includeCards", "Cards"],
 							["includeFingerprints", "Fingerprints"],
 							["includeFaces", "Faces"],
-							["rawBiometricPackage", "Raw biometric package"],
+							["rawBiometricPackage", "Biometric custody package"],
 						].map(([key, label]) => (
 							<label
 								key={key}
@@ -8995,9 +9059,9 @@ export function DeviceEnrollmentPanel({
 							))}
 						</div>
 							<div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-								<p className="font-semibold text-slate-950">Raw biometric readiness</p>
+								<p className="font-semibold text-slate-950">Biometric readiness</p>
 								<p className="mt-1">
-									Fingerprints: {(deviceUserExportState.preview.summary.biometrics as any)?.fingerprintRawBlobsCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.fingerprintCountReported || 0} raw blobs. Faces: {(deviceUserExportState.preview.summary.biometrics as any)?.faceRawBlobsCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.faceCountReported || 0} raw blobs.
+									Fingerprints ready: {(deviceUserExportState.preview.summary.biometrics as any)?.fingerprintRawBlobsCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.fingerprintCountReported || 0}. Faces ready: {(deviceUserExportState.preview.summary.biometrics as any)?.faceRawBlobsCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.faceCountReported || 0}.
 								</p>
 							</div>
 						</div>
@@ -9006,15 +9070,16 @@ export function DeviceEnrollmentPanel({
 						<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
 							<p className="font-semibold">Credential custody</p>
 							<p className="mt-1 text-amber-900">
-								Fingerprint raw blobs: {(deviceUserExportState.preview.summary.biometrics as any)?.fingerprintRawBlobsCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.fingerprintCountReported || 0} reported users.
+								Fingerprint custody ready: {(deviceUserExportState.preview.summary.biometrics as any)?.fingerprintRawBlobsCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.fingerprintCountReported || 0} enrolled records.
 							</p>
 							<p className="mt-1 text-amber-900">
-								Face raw blobs: {(deviceUserExportState.preview.summary.biometrics as any)?.faceRawBlobsCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.faceCountReported || 0} reported users.
+								Face custody ready: {(deviceUserExportState.preview.summary.biometrics as any)?.faceRawBlobsCaptured || 0} of {deviceUserExportState.preview.summary.biometrics?.faceCountReported || 0} enrolled records.
 							</p>
 							<p className="mt-1 text-amber-900">
-								Package status:{" "}
-								{deviceUserExportState.preview.rawBiometricPackage?.status ||
-									"not requested"}
+								Export readiness:{" "}
+								{formatDeviceUserExportReadiness(
+									deviceUserExportState.preview.rawBiometricPackage?.status,
+								)}
 							</p>
 						</div>
 					) : null}
@@ -9027,7 +9092,7 @@ export function DeviceEnrollmentPanel({
 							}`}>
 							{deviceUserExportState.result.rawBiometricPackage?.errors?.length ? (
 								<p className="font-semibold">
-									Partial export: {deviceUserExportState.result.rawBiometricPackage.errors.length} requested raw biometric payloads are missing.
+									Partial export: {deviceUserExportState.result.rawBiometricPackage.errors.length} enrolled biometric records still need custody review.
 								</p>
 							) : null}
 							{deviceUserExportState.format === "json"
@@ -9040,30 +9105,30 @@ export function DeviceEnrollmentPanel({
 						<Button
 							type="button"
 							variant="outline"
-							disabled={previewDeviceUserExportMutation.isPending || isLoadingDeviceUserExportRows}
+							disabled={isDeviceUserExportPreviewing || isLoadingDeviceUserExportRows}
 							onClick={() => void previewDeviceUserExport()}>
-							{previewDeviceUserExportMutation.isPending ? (
+							{isDeviceUserExportPreviewing ? (
 								<Loader2 className="h-4 w-4 animate-spin" />
 							) : (
 								<Eye className="h-4 w-4" />
 							)}
-							Preview
+							{isDeviceUserExportPreviewing ? "Previewing..." : "Preview"}
 						</Button>
 						<Button
 							type="button"
 							disabled={
-								exportDeviceUsersMutation.isPending ||
-								previewDeviceUserExportMutation.isPending ||
+								isDeviceUserExportDownloading ||
+								isDeviceUserExportPreviewing ||
 								startDeviceUserSyncJobMutation.isPending ||
 								isLoadingDeviceUserExportRows
 							}
 							onClick={() => void exportDeviceUserFile()}>
-							{exportDeviceUsersMutation.isPending ? (
+							{isDeviceUserExportDownloading ? (
 								<Loader2 className="h-4 w-4 animate-spin" />
 							) : (
 								<Download className="h-4 w-4" />
 							)}
-							Export{" "}
+							{isDeviceUserExportDownloading ? "Exporting" : "Export"}{" "}
 							{deviceUserExportState.format === "json"
 								? "Package"
 								: deviceUserExportState.format === "excel"
@@ -9088,13 +9153,13 @@ export function DeviceEnrollmentPanel({
 						</p>
 						<p className="mt-1 text-xs text-slate-600">
 							Use the CSV export from another Hikvision device to compare users and
-							preview raw biometric blobs without writing to the device.
+							preview fingerprint or face custody data before any write is allowed.
 						</p>
 					</div>
 					<div className="grid gap-2 sm:grid-cols-2">
 						{[
-							["csv", "CSV", "Raw blob columns"],
-							["json", "Package JSON", "Raw biometric package import"],
+							["csv", "CSV", "Spreadsheet import"],
+							["json", "Package JSON", "Device-user package import"],
 						].map(([value, label, description]) => (
 							<button
 								key={value}
@@ -9242,13 +9307,13 @@ export function DeviceEnrollmentPanel({
 								<p className="font-semibold">Transfer proof</p>
 								<p className="mt-1 text-amber-900">
 									{deviceUserImportState.preview.executeBlockedReason ||
-										"Execute is available after typed confirmation. SDK peer copy reads from a reachable source; rawPackage writes evidenced blobs from the file."}
+										"Execute is available after typed confirmation. Reachable source copy reads from a source device; package data writes the custody data carried in the file."}
 								</p>
 								<p className="mt-1 text-amber-900">
-									Raw package:{" "}
+									Package data:{" "}
 									{deviceUserImportState.preview.rawBiometricPackage?.present
-										? `${deviceUserImportState.preview.rawBiometricPackage.rawFingerprintBlobCount || 0} fingerprint / ${deviceUserImportState.preview.rawBiometricPackage.rawFaceBlobCount || 0} face blobs`
-										: "no raw biometric blobs in file"}
+										? `${deviceUserImportState.preview.rawBiometricPackage.rawFingerprintBlobCount || 0} fingerprint / ${deviceUserImportState.preview.rawBiometricPackage.rawFaceBlobCount || 0} face records`
+										: "no biometric custody data in file"}
 									{" / "}
 									{deviceUserImportState.preview.rawBiometricPackage?.transferModes?.join(
 										", ",
@@ -9281,7 +9346,11 @@ export function DeviceEnrollmentPanel({
 														{row.sourceDeviceName || "-"}
 													</td>
 													<td className="px-3 py-2 text-slate-700">
-														{row.transferMode || "metadataOnly"}
+														{row.transferMode === "rawPackage"
+															? "Package data"
+															: row.transferMode === "sdkPeerCopy"
+																? "Reachable source copy"
+																: "Metadata only"}
 													</td>
 												</tr>
 											))}
@@ -9306,8 +9375,8 @@ export function DeviceEnrollmentPanel({
 										}))
 									}
 									className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200">
-									<option value="sdkPeerCopy">SDK peer copy</option>
-									<option value="rawPackage">Raw package</option>
+									<option value="sdkPeerCopy">Reachable source copy</option>
+									<option value="rawPackage">Package data</option>
 									<option value="metadataOnly">Metadata only</option>
 								</select>
 							</label>
@@ -9376,7 +9445,7 @@ export function DeviceEnrollmentPanel({
 								</>
 							)}
 							<p className="mt-1 text-xs text-emerald-900">
-								Raw package used:{" "}
+								Package data used:{" "}
 								{String(deviceUserImportState.result.plaintextBiometricExposed)}
 							</p>
 						</div>

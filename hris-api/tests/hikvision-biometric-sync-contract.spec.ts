@@ -14,6 +14,9 @@ describe("Hikvision biometric sync contract", () => {
 		);
 	const envelopeHelperSource = () =>
 		readFileSync(join(process.cwd(), "app/device/biometric-envelope.helper.ts"), "utf8");
+	const indexSource = () => readFileSync(join(process.cwd(), "index.ts"), "utf8");
+	const securityMiddlewareSource = () =>
+		readFileSync(join(process.cwd(), "middleware/security.ts"), "utf8");
 
 	it("exposes admin-only dry-run and execute reconciliation without template custody", () => {
 		const router = routerSource();
@@ -105,6 +108,8 @@ describe("Hikvision biometric sync contract", () => {
 	it("supports scoped device-user export and gated import execute without plaintext biometric custody", () => {
 		const router = routerSource();
 		const controller = controllerSource();
+		const index = indexSource();
+		const security = securityMiddlewareSource();
 
 		expect(router).to.include('routes.post("/users/export/preview", controller.previewDeviceUserExport)');
 		expect(router).to.include('routes.post("/users/export", controller.exportDeviceUsers)');
@@ -174,6 +179,15 @@ describe("Hikvision biometric sync contract", () => {
 		);
 		expect(controller).to.include('const appEnvironment = String(process.env.APP_ENV || "")');
 		expect(controller).to.include('appEnvironment === "production" || appEnvironment === "prod"');
+		expect(index).to.include('const apiBodyLimit = process.env.HRIS_API_BODY_LIMIT || "75mb"');
+		expect(index).to.include("express.json({ limit: apiBodyLimit })");
+		expect(index).to.include("express.urlencoded({ extended: true, limit: apiBodyLimit })");
+		expect(security).to.include("const parseRequestSizeLimit =");
+		expect(security).to.include('process.env.HRIS_API_BODY_LIMIT || "75mb"');
+		expect(security).to.include("formatRequestSizeLimit(maxSize)");
+		expect(readFileSync(join(process.cwd(), "config/security.ts"), "utf8")).to.include(
+			"maxSize: 75 * 1024 * 1024",
+		);
 		expect(controller).to.include('noOpReason: "already_converged_persisted_truth"');
 		expect(controller).to.include("const runDeviceUserImportExecuteWork = async");
 		expect(controller).to.include("const getDeviceUserImportJob = async");
@@ -420,9 +434,29 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("summarizeDeviceUserRawBiometricCustody");
 		expect(controller).to.include("fingerprintRawMissing");
 		expect(controller).to.include("faceRawMissing");
+		expect(controller).to.include('custodyScope: liveVendorUserIds ? "current_live_device_users" : "hris_device_users"');
+		expect(controller).to.include("staleHrisOnlyRows");
+		expect(controller).to.include("staleFingerprintReported");
+		expect(controller).to.include("staleFingerprintRawBlobCount");
+		expect(controller).to.include("biometricCustodyScope");
+		expect(controller).to.include("biometricStaleHrisOnlyRows");
 		expect(controller).to.include("fingerprintEnvelopeMissing");
 		expect(controller).to.include("faceEnvelopeMissing");
 		expect(controller).to.include("Raw biometric custody repair completed; some credentials still need missing_raw_blob review.");
+	});
+
+	it("returns error-shaped responses for manual raw capture no-data failures", () => {
+		const controller = controllerSource();
+
+		expect(controller).to.include('const reason = result.reason || "Raw fingerprint capture failed"');
+		expect(controller).to.include('const reason = result.reason || "Raw face capture failed"');
+		expect(controller).to.include("const response: any = buildErrorResponse(reason, 422");
+		expect(controller).to.include('field: "capture.reason"');
+		expect(controller).to.include("response.data = {");
+		expect(controller).to.include("capture: result");
+		expect(controller).to.include("res.status(422).json(response)");
+		expect(controller).to.include('buildSuccessResponse(\n\t\t\t\t\t"Raw fingerprints captured on DeviceUser"');
+		expect(controller).to.include('buildSuccessResponse(\n\t\t\t\t\t"Raw face captured on DeviceUser"');
 	});
 
 	it("exposes selected-device activity for Sync Center observability without mutating devices", () => {

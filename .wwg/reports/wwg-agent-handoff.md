@@ -1,5 +1,85 @@
 # WWG Agent Handoff
 
+## 2026-07-20 - TEST A zero-missing recovery boundary handoff
+
+- Task mode: Agent-owned live biometric recovery attempt, truth classification, and UI clarity repair.
+- Evidence: `.runtime/test-a-zero-missing-raw-recovery-20260720-113320/`.
+- Runtime/API evidence:
+  - Local API was restarted with `HIKVISION_RAW_BIOMETRIC_SYNC_CONCURRENCY=1` and health saved in `api-health-after-concurrency1-restart.json`.
+  - Raw-only job `48f654ff-8ed0-4ccb-8470-8f51d9654dbb` completed for TEST A: `136` missing credentials processed, `0` captured, `938` cached, `136` failed.
+  - Failure reasons remained explicit: `no_face_on_device` and `no_fingerprint_data_from_device`.
+- SQL evidence:
+  - `raw-sql-before.json` and `raw-sql-after.json` match after recovery.
+  - Current custody remains `394` DeviceUser rows; `348` raw-ok/not-enrolled rows; `45` rows missing both fingerprint and face raw; `1` row missing fingerprint raw only.
+  - Fingerprint custody remains `718` inventory slots / `628` raw stored / `91` raw missing; face custody remains `356` inventory / `311` raw stored / `45` raw missing.
+- Direct live capture evidence:
+  - `direct-capture-samples-summary.json` covers visible/prior rows `83`, `839`, `984`, `1008`, `1076`, and `1143`.
+  - All six fingerprint captures returned HTTP `422`, `status: "error"`, `no_fingerprint_data_from_device`.
+  - All six face captures returned HTTP `422`, `status: "error"`, `no_face_on_device`.
+- Device probe evidence:
+  - `deep-isapi-fingerprint-probe-summary.json` proves control user `1004` still returns bytes through the same read path (`13` hits across probe shapes).
+  - Missing users `8`, `83`, and `984` returned `0` hits across `54` probe attempts each, so no parser/probe code bug was proven for the remaining rows.
+- Code/UI changes:
+  - No new raw blob recovery code was justified by the live evidence.
+  - `hris-app/app/routes/admin/devices/enroll.tsx` now distinguishes inventory counts from raw stored bytes in the sync review modal and states that no blobs are fabricated.
+- Validation:
+  - Backend focused tests already passed with the no-data contract fix: `20` passing.
+  - Backend `tsc --noEmit --pretty false` passed.
+  - Targeted frontend ESLint on `enroll.tsx` passed with existing warnings only.
+  - Frontend `typecheck:test` remains blocked by unrelated existing `TimesheetsTab.test.tsx` `UseQueryResult` fixture type drift.
+  - Same-environment Playwright saved `playwright-modal-copy-proof.png`, `playwright-modal-copy-proof.txt`, `playwright-modal-copy-network.json`, and `playwright-modal-copy-summary.json`; the summary confirms the modal shows `inventory vs raw`, `inventory enrolled`, `raw no-data/missing`, and `no blobs are fabricated`.
+- Remaining boundary: zero missing raw blobs cannot be truthfully reached from the current panel reads. The remaining missing values are stale/count-only inventory claims unless the physical panel is re-enrolled/refreshed or a different verified device-side export path returns actual raw bytes.
+
+## 2026-07-20 - TEST A missing raw root-cause follow-up handoff
+
+- Task mode: Focused biometric custody root-cause repair and API contract truth repair.
+- Evidence: `.runtime/test-a-missing-raw-root-cause-20260720-111215/`.
+- Raw SQL proof:
+  - TEST A `cmrlgqsjv000oob01165tbd8n` remains the scoped Hikvision device.
+  - Active DB table is `public."Device"` plus `device_users`; SQL artifacts include `raw-sql-classification.sql`, `raw-sql-01-test-a-device.json`, `raw-sql-02-device-user-classification.json`, `raw-sql-03-sample-rows.json`, and `raw-sql-04-aggregate.json`.
+  - Current aggregate: `394` DeviceUser rows; `348` raw-ok/not-enrolled rows; `45` rows missing both fingerprint and face raw; `1` row missing fingerprint raw only. Fingerprint custody is `718` reported slots / `628` stored raw templates / `91` missing; face custody is `356` reported / `311` raw / `45` missing.
+- Direct API/device proof:
+  - Login actor: `admin@bandai.local` / `hris` admin.
+  - Modal/source endpoints were captured: `/api/device/sync-preview?deviceId=cmrlgqsjv000oob01165tbd8n` and `/api/device/cmrlgqsjv000oob01165tbd8n/users`.
+  - Sample rows `83`, `839`, `984`, `1008`, `1076`, and `1143` all returned live raw capture no-data: fingerprints `no_fingerprint_data_from_device`, faces `no_face_on_device`.
+  - Root-cause classification: stale/count-only inventory claims with true live raw no-data for sampled rows; no parser, merge, or probe bug was proven for these rows.
+- Code bug repaired:
+  - Manual raw fingerprint/face capture endpoints previously returned HTTP `422` with `buildSuccessResponse`, causing `status: "success"` on no-data and sometimes very large stale metadata bodies.
+  - `hris-api/app/device/device.controller.ts` now returns compact `buildErrorResponse` bodies with `capture.reason` on no-data and keeps success envelopes only for actual raw capture success.
+  - Regression coverage added in `hris-api/tests/hikvision-biometric-sync-contract.spec.ts`.
+- Validation:
+  - `npx tsx node_modules/mocha/bin/mocha --no-config tests/device-user-raw-fingerprint.helper.spec.ts tests/hikvision-biometric-sync-contract.spec.ts`: `20` passing.
+  - `npx tsc --noEmit --pretty false`: passed.
+  - Same-environment Playwright against `http://127.0.0.1:5175` saved `playwright-sync-center-device-users.png`, `playwright-page-text.txt`, `playwright-network.json`, `playwright-api-results.json`, and `playwright-summary.json`. Browser-side authenticated capture calls all returned HTTP `422` / `status: "error"` with exact no-data reasons.
+- Remaining boundary:
+  - This pass repaired `0` raw blobs. It fixed the no-data API contract and classified the requested six rows. The other `40` rows with missing raw were not directly captured in this pass and remain SQL-evidenced missing rows unless/until sampled by direct device calls.
+
+## 2026-07-20 - TEST A raw biometric repair loop handoff
+
+- Task mode: Mixed biometric custody repair + UI truth repair + live TEST A proof.
+- TEST A: `cmrlgqsjv000oob01165tbd8n` (`192.168.254.102:443`, Hikvision), identified through API/DB evidence.
+- Implementation truth:
+  - Raw fingerprint sync now counts template slots, not just users.
+  - `FingerPrintUpload` bulk can under-return templates; helper now probes per-finger when stored raw count is below `UserInfo.numOfFP`, then merges existing and newly fetched raw templates.
+  - Raw-only job status completes with needs-attention semantics when `missing_raw_blob` remains; it does not hard-fail a device just because some rows have real no-data responses.
+  - UI copy now says raw custody, current modality/vendor user, recent missing rows, and finished-with-missing review instead of stale `0%`/encrypted-envelope text.
+- Live evidence in `.runtime/test-a-raw-repair-loop-20260720-103434/`:
+  - Initial preview: source `314`, HRIS DeviceUsers `394`, fingerprint slots `718`, fingerprint raw `325`, fingerprint missing `393`, face reported `356`, face raw `311`, face missing `45`.
+  - Job `bbccf2b6-75be-4e78-a7fa-e1a683149c02`: `266` captured, reduced fingerprint missing to `120`.
+  - Job `834d6273-74d8-416f-aecf-8fd92430a062` with local `HIKVISION_RAW_BIOMETRIC_SYNC_CONCURRENCY=2`: `29` captured, removed transient `Unauthorized` class, final fingerprint raw `627`, missing `91`.
+  - Remaining sample repair for users `1008`, `1076`, `1143` returned exact HTTP `422` bodies: `no_fingerprint_data_from_device` and `no_face_on_device`.
+- UI evidence:
+  - `browser-review-sync-dialog.png/.txt`: review modal shows `718 enrolled · 627 raw · 91 missing_raw_blob` and `356 enrolled · 311 raw · 45 missing_raw_blob`.
+  - `browser-details-1004.png/.txt`: repaired user shows `2 of 2 stored` and raw face stored.
+  - `browser-details-1008-search-open.png/.txt`: remaining no-data user shows `2 missing_raw_blob`, raw repair buttons, and count-only missing face truth.
+- Validation:
+  - Backend biometric sync + raw helper tests: 19 passing.
+  - Controller/router/helper import check: passed.
+  - Frontend device-user UI contract: passed.
+  - Backend `tsc --noEmit`: passed.
+  - Frontend targeted ESLint on touched files: warnings only, no errors.
+  - Frontend `typecheck:test` still fails on unrelated existing `TimesheetsTab.test.tsx` `UseQueryResult` fixture type drift.
+
 ## Purpose
 
 This file is the generic WWG Agent Handoff for a chosen implementation agent working from WWG project truth. The Codex compatibility artifact is written separately at `.wwg/reports/wwg-handoff-to-codex.md`.
@@ -414,6 +494,35 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 4. Implement the first MVP page/screen.
 5. Add tests and update WWG context after implementation.
 ```
+
+# 2026-07-20 DeviceUser Raw Biometric Export/Import Handoff
+
+- Status: `PARTIAL_COMPLETE_WITH_EVIDENCED_MISSING_RAW_BLOBS` for TEST A raw biometric custody. No biometric blobs were fabricated from counts.
+- Current proven TEST A export/package truth:
+  - DeviceUser rows: 394 total, 338 linked, 56 unlinked.
+  - Fingerprint rows: 361 reported, 316 rows with raw blobs; latest package import preview carries 628 raw fingerprint templates. Earlier repair preview proved 718 enrolled fingerprint template slots, so the latest package is still short by 90 template slots against that reference.
+  - Face rows: 356 reported, 311 raw face blobs, 45 missing face blobs.
+  - Package status: `partial_missing_requested_raw_blobs`; 46 rows carry the reason `Reported biometric enrollment exists but no evidenced raw blob is stored`.
+- Recovery loop run by agent:
+  - Checked prior all-device sync first. Existing all-Hikvision job `6c7e3e4c-f722-4b00-a57c-81e06ab709d4` was still `processing` and repeatedly failing Main Entrance Device B fetches.
+  - Ran TEST A biometrics-only job `e692290a-1d4f-4965-887f-c107bd473992`: completed, no new captures, cached 938 existing custody entries, 136 failed/missing checks.
+  - Retried TEST A biometrics-only job `8d3a48df-a85e-44e2-abd3-3120d21e046f`: completed with the same no-new-capture result.
+- Export/import journey proof:
+  - Real CSV, Excel, and Package JSON browser downloads were saved and parsed. Headers are HR-friendly, no duplicate columns were found, no encrypted/passphrase wording remains in this modal journey, and CSV/XLSX preserve multi-fingerprint values as `FPn("...");FPn("...")`.
+  - Package JSON preview of the full 22,968,896-byte file succeeded non-mutating with 394 matches, 0 conflicts, and 55 missing HRIS employees. Execute without typed confirmation was rejected with HTTP 400.
+  - CSV subset import preview proved the modal shows preview-first copy and package-data status without mutation.
+- Code truth changed:
+  - API request body limit now uses `HRIS_API_BODY_LIMIT || "75mb"` and the security config is aligned at 75 MB so real package JSON import preview is accepted.
+  - Import parsing accepts FP-pattern cells, JSON array/object cells, and semicolon/comma separated raw fingerprint templates, preserving all templates in rawPackage import.
+  - Export/import modal loading copy is HR-friendly and operational.
+- Validation:
+  - Backend focused contracts: 25 passing.
+  - Frontend focused UI contract: 1 passing.
+  - Backend typecheck: passed.
+  - Frontend targeted ESLint: 0 errors, existing warnings only.
+  - Full frontend typecheck still fails outside this scope in pre-existing app/type drift such as `LoginDebug.tsx`, calendar/guide imports, leave route imports, `TimesheetsTab.test.tsx`, and other unrelated files.
+- Evidence root: `.runtime/device-user-raw-export-proof-20260720-110129/`.
+- Recommendations recorded: `REC-20260720-HIKVISION-RAW-SYNC-STALE-JOB-CANCEL` and `REC-20260720-HIKVISION-RAW-SYNC-DEVICE-PREFLIGHT`.
 
 ## Next Steps
 

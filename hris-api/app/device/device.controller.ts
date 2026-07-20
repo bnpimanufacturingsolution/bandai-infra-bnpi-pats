@@ -3490,6 +3490,25 @@ export const controller = (prisma: PrismaClient) => {
 				employeeNo: vendorUserId,
 				deviceUserId: existing?.id || null,
 			});
+			if (!result.ok) {
+				const reason = result.reason || "Raw fingerprint capture failed";
+				const response: any = buildErrorResponse(reason, 422, [
+					{ field: "capture.reason", message: reason },
+				]);
+				response.data = {
+					capture: result,
+					deviceUser: existing
+						? {
+								id: existing.id,
+								deviceId,
+								vendorUserId,
+								employeeNo: vendorUserId,
+							}
+						: null,
+				};
+				res.status(422).json(response);
+				return;
+			}
 			const row = await (prisma as any).deviceUser.findFirst({
 				where: {
 					organizationId,
@@ -3498,16 +3517,14 @@ export const controller = (prisma: PrismaClient) => {
 				},
 				select: buildDeviceUserSelect({ includeVendorMetadata: true }),
 			});
-			res.status(result.ok ? 200 : 422).json(
+			res.status(200).json(
 				buildSuccessResponse(
-					result.ok
-						? "Raw fingerprints captured on DeviceUser"
-						: result.reason || "Raw fingerprint capture failed",
+					"Raw fingerprints captured on DeviceUser",
 					{
 						capture: result,
 						deviceUser: row ? decorateDeviceUser(row) : null,
 					},
-					result.ok ? 200 : 422,
+					200,
 				),
 			);
 		} catch (error: any) {
@@ -3594,6 +3611,25 @@ export const controller = (prisma: PrismaClient) => {
 				employeeNo: vendorUserId,
 				deviceUserId: existing?.id || null,
 			});
+			if (!result.ok) {
+				const reason = result.reason || "Raw face capture failed";
+				const response: any = buildErrorResponse(reason, 422, [
+					{ field: "capture.reason", message: reason },
+				]);
+				response.data = {
+					capture: result,
+					deviceUser: existing
+						? {
+								id: existing.id,
+								deviceId,
+								vendorUserId,
+								employeeNo: vendorUserId,
+							}
+						: null,
+				};
+				res.status(422).json(response);
+				return;
+			}
 			const row = await (prisma as any).deviceUser.findFirst({
 				where: {
 					organizationId,
@@ -3602,16 +3638,14 @@ export const controller = (prisma: PrismaClient) => {
 				},
 				select: buildDeviceUserSelect({ includeVendorMetadata: true }),
 			});
-			res.status(result.ok ? 200 : 422).json(
+			res.status(200).json(
 				buildSuccessResponse(
-					result.ok
-						? "Raw face captured on DeviceUser"
-						: result.reason || "Raw face capture failed",
+					"Raw face captured on DeviceUser",
 					{
 						capture: result,
 						deviceUser: row ? decorateDeviceUser(row) : null,
 					},
-					result.ok ? 200 : 422,
+					200,
 				),
 			);
 		} catch (error: any) {
@@ -6474,7 +6508,22 @@ export const controller = (prisma: PrismaClient) => {
 		};
 	};
 
-	const summarizeDeviceUserRawBiometricCustody = (rows: any[]) => {
+	const summarizeDeviceUserRawBiometricCustody = (
+		rows: any[],
+		options: { liveVendorUserIds?: Set<string> | null } = {},
+	) => {
+		const liveVendorUserIds = options.liveVendorUserIds || null;
+		const scopedRows = liveVendorUserIds
+			? (rows || []).filter((row) =>
+					liveVendorUserIds.has(String(row?.vendorUserId || row?.employeeNo || "").trim()),
+				)
+			: rows || [];
+		const staleRows = liveVendorUserIds
+			? (rows || []).filter((row) => {
+					const vendorUserId = String(row?.vendorUserId || row?.employeeNo || "").trim();
+					return vendorUserId && !liveVendorUserIds.has(vendorUserId);
+				})
+			: [];
 		const summary = {
 			fingerprintReported: 0,
 			fingerprintEnrolledRows: 0,
@@ -6490,8 +6539,17 @@ export const controller = (prisma: PrismaClient) => {
 			faceTemplateReportedTotal: 0,
 			faceRawPresentRows: 0,
 			faceRawMissingRows: 0,
+			staleHrisOnlyRows: staleRows.length,
+			staleFingerprintReported: 0,
+			staleFingerprintRawPresent: 0,
+			staleFingerprintRawBlobCount: 0,
+			staleFingerprintRawMissing: 0,
+			staleFaceReported: 0,
+			staleFaceRawPresent: 0,
+			staleFaceRawMissing: 0,
+			custodyScope: liveVendorUserIds ? "current_live_device_users" : "hris_device_users",
 		};
-		for (const row of rows || []) {
+		const applyRow = (row: any, target: "live" | "stale") => {
 			const credentialSummary =
 				row?.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
 				row?.vendorMetadata?.credentialSummary ||
@@ -6511,29 +6569,50 @@ export const controller = (prisma: PrismaClient) => {
 				Boolean(rawFace) ||
 				Boolean(row?.vendorMetadata?.rawFacePresent) ||
 				Boolean(row?.rawPayload?._hrisDeviceMetadata?.rawFacePresent);
+			if (target === "stale") {
+				const preservedRawFingerprintCount =
+					rawFingerprints.length > 0 || hasRawFingerprint
+						? Math.max(rawFingerprints.length, 1)
+						: 0;
+				summary.staleFingerprintRawBlobCount += preservedRawFingerprintCount;
+			}
 			if (fingerprintCount > 0) {
 				const storedCount = Math.min(rawFingerprints.length, fingerprintCount);
 				const missingCount = Math.max(fingerprintCount - storedCount, 0);
-				summary.fingerprintEnrolledRows += 1;
-				summary.fingerprintReported += fingerprintCount;
-				summary.fingerprintTemplateReportedTotal += fingerprintCount;
-				summary.fingerprintRawPresent += storedCount;
-				summary.fingerprintRawMissing += missingCount;
-				if (hasRawFingerprint) summary.fingerprintRawPresentRows += 1;
-				if (missingCount > 0) summary.fingerprintRawMissingRows += 1;
+				if (target === "stale") {
+					summary.staleFingerprintReported += fingerprintCount;
+					summary.staleFingerprintRawPresent += storedCount;
+					summary.staleFingerprintRawMissing += missingCount;
+				} else {
+					summary.fingerprintEnrolledRows += 1;
+					summary.fingerprintReported += fingerprintCount;
+					summary.fingerprintTemplateReportedTotal += fingerprintCount;
+					summary.fingerprintRawPresent += storedCount;
+					summary.fingerprintRawMissing += missingCount;
+					if (hasRawFingerprint) summary.fingerprintRawPresentRows += 1;
+					if (missingCount > 0) summary.fingerprintRawMissingRows += 1;
+				}
 			}
 			if (faceCount > 0) {
 				const storedCount = hasRawFace ? Math.max(faceCount, 1) : 0;
 				const missingCount = Math.max(faceCount - (hasRawFace ? 1 : 0), 0);
-				summary.faceEnrolledRows += 1;
-				summary.faceReported += faceCount;
-				summary.faceTemplateReportedTotal += faceCount;
-				summary.faceRawPresent += storedCount;
-				summary.faceRawMissing += missingCount;
-				if (hasRawFace) summary.faceRawPresentRows += 1;
-				if (missingCount > 0) summary.faceRawMissingRows += 1;
+				if (target === "stale") {
+					summary.staleFaceReported += faceCount;
+					summary.staleFaceRawPresent += storedCount;
+					summary.staleFaceRawMissing += missingCount;
+				} else {
+					summary.faceEnrolledRows += 1;
+					summary.faceReported += faceCount;
+					summary.faceTemplateReportedTotal += faceCount;
+					summary.faceRawPresent += storedCount;
+					summary.faceRawMissing += missingCount;
+					if (hasRawFace) summary.faceRawPresentRows += 1;
+					if (missingCount > 0) summary.faceRawMissingRows += 1;
+				}
 			}
-		}
+		};
+		for (const row of scopedRows) applyRow(row, "live");
+		for (const row of staleRows) applyRow(row, "stale");
 		return {
 			...summary,
 			// Backward-compatible aliases for older app builds while the UI copy moves
@@ -10986,7 +11065,32 @@ export const controller = (prisma: PrismaClient) => {
 		organizationId: string;
 		device: any;
 	}) => {
-		const rows = (await loadDeviceUsersForExport(params.organizationId, params.device.id)) as any[];
+		const allRows = (await loadDeviceUsersForExport(params.organizationId, params.device.id)) as any[];
+		let liveVendorUserIds: Set<string> | null = null;
+		try {
+			const snapshot = await withDeviceUserImportTimeout(
+				loadHikvisionDeviceUserSnapshot(params.req, params.device),
+				Math.max(HIKVISION_PREVIEW_DEVICE_BUDGET_MS, 15_000),
+				"Live device users unavailable for biometric custody scope",
+			);
+			liveVendorUserIds = new Set(
+				snapshot.candidates
+					.map((candidate) => String(candidate.vendorUserId || "").trim())
+					.filter(Boolean),
+			);
+		} catch (error: any) {
+			deviceLogger.warn(
+				`Live biometric custody scope unavailable for ${params.device.id}: ${error?.message || error}`,
+			);
+		}
+		const rows = liveVendorUserIds
+			? allRows.filter((row) =>
+					liveVendorUserIds!.has(String(row?.vendorUserId || row?.employeeNo || "").trim()),
+				)
+			: allRows;
+		const staleSummary = liveVendorUserIds
+			? summarizeDeviceUserRawBiometricCustody(allRows, { liveVendorUserIds })
+			: null;
 		const concurrency = Math.min(
 			Math.max(Number(process.env.HIKVISION_RAW_BIOMETRIC_SYNC_CONCURRENCY || 8) || 8, 1),
 			16,
@@ -11175,6 +11279,13 @@ export const controller = (prisma: PrismaClient) => {
 			biometricFailed: failed,
 			biometricFailureReasons: failureReasons,
 			biometricFailureLog: deviceUserSyncJobs.get(params.jobId)?.biometricFailureLog || [],
+			biometricCustodyScope: liveVendorUserIds ? "current_live_device_users" : "hris_device_users",
+			biometricStaleHrisOnlyRows: staleSummary?.staleHrisOnlyRows || 0,
+			biometricStaleFingerprintReported: staleSummary?.staleFingerprintReported || 0,
+			biometricStaleFingerprintRawBlobCount: staleSummary?.staleFingerprintRawBlobCount || 0,
+			biometricStaleFingerprintRawMissing: staleSummary?.staleFingerprintRawMissing || 0,
+			biometricStaleFaceReported: staleSummary?.staleFaceReported || 0,
+			biometricStaleFaceRawMissing: staleSummary?.staleFaceRawMissing || 0,
 		};
 	};
 
@@ -13536,6 +13647,15 @@ export const controller = (prisma: PrismaClient) => {
 					faceTemplateReportedTotal?: number;
 					faceEnvelopePresent: number;
 					faceEnvelopeMissing: number;
+					staleHrisOnlyRows?: number;
+					staleFingerprintReported?: number;
+					staleFingerprintRawPresent?: number;
+					staleFingerprintRawBlobCount?: number;
+					staleFingerprintRawMissing?: number;
+					staleFaceReported?: number;
+					staleFaceRawPresent?: number;
+					staleFaceRawMissing?: number;
+					custodyScope?: string;
 				}
 			>();
 			const emptyBiometricCustody = () => ({
@@ -13551,6 +13671,15 @@ export const controller = (prisma: PrismaClient) => {
 				faceTemplateReportedTotal: 0,
 				faceEnvelopePresent: 0,
 				faceEnvelopeMissing: 0,
+				staleHrisOnlyRows: 0,
+				staleFingerprintReported: 0,
+				staleFingerprintRawPresent: 0,
+				staleFingerprintRawBlobCount: 0,
+				staleFingerprintRawMissing: 0,
+				staleFaceReported: 0,
+				staleFaceRawPresent: 0,
+				staleFaceRawMissing: 0,
+				custodyScope: "hris_device_users",
 			});
 			if (await hasDeviceUserTable()) {
 				try {
@@ -13616,6 +13745,30 @@ export const controller = (prisma: PrismaClient) => {
 							bucket.push(row);
 							rowsByDevice.set(deviceId, bucket);
 						}
+						const liveVendorUserIdsByDeviceId = new Map<string, Set<string>>();
+						if (selectedDeviceId && selectedDeviceId !== "all") {
+							for (const device of syncDevices.filter((item) => item.vendor === "Hikvision")) {
+								try {
+									const snapshot = await withDeviceUserImportTimeout(
+										loadHikvisionDeviceUserSnapshot(req, device),
+										Math.max(HIKVISION_PREVIEW_DEVICE_BUDGET_MS, 15_000),
+										"Live device users unavailable for custody scope",
+									);
+									liveVendorUserIdsByDeviceId.set(
+										device.id,
+										new Set(
+											snapshot.candidates
+												.map((candidate) => String(candidate.vendorUserId || "").trim())
+												.filter(Boolean),
+										),
+									);
+								} catch (error: any) {
+									deviceLogger.warn(
+										`Live custody scope unavailable for ${device.id}: ${error?.message || error}`,
+									);
+								}
+							}
+						}
 						for (const device of syncDevices) {
 							const deviceRows = rowsByDevice.get(device.id) || [];
 							deviceUserSummaryByDeviceId.set(
@@ -13624,7 +13777,9 @@ export const controller = (prisma: PrismaClient) => {
 							);
 							biometricCustodyByDeviceId.set(
 								device.id,
-								summarizeDeviceUserRawBiometricCustody(deviceRows),
+								summarizeDeviceUserRawBiometricCustody(deviceRows, {
+									liveVendorUserIds: liveVendorUserIdsByDeviceId.get(device.id) || null,
+								}),
 							);
 						}
 					}

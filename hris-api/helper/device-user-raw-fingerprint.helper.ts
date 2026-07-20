@@ -54,6 +54,72 @@ export const envBool = (name: string, defaultValue: boolean) => {
 export const isRawFingerprintEnrollCaptureEnabled = () =>
 	envBool("HIKVISION_ENROLL_RAW_FINGERPRINT", false);
 
+export const markDeviceUserRawBiometricFailure = async (params: {
+	prisma: PrismaClient | any;
+	organizationId: string;
+	deviceId: string;
+	employeeNo: string;
+	modality: "fingerprint" | "face";
+	reason: string;
+	expectedCount?: number;
+	attempts?: number;
+}) => {
+	const organizationId = String(params.organizationId || "").trim();
+	const deviceId = String(params.deviceId || "").trim();
+	const employeeNo = String(params.employeeNo || "").trim();
+	const reason = String(params.reason || "raw_capture_failed").trim();
+	if (!organizationId || !deviceId || !employeeNo || !reason) return null;
+	const row = await params.prisma.deviceUser.findFirst({
+		where: {
+			organizationId,
+			deviceId,
+			OR: [{ vendorUserId: employeeNo }, { employeeNo }],
+		},
+		select: { id: true, vendorUserId: true, rawPayload: true, vendorMetadata: true },
+	});
+	if (!row) return null;
+	const priorVendor = row.vendorMetadata && typeof row.vendorMetadata === "object" ? row.vendorMetadata : {};
+	const priorRaw = row.rawPayload && typeof row.rawPayload === "object" ? row.rawPayload : {};
+	const previousFailures =
+		priorVendor.rawBiometricFailures && typeof priorVendor.rawBiometricFailures === "object"
+			? priorVendor.rawBiometricFailures
+			: {};
+	const failure = {
+		reason,
+		status:
+			reason === "no_fingerprint_data_from_device" || reason === "no_face_on_device"
+				? "stale_count_only"
+				: "capture_failed",
+		expectedCount: Math.max(Number(params.expectedCount || 0) || 0, 0),
+		attempts: Math.max(Number(params.attempts || 0) || 0, 0),
+		checkedAt: new Date().toISOString(),
+		source: "live_device_raw_capture",
+	};
+	const rawBiometricFailures = {
+		...previousFailures,
+		[params.modality]: failure,
+	};
+	const rawMetadata = {
+		...(priorRaw._hrisDeviceMetadata || {}),
+		rawBiometricFailures,
+	};
+	return params.prisma.deviceUser.update({
+		where: { id: row.id },
+		data: {
+			vendorMetadata: {
+				...priorVendor,
+				rawBiometricFailures,
+			},
+			rawPayload: {
+				...priorRaw,
+				_hrisDeviceMetadata: rawMetadata,
+			},
+			lastSyncedAt: new Date(),
+		},
+		select: { id: true, vendorUserId: true, vendorMetadata: true, rawPayload: true },
+	});
+};
+
 export const extractFingerDataFromIsapiNode = (node: any): string => {
 	if (!node || typeof node !== "object") return "";
 	const candidates = [
@@ -546,6 +612,11 @@ export const applyRawFingerprintCustodyToRow = (row: any, custody: RawFingerprin
 		fingerprintCount,
 		hasFingerprint: fingerprintCount > 0,
 	};
+	const priorFailures =
+		priorVendor.rawBiometricFailures && typeof priorVendor.rawBiometricFailures === "object"
+			? priorVendor.rawBiometricFailures
+			: {};
+	const { fingerprint: _fingerprintFailure, ...remainingFailures } = priorFailures;
 
 	// Public raw plane — what the operator expects to open on Device User details.
 	const rawFingerprints = {
@@ -570,6 +641,7 @@ export const applyRawFingerprintCustodyToRow = (row: any, custody: RawFingerprin
 	row.vendorMetadata = {
 		...priorVendor,
 		credentialSummary,
+		rawBiometricFailures: remainingFailures,
 		// Top-level for easy API/UI discovery.
 		rawFingerprints,
 		// Keep a short status flag for badges.
@@ -694,6 +766,16 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 	const mergedFingerprints = mergeRawFingerprintTemplates(priorFingerprints, fingerprints);
 
 	if (!mergedFingerprints.length) {
+		await markDeviceUserRawBiometricFailure({
+			prisma: params.prisma,
+			organizationId,
+			deviceId,
+			employeeNo,
+			modality: "fingerprint",
+			reason: lastError || "no_fingerprint_data_from_device",
+			expectedCount: expectedFingerprintCount,
+			attempts,
+		}).catch(() => undefined);
 		await patchEnrollmentEventRawStatus(params, {
 			status: "raw_capture_failed",
 			reason: lastError || "no_fingerprint_data_from_device",
@@ -925,6 +1007,16 @@ export const captureRawFaceForEnrollment = async (params: {
 		faceURL = String(userInfoNode?.faceURL || "").trim();
 		const numOfFace = Number(userInfoNode?.numOfFace || 0) || 0;
 		if (!faceURL || numOfFace < 1) {
+			await markDeviceUserRawBiometricFailure({
+				prisma: params.prisma,
+				organizationId,
+				deviceId,
+				employeeNo,
+				modality: "face",
+				reason: "no_face_on_device",
+				expectedCount: numOfFace,
+				attempts: 1,
+			}).catch(() => undefined);
 			return {
 				ok: false,
 				present: false,
@@ -933,6 +1025,15 @@ export const captureRawFaceForEnrollment = async (params: {
 			};
 		}
 	} catch (error: any) {
+		await markDeviceUserRawBiometricFailure({
+			prisma: params.prisma,
+			organizationId,
+			deviceId,
+			employeeNo,
+			modality: "face",
+			reason: String(error?.message || error || "userinfo_face_lookup_failed"),
+			attempts: 1,
+		}).catch(() => undefined);
 		return {
 			ok: false,
 			present: false,
@@ -971,8 +1072,17 @@ export const captureRawFaceForEnrollment = async (params: {
 									(binary as any)?.data ||
 									(binary as any) ||
 									[],
-							);
+		);
 		if (!raw.length || raw.length < 32) {
+			await markDeviceUserRawBiometricFailure({
+				prisma: params.prisma,
+				organizationId,
+				deviceId,
+				employeeNo,
+				modality: "face",
+				reason: "face_binary_empty",
+				attempts: 1,
+			}).catch(() => undefined);
 			return {
 				ok: false,
 				present: false,
@@ -987,6 +1097,15 @@ export const captureRawFaceForEnrollment = async (params: {
 				"image/jpeg",
 		);
 	} catch (error: any) {
+		await markDeviceUserRawBiometricFailure({
+			prisma: params.prisma,
+			organizationId,
+			deviceId,
+			employeeNo,
+			modality: "face",
+			reason: String(error?.message || error || "face_binary_fetch_failed"),
+			attempts: 1,
+		}).catch(() => undefined);
 		return {
 			ok: false,
 			present: false,
@@ -1031,11 +1150,17 @@ export const captureRawFaceForEnrollment = async (params: {
 		hasFace: true,
 		faceCount: Math.max(Number(priorVm.credentialSummary?.faceCount || 0) || 0, 1),
 	};
+	const priorFailures =
+		priorVm.rawBiometricFailures && typeof priorVm.rawBiometricFailures === "object"
+			? priorVm.rawBiometricFailures
+			: {};
+	const { face: _faceFailure, ...remainingFailures } = priorFailures;
 	const vendorMetadata = {
 		...priorVm,
 		rawFace,
 		rawFacePresent: true,
 		credentialSummary,
+		rawBiometricFailures: remainingFailures,
 	};
 	const rawPayload = {
 		...priorRaw,
@@ -1045,6 +1170,7 @@ export const captureRawFaceForEnrollment = async (params: {
 			...(priorRaw._hrisDeviceMetadata || {}),
 			rawFace,
 			credentialSummary,
+			rawBiometricFailures: remainingFailures,
 		},
 	};
 
