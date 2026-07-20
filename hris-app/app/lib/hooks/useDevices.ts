@@ -764,7 +764,7 @@ export const useDeleteDeviceUser = () => {
 			queryClient.invalidateQueries({ queryKey: ["devices", "users", deviceId] });
 			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users", deviceId] });
 			queryClient.invalidateQueries({ queryKey: queryKeys.devices.syncPreview({ deviceId }) });
-			sonnerToast.success("Device user deleted");
+			sonnerToast.success("Deleted device user from device and HRIS inventory");
 		},
 		onError: (error: any, _payload, context) => {
 			context?.hrisSnapshots?.forEach(([queryKey, data]) => {
@@ -855,9 +855,11 @@ export const useDeleteDeviceUsers = () => {
 			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users", deviceId] });
 			queryClient.invalidateQueries({ queryKey: queryKeys.devices.syncPreview({ deviceId }) });
 			if (data.failed) {
-				sonnerToast.warning(`Deleted ${data.deleted}; ${data.failed} need attention`);
+				sonnerToast.warning(
+					`Deleted ${data.deleted} selected device users; ${data.failed} selected users need attention`,
+				);
 			} else {
-				sonnerToast.success(`Deleted ${data.deleted} device users`);
+				sonnerToast.success(`Deleted ${data.deleted} selected device users`);
 			}
 		},
 		onError: (error: any, _payload, context) => {

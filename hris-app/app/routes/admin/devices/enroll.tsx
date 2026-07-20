@@ -2604,6 +2604,17 @@ export function DeviceEnrollmentPanel({
 	};
 
 	const openDeleteDeviceUser = (deviceUser: VisibleDeviceUserRow) => {
+		const selectedTargets = selectedDeletableDeviceUserRows.filter((row) =>
+			selectedExportVendorUserIdSet.has(row.vendorUserId),
+		);
+		if (
+			selectedTargets.length > 0 &&
+			selectedTargets.some((row) => row.vendorUserId === deviceUser.vendorUserId)
+		) {
+			setDeleteTarget(null);
+			setDeleteSelectedTargets(selectedTargets);
+			return;
+		}
 		setDeleteTarget(deviceUser);
 		setDeleteSelectedTargets([]);
 	};
@@ -5449,7 +5460,7 @@ export function DeviceEnrollmentPanel({
 									<div>
 										<span className="font-semibold">
 											{recentDeletedDeviceUser.count && recentDeletedDeviceUser.count > 1
-												? `Deleted ${recentDeletedDeviceUser.count} device users`
+												? `Deleted ${recentDeletedDeviceUser.count} selected device users`
 												: `Deleted ${recentDeletedDeviceUser.displayName || "device user"} (${recentDeletedDeviceUser.vendorUserId})`}
 										</span>
 										<span className="mt-1 block text-xs text-emerald-800">
@@ -5458,7 +5469,7 @@ export function DeviceEnrollmentPanel({
 											HRIS row:{" "}
 											{recentDeletedDeviceUser.hrisDeleted ? "removed" : "needs check"}
 											{recentDeletedDeviceUser.failed
-												? ` · ${recentDeletedDeviceUser.failed} failed`
+												? ` · ${recentDeletedDeviceUser.failed} selected users failed`
 												: ""}
 										</span>
 									</div>
@@ -5750,7 +5761,12 @@ export function DeviceEnrollmentPanel({
 																		<Trash2 className="mr-2 h-4 w-4" />
 																		{deviceUser.employeeId
 																			? "Unlink before delete"
-																			: "Delete from device"}
+																			: selectedDeletableDeviceUserRows.length > 1 &&
+																					selectedExportVendorUserIdSet.has(
+																						deviceUser.vendorUserId,
+																					)
+																				? `Delete ${selectedDeletableDeviceUserRows.length} selected`
+																				: "Delete from device"}
 																	</DropdownMenuItem>
 																</DropdownMenuContent>
 															</DropdownMenu>
