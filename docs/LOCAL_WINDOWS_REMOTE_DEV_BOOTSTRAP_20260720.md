@@ -57,17 +57,23 @@ npm.cmd run dev
 Uses `.env` + predev tunnel bootstrap (`.env.development.local` regenerated for `127.0.0.1:55435`).
 Writes to **shared DEV** — do not use for experimental mutations.
 
-### Local clone (isolated Docker Postgres on `5433`)
+### Local clone (isolated Docker Postgres on `5433`) — one command
 
 ```powershell
-docker start hris-local-dev-clone   # if needed
 cd <repo>\hris-api
-# first time: copy .env.local-clone.example → .env.local-clone
 npm.cmd run dev:local
 ```
 
-Uses `.env` + `.env.local-clone` and `predev:local` (skips BNPI tunnel + device bridges).
+Single command (`scripts/run-dev-local.cjs`) does all of:
+
+1. Ensure `.env.local-clone` (copy from example if missing)
+2. Start/create Docker `hris-local-dev-clone` on `5433`
+3. Wait until Postgres is ready
+4. Run predev with BNPI tunnel + Hikvision bridges skipped
+5. Start API watch against the local clone
+
 Writes only to **local clone** — safe for destructive local testing.
+First-time data still requires a one-time dump/restore into that container (see clone evidence under `.runtime/local-db-clone-*`).
 
 Success line (both):
 
