@@ -1764,7 +1764,10 @@ export const controller = (prisma: PrismaClient) => {
 				);
 			}
 
-			const manualCopyTimeoutSeconds = Math.max(waitSeconds + 25, 30);
+			const manualCopyTimeoutSeconds = Math.max(
+				waitSeconds + 5,
+				Math.min(Number(process.env.HIKVISION_MANUAL_COPY_TIMEOUT_SECONDS || 10), 60),
+			);
 			const runManualCopy = (extraEnv: string[] = []) =>
 				runHikvisionListenerVmCommand(
 					[
@@ -1788,15 +1791,11 @@ export const controller = (prisma: PrismaClient) => {
 						...(params.includeFingerprints ? ["--manual-include-fingerprints"] : []),
 						...(params.includeFaceRecognition ? [] : ["--manual-exclude-face"]),
 					],
-					Math.max(manualCopyTimeoutSeconds * 1000 + 10000, 45000),
+					Math.max(manualCopyTimeoutSeconds * 1000 + 5000, 15000),
 				);
 		const strategies = [
 			{
 				name: "static_spec",
-				extraEnv: [] as string[],
-			},
-			{
-				name: "postgres",
 				extraEnv: [] as string[],
 			},
 			{
@@ -9447,6 +9446,11 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 			const results: any[] = [];
+			const sdkPeerCopyTimeoutFailures = new Map<string, number>();
+			const sdkPeerCopyTimeoutCircuitLimit = Math.max(
+				1,
+				Math.min(Number(process.env.HIKVISION_MERGE_COPY_TIMEOUT_CIRCUIT_LIMIT || 1), 10),
+			);
 			for (const user of appliedPlan.users) {
 				const selectedConflict = user.conflicts.find((conflict: any) => conflict.choice);
 				const sourceDeviceId =
@@ -9467,6 +9471,33 @@ export const controller = (prisma: PrismaClient) => {
 					if (targetDeviceId === sourceDevice.id) continue;
 					const targetDevice = devices.find((device) => device.id === targetDeviceId);
 					if (!targetDevice) continue;
+					const copyCircuitKey = `${sourceDevice.id}->${targetDeviceId}`;
+					const priorTimeoutFailures = sdkPeerCopyTimeoutFailures.get(copyCircuitKey) || 0;
+					const copyCredentialStages = ["user", "fingerprint", "face"];
+					if (priorTimeoutFailures >= sdkPeerCopyTimeoutCircuitLimit) {
+						const circuitError = `Skipped SDK peer copy after ${priorTimeoutFailures} timeout failures for ${sourceDevice.name || sourceDevice.id} to ${targetDevice.name || targetDeviceId}`;
+						results.push({
+							userKey: user.key,
+							sourceDeviceId: sourceDevice.id,
+							targetDeviceId,
+							status: "error",
+							error: circuitError,
+						});
+						emitMergeProgress?.({
+							stage: "copy_error",
+							userKey: user.key,
+							vendorUserId: sourceRecord.vendorUserId,
+							sourceDeviceId: sourceDevice.id,
+							sourceDeviceName: sourceDevice.name || sourceDevice.address,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							credentialStages: copyCredentialStages,
+							includeFingerprints: true,
+							includeFaceRecognition: true,
+							error: circuitError,
+							message: `Skipped timed-out copy path for user ${sourceRecord.vendorUserId} from ${sourceDevice.name || sourceDevice.address || sourceDevice.id} to ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+						});
+					} else
 					try {
 						emitMergeProgress?.({
 							stage: "copy_started",
@@ -9476,6 +9507,9 @@ export const controller = (prisma: PrismaClient) => {
 							sourceDeviceName: sourceDevice.name || sourceDevice.address,
 							targetDeviceId,
 							targetDeviceName: targetDevice.name || targetDevice.address,
+							credentialStages: copyCredentialStages,
+							includeFingerprints: true,
+							includeFaceRecognition: true,
 							message: `Copying user ${sourceRecord.vendorUserId} from ${sourceDevice.name || sourceDevice.address || sourceDevice.id} to ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 						});
 						const copy = await copyHikvisionUserToPeerWithRetry({
@@ -9503,15 +9537,22 @@ export const controller = (prisma: PrismaClient) => {
 							targetDeviceId,
 							targetDeviceName: targetDevice.name || targetDevice.address,
 							strategy: copy.vmCopy?.strategy || null,
+							credentialStages: copyCredentialStages,
+							includeFingerprints: true,
+							includeFaceRecognition: true,
 							message: `Copied user ${sourceRecord.vendorUserId} to ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 						});
 					} catch (error: any) {
+						const copyErrorMessage = error?.message || "SDK user copy failed";
+						if (/(timed out|timeout|Process timed out)/i.test(String(copyErrorMessage))) {
+							sdkPeerCopyTimeoutFailures.set(copyCircuitKey, priorTimeoutFailures + 1);
+						}
 						results.push({
 							userKey: user.key,
 							sourceDeviceId: sourceDevice.id,
 							targetDeviceId,
 							status: "error",
-							error: error?.message || "SDK user copy failed",
+							error: copyErrorMessage,
 						});
 						emitMergeProgress?.({
 							stage: "copy_error",
@@ -9521,7 +9562,10 @@ export const controller = (prisma: PrismaClient) => {
 							sourceDeviceName: sourceDevice.name || sourceDevice.address,
 							targetDeviceId,
 							targetDeviceName: targetDevice.name || targetDevice.address,
-							error: error?.message || "SDK user copy failed",
+							credentialStages: copyCredentialStages,
+							includeFingerprints: true,
+							includeFaceRecognition: true,
+							error: copyErrorMessage,
 							message: `Copy failed for user ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 						});
 					}
