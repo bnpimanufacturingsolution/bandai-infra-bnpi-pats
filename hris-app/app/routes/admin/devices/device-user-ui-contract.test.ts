@@ -94,6 +94,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("deviceService.getDeviceUsers");
 		expect(enroll).toContain("vendorUserId: linkTarget.vendorUserId");
 		expect(enroll).toContain("vendorUserIds");
+		expect(enroll).toContain("Math.min(Math.max(sourceVendorUserIdsForQuery.length, 1), 1000)");
+		expect(deviceController).toContain("const maxLimit = vendorUserIds.length > 0 ? 1000 : 100");
 		expect(enroll).toContain("linkTarget.hrisDeviceUser || null");
 		expect(enroll).toContain('status: "UNMATCHED"');
 		expect(enroll).toContain("openDbDeviceUsers?.deviceUsers");
@@ -104,6 +106,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Could not verify link");
 		expect(enroll).toContain("Search employee name, ID, device ID");
 		expect(enroll).toContain("EmployeePickerSelect");
+		const employeePicker = readAppFile("app/components/molecules/employee/EmployeePickerSelect.tsx");
+		expect(employeePicker).toContain("(data as any)?.data?.pagination?.total");
+		expect(employeePicker).toContain("(data as any)?.data || {}");
 		expect(enroll).not.toContain("limit: 1000,\n\t\tdocument: true,\n\t\tpagination: true,");
 		expect(enroll).toContain("Unlink employee");
 		expect(enroll).toContain('title="Unlink employee"');

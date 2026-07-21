@@ -937,7 +937,7 @@ export function DeviceEnrollmentPanel({
 	} = useDeviceUsers(
 		selectedDeviceId,
 		{
-			limit: Math.min(Math.max(sourceVendorUserIdsForQuery.length, 1), 100),
+			limit: Math.min(Math.max(sourceVendorUserIdsForQuery.length, 1), 1000),
 			vendorUserIds: sourceVendorUserIdsForQuery,
 		},
 		hasSourceVendorUsers,

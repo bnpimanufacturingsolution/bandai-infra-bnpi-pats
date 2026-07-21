@@ -1,5 +1,28 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-21 Device-user link employee picker and padded-ID proof
+
+- Task mode: Mixed admin UX regression repair and device-user/employee matching proof.
+- Implemented:
+  - The Link device user modal now uses the async `EmployeePickerSelect` instead of a preloaded 1000-row `SearchableSelect`, so employee search runs through the employee API and can find codes beyond the initial slice.
+  - Shared popover content now renders above the custom modal shell/backdrop, fixing the dropdown opening behind the modal.
+  - Employee picker fields/details include `deviceEmpId`, so the admin can search and see device IDs while linking.
+  - Backend helper regression coverage explicitly proves numeric vendor IDs link to five-digit padded `Employee.employeeId` records when no direct `deviceEmpId` match is present (`21 -> 00021`, `989 -> 00989`).
+- Runtime/API proof:
+  - Evidence root: `.runtime/device-user-link-selector-20260721-123032/`.
+  - Admin employee search endpoint returned `00021` for query `21` and `00989` for query `989` through the same API path the picker uses.
+  - Saved DeviceUser lookups on current Hikvision devices showed vendor `21` linked to employee code `00021` and vendor `989` linked to employee code `00989`.
+- Browser proof:
+  - Evidence root: `.runtime/device-user-link-selector-playwright-20260721-043453/`.
+  - Headless Playwright opened Device Users for vendor user `989`, opened the Link device user modal, opened the employee picker, typed `989`, and verified employee `00989` was visible with no failed requests.
+- Validation:
+  - Backend focused helper tests passed (`11` passing).
+  - Frontend focused Device Users UI contract passed.
+  - API typecheck passed.
+  - `git diff --check` passed.
+  - Frontend broad `tsconfig.test` typecheck still fails on unrelated existing `TimesheetsTab.test.tsx` React Query fixture drift, already covered by `REC-20260706-TEST-TYPECHECK-MOCKS`.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-21 Hikvision faceURL 404 raw-custody sanitization
 
 - Task mode: Bug fix with backend custody safety and admin UX repair.

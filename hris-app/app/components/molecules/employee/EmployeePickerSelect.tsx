@@ -154,10 +154,14 @@ export function EmployeePickerSelect({
 	);
 	const { data: selectedEmployee } = useEmployee(value || "", EMPLOYEE_PICKER_FIELDS);
 	const selectedEmployeeId = getEmployeeId(selectedEmployee);
-	const fetchedEmployees = React.useMemo(
-		() => (data?.employees || []),
-		[data],
-	);
+	const fetchedEmployees = React.useMemo(() => {
+		const payload = (data as any)?.employees
+			? data
+			: Array.isArray((data as any)?.data)
+				? { employees: (data as any).data }
+				: (data as any)?.data || {};
+		return payload?.employees || [];
+	}, [data]);
 	const candidates = React.useMemo(() => {
 		const rows: Employee[] = [];
 		const seen = new Set<string>();
@@ -177,7 +181,14 @@ export function EmployeePickerSelect({
 
 		return rows;
 	}, [excludeEmployeeId, fetchedEmployees, selectedEmployee, selectedEmployeeId]);
-	const totalCount = Number(data?.count || candidates.length || 0);
+	const totalCount = Number(
+		(data as any)?.count ||
+			(data as any)?.data?.count ||
+			(data as any)?.pagination?.total ||
+			(data as any)?.data?.pagination?.total ||
+			candidates.length ||
+			0,
+	);
 	const selectedLabel = selectedEmployee
 		? `${getEmployeeName(selectedEmployee)} (${selectedEmployee.employeeId || "No ID"})`
 		: "";

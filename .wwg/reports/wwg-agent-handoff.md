@@ -1,5 +1,31 @@
 # WWG Agent Handoff
 
+## 2026-07-21 - Device-user link employee picker and padded-ID proof
+
+- Status: `COMPLETE_LOCAL_API_AND_BROWSER_PROOF`.
+- Task mode: Mixed admin UX regression repair and device-user/employee matching proof.
+- User symptom repaired:
+  - In the Link device user modal, the employee dropdown did not visibly open from inside the modal and could not reliably search the full employee list for expected padded employee codes such as vendor `989` -> employee `00989`.
+- Implementation:
+  - `hris-app/app/components/ui/popover.tsx` now renders popover portals above the custom modal shell/backdrop.
+  - `hris-app/app/routes/admin/devices/enroll.tsx` uses the async `EmployeePickerSelect` for manual device-user linking instead of a preloaded 1000-row `SearchableSelect`.
+  - `hris-app/app/components/molecules/employee/EmployeePickerSelect.tsx` includes `deviceEmpId` in requested fields and shows it in option metadata.
+  - `hris-api/tests/device-user-sync.helper.spec.ts` now explicitly covers padded employee-code fallback for `21 -> 00021` and `989 -> 00989`.
+- API proof:
+  - Evidence root: `.runtime/device-user-link-selector-20260721-123032/`.
+  - `employee-picker-search-proof.json`: admin search for `21` returned `00021` / `deviceEmpId=21`; search for `989` returned `00989` / `deviceEmpId=989`.
+  - `device-user-padded-link-dryrun-proof.json`: saved DeviceUser rows on the current four Hikvision devices show vendor `21` linked to employee `00021` and vendor `989` linked to employee `00989`.
+- Browser proof:
+  - Evidence root: `.runtime/device-user-link-selector-playwright-20260721-043453/`.
+  - Playwright opened Device Users for vendor `989`, opened the Link device user modal, opened the employee picker above the modal, typed `989`, and verified `00989` was visible. Screenshot: `link-modal-employee-picker-989.png`.
+- Validation:
+  - `npx tsx node_modules/mocha/bin/mocha --no-config tests/device-user-sync.helper.spec.ts`: `11` passing.
+  - `npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts`: passed.
+  - `npx tsc --noEmit --pretty false --incremental false --listFiles false` in `hris-api`: passed.
+  - `git diff --check`: passed.
+  - Frontend broad `npx tsc -p tsconfig.test.json --noEmit --pretty false` still fails on unrelated existing `TimesheetsTab.test.tsx` React Query mock drift already tracked by `REC-20260706-TEST-TYPECHECK-MOCKS`.
+- Recommendation capture: No new recommendations were identified.
+
 ## 2026-07-21 - Hikvision faceURL 404 raw-custody sanitization
 
 - Status: `COMPLETE_LOCAL_BROWSER_PROOF`.

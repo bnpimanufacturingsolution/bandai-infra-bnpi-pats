@@ -4085,9 +4085,10 @@ export const controller = (prisma: PrismaClient) => {
 						.map((value) => value.trim())
 						.filter(Boolean),
 				),
-			).slice(0, 100);
+			).slice(0, 1000);
 			const page = Math.max(Number(req.query.page || 1), 1);
-			const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), 100);
+			const maxLimit = vendorUserIds.length > 0 ? 1000 : 100;
+			const limit = Math.min(Math.max(Number(req.query.limit || 25), 1), maxLimit);
 			const where: any = {
 				organizationId,
 				...(deviceId ? { deviceId } : {}),
