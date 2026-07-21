@@ -729,3 +729,15 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - API repair uses optimistic `updatedAt` merge/retry and preserves raw fingerprint/face custody. Exact evidenced-event replay remained present after the delayed enrichment window.
 - Modal repair suppresses the false `Not captured yet` state while its saved DeviceUser refetch is pending. Users `15` and `18` render `1 stored` in headless proof.
 - Evidence and boundary: `.runtime/fingerprint-enroll-raw-race-20260719/summary.md`.
+
+# 2026-07-21 Device C DeviceUser Gap Repair Handoff
+
+- Status: `FULFILLED_WITH_BOUNDARY`.
+- Root cause: DeviceUser sync job planning used saved HRIS DeviceUser state only (`vendorUserCount: null`) for its decision matrix, so the running `needs_attention_only` job reported `missing_device_user_record=0` even while Sync Center preview proved Main Entrance Device C had `687` physical users and only `416` saved HRIS DeviceUser rows.
+- Code changed: the job planner now calls the fast Hikvision device-user count before deciding missing source identities are zero. When the live source count exceeds saved HRIS rows, the job sets `sourceReadRequired=true` and reads source users before raw-custody repair.
+- UI changed: job progress no longer labels failed raw capture attempts as remaining HRIS "raw gaps"; it uses `Device no-data` / `raw reads failed`, matching device 404/no-data evidence.
+- Runtime repair: API was restarted locally on port `3001`. Repaired dry-run for Device C returned `missingDeviceUsers=271`, `sourceReadRequired=true`, `sourceReadSkipped=false`. Real job `690dbe6d-c751-4dc3-9dff-f1f70738012a` completed with `created=271`, `updated=416`, `linked=640`, and `unmatched=46`.
+- Final proof: fresh Sync Center preview returned Device C `fromDevice=687`, `savedInHris=687`, `gap=0`, `missingDeviceUsers=0`, `needsLink=46`, `alreadyPresent=641`. Fresh merge plan showed `687` unique IDs and no duplicate unique IDs.
+- Validation: backend focused contracts passed 27/27; API typecheck passed; frontend focused UI contract passed 1/1; `git diff --check` passed with only CRLF warnings.
+- Boundary: 118 face raw reads failed because Device C returned 404/no-data for face image URLs. No raw biometric bytes were inferred or fabricated from counts.
+- Evidence root: `.runtime/device-c-repaired-sync-20260721-1153/`.

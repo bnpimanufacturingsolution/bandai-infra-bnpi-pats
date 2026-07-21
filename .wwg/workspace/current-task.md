@@ -2076,3 +2076,15 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
 - Validation: backend focused contracts passed 17/17; frontend focused Sync Center/Device Users contract passed 1/1; API typecheck passed. Frontend `typecheck:test` still fails outside touched device scope at `app/routes/employee/dashboard/TimesheetsTab.test.tsx(54,46)`, already covered by existing recommendation `REC-20260706-TEST-TYPECHECK-MOCKS`.
 - Boundary/warning: stale non-target Hikvision devices remain in saved config/list results, but they no longer block the four target devices in the same local testing journey. No biometric bytes were fabricated from counts.
 - Evidence root: `.runtime/sync-center-four-hikvision-20260721-090712/`.
+
+# Latest Task Addendum - 2026-07-21 Device C DeviceUser Gap Repair
+
+- Task mode: mixed backend truth repair, admin UI wording repair, real endpoint execution, and local API restart.
+- Root cause: bulk DeviceUser sync job planning built the decision matrix with `vendorUserCount: null`, so `needs_attention_only` trusted saved HRIS DeviceUser rows and skipped live source identity reads even when Sync Center preview proved Device C had `687` physical users and only `416` saved HRIS rows.
+- Backend repair: `buildDeviceUserSyncJobDecisionMatrix` now reads the fast Hikvision source user count before deciding whether missing DeviceUser records are zero. If the live device count shows missing source IDs, the job marks `sourceReadRequired=true` and includes `Reading source users needed for identity gaps`.
+- UI repair: live job cards no longer label failed raw capture attempts as honest remaining HRIS "raw gaps"; they show `Device no-data` / `raw reads failed` because Device C returned 404/no-data for face raw reads.
+- Runtime proof: after API restart, dry-run for Device C showed `missingDeviceUsers=271`, `sourceReadRequired=true`, `sourceReadSkipped=false`. Real job `690dbe6d-c751-4dc3-9dff-f1f70738012a` completed with `totalSourceRecords=687`, `created=271`, `updated=416`, `linked=640`, `unmatched=46`.
+- Final endpoint proof: fresh `GET /api/device/sync-preview?deviceId=cmripjwbx00ewl001ihcke210&quick=true` returned Main Entrance Device C `fromDevice=687`, `savedInHris=687`, `gap=0`, `missingDeviceUsers=0`, `needsLink=46`, `alreadyPresent=641`.
+- Merge proof: fresh merge plan returned `687` unique IDs and no duplicate unique IDs for the checked scope.
+- Boundary: 118 face raw reads failed because the device returned 404/no-data. HRIS did not fabricate biometric bytes from counts.
+- Evidence root: `.runtime/device-c-repaired-sync-20260721-1153/`.
