@@ -72,4 +72,12 @@ describe("Hikvision remote device tunnel contract", () => {
 			restartLocalApiScript.indexOf("run-dev-api-watch.cjs"),
 		);
 	});
+
+	it("does not let optional TEST A bridge stderr fail the local restart after API health is green", () => {
+		expect(restartLocalApiScript).to.include("optional TEST A bridge exited");
+		expect(restartLocalApiScript).to.include("2>&1 | ForEach-Object { Write-Host $_ }");
+		expect(restartLocalApiScript.indexOf("Local hris-api is healthy")).to.be.lessThan(
+			restartLocalApiScript.indexOf("Ensuring TEST A SSH reverse bridge"),
+		);
+	});
 });

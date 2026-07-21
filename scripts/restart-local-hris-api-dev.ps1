@@ -128,6 +128,8 @@ $listenerRestartScript = Join-Path $repoRoot "scripts\restart-local-hikvision-li
 if (Test-Path $bridgeScript) {
 	try {
 		Write-Host "[local-api-restart] Ensuring TEST A SSH reverse bridge for Live capture"
+		$previousErrorActionPreference = $ErrorActionPreference
+		$ErrorActionPreference = "Continue"
 		& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeScript `
 			-Action start `
 			-HttpDevicePort 443 `
@@ -135,8 +137,14 @@ if (Test-Path $bridgeScript) {
 			-HttpListenPort 59443 `
 			-SdkListenPort 59000 `
 			-ApiLocalPort $Port `
-			-ApiRemotePort 53001
+			-ApiRemotePort 53001 2>&1 | ForEach-Object { Write-Host $_ }
+		$bridgeExitCode = $LASTEXITCODE
+		$ErrorActionPreference = $previousErrorActionPreference
+		if ($bridgeExitCode -ne 0) {
+			Write-Host "[local-api-restart] Bridge ensure skipped: optional TEST A bridge exited $bridgeExitCode"
+		}
 	} catch {
+		$ErrorActionPreference = "Stop"
 		Write-Host "[local-api-restart] Bridge ensure skipped: $($_.Exception.Message)"
 	}
 }
