@@ -428,8 +428,10 @@ export const router = (
 		"/user-info/count",
 		cache({
 			ttl: 60,
-			keyGenerator: () => {
-				return `cache:hikvision:userinfo:count`;
+			keyGenerator: (req: Request) => {
+				const organizationId = String((req as any).organizationId || "unknown");
+				const deviceId = String(req.query?.deviceId || "default").trim() || "default";
+				return `cache:hikvision:userinfo:count:${organizationId}:${deviceId}`;
 			},
 		}),
 		controller.getUserInfoCount,

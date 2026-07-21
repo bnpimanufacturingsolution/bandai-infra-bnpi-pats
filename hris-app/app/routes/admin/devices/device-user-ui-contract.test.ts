@@ -153,7 +153,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).not.toContain("isSyncCenterReviewOpen");
 		expect(enroll).toContain('deviceUserView === "source"');
 		expect(enroll).toContain('status === "source_unavailable"');
+		expect(enroll).toContain('preview.status === "saved_preview"');
+		expect(enroll).toContain('if (status === "saved_preview") return "Unavailable";');
 		expect(enroll).toContain('options.unavailableLabel || "Unavailable"');
+		expect(enroll).not.toContain("Read separately");
+		expect(enroll).not.toContain("Saved preview");
 		expect(enroll).toContain('return "Not checked";');
 		expect(enroll).toContain("Preview merge by unique ID");
 		expect(enroll).toContain("Preview recommended choices");

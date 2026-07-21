@@ -36,7 +36,8 @@ describe("device log sync targeted import contract", () => {
 	it("runs independent ZKTeco and Hikvision availability probes concurrently", () => {
 		expect(controllerSource).to.contain("HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS || 1800");
 		expect(controllerSource).to.contain("const zktecoPreviewPromise =");
-		expect(controllerSource).to.contain("const hikvisionTotalsPromise = withDeviceUserImportTimeout(");
+		expect(controllerSource).to.contain("const hikvisionTotalsPromise = quickSavedPreview");
+		expect(controllerSource).to.contain(": withDeviceUserImportTimeout(");
 		expect(controllerSource).to.contain("Promise.allSettled(");
 		expect(controllerSource).to.contain("const [zktecoPreview] = await Promise.all([");
 		expect(controllerSource).to.contain("zktecoPreviewPromise,");
@@ -48,6 +49,10 @@ describe("device log sync targeted import contract", () => {
 		expect(controllerSource).to.contain("HIKVISION_PREVIEW_DEVICE_BUDGET_MS");
 		expect(controllerSource).to.contain('mode: "sync-preview"');
 		expect(controllerSource).to.contain("includeDirectUserInventory: !syncPreviewMode");
+		expect(controllerSource).to.contain("const includeLiveCustody =");
+		expect(controllerSource).to.contain("const includeLiveSourceTotals =");
+		expect(controllerSource).to.contain("includeLiveCustody &&");
+		expect(controllerSource).to.contain("includeLiveSourceTotals &&");
 		expect(controllerSource).to.contain(
 			"zktecoDevices.length > 0 ? getZktecoBridgeStatus() : Promise.resolve(null)",
 		);

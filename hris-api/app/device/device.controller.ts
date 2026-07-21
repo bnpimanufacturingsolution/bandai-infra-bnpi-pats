@@ -13958,6 +13958,14 @@ export const controller = (prisma: PrismaClient) => {
 				String(req.query.quick || req.query.savedOnly || "")
 					.trim()
 					.toLowerCase() === "true";
+			const includeLiveCustody =
+				String(req.query.includeLiveCustody || "")
+					.trim()
+					.toLowerCase() === "true";
+			const includeLiveSourceTotals =
+				String(req.query.includeLiveSourceTotals || "")
+					.trim()
+					.toLowerCase() === "true";
 			const devices = await prisma.device.findMany({
 				where: {
 					organizationId: String(organizationId),
@@ -14171,7 +14179,10 @@ export const controller = (prisma: PrismaClient) => {
 						biometricCustodyByDeviceId.set(deviceId, emptyBiometricCustody());
 					}
 					const shouldLoadDetailedCustody =
-						Boolean(selectedDeviceId) && selectedDeviceId !== "all" && !quickSavedPreview;
+						includeLiveCustody &&
+						Boolean(selectedDeviceId) &&
+						selectedDeviceId !== "all" &&
+						!quickSavedPreview;
 					if (shouldLoadDetailedCustody && (await hasDeviceUserVendorMetadataColumn())) {
 						const biometricRows = await (prisma as any).deviceUser.findMany({
 							where: {
@@ -14288,7 +14299,10 @@ export const controller = (prisma: PrismaClient) => {
 				operationLogProbe: { ok: false, count: null, error: message },
 			});
 			const shouldProbeLiveSourceTotals =
-				Boolean(selectedDeviceId) && selectedDeviceId !== "all" && !quickSavedPreview;
+				includeLiveSourceTotals &&
+				Boolean(selectedDeviceId) &&
+				selectedDeviceId !== "all" &&
+				!quickSavedPreview;
 			const hikvisionDevices = syncDevices.filter((device) => device.vendor === "Hikvision");
 			const hikvisionPreviewBudgetMs = shouldProbeLiveSourceTotals
 				? HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS
@@ -14296,33 +14310,36 @@ export const controller = (prisma: PrismaClient) => {
 						HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS,
 						HIKVISION_FAST_USER_COUNT_TIMEOUT_MS * 2 + 500,
 					);
-			const hikvisionTotalsPromise = withDeviceUserImportTimeout(
-				Promise.allSettled(
-					hikvisionDevices.map(async (device) => {
-						const total = shouldProbeLiveSourceTotals
-							? await getHikvisionSourceTotal(req, device.id, {
-									mode: "sync-preview",
-								})
-							: await getHikvisionFastDeviceUserSourceCount(req, device.id);
-						hikvisionTotals.set(device.id, total);
-					}),
-				),
-				hikvisionPreviewBudgetMs,
-				shouldProbeLiveSourceTotals
-					? "Source totals timed out; using saved HRIS evidence for preview"
-					: "Device user counts timed out; using saved HRIS evidence for preview",
-			).catch((error: any) => {
-				const message =
-					error?.message ||
-					(shouldProbeLiveSourceTotals
-						? "Source totals timed out; using saved HRIS evidence for preview"
-						: "Device user counts timed out; using saved HRIS evidence for preview");
-				for (const device of hikvisionDevices) {
-					if (!hikvisionTotals.has(device.id)) {
-						hikvisionTotals.set(device.id, hikvisionPreviewTimeout(message));
-					}
-				}
-			});
+			const hikvisionTotalsPromise =
+				hikvisionDevices.length === 0
+					? Promise.resolve()
+					: withDeviceUserImportTimeout(
+						Promise.allSettled(
+							hikvisionDevices.map(async (device) => {
+								const total = shouldProbeLiveSourceTotals
+									? await getHikvisionSourceTotal(req, device.id, {
+											mode: "sync-preview",
+										})
+									: await getHikvisionFastDeviceUserSourceCount(req, device.id);
+								hikvisionTotals.set(device.id, total);
+							}),
+						),
+						hikvisionPreviewBudgetMs,
+						shouldProbeLiveSourceTotals
+							? "Source totals timed out; using saved HRIS evidence for preview"
+							: "Device user counts timed out; using saved HRIS evidence for preview",
+					).catch((error: any) => {
+						const message =
+							error?.message ||
+							(shouldProbeLiveSourceTotals
+								? "Source totals timed out; using saved HRIS evidence for preview"
+								: "Device user counts timed out; using saved HRIS evidence for preview");
+						for (const device of hikvisionDevices) {
+							if (!hikvisionTotals.has(device.id)) {
+								hikvisionTotals.set(device.id, hikvisionPreviewTimeout(message));
+							}
+						}
+					});
 			const [zktecoPreview] = await Promise.all([
 				zktecoPreviewPromise,
 				hikvisionTotalsPromise,
@@ -14382,6 +14399,9 @@ export const controller = (prisma: PrismaClient) => {
 					device.vendor === "ZKTeco"
 						? zktecoPreviewByIp.get(String(device.address || "").trim())
 						: hikvisionTotals.get(device.id);
+				const liveSourceSkippedForQuickPreview = Boolean(
+					sourcePreview?.skippedForQuickPreview,
+				);
 				const peerBaseline = peerBaselineByVendor.get(device.vendor) || null;
 				const peerDrift = {
 					missingUsers: 0,
@@ -14432,7 +14452,11 @@ export const controller = (prisma: PrismaClient) => {
 						? zktecoPreview.error || "ZKTeco SDK preview did not return this device"
 						: null);
 				const rawSourceErrorMessage =
-					sourceError === null || sourceError === undefined ? null : String(sourceError);
+					liveSourceSkippedForQuickPreview ||
+					sourceError === null ||
+					sourceError === undefined
+						? null
+						: String(sourceError);
 				const sourceErrorMessage =
 					device.vendor === "Hikvision" &&
 					rawSourceErrorMessage &&
@@ -14608,7 +14632,9 @@ export const controller = (prisma: PrismaClient) => {
 							? "hikvision-import"
 							: "zkteco-bridge-sync"
 						: null,
-					status: sourceErrorMessage
+					status: liveSourceSkippedForQuickPreview
+						? "saved_preview"
+						: sourceErrorMessage
 						? "source_unavailable"
 						: !shouldProbeLiveSourceTotals && vendorUserCount !== null
 							? "user_count_ready"
@@ -14621,7 +14647,9 @@ export const controller = (prisma: PrismaClient) => {
 									: "synced",
 					lastSourceEventAt:
 						device.vendor === "ZKTeco" ? sourcePreview?.lastSelectedAt || null : null,
-					countLatencyMs: sourcePreview?.latencyMs ?? null,
+					countLatencyMs: liveSourceSkippedForQuickPreview
+						? 0
+						: (sourcePreview?.latencyMs ?? null),
 					eventRows,
 					sources,
 					readySourceCount,

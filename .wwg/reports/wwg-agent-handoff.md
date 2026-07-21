@@ -627,6 +627,18 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Evidence root: `.runtime/overnight-hikvision-listener-green-20260721-065548/`.
 - Recommendations: no new recommendations were added; existing `REC-20260721-HIKVISION-API-REVERSE-ENSURE-BUG` already covers the direct recovery issue observed in this run.
 
+# 2026-07-21 Sync Center DB/Live Gate Removal + Four Hikvision Device Proof
+
+- Status: `FULFILLED_WITH_WARNINGS`.
+- Code changed: Sync Center no longer renders or owns the `Checking DB + live path` / Keep Ready / Prove-fix readiness strip. `GET /api/device/sync-preview?quick=true` is now the default Sync Center path and treats skipped live source counts as neutral `saved_preview` instead of a blocking error. The host-local Hikvision tunnel env map is generated as a single-line value so all `.20-.23` forwards are loaded by the local API.
+- Runtime proof: `ssh project-truth-hris` worked while direct LAN SSH to `10.184.37.19` timed out; Cloudflare tunnel stayed active. VM fast reachability proved `.20-.23` required TCP ports `80/443/8000` open. Host-local forwards for all four devices were open.
+- API proof: local API quick health proved `.20`, `.21`, `.22`, `.23` `online` via `env_tunnel_map`. Quick Sync Center preview returned target HRIS DeviceUser counts `.20=459`, `.21=687`, `.22=416`, `.23=399` in 2454ms without live source blocking. Separate live Hikvision user-info count succeeded for all four in 1574ms-4784ms. Device Users endpoint returned saved totals for all four.
+- Listener proof: `/api/device/hikvision/listener` returned running/armed/receiving overall with four device rows; `.20` receiving and `.21-.23` armed.
+- Browser proof: Playwright on `http://127.0.0.1:5175` proved `/admin/configuration/devices`, Sync Center, and Device Users show all four target IPs; no `Checking DB + live path`, `Prove / fix now`, or `Keep ready ON` text was present. Network captured quick health, `sync-preview?quick=true`, and listener calls only.
+- Validation: backend focused contracts passed 17/17; frontend focused contract passed 1/1; API typecheck passed. Frontend `typecheck:test` still fails outside this scope at `app/routes/employee/dashboard/TimesheetsTab.test.tsx(54,46)`, covered by existing `REC-20260706-TEST-TYPECHECK-MOCKS`.
+- Evidence root: `.runtime/sync-center-four-hikvision-20260721-090712/`.
+- Boundary: stale non-target Hikvision devices still exist in config/list results, but they no longer block target-device health, Sync Center render, or Device Users proof. No biometric bytes were inferred from counts.
+
 ## Next Steps
 
 - Open VSCode.

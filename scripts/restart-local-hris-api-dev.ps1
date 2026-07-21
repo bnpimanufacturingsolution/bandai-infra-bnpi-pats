@@ -13,6 +13,7 @@ $logPath = Join-Path $runtimeDir "latest.log"
 $dotenvCli = Join-Path $apiDir "node_modules\dotenv-cli\cli.js"
 $nodeBinary = (Get-Command node.exe).Source
 $ensureDbAccessScript = Join-Path $apiDir "scripts\ensure-bnpi-db-access.cjs"
+$ensureHikvisionRemoteTunnelScript = Join-Path $apiDir "scripts\ensure-hikvision-remote-device-tunnel.cjs"
 
 function Get-RepoApiProcesses {
 	$connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
@@ -90,6 +91,13 @@ if (-not (Test-Path $ensureDbAccessScript)) {
 
 Write-Host "[local-api-restart] Running DB access preflight"
 & $nodeBinary $ensureDbAccessScript
+
+if (Test-Path $ensureHikvisionRemoteTunnelScript) {
+	Write-Host "[local-api-restart] Ensuring Hikvision remote device tunnels (.20/.21/.22/.23)"
+	& $nodeBinary $ensureHikvisionRemoteTunnelScript
+} else {
+	Write-Host "[local-api-restart] Hikvision remote tunnel ensure skipped: missing $ensureHikvisionRemoteTunnelScript"
+}
 
 $launchScript = @"
 Set-Location '$apiDir'

@@ -561,7 +561,7 @@ export function DeviceEnrollmentPanel({
 	} = useDeviceSyncPreview(
 		{
 			deviceId: activePanel === "overview" ? "all" : selectedDeviceId || "all",
-			quick: activePanel !== "overview" && Boolean(selectedDeviceId),
+			quick: true,
 		},
 		// Only while Sync Center panels that need counts are visible â€” no background poll.
 		activePanel === "overview" || activePanel === "users" || Boolean(selectedDeviceId),
@@ -2964,6 +2964,9 @@ export function DeviceEnrollmentPanel({
 		if (options.pending) return "Checking...";
 		if (typeof value === "number" && Number.isFinite(value)) return value.toLocaleString();
 		if (!preview) return "Not checked";
+		if (preview.status === "saved_preview") {
+			return options.unavailableLabel || "Unavailable";
+		}
 		if (preview.error || preview.status === "source_unavailable") {
 			return options.unavailableLabel || "Unavailable";
 		}
@@ -3690,12 +3693,14 @@ export function DeviceEnrollmentPanel({
 		if (status === "needs_sync") return "Needs sync";
 		if (status === "needs_attention") return "Needs attention";
 		if (status === "user_count_ready") return "User counts ready";
+		if (status === "saved_preview") return "Unavailable";
 		if (status === "source_total_unavailable") return "Source unavailable";
 		return "Not checked";
 	};
 	const getSyncStatusBadge = (status: string) => {
 		if (status === "synced") return "success";
 		if (status === "user_count_ready") return "success";
+		if (status === "saved_preview") return "secondary";
 		if (status === "checking") return "secondary";
 		if (status === "needs_attention") return "destructive";
 		if (status === "needs_sync" || status === "source_total_unavailable") return "warning";
@@ -5122,7 +5127,9 @@ export function DeviceEnrollmentPanel({
 													From device
 												</span>
 												<span className="font-semibold text-slate-950">
-													{countMetricValue(sourceCount, preview)}
+													{countMetricValue(sourceCount, preview, {
+														unavailableLabel: "Unavailable",
+													})}
 												</span>
 											</div>
 											<div className="flex items-center justify-between gap-2 lg:block">
@@ -5138,7 +5145,9 @@ export function DeviceEnrollmentPanel({
 													Gap
 												</span>
 												<span className="font-semibold text-slate-950">
-													{countMetricValue(gapCount, preview)}
+													{countMetricValue(gapCount, preview, {
+														unavailableLabel: "Unavailable",
+													})}
 												</span>
 											</div>
 											<div className="flex items-center justify-between gap-2 lg:block">

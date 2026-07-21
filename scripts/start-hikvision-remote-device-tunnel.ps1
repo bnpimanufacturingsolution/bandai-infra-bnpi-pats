@@ -191,6 +191,10 @@ if (-not $active) {
     throw "Hikvision remote device tunnel exited immediately. $stderr"
   }
 
+  $tunnelMap = (($forwardSpecs | ForEach-Object {
+    "$($_.DeviceIp):$($_.RemotePort)=127.0.0.1:$($_.LocalPort)"
+  }) -join ',')
+
   $active = [pscustomobject]@{
     GeneratedAt = (Get-Date).ToString('o')
     ProcessId = $process.Id
@@ -204,7 +208,7 @@ if (-not $active) {
         Remote = "$($_.DeviceIp):$($_.RemotePort)"
       }
     })
-    Env = "PROJECT_TRUTH_HIKVISION_TUNNEL_MAP=$(($forwardSpecs | ForEach-Object { "$($_.DeviceIp):$($_.RemotePort)=127.0.0.1:$($_.LocalPort)" }) -join ',')"
+    Env = "PROJECT_TRUTH_HIKVISION_TUNNEL_MAP=$tunnelMap"
     StopCommand = '.\scripts\start-hikvision-remote-device-tunnel.ps1 -StopExisting'
     Evidence = $runRoot
   }
