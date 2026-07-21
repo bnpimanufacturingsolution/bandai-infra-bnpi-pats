@@ -3,7 +3,7 @@ import { Button } from "~/components/atoms/Button";
 import { Modal } from "~/components/atoms/Modal";
 import { Badge } from "~/components/atoms/Badge";
 import { Select } from "~/components/atoms/Select";
-import { SearchableSelect } from "~/components/ui/searchable-select";
+import { EmployeePickerSelect } from "~/components/molecules/employee/EmployeePickerSelect";
 import { formatDateTime } from "~/lib/utils/text-utils";
 import type { Column } from "~/components/atoms/DataTable";
 import {
@@ -815,33 +815,6 @@ export function DeviceEnrollmentPanel({
 	const [copyDeviceUserStatusMessage, setCopyDeviceUserStatusMessage] = useState("");
 	const [selectedEmployeeForLink, setSelectedEmployeeForLink] = useState("");
 
-	const {
-		data: allEmployeesData,
-		isLoading: isLoadingEmployeeLinkOptions,
-		error: employeeLinkOptionsError,
-	} = useEmployees({
-		limit: 1000,
-		document: true,
-		pagination: true,
-	});
-	const allEmployeesPayload =
-		(allEmployeesData as any)?.employees || (allEmployeesData as any)?.pagination
-			? (allEmployeesData as any)
-			: Array.isArray((allEmployeesData as any)?.data)
-				? {
-						employees: (allEmployeesData as any).data,
-						pagination: (allEmployeesData as any)?.pagination,
-					}
-				: (allEmployeesData as any)?.data || {};
-	const allUsers =
-		allEmployeesPayload?.employees
-			?.map((employee: Employee) => ({
-				id: employee.userId || employee.user?.id || employee.id,
-				email: employee.user?.email || "",
-				firstName: employee.person?.personalInfo?.firstName,
-				lastName: employee.person?.personalInfo?.lastName,
-			}))
-			.filter((user: { id: string; email: string }) => user.id && user.email) || [];
 	const getEmployeeDisplayName = (employee?: Employee | null) => {
 		const firstName = employee?.person?.personalInfo?.firstName || "";
 		const lastName = employee?.person?.personalInfo?.lastName || "";
@@ -853,20 +826,6 @@ export function DeviceEnrollmentPanel({
 			"Employee"
 		);
 	};
-	const employeeLinkOptions =
-		allEmployeesPayload?.employees?.map((employee: Employee) => ({
-			value: employee.id,
-			label: `${getEmployeeDisplayName(employee)} - ${employee.employeeId || "No employee ID"}`,
-			description:
-				[
-					employee.deviceEmpId ? `Legacy device ID ${employee.deviceEmpId}` : null,
-					employee.department?.name,
-					employee.position?.title,
-				]
-					.filter(Boolean)
-					.join(" - ") || undefined,
-			badge: employee.employeeId || undefined,
-		})) || [];
 
 	const importEnrollmentMutation = useImportDeviceEnrollment();
 
@@ -9753,24 +9712,11 @@ export function DeviceEnrollmentPanel({
 					) : null}
 					<div>
 						<div className="text-sm font-medium text-slate-700">Employee</div>
-						<SearchableSelect
-							options={employeeLinkOptions}
+						<EmployeePickerSelect
 							value={selectedEmployeeForLink}
 							onValueChange={setSelectedEmployeeForLink}
-							placeholder={
-								isLoadingEmployeeLinkOptions
-									? "Loading employees..."
-									: "Select employee"
-							}
+							placeholder="Select employee"
 							searchPlaceholder="Search employee name, ID, device ID..."
-							emptyText={
-								employeeLinkOptionsError
-									? "Employees could not be loaded."
-									: "No employees found."
-							}
-							disabled={
-								isLoadingEmployeeLinkOptions || Boolean(employeeLinkOptionsError)
-							}
 						/>
 					</div>
 					<div className="flex justify-end gap-2">

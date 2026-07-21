@@ -103,6 +103,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("LINK_CHECK_FAILED");
 		expect(enroll).toContain("Could not verify link");
 		expect(enroll).toContain("Search employee name, ID, device ID");
+		expect(enroll).toContain("EmployeePickerSelect");
+		expect(enroll).not.toContain("limit: 1000,\n\t\tdocument: true,\n\t\tpagination: true,");
 		expect(enroll).toContain("Unlink employee");
 		expect(enroll).toContain('title="Unlink employee"');
 		expect(enroll).toContain("Confirm this device user should be unlinked");

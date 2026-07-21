@@ -28,6 +28,7 @@ interface EmployeePickerSelectProps {
 const EMPLOYEE_PICKER_FIELDS = [
 	"id",
 	"employeeId",
+	"deviceEmpId",
 	"person.personalInfo",
 	"departmentId",
 	"department.id",
@@ -328,7 +329,14 @@ export function EmployeePickerSelect({
 												</span>
 											</div>
 											<div className="truncate text-xs text-muted-foreground">
-												{getAssignmentLabel(employee) || "No assignment"}
+												{[
+													employee.deviceEmpId
+														? `Device ID ${employee.deviceEmpId}`
+														: null,
+													getAssignmentLabel(employee) || "No assignment",
+												]
+													.filter(Boolean)
+													.join(" - ")}
 											</div>
 										</div>
 										<span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground">
