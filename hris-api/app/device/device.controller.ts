@@ -8350,16 +8350,24 @@ export const controller = (prisma: PrismaClient) => {
 							}),
 						);
 					} catch (error: any) {
-						const delayedCopy = await withDeviceUserImportTimeout(
-							waitForDelayedHikvisionPeerCopy({
-								req,
-								organizationId: gate.organizationId,
-								targetDevice,
-								employeeNo: row.vendorUserId,
-							}),
-							Math.min(HIKVISION_PEER_COPY_COMPLETION_WAIT_MS + 10000, DEVICE_USER_IMPORT_ROW_TIMEOUT_MS),
-							`Timed out waiting for target device ${targetDevice.name || targetDevice.id} to report copied user ${row.vendorUserId}`,
-						).catch(() => null);
+						const copyErrorMessage = String(error?.message || "");
+						const skipDelayedReread =
+							/(timed out|timeout|Process timed out)/i.test(copyErrorMessage);
+						const delayedCopy = skipDelayedReread
+							? null
+							: await withDeviceUserImportTimeout(
+									waitForDelayedHikvisionPeerCopy({
+										req,
+										organizationId: gate.organizationId,
+										targetDevice,
+										employeeNo: row.vendorUserId,
+									}),
+									Math.min(
+										HIKVISION_PEER_COPY_COMPLETION_WAIT_MS + 10000,
+										DEVICE_USER_IMPORT_ROW_TIMEOUT_MS,
+									),
+									`Timed out waiting for target device ${targetDevice.name || targetDevice.id} to report copied user ${row.vendorUserId}`,
+								).catch(() => null);
 						if ((delayedCopy as any)?.targetDeviceUser?.id) {
 							results.push(
 								buildDeviceUserImportResultRow(row, {
