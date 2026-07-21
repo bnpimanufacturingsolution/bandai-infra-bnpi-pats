@@ -1,5 +1,20 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-21 Sync Center Needs link click rows
+
+- Task mode: Focused admin UX regression repair.
+- Implemented:
+  - The Device Users `Needs link` metric now sets `deviceUserStatus=UNMATCHED` when clicked, so the table requests saved HRIS rows that actually need employee links.
+  - The source-scoped optimization now applies only to `shown` and `source` views; saved truth views such as `open` and `linked` use HRIS `DeviceUser` rows.
+- Runtime/browser proof:
+  - Evidence root: `.runtime/sync-center-needs-link-click-browser-20260721T053934Z/`.
+  - Clicking Device C `Needs link: 46` produced URL `deviceUserView=open&deviceUserStatus=UNMATCHED`, requested `/api/device/cmripjwbx00ewl001ihcke210/users?limit=50&status=UNMATCHED`, and showed `1 - 8 of 46` without the empty-state copy.
+  - API proof in `.runtime/sync-center-needs-link-click-20260721-133728/` returned 46 `UNMATCHED` rows for Device C.
+- Validation:
+  - Frontend focused Device Users UI contract passed.
+  - `git diff --check` passed with CRLF normalization warnings only.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-21 Device-user link employee picker and padded-ID proof
 
 - Task mode: Mixed admin UX regression repair and device-user/employee matching proof.

@@ -954,7 +954,7 @@ export function DeviceEnrollmentPanel({
 		!isSourceMatchedDeviceUsersError &&
 		deviceUserStatus === "all" &&
 		!deviceUserSearch &&
-		deviceUserView !== "hris" &&
+		(deviceUserView === "shown" || deviceUserView === "source") &&
 		!hasScopedDeviceUserVendorIds;
 	const {
 		data: dbDeviceUsers,
@@ -1290,7 +1290,9 @@ export function DeviceEnrollmentPanel({
 		updateSearchParams((next) => {
 			if (view && view !== "shown") next.set("deviceUserView", view);
 			else next.delete("deviceUserView");
-			next.delete("deviceUserStatus");
+			if (view === "open") next.set("deviceUserStatus", "UNMATCHED");
+			else if (view === "linked") next.set("deviceUserStatus", "ACTIVE");
+			else next.delete("deviceUserStatus");
 			next.delete("deviceUserSearch");
 			next.set("deviceUserPage", "1");
 			next.set("syncPanel", "users");

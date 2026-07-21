@@ -372,6 +372,10 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Reading source users from the physical device");
 		expect(enroll).toContain("deviceUserView");
 		expect(enroll).toContain("deviceUserPage");
+		expect(enroll).toContain('if (view === "open") next.set("deviceUserStatus", "UNMATCHED")');
+		expect(enroll).toContain(
+			'(deviceUserView === "shown" || deviceUserView === "source")',
+		);
 		expect(enroll).toContain("New records");
 		expect(enroll).toContain("What Sync can fix");
 		expect(enroll).toContain("missing_device_user_record");

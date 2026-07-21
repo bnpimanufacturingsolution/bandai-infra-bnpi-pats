@@ -1,5 +1,26 @@
 # WWG Agent Handoff
 
+## 2026-07-21 - Sync Center Needs link click rows
+
+- Status: `COMPLETE_LOCAL_API_AND_BROWSER_PROOF`.
+- Task mode: Focused admin UX regression repair.
+- User symptom repaired:
+  - In Sync Center > Device Users, clicking the `Needs link` count for Device C opened an empty table even though the metric showed 46 rows requiring employee links.
+- Implementation:
+  - `hris-app/app/routes/admin/devices/enroll.tsx` now sets `deviceUserStatus=UNMATCHED` when the `open` / `Needs link` view is selected from the metric cards.
+  - The source-scoped Device Users optimization is limited to `shown` and `source` views, so `open` and `linked` views use saved HRIS `DeviceUser` truth.
+  - `hris-app/app/routes/admin/devices/device-user-ui-contract.test.ts` guards the routing/filter contract.
+- API proof:
+  - Evidence root: `.runtime/sync-center-needs-link-click-20260721-133728/`.
+  - Admin `GET /api/device/cmripjwbx00ewl001ihcke210/users?limit=50&status=UNMATCHED` returned `rowCount=46`, `summary.unmatched=46`, and sample rows all had `status=UNMATCHED`.
+- Browser proof:
+  - Evidence root: `.runtime/sync-center-needs-link-click-browser-20260721T053934Z/`.
+  - Headless Playwright clicked Device C `Needs link: 46`, verified final URL `deviceUserView=open&deviceUserStatus=UNMATCHED`, saw the network request with `status=UNMATCHED`, and confirmed the table showed `1 - 8 of 46` with no `No device users found for this view.` empty state.
+- Validation:
+  - `npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts`: passed.
+  - `git diff --check`: passed with CRLF normalization warnings only.
+- Recommendation capture: No new recommendations were identified.
+
 ## 2026-07-21 - Device-user link employee picker and padded-ID proof
 
 - Status: `COMPLETE_LOCAL_API_AND_BROWSER_PROOF`.
