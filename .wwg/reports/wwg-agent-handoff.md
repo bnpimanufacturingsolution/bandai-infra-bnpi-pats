@@ -872,3 +872,11 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Frontend changed: `enroll.tsx` now gates the review/editor body with `!hasSdkMergeJob`. While a job exists, the modal renders only the job monitor plus a `Locked job scope` section from backend `writeMatrix`, including selected unique IDs, peer copy attempts, fingerprint gaps at start, face gaps at start, targets receiving copies, and physical sources used.
 - Validation: focused frontend UI contract passed; targeted `enroll.tsx` ESLint passed with existing warnings only; backend typecheck passed.
 - Boundary: no additional real merge job was started during this repair. Browser proof against the exact operator-visible job needs the active `mergeJobId` or a fresh approved job run.
+
+# 2026-07-22 Merge Users Live Progress Truth Repair Handoff
+
+- Status: `LIVE_JOB_INSPECTED_PROGRESS_UI_REPAIRED`.
+- Live job inspected: `d4fe5561-64f7-4349-b53e-922486c7436b`. API still returned `processing`, `totalWrites=3770`, `processedWrites=565`, `successfulWrites=0`, `failedWrites=0`, `results=[]`, `startedAt=2026-07-21T19:54:47.863Z`. The honest interpretation is that the backend is still inside the long device-copy call and has not returned actual per-target write rows.
+- UI repair: running merge card now shows `Progress estimate` instead of `Completed` while processing. It also shows `Current phase`, `Elapsed`, `UI polling`, and `Backend update`, plus explicit copy that Applied/Needs attention stay zero until per-target results return and devices are reread.
+- Backend repair: merge job updates now stamp `updatedAt`; frontend type accepts `updatedAt`.
+- Validation: focused frontend contract passed; targeted `enroll.tsx` ESLint passed with existing warnings only; backend typecheck passed.

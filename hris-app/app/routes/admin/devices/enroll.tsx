@@ -726,6 +726,7 @@ export function DeviceEnrollmentPanel({
 		sdkMergeJobId,
 		Boolean(sdkMergeJobId),
 	);
+	const [sdkMergeJobClock, setSdkMergeJobClock] = useState(() => Date.now());
 	const deviceUserSyncJobStatus = deviceUserSyncJobProgress?.status;
 	const [detailsDeviceUser, setDetailsDeviceUser] = useState<VisibleDeviceUserRow | null>(null);
 	const detailsDeviceUserVendorUserId = String(detailsDeviceUser?.vendorUserId || "").trim();
@@ -1006,6 +1007,11 @@ export function DeviceEnrollmentPanel({
 		if (!sdkMergeJobIdParam || sdkMergeJobIdParam === sdkMergeJobId) return;
 		setSdkMergeJobId(sdkMergeJobIdParam);
 	}, [sdkMergeJobId, sdkMergeJobIdParam]);
+	useEffect(() => {
+		if (!sdkMergeJobId || sdkMergeJobProgress?.status !== "processing") return;
+		const timer = window.setInterval(() => setSdkMergeJobClock(Date.now()), 1000);
+		return () => window.clearInterval(timer);
+	}, [sdkMergeJobId, sdkMergeJobProgress?.status]);
 	useEffect(() => {
 		if (!sdkMergeJobId || !isSdkMergeJobError) return;
 		setSdkMergeLastJob((current) =>
@@ -2315,13 +2321,71 @@ export function DeviceEnrollmentPanel({
 				: sdkMergeJobIsProcessing
 					? "Merge job running"
 					: "Merge job status";
+	const sdkMergeJobElapsed = effectiveSdkMergeJob?.startedAt
+		? formatDeviceUserSyncElapsed(
+				effectiveSdkMergeJob.startedAt,
+				effectiveSdkMergeJob.completedAt || (sdkMergeJobIsProcessing ? new Date(sdkMergeJobClock).toISOString() : null),
+			)
+		: "Not recorded";
+	const sdkMergeJobLastChecked = sdkMergeJobProgress
+		? formatDateTime(new Date(sdkMergeJobClock).toISOString())
+		: "Waiting for first poll";
+	const sdkMergeJobLastBackendUpdate =
+		effectiveSdkMergeJob?.updatedAt || effectiveSdkMergeJob?.completedAt || null;
+	const sdkMergeJobBackendAgeSeconds = sdkMergeJobLastBackendUpdate
+		? Math.max(
+				0,
+				Math.floor(
+					(sdkMergeJobClock - new Date(sdkMergeJobLastBackendUpdate).getTime()) / 1000,
+				),
+			)
+		: null;
+	const sdkMergeJobWriteMatrix = effectiveSdkMergeJob?.writeMatrix;
+	const sdkMergeJobTargetRows = sdkMergeJobWriteMatrix?.perTarget || [];
+	const sdkMergeJobSourceRows = sdkMergeJobWriteMatrix?.perSource || [];
+	const sdkMergeJobResults = effectiveSdkMergeJob?.results || [];
+	const sdkMergeJobProgressEvents = effectiveSdkMergeJob?.progressEvents || [];
+	const sdkMergeJobHasTelemetry = Boolean(
+		effectiveSdkMergeJob?.updatedAt || sdkMergeJobProgressEvents.length > 0,
+	);
+	const sdkMergeStageLabels: Record<string, string> = {
+		queued: "Queued",
+		preparing: "Preparing matrix",
+		source_snapshot: "Reading source snapshots",
+		source_snapshot_device: "Reading one device",
+		source_snapshot_device_done: "Device snapshot saved",
+		copy_started: "Copying to target",
+		copy_success: "Target copy applied",
+		copy_error: "Target copy needs attention",
+		db_merge_started: "Updating HRIS row",
+		db_merge_done: "HRIS row updated",
+		user_done: "Selected ID finished",
+		reread_started: "Rereading devices",
+		reread_done: "Reread finished",
+		completed: "Completed",
+		completed_with_attention: "Completed with attention",
+		failed: "Failed",
+	};
+	const sdkMergeJobPhase = sdkMergeJobIsProcessing
+		? effectiveSdkMergeJob?.currentStage
+			? sdkMergeStageLabels[effectiveSdkMergeJob.currentStage] || effectiveSdkMergeJob.currentStage
+			: sdkMergeJobHasTelemetry
+				? "Working"
+				: "No detailed backend heartbeat yet"
+		: effectiveSdkMergeJob?.status === "completed"
+			? "Reread completed"
+			: effectiveSdkMergeJob?.status === "failed"
+				? "Review attention rows"
+				: "Waiting for job status";
 	const sdkMergeJobSummaryItems = [
 		["Planned writes", effectiveSdkMergeJob?.totalWrites ?? sdkMergeRows.length],
-		["Completed", effectiveSdkMergeJob?.processedWrites ?? 0],
+		[
+			sdkMergeJobIsProcessing ? "Progress estimate" : "Completed",
+			effectiveSdkMergeJob?.processedWrites ?? 0,
+		],
 		["Applied", effectiveSdkMergeJob?.successfulWrites ?? 0],
 		["Needs attention", effectiveSdkMergeJob?.failedWrites ?? 0],
 	] as const;
-	const sdkMergeJobWriteMatrix = effectiveSdkMergeJob?.writeMatrix;
 	const sdkMergeJobScopeItems = sdkMergeJobWriteMatrix
 		? [
 				["Selected unique IDs", sdkMergeJobWriteMatrix.selectedUniqueIds],
@@ -2330,13 +2394,15 @@ export function DeviceEnrollmentPanel({
 				["Face gaps at start", sdkMergeJobWriteMatrix.faceGaps],
 			]
 		: [];
-	const sdkMergeJobTargetRows = sdkMergeJobWriteMatrix?.perTarget || [];
-	const sdkMergeJobSourceRows = sdkMergeJobWriteMatrix?.perSource || [];
-	const sdkMergeJobResults = effectiveSdkMergeJob?.results || [];
+	const sdkMergeLatestEvents = sdkMergeJobProgressEvents.slice(-8).reverse();
 	const sdkMergeJobSummary = effectiveSdkMergeJob
-		? `${mergeMetricValue(effectiveSdkMergeJob.successfulWrites)} writes applied, ${mergeMetricValue(
-				effectiveSdkMergeJob.failedWrites,
-			)} need attention.`
+		? sdkMergeJobIsProcessing
+			? sdkMergeJobHasTelemetry
+				? "The UI is polling the backend job. Applied and Needs attention move only after each target copy returns, then HRIS rereads devices to verify the result."
+				: "This job was started before detailed merge telemetry was available. The UI is polling, but the backend has not returned per-target results or a live heartbeat for this job."
+			: `${mergeMetricValue(effectiveSdkMergeJob.successfulWrites)} writes applied, ${mergeMetricValue(
+					effectiveSdkMergeJob.failedWrites,
+				)} need attention.`
 		: "";
 	const keepSdkMergeCurrent = (row: SdkMergeIssueRow) => {
 		const fields = row.conflictFields?.length
@@ -7272,6 +7338,32 @@ export function DeviceEnrollmentPanel({
 									className={`h-full rounded-full transition-all ${sdkMergeJobFillClass}`}
 									style={{ width: `${sdkMergeJobPercent}%` }}
 								/>
+							</div>
+							<div className="mt-3 grid gap-2 sm:grid-cols-4">
+								{[
+									["Current phase", sdkMergeJobPhase],
+									["Elapsed", sdkMergeJobElapsed],
+									["UI polling", sdkMergeJobLastChecked],
+									[
+										"Backend update",
+										sdkMergeJobBackendAgeSeconds === null
+											? "Waiting"
+											: sdkMergeJobBackendAgeSeconds <= 3
+												? "Just now"
+												: `${sdkMergeJobBackendAgeSeconds}s ago`,
+									],
+								].map(([label, value]) => (
+									<div
+										key={String(label)}
+										className="rounded-md border border-white/80 bg-white/70 px-3 py-2">
+										<p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+											{label}
+										</p>
+										<p className="mt-1 truncate text-sm font-semibold text-slate-950">
+											{value}
+										</p>
+									</div>
+								))}
 							</div>
 							<div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
 								{sdkMergeJobSummaryItems.map(([label, value]) => (

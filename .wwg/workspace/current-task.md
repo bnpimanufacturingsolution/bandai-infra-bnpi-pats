@@ -2196,3 +2196,10 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
 - Problem: after the real merge job started, the main merge modal still rendered the pre-run review/editor controls (`Review merge by unique ID`, select/deselect scope, recommended sources, per-device impact, editable rows) underneath the running progress card. That was misleading because the selected scope/source matrix is already frozen once the backend job exists.
 - Repair: while `hasSdkMergeJob` is true, the modal now hides the review/editor surface and shows only the job monitor. The monitor includes progress, terminal retry/dismiss actions, and a `Locked job scope` panel from backend `writeMatrix` with selected unique IDs, peer copy attempts, biometric gaps at start, targets receiving copies, and physical sources used.
 - Boundary: this pass did not start another real merge job. The fix is validated by source contract and build/lint checks; a browser proof against the exact operator job requires the active `mergeJobId` from that browser/session or a fresh approved job run.
+
+# Latest Task Addendum - 2026-07-22 Merge Users Live Progress Truth Repair
+
+- Task mode: live job truth inspection plus admin running-state UX repair.
+- Live truth checked from local API: job `d4fe5561-64f7-4349-b53e-922486c7436b` still returned `status=processing`, `totalWrites=3770`, `processedWrites=565`, `successfulWrites=0`, `failedWrites=0`, `results=[]`, and `startedAt=2026-07-21T19:54:47.863Z`. This means no actual per-target write results had returned yet; `565` was only the backend's initial progress marker.
+- Repair: the running job card now labels the `565` style number as `Progress estimate` while processing, not `Completed`. It adds `Current phase`, `Elapsed`, `UI polling`, and `Backend update` heartbeat fields, and explains that actual `Applied` / `Needs attention` counts remain zero until per-target results return and devices are reread.
+- Backend contract repair: merge job updates now stamp `updatedAt`, and the frontend job-progress type includes `updatedAt`, so future polls can separate stale backend state from active UI polling.

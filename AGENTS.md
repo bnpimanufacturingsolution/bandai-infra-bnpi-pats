@@ -286,6 +286,22 @@ stop before irreversible mutation unless the user explicitly approved the
 destructive action and a backup/recovery path is verified. Browser proof comes
 after API/network proof.
 
+## Long-Running Job Observability Rule
+
+Any admin/device job that can take more than a few seconds must expose an honest
+watchable contract before the UI presents it as running. The API must let an
+operator answer: what scope is locked, what source is being used, what target is
+being attempted, what stage is active, when the backend last advanced, how many
+real writes succeeded or failed, and what the latest recoverable error is.
+
+If the backend cannot explain the job through pollable state, progress events,
+or a dry-run/plan that matches execution, the implementation is wrong and should
+be refactored. The UI must not guess, inflate progress, or show editable preview
+controls after a job scope is frozen. Use explicit labels such as stale,
+estimated, queued, applying, rereading, completed, failed, or needs attention.
+Counts must distinguish selected unique IDs, source records, peer copy attempts,
+successful writes, failed writes, and biometric evidence/gaps.
+
 ## Browser Verification Tool
 
 Temporary 2026-07-09 local rule: prefer headless Playwright for Project Truth

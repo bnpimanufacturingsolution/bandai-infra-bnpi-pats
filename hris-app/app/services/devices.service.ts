@@ -601,6 +601,9 @@ export interface DeviceUserMergeJobProgress {
 	successfulWrites: number;
 	failedWrites: number;
 	message: string;
+	currentStage?: string;
+	currentUserKey?: string | null;
+	currentTargetDeviceId?: string | null;
 	writeMatrix?: {
 		selectedUniqueIds: number;
 		totalWrites: number;
@@ -640,9 +643,25 @@ export interface DeviceUserMergeJobProgress {
 	};
 	results: Array<{
 		userKey?: string;
+		vendorUserId?: string;
 		sourceDeviceId?: string;
+		sourceDeviceName?: string;
 		targetDeviceId?: string;
+		targetDeviceName?: string;
 		status: "success" | "error" | string;
+		strategy?: string | null;
+		error?: string | null;
+	}>;
+	progressEvents?: Array<{
+		stage?: string;
+		message?: string;
+		at?: string;
+		userKey?: string;
+		vendorUserId?: string;
+		sourceDeviceId?: string;
+		sourceDeviceName?: string;
+		targetDeviceId?: string;
+		targetDeviceName?: string;
 		strategy?: string | null;
 		error?: string | null;
 	}>;
@@ -651,6 +670,7 @@ export interface DeviceUserMergeJobProgress {
 	attention?: number;
 	error?: string | null;
 	startedAt: string;
+	updatedAt?: string;
 	completedAt?: string;
 }
 

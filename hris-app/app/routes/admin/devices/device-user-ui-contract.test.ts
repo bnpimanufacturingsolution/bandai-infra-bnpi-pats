@@ -280,6 +280,12 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("sdkMergeState.status !== \"loading\" && !hasSdkMergeJob");
 		expect(enroll).toContain("Targets receiving copies");
 		expect(enroll).toContain("Physical sources used");
+		expect(enroll).toContain("Progress estimate");
+		expect(enroll).toContain("Current phase");
+		expect(enroll).toContain("UI polling");
+		expect(enroll).toContain("Backend update");
+		expect(enroll).toContain("Device copy call in progress");
+		expect(enroll).toContain("The UI is still polling.");
 		expect(enroll).toContain("Back to review");
 		expect(enroll).toContain("Review selected merge (${sdkMergeSelectedUniqueCount})");
 		expect(enroll).not.toContain("sdkMergePreviewOnly");

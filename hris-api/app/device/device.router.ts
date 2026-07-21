@@ -64,6 +64,7 @@ interface IController {
 	planHikvisionSdkUserMerge(req: Request, res: Response, next: NextFunction): Promise<void>;
 	applyHikvisionSdkUserMerge(req: Request, res: Response, next: NextFunction): Promise<void>;
 	startHikvisionSdkUserMergeJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	listHikvisionSdkUserMergeJobs(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getHikvisionSdkUserMergeJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	mirrorHikvisionFaceToPeers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	mockHikvisionFingerprintTally(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -137,6 +138,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/hikvision/sdk-users/merge/plan", controller.planHikvisionSdkUserMerge);
 	routes.post("/hikvision/sdk-users/merge/apply", controller.applyHikvisionSdkUserMerge);
 	routes.post("/hikvision/sdk-users/merge/jobs", controller.startHikvisionSdkUserMergeJob);
+	routes.get("/hikvision/sdk-users/merge/jobs", controller.listHikvisionSdkUserMergeJobs);
 	routes.get("/hikvision/sdk-users/merge/jobs/:jobId", controller.getHikvisionSdkUserMergeJob);
 	routes.post("/hikvision/mirror-face", controller.mirrorHikvisionFaceToPeers);
 	routes.post("/hikvision/mock-fingerprint", controller.mockHikvisionFingerprintTally);

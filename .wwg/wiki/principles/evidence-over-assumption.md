@@ -35,6 +35,7 @@ Use explicit labels instead of inventing facts:
 - Lifecycle rows such as Fingerprint enrolled come from Operation logs (`ContentMgmt/logSearch`), not from inventory.
 - Attendance taps come from Attendance/access events (`AccessControl/AcsEvent`).
 - Host-local Windows Docker is diagnostic; the Project Truth finish line is VM/GitOps/LAN (+ named tunnel when public).
+- Long-running admin/device jobs must be explainable while they run. If an API cannot expose locked scope, source, target, current stage, backend heartbeat, real successes/failures, and latest recoverable errors, the backend contract is not sufficient and the UI must not invent progress. Counts must distinguish selected unique IDs, source records, peer copy attempts, successful writes, failed writes, and biometric evidence/gaps.
 
 ## Hikvision callback / socket wire truth (do not invent)
 

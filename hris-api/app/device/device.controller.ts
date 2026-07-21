@@ -441,13 +441,18 @@ type DeviceUserMergeJob = {
 	successfulWrites: number;
 	failedWrites: number;
 	message: string;
+	currentStage?: string;
+	currentUserKey?: string | null;
+	currentTargetDeviceId?: string | null;
 	results: any[];
+	progressEvents?: any[];
 	writeMatrix?: any;
 	remainingConflicts?: number;
 	remainingMissing?: number;
 	attention?: number;
 	error?: string | null;
 	startedAt: Date;
+	updatedAt?: Date;
 	completedAt?: Date;
 };
 
@@ -891,14 +896,24 @@ const markDeviceUserSyncJobStale = (job: DeviceUserSyncJob) => {
 
 const updateDeviceUserMergeJob = (
 	jobId: string,
-	patch: Partial<Omit<DeviceUserMergeJob, "jobId" | "results">> & { results?: any[] },
+	patch: Partial<Omit<DeviceUserMergeJob, "jobId" | "results" | "progressEvents">> & {
+		results?: any[];
+		progressEvents?: any[];
+		appendProgressEvent?: any;
+	},
 ) => {
 	const job = deviceUserMergeJobs.get(jobId);
 	if (!job) return;
+	const { appendProgressEvent, ...jobPatch } = patch;
+	const progressEvents = patch.appendProgressEvent
+		? [...(job.progressEvents || []), appendProgressEvent].slice(-100)
+		: jobPatch.progressEvents || job.progressEvents;
 	deviceUserMergeJobs.set(jobId, {
 		...job,
-		...patch,
-		results: patch.results || job.results,
+		...jobPatch,
+		results: jobPatch.results || job.results,
+		progressEvents,
+		updatedAt: new Date(),
 	});
 };
 
@@ -9326,6 +9341,14 @@ export const controller = (prisma: PrismaClient) => {
 				res.status(409).json(buildErrorResponse(reason, 409));
 				return;
 			}
+			const emitMergeProgress =
+				typeof (req as any).deviceUserMergeProgress === "function"
+					? (event: any) =>
+							(req as any).deviceUserMergeProgress({
+								...event,
+								at: new Date().toISOString(),
+							})
+					: undefined;
 
 			const devices = await prisma.device.findMany({
 				where: {
@@ -9342,15 +9365,42 @@ export const controller = (prisma: PrismaClient) => {
 					config: true,
 				},
 			});
-			for (const device of devices) {
-				const { candidates } = await loadHikvisionDeviceUserSnapshot(req, device);
-				await upsertDeviceUsersFromCandidates({
-					organizationId: String(admin.organizationId),
-					deviceId: device.id,
-					candidates,
-					source: "hikvision",
-					pruneMissing: false,
+			if ((req as any).deviceUserMergeSkipInitialSnapshot) {
+				emitMergeProgress?.({
+					stage: "using_reviewed_plan_snapshot",
+					message:
+						"Using the reviewed merge plan snapshot; skipping redundant pre-copy source reread.",
+					totalDevices: devices.length,
 				});
+			} else {
+				emitMergeProgress?.({
+					stage: "source_snapshot",
+					message: "Reading selected device users before copy.",
+					totalDevices: devices.length,
+				});
+				for (const device of devices) {
+					emitMergeProgress?.({
+						stage: "source_snapshot_device",
+						deviceId: device.id,
+						deviceName: device.name || device.address,
+						message: `Reading source snapshot from ${device.name || device.address || device.id}.`,
+					});
+					const { candidates } = await loadHikvisionDeviceUserSnapshot(req, device);
+					await upsertDeviceUsersFromCandidates({
+						organizationId: String(admin.organizationId),
+						deviceId: device.id,
+						candidates,
+						source: "hikvision",
+						pruneMissing: false,
+					});
+					emitMergeProgress?.({
+						stage: "source_snapshot_device_done",
+						deviceId: device.id,
+						deviceName: device.name || device.address,
+						sourceRecords: candidates.length,
+						message: `Read ${candidates.length} user records from ${device.name || device.address || device.id}.`,
+					});
+				}
 			}
 			const results: any[] = [];
 			for (const user of appliedPlan.users) {
@@ -9374,6 +9424,16 @@ export const controller = (prisma: PrismaClient) => {
 					const targetDevice = devices.find((device) => device.id === targetDeviceId);
 					if (!targetDevice) continue;
 					try {
+						emitMergeProgress?.({
+							stage: "copy_started",
+							userKey: user.key,
+							vendorUserId: sourceRecord.vendorUserId,
+							sourceDeviceId: sourceDevice.id,
+							sourceDeviceName: sourceDevice.name || sourceDevice.address,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							message: `Copying user ${sourceRecord.vendorUserId} from ${sourceDevice.name || sourceDevice.address || sourceDevice.id} to ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+						});
 						const copy = await copyHikvisionUserToPeerWithRetry({
 							req,
 							organizationId: String(admin.organizationId),
@@ -9390,6 +9450,17 @@ export const controller = (prisma: PrismaClient) => {
 							status: "success",
 							strategy: copy.vmCopy?.strategy || null,
 						});
+						emitMergeProgress?.({
+							stage: "copy_success",
+							userKey: user.key,
+							vendorUserId: sourceRecord.vendorUserId,
+							sourceDeviceId: sourceDevice.id,
+							sourceDeviceName: sourceDevice.name || sourceDevice.address,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							strategy: copy.vmCopy?.strategy || null,
+							message: `Copied user ${sourceRecord.vendorUserId} to ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+						});
 					} catch (error: any) {
 						results.push({
 							userKey: user.key,
@@ -9397,6 +9468,17 @@ export const controller = (prisma: PrismaClient) => {
 							targetDeviceId,
 							status: "error",
 							error: error?.message || "SDK user copy failed",
+						});
+						emitMergeProgress?.({
+							stage: "copy_error",
+							userKey: user.key,
+							vendorUserId: sourceRecord.vendorUserId,
+							sourceDeviceId: sourceDevice.id,
+							sourceDeviceName: sourceDevice.name || sourceDevice.address,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							error: error?.message || "SDK user copy failed",
+							message: `Copy failed for user ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 						});
 					}
 					const targetRow = await (prisma as any).deviceUser.findFirst({
@@ -9419,6 +9501,14 @@ export const controller = (prisma: PrismaClient) => {
 						},
 					});
 					if (targetRow?.id) {
+						emitMergeProgress?.({
+							stage: "db_merge_started",
+							userKey: user.key,
+							vendorUserId: sourceRecord.vendorUserId,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							message: `Updating HRIS DeviceUser row for ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+						});
 						const selectedRecordFor = (field: string) => {
 							const conflict = user.conflicts.find(
 								(item: any) => item.field === field,
@@ -9485,6 +9575,14 @@ export const controller = (prisma: PrismaClient) => {
 								},
 							},
 						});
+						emitMergeProgress?.({
+							stage: "db_merge_done",
+							userKey: user.key,
+							vendorUserId: sourceRecord.vendorUserId,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							message: `Updated HRIS row for ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+						});
 					}
 				}
 				const decisions = user.conflicts.map((conflict: any) => ({
@@ -9510,11 +9608,30 @@ export const controller = (prisma: PrismaClient) => {
 					description: "Applied reviewed Hikvision device-user merge decisions",
 					organizationId: String(admin.organizationId),
 				});
+				emitMergeProgress?.({
+					stage: "user_done",
+					userKey: user.key,
+					vendorUserId: sourceRecord.vendorUserId,
+					sourceDeviceId: sourceDevice.id,
+					sourceDeviceName: sourceDevice.name || sourceDevice.address,
+					targets: user.targetDeviceIds.length,
+					message: `Finished reviewed merge work for user ${sourceRecord.vendorUserId}.`,
+				});
 			}
+			emitMergeProgress?.({
+				stage: "reread_started",
+				message: "Rereading devices to verify the merge result.",
+			});
 			const reread = await loadHikvisionSdkMergePlan({
 				req,
 				organizationId: String(admin.organizationId),
 				deviceIds: appliedPlan.deviceIds,
+			});
+			emitMergeProgress?.({
+				stage: "reread_done",
+				remainingConflicts: reread.plan.counts.conflicts,
+				remainingMissing: reread.plan.counts.missing,
+				message: "Reread complete. Finalizing merge job results.",
 			});
 			logActivity(req, {
 				userId: String((req as any).userId || "unknown"),
@@ -9554,8 +9671,11 @@ export const controller = (prisma: PrismaClient) => {
 		choices?: Record<string, any>;
 		applyAll?: "A" | "B";
 		selectedUserKeys?: string[];
+		onProgress?: (event: any) => void;
 	}) => {
 		const originalBody = params.req.body;
+		const originalProgress = (params.req as any).deviceUserMergeProgress;
+		const originalSkipInitialSnapshot = (params.req as any).deviceUserMergeSkipInitialSnapshot;
 		let statusCode = 200;
 		let responsePayload: any = null;
 		const fakeRes = {
@@ -9575,9 +9695,13 @@ export const controller = (prisma: PrismaClient) => {
 				applyAll: params.applyAll,
 				selectedUserKeys: params.selectedUserKeys,
 			};
+			(params.req as any).deviceUserMergeProgress = params.onProgress;
+			(params.req as any).deviceUserMergeSkipInitialSnapshot = true;
 			await applyHikvisionSdkUserMerge(params.req, fakeRes, (() => undefined) as NextFunction);
 		} finally {
 			(params.req as any).body = originalBody;
+			(params.req as any).deviceUserMergeProgress = originalProgress;
+			(params.req as any).deviceUserMergeSkipInitialSnapshot = originalSkipInitialSnapshot;
 		}
 		if (statusCode >= 400) {
 			const message =
@@ -9601,9 +9725,55 @@ export const controller = (prisma: PrismaClient) => {
 		const job = deviceUserMergeJobs.get(params.jobId);
 		if (!job) return;
 		try {
+			let processedWrites = Math.max(0, job.processedWrites || 0);
+			let successfulWrites = Math.max(0, job.successfulWrites || 0);
+			let failedWrites = Math.max(0, job.failedWrites || 0);
+			const recordProgress = (event: any) => {
+				const stage = String(event?.stage || "working");
+				const terminalCopy = stage === "copy_success" || stage === "copy_error";
+				const resultRow = terminalCopy
+					? {
+							userKey: event.userKey,
+							vendorUserId: event.vendorUserId,
+							sourceDeviceId: event.sourceDeviceId,
+							sourceDeviceName: event.sourceDeviceName,
+							targetDeviceId: event.targetDeviceId,
+							targetDeviceName: event.targetDeviceName,
+							status: stage === "copy_success" ? "success" : "error",
+							strategy: event.strategy || null,
+							error: event.error || null,
+						}
+					: null;
+				if (terminalCopy) {
+					processedWrites = Math.min(job.totalWrites, processedWrites + 1);
+					if (stage === "copy_success") successfulWrites += 1;
+					if (stage === "copy_error") failedWrites += 1;
+				}
+				const latest = deviceUserMergeJobs.get(params.jobId);
+				const nextResults = resultRow
+					? [...(latest?.results || []), resultRow].slice(-250)
+					: latest?.results;
+				updateDeviceUserMergeJob(params.jobId, {
+					message: event?.message || "Applying reviewed decisions to the selected devices.",
+					currentStage: stage,
+					currentUserKey: event?.userKey || null,
+					currentTargetDeviceId: event?.targetDeviceId || null,
+					processedWrites,
+					successfulWrites,
+					failedWrites,
+					results: nextResults,
+					appendProgressEvent: event,
+				});
+			};
 			updateDeviceUserMergeJob(params.jobId, {
-				message: "Applying reviewed decisions to the selected devices.",
-				processedWrites: Math.max(1, Math.floor(job.totalWrites * 0.15)),
+				message: "Preparing reviewed source and target matrix.",
+				currentStage: "preparing",
+				processedWrites: 0,
+				appendProgressEvent: {
+					stage: "preparing",
+					message: "Preparing reviewed source and target matrix.",
+					at: new Date().toISOString(),
+				},
 			});
 			const result = await runHikvisionSdkUserMergeApplyForJob({
 				req: params.req,
@@ -9611,11 +9781,12 @@ export const controller = (prisma: PrismaClient) => {
 				choices: params.choices,
 				applyAll: params.applyAll,
 				selectedUserKeys: params.selectedUserKeys,
+				onProgress: recordProgress,
 			});
 			const results = Array.isArray(result?.results) ? result.results : [];
-			const failedWrites = results.filter((item: any) => item.status === "error").length;
-			const successfulWrites = Math.max(0, results.length - failedWrites);
-			const attention = Number(result?.attention || failedWrites || 0);
+			const finalFailedWrites = results.filter((item: any) => item.status === "error").length;
+			const finalSuccessfulWrites = Math.max(0, results.length - finalFailedWrites);
+			const attention = Number(result?.attention || finalFailedWrites || 0);
 			let retryPlanId: string | undefined;
 			const retryPlan = result?.reread?.plan || result?.reread;
 			if (attention > 0 && retryPlan?.deviceIds?.length) {
@@ -9635,8 +9806,11 @@ export const controller = (prisma: PrismaClient) => {
 					attention > 0
 						? "Merge finished with attention items. Review the failed rows, then retry from the reread plan."
 						: "Merge finished and devices were reread.",
+				currentStage: attention > 0 ? "completed_with_attention" : "completed",
+				currentUserKey: null,
+				currentTargetDeviceId: null,
 				processedWrites: job.totalWrites,
-				successfulWrites,
+				successfulWrites: finalSuccessfulWrites,
 				failedWrites: attention,
 				results,
 				remainingConflicts: Number(result?.remainingConflicts || 0),
@@ -9648,6 +9822,7 @@ export const controller = (prisma: PrismaClient) => {
 			updateDeviceUserMergeJob(params.jobId, {
 				status: "failed",
 				message: error?.message || "Device-user merge job failed.",
+				currentStage: "failed",
 				failedWrites: Math.max(1, job.failedWrites || 0),
 				error: error?.message || "Device-user merge job failed.",
 				completedAt: new Date(),
@@ -9718,9 +9893,21 @@ export const controller = (prisma: PrismaClient) => {
 				failedWrites: 0,
 				message:
 					"Merge job queued. HRIS will apply reviewed decisions, copy credentials, then reread devices.",
+				currentStage: "queued",
+				currentUserKey: null,
+				currentTargetDeviceId: null,
 				results: [],
+				progressEvents: [
+					{
+						stage: "queued",
+						message:
+							"Merge job queued. HRIS will apply reviewed decisions, copy credentials, then reread devices.",
+						at: new Date().toISOString(),
+					},
+				],
 				writeMatrix,
 				startedAt: new Date(),
+				updatedAt: new Date(),
 			};
 			deviceUserMergeJobs.set(jobId, job);
 			processHikvisionSdkUserMergeJob({
@@ -9770,6 +9957,71 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 		res.status(200).json(buildSuccessResponse("SDK user merge job retrieved", job, 200));
+	};
+
+	const listHikvisionSdkUserMergeJobs = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		const admin = assertDeviceUserAdmin(req, res);
+		if (!admin) return;
+		cleanupDeviceUserMergeJobs();
+		const now = Date.now();
+		const status = String(req.query.status || "").trim();
+		const jobs = [...deviceUserMergeJobs.values()]
+			.filter((job) => job.organizationId === String(admin.organizationId))
+			.filter((job) => !status || job.status === status)
+			.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+			.map((job) => {
+				const lastActivityAt =
+					job.updatedAt || job.completedAt || job.startedAt || new Date(0);
+				const secondsSinceUpdate = Math.max(
+					0,
+					Math.floor((now - lastActivityAt.getTime()) / 1000),
+				);
+				return {
+					jobId: job.jobId,
+					planId: job.planId,
+					retryPlanId: job.retryPlanId,
+					status: job.status,
+					totalWrites: job.totalWrites,
+					processedWrites: job.processedWrites,
+					successfulWrites: job.successfulWrites,
+					failedWrites: job.failedWrites,
+					message: job.message,
+					currentStage: job.currentStage,
+					currentUserKey: job.currentUserKey,
+					currentTargetDeviceId: job.currentTargetDeviceId,
+					progressEventCount: job.progressEvents?.length || 0,
+					resultCount: job.results?.length || 0,
+					writeMatrix: job.writeMatrix
+						? {
+								selectedUniqueIds: job.writeMatrix.selectedUniqueIds,
+								totalWrites: job.writeMatrix.totalWrites,
+								fingerprintGaps: job.writeMatrix.fingerprintGaps,
+								faceGaps: job.writeMatrix.faceGaps,
+								conflicts: job.writeMatrix.conflicts,
+							}
+						: null,
+					startedAt: job.startedAt,
+					updatedAt: job.updatedAt,
+					completedAt: job.completedAt,
+					secondsSinceUpdate,
+					staleTelemetry:
+						job.status === "processing" && secondsSinceUpdate > 120,
+				};
+			});
+		res.status(200).json(
+			buildSuccessResponse(
+				"SDK user merge jobs retrieved",
+				{
+					jobs,
+					running: jobs.filter((job) => job.status === "processing").length,
+				},
+				200,
+			),
+		);
 	};
 
 	const getHikvisionMergeDevices = async (organizationId: string, requestedIds: unknown) => {
@@ -18219,6 +18471,7 @@ export const controller = (prisma: PrismaClient) => {
 		planHikvisionSdkUserMerge,
 		applyHikvisionSdkUserMerge,
 		startHikvisionSdkUserMergeJob,
+		listHikvisionSdkUserMergeJobs,
 		getHikvisionSdkUserMergeJob,
 		mirrorHikvisionFaceToPeers,
 		createSyntheticKioskLoginTap,
