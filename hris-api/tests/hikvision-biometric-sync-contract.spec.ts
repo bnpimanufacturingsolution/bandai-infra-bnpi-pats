@@ -493,9 +493,12 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include('"unsupported_by_sync"');
 		expect(controller).to.include("buildDeviceUserSyncDecisionMatrix");
 		expect(controller).to.include("buildDeviceUserSyncJobDecisionMatrix");
+		expect(controller).to.include("getHikvisionFastDeviceUserSourceCount");
+		expect(controller).to.include("vendorUserCount = Number(sourceCount.userCount)");
 		expect(controller).to.include("syncDecisionMatrix");
 		expect(controller).to.include("selectedFastPlan");
 		expect(controller).to.include("sourceReadRequired");
+		expect(controller).to.include("Live device user count shows missing DeviceUser records");
 		expect(controller).to.include("Building missing-record matrix");
 		expect(controller).to.include("Device user sync dry-run plan generated");
 		expect(controller).to.include("willCreateJob: false");

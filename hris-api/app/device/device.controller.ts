@@ -11542,6 +11542,7 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const buildDeviceUserSyncJobDecisionMatrix = async (params: {
+		req: Request;
 		organizationId: string;
 		devices: any[];
 		syncMode: DeviceUserSyncMode;
@@ -11555,6 +11556,7 @@ export const controller = (prisma: PrismaClient) => {
 			stale_count_only_or_live_no_data: 0,
 			unsupported_by_sync: 0,
 		};
+		let sourceReadRequired = false;
 		for (const device of params.devices) {
 			let rows: any[] = [];
 			try {
@@ -11562,10 +11564,28 @@ export const controller = (prisma: PrismaClient) => {
 			} catch {
 				rows = [];
 			}
+			let vendorUserCount: number | null = null;
+			if (params.syncMode !== "biometrics_only" && isHikvisionDevice(device)) {
+				try {
+					const sourceCount = await getHikvisionFastDeviceUserSourceCount(
+						params.req,
+						device.id,
+					);
+					if (
+						sourceCount.userCount !== null &&
+						sourceCount.userCount !== undefined &&
+						Number.isFinite(Number(sourceCount.userCount))
+					) {
+						vendorUserCount = Number(sourceCount.userCount);
+					}
+				} catch {
+					vendorUserCount = null;
+				}
+			}
 			const statusSummary = summarizeDeviceUserStatuses(rows) as any;
 			const custodySummary = summarizeDeviceUserRawBiometricCustody(rows) as any;
 			const matrix = buildDeviceUserSyncDecisionMatrix({
-				vendorUserCount: null,
+				vendorUserCount,
 				hrisUserCount: Number(statusSummary.total || rows.length || 0),
 				openUserCount: Number(statusSummary.unmatched || 0),
 				conflictUserCount: Number(statusSummary.conflict || 0),
@@ -11579,6 +11599,7 @@ export const controller = (prisma: PrismaClient) => {
 			for (const key of Object.keys(aggregateCounts) as DeviceUserSyncDecisionBucketKey[]) {
 				aggregateCounts[key] += Number(matrix.counts[key] || 0);
 			}
+			sourceReadRequired = sourceReadRequired || matrix.sourceReadRequired;
 		}
 		const matrix = buildDeviceUserSyncDecisionMatrix({
 			vendorUserCount: null,
@@ -11590,6 +11611,28 @@ export const controller = (prisma: PrismaClient) => {
 			staleHrisOnlyRows: aggregateCounts.stale_count_only_or_live_no_data,
 			modeHint: params.syncMode,
 		});
+		const jobStages = [
+			"Building missing-record matrix",
+			...(sourceReadRequired ? ["Reading source users needed for identity gaps"] : []),
+			...(aggregateCounts.missing_raw_fingerprint_blob > 0
+				? ["Capturing missing fingerprint raw bytes"]
+				: []),
+			...(aggregateCounts.missing_raw_face_blob > 0
+				? ["Capturing missing face raw bytes"]
+				: []),
+			...(aggregateCounts.stale_count_only_or_live_no_data > 0
+				? ["Skipping known no-data rows"]
+				: []),
+			aggregateCounts.missing_device_user_record +
+				aggregateCounts.missing_employee_link +
+				aggregateCounts.missing_raw_fingerprint_blob +
+				aggregateCounts.missing_raw_face_blob +
+				aggregateCounts.stale_count_only_or_live_no_data +
+				aggregateCounts.unsupported_by_sync >
+			0
+				? "Finished with missing items needing review"
+				: "Finished with no actionable gaps",
+		];
 		return {
 			...matrix,
 			counts: aggregateCounts,
@@ -11597,6 +11640,11 @@ export const controller = (prisma: PrismaClient) => {
 				...bucket,
 				count: aggregateCounts[bucket.key],
 			})),
+			sourceReadRequired,
+			sourceReadReason: sourceReadRequired
+				? "Live device user count shows missing DeviceUser records, so source identity must be read before raw-custody repair."
+				: matrix.sourceReadReason,
+			jobStages,
 		};
 	};
 
@@ -12323,6 +12371,7 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const decisionMatrix = await buildDeviceUserSyncJobDecisionMatrix({
+				req,
 				organizationId: gate.organizationId,
 				devices: targetDevices,
 				syncMode,
