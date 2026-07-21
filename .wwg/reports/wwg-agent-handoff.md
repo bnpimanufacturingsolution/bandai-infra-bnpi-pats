@@ -7,22 +7,48 @@
 - User symptom repaired:
   - The merge modal said `Unique IDs` while showing duplicate selectable rows such as `21, 21, 32, 32`, which made the merge count feel dishonest and made it unclear which row an admin should select.
 - Implementation:
-  - `hris-api/helper/device-user-merge.helper.ts` now groups merge identities by connected evidence. Same `vendorUserId` always collapses to one merge identity; manual employee links can still connect different vendor IDs when that is the evidenced relationship.
+  - `hris-api/helper/device-user-merge.helper.ts` now groups merge rows by strict device/vendor person ID from live selected-device reads. Same `vendorUserId` always collapses to one merge row; saved HRIS manual employee links no longer collapse two different vendor IDs into one "unique ID" choice.
   - Duplicate source rows for the same device/user ID are collapsed before unique-ID counting, keeping the richest source row and reporting duplicate source evidence on the plan.
   - `hris-app/app/routes/admin/devices/enroll.tsx` now uses `Device ID records` for per-device/read rows, reports the unique list count as IDs, and shows duplicate-collapse copy only when the plan reports collapsed duplicates.
   - Frontend response types and focused contract tests were updated for `sourceRows`, `dedupedDeviceRecords`, and `duplicateSourceRows`.
 - Runtime/API proof:
-  - Evidence root: `.runtime/merge-unique-id-truth-20260721-112633/`.
-  - API restarted successfully; final listener PID `19488`, `/health` status `healthy`.
-  - Non-mutating admin `POST /api/device/hikvision/sdk-users/merge/plan` for the current four Hikvision target devices returned `uniqueIdCount=686`, `apiCountUnionUsers=686`, `sourceRows=2748`, `dedupedDeviceRecords=2748`, `duplicateSourceRows=0`, and `hasDuplicateUniqueIdsShown=false`.
+  - Evidence root: `.runtime/merge-strict-device-id-truth-20260721-113511/`.
+  - API restarted successfully; final listener PID `9228`, `/health` status `healthy`.
+  - Non-mutating admin `POST /api/device/hikvision/sdk-users/merge/plan` for the current four Hikvision target devices returned `uniqueDeviceIdCount=687`, `apiCountUnionUsers=687`, `sourceRowsFromDevice=2748`, `dedupedDeviceRecords=2748`, `duplicateSourceRows=0`, `hasDuplicateUniqueIdsShown=false`, and zero groups with more than one vendor ID.
 - Validation:
   - Backend merge helper: `12` passing.
-  - Backend focused device-user/Hikvision contracts: `22` passing.
   - Backend typecheck: passed.
-  - Frontend device-user UI contract: `1` passing.
-  - `git diff --check`: passed.
 - Warning:
   - Browser automation could not complete login because the current `5175` frontend dev server rendered no login inputs in headless DOM for `/auth/login`; debug artifacts are in the same evidence directory. The merge endpoint proof is still valid and non-mutating.
+- Recommendation capture: No new recommendations were identified.
+
+## 2026-07-21 - Sync Center dry-run planner scope correction
+
+- Status: `COMPLETE_LOCAL_API_AND_BROWSER_PROOF`.
+- Task mode: Mixed admin UX truth repair, backend dry-run safety, and regression proof.
+- User symptom repaired:
+  - The status/review experience still made the sync feel like it was starting with a broad `Reading source users` step, and the earlier review panel could disagree with the actual job planner on raw-gap counts.
+- Implementation:
+  - `hris-api/app/device/device.controller.ts` now supports non-mutating `dryRun=true` on `POST /api/device/users/sync-jobs`; the response includes `willCreateJob=false`, `jobId=null`, `decisionMatrix`, and an `executionPlan`.
+  - The job status lookup marks persisted `processing` jobs stale after API restart, preventing old saved statuses from masquerading as active workers.
+  - `hris-app/app/routes/admin/devices/enroll.tsx` now uses the dry-run sync-job planner for `Review sync`, shows the same matrix counts the job will use, and uses scoped missing-work copy when source reread is skipped.
+  - `hris-app/app/services/devices.service.ts` now types dry-run sync-job responses.
+- API proof:
+  - Evidence root: `.runtime/sync-center-dry-run-scope-20260721-112157/`.
+  - `api-device-user-sync-dry-run-plan-final.json`: admin `admin@bandai.local` / `hris`, payload `{ mode: "needs_attention_only", deviceIds: ["cmpxw13hx002h7zwso7dyedrn"], dryRun: true }`, mutation `none_dry_run`, `7.586s`.
+  - Result: `mode=dry_run`, `willCreateJob=false`, `jobId=null`, `selectedFastPlan=needs_attention_only`, `sourceReadRequired=false`, `sourceReadSkipped=true`.
+  - Matrix counts: `missing_device_user_record=0`, `missing_employee_link=49`, `missing_raw_fingerprint_blob=106`, `missing_raw_face_blob=65`, `already_present=741`, `stale_count_only_or_live_no_data=0`, `unsupported_by_sync=0`.
+  - Execution steps skip full source-user reread, process missing links only, capture missing fingerprint/face raw bytes only, and skip already-present rows.
+- Browser proof:
+  - `browser-sync-center-scoped-review-final.json` and `browser-sync-center-scoped-review-final.png`.
+  - Browser verified `What Sync can fix`, `Missing employee links=49`, `Missing fingerprint raw blobs=106`, `Missing face raw blobs=65`, `Already present=741`, `Fastest valid plan: needs_attention_only`, `Saved-state first`, and absence of `Reading source device users`.
+- Validation:
+  - `npx tsx node_modules/mocha/bin/mocha --no-config tests/hikvision-biometric-sync-contract.spec.ts`: `15` passing.
+  - `npx tsc --noEmit --pretty false` in `hris-api`: passed.
+  - `npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts`: `1` passing.
+  - Frontend repo-wide `npx tsc --noEmit --pretty false` still fails on unrelated existing app-wide type drift outside this Device Users surface.
+- Warning:
+  - The fast plan may still perform live raw-capture reads for the 106 fingerprint and 65 face candidate rows. It should not reread every source user first and should not process the 741 already-present rows by default.
 - Recommendation capture: No new recommendations were identified.
 
 ## 2026-07-21 - Sync Center missing-record decision matrix handoff

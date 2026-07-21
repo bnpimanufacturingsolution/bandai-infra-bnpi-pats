@@ -2369,6 +2369,36 @@ export function DeviceEnrollmentPanel({
 		if (!activeDeviceUserSyncJob?.jobId) return;
 		cancelDeviceUserSyncJobMutation.mutate(activeDeviceUserSyncJob.jobId);
 	};
+	const mergeDeviceUserSyncReviewMatrix = (previewMatrix: any, dryRunMatrix: any) => {
+		if (!previewMatrix) return dryRunMatrix || null;
+		if (!dryRunMatrix) return previewMatrix;
+		const mergedCounts = {
+			...(dryRunMatrix.counts || {}),
+			...(previewMatrix.counts || {}),
+			missing_raw_fingerprint_blob: Math.max(
+				Number(previewMatrix.counts?.missing_raw_fingerprint_blob || 0),
+				Number(dryRunMatrix.counts?.missing_raw_fingerprint_blob || 0),
+			),
+			missing_raw_face_blob: Math.max(
+				Number(previewMatrix.counts?.missing_raw_face_blob || 0),
+				Number(dryRunMatrix.counts?.missing_raw_face_blob || 0),
+			),
+		};
+		return {
+			...dryRunMatrix,
+			...previewMatrix,
+			counts: mergedCounts,
+			buckets: (previewMatrix.buckets || dryRunMatrix.buckets || []).map((bucket: any) => ({
+				...bucket,
+				count: Number(mergedCounts[bucket.key] || 0),
+			})),
+			sourceReadRequired:
+				Boolean(previewMatrix.sourceReadRequired) || Boolean(dryRunMatrix.sourceReadRequired),
+			jobStages: Array.from(
+				new Set([...(previewMatrix.jobStages || []), ...(dryRunMatrix.jobStages || [])]),
+			),
+		};
+	};
 
 	const openDeviceUserSyncReview = async (deviceIdOverride?: string) => {
 		const targetDeviceId = deviceIdOverride || selectedDeviceId;
@@ -2405,9 +2435,10 @@ export function DeviceEnrollmentPanel({
 						: "Dry-run matrix found source evidence is needed before sync.",
 				preview: {
 					...preview,
-					syncDecisionMatrix:
-						dryRunPlan.decisionMatrix ||
+					syncDecisionMatrix: mergeDeviceUserSyncReviewMatrix(
 						preview?.syncDecisionMatrix,
+						dryRunPlan.decisionMatrix,
+					),
 				},
 			});
 			void refetchSyncPreview();

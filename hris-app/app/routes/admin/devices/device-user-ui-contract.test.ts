@@ -134,6 +134,10 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Retry raw blobs only");
 		expect(enroll).toContain("What Sync can fix");
 		expect(enroll).toContain("missing_device_user_record");
+		expect(enroll).toContain("mergeDeviceUserSyncReviewMatrix");
+		expect(enroll).toContain("preview?.syncDecisionMatrix");
+		expect(enroll).toContain("dryRunPlan.decisionMatrix");
+		expect(enroll).toContain("missing_raw_fingerprint_blob: Math.max");
 		expect(enroll).toContain("missing_employee_link");
 		expect(enroll).toContain("missing_raw_fingerprint_blob");
 		expect(enroll).toContain("missing_raw_face_blob");

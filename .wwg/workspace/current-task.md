@@ -4,21 +4,43 @@
 
 - Task mode: Mixed backend correctness and admin UX truth repair.
 - Implemented:
-  - Hikvision device-user merge planning now groups records by connected identity evidence so the same `vendorUserId` cannot split into separate selectable unique-ID rows just because one source row is manually/HRIS-linked and another is not.
+  - Hikvision device-user merge planning now counts strict unique device/vendor person IDs from live selected-device reads. The same `vendorUserId` cannot split into separate selectable unique-ID rows just because one source row is manually/HRIS-linked and another is not.
+  - Saved HRIS `DeviceUser` rows attach link/status/manual-link context only; they do not drive the unique-ID count and no longer collapse two different vendor IDs into one selectable unique-ID row.
   - Duplicate source rows for the same device/user ID are collapsed before unique-ID counting, with `sourceRows`, `dedupedDeviceRecords`, and `duplicateSourceRows` reported in the plan.
   - The merge modal now labels the record count as `Device ID records`, reports unique-list counts as IDs, and can disclose when duplicate source rows were collapsed into matching unique IDs.
 - Runtime/API proof after API restart:
-  - Evidence root: `.runtime/merge-unique-id-truth-20260721-112633/`.
-  - Local API restarted from watcher PID `3296` to listener PID `19488`; `/health` returned `healthy`.
-  - Non-mutating admin merge-plan endpoint returned `uniqueIdCount=686`, `apiCountUnionUsers=686`, `sourceRows=2748`, `dedupedDeviceRecords=2748`, `duplicateSourceRows=0`, and `hasDuplicateUniqueIdsShown=false` for the four current Hikvision target devices.
+  - Evidence root: `.runtime/merge-strict-device-id-truth-20260721-113511/`.
+  - Local API restarted to listener PID `9228`; `/health` returned `healthy`.
+  - Non-mutating admin merge-plan endpoint returned `uniqueDeviceIdCount=687`, `apiCountUnionUsers=687`, `sourceRowsFromDevice=2748`, `dedupedDeviceRecords=2748`, `duplicateSourceRows=0`, `hasDuplicateUniqueIdsShown=false`, and zero groups with more than one vendor ID for the four current Hikvision target devices.
 - Validation:
   - `hris-api` focused merge helper tests passed (`12` passing).
-  - `hris-api` focused device-user/Hikvision contracts passed (`22` passing).
   - `hris-api` typecheck passed.
-  - `hris-app` focused device-user UI contract passed (`1` passing).
-  - `git diff --check` passed.
 - Boundary:
   - Browser automation against `http://127.0.0.1:5175/auth/login` could not complete login because the current frontend dev server rendered no login input elements in headless DOM; API proof and source/UI contracts were used as the closeout evidence.
+- Recommendation capture: No new recommendations were identified.
+
+## Latest Task Addendum - 2026-07-21 Sync Center dry-run planner scope correction
+
+- Task mode: Mixed admin UX truth repair, backend dry-run safety, and regression proof.
+- Implemented:
+  - `POST /api/device/users/sync-jobs` now accepts `dryRun=true` and returns the missing-record decision matrix plus execution plan without creating a job.
+  - The Device Users `Review sync` modal now calls the same dry-run planner used by execution, so review counts no longer drift from the job start path.
+  - Persisted `processing` device-user jobs are marked stale after API restart instead of being revived as active background work.
+  - Status/review copy now says scoped missing work when `sourceReadRequired=false`; it does not claim a broad source-user read for saved-state fast plans.
+- Runtime/API proof:
+  - Evidence root: `.runtime/sync-center-dry-run-scope-20260721-112157/`.
+  - Non-mutating admin dry-run for Main Entrance Device B (`cmpxw13hx002h7zwso7dyedrn`) returned `mode=dry_run`, `willCreateJob=false`, `jobId=null`, `selectedFastPlan=needs_attention_only`, `sourceReadRequired=false`, and `sourceReadSkipped=true` in `7.586s`.
+  - Matrix counts: `missing_device_user_record=0`, `missing_employee_link=49`, `missing_raw_fingerprint_blob=106`, `missing_raw_face_blob=65`, `already_present=741`, `stale_count_only_or_live_no_data=0`, `unsupported_by_sync=0`.
+  - Execution steps explicitly include `Skip source user reread because saved HRIS state scopes the actionable work`, raw capture only for fingerprint/face candidates, and skipping already-present rows.
+- Browser proof:
+  - `.runtime/sync-center-dry-run-scope-20260721-112157/browser-sync-center-scoped-review-final.json`.
+  - `.runtime/sync-center-dry-run-scope-20260721-112157/browser-sync-center-scoped-review-final.png`.
+  - Browser verified the review modal shows the dry-run planner counts (`49`, `106`, `65`, `741`), `Fastest valid plan: needs_attention_only`, `Saved-state first`, and no old `Reading source device users` copy.
+- Validation:
+  - Backend contract: `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` passed (`15` passing).
+  - Backend typecheck: `npx tsc --noEmit --pretty false` passed.
+  - Frontend focused contract: `hris-app/app/routes/admin/devices/device-user-ui-contract.test.ts` passed (`1` passing).
+  - Frontend broad `npx tsc --noEmit --pretty false` still fails on unrelated existing app-wide type drift outside Device Users.
 - Recommendation capture: No new recommendations were identified.
 
 ## Latest Task Addendum - 2026-07-21 Sync Center missing-record decision matrix
