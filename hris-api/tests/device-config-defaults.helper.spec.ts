@@ -68,6 +68,68 @@ describe("device runtime config defaults", () => {
 		});
 	});
 
+	it("adds local reverse-bridge runtime fields for TEST A Hikvision payloads", () => {
+		const config = buildDeviceRuntimeConfig({
+			config: { vendor: "Hikvision" },
+			name: "TEST A",
+			address: "192.168.254.109",
+			protocol: "https",
+			port: 443,
+		});
+
+		expect(config).to.deep.include({
+			vendor: "Hikvision",
+			source: "vendor/hikvision-linux",
+			hikvisionRuntimeAddress: "127.0.0.1",
+			hikvisionRuntimePort: 59443,
+			hikvisionRuntimeProtocol: "https",
+			hikvisionSdkRuntimeAddress: "127.0.0.1",
+			hikvisionSdkRuntimePort: 59000,
+			hikvisionSdkRuntimeTransport: "ssh-reverse-forward",
+			hikvisionReverseBridgeIndex: 0,
+		});
+	});
+
+	it("offsets local reverse-bridge runtime fields for TEST B Hikvision payloads", () => {
+		const config = buildDeviceRuntimeConfig({
+			config: { vendor: "Hikvision" },
+			name: "TEST B",
+			address: "192.168.254.110",
+			protocol: "https",
+			port: 443,
+		});
+
+		expect(config).to.deep.include({
+			vendor: "Hikvision",
+			source: "vendor/hikvision-linux",
+			hikvisionRuntimeAddress: "127.0.0.1",
+			hikvisionRuntimePort: 59543,
+			hikvisionRuntimeProtocol: "https",
+			hikvisionSdkRuntimeAddress: "127.0.0.1",
+			hikvisionSdkRuntimePort: 59100,
+			hikvisionSdkRuntimeTransport: "ssh-reverse-forward",
+			hikvisionReverseBridgeIndex: 1,
+		});
+	});
+
+	it("does not force host reverse-bridge fields onto non-local Hikvision devices", () => {
+		const config = buildDeviceRuntimeConfig({
+			config: { vendor: "Hikvision" },
+			name: "Office Door",
+			address: "10.184.37.20",
+			protocol: "https",
+			port: 443,
+		});
+
+		expect(config).not.to.have.property("hikvisionRuntimeAddress");
+		expect(config).not.to.have.property("hikvisionSdkRuntimeAddress");
+		expect(config).to.deep.include({
+			vendor: "Hikvision",
+			source: "vendor/hikvision-linux",
+			sdkPort: 8000,
+		});
+	});
+
 	it("preserves existing non-routing metadata when the UI submits only vendor", () => {
 		const config = buildDeviceRuntimeConfig({
 			existingConfig: {

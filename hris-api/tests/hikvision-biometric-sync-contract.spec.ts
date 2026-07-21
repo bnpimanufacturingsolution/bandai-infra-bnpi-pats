@@ -405,6 +405,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include('minor: "SYNC_ROUTE_BACKFILL"');
 		expect(controller).to.include("lifecycleBackfill,");
 		expect(controller).to.include("Post-create Hikvision device users synced");
+		expect(controller).to.include("Hikvision device rejected the saved access credentials during UserInfo/Search");
 		expect(controller).to.include("startedByUserId: (req as any).userId || null");
 		expect(controller).to.include("isHikvisionDevice(device)");
 		expect(controller).to.include('String((device as any)?.access?.password || "").trim()');

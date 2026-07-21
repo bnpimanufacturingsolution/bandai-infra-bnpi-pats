@@ -13,11 +13,15 @@ import {
 } from "../helper/payroll-reconciliation.helper";
 
 const repoRoot = path.resolve(__dirname, "..", "..");
-const outputDir = path.resolve(repoRoot, "test-results", "payroll-bandai-analysis");
+const outputDirArg = process.argv.find((arg) => arg.startsWith("--output-dir="))?.split("=")[1];
+const outputDir = outputDirArg
+	? path.resolve(repoRoot, outputDirArg)
+	: path.resolve(repoRoot, "test-results", "payroll-bandai-analysis");
 const workbookArg = process.argv.find((arg) => arg.startsWith("--workbook="))?.split("=")[1];
 const passwordArg = process.argv.find((arg) => arg.startsWith("--password="))?.split("=")[1] || "9090";
 const organizationId = process.argv.find((arg) => arg.startsWith("--organizationId="))?.split("=")[1];
 const sourceOnly = process.argv.includes("--source-only");
+const noDefaultSources = process.argv.includes("--no-default-sources");
 const referenceWorkbookArg = process.argv.find((arg) => arg.startsWith("--reference-workbook="))?.split("=")[1];
 const compensationUploadArg = process.argv.find((arg) => arg.startsWith("--compensation-upload="))?.split("=")[1];
 const deductionUploadArg = process.argv.find((arg) => arg.startsWith("--deduction-upload="))?.split("=")[1];
@@ -72,10 +76,10 @@ async function main() {
 		const sourceEvidence = buildBandaiPayrollSourceEvidence({
 			analysis,
 			password: passwordArg,
-			referenceWorkbookPath: referenceWorkbookArg || defaultReferenceWorkbook,
-			compensationUploadPath: compensationUploadArg || defaultCompensationUpload,
-			deductionUploadPath: deductionUploadArg || defaultDeductionUpload,
-			overtimeWorkbookPath: overtimeWorkbookArg || defaultOvertimeWorkbook,
+			referenceWorkbookPath: referenceWorkbookArg || (noDefaultSources ? undefined : defaultReferenceWorkbook),
+			compensationUploadPath: compensationUploadArg || (noDefaultSources ? undefined : defaultCompensationUpload),
+			deductionUploadPath: deductionUploadArg || (noDefaultSources ? undefined : defaultDeductionUpload),
+			overtimeWorkbookPath: overtimeWorkbookArg || (noDefaultSources ? undefined : defaultOvertimeWorkbook),
 		});
 		writeJson(path.join(outputDir, "payroll-source-evidence.json"), sourceEvidence);
 		writeText(

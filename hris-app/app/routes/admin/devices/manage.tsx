@@ -65,8 +65,10 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { DeviceEnrollmentPanel } from "./enroll";
 import {
+	buildHikvisionRuntimeConfig,
 	buildDeviceConfigPreset,
 	getDefaultDeviceConfig,
 	getDeviceConfigRecord,
@@ -113,6 +115,9 @@ const getVendorHelperText = (vendor: string) => {
 	}
 	return "Hikvision terminals normally use HTTP port 80 for HRIS checks.";
 };
+
+const runtimeValue = (value: unknown) =>
+	value === undefined || value === null || value === "" ? "-" : String(value);
 
 const healthToneClass = (ok: boolean) => (ok ? "text-green-700" : "text-amber-700");
 
@@ -293,7 +298,7 @@ function DeviceFact({
 		<div className="min-w-0 rounded-md border border-slate-200 bg-white px-3 py-2">
 			<p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
 			<p className={`mt-1 truncate text-sm font-medium text-slate-950 ${mono ? "font-mono" : ""}`}>
-				{value || "-"}
+				{value === undefined || value === null || value === "" ? "-" : value}
 			</p>
 		</div>
 	);
@@ -700,9 +705,22 @@ export default function DevicesManagePage() {
 	});
 
 	const watchedProtocol = watch("protocol");
+	const watchedName = watch("name");
+	const watchedAddress = watch("address");
 	const watchedConfig = (watch("config") as DeviceConfigRecord | undefined) || getDefaultDeviceConfig();
 	const watchedVendor = String(watchedConfig.vendor || "Hikvision");
 	const watchedEmployeeKioskLoginEnabled = watchedConfig.employeeKioskLoginEnabled === true;
+	const watchedRuntimeConfig =
+		watchedVendor === "Hikvision"
+			? buildHikvisionRuntimeConfig(watchedConfig, {
+					name: watchedName,
+					address: watchedAddress,
+					protocol: watchedProtocol,
+				})
+			: {};
+	const watchedUsesReverseBridge =
+		String(watchedRuntimeConfig.hikvisionSdkRuntimeTransport || "") ===
+		"ssh-reverse-forward";
 
 	const applyVendorPreset = (vendor: string) => {
 		const defaults = getVendorConnectionDefaults(vendor);
@@ -714,6 +732,29 @@ export default function DevicesManagePage() {
 		setValue("config", preset, { shouldDirty: true, shouldValidate: true });
 		setValue("protocol", defaults.protocol, { shouldDirty: true, shouldValidate: true });
 		setValue("port", defaults.port, { shouldDirty: true, shouldValidate: true });
+	};
+
+	const setHikvisionRuntimeMode = (mode: "auto" | "direct") => {
+		const next = {
+			...getDeviceConfigRecord(watchedConfig),
+			vendor: "Hikvision",
+		};
+
+		if (mode === "auto") {
+			next.preferHostReverseBridge = "true";
+			next.hikvisionSdkRuntimeTransport = "ssh-reverse-forward";
+		} else {
+			delete next.preferHostReverseBridge;
+			delete next.hikvisionRuntimeAddress;
+			delete next.hikvisionRuntimePort;
+			delete next.hikvisionRuntimeProtocol;
+			delete next.hikvisionSdkRuntimeAddress;
+			delete next.hikvisionSdkRuntimePort;
+			delete next.hikvisionSdkRuntimeTransport;
+			delete next.hikvisionReverseBridgeIndex;
+		}
+
+		setValue("config", next, { shouldDirty: true, shouldValidate: true });
 	};
 
 	// Handle deep linking: populate forms
@@ -877,6 +918,11 @@ export default function DevicesManagePage() {
 		const normalizedConfig = normalizeDeviceConfigForSubmit(
 			data.config,
 			isEditing ? activeDevice?.config : undefined,
+			{
+				name: data.name,
+				address: data.address,
+				protocol: data.protocol,
+			},
 		);
 
 		if (isEditing && activeDevice) {
@@ -1127,148 +1173,237 @@ export default function DevicesManagePage() {
 					<div className="py-8 text-center text-gray-500">Loading device...</div>
 				) : (
 					<form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-						<div className="grid gap-4 md:grid-cols-2">
-							<div data-field-path="name">
-								<div className="block text-sm font-medium text-gray-700 mb-1">
-									Name *
-								</div>
-								<Input
-									placeholder="e.g., Main Entrance Device"
-									aria-invalid={false}
-									{...register("name")}
-								/>
-								<ConstraintTokenRow
-									tokens={[{ label: "Required", tone: "default" }]}
-								/>
-							</div>
-							<div data-field-path="protocol">
-								<div className="block text-sm font-medium text-gray-700 mb-1">
-									Protocol *
-								</div>
-								<Select
-									options={protocolOptions}
-									value={watchedProtocol || "http"}
-									onChange={(v) => setValue("protocol", (v || "http") as DeviceFormData["protocol"])}
-									placeholder="Select Protocol"
-								/>
-								<ConstraintTokenRow
-									tokens={[{ label: "Required", tone: "default" }]}
-								/>
-							</div>
-						</div>
+						<Tabs defaultValue="connection" className="space-y-4">
+							<TabsList className="grid w-full grid-cols-2">
+								<TabsTrigger value="connection">Connection</TabsTrigger>
+								<TabsTrigger value="runtime">Runtime config</TabsTrigger>
+							</TabsList>
 
-						<div className="grid gap-4 md:grid-cols-2">
-							<div data-field-path="address">
-								<div className="block text-sm font-medium text-gray-700 mb-1">
-									Address *
+							<TabsContent value="connection" className="space-y-5">
+								<div className="grid gap-4 md:grid-cols-2">
+									<div data-field-path="name">
+										<div className="block text-sm font-medium text-gray-700 mb-1">
+											Name *
+										</div>
+										<Input
+											placeholder="e.g., Main Entrance Device"
+											aria-invalid={false}
+											{...register("name")}
+										/>
+										<ConstraintTokenRow
+											tokens={[{ label: "Required", tone: "default" }]}
+										/>
+									</div>
+									<div data-field-path="protocol">
+										<div className="block text-sm font-medium text-gray-700 mb-1">
+											Protocol *
+										</div>
+										<Select
+											options={protocolOptions}
+											value={watchedProtocol || "http"}
+											onChange={(v) => setValue("protocol", (v || "http") as DeviceFormData["protocol"])}
+											placeholder="Select Protocol"
+										/>
+										<ConstraintTokenRow
+											tokens={[{ label: "Required", tone: "default" }]}
+										/>
+									</div>
 								</div>
-								<Input
-									placeholder="e.g., 192.168.1.100"
-									aria-invalid={false}
-									{...register("address")}
-								/>
-								<ConstraintTokenRow
-									tokens={[{ label: "IP/host", tone: "subtle" }]}
-								/>
-							</div>
-							<div data-field-path="port">
-								<div className="block text-sm font-medium text-gray-700 mb-1">
-									Port *
-								</div>
-								<Input
-									type="number"
-									placeholder="e.g., 80"
-									aria-invalid={false}
-									{...register("port", { valueAsNumber: true })}
-								/>
-								<ConstraintTokenRow
-									tokens={[{ label: "1-65535", tone: "subtle" }]}
-								/>
-							</div>
-						</div>
 
-						<div className="rounded-md border border-slate-200 bg-slate-50/60 p-3">
-							<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-								<div>
-									<p className="text-sm font-semibold text-slate-950">Device vendor</p>
-									<p className="text-xs text-slate-500">
-										Choose the terminal brand. HRIS applies the correct runtime settings automatically.
-									</p>
+								<div className="grid gap-4 md:grid-cols-2">
+									<div data-field-path="address">
+										<div className="block text-sm font-medium text-gray-700 mb-1">
+											Address *
+										</div>
+										<Input
+											placeholder="e.g., 192.168.1.100"
+											aria-invalid={false}
+											{...register("address")}
+										/>
+										<ConstraintTokenRow
+											tokens={[{ label: "IP/host", tone: "subtle" }]}
+										/>
+									</div>
+									<div data-field-path="port">
+										<div className="block text-sm font-medium text-gray-700 mb-1">
+											Port *
+										</div>
+										<Input
+											type="number"
+											placeholder="e.g., 80"
+											aria-invalid={false}
+											{...register("port", { valueAsNumber: true })}
+										/>
+										<ConstraintTokenRow
+											tokens={[{ label: "1-65535", tone: "subtle" }]}
+										/>
+									</div>
 								</div>
-								<AdminConfigSourceChip>{watchedVendor}</AdminConfigSourceChip>
-							</div>
-							<div data-field-path="config.vendor">
-								<div className="mb-1 block text-sm font-medium text-gray-700">
-									Vendor *
-								</div>
-								<Select
-									options={deviceVendorOptions}
-									value={watchedVendor}
-									onChange={(value) => applyVendorPreset(value || "Hikvision")}
-									placeholder="Select vendor"
-								/>
-								<p className="mt-1 text-xs text-slate-500">
-									{getVendorHelperText(watchedVendor)}
-								</p>
-							</div>
-						</div>
 
-						<div
-							data-field-path="config.employeeKioskLoginEnabled"
-							className="rounded-md border border-slate-200 bg-white p-4">
-							<label
-								htmlFor="employeeKioskLoginEnabled"
-								className="flex items-start gap-3">
-								<Checkbox
-									id="employeeKioskLoginEnabled"
-									checked={watchedEmployeeKioskLoginEnabled}
-									onCheckedChange={(checked) =>
-										setValue(
-											"config",
-											{
-												...getDeviceConfigRecord(watchedConfig),
-												employeeKioskLoginEnabled: checked === true,
-											},
-											{ shouldDirty: true, shouldValidate: true },
-										)
-									}
-								/>
-								<span className="space-y-1">
-									<span className="block text-sm font-medium text-gray-700">
-										Enable biometric kiosk login
-									</span>
-									<span className="block text-xs text-slate-500">
-										Allow a fresh attendance tap from this device to sign in the employee kiosk automatically.
-									</span>
-								</span>
-							</label>
-						</div>
+								<div className="rounded-md border border-slate-200 bg-slate-50/60 p-3">
+									<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+										<div>
+											<p className="text-sm font-semibold text-slate-950">Device vendor</p>
+											<p className="text-xs text-slate-500">
+												Choose the terminal brand. HRIS applies the correct runtime settings automatically.
+											</p>
+										</div>
+										<AdminConfigSourceChip>{watchedVendor}</AdminConfigSourceChip>
+									</div>
+									<div data-field-path="config.vendor">
+										<div className="mb-1 block text-sm font-medium text-gray-700">
+											Vendor *
+										</div>
+										<Select
+											options={deviceVendorOptions}
+											value={watchedVendor}
+											onChange={(value) => applyVendorPreset(value || "Hikvision")}
+											placeholder="Select vendor"
+										/>
+										<p className="mt-1 text-xs text-slate-500">
+											{getVendorHelperText(watchedVendor)}
+										</p>
+									</div>
+								</div>
 
-						<div className="grid gap-4 md:grid-cols-2">
-							<div>
-								<div className="block text-sm font-medium text-gray-700 mb-1">
-									Username (optional)
+								<div
+									data-field-path="config.employeeKioskLoginEnabled"
+									className="rounded-md border border-slate-200 bg-white p-4">
+									<label
+										htmlFor="employeeKioskLoginEnabled"
+										className="flex items-start gap-3">
+										<Checkbox
+											id="employeeKioskLoginEnabled"
+											checked={watchedEmployeeKioskLoginEnabled}
+											onCheckedChange={(checked) =>
+												setValue(
+													"config",
+													{
+														...getDeviceConfigRecord(watchedConfig),
+														employeeKioskLoginEnabled: checked === true,
+													},
+													{ shouldDirty: true, shouldValidate: true },
+												)
+											}
+										/>
+										<span className="space-y-1">
+											<span className="block text-sm font-medium text-gray-700">
+												Enable biometric kiosk login
+											</span>
+											<span className="block text-xs text-slate-500">
+												Allow a fresh attendance tap from this device to sign in the employee kiosk automatically.
+											</span>
+										</span>
+									</label>
 								</div>
-								<Input
-									placeholder="Device username"
-									{...register("access.username", {
-										setValueAs: (value) => value || undefined,
-									})}
-								/>
-							</div>
-							<div>
-								<div className="block text-sm font-medium text-gray-700 mb-1">
-									Password (optional)
+
+								<div className="grid gap-4 md:grid-cols-2">
+									<div>
+										<div className="block text-sm font-medium text-gray-700 mb-1">
+											Username (optional)
+										</div>
+										<Input
+											placeholder="Device username"
+											{...register("access.username", {
+												setValueAs: (value) => value || undefined,
+											})}
+										/>
+									</div>
+									<div>
+										<div className="block text-sm font-medium text-gray-700 mb-1">
+											Password (optional)
+										</div>
+										<Input
+											type="password"
+											placeholder="Device password"
+											{...register("access.password", {
+												setValueAs: (value) => value || undefined,
+											})}
+										/>
+									</div>
 								</div>
-								<Input
-									type="password"
-									placeholder="Device password"
-									{...register("access.password", {
-										setValueAs: (value) => value || undefined,
-									})}
-								/>
-							</div>
-						</div>
+							</TabsContent>
+
+							<TabsContent value="runtime" className="space-y-4">
+								<div className="rounded-md border border-slate-200 bg-slate-50/70 p-3">
+									<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+										<div>
+											<p className="text-sm font-semibold text-slate-950">Runtime path</p>
+											<p className="text-xs text-slate-500">
+												Review the adapter and bridge values that will be saved with this device.
+											</p>
+										</div>
+										<AdminConfigSourceChip>
+											{watchedUsesReverseBridge ? "SSH reverse bridge" : "Direct device"}
+										</AdminConfigSourceChip>
+									</div>
+									<div data-field-path="config.runtimeMode">
+										<div className="mb-1 block text-sm font-medium text-gray-700">
+											Hikvision runtime mode
+										</div>
+										<Select
+											options={[
+												{ value: "auto", label: "Auto local bridge" },
+												{ value: "direct", label: "Direct device only" },
+											]}
+											value={watchedUsesReverseBridge ? "auto" : "direct"}
+											onChange={(value) =>
+												setHikvisionRuntimeMode(value === "direct" ? "direct" : "auto")
+											}
+											placeholder="Select runtime mode"
+											disabled={watchedVendor !== "Hikvision"}
+										/>
+										<p className="mt-1 text-xs text-slate-500">
+											Local Hikvision test devices on 192.168.254.x use host reverse-forward ports.
+										</p>
+									</div>
+								</div>
+
+								<div className="grid gap-3 md:grid-cols-2">
+									<DeviceFact
+										label="HTTP runtime"
+										value={`${runtimeValue(watchedRuntimeConfig.hikvisionRuntimeAddress)}:${runtimeValue(watchedRuntimeConfig.hikvisionRuntimePort)}`}
+										mono
+									/>
+									<DeviceFact
+										label="SDK runtime"
+										value={`${runtimeValue(watchedRuntimeConfig.hikvisionSdkRuntimeAddress)}:${runtimeValue(watchedRuntimeConfig.hikvisionSdkRuntimePort)}`}
+										mono
+									/>
+									<DeviceFact
+										label="Runtime protocol"
+										value={runtimeValue(watchedRuntimeConfig.hikvisionRuntimeProtocol).toUpperCase()}
+									/>
+									<DeviceFact
+										label="Bridge index"
+										value={runtimeValue(watchedRuntimeConfig.hikvisionReverseBridgeIndex)}
+									/>
+								</div>
+
+								<div className="rounded-md border border-slate-200 bg-white p-3">
+									<div className="grid gap-3 md:grid-cols-2">
+										<DeviceFact
+											label="Adapter"
+											value={runtimeValue(watchedConfig.source || buildDeviceConfigPreset(watchedVendor).source)}
+											mono
+										/>
+										<DeviceFact
+											label="Callback"
+											value={runtimeValue(watchedConfig.webhookPath || buildDeviceConfigPreset(watchedVendor).webhookPath)}
+											mono
+										/>
+										<DeviceFact
+											label="SDK port"
+											value={runtimeValue(watchedConfig.sdkPort || buildDeviceConfigPreset(watchedVendor).sdkPort)}
+										/>
+										<DeviceFact
+											label="SDK transport"
+											value={runtimeValue(watchedRuntimeConfig.hikvisionSdkRuntimeTransport || watchedConfig.sdkProtocol)}
+										/>
+									</div>
+								</div>
+							</TabsContent>
+						</Tabs>
 
 						<div className="flex justify-end gap-3">
 							<Button

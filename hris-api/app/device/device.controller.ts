@@ -3515,6 +3515,15 @@ export const controller = (prisma: PrismaClient) => {
 		return { organizationId, role };
 	};
 
+	const describePostCreateHikvisionSyncError = (error: any) => {
+		const status = Number(error?.status || error?.statusCode || 0);
+		const message = String(error?.message || error || "device_user_sync_failed").trim();
+		if (status === 401 || status === 403 || /^unauthorized$/i.test(message)) {
+			return "Hikvision device rejected the saved access credentials during UserInfo/Search; device row was created but Device Users auto-sync was skipped";
+		}
+		return message;
+	};
+
 	const getDeviceForUserSync = async (organizationId: string, deviceId: string) => {
 		if (!deviceId) return null;
 		return (prisma as any).device.findFirst({
@@ -16376,6 +16385,7 @@ export const controller = (prisma: PrismaClient) => {
 				config: buildDeviceRuntimeConfig({
 					config: validation.data.config,
 					name: validation.data.name,
+					address: validation.data.address,
 					protocol: validation.data.protocol,
 					port: validation.data.port,
 				}),
@@ -16399,9 +16409,7 @@ export const controller = (prisma: PrismaClient) => {
 					deviceLogger.info(`Post-create Hikvision device users synced for ${device.id}`);
 				} catch (postCreateSyncError: any) {
 					deviceLogger.warn(
-						`Post-create Hikvision device user sync failed for ${device.id}: ${
-							postCreateSyncError?.message || postCreateSyncError
-						}`,
+						`Post-create Hikvision device user sync failed for ${device.id}: ${describePostCreateHikvisionSyncError(postCreateSyncError)}`,
 					);
 				}
 			}
@@ -17442,6 +17450,7 @@ export const controller = (prisma: PrismaClient) => {
 								config: validatedData.config,
 								existingConfig: existingDevice.config,
 								name: validatedData.name || existingDevice.name,
+								address: validatedData.address || existingDevice.address,
 								protocol: validatedData.protocol || existingDevice.protocol,
 								port:
 									typeof validatedData.port === "number"

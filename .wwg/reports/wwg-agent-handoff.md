@@ -811,3 +811,24 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Validation: backend focused contracts passed 27/27; API typecheck passed; frontend focused UI contract passed 1/1; `git diff --check` passed with only CRLF warnings.
 - Boundary: 118 face raw reads failed because Device C returned 404/no-data for face image URLs. No raw biometric bytes were inferred or fabricated from counts.
 - Evidence root: `.runtime/device-c-repaired-sync-20260721-1153/`.
+
+# 2026-07-21 New Cutoff Payroll Dry-Run/Seed Handoff
+
+- Status: `PARTIALLY_FULFILLED`. Payroll was not generated because preview/comparison still has severe unexplained source gaps after the safe seeds.
+- Evidence root: `.runtime/overnight-payroll-new-cutoff-20260721-144322/`.
+- Same local DEV lane was used: API `127.0.0.1:3001`, app `127.0.0.1:5175`, and canonical DEV DB `127.0.0.1:55435`. No production mutation and no Cloudflare tunnel changes.
+- Workbook intake:
+  - All provided new-cutoff XLSX files were inventoried.
+  - HRIS Payroll Computation workbooks were encrypted; `officecrypto-tool` decrypted them into the evidence folder after verifying SheetJS/ExcelJS are not the right decrypt-first path for modern encrypted XLSX.
+- Applied for July 15 (`2026-06-26` to `2026-07-10`, pay date `2026-07-15`):
+  - Biometrics attendance seed from `Biometrics Data_Jun 26 - Jul 10.xlsx`.
+  - Fast approved timesheet/line seed from the seeded attendance.
+  - Scoped OT metadata repair from `2rptOvertimeDetails - June 26 - July 10, 2026.xlsx`.
+  - Scoped mass-upload seed from `Compensation Mass Upload 07.15.26.xlsx` and `Deduction Mass Upload 07.15.26.xlsx`: 1,307 EmployeeBenefit rows and 65 EmployeeLoan rows applied. Nineteen employee codes stayed unmatched.
+- July 15 post-seed comparison still failed the generate gate: 859 workbook rows, 838 employees matched, 824 approved timesheets found, 0 exact/tolerance matches. Remaining categories: `SOURCE_MISSING_APPROVED_OT=553`, `SOURCE_MISSING_ALLOWANCE=124`, `SOURCE_MISSING_MANUAL_ADJUSTMENT=73`, `SOURCE_MISSING_DEDUCTION_OR_LOAN=43`, `HRIS_LOGIC_MISMATCH_REPAIRABLE=25`, `TIMESHEET_NOT_FOUND=14`, `EMPLOYEE_NOT_FOUND=21`, `SOURCE_MISSING_STATUTORY_CONFIG=6`.
+- June 30 (`2026-06-11` to `2026-06-25`, pay date `2026-06-30`) stayed dry-run only:
+  - No biometrics workbook exists in `docs/new-cutoff`.
+  - DEV has no attendance/timesheets for the period.
+  - Compensation upload has unmapped `INC` code across 816 rows; do not infer its payroll treatment without HR/source confirmation.
+- July 30 (`2026-07-11` to `2026-07-25`) remains biometrics-mapping-only because no HRIS Payroll Computation comparator workbook was provided.
+- Validation: `hris-api npm run test:regression:payroll-source-truth` passed 52 specs; `hris-api npm run typecheck` passed.

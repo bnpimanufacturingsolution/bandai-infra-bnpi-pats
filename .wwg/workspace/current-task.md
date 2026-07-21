@@ -2145,3 +2145,19 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
 - Merge proof: fresh merge plan returned `687` unique IDs and no duplicate unique IDs for the checked scope.
 - Boundary: 118 face raw reads failed because the device returned 404/no-data. HRIS did not fabricate biometric bytes from counts.
 - Evidence root: `.runtime/device-c-repaired-sync-20260721-1153/`.
+
+# Latest Task Addendum - 2026-07-21 New Cutoff Payroll Dry-Run/Seed Proof
+
+- Task mode: mixed payroll source-truth dry-run, local DEV data seeding, and reconciliation evidence. Status: `PARTIALLY_FULFILLED`.
+- Same testing lane was used: local API `127.0.0.1:3001`, app `127.0.0.1:5175`, and DEV Postgres through `127.0.0.1:55435`. Cloudflare tunnel/runtime controls were not touched.
+- Workbook intake completed for all provided new-cutoff XLSX files. Passworded HRIS Payroll Computation workbooks were decrypted with `officecrypto-tool` into the evidence folder after SheetJS/ExcelJS limitations were verified.
+- July 15 period (`2026-06-26` to `2026-07-10`) was seeded in DEV after dry-run proof:
+  - Biometrics attendance: 9,811 importable employee-days; 517 grouped unmatched rows; applied into effective attendance.
+  - Approved timesheets: 812 new timesheets and 9,603 lines created from seeded attendance; final period state had 832 approved timesheets and 9,860 effective lines.
+  - OT repair: applied scoped source-bucket metadata to 9,773 timesheet lines; 87 OT workbook rows remained missing from effective source lines.
+  - Mass uploads: applied 1,307 EmployeeBenefit rows and 65 EmployeeLoan rows from the July 15 compensation/deduction uploads. Nineteen employee IDs remained unmatched and were not fabricated.
+- July 15 comparison after attendance/OT/mass-upload seed still had severe source gaps, so payroll generation was intentionally not run. Summary: 859 workbook rows, 838 employees matched, 824 approved timesheets found, 0 exact/tolerance row matches; categories included `SOURCE_MISSING_APPROVED_OT=553`, `SOURCE_MISSING_ALLOWANCE=124`, `SOURCE_MISSING_MANUAL_ADJUSTMENT=73`, `SOURCE_MISSING_DEDUCTION_OR_LOAN=43`, `TIMESHEET_NOT_FOUND=14`, `EMPLOYEE_NOT_FOUND=21`, and `SOURCE_MISSING_STATUTORY_CONFIG=6`.
+- June 30 period (`2026-06-11` to `2026-06-25`) remained dry-run only: no biometrics workbook was provided, DEV has no attendance/timesheets for the period, and compensation code `INC` covered 816 rows / about PHP 9.9M without a governed payroll classification. No June 30 payroll generation was attempted.
+- July 30 period (`2026-07-11` to `2026-07-25`) has biometrics evidence only and no comparator workbook in `docs/new-cutoff`; payroll tally remains `NEEDS_CONFIRMATION`.
+- Validation: `hris-api npm run test:regression:payroll-source-truth` passed 52 specs; `hris-api npm run typecheck` passed.
+- Evidence root: `.runtime/overnight-payroll-new-cutoff-20260721-144322/`.
