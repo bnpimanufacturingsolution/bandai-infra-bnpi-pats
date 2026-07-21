@@ -923,22 +923,46 @@ const runFixedProcess = (
 	options: { timeoutMs?: number } = {},
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> =>
 	new Promise((resolve) => {
-		execFile(
+		const timeoutMs = options.timeoutMs ?? 7000;
+		let settled = false;
+		let killTimer: NodeJS.Timeout;
+		const child = execFile(
 			file,
 			args,
 			{
-				timeout: options.timeoutMs ?? 7000,
+				timeout: timeoutMs,
+				killSignal: "SIGKILL",
 				windowsHide: true,
 				maxBuffer: 5 * 1024 * 1024,
 			},
 			(error: any, stdout, stderr) => {
+				if (settled) return;
+				settled = true;
+				if (killTimer) clearTimeout(killTimer);
 				resolve({
-					exitCode: typeof error?.code === "number" ? error.code : error ? 1 : 0,
+					exitCode:
+						typeof error?.code === "number"
+							? error.code
+							: error?.killed || error?.signal
+								? 124
+								: error
+									? 1
+									: 0,
 					stdout: String(stdout || ""),
 					stderr: String(stderr || ""),
 				});
 			},
 		);
+		killTimer = setTimeout(() => {
+			if (settled) return;
+			settled = true;
+			child.kill("SIGKILL");
+			resolve({
+				exitCode: 124,
+				stdout: "",
+				stderr: `Process timed out after ${timeoutMs}ms`,
+			});
+		}, timeoutMs + 1000);
 	});
 
 const quoteRemoteShellArg = (value: string) => `'${String(value).replace(/'/g, `'\\''`)}'`;
@@ -1740,10 +1764,15 @@ export const controller = (prisma: PrismaClient) => {
 				);
 			}
 
+			const manualCopyTimeoutSeconds = Math.max(waitSeconds + 25, 30);
 			const runManualCopy = (extraEnv: string[] = []) =>
 				runHikvisionListenerVmCommand(
 					[
 						"sudo",
+						"timeout",
+						"-k",
+						"5s",
+						`${manualCopyTimeoutSeconds}s`,
 						"env",
 						...extraEnv,
 						"HIKVISION_ALLOW_STATIC_DEVICE_SPEC=1",
@@ -1759,7 +1788,7 @@ export const controller = (prisma: PrismaClient) => {
 						...(params.includeFingerprints ? ["--manual-include-fingerprints"] : []),
 						...(params.includeFaceRecognition ? [] : ["--manual-exclude-face"]),
 					],
-					Math.max(waitSeconds * 1000 + 45000, 60000),
+					Math.max(manualCopyTimeoutSeconds * 1000 + 10000, 45000),
 				);
 		const strategies = [
 			{
@@ -1782,6 +1811,11 @@ export const controller = (prisma: PrismaClient) => {
 		for (const strategy of strategies) {
 			let result = await runManualCopy(strategy.extraEnv);
 			const firstAttemptDetail = result.stderr.trim() || result.stdout.trim();
+			if (result.exitCode === 124 || result.exitCode === 137) {
+				throw new Error(
+					`Timed out running Hikvision manual copy (${strategy.name}) for user ${params.employeeNo} from ${params.sourceDevice.name || params.sourceDevice.id}`,
+				);
+			}
 			if (
 				result.exitCode !== 0 &&
 				isMissingHikvisionListenerRuntimeError(firstAttemptDetail)
