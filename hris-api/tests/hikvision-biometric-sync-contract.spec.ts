@@ -501,6 +501,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("willCreateJob: false");
 		expect(controller).to.include("executionPlan");
 		expect(controller).to.include("Skip source user reread because saved HRIS state scopes the actionable work");
+		expect(controller).to.include("Device-user sync worker is no longer active after API restart");
+		expect(controller).to.include("job.status !== \"processing\"");
 		expect(controller).to.include("decision_matrix_did_not_require_source_identity_read");
 		expect(controller).to.include("saved_matrix_has_no_missing_raw_biometric_blobs");
 		expect(controller).to.include("Reading source users needed for identity gaps");

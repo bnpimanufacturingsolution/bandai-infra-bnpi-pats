@@ -43,12 +43,24 @@ export type DeviceUserMergeConflict = {
 	deviceB: { id: string; name: string; value: unknown };
 };
 
+export type DeviceUserMergeDuplicateSource = {
+	deviceId: string;
+	deviceName: string;
+	vendorUserId: string;
+	sourceRows: number;
+	keptRecordId: string | null;
+	duplicateRecordIds: string[];
+	differingFields: DeviceUserMergeField[];
+};
+
 export type DeviceUserMergeGroup = {
 	key: string;
 	employeeId: string | null;
 	employee: unknown;
 	vendorUserIds: string[];
 	records: DeviceUserMergeRecord[];
+	sourceRows: number;
+	duplicateSourceRows: DeviceUserMergeDuplicateSource[];
 	sourceDeviceId: string;
 	targetDeviceIds: string[];
 	conflicts: DeviceUserMergeConflict[];
@@ -96,27 +108,138 @@ const identityKey = (record: DeviceUserMergeRecord) => {
 	return `unmatched:${text(record.deviceId)}:${text(record.vendorUserId)}`;
 };
 
+const recordId = (record: DeviceUserMergeRecord, index: number) =>
+	text((record as any).id) ||
+	`${text(record.deviceId) || "device"}:${text(record.vendorUserId) || text(record.employeeNo) || "unknown"}:${index}`;
+
+const buildIdentityGroups = (records: DeviceUserMergeRecord[]) => {
+	const parent = records.map((_, index) => index);
+	const find = (index: number): number => {
+		let current = index;
+		while (parent[current] !== current) {
+			parent[current] = parent[parent[current]];
+			current = parent[current];
+		}
+		return current;
+	};
+	const union = (left: number, right: number) => {
+		const leftRoot = find(left);
+		const rightRoot = find(right);
+		if (leftRoot !== rightRoot) parent[rightRoot] = leftRoot;
+	};
+	const seen = new Map<string, number>();
+	const connect = (key: string, index: number) => {
+		if (!text(key)) return;
+		const existing = seen.get(key);
+		if (existing === undefined) seen.set(key, index);
+		else union(existing, index);
+	};
+
+	records.forEach((record, index) => {
+		if (text(record.vendorUserId)) connect(`vendor:${text(record.vendorUserId)}`, index);
+		if (text(record.employeeNo)) connect(`employee-no:${text(record.employeeNo)}`, index);
+		if (record.manualLink && text(record.employeeId)) {
+			connect(`manual:${text(record.employeeId)}`, index);
+		}
+		if (!text(record.vendorUserId) && !text(record.employeeNo) && text(record.employeeId)) {
+			connect(`employee:${text(record.employeeId)}`, index);
+		}
+		if (
+			!text(record.vendorUserId) &&
+			!text(record.employeeNo) &&
+			!text(record.employeeId) &&
+			text(record.identityName)
+		) {
+			connect(`identity:${text(record.identityName).toLocaleLowerCase()}`, index);
+		}
+	});
+
+	const groups = new Map<number, DeviceUserMergeRecord[]>();
+	records.forEach((record, index) => {
+		const root = find(index);
+		const group = groups.get(root) || [];
+		group.push(record);
+		groups.set(root, group);
+	});
+	return groups;
+};
+
+const groupKeyForRecords = (records: DeviceUserMergeRecord[]) => {
+	const vendorIds = [...new Set(records.map((record) => text(record.vendorUserId)).filter(Boolean))];
+	if (vendorIds.length === 1) return `vendor:${vendorIds[0]}`;
+	const manualEmployeeIds = [
+		...new Set(
+			records
+				.filter((record) => record.manualLink)
+				.map((record) => text(record.employeeId))
+				.filter(Boolean),
+		),
+	];
+	if (manualEmployeeIds.length === 1) return `manual:${manualEmployeeIds[0]}`;
+	const employeeNos = [...new Set(records.map((record) => text(record.employeeNo)).filter(Boolean))];
+	if (employeeNos.length === 1) return `employee-no:${employeeNos[0]}`;
+	const employeeIds = [...new Set(records.map((record) => text(record.employeeId)).filter(Boolean))];
+	if (employeeIds.length === 1) return `employee:${employeeIds[0]}`;
+	return identityKey(records[0]);
+};
+
+const collapseDuplicateDeviceRows = (records: DeviceUserMergeRecord[]) => {
+	const byDeviceAndVendor = new Map<string, DeviceUserMergeRecord[]>();
+	for (const record of records) {
+		const key = `${text(record.deviceId)}:${text(record.vendorUserId) || text(record.employeeNo)}`;
+		const group = byDeviceAndVendor.get(key) || [];
+		group.push(record);
+		byDeviceAndVendor.set(key, group);
+	}
+	const keptRecords: DeviceUserMergeRecord[] = [];
+	const duplicateSourceRows: DeviceUserMergeDuplicateSource[] = [];
+	for (const group of byDeviceAndVendor.values()) {
+		const ordered = [...group].sort(
+			(a, b) =>
+				sourceScore(b) - sourceScore(a) ||
+				text(a.deviceId).localeCompare(text(b.deviceId)) ||
+				text(a.vendorUserId).localeCompare(text(b.vendorUserId)),
+		);
+		const kept = ordered[0];
+		keptRecords.push(kept);
+		if (ordered.length <= 1) continue;
+		const differingFields = DEVICE_USER_MERGE_FIELDS.filter((field) => {
+			const distinct = new Set(ordered.map((record) => stable(valueFor(record, field))));
+			return distinct.size > 1;
+		});
+		duplicateSourceRows.push({
+			deviceId: kept.deviceId,
+			deviceName: kept.deviceName,
+			vendorUserId: kept.vendorUserId,
+			sourceRows: ordered.length,
+			keptRecordId: recordId(kept, 0),
+			duplicateRecordIds: ordered.slice(1).map((record, index) => recordId(record, index + 1)),
+			differingFields,
+		});
+	}
+	return { records: keptRecords, duplicateSourceRows };
+};
+
 export const buildDeviceUserMergePlan = (params: {
 	records: DeviceUserMergeRecord[];
 	deviceIds: string[];
 }) => {
-	const groups = new Map<string, DeviceUserMergeRecord[]>();
+	const sourceRowCount = params.records.length;
 	const ambiguousMatches: Array<{ record: DeviceUserMergeRecord; candidates: string[] }> = [];
+	const mergeableRecords: DeviceUserMergeRecord[] = [];
 	for (const record of params.records) {
 		if ((record.identityCandidates || []).length > 1) {
 			ambiguousMatches.push({ record, candidates: [...(record.identityCandidates || [])] });
 			continue;
 		}
-		const key = identityKey(record);
-		if (!text(key)) continue;
-		const group = groups.get(key) || [];
-		group.push(record);
-		groups.set(key, group);
+		mergeableRecords.push(record);
 	}
 
 	const users: DeviceUserMergeGroup[] = [];
-	for (const [key, records] of groups) {
-		const ordered = [...records].sort((a, b) => a.deviceId.localeCompare(b.deviceId));
+	for (const records of buildIdentityGroups(mergeableRecords).values()) {
+		const key = groupKeyForRecords(records);
+		const collapsed = collapseDuplicateDeviceRows(records);
+		const ordered = [...collapsed.records].sort((a, b) => a.deviceId.localeCompare(b.deviceId));
 		const source =
 			[...ordered].sort((a, b) => {
 				const score = sourceScore(b) - sourceScore(a);
@@ -155,6 +278,8 @@ export const buildDeviceUserMergePlan = (params: {
 				...new Set(ordered.map((record) => text(record.vendorUserId)).filter(Boolean)),
 			],
 			records: ordered,
+			sourceRows: records.length,
+			duplicateSourceRows: collapsed.duplicateSourceRows,
 			sourceDeviceId: source.deviceId,
 			targetDeviceIds: params.deviceIds.filter((id) => id !== source.deviceId),
 			conflicts,
@@ -176,6 +301,17 @@ export const buildDeviceUserMergePlan = (params: {
 		unresolvedDecisions: [],
 		counts: {
 			unionUsers: users.length,
+			sourceRows: sourceRowCount,
+			dedupedDeviceRecords: users.reduce((sum, user) => sum + user.records.length, 0),
+			duplicateSourceRows: users.reduce(
+				(sum, user) =>
+					sum +
+					user.duplicateSourceRows.reduce(
+						(total, duplicate) => total + Math.max(0, duplicate.sourceRows - 1),
+						0,
+					),
+				0,
+			),
 			conflicts: users.reduce((sum, user) => sum + user.conflicts.length, 0),
 			missing: users.reduce((sum, user) => sum + user.missingOnDeviceIds.length, 0),
 			ambiguous: ambiguousMatches.length,

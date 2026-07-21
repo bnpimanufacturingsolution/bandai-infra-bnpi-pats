@@ -705,6 +705,7 @@ const markDeviceUserSyncJobStale = (job: DeviceUserSyncJob) => {
 		status: "failed",
 		stale: true,
 		message:
+			job.message ||
 			"Device-user sync stopped updating. Start Sync device users again when you want a fresh, triggered run.",
 		updatedAt: now,
 		completedAt: now,
@@ -12439,11 +12440,22 @@ export const controller = (prisma: PrismaClient) => {
 		const gate = assertDeviceUserAdmin(req, res);
 		if (!gate) return;
 		const jobId = String(req.params.jobId || "").trim();
-		const foundJob = deviceUserSyncJobs.get(jobId) || readDeviceUserSyncJob(jobId);
-		const job = foundJob && isDeviceUserSyncJobStale(foundJob)
+		const memoryJob = deviceUserSyncJobs.get(jobId);
+		const persistedJob = memoryJob ? null : readDeviceUserSyncJob(jobId);
+		const foundJob = memoryJob || persistedJob;
+		const interruptedPersistedJob =
+			!memoryJob && persistedJob?.status === "processing" ? persistedJob : null;
+		const job = interruptedPersistedJob
+			? markDeviceUserSyncJobStale({
+					...interruptedPersistedJob,
+					message:
+						"Device-user sync worker is no longer active after API restart. Start a fresh dry-run or sync plan.",
+				})
+			: foundJob && isDeviceUserSyncJobStale(foundJob)
 			? markDeviceUserSyncJobStale(foundJob)
 			: foundJob;
-		if (job && !deviceUserSyncJobs.has(jobId)) deviceUserSyncJobs.set(jobId, job);
+		if (job && !deviceUserSyncJobs.has(jobId) && job.status !== "processing")
+			deviceUserSyncJobs.set(jobId, job);
 		if (!job || job.organizationId !== gate.organizationId) {
 			res.status(404).json(
 				buildErrorResponse("Device-user sync job not found or expired", 404),

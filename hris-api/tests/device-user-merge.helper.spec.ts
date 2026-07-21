@@ -103,6 +103,65 @@ describe("device user union merge", () => {
 		expect(plan.users[0].vendorUserIds).to.have.members(["vendor-a", "vendor-b"]);
 	});
 
+	it("keeps one merge identity for the same vendor user id even when one row is manually linked", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records: [
+				record("a", {
+					vendorUserId: "21",
+					employeeId: "employee-21",
+					manualLink: true,
+					rawPayload: { numOfFP: 1, numOfFace: 1 },
+				}),
+				record("b", {
+					vendorUserId: "21",
+					employeeId: null,
+					manualLink: false,
+					rawPayload: { numOfFP: 0, numOfFace: 0 },
+				}),
+			],
+		});
+
+		expect(plan.users).to.have.length(1);
+		expect(plan.users[0].key).to.equal("vendor:21");
+		expect(plan.users[0].vendorUserIds).to.deep.equal(["21"]);
+		expect(plan.counts.unionUsers).to.equal(1);
+	});
+
+	it("collapses duplicate source rows for the same device and vendor id before counting unique IDs", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					vendorUserId: "32",
+					rawPayload: { numOfFP: 0, numOfFace: 0 },
+				}),
+				record("a", {
+					vendorUserId: "32",
+					rawPayload: { numOfFP: 1, numOfFace: 1 },
+				}),
+				record("b", {
+					vendorUserId: "32",
+					rawPayload: { numOfFP: 1, numOfFace: 1 },
+				}),
+			],
+		});
+
+		expect(plan.users).to.have.length(1);
+		expect(plan.users[0].records).to.have.length(2);
+		expect(plan.users[0].sourceRows).to.equal(3);
+		expect(plan.users[0].duplicateSourceRows).to.have.length(1);
+		expect(plan.users[0].duplicateSourceRows[0].sourceRows).to.equal(2);
+		expect(plan.users[0].duplicateSourceRows[0].differingFields).to.include.members([
+			"fingerprint",
+			"face",
+		]);
+		expect(plan.counts.unionUsers).to.equal(1);
+		expect((plan.counts as any).sourceRows).to.equal(3);
+		expect((plan.counts as any).dedupedDeviceRecords).to.equal(2);
+		expect((plan.counts as any).duplicateSourceRows).to.equal(1);
+	});
+
 	it("supports keep-existing and clear-choice semantics", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],

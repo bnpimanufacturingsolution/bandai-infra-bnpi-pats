@@ -140,11 +140,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(deviceService).toContain("stale_count_only_or_live_no_data");
 		expect(deviceService).toContain("unsupported_by_sync");
 		expect(enroll).toContain("Fastest valid plan");
-		expect(enroll).toContain("Fast plan: saved HRIS only");
-		expect(enroll).toContain("The decision matrix scoped this run to records Sync can handle from saved HRIS state");
+		expect(enroll).toContain("Fast plan: scoped missing work");
+		expect(enroll).toContain("Full source-user reread and already-present rows are skipped");
 		expect(enroll).toContain("Missing links");
 		expect(enroll).toContain("Already skipped");
-		expect(enroll).toContain("Scoped missing/link records only");
+		expect(enroll).toContain("Missing links/raw blobs only");
 		expect(enroll).toContain("Building missing-record matrix");
 		expect(enroll).toContain("Reading source users needed for identity gaps");
 		expect(enroll).toContain("Capturing missing fingerprint raw bytes");
@@ -202,7 +202,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Issue: ${mergePlural(issueCount, \"device\")}");
 		expect(enroll).toContain("Expected active devices");
 		expect(enroll).toContain("Unique IDs");
-		expect(enroll).toContain("Device records read");
+		expect(enroll).toContain("Device ID records");
+		expect(enroll).toContain("duplicate source row");
+		expect(enroll).toContain("collapsed into the matching unique IDs");
 		expect(enroll).toContain("Issue details");
 		expect(enroll).toContain("SdkMergeListMode");
 		expect(enroll).toContain("sdkMergeUniqueRows");

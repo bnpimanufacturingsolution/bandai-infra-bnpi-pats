@@ -541,6 +541,16 @@ export type DeviceUserMergePlanResponse = {
 			employee?: { id?: string; employeeId?: string | null; fullName?: string | null } | null;
 			vendorUserIds: string[];
 			records: any[];
+			sourceRows?: number;
+			duplicateSourceRows?: Array<{
+				deviceId: string;
+				deviceName: string;
+				vendorUserId: string;
+				sourceRows: number;
+				keptRecordId?: string | null;
+				duplicateRecordIds?: string[];
+				differingFields?: DeviceUserMergeField[];
+			}>;
 			missingOnDeviceIds: string[];
 			conflicts: Array<{
 				field: DeviceUserMergeField;
@@ -551,6 +561,9 @@ export type DeviceUserMergePlanResponse = {
 		}>;
 		counts: {
 			unionUsers: number;
+			sourceRows?: number;
+			dedupedDeviceRecords?: number;
+			duplicateSourceRows?: number;
 			conflicts: number;
 			missing: number;
 			ambiguous?: number;

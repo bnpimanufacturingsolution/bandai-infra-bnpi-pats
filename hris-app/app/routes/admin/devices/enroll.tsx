@@ -1732,6 +1732,11 @@ export function DeviceEnrollmentPanel({
 			const deviceNames = user.records
 				.map((record: any) => mergeDeviceName(plan.devices, record.deviceId))
 				.filter(Boolean);
+			const duplicateSourceRowCount = (user.duplicateSourceRows || []).reduce(
+				(count: number, duplicate: any) =>
+					count + Math.max(0, Number(duplicate.sourceRows || 0) - 1),
+				0,
+			);
 			const missingNames = user.missingOnDeviceIds
 				.map((deviceId) => mergeDeviceName(plan.devices, deviceId))
 				.filter(Boolean);
@@ -1752,9 +1757,9 @@ export function DeviceEnrollmentPanel({
 				personLabel: mergePersonLabel(user),
 				issueLabel: reviewRows.length ? "Needs review" : "Ready / no action",
 				missingLabel: missingNames.length ? missingNames.join(", ") : "All selected devices",
-				dataLabel: `${mergePlural(user.records.length, "device record")} read. Seen on ${deviceNames.join(", ") || "no device"}.`,
+				dataLabel: `${mergePlural(user.records.length, "device record")} kept from ${mergePlural(user.sourceRows || user.records.length, "source row")}. Seen on ${deviceNames.join(", ") || "no device"}.`,
 				recommendedAction: reviewRows.length
-					? `${mergePlural(reviewRows.length, "issue row")} to review for this ID.`
+					? `${mergePlural(reviewRows.length, "issue row")} to review for this ID.${duplicateSourceRowCount ? ` ${mergePlural(duplicateSourceRowCount, "duplicate source row")} collapsed.` : ""}`
 					: "This ID is already aligned across the selected devices.",
 				primaryAction: "details",
 				conflictFields: user.conflicts.map(
@@ -1955,6 +1960,19 @@ export function DeviceEnrollmentPanel({
 	const sdkMergeDeviceRecordCount =
 		sdkMergeState.data?.plan.users.reduce((count, user) => count + user.records.length, 0) ||
 		0;
+	const sdkMergeDuplicateSourceRowCount =
+		sdkMergeState.data?.plan.counts?.duplicateSourceRows ||
+		sdkMergeState.data?.plan.users.reduce(
+			(count, user) =>
+				count +
+				(user.duplicateSourceRows || []).reduce(
+					(total: number, duplicate: any) =>
+						total + Math.max(0, Number(duplicate.sourceRows || 0) - 1),
+					0,
+				),
+			0,
+		) ||
+		0;
 	const sdkMergePotentialWriteCount =
 		sdkMergeWriteRows.length ||
 		sdkMergeState.data?.plan.plannedWrites?.length ||
@@ -2002,7 +2020,7 @@ export function DeviceEnrollmentPanel({
 		sdkMergeListMode === "unique"
 			? "Unique IDs"
 			: sdkMergeListMode === "records"
-				? "Device records read"
+				? "Device ID records"
 				: sdkMergeListMode === "review"
 					? "Needs review"
 					: sdkMergeListMode === "writes"
@@ -3613,7 +3631,7 @@ export function DeviceEnrollmentPanel({
 			: Math.min(100, Math.round((deviceUserSyncJobProcessed / deviceUserSyncJobTotal) * 100))
 		: 0;
 	const deviceUserSyncPrimaryResult = effectiveDeviceUserSyncJobProgress?.results?.[0] || null;
-	const deviceUserSyncUsesSavedHrisOnly =
+	const deviceUserSyncSkipsSourceUserReread =
 		hasEffectiveDeviceUserSyncJobProgress &&
 		effectiveDeviceUserSyncJobProgress?.decisionMatrix?.sourceReadRequired === false;
 	const deviceUserSyncCurrentModality =
@@ -3629,7 +3647,7 @@ export function DeviceEnrollmentPanel({
 	const deviceUserSyncCurrentDeviceLabel =
 		effectiveDeviceUserSyncJobProgress?.currentDeviceName ||
 		deviceUserSyncPrimaryResult?.deviceName ||
-		(deviceUserSyncUsesSavedHrisOnly ? "Saved HRIS DeviceUser state" : null) ||
+		(deviceUserSyncSkipsSourceUserReread ? "Scoped DeviceUser matrix" : null) ||
 		(deviceUserSyncIsPlanningBiometrics
 			? "Building raw-custody plan"
 			: deviceUserSyncJobIsTerminal
@@ -3639,8 +3657,8 @@ export function DeviceEnrollmentPanel({
 		? deviceUserSyncHasRawGaps
 			? `${metricValue(deviceUserSyncBiometricFailed)} missing_raw_blob`
 			: "No remaining raw gaps"
-		: deviceUserSyncUsesSavedHrisOnly
-			? "Scoped missing/link records only"
+		: deviceUserSyncSkipsSourceUserReread
+			? "Missing links/raw blobs only"
 		: deviceUserSyncIsPlanningBiometrics
 			? "Finding missing raw blobs"
 		: `${deviceUserSyncCurrentModality} - ${
@@ -3699,8 +3717,8 @@ export function DeviceEnrollmentPanel({
 					: deviceUserSyncJobIsProcessing
 						? deviceUserSyncJobCancelRequested
 							? "Cancelling device-user refresh"
-							: deviceUserSyncUsesSavedHrisOnly
-								? "Fast plan: saved HRIS only"
+							: deviceUserSyncSkipsSourceUserReread
+								? "Fast plan: scoped missing work"
 							: deviceUserSyncJobMode === "needs_attention_only"
 								? "Refreshing mismatches"
 								: deviceUserSyncJobMode === "peer_converge"
@@ -3744,8 +3762,8 @@ export function DeviceEnrollmentPanel({
 		? deviceUserSyncJobIsProcessing
 			? deviceUserSyncBiometricTotal > 0
 				? `${deviceUserSyncCurrentModality} custody for user ${effectiveDeviceUserSyncJobProgress.currentVendorUserId || "-"} on ${effectiveDeviceUserSyncJobProgress.currentDeviceName || "the selected device"}.`
-				: deviceUserSyncUsesSavedHrisOnly
-					? "The decision matrix scoped this run to records Sync can handle from saved HRIS state. Source users and already-present rows are skipped."
+				: deviceUserSyncSkipsSourceUserReread
+					? "The decision matrix scoped this run to records Sync can handle now. Full source-user reread and already-present rows are skipped; only missing links and missing raw blobs are queued."
 				: deviceUserSyncJobMode === "biometrics_only"
 					? "Building missing-record matrix from saved DeviceUser truth; source identity reread is skipped unless deep repair is selected."
 					: "Reading source users only because the decision matrix found identity gaps or a full refresh was requested."
@@ -7138,7 +7156,7 @@ export function DeviceEnrollmentPanel({
 							<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
 								{[
 									["unique", "Unique IDs", sdkMergeUniqueIdCount],
-									["records", "Device records read", sdkMergeDeviceRecordCount],
+									["records", "Device ID records", sdkMergeDeviceRecordCount],
 									["review", "Needs review", sdkMergeAttentionRowCount],
 									["writes", "Potential writes", sdkMergePotentialWriteCount],
 								].map(([mode, label, value]) => (
@@ -7258,9 +7276,25 @@ export function DeviceEnrollmentPanel({
 									<div className="min-w-0">
 										<p className="text-sm font-semibold text-slate-950">
 											{sdkMergeActiveFilterLabel}:{" "}
-											{sdkMergeVisibleRows.length} row
-											{sdkMergeVisibleRows.length === 1 ? "" : "s"}
+											{mergeMetricValue(sdkMergeVisibleRows.length)}{" "}
+											{sdkMergeListMode === "unique"
+												? sdkMergeVisibleRows.length === 1
+													? "ID"
+													: "IDs"
+												: sdkMergeVisibleRows.length === 1
+													? "row"
+													: "rows"}
 										</p>
+										{sdkMergeListMode === "unique" &&
+										sdkMergeDuplicateSourceRowCount > 0 ? (
+											<p className="mt-0.5 text-xs text-slate-600">
+												{mergePlural(
+													sdkMergeDuplicateSourceRowCount,
+													"duplicate source row",
+												)}{" "}
+												collapsed into the matching unique IDs.
+											</p>
+										) : null}
 									</div>
 									{selectedMergeDeviceId !== "all" ||
 									selectedMergeUserKey ||
