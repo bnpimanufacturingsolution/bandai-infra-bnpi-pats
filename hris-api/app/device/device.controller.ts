@@ -9358,11 +9358,13 @@ export const controller = (prisma: PrismaClient) => {
 				},
 				select: {
 					id: true,
+					organizationId: true,
 					name: true,
 					address: true,
 					port: true,
 					protocol: true,
 					config: true,
+					access: true,
 				},
 			});
 			if ((req as any).deviceUserMergeSkipInitialSnapshot) {

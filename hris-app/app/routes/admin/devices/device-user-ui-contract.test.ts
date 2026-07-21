@@ -284,8 +284,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Current phase");
 		expect(enroll).toContain("UI polling");
 		expect(enroll).toContain("Backend update");
-		expect(enroll).toContain("Device copy call in progress");
-		expect(enroll).toContain("The UI is still polling.");
+		expect(enroll).toContain("No detailed backend heartbeat yet");
+		expect(enroll).toContain("Applied and Needs attention move only after each target copy returns");
+		expect(enroll).toContain("This job was started before detailed merge telemetry was available.");
 		expect(enroll).toContain("Back to review");
 		expect(enroll).toContain("Review selected merge (${sdkMergeSelectedUniqueCount})");
 		expect(enroll).not.toContain("sdkMergePreviewOnly");
