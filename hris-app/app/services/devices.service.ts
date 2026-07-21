@@ -336,6 +336,18 @@ export interface DeviceUserSyncDecisionMatrix {
 	jobStages: string[];
 }
 
+export interface DeviceUserSyncExecutionPlan {
+	mode?: DeviceUserSyncMode;
+	dryRun?: boolean;
+	willCreateJob?: boolean;
+	selectedDeviceCount?: number;
+	selectedDevices?: string[];
+	sourceReadRequired?: boolean;
+	sourceReadSkipped?: boolean;
+	sourceReadReason?: string;
+	steps?: string[];
+}
+
 export interface DeviceSyncPreviewSourceCheck {
 	key: string;
 	label: string;
@@ -953,6 +965,15 @@ export interface DeviceUsersResponse {
 		limit: number;
 		totalPages?: number;
 	};
+}
+
+export interface DeviceUserSyncJobStartResponse {
+	mode?: "dry_run" | string;
+	jobId?: string | null;
+	willCreateJob?: boolean;
+	progress?: DeviceUserSyncJobProgress;
+	decisionMatrix?: DeviceUserSyncDecisionMatrix | null;
+	executionPlan?: DeviceUserSyncExecutionPlan | null;
 }
 
 export interface DeleteDeviceUserRequest {
@@ -1746,12 +1767,14 @@ class DevicesService extends APIService {
 
 	async startDeviceUserSyncJob(
 		payload: DeviceUserSyncJobStartRequest = { mode: "full_refresh" },
-	): Promise<{ jobId: string; progress: DeviceUserSyncJobProgress }> {
+	): Promise<DeviceUserSyncJobStartResponse> {
 		try {
 			const response = await hrisApiClient.post<any>("/api/device/users/sync-jobs", payload);
 			const data = response.data?.data || response.data;
-			if (!data?.jobId) throw new Error("Failed to start device-user sync");
-			return data as { jobId: string; progress: DeviceUserSyncJobProgress };
+			if (!data?.jobId && data?.mode !== "dry_run") {
+				throw new Error("Failed to start device-user sync");
+			}
+			return data as DeviceUserSyncJobStartResponse;
 		} catch (error: any) {
 			console.error("Error starting device-user sync job:", error);
 			throw new Error(

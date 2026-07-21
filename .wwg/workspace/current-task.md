@@ -1,5 +1,26 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-21 Device-user merge unique-ID truth repair
+
+- Task mode: Mixed backend correctness and admin UX truth repair.
+- Implemented:
+  - Hikvision device-user merge planning now groups records by connected identity evidence so the same `vendorUserId` cannot split into separate selectable unique-ID rows just because one source row is manually/HRIS-linked and another is not.
+  - Duplicate source rows for the same device/user ID are collapsed before unique-ID counting, with `sourceRows`, `dedupedDeviceRecords`, and `duplicateSourceRows` reported in the plan.
+  - The merge modal now labels the record count as `Device ID records`, reports unique-list counts as IDs, and can disclose when duplicate source rows were collapsed into matching unique IDs.
+- Runtime/API proof after API restart:
+  - Evidence root: `.runtime/merge-unique-id-truth-20260721-112633/`.
+  - Local API restarted from watcher PID `3296` to listener PID `19488`; `/health` returned `healthy`.
+  - Non-mutating admin merge-plan endpoint returned `uniqueIdCount=686`, `apiCountUnionUsers=686`, `sourceRows=2748`, `dedupedDeviceRecords=2748`, `duplicateSourceRows=0`, and `hasDuplicateUniqueIdsShown=false` for the four current Hikvision target devices.
+- Validation:
+  - `hris-api` focused merge helper tests passed (`12` passing).
+  - `hris-api` focused device-user/Hikvision contracts passed (`22` passing).
+  - `hris-api` typecheck passed.
+  - `hris-app` focused device-user UI contract passed (`1` passing).
+  - `git diff --check` passed.
+- Boundary:
+  - Browser automation against `http://127.0.0.1:5175/auth/login` could not complete login because the current frontend dev server rendered no login input elements in headless DOM; API proof and source/UI contracts were used as the closeout evidence.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-21 Sync Center missing-record decision matrix
 
 - Task mode: Mixed admin UX/performance feature and backend fast-path repair.

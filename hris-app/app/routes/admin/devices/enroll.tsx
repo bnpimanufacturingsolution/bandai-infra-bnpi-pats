@@ -2383,17 +2383,32 @@ export function DeviceEnrollmentPanel({
 			message: "Reading current sync preview before review.",
 		});
 		try {
-			const previewResponse = await deviceService.getDeviceSyncPreview({
-				deviceId: targetDeviceId,
-			});
+			const [previewResponse, dryRunPlan] = await Promise.all([
+				deviceService.getDeviceSyncPreview({
+					deviceId: targetDeviceId,
+				}),
+				deviceService.startDeviceUserSyncJob({
+					mode: DEFAULT_BULK_DEVICE_USER_SYNC_MODE,
+					deviceIds: [targetDeviceId],
+					dryRun: true,
+				}),
+			]);
 			const preview =
 				previewResponse.devices.find((row) => row.deviceId === targetDeviceId) ||
 				previewResponse.devices[0];
 			setDeviceUserSyncState({
 				open: true,
 				status: "review",
-				message: "Sync physical device users into HRIS identity records.",
-				preview,
+				message:
+					dryRunPlan.executionPlan?.sourceReadSkipped === true
+						? "Dry-run matrix scoped the fastest valid sync plan."
+						: "Dry-run matrix found source evidence is needed before sync.",
+				preview: {
+					...preview,
+					syncDecisionMatrix:
+						dryRunPlan.decisionMatrix ||
+						preview?.syncDecisionMatrix,
+				},
 			});
 			void refetchSyncPreview();
 		} catch (error: any) {
@@ -2430,6 +2445,7 @@ export function DeviceEnrollmentPanel({
 				mode: requestedMode,
 				deviceIds: [selectedDeviceId],
 			});
+			if (!result.jobId) throw new Error("Device-user sync did not return a job id");
 			setActiveDeviceUserSyncJob({ jobId: result.jobId });
 			setDeviceUserSyncState({ open: false, status: "idle", message: "" });
 			setBulkDeviceUserSyncState({
@@ -3578,6 +3594,24 @@ export function DeviceEnrollmentPanel({
 		deviceUserSyncDecisionMatrix?.buckets?.length
 			? deviceUserSyncDecisionMatrix.buckets
 			: fallbackDeviceUserSyncDecisionBuckets;
+	const getDeviceUserSyncDecisionCount = (key: string) =>
+		Number(
+			deviceUserSyncDecisionMatrix?.buckets?.find(
+				(bucket) => bucket.key === key,
+			)?.count ||
+				(deviceUserSyncDecisionMatrix?.counts as any)?.[key] ||
+				0,
+		);
+	const plannedFingerprintRawMissingCount =
+		deviceUserSyncDecisionMatrix
+			? getDeviceUserSyncDecisionCount("missing_raw_fingerprint_blob")
+			: (deviceUserSyncReviewPreview?.fingerprintRawMissing ??
+				deviceUserSyncReviewPreview?.fingerprintEnvelopeMissing);
+	const plannedFaceRawMissingCount =
+		deviceUserSyncDecisionMatrix
+			? getDeviceUserSyncDecisionCount("missing_raw_face_blob")
+			: (deviceUserSyncReviewPreview?.faceRawMissing ??
+				deviceUserSyncReviewPreview?.faceEnvelopeMissing);
 	const hasEffectiveDeviceUserSyncJobProgress = Boolean(effectiveDeviceUserSyncJobProgress);
 	const effectiveDeviceUserSyncJobStatus = effectiveDeviceUserSyncJobProgress?.status;
 	const deviceUserSyncJobProcessed = Number(
@@ -3738,21 +3772,15 @@ export function DeviceEnrollmentPanel({
 		["Already present", effectiveDeviceUserSyncJobProgress?.biometricCached ?? 0],
 		["Remaining", deviceUserSyncBiometricRemaining],
 	] as const;
-	const getDeviceUserSyncBucketCount = (key: string) =>
-		Number(
-			effectiveDeviceUserSyncJobProgress?.decisionMatrix?.buckets?.find(
-				(bucket) => bucket.key === key,
-			)?.count || 0,
-		);
 	const deviceUserSyncMatrixSummaryItems = [
-		["Missing users", getDeviceUserSyncBucketCount("missing_device_user_record")],
-		["Missing links", getDeviceUserSyncBucketCount("missing_employee_link")],
+		["Missing users", getDeviceUserSyncDecisionCount("missing_device_user_record")],
+		["Missing links", getDeviceUserSyncDecisionCount("missing_employee_link")],
 		[
 			"Raw gaps",
-			getDeviceUserSyncBucketCount("missing_raw_fingerprint_blob") +
-				getDeviceUserSyncBucketCount("missing_raw_face_blob"),
+			getDeviceUserSyncDecisionCount("missing_raw_fingerprint_blob") +
+				getDeviceUserSyncDecisionCount("missing_raw_face_blob"),
 		],
-		["Already skipped", getDeviceUserSyncBucketCount("already_present")],
+		["Already skipped", getDeviceUserSyncDecisionCount("already_present")],
 	] as const;
 	const deviceUserSyncFailureLog = (
 		effectiveDeviceUserSyncJobProgress?.biometricFailureLog || []
@@ -6288,12 +6316,20 @@ export function DeviceEnrollmentPanel({
 								<div className="grid gap-2 sm:grid-cols-2">
 									{[
 										[
-											"Current live users: fingerprint inventory vs HRIS raw",
-											`${metricValue(deviceUserSyncReviewPreview?.fingerprintReported)} inventory slots / ${metricValue(deviceUserSyncReviewPreview?.fingerprintRawPresent ?? deviceUserSyncReviewPreview?.fingerprintEnvelopePresent)} HRIS raw stored / ${metricValue(deviceUserSyncReviewPreview?.fingerprintRawMissing ?? deviceUserSyncReviewPreview?.fingerprintEnvelopeMissing)} raw missing`,
+											deviceUserSyncDecisionMatrix
+												? "Fast plan: fingerprint raw candidates"
+												: "Current live users: fingerprint inventory vs HRIS raw",
+											deviceUserSyncDecisionMatrix
+												? `${metricValue(plannedFingerprintRawMissingCount)} candidate rows; raw bytes must come from evidenced live capture, not counts`
+												: `${metricValue(deviceUserSyncReviewPreview?.fingerprintReported)} inventory slots / ${metricValue(deviceUserSyncReviewPreview?.fingerprintRawPresent ?? deviceUserSyncReviewPreview?.fingerprintEnvelopePresent)} HRIS raw stored / ${metricValue(plannedFingerprintRawMissingCount)} raw missing`,
 										],
 										[
-											"Current live users: face inventory vs HRIS raw",
-											`${metricValue(deviceUserSyncReviewPreview?.faceReported)} inventory claims / ${metricValue(deviceUserSyncReviewPreview?.faceRawPresent ?? deviceUserSyncReviewPreview?.faceEnvelopePresent)} HRIS raw stored / ${metricValue(deviceUserSyncReviewPreview?.faceRawMissing ?? deviceUserSyncReviewPreview?.faceEnvelopeMissing)} raw missing`,
+											deviceUserSyncDecisionMatrix
+												? "Fast plan: face raw candidates"
+												: "Current live users: face inventory vs HRIS raw",
+											deviceUserSyncDecisionMatrix
+												? `${metricValue(plannedFaceRawMissingCount)} candidate rows; raw bytes must come from evidenced live capture, not counts`
+												: `${metricValue(deviceUserSyncReviewPreview?.faceReported)} inventory claims / ${metricValue(deviceUserSyncReviewPreview?.faceRawPresent ?? deviceUserSyncReviewPreview?.faceEnvelopePresent)} HRIS raw stored / ${metricValue(plannedFaceRawMissingCount)} raw missing`,
 										],
 									].map(([label, value]) => (
 										<div key={label} className="rounded-md border border-slate-200 px-2 py-1.5">
@@ -6316,9 +6352,9 @@ export function DeviceEnrollmentPanel({
 									</div>
 								) : null}
 								<p className="text-slate-600">
-									Current counts are scoped to users still present in the live device
-									inventory. Stale HRIS-only rows are preserved separately for cleanup
-									review; no blobs are fabricated from old counts.
+									{deviceUserSyncDecisionMatrix
+										? "This dry-run plan is the same planner used to start Sync. Already-present rows and full source-user rereads are skipped unless the matrix says source evidence is needed."
+										: "Current counts are scoped to users still present in the live device inventory. Stale HRIS-only rows are preserved separately for cleanup review; no blobs are fabricated from old counts."}
 								</p>
 							</div>
 						) : null}

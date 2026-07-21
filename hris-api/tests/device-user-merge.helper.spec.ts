@@ -81,7 +81,7 @@ describe("device user union merge", () => {
 		expect(applyMergeChoices(plan).executable).to.equal(false);
 	});
 
-	it("preserves an approved manual link ahead of automatic identity matching", () => {
+	it("does not collapse different vendor user ids just because they share an HRIS manual link", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],
 			records: [
@@ -98,9 +98,12 @@ describe("device user union merge", () => {
 				}),
 			],
 		});
-		expect(plan.users).to.have.length(1);
-		expect(plan.users[0].employeeId).to.equal("employee-1");
-		expect(plan.users[0].vendorUserIds).to.have.members(["vendor-a", "vendor-b"]);
+		expect(plan.users).to.have.length(2);
+		expect(plan.users.map((user) => user.vendorUserIds[0])).to.have.members([
+			"vendor-a",
+			"vendor-b",
+		]);
+		expect(plan.users.every((user) => user.employeeId === "employee-1")).to.equal(true);
 	});
 
 	it("keeps one merge identity for the same vendor user id even when one row is manually linked", () => {

@@ -1,5 +1,30 @@
 # WWG Agent Handoff
 
+## 2026-07-21 - Device-user merge unique-ID truth repair
+
+- Status: `COMPLETE_LOCAL_API_PROOF_WITH_BROWSER_WARNING`.
+- Task mode: Mixed backend correctness and admin UX truth repair.
+- User symptom repaired:
+  - The merge modal said `Unique IDs` while showing duplicate selectable rows such as `21, 21, 32, 32`, which made the merge count feel dishonest and made it unclear which row an admin should select.
+- Implementation:
+  - `hris-api/helper/device-user-merge.helper.ts` now groups merge identities by connected evidence. Same `vendorUserId` always collapses to one merge identity; manual employee links can still connect different vendor IDs when that is the evidenced relationship.
+  - Duplicate source rows for the same device/user ID are collapsed before unique-ID counting, keeping the richest source row and reporting duplicate source evidence on the plan.
+  - `hris-app/app/routes/admin/devices/enroll.tsx` now uses `Device ID records` for per-device/read rows, reports the unique list count as IDs, and shows duplicate-collapse copy only when the plan reports collapsed duplicates.
+  - Frontend response types and focused contract tests were updated for `sourceRows`, `dedupedDeviceRecords`, and `duplicateSourceRows`.
+- Runtime/API proof:
+  - Evidence root: `.runtime/merge-unique-id-truth-20260721-112633/`.
+  - API restarted successfully; final listener PID `19488`, `/health` status `healthy`.
+  - Non-mutating admin `POST /api/device/hikvision/sdk-users/merge/plan` for the current four Hikvision target devices returned `uniqueIdCount=686`, `apiCountUnionUsers=686`, `sourceRows=2748`, `dedupedDeviceRecords=2748`, `duplicateSourceRows=0`, and `hasDuplicateUniqueIdsShown=false`.
+- Validation:
+  - Backend merge helper: `12` passing.
+  - Backend focused device-user/Hikvision contracts: `22` passing.
+  - Backend typecheck: passed.
+  - Frontend device-user UI contract: `1` passing.
+  - `git diff --check`: passed.
+- Warning:
+  - Browser automation could not complete login because the current `5175` frontend dev server rendered no login inputs in headless DOM for `/auth/login`; debug artifacts are in the same evidence directory. The merge endpoint proof is still valid and non-mutating.
+- Recommendation capture: No new recommendations were identified.
+
 ## 2026-07-21 - Sync Center missing-record decision matrix handoff
 
 - Status: `COMPLETE_LOCAL_PROOF`.

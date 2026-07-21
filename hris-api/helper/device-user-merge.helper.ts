@@ -138,9 +138,6 @@ const buildIdentityGroups = (records: DeviceUserMergeRecord[]) => {
 	records.forEach((record, index) => {
 		if (text(record.vendorUserId)) connect(`vendor:${text(record.vendorUserId)}`, index);
 		if (text(record.employeeNo)) connect(`employee-no:${text(record.employeeNo)}`, index);
-		if (record.manualLink && text(record.employeeId)) {
-			connect(`manual:${text(record.employeeId)}`, index);
-		}
 		if (!text(record.vendorUserId) && !text(record.employeeNo) && text(record.employeeId)) {
 			connect(`employee:${text(record.employeeId)}`, index);
 		}
@@ -167,15 +164,6 @@ const buildIdentityGroups = (records: DeviceUserMergeRecord[]) => {
 const groupKeyForRecords = (records: DeviceUserMergeRecord[]) => {
 	const vendorIds = [...new Set(records.map((record) => text(record.vendorUserId)).filter(Boolean))];
 	if (vendorIds.length === 1) return `vendor:${vendorIds[0]}`;
-	const manualEmployeeIds = [
-		...new Set(
-			records
-				.filter((record) => record.manualLink)
-				.map((record) => text(record.employeeId))
-				.filter(Boolean),
-		),
-	];
-	if (manualEmployeeIds.length === 1) return `manual:${manualEmployeeIds[0]}`;
 	const employeeNos = [...new Set(records.map((record) => text(record.employeeNo)).filter(Boolean))];
 	if (employeeNos.length === 1) return `employee-no:${employeeNos[0]}`;
 	const employeeIds = [...new Set(records.map((record) => text(record.employeeId)).filter(Boolean))];
