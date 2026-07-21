@@ -854,3 +854,21 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
   - Compensation upload has unmapped `INC` code across 816 rows; do not infer its payroll treatment without HR/source confirmation.
 - July 30 (`2026-07-11` to `2026-07-25`) remains biometrics-mapping-only because no HRIS Payroll Computation comparator workbook was provided.
 - Validation: `hris-api npm run test:regression:payroll-source-truth` passed 52 specs; `hris-api npm run typecheck` passed.
+
+# 2026-07-22 Merge Users Selected-ID Matrix Review Handoff
+
+- Status: `GREEN_NO_WRITE_EXECUTED`. The merge review flow was verified through the real non-mutating plan endpoint and browser modal, but the real merge job was not started.
+- User problem addressed: the prior “Needs decision” view was misleading because it could show duplicate rows for the same unique device ID. The review modal also hid the most important operator question: what selected ID writes from which source device to which target devices, and whether fingerprint/face will be copied.
+- Frontend changed: `mergeList=issues` now renders one row per unique selected ID. The final review modal shows metrics for selected unique IDs, peer copy attempts, fingerprint gaps, face gaps, and conflicts resolved; per-target and per-source matrices; and a full selected-ID write matrix with physical source, targets, biometric source evidence, selected-device coverage/gaps, copy count, and an Edit action back to the row before starting.
+- Backend changed: device-user merge job progress now includes `writeMatrix` and uses that matrix for `totalWrites`, so the job polling contract can match the final review counts. The matrix includes selected unique IDs, total writes, fingerprint gaps, face gaps, per-target/per-source summaries, and per-row source/target/coverage details.
+- Browser proof: Playwright on `http://localhost:5175/admin/configuration/devices?action=device-users&syncPanel=users` authenticated as `admin@bandai.local`, hit `POST /api/device/hikvision/sdk-users/merge/plan`, used recommended sources, and opened the final review without pressing Start. The modal showed `754` selected unique IDs, `3,770` peer copy attempts, `3,493` fingerprint gaps, `3,655` face gaps, `1093/1093` conflicts resolved, `Writes by target device`, `Sources used`, `Selected ID write matrix`, `Physical source`, `Fingerprint`, `Face`, and `Edit`. Row proof for ID `1`: fingerprint `Source 2`, `5/6 devices; 1 gap`; face `Source 1`, `6/6 devices; aligned`; copy `5`.
+- Validation: frontend contract test passed; targeted `enroll.tsx` ESLint passed with existing warnings only; backend merge-helper tests passed 12/12; backend typecheck passed; `git diff --check` passed with only CRLF notices.
+- Evidence root: `.runtime/merge-users-ui-proof-20260722-035213/`.
+
+# 2026-07-22 Merge Users Running-State Stage Repair Handoff
+
+- Status: `CODE_VALIDATED_NO_NEW_WRITE_EXECUTED`.
+- User problem addressed: after pressing Start, the merge modal still showed review/edit controls below the running progress card. This was misleading because recommended sources, selected rows, and scope are no longer editable once the job exists.
+- Frontend changed: `enroll.tsx` now gates the review/editor body with `!hasSdkMergeJob`. While a job exists, the modal renders only the job monitor plus a `Locked job scope` section from backend `writeMatrix`, including selected unique IDs, peer copy attempts, fingerprint gaps at start, face gaps at start, targets receiving copies, and physical sources used.
+- Validation: focused frontend UI contract passed; targeted `enroll.tsx` ESLint passed with existing warnings only; backend typecheck passed.
+- Boundary: no additional real merge job was started during this repair. Browser proof against the exact operator-visible job needs the active `mergeJobId` or a fresh approved job run.

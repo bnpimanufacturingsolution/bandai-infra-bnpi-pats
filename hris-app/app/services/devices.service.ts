@@ -604,6 +604,8 @@ export interface DeviceUserMergeJobProgress {
 	writeMatrix?: {
 		selectedUniqueIds: number;
 		totalWrites: number;
+		fingerprintGaps: number;
+		faceGaps: number;
 		conflicts: number;
 		perTarget: Array<{
 			deviceId: string;
@@ -625,6 +627,14 @@ export interface DeviceUserMergeJobProgress {
 			targetDeviceIds: string[];
 			targetDeviceNames: string[];
 			writes: number;
+			fingerprintSourceCount: number;
+			fingerprintPresentDevices: number;
+			fingerprintExpectedDevices: number;
+			fingerprintGapDevices: number;
+			faceSourceCount: number;
+			facePresentDevices: number;
+			faceExpectedDevices: number;
+			faceGapDevices: number;
 			conflicts: number;
 		}>;
 	};

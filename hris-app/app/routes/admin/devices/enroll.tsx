@@ -2058,6 +2058,14 @@ export function DeviceEnrollmentPanel({
 					targetDeviceNames: string[];
 					writes: number;
 					conflicts: number;
+					fingerprintSourceCount: number;
+					fingerprintPresentDevices: number;
+					fingerprintExpectedDevices: number;
+					fingerprintGapDevices: number;
+					faceSourceCount: number;
+					facePresentDevices: number;
+					faceExpectedDevices: number;
+					faceGapDevices: number;
 				}>,
 			};
 		}
@@ -2094,6 +2102,14 @@ export function DeviceEnrollmentPanel({
 							? selectedConflict?.deviceA.id || user.sourceDeviceId
 							: user.sourceDeviceId;
 				const sourceDeviceName = mergeDeviceName(plan.devices, sourceDeviceId);
+				const sourceRecord =
+					user.records.find((record: any) => record.deviceId === sourceDeviceId) ||
+					user.records.find((record: any) => record.deviceId === user.sourceDeviceId) ||
+					user.records[0];
+				const fingerprintSourceCount = mergeCredentialCount(sourceRecord, "fingerprint");
+				const faceSourceCount = mergeCredentialCount(sourceRecord, "face");
+				const fingerprintTruth = mergeCredentialTruth(user, plan.devices, "fingerprint");
+				const faceTruth = mergeCredentialTruth(user, plan.devices, "face");
 				const targetDeviceIds = user.targetDeviceIds.filter(
 					(deviceId) => deviceId !== sourceDeviceId,
 				);
@@ -2128,6 +2144,17 @@ export function DeviceEnrollmentPanel({
 					),
 					writes: targetDeviceIds.length,
 					conflicts: user.conflicts.length,
+					fingerprintSourceCount,
+					fingerprintPresentDevices: fingerprintTruth.present,
+					fingerprintExpectedDevices: fingerprintTruth.expected,
+					fingerprintGapDevices: Math.max(
+						0,
+						fingerprintTruth.expected - fingerprintTruth.present,
+					),
+					faceSourceCount,
+					facePresentDevices: faceTruth.present,
+					faceExpectedDevices: faceTruth.expected,
+					faceGapDevices: Math.max(0, faceTruth.expected - faceTruth.present),
 				};
 			});
 		return {
@@ -2141,6 +2168,14 @@ export function DeviceEnrollmentPanel({
 	}, [sdkMergeState.applyAll, sdkMergeState.choices, sdkMergeState.data, selectedSdkMergeUserKeys]);
 	const sdkMergeSelectedPotentialWriteCount = sdkMergeSelectedWriteMatrix.rows.reduce(
 		(count, row) => count + row.writes,
+		0,
+	);
+	const sdkMergeSelectedFingerprintGapCount = sdkMergeSelectedWriteMatrix.rows.reduce(
+		(count, row) => count + row.fingerprintGapDevices,
+		0,
+	);
+	const sdkMergeSelectedFaceGapCount = sdkMergeSelectedWriteMatrix.rows.reduce(
+		(count, row) => count + row.faceGapDevices,
 		0,
 	);
 	const sdkMergeAttentionRowCount = sdkMergeReviewRows.length;
@@ -2286,6 +2321,17 @@ export function DeviceEnrollmentPanel({
 		["Applied", effectiveSdkMergeJob?.successfulWrites ?? 0],
 		["Needs attention", effectiveSdkMergeJob?.failedWrites ?? 0],
 	] as const;
+	const sdkMergeJobWriteMatrix = effectiveSdkMergeJob?.writeMatrix;
+	const sdkMergeJobScopeItems = sdkMergeJobWriteMatrix
+		? [
+				["Selected unique IDs", sdkMergeJobWriteMatrix.selectedUniqueIds],
+				["Peer copy attempts", sdkMergeJobWriteMatrix.totalWrites],
+				["Fingerprint gaps at start", sdkMergeJobWriteMatrix.fingerprintGaps],
+				["Face gaps at start", sdkMergeJobWriteMatrix.faceGaps],
+			]
+		: [];
+	const sdkMergeJobTargetRows = sdkMergeJobWriteMatrix?.perTarget || [];
+	const sdkMergeJobSourceRows = sdkMergeJobWriteMatrix?.perSource || [];
 	const sdkMergeJobResults = effectiveSdkMergeJob?.results || [];
 	const sdkMergeJobSummary = effectiveSdkMergeJob
 		? `${mergeMetricValue(effectiveSdkMergeJob.successfulWrites)} writes applied, ${mergeMetricValue(
@@ -7245,6 +7291,88 @@ export function DeviceEnrollmentPanel({
 								{sdkMergeJobSummary ||
 									"HRIS is applying the reviewed recommended-source plan, copying credentials, then rereading devices."}
 							</p>
+							{sdkMergeJobScopeItems.length ? (
+								<div className="mt-3 rounded-md border border-white/80 bg-white/80 p-3">
+									<div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+										<div>
+											<p className="text-sm font-semibold text-slate-950">
+												Locked job scope
+											</p>
+											<p className="mt-0.5 text-xs text-slate-600">
+												This is the frozen source/target matrix from the job start request. Change scope only after the job finishes or fails.
+											</p>
+										</div>
+										{effectiveSdkMergeJob?.jobId ? (
+											<p className="shrink-0 text-xs font-medium text-slate-600">
+												Job {formatDeviceUserSyncJobId(effectiveSdkMergeJob.jobId)}
+											</p>
+										) : null}
+									</div>
+									<div className="mt-3 grid gap-2 sm:grid-cols-4">
+										{sdkMergeJobScopeItems.map(([label, value]) => (
+											<div
+												key={String(label)}
+												className="rounded-md border border-slate-200 bg-white px-3 py-2">
+												<p className="text-[11px] font-medium uppercase text-slate-500">
+													{label}
+												</p>
+												<p className="mt-1 text-sm font-semibold text-slate-950">
+													{mergeMetricValue(value)}
+												</p>
+											</div>
+										))}
+									</div>
+									<div className="mt-3 grid gap-3 lg:grid-cols-2">
+										<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+											<div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+												<p className="text-xs font-semibold uppercase text-slate-600">
+													Targets receiving copies
+												</p>
+											</div>
+											<div className="max-h-36 overflow-auto">
+												{sdkMergeJobTargetRows.slice(0, 8).map((target: any) => (
+													<div
+														key={`job-target:${target.deviceId}`}
+														className="grid grid-cols-[minmax(0,1fr)_80px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+														<span className="truncate font-medium text-slate-950">
+															{target.deviceName || target.deviceId}
+														</span>
+														<span className="text-right font-semibold text-slate-950">
+															{mergeMetricValue(target.writes)}
+														</span>
+													</div>
+												))}
+											</div>
+										</div>
+										<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+											<div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+												<p className="text-xs font-semibold uppercase text-slate-600">
+													Physical sources used
+												</p>
+											</div>
+											<div className="max-h-36 overflow-auto">
+												{sdkMergeJobSourceRows.slice(0, 8).map((source: any) => (
+													<div
+														key={`job-source:${source.deviceId}`}
+														className="grid grid-cols-[minmax(0,1fr)_80px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+														<div className="min-w-0">
+															<p className="truncate font-medium text-slate-950">
+																{source.deviceName || source.deviceId}
+															</p>
+															<p className="truncate text-xs text-slate-600">
+																{mergePlural(source.selectedUniqueIds, "selected ID")}
+															</p>
+														</div>
+														<span className="text-right font-semibold text-slate-950">
+															{mergeMetricValue(source.writes)}
+														</span>
+													</div>
+												))}
+											</div>
+										</div>
+									</div>
+								</div>
+							) : null}
 							{effectiveSdkMergeJob?.error ? (
 								<p className="mt-2 text-xs text-red-800">
 									{effectiveSdkMergeJob.error}
@@ -7295,7 +7423,7 @@ export function DeviceEnrollmentPanel({
 						</div>
 					) : null}
 
-					{sdkMergeState.data && sdkMergeState.status !== "loading" ? (
+					{sdkMergeState.data && sdkMergeState.status !== "loading" && !hasSdkMergeJob ? (
 						<>
 							<div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
 								<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -7919,15 +8047,17 @@ export function DeviceEnrollmentPanel({
 					}
 				}}
 				title="Review selected merge"
-				description="Confirm the selected unique IDs and potential device writes before HRIS copies source data to peer devices."
-				className="max-w-2xl"
+				description="Confirm selected unique IDs, source devices, peer copy attempts, and biometric evidence before HRIS starts the job."
+				className="max-w-5xl"
 				showCloseButton={!startHikvisionSdkUserMergeJobMutation.isPending}
 				closeOnBackdropClick={!startHikvisionSdkUserMergeJobMutation.isPending}>
 				<div className="space-y-4">
-					<div className="grid gap-2 sm:grid-cols-3">
+					<div className="grid gap-2 sm:grid-cols-5">
 						{[
 							["Selected unique IDs", sdkMergeSelectedUniqueCount],
-							["Potential device writes", sdkMergeSelectedPotentialWriteCount],
+							["Peer copy attempts", sdkMergeSelectedPotentialWriteCount],
+							["Fingerprint gaps", sdkMergeSelectedFingerprintGapCount],
+							["Face gaps", sdkMergeSelectedFaceGapCount],
 							["Conflicts resolved", `${sdkMergeSelectedResolvedCount}/${sdkMergeSelectedConflictCount}`],
 						].map(([label, value]) => (
 							<div key={String(label)} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
@@ -7939,7 +8069,7 @@ export function DeviceEnrollmentPanel({
 					<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
 						<p className="font-semibold">This starts a real device-write job.</p>
 						<p className="mt-1 text-xs leading-5 text-amber-900">
-							HRIS will copy the selected source user data to missing peer devices, include fingerprint and face data only when the source record exposes usable biometric data, then reread devices to confirm the result. Counts are review evidence; missing raw blobs are not fabricated.
+							For each unique ID, HRIS uses the shown physical source device and copies that user to the shown peer target devices. Fingerprint and face columns show source evidence and current gaps, not template-write counts; missing raw blobs are not fabricated.
 						</p>
 					</div>
 					<div className="grid gap-3 lg:grid-cols-2">
@@ -7994,14 +8124,23 @@ export function DeviceEnrollmentPanel({
 						</div>
 					</div>
 					<div className="overflow-hidden rounded-md border border-slate-200">
-						<div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_88px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase text-slate-600">
-							<span>Selected ID</span>
-							<span>Source to targets</span>
-							<span>Writes</span>
+						<div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+							<p className="text-sm font-semibold text-slate-950">Selected ID write matrix</p>
+							<p className="mt-0.5 text-xs text-slate-600">
+								One row per selected unique ID. Fingerprint/face show source evidence and selected-device coverage.
+							</p>
 						</div>
-						<div className="max-h-56 overflow-auto">
-							{sdkMergeSelectedWriteMatrix.rows.slice(0, 10).map((row) => (
-								<div key={`confirm:${row.key}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_88px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+						<div className="grid grid-cols-[minmax(150px,1.2fr)_minmax(140px,1fr)_minmax(180px,1.3fr)_128px_128px_96px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase text-slate-600">
+							<span>ID</span>
+							<span>Physical source</span>
+							<span>Targets</span>
+							<span>Fingerprint</span>
+							<span>Face</span>
+							<span>Copy</span>
+						</div>
+						<div className="max-h-[42vh] overflow-auto">
+							{sdkMergeSelectedWriteMatrix.rows.map((row) => (
+								<div key={`confirm:${row.key}`} className="grid grid-cols-[minmax(150px,1.2fr)_minmax(140px,1fr)_minmax(180px,1.3fr)_128px_128px_96px] items-center gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
 									<div className="min-w-0">
 										<p className="truncate font-medium text-slate-950">{row.label}</p>
 										<p className="truncate text-xs text-slate-600">
@@ -8011,22 +8150,59 @@ export function DeviceEnrollmentPanel({
 									<div className="min-w-0">
 										<p className="truncate font-medium text-slate-950">{row.sourceDeviceName}</p>
 										<p className="truncate text-xs text-slate-600">
-											To {row.targetDeviceNames.slice(0, 2).join(", ") || "no target"}
-											{row.targetDeviceNames.length > 2
-												? ` +${row.targetDeviceNames.length - 2}`
-												: ""}
+											{row.conflicts ? mergePlural(row.conflicts, "resolved field") : "Richest source"}
 										</p>
 									</div>
-									<p className="text-sm font-semibold text-slate-950">
-										{mergeMetricValue(row.writes)}
-									</p>
+									<div className="min-w-0">
+										<p className="truncate font-medium text-slate-950">
+											{row.targetDeviceNames.slice(0, 3).join(", ") || "No target"}
+										</p>
+										<p className="truncate text-xs text-slate-600">
+											{row.targetDeviceNames.length > 3
+												? `+${row.targetDeviceNames.length - 3} more target devices`
+												: mergePlural(row.targetDeviceNames.length, "target device")}
+										</p>
+									</div>
+									<div className="text-sm">
+										<p className="font-semibold text-slate-950">
+											Source {mergeMetricValue(row.fingerprintSourceCount)}
+										</p>
+										<p className="text-xs text-slate-600">
+											{mergeMetricValue(row.fingerprintPresentDevices)}/{mergeMetricValue(row.fingerprintExpectedDevices)} devices
+											{row.fingerprintGapDevices
+												? `; ${mergePlural(row.fingerprintGapDevices, "gap")}`
+												: "; aligned"}
+										</p>
+									</div>
+									<div className="text-sm">
+										<p className="font-semibold text-slate-950">
+											Source {mergeMetricValue(row.faceSourceCount)}
+										</p>
+										<p className="text-xs text-slate-600">
+											{mergeMetricValue(row.facePresentDevices)}/{mergeMetricValue(row.faceExpectedDevices)} devices
+											{row.faceGapDevices
+												? `; ${mergePlural(row.faceGapDevices, "gap")}`
+												: "; aligned"}
+										</p>
+									</div>
+									<div className="flex items-center justify-between gap-2">
+										<p className="text-sm font-semibold text-slate-950">
+											{mergeMetricValue(row.writes)}
+										</p>
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											className="h-8 px-2 text-xs"
+											onClick={() => {
+												setSdkMergeConfirmOpen(false);
+												setSelectedMergeUser(row.key);
+											}}>
+											Edit
+										</Button>
+									</div>
 								</div>
 							))}
-							{sdkMergeSelectedWriteMatrix.rows.length > 10 ? (
-								<div className="px-3 py-2 text-xs text-slate-600">
-									+{mergeMetricValue(sdkMergeSelectedWriteMatrix.rows.length - 10)} more selected unique IDs in the same matrix.
-								</div>
-							) : null}
 						</div>
 					</div>
 					<div className="flex flex-col-reverse gap-2 border-t pt-3 sm:flex-row sm:justify-end">
@@ -8051,7 +8227,7 @@ export function DeviceEnrollmentPanel({
 							)}
 							{startHikvisionSdkUserMergeJobMutation.isPending
 								? "Starting..."
-								: `Start merge job (${sdkMergeSelectedUniqueCount})`}
+								: `Start peer copy job (${sdkMergeSelectedUniqueCount} IDs)`}
 						</Button>
 					</div>
 				</div>

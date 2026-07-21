@@ -2179,3 +2179,20 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
 - July 30 period (`2026-07-11` to `2026-07-25`) has biometrics evidence only and no comparator workbook in `docs/new-cutoff`; payroll tally remains `NEEDS_CONFIRMATION`.
 - Validation: `hris-api npm run test:regression:payroll-source-truth` passed 52 specs; `hris-api npm run typecheck` passed.
 - Evidence root: `.runtime/overnight-payroll-new-cutoff-20260721-144322/`.
+
+# Latest Task Addendum - 2026-07-22 Merge Users Selected-ID Matrix Review
+
+- Task mode: mixed admin UX hardening, backend job-contract hardening, non-mutating endpoint proof, and Playwright verification.
+- Product truth: merge users must be reviewed as one row per unique device/vendor person ID, not one row per raw issue/detail. A selected unique ID writes from one shown physical source device to peer target devices; fingerprint and face are included only when the shown source record exposes usable biometric data. Missing raw blobs/count-only claims must not be fabricated.
+- Frontend repair: `Needs review IDs` now uses unique-ID rows, not duplicate issue rows. The final review modal is a wider operational matrix with selected unique IDs, peer copy attempts, fingerprint gaps, face gaps, conflicts resolved, per-target writes, per-source writes, and a full selected-ID matrix with physical source, targets, biometric source evidence, selected-device coverage/gaps, copy count, and an Edit action back to the row.
+- Backend repair: merge job progress now carries a `writeMatrix` snapshot with selected unique IDs, total writes, fingerprint gaps, face gaps, per-target/per-source summaries, and per-row source/target/coverage data. Job `totalWrites` is aligned to that matrix so polling does not disagree with the review.
+- Live browser proof: Playwright opened the admin Device Users merge flow on `localhost:5175`, authenticated as admin, hit `POST /api/device/hikvision/sdk-users/merge/plan`, used recommended sources, and opened the final review without starting the real job. The modal showed `754` selected unique IDs, `3,770` peer copy attempts, `3,493` fingerprint gaps, `3,655` face gaps, and `1093/1093` conflicts resolved. Row proof showed ID `1` as fingerprint `Source 2`, `5/6 devices; 1 gap`, face `Source 1`, `6/6 devices; aligned`, and `5` peer copy attempts.
+- Validation: focused frontend UI contract passed; targeted frontend ESLint had 0 errors with existing warnings only; backend merge-helper tests passed 12/12; backend typecheck passed; `git diff --check` passed with only CRLF notices.
+- Evidence root: `.runtime/merge-users-ui-proof-20260722-035213/`.
+
+# Latest Task Addendum - 2026-07-22 Merge Users Running-State Stage Repair
+
+- Task mode: admin UX regression repair and job-state truth hardening.
+- Problem: after the real merge job started, the main merge modal still rendered the pre-run review/editor controls (`Review merge by unique ID`, select/deselect scope, recommended sources, per-device impact, editable rows) underneath the running progress card. That was misleading because the selected scope/source matrix is already frozen once the backend job exists.
+- Repair: while `hasSdkMergeJob` is true, the modal now hides the review/editor surface and shows only the job monitor. The monitor includes progress, terminal retry/dismiss actions, and a `Locked job scope` panel from backend `writeMatrix` with selected unique IDs, peer copy attempts, biometric gaps at start, targets receiving copies, and physical sources used.
+- Boundary: this pass did not start another real merge job. The fix is validated by source contract and build/lint checks; a browser proof against the exact operator job requires the active `mergeJobId` from that browser/session or a fresh approved job run.

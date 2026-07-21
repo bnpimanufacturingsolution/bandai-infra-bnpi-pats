@@ -477,6 +477,20 @@ const buildDeviceUserMergeWriteMatrix = (plan: any) => {
 				: selectedConflict?.choice === "A"
 					? selectedConflict.deviceA.id
 					: user.sourceDeviceId;
+		const sourceRecord =
+			(user.records || []).find((record: any) => record.deviceId === sourceDeviceId) ||
+			(user.records || []).find((record: any) => record.deviceId === user.sourceDeviceId) ||
+			(user.records || [])[0];
+		const sourceCredentials = extractHikvisionCredentialSummary(sourceRecord?.rawPayload || {});
+		const expectedDeviceCount = devices.length;
+		const fingerprintPresentDevices = (user.records || []).filter((record: any) => {
+			const summary = extractHikvisionCredentialSummary(record?.rawPayload || {});
+			return Number(summary.fingerprintCount || 0) > 0;
+		}).length;
+		const facePresentDevices = (user.records || []).filter((record: any) => {
+			const summary = extractHikvisionCredentialSummary(record?.rawPayload || {});
+			return Number(summary.faceCount || 0) > 0;
+		}).length;
 		const targetDeviceIds = (user.targetDeviceIds || []).filter(
 			(targetDeviceId: string) => targetDeviceId && targetDeviceId !== sourceDeviceId,
 		);
@@ -508,12 +522,22 @@ const buildDeviceUserMergeWriteMatrix = (plan: any) => {
 			targetDeviceIds,
 			targetDeviceNames: targetDeviceIds.map(deviceLabel),
 			writes: targetDeviceIds.length,
+			fingerprintSourceCount: Number(sourceCredentials.fingerprintCount || 0),
+			fingerprintPresentDevices,
+			fingerprintExpectedDevices: expectedDeviceCount,
+			fingerprintGapDevices: Math.max(0, expectedDeviceCount - fingerprintPresentDevices),
+			faceSourceCount: Number(sourceCredentials.faceCount || 0),
+			facePresentDevices,
+			faceExpectedDevices: expectedDeviceCount,
+			faceGapDevices: Math.max(0, expectedDeviceCount - facePresentDevices),
 			conflicts: (user.conflicts || []).length,
 		};
 	});
 	return {
 		selectedUniqueIds: rows.length,
 		totalWrites: rows.reduce((sum: number, row: any) => sum + row.writes, 0),
+		fingerprintGaps: rows.reduce((sum: number, row: any) => sum + row.fingerprintGapDevices, 0),
+		faceGaps: rows.reduce((sum: number, row: any) => sum + row.faceGapDevices, 0),
 		conflicts: rows.reduce((sum: number, row: any) => sum + row.conflicts, 0),
 		perTarget: Array.from(perTarget.values()),
 		perSource: Array.from(perSource.values()),
