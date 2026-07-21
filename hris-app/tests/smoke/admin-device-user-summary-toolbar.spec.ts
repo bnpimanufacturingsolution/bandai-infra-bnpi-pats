@@ -168,7 +168,7 @@ async function installMockApi(page: Page, options?: { job?: typeof liveSyncJobPr
 						needsSyncEvents: 0,
 						hrisSavedCount: 150 + index * 10,
 						vendorEventCount: 0,
-						vendorUserCount: null,
+						vendorUserCount: 200 + index * 10,
 						hrisUserCount: 150 + index * 10,
 						openUserCount: 10 + index,
 						knownSkippedEventCount: 0,
@@ -257,6 +257,9 @@ test("Device Users summary toolbar keeps title and Sync status aligned", async (
 	await expect(refreshSummary).toBeVisible();
 	await expect(searchBox).toBeVisible();
 	await expect(mergeUsers).toBeVisible();
+	await expect(dialog.getByText("200").first()).toBeVisible();
+	await expect(dialog.getByText("210").first()).toBeVisible();
+	await expect(dialog.getByText("Live source totals skipped for fast all-device overview")).toHaveCount(0);
 
 	const titleBox = await title.boundingBox();
 	const syncBox = await syncStatus.boundingBox();

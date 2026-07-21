@@ -118,4 +118,23 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("if (result.error) errors.push(result.error)");
 		expect(controller).to.include("unreachableDevices: errors.map");
 	});
+
+	it("uses a fast Hikvision UserInfo count for Device Users preview instead of stale all-device skip copy", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("const getHikvisionFastDeviceUserSourceCount = async");
+		expect(controller).to.include("hris-fast-user-count");
+		expect(controller).to.include("Device logs not requested for device-user summary");
+		expect(controller).to.include("Device user counts timed out; using saved HRIS evidence for preview");
+		expect(controller).not.to.include("Live source totals skipped for fast all-device overview");
+		expect(controller).not.to.include("Live source totals skipped for quick saved HRIS preview");
+	});
+
+	it("runs bulk device-user sync in bounded batches so one slow device does not block all devices", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("const DEVICE_USER_SYNC_CONCURRENCY");
+		expect(controller).to.include("processDeviceUserSyncTarget");
+		expect(controller).to.include("index += DEVICE_USER_SYNC_CONCURRENCY");
+		expect(controller).to.include("Promise.all(");
+		expect(controller).to.include(".slice(index, index + DEVICE_USER_SYNC_CONCURRENCY)");
+	});
 });

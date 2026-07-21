@@ -146,6 +146,12 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("No live device-user records matched this search");
 		expect(enroll).toContain("Merge needs at least two available devices.");
 		expect(enroll).toContain("typeof preview.vendorUserCount === \"number\"");
+		expect(enroll).toContain('const listenerReadyForTap =');
+		expect(enroll).toContain('listenerState === "login_failed"');
+		expect(enroll).toContain('deviceUserView === "source"');
+		expect(enroll).toContain('status === "source_unavailable"');
+		expect(enroll).toContain('options.unavailableLabel || "Unavailable"');
+		expect(enroll).toContain('return "Not checked";');
 		expect(enroll).toContain("Preview merge by unique ID");
 		expect(enroll).toContain("Preview recommended choices");
 		expect(enroll).toContain("selected unique ID");

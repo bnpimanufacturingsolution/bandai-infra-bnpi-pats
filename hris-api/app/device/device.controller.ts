@@ -183,9 +183,13 @@ const HIKVISION_PREVIEW_DEVICE_BUDGET_MS = Math.max(
 const HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS = Math.max(
 	1000,
 	Math.min(
-		Number(process.env.HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS || 1500),
+		Number(process.env.HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS || 3500),
 		4000,
 	),
+);
+const HIKVISION_FAST_USER_COUNT_TIMEOUT_MS = Math.max(
+	1500,
+	Math.min(Number(process.env.HIKVISION_FAST_USER_COUNT_TIMEOUT_MS || 2200), 6000),
 );
 const HIKVISION_PEER_COPY_RETRY_LIMIT = Math.max(
 	1,
@@ -198,6 +202,10 @@ const HIKVISION_PEER_COPY_COMPLETION_WAIT_MS = Math.max(
 const DEVICE_USER_IMPORT_ROW_TIMEOUT_MS = Math.max(
 	30000,
 	Math.min(Number(process.env.DEVICE_USER_IMPORT_ROW_TIMEOUT_MS || 90000), 180000),
+);
+const DEVICE_USER_SYNC_CONCURRENCY = Math.max(
+	1,
+	Math.min(Number(process.env.DEVICE_USER_SYNC_CONCURRENCY || 2), 4),
 );
 const DEVICE_USER_EXPORT_SCHEMA_VERSION = "project-truth.hikvision-device-users.v1";
 const DEVICE_USER_IMPORT_CONFIRMATION = "IMPORT DEVICE USERS";
@@ -2740,6 +2748,7 @@ export const controller = (prisma: PrismaClient) => {
 		endpoint: string,
 		body: Record<string, unknown>,
 		keys: string[],
+		options: { timeoutMs?: number } = {},
 	) => {
 		try {
 			const data = await hikvisionFetch(endpoint, {
@@ -2747,7 +2756,7 @@ export const controller = (prisma: PrismaClient) => {
 				deviceId,
 				prisma,
 				request: req,
-				timeoutMs: HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS,
+				timeoutMs: options.timeoutMs ?? HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS,
 				headers: { "Content-Type": "application/json" },
 				body,
 			});
@@ -3176,6 +3185,131 @@ export const controller = (prisma: PrismaClient) => {
 				operationLogProbe: { ok: false, count: null, error: message },
 			};
 		}
+	};
+
+	const getHikvisionFastDeviceUserSourceCount = async (req: Request, deviceId: string) => {
+		const startedAt = Date.now();
+		const readUserCount = (maxResults: number) =>
+			getHikvisionCountFromSearch(
+				req,
+				deviceId,
+				hikvisionEndpoint.accessControl.userInfo.search,
+				{
+					UserInfoSearchCond: {
+						searchID: `hris-fast-user-count-${Date.now()}-${maxResults}`,
+						searchResultPosition: 0,
+						maxResults,
+					},
+				},
+				["totalMatches", "numOfMatches", "totalNum", "totalNumber", "total"],
+				{ timeoutMs: HIKVISION_FAST_USER_COUNT_TIMEOUT_MS },
+			);
+		const readUserCountEndpoint = async () => {
+			try {
+				const data = await hikvisionFetch(hikvisionEndpoint.accessControl.userInfo.count, {
+					method: "GET",
+					deviceId,
+					prisma,
+					request: req,
+					timeoutMs: HIKVISION_FAST_USER_COUNT_TIMEOUT_MS,
+				});
+				return {
+					ok: true,
+					count: firstNumericValueForKeys(data, [
+						"userCount",
+						"totalUserCount",
+						"userTotal",
+						"totalNum",
+						"totalNumber",
+						"total",
+					]),
+					raw: data,
+					error: null,
+				};
+			} catch (error: any) {
+				return {
+					ok: false,
+					count: null,
+					raw: null,
+					error:
+						error?.data?.errorCode ||
+						error?.data?.errorCause ||
+						error?.message ||
+						"Hikvision UserInfo count endpoint did not respond",
+				};
+			}
+		};
+		const firstUserSearch = await readUserCount(1);
+		const firstCount =
+			firstUserSearch.count !== null &&
+			firstUserSearch.count !== undefined &&
+			Number.isFinite(Number(firstUserSearch.count))
+					? Number(firstUserSearch.count)
+					: null;
+		const firstError = firstUserSearch.error ? String(firstUserSearch.error) : "";
+		const shouldRetryForMissingTotal =
+			firstCount === null &&
+			!isHikvisionTransportFailure(firstError);
+		const searchResult =
+			firstCount !== null || !shouldRetryForMissingTotal
+				? firstUserSearch
+				: await readUserCount(5);
+		const searchCount =
+			searchResult.count !== null &&
+			searchResult.count !== undefined &&
+			Number.isFinite(Number(searchResult.count))
+				? Number(searchResult.count)
+				: null;
+		const userSearch =
+			searchCount !== null || isHikvisionTransportFailure(searchResult.error)
+				? searchResult
+				: await readUserCountEndpoint();
+		const userCount =
+			userSearch.count !== null &&
+			userSearch.count !== undefined &&
+			Number.isFinite(Number(userSearch.count))
+				? Number(userSearch.count)
+				: null;
+		const error =
+			userCount === null
+				? userSearch.error || "Device returned no user total in UserInfo/Search response"
+				: null;
+
+		return {
+			ok: userCount !== null,
+			totalEvents: null,
+			operationLogTotal: null,
+			operationDeviceByAction: null,
+			operationDeviceLabelsByAction: null,
+			operationSampleSize: 0,
+			userCount,
+			fingerprintUserCount: null,
+			faceUserCount: null,
+			cardUserCount: null,
+			inventoryEvidenceSource: null,
+			latencyMs: Date.now() - startedAt,
+			userProbe: {
+				ok: userCount !== null,
+				count: userCount,
+				error,
+			},
+			eventProbe: {
+				ok: false,
+				count: null,
+				error: "Device logs not requested for device-user summary",
+			},
+			operationLogProbe: {
+				ok: false,
+				count: null,
+				error: "Operation logs not requested for device-user summary",
+			},
+			raw: {
+				userSearch: userSearch.raw,
+				eventSearch: null,
+				logSearch: null,
+			},
+			error,
+		};
 	};
 
 	const getBridgeDeviceStatus = (bridgeStatus: any, address: string) => {
@@ -11445,7 +11579,7 @@ export const controller = (prisma: PrismaClient) => {
 		let successfulDevices = 0;
 		let failedDevices = 0;
 
-		for (const device of params.devices) {
+		const processDeviceUserSyncTarget = async (device: any) => {
 			const currentJob = deviceUserSyncJobs.get(params.jobId);
 			if (!currentJob) return;
 			if (currentJob.cancelRequested) {
@@ -11537,6 +11671,28 @@ export const controller = (prisma: PrismaClient) => {
 					results,
 				});
 			}
+		};
+
+		for (let index = 0; index < params.devices.length; index += DEVICE_USER_SYNC_CONCURRENCY) {
+			const currentJob = deviceUserSyncJobs.get(params.jobId);
+			if (!currentJob) return;
+			if (currentJob.cancelRequested) {
+				updateDeviceUserSyncJob(params.jobId, {
+					status: "cancelled",
+					message: getBulkSyncModeCancelledMessage(params.syncMode),
+					processedDevices: results.length,
+					successfulDevices,
+					failedDevices,
+					results,
+					completedAt: new Date(),
+				});
+				return;
+			}
+			await Promise.all(
+				params.devices
+					.slice(index, index + DEVICE_USER_SYNC_CONCURRENCY)
+					.map((device) => processDeviceUserSyncTarget(device)),
+			);
 		}
 
 		if (params.syncMode === "peer_converge" && successfulDevices > 1) {
@@ -14108,51 +14264,47 @@ export const controller = (prisma: PrismaClient) => {
 			// device must not block the modal for ready devices.
 			const zktecoPreviewPromise =
 				zktecoDevices.length > 0 ? getZktecoBridgeStatus() : Promise.resolve(null);
-			const hikvisionTotals = new Map<
-				string,
-				Awaited<ReturnType<typeof getHikvisionSourceTotal>>
-			>();
+			const hikvisionTotals = new Map<string, any>();
 			const hikvisionPreviewTimeout = (message: string) => ({
 				ok: false,
 				totalEvents: null,
 				operationLogTotal: null,
 				userCount: null,
-				latencyMs: HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS,
+				latencyMs: HIKVISION_FAST_USER_COUNT_TIMEOUT_MS,
 				error: message,
 				eventProbe: { ok: false, count: null, error: message },
 				operationLogProbe: { ok: false, count: null, error: message },
 			});
 			const shouldProbeLiveSourceTotals =
 				Boolean(selectedDeviceId) && selectedDeviceId !== "all" && !quickSavedPreview;
-			const hikvisionDevices = shouldProbeLiveSourceTotals
-				? syncDevices.filter((device) => device.vendor === "Hikvision")
-				: [];
-			if (!shouldProbeLiveSourceTotals) {
-				for (const device of syncDevices.filter((item) => item.vendor === "Hikvision")) {
-					hikvisionTotals.set(
-						device.id,
-						hikvisionPreviewTimeout(
-							quickSavedPreview
-								? "Live source totals skipped for quick saved HRIS preview"
-								: "Live source totals skipped for fast all-device overview",
-						),
+			const hikvisionDevices = syncDevices.filter((device) => device.vendor === "Hikvision");
+			const hikvisionPreviewBudgetMs = shouldProbeLiveSourceTotals
+				? HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS
+				: Math.max(
+						HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS,
+						HIKVISION_FAST_USER_COUNT_TIMEOUT_MS * 2 + 500,
 					);
-				}
-			}
 			const hikvisionTotalsPromise = withDeviceUserImportTimeout(
 				Promise.allSettled(
 					hikvisionDevices.map(async (device) => {
-						const total = await getHikvisionSourceTotal(req, device.id, {
-							mode: "sync-preview",
-						});
+						const total = shouldProbeLiveSourceTotals
+							? await getHikvisionSourceTotal(req, device.id, {
+									mode: "sync-preview",
+								})
+							: await getHikvisionFastDeviceUserSourceCount(req, device.id);
 						hikvisionTotals.set(device.id, total);
 					}),
 				),
-				HIKVISION_SYNC_PREVIEW_SOURCE_BUDGET_MS,
-				"Source totals timed out; using saved HRIS evidence for preview",
+				hikvisionPreviewBudgetMs,
+				shouldProbeLiveSourceTotals
+					? "Source totals timed out; using saved HRIS evidence for preview"
+					: "Device user counts timed out; using saved HRIS evidence for preview",
 			).catch((error: any) => {
 				const message =
-					error?.message || "Source totals timed out; using saved HRIS evidence for preview";
+					error?.message ||
+					(shouldProbeLiveSourceTotals
+						? "Source totals timed out; using saved HRIS evidence for preview"
+						: "Device user counts timed out; using saved HRIS evidence for preview");
 				for (const device of hikvisionDevices) {
 					if (!hikvisionTotals.has(device.id)) {
 						hikvisionTotals.set(device.id, hikvisionPreviewTimeout(message));
@@ -14446,6 +14598,8 @@ export const controller = (prisma: PrismaClient) => {
 						: null,
 					status: sourceErrorMessage
 						? "source_unavailable"
+						: !shouldProbeLiveSourceTotals && vendorUserCount !== null
+							? "user_count_ready"
 						: totalEvents === null && operationLogTotal === null
 							? "source_total_unavailable"
 							: needsSyncEvents && needsSyncEvents > 0

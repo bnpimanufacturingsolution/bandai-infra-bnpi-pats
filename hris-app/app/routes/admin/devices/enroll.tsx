@@ -699,14 +699,20 @@ export function DeviceEnrollmentPanel({
 		if (!keepLiveReady) return;
 		if (typeof window === "undefined") return;
 		if (!liveReadiness) return;
-		// Healthy ONLY when really receiving (1+). Armed-only is not enough.
+		const listenerReadyForTap =
+			liveReadiness.listener?.running === true &&
+			liveReadiness.listener?.armed === true &&
+			liveReadiness.safeToTap === true &&
+			liveReadiness.overall !== "red";
 		const pathHealthy =
 			liveReadiness.database?.ok === true &&
-			liveReadiness.listener?.receiving === true &&
-			liveReadiness.overall === "green" &&
-			liveReadiness.safeToEnroll === true;
+			(liveReadiness.listener?.receiving === true || listenerReadyForTap) &&
+			liveReadiness.safeToTap === true &&
+			liveReadiness.overall !== "red";
 		if (pathHealthy) return;
-		const needsForceReArm = liveReadiness.listener?.receiving !== true;
+		const listenerState = String(liveReadiness.listener?.state || "").toLowerCase();
+		const needsForceReArm =
+			liveReadiness.listener?.running !== true || listenerState === "login_failed";
 		let cancelled = false;
 		const run = () => {
 			if (cancelled || isProvingLivePath || isQuietKeepReadyRepair) return;
@@ -1025,7 +1031,10 @@ export function DeviceEnrollmentPanel({
 	const shouldFetchDeviceUsers =
 		(watchedDeviceId && action === "enroll" && !hasScopedDeviceUserVendorIds) ||
 		(action === "import" && !hasScopedDeviceUserVendorIds) ||
-		(activePanel === "users" && Boolean(selectedDeviceId) && !hasScopedDeviceUserVendorIds) ||
+		(activePanel === "users" &&
+			deviceUserView === "source" &&
+			Boolean(selectedDeviceId) &&
+			!hasScopedDeviceUserVendorIds) ||
 		(deviceUserExportState.open && Boolean(selectedDeviceId));
 	const {
 		data: deviceUsersData = [],
@@ -3093,6 +3102,19 @@ export function DeviceEnrollmentPanel({
 		) || syncPreview?.devices?.[0];
 	const metricValue = (value: unknown) =>
 		typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : "-";
+	const countMetricValue = (
+		value: unknown,
+		preview?: DeviceSyncPreviewRow,
+		options: { pending?: boolean; unavailableLabel?: string } = {},
+	) => {
+		if (options.pending) return "Checking...";
+		if (typeof value === "number" && Number.isFinite(value)) return value.toLocaleString();
+		if (!preview) return "Not checked";
+		if (preview.error || preview.status === "source_unavailable") {
+			return options.unavailableLabel || "Unavailable";
+		}
+		return "Not checked";
+	};
 	const getDeviceVendor = (device: any) => {
 		const rawVendor =
 			device?.config?.vendor ||
@@ -3121,6 +3143,8 @@ export function DeviceEnrollmentPanel({
 			? isSyncPreviewPending
 				? "checking"
 				: "not_checked"
+			: preview.status === "user_count_ready"
+				? "user_count_ready"
 			: hasError || hasFailed
 				? "needs_attention"
 				: hasMissing
@@ -3811,11 +3835,13 @@ export function DeviceEnrollmentPanel({
 		if (status === "checking") return "Checking";
 		if (status === "needs_sync") return "Needs sync";
 		if (status === "needs_attention") return "Needs attention";
+		if (status === "user_count_ready") return "User counts ready";
 		if (status === "source_total_unavailable") return "Source unavailable";
 		return "Not checked";
 	};
 	const getSyncStatusBadge = (status: string) => {
 		if (status === "synced") return "success";
+		if (status === "user_count_ready") return "success";
 		if (status === "checking") return "secondary";
 		if (status === "needs_attention") return "destructive";
 		if (status === "needs_sync" || status === "source_total_unavailable") return "warning";
@@ -4930,16 +4956,18 @@ export function DeviceEnrollmentPanel({
 												latestUserSync?.startedAt ||
 												latestLogSync?.startedAt
 											: preview?.lastSourceEventAt;
-									const sourceUserValue = isPreviewPending
-										? "Checking..."
-										: metricValue(sourceUserTotal);
-									const gapValue = isPreviewPending ? "Checking..." : metricValue(userGap);
-									const hrisUserValue = isPreviewPending
-										? "Checking..."
-										: metricValue(hrisUserTotal);
-									const openUserValue = isPreviewPending
-										? "Checking..."
-										: metricValue(openUserTotal);
+									const sourceUserValue = countMetricValue(sourceUserTotal, preview, {
+										pending: isPreviewPending,
+									});
+									const gapValue = countMetricValue(userGap, preview, {
+										pending: isPreviewPending,
+									});
+									const hrisUserValue = countMetricValue(hrisUserTotal, preview, {
+										pending: isPreviewPending,
+									});
+									const openUserValue = countMetricValue(openUserTotal, preview, {
+										pending: isPreviewPending,
+									});
 									return (
 										<div
 											key={device.id}
@@ -5263,7 +5291,7 @@ export function DeviceEnrollmentPanel({
 													From device
 												</span>
 												<span className="font-semibold text-slate-950">
-													{metricValue(sourceCount)}
+													{countMetricValue(sourceCount, preview)}
 												</span>
 											</div>
 											<div className="flex items-center justify-between gap-2 lg:block">
@@ -5271,7 +5299,7 @@ export function DeviceEnrollmentPanel({
 													Saved in HRIS
 												</span>
 												<span className="font-semibold text-slate-950">
-													{metricValue(hrisCount)}
+													{countMetricValue(hrisCount, preview)}
 												</span>
 											</div>
 											<div className="flex items-center justify-between gap-2 lg:block">
@@ -5279,7 +5307,7 @@ export function DeviceEnrollmentPanel({
 													Gap
 												</span>
 												<span className="font-semibold text-slate-950">
-													{metricValue(gapCount)}
+													{countMetricValue(gapCount, preview)}
 												</span>
 											</div>
 											<div className="flex items-center justify-between gap-2 lg:block">
@@ -5287,7 +5315,7 @@ export function DeviceEnrollmentPanel({
 													Needs link
 												</span>
 												<span className="font-semibold text-slate-950">
-													{metricValue(openCount)}
+													{countMetricValue(openCount, preview)}
 												</span>
 											</div>
 											<div className="flex justify-end">
@@ -6676,19 +6704,19 @@ export function DeviceEnrollmentPanel({
 										) : null}
 									</div>
 									<div className="font-semibold text-slate-950">
-										{metricValue(sourceCount)}
+										{countMetricValue(sourceCount, preview)}
 									</div>
 									<div className="font-semibold text-slate-950">
-										{metricValue(hrisCount)}
+										{countMetricValue(hrisCount, preview)}
 									</div>
 									<div className="font-semibold text-slate-950">
-										{metricValue(gapCount)}
+										{countMetricValue(gapCount, preview)}
 									</div>
 									<div className="font-semibold text-slate-950">
 										{metricValue(peerDriftCount)}
 									</div>
 									<div className="font-semibold text-slate-950">
-										{metricValue(openCount)}
+										{countMetricValue(openCount, preview)}
 									</div>
 								</div>
 							);
