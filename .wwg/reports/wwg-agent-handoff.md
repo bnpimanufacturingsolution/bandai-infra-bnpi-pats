@@ -1,5 +1,27 @@
 # WWG Agent Handoff
 
+## 2026-07-22 - Merge users unique-row frontend drift repair
+
+- Status: `COMPLETE_LOCAL_API_AND_STATIC_UI_PROOF`.
+- Task mode: Focused admin UX truth repair.
+- User symptom repaired:
+  - In Merge device users, clicking `Needs decision` showed repeated selectable rows for the same vendor user ID because the frontend rendered raw issue rows. This contradicted the Project Truth requirement that selectable merge rows are one unique device/vendor person ID.
+- Implementation:
+  - `hris-app/app/routes/admin/devices/enroll.tsx` now renders `mergeList=issues` from `sdkMergeReviewRows`, which are unique-ID rows, while resolving filter/device scope through the underlying issue rows.
+  - Filter chips and per-device impact counts use unique user-key counts (`sdkMergeUniqueIssueCount`, `sdkMergeUniqueIssueDeviceCount`) instead of `sdkMergeRows.length`.
+  - The raw conflict/credential issue rows remain available through the per-row `Review sources` drilldown.
+  - The stale/dead `sdkMergePreviewOnly` gate was replaced by a `Review selected merge` confirmation modal. The first modal is planning/review; the second modal is the final real-write confirmation.
+- API proof:
+  - Evidence root: `.runtime/merge-users-review-confirm-20260722-032110/`.
+  - Non-mutating admin merge plan returned 4 selected Hikvision devices, 687 unique IDs, 2,748 device ID records, 0 duplicate unique keys, 0 blocking read errors, and 2,061 potential device writes.
+- Validation:
+  - `npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts`: passed.
+  - `npx tsx node_modules/mocha/bin/mocha --no-config tests/device-user-merge.helper.spec.ts`: 12 passing.
+  - `npx eslint app/routes/admin/devices/enroll.tsx --max-warnings=999`: 0 errors, existing warnings only.
+  - `git diff --check -- hris-app/app/routes/admin/devices/enroll.tsx hris-app/app/routes/admin/devices/device-user-ui-contract.test.ts`: no whitespace errors; CRLF warnings only.
+  - App-wide frontend typecheck still fails on unrelated existing drift across guide/calendar/examples/leave/TimesheetsTab and other non-device files.
+- Recommendation capture: No new recommendations were identified.
+
 ## 2026-07-21 - Sync Center Needs link click rows
 
 - Status: `COMPLETE_LOCAL_API_AND_BROWSER_PROOF`.

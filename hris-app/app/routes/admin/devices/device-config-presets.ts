@@ -1,4 +1,4 @@
-type DeviceConfigRecord = Record<string, unknown>;
+export type DeviceConfigRecord = Record<string, unknown>;
 
 type DeviceRuntimeContext = {
 	name?: string | null;

@@ -73,6 +73,7 @@ import {
 	getDefaultDeviceConfig,
 	getDeviceConfigRecord,
 	normalizeDeviceConfigForSubmit,
+	type DeviceConfigRecord,
 } from "./device-config-presets";
 
 const DeviceFormSchema = CreateDeviceSchema;
@@ -735,7 +736,7 @@ export default function DevicesManagePage() {
 	};
 
 	const setHikvisionRuntimeMode = (mode: "auto" | "direct") => {
-		const next = {
+		const next: DeviceConfigRecord = {
 			...getDeviceConfigRecord(watchedConfig),
 			vendor: "Hikvision",
 		};

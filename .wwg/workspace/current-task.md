@@ -1,5 +1,23 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-22 Merge users unique-row frontend drift repair
+
+- Task mode: Focused admin UX truth repair.
+- Implemented:
+  - The Merge device users modal now keeps `mergeList=issues` and issue-filter views (`Needs decision`, fingerprint gaps, face gaps, missing) to one selectable row per unique device/vendor ID instead of repeating the same ID once per issue/conflict row.
+  - Issue filter chips and per-device impact counts now count unique IDs, not raw issue rows.
+  - Raw issue/conflict details remain available through the per-row Review sources drilldown.
+  - The dead `Preview only` execution gate was replaced with a separate `Review selected merge` confirmation modal before starting the real merge job.
+- Runtime/API proof:
+  - Evidence root: `.runtime/merge-users-review-confirm-20260722-032110/`.
+  - Non-mutating merge-plan endpoint returned four selected Hikvision devices, 687 unique IDs, 2,748 device ID records, zero duplicate unique keys, zero blocking errors, and 2,061 potential device writes.
+- Validation:
+  - Frontend focused Device Users UI contract passed.
+  - Backend merge helper tests passed (12 passing).
+  - `npx eslint app/routes/admin/devices/enroll.tsx --max-warnings=999` parsed the file with zero errors; existing warnings remain.
+  - App-wide frontend typecheck remains blocked by unrelated existing drift outside this device surface.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-21 Sync Center Needs link click rows
 
 - Task mode: Focused admin UX regression repair.
