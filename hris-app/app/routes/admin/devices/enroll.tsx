@@ -3720,8 +3720,8 @@ export function DeviceEnrollmentPanel({
 				: "Source read only if needed");
 	const deviceUserSyncCurrentCredentialLabel = deviceUserSyncJobIsTerminal
 		? deviceUserSyncHasRawGaps
-			? `${metricValue(deviceUserSyncBiometricFailed)} missing_raw_blob`
-			: "No remaining raw gaps"
+			? `${metricValue(deviceUserSyncBiometricFailed)} raw reads failed`
+			: "No device raw failures"
 		: deviceUserSyncSkipsSourceUserReread
 			? "Missing links/raw blobs only"
 		: deviceUserSyncIsPlanningBiometrics
@@ -3777,7 +3777,7 @@ export function DeviceEnrollmentPanel({
 				? "Sync needs attention"
 				: effectiveDeviceUserSyncJobStatus === "completed"
 					? deviceUserSyncHasRawGaps
-						? "Raw custody needs repair"
+						? "Raw custody needs device data"
 						: "Sync finished"
 					: deviceUserSyncJobIsProcessing
 						? deviceUserSyncJobCancelRequested
@@ -3799,7 +3799,7 @@ export function DeviceEnrollmentPanel({
 						: "Device-user sync status";
 	const bulkDeviceUserSyncSummaryItems = [
 		["Captured", effectiveDeviceUserSyncJobProgress?.biometricCaptured ?? 0],
-		["Missing raw", effectiveDeviceUserSyncJobProgress?.biometricFailed ?? 0],
+		["Device no-data", effectiveDeviceUserSyncJobProgress?.biometricFailed ?? 0],
 		["Already present", effectiveDeviceUserSyncJobProgress?.biometricCached ?? 0],
 		["Remaining", deviceUserSyncBiometricRemaining],
 	] as const;
@@ -3827,8 +3827,8 @@ export function DeviceEnrollmentPanel({
 					? "Building missing-record matrix from saved DeviceUser truth; source identity reread is skipped unless deep repair is selected."
 					: "Reading source users only because the decision matrix found identity gaps or a full refresh was requested."
 			: deviceUserSyncHasRawGaps
-				? `${metricValue(effectiveDeviceUserSyncJobProgress.biometricCaptured)} raw payloads captured; ${metricValue(deviceUserSyncBiometricFailed)} missing_raw_blob items still need repair.`
-				: `${metricValue(effectiveDeviceUserSyncJobProgress.biometricCaptured)} raw biometric payloads captured; no raw gaps reported by this job.`
+				? `${metricValue(effectiveDeviceUserSyncJobProgress.biometricCaptured)} raw payloads captured; ${metricValue(deviceUserSyncBiometricFailed)} raw reads failed or returned no-data from the device.`
+				: `${metricValue(effectiveDeviceUserSyncJobProgress.biometricCaptured)} raw biometric payloads captured; no device raw failures reported by this job.`
 		: "";
 	const bulkDeviceUserSyncToneClass =
 		bulkDeviceUserSyncState.status === "error"
@@ -6580,7 +6580,7 @@ export function DeviceEnrollmentPanel({
 									<div className="mt-3 rounded-md border border-orange-100 bg-white/70 px-3 py-2">
 										<div className="flex items-center justify-between gap-3">
 											<p className="text-xs font-semibold uppercase tracking-wide text-orange-700">
-												Recent missing raw
+												Recent device no-data
 											</p>
 											<p className="text-xs text-orange-800">
 												Latest {metricValue(deviceUserSyncFailureLog.length)}

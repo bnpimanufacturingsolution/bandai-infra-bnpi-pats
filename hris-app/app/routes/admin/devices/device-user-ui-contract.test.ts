@@ -127,9 +127,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("deviceIds: [selectedDeviceId]");
 		expect(enroll).toContain("You can close this window and reopen status");
 		expect(enroll).toContain('["Captured", effectiveDeviceUserSyncJobProgress?.biometricCaptured');
-		expect(enroll).toContain('["Missing raw", effectiveDeviceUserSyncJobProgress?.biometricFailed');
+		expect(enroll).toContain('["Device no-data", effectiveDeviceUserSyncJobProgress?.biometricFailed');
 		expect(enroll).toContain("deviceUserSyncFailureLog");
-		expect(enroll).toContain("Recent missing raw");
+		expect(enroll).toContain("Recent device no-data");
 		expect(enroll).toContain("Building raw-custody plan");
 		expect(enroll).toContain("Retry raw blobs only");
 		expect(enroll).toContain("What Sync can fix");
