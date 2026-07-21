@@ -16,6 +16,17 @@ import { isOpaqueHikvisionPersonToken } from "./hikvision-event-contract.helper"
 export const RAW_FINGERPRINT_SCHEMA = "project-truth.hikvision-fingerprint-raw.v1";
 export const RAW_FACE_SCHEMA = "project-truth.hikvision-face-raw.v1";
 
+export type RawFaceBinaryClassification =
+	| { ok: true; reason: null }
+	| {
+			ok: false;
+			reason:
+				| "face_image_not_found_on_device"
+				| "face_image_unauthorized"
+				| "face_binary_empty"
+				| "face_binary_not_image";
+	  };
+
 export type RawFingerprintTemplate = {
 	fingerPrintId: number;
 	fingerType: number | string | null;
@@ -52,6 +63,8 @@ export const markDeviceUserRawBiometricFailure = async (params: {
 	employeeNo: string;
 	modality: "fingerprint" | "face";
 	reason: string;
+	diagnosticPath?: string | null;
+	diagnosticStatus?: number | null;
 	expectedCount?: number;
 	attempts?: number;
 }) => {
@@ -78,11 +91,18 @@ export const markDeviceUserRawBiometricFailure = async (params: {
 	const failure = {
 		reason,
 		status:
-			reason === "no_fingerprint_data_from_device" || reason === "no_face_on_device"
+			reason === "no_fingerprint_data_from_device" ||
+			reason === "no_face_on_device" ||
+			reason === "face_image_not_found_on_device" ||
+			reason === "face_image_unauthorized"
 				? "stale_count_only"
 				: "capture_failed",
 		expectedCount: Math.max(Number(params.expectedCount || 0) || 0, 0),
 		attempts: Math.max(Number(params.attempts || 0) || 0, 0),
+		...(params.diagnosticPath ? { diagnosticPath: params.diagnosticPath } : {}),
+		...(Number(params.diagnosticStatus || 0)
+			? { diagnosticStatus: Number(params.diagnosticStatus || 0) }
+			: {}),
 		checkedAt: new Date().toISOString(),
 		source: "live_device_raw_capture",
 	};
@@ -109,6 +129,48 @@ export const markDeviceUserRawBiometricFailure = async (params: {
 		},
 		select: { id: true, vendorUserId: true, vendorMetadata: true, rawPayload: true },
 	});
+};
+
+const bufferPreviewText = (buffer?: Buffer | Uint8Array | string | null) => {
+	if (!buffer) return "";
+	if (typeof buffer === "string") return buffer.slice(0, 1024);
+	return Buffer.from(buffer).toString("utf8", 0, Math.min(buffer.length, 1024));
+};
+
+export const classifyHikvisionRawFaceBinaryResponse = (params: {
+	buffer?: Buffer | Uint8Array | string | null;
+	contentType?: string | null;
+	status?: number | null;
+}): RawFaceBinaryClassification => {
+	const contentType = String(params.contentType || "").toLowerCase();
+	const status = Number(params.status || 0) || 0;
+	const preview = bufferPreviewText(params.buffer).trim().toLowerCase();
+
+	if (status === 401 || preview.includes("<statusvalue>401</statusvalue>") || preview.includes("unauthorized")) {
+		return { ok: false, reason: "face_image_unauthorized" };
+	}
+	if (
+		status === 404 ||
+		preview.includes("404 -- not found") ||
+		preview.includes("can't locate document") ||
+		preview.includes("cant locate document")
+	) {
+		return { ok: false, reason: "face_image_not_found_on_device" };
+	}
+	if (!params.buffer || (typeof params.buffer !== "string" && params.buffer.length < 32)) {
+		return { ok: false, reason: "face_binary_empty" };
+	}
+	if (
+		contentType.includes("text/html") ||
+		contentType.includes("text/xml") ||
+		contentType.includes("application/xml") ||
+		preview.startsWith("<!doctype html") ||
+		preview.startsWith("<html") ||
+		preview.startsWith("<?xml")
+	) {
+		return { ok: false, reason: "face_binary_not_image" };
+	}
+	return { ok: true, reason: null };
 };
 
 export const extractFingerDataFromIsapiNode = (node: any): string => {
@@ -1053,43 +1115,57 @@ export const captureRawFaceForEnrollment = async (params: {
 									(binary as any) ||
 									[],
 		);
-		if (!raw.length || raw.length < 32) {
+		contentType = String(
+			(binary as any)?.contentType ||
+				(binary as any)?.headers?.["content-type"] ||
+				"image/jpeg",
+		);
+		const classification = classifyHikvisionRawFaceBinaryResponse({
+			buffer: raw,
+			contentType,
+			status: (binary as any)?.status,
+		});
+		if (!classification.ok) {
 			await markDeviceUserRawBiometricFailure({
 				prisma: params.prisma,
 				organizationId,
 				deviceId,
 				employeeNo,
 				modality: "face",
-				reason: "face_binary_empty",
+				reason: classification.reason,
+				diagnosticPath: picPath,
+				diagnosticStatus: (binary as any)?.status,
 				attempts: 1,
 			}).catch(() => undefined);
 			return {
 				ok: false,
 				present: false,
-				reason: "face_binary_empty",
+				reason: classification.reason,
 				deviceUserId: params.deviceUserId || null,
 			};
 		}
 		buf = raw;
-		contentType = String(
-			(binary as any)?.contentType ||
-				(binary as any)?.headers?.["content-type"] ||
-				"image/jpeg",
-		);
 	} catch (error: any) {
+		const classification = classifyHikvisionRawFaceBinaryResponse({
+			buffer: String(error?.message || error || ""),
+			status: error?.status,
+		});
+		const reason = classification.ok ? "face_binary_fetch_failed" : classification.reason;
 		await markDeviceUserRawBiometricFailure({
 			prisma: params.prisma,
 			organizationId,
 			deviceId,
 			employeeNo,
 			modality: "face",
-			reason: String(error?.message || error || "face_binary_fetch_failed"),
+			reason,
+			diagnosticPath: picPath,
+			diagnosticStatus: error?.status,
 			attempts: 1,
 		}).catch(() => undefined);
 		return {
 			ok: false,
 			present: false,
-			reason: String(error?.message || error || "face_binary_fetch_failed"),
+			reason,
 			deviceUserId: params.deviceUserId || null,
 		};
 	}

@@ -445,6 +445,23 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("Raw biometric custody repair completed; some credentials still need missing_raw_blob review.");
 	});
 
+	it("sanitizes Hikvision faceURL non-image failures before recording raw custody status", () => {
+		const helper = readFileSync(
+			join(process.cwd(), "helper/device-user-raw-fingerprint.helper.ts"),
+			"utf8",
+		);
+
+		expect(helper).to.include("classifyHikvisionRawFaceBinaryResponse");
+		expect(helper).to.include('"face_image_not_found_on_device"');
+		expect(helper).to.include('"face_image_unauthorized"');
+		expect(helper).to.include('"face_binary_not_image"');
+		expect(helper).to.include("diagnosticPath: picPath");
+		expect(helper).to.include("buf.toString(\"base64\")");
+		expect(helper.indexOf("classifyHikvisionRawFaceBinaryResponse")).to.be.lessThan(
+			helper.indexOf('const b64 = buf.toString("base64")'),
+		);
+	});
+
 	it("returns error-shaped responses for manual raw capture no-data failures", () => {
 		const controller = controllerSource();
 

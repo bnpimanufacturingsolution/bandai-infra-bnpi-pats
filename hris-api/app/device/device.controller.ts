@@ -635,13 +635,51 @@ const updateDeviceUserSyncJob = (
 		...patch,
 		updatedAt: new Date(),
 		results: patch.results || job.results,
+		biometricFailureLog: sanitizeDeviceUserSyncFailureLog(
+			patch.biometricFailureLog || job.biometricFailureLog,
+		),
 	};
 	deviceUserSyncJobs.set(jobId, nextJob);
 	persistDeviceUserSyncJob(nextJob);
 };
 
+const sanitizeDeviceUserSyncRawFailureReason = (reason?: string | null) => {
+	const raw = String(reason || "missing_raw_blob").trim();
+	const lower = raw.toLowerCase();
+	if (
+		raw === "face_image_not_found_on_device" ||
+		lower.includes("404 -- not found") ||
+		lower.includes("can't locate document") ||
+		lower.includes("cant locate document")
+	) {
+		return "face_image_not_found_on_device";
+	}
+	if (
+		raw === "face_image_unauthorized" ||
+		lower.includes("<statusvalue>401</statusvalue>") ||
+		lower.includes("unauthorized")
+	) {
+		return "face_image_unauthorized";
+	}
+	if (raw === "face_binary_not_image") return raw;
+	if (raw === "face_binary_empty") return raw;
+	if (raw === "no_face_on_device") return raw;
+	if (raw === "no_fingerprint_data_from_device") return raw;
+	if (lower.startsWith("<!doctype html") || lower.startsWith("<html") || lower.startsWith("<?xml")) {
+		return "face_binary_not_image";
+	}
+	return raw.length > 160 ? `${raw.slice(0, 157)}...` : raw;
+};
+
+const sanitizeDeviceUserSyncFailureLog = (value: unknown) =>
+	(Array.isArray(value) ? value : []).map((entry: any) => ({
+		...entry,
+		reason: sanitizeDeviceUserSyncRawFailureReason(entry?.reason),
+	}));
+
 const serializeDeviceUserSyncJob = (job: DeviceUserSyncJob) => ({
 	...job,
+	biometricFailureLog: sanitizeDeviceUserSyncFailureLog(job.biometricFailureLog),
 	startedAt: job.startedAt instanceof Date ? job.startedAt.toISOString() : job.startedAt,
 	updatedAt: job.updatedAt instanceof Date ? job.updatedAt.toISOString() : job.updatedAt,
 	completedAt:
@@ -681,9 +719,7 @@ const readDeviceUserSyncJob = (jobId: string): DeviceUserSyncJob | null => {
 			biometricCaptured: Number(parsed.biometricCaptured || 0),
 			biometricCached: Number(parsed.biometricCached || 0),
 			biometricFailed: Number(parsed.biometricFailed || 0),
-			biometricFailureLog: Array.isArray(parsed.biometricFailureLog)
-				? parsed.biometricFailureLog
-				: [],
+			biometricFailureLog: sanitizeDeviceUserSyncFailureLog(parsed.biometricFailureLog),
 		};
 	} catch (error) {
 		deviceLogger.warn(`Failed to read device-user sync job snapshot: ${error}`);
@@ -12511,7 +12547,16 @@ export const controller = (prisma: PrismaClient) => {
 			);
 			return;
 		}
-		res.status(200).json(buildSuccessResponse("Device-user sync job retrieved", job, 200));
+		res.status(200).json(
+			buildSuccessResponse(
+				"Device-user sync job retrieved",
+				{
+					...job,
+					biometricFailureLog: sanitizeDeviceUserSyncFailureLog(job.biometricFailureLog),
+				},
+				200,
+			),
+		);
 	};
 
 	const cancelDeviceUserSyncJob = async (req: Request, res: Response, _next: NextFunction) => {

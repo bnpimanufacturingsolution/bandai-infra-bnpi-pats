@@ -3,6 +3,7 @@ import {
 	applyRawFingerprintCustodyToRow,
 	buildRawFingerprintCustody,
 	captureRawFingerprintsForEnrollment,
+	classifyHikvisionRawFaceBinaryResponse,
 	isRawFingerprintEnrollCaptureEnabled,
 	normalizeIsapiFingerprintList,
 	parseFingerPrintProgress,
@@ -233,6 +234,31 @@ describe("device-user-raw-fingerprint helper", () => {
 		expect(shouldCaptureRawFingerprintForEventAction("FINGERPRINT_UPDATED")).to.equal(true);
 		expect(shouldCaptureRawFingerprintForEventAction("USER_CREATED")).to.equal(true);
 		expect(shouldCaptureRawFingerprintForEventAction("TAP")).to.equal(false);
+	});
+
+	it("classifies Hikvision faceURL HTML/XML failures without treating them as images", () => {
+		const notFound = classifyHikvisionRawFaceBinaryResponse({
+			contentType: "text/html",
+			status: 404,
+			buffer: Buffer.from(`<!DOCTYPE html><html><body>Can't locate document: /LOCALS/pic/enrlFace/0/0000000200.jpg@WEB000000060622</body></html>`),
+		});
+		expect(notFound.ok).to.equal(false);
+		expect(notFound.reason).to.equal("face_image_not_found_on_device");
+
+		const unauthorized = classifyHikvisionRawFaceBinaryResponse({
+			contentType: "application/xml",
+			status: 401,
+			buffer: Buffer.from(`<?xml version="1.0"?><userCheck><statusValue>401</statusValue><statusString>Unauthorized</statusString></userCheck>`),
+		});
+		expect(unauthorized.ok).to.equal(false);
+		expect(unauthorized.reason).to.equal("face_image_unauthorized");
+
+		const validJpeg = classifyHikvisionRawFaceBinaryResponse({
+			contentType: "image/jpeg",
+			status: 200,
+			buffer: Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(128, 1)]),
+		});
+		expect(validJpeg.ok).to.equal(true);
 	});
 
 	it("persists raw templates from C++ callback fingerprints array without AES", async () => {

@@ -130,6 +130,13 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain('["Device no-data", effectiveDeviceUserSyncJobProgress?.biometricFailed');
 		expect(enroll).toContain("deviceUserSyncFailureLog");
 		expect(enroll).toContain("Recent device no-data");
+		expect(enroll).toContain("formatDeviceUserSyncRawFailureReason");
+		expect(enroll).toContain("Face image not found on device");
+		expect(enroll).toContain("Face image unavailable: unauthorized");
+		expect(enroll).toContain("Device returned non-image data");
+		expect(enroll).toContain("face_image_not_found_on_device");
+		expect(enroll).toContain("face_image_unauthorized");
+		expect(enroll).toContain("{formatDeviceUserSyncRawFailureReason(failure.reason)}");
 		expect(enroll).toContain("Building raw-custody plan");
 		expect(enroll).toContain("Retry raw blobs only");
 		expect(enroll).toContain("What Sync can fix");

@@ -430,6 +430,36 @@ const formatDeviceUserSyncElapsed = (startedAt?: string | null, completedAt?: st
 	if (minutes > 0) return `${minutes}m ${seconds}s`;
 	return `${seconds}s`;
 };
+
+const formatDeviceUserSyncRawFailureReason = (reason?: string | null) => {
+	const raw = String(reason || "missing_raw_blob").trim();
+	const lower = raw.toLowerCase();
+	if (
+		raw === "face_image_not_found_on_device" ||
+		lower.includes("404 -- not found") ||
+		lower.includes("can't locate document") ||
+		lower.includes("cant locate document")
+	) {
+		return "Face image not found on device";
+	}
+	if (
+		raw === "face_image_unauthorized" ||
+		lower.includes("<statusvalue>401</statusvalue>") ||
+		lower.includes("unauthorized")
+	) {
+		return "Face image unavailable: unauthorized";
+	}
+	if (raw === "face_binary_not_image") return "Face response was not an image";
+	if (raw === "face_binary_empty") return "Face image response was empty";
+	if (raw === "no_face_on_device") return "No face returned by device";
+	if (raw === "no_fingerprint_data_from_device") return "No fingerprint data returned by device";
+	if (raw === "missing_raw_blob") return "Missing raw blob";
+	if (lower.startsWith("<!doctype html") || lower.startsWith("<html") || lower.startsWith("<?xml")) {
+		return "Device returned non-image data";
+	}
+	return raw.length > 96 ? `${raw.slice(0, 93)}...` : raw;
+};
+
 export function DeviceEnrollmentPanel({
 	embedded = false,
 	mode = "sync-review",
@@ -6598,7 +6628,7 @@ export function DeviceEnrollmentPanel({
 														{failure.modality}
 													</span>
 													<span className="min-w-0 truncate">
-														{failure.reason || "missing_raw_blob"}
+														{formatDeviceUserSyncRawFailureReason(failure.reason)}
 													</span>
 												</div>
 											))}
