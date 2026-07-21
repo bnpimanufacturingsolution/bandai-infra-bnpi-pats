@@ -513,6 +513,7 @@ export function DeviceEnrollmentPanel({
 	const activePanel = ["overview", "users", "logs", "runs"].includes(activePanelParam)
 		? activePanelParam
 		: "overview";
+	const isSyncCenterReviewOpen = action === "sync-review" || action === "device-users";
 	const deviceUserStatus = searchParams.get("deviceUserStatus") || "all";
 	const deviceUserSearch = searchParams.get("deviceUserSearch") || "";
 	const deviceUserVendorRange = searchParams.get("deviceUserVendorRange") || "";
@@ -697,6 +698,7 @@ export function DeviceEnrollmentPanel({
 	const keepReadyLastProveAtRef = useRef(0);
 	useEffect(() => {
 		if (!keepLiveReady) return;
+		if (isSyncCenterReviewOpen) return;
 		if (typeof window === "undefined") return;
 		if (!liveReadiness) return;
 		const listenerReadyForTap =
@@ -731,6 +733,7 @@ export function DeviceEnrollmentPanel({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [
 		keepLiveReady,
+		isSyncCenterReviewOpen,
 		liveReadiness?.overall,
 		liveReadiness?.safeToTap,
 		liveReadiness?.safeToEnroll,
