@@ -1,5 +1,28 @@
 # WWG Agent Handoff
 
+## 2026-07-21 - Hikvision faceURL 404 raw-custody sanitization
+
+- Status: `COMPLETE_LOCAL_BROWSER_PROOF`.
+- Task mode: Bug fix with backend custody safety and admin UX repair.
+- User symptom repaired:
+  - Device-user sync status for Main Entrance Device C showed raw Hikvision `404 -- Not Found` HTML from `/LOCALS/pic/enrlFace/...` in Recent missing raw / missing raw summaries, making it look like HRIS broke or like "no face" had been proven.
+- Implementation:
+  - `hris-api/helper/device-user-raw-fingerprint.helper.ts` classifies Hikvision faceURL binary responses before base64 conversion. HTML 404 becomes `face_image_not_found_on_device`, XML/401 becomes `face_image_unauthorized`, empty/tiny responses remain `face_binary_empty`, and other non-image HTML/XML/text responses become `face_binary_not_image`.
+  - Non-image faceURL bodies are never stored as `rawFace`; the sync records short diagnostic reason/status/path evidence and continues other raw-custody tasks.
+  - `hris-api/app/device/device.controller.ts` sanitizes live and persisted device-user sync failure reasons, aggregate `biometricFailureReasons`, result summaries, and failure logs.
+  - `hris-app/app/routes/admin/devices/enroll.tsx` renders friendly reason labels and sanitizes legacy persisted aggregate messages before display.
+- Runtime proof:
+  - Evidence root: `.runtime/hikvision-face-404-sanitize-20260721-121324/`.
+  - Current Device C job `1e7d9de2-7be8-460d-a031-d9fb3b0735b1` was reopened in the Sync Center status modal.
+  - Final browser proof file: `browser-device-c-status-modal-after-summary-sanitize.json`.
+  - Proof result: modal contained `Face image not found on device`; did not contain `<!DOCTYPE html>`, `<html>`, `Access Error: 404`, or `can't locate document`; run state was completed with `262` captured raw payloads and `270` missing raw reads still shown as review/repair items.
+- Validation:
+  - `npx tsx node_modules/mocha/bin/mocha --no-config tests/device-user-raw-fingerprint.helper.spec.ts tests/hikvision-biometric-sync-contract.spec.ts`: `24` passing.
+  - `npx tsc --noEmit --pretty false` in `hris-api`: passed.
+  - `npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts` in `hris-app`: `1` passing.
+  - `git diff --check`: no whitespace errors; CRLF normalization warnings only.
+- Recommendation capture: No new recommendations were identified.
+
 ## 2026-07-21 - Device-user merge unique-ID truth repair
 
 - Status: `COMPLETE_LOCAL_API_PROOF_WITH_BROWSER_WARNING`.
