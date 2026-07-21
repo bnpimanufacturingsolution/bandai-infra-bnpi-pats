@@ -274,18 +274,36 @@ const result = spawnSync(
 	],
 	{
 		cwd: repoRoot,
-		stdio: "inherit",
+		stdio: "pipe",
 		windowsHide: true,
+		encoding: "utf8",
 		env: process.env,
 	},
 );
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);
+const output = `${result.stdout || ""}\n${result.stderr || ""}`.trim();
 if (result.status !== 0) {
 	console.warn(
 		`[hikvision-bridge] Bridge start failed (exit ${result.status || 1}) after ${sec}s. Live capture may stay Login failed (7). Continuing API boot.`,
 	);
+	if (output) {
+		const compact = output
+			.split(/\r?\n/)
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.filter((line) => !/^\s*(At |CategoryInfo|FullyQualifiedErrorId)/.test(line))
+			.slice(-6);
+		for (const line of compact) {
+			console.warn(`[hikvision-bridge] ${line.slice(0, 500)}`);
+		}
+	}
 	process.exit(0);
+}
+if (output) {
+	for (const line of output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(-8)) {
+		console.log(`[hikvision-bridge] ${line.slice(0, 500)}`);
+	}
 }
 console.log(`[hikvision-bridge] STEP start: ok in ${sec}s`);
 

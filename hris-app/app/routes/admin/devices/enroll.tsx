@@ -3476,6 +3476,47 @@ export function DeviceEnrollmentPanel({
 				deviceUser.status === "SOURCE_ONLY" || deviceUser.status === "UNMATCHED",
 		).length;
 	const usersToSaveCount = Math.max(Number(physicalSourceCount || 0) - physicalHrisUserCount, 0);
+	const usersAlreadyInHrisCount = Math.min(
+		Number(physicalSourceCount || 0),
+		Number(physicalHrisUserCount || 0),
+	);
+	const projectedEmployeeLinkReviewCount = openPhysicalUserCount;
+	const deviceUserSyncReviewMatrix = [
+		{
+			step: "1",
+			label: "Read source users",
+			count: physicalSourceCount,
+			detail: "Reread the physical device user inventory before any HRIS write.",
+		},
+		{
+			step: "2",
+			label: "Compare with HRIS",
+			count: physicalHrisUserCount,
+			detail:
+				"Match by device + plain vendor person ID against existing DeviceUser records.",
+		},
+		{
+			step: "3",
+			label: "Create missing records",
+			count: usersToSaveCount,
+			detail:
+				"Create only source users that do not already have an HRIS DeviceUser row.",
+		},
+		{
+			step: "4",
+			label: "Refresh existing rows",
+			count: usersAlreadyInHrisCount,
+			detail:
+				"Keep existing HRIS rows and refresh current device payload; no duplicates.",
+		},
+		{
+			step: "5",
+			label: "Leave link review open",
+			count: projectedEmployeeLinkReviewCount,
+			detail:
+				"Save unmatched device users as Needs link until an admin attaches the employee.",
+		},
+	] as const;
 	const completedDeviceUserSyncItems = [
 		["Read from device", deviceUserSyncState.summary?.totalSourceRecords],
 		["Imported to HRIS", deviceUserSyncState.summary?.importableRecords],
@@ -6111,6 +6152,38 @@ export function DeviceEnrollmentPanel({
 											</span>
 										</div>
 									))}
+								</div>
+								<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+									<div className="border-b border-slate-200 px-3 py-2">
+										<div className="text-sm font-semibold text-slate-950">
+											Sync decision matrix
+										</div>
+										<div className="mt-0.5 text-xs text-slate-600">
+											The sync reads all current source users so HRIS can honestly
+											identify the missing records; it does not duplicate rows already
+											saved by device person ID.
+										</div>
+									</div>
+									<div className="divide-y divide-slate-100">
+										{deviceUserSyncReviewMatrix.map((item) => (
+											<div
+												key={item.step}
+												className="grid gap-2 px-3 py-2 sm:grid-cols-[2rem_minmax(0,1fr)_5rem] sm:items-start">
+												<span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
+													{item.step}
+												</span>
+												<div className="min-w-0">
+													<div className="font-semibold text-slate-950">
+														{item.label}
+													</div>
+													<div className="mt-0.5 text-slate-600">{item.detail}</div>
+												</div>
+												<div className="font-semibold text-slate-950 sm:text-right">
+													{metricValue(item.count)}
+												</div>
+											</div>
+										))}
+									</div>
 								</div>
 								<div className="grid gap-2 sm:grid-cols-2">
 									{[

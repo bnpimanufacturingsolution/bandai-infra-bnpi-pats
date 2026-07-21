@@ -3272,10 +3272,7 @@ export const controller = (prisma: PrismaClient) => {
 			Number.isFinite(Number(searchResult.count))
 				? Number(searchResult.count)
 				: null;
-		const userSearch =
-			searchCount !== null || isHikvisionTransportFailure(searchResult.error)
-				? searchResult
-				: await readUserCountEndpoint();
+		const userSearch = searchCount !== null ? searchResult : await readUserCountEndpoint();
 		const userCount =
 			userSearch.count !== null &&
 			userSearch.count !== undefined &&
@@ -4027,7 +4024,7 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const includeVendorMetadata = await hasDeviceUserVendorMetadataColumn();
-			const [rows, total, allRows] = await Promise.all([
+			const [rows, totalGroups, allRows] = await Promise.all([
 				(prisma as any).deviceUser.findMany({
 					where,
 					select: buildDeviceUserSelect({ includeVendorMetadata }),
@@ -4035,7 +4032,11 @@ export const controller = (prisma: PrismaClient) => {
 					skip: (page - 1) * limit,
 					take: limit,
 				}),
-				(prisma as any).deviceUser.count({ where }),
+				(prisma as any).deviceUser.groupBy({
+					by: ["vendorUserId"],
+					where,
+					_count: { _all: true },
+				}),
 				(prisma as any).deviceUser.findMany({
 					where: {
 						organizationId,
@@ -4051,8 +4052,11 @@ export const controller = (prisma: PrismaClient) => {
 					"Device users retrieved",
 					{
 						deviceUsers: rows.map(decorateDeviceUser),
-						summary: summarizeDeviceUserStatuses(allRows),
-						pagination: buildPagination(total, page, limit),
+						summary: {
+							...summarizeDeviceUserStatuses(allRows),
+							total: Array.isArray(totalGroups) ? totalGroups.length : 0,
+						},
+						pagination: buildPagination(Array.isArray(totalGroups) ? totalGroups.length : 0, page, limit),
 					},
 					200,
 				),
@@ -14124,7 +14128,7 @@ export const controller = (prisma: PrismaClient) => {
 			if (await hasDeviceUserTable()) {
 				try {
 					const statusGroups = await (prisma as any).deviceUser.groupBy({
-						by: ["deviceId", "status"],
+						by: ["deviceId", "status", "vendorUserId"],
 						where: {
 							organizationId: String(organizationId),
 							deviceId: { in: syncDevices.map((device) => device.id) },
@@ -14132,7 +14136,7 @@ export const controller = (prisma: PrismaClient) => {
 						_count: { _all: true },
 					});
 					const linkedGroups = await (prisma as any).deviceUser.groupBy({
-						by: ["deviceId"],
+						by: ["deviceId", "vendorUserId"],
 						where: {
 							organizationId: String(organizationId),
 							deviceId: { in: syncDevices.map((device) => device.id) },
@@ -14144,7 +14148,7 @@ export const controller = (prisma: PrismaClient) => {
 					for (const row of linkedGroups || []) {
 						const deviceId = String(row.deviceId || "").trim();
 						if (!deviceId) continue;
-						linkedCountByDeviceId.set(deviceId, Number(row?._count?._all || 0));
+						linkedCountByDeviceId.set(deviceId, (linkedCountByDeviceId.get(deviceId) || 0) + 1);
 					}
 					const byDevice = new Map<
 						string,
@@ -14164,7 +14168,7 @@ export const controller = (prisma: PrismaClient) => {
 						const deviceId = String(row.deviceId || "").trim();
 						if (!deviceId || !byDevice.has(deviceId)) continue;
 						const bucket = byDevice.get(deviceId)!;
-						const count = Number(row?._count?._all || 0);
+						const count = 1;
 						const status = String(row.status || "").toUpperCase();
 						bucket.total += count;
 						if (status === "ACTIVE") bucket.active += count;

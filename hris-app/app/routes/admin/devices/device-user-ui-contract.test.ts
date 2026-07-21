@@ -319,6 +319,12 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("deviceUserView");
 		expect(enroll).toContain("deviceUserPage");
 		expect(enroll).toContain("New records");
+		expect(enroll).toContain("Sync decision matrix");
+		expect(enroll).toContain("Create missing records");
+		expect(enroll).toContain("Create only source users that do not already have an HRIS DeviceUser row");
+		expect(enroll).toContain("Refresh existing rows");
+		expect(enroll).toContain("no duplicates");
+		expect(enroll).toContain("Leave link review open");
 		expect(enroll).toContain("Auto-linked");
 		expect(enroll).toContain("Rows marked Needs link were saved in HRIS");
 		expect(enroll).toContain("saved biometric");

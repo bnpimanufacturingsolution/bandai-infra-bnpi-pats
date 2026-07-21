@@ -13,6 +13,7 @@ describe("Hikvision remote device tunnel contract", () => {
 	const accessControlRouter = readRepoFile("hris-api/app/hikvision/routes/access.control.router.ts");
 	const deviceController = readRepoFile("hris-api/app/device/device.controller.ts");
 	const restartLocalApiScript = readRepoFile("scripts/restart-local-hris-api-dev.ps1");
+	const vmBridgeEnsureScript = readRepoFile("hris-api/scripts/ensure-hikvision-vm-bridge.cjs");
 
 	it("passes the four current Hikvision device IPs as one normalized PowerShell argument", () => {
 		expect(ensureScript).to.include(
@@ -65,6 +66,22 @@ describe("Hikvision remote device tunnel contract", () => {
 		expect(deviceController).to.not.include("Live source counts skipped for quick Sync Center preview");
 	});
 
+	it("falls back to the lighter UserInfo count endpoint when UserInfo/Search does not yield a count", () => {
+		expect(deviceController).to.include(
+			"const userSearch = searchCount !== null ? searchResult : await readUserCountEndpoint();",
+		);
+		expect(deviceController).to.not.include(
+			"searchCount !== null || isHikvisionTransportFailure(searchResult.error)",
+		);
+	});
+
+	it("counts saved DeviceUser inventory by distinct vendor user id for Sync Center and Device Users totals", () => {
+		expect(deviceController).to.include('by: ["deviceId", "status", "vendorUserId"]');
+		expect(deviceController).to.include('by: ["deviceId", "vendorUserId"]');
+		expect(deviceController).to.include('by: ["vendorUserId"]');
+		expect(deviceController).to.include("total: Array.isArray(totalGroups) ? totalGroups.length : 0");
+	});
+
 	it("ensures the four-device tunnel before a manual local API restart loads env", () => {
 		expect(restartLocalApiScript).to.include("ensure-hikvision-remote-device-tunnel.cjs");
 		expect(restartLocalApiScript).to.include("Ensuring Hikvision remote device tunnels (.20/.21/.22/.23)");
@@ -79,5 +96,12 @@ describe("Hikvision remote device tunnel contract", () => {
 		expect(restartLocalApiScript.indexOf("Local hris-api is healthy")).to.be.lessThan(
 			restartLocalApiScript.indexOf("Ensuring TEST A SSH reverse bridge"),
 		);
+	});
+
+	it("keeps optional TEST A bridge failures compact and non-blocking during npm run dev predev", () => {
+		expect(vmBridgeEnsureScript).to.include('stdio: "pipe"');
+		expect(vmBridgeEnsureScript).to.include("Continuing API boot");
+		expect(vmBridgeEnsureScript).to.include("process.exit(0);");
+		expect(vmBridgeEnsureScript).to.include("slice(-6)");
 	});
 });
