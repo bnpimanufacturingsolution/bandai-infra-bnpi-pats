@@ -263,6 +263,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Review selected merge");
 		expect(enroll).toContain("This starts a real device-write job.");
 		expect(enroll).toContain("Counts are review evidence; missing raw blobs are not fabricated.");
+		expect(enroll).toContain("sdkMergeSelectedWriteMatrix");
+		expect(enroll).toContain("Writes by target device");
+		expect(enroll).toContain("Sources used");
+		expect(enroll).toContain("Selected source devices for the selected IDs.");
+		expect(enroll).toContain("Source to targets");
 		expect(enroll).toContain("Back to review");
 		expect(enroll).toContain("Review selected merge (${sdkMergeSelectedUniqueCount})");
 		expect(enroll).not.toContain("sdkMergePreviewOnly");

@@ -442,6 +442,7 @@ type DeviceUserMergeJob = {
 	failedWrites: number;
 	message: string;
 	results: any[];
+	writeMatrix?: any;
 	remainingConflicts?: number;
 	remainingMissing?: number;
 	attention?: number;
@@ -456,6 +457,69 @@ const deviceUserMergePlans = new Map<
 	string,
 	{ organizationId: string; plan: any; createdAt: Date; req: Request }
 >();
+
+const buildDeviceUserMergeWriteMatrix = (plan: any) => {
+	const devices = Array.isArray(plan?.devices) ? plan.devices : [];
+	const deviceById = new Map<string, any>(
+		devices.map((device: any) => [String(device.id), device]),
+	);
+	const deviceLabel = (deviceId: string) => {
+		const device = deviceById.get(String(deviceId));
+		return device?.name || device?.address || deviceId;
+	};
+	const perTarget = new Map<string, any>();
+	const perSource = new Map<string, any>();
+	const rows = (Array.isArray(plan?.users) ? plan.users : []).map((user: any) => {
+		const selectedConflict = (user.conflicts || []).find((conflict: any) => conflict.choice);
+		const sourceDeviceId =
+			selectedConflict?.choice === "B"
+				? selectedConflict.deviceB.id
+				: selectedConflict?.choice === "A"
+					? selectedConflict.deviceA.id
+					: user.sourceDeviceId;
+		const targetDeviceIds = (user.targetDeviceIds || []).filter(
+			(targetDeviceId: string) => targetDeviceId && targetDeviceId !== sourceDeviceId,
+		);
+		const source = perSource.get(sourceDeviceId) || {
+			deviceId: sourceDeviceId,
+			deviceName: deviceLabel(sourceDeviceId),
+			selectedUniqueIds: 0,
+			writes: 0,
+		};
+		source.selectedUniqueIds += 1;
+		source.writes += targetDeviceIds.length;
+		perSource.set(sourceDeviceId, source);
+		for (const targetDeviceId of targetDeviceIds) {
+			const target = perTarget.get(targetDeviceId) || {
+				deviceId: targetDeviceId,
+				deviceName: deviceLabel(targetDeviceId),
+				writes: 0,
+				sourceDeviceIds: [],
+			};
+			target.writes += 1;
+			if (!target.sourceDeviceIds.includes(sourceDeviceId)) target.sourceDeviceIds.push(sourceDeviceId);
+			perTarget.set(targetDeviceId, target);
+		}
+		return {
+			userKey: user.key,
+			vendorUserIds: user.vendorUserIds || [],
+			sourceDeviceId,
+			sourceDeviceName: deviceLabel(sourceDeviceId),
+			targetDeviceIds,
+			targetDeviceNames: targetDeviceIds.map(deviceLabel),
+			writes: targetDeviceIds.length,
+			conflicts: (user.conflicts || []).length,
+		};
+	});
+	return {
+		selectedUniqueIds: rows.length,
+		totalWrites: rows.reduce((sum: number, row: any) => sum + row.writes, 0),
+		conflicts: rows.reduce((sum: number, row: any) => sum + row.conflicts, 0),
+		perTarget: Array.from(perTarget.values()),
+		perSource: Array.from(perSource.values()),
+		rows,
+	};
+};
 
 const cleanupDeviceImportJobs = () => {
 	const cutoff = Date.now() - 60 * 60 * 1000;
@@ -9613,7 +9677,11 @@ export const controller = (prisma: PrismaClient) => {
 				res.status(409).json(buildErrorResponse(reason, 409));
 				return;
 			}
-			const totalWrites = Math.max(1, Number(selectedAppliedPlan.plannedWrites?.length || 0));
+			const writeMatrix = buildDeviceUserMergeWriteMatrix(selectedAppliedPlan);
+			const totalWrites = Math.max(
+				1,
+				Number(writeMatrix.totalWrites || selectedAppliedPlan.plannedWrites?.length || 0),
+			);
 			const jobId = randomUUID();
 			const job: DeviceUserMergeJob = {
 				jobId,
@@ -9627,6 +9695,7 @@ export const controller = (prisma: PrismaClient) => {
 				message:
 					"Merge job queued. HRIS will apply reviewed decisions, copy credentials, then reread devices.",
 				results: [],
+				writeMatrix,
 				startedAt: new Date(),
 			};
 			deviceUserMergeJobs.set(jobId, job);

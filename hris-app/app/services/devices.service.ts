@@ -601,6 +601,33 @@ export interface DeviceUserMergeJobProgress {
 	successfulWrites: number;
 	failedWrites: number;
 	message: string;
+	writeMatrix?: {
+		selectedUniqueIds: number;
+		totalWrites: number;
+		conflicts: number;
+		perTarget: Array<{
+			deviceId: string;
+			deviceName: string;
+			writes: number;
+			sourceDeviceIds: string[];
+		}>;
+		perSource: Array<{
+			deviceId: string;
+			deviceName: string;
+			selectedUniqueIds: number;
+			writes: number;
+		}>;
+		rows: Array<{
+			userKey: string;
+			vendorUserIds: string[];
+			sourceDeviceId: string;
+			sourceDeviceName: string;
+			targetDeviceIds: string[];
+			targetDeviceNames: string[];
+			writes: number;
+			conflicts: number;
+		}>;
+	};
 	results: Array<{
 		userKey?: string;
 		sourceDeviceId?: string;

@@ -2033,12 +2033,116 @@ export function DeviceEnrollmentPanel({
 			0,
 		) ||
 		0;
-	const sdkMergeSelectedPotentialWriteCount =
-		sdkMergeState.data?.plan.users.reduce(
-			(count, user) =>
-				selectedSdkMergeUserKeys[user.key] ? count + user.targetDeviceIds.length : count,
-			0,
-		) || 0;
+	const sdkMergeSelectedWriteMatrix = useMemo(() => {
+		const plan = sdkMergeState.data?.plan;
+		if (!plan) {
+			return {
+				perTarget: [] as Array<{
+					deviceId: string;
+					deviceName: string;
+					writes: number;
+					sourceDeviceNames: string[];
+				}>,
+				perSource: [] as Array<{
+					deviceId: string;
+					deviceName: string;
+					selectedUniqueIds: number;
+					writes: number;
+				}>,
+				rows: [] as Array<{
+					key: string;
+					label: string;
+					vendorUserId: string;
+					sourceDeviceId: string;
+					sourceDeviceName: string;
+					targetDeviceNames: string[];
+					writes: number;
+					conflicts: number;
+				}>,
+			};
+		}
+		const sourceMap = new Map<
+			string,
+			{ deviceId: string; deviceName: string; selectedUniqueIds: number; writes: number }
+		>();
+		const targetMap = new Map<
+			string,
+			{
+				deviceId: string;
+				deviceName: string;
+				writes: number;
+				sourceDeviceNames: Set<string>;
+			}
+		>();
+		const rows = plan.users
+			.filter((user) => selectedSdkMergeUserKeys[user.key])
+			.map((user) => {
+				const selectedConflict = user.conflicts.find((conflict) => {
+					const choice =
+						sdkMergeState.applyAll ||
+						sdkMergeState.choices[user.key]?.[conflict.field];
+					return Boolean(choice);
+				});
+				const selectedChoice =
+					selectedConflict &&
+					(sdkMergeState.applyAll ||
+						sdkMergeState.choices[user.key]?.[selectedConflict.field]);
+				const sourceDeviceId =
+					selectedChoice === "B"
+						? selectedConflict?.deviceB.id || user.sourceDeviceId
+						: selectedChoice === "A"
+							? selectedConflict?.deviceA.id || user.sourceDeviceId
+							: user.sourceDeviceId;
+				const sourceDeviceName = mergeDeviceName(plan.devices, sourceDeviceId);
+				const targetDeviceIds = user.targetDeviceIds.filter(
+					(deviceId) => deviceId !== sourceDeviceId,
+				);
+				const source = sourceMap.get(sourceDeviceId) || {
+					deviceId: sourceDeviceId,
+					deviceName: sourceDeviceName,
+					selectedUniqueIds: 0,
+					writes: 0,
+				};
+				source.selectedUniqueIds += 1;
+				source.writes += targetDeviceIds.length;
+				sourceMap.set(sourceDeviceId, source);
+				for (const targetDeviceId of targetDeviceIds) {
+					const target = targetMap.get(targetDeviceId) || {
+						deviceId: targetDeviceId,
+						deviceName: mergeDeviceName(plan.devices, targetDeviceId),
+						writes: 0,
+						sourceDeviceNames: new Set<string>(),
+					};
+					target.writes += 1;
+					target.sourceDeviceNames.add(sourceDeviceName);
+					targetMap.set(targetDeviceId, target);
+				}
+				return {
+					key: user.key,
+					label: mergePersonLabel(user),
+					vendorUserId: mergeVendorUserId(user),
+					sourceDeviceId,
+					sourceDeviceName,
+					targetDeviceNames: targetDeviceIds.map((deviceId) =>
+						mergeDeviceName(plan.devices, deviceId),
+					),
+					writes: targetDeviceIds.length,
+					conflicts: user.conflicts.length,
+				};
+			});
+		return {
+			perTarget: Array.from(targetMap.values()).map((item) => ({
+				...item,
+				sourceDeviceNames: Array.from(item.sourceDeviceNames),
+			})),
+			perSource: Array.from(sourceMap.values()),
+			rows,
+		};
+	}, [sdkMergeState.applyAll, sdkMergeState.choices, sdkMergeState.data, selectedSdkMergeUserKeys]);
+	const sdkMergeSelectedPotentialWriteCount = sdkMergeSelectedWriteMatrix.rows.reduce(
+		(count, row) => count + row.writes,
+		0,
+	);
 	const sdkMergeAttentionRowCount = sdkMergeReviewRows.length;
 	const sdkMergeFilterItems: Array<{ value: SdkMergeFilter; label: string; count: number }> = [
 		{ value: "all", label: "Needs review IDs", count: sdkMergeUniqueIssueCount("all") },
@@ -7838,33 +7942,89 @@ export function DeviceEnrollmentPanel({
 							HRIS will copy the selected source user data to missing peer devices, include fingerprint and face data only when the source record exposes usable biometric data, then reread devices to confirm the result. Counts are review evidence; missing raw blobs are not fabricated.
 						</p>
 					</div>
-					<div className="overflow-hidden rounded-md border border-slate-200">
-						<div className="grid grid-cols-[minmax(0,1fr)_110px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase text-slate-600">
-							<span>Selected ID</span>
-							<span>Writes</span>
-						</div>
-						<div className="max-h-56 overflow-auto">
-							{(sdkMergeState.data?.plan.users || [])
-								.filter((user) => selectedSdkMergeUserKeys[user.key])
-								.slice(0, 10)
-								.map((user) => (
-									<div key={`confirm:${user.key}`} className="grid grid-cols-[minmax(0,1fr)_110px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+					<div className="grid gap-3 lg:grid-cols-2">
+						<div className="overflow-hidden rounded-md border border-slate-200">
+							<div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+								<p className="text-sm font-semibold text-slate-950">Writes by target device</p>
+								<p className="mt-0.5 text-xs text-slate-600">
+									Where selected IDs will be copied.
+								</p>
+							</div>
+							<div className="max-h-44 overflow-auto">
+								{sdkMergeSelectedWriteMatrix.perTarget.map((target) => (
+									<div key={`confirm-target:${target.deviceId}`} className="grid grid-cols-[minmax(0,1fr)_88px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
 										<div className="min-w-0">
-											<p className="truncate font-medium text-slate-950">
-												{mergePersonLabel(user)}
-											</p>
+											<p className="truncate font-medium text-slate-950">{target.deviceName}</p>
 											<p className="truncate text-xs text-slate-600">
-												Unique device ID {mergeVendorUserId(user)}
+												From {target.sourceDeviceNames.slice(0, 2).join(", ")}
+												{target.sourceDeviceNames.length > 2
+													? ` +${target.sourceDeviceNames.length - 2}`
+													: ""}
 											</p>
 										</div>
 										<p className="text-sm font-semibold text-slate-950">
-											{mergeMetricValue(user.targetDeviceIds.length)}
+											{mergeMetricValue(target.writes)}
 										</p>
 									</div>
 								))}
-							{sdkMergeSelectedUniqueCount > 10 ? (
+							</div>
+						</div>
+						<div className="overflow-hidden rounded-md border border-slate-200">
+							<div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+								<p className="text-sm font-semibold text-slate-950">Sources used</p>
+								<p className="mt-0.5 text-xs text-slate-600">
+									Selected source devices for the selected IDs.
+								</p>
+							</div>
+							<div className="max-h-44 overflow-auto">
+								{sdkMergeSelectedWriteMatrix.perSource.map((source) => (
+									<div key={`confirm-source:${source.deviceId}`} className="grid grid-cols-[minmax(0,1fr)_88px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+										<div className="min-w-0">
+											<p className="truncate font-medium text-slate-950">{source.deviceName}</p>
+											<p className="truncate text-xs text-slate-600">
+												{mergePlural(source.selectedUniqueIds, "selected unique ID")}
+											</p>
+										</div>
+										<p className="text-sm font-semibold text-slate-950">
+											{mergeMetricValue(source.writes)}
+										</p>
+									</div>
+								))}
+							</div>
+						</div>
+					</div>
+					<div className="overflow-hidden rounded-md border border-slate-200">
+						<div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_88px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase text-slate-600">
+							<span>Selected ID</span>
+							<span>Source to targets</span>
+							<span>Writes</span>
+						</div>
+						<div className="max-h-56 overflow-auto">
+							{sdkMergeSelectedWriteMatrix.rows.slice(0, 10).map((row) => (
+								<div key={`confirm:${row.key}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_88px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+									<div className="min-w-0">
+										<p className="truncate font-medium text-slate-950">{row.label}</p>
+										<p className="truncate text-xs text-slate-600">
+											Unique device ID {row.vendorUserId}
+										</p>
+									</div>
+									<div className="min-w-0">
+										<p className="truncate font-medium text-slate-950">{row.sourceDeviceName}</p>
+										<p className="truncate text-xs text-slate-600">
+											To {row.targetDeviceNames.slice(0, 2).join(", ") || "no target"}
+											{row.targetDeviceNames.length > 2
+												? ` +${row.targetDeviceNames.length - 2}`
+												: ""}
+										</p>
+									</div>
+									<p className="text-sm font-semibold text-slate-950">
+										{mergeMetricValue(row.writes)}
+									</p>
+								</div>
+							))}
+							{sdkMergeSelectedWriteMatrix.rows.length > 10 ? (
 								<div className="px-3 py-2 text-xs text-slate-600">
-									+{mergeMetricValue(sdkMergeSelectedUniqueCount - 10)} more selected unique IDs.
+									+{mergeMetricValue(sdkMergeSelectedWriteMatrix.rows.length - 10)} more selected unique IDs in the same matrix.
 								</div>
 							) : null}
 						</div>
