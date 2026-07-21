@@ -1,5 +1,24 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-21 Hikvision faceURL 404 raw-custody sanitization
+
+- Task mode: Bug fix with backend custody safety and admin UX repair.
+- Implemented:
+  - Hikvision face raw-capture now treats HTML/XML/non-image faceURL responses as missing raw custody, not captured biometric bytes.
+  - Face URL failures are classified as short reasons such as `face_image_not_found_on_device`, `face_image_unauthorized`, `face_binary_not_image`, or `face_binary_empty`.
+  - Device-user sync job summaries, persisted result rows, and recent failure logs sanitize raw-custody reasons before storage/response.
+  - The Sync Center status modal renders friendly labels such as `Face image not found on device` and sanitizes legacy persisted aggregate messages so raw device HTML/XML is not shown.
+- Runtime/browser proof:
+  - Evidence root: `.runtime/hikvision-face-404-sanitize-20260721-121324/`.
+  - Current Main Entrance Device C job `1e7d9de2-7be8-460d-a031-d9fb3b0735b1` reopened in the Device-user sync status modal.
+  - Final modal proof showed completed status with `262` captured raw payloads and `270` missing raw reads, preserved as review/repair items.
+  - Final browser proof confirmed friendly missing-face labels and no `<!DOCTYPE html>`, `<html>`, `Access Error: 404`, or `can't locate document` text in the modal.
+- Validation:
+  - `hris-api` focused raw biometric + Hikvision sync contracts passed (`24` passing).
+  - `hris-api` typecheck passed.
+  - `hris-app` focused Device Users UI contract passed (`1` passing).
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-21 Device-user merge unique-ID truth repair
 
 - Task mode: Mixed backend correctness and admin UX truth repair.

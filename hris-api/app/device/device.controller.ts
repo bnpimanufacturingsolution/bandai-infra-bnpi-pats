@@ -634,7 +634,7 @@ const updateDeviceUserSyncJob = (
 		...job,
 		...patch,
 		updatedAt: new Date(),
-		results: patch.results || job.results,
+		results: sanitizeDeviceUserSyncJobResults(patch.results || job.results),
 		biometricFailureLog: sanitizeDeviceUserSyncFailureLog(
 			patch.biometricFailureLog || job.biometricFailureLog,
 		),
@@ -677,9 +677,59 @@ const sanitizeDeviceUserSyncFailureLog = (value: unknown) =>
 		reason: sanitizeDeviceUserSyncRawFailureReason(entry?.reason),
 	}));
 
+const sanitizeDeviceUserSyncFailureReasons = (value: unknown) => {
+	const sanitized: Record<string, number> = {};
+	if (!value || typeof value !== "object") return sanitized;
+	for (const [reason, count] of Object.entries(value as Record<string, unknown>)) {
+		const key = sanitizeDeviceUserSyncRawFailureReason(reason);
+		const numericCount = Number(count);
+		sanitized[key] = (sanitized[key] || 0) + (Number.isFinite(numericCount) ? numericCount : 0);
+	}
+	return sanitized;
+};
+
+const formatDeviceUserSyncMissingRawBlobSummary = (count: number, reasons: Record<string, number>) =>
+	`${count} biometric credential(s) still missing raw blobs: ${
+		Object.entries(reasons)
+			.map(([reason, reasonCount]) => `${reason}=${reasonCount}`)
+			.join(", ") || "reason_unknown"
+	}`;
+
+const sanitizeDeviceUserSyncJobResults = (value: unknown) =>
+	(Array.isArray(value) ? value : []).map((result: any) => {
+		const sanitizedReasons = sanitizeDeviceUserSyncFailureReasons(
+			result?.summary?.biometricFailureReasons || {},
+		);
+		const summary = result?.summary
+			? {
+					...result.summary,
+					biometricFailureReasons: sanitizedReasons,
+				}
+			: result?.summary;
+		const error = String(result?.error || "");
+		const countFromSummary = Number(summary?.biometricFailed);
+		const countFromError = Number(error.match(/(\d+)\s+biometric credential/i)?.[1]);
+		const missingRawCount = Number.isFinite(countFromSummary)
+			? countFromSummary
+			: Number.isFinite(countFromError)
+				? countFromError
+				: 0;
+		return {
+			...result,
+			summary,
+			error:
+				!result?.error
+					? null
+					: error.includes("still missing raw blobs")
+					? formatDeviceUserSyncMissingRawBlobSummary(missingRawCount, sanitizedReasons)
+					: sanitizeDeviceUserSyncRawFailureReason(error || null),
+		};
+	});
+
 const serializeDeviceUserSyncJob = (job: DeviceUserSyncJob) => ({
 	...job,
 	biometricFailureLog: sanitizeDeviceUserSyncFailureLog(job.biometricFailureLog),
+	results: sanitizeDeviceUserSyncJobResults(job.results),
 	startedAt: job.startedAt instanceof Date ? job.startedAt.toISOString() : job.startedAt,
 	updatedAt: job.updatedAt instanceof Date ? job.updatedAt.toISOString() : job.updatedAt,
 	completedAt:
@@ -11900,7 +11950,9 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			if (lastError) {
 				failed += missingCount;
-				const reason = String(lastError?.message || lastError || "unknown_failure");
+				const reason = sanitizeDeviceUserSyncRawFailureReason(
+					String(lastError?.message || lastError || "unknown_failure"),
+				);
 				failureReasons[reason] = (failureReasons[reason] || 0) + missingCount;
 				deviceLogger.warn(
 					`Biometric custody capture failed for ${params.device.id}/${vendorUserId}/${task.modality}: ${lastError?.message || lastError}`,
@@ -11913,7 +11965,9 @@ export const controller = (prisma: PrismaClient) => {
 			if (!next) return;
 			const partialMissingCount = lastError ? missingCount : Math.max(missingCount - capturedCount, 0);
 			const partialReason = lastError
-				? String(lastError?.message || lastError || "unknown_failure")
+				? sanitizeDeviceUserSyncRawFailureReason(
+						String(lastError?.message || lastError || "unknown_failure"),
+					)
 				: "partial_raw_blob_capture";
 			const failureLog = partialMissingCount > 0
 				? [
@@ -11951,7 +12005,7 @@ export const controller = (prisma: PrismaClient) => {
 			biometricCached: cached,
 			biometricCaptured: captured,
 			biometricFailed: failed,
-			biometricFailureReasons: failureReasons,
+			biometricFailureReasons: sanitizeDeviceUserSyncFailureReasons(failureReasons),
 			biometricFailureLog: deviceUserSyncJobs.get(params.jobId)?.biometricFailureLog || [],
 			biometricCustodyScope: liveVendorUserIds ? "current_live_device_users" : "hris_device_users",
 			biometricStaleHrisOnlyRows: staleSummary?.staleHrisOnlyRows || 0,
@@ -12034,16 +12088,23 @@ export const controller = (prisma: PrismaClient) => {
 					device,
 				});
 				const biometricFailed = Number((biometricSummary as any)?.biometricFailed || 0);
+				const biometricFailureReasons = sanitizeDeviceUserSyncFailureReasons(
+					(biometricSummary as any)?.biometricFailureReasons || {},
+				);
 				const deviceStatus = biometricFailed > 0 ? "needs_attention" : "success";
 				setDeviceUserSyncJobResult(results, {
 					deviceId: device.id,
 					deviceName: device.name || device.address || "Hikvision device",
 					status: deviceStatus,
 					runId: sourceResult.run?.id || null,
-					summary: { ...sourceResult.summary, ...biometricSummary },
+					summary: {
+						...sourceResult.summary,
+						...biometricSummary,
+						biometricFailureReasons,
+					},
 					error:
 						biometricFailed > 0
-							? `${biometricFailed} biometric credential(s) still missing raw blobs: ${Object.entries((biometricSummary as any)?.biometricFailureReasons || {})
+							? `${biometricFailed} biometric credential(s) still missing raw blobs: ${Object.entries(biometricFailureReasons)
 									.map(([reason, count]) => `${reason}=${count}`)
 									.join(", ") || "reason_unknown"}`
 							: null,
@@ -12553,6 +12614,7 @@ export const controller = (prisma: PrismaClient) => {
 				{
 					...job,
 					biometricFailureLog: sanitizeDeviceUserSyncFailureLog(job.biometricFailureLog),
+					results: sanitizeDeviceUserSyncJobResults(job.results),
 				},
 				200,
 			),

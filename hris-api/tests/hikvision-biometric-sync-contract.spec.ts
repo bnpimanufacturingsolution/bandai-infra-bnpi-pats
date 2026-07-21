@@ -460,6 +460,13 @@ describe("Hikvision biometric sync contract", () => {
 		expect(helper.indexOf("classifyHikvisionRawFaceBinaryResponse")).to.be.lessThan(
 			helper.indexOf('const b64 = buf.toString("base64")'),
 		);
+		const controller = controllerSource();
+		expect(controller).to.include("sanitizeDeviceUserSyncRawFailureReason");
+		expect(controller).to.include("sanitizeDeviceUserSyncFailureReasons");
+		expect(controller).to.include("sanitizeDeviceUserSyncJobResults");
+		expect(controller).to.include("formatDeviceUserSyncMissingRawBlobSummary");
+		expect(controller).to.include("results: sanitizeDeviceUserSyncJobResults(job.results)");
+		expect(controller).to.include("sanitizeDeviceUserSyncJobResults(patch.results || job.results)");
 	});
 
 	it("returns error-shaped responses for manual raw capture no-data failures", () => {

@@ -460,6 +460,28 @@ const formatDeviceUserSyncRawFailureReason = (reason?: string | null) => {
 	return raw.length > 96 ? `${raw.slice(0, 93)}...` : raw;
 };
 
+const formatDeviceUserSyncRawFailureMessage = (message?: string | null) => {
+	const raw = String(message || "").trim();
+	if (!raw) return "Sync failed.";
+	const lower = raw.toLowerCase();
+	if (!lower.includes("still missing raw blobs")) {
+		return formatDeviceUserSyncRawFailureReason(raw);
+	}
+	const count = raw.match(/(\d+)\s+biometric credential/i)?.[1] || "";
+	const reasonLabels = new Set<string>();
+	for (const part of raw.split(":").slice(1).join(":").split(",")) {
+		const reason = part.split("=").slice(0, -1).join("=").trim() || part.trim();
+		if (reason) reasonLabels.add(formatDeviceUserSyncRawFailureReason(reason));
+	}
+	const friendlyReasons = Array.from(reasonLabels).filter(Boolean);
+	const prefix = count
+		? `${count} biometric credential(s) still missing raw blobs`
+		: "Biometric credential(s) still missing raw blobs";
+	return friendlyReasons.length > 0
+		? `${prefix}: ${friendlyReasons.join(", ")}`
+		: `${prefix}: Missing raw blob`;
+};
+
 export function DeviceEnrollmentPanel({
 	embedded = false,
 	mode = "sync-review",
@@ -6891,7 +6913,7 @@ export function DeviceEnrollmentPanel({
 												: `${metricValue(result.summary?.created)} created, ${metricValue(result.summary?.updated)} updated, ${metricValue(result.summary?.unmatched)} need link.`
 											: result.status === "cancelled"
 												? "Sync was cancelled before this device was completed."
-												: result.error || "Sync failed."}
+												: formatDeviceUserSyncRawFailureMessage(result.error)}
 									</p>
 								</div>
 							))}
