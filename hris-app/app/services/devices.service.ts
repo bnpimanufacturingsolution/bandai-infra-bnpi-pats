@@ -304,6 +304,36 @@ export interface DeviceSyncPreviewRow {
 	readySourceCount?: number;
 	sourceCheckTotal?: number;
 	operationLogTotal?: number | null;
+	syncDecisionMatrix?: DeviceUserSyncDecisionMatrix;
+}
+
+export type DeviceUserSyncDecisionBucketKey =
+	| "missing_device_user_record"
+	| "missing_employee_link"
+	| "missing_raw_fingerprint_blob"
+	| "missing_raw_face_blob"
+	| "already_present"
+	| "stale_count_only_or_live_no_data"
+	| "unsupported_by_sync";
+
+export interface DeviceUserSyncDecisionBucket {
+	key: DeviceUserSyncDecisionBucketKey;
+	label: string;
+	count: number;
+	why: string;
+	canSyncCreate: boolean;
+	defaultIncluded: boolean;
+	filter: string;
+}
+
+export interface DeviceUserSyncDecisionMatrix {
+	buckets: DeviceUserSyncDecisionBucket[];
+	counts: Record<DeviceUserSyncDecisionBucketKey, number>;
+	selectedFastPlan: DeviceUserSyncMode;
+	selectedFastPlanReason: string;
+	sourceReadRequired: boolean;
+	sourceReadReason: string;
+	jobStages: string[];
 }
 
 export interface DeviceSyncPreviewSourceCheck {
@@ -572,12 +602,16 @@ export type DeviceUserMergeApplyPayload = {
 export interface DeviceUserSyncJobStartRequest {
 	mode?: DeviceUserSyncMode;
 	deviceIds?: string[];
+	dryRun?: boolean;
 }
 
 export interface DeviceUserSyncJobProgress {
 	jobId: string;
 	status: "processing" | "completed" | "failed" | "cancelled";
 	syncMode?: DeviceUserSyncMode;
+	decisionMatrix?: DeviceUserSyncDecisionMatrix | null;
+	jobStages?: string[];
+	currentStage?: string | null;
 	totalDevices: number;
 	processedDevices: number;
 	successfulDevices: number;

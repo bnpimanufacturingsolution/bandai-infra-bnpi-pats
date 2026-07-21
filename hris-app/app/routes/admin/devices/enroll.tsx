@@ -399,7 +399,7 @@ type DeviceUserPeerTallyRow = {
 
 const DEVICE_USER_SYNC_JOB_STORAGE_KEY = "hris.device-user-sync-job";
 const DEVICE_USER_SYNC_PROCESSING_STALE_MS = 30 * 60 * 1000;
-const DEFAULT_BULK_DEVICE_USER_SYNC_MODE: DeviceUserSyncMode = "full_refresh";
+const DEFAULT_BULK_DEVICE_USER_SYNC_MODE: DeviceUserSyncMode = "needs_attention_only";
 const formatDeviceUserSyncJobId = (value?: string | null) => {
 	if (!value) return "No job id";
 	return value.length > 12 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
@@ -834,10 +834,9 @@ export function DeviceEnrollmentPanel({
 		if (!activeDeviceUserSyncJob || !isDeviceUserSyncJobError) return;
 		setActiveDeviceUserSyncJob(null);
 		setBulkDeviceUserSyncState({
-			open: true,
-			status: "error",
-			message:
-				"Previous device-user sync status expired after an API restart or cleanup. You can rerun the refresh safely; per-device sync is retryable and durable Sync Runs remain available below.",
+			open: false,
+			status: "idle",
+			message: "",
 			lastProgress: null,
 		});
 		toast.warning("Previous device-user sync status expired", {
@@ -850,14 +849,12 @@ export function DeviceEnrollmentPanel({
 		if (!activeDeviceUserSyncJob || !deviceUserSyncJobProgress) return;
 		if (isDeviceUserSyncProgressFresh(deviceUserSyncJobProgress)) return;
 		setActiveDeviceUserSyncJob(null);
-		setBulkDeviceUserSyncState((current) => ({
-			...current,
-			open: current.open,
-			status: "error",
-			message:
-				"Previous device-user sync status stopped updating. Start Sync device users again when you want a fresh, triggered run.",
+		setBulkDeviceUserSyncState({
+			open: false,
+			status: "idle",
+			message: "",
 			lastProgress: null,
-		}));
+		});
 		toast.warning("Previous device-user sync status stopped updating", {
 			id: "device-user-sync-progress",
 			description: "No device-user sync is being shown as active until you trigger a fresh run.",
@@ -1092,7 +1089,7 @@ export function DeviceEnrollmentPanel({
 		if (deviceUserSyncJobProgress) {
 			setBulkDeviceUserSyncState((current) => ({
 				...current,
-				open: true,
+				open: current.open,
 				status: "review",
 				message: deviceUserSyncJobProgress.message || current.message,
 				lastProgress: deviceUserSyncJobProgress,
@@ -1118,6 +1115,12 @@ export function DeviceEnrollmentPanel({
 					"Configured devices were refreshed successfully.",
 			});
 		} else if (deviceUserSyncJobStatus === "cancelled") {
+			setBulkDeviceUserSyncState({
+				open: false,
+				status: "idle",
+				message: "",
+				lastProgress: null,
+			});
 			toast.warning("Device-user sync cancelled", {
 				id: "device-user-sync-progress",
 				description:
@@ -1334,12 +1337,7 @@ export function DeviceEnrollmentPanel({
 			toast.error("No configured devices are available to sync");
 			return;
 		}
-		setBulkDeviceUserSyncState({
-			open: true,
-			status: "review",
-			message: "Choose what to refresh, then run it.",
-			lastProgress: null,
-		});
+		void runBulkDeviceUserSync(DEFAULT_BULK_DEVICE_USER_SYNC_MODE);
 	};
 	const openSdkUserMerge = async (initialSearch = "") => {
 		const searchScope = initialSearch.trim();
@@ -2297,11 +2295,13 @@ export function DeviceEnrollmentPanel({
 			needsAttentionDeviceIds.length === 0
 		) {
 			setBulkDeviceUserSyncState({
-				open: true,
-				status: "error",
-				message:
-					"Everything already looks aligned. Switch to All devices if you still want a full reread.",
+				open: false,
+				status: "idle",
+				message: "",
 				lastProgress: null,
+			});
+			toast.info("Device users already look aligned", {
+				description: "No mismatch refresh was started.",
 			});
 			return;
 		}
@@ -2309,11 +2309,13 @@ export function DeviceEnrollmentPanel({
 			open: true,
 			status: "starting",
 			message:
-				bulkDeviceUserSyncMode === "needs_attention_only"
+				requestedMode === "needs_attention_only"
 					? "Starting the mismatch refresh."
-					: bulkDeviceUserSyncMode === "peer_converge"
+					: requestedMode === "peer_converge"
 						? "Starting cross-device convergence."
-						: "Starting the full reread.",
+						: requestedMode === "biometrics_only"
+							? "Building missing-record matrix for raw blobs only."
+							: "Starting the full reread.",
 			lastProgress: null,
 		});
 		try {
@@ -2401,11 +2403,13 @@ export function DeviceEnrollmentPanel({
 		setDeviceUserSyncState((current) => ({
 			...current,
 			status: "syncing",
-			message: "Queuing live users and missing biometric custody in the background.",
+			message: "Queuing the fastest valid device-user plan from the decision matrix.",
 		}));
 		try {
+			const requestedMode =
+				deviceUserSyncDecisionMatrix?.selectedFastPlan || "full_refresh";
 			const result = await startDeviceUserSyncJobMutation.mutateAsync({
-				mode: "full_refresh",
+				mode: requestedMode,
 				deviceIds: [selectedDeviceId],
 			});
 			setActiveDeviceUserSyncJob({ jobId: result.jobId });
@@ -3481,40 +3485,51 @@ export function DeviceEnrollmentPanel({
 		Number(physicalHrisUserCount || 0),
 	);
 	const projectedEmployeeLinkReviewCount = openPhysicalUserCount;
-	const deviceUserSyncReviewMatrix = [
+	const fallbackDeviceUserSyncDecisionBuckets = [
 		{
-			step: "1",
-			label: "Read source users",
-			count: physicalSourceCount,
-			detail: "Reread the physical device user inventory before any HRIS write.",
-		},
-		{
-			step: "2",
-			label: "Compare with HRIS",
-			count: physicalHrisUserCount,
-			detail:
-				"Match by device + plain vendor person ID against existing DeviceUser records.",
-		},
-		{
-			step: "3",
+			key: "missing_device_user_record",
 			label: "Create missing records",
 			count: usersToSaveCount,
-			detail:
-				"Create only source users that do not already have an HRIS DeviceUser row.",
+			why: "Source identity exists, but HRIS has no DeviceUser row for that plain device person ID.",
+			canSyncCreate: true,
+			defaultIncluded: true,
+			filter: "missing_device_user_record",
 		},
 		{
-			step: "4",
-			label: "Refresh existing rows",
-			count: usersAlreadyInHrisCount,
-			detail:
-				"Keep existing HRIS rows and refresh current device payload; no duplicates.",
-		},
-		{
-			step: "5",
-			label: "Leave link review open",
+			key: "missing_employee_link",
+			label: "Missing employee links",
 			count: projectedEmployeeLinkReviewCount,
-			detail:
-				"Save unmatched device users as Needs link until an admin attaches the employee.",
+			why: "Auto-link only exact unambiguous employee matches; leave the rest for review.",
+			canSyncCreate: true,
+			defaultIncluded: true,
+			filter: "missing_employee_link",
+		},
+		{
+			key: "missing_raw_fingerprint_blob",
+			label: "Missing fingerprint raw blobs",
+			count: deviceUserSyncReviewPreview?.fingerprintRawMissing ?? 0,
+			why: "Try raw fingerData capture only when a live read can plausibly return bytes.",
+			canSyncCreate: true,
+			defaultIncluded: true,
+			filter: "missing_raw_fingerprint_blob",
+		},
+		{
+			key: "missing_raw_face_blob",
+			label: "Missing face raw blobs",
+			count: deviceUserSyncReviewPreview?.faceRawMissing ?? 0,
+			why: "Try raw face/image capture only when the device has evidenced bytes.",
+			canSyncCreate: true,
+			defaultIncluded: true,
+			filter: "missing_raw_face_blob",
+		},
+		{
+			key: "already_present",
+			label: "Already present",
+			count: usersAlreadyInHrisCount,
+			why: "Skip rows already present in HRIS unless a forced repair is selected.",
+			canSyncCreate: false,
+			defaultIncluded: false,
+			filter: "already_present",
 		},
 	] as const;
 	const completedDeviceUserSyncItems = [
@@ -3537,6 +3552,14 @@ export function DeviceEnrollmentPanel({
 		isDeviceUserSyncProgressFresh(deviceUserSyncJobProgress)
 			? deviceUserSyncJobProgress
 			: bulkDeviceUserSyncState.lastProgress || null;
+	const deviceUserSyncDecisionMatrix =
+		deviceUserSyncReviewPreview?.syncDecisionMatrix ||
+		effectiveDeviceUserSyncJobProgress?.decisionMatrix ||
+		null;
+	const deviceUserSyncDecisionBuckets =
+		deviceUserSyncDecisionMatrix?.buckets?.length
+			? deviceUserSyncDecisionMatrix.buckets
+			: fallbackDeviceUserSyncDecisionBuckets;
 	const hasEffectiveDeviceUserSyncJobProgress = Boolean(effectiveDeviceUserSyncJobProgress);
 	const effectiveDeviceUserSyncJobStatus = effectiveDeviceUserSyncJobProgress?.status;
 	const deviceUserSyncJobProcessed = Number(
@@ -3590,6 +3613,9 @@ export function DeviceEnrollmentPanel({
 			: Math.min(100, Math.round((deviceUserSyncJobProcessed / deviceUserSyncJobTotal) * 100))
 		: 0;
 	const deviceUserSyncPrimaryResult = effectiveDeviceUserSyncJobProgress?.results?.[0] || null;
+	const deviceUserSyncUsesSavedHrisOnly =
+		hasEffectiveDeviceUserSyncJobProgress &&
+		effectiveDeviceUserSyncJobProgress?.decisionMatrix?.sourceReadRequired === false;
 	const deviceUserSyncCurrentModality =
 		deviceUserSyncJobIsTerminal
 			? deviceUserSyncHasRawGaps
@@ -3603,15 +3629,18 @@ export function DeviceEnrollmentPanel({
 	const deviceUserSyncCurrentDeviceLabel =
 		effectiveDeviceUserSyncJobProgress?.currentDeviceName ||
 		deviceUserSyncPrimaryResult?.deviceName ||
+		(deviceUserSyncUsesSavedHrisOnly ? "Saved HRIS DeviceUser state" : null) ||
 		(deviceUserSyncIsPlanningBiometrics
 			? "Building raw-custody plan"
 			: deviceUserSyncJobIsTerminal
 				? "Selected device"
-				: "Reading source device");
+				: "Source read only if needed");
 	const deviceUserSyncCurrentCredentialLabel = deviceUserSyncJobIsTerminal
 		? deviceUserSyncHasRawGaps
 			? `${metricValue(deviceUserSyncBiometricFailed)} missing_raw_blob`
 			: "No remaining raw gaps"
+		: deviceUserSyncUsesSavedHrisOnly
+			? "Scoped missing/link records only"
 		: deviceUserSyncIsPlanningBiometrics
 			? "Finding missing raw blobs"
 		: `${deviceUserSyncCurrentModality} - ${
@@ -3670,21 +3699,42 @@ export function DeviceEnrollmentPanel({
 					: deviceUserSyncJobIsProcessing
 						? deviceUserSyncJobCancelRequested
 							? "Cancelling device-user refresh"
+							: deviceUserSyncUsesSavedHrisOnly
+								? "Fast plan: saved HRIS only"
 							: deviceUserSyncJobMode === "needs_attention_only"
 								? "Refreshing mismatches"
 								: deviceUserSyncJobMode === "peer_converge"
 									? "Making peers match best truth"
 									: deviceUserSyncJobMode === "biometrics_only"
-										? "Repairing raw biometric blobs"
+										? effectiveDeviceUserSyncJobProgress?.currentStage ||
+											"Capturing missing fingerprint raw bytes"
 										: deviceUserSyncBiometricTotal > 0
-											? "Repairing raw biometric blobs"
-											: "Reading source device users"
+											? effectiveDeviceUserSyncJobProgress?.currentStage ||
+												"Capturing missing biometric raw bytes"
+											: effectiveDeviceUserSyncJobProgress?.currentStage ||
+												"Reading source users needed for identity gaps"
 						: "Device-user sync status";
 	const bulkDeviceUserSyncSummaryItems = [
 		["Captured", effectiveDeviceUserSyncJobProgress?.biometricCaptured ?? 0],
 		["Missing raw", effectiveDeviceUserSyncJobProgress?.biometricFailed ?? 0],
 		["Already present", effectiveDeviceUserSyncJobProgress?.biometricCached ?? 0],
 		["Remaining", deviceUserSyncBiometricRemaining],
+	] as const;
+	const getDeviceUserSyncBucketCount = (key: string) =>
+		Number(
+			effectiveDeviceUserSyncJobProgress?.decisionMatrix?.buckets?.find(
+				(bucket) => bucket.key === key,
+			)?.count || 0,
+		);
+	const deviceUserSyncMatrixSummaryItems = [
+		["Missing users", getDeviceUserSyncBucketCount("missing_device_user_record")],
+		["Missing links", getDeviceUserSyncBucketCount("missing_employee_link")],
+		[
+			"Raw gaps",
+			getDeviceUserSyncBucketCount("missing_raw_fingerprint_blob") +
+				getDeviceUserSyncBucketCount("missing_raw_face_blob"),
+		],
+		["Already skipped", getDeviceUserSyncBucketCount("already_present")],
 	] as const;
 	const deviceUserSyncFailureLog = (
 		effectiveDeviceUserSyncJobProgress?.biometricFailureLog || []
@@ -3694,9 +3744,11 @@ export function DeviceEnrollmentPanel({
 		? deviceUserSyncJobIsProcessing
 			? deviceUserSyncBiometricTotal > 0
 				? `${deviceUserSyncCurrentModality} custody for user ${effectiveDeviceUserSyncJobProgress.currentVendorUserId || "-"} on ${effectiveDeviceUserSyncJobProgress.currentDeviceName || "the selected device"}.`
+				: deviceUserSyncUsesSavedHrisOnly
+					? "The decision matrix scoped this run to records Sync can handle from saved HRIS state. Source users and already-present rows are skipped."
 				: deviceUserSyncJobMode === "biometrics_only"
-					? "Preparing saved DeviceUser raw-custody repair; no live source reread is needed."
-					: "Reading live source users before raw-custody repair starts."
+					? "Building missing-record matrix from saved DeviceUser truth; source identity reread is skipped unless deep repair is selected."
+					: "Reading source users only because the decision matrix found identity gaps or a full refresh was requested."
 			: deviceUserSyncHasRawGaps
 				? `${metricValue(effectiveDeviceUserSyncJobProgress.biometricCaptured)} raw payloads captured; ${metricValue(deviceUserSyncBiometricFailed)} missing_raw_blob items still need repair.`
 				: `${metricValue(effectiveDeviceUserSyncJobProgress.biometricCaptured)} raw biometric payloads captured; no raw gaps reported by this job.`
@@ -6156,35 +6208,65 @@ export function DeviceEnrollmentPanel({
 								<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
 									<div className="border-b border-slate-200 px-3 py-2">
 										<div className="text-sm font-semibold text-slate-950">
-											Sync decision matrix
+											What Sync can fix
 										</div>
 										<div className="mt-0.5 text-xs text-slate-600">
-											The sync reads all current source users so HRIS can honestly
-											identify the missing records; it does not duplicate rows already
-											saved by device person ID.
+											The matrix uses saved HRIS DeviceUser truth first, then reads the
+											source only when identity gaps need device evidence.
 										</div>
 									</div>
 									<div className="divide-y divide-slate-100">
-										{deviceUserSyncReviewMatrix.map((item) => (
+										{deviceUserSyncDecisionBuckets.map((item) => (
 											<div
-												key={item.step}
-												className="grid gap-2 px-3 py-2 sm:grid-cols-[2rem_minmax(0,1fr)_5rem] sm:items-start">
-												<span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
-													{item.step}
-												</span>
+												key={item.key}
+												className="grid gap-2 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_5rem_7rem] sm:items-start">
 												<div className="min-w-0">
-													<div className="font-semibold text-slate-950">
-														{item.label}
+													<div className="flex flex-wrap items-center gap-2">
+														<span className="font-semibold text-slate-950">
+															{item.label}
+														</span>
+														<Badge variant={item.defaultIncluded ? "success" : "secondary"}>
+															{item.defaultIncluded ? "In fast job" : "Skipped"}
+														</Badge>
 													</div>
-													<div className="mt-0.5 text-slate-600">{item.detail}</div>
+													<div className="mt-0.5 text-slate-600">{item.why}</div>
 												</div>
 												<div className="font-semibold text-slate-950 sm:text-right">
 													{metricValue(item.count)}
 												</div>
+												<span className="text-xs font-medium text-slate-500 sm:text-right">
+													{item.filter}
+												</span>
 											</div>
 										))}
 									</div>
 								</div>
+								{deviceUserSyncDecisionMatrix ? (
+									<div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+										<div className="flex flex-wrap items-center justify-between gap-2">
+											<span className="text-xs font-semibold text-slate-950">
+												Fastest valid plan: {deviceUserSyncDecisionMatrix.selectedFastPlan}
+											</span>
+											<Badge variant={deviceUserSyncDecisionMatrix.sourceReadRequired ? "warning" : "success"}>
+												{deviceUserSyncDecisionMatrix.sourceReadRequired
+													? "Source read needed"
+													: "Saved-state first"}
+											</Badge>
+										</div>
+										<p className="mt-1 text-xs text-slate-600">
+											{deviceUserSyncDecisionMatrix.selectedFastPlanReason}
+										</p>
+										<div className="mt-2 flex flex-wrap gap-1.5">
+											{deviceUserSyncDecisionMatrix.jobStages.map((stage) => (
+												<span
+													key={stage}
+													className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600">
+													{stage}
+												</span>
+											))}
+										</div>
+									</div>
+								) : null}
 								<div className="grid gap-2 sm:grid-cols-2">
 									{[
 										[
@@ -6274,13 +6356,19 @@ export function DeviceEnrollmentPanel({
 			<Modal
 				open={bulkDeviceUserSyncState.open}
 				onOpenChange={(open) =>
-					setBulkDeviceUserSyncState((current) => ({ ...current, open }))
+					setBulkDeviceUserSyncState((current) => ({
+						...current,
+						open,
+						lastProgress: open ? current.lastProgress : null,
+						status: open ? current.status : "idle",
+						message: open ? current.message : "",
+					}))
 				}
 				title={hasEffectiveDeviceUserSyncJobProgress ? "Device-user sync status" : "Sync device users"}
 				description={
 					hasEffectiveDeviceUserSyncJobProgress
 						? "You can close this window and reopen status from Sync device users."
-						: "Choose the manual refresh scope, then reread live device-user truth."
+						: "Device-user refresh status."
 				}
 				className={hasEffectiveDeviceUserSyncJobProgress ? "max-w-lg" : "max-w-4xl"}
 				showCloseButton
@@ -6338,7 +6426,11 @@ export function DeviceEnrollmentPanel({
 							</p>
 						)}
 						<div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-							{bulkDeviceUserSyncSummaryItems.map(([label, value]) => (
+							{(hasEffectiveDeviceUserSyncJobProgress &&
+							effectiveDeviceUserSyncJobProgress?.decisionMatrix
+								? deviceUserSyncMatrixSummaryItems
+								: bulkDeviceUserSyncSummaryItems
+							).map(([label, value]) => (
 								<div
 									key={String(label)}
 									className="rounded-md border border-white/80 bg-white/80 px-3 py-2">
@@ -6430,7 +6522,8 @@ export function DeviceEnrollmentPanel({
 								) : null}
 							</>
 						) : null}
-						{!hasEffectiveDeviceUserSyncJobProgress ? (
+						{!hasEffectiveDeviceUserSyncJobProgress &&
+						bulkDeviceUserSyncState.status === "review" ? (
 							<div className="mt-4 rounded-xl border border-white/80 bg-white/70 p-3">
 								<div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
 									<div className="space-y-1">
@@ -6458,7 +6551,7 @@ export function DeviceEnrollmentPanel({
 												<span className="text-sm font-semibold">
 													All devices
 												</span>
-												<Badge variant="success">Default</Badge>
+												<Badge variant="outline">Force reread</Badge>
 											</div>
 											<p className="mt-1 text-xs text-current/80">
 												Reread every configured device user and refresh HRIS
@@ -6501,6 +6594,7 @@ export function DeviceEnrollmentPanel({
 												<span className="text-sm font-semibold">
 													Only mismatches
 												</span>
+												<Badge variant="success">Default</Badge>
 												<Badge variant="secondary">
 													{metricValue(
 														needsAttentionSyncCenterDevices.length,
@@ -6559,7 +6653,8 @@ export function DeviceEnrollmentPanel({
 						) : null}
 					</div>
 
-					{!hasEffectiveDeviceUserSyncJobProgress ? (
+					{!hasEffectiveDeviceUserSyncJobProgress &&
+					bulkDeviceUserSyncState.status === "review" ? (
 					<div className="overflow-hidden rounded-md border border-slate-200">
 						<div className="grid grid-cols-[minmax(180px,1.4fr)_110px_110px_90px_110px_110px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-slate-500">
 							<span>Device</span>
@@ -6692,12 +6787,15 @@ export function DeviceEnrollmentPanel({
 						<Button
 							type="button"
 							variant="outline"
-							onClick={() =>
-								setBulkDeviceUserSyncState((current) => ({
-									...current,
+							onClick={() => {
+								setActiveDeviceUserSyncJob(null);
+								setBulkDeviceUserSyncState({
 									open: false,
-								}))
-							}>
+									status: "idle",
+									message: "",
+									lastProgress: null,
+								});
+							}}>
 							Close
 						</Button>
 						{deviceUserSyncJobIsProcessing ? (

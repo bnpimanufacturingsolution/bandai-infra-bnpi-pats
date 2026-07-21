@@ -480,6 +480,36 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("sdkReceived");
 	});
 
+	it("plans device-user sync through a missing-record decision matrix before expensive reads", () => {
+		const controller = controllerSource();
+
+		expect(controller).to.include("type DeviceUserSyncDecisionBucketKey");
+		expect(controller).to.include('"missing_device_user_record"');
+		expect(controller).to.include('"missing_employee_link"');
+		expect(controller).to.include('"missing_raw_fingerprint_blob"');
+		expect(controller).to.include('"missing_raw_face_blob"');
+		expect(controller).to.include('"already_present"');
+		expect(controller).to.include('"stale_count_only_or_live_no_data"');
+		expect(controller).to.include('"unsupported_by_sync"');
+		expect(controller).to.include("buildDeviceUserSyncDecisionMatrix");
+		expect(controller).to.include("buildDeviceUserSyncJobDecisionMatrix");
+		expect(controller).to.include("syncDecisionMatrix");
+		expect(controller).to.include("selectedFastPlan");
+		expect(controller).to.include("sourceReadRequired");
+		expect(controller).to.include("Building missing-record matrix");
+		expect(controller).to.include("Device user sync dry-run plan generated");
+		expect(controller).to.include("willCreateJob: false");
+		expect(controller).to.include("executionPlan");
+		expect(controller).to.include("Skip source user reread because saved HRIS state scopes the actionable work");
+		expect(controller).to.include("decision_matrix_did_not_require_source_identity_read");
+		expect(controller).to.include("saved_matrix_has_no_missing_raw_biometric_blobs");
+		expect(controller).to.include("Reading source users needed for identity gaps");
+		expect(controller).to.include("Capturing missing fingerprint raw bytes");
+		expect(controller).to.include("Capturing missing face raw bytes");
+		expect(controller).to.include("Skipping known no-data rows");
+		expect(controller).to.include("Saved HRIS DeviceUser truth already identifies raw-custody gaps");
+	});
+
 	it("keeps the device events page working when device_users has not been migrated yet", () => {
 		const controller = controllerSource();
 

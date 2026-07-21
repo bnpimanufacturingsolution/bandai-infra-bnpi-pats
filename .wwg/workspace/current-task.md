@@ -1,5 +1,23 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-21 Sync Center missing-record decision matrix
+
+- Task mode: Mixed admin UX/performance feature and backend fast-path repair.
+- Implemented:
+  - Sync Center now builds a `syncDecisionMatrix` before starting a Device Users sync job.
+  - The matrix classifies `missing_device_user_record`, `missing_employee_link`, `missing_raw_fingerprint_blob`, `missing_raw_face_blob`, `already_present`, `stale_count_only_or_live_no_data`, and `unsupported_by_sync`.
+  - Default Device Users sync mode is now `needs_attention_only`; the job skips source-device rereads when the matrix says saved HRIS state is enough, and raw-custody capture returns from saved state when no missing raw blobs exist.
+  - The review modal shows `What Sync can fix`, bucket counts, bucket filters, selected fastest valid plan, and truthful stage copy.
+- Evidence:
+  - API proof: `.runtime/sync-center-decision-matrix-20260721-110520/api-sync-preview-decision-matrix-final.json`.
+  - Browser proof: `.runtime/sync-center-decision-matrix-20260721-110520/browser-sync-center-review-modal.json` and `.runtime/sync-center-decision-matrix-20260721-110520/browser-sync-center-review-modal.png`.
+- Validation:
+  - Backend contract: `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` passed (`15` passing).
+  - Backend typecheck: `npx tsc --noEmit --pretty false` passed.
+  - Frontend contract: `hris-app/app/routes/admin/devices/device-user-ui-contract.test.ts` passed (`1` passing).
+  - Frontend broad `tsconfig.test` typecheck still fails outside this scope at `app/routes/employee/dashboard/TimesheetsTab.test.tsx(54,46)`, covered by existing `REC-20260706-TEST-TYPECHECK-MOCKS`.
+- Recommendation capture: No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-21 Four Hikvision devices online/armed
 
 - Task mode: Mixed live runtime repair, native listener regression repair, and evidence closeout.

@@ -10,6 +10,8 @@ describe("admin device user and log sync UI contract", () => {
 		const enroll = readAppFile("app/routes/admin/devices/enroll.tsx");
 		const events = readAppFile("app/routes/admin/devices/events.tsx");
 		const deviceHooks = readAppFile("app/lib/hooks/useDevices.ts");
+		const deviceService = readAppFile("app/services/devices.service.ts");
+		const deviceController = readAppFile("../hris-api/app/device/device.controller.ts");
 
 		expect(deviceHooks).toContain("useDeviceHealthMap");
 		expect(events).toContain('data-testid="device-filter-reachability-dot"');
@@ -121,7 +123,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("biometrics_only");
 		expect(enroll).not.toContain("Fingerprint encrypted envelope");
 		expect(enroll).not.toContain("Face encrypted envelope");
-		expect(enroll).toContain("missing biometric custody in the background");
+		expect(enroll).toContain("fastest valid device-user plan");
 		expect(enroll).toContain("deviceIds: [selectedDeviceId]");
 		expect(enroll).toContain("You can close this window and reopen status");
 		expect(enroll).toContain('["Captured", effectiveDeviceUserSyncJobProgress?.biometricCaptured');
@@ -130,9 +132,39 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Recent missing raw");
 		expect(enroll).toContain("Building raw-custody plan");
 		expect(enroll).toContain("Retry raw blobs only");
+		expect(enroll).toContain("What Sync can fix");
+		expect(enroll).toContain("missing_device_user_record");
+		expect(enroll).toContain("missing_employee_link");
+		expect(enroll).toContain("missing_raw_fingerprint_blob");
+		expect(enroll).toContain("missing_raw_face_blob");
+		expect(deviceService).toContain("stale_count_only_or_live_no_data");
+		expect(deviceService).toContain("unsupported_by_sync");
+		expect(enroll).toContain("Fastest valid plan");
+		expect(enroll).toContain("Fast plan: saved HRIS only");
+		expect(enroll).toContain("The decision matrix scoped this run to records Sync can handle from saved HRIS state");
+		expect(enroll).toContain("Missing links");
+		expect(enroll).toContain("Already skipped");
+		expect(enroll).toContain("Scoped missing/link records only");
+		expect(enroll).toContain("Building missing-record matrix");
+		expect(enroll).toContain("Reading source users needed for identity gaps");
+		expect(enroll).toContain("Capturing missing fingerprint raw bytes");
+		expect(deviceController).toContain("Capturing missing face raw bytes");
+		expect(deviceController).toContain("Skipping known no-data rows");
+		expect(enroll).toContain('const DEFAULT_BULK_DEVICE_USER_SYNC_MODE: DeviceUserSyncMode = "needs_attention_only"');
+		expect(enroll).toContain("Queuing the fastest valid device-user plan from the decision matrix.");
+		expect(enroll).not.toContain("Reading source device users");
 		expect(enroll).not.toContain("serially captures");
 		expect(enroll).toContain("Device-user sync status");
 		expect(enroll).toContain("Open device-user sync status");
+		expect(enroll).not.toContain(
+			"Previous device-user sync status expired after an API restart or cleanup. You can rerun the refresh safely",
+		);
+		expect(enroll).not.toContain(
+			"Previous device-user sync status stopped updating. Start Sync device users again",
+		);
+		expect(enroll).toContain('open: current.open');
+		expect(enroll).toContain('lastProgress: open ? current.lastProgress : null');
+		expect(enroll).toContain('status: open ? current.status : "idle"');
 		expect(enroll).toContain("biometric credentials");
 		expect(enroll).toContain("Current credential");
 		expect(enroll).toContain("Already present");
@@ -319,12 +351,17 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("deviceUserView");
 		expect(enroll).toContain("deviceUserPage");
 		expect(enroll).toContain("New records");
-		expect(enroll).toContain("Sync decision matrix");
-		expect(enroll).toContain("Create missing records");
-		expect(enroll).toContain("Create only source users that do not already have an HRIS DeviceUser row");
-		expect(enroll).toContain("Refresh existing rows");
-		expect(enroll).toContain("no duplicates");
-		expect(enroll).toContain("Leave link review open");
+		expect(enroll).toContain("What Sync can fix");
+		expect(enroll).toContain("missing_device_user_record");
+		expect(enroll).toContain("missing_raw_fingerprint_blob");
+		expect(enroll).toContain("missing_raw_face_blob");
+		expect(enroll).toContain("Fastest valid plan");
+		expect(enroll).toContain("Building missing-record matrix");
+		expect(enroll).toContain("Reading source users needed for identity gaps");
+		expect(enroll).toContain("Already present");
+		expect(enroll).toContain("Skip rows already present in HRIS unless a forced repair is selected");
+		expect(enroll).toContain("Saved-state first");
+		expect(enroll).toContain("Missing employee links");
 		expect(enroll).toContain("Auto-linked");
 		expect(enroll).toContain("Rows marked Needs link were saved in HRIS");
 		expect(enroll).toContain("saved biometric");

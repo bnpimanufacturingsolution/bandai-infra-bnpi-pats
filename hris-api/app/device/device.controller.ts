@@ -353,11 +353,43 @@ type DeviceUserSyncJobResult = {
 	error?: string | null;
 };
 
+type DeviceUserSyncDecisionBucketKey =
+	| "missing_device_user_record"
+	| "missing_employee_link"
+	| "missing_raw_fingerprint_blob"
+	| "missing_raw_face_blob"
+	| "already_present"
+	| "stale_count_only_or_live_no_data"
+	| "unsupported_by_sync";
+
+type DeviceUserSyncDecisionBucket = {
+	key: DeviceUserSyncDecisionBucketKey;
+	label: string;
+	count: number;
+	why: string;
+	canSyncCreate: boolean;
+	defaultIncluded: boolean;
+	filter: string;
+};
+
+type DeviceUserSyncDecisionMatrix = {
+	buckets: DeviceUserSyncDecisionBucket[];
+	counts: Record<DeviceUserSyncDecisionBucketKey, number>;
+	selectedFastPlan: DeviceUserSyncMode;
+	selectedFastPlanReason: string;
+	sourceReadRequired: boolean;
+	sourceReadReason: string;
+	jobStages: string[];
+};
+
 type DeviceUserSyncJob = {
 	jobId: string;
 	status: DeviceUserSyncJobStatus;
 	syncMode: DeviceUserSyncMode;
 	organizationId: string;
+	decisionMatrix?: DeviceUserSyncDecisionMatrix | null;
+	jobStages?: string[];
+	currentStage?: string | null;
 	totalDevices: number;
 	processedDevices: number;
 	successfulDevices: number;
@@ -11353,6 +11385,220 @@ export const controller = (prisma: PrismaClient) => {
 			},
 		);
 
+	const DEVICE_USER_SYNC_DECISION_BUCKETS: Array<{
+		key: DeviceUserSyncDecisionBucketKey;
+		label: string;
+		why: string;
+		canSyncCreate: boolean;
+		defaultIncluded: boolean;
+		filter: string;
+	}> = [
+		{
+			key: "missing_device_user_record",
+			label: "Missing DeviceUser records",
+			why: "Source identity exists, but HRIS has no DeviceUser row for that plain device person ID.",
+			canSyncCreate: true,
+			defaultIncluded: true,
+			filter: "missing_device_user_record",
+		},
+		{
+			key: "missing_employee_link",
+			label: "Missing employee links",
+			why: "DeviceUser exists without a safe employee link. Sync can auto-link only exact unambiguous matches.",
+			canSyncCreate: true,
+			defaultIncluded: true,
+			filter: "missing_employee_link",
+		},
+		{
+			key: "missing_raw_fingerprint_blob",
+			label: "Missing fingerprint raw blobs",
+			why: "Fingerprint enrollment is reported, but evidenced raw fingerData is not stored.",
+			canSyncCreate: true,
+			defaultIncluded: true,
+			filter: "missing_raw_fingerprint_blob",
+		},
+		{
+			key: "missing_raw_face_blob",
+			label: "Missing face raw blobs",
+			why: "Face enrollment is reported, but evidenced raw face/image data is not stored.",
+			canSyncCreate: true,
+			defaultIncluded: true,
+			filter: "missing_raw_face_blob",
+		},
+		{
+			key: "already_present",
+			label: "Already present",
+			why: "HRIS already has the DeviceUser record and any evidenced raw custody currently known.",
+			canSyncCreate: false,
+			defaultIncluded: false,
+			filter: "already_present",
+		},
+		{
+			key: "stale_count_only_or_live_no_data",
+			label: "Known no-data / stale count-only",
+			why: "Counts or stale inventory claim enrollment, but raw bytes are not evidenced; default sync skips repeated no-data loops.",
+			canSyncCreate: false,
+			defaultIncluded: false,
+			filter: "stale_count_only_or_live_no_data",
+		},
+		{
+			key: "unsupported_by_sync",
+			label: "Unsupported by this sync",
+			why: "This is outside Sync device users; use Sync logs, merge, manual link, or another repair path.",
+			canSyncCreate: false,
+			defaultIncluded: false,
+			filter: "unsupported_by_sync",
+		},
+	];
+
+	const buildDeviceUserSyncDecisionMatrix = (params: {
+		vendorUserCount?: number | null;
+		hrisUserCount?: number | null;
+		openUserCount?: number | null;
+		conflictUserCount?: number | null;
+		fingerprintRawMissing?: number | null;
+		faceRawMissing?: number | null;
+		staleHrisOnlyRows?: number | null;
+		staleFingerprintRawMissing?: number | null;
+		staleFaceRawMissing?: number | null;
+		sourceStatus?: string | null;
+		sourceError?: string | null;
+		modeHint?: DeviceUserSyncMode | null;
+	}): DeviceUserSyncDecisionMatrix => {
+		const vendorUserCount =
+			params.vendorUserCount === null || params.vendorUserCount === undefined
+				? null
+				: Math.max(Number(params.vendorUserCount) || 0, 0);
+		const hrisUserCount = Math.max(Number(params.hrisUserCount || 0), 0);
+		const missingDeviceUsers =
+			vendorUserCount === null ? 0 : Math.max(vendorUserCount - hrisUserCount, 0);
+		const missingLinks = Math.max(Number(params.openUserCount || 0), 0);
+		const missingFingerprint = Math.max(Number(params.fingerprintRawMissing || 0), 0);
+		const missingFace = Math.max(Number(params.faceRawMissing || 0), 0);
+		const staleNoData =
+			Math.max(Number(params.staleHrisOnlyRows || 0), 0) +
+			Math.max(Number(params.staleFingerprintRawMissing || 0), 0) +
+			Math.max(Number(params.staleFaceRawMissing || 0), 0);
+		const unsupported = Math.max(Number(params.conflictUserCount || 0), 0);
+		const alreadyPresent =
+			vendorUserCount === null
+				? hrisUserCount
+				: Math.max(Math.min(vendorUserCount, hrisUserCount) - missingLinks, 0);
+		const counts: Record<DeviceUserSyncDecisionBucketKey, number> = {
+			missing_device_user_record: missingDeviceUsers,
+			missing_employee_link: missingLinks,
+			missing_raw_fingerprint_blob: missingFingerprint,
+			missing_raw_face_blob: missingFace,
+			already_present: alreadyPresent,
+			stale_count_only_or_live_no_data: staleNoData,
+			unsupported_by_sync: unsupported,
+		};
+		const buckets = DEVICE_USER_SYNC_DECISION_BUCKETS.map((bucket) => ({
+			...bucket,
+			count: counts[bucket.key],
+		}));
+		const rawGapCount = missingFingerprint + missingFace;
+		const sourceReadRequired =
+			missingDeviceUsers > 0 ||
+			params.modeHint === "full_refresh" ||
+			params.modeHint === "peer_converge";
+		const selectedFastPlan: DeviceUserSyncMode =
+			params.modeHint ||
+			(rawGapCount > 0 && missingDeviceUsers === 0
+				? "biometrics_only"
+				: missingDeviceUsers > 0 || missingLinks > 0 || unsupported > 0
+					? "needs_attention_only"
+					: "biometrics_only");
+		const selectedFastPlanReason =
+			selectedFastPlan === "biometrics_only"
+				? "Saved HRIS DeviceUser truth already identifies raw-custody gaps, so source identity reread is skipped by default."
+				: selectedFastPlan === "needs_attention_only"
+					? "The matrix found actionable gaps, so the job targets only devices needing review instead of rereading every row."
+					: selectedFastPlan === "peer_converge"
+						? "Peer convergence needs current device-user truth before copying missing peer users."
+						: "Full refresh was requested, so source users are reread even if the matrix can already identify saved gaps.";
+		const jobStages = [
+			"Building missing-record matrix",
+			...(sourceReadRequired ? ["Reading source users needed for identity gaps"] : []),
+			...(missingFingerprint > 0 ? ["Capturing missing fingerprint raw bytes"] : []),
+			...(missingFace > 0 ? ["Capturing missing face raw bytes"] : []),
+			...(staleNoData > 0 ? ["Skipping known no-data rows"] : []),
+			rawGapCount + staleNoData + unsupported > 0
+				? "Finished with missing items needing review"
+				: "Finished with no actionable gaps",
+		];
+		return {
+			buckets,
+			counts,
+			selectedFastPlan,
+			selectedFastPlanReason,
+			sourceReadRequired,
+			sourceReadReason: sourceReadRequired
+				? "Source identity must be read for missing DeviceUser records, peer convergence, or explicit full refresh."
+				: "Saved HRIS DeviceUser state is enough to plan this job; live source identity reread is not needed first.",
+			jobStages,
+		};
+	};
+
+	const buildDeviceUserSyncJobDecisionMatrix = async (params: {
+		organizationId: string;
+		devices: any[];
+		syncMode: DeviceUserSyncMode;
+	}) => {
+		const aggregateCounts: Record<DeviceUserSyncDecisionBucketKey, number> = {
+			missing_device_user_record: 0,
+			missing_employee_link: 0,
+			missing_raw_fingerprint_blob: 0,
+			missing_raw_face_blob: 0,
+			already_present: 0,
+			stale_count_only_or_live_no_data: 0,
+			unsupported_by_sync: 0,
+		};
+		for (const device of params.devices) {
+			let rows: any[] = [];
+			try {
+				rows = (await loadDeviceUsersForExport(params.organizationId, device.id)) as any[];
+			} catch {
+				rows = [];
+			}
+			const statusSummary = summarizeDeviceUserStatuses(rows) as any;
+			const custodySummary = summarizeDeviceUserRawBiometricCustody(rows) as any;
+			const matrix = buildDeviceUserSyncDecisionMatrix({
+				vendorUserCount: null,
+				hrisUserCount: Number(statusSummary.total || rows.length || 0),
+				openUserCount: Number(statusSummary.unmatched || 0),
+				conflictUserCount: Number(statusSummary.conflict || 0),
+				fingerprintRawMissing: Number(custodySummary.fingerprintRawMissing || 0),
+				faceRawMissing: Number(custodySummary.faceRawMissing || 0),
+				staleHrisOnlyRows: Number(custodySummary.staleHrisOnlyRows || 0),
+				staleFingerprintRawMissing: Number(custodySummary.staleFingerprintRawMissing || 0),
+				staleFaceRawMissing: Number(custodySummary.staleFaceRawMissing || 0),
+				modeHint: params.syncMode,
+			});
+			for (const key of Object.keys(aggregateCounts) as DeviceUserSyncDecisionBucketKey[]) {
+				aggregateCounts[key] += Number(matrix.counts[key] || 0);
+			}
+		}
+		const matrix = buildDeviceUserSyncDecisionMatrix({
+			vendorUserCount: null,
+			hrisUserCount: aggregateCounts.already_present,
+			openUserCount: aggregateCounts.missing_employee_link,
+			conflictUserCount: aggregateCounts.unsupported_by_sync,
+			fingerprintRawMissing: aggregateCounts.missing_raw_fingerprint_blob,
+			faceRawMissing: aggregateCounts.missing_raw_face_blob,
+			staleHrisOnlyRows: aggregateCounts.stale_count_only_or_live_no_data,
+			modeHint: params.syncMode,
+		});
+		return {
+			...matrix,
+			counts: aggregateCounts,
+			buckets: DEVICE_USER_SYNC_DECISION_BUCKETS.map((bucket) => ({
+				...bucket,
+				count: aggregateCounts[bucket.key],
+			})),
+		};
+	};
+
 	const captureMissingBiometricCustodyForDevice = async (params: {
 		jobId: string;
 		req: Request;
@@ -11360,8 +11606,45 @@ export const controller = (prisma: PrismaClient) => {
 		device: any;
 	}) => {
 		const allRows = (await loadDeviceUsersForExport(params.organizationId, params.device.id)) as any[];
+		const savedRawSummary = summarizeDeviceUserRawBiometricCustody(allRows);
+		const savedMissingRaw =
+			Number(savedRawSummary.fingerprintRawMissing || 0) +
+			Number(savedRawSummary.faceRawMissing || 0);
+		if (savedMissingRaw <= 0) {
+			updateDeviceUserSyncJob(params.jobId, {
+				currentStage: "Finished with no actionable gaps",
+				message: `Saved HRIS DeviceUser matrix has no missing raw biometric blobs for ${params.device.name || params.device.address || "device"}.`,
+				currentDeviceId: params.device.id,
+				currentDeviceName: params.device.name || params.device.address || "Hikvision device",
+			});
+			return {
+				biometricTasks: 0,
+				biometricCached:
+					Number(savedRawSummary.fingerprintRawPresent || 0) +
+					Number(savedRawSummary.faceRawPresent || 0),
+				biometricCaptured: 0,
+				biometricFailed: 0,
+				biometricFailureReasons: {},
+				biometricFailureLog: deviceUserSyncJobs.get(params.jobId)?.biometricFailureLog || [],
+				biometricCustodyScope: "hris_device_users",
+				biometricSourceRefreshSkipped: true,
+				biometricSkipReason: "saved_matrix_has_no_missing_raw_biometric_blobs",
+				biometricStaleHrisOnlyRows: 0,
+				biometricStaleFingerprintReported: 0,
+				biometricStaleFingerprintRawBlobCount: 0,
+				biometricStaleFingerprintRawMissing: 0,
+				biometricStaleFaceReported: 0,
+				biometricStaleFaceRawMissing: 0,
+			};
+		}
 		let liveVendorUserIds: Set<string> | null = null;
 		try {
+			updateDeviceUserSyncJob(params.jobId, {
+				currentStage: "Reading source users needed for identity gaps",
+				message: `Checking current source users for ${params.device.name || params.device.address} before raw-custody repair.`,
+				currentDeviceId: params.device.id,
+				currentDeviceName: params.device.name || params.device.address || "Hikvision device",
+			});
 			const snapshot = await withDeviceUserImportTimeout(
 				loadHikvisionDeviceUserSnapshot(params.req, params.device),
 				Math.max(HIKVISION_PREVIEW_DEVICE_BUDGET_MS, 15_000),
@@ -11448,6 +11731,14 @@ export const controller = (prisma: PrismaClient) => {
 		}, 0);
 		const initial = deviceUserSyncJobs.get(params.jobId);
 		updateDeviceUserSyncJob(params.jobId, {
+			currentStage:
+				tasks.some((task) => task.modality === "fingerprint")
+					? "Capturing missing fingerprint raw bytes"
+					: tasks.some((task) => task.modality === "face")
+						? "Capturing missing face raw bytes"
+						: staleSummary && Number(staleSummary.staleHrisOnlyRows || 0) > 0
+							? "Skipping known no-data rows"
+							: "Finished with no actionable gaps",
 			biometricTotal:
 				Number(initial?.biometricTotal || 0) +
 				tasks.reduce((sum, task) => sum + Math.max(Number(task.missingCount || 0), 1), 0),
@@ -11471,7 +11762,11 @@ export const controller = (prisma: PrismaClient) => {
 			const vendorUserId = String(task.row.vendorUserId || task.row.employeeNo || "").trim();
 			const missingCount = Math.max(Number(task.missingCount || 0), 1);
 			updateDeviceUserSyncJob(params.jobId, {
-				message: `Capturing ${task.modality} custody for ${params.device.name || params.device.address} (${current.biometricProcessed + 1}/${current.biometricTotal}).`,
+				currentStage:
+					task.modality === "fingerprint"
+						? "Capturing missing fingerprint raw bytes"
+						: "Capturing missing face raw bytes",
+				message: `Capturing missing ${task.modality} raw bytes for ${params.device.name || params.device.address} (${current.biometricProcessed + 1}/${current.biometricTotal}).`,
 				currentDeviceId: params.device.id,
 				currentDeviceName: params.device.name || params.device.address || "Hikvision device",
 				currentVendorUserId: vendorUserId,
@@ -11612,14 +11907,33 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			try {
+				const skipSourceRefresh =
+					params.syncMode === "biometrics_only" ||
+					(params.syncMode === "needs_attention_only" &&
+						currentJob.decisionMatrix?.sourceReadRequired === false);
+				updateDeviceUserSyncJob(params.jobId, {
+					currentStage:
+						skipSourceRefresh
+							? "Building missing-record matrix"
+							: "Reading source users needed for identity gaps",
+					message:
+						skipSourceRefresh
+							? `Using saved DeviceUser matrix for ${device.name || device.address || "device"}; source reread is not required for this fast plan.`
+							: `Reading source users needed for identity gaps on ${device.name || device.address || "device"}.`,
+					currentDeviceId: device.id,
+					currentDeviceName: device.name || device.address || "Hikvision device",
+				});
 				const sourceResult =
-					params.syncMode === "biometrics_only"
+					skipSourceRefresh
 						? {
 								run: null,
 								summary: {
-									mode: "biometrics_only",
+									mode: params.syncMode,
 									sourceRefreshSkipped: true,
-									reason: "using_saved_device_user_truth_for_raw_custody_repair",
+									reason:
+										params.syncMode === "biometrics_only"
+											? "using_saved_device_user_truth_for_raw_custody_repair"
+											: "decision_matrix_did_not_require_source_identity_read",
 								},
 							}
 						: await syncHikvisionDeviceUsersFromSource({
@@ -12007,6 +12321,65 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			const decisionMatrix = await buildDeviceUserSyncJobDecisionMatrix({
+				organizationId: gate.organizationId,
+				devices: targetDevices,
+				syncMode,
+			});
+			const sourceRefreshSkippedByMatrix =
+				syncMode === "biometrics_only" ||
+				(syncMode === "needs_attention_only" && decisionMatrix.sourceReadRequired === false);
+			const executionPlan = {
+				mode: syncMode,
+				dryRun: (req.body as any)?.dryRun === true,
+				willCreateJob: (req.body as any)?.dryRun === true ? false : true,
+				selectedDeviceCount: targetDevices.length,
+				selectedDevices: targetDevices.map((device) => ({
+					id: device.id,
+					name: device.name || device.address || "Hikvision device",
+					address: device.address || null,
+				})),
+				sourceReadRequired: decisionMatrix.sourceReadRequired,
+				sourceReadSkipped: sourceRefreshSkippedByMatrix,
+				sourceReadReason: decisionMatrix.sourceReadReason,
+				steps: [
+					"Build missing-record matrix from saved HRIS DeviceUser state",
+					...(decisionMatrix.sourceReadRequired
+						? ["Read source users needed for identity gaps"]
+						: ["Skip source user reread because saved HRIS state scopes the actionable work"]),
+					...(decisionMatrix.counts.missing_employee_link > 0
+						? ["Process missing employee-link candidates only"]
+						: []),
+					...(decisionMatrix.counts.missing_raw_fingerprint_blob > 0
+						? ["Capture missing fingerprint raw bytes only"]
+						: []),
+					...(decisionMatrix.counts.missing_raw_face_blob > 0
+						? ["Capture missing face raw bytes only"]
+						: []),
+					...(decisionMatrix.counts.already_present > 0
+						? ["Skip already-present rows in the default fast job"]
+						: []),
+					...(decisionMatrix.counts.stale_count_only_or_live_no_data > 0
+						? ["Skip known no-data / stale count-only rows unless deep repair is requested"]
+						: []),
+				],
+			};
+			if ((req.body as any)?.dryRun === true) {
+				res.status(200).json(
+					buildSuccessResponse(
+						"Device user sync dry-run plan generated",
+						{
+							mode: "dry_run",
+							jobId: null,
+							willCreateJob: false,
+							decisionMatrix,
+							executionPlan,
+						},
+						200,
+					),
+				);
+				return;
+			}
 			const jobId = randomUUID();
 			const startedAt = new Date();
 			const job: DeviceUserSyncJob = {
@@ -12014,6 +12387,9 @@ export const controller = (prisma: PrismaClient) => {
 				status: "processing",
 				syncMode,
 				organizationId: gate.organizationId,
+				decisionMatrix,
+				jobStages: decisionMatrix.jobStages,
+				currentStage: "Building missing-record matrix",
 				totalDevices: targetDevices.length,
 				processedDevices: 0,
 				successfulDevices: 0,
@@ -12024,7 +12400,7 @@ export const controller = (prisma: PrismaClient) => {
 				biometricCached: 0,
 				biometricFailed: 0,
 				biometricFailureLog: [],
-				message: getBulkSyncModeQueuedMessage(syncMode),
+				message: decisionMatrix.selectedFastPlanReason || getBulkSyncModeQueuedMessage(syncMode),
 				results: [],
 				startedAt,
 				updatedAt: startedAt,
@@ -14590,6 +14966,36 @@ export const controller = (prisma: PrismaClient) => {
 								(Number.isFinite(Number(needsSyncEvents)) && Number(needsSyncEvents) > 0)) &&
 							device.vendor === "ZKTeco" &&
 							Boolean(zktecoPreview?.ok));
+				const status = liveSourceSkippedForQuickPreview
+					? "saved_preview"
+					: sourceErrorMessage
+					? "source_unavailable"
+					: !shouldProbeLiveSourceTotals && vendorUserCount !== null
+						? "user_count_ready"
+					: totalEvents === null && operationLogTotal === null
+						? "source_total_unavailable"
+					: needsSyncEvents && needsSyncEvents > 0
+						? "needs_sync"
+						: eventWillAddTotal > 0
+							? "needs_sync"
+							: "synced";
+				const syncDecisionMatrix = buildDeviceUserSyncDecisionMatrix({
+					vendorUserCount,
+					hrisUserCount: deviceUserSummary.total,
+					openUserCount: deviceUserSummary.unmatched,
+					conflictUserCount: deviceUserSummary.conflict,
+					fingerprintRawMissing:
+						(biometricCustody as any).fingerprintRawMissing ??
+						(biometricCustody as any).fingerprintEnvelopeMissing,
+					faceRawMissing:
+						(biometricCustody as any).faceRawMissing ??
+						(biometricCustody as any).faceEnvelopeMissing,
+					staleHrisOnlyRows: (biometricCustody as any).staleHrisOnlyRows,
+					staleFingerprintRawMissing: (biometricCustody as any).staleFingerprintRawMissing,
+					staleFaceRawMissing: (biometricCustody as any).staleFaceRawMissing,
+					sourceStatus: status,
+					sourceError: sourceErrorMessage,
+				});
 				return {
 					deviceId: device.id,
 					name: device.name,
@@ -14636,19 +15042,6 @@ export const controller = (prisma: PrismaClient) => {
 							? "hikvision-import"
 							: "zkteco-bridge-sync"
 						: null,
-					status: liveSourceSkippedForQuickPreview
-						? "saved_preview"
-						: sourceErrorMessage
-						? "source_unavailable"
-						: !shouldProbeLiveSourceTotals && vendorUserCount !== null
-							? "user_count_ready"
-						: totalEvents === null && operationLogTotal === null
-							? "source_total_unavailable"
-							: needsSyncEvents && needsSyncEvents > 0
-								? "needs_sync"
-								: eventWillAddTotal > 0
-									? "needs_sync"
-									: "synced",
 					lastSourceEventAt:
 						device.vendor === "ZKTeco" ? sourcePreview?.lastSelectedAt || null : null,
 					countLatencyMs: liveSourceSkippedForQuickPreview
@@ -14658,7 +15051,9 @@ export const controller = (prisma: PrismaClient) => {
 					sources,
 					readySourceCount,
 					sourceCheckTotal: sources.length,
+					syncDecisionMatrix,
 					...(sourceErrorMessage ? { error: sourceErrorMessage } : {}),
+					status,
 				};
 			});
 

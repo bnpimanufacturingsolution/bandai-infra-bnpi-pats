@@ -1,5 +1,30 @@
 # WWG Agent Handoff
 
+## 2026-07-21 - Sync Center missing-record decision matrix handoff
+
+- Status: `COMPLETE_LOCAL_PROOF`.
+- Task mode: Mixed admin UX/performance feature and backend fast-path repair.
+- Code changed:
+  - `hris-api/app/device/device.controller.ts`: added Device Users sync decision matrix buckets, preview payload, job persistence fields, selected fast plan, source-read skip logic, and saved-state raw-custody skip.
+  - `hris-app/app/services/devices.service.ts`: exposed matrix/job-stage types to the UI.
+  - `hris-app/app/routes/admin/devices/enroll.tsx`: changed default job mode to `needs_attention_only`, added `What Sync can fix` bucket summary/filter view, selected plan display, and truthful stage copy.
+  - Focused backend/frontend contract tests updated.
+- API proof:
+  - `.runtime/sync-center-decision-matrix-20260721-110520/api-sync-preview-decision-matrix-final.json`.
+  - Main Entrance Device B (`cmpxw13hx002h7zwso7dyedrn`, `10.184.37.20`) returned `selectedFastPlan=needs_attention_only`, `sourceReadRequired=false`, `missing_employee_link=49`, `already_present=638`, and zero missing raw blobs in `3.818s`.
+- Browser proof:
+  - `.runtime/sync-center-decision-matrix-20260721-110520/browser-sync-center-review-modal.json`.
+  - `.runtime/sync-center-decision-matrix-20260721-110520/browser-sync-center-review-modal.png`.
+  - Browser verified `What Sync can fix`, all seven bucket/filter labels, `Fastest valid plan`, `Building missing-record matrix`, and absence of old `Reading source device users` wording.
+- Validation:
+  - `npx tsx node_modules/mocha/bin/mocha --no-config tests/hikvision-biometric-sync-contract.spec.ts`: `15` passing.
+  - `npx tsc --noEmit --pretty false` in `hris-api`: passed.
+  - `npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts`: `1` passing.
+  - `git diff --check`: no whitespace errors; CRLF normalization warnings only.
+- Warning:
+  - Frontend broad `npx tsc -p tsconfig.test.json --noEmit --pretty false` still fails outside touched device scope at `app/routes/employee/dashboard/TimesheetsTab.test.tsx(54,46)`, already tracked by `REC-20260706-TEST-TYPECHECK-MOCKS`.
+- Recommendation capture: No new recommendations were identified.
+
 ## 2026-07-21 - Four Hikvision devices online/armed handoff
 
 - Task mode: Mixed live runtime repair, native listener regression repair, and evidence closeout.
