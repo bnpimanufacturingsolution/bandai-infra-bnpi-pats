@@ -38,7 +38,7 @@ const args = [
 	"-File",
 	scriptPath,
 	"-DeviceIps",
-	...deviceIps,
+	deviceIps.join(","),
 ];
 
 const result = spawnSync("powershell.exe", args, {

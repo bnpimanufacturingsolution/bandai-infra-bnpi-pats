@@ -14,6 +14,7 @@ const portOwnershipScript = path.join(__dirname, "..", "scripts", "ensure-dev-po
 const devWatchScript = path.join(__dirname, "..", "scripts", "run-dev-api-watch.cjs");
 const bridgeScript = path.join(__dirname, "..", "..", "scripts", "start-host-hikvision-vm-ssh-bridge.ps1");
 const livePathScript = path.join(__dirname, "..", "..", "scripts", "ensure-device-live-path.ps1");
+const remoteDeviceTunnelScript = path.join(__dirname, "..", "scripts", "ensure-hikvision-remote-device-tunnel.cjs");
 
 describe("resolve-hikvision-vm-bridge-targets", () => {
 	it("exports a resolver script that ranks host-reachable reverse targets", () => {
@@ -97,5 +98,12 @@ describe("resolve-hikvision-vm-bridge-targets", () => {
 		expect(livePathSource).to.include("DONE (pre-api defer)");
 		expect(watchSource).to.include("runLivePathAfterHealth");
 		expect(watchSource).to.include("HRIS_DEVICE_LIVE_PATH_REQUIRE_API: \"true\"");
+	});
+
+	it("passes the four Hikvision remote device IPs as one PowerShell argument", () => {
+		const source = fs.readFileSync(remoteDeviceTunnelScript, "utf8");
+		expect(source).to.include("10.184.37.20,10.184.37.21,10.184.37.22,10.184.37.23");
+		expect(source).to.include("deviceIps.join(\",\")");
+		expect(source).to.not.include("...deviceIps");
 	});
 });

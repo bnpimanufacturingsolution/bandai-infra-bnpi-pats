@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+﻿import { useEffect, useState, useCallback, useMemo } from "react";
 import { Button } from "~/components/atoms/Button";
 import { Modal } from "~/components/atoms/Modal";
 import { Badge } from "~/components/atoms/Badge";
@@ -39,7 +39,6 @@ import * as XLSX from "xlsx";
 import { useEmployee, useEmployees } from "~/lib/hooks/useEmployees";
 import {
 	useDevices,
-	useDeviceLiveReadiness,
 	useDeviceSyncPreview,
 	useDeviceSyncRuns,
 	useDeviceActivity,
@@ -74,12 +73,6 @@ import {
 } from "~/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
-import { DeviceLiveReadinessStrip } from "~/components/molecules/DeviceLiveReadinessStrip";
-import {
-	DEVICE_LIVE_KEEP_READY_INTERVAL_MS,
-	readDeviceLiveKeepReady,
-	writeDeviceLiveKeepReady,
-} from "~/lib/device-live-keep-ready";
 import type { HikvisionUserInfo } from "~/types/hikvision";
 import deviceService, {
 	type DeviceSyncPreviewRow,
@@ -513,7 +506,6 @@ export function DeviceEnrollmentPanel({
 	const activePanel = ["overview", "users", "logs", "runs"].includes(activePanelParam)
 		? activePanelParam
 		: "overview";
-	const isSyncCenterReviewOpen = action === "sync-review" || action === "device-users";
 	const deviceUserStatus = searchParams.get("deviceUserStatus") || "all";
 	const deviceUserSearch = searchParams.get("deviceUserSearch") || "";
 	const deviceUserVendorRange = searchParams.get("deviceUserVendorRange") || "";
@@ -571,7 +563,7 @@ export function DeviceEnrollmentPanel({
 			deviceId: activePanel === "overview" ? "all" : selectedDeviceId || "all",
 			quick: activePanel !== "overview" && Boolean(selectedDeviceId),
 		},
-		// Only while Sync Center panels that need counts are visible — no background poll.
+		// Only while Sync Center panels that need counts are visible â€” no background poll.
 		activePanel === "overview" || activePanel === "users" || Boolean(selectedDeviceId),
 		{ refetchIntervalMs: false, staleTime: 60 * 1000 },
 	);
@@ -604,147 +596,6 @@ export function DeviceEnrollmentPanel({
 		},
 	);
 	const hikvisionListenerControl = useControlHikvisionListener();
-	const {
-		data: liveReadiness,
-		isLoading: isLiveReadinessLoading,
-		error: liveReadinessError,
-		refetch: refetchLiveReadiness,
-	} = useDeviceLiveReadiness(true, {
-		refetchInterval: 45_000,
-		staleTime: 20_000,
-	});
-	const [isProvingLivePath, setIsProvingLivePath] = useState(false);
-	const [keepLiveReady, setKeepLiveReady] = useState(false);
-	useEffect(() => {
-		setKeepLiveReady(readDeviceLiveKeepReady());
-		const onStorage = (event: StorageEvent) => {
-			if (event.key === "project-truth.device-live-keep-ready") {
-				setKeepLiveReady(event.newValue === "1");
-			}
-		};
-		const onCustom = (event: Event) => {
-			const detail = (event as CustomEvent<{ on?: boolean }>).detail;
-			if (typeof detail?.on === "boolean") setKeepLiveReady(detail.on);
-		};
-		window.addEventListener("storage", onStorage);
-		window.addEventListener("project-truth:device-live-keep-ready", onCustom as EventListener);
-		return () => {
-			window.removeEventListener("storage", onStorage);
-			window.removeEventListener(
-				"project-truth:device-live-keep-ready",
-				onCustom as EventListener,
-			);
-		};
-	}, []);
-	const setKeepLiveReadyPersisted = (on: boolean) => {
-		setKeepLiveReady(on);
-		writeDeviceLiveKeepReady(on);
-		if (on) {
-			toast.success("Keep ready ON", {
-				id: "device-live-keep-ready",
-				description:
-					"Stays quiet while green. Only auto-repairs if the live path goes red.",
-			});
-		} else {
-			toast.message("Keep ready OFF", { id: "device-live-keep-ready" });
-		}
-	};
-	const [isQuietKeepReadyRepair, setIsQuietKeepReadyRepair] = useState(false);
-	const proveLivePath = async (options?: { quiet?: boolean; forceReArm?: boolean }) => {
-		const quiet = options?.quiet === true;
-		const forceReArm = options?.forceReArm === true;
-		if (quiet) setIsQuietKeepReadyRepair(true);
-		else setIsProvingLivePath(true);
-		try {
-			const result = await deviceService.proveDeviceLivePath({ forceReArm });
-			await refetchLiveReadiness();
-			const readinessGreen =
-				result.readiness?.overall === "green" &&
-				result.readiness?.safeToTap === true &&
-				result.readiness?.safeToEnroll === true;
-			const pathOk = result.proven === true || readinessGreen;
-			if (pathOk) {
-				if (!quiet) {
-					toast.success("Safe to enroll — live path proved", {
-						id: "device-live-path-prove",
-						description:
-							result.readiness?.headline ||
-							"DB + live capture + proof look healthy. Create/enroll should stream realtime.",
-					});
-				}
-			} else if (!quiet) {
-				toast.warning("Not fully ready to enroll", {
-					id: "device-live-path-prove",
-					description:
-						result.readiness?.headline ||
-						result.operatorHint ||
-						"Fix red readiness checks first.",
-				});
-			}
-			return { ...result, proven: pathOk };
-		} catch (error: any) {
-			if (!quiet) {
-				toast.error(error?.message || "Live path prove failed", {
-					id: "device-live-path-prove",
-				});
-			}
-			return null;
-		} finally {
-			if (quiet) setIsQuietKeepReadyRepair(false);
-			else setIsProvingLivePath(false);
-		}
-	};
-
-	const keepReadyLastProveAtRef = useRef(0);
-	useEffect(() => {
-		if (!keepLiveReady) return;
-		if (isSyncCenterReviewOpen) return;
-		if (typeof window === "undefined") return;
-		if (!liveReadiness) return;
-		const listenerReadyForTap =
-			liveReadiness.listener?.running === true &&
-			liveReadiness.listener?.armed === true &&
-			liveReadiness.safeToTap === true &&
-			liveReadiness.overall !== "red";
-		const pathHealthy =
-			liveReadiness.database?.ok === true &&
-			(liveReadiness.listener?.receiving === true || listenerReadyForTap) &&
-			liveReadiness.safeToTap === true &&
-			liveReadiness.overall !== "red";
-		if (pathHealthy) return;
-		const listenerState = String(liveReadiness.listener?.state || "").toLowerCase();
-		const needsForceReArm =
-			liveReadiness.listener?.running !== true || listenerState === "login_failed";
-		let cancelled = false;
-		const run = () => {
-			if (cancelled || isProvingLivePath || isQuietKeepReadyRepair) return;
-			const now = Date.now();
-			if (now - keepReadyLastProveAtRef.current < 120_000) return;
-			keepReadyLastProveAtRef.current = now;
-			void proveLivePath({ quiet: true, forceReArm: needsForceReArm });
-		};
-		const t = window.setTimeout(run, 2_000);
-		const intervalId = window.setInterval(run, 120_000);
-		return () => {
-			cancelled = true;
-			window.clearTimeout(t);
-			window.clearInterval(intervalId);
-		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [
-		keepLiveReady,
-		isSyncCenterReviewOpen,
-		liveReadiness?.overall,
-		liveReadiness?.safeToTap,
-		liveReadiness?.safeToEnroll,
-		liveReadiness?.database?.ok,
-		liveReadiness?.listener?.running,
-		liveReadiness?.listener?.receiving,
-		liveReadiness?.listener?.armed,
-		liveReadiness?.proof?.fresh,
-		isProvingLivePath,
-		isQuietKeepReadyRepair,
-	]);
 	const syncDeviceUsersMutation = useSyncDeviceUsers();
 	const previewDeviceUserExportMutation = usePreviewDeviceUserExport();
 	const exportDeviceUsersMutation = useExportDeviceUsers();
@@ -3393,7 +3244,7 @@ export function DeviceEnrollmentPanel({
 		if (!normalizedDeviceUserSearch) return 2;
 		const vendor = String(row.vendorUserId || "").toLowerCase();
 		const empId = String(row.employee?.employeeId || "").toLowerCase();
-		// Exact vendor / employee id first (search "19" → User 19 before 198/1198).
+		// Exact vendor / employee id first (search "19" â†’ User 19 before 198/1198).
 		if (vendor === normalizedDeviceUserSearch || empId === normalizedDeviceUserSearch) return 0;
 		if (
 			vendor.startsWith(normalizedDeviceUserSearch) ||
@@ -3444,7 +3295,7 @@ export function DeviceEnrollmentPanel({
 		.sort((left, right) => {
 			const rankDelta = rankDeviceUserSearchMatch(left) - rankDeviceUserSearchMatch(right);
 			if (rankDelta !== 0) return rankDelta;
-			// On-device (live source) first — matches Hikvision Person Management "recent" feel.
+			// On-device (live source) first â€” matches Hikvision Person Management "recent" feel.
 			const leftLive = left.sourceUser ? 0 : 1;
 			const rightLive = right.sourceUser ? 0 : 1;
 			if (leftLive !== rightLive) return leftLive - rightLive;
@@ -3472,7 +3323,7 @@ export function DeviceEnrollmentPanel({
 		safeDeviceUserPage * deviceUserLimit,
 	);
 
-	// From Device Events: /devices?action=device-users&deviceUserDetails=14 → open that user's modal.
+	// From Device Events: /devices?action=device-users&deviceUserDetails=14 â†’ open that user's modal.
 	useEffect(() => {
 		if (!deviceUserDetailsParam) return;
 		if (activePanel !== "users") return;
@@ -4802,29 +4653,6 @@ export function DeviceEnrollmentPanel({
 				</div>
 			)}
 
-			<DeviceLiveReadinessStrip
-				compact
-				mode="enroll"
-				readiness={liveReadiness}
-				isLoading={isLiveReadinessLoading}
-				errorMessage={
-					liveReadinessError
-						? liveReadinessError instanceof Error
-							? liveReadinessError.message
-							: "Readiness check failed"
-						: null
-				}
-				onProve={() => void proveLivePath({ forceReArm: true })}
-				isProving={isProvingLivePath}
-				keepReady={keepLiveReady}
-				onKeepReadyChange={setKeepLiveReadyPersisted}
-				keepReadyWorking={
-					keepLiveReady &&
-					isQuietKeepReadyRepair &&
-					(liveReadiness?.overall === "red" || liveReadiness?.safeToTap === false)
-				}
-			/>
-
 			<Tabs value={activePanel} onValueChange={setActivePanel} className="space-y-4">
 				<TabsList className="grid h-auto w-full grid-cols-4 rounded-md bg-slate-100 p-1">
 					<TabsTrigger value="overview">Overview</TabsTrigger>
@@ -4882,7 +4710,7 @@ export function DeviceEnrollmentPanel({
 												? "VM running"
 												: "VM stopped"}
 									</span>
-									<span className="opacity-40">•</span>
+									<span className="opacity-40">â€¢</span>
 									<span className="truncate">
 										Checked{" "}
 										{formatSyncCenterTime(hikvisionListenerStatus?.checkedAt)}
@@ -4900,7 +4728,7 @@ export function DeviceEnrollmentPanel({
 					{isLoadingDevices && devices.length === 0 ? (
 						<div className="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
 							<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
-							Loading device list… Close is always available if this hangs.
+							Loading device listâ€¦ Close is always available if this hangs.
 						</div>
 					) : syncCenterDevices.length === 0 ? (
 						<div className="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
@@ -5591,11 +5419,11 @@ export function DeviceEnrollmentPanel({
 										</span>
 										<span className="mt-1 block text-xs text-emerald-800">
 											Device:{" "}
-											{recentDeletedDeviceUser.sourceDeleted ? "not found" : "needs check"} ·
+											{recentDeletedDeviceUser.sourceDeleted ? "not found" : "needs check"} Â·
 											HRIS row:{" "}
 											{recentDeletedDeviceUser.hrisDeleted ? "removed" : "needs check"}
 											{recentDeletedDeviceUser.failed
-												? ` · ${recentDeletedDeviceUser.failed} selected users failed`
+												? ` Â· ${recentDeletedDeviceUser.failed} selected users failed`
 												: ""}
 										</span>
 									</div>
@@ -7053,8 +6881,8 @@ export function DeviceEnrollmentPanel({
 											Preview merge by unique ID
 										</p>
 										<p className="mt-1 text-xs text-slate-600">
-											{mergePlural(sdkMergeSelectedUniqueCount, "selected unique ID")} ·{" "}
-											{mergePlural(sdkMergeSelectedPotentialWriteCount, "selected potential write")} ·{" "}
+											{mergePlural(sdkMergeSelectedUniqueCount, "selected unique ID")} Â·{" "}
+											{mergePlural(sdkMergeSelectedPotentialWriteCount, "selected potential write")} Â·{" "}
 											{sdkMergeExcludedActionableCount} excluded
 										</p>
 										{sdkMergeBlockingCount > 0 ? (
@@ -8336,7 +8164,7 @@ export function DeviceEnrollmentPanel({
 													{rawPresent
 														? `${storedCount} of ${enrolledCount} stored`
 														: detailsDeviceUserSavedLoading
-															? <><Loader2 className="h-5 w-5 animate-spin" />Checking saved templates…</>
+															? <><Loader2 className="h-5 w-5 animate-spin" />Checking saved templatesâ€¦</>
 														: "Not captured yet"}
 												</p>
 												<p className="mt-1 text-xs font-semibold">
@@ -8433,7 +8261,7 @@ export function DeviceEnrollmentPanel({
 															}
 														}}>
 														{rawFpCaptureBusy
-															? "Capturing…"
+															? "Capturingâ€¦"
 															: rawPresent
 																? "Repair: re-capture raw"
 																: "Repair: capture raw"}
@@ -8452,21 +8280,21 @@ export function DeviceEnrollmentPanel({
 																	<p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
 																		Template {idx + 1}
 																		{open
-																			? " · full base64"
-																			: " · preview"}
+																			? " Â· full base64"
+																			: " Â· preview"}
 																	</p>
 																	<p className="mt-1 break-all font-mono text-[10px] leading-4 text-slate-800">
 																		{open
 																			? data
-																			: `${data.slice(0, 120)}${data.length > 120 ? "…" : ""}`}
+																			: `${data.slice(0, 120)}${data.length > 120 ? "â€¦" : ""}`}
 																	</p>
 																	<p className="mt-1 text-[10px] text-emerald-900">
-																		length={data.length} chars ·
+																		length={data.length} chars Â·
 																		fingerPrintId=
 																		{String(
 																			tpl?.fingerPrintId ?? "?",
 																		)}{" "}
-																		· type=
+																		Â· type=
 																		{String(tpl?.fingerType ?? "?")}
 																	</p>
 																	<div className="mt-2 flex flex-wrap gap-2">
@@ -8562,7 +8390,7 @@ export function DeviceEnrollmentPanel({
 													{facePresent
 														? "Stored on DeviceUser"
 														: faceCount > 0
-															? "Count only — raw not pulled"
+															? "Count only â€” raw not pulled"
 															: "No face on device"}
 												</p>
 												<p className="mt-2 leading-5">
@@ -8570,7 +8398,7 @@ export function DeviceEnrollmentPanel({
 														? "Base64 face image custody on DeviceUser (not on DeviceEvent ledger)."
 														: faceCount > 0
 															? "UserInfo reports a face count but raw picture was not captured yet."
-															: "Device UserInfo has numOfFace=0 / no faceURL for this person — nothing to store."}
+															: "Device UserInfo has numOfFace=0 / no faceURL for this person â€” nothing to store."}
 												</p>
 												{faceCount > 0 ? (
 													<div className="mt-3 flex flex-wrap gap-2">
@@ -8663,7 +8491,7 @@ export function DeviceEnrollmentPanel({
 															className="mx-auto max-h-40 rounded-lg object-contain"
 														/>
 														<p className="mt-2 text-[10px] text-emerald-900">
-															bytes≈{String(rawFace?.byteLength || b64.length)} ·
+															bytesâ‰ˆ{String(rawFace?.byteLength || b64.length)} Â·
 															source={String(rawFace?.source || "?")}
 														</p>
 													</div>
@@ -8983,7 +8811,7 @@ export function DeviceEnrollmentPanel({
 								<div className="min-w-0">
 									<p className="font-semibold">{deviceUserExportActionLabel}</p>
 									<p className="mt-1 text-xs text-orange-900">
-										{deviceUserExportScopeLabel} · {deviceUserExportScopeCountLabel} ·{" "}
+										{deviceUserExportScopeLabel} Â· {deviceUserExportScopeCountLabel} Â·{" "}
 										{deviceUserExportState.format === "json"
 											? "Package JSON"
 											: deviceUserExportState.format === "excel"

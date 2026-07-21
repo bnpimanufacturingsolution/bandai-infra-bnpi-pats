@@ -3201,7 +3201,16 @@ export const controller = (prisma: PrismaClient) => {
 						maxResults,
 					},
 				},
-				["totalMatches", "numOfMatches", "totalNum", "totalNumber", "total"],
+				[
+					"totalMatches",
+					"numOfMatches",
+					"userNumber",
+					"userNum",
+					"numOfUsers",
+					"totalNum",
+					"totalNumber",
+					"total",
+				],
 				{ timeoutMs: HIKVISION_FAST_USER_COUNT_TIMEOUT_MS },
 			);
 		const readUserCountEndpoint = async () => {
@@ -3217,6 +3226,9 @@ export const controller = (prisma: PrismaClient) => {
 					ok: true,
 					count: firstNumericValueForKeys(data, [
 						"userCount",
+						"userNumber",
+						"userNum",
+						"numOfUsers",
 						"totalUserCount",
 						"userTotal",
 						"totalNum",

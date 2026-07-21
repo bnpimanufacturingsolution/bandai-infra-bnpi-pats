@@ -20,6 +20,14 @@ $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $runRoot = Join-Path $runtimeRoot "run-$stamp"
 $sshExe = (Get-Command ssh.exe -ErrorAction Stop).Source
 
+$DeviceIps = @(
+  $DeviceIps |
+    ForEach-Object { [string]$_ } |
+    ForEach-Object { $_ -split '[,\s;]+' } |
+    ForEach-Object { $_.Trim() } |
+    Where-Object { $_ }
+)
+
 function Stop-ExistingTunnel {
   if (-not (Test-Path -LiteralPath $pidFile)) { return }
   $record = Get-Content -Raw -LiteralPath $pidFile | ConvertFrom-Json

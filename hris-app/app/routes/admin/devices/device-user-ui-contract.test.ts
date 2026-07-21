@@ -146,10 +146,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("No live device-user records matched this search");
 		expect(enroll).toContain("Merge needs at least two available devices.");
 		expect(enroll).toContain("typeof preview.vendorUserCount === \"number\"");
-		expect(enroll).toContain('const listenerReadyForTap =');
-		expect(enroll).toContain('const isSyncCenterReviewOpen = action === "sync-review" || action === "device-users"');
-		expect(enroll).toContain("if (isSyncCenterReviewOpen) return;");
-		expect(enroll).toContain('listenerState === "login_failed"');
+		expect(enroll).not.toContain("DeviceLiveReadinessStrip");
+		expect(enroll).not.toContain("Checking DB + live path");
+		expect(enroll).not.toContain("useDeviceLiveReadiness");
+		expect(enroll).not.toContain("proveLivePath");
+		expect(enroll).not.toContain("isSyncCenterReviewOpen");
 		expect(enroll).toContain('deviceUserView === "source"');
 		expect(enroll).toContain('status === "source_unavailable"');
 		expect(enroll).toContain('options.unavailableLabel || "Unavailable"');
