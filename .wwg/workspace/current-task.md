@@ -1,5 +1,13 @@
-# Current Task
+﻿# Current Task
 
+## Latest Task Addendum - 2026-07-22 Main Entrance A-F six-device tunnel repair
+
+- Task mode: live runtime reachability + tunnel bootstrap.
+- Proven: VM reaches `.20-.25` on 80/443/8000; host does not (tunnel required for local API).
+- Root cause of E/F offline locally: stale four-device tunnel map missing `.24/.25`.
+- Fixed: six-device SSH tunnel running; local + K3s DEV health online for A-F.
+- Evidence: `.runtime/device-a-f-reach-20260722-143906/`.
+- Boundary: do not treat TEST A/B reverse bridge as this tunnel; Cloudflare remains active.
 ## Latest Task Addendum - 2026-07-22 Merge Users Overnight Loop Terminal Evidence
 
 - Task mode: mixed live runtime ownership, backend merge-job repair, admin UX hardening, and evidence handoff.
@@ -285,7 +293,7 @@
   - Local recovery setting `HIKVISION_RAW_BIOMETRIC_SYNC_CONCURRENCY=2` removed transient `Unauthorized` failures; job `834d6273-74d8-416f-aecf-8fd92430a062` captured `29` more and reduced fingerprint missing to `91`.
   - Final preview: source users `314`, HRIS DeviceUsers `394`, fingerprint slots `718`, fingerprint raw `627`, fingerprint missing `91`; face reported `356`, face raw `311`, face missing `45`.
 - Remaining boundary: per-row sample repair for users `1008`, `1076`, and `1143` returned HTTP `422` with exact bodies `no_fingerprint_data_from_device` and `no_face_on_device`. These rows remain `missing_raw_blob`; no raw blobs were fabricated.
-- UI proof: Sync review modal shows raw custody counts (`718 enrolled · 627 raw · 91 missing_raw_blob`, `356 enrolled · 311 raw · 45 missing_raw_blob`) and details modal shows `2 of 2 stored` for repaired user `1004`; user `1008` shows `2 missing_raw_blob`, `Repair: capture raw`, face count-only raw missing, and `Repair: capture face`.
+- UI proof: Sync review modal shows raw custody counts (`718 enrolled Â· 627 raw Â· 91 missing_raw_blob`, `356 enrolled Â· 311 raw Â· 45 missing_raw_blob`) and details modal shows `2 of 2 stored` for repaired user `1004`; user `1008` shows `2 missing_raw_blob`, `Repair: capture raw`, face count-only raw missing, and `Repair: capture face`.
 - Evidence: `.runtime/test-a-raw-repair-loop-20260720-103434/`.
 
 ## Latest Task Addendum - 2026-07-20 Raw biometric package export/import alignment
@@ -320,7 +328,7 @@
   - Capture API works with `req.organizationId`
   - UI: always refetch DeviceUser on details open; raw FP + face sections
 - Auto path: schedule raw FP (+ face when present) after plain identity; enrich preserves raw
-- Recommendation: Physical panel unique FP enroll for new person sticky (Proposed — prior REC).
+- Recommendation: Physical panel unique FP enroll for new person sticky (Proposed â€” prior REC).
 
 ## Latest Task Addendum - 2026-07-19 Backend helper module resolution repair
 
@@ -398,7 +406,7 @@
 - Evidence: `.runtime/create-enroll-flow-proof-20260719-181730/summary.json`
 - C++: full inventory (319 users), delayed identity re-POST, ISAPI FP fallback, arm baseline seed.
 - Live G6 quote: `callback_identity_inventory_delta employeeNo=99182448` then `post_result employeeNo=99182448` with `identitySource=inventory_delta`.
-- G3–G5: create/enroll plain DeviceUser+events + raw 684-char template (API). Device synthetic FP re-read may still show numOfFP=0 (labeled donor blob path).
+- G3â€“G5: create/enroll plain DeviceUser+events + raw 684-char template (API). Device synthetic FP re-read may still show numOfFP=0 (labeled donor blob path).
 - Recommendation capture: Device FP write stickiness after FingerPrintDownload.
 
 ## Latest Task Addendum - 2026-07-19 Device Events no-person sync signal copy
@@ -421,12 +429,12 @@
 - Proven green: host TCP/API, reverse :59000/:59443/:53001, rebuilt binary with enrich, listener armed/receiving, synthetic create `99180240` on device, DeviceUser raw template 684 chars (not AES), plain employeeNo on USER_CREATED/FINGERPRINT_ENROLLED ledger rows, API users returns raw.
 - ACS live truth: major=3 still often `employeeNo=""`; enrich ran; inventory delta did not always attach plain in-window (`no_new_plain` / baseline). Do not claim ACS first packet always plain.
 - Device FP write returned OK but `numOfFP` stayed 0 on re-read (3 retries); raw custody used donor-15 template path with explicit source label.
-- Recommendation capture: Investigate C++ inventory pagination / delta when pageEmployees stuck at 30; improve FingerPrintDownload→Upload re-read for synthetic write.
+- Recommendation capture: Investigate C++ inventory pagination / delta when pageEmployees stuck at 30; improve FingerPrintDownloadâ†’Upload re-read for synthetic write.
 
 ## Latest Task Addendum - 2026-07-19 C++ plain-id enrich + raw templates + anti-assumption WWG
 
 - Task mode: Regression repair + governance + C++ wire-path harden.
-- Operator pushback: stop assuming first socket always has plain id; **trace** C++ ACS → POST → socket. Proven: major=3 often empty `dwEmployeeNo`; major=5 taps often plain; logSearch often opaque.
+- Operator pushback: stop assuming first socket always has plain id; **trace** C++ ACS â†’ POST â†’ socket. Proven: major=3 often empty `dwEmployeeNo`; major=5 taps often plain; logSearch often opaque.
 - Governance:
   - `.grok/rules/02-sdk-callback-wire-truth.md` (always-on)
   - `AGENTS.md` hard ban on inventing callback person id
@@ -435,17 +443,17 @@
   - `enrich_hris_job_before_post` before POST: inventory delta multipass when ACS person empty; attach raw FP templates (+ face when card known)
   - Callback JSON: `identitySource`, `fingerprints[]` raw base64, `faceTemplate`/`facePicture`, `fingerprintCount`
 - HRIS:
-  - Accept callback fingerprints/face → DeviceUser raw store immediately
-  - Socket: plain-only `employeeNo`; include deviceUser; UI “Resolving person id…” when empty/resolving
+  - Accept callback fingerprints/face â†’ DeviceUser raw store immediately
+  - Socket: plain-only `employeeNo`; include deviceUser; UI â€œResolving person idâ€¦â€ when empty/resolving
 - Rebuild/redeploy listener binary on VM still required for C++ path to run live.
 - Recommendation capture: No new recommendations were identified.
 
 ## Latest Task Addendum - 2026-07-19 Raw fingerprint template on DeviceUser (not AES)
 
 - Task mode: Bug fix / product expectation correction + live proof.
-- Operator correction: on fingerprint enroll, store **raw** base64 fingerData on DeviceUser — do **not** default to encrypted-only custody.
+- Operator correction: on fingerprint enroll, store **raw** base64 fingerData on DeviceUser â€” do **not** default to encrypted-only custody.
 - Implemented:
-  - `hris-api/helper/device-user-raw-fingerprint.helper.ts` — ISAPI FingerPrintUpload read, proven TEST A `FingerPrintInfo.FingerPrintList[]` parser, persist to `vendorMetadata.rawFingerprints.templates[].data` (and rawPayload mirror).
+  - `hris-api/helper/device-user-raw-fingerprint.helper.ts` â€” ISAPI FingerPrintUpload read, proven TEST A `FingerPrintInfo.FingerPrintList[]` parser, persist to `vendorMetadata.rawFingerprints.templates[].data` (and rawPayload mirror).
   - `enrichEnrollmentLifecycleEvent` schedules raw capture after FINGERPRINT_ENROLLED / USER_CREATED / USER_UPDATED when plain person id is known.
   - DeviceEvent gets pointer/status only (`rawFingerprintCustody`, `raw_on_device_user`); full blobs stay on DeviceUser.
   - Device user details UI shows raw present + first 120 chars preview.
@@ -461,8 +469,8 @@
 - Task mode: Docs / architecture sync.
 - Goal: Capture operator vision for panel/SDK user create + enroll identity, verify architecture correctness, document exact flows, and provide diagrams so agents stay synced to the spec.
 - Written:
-  - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` — full spec, identity planes, Flow A/B/C/D, mermaid sequence, acceptance, gaps.
-  - `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md` — WWG architecture twin.
+  - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` â€” full spec, identity planes, Flow A/B/C/D, mermaid sequence, acceptance, gaps.
+  - `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md` â€” WWG architecture twin.
   - Pointer in `docs/HIKVISION_RUNTIME_TRUTH.md`.
 - Architecture verdict: Operator vision is correct; implementation is aligned with the happy path and panel-opaque path, with explicit boundary that plain person id may trail the first socket by a few seconds when major=3 has empty `dwEmployeeNo`.
 - Recommendation capture: No new recommendations were identified.
@@ -512,7 +520,7 @@
   - Legacy fallback still preferred historical `192.168.254.189`.
   - Resolver ranked DB reverse rows but did not probe which candidate the **host** can reach right now.
 - Implemented:
-  - `resolve-hikvision-vm-bridge-targets.cjs` now probes host TCP (sdk/http/443/80, ~300–400ms) and ranks `reverseBridge + hostReachable` first. Source becomes `db-reverse-bridge-host-reachable` when LIVE.
+  - `resolve-hikvision-vm-bridge-targets.cjs` now probes host TCP (sdk/http/443/80, ~300â€“400ms) and ranks `reverseBridge + hostReachable` first. Source becomes `db-reverse-bridge-host-reachable` when LIVE.
   - Fallback order when DB is down: `192.168.254.102` then `192.168.254.189`.
   - `ensure-hikvision-vm-bridge.cjs` fast-paths only when **local bridge matches resolved IPs AND VM :59000 is open**; otherwise stop + rebind.
   - `ensure-device-live-path.ps1` prefers host-reachable targets from the same resolver.
@@ -526,20 +534,20 @@
 ## Latest Task Addendum - 2026-07-19 SDK enrollment plain person id on callback
 
 - Task mode: Bug fix / runtime identity path + unit proof.
-- Goal: When an SDK user create/update (or enroll) callback already carries a plain device person id, apply it on the callback path immediately, socket identity quickly, and always land raw UserInfo metadata on `DeviceUser` — without treating multipass logSearch as the only path.
+- Goal: When an SDK user create/update (or enroll) callback already carries a plain device person id, apply it on the callback path immediately, socket identity quickly, and always land raw UserInfo metadata on `DeviceUser` â€” without treating multipass logSearch as the only path.
 - Clarified architecture (not a secret second poller inventing people):
-  - Live path is still the HCNetSDK ACS alarm callback → `/api/hikvision/callback`.
+  - Live path is still the HCNetSDK ACS alarm callback â†’ `/api/hikvision/callback`.
   - When `dwEmployeeNo` / plain `employeeNo` is present on that callback, HRIS now runs the fast identity path.
-  - When the callback is only a major=3 opaque SYNC_SIGNAL (empty person), multipass ISAPI `ContentMgmt/logSearch` still resolves typed USER_CREATED / FP leaves and may map opaque tokens → plain via inventory delta / `DevicePersonToken`. That is follow-up evidence, not a replacement for the SDK callback.
+  - When the callback is only a major=3 opaque SYNC_SIGNAL (empty person), multipass ISAPI `ContentMgmt/logSearch` still resolves typed USER_CREATED / FP leaves and may map opaque tokens â†’ plain via inventory delta / `DevicePersonToken`. That is follow-up evidence, not a replacement for the SDK callback.
 - Implemented:
   - `applyFastEnrollmentIdentityOnSdkCallback` / `isHikvisionEnrollmentLifecycleCallback` in `hris-api/helper/device-person-token.helper.ts`.
   - Immediate `DeviceUser` upsert (stub + HRIS link via `deviceEmpId` / `employeeId` code match), `DeviceEvent` MATCHED/UNMATCHED with plain `employeeNo`, first `device-event:saved` socket.
   - Background `enrichEnrollmentLifecycleEvent` still pulls full UserInfo into `DeviceUser.rawPayload` / `vendorMetadata` and re-sockets.
   - `callback.controller.ts` non-attendance enrollment path uses the fast path and no longer forces `IGNORED` over identity when plain id is applied.
 - Proof:
-  - Focused Mocha: `tests/device-person-token.helper.spec.ts` + `tests/hikvision-callback.controller.spec.ts` → 17/17 pass.
+  - Focused Mocha: `tests/device-person-token.helper.spec.ts` + `tests/hikvision-callback.controller.spec.ts` â†’ 17/17 pass.
 - Boundary:
-  - Plain device person id ≠ HRIS `Employee.employeeId` code unless already linked via DeviceUser / `deviceEmpId`.
+  - Plain device person id â‰  HRIS `Employee.employeeId` code unless already linked via DeviceUser / `deviceEmpId`.
   - Empty-person major=3 signals still need logSearch / inventory delta for plain id; we do not invent person numbers.
 - Recommendation capture: No new recommendations were identified.
 
@@ -598,15 +606,15 @@
 - Truth sync: Project Truth and Project Truth summary now state that processing device-user sync snapshots older than 30 minutes without progress evidence are stale and require a fresh admin-triggered run.
 - Recommendation capture: No new recommendations were identified.
 
-Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim Sync logs, no VM primary jargon)
+Status: IMPLEMENTED + PROVEN â€” Device admin UX clarity (friendly status, slim Sync logs, no VM primary jargon)
 
 ## Latest Task Addendum - 2026-07-16 Device admin UX clarity pass
 
 - Task mode: Meaningful UX feature + contract tests + Playwright journey proof.
 - Goal: Device management / Device events / Sync logs / Sync users journey is admin-friendly, not engineer-verbose; loading is honest; Sync logs not repeated/noisy; no redundant filter columns; no primary VM jargon.
 - Implemented:
-  - `hris-app/app/routes/admin/devices/events.tsx` — Live capture status copy; Saved event ledger strip; Sync logs slim summary + blocked collapse + 4-column table; loading/empty honesty.
-  - `hris-app/app/routes/admin/devices/manage.tsx` — “Checking device connection…” / “Reading users from device…”.
+  - `hris-app/app/routes/admin/devices/events.tsx` â€” Live capture status copy; Saved event ledger strip; Sync logs slim summary + blocked collapse + 4-column table; loading/empty honesty.
+  - `hris-app/app/routes/admin/devices/manage.tsx` â€” â€œChecking device connectionâ€¦â€ / â€œReading users from deviceâ€¦â€.
   - Contract + Playwright smoke (3 tests) updated and green.
   - Non-stop agent loop prompt: `docs/00-product/AGENT-PROMPT-device-admin-ux-clarity-loop.md`
 - Evidence: `.runtime/device-ux-clarity-20260716-221328/`, screenshots under `.runtime/device-ux-clarity-proof/screenshots/`
@@ -623,10 +631,10 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
   - Argo apps at revision `7309928` (includes event-first `ee42f4a`); PROD/DEV/UAT `hris-api`/`hris-app` Running on `hris-api-local:develop` / app images; tunnel active.
   - `GET https://api.bnpi-hris.tech/api/device/sync-preview` returns per-device `eventRows[]` + `sources[]` with live ZKTeco Ready rows (e.g. `.235` willAdd `2035` / already `20267`).
   - `GET https://dev-api.bnpi-hris.tech/api/device/sync-preview` returns Hikvision 16-row event catalogs with already-in-HRIS by action even when sources unavailable.
-  - Public browser: admin login → Device events → Sync logs (`action=sync-logs`); UI shows Event to add / Will add / Already in HRIS / Source proof; network `sync-preview` HTTP 200.
+  - Public browser: admin login â†’ Device events â†’ Sync logs (`action=sync-logs`); UI shows Event to add / Will add / Already in HRIS / Source proof; network `sync-preview` HTTP 200.
 - Residual still open:
   - Hikvision TCP from VM fail for configured addresses; PROD Main Entrance Device missing access credentials in preview error.
-  - ZKTeco `.234` preview still source_unavailable while later TCP `4370` OK — investigate bridge/read path, not modal contract.
+  - ZKTeco `.234` preview still source_unavailable while later TCP `4370` OK â€” investigate bridge/read path, not modal contract.
   - `project-truth-runtime-dev` Argo app Synced/Degraded.
   - Per-type operation **willAdd** precision still needs per-action logSearch classification when Hikvision sources are reachable.
   - ansible-pull commit `e156c70` lags Argo serving revision `7309928`.
@@ -636,7 +644,7 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
 - Task mode: Meaningful feature + API contract + UI + tests + Playwright proof.
 - Commit: `ee42f4a` on `develop`.
 - Evidence: `.runtime/sync-logs-event-first-20260716-215712/`
-- Goal: Sync logs modal is event-first — per Hikvision device show what will be added to Device Events (not inventory-first On device / In HRIS / Can import as the main story).
+- Goal: Sync logs modal is event-first â€” per Hikvision device show what will be added to Device Events (not inventory-first On device / In HRIS / Can import as the main story).
 - Implemented:
   - `hris-api/helper/sync-logs-event-rows.helper.ts` catalog + dual-source builders.
   - `GET /api/device/sync-preview` now returns `eventRows[]`, `sources[]`, operation log total probe (`ContentMgmt/logSearch`), attendance total (`AccessControl/AcsEvent`), and already-in-HRIS by `eventAction`.
@@ -2149,7 +2157,7 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
 - Task mode: Biometric persistence regression repair plus operator-journey hardening.
 - Root cause: the C++ listener successfully read and posted the raw template, and the enrollment DeviceEvent retained it, but a slower UserInfo enrichment could overwrite DeviceUser with metadata read before the callback completed.
 - Repair: DeviceUser UserInfo enrichment now uses an `updatedAt` optimistic merge/retry and preserves current raw fingerprint/face custody across a concurrent callback write.
-- User journey: the Device Users details modal refetches the saved HRIS row and shows `Checking saved templates…` during that read; it does not show `Not captured yet` until absence is confirmed.
+- User journey: the Device Users details modal refetches the saved HRIS row and shows `Checking saved templatesâ€¦` during that read; it does not show `Not captured yet` until absence is confirmed.
 - Live TEST A proof: exact event `cmrrwqkpc009l7zaogna1hbkd` for person `18` replayed successfully; after 20 seconds DeviceUser retained one 684-character raw template from `cpp_sdk_callback_raw`. Users `15` and `18` both rendered `1 stored` in headless browser proof.
 - Verification: 22 focused backend tests, 14 C++ source-contract tests, and 1 modal Playwright regression passed. The current C++ source also built/linked against the VM HCNetSDK in an isolated output path.
 - Evidence: `.runtime/fingerprint-enroll-raw-race-20260719/summary.md` and screenshots in the same directory.
@@ -2251,3 +2259,4 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
 - Proof: VM `nc` and ISAPI unauthenticated probes reached all six; K3s DEV quick health reported all six online; local quick health reported all six online via `env_tunnel_map`; full authenticated `.24/.25` health returned `systemTime=readable` and `deviceApi=online`; Playwright found every address and six online API responses. Focused test passed 11/11, API typecheck passed, Node syntax and PowerShell parse passed.
 - Public boundary: LAN app/API `10.184.37.19:3100/3101` return 200 and `cloudflared-bnpi-hris.service` remains active, but public `bnpi-hris.tech` hosts return Cloudflare 503/TLS resets. Existing QUIC plus additive HTTP/2 connector probes from VM source `.19` and `.78` all failed at Cloudflare edge TLS/control streams. The named service was not stopped or reconfigured.
 - Evidence root: `.runtime/hikvision-six-device-20260722-143712/`.
+

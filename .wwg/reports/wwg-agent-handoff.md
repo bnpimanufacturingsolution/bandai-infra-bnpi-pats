@@ -1,5 +1,17 @@
-# WWG Agent Handoff
+﻿# WWG Agent Handoff
 
+## 2026-07-22 - Main Entrance A-F (.20-.25) six-device tunnel repair
+
+- Status: `COMPLETE_LOCAL_AND_K3S_DEV_HEALTH_PROOF`.
+- Task mode: live runtime reachability + tunnel bootstrap repair (no product code change required).
+- Root cause: K3s DEV Device rows for Main Entrance A-F already pointed at `10.184.37.20-.25` with credentials; VM TCP `80/443/8000` was OK for all six. Windows host cannot reach those IPs directly. Local health only saw four devices because the live SSH tunnel and `PROJECT_TRUTH_HIKVISION_TUNNEL_MAP` stopped at `.23` (ports for `.24/.25` were closed).
+- Repair: restarted `scripts/start-hikvision-remote-device-tunnel.ps1` with DeviceIps `.20-.25`; all 18 local forwards TcpOk; env map updated in `hris-api/.env.development.local`.
+- Local API health (`localhost:3001`): A-F all `online` via `env_tunnel_map` (E=.24, F=.25 included).
+- K3s DEV LAN API (`10.184.37.19:3101`): A-F all `online` via `resolved_runtime_endpoint`.
+- psql (K3s DEV): A=`10.184.37.21`, B=`.20`, C=`.22`, D=`.23`, E=`.24`, F=`.25`; all have access username+password keys.
+- Boundary: TEST A/B (`192.168.254.109/.110`) remain a separate reverse-bridge lane; not part of this six-device tunnel map. Cloudflare tunnel left active.
+- Evidence root: `.runtime/device-a-f-reach-20260722-143906/`.
+- Bootstrap: `npm run dev` ensure path already defaults to six IPs in `ensure-hikvision-remote-device-tunnel.cjs`; re-run tunnel script if a stale four-device tunnel is still bound.
 ## 2026-07-22 - Merge Users Overnight Loop Terminal Evidence
 
 - Status: `PARTIALLY_FULFILLED_WITH_REAL_DEVICE_BOUNDARY`.
@@ -341,7 +353,7 @@
   - Job `834d6273-74d8-416f-aecf-8fd92430a062` with local `HIKVISION_RAW_BIOMETRIC_SYNC_CONCURRENCY=2`: `29` captured, removed transient `Unauthorized` class, final fingerprint raw `627`, missing `91`.
   - Remaining sample repair for users `1008`, `1076`, `1143` returned exact HTTP `422` bodies: `no_fingerprint_data_from_device` and `no_face_on_device`.
 - UI evidence:
-  - `browser-review-sync-dialog.png/.txt`: review modal shows `718 enrolled · 627 raw · 91 missing_raw_blob` and `356 enrolled · 311 raw · 45 missing_raw_blob`.
+  - `browser-review-sync-dialog.png/.txt`: review modal shows `718 enrolled Â· 627 raw Â· 91 missing_raw_blob` and `356 enrolled Â· 311 raw Â· 45 missing_raw_blob`.
   - `browser-details-1004.png/.txt`: repaired user shows `2 of 2 stored` and raw face stored.
   - `browser-details-1008-search-open.png/.txt`: remaining no-data user shows `2 missing_raw_blob`, raw repair buttons, and count-only missing face truth.
 - Validation:
@@ -830,7 +842,7 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Select: C:\Users\anoni\OneDrive\Desktop\PROJECT_TRUTH_HYPERV_FRESH.
 - Start your chosen coding agent.
 - Use the recommended first prompt above.
-# 2026-07-19 — Raw fingerprint enrollment custody race repaired
+# 2026-07-19 â€” Raw fingerprint enrollment custody race repaired
 
 - The C++ listener was not the failing layer: TEST A person `18` produced one raw template, attached it to the callback, and received HTTP success.
 - Root cause was a last-writer-wins race in API UserInfo enrichment. A stale inventory snapshot could overwrite the DeviceUser raw metadata after the callback, while DeviceEvent still retained the template.
@@ -874,7 +886,7 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 # 2026-07-22 Merge Users Selected-ID Matrix Review Handoff
 
 - Status: `GREEN_NO_WRITE_EXECUTED`. The merge review flow was verified through the real non-mutating plan endpoint and browser modal, but the real merge job was not started.
-- User problem addressed: the prior “Needs decision” view was misleading because it could show duplicate rows for the same unique device ID. The review modal also hid the most important operator question: what selected ID writes from which source device to which target devices, and whether fingerprint/face will be copied.
+- User problem addressed: the prior â€œNeeds decisionâ€ view was misleading because it could show duplicate rows for the same unique device ID. The review modal also hid the most important operator question: what selected ID writes from which source device to which target devices, and whether fingerprint/face will be copied.
 - Frontend changed: `mergeList=issues` now renders one row per unique selected ID. The final review modal shows metrics for selected unique IDs, peer copy attempts, fingerprint gaps, face gaps, and conflicts resolved; per-target and per-source matrices; and a full selected-ID write matrix with physical source, targets, biometric source evidence, selected-device coverage/gaps, copy count, and an Edit action back to the row before starting.
 - Backend changed: device-user merge job progress now includes `writeMatrix` and uses that matrix for `totalWrites`, so the job polling contract can match the final review counts. The matrix includes selected unique IDs, total writes, fingerprint gaps, face gaps, per-target/per-source summaries, and per-row source/target/coverage details.
 - Browser proof: Playwright on `http://localhost:5175/admin/configuration/devices?action=device-users&syncPanel=users` authenticated as `admin@bandai.local`, hit `POST /api/device/hikvision/sdk-users/merge/plan`, used recommended sources, and opened the final review without pressing Start. The modal showed `754` selected unique IDs, `3,770` peer copy attempts, `3,493` fingerprint gaps, `3,655` face gaps, `1093/1093` conflicts resolved, `Writes by target device`, `Sources used`, `Selected ID write matrix`, `Physical source`, `Fingerprint`, `Face`, and `Edit`. Row proof for ID `1`: fingerprint `Source 2`, `5/6 devices; 1 gap`; face `Source 1`, `6/6 devices; aligned`; copy `5`.
@@ -907,3 +919,4 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Validation: focused Mocha 11/11; API TypeScript typecheck passed; Node syntax checks passed; PowerShell tunnel script parse passed. An accidentally broad repository test invocation surfaced existing unrelated failures and is not counted as a focused regression failure.
 - Public boundary: VM LAN app/API are 200 and the protected named tunnel service stayed active. Public hosts returned Cloudflare 503/TLS resets; current QUIC logs show repeated control-stream failures, and additive HTTP/2 attempts from both VM `.19` and `.78` were reset during edge TLS on port `7844`. No tunnel outage or destructive reconfiguration was performed.
 - Evidence root: `.runtime/hikvision-six-device-20260722-143712/`.
+
