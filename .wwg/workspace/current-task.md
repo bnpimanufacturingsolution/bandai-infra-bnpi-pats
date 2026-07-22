@@ -1,5 +1,36 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-22 Merge listener truth and TEST A/B boundary
+
+- Task mode: mixed live runtime recovery, listener-status UX hardening, and merge-plan evidence.
+- Runtime status:
+  - Local API `http://localhost:3001` was recovered after it dropped; health and admin login passed again.
+  - Frontend `http://localhost:5175` was restarted and browser-proven after the listener modal patch.
+  - DEV DB forward `127.0.0.1:55435` stayed open.
+  - `.20/.21/.22/.23` Hikvision host tunnels stayed active; Cloudflare was not disabled.
+- Merge/run truth:
+  - Original job `a9d3acf7-7dee-406a-9198-c413fbd699d4` is not pollable after API restart, so completion was not invented.
+  - Current valid four-device reread for `.20/.21/.22/.23`: `validForFinalCounts=true`, `unionUsers=698`, `sourceRows=2759`, `dedupedDeviceRecords=2759`, `conflicts=862`, `missing=33`, `missingHrisLinks=47`, `plannedWrites=2094`.
+  - Current six-device reread after TEST A/B host-local forward remains `validForFinalCounts=false`; TEST A and TEST B still fail HTTP user reread with `fetch failed`, and one run also saw Main Entrance Device A `Unauthorized`. These six-device counts are diagnostic only and must not be used as final truth.
+  - TEST B isolated peer copy for employee `9` succeeded earlier with `fingerprintCount=2`, `faceCount=0`; TEST A clean retry remains deterministic SDK login failure `lastError=9`.
+- Listener/UI truth:
+  - Backend listener endpoint currently reports Main Entrance Device B armed and TEST A login failed on SDK `58000`.
+  - The listener modal now waits long enough for the VM status call and distinguishes HRIS post failure from SDK login failure. Browser proof shows `0 receiving / 1 armed / 1 login failed`, Main B `Armed, waiting for tap`, TEST A `Login failed (9)`, and `HRIS callback post failed after reading 10.184.37.20`.
+- Evidence:
+  - Browser: `.runtime/merge-users-final-run-20260722-042955/browser-listener-modal-live-20260722-145705/`.
+  - Valid four-device plan: `.runtime/merge-users-final-run-20260722-042955/fresh-four-device-plan-current-20260722-144103/`.
+  - Invalid six-device diagnostic plan: `.runtime/merge-users-final-run-20260722-042955/fresh-six-device-plan-after-host-forward-20260722-143756/`.
+  - TEST A/B host-local forward proof: `.runtime/merge-users-final-run-20260722-042955/testab-host-local-forward-20260722-143736/`.
+- Validation:
+  - `hris-api`: typecheck passed.
+  - `hris-api`: Hikvision biometric sync contract passed (`16` passing).
+  - `hris-app`: Device Users UI contract passed.
+  - `hris-app`: targeted ESLint for `events.tsx` and `enroll.tsx` exited `0` with existing warnings only.
+- Boundary:
+  - Do not claim all `852` or current six-device unique IDs are fully synced.
+  - Do not claim fingerprint/face bytes are repaired from counts alone.
+  - Do not start a blind six-device retry while TEST A/B cannot provide reliable HTTP reread and TEST A still has SDK login `9`.
+
 ## Latest Task Addendum - 2026-07-22 Main Entrance A-F six-device tunnel repair
 
 - Task mode: live runtime reachability + tunnel bootstrap.

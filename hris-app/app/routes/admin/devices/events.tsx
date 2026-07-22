@@ -2903,7 +2903,13 @@ export default function DeviceEventsPage() {
 	const hikvisionListenerDiagnosis =
 		hikvisionListenerStatus?.sdk?.diagnosis ||
 		(hikvisionListenerStatus?.sdk?.lastError
-			? `SDK login failed${hikvisionListenerStatus.sdk.lastTargetHost ? ` against ${hikvisionListenerStatus.sdk.lastTargetHost}` : ""}.`
+			? /post|callback|hris/i.test(String(hikvisionListenerStatus.sdk.lastError || ""))
+				? `HRIS callback post failed${hikvisionListenerStatus.sdk.lastTargetHost ? ` after reading ${hikvisionListenerStatus.sdk.lastTargetHost}` : ""}.`
+				: /login.*failed|auth_failed|backoff/i.test(
+						String(hikvisionListenerStatus.sdk.lastFailureReason || hikvisionListenerStatus.sdk.lastError || ""),
+					)
+					? `SDK login failed${hikvisionListenerStatus.sdk.lastTargetHost ? ` against ${hikvisionListenerStatus.sdk.lastTargetHost}` : ""}.`
+					: `SDK listener error${hikvisionListenerStatus.sdk.lastTargetHost ? ` near ${hikvisionListenerStatus.sdk.lastTargetHost}` : ""}.`
 			: "");
 	const hikvisionListenerDevices = useMemo<EnrichedHikvisionListenerDeviceRow[]>(() => {
 		const rows = hikvisionListenerStatus?.sdk?.devices || [];

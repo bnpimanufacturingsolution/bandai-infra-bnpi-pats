@@ -480,6 +480,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(events).toContain("showSyncPreviewSkeleton");
 		expect(events).toContain("Sync-preview only when Sync logs modal is open");
 		expect(deviceHooks).toContain("options.refetchInterval ?? false");
+		expect(deviceService).toContain("{ timeoutMs: 15_000 }");
 
 		expect(events).toContain("Sync logs");
 		expect(events).toContain("Sync device logs");
@@ -489,6 +490,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(events).toContain("SDK operation signal captured");
 		expect(events).toContain("Listener stopped");
 		expect(events).toContain("Login failed");
+		expect(events).toContain("HRIS callback post failed");
 		expect(events).toContain('device.state !== "login_failed"');
 		expect(deviceController).toContain("Listener service is stopped; previous arm/read log entries are historical only.");
 		expect(events).toContain("Open it, then run/review device-user reconciliation for the same device.");

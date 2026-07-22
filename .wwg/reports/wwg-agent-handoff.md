@@ -1,5 +1,24 @@
 ﻿# WWG Agent Handoff
 
+## 2026-07-22 - Merge listener truth and TEST A/B boundary
+
+- Status: `PARTIALLY_FULFILLED_WITH_REAL_DEVICE_BOUNDARY`.
+- Task mode: mixed live runtime recovery, listener-status UX hardening, and merge-plan evidence.
+- Runtime truth: API and frontend were both recovered locally; admin login works; DEV DB forward `127.0.0.1:55435` is open; `.20/.21/.22/.23` tunnels remained active; Cloudflare was not disabled.
+- Merge job truth: original job `a9d3acf7-7dee-406a-9198-c413fbd699d4` is not pollable after API restart. Completion was not invented.
+- Valid current reread for the four production LAN devices `.20/.21/.22/.23`: `unionUsers=698`, `sourceRows=2759`, `dedupedDeviceRecords=2759`, `conflicts=862`, `missing=33`, `missingHrisLinks=47`, `plannedWrites=2094`, `errorCount=0`.
+- Current six-device reread remains invalid for final counts: after adding host-local forwards for TEST A/B, the plan still had TEST A and TEST B `fetch failed` plus one Main Entrance Device A `Unauthorized` sample. Its counts are diagnostic only.
+- TEST A/B boundary: Windows and VM physical probes cannot reliably reach TEST A/B on normal HTTP/SDK ports; TEST A clean SDK retry still gives login `lastError=9`. TEST B isolated employee `9` peer copy succeeded earlier with two fingerprint templates and no face bytes, but TEST B cannot be treated as generally six-device-reread healthy.
+- UI repair: listener modal now waits `15s` for VM status and separates HRIS post failures from SDK login failures. Browser proof shows `0 receiving / 1 armed / 1 login failed`, Main B armed, TEST A login failed, and `HRIS callback post failed after reading 10.184.37.20` instead of false Main B SDK-login blame.
+- Evidence:
+  - Browser listener modal: `.runtime/merge-users-final-run-20260722-042955/browser-listener-modal-live-20260722-145705/`.
+  - Valid four-device plan: `.runtime/merge-users-final-run-20260722-042955/fresh-four-device-plan-current-20260722-144103/`.
+  - Invalid six-device diagnostic plan: `.runtime/merge-users-final-run-20260722-042955/fresh-six-device-plan-after-host-forward-20260722-143756/`.
+  - TEST A/B host-local forward proof: `.runtime/merge-users-final-run-20260722-042955/testab-host-local-forward-20260722-143736/`.
+- Validation: API typecheck passed; Hikvision biometric sync contract passed (`16` passing); Device Users UI contract passed; targeted ESLint for `events.tsx` and `enroll.tsx` exited `0` with existing warnings only; `git diff --check` had CRLF warnings only.
+- Boundary: do not claim all `852` unique IDs or the current six-device diagnostic unique IDs are fully synced; do not claim fingerprint/face bytes are fixed from counts; do not start a blind six-device retry until TEST A/B HTTP reread and TEST A SDK login are repaired or explicitly excluded.
+- Recommendation capture: No new recommendations were identified.
+
 ## 2026-07-22 - Main Entrance A-F (.20-.25) six-device tunnel repair
 
 - Status: `COMPLETE_LOCAL_AND_K3S_DEV_HEALTH_PROOF`.

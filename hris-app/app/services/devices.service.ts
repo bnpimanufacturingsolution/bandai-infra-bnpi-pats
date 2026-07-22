@@ -2386,7 +2386,7 @@ class DevicesService extends APIService {
 			const response = await hrisApiClient.get<any>(
 				"/api/device/hikvision/listener",
 				undefined,
-				{ timeoutMs: 8000 },
+				{ timeoutMs: 15_000 },
 			);
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Failed to load Hikvision listener status");
