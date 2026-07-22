@@ -94,6 +94,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include(
 			"isDeterministicHikvisionManualCopySdkFailure(sdkFailureMessage)",
 		);
+		expect(controller).to.include(
+			"if (isDeterministicHikvisionManualCopySdkFailure(error?.message || error)) break;",
+		);
 		expect(controller.indexOf('name: "postgres"')).to.be.lessThan(
 			controller.indexOf('name: "api"'),
 		);

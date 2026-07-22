@@ -15,17 +15,24 @@ describe("Hikvision remote device tunnel contract", () => {
 	const restartLocalApiScript = readRepoFile("scripts/restart-local-hris-api-dev.ps1");
 	const vmBridgeEnsureScript = readRepoFile("hris-api/scripts/ensure-hikvision-vm-bridge.cjs");
 
-	it("passes the four current Hikvision device IPs as one normalized PowerShell argument", () => {
+	it("passes the six current Hikvision device IPs as one normalized PowerShell argument", () => {
 		expect(ensureScript).to.include(
-			'"10.184.37.20,10.184.37.21,10.184.37.22,10.184.37.23"',
+			'"10.184.37.20,10.184.37.21,10.184.37.22,10.184.37.23,10.184.37.24,10.184.37.25"',
 		);
 		expect(ensureScript).to.include('"-DeviceIps"');
 		expect(ensureScript).to.include("deviceIps.join(\",\")");
 		expect(ensureScript).to.not.include("...deviceIps");
 	});
 
-	it("defaults the PowerShell helper to all four devices and all required local ports", () => {
-		for (const ip of ["10.184.37.20", "10.184.37.21", "10.184.37.22", "10.184.37.23"]) {
+	it("defaults the PowerShell helper to all six devices and all required local ports", () => {
+		for (const ip of [
+			"10.184.37.20",
+			"10.184.37.21",
+			"10.184.37.22",
+			"10.184.37.23",
+			"10.184.37.24",
+			"10.184.37.25",
+		]) {
 			expect(tunnelScript).to.include(ip);
 		}
 		expect(tunnelScript).to.include("[int]$LocalHttpPortBase = 10080");
@@ -82,9 +89,9 @@ describe("Hikvision remote device tunnel contract", () => {
 		expect(deviceController).to.include("total: Array.isArray(totalGroups) ? totalGroups.length : 0");
 	});
 
-	it("ensures the four-device tunnel before a manual local API restart loads env", () => {
+	it("ensures the six-device tunnel before a manual local API restart loads env", () => {
 		expect(restartLocalApiScript).to.include("ensure-hikvision-remote-device-tunnel.cjs");
-		expect(restartLocalApiScript).to.include("Ensuring Hikvision remote device tunnels (.20/.21/.22/.23)");
+		expect(restartLocalApiScript).to.include("Ensuring Hikvision remote device tunnels (.20-.25)");
 		expect(restartLocalApiScript.indexOf("ensure-hikvision-remote-device-tunnel.cjs")).to.be.lessThan(
 			restartLocalApiScript.indexOf("run-dev-api-watch.cjs"),
 		);

@@ -11282,6 +11282,7 @@ export const controller = (prisma: PrismaClient) => {
 				};
 			} catch (error: any) {
 				lastError = error;
+				if (isDeterministicHikvisionManualCopySdkFailure(error?.message || error)) break;
 				if (attempt >= retryLimit) break;
 				await sleep(600 * attempt);
 			}
@@ -16723,6 +16724,44 @@ export const controller = (prisma: PrismaClient) => {
 			(activeState === "deactivating" && mainPid > 0);
 		const running =
 			(systemdLooksUp && subState !== "failed") || Boolean(sdk?.receivingCallbacks);
+		const sdkHasCurrentLoginFailure = Boolean(
+			sdk?.lastError ||
+				/login.*failed|auth_failed|backoff/i.test(String(sdk?.lastFailureReason || "")),
+		);
+		if (!running) {
+			sdk.receivingCallbacks = false;
+			sdk.armed = false;
+			sdk.state = "idle";
+			sdk.diagnosis =
+				"Listener service is stopped; previous arm/read log entries are historical only.";
+			sdk.devices = sdk.devices.map((device) => ({
+				...device,
+				receivingCallbacks: false,
+				armed: false,
+				state: "idle",
+			}));
+		} else if (sdkHasCurrentLoginFailure && !sdk.receivingCallbacks) {
+			sdk.devices = sdk.devices.map((device) => {
+				const deviceHasLoginFailure = Boolean(
+					device.lastLoginOk === false ||
+						device.lastLoginError ||
+						/login.*failed|auth_failed|backoff/i.test(
+							String(device.lastFailureReason || ""),
+						),
+				);
+				return deviceHasLoginFailure
+					? {
+							...device,
+							armed: false,
+							state: "login_failed",
+						}
+					: device;
+			});
+			sdk.armed = sdk.devices.some(
+				(device) => device.receivingCallbacks || (device.armed && device.state !== "login_failed"),
+			);
+			sdk.state = sdk.armed ? sdk.state : "login_failed";
+		}
 		const resolvedTarget = bundled.exitCode === 0 || evidenceLogLines.length || activeText
 			? bundled.target
 			: fallbackTarget;

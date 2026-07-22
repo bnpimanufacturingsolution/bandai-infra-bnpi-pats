@@ -487,6 +487,10 @@ describe("admin device user and log sync UI contract", () => {
 		expect(events).toContain("const latestSdkEvidenceEvent = latestSdkSavedEvent");
 		expect(events).toContain("latestSdkEvidenceIsOperationSignal");
 		expect(events).toContain("SDK operation signal captured");
+		expect(events).toContain("Listener stopped");
+		expect(events).toContain("Login failed");
+		expect(events).toContain('device.state !== "login_failed"');
+		expect(deviceController).toContain("Listener service is stopped; previous arm/read log entries are historical only.");
 		expect(events).toContain("Open it, then run/review device-user reconciliation for the same device.");
 		expect(events).toContain("SDK event proof");
 		expect(events).not.toContain("Browser connected; no recent SDK tap");

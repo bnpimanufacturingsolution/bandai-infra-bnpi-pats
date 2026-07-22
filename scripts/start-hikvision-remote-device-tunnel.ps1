@@ -1,5 +1,5 @@
 param(
-  [string[]]$DeviceIps = @('10.184.37.20', '10.184.37.21', '10.184.37.22', '10.184.37.23'),
+  [string[]]$DeviceIps = @('10.184.37.20', '10.184.37.21', '10.184.37.22', '10.184.37.23', '10.184.37.24', '10.184.37.25'),
   [string]$SshTarget = 'project-truth-hris',
   [string]$FallbackSshTarget = 'infra@10.184.37.19',
   [string]$SshKeyPath = (Join-Path $env:USERPROFILE '.ssh\node-health-appliance_ed25519'),

@@ -2946,8 +2946,13 @@ export default function DeviceEventsPage() {
 				) || null
 			: null;
 	const hikvisionListenerDeviceSummary = hikvisionListenerDevices.length
-		? `${hikvisionListenerDevices.filter((device: EnrichedHikvisionListenerDeviceRow) => device.receivingCallbacks).length} receiving / ${
-				hikvisionListenerDevices.filter((device: EnrichedHikvisionListenerDeviceRow) => device.armed).length
+		? `${hikvisionListenerDevices.filter((device: EnrichedHikvisionListenerDeviceRow) => hikvisionListenerRunning && device.receivingCallbacks).length} receiving / ${
+				hikvisionListenerDevices.filter(
+					(device: EnrichedHikvisionListenerDeviceRow) =>
+						hikvisionListenerRunning &&
+						device.armed &&
+						device.state !== "login_failed",
+				).length
 			} armed / ${hikvisionListenerDevices.filter((device: EnrichedHikvisionListenerDeviceRow) => device.state === "login_failed").length} login failed`
 		: "No per-device listener rows";
 	const healthSummaryEntries = useMemo<HealthSummaryEntry[]>(
@@ -2977,17 +2982,32 @@ export default function DeviceEventsPage() {
 			? `${healthSummaryOnline} online / ${healthSummaryDegraded} degraded / ${healthSummaryOffline} offline`
 			: "Device health not checked yet";
 	const focusedHikvisionStatus = selectedHikvisionListenerDevice
-		? selectedHikvisionListenerDevice.receivingCallbacks
-			? `${selectedHikvisionListenerDevice.name || selectedHikvisionListenerDevice.host || "Selected device"} is receiving callbacks.`
-			: selectedHikvisionListenerDevice.armed
-				? `${selectedHikvisionListenerDevice.name || selectedHikvisionListenerDevice.host || "Selected device"} is armed; waiting for a tap.`
-				: selectedHikvisionListenerDevice.lastLoginOk === false
-					? `${selectedHikvisionListenerDevice.name || selectedHikvisionListenerDevice.host || "Selected device"} SDK login failed${
-							selectedHikvisionListenerDevice.lastLoginError
-								? ` with code ${selectedHikvisionListenerDevice.lastLoginError}`
-								: ""
-						}.`
-					: `${selectedHikvisionListenerDevice.name || selectedHikvisionListenerDevice.host || "Selected device"} has no recent SDK proof.`
+		? (() => {
+				const label =
+					selectedHikvisionListenerDevice.name ||
+					selectedHikvisionListenerDevice.host ||
+					"Selected device";
+				if (!hikvisionListenerRunning) {
+					return "Hikvision listener is stopped; previous SDK arm/read rows are historical.";
+				}
+				if (
+					selectedHikvisionListenerDevice.state === "login_failed" ||
+					selectedHikvisionListenerDevice.lastLoginOk === false
+				) {
+					return `${label} SDK login failed${
+						selectedHikvisionListenerDevice.lastLoginError
+							? ` with code ${selectedHikvisionListenerDevice.lastLoginError}`
+							: ""
+					}.`;
+				}
+				if (selectedHikvisionListenerDevice.receivingCallbacks) {
+					return `${label} is receiving callbacks.`;
+				}
+				if (selectedHikvisionListenerDevice.armed) {
+					return `${label} is armed; waiting for a tap.`;
+				}
+				return `${label} has no recent SDK proof.`;
+			})()
 		: null;
 	const liveReadinessErrorMessage = liveReadinessError
 		? getAsyncErrorMessage(liveReadinessError, "Live path health check failed")
@@ -4324,21 +4344,28 @@ export default function DeviceEventsPage() {
 							{hikvisionListenerDevices.length ? (
 								hikvisionListenerDevices.map((device) => {
 									const isSelected = deviceId !== "all" && device.deviceId === deviceId;
-									const rowLive = device.receivingCallbacks || device.armed;
+									const rowLoginFailed =
+										device.state === "login_failed" || device.lastLoginOk === false;
+									const rowLive =
+										hikvisionListenerRunning &&
+										!rowLoginFailed &&
+										(device.receivingCallbacks || device.armed);
 									const rowIconClass = device.receivingCallbacks
 										? "bg-emerald-100 text-emerald-700"
-										: device.armed
+										: rowLive
 											? "bg-blue-100 text-blue-700"
-											: device.state === "login_failed"
+											: rowLoginFailed
 												? "bg-amber-100 text-amber-700"
 												: "bg-slate-100 text-slate-500";
-									const rowLabel = device.receivingCallbacks
-										? "Receiving callbacks"
-										: device.armed
-											? "Armed, waiting for tap"
-											: device.state === "login_failed"
-												? `Login failed${device.lastLoginError ? ` (${device.lastLoginError})` : ""}`
-												: formatEventTaxonomyToken(device.state || "unknown");
+									const rowLabel = (() => {
+										if (!hikvisionListenerRunning) return "Listener stopped";
+										if (rowLoginFailed) {
+											return `Login failed${device.lastLoginError ? ` (${device.lastLoginError})` : ""}`;
+										}
+										if (device.receivingCallbacks) return "Receiving callbacks";
+										if (device.armed) return "Armed, waiting for tap";
+										return formatEventTaxonomyToken(device.state || "unknown");
+									})();
 									return (
 										<div
 											key={device.deviceId || device.host || device.name || rowLabel}
@@ -4572,6 +4599,7 @@ export default function DeviceEventsPage() {
 								<input
 									type="checkbox"
 									className="mt-0.5 h-4 w-4 rounded border-slate-300"
+									aria-label="Include attendance taps"
 									checked={syncIncludeAttendance}
 									onChange={(e) => setSyncIncludeAttendance(e.target.checked)}
 									data-testid="sync-include-attendance"
@@ -4590,6 +4618,7 @@ export default function DeviceEventsPage() {
 								<input
 									type="checkbox"
 									className="mt-0.5 h-4 w-4 rounded border-slate-300"
+									aria-label="Include user and enrollment activity"
 									checked={syncIncludeOperations}
 									onChange={(e) => setSyncIncludeOperations(e.target.checked)}
 									data-testid="sync-include-operations"

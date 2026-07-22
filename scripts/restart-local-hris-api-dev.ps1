@@ -93,7 +93,7 @@ Write-Host "[local-api-restart] Running DB access preflight"
 & $nodeBinary $ensureDbAccessScript
 
 if (Test-Path $ensureHikvisionRemoteTunnelScript) {
-	Write-Host "[local-api-restart] Ensuring Hikvision remote device tunnels (.20/.21/.22/.23)"
+Write-Host "[local-api-restart] Ensuring Hikvision remote device tunnels (.20-.25)"
 	& $nodeBinary $ensureHikvisionRemoteTunnelScript
 } else {
 	Write-Host "[local-api-restart] Hikvision remote tunnel ensure skipped: missing $ensureHikvisionRemoteTunnelScript"
