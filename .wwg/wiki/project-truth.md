@@ -256,6 +256,10 @@ Do not introduce without approval:
   - Status: NEEDS_CONFIRMATION
   - Evidence: Existing project adoption audit
 
+- Item: Main Entrance Hikvision DEV inventory is six active rows on `10.184.37.20` through `10.184.37.25`; Windows localhost hot reload reaches those VM-routable terminals through one SSH tunnel map covering HTTP `80`, HTTPS `443`, and SDK `8000` for every address.
+  - Status: CONFIRMED_LOCAL_AND_K3S_RUNTIME_EVIDENCE_WITH_PUBLIC_BOUNDARY
+  - Evidence: On 2026-07-22, direct LAN SSH to `infra@10.184.37.19` succeeded. K3s DEV Postgres returned six active rows: B `.20`, A `.21`, C `.22`, D `.23`, E `.24`, and F `.25`, all HTTPS `443` with SDK `8000`. VM probes reached all six on TCP `80/443/8000`; K3s DEV quick health reported all six online. The prior Windows bootstrap mapped only `.20-.23`, which made `.24/.25` fall back to unavailable direct Windows routing and display offline. The default tunnel/predev set was extended to `.20-.25`; after API restart, local quick health and Playwright reported all six online through `env_tunnel_map`, and full authenticated health for `.24/.25` read device system time successfully. Boundary: LAN/K3s and localhost are proven, but public `bnpi-hris.tech` ingress returned Cloudflare 503/TLS resets while the named service remained active; QUIC and two additive HTTP/2 connector attempts from VM source `.19` and `.78` all hit edge TLS/control-stream resets. Evidence root: `.runtime/hikvision-six-device-20260722-143712/`.
+
 ## Safety and Production Boundaries
 
 Current boundaries:

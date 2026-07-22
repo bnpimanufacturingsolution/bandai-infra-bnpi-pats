@@ -2241,3 +2241,13 @@ Status: IMPLEMENTED + PROVEN — Device admin UX clarity (friendly status, slim 
 - Live truth checked from local API: job `d4fe5561-64f7-4349-b53e-922486c7436b` still returned `status=processing`, `totalWrites=3770`, `processedWrites=565`, `successfulWrites=0`, `failedWrites=0`, `results=[]`, and `startedAt=2026-07-21T19:54:47.863Z`. This means no actual per-target write results had returned yet; `565` was only the backend's initial progress marker.
 - Repair: the running job card now labels the `565` style number as `Progress estimate` while processing, not `Completed`. It adds `Current phase`, `Elapsed`, `UI polling`, and `Backend update` heartbeat fields, and explains that actual `Applied` / `Needs attention` counts remain zero until per-target results return and devices are reread.
 - Backend contract repair: merge job updates now stamp `updatedAt`, and the frontend job-progress type includes `updatedAt`, so future polls can separate stale backend state from active UI polling.
+
+# Latest Task Addendum - 2026-07-22 Main Entrance A-F Health and Local Bootstrap Repair
+
+- Task mode: runtime diagnosis, focused bootstrap regression repair, API/browser proof, and public-ingress boundary audit. Status: `FULFILLED_WITH_WARNING`.
+- Canonical DEV DB truth: six active Hikvision rows exist on B `.20`, A `.21`, C `.22`, D `.23`, E `.24`, and F `.25`; all use HTTPS `443` and SDK `8000`. No device row needed mutation.
+- Root cause: Windows `npm run dev` and the active local SSH tunnel mapped only `.20-.23`. `.24/.25` therefore bypassed `PROJECT_TRUTH_HIKVISION_TUNNEL_MAP`, fell back to direct Windows routing, and rendered offline even though the VM and K3s runtime could reach them.
+- Repair: default tunnel/predev/restart labels and the tunnel contract now cover `.20-.25`. The regenerated tunnel exposes all 18 HTTP/HTTPS/SDK forwards and local API reloads the six-device map.
+- Proof: VM `nc` and ISAPI unauthenticated probes reached all six; K3s DEV quick health reported all six online; local quick health reported all six online via `env_tunnel_map`; full authenticated `.24/.25` health returned `systemTime=readable` and `deviceApi=online`; Playwright found every address and six online API responses. Focused test passed 11/11, API typecheck passed, Node syntax and PowerShell parse passed.
+- Public boundary: LAN app/API `10.184.37.19:3100/3101` return 200 and `cloudflared-bnpi-hris.service` remains active, but public `bnpi-hris.tech` hosts return Cloudflare 503/TLS resets. Existing QUIC plus additive HTTP/2 connector probes from VM source `.19` and `.78` all failed at Cloudflare edge TLS/control streams. The named service was not stopped or reconfigured.
+- Evidence root: `.runtime/hikvision-six-device-20260722-143712/`.

@@ -896,3 +896,14 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - UI repair: running merge card now shows `Progress estimate` instead of `Completed` while processing. It also shows `Current phase`, `Elapsed`, `UI polling`, and `Backend update`, plus explicit copy that Applied/Needs attention stay zero until per-target results return and devices are reread.
 - Backend repair: merge job updates now stamp `updatedAt`; frontend type accepts `updatedAt`.
 - Validation: focused frontend contract passed; targeted `enroll.tsx` ESLint passed with existing warnings only; backend typecheck passed.
+
+# 2026-07-22 Main Entrance A-F Health and Local Bootstrap Repair Handoff
+
+- Status: `FULFILLED_WITH_PUBLIC_WARNING`.
+- DB comparison: K3s DEV has exactly six active Main Entrance rows: B `.20`, A `.21`, C `.22`, D `.23`, E `.24`, F `.25`. All share HTTPS `443`, Hikvision SDK `8000`, and the same governed runtime shape. `.24` was not offline because of a malformed row.
+- Root cause: `scripts/start-hikvision-remote-device-tunnel.ps1` and `hris-api/scripts/ensure-hikvision-remote-device-tunnel.cjs` defaulted to `.20-.23`; the running tunnel/env map confirmed only those four. Local health for `.24/.25` consequently used `resolved_runtime_endpoint` and failed from Windows, while K3s health was online.
+- Code repair: default device IPs now include `.24/.25`; predev and manual restart labels say `.20-.25`; the focused contract asserts all six.
+- Runtime proof: the regenerated tunnel has 18 working forwards. After local API restart, A-F quick health all returned `online`, `reachable`, `source=env_tunnel_map`. Full `.24/.25` checks returned `systemTime=readable`, `deviceApi=online`, proven by authenticated system-time reads. Playwright captured all six addresses and online health responses at `localhost:5175`.
+- Validation: focused Mocha 11/11; API TypeScript typecheck passed; Node syntax checks passed; PowerShell tunnel script parse passed. An accidentally broad repository test invocation surfaced existing unrelated failures and is not counted as a focused regression failure.
+- Public boundary: VM LAN app/API are 200 and the protected named tunnel service stayed active. Public hosts returned Cloudflare 503/TLS resets; current QUIC logs show repeated control-stream failures, and additive HTTP/2 attempts from both VM `.19` and `.78` were reset during edge TLS on port `7844`. No tunnel outage or destructive reconfiguration was performed.
+- Evidence root: `.runtime/hikvision-six-device-20260722-143712/`.
