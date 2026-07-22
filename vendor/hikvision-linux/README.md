@@ -108,6 +108,12 @@ when you intentionally want preview-only evidence that does not persist saved
 `DeviceEvent` rows. Raw fingerprint template bytes are never written to normal
 HRIS `User` records or JSONL evidence.
 
+When the reviewed Device Users merge job must exclusively own SDK writes, set
+`HIKVISION_AUTOMATIC_PEER_RECONCILE=false` on the managed listener. The listener
+still logs in, arms alarm callbacks, and posts Device Events, while automatic
+inventory polling and event-triggered peer writes are paused. Manual reviewed
+copy processes remain enabled because they run as explicit `manual_*` jobs.
+
 ## Docker Trial
 
 ```bash

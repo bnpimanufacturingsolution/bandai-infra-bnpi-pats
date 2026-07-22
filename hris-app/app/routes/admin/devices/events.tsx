@@ -130,6 +130,17 @@ type EnrichedHikvisionListenerDeviceRow = HikvisionListenerDeviceRow & {
 	usesReverseTunnel: boolean;
 };
 
+type HikvisionListenerActiveWork = {
+	event: string;
+	label: string;
+	at: string | null;
+	employeeNo: string | null;
+	source: string | null;
+	target: string | null;
+	ok: string | null;
+	detail: string | null;
+};
+
 type HealthSummaryEntry = {
 	id: string;
 	device?: Device;
@@ -164,6 +175,92 @@ type ResetPreviewState =
 	| { status: "ready"; data: DeviceEventsResetResponse }
 	| { status: "executed"; data: DeviceEventsResetResponse }
 	| { status: "error"; message: string };
+
+const HIKVISION_ACTIVE_WORK_EVENTS = new Set([
+	"source_user_inventory_read",
+	"source_user_read",
+	"source_card_read",
+	"source_fingerprint_read",
+	"source_face_read",
+	"peer_user_write",
+	"peer_sync_attempt",
+	"poll_reconcile_queued",
+	"reconcile_queued",
+	"callback_identity_repost_queued",
+	"hris_device_event_queued",
+]);
+
+const parseHikvisionListenerLogJson = (line: string): Record<string, unknown> | null => {
+	try {
+		const parsed = JSON.parse(line);
+		return parsed && typeof parsed === "object" ? parsed : null;
+	} catch {
+		return null;
+	}
+};
+
+const formatHikvisionActiveWorkLabel = (entry: Record<string, unknown>) => {
+	const event = String(entry.event || "").trim();
+	const operation = String(entry.operation || "").trim();
+	if (event === "source_user_inventory_read") return "Reading source user inventory";
+	if (event === "source_user_read") return "Reading user data";
+	if (event === "source_card_read") return "Reading card";
+	if (event === "source_fingerprint_read") return "Reading fingerprint";
+	if (event === "source_face_read") return "Reading face";
+	if (event === "peer_user_write") return "Writing user data";
+	if (event === "peer_sync_attempt") return `Peer ${operation || "SDK"} copy attempt`;
+	if (event === "poll_reconcile_queued" || event === "reconcile_queued") {
+		return "Queued biometric reconcile";
+	}
+	if (event === "callback_identity_repost_queued") return "Retrying HRIS callback post";
+	if (event === "hris_device_event_queued") return "Queued HRIS event";
+	return formatEventTaxonomyToken(event || "SDK work");
+};
+
+const getHikvisionListenerActiveWork = (
+	lines: string[] | undefined,
+): HikvisionListenerActiveWork | null => {
+	const entries = (lines || [])
+		.map(parseHikvisionListenerLogJson)
+		.filter((entry): entry is Record<string, unknown> => Boolean(entry));
+	const activeEntry = [...entries]
+		.reverse()
+		.find((entry) => HIKVISION_ACTIVE_WORK_EVENTS.has(String(entry.event || "").trim()));
+	if (!activeEntry) return null;
+	const event = String(activeEntry.event || "").trim();
+	const source =
+		String(activeEntry.sourceDeviceId || activeEntry.sourceHost || activeEntry.host || "").trim() ||
+		null;
+	const target =
+		String(activeEntry.targetDeviceId || activeEntry.targetHost || activeEntry.host || "").trim() ||
+		null;
+	const detailParts = [
+		String(activeEntry.operation || "").trim()
+			? `operation ${String(activeEntry.operation).trim()}`
+			: "",
+		String(activeEntry.templateCount || "").trim()
+			? `${String(activeEntry.templateCount).trim()} fingerprint template(s)`
+			: "",
+		String(activeEntry.pictureSize || "").trim()
+			? `${String(activeEntry.pictureSize).trim()} face bytes`
+			: "",
+		String(activeEntry.offset || "").trim()
+			? `offset ${String(activeEntry.offset).trim()}`
+			: "",
+	]
+		.filter(Boolean)
+		.join(" / ");
+	return {
+		event,
+		label: formatHikvisionActiveWorkLabel(activeEntry),
+		at: String(activeEntry.ts || activeEntry.time || "").trim() || null,
+		employeeNo: String(activeEntry.employeeNo || "").trim() || null,
+		source,
+		target,
+		ok: String(activeEntry.ok ?? "").trim() || null,
+		detail: detailParts || null,
+	};
+};
 
 const DEVICE_IMPORT_JOB_STORAGE_KEY = "project-truth-device-import-job-v1";
 
@@ -2868,11 +2965,17 @@ export default function DeviceEventsPage() {
 					!hikvisionListenerStatus.control?.available ||
 					hikvisionListenerStatus.error),
 		);
+	const hikvisionListenerActiveWork = useMemo(
+		() => getHikvisionListenerActiveWork(hikvisionListenerStatus?.logs?.recent),
+		[hikvisionListenerStatus?.logs?.recent],
+	);
 	const hikvisionListenerStatusLabel = isSdkAlarmSavedScope
 		? isLoadingHikvisionListenerStatus
 			? "Checking live capture…"
 			: hikvisionSdkReceiving
 				? "Live capture receiving taps"
+				: hikvisionListenerActiveWork
+					? "SDK work active · no fresh tap callback"
 				: hikvisionSdkArmed
 					? "Live capture ready · quiet (still armed)"
 					: hikvisionSdkState === "login_failed"
@@ -2952,14 +3055,16 @@ export default function DeviceEventsPage() {
 				) || null
 			: null;
 	const hikvisionListenerDeviceSummary = hikvisionListenerDevices.length
-		? `${hikvisionListenerDevices.filter((device: EnrichedHikvisionListenerDeviceRow) => hikvisionListenerRunning && device.receivingCallbacks).length} receiving / ${
+		? `${hikvisionListenerDevices.filter((device: EnrichedHikvisionListenerDeviceRow) => hikvisionListenerRunning && device.receivingCallbacks).length} callbacks / ${
 				hikvisionListenerDevices.filter(
 					(device: EnrichedHikvisionListenerDeviceRow) =>
 						hikvisionListenerRunning &&
 						device.armed &&
 						device.state !== "login_failed",
 				).length
-			} armed / ${hikvisionListenerDevices.filter((device: EnrichedHikvisionListenerDeviceRow) => device.state === "login_failed").length} login failed`
+			} armed/listening / ${hikvisionListenerDevices.filter((device: EnrichedHikvisionListenerDeviceRow) => device.state === "login_failed").length} login failed${
+				hikvisionListenerActiveWork ? " / SDK work active" : ""
+			}`
 		: "No per-device listener rows";
 	const healthSummaryEntries = useMemo<HealthSummaryEntry[]>(
 		() =>
@@ -4369,7 +4474,7 @@ export default function DeviceEventsPage() {
 											return `Login failed${device.lastLoginError ? ` (${device.lastLoginError})` : ""}`;
 										}
 										if (device.receivingCallbacks) return "Receiving callbacks";
-										if (device.armed) return "Armed, waiting for tap";
+										if (device.armed) return "Armed/listening";
 										return formatEventTaxonomyToken(device.state || "unknown");
 									})();
 									return (
@@ -4476,6 +4581,35 @@ export default function DeviceEventsPage() {
 								{hikvisionListenerStatus?.logs?.available ? "Log tail loaded" : "No log tail"}
 							</Badge>
 						</div>
+						{hikvisionListenerActiveWork ? (
+							<div className="mt-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-950">
+								<div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+									<p className="font-semibold">
+										Active SDK work: {hikvisionListenerActiveWork.label}
+									</p>
+									<p className="text-xs text-blue-800">
+										{formatEventTime(hikvisionListenerActiveWork.at)}
+									</p>
+								</div>
+								<div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-blue-900">
+									{hikvisionListenerActiveWork.employeeNo ? (
+										<span>Employee {hikvisionListenerActiveWork.employeeNo}</span>
+									) : null}
+									{hikvisionListenerActiveWork.source ? (
+										<span>Source {hikvisionListenerActiveWork.source}</span>
+									) : null}
+									{hikvisionListenerActiveWork.target ? (
+										<span>Target {hikvisionListenerActiveWork.target}</span>
+									) : null}
+									{hikvisionListenerActiveWork.ok ? (
+										<span>ok={hikvisionListenerActiveWork.ok}</span>
+									) : null}
+									{hikvisionListenerActiveWork.detail ? (
+										<span>{hikvisionListenerActiveWork.detail}</span>
+									) : null}
+								</div>
+							</div>
+						) : null}
 						<div className="mt-3 max-h-48 overflow-y-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">
 							{hikvisionListenerStatus?.logs?.recent?.length ? (
 								<pre className="whitespace-pre-wrap break-words font-mono leading-5">

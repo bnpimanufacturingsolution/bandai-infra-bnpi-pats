@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cctype>
 #include <condition_variable>
 #include <csignal>
 #include <cstdio>
@@ -130,6 +131,7 @@ std::atomic<unsigned long long> delayed_reconcile_token{0};
 std::atomic<unsigned long long> callback_spool_token{0};
 constexpr size_t HRIS_IMMEDIATE_WORKER_COUNT = 2;
 bool execute_mode = true;
+bool automatic_peer_reconcile_enabled = true;
 std::string hris_api_base;
 std::string hris_api_token;
 std::string min_sdk_time;
@@ -525,6 +527,18 @@ bool should_queue_poll_reconcile_now(const std::string &key) {
 void queue_reconcile(const ReconcileJob &job) {
     if (!job.employee_no.empty()) {
         mark_recent_employee_candidate(job.source_host, job.employee_no);
+    }
+    const bool manual_reconcile = job.event_kind.rfind("manual_", 0) == 0;
+    if (!automatic_peer_reconcile_enabled && !manual_reconcile) {
+        emit_json({
+            {"event", "automatic_peer_reconcile_paused"},
+            {"sourceDeviceId", job.source_device_id},
+            {"sourceHost", job.source_host},
+            {"employeeNo", job.employee_no},
+            {"minor", minor_name(job.minor)},
+            {"reason", "explicit_merge_owns_sdk_writes"}
+        });
+        return;
     }
     const bool full_mirror = should_full_mirror_reconcile(job);
     if (full_mirror && !job.source_host.empty()) {
@@ -4812,6 +4826,16 @@ int main(int argc, char **argv) {
     if (hris_api_token.empty() && env_token != nullptr) {
         hris_api_token = env_token;
     }
+    const char *automatic_reconcile_env =
+        std::getenv("HIKVISION_AUTOMATIC_PEER_RECONCILE");
+    if (automatic_reconcile_env != nullptr) {
+        std::string value = automatic_reconcile_env;
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        automatic_peer_reconcile_enabled =
+            value != "0" && value != "false" && value != "off" && value != "no";
+    }
 
     if (replay_spool_only) {
         replay_pending_hris_contract_posts();
@@ -5042,7 +5066,7 @@ int main(int argc, char **argv) {
     std::thread callback_spool_replayer(callback_spool_replay_loop);
 
     std::thread poller;
-    if (!manual_reconcile_mode) {
+    if (!manual_reconcile_mode && automatic_peer_reconcile_enabled) {
         poller = std::thread(polling_loop);
     }
     if (manual_fingerprint_clone_mode) {
@@ -5203,6 +5227,7 @@ int main(int argc, char **argv) {
         {"event", "service_started"},
         {"armedDevices", std::to_string(sessions.size())},
         {"mode", execute_mode ? "execute" : "dry-run"},
+        {"automaticPeerReconcile", automatic_peer_reconcile_enabled ? "true" : "false"},
         {"hrisApiBase", hris_api_base}
     });
 

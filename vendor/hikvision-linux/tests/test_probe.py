@@ -159,6 +159,16 @@ class ProbeTests(unittest.TestCase):
         self.assertNotIn("queue_cv.notify_one()", text)
         self.assertIn("queue_cv.notify_all()", text)
 
+    def test_managed_listener_can_pause_automatic_peer_writes_without_disarming(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
+        text = source.read_text(encoding="utf-8")
+
+        self.assertIn('std::getenv("HIKVISION_AUTOMATIC_PEER_RECONCILE")', text)
+        self.assertIn('"automatic_peer_reconcile_paused"', text)
+        self.assertIn('"explicit_merge_owns_sdk_writes"', text)
+        self.assertIn("!manual_reconcile_mode && automatic_peer_reconcile_enabled", text)
+        self.assertIn('"automaticPeerReconcile"', text)
+
     def test_build_script_produces_project_truth_named_service(self) -> None:
         script = Path(__file__).resolve().parents[1] / "scripts" / "build-hikvision-biometric-service.sh"
         text = script.read_text(encoding="utf-8")

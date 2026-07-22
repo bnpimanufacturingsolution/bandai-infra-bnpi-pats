@@ -491,6 +491,14 @@ describe("admin device user and log sync UI contract", () => {
 		expect(events).toContain("Listener stopped");
 		expect(events).toContain("Login failed");
 		expect(events).toContain("HRIS callback post failed");
+		expect(events).toContain("HIKVISION_ACTIVE_WORK_EVENTS");
+		expect(events).toContain("Active SDK work:");
+		expect(events).toContain("Reading fingerprint");
+		expect(events).toContain("Reading face");
+		expect(events).toContain("Peer ${operation || \"SDK\"} copy attempt");
+		expect(events).toContain("callbacks /");
+		expect(events).toContain("armed/listening");
+		expect(events).toContain("SDK work active");
 		expect(events).toContain('device.state !== "login_failed"');
 		expect(deviceController).toContain("Listener service is stopped; previous arm/read log entries are historical only.");
 		expect(events).toContain("Open it, then run/review device-user reconciliation for the same device.");
