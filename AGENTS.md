@@ -384,7 +384,7 @@ For prompts that mention drift, device truth, VM/GitOps state, LAN state, produc
 - Plan and plan review before edits.
 - Execute in passes.
 - Validate against the requested finish line, not just local convenience.
-- Retry or recover through at least three documented plausible fixes before calling a recoverable issue blocked.
+- Retry or recover through at least 5 documented plausible fixes before calling a recoverable issue blocked.
 - Record evidence and remaining drift in the handoff.
 
 When WWG exists, start from `.wwg/reports/wwg-agent-handoff.md`, then use `Agent-Meta-Prompt-Template.md` to structure the actual execution prompt.
