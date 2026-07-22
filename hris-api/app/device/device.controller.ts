@@ -1107,6 +1107,8 @@ const runFixedProcess = (
 		const timeoutMs = options.timeoutMs ?? 7000;
 		let settled = false;
 		let killTimer: NodeJS.Timeout;
+		const stdoutChunks: string[] = [];
+		const stderrChunks: string[] = [];
 		const child = execFile(
 			file,
 			args,
@@ -1134,14 +1136,23 @@ const runFixedProcess = (
 				});
 			},
 		);
+		child.stdout?.on("data", (chunk) => {
+			stdoutChunks.push(String(chunk || ""));
+		});
+		child.stderr?.on("data", (chunk) => {
+			stderrChunks.push(String(chunk || ""));
+		});
 		killTimer = setTimeout(() => {
 			if (settled) return;
 			settled = true;
 			child.kill("SIGKILL");
 			resolve({
 				exitCode: 124,
-				stdout: "",
-				stderr: `Process timed out after ${timeoutMs}ms`,
+				stdout: stdoutChunks.join(""),
+				stderr: [
+					stderrChunks.join(""),
+					`Process timed out after ${timeoutMs}ms`,
+				].filter(Boolean).join("\n"),
 			});
 		}, timeoutMs + 1000);
 	});
@@ -1552,6 +1563,19 @@ const buildHikvisionManualCopySdkFailureMessage = (params: {
 const isDeterministicHikvisionManualCopySdkFailure = (message: string) =>
 	/cannot be used as the SDK copy (source|target)/i.test(String(message || ""));
 
+const hikvisionPeerSyncAttemptOk = (
+	event: Record<string, any>,
+	operation: string,
+	employeeNo: string,
+	targetDeviceId?: string,
+) =>
+	event?.event === "peer_sync_attempt" &&
+	String(event?.operation || "").trim().toLowerCase() === operation &&
+	String(event?.employeeNo || "").trim() === employeeNo &&
+	String(event?.ok || "").trim().toLowerCase() === "true" &&
+	(!targetDeviceId ||
+		String(event?.targetDeviceId || "").trim() === String(targetDeviceId || "").trim());
+
 const sleep = (ms: number) =>
 	new Promise((resolve) => {
 		setTimeout(resolve, Math.max(0, Math.floor(ms)));
@@ -1584,6 +1608,7 @@ type HikvisionManualCopyParams = {
 	includeFaceRecognition: boolean;
 	waitSeconds?: number;
 	skipPreflight?: boolean;
+	onProgress?: (event: any) => void;
 };
 
 const readStoredHikvisionSyntheticCredentialSummary = (rawPayload: any) => {
@@ -1920,15 +1945,40 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const runHikvisionManualCopyOnVm = async (params: HikvisionManualCopyParams) => {
-		const waitSeconds = Math.max(1, Math.min(Number(params.waitSeconds || 1), 8));
+		const waitSeconds = Math.max(1, Math.min(Number(params.waitSeconds || 8), 8));
 		const targetDevices = params.targetDevices?.length
 			? params.targetDevices
 			: params.targetDevice
 				? [params.targetDevice]
 				: [];
+		const emitManualCopyProgress = (event: any) =>
+			params.onProgress?.({
+				...event,
+				userKey: `vendor:${params.employeeNo}`,
+				vendorUserId: params.employeeNo,
+				sourceDeviceId: params.sourceDeviceId,
+				sourceDeviceName: params.sourceDevice?.name || params.sourceDevice?.address,
+				targetDeviceIds: targetDevices.map((device) => device?.id).filter(Boolean),
+				targetDeviceNames: targetDevices
+					.map((device) => device?.name || device?.address)
+					.filter(Boolean),
+				credentialStages: [
+					"user",
+					...(params.includeFingerprints ? ["fingerprint"] : []),
+					...(params.includeFaceRecognition ? ["face"] : []),
+				],
+				includeFingerprints: params.includeFingerprints,
+				includeFaceRecognition: params.includeFaceRecognition,
+				batchMultiTarget: targetDevices.length > 1,
+			});
 		if (!targetDevices.length) {
 			throw new Error("At least one Hikvision target device is required for peer copy");
 		}
+		emitManualCopyProgress({
+			stage: "vm_copy_preflight_started",
+			targetCount: targetDevices.length,
+			message: `Checking VM SDK reachability for user ${params.employeeNo} before peer copy.`,
+		});
 		if (!params.skipPreflight) {
 			await preflightHikvisionManualCopyEndpoint(
 				params.sourceDevice,
@@ -1945,6 +1995,11 @@ export const controller = (prisma: PrismaClient) => {
 				),
 			);
 		}
+		emitManualCopyProgress({
+			stage: "vm_copy_preflight_done",
+			targetCount: targetDevices.length,
+			message: `VM SDK reachability passed for user ${params.employeeNo}; preparing manual copy spec.`,
+		});
 		const localSpecPath = writeHikvisionManualCopySpec(params);
 		const remoteSpecPath = `/tmp/project-truth-hikvision-manual-copy-${Date.now()}.spec`;
 		try {
@@ -1974,6 +2029,13 @@ export const controller = (prisma: PrismaClient) => {
 				waitSeconds + 5,
 				Math.min(configuredCopyTimeout + modalityBonus + peerBonus, 90),
 			);
+			// Force wrapper to mint HRIS bearer token even when static device spec is used.
+			// Without this, curl to http://127.0.0.1:53001 returns 401 and every peer copy fails.
+			const manualCopyAuthEnv = [
+				"HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api",
+				"HIKVISION_HOST_REVERSE_API_BASE=http://127.0.0.1:53001",
+				"HIKVISION_HOT_RELOAD_API_BASE=http://127.0.0.1:53001",
+			];
 			const runManualCopy = (extraEnv: string[] = []) =>
 				runHikvisionListenerVmCommand(
 					[
@@ -1983,6 +2045,7 @@ export const controller = (prisma: PrismaClient) => {
 						"5s",
 						`${manualCopyTimeoutSeconds}s`,
 						"env",
+						...manualCopyAuthEnv,
 						...extraEnv,
 						"HIKVISION_ALLOW_STATIC_DEVICE_SPEC=1",
 						"HIKVISION_SKIP_SPOOL_REPLAY=1",
@@ -2006,21 +2069,47 @@ export const controller = (prisma: PrismaClient) => {
 			},
 			{
 				name: "api",
+				// Prefer host reverse :53001 (not stale :3101) for device list + token posts.
 				extraEnv: [
 					"HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api",
-					`HIKVISION_HOT_RELOAD_API_BASE=${HIKVISION_VM_LOCAL_API_BASE}`,
+					"HIKVISION_HOT_RELOAD_API_BASE=http://127.0.0.1:53001",
 				],
 			},
 		];
 		const failures: string[] = [];
 		for (const strategy of strategies) {
+			emitManualCopyProgress({
+				stage: "vm_copy_attempt_started",
+				strategy: strategy.name,
+				timeoutSeconds: manualCopyTimeoutSeconds,
+				targetCount: targetDevices.length,
+				message: `VM SDK ${strategy.name} attempt for user ${params.employeeNo}: user/fingerprint/face to ${targetDevices.length} target(s).`,
+			});
 			let result = await runManualCopy(strategy.extraEnv);
 			const firstAttemptDetail = result.stderr.trim() || result.stdout.trim();
 			if (result.exitCode === 124 || result.exitCode === 137) {
-				throw new Error(
-					`Timed out running Hikvision manual copy (${strategy.name}) for user ${params.employeeNo} from ${params.sourceDevice.name || params.sourceDevice.id}`,
-				);
+				const detail = firstAttemptDetail
+					? ` Last output: ${firstAttemptDetail.slice(-500)}`
+					: "";
+				const timeoutMessage =
+					`Timed out running Hikvision manual copy (${strategy.name}) for user ${params.employeeNo} from ${params.sourceDevice.name || params.sourceDevice.id}.${detail}`;
+				emitManualCopyProgress({
+					stage: "vm_copy_attempt_timeout",
+					strategy: strategy.name,
+					timeoutSeconds: manualCopyTimeoutSeconds,
+					error: timeoutMessage,
+					message: timeoutMessage,
+				});
+				failures.push(timeoutMessage);
+				continue;
 			}
+			emitManualCopyProgress({
+				stage: "vm_copy_attempt_finished",
+				strategy: strategy.name,
+				exitCode: result.exitCode,
+				events: parseJsonLines(result.stdout).length,
+				message: `VM SDK ${strategy.name} attempt for user ${params.employeeNo} exited ${result.exitCode}.`,
+			});
 			if (
 				result.exitCode !== 0 &&
 				isMissingHikvisionListenerRuntimeError(firstAttemptDetail)
@@ -2039,24 +2128,38 @@ export const controller = (prisma: PrismaClient) => {
 				events
 					.filter(
 						(event) =>
-							event?.event === "peer_user_write" &&
 							String(event?.employeeNo || "").trim() === params.employeeNo &&
-							String(event?.ok || "").trim().toLowerCase() === "true",
+							String(event?.ok || "").trim().toLowerCase() === "true" &&
+							(event?.event === "peer_user_write" ||
+								(event?.event === "peer_sync_attempt" &&
+									String(event?.operation || "").trim().toLowerCase() === "user")),
 					)
 					.map((event) => String(event?.targetDeviceId || "").trim())
 					.filter(Boolean),
 			);
-			const peerUserWriteOk = targetDevices.some((targetDevice) =>
+			const peerUserWriteOk = targetDevices.every((targetDevice) =>
 				successfulTargetIds.has(String(targetDevice?.id || "").trim()),
 			);
 			const fingerprintWriteOk =
 				!params.includeFingerprints ||
-				events.some(
-					(event) =>
-						String(event?.employeeNo || "").trim() === params.employeeNo &&
-						((event?.event === "peer_fingerprint_write" &&
-							String(event?.ok || "").trim().toLowerCase() === "true") ||
-							event?.event === "peer_fingerprint_write_skipped"),
+				targetDevices.every((targetDevice) =>
+					events.some(
+						(event) =>
+							String(event?.employeeNo || "").trim() === params.employeeNo &&
+							((event?.event === "peer_fingerprint_write" &&
+								String(event?.targetDeviceId || "").trim() ===
+									String(targetDevice?.id || "").trim() &&
+								String(event?.ok || "").trim().toLowerCase() === "true") ||
+								hikvisionPeerSyncAttemptOk(
+									event,
+									"fingerprint",
+									params.employeeNo,
+									String(targetDevice?.id || "").trim(),
+								) ||
+								(event?.event === "peer_fingerprint_write_skipped" &&
+									String(event?.targetDeviceId || "").trim() ===
+										String(targetDevice?.id || "").trim())),
+					),
 				);
 			const completed = events.some(
 				(event) =>
@@ -2085,13 +2188,31 @@ export const controller = (prisma: PrismaClient) => {
 			if (sdkFailureMessage && isDeterministicHikvisionManualCopySdkFailure(sdkFailureMessage)) {
 				throw new Error(sdkFailureMessage);
 			}
+			const visibleEvents = events
+				.filter((event) => event?.event)
+				.slice(-12)
+				.map((event) => ({
+					event: event.event,
+					operation: event.operation,
+					targetDeviceId: event.targetDeviceId,
+					employeeNo: event.employeeNo,
+					ok: event.ok,
+					reason: event.reason,
+					lastError: event.lastError,
+				}));
+			const parsedEventSummary =
+				events.length > 0
+					? `events=${events.length}; completed=${completed}; userOk=${peerUserWriteOk}; fingerprintOk=${fingerprintWriteOk}; latest=${JSON.stringify(visibleEvents)}`
+					: "";
 			failures.push(
-				`${strategy.name}: ${
-					sdkFailureMessage ||
-					result.stderr.trim() ||
-					result.stdout.trim() ||
-					"Scoped Hikvision user copy did not report a completed peer write"
-				}`,
+				`${strategy.name}: ${[
+					sdkFailureMessage,
+					parsedEventSummary,
+					result.stderr.trim(),
+					!parsedEventSummary ? result.stdout.trim() : "",
+				]
+					.filter(Boolean)
+					.join(" | ") || "Scoped Hikvision user copy did not report a completed peer write"}`,
 			);
 		}
 		throw new Error(failures.join(" | "));
@@ -9855,6 +9976,7 @@ export const controller = (prisma: PrismaClient) => {
 							employeeNo: sourceRecord.vendorUserId,
 							includeFingerprints: true,
 							includeFaceRecognition: true,
+							onProgress: emitMergeProgress,
 						});
 						for (const batchResult of batch.results || []) {
 							const targetDeviceId = String(batchResult.targetDevice?.id || "");
@@ -11159,6 +11281,7 @@ export const controller = (prisma: PrismaClient) => {
 		employeeNo: string;
 		includeFingerprints: boolean;
 		includeFaceRecognition: boolean;
+		onProgress?: (event: any) => void;
 	}) => {
 		const startedAt = Date.now();
 		const sourceDeviceId = String(params.sourceDevice.id);
@@ -11281,7 +11404,14 @@ export const controller = (prisma: PrismaClient) => {
 					.map((plan) => plan.targetDevice)
 					.filter((targetDevice) => !preflightFailures.has(String(targetDevice.id)));
 				if (reachableTargets.length) {
-					for (vmAttempt = 1; vmAttempt <= HIKVISION_PEER_COPY_RETRY_LIMIT; vmAttempt += 1) {
+					const batchVmRetryLimit = Math.max(
+						1,
+						Math.min(
+							Number(process.env.HIKVISION_MERGE_BATCH_VM_RETRY_LIMIT || 1),
+							HIKVISION_PEER_COPY_RETRY_LIMIT,
+						),
+					);
+					for (vmAttempt = 1; vmAttempt <= batchVmRetryLimit; vmAttempt += 1) {
 						const vmCopyStartedAt = Date.now();
 						try {
 							sharedVmCopyResult = await runHikvisionManualCopyOnVm({
@@ -11292,13 +11422,30 @@ export const controller = (prisma: PrismaClient) => {
 								includeFingerprints: params.includeFingerprints,
 								includeFaceRecognition: params.includeFaceRecognition,
 								skipPreflight: true,
+								onProgress: params.onProgress,
 							});
 							vmManualCopyMs += Date.now() - vmCopyStartedAt;
 							break;
 						} catch (error: any) {
 							vmManualCopyMs += Date.now() - vmCopyStartedAt;
 							sharedVmCopyError = error?.message || "The coordinated VM SDK copy failed";
-							if (vmAttempt < HIKVISION_PEER_COPY_RETRY_LIMIT) await sleep(600 * vmAttempt);
+							params.onProgress?.({
+								stage: "vm_copy_batch_attempt_failed",
+								userKey: `vendor:${params.employeeNo}`,
+								vendorUserId: params.employeeNo,
+								sourceDeviceId,
+								sourceDeviceName: params.sourceDevice?.name || params.sourceDevice?.address,
+								targetDeviceIds: reachableTargets.map((device) => device.id),
+								targetDeviceNames: reachableTargets.map(
+									(device) => device.name || device.address,
+								),
+								targetCount: reachableTargets.length,
+								vmAttempt,
+								vmRetryLimit: batchVmRetryLimit,
+								error: sharedVmCopyError,
+								message: `VM SDK batch attempt ${vmAttempt}/${batchVmRetryLimit} failed for user ${params.employeeNo}.`,
+							});
+							if (vmAttempt < batchVmRetryLimit) await sleep(600 * vmAttempt);
 						}
 					}
 				}

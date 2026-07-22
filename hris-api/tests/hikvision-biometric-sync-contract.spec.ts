@@ -64,6 +64,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("requestTotalMs");
 		expect(controller).to.include("const writeHikvisionManualCopySpec =");
 		expect(controller).to.include("HIKVISION_ALLOW_STATIC_DEVICE_SPEC=1");
+		// Manual copy must mint HRIS token (static override previously left 401 on VM curl).
+		expect(controller).to.include("HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api");
+		expect(controller).to.include(
+			"HIKVISION_HOST_REVERSE_API_BASE=http://127.0.0.1:53001",
+		);
 		expect(controller).to.include("HIKVISION_DEVICE_SPEC_OVERRIDE=");
 		expect(controller).to.include('name: "static_spec"');
 		expect(controller).to.include("const preflightHikvisionManualCopyEndpoint = async");

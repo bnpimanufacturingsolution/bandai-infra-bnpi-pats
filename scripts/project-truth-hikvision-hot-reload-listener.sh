@@ -297,8 +297,14 @@ ensure_work_tree
 cd "$WORK"
 export HIKVISION_LINUX_SDK_ROOT="$SDK_ROOT"
 export LD_LIBRARY_PATH="$SDK_ROOT/lib:$SDK_ROOT:$SDK_ROOT/HCNetSDKCom:${LD_LIBRARY_PATH:-}"
-if [[ "$DEVICE_SOURCE" == "api" && -z "${hris_token:-}" ]]; then
-  hris_token="$(fetch_hikvision_hris_token)"
+# Always mint a token when empty. Static-spec override used to skip the API device
+# fetch and left HIKVISION_HRIS_API_TOKEN blank, so every callback/reconcile curl
+# returned HTTP 401 ("No token provided") and merge peer-copy looked like total failure.
+if [[ -z "${hris_token:-}" ]]; then
+  if ! hris_token="$(fetch_hikvision_hris_token)"; then
+    echo "WARN: failed to mint HRIS API token; HRIS posts may 401 until login works" >&2
+    hris_token=""
+  fi
 fi
 export HIKVISION_HRIS_API_TOKEN="$hris_token"
 

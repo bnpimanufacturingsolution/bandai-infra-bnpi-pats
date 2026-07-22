@@ -5033,7 +5033,10 @@ int main(int argc, char **argv) {
     std::thread reconcile_worker(reconcile_worker_loop);
     std::thread callback_spool_replayer(callback_spool_replay_loop);
 
-    std::thread poller(polling_loop);
+    std::thread poller;
+    if (!manual_reconcile_mode) {
+        poller = std::thread(polling_loop);
+    }
     if (manual_fingerprint_clone_mode) {
         DeviceSession *manual_source = nullptr;
         DeviceSession *manual_target = nullptr;
