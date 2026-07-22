@@ -985,3 +985,16 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Safe retry boundary: no `retryPlanId` was provided; the active job scope already differed from the intended operator scope; and fresh remaining plans still carry conflicts/source-choice decisions. Do not start another write job by guessing `applyAll` or recommended sources. A safe retry requires a reviewed remaining-scope plan or a backend-generated retry plan that locks only remaining actionable rows.
 - Validation during this pass: API typecheck passed after the biometric status literal hardening; frontend device-user contract passed; targeted frontend ESLint passed with 0 errors and existing warnings. Browser proof of the running modal is under `.runtime/merge-users-final-run-20260722-042955/browser-merge-live-work-20260722-1545/`.
 
+# 2026-07-23 Overnight Merge Device Users Owner Loop Handoff
+
+- Status: `PARTIALLY FULFILLED`. Evidence root: `.runtime/merge-device-users-overnight-20260722-205845/`; full closeout: `WAKEUP-REPORT.md`.
+- Fresh accepted scope was Main Entrance B/A/D/E/F. Main Entrance C was excluded after repeated `EHOSTUNREACH` user reads; TEST A/B remained outside the proven normal HTTP/SDK scope.
+- Fresh before/after physical counts: B `687→812`, A `697→813`, D `744→849`, E `740→822`, F `715→748`. Device records increased `3583→4044` (+461); unique union stayed 865; peer gaps fell `742→281`.
+- Final plan `3e08ac56-2f8f-4b91-8c69-b9eed346df95` read all five devices cleanly with zero errors. All remaining 281 peer gaps are on 205 IDs with unresolved conflicts; zero conflict-free rows remain. The loop stopped rather than guessing source identity fields.
+- Biometric boundary: zero readable raw fingerprint records and zero readable raw face records were available. Final evidence is 1,746 fingerprint count-only records, 1,351 face count-only records, and explicit not-enrolled rows. Nothing count-only was called synchronized raw data.
+- Failure-only retry was proven: canary timeouts were retried as only eight remaining rows; seven were ledger successes and the eighth immediate-verification failure was subsequently present on physical reread. Later stale-inventory false noops were detected by fresh reread, repaired in code, and retried rather than accepted.
+- Corrected jobs applied 280/280 physical writes with zero already-matched and zero failures: `f457c844...`, `32dea565...`, `5c812f2b...`, `24e40a51...`.
+- Repairs pushed to `develop`: `6977afd`, `8a52316`, `a32f264`, `a037f4b`, `fb8750e`. VM ansible/GitOps runtime proved exact deployed commit `fb8750e`; the named Cloudflare tunnel stayed active.
+- Close health: canonical `127.0.0.1:55435` PostgreSQL handshake and Prisma query pass; local API health/login/auth-me pass; frontend `:5175` passes; public DEV health passes; all 18 A–F HTTP/HTTPS/SDK forwards pass and remain running.
+- Validation: API typecheck pass; 30 focused Hikvision contracts pass; Device Users UI contract pass; targeted frontend ESLint 0 errors; deployed headless Playwright terminal-job proof pass. Full frontend typecheck has unrelated existing failures and was not called green.
+
