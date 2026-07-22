@@ -67,6 +67,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("HIKVISION_DEVICE_SPEC_OVERRIDE=");
 		expect(controller).to.include('name: "static_spec"');
 		expect(controller).to.include("const preflightHikvisionManualCopyEndpoint = async");
+		expect(controller).to.include("useTunnelMap: false");
+		expect(controller).to.include("config.hikvisionSdkRuntimeAddress || device?.address");
+		expect(controller).to.not.include("preferPhysicalAddress: true");
 		expect(controller).to.include("VM cannot reach");
 		expect(controller).to.include("quoteRemoteShellArg");
 		expect(controller).to.include("remoteArgs.map(quoteRemoteShellArg).join");
@@ -79,7 +82,7 @@ describe("Hikvision biometric sync contract", () => {
 			"const isDeterministicHikvisionManualCopySdkFailure =",
 		);
 		expect(controller).to.include("const runManualCopy = (extraEnv: string[] = []) =>");
-		expect(controller).to.include("Math.max(waitSeconds * 1000 + 45000, 60000)");
+		expect(controller).to.include("Math.max(manualCopyTimeoutSeconds * 1000 + 5000, 15000)");
 		expect(controller).to.include("maxBuffer: 5 * 1024 * 1024");
 		expect(controller).to.include("result.exitCode !== 0");
 		expect(controller).to.include("isMissingHikvisionListenerRuntimeError(firstAttemptDetail)");
@@ -165,6 +168,35 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("targetDeviceIds");
 		expect(controller).to.include("targetDevices: reachableTargets");
 		expect(controller).to.include("vmSessionCount: sharedVmCopyResult ? 1 : 0");
+		// Merge apply must reuse batch multi-target (one VM session per unique ID), not only 1:1.
+		expect(controller).to.include("await copyHikvisionUserToPeersBatch({");
+		expect(controller).to.include('stage: "batch_copy_started"');
+		expect(controller).to.include("batchMultiTarget: true");
+		expect(controller).to.include(
+			"HIKVISION_MERGE_COPY_TIMEOUT_CIRCUIT_LIMIT || 3",
+		);
+		// Durable merge ledger + face-aware physical peer copy + smarter VM timeout.
+		expect(controller).to.include("const appendMergeLedgerRow =");
+		expect(controller).to.include("HIKVISION_MERGE_LEDGER_DIR");
+		expect(controller).to.include("success.jsonl");
+		expect(controller).to.include("failure.jsonl");
+		expect(controller).to.include("countsAsPeerWriteSuccess");
+		expect(controller).to.include(
+			"params.includeFaceRecognition &&",
+		);
+		expect(controller).to.include(
+			"HIKVISION_MANUAL_COPY_TIMEOUT_SECONDS || 25",
+		);
+		// Durable merge job snapshots survive API restart (no fake forever-processing).
+		expect(controller).to.include("DEVICE_USER_MERGE_JOB_DIR");
+		expect(controller).to.include("const persistDeviceUserMergeJob =");
+		expect(controller).to.include("const readDeviceUserMergeJob =");
+		expect(controller).to.include("const resolveDeviceUserMergeJob =");
+		expect(controller).to.include("const markDeviceUserMergeJobStale =");
+		expect(controller).to.include("persistDeviceUserMergeJob(job)");
+		expect(controller).to.include("workerActive");
+		expect(controller).to.include("failed_stale");
+		expect(controller).to.include("device-user-merge-jobs");
 		expect(controller).to.include("const settled = await Promise.allSettled(");
 		expect(controller).to.include("preferredHikvisionListenerVmTargetLabel");
 		expect(controller).to.include("HIKVISION_VM_SSH_CONNECT_TIMEOUT_SECONDS");

@@ -228,8 +228,19 @@ const DEVICE_USER_SYNC_JOB_DIR = path.join(
 	".runtime",
 	"device-user-sync-jobs",
 );
+const DEVICE_USER_MERGE_JOB_DIR = path.join(
+	process.cwd(),
+	"..",
+	".runtime",
+	"device-user-merge-jobs",
+);
 const DEVICE_IMPORT_JOB_PROCESSING_STALE_MS = 30 * 60 * 1000;
 const DEVICE_USER_SYNC_PROCESSING_STALE_MS = 30 * 60 * 1000;
+/** Merge peer-copy can sit in one long VM batch; still treat silent processing as dead after this. */
+const DEVICE_USER_MERGE_PROCESSING_STALE_MS = Math.max(
+	5 * 60 * 1000,
+	Math.min(Number(process.env.HIKVISION_MERGE_JOB_STALE_MS || 45 * 60 * 1000), 3 * 60 * 60 * 1000),
+);
 
 type DeviceImportJobStatus = "processing" | "completed" | "failed" | "cancelled";
 
@@ -447,10 +458,15 @@ type DeviceUserMergeJob = {
 	results: any[];
 	progressEvents?: any[];
 	writeMatrix?: any;
+	copyFailureSummary?: any;
 	remainingConflicts?: number;
 	remainingMissing?: number;
 	attention?: number;
 	error?: string | null;
+	/** True when a processing snapshot was revived after worker death / API restart. */
+	stale?: boolean;
+	/** Disk snapshot path for agent recovery (relative or absolute). */
+	snapshotPath?: string | null;
 	startedAt: Date;
 	updatedAt?: Date;
 	completedAt?: Date;
@@ -894,6 +910,140 @@ const markDeviceUserSyncJobStale = (job: DeviceUserSyncJob) => {
 	return staleJob;
 };
 
+const serializeDeviceUserMergeJob = (job: DeviceUserMergeJob) => ({
+	...job,
+	results: Array.isArray(job.results) ? job.results : [],
+	progressEvents: Array.isArray(job.progressEvents) ? job.progressEvents : [],
+	startedAt: job.startedAt instanceof Date ? job.startedAt.toISOString() : job.startedAt,
+	updatedAt: job.updatedAt instanceof Date ? job.updatedAt.toISOString() : job.updatedAt,
+	completedAt:
+		job.completedAt instanceof Date ? job.completedAt.toISOString() : job.completedAt || null,
+});
+
+const persistDeviceUserMergeJob = (job: DeviceUserMergeJob) => {
+	try {
+		fsSync.mkdirSync(DEVICE_USER_MERGE_JOB_DIR, { recursive: true });
+		const snapshotPath = path.join(DEVICE_USER_MERGE_JOB_DIR, `${job.jobId}.json`);
+		const withPath: DeviceUserMergeJob = { ...job, snapshotPath };
+		fsSync.writeFileSync(
+			snapshotPath,
+			JSON.stringify(serializeDeviceUserMergeJob(withPath), null, 2),
+		);
+		// Keep memory path in sync so GET responses expose where agents can read truth.
+		if (deviceUserMergeJobs.has(job.jobId)) {
+			const current = deviceUserMergeJobs.get(job.jobId);
+			if (current && current.snapshotPath !== snapshotPath) {
+				deviceUserMergeJobs.set(job.jobId, { ...current, snapshotPath });
+			}
+		}
+	} catch (error) {
+		deviceLogger.warn(`Failed to persist device-user merge job snapshot: ${error}`);
+	}
+};
+
+const readDeviceUserMergeJob = (jobId: string): DeviceUserMergeJob | null => {
+	try {
+		const filePath = path.join(DEVICE_USER_MERGE_JOB_DIR, `${jobId}.json`);
+		if (!fsSync.existsSync(filePath)) return null;
+		// Strip UTF-8 BOM from PowerShell Set-Content -Encoding UTF8 and similar writers.
+		const raw = fsSync
+			.readFileSync(filePath, "utf8")
+			.replace(/^\uFEFF/, "")
+			.trim();
+		if (!raw) return null;
+		const parsed = JSON.parse(raw);
+		const startedAt = parsed.startedAt ? new Date(parsed.startedAt) : new Date();
+		const completedAt = parsed.completedAt ? new Date(parsed.completedAt) : undefined;
+		const updatedAt = parsed.updatedAt
+			? new Date(parsed.updatedAt)
+			: completedAt || startedAt;
+		return {
+			...parsed,
+			startedAt,
+			updatedAt,
+			completedAt,
+			results: Array.isArray(parsed.results) ? parsed.results : [],
+			progressEvents: Array.isArray(parsed.progressEvents) ? parsed.progressEvents : [],
+			totalWrites: Number(parsed.totalWrites || 0),
+			processedWrites: Number(parsed.processedWrites || 0),
+			successfulWrites: Number(parsed.successfulWrites || 0),
+			failedWrites: Number(parsed.failedWrites || 0),
+			stale: Boolean(parsed.stale),
+			snapshotPath: filePath,
+		};
+	} catch (error) {
+		deviceLogger.warn(`Failed to read device-user merge job snapshot: ${error}`);
+		return null;
+	}
+};
+
+const isDeviceUserMergeJobStale = (job: DeviceUserMergeJob) => {
+	if (job.status !== "processing") return false;
+	const lastProgressAt = job.updatedAt || job.startedAt;
+	const lastProgressTime = lastProgressAt instanceof Date ? lastProgressAt.getTime() : NaN;
+	return (
+		!Number.isFinite(lastProgressTime) ||
+		Date.now() - lastProgressTime > DEVICE_USER_MERGE_PROCESSING_STALE_MS
+	);
+};
+
+const markDeviceUserMergeJobStale = (
+	job: DeviceUserMergeJob,
+	message?: string,
+): DeviceUserMergeJob => {
+	const now = new Date();
+	const staleJob: DeviceUserMergeJob = {
+		...job,
+		status: "failed",
+		stale: true,
+		message:
+			message ||
+			job.message ||
+			"Device-user merge worker is no longer active after API restart or a stalled batch. Start a fresh merge job from the reread/retry plan; do not treat this as peer-write success.",
+		error:
+			job.error ||
+			"Merge job interrupted (stale processing snapshot). Worker not active in this API process.",
+		currentStage: "failed_stale",
+		updatedAt: now,
+		completedAt: now,
+	};
+	deviceUserMergeJobs.set(job.jobId, staleJob);
+	persistDeviceUserMergeJob(staleJob);
+	return staleJob;
+};
+
+const resolveDeviceUserMergeJob = (
+	jobId: string,
+	options?: { markInterruptedProcessingStale?: boolean },
+): DeviceUserMergeJob | null => {
+	const memoryJob = deviceUserMergeJobs.get(jobId);
+	const persistedJob = memoryJob ? null : readDeviceUserMergeJob(jobId);
+	const foundJob = memoryJob || persistedJob;
+	if (!foundJob) return null;
+
+	// Processing snapshot on disk but not in this process = worker died (API restart/crash).
+	const interruptedPersistedJob =
+		options?.markInterruptedProcessingStale !== false &&
+		!memoryJob &&
+		persistedJob?.status === "processing"
+			? persistedJob
+			: null;
+	if (interruptedPersistedJob) {
+		return markDeviceUserMergeJobStale(
+			interruptedPersistedJob,
+			"Device-user merge worker is no longer active after API restart. Last progress was persisted; start a fresh merge for remaining failures only.",
+		);
+	}
+	if (isDeviceUserMergeJobStale(foundJob)) {
+		return markDeviceUserMergeJobStale(foundJob);
+	}
+	// Hydrate memory from durable snapshot for completed/failed jobs so list/GET stay cheap.
+	if (!memoryJob && foundJob.status !== "processing") {
+		deviceUserMergeJobs.set(jobId, foundJob);
+	}
+	return foundJob;
+};
+
 const updateDeviceUserMergeJob = (
 	jobId: string,
 	patch: Partial<Omit<DeviceUserMergeJob, "jobId" | "results" | "progressEvents">> & {
@@ -908,13 +1058,44 @@ const updateDeviceUserMergeJob = (
 	const progressEvents = patch.appendProgressEvent
 		? [...(job.progressEvents || []), appendProgressEvent].slice(-100)
 		: jobPatch.progressEvents || job.progressEvents;
-	deviceUserMergeJobs.set(jobId, {
+	const nextJob: DeviceUserMergeJob = {
 		...job,
 		...jobPatch,
 		results: jobPatch.results || job.results,
 		progressEvents,
 		updatedAt: new Date(),
-	});
+	};
+	deviceUserMergeJobs.set(jobId, nextJob);
+	persistDeviceUserMergeJob(nextJob);
+};
+
+/** Durable per-row merge peer-copy ledger (success/failure jsonl). Circuit-skips are failures, not success. */
+const resolveMergeLedgerDir = (jobId: string) => {
+	const envDir = String(process.env.HIKVISION_MERGE_LEDGER_DIR || "").trim();
+	if (envDir) return path.resolve(envDir);
+	return path.resolve(process.cwd(), "..", ".runtime", "merge-ledger", jobId);
+};
+
+const appendMergeLedgerRow = (
+	jobId: string,
+	kind: "success" | "failure",
+	row: Record<string, unknown>,
+) => {
+	try {
+		const dir = resolveMergeLedgerDir(jobId);
+		fsSync.mkdirSync(dir, { recursive: true });
+		const file = path.join(dir, kind === "success" ? "success.jsonl" : "failure.jsonl");
+		const line = JSON.stringify({
+			at: new Date().toISOString(),
+			jobId,
+			...row,
+		});
+		fsSync.appendFileSync(file, `${line}\n`, "utf8");
+	} catch (error: any) {
+		deviceLogger.warn(
+			`Failed to append merge ledger ${kind} row for job ${jobId}: ${error?.message || error}`,
+		);
+	}
 };
 
 const runFixedProcess = (
@@ -1585,17 +1766,27 @@ export const controller = (prisma: PrismaClient) => {
 			.replace(/[\r\n|]+/g, " ")
 			.trim();
 
-	const getHikvisionSdkEndpoint = (device: any) => {
+	const getHikvisionSdkEndpoint = (
+		device: any,
+		options: { useTunnelMap?: boolean; preferPhysicalAddress?: boolean } = {},
+	) => {
 		const config = device?.config || {};
 		const physicalHost = cleanHikvisionDeviceSpecValue(
-			config.hikvisionSdkRuntimeAddress || device?.address,
+			options.preferPhysicalAddress
+				? device?.address
+				: config.hikvisionSdkRuntimeAddress || device?.address,
 		);
 		const physicalPort = Number(
 			cleanHikvisionDeviceSpecValue(
-				config.hikvisionSdkRuntimePort || config.sdkPort || "8000",
+				options.preferPhysicalAddress
+					? config.sdkPort || "8000"
+					: config.hikvisionSdkRuntimePort || config.sdkPort || "8000",
 			),
 		);
-		const tunnelTarget = resolveHikvisionTunnelTarget(physicalHost, physicalPort);
+		const tunnelTarget =
+			options.useTunnelMap === false
+				? null
+				: resolveHikvisionTunnelTarget(physicalHost, physicalPort);
 		return {
 			host: tunnelTarget?.host || physicalHost,
 			port: cleanHikvisionDeviceSpecValue(tunnelTarget?.port || physicalPort || "8000"),
@@ -1605,7 +1796,9 @@ export const controller = (prisma: PrismaClient) => {
 	const buildHikvisionManualCopySpecLine = (device: any) => {
 		const config = device?.config || {};
 		const access = device?.access || {};
-		const { host: sdkHost, port: sdkPort } = getHikvisionSdkEndpoint(device);
+		const { host: sdkHost, port: sdkPort } = getHikvisionSdkEndpoint(device, {
+			useTunnelMap: false,
+		});
 		const username = cleanHikvisionDeviceSpecValue(
 			access.username || process.env.HIKVISION_USERNAME,
 		);
@@ -1656,7 +1849,9 @@ export const controller = (prisma: PrismaClient) => {
 		role: "source" | "target",
 		employeeNo: string,
 	) => {
-		const { host, port } = getHikvisionSdkEndpoint(device);
+		const { host, port } = getHikvisionSdkEndpoint(device, {
+			useTunnelMap: false,
+		});
 		const label = hikvisionDeviceLabel(device);
 		if (!/^[A-Za-z0-9_.-]+$/.test(host) || !/^\d+$/.test(port)) {
 			throw new Error(
@@ -1683,7 +1878,9 @@ export const controller = (prisma: PrismaClient) => {
 		employeeNo: string,
 	) => {
 		const probes = devices.map(({ device, role }) => {
-			const { host, port } = getHikvisionSdkEndpoint(device);
+			const { host, port } = getHikvisionSdkEndpoint(device, {
+				useTunnelMap: false,
+			});
 			const deviceId = String(device?.id || "").trim();
 			if (
 				!/^[A-Za-z0-9_.-]+$/.test(deviceId) ||
@@ -1764,9 +1961,18 @@ export const controller = (prisma: PrismaClient) => {
 				);
 			}
 
+			// Multi-target + FP/face need headroom; default was 10s and caused timeout storms on merge.
+			// Env floor still wins; scale by peers and modalities up to 90s.
+			const configuredCopyTimeout = Math.max(
+				5,
+				Math.min(Number(process.env.HIKVISION_MANUAL_COPY_TIMEOUT_SECONDS || 25), 90),
+			);
+			const modalityBonus =
+				(params.includeFingerprints ? 8 : 0) + (params.includeFaceRecognition ? 8 : 0);
+			const peerBonus = Math.max(0, targetDevices.length - 1) * 6;
 			const manualCopyTimeoutSeconds = Math.max(
 				waitSeconds + 5,
-				Math.min(Number(process.env.HIKVISION_MANUAL_COPY_TIMEOUT_SECONDS || 10), 60),
+				Math.min(configuredCopyTimeout + modalityBonus + peerBonus, 90),
 			);
 			const runManualCopy = (extraEnv: string[] = []) =>
 				runHikvisionListenerVmCommand(
@@ -9447,10 +9653,111 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const results: any[] = [];
 			const sdkPeerCopyTimeoutFailures = new Map<string, number>();
+			// Default 3: one timeout must not open-circuit an entire source→target path for bulk merge.
 			const sdkPeerCopyTimeoutCircuitLimit = Math.max(
 				1,
-				Math.min(Number(process.env.HIKVISION_MERGE_COPY_TIMEOUT_CIRCUIT_LIMIT || 1), 10),
+				Math.min(Number(process.env.HIKVISION_MERGE_COPY_TIMEOUT_CIRCUIT_LIMIT || 3), 10),
 			);
+			const copyCredentialStages = ["user", "fingerprint", "face"];
+			const mergeOverlayDeviceUserRow = async (params: {
+				user: any;
+				sourceDevice: any;
+				sourceRecord: any;
+				targetDevice: any;
+				targetDeviceId: string;
+			}) => {
+				const { user, sourceDevice, sourceRecord, targetDevice, targetDeviceId } = params;
+				const targetRow = await (prisma as any).deviceUser.findFirst({
+					where: {
+						organizationId: String(admin.organizationId),
+						deviceId: targetDeviceId,
+						vendorUserId: sourceRecord.vendorUserId,
+					},
+					select: {
+						id: true,
+						employeeId: true,
+						employeeNo: true,
+						displayName: true,
+						status: true,
+						validFrom: true,
+						validTo: true,
+						doorRight: true,
+						accessPlan: true,
+						rawPayload: true,
+					},
+				});
+				if (!targetRow?.id) return;
+				emitMergeProgress?.({
+					stage: "db_merge_started",
+					userKey: user.key,
+					vendorUserId: sourceRecord.vendorUserId,
+					targetDeviceId,
+					targetDeviceName: targetDevice.name || targetDevice.address,
+					message: `Updating HRIS DeviceUser row for ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+				});
+				const selectedRecordFor = (field: string) => {
+					const conflict = user.conflicts.find((item: any) => item.field === field);
+					if (conflict?.choice === "KEEP") return null;
+					if (!conflict?.choice) return sourceRecord;
+					const selectedDeviceId =
+						conflict.choice === "B" ? conflict.deviceB.id : conflict.deviceA.id;
+					return (
+						user.records.find((record: any) => record.deviceId === selectedDeviceId) ||
+						sourceRecord
+					);
+				};
+				const employeeRecord = selectedRecordFor("employeeId");
+				const nameRecord = selectedRecordFor("displayName");
+				const statusRecord = selectedRecordFor("status");
+				const validityFromRecord = selectedRecordFor("validFrom");
+				const validityToRecord = selectedRecordFor("validTo");
+				const accessRecord = selectedRecordFor("doorRight");
+				const selectedRawRecord = selectedRecordFor("fingerprint") || sourceRecord;
+				const selectedRaw = selectedRawRecord.rawPayload as any;
+				const targetCredentials = extractHikvisionCredentialSummary(
+					targetRow.rawPayload || {},
+				);
+				const selectedCredentials = extractHikvisionCredentialSummary(selectedRaw || {});
+				const preserveBiometricRaw =
+					targetCredentials.fingerprintCount > selectedCredentials.fingerprintCount ||
+					targetCredentials.faceCount > selectedCredentials.faceCount ||
+					targetCredentials.cardCount > selectedCredentials.cardCount;
+				await (prisma as any).deviceUser.update({
+					where: { id: targetRow.id },
+					data: {
+						employeeId: employeeRecord
+							? employeeRecord.employeeId || user.employeeId || null
+							: targetRow.employeeId,
+						displayName: nameRecord ? nameRecord.displayName : targetRow.displayName,
+						status: statusRecord ? statusRecord.status : targetRow.status,
+						validFrom: validityFromRecord
+							? validityFromRecord.validFrom
+								? new Date(validityFromRecord.validFrom)
+								: null
+							: targetRow.validFrom,
+						validTo: validityToRecord
+							? validityToRecord.validTo
+								? new Date(validityToRecord.validTo)
+								: null
+							: targetRow.validTo,
+						doorRight: accessRecord ? accessRecord.doorRight : targetRow.doorRight,
+						accessPlan: accessRecord ? accessRecord.accessPlan : targetRow.accessPlan,
+						rawPayload: {
+							...(targetRow.rawPayload || {}),
+							...(preserveBiometricRaw ? {} : selectedRaw || {}),
+							hrisMerge: { reviewed: true, decisions: user.conflicts },
+						},
+					},
+				});
+				emitMergeProgress?.({
+					stage: "db_merge_done",
+					userKey: user.key,
+					vendorUserId: sourceRecord.vendorUserId,
+					targetDeviceId,
+					targetDeviceName: targetDevice.name || targetDevice.address,
+					message: `Updated HRIS row for ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+				});
+			};
 			for (const user of appliedPlan.users) {
 				const selectedConflict = user.conflicts.find((conflict: any) => conflict.choice);
 				const sourceDeviceId =
@@ -9467,13 +9774,19 @@ export const controller = (prisma: PrismaClient) => {
 					(record) => record.deviceId === sourceDevice.id,
 				);
 				if (!sourceRecord) continue;
-				for (const targetDeviceId of user.targetDeviceIds) {
-					if (targetDeviceId === sourceDevice.id) continue;
-					const targetDevice = devices.find((device) => device.id === targetDeviceId);
-					if (!targetDevice) continue;
+				// Batch multi-target: one VM SDK session per unique ID → all remaining peers
+				// (reuses copyHikvisionUserToPeersBatch / PRD copy-to-all path).
+				const candidateTargets = user.targetDeviceIds
+					.filter((targetDeviceId: string) => targetDeviceId !== sourceDevice.id)
+					.map((targetDeviceId: string) =>
+						devices.find((device) => device.id === targetDeviceId),
+					)
+					.filter(Boolean) as typeof devices;
+				const batchTargets: typeof devices = [];
+				for (const targetDevice of candidateTargets) {
+					const targetDeviceId = String(targetDevice.id);
 					const copyCircuitKey = `${sourceDevice.id}->${targetDeviceId}`;
 					const priorTimeoutFailures = sdkPeerCopyTimeoutFailures.get(copyCircuitKey) || 0;
-					const copyCredentialStages = ["user", "fingerprint", "face"];
 					if (priorTimeoutFailures >= sdkPeerCopyTimeoutCircuitLimit) {
 						const circuitError = `Skipped SDK peer copy after ${priorTimeoutFailures} timeout failures for ${sourceDevice.name || sourceDevice.id} to ${targetDevice.name || targetDeviceId}`;
 						results.push({
@@ -9497,180 +9810,190 @@ export const controller = (prisma: PrismaClient) => {
 							error: circuitError,
 							message: `Skipped timed-out copy path for user ${sourceRecord.vendorUserId} from ${sourceDevice.name || sourceDevice.address || sourceDevice.id} to ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 						});
-					} else
+						continue;
+					}
+					batchTargets.push(targetDevice);
+				}
+				for (const targetDevice of batchTargets) {
+					const targetDeviceId = String(targetDevice.id);
+					emitMergeProgress?.({
+						stage: "copy_started",
+						userKey: user.key,
+						vendorUserId: sourceRecord.vendorUserId,
+						sourceDeviceId: sourceDevice.id,
+						sourceDeviceName: sourceDevice.name || sourceDevice.address,
+						targetDeviceId,
+						targetDeviceName: targetDevice.name || targetDevice.address,
+						credentialStages: copyCredentialStages,
+						includeFingerprints: true,
+						includeFaceRecognition: true,
+						batchMultiTarget: true,
+						batchTargetCount: batchTargets.length,
+						message: `Copying user ${sourceRecord.vendorUserId} from ${sourceDevice.name || sourceDevice.address || sourceDevice.id} to ${targetDevice.name || targetDevice.address || targetDeviceId} (batched multi-target).`,
+					});
+				}
+				if (batchTargets.length > 0) {
 					try {
 						emitMergeProgress?.({
-							stage: "copy_started",
+							stage: "batch_copy_started",
 							userKey: user.key,
 							vendorUserId: sourceRecord.vendorUserId,
 							sourceDeviceId: sourceDevice.id,
 							sourceDeviceName: sourceDevice.name || sourceDevice.address,
-							targetDeviceId,
-							targetDeviceName: targetDevice.name || targetDevice.address,
+							targetCount: batchTargets.length,
+							targetDeviceIds: batchTargets.map((device) => device.id),
 							credentialStages: copyCredentialStages,
 							includeFingerprints: true,
 							includeFaceRecognition: true,
-							message: `Copying user ${sourceRecord.vendorUserId} from ${sourceDevice.name || sourceDevice.address || sourceDevice.id} to ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+							message: `Batch peer copy for user ${sourceRecord.vendorUserId} from ${sourceDevice.name || sourceDevice.address || sourceDevice.id} to ${batchTargets.length} target(s) in one VM SDK session.`,
 						});
-						const copy = await copyHikvisionUserToPeerWithRetry({
+						const batch = await copyHikvisionUserToPeersBatch({
 							req,
 							organizationId: String(admin.organizationId),
 							sourceDevice,
-							targetDevice,
+							targetDevices: batchTargets,
 							employeeNo: sourceRecord.vendorUserId,
 							includeFingerprints: true,
 							includeFaceRecognition: true,
 						});
-						results.push({
-							userKey: user.key,
-							sourceDeviceId: sourceDevice.id,
-							targetDeviceId,
-							status: "success",
-							strategy: copy.vmCopy?.strategy || null,
-						});
+						for (const batchResult of batch.results || []) {
+							const targetDeviceId = String(batchResult.targetDevice?.id || "");
+							const targetDevice =
+								batchTargets.find((device) => String(device.id) === targetDeviceId) ||
+								devices.find((device) => String(device.id) === targetDeviceId);
+							if (!targetDeviceId || !targetDevice) continue;
+							const copyCircuitKey = `${sourceDevice.id}->${targetDeviceId}`;
+							const priorTimeoutFailures =
+								sdkPeerCopyTimeoutFailures.get(copyCircuitKey) || 0;
+							if (batchResult.status === "success") {
+								results.push({
+									userKey: user.key,
+									sourceDeviceId: sourceDevice.id,
+									targetDeviceId,
+									status: "success",
+									strategy:
+										batchResult.vmCopy?.strategy ||
+										(batch.summary?.vmSessionCount ? "batch_multi_target" : null),
+									alreadyConverged: batchResult.alreadyConverged === true,
+								});
+								emitMergeProgress?.({
+									stage: "copy_success",
+									userKey: user.key,
+									vendorUserId: sourceRecord.vendorUserId,
+									sourceDeviceId: sourceDevice.id,
+									sourceDeviceName: sourceDevice.name || sourceDevice.address,
+									targetDeviceId,
+									targetDeviceName: targetDevice.name || targetDevice.address,
+									strategy:
+										batchResult.vmCopy?.strategy ||
+										(batch.summary?.vmSessionCount ? "batch_multi_target" : null),
+									credentialStages: copyCredentialStages,
+									includeFingerprints: true,
+									includeFaceRecognition: true,
+									batchMultiTarget: true,
+									message: `Copied user ${sourceRecord.vendorUserId} to ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+								});
+							} else {
+								const copyErrorMessage =
+									batchResult.error || "SDK user copy failed";
+								if (
+									/(timed out|timeout|Process timed out|cannot be used as the SDK copy)/i.test(
+										String(copyErrorMessage),
+									)
+								) {
+									sdkPeerCopyTimeoutFailures.set(
+										copyCircuitKey,
+										priorTimeoutFailures + 1,
+									);
+								}
+								results.push({
+									userKey: user.key,
+									sourceDeviceId: sourceDevice.id,
+									targetDeviceId,
+									status: "error",
+									error: copyErrorMessage,
+								});
+								emitMergeProgress?.({
+									stage: "copy_error",
+									userKey: user.key,
+									vendorUserId: sourceRecord.vendorUserId,
+									sourceDeviceId: sourceDevice.id,
+									sourceDeviceName: sourceDevice.name || sourceDevice.address,
+									targetDeviceId,
+									targetDeviceName: targetDevice.name || targetDevice.address,
+									credentialStages: copyCredentialStages,
+									includeFingerprints: true,
+									includeFaceRecognition: true,
+									error: copyErrorMessage,
+									batchMultiTarget: true,
+									message: `Copy failed for user ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+								});
+							}
+							await mergeOverlayDeviceUserRow({
+								user,
+								sourceDevice,
+								sourceRecord,
+								targetDevice,
+								targetDeviceId,
+							});
+						}
 						emitMergeProgress?.({
-							stage: "copy_success",
+							stage: "batch_copy_done",
 							userKey: user.key,
 							vendorUserId: sourceRecord.vendorUserId,
 							sourceDeviceId: sourceDevice.id,
 							sourceDeviceName: sourceDevice.name || sourceDevice.address,
-							targetDeviceId,
-							targetDeviceName: targetDevice.name || targetDevice.address,
-							strategy: copy.vmCopy?.strategy || null,
-							credentialStages: copyCredentialStages,
-							includeFingerprints: true,
-							includeFaceRecognition: true,
-							message: `Copied user ${sourceRecord.vendorUserId} to ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+							summary: batch.summary || null,
+							timings: batch.timings || null,
+							message: `Batch peer copy finished for user ${sourceRecord.vendorUserId} (${batch.summary?.successfulTargets || 0}/${batch.summary?.totalTargets || batchTargets.length} targets).`,
 						});
 					} catch (error: any) {
-						const copyErrorMessage = error?.message || "SDK user copy failed";
-						if (/(timed out|timeout|Process timed out)/i.test(String(copyErrorMessage))) {
-							sdkPeerCopyTimeoutFailures.set(copyCircuitKey, priorTimeoutFailures + 1);
+						const copyErrorMessage = error?.message || "SDK user batch copy failed";
+						for (const targetDevice of batchTargets) {
+							const targetDeviceId = String(targetDevice.id);
+							const copyCircuitKey = `${sourceDevice.id}->${targetDeviceId}`;
+							const priorTimeoutFailures =
+								sdkPeerCopyTimeoutFailures.get(copyCircuitKey) || 0;
+							if (
+								/(timed out|timeout|Process timed out|cannot be used as the SDK copy)/i.test(
+									String(copyErrorMessage),
+								)
+							) {
+								sdkPeerCopyTimeoutFailures.set(
+									copyCircuitKey,
+									priorTimeoutFailures + 1,
+								);
+							}
+							results.push({
+								userKey: user.key,
+								sourceDeviceId: sourceDevice.id,
+								targetDeviceId,
+								status: "error",
+								error: copyErrorMessage,
+							});
+							emitMergeProgress?.({
+								stage: "copy_error",
+								userKey: user.key,
+								vendorUserId: sourceRecord.vendorUserId,
+								sourceDeviceId: sourceDevice.id,
+								sourceDeviceName: sourceDevice.name || sourceDevice.address,
+								targetDeviceId,
+								targetDeviceName: targetDevice.name || targetDevice.address,
+								credentialStages: copyCredentialStages,
+								includeFingerprints: true,
+								includeFaceRecognition: true,
+								error: copyErrorMessage,
+								batchMultiTarget: true,
+								message: `Batch copy failed for user ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+							});
+							await mergeOverlayDeviceUserRow({
+								user,
+								sourceDevice,
+								sourceRecord,
+								targetDevice,
+								targetDeviceId,
+							});
 						}
-						results.push({
-							userKey: user.key,
-							sourceDeviceId: sourceDevice.id,
-							targetDeviceId,
-							status: "error",
-							error: copyErrorMessage,
-						});
-						emitMergeProgress?.({
-							stage: "copy_error",
-							userKey: user.key,
-							vendorUserId: sourceRecord.vendorUserId,
-							sourceDeviceId: sourceDevice.id,
-							sourceDeviceName: sourceDevice.name || sourceDevice.address,
-							targetDeviceId,
-							targetDeviceName: targetDevice.name || targetDevice.address,
-							credentialStages: copyCredentialStages,
-							includeFingerprints: true,
-							includeFaceRecognition: true,
-							error: copyErrorMessage,
-							message: `Copy failed for user ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
-						});
-					}
-					const targetRow = await (prisma as any).deviceUser.findFirst({
-						where: {
-							organizationId: String(admin.organizationId),
-							deviceId: targetDeviceId,
-							vendorUserId: sourceRecord.vendorUserId,
-						},
-						select: {
-							id: true,
-							employeeId: true,
-							employeeNo: true,
-							displayName: true,
-							status: true,
-							validFrom: true,
-							validTo: true,
-							doorRight: true,
-							accessPlan: true,
-							rawPayload: true,
-						},
-					});
-					if (targetRow?.id) {
-						emitMergeProgress?.({
-							stage: "db_merge_started",
-							userKey: user.key,
-							vendorUserId: sourceRecord.vendorUserId,
-							targetDeviceId,
-							targetDeviceName: targetDevice.name || targetDevice.address,
-							message: `Updating HRIS DeviceUser row for ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
-						});
-						const selectedRecordFor = (field: string) => {
-							const conflict = user.conflicts.find(
-								(item: any) => item.field === field,
-							);
-							if (conflict?.choice === "KEEP") return null;
-							if (!conflict?.choice) return sourceRecord;
-							const selectedDeviceId =
-								conflict.choice === "B" ? conflict.deviceB.id : conflict.deviceA.id;
-							return (
-								user.records.find(
-									(record: any) => record.deviceId === selectedDeviceId,
-								) || sourceRecord
-							);
-						};
-						const employeeRecord = selectedRecordFor("employeeId");
-						const nameRecord = selectedRecordFor("displayName");
-						const statusRecord = selectedRecordFor("status");
-						const validityFromRecord = selectedRecordFor("validFrom");
-						const validityToRecord = selectedRecordFor("validTo");
-						const accessRecord = selectedRecordFor("doorRight");
-						const selectedRawRecord = selectedRecordFor("fingerprint") || sourceRecord;
-						const selectedRaw = selectedRawRecord.rawPayload as any;
-						const targetCredentials = extractHikvisionCredentialSummary(
-							targetRow.rawPayload || {},
-						);
-						const selectedCredentials = extractHikvisionCredentialSummary(
-							selectedRaw || {},
-						);
-						const preserveBiometricRaw =
-							targetCredentials.fingerprintCount >
-								selectedCredentials.fingerprintCount ||
-							targetCredentials.faceCount > selectedCredentials.faceCount ||
-							targetCredentials.cardCount > selectedCredentials.cardCount;
-						await (prisma as any).deviceUser.update({
-							where: { id: targetRow.id },
-							data: {
-								employeeId: employeeRecord
-									? employeeRecord.employeeId || user.employeeId || null
-									: targetRow.employeeId,
-								displayName: nameRecord
-									? nameRecord.displayName
-									: targetRow.displayName,
-								status: statusRecord ? statusRecord.status : targetRow.status,
-								validFrom: validityFromRecord
-									? validityFromRecord.validFrom
-										? new Date(validityFromRecord.validFrom)
-										: null
-									: targetRow.validFrom,
-								validTo: validityToRecord
-									? validityToRecord.validTo
-										? new Date(validityToRecord.validTo)
-										: null
-									: targetRow.validTo,
-								doorRight: accessRecord
-									? accessRecord.doorRight
-									: targetRow.doorRight,
-								accessPlan: accessRecord
-									? accessRecord.accessPlan
-									: targetRow.accessPlan,
-								rawPayload: {
-									...(targetRow.rawPayload || {}),
-									...(preserveBiometricRaw ? {} : selectedRaw || {}),
-									hrisMerge: { reviewed: true, decisions: user.conflicts },
-								},
-							},
-						});
-						emitMergeProgress?.({
-							stage: "db_merge_done",
-							userKey: user.key,
-							vendorUserId: sourceRecord.vendorUserId,
-							targetDeviceId,
-							targetDeviceName: targetDevice.name || targetDevice.address,
-							message: `Updated HRIS row for ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
-						});
 					}
 				}
 				const decisions = user.conflicts.map((conflict: any) => ({
@@ -9715,10 +10038,11 @@ export const controller = (prisma: PrismaClient) => {
 				organizationId: String(admin.organizationId),
 				deviceIds: appliedPlan.deviceIds,
 			});
+			const rereadCounts = reread?.counts || reread?.plan?.counts || {};
 			emitMergeProgress?.({
 				stage: "reread_done",
-				remainingConflicts: reread.plan.counts.conflicts,
-				remainingMissing: reread.plan.counts.missing,
+				remainingConflicts: Number(rereadCounts.conflicts || 0),
+				remainingMissing: Number(rereadCounts.missing || 0),
 				message: "Reread complete. Finalizing merge job results.",
 			});
 			logActivity(req, {
@@ -9736,8 +10060,8 @@ export const controller = (prisma: PrismaClient) => {
 						planId,
 						results,
 						reread,
-						remainingConflicts: reread.plan.counts.conflicts,
-						remainingMissing: reread.plan.counts.missing,
+						remainingConflicts: Number(rereadCounts.conflicts || 0),
+						remainingMissing: Number(rereadCounts.missing || 0),
 						attention: results.filter((result) => result.status === "error").length,
 					},
 					200,
@@ -9836,11 +10160,67 @@ export const controller = (prisma: PrismaClient) => {
 					processedWrites = Math.min(job.totalWrites, processedWrites + 1);
 					if (stage === "copy_success") successfulWrites += 1;
 					if (stage === "copy_error") failedWrites += 1;
+					const errText = String(event?.error || "");
+					const isCircuitSkip = /Skipped SDK peer copy after \d+ timeout/i.test(errText);
+					const isTimeout = /(timed out|timeout|Process timed out)/i.test(errText);
+					const ledgerKind = stage === "copy_success" ? "success" : "failure";
+					appendMergeLedgerRow(params.jobId, ledgerKind, {
+						vendorUserId: event?.vendorUserId || null,
+						userKey: event?.userKey || null,
+						sourceDeviceId: event?.sourceDeviceId || null,
+						sourceDeviceName: event?.sourceDeviceName || null,
+						targetDeviceId: event?.targetDeviceId || null,
+						targetDeviceName: event?.targetDeviceName || null,
+						stage,
+						status:
+							stage === "copy_success"
+								? event?.alreadyConverged
+									? "already_converged"
+									: "peer_write_success"
+								: isCircuitSkip
+									? "circuit_skip"
+									: isTimeout
+										? "timeout"
+										: "error",
+						strategy: event?.strategy || null,
+						batchMultiTarget: event?.batchMultiTarget === true,
+						error: event?.error || null,
+						// Circuit-skips and timeouts must never be counted as peer write success.
+						countsAsPeerWriteSuccess: stage === "copy_success" && !isCircuitSkip,
+					});
 				}
 				const latest = deviceUserMergeJobs.get(params.jobId);
 				const nextResults = resultRow
 					? [...(latest?.results || []), resultRow].slice(-250)
 					: latest?.results;
+				let copyFailureSummary = latest?.copyFailureSummary;
+				if (stage === "copy_error") {
+					const source =
+						String(event?.sourceDeviceName || event?.sourceDeviceId || "unknown") || "unknown";
+					const target =
+						String(event?.targetDeviceName || event?.targetDeviceId || "unknown") || "unknown";
+					const pairKey = `${source} -> ${target}`;
+					const errorKey = String(event?.error || event?.message || "copy_error").slice(0, 240);
+					copyFailureSummary = {
+						total: Number(copyFailureSummary?.total || 0) + 1,
+						byPair: {
+							...(copyFailureSummary?.byPair || {}),
+							[pairKey]: Number(copyFailureSummary?.byPair?.[pairKey] || 0) + 1,
+						},
+						byError: {
+							...(copyFailureSummary?.byError || {}),
+							[errorKey]: Number(copyFailureSummary?.byError?.[errorKey] || 0) + 1,
+						},
+						latest: {
+							userKey: event?.userKey || null,
+							vendorUserId: event?.vendorUserId || null,
+							source,
+							target,
+							error: errorKey,
+							at: event?.at || new Date().toISOString(),
+						},
+					};
+				}
 				updateDeviceUserMergeJob(params.jobId, {
 					message: event?.message || "Applying reviewed decisions to the selected devices.",
 					currentStage: stage,
@@ -9850,6 +10230,7 @@ export const controller = (prisma: PrismaClient) => {
 					successfulWrites,
 					failedWrites,
 					results: nextResults,
+					copyFailureSummary,
 					appendProgressEvent: event,
 				});
 			};
@@ -9907,11 +10288,14 @@ export const controller = (prisma: PrismaClient) => {
 				completedAt: new Date(),
 			});
 		} catch (error: any) {
+			const latest = deviceUserMergeJobs.get(params.jobId) || job;
 			updateDeviceUserMergeJob(params.jobId, {
 				status: "failed",
 				message: error?.message || "Device-user merge job failed.",
 				currentStage: "failed",
-				failedWrites: Math.max(1, job.failedWrites || 0),
+				successfulWrites: Math.max(0, latest.successfulWrites || 0),
+				failedWrites: Math.max(1, latest.failedWrites || 0),
+				processedWrites: Math.max(latest.processedWrites || 0, job.processedWrites || 0),
 				error: error?.message || "Device-user merge job failed.",
 				completedAt: new Date(),
 			});
@@ -9994,10 +10378,13 @@ export const controller = (prisma: PrismaClient) => {
 					},
 				],
 				writeMatrix,
+				stale: false,
 				startedAt: new Date(),
 				updatedAt: new Date(),
 			};
 			deviceUserMergeJobs.set(jobId, job);
+			// Durable snapshot first so API restart mid-copy never claims "job not found".
+			persistDeviceUserMergeJob(job);
 			processHikvisionSdkUserMergeJob({
 				jobId,
 				req,
@@ -10016,8 +10403,18 @@ export const controller = (prisma: PrismaClient) => {
 					completedAt: new Date(),
 				});
 			});
+			const started = deviceUserMergeJobs.get(jobId) || job;
 			res.status(202).json(
-				buildSuccessResponse("SDK user merge job started", { jobId, progress: job }, 202),
+				buildSuccessResponse(
+					"SDK user merge job started",
+					{
+						jobId,
+						progress: started,
+						snapshotPath: started.snapshotPath || null,
+						durable: true,
+					},
+					202,
+				),
 			);
 		} catch (error: any) {
 			res.status(error?.statusCode || 500).json(
@@ -10037,14 +10434,33 @@ export const controller = (prisma: PrismaClient) => {
 		const admin = assertDeviceUserAdmin(req, res);
 		if (!admin) return;
 		const jobId = String(req.params.jobId || "").trim();
-		const job = deviceUserMergeJobs.get(jobId);
+		const job = resolveDeviceUserMergeJob(jobId);
 		if (!job || job.organizationId !== String(admin.organizationId)) {
 			res.status(404).json(
 				buildErrorResponse("SDK user merge job not found or expired", 404),
 			);
 			return;
 		}
-		res.status(200).json(buildSuccessResponse("SDK user merge job retrieved", job, 200));
+		res.status(200).json(
+			buildSuccessResponse(
+				job.stale
+					? "SDK user merge job retrieved (stale after worker death / API restart)"
+					: "SDK user merge job retrieved",
+				{
+					...job,
+					durable: true,
+					// Explicit agent recovery flags so poll scripts never invent "still processing".
+					workerActive: job.status === "processing" && !job.stale,
+					recoveryHint:
+						job.stale || job.status === "failed"
+							? "Do not poll this job as active. Use failure ledger / remaining plan and start a fresh merge job for unfinished rows only."
+							: job.status === "completed"
+								? "Job finished; use results and ledger tallies."
+								: "Job worker is active in this API process; continue polling.",
+				},
+				200,
+			),
+		);
 	};
 
 	const listHikvisionSdkUserMergeJobs = async (
@@ -10083,6 +10499,14 @@ export const controller = (prisma: PrismaClient) => {
 					currentTargetDeviceId: job.currentTargetDeviceId,
 					progressEventCount: job.progressEvents?.length || 0,
 					resultCount: job.results?.length || 0,
+					copyFailureSummary: job.copyFailureSummary
+						? {
+								total: job.copyFailureSummary.total || 0,
+								byPair: job.copyFailureSummary.byPair || {},
+								byError: job.copyFailureSummary.byError || {},
+								latest: job.copyFailureSummary.latest || null,
+							}
+						: null,
 					writeMatrix: job.writeMatrix
 						? {
 								selectedUniqueIds: job.writeMatrix.selectedUniqueIds,
@@ -10740,12 +11164,31 @@ export const controller = (prisma: PrismaClient) => {
 		const sourceDeviceId = String(params.sourceDevice.id);
 		const targetDeviceIds = params.targetDevices.map((device) => String(device.id));
 		const sourceRefreshStartedAt = Date.now();
+		// Refresh source AND every target from live device truth before planning.
+		// Prior merge overlays often polluted DeviceUser.numOfFP/numOfFace without a real
+		// peer write, which made alreadyConverged=true and skipped needed physical copies.
 		await syncSingleHikvisionDeviceUserFromSource({
 			req: params.req,
 			organizationId: params.organizationId,
 			device: params.sourceDevice,
 			employeeNo: params.employeeNo,
 		});
+		await Promise.all(
+			params.targetDevices.map(async (targetDevice) => {
+				try {
+					await syncSingleHikvisionDeviceUserFromSource({
+						req: params.req,
+						organizationId: params.organizationId,
+						device: targetDevice,
+						employeeNo: params.employeeNo,
+					});
+				} catch (error: any) {
+					deviceLogger.warn(
+						`Target single-user refresh failed before peer copy for ${params.employeeNo} on ${targetDevice?.name || targetDevice?.id}: ${error?.message || error}`,
+					);
+				}
+			}),
+		);
 		const sourceRefreshMs = Date.now() - sourceRefreshStartedAt;
 		const savedUsers = await (prisma as any).deviceUser.findMany({
 			where: {
@@ -10767,6 +11210,7 @@ export const controller = (prisma: PrismaClient) => {
 			savedUsers.map((deviceUser: any) => [String(deviceUser.deviceId), deviceUser]),
 		);
 		const sourceDeviceUser: any = savedUserByDeviceId.get(sourceDeviceId) || null;
+		// Prefer physical device counts (numOfFP/numOfFace), not synthetic merge overlays.
 		const sourcePhysicalSummary = extractHikvisionCredentialSummary(
 			sourceDeviceUser?.rawPayload || {},
 		);
@@ -10775,15 +11219,22 @@ export const controller = (prisma: PrismaClient) => {
 			const targetPhysicalSummary = extractHikvisionCredentialSummary(
 				targetDeviceUser?.rawPayload || {},
 			);
+			const credentialGap =
+				targetPhysicalSummary.cardCount < sourcePhysicalSummary.cardCount ||
+				(params.includeFingerprints &&
+					targetPhysicalSummary.fingerprintCount <
+						sourcePhysicalSummary.fingerprintCount) ||
+				(params.includeFaceRecognition &&
+					targetPhysicalSummary.faceCount < sourcePhysicalSummary.faceCount);
+			// Never trust "converged" when live physical credential counts still lag the source.
 			const alreadyConverged =
 				Boolean(sourceDeviceUser?.id) &&
+				!credentialGap &&
 				!shouldConvergeDeviceUserToPeer(sourceDeviceUser, targetDeviceUser);
 			const requiresPhysicalPeerCopy =
 				!sourceDeviceUser?.id ||
 				!targetDeviceUser?.id ||
-				targetPhysicalSummary.cardCount < sourcePhysicalSummary.cardCount ||
-				(params.includeFingerprints &&
-					targetPhysicalSummary.fingerprintCount < sourcePhysicalSummary.fingerprintCount);
+				credentialGap;
 			return { targetDevice, alreadyConverged, requiresPhysicalPeerCopy };
 		});
 
@@ -11048,7 +11499,9 @@ export const controller = (prisma: PrismaClient) => {
 						targetPhysicalSummary.cardCount < sourcePhysicalSummary.cardCount ||
 						(includeFingerprints &&
 							targetPhysicalSummary.fingerprintCount <
-								sourcePhysicalSummary.fingerprintCount);
+								sourcePhysicalSummary.fingerprintCount) ||
+						(includeFaceRecognition &&
+							targetPhysicalSummary.faceCount < sourcePhysicalSummary.faceCount);
 					return {
 						targetDevice: { id: targetDevice.id, name: targetDevice.name },
 						alreadyConverged,
