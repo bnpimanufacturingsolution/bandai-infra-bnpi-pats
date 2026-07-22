@@ -4921,7 +4921,7 @@ int main(int argc, char **argv) {
             attempts_performed = attempt;
             DeviceSession session;
             session.config = config;
-            if (login_device(session) && (arm_alarm(session) || manual_reconcile_mode)) {
+            if (login_device(session) && (manual_reconcile_mode || arm_alarm(session))) {
                 {
                     std::lock_guard<std::mutex> lock(sessions_mutex);
                     sessions.push_back(session);

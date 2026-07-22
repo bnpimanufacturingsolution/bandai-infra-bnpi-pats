@@ -1945,7 +1945,7 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const runHikvisionManualCopyOnVm = async (params: HikvisionManualCopyParams) => {
-		const waitSeconds = Math.max(1, Math.min(Number(params.waitSeconds || 8), 8));
+		const waitSeconds = Math.max(1, Math.min(Number(params.waitSeconds || 20), 30));
 		const targetDevices = params.targetDevices?.length
 			? params.targetDevices
 			: params.targetDevice
