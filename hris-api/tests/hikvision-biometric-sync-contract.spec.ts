@@ -206,6 +206,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("alreadyConvergedWrites");
 		expect(controller).to.include("!event?.alreadyConverged");
 		expect(controller).to.include("batchResult.alreadyConverged === true");
+		expect(controller).to.include("forcePhysicalCopy?: boolean");
+		expect(controller).to.include("forcePhysicalCopy: true");
+		expect(controller).to.include("!params.forcePhysicalCopy &&");
 		expect(hikvisionCpp).to.include("if (!manual_reconcile_mode)");
 		expect(controller).to.include(
 			"params.includeFaceRecognition &&",

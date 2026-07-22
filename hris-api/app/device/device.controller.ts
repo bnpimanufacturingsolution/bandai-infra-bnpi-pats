@@ -10091,6 +10091,10 @@ export const controller = (prisma: PrismaClient) => {
 							employeeNo: sourceRecord.vendorUserId,
 							includeFingerprints,
 							includeFaceRecognition,
+							// These targets came from the fresh SDK plan's missing matrix.
+							// A narrower ISAPI lookup must not turn a required idempotent
+							// physical device write into a false already-converged no-op.
+							forcePhysicalCopy: true,
 							onProgress: emitMergeProgress,
 						});
 						for (const batchResult of batch.results || []) {
@@ -11422,6 +11426,7 @@ export const controller = (prisma: PrismaClient) => {
 		employeeNo: string;
 		includeFingerprints: boolean;
 		includeFaceRecognition: boolean;
+		forcePhysicalCopy?: boolean;
 		onProgress?: (event: any) => void;
 	}) => {
 		const startedAt = Date.now();
@@ -11492,10 +11497,12 @@ export const controller = (prisma: PrismaClient) => {
 					targetPhysicalSummary.faceCount < sourcePhysicalSummary.faceCount);
 			// Never trust "converged" when live physical credential counts still lag the source.
 			const alreadyConverged =
+				!params.forcePhysicalCopy &&
 				Boolean(sourceDeviceUser?.id) &&
 				!credentialGap &&
 				!shouldConvergeDeviceUserToPeer(sourceDeviceUser, targetDeviceUser);
 			const requiresPhysicalPeerCopy =
+				params.forcePhysicalCopy ||
 				!sourceDeviceUser?.id ||
 				!targetDeviceUser?.id ||
 				credentialGap;
