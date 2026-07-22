@@ -4966,19 +4966,23 @@ int main(int argc, char **argv) {
                     {"attempt", std::to_string(attempt)},
                     {"peerEnabled", "true"}
                 });
-                // Seed inventory baseline ASAP so later create/enroll empty-ACS
-                // can resolve NEW plains via delta (not swallow into first baseline).
-                try {
-                    DeviceSession *seed_session = find_session_by_host(config.host);
-                    if (seed_session != nullptr) {
-                        seed_inventory_baseline_for_session(*seed_session);
+                // Baseline scans read every user and can take tens of seconds per panel.
+                // They are required for callback identity deltas in listener mode, but a
+                // bounded manual copy already names the employee and must not scan every
+                // selected device before doing that one write.
+                if (!manual_reconcile_mode) {
+                    try {
+                        DeviceSession *seed_session = find_session_by_host(config.host);
+                        if (seed_session != nullptr) {
+                            seed_inventory_baseline_for_session(*seed_session);
+                        }
+                    } catch (...) {
+                        emit_json({
+                            {"event", "inventory_baseline_seed_failed"},
+                            {"deviceId", config.hris_device_id},
+                            {"host", config.host}
+                        });
                     }
-                } catch (...) {
-                    emit_json({
-                        {"event", "inventory_baseline_seed_failed"},
-                        {"deviceId", config.hris_device_id},
-                        {"host", config.host}
-                    });
                 }
             } else if (session.user_id >= 0) {
                 NET_DVR_Logout_V30(session.user_id);

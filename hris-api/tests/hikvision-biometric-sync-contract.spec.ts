@@ -132,6 +132,7 @@ describe("Hikvision biometric sync contract", () => {
 	it("supports scoped device-user export and gated import execute without plaintext biometric custody", () => {
 		const router = routerSource();
 		const controller = controllerSource();
+		const hikvisionCpp = serviceSource();
 		const index = indexSource();
 		const security = securityMiddlewareSource();
 
@@ -205,6 +206,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("alreadyConvergedWrites");
 		expect(controller).to.include("!event?.alreadyConverged");
 		expect(controller).to.include("batchResult.alreadyConverged === true");
+		expect(hikvisionCpp).to.include("if (!manual_reconcile_mode)");
 		expect(controller).to.include(
 			"params.includeFaceRecognition &&",
 		);
