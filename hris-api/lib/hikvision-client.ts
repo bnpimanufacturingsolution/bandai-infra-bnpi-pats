@@ -95,6 +95,26 @@ const isLoopbackRuntimeHost = (value: string) => {
 	return host === "127.0.0.1" || host === "localhost" || host === "::1";
 };
 
+export const withHikvisionPrismaTransportRetry = async <T>(
+	operation: () => Promise<T>,
+	delaysMs: number[] = [0, 2000, 4000, 6000, 8000],
+): Promise<T> => {
+	let lastError: unknown;
+	for (const delayMs of delaysMs) {
+		if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+		try {
+			return await operation();
+		} catch (error: any) {
+			lastError = error;
+			const detail = `${error?.message || error || ""} ${error?.code || ""}`;
+			if (!/(can't reach database|server has closed the connection|connection.*closed|econnreset|p1001)/i.test(detail)) {
+				throw error;
+			}
+		}
+	}
+	throw lastError;
+};
+
 const parseEndpointHostPort = (value: string) => {
 	const text = String(value || "").trim();
 	if (!text) return null;
@@ -269,7 +289,7 @@ class HikvisionClient {
 			String((options.request?.query as any)?.deviceId || "").trim();
 
 		if (options.prisma && (requestedDeviceId || organizationId)) {
-			const device = await options.prisma.device.findFirst({
+			const device = await withHikvisionPrismaTransportRetry(() => options.prisma!.device.findFirst({
 				where: {
 					isDeleted: false,
 					...(requestedDeviceId ? { id: requestedDeviceId } : {}),
@@ -285,7 +305,7 @@ class HikvisionClient {
 					config: true,
 					access: true,
 				},
-			});
+			}));
 
 			if (!device) {
 				throw {

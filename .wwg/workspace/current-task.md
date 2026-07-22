@@ -1,5 +1,26 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-22 Overnight local dev stack recovery (login + DB + device health)
+
+- Task mode: recoverable overnight loop for host-local `npm run dev` stack.
+- Job card: `docs/00-product/AGENT-PROMPT-overnight-local-dev-stack-recovery.md`
+- **Live snapshot at task open (re-probe; do not treat as done):**
+  - `3001` API **CLOSED** — cannot login (no API process).
+  - `5175` app **LISTEN** — frontend up alone does not equal working login.
+  - `55435` DEV DB forward **CLOSED** — Prisma cannot reach K3s DEV Postgres.
+  - Hikvision tunnel ports `10080/10081/18000` **CLOSED** — local device health via tunnel map cannot be green.
+  - Host Wi-Fi `192.168.1.110`; `ping 10.184.37.19` **False** — use `ssh project-truth-hris` for DB/device tunnels, not direct LAN.
+- **Why login fails (causal chain, evidence-backed):**
+  1. Login requires API on `:3001` + Prisma → `DATABASE_URL` `@127.0.0.1:55435`.
+  2. When `55435` is down, login returns 500 with `Can't reach database server at 127.0.0.1:55435` (seen in `.runtime/local-api-watch/latest.log`).
+  3. `/health` can still say healthy while DB is down — health alone is not acceptance.
+- **Device health (from WWG handoff, mark STALE until re-proven):**
+  - Earlier same-day: Main Entrance A–F online after six-device tunnel (`.runtime/device-a-f-reach-20260722-143906/`).
+  - TEST A/B separate boundary; not part of `.20-.25` tunnel map.
+  - Current host probe: tunnels down → local device health **NEEDS_CONFIRMATION** / expected offline until tunnels restored.
+- Finish line: EXIT GATE in overnight job card (DB + API health + login token + me + app + tunnel proof + device JSON + WWG stamp).
+- Evidence root: `.runtime/overnight-dev-stack-recovery-20260722-200655/`
+- Boundary: no merge completion claims; no inventing device online counts.
 ## Latest Task Addendum - 2026-07-22 Merge listener truth and TEST A/B boundary
 
 - Task mode: mixed live runtime recovery, listener-status UX hardening, and merge-plan evidence.
@@ -2330,4 +2351,23 @@ Status: IMPLEMENTED + PROVEN â€” Device admin UX clarity (friendly status, 
   - B-C: B `687`, C `740`, `missing=53`, `plannedWrites=53`.
   - B-F: B `687`, F `687`, `unionUsers=837`, `missing=300`, `plannedWrites=300`.
 - Safe retry boundary: backend provided no `retryPlanId`; the running job scope was already a mismatch (`852/2551` vs intended `569/2845`), and fresh plans still include conflicts/source-choice decisions. Do not start a new write retry automatically from guessed choices. A safe retry needs a reviewed remaining-scope plan or backend-generated retry plan.
+
+# Latest Task Addendum - 2026-07-23 Overnight Merge Device Users Closeout
+
+- Status: `PARTIALLY FULFILLED`; evidence root `.runtime/merge-device-users-overnight-20260722-205845/`; wakeup report `WAKEUP-REPORT.md`.
+- Accepted live scope: Main Entrance B/A/D/E/F. Main Entrance C and TEST A/B are excluded from completion claims.
+- Fresh physical records increased from 3,583 to 4,044 while the unique union stayed 865. Final peer gaps are 281, all on 205 unresolved-conflict IDs; zero conflict-free rows remain.
+- No readable raw fingerprint or face custody existed. Count-only enrollment remains explicitly unresolved and was not fabricated or called synced.
+- Code repairs through `fb8750e` are pushed to `develop` and deployed to the DEV VM runtime. Runtime DB/API/app/A–F tunnels and focused API/UI/browser validation are green at close.
+- Remaining boundary requires new physical connectivity evidence for excluded devices or human conflict adjudication; automatic source guessing is prohibited.
+
+# Latest Task Addendum - 2026-07-23 Agent-Owned Fresh Revalidation
+
+- Status: `PARTIALLY FULFILLED`; new evidence root `.runtime/merge-device-users-overnight-20260723-050702/`.
+- The earlier five-device clean plan is now `STALE` for execution. Four new read-only plans never produced a stable zero-error scope: validity shifted across 4/5, 1/2, 1/5, and 3/5 devices. The latest plan `39f0ab6c-5cf6-443d-888a-51a3ef9f75fb` had 865 unique IDs, 1,081 conflicts, 186 missing target records, and E/A Unauthorized reads.
+- No new merge job, canary, or physical write was started. Automatic source selection remains prohibited while read errors and conflicts exist.
+- Runtime repairs made in this pass: bounded optional TEST bridge bootstrap; canonical DB watcher log contention tolerance; transient Prisma transport retry; direct-LAN-to-Cloudflare SSH fallback hardening; reverse API port `53001`; listener spool replay moved after SDK arm; bounded listener log scan.
+- Fresh listener execution armed Main Entrance A/B/D/E/F while C returned HCNetSDK error 7. Final SSH status became unavailable after three direct-LAN timeouts and repeated Cloudflare Access banner timeouts, so final armed state is `NEEDS_CONFIRMATION` rather than green.
+- Final Playwright truth: admin login and Sync Center render, but Merge reports 0/8 available and Listener reports status unreachable. This is a failed exit gate, not a completed merge.
+- Focused validation: 37 API Hikvision contracts, 13 frontend device UI/events contracts, the PowerShell bridge contract, and API TypeScript typecheck passed.
 

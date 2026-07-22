@@ -13,6 +13,8 @@ describe("Hikvision remote device tunnel contract", () => {
 	const accessControlRouter = readRepoFile("hris-api/app/hikvision/routes/access.control.router.ts");
 	const deviceController = readRepoFile("hris-api/app/device/device.controller.ts");
 	const restartLocalApiScript = readRepoFile("scripts/restart-local-hris-api-dev.ps1");
+	const predevScript = readRepoFile("hris-api/scripts/predev-run.cjs");
+	const dbWatchScript = readRepoFile("scripts/watch-k8s-dev-db-access.ps1");
 	const vmBridgeEnsureScript = readRepoFile("hris-api/scripts/ensure-hikvision-vm-bridge.cjs");
 	const overnightMergeScript = readRepoFile("scripts/merge-users-overnight-loop.ps1");
 
@@ -100,6 +102,16 @@ describe("Hikvision remote device tunnel contract", () => {
 		);
 	});
 
+	it("keeps the canonical DEV DB wire handshake under a bounded self-repair watcher", () => {
+		expect(predevScript).to.include('id: "ensure-k8s-db-watch"');
+		expect(restartLocalApiScript).to.include("watch-k8s-dev-db-access.ps1");
+		expect(dbWatchScript).to.include("Test-PostgresHandshake");
+		expect(dbWatchScript).to.include("$consecutiveFailures -ge $FailureThreshold");
+		expect(dbWatchScript).to.include("start-k8s-dev-db-access.ps1");
+		expect(dbWatchScript).to.include("-WindowStyle Hidden");
+		expect(dbWatchScript).to.include("for ($attempt = 1; $attempt -le 5");
+	});
+
 	it("does not let optional TEST A bridge stderr fail the local restart after API health is green", () => {
 		expect(restartLocalApiScript).to.include("optional TEST A bridge exited");
 		expect(restartLocalApiScript).to.include("2>&1 | ForEach-Object { Write-Host $_ }");
@@ -123,5 +135,6 @@ describe("Hikvision remote device tunnel contract", () => {
 		expect(vmBridgeEnsureScript).to.include("Continuing API boot");
 		expect(vmBridgeEnsureScript).to.include("process.exit(0);");
 		expect(vmBridgeEnsureScript).to.include("slice(-6)");
+		expect(vmBridgeEnsureScript).to.include("timeout: 45_000");
 	});
 });

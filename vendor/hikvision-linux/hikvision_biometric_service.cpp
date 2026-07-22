@@ -4908,11 +4908,6 @@ int main(int argc, char **argv) {
         return 1;
     }
     emit_json({{"event", "sdk_callback_register"}, {"ok", "true"}});
-    if (std::getenv("HIKVISION_SKIP_SPOOL_REPLAY") == nullptr) {
-        replay_pending_hris_contract_posts();
-        replay_pending_hikvision_callbacks();
-    }
-
     // Arm reverse-tunnel / local hosts first (127.0.0.1 TEST A) so live path is ready
     // before wasting time on unreachable LAN peers.
     std::vector<DeviceConfig> arm_order = configs;
@@ -5068,6 +5063,13 @@ int main(int argc, char **argv) {
     std::thread hris_enrichment_poster(hris_enrichment_post_loop);
     std::thread reconcile_worker(reconcile_worker_loop);
     std::thread callback_spool_replayer(callback_spool_replay_loop);
+    // Historical reconcile/callback spools can contain thousands of durable
+    // rows. Replaying them before SDK login made a healthy service look active
+    // while no panel was armed for minutes or hours. Arm first; replay remains
+    // durable background work and is safe to resume after a process restart.
+    if (std::getenv("HIKVISION_SKIP_SPOOL_REPLAY") == nullptr) {
+        std::thread(replay_pending_hris_contract_posts).detach();
+    }
 
     std::thread poller;
     if (!manual_reconcile_mode && automatic_peer_reconcile_enabled) {

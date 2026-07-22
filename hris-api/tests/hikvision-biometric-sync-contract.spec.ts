@@ -400,6 +400,14 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include('"fingerData"');
 	});
 
+	it("arms SDK sessions before replaying a large historical HRIS spool", () => {
+		const service = serviceSource();
+		const armGuard = service.indexOf('if (!has_sessions)');
+		const replay = service.indexOf('std::thread(replay_pending_hris_contract_posts).detach()');
+		expect(armGuard).to.be.greaterThan(-1);
+		expect(replay).to.be.greaterThan(armGuard);
+	});
+
 	it("exposes fixed local VM listener status and control endpoints for admin recovery", () => {
 		const router = routerSource();
 		const controller = controllerSource();
@@ -427,6 +435,17 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("execFile(");
 		expect(controller).to.include('"systemctl"');
 		expect(controller).to.include('"start", "stop", "restart"');
+	});
+
+	it("falls back from an unroutable direct VM listener target to the Cloudflare alias", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("const shouldTryNextTarget =");
+		expect(controller).to.include("isHikvisionTransportFailure(transportDetail)");
+		expect(controller).to.include("result.exitCode === 124");
+		expect(controller).to.include("if (!shouldTryNextTarget)");
+		expect(controller).to.include('target.label.startsWith("alias:") ? 3 : 1');
+		expect(controller).to.include("evidenceLogLines.length > 0 || Boolean(activeText)");
+		expect(controller).to.include("sudo tail -n 3000 /var/log/project-truth/hikvision-hot-reload-listener.jsonl");
 	});
 
 	it("keeps the VM hot-reload wrapper sourced from all Hikvision device rows instead of one hardcoded device", () => {

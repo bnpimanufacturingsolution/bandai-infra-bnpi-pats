@@ -13,6 +13,7 @@ $logPath = Join-Path $runtimeDir "latest.log"
 $dotenvCli = Join-Path $apiDir "node_modules\dotenv-cli\cli.js"
 $nodeBinary = (Get-Command node.exe).Source
 $ensureDbAccessScript = Join-Path $apiDir "scripts\ensure-bnpi-db-access.cjs"
+$ensureDbWatchScript = Join-Path $repoRoot "scripts\watch-k8s-dev-db-access.ps1"
 $ensureHikvisionRemoteTunnelScript = Join-Path $apiDir "scripts\ensure-hikvision-remote-device-tunnel.cjs"
 
 function Get-RepoApiProcesses {
@@ -126,6 +127,11 @@ if (-not (Test-Path $ensureDbAccessScript)) {
 
 Write-Host "[local-api-restart] Running DB access preflight"
 & $nodeBinary $ensureDbAccessScript
+
+if (Test-Path $ensureDbWatchScript) {
+	Write-Host "[local-api-restart] Ensuring canonical DEV DB self-repair watcher"
+	& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ensureDbWatchScript
+}
 
 if (Test-Path $ensureHikvisionRemoteTunnelScript) {
 Write-Host "[local-api-restart] Ensuring Hikvision remote device tunnels (.20-.25)"

@@ -2,9 +2,32 @@ import { expect } from "chai";
 import {
 	buildHikvisionDeviceBaseUrl,
 	resolveHikvisionTunnelTarget,
+	withHikvisionPrismaTransportRetry,
 } from "../lib/hikvision-client";
 
 describe("hikvision client endpoint resolution", () => {
+	it("retries transient Prisma transport loss without retrying permanent errors", async () => {
+		let attempts = 0;
+		const value = await withHikvisionPrismaTransportRetry(async () => {
+			attempts += 1;
+			if (attempts < 3) throw new Error("Server has closed the connection.");
+			return "ready";
+		}, [0, 1, 1]);
+		expect(value).to.equal("ready");
+		expect(attempts).to.equal(3);
+
+		let permanentAttempts = 0;
+		try {
+			await withHikvisionPrismaTransportRetry(async () => {
+				permanentAttempts += 1;
+				throw new Error("Device not found");
+			}, [0, 1, 1]);
+			expect.fail("expected permanent error");
+		} catch (error: any) {
+			expect(error.message).to.equal("Device not found");
+		}
+		expect(permanentAttempts).to.equal(1);
+	});
 	it("prefers the physical device address on non-linux hosts when runtime address is loopback-only", () => {
 		const baseUrl = buildHikvisionDeviceBaseUrl(
 			{

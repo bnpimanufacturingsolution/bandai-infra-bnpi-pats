@@ -278,14 +278,16 @@ const result = spawnSync(
 		windowsHide: true,
 		encoding: "utf8",
 		env: process.env,
+		timeout: 45_000,
+		killSignal: "SIGKILL",
 	},
 );
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);
 const output = `${result.stdout || ""}\n${result.stderr || ""}`.trim();
-if (result.status !== 0) {
+if (result.status !== 0 || result.error) {
 	console.warn(
-		`[hikvision-bridge] Bridge start failed (exit ${result.status || 1}) after ${sec}s. Live capture may stay Login failed (7). Continuing API boot.`,
+		`[hikvision-bridge] Bridge start failed (exit ${result.status || 1}${result.error ? `, ${result.error.message}` : ""}) after ${sec}s. Live capture may stay Login failed (7). Continuing API boot.`,
 	);
 	if (output) {
 		const compact = output

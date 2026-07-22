@@ -43,8 +43,14 @@ function Get-VmSshCandidates {
 function Select-VmSshCandidate {
   foreach ($candidate in Get-VmSshCandidates) {
     $args = @('-o', 'ConnectTimeout=5', '-o', 'BatchMode=yes') + @($candidate.Args) + @('echo SSH_OK')
-    $out = & ssh.exe @args 2>$null
-    if ($LASTEXITCODE -eq 0 -and (($out | Out-String) -match 'SSH_OK')) {
+    # Windows PowerShell promotes native stderr to a terminating NativeCommandError
+    # under Stop, which previously aborted before the Cloudflare alias fallback.
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $out = & ssh.exe @args 2>&1
+    $sshExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousErrorAction
+    if ($sshExitCode -eq 0 -and (($out | Out-String) -match 'SSH_OK')) {
       return $candidate
     }
   }

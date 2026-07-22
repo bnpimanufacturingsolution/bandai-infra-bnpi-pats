@@ -1288,19 +1288,31 @@ const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) =
 	return (async () => {
 		let lastResult: Awaited<ReturnType<typeof runAgainstTarget>> | null = null;
 		for (const target of targets) {
-			const result = await runAgainstTarget(target);
-			if (result.exitCode === 0) {
-				preferredHikvisionListenerVmTargetLabel = target.label;
-				return result;
+			// Cloudflare Access can lose one connector handshake while the named
+			// tunnel itself remains healthy. Give the documented alias two bounded
+			// transport-only retries before presenting the listener as unreachable.
+			const maxAttempts = target.label.startsWith("alias:") ? 3 : 1;
+			for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+				const result = await runAgainstTarget(target);
+				if (result.exitCode === 0) {
+					preferredHikvisionListenerVmTargetLabel = target.label;
+					return result;
+				}
+				const transportDetail = `${result.stderr || ""}\n${result.stdout || ""}`;
+				const shouldTryNextTarget =
+					result.exitCode === 124 ||
+					result.exitCode === 255 ||
+					isHikvisionTransportFailure(transportDetail);
+				if (!shouldTryNextTarget) {
+					preferredHikvisionListenerVmTargetLabel = target.label;
+					return result;
+				}
+				if (target.label === preferredHikvisionListenerVmTargetLabel) {
+					preferredHikvisionListenerVmTargetLabel = "";
+				}
+				lastResult = result;
+				if (attempt < maxAttempts) continue;
 			}
-			if (result.exitCode !== 255) {
-				preferredHikvisionListenerVmTargetLabel = target.label;
-				return result;
-			}
-			if (target.label === preferredHikvisionListenerVmTargetLabel) {
-				preferredHikvisionListenerVmTargetLabel = "";
-			}
-			lastResult = result;
 		}
 		return (
 			lastResult || {
@@ -16762,7 +16774,7 @@ export const controller = (prisma: PrismaClient) => {
 					`echo '---LOG---'`,
 					`sudo tail -n ${HIKVISION_LISTENER_STATUS_EVIDENCE_LINES} /var/log/project-truth/hikvision-hot-reload-listener.jsonl 2>/dev/null || true`,
 					`echo '---KEYLOG---'`,
-					`sudo grep -E 'device_config_loaded|sdk_login|sdk_alarm_arm|device_armed|device_arming_failed_after_retries|device_login_locked_backoff|device_login_auth_failed_backoff|acs_alarm_received|hikvision_callback_post|hikvision_callback_post_result|hikvision_callback_spool_replay_result|hris_contract_post|sdk_callback_register' /var/log/project-truth/hikvision-hot-reload-listener.jsonl 2>/dev/null | tail -n ${HIKVISION_LISTENER_STATUS_KEY_EVENT_LINES} || true`,
+					`sudo tail -n 3000 /var/log/project-truth/hikvision-hot-reload-listener.jsonl 2>/dev/null | grep -E 'device_config_loaded|sdk_login|sdk_alarm_arm|device_armed|device_arming_failed_after_retries|device_login_locked_backoff|device_login_auth_failed_backoff|acs_alarm_received|hikvision_callback_post|hikvision_callback_post_result|hikvision_callback_spool_replay_result|hris_contract_post|sdk_callback_register' | tail -n ${HIKVISION_LISTENER_STATUS_KEY_EVENT_LINES} || true`,
 				].join("; "),
 			],
 			HIKVISION_LISTENER_STATUS_TIMEOUT_MS,
@@ -16899,7 +16911,7 @@ export const controller = (prisma: PrismaClient) => {
 		const controlAvailable =
 			bundled.exitCode === 0 || Boolean(activeText) || Boolean(show.ActiveState);
 		const statusError =
-			bundled.exitCode === 0
+			bundled.exitCode === 0 || evidenceLogLines.length > 0 || Boolean(activeText)
 				? null
 				: bundled.stderr.trim() ||
 					(bundled.exitCode === 124 || /timed out|timeout/i.test(bundled.stderr)

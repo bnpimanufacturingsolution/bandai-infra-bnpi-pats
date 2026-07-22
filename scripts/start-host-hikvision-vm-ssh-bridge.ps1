@@ -183,6 +183,9 @@ foreach ($arg in @(
 $records = New-Object System.Collections.Generic.List[object]
 $runtimeProtocol = if ($HttpDevicePort -eq 443) { 'https' } else { 'http' }
 $remoteListenPorts = New-Object System.Collections.Generic.List[int]
+$remoteListenPorts.Add([int]$ApiRemotePort) | Out-Null
+$forwardArgs.Add('-R')
+$forwardArgs.Add("${ApiRemotePort}:127.0.0.1:${ApiLocalPort}")
 
 for ($deviceIndex = 0; $deviceIndex -lt $targetDeviceIps.Count; $deviceIndex++) {
   $targetDeviceIp = $targetDeviceIps[$deviceIndex]
@@ -234,7 +237,8 @@ if ($proc.HasExited) {
 $verifyPorts = @($records | ForEach-Object {
   $_.RuntimeConfigHint.hikvisionRuntimePort
   $_.RuntimeConfigHint.hikvisionSdkRuntimePort
-} | Sort-Object -Unique)
+}) + @($ApiRemotePort)
+$verifyPorts = @($verifyPorts | Sort-Object -Unique)
 $verifyPortList = ($verifyPorts | ForEach-Object { [string]$_ }) -join ' '
 $verifyScript = @'
 for p in __PORTS__; do
@@ -258,6 +262,7 @@ $state = [pscustomobject]@{
   generatedAt = (Get-Date).ToString('o')
   vmSshTarget = $sshCandidate.Label
   processId = $proc.Id
+  apiReverse = "127.0.0.1:${ApiRemotePort}->127.0.0.1:${ApiLocalPort}"
   deviceIps = $targetDeviceIps
   bridges = $records
   evidenceDir = $runRoot

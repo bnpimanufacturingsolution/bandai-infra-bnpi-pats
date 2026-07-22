@@ -998,3 +998,13 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Close health: canonical `127.0.0.1:55435` PostgreSQL handshake and Prisma query pass; local API health/login/auth-me pass; frontend `:5175` passes; public DEV health passes; all 18 A–F HTTP/HTTPS/SDK forwards pass and remain running.
 - Validation: API typecheck pass; 30 focused Hikvision contracts pass; Device Users UI contract pass; targeted frontend ESLint 0 errors; deployed headless Playwright terminal-job proof pass. Full frontend typecheck has unrelated existing failures and was not called green.
 
+# 2026-07-23 Overnight Merge Fresh Revalidation Handoff
+
+- Status: `PARTIALLY FULFILLED`; evidence `.runtime/merge-device-users-overnight-20260723-050702/`; use its `WAKEUP-REPORT.md` as the current closeout.
+- Previous five-device final-count evidence is historical only. Fresh read-only plans were unstable and invalid: `1d1ff7d3...` was 4/5 valid with 1,132 conflicts; `f062afa4...` was 1/2; `2cd6cd3c...` was 1/5 after DB transport loss; `39f0ab6c...` was 3/5 with 1,081 conflicts and 186 missing target records.
+- Zero writes were attempted. There was no safe canary or reviewed remaining-scope matrix, and no circuit/timeout was counted as success.
+- Listener repair was deployed and freshly armed A/B/D/E/F; C remained login error 7. The final SSH path later failed three direct-LAN attempts and repeated Cloudflare Access banner exchanges, while the already-established host tunnels and reverse bridge remained non-destructively preserved.
+- Runtime/API repairs are covered by focused tests: 37 API contracts, 13 UI/events contracts, the PowerShell bridge contract, and API typecheck passed. Controlled `npm run dev` recovered health without operator action.
+- Final browser proof is deliberately red: login and Sync Center pass, Merge says 0/8 available, and Listener says status unreachable. Do not reuse the earlier green browser state as current truth.
+- Required next condition for any future write is a fresh zero-read-error plan with explicit conflict adjudication and a physical canary/reread. This is not operator homework for the current run; it is an external connectivity/decision boundary.
+
