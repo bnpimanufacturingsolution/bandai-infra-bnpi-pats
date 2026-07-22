@@ -4407,6 +4407,10 @@ void process_reconcile_job(const ReconcileJob &job) {
             {"peerUserWrites", std::to_string(peer_write_count)},
             {"mode", execute_mode ? "execute" : "dry-run"}
         });
+        if (job.event_kind.find("manual_") == 0) {
+            keep_running = 0;
+            queue_cv.notify_all();
+        }
         return;
     }
 
@@ -4479,6 +4483,10 @@ void process_reconcile_job(const ReconcileJob &job) {
         {"sourceFacePictureSize", std::to_string(face_picture.size())},
         {"mode", execute_mode ? "execute" : "dry-run"}
     });
+    if (job.event_kind.find("manual_") == 0) {
+        keep_running = 0;
+        queue_cv.notify_all();
+    }
 }
 
 void prepare_immediate_hris_job_for_post(ReconcileJob &job) {

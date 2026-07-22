@@ -2077,53 +2077,7 @@ export const controller = (prisma: PrismaClient) => {
 			},
 		];
 		const failures: string[] = [];
-		for (const strategy of strategies) {
-			emitManualCopyProgress({
-				stage: "vm_copy_attempt_started",
-				strategy: strategy.name,
-				timeoutSeconds: manualCopyTimeoutSeconds,
-				targetCount: targetDevices.length,
-				message: `VM SDK ${strategy.name} attempt for user ${params.employeeNo}: user/fingerprint/face to ${targetDevices.length} target(s).`,
-			});
-			let result = await runManualCopy(strategy.extraEnv);
-			const firstAttemptDetail = result.stderr.trim() || result.stdout.trim();
-			if (result.exitCode === 124 || result.exitCode === 137) {
-				const detail = firstAttemptDetail
-					? ` Last output: ${firstAttemptDetail.slice(-500)}`
-					: "";
-				const timeoutMessage =
-					`Timed out running Hikvision manual copy (${strategy.name}) for user ${params.employeeNo} from ${params.sourceDevice.name || params.sourceDevice.id}.${detail}`;
-				emitManualCopyProgress({
-					stage: "vm_copy_attempt_timeout",
-					strategy: strategy.name,
-					timeoutSeconds: manualCopyTimeoutSeconds,
-					error: timeoutMessage,
-					message: timeoutMessage,
-				});
-				failures.push(timeoutMessage);
-				continue;
-			}
-			emitManualCopyProgress({
-				stage: "vm_copy_attempt_finished",
-				strategy: strategy.name,
-				exitCode: result.exitCode,
-				events: parseJsonLines(result.stdout).length,
-				message: `VM SDK ${strategy.name} attempt for user ${params.employeeNo} exited ${result.exitCode}.`,
-			});
-			if (
-				result.exitCode !== 0 &&
-				isMissingHikvisionListenerRuntimeError(firstAttemptDetail)
-			) {
-				const installResult = await installManagedHikvisionListenerWrapperOnVm();
-				if (!installResult.ok) {
-					throw new Error(
-						installResult.error ||
-							"Failed to prepare Hikvision listener runtime for manual copy",
-					);
-				}
-				result = await runManualCopy(strategy.extraEnv);
-			}
-			const events = parseJsonLines(result.stdout);
+		const evaluateManualCopyEvents = (events: Record<string, any>[]) => {
 			const successfulTargetIds = new Set(
 				events
 					.filter(
@@ -2166,6 +2120,68 @@ export const controller = (prisma: PrismaClient) => {
 					event?.event === "reconcile_completed" &&
 					String(event?.employeeNo || "").trim() === params.employeeNo,
 			);
+			return { peerUserWriteOk, fingerprintWriteOk, completed };
+		};
+		for (const strategy of strategies) {
+			emitManualCopyProgress({
+				stage: "vm_copy_attempt_started",
+				strategy: strategy.name,
+				timeoutSeconds: manualCopyTimeoutSeconds,
+				targetCount: targetDevices.length,
+				message: `VM SDK ${strategy.name} attempt for user ${params.employeeNo}: user/fingerprint/face to ${targetDevices.length} target(s).`,
+			});
+			let result = await runManualCopy(strategy.extraEnv);
+			const firstAttemptDetail = result.stderr.trim() || result.stdout.trim();
+			if (result.exitCode === 124 || result.exitCode === 137) {
+				const events = parseJsonLines(result.stdout);
+				const eventProof = evaluateManualCopyEvents(events);
+				if (eventProof.peerUserWriteOk && eventProof.completed && eventProof.fingerprintWriteOk) {
+					return {
+						waitSeconds,
+						strategy: `${strategy.name}_completed_before_timeout`,
+						stdout: result.stdout,
+						stderr: result.stderr,
+						events,
+					};
+				}
+				const detail = firstAttemptDetail
+					? ` Last output: ${firstAttemptDetail.slice(-500)}`
+					: "";
+				const timeoutMessage =
+					`Timed out running Hikvision manual copy (${strategy.name}) for user ${params.employeeNo} from ${params.sourceDevice.name || params.sourceDevice.id}.${detail}`;
+				emitManualCopyProgress({
+					stage: "vm_copy_attempt_timeout",
+					strategy: strategy.name,
+					timeoutSeconds: manualCopyTimeoutSeconds,
+					error: timeoutMessage,
+					message: timeoutMessage,
+				});
+				failures.push(timeoutMessage);
+				continue;
+			}
+			emitManualCopyProgress({
+				stage: "vm_copy_attempt_finished",
+				strategy: strategy.name,
+				exitCode: result.exitCode,
+				events: parseJsonLines(result.stdout).length,
+				message: `VM SDK ${strategy.name} attempt for user ${params.employeeNo} exited ${result.exitCode}.`,
+			});
+			if (
+				result.exitCode !== 0 &&
+				isMissingHikvisionListenerRuntimeError(firstAttemptDetail)
+			) {
+				const installResult = await installManagedHikvisionListenerWrapperOnVm();
+				if (!installResult.ok) {
+					throw new Error(
+						installResult.error ||
+							"Failed to prepare Hikvision listener runtime for manual copy",
+					);
+				}
+				result = await runManualCopy(strategy.extraEnv);
+			}
+			const events = parseJsonLines(result.stdout);
+			const { peerUserWriteOk, fingerprintWriteOk, completed } =
+				evaluateManualCopyEvents(events);
 			if (result.exitCode === 0 && peerUserWriteOk && completed && fingerprintWriteOk) {
 				return {
 					waitSeconds,
