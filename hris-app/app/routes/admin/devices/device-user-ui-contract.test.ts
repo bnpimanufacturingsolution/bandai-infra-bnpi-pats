@@ -197,6 +197,13 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("deviceUserSyncStatusBubble");
 		expect(enroll).toContain("Merge users");
 		expect(enroll).toContain('title="Merge device users"');
+		// Failed inventory reads must show Unavailable, never fake zero + all-missing.
+		expect(enroll).toContain("Unavailable");
+		expect(enroll).toContain("readFailed");
+		expect(enroll).toContain("merge-device-read-failed-");
+		expect(enroll).toContain(
+			"Issue counts are not computed for devices that failed inventory read",
+		);
 		expect(enroll).toContain("Checking which Hikvision devices are available (up to 5 seconds).");
 		expect(enroll).toContain("offline or unavailable skipped");
 		expect(enroll).toContain("Searching live device-user records");
@@ -499,6 +506,12 @@ describe("admin device user and log sync UI contract", () => {
 		expect(events).toContain("callbacks /");
 		expect(events).toContain("armed/listening");
 		expect(events).toContain("SDK work active");
+		expect(enroll).toContain("Live copy now");
+		expect(enroll).toContain("Employee now");
+		expect(enroll).toContain("Credential stage");
+		expect(enroll).toContain("From backend progressEvents");
+		expect(enroll).toContain("vm_copy_attempt_started");
+		expect(enroll).toContain("Batch copy started");
 		expect(events).toContain('device.state !== "login_failed"');
 		expect(deviceController).toContain("Listener service is stopped; previous arm/read log entries are historical only.");
 		expect(events).toContain("Open it, then run/review device-user reconciliation for the same device.");

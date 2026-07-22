@@ -9551,9 +9551,8 @@ export const controller = (prisma: PrismaClient) => {
 
 		const records: DeviceUserMergeRecord[] = [];
 		const errors: Array<{ deviceId: string; deviceName: string; error: string }> = [];
-		const deviceResults = await Promise.all(
-			devices.map(async (device) => {
-				const deviceRecords: DeviceUserMergeRecord[] = [];
+		const loadDeviceRecords = async (device: (typeof devices)[number]) => {
+			const deviceRecords: DeviceUserMergeRecord[] = [];
 			try {
 				const { candidates } = await loadHikvisionDeviceUserSnapshot(params.req, device);
 				const employees = await loadEmployeesForDeviceUserCandidates(
@@ -9600,7 +9599,7 @@ export const controller = (prisma: PrismaClient) => {
 						rawPayload: candidate.rawPayload,
 						manualLink: Boolean(
 							saved?.employeeId ||
-							saved?.rawPayload?.hrisSync?.matchReason === "manual_existing",
+								saved?.rawPayload?.hrisSync?.matchReason === "manual_existing",
 						),
 					});
 				}
@@ -9615,16 +9614,46 @@ export const controller = (prisma: PrismaClient) => {
 					},
 				};
 			}
-			}),
-		);
+		};
+		// Sequential inventory reads reduce concurrent digest/auth pressure that
+		// previously produced Unauthorized on some panels while others succeeded,
+		// which the UI then rendered as "IDs read: 0" + "Missing: all unique IDs".
+		const deviceResults: Array<{
+			records: DeviceUserMergeRecord[];
+			error: { deviceId: string; deviceName: string; error: string } | null;
+		}> = [];
+		for (let index = 0; index < devices.length; index += 1) {
+			const device = devices[index];
+			let result = await loadDeviceRecords(device);
+			if (result.error) {
+				for (let recovery = 1; recovery <= 3 && result.error; recovery += 1) {
+					const delayMs = recovery === 1 ? 500 : recovery === 2 ? 1500 : 3000;
+					deviceLogger.warn(
+						`Merge inventory read recovery ${recovery}/3 for ${device.name || device.address || device.id} after ${result.error.error}; retrying in ${delayMs}ms`,
+					);
+					await new Promise((resolve) => setTimeout(resolve, delayMs));
+					result = await loadDeviceRecords(device);
+				}
+			}
+			deviceResults.push(result);
+			if (index + 1 < devices.length) {
+				await new Promise((resolve) => setTimeout(resolve, 200));
+			}
+		}
 		for (const result of deviceResults) {
 			records.push(...result.records);
 			if (result.error) errors.push(result.error);
 		}
+		const failedDeviceIds = new Set(errors.map((error) => error.deviceId));
+		const validDeviceIds = (params.deviceIds as string[]).filter(
+			(deviceId) => !failedDeviceIds.has(deviceId),
+		);
 		const plan: any = buildDeviceUserMergePlan({
 			records,
 			deviceIds: params.deviceIds as string[],
+			validDeviceIds,
 		});
+		const idsReadByDevice = plan.idsReadByDevice || {};
 		return {
 			...plan,
 			errors,
@@ -9634,12 +9663,19 @@ export const controller = (prisma: PrismaClient) => {
 				deviceName: error.deviceName,
 				error: error.error,
 			})),
-			devices: devices.map((device) => ({
-				id: device.id,
-				name: device.name,
-				address: device.address,
-				port: device.port,
-			})),
+			devices: devices.map((device) => {
+				const error = errors.find((entry) => entry.deviceId === device.id);
+				const idsRead = Number(idsReadByDevice[device.id] || 0);
+				return {
+					id: device.id,
+					name: device.name,
+					address: device.address,
+					port: device.port,
+					readStatus: error ? "failed" : "ok",
+					readError: error?.error || null,
+					idsRead: error ? null : idsRead,
+				};
+			}),
 		};
 	};
 

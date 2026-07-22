@@ -2226,27 +2226,62 @@ export function DeviceEnrollmentPanel({
 							"Needs review IDs";
 	const sdkMergeDeviceIssueCounts = useMemo(() => {
 		const plan = sdkMergeState.data?.plan;
+		const failedByDeviceId = new Map<string, string>();
+		for (const error of plan?.errors || plan?.sdkErrors || plan?.unreachableDevices || []) {
+			const deviceId = String((error as any)?.deviceId || "").trim();
+			if (!deviceId || failedByDeviceId.has(deviceId)) continue;
+			failedByDeviceId.set(
+				deviceId,
+				String((error as any)?.error || (error as any)?.message || "Read failed"),
+			);
+		}
+		for (const device of plan?.devices || []) {
+			const deviceId = String((device as any)?.id || "").trim();
+			if (!deviceId) continue;
+			if (String((device as any)?.readStatus || "").toLowerCase() === "failed") {
+				failedByDeviceId.set(
+					deviceId,
+					String((device as any)?.readError || "Read failed"),
+				);
+			}
+		}
 		return (plan?.devices || []).map((device) => {
+			const deviceId = String(device.id || "");
+			const readFailed = failedByDeviceId.has(deviceId);
+			const readFromPlan =
+				typeof (device as any)?.idsRead === "number"
+					? Number((device as any).idsRead)
+					: plan?.users.reduce(
+							(count, user) =>
+								count +
+								(user.records.some((record: any) => record.deviceId === device.id)
+									? 1
+									: 0),
+							0,
+						) || 0;
 			return {
 				device,
-				read:
-					plan?.users.reduce(
-						(count, user) =>
-							count +
-							(user.records.some((record: any) => record.deviceId === device.id)
-								? 1
-								: 0),
-						0,
-					) || 0,
+				read: readFailed ? null : readFromPlan,
+				readFailed,
+				readError: failedByDeviceId.get(deviceId) || null,
 				counts: {
-					missing: sdkMergeUniqueIssueDeviceCount(device.id, "missing"),
-					decision: sdkMergeUniqueIssueDeviceCount(device.id, "decision"),
-					fingerprint: sdkMergeUniqueIssueDeviceCount(device.id, "fingerprint"),
-					face: sdkMergeUniqueIssueDeviceCount(device.id, "face"),
-					card: sdkMergeUniqueIssueDeviceCount(device.id, "card"),
-					ready: sdkMergeRows.filter(
-						(row) => row.filter === "ready" && sdkMergeRowMatchesDevice(row, device.id, "ready"),
-					).length,
+					// Do not invent "all unique IDs missing" when the device never read.
+					missing: readFailed ? 0 : sdkMergeUniqueIssueDeviceCount(device.id, "missing"),
+					decision: readFailed
+						? 0
+						: sdkMergeUniqueIssueDeviceCount(device.id, "decision"),
+					fingerprint: readFailed
+						? 0
+						: sdkMergeUniqueIssueDeviceCount(device.id, "fingerprint"),
+					face: readFailed ? 0 : sdkMergeUniqueIssueDeviceCount(device.id, "face"),
+					card: readFailed ? 0 : sdkMergeUniqueIssueDeviceCount(device.id, "card"),
+					ready: readFailed
+						? 0
+						: sdkMergeRows.filter(
+								(row) =>
+									row.filter === "ready" &&
+									sdkMergeRowMatchesDevice(row, device.id, "ready"),
+							).length,
 				},
 			};
 		});
@@ -2364,6 +2399,12 @@ export function DeviceEnrollmentPanel({
 		copy_started: "Copying to target",
 		copy_success: "Target copy applied",
 		copy_error: "Target copy needs attention",
+		batch_copy_started: "Batch copy started",
+		batch_copy_done: "Batch copy finished",
+		vm_copy_preflight_started: "Checking VM SDK reachability",
+		vm_copy_preflight_done: "VM SDK reachable",
+		vm_copy_attempt_started: "VM SDK copy attempt",
+		vm_copy_attempt_timeout: "VM SDK copy timed out",
 		db_merge_started: "Updating HRIS row",
 		db_merge_done: "HRIS row updated",
 		user_done: "Selected ID finished",
@@ -2402,6 +2443,71 @@ export function DeviceEnrollmentPanel({
 			]
 		: [];
 	const sdkMergeLatestEvents = sdkMergeJobProgressEvents.slice(-8).reverse();
+	const sdkMergeCurrentEvent =
+		[...sdkMergeJobProgressEvents]
+			.reverse()
+			.find((event) =>
+				[
+					"copy_started",
+					"batch_copy_started",
+					"vm_copy_preflight_started",
+					"vm_copy_preflight_done",
+					"vm_copy_attempt_started",
+					"vm_copy_attempt_timeout",
+					"copy_success",
+					"copy_error",
+					"db_merge_started",
+					"db_merge_done",
+					"user_done",
+				].includes(String(event?.stage || "")),
+			) || null;
+	const sdkMergeCurrentCredentialStages = Array.isArray(
+		(sdkMergeCurrentEvent as any)?.credentialStages,
+	)
+		? ((sdkMergeCurrentEvent as any).credentialStages as unknown[])
+				.map((stage) => String(stage || "").trim())
+				.filter(Boolean)
+		: [];
+	const sdkMergeCurrentTargetNames = Array.isArray(
+		(sdkMergeCurrentEvent as any)?.targetDeviceNames,
+	)
+		? ((sdkMergeCurrentEvent as any).targetDeviceNames as unknown[])
+				.map((name) => String(name || "").trim())
+				.filter(Boolean)
+		: (sdkMergeCurrentEvent as any)?.targetDeviceName
+			? [String((sdkMergeCurrentEvent as any).targetDeviceName)]
+			: [];
+	const sdkMergeCurrentWorkItems = sdkMergeCurrentEvent
+		? [
+				[
+					"Employee now",
+					(sdkMergeCurrentEvent as any).vendorUserId ||
+						(effectiveSdkMergeJob?.currentUserKey || "").replace(/^vendor:/, "") ||
+						"Waiting",
+				],
+				[
+					"Source",
+					(sdkMergeCurrentEvent as any).sourceDeviceName ||
+						(sdkMergeCurrentEvent as any).sourceDeviceId ||
+						"Waiting",
+				],
+				[
+					"Targets",
+					sdkMergeCurrentTargetNames.length
+						? sdkMergeCurrentTargetNames.join(", ")
+						: (sdkMergeCurrentEvent as any).targetDeviceName ||
+							(effectiveSdkMergeJob?.currentTargetDeviceId
+								? effectiveSdkMergeJob.currentTargetDeviceId
+								: "Batch/session"),
+				],
+				[
+					"Credential stage",
+					sdkMergeCurrentCredentialStages.length
+						? sdkMergeCurrentCredentialStages.join(" + ")
+						: "User row / HRIS metadata",
+				],
+			]
+		: [];
 	const sdkMergeJobSummary = effectiveSdkMergeJob
 		? sdkMergeJobIsProcessing
 			? sdkMergeJobHasTelemetry
@@ -7379,6 +7485,44 @@ export function DeviceEnrollmentPanel({
 									</div>
 								))}
 							</div>
+							{sdkMergeCurrentWorkItems.length ? (
+								<div className="mt-3 rounded-md border border-white/80 bg-white/80 p-3">
+									<div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+										<div className="min-w-0">
+											<p className="text-sm font-semibold text-slate-950">
+												Live copy now
+											</p>
+											<p className="mt-0.5 text-xs text-slate-600">
+												From backend progressEvents. Counts move only after the device or HRIS write returns.
+											</p>
+										</div>
+										{sdkMergeCurrentEvent?.at ? (
+											<p className="shrink-0 text-xs font-medium text-slate-600">
+												{formatDateTime(sdkMergeCurrentEvent.at)}
+											</p>
+										) : null}
+									</div>
+									<div className="mt-3 grid gap-2 sm:grid-cols-4">
+										{sdkMergeCurrentWorkItems.map(([label, value]) => (
+											<div
+												key={String(label)}
+												className="min-w-0 rounded-md border border-slate-200 bg-white px-3 py-2">
+												<p className="text-[11px] font-medium uppercase text-slate-500">
+													{label}
+												</p>
+												<p className="mt-1 truncate text-sm font-semibold text-slate-950">
+													{value}
+												</p>
+											</div>
+										))}
+									</div>
+									{sdkMergeCurrentEvent?.message ? (
+										<p className="mt-2 break-words text-xs text-slate-700">
+											{sdkMergeCurrentEvent.message}
+										</p>
+									) : null}
+								</div>
+							) : null}
 							<div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
 								{sdkMergeJobSummaryItems.map(([label, value]) => (
 									<div
@@ -7699,7 +7843,8 @@ export function DeviceEnrollmentPanel({
 									<span>Finger</span>
 									<span>Face</span>
 								</div>
-								{sdkMergeDeviceIssueCounts.map(({ device, read, counts }) => (
+								{sdkMergeDeviceIssueCounts.map(
+									({ device, read, counts, readFailed, readError }) => (
 									<div
 										key={device.id}
 										className="grid gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 lg:grid-cols-[minmax(180px,1fr)_88px_repeat(4,106px)] lg:items-center">
@@ -7715,7 +7860,25 @@ export function DeviceEnrollmentPanel({
 												className={`block truncate text-xs font-normal ${selectedMergeDeviceId === device.id ? "text-orange-900" : "text-slate-700"}`}>
 												{device.address || device.id}
 											</span>
+											{readFailed ? (
+												<span className="mt-0.5 block truncate text-xs font-medium text-amber-800">
+													Read failed
+													{readError ? `: ${readError}` : ""}
+												</span>
+											) : null}
 										</button>
+										{readFailed ? (
+											<span
+												title={
+													readError
+														? `Inventory read failed: ${readError}`
+														: "Inventory read failed for this device in the current merge plan"
+												}
+												className="inline-flex min-h-8 items-center justify-center rounded-md border border-amber-300 bg-amber-50 px-2 text-center text-xs font-semibold text-amber-950"
+												data-testid={`merge-device-read-failed-${device.id}`}>
+												Unavailable
+											</span>
+										) : (
 										<button
 											type="button"
 											aria-label={`Show ${read} unique IDs for ${device.name || device.address || device.id}`}
@@ -7723,10 +7886,11 @@ export function DeviceEnrollmentPanel({
 											className={getSdkMergeCountButtonClass(
 												selectedMergeDeviceId === device.id &&
 													sdkMergeListMode === "unique",
-												read,
+												read || 0,
 											)}>
 											{read}
 										</button>
+										)}
 										{(
 											[
 												["missing", counts.missing],
@@ -7735,6 +7899,14 @@ export function DeviceEnrollmentPanel({
 												["face", counts.face],
 											] as Array<[SdkMergeFilter, number]>
 										).map(([filter, count]) => (
+											readFailed ? (
+												<span
+													key={filter}
+													className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-200 bg-slate-50 px-2 text-center text-xs font-medium text-slate-600"
+													title="Issue counts are not computed for devices that failed inventory read">
+													—
+												</span>
+											) : (
 											<button
 												key={filter}
 												type="button"
@@ -7749,9 +7921,11 @@ export function DeviceEnrollmentPanel({
 												)}>
 												{count}
 											</button>
+											)
 										))}
 									</div>
-								))}
+									),
+								)}
 							</div>
 
 							<div className="overflow-hidden rounded-md border border-slate-200 bg-white">

@@ -539,11 +539,17 @@ export type DeviceUserMergePlanResponse = {
 	planId: string;
 	plan: {
 		deviceIds: string[];
+		validDeviceIds?: string[];
+		failedDeviceIds?: string[];
+		idsReadByDevice?: Record<string, number>;
 		devices: Array<{
 			id: string;
 			name?: string | null;
 			address?: string | null;
 			port?: number | null;
+			readStatus?: "ok" | "failed" | string | null;
+			readError?: string | null;
+			idsRead?: number | null;
 		}>;
 		users: Array<{
 			key: string;
@@ -580,9 +586,13 @@ export type DeviceUserMergePlanResponse = {
 			missing: number;
 			ambiguous?: number;
 			missingHrisLinks?: number;
+			validDevices?: number;
+			failedDevices?: number;
 		};
 		plannedWrites?: Array<{ userKey: string; targetDeviceId: string }>;
 		errors: Array<{ deviceId: string; deviceName: string; error: string }>;
+		sdkErrors?: Array<{ deviceId: string; deviceName: string; error: string }>;
+		unreachableDevices?: Array<{ deviceId: string; deviceName: string; error: string }>;
 		ambiguousMatches?: Array<{ deviceId?: string; deviceName?: string; candidates?: string[] }>;
 	};
 };

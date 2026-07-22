@@ -28,6 +28,43 @@ describe("device user union merge", () => {
 		).to.deep.equal(["a"]);
 	});
 
+	it("does not treat a failed device read as zero IDs with all unique IDs missing", () => {
+		// Device c was selected but inventory read failed: no records, excluded from validDeviceIds.
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			validDeviceIds: ["a", "b"],
+			records: [
+				record("a", { vendorUserId: "21", rawPayload: { numOfFP: 2, numOfFace: 1 } }),
+				record("b", { vendorUserId: "21", rawPayload: { numOfFP: 1, numOfFace: 0 } }),
+				record("a", { vendorUserId: "32", rawPayload: { numOfFP: 0, numOfFace: 0 } }),
+			],
+		});
+		expect(plan.counts.unionUsers).to.equal(2);
+		expect(plan.failedDeviceIds).to.deep.equal(["c"]);
+		expect(plan.validDeviceIds).to.deep.equal(["a", "b"]);
+		expect(plan.idsReadByDevice.a).to.equal(2);
+		expect(plan.idsReadByDevice.b).to.equal(1);
+		expect(plan.idsReadByDevice.c || 0).to.equal(0);
+		// Missing only among successfully read devices, never the failed panel.
+		for (const user of plan.users) {
+			expect(user.missingOnDeviceIds).to.not.include("c");
+			expect(user.targetDeviceIds).to.not.include("c");
+		}
+		const serialized = serializeDeviceUserMergePlanForReview({
+			...plan,
+			devices: [
+				{ id: "a", name: "A", readStatus: "ok", idsRead: 2 },
+				{ id: "b", name: "B", readStatus: "ok", idsRead: 1 },
+				{ id: "c", name: "E", readStatus: "failed", readError: "Unauthorized", idsRead: null },
+			],
+			errors: [{ deviceId: "c", deviceName: "E", error: "Unauthorized" }],
+		});
+		expect(serialized.failedDeviceIds).to.deep.equal(["c"]);
+		expect(serialized.devices.find((device: any) => device.id === "c")?.readStatus).to.equal(
+			"failed",
+		);
+	});
+
 	it("requires an explicit choice and supports A/B all choices", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],

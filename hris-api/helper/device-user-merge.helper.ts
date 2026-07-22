@@ -211,8 +211,24 @@ const collapseDuplicateDeviceRows = (records: DeviceUserMergeRecord[]) => {
 export const buildDeviceUserMergePlan = (params: {
 	records: DeviceUserMergeRecord[];
 	deviceIds: string[];
+	/**
+	 * Devices with a successful inventory read in this same plan run.
+	 * Failed/unavailable devices must not be treated as "0 IDs read" or
+	 * "missing every unique ID" — only successful reads define the union gap.
+	 * Defaults to all selected deviceIds when omitted (backward compatible).
+	 */
+	validDeviceIds?: string[];
 }) => {
 	const sourceRowCount = params.records.length;
+	const selectedDeviceIds = params.deviceIds.map((id) => text(id)).filter(Boolean);
+	const validDeviceIds = (
+		Array.isArray(params.validDeviceIds) && params.validDeviceIds.length > 0
+			? params.validDeviceIds
+			: selectedDeviceIds
+	)
+		.map((id) => text(id))
+		.filter(Boolean);
+	const validDeviceIdSet = new Set(validDeviceIds);
 	const ambiguousMatches: Array<{ record: DeviceUserMergeRecord; candidates: string[] }> = [];
 	const mergeableRecords: DeviceUserMergeRecord[] = [];
 	for (const record of params.records) {
@@ -257,7 +273,10 @@ export const buildDeviceUserMergePlan = (params: {
 				deviceB: { id: b.deviceId, name: b.deviceName, value: valueFor(b, field) },
 			});
 		}
-		const deviceIds = new Set(ordered.map((record) => record.deviceId));
+		const presentOnDeviceIds = new Set(ordered.map((record) => record.deviceId));
+		// Peer copy targets and missing gaps only among successfully read devices.
+		const targetDeviceIds = validDeviceIds.filter((id) => id !== source.deviceId);
+		const missingOnDeviceIds = validDeviceIds.filter((id) => !presentOnDeviceIds.has(id));
 		users.push({
 			key,
 			employeeId: ordered.find((record) => text(record.employeeId))?.employeeId || null,
@@ -269,13 +288,25 @@ export const buildDeviceUserMergePlan = (params: {
 			sourceRows: records.length,
 			duplicateSourceRows: collapsed.duplicateSourceRows,
 			sourceDeviceId: source.deviceId,
-			targetDeviceIds: params.deviceIds.filter((id) => id !== source.deviceId),
+			targetDeviceIds,
 			conflicts,
-			missingOnDeviceIds: params.deviceIds.filter((id) => !deviceIds.has(id)),
+			missingOnDeviceIds,
 		});
 	}
+	const idsReadByDevice: Record<string, number> = {};
+	for (const id of selectedDeviceIds) idsReadByDevice[id] = 0;
+	for (const user of users) {
+		const seen = new Set(user.records.map((record) => record.deviceId));
+		for (const deviceId of seen) {
+			if (deviceId in idsReadByDevice) idsReadByDevice[deviceId] += 1;
+			else idsReadByDevice[deviceId] = 1;
+		}
+	}
 	return {
-		deviceIds: params.deviceIds,
+		deviceIds: selectedDeviceIds,
+		validDeviceIds,
+		failedDeviceIds: selectedDeviceIds.filter((id) => !validDeviceIdSet.has(id)),
+		idsReadByDevice,
 		users,
 		unionUsers: users,
 		onlyOnOneDevice: users.filter((user) => user.missingOnDeviceIds.length > 0),
@@ -304,6 +335,8 @@ export const buildDeviceUserMergePlan = (params: {
 			missing: users.reduce((sum, user) => sum + user.missingOnDeviceIds.length, 0),
 			ambiguous: ambiguousMatches.length,
 			missingHrisLinks: users.filter((user) => !user.employeeId).length,
+			validDevices: validDeviceIds.length,
+			failedDevices: selectedDeviceIds.filter((id) => !validDeviceIdSet.has(id)).length,
 		},
 	};
 };
@@ -329,6 +362,9 @@ const compactMergeRecordForReview = (record: DeviceUserMergeRecord) => {
  */
 export const serializeDeviceUserMergePlanForReview = (plan: any) => ({
 	deviceIds: plan.deviceIds || [],
+	validDeviceIds: plan.validDeviceIds || plan.deviceIds || [],
+	failedDeviceIds: plan.failedDeviceIds || [],
+	idsReadByDevice: plan.idsReadByDevice || {},
 	devices: plan.devices || [],
 	users: (plan.users || []).map((user: DeviceUserMergeGroup) => ({
 		...user,
