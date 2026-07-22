@@ -6,6 +6,9 @@ param(
   [int]$PlanTimeoutSec = 600,
   [int]$HealthTimeoutSec = 60,
   [switch]$SkipStartIfProcessing,
+  [string[]]$DeviceIds = @(),
+  [string]$ReviewedChoicesPath = "",
+  [switch]$ExecuteReviewedPlan,
   [string]$EvidenceRoot = ""
 )
 
@@ -22,14 +25,16 @@ $EvidenceRoot | Set-Content (Join-Path $repoRoot ".runtime\merge-overnight-lates
 $heartbeatLog = Join-Path $EvidenceRoot "heartbeat.jsonl"
 $summaryPath = Join-Path $EvidenceRoot "loop-summary.json"
 
-$deviceIds = @(
-  "cmrht5s2w00ei7zgsre8y3o5n", # A .21
-  "cmpxw13hx002h7zwso7dyedrn", # B .20
-  "cmripjwbx00ewl001ihcke210", # C .22
-  "cmripjwkw00ffl0013lfxcbxw", # D .23
-  "cmriu5ab102goi001x9o7nfct", # E .24
-  "cmrim1zop05ik7zp4zgm2sm4k"  # F .25
-)
+$deviceIds = @($DeviceIds | ForEach-Object { [string]$_ } | ForEach-Object { $_ -split '[,;\s]+' } | Where-Object { $_ } | Select-Object -Unique)
+if ($deviceIds.Count -lt 2) {
+  throw "Pass at least two DeviceIds selected from fresh live evidence. This script has no hardcoded merge scope."
+}
+if ($ExecuteReviewedPlan -and (-not $ReviewedChoicesPath -or -not (Test-Path -LiteralPath $ReviewedChoicesPath))) {
+  throw "ExecuteReviewedPlan requires ReviewedChoicesPath. Automatic A/B, count-based, and first-row choices are forbidden."
+}
+$reviewedChoices = if ($ExecuteReviewedPlan) {
+  Get-Content -Raw -LiteralPath $ReviewedChoicesPath | ConvertFrom-Json -AsHashtable
+} else { $null }
 $deviceLabels = @{
   "cmrht5s2w00ei7zgsre8y3o5n" = "A/.21"
   "cmpxw13hx002h7zwso7dyedrn" = "B/.20"
@@ -137,54 +142,6 @@ function Get-Listener([hashtable]$Headers) {
   }
 }
 
-function Build-RichestChoices($plan) {
-  $choices = @{}
-  $ledger = @()
-  $users = @()
-  if ($plan.users) { $users = @($plan.users) }
-  elseif ($plan.data -and $plan.data.plan -and $plan.data.plan.users) { $users = @($plan.data.plan.users) }
-  foreach ($user in $users) {
-    $key = [string]$user.key
-    if (-not $key) { continue }
-    $fieldMap = @{}
-    foreach ($c in @($user.conflicts)) {
-      $field = [string]$c.field
-      if (-not $field) { continue }
-      $va = $c.deviceA.value
-      $vb = $c.deviceB.value
-      $choice = "A"
-      $reason = "default_A"
-      if ($field -in @("face", "fingerprint", "card")) {
-        $na = 0; $nb = 0
-        [void][double]::TryParse([string]$va, [ref]$na)
-        [void][double]::TryParse([string]$vb, [ref]$nb)
-        if ($nb -gt $na) { $choice = "B"; $reason = "higher_evidenced_count" }
-        elseif ($na -gt $nb) { $choice = "A"; $reason = "higher_evidenced_count" }
-        elseif ($nb -eq $na) { $choice = "A"; $reason = "tie_prefer_A" }
-      } else {
-        $sa = [string]$va
-        $sb = [string]$vb
-        if ((-not $sa) -and $sb) { $choice = "B"; $reason = "nonempty_B" }
-        elseif ($sa -and (-not $sb)) { $choice = "A"; $reason = "nonempty_A" }
-        else { $choice = "A"; $reason = "string_prefer_A" }
-      }
-      $fieldMap[$field] = $choice
-      $ledger += [pscustomobject]@{
-        userKey = $key
-        field = $field
-        choice = $choice
-        reason = $reason
-        deviceA = $c.deviceA.name
-        valueA = $va
-        deviceB = $c.deviceB.name
-        valueB = $vb
-      }
-    }
-    if ($fieldMap.Count -gt 0) { $choices[$key] = $fieldMap }
-  }
-  return @{ choices = $choices; ledger = $ledger }
-}
-
 function Get-Jobs([hashtable]$Headers) {
   try {
     return Invoke-RestMethod -Method Get "http://localhost:3001/api/device/hikvision/sdk-users/merge/jobs" -Headers $Headers -TimeoutSec 30
@@ -286,18 +243,22 @@ if ($processing.Count -gt 0) {
     @{ planId = $planId; summary = $planSummary; users = $slimUsers; counts = $plan.counts; errors = $plan.errors } |
       ConvertTo-Json -Depth 12 | Set-Content (Join-Path $EvidenceRoot "plan-slim.json")
     $planSummary | ConvertTo-Json | Set-Content (Join-Path $EvidenceRoot "plan-summary.json")
-    Write-Hb -Cycle 0 -Checklist "4/6" -LastProof "plan=$planId unique=$($planSummary.uniqueIds)" -Next "richest_choices" -Extra @{ plan = $planSummary }
+    Write-Hb -Cycle 0 -Checklist "4/6" -LastProof "plan=$planId unique=$($planSummary.uniqueIds)" -Next "review_explicit_choices" -Extra @{ plan = $planSummary }
 
-    $built = Build-RichestChoices $plan
-    $built.ledger | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $EvidenceRoot "richest-choice-ledger.json")
-    ($built.choices | ConvertTo-Json -Depth 8) | Set-Content (Join-Path $EvidenceRoot "richest-choices.json")
+    if (-not $ExecuteReviewedPlan) {
+      $state.notes += "Read-only plan complete; no write requested. Review conflicts and rerun with ExecuteReviewedPlan plus ReviewedChoicesPath."
+      $state.endedAt = (Get-Date).ToString("o")
+      $state | ConvertTo-Json -Depth 8 | Set-Content $summaryPath
+      Write-Hb -Cycle 0 -Checklist "safe_stop" -LastProof $summaryPath -Next "external_evidence_review_required"
+      return
+    }
 
     $startBody = @{
       planId = $planId
-      choices = $built.choices
+      choices = $reviewedChoices
     } | ConvertTo-Json -Depth 20 -Compress
     [System.IO.File]::WriteAllText((Join-Path $EvidenceRoot "job-start-payload.json"), $startBody)
-    Write-Host "Starting merge job with richest conflict choices..."
+    Write-Host "Starting merge job with the explicitly reviewed choice file..."
     $startResp = Invoke-RestMethod -Method Post "http://localhost:3001/api/device/hikvision/sdk-users/merge/jobs" `
       -Headers $headers -ContentType "application/json" -Body $startBody -TimeoutSec 120
     ($startResp | ConvertTo-Json -Depth 10) | Set-Content (Join-Path $EvidenceRoot "job-start-response.json")
@@ -348,29 +309,9 @@ for ($cycle = 1; $cycle -le $MaxCycles; $cycle++) {
       if ($processing.Count -gt 0) { $state.activeJobId = $processing[0].jobId }
     } catch {}
     if (-not $state.activeJobId) {
-      Write-Hb -Cycle $cycle -Checklist "idle" -LastProof "no_job" -Next "sleep_then_replan_if_needed" -Extra @{ tunnelOpen = $tunnelOpen }
-      # one replan attempt mid-loop if still no job
-      if ($cycle -eq 2 -or $cycle -eq 10) {
-        try {
-          $headers = Get-AdminHeaders
-          $planBody = @{ deviceIds = $deviceIds } | ConvertTo-Json
-          $planResp = Invoke-RestMethod -Method Post "http://localhost:3001/api/device/hikvision/sdk-users/merge/plan" `
-            -Headers $headers -ContentType "application/json" -Body $planBody -TimeoutSec $PlanTimeoutSec
-          $planId = $planResp.data.planId
-          $plan = $planResp.data.plan
-          $built = Build-RichestChoices $plan
-          $startBody = @{ planId = $planId; choices = $built.choices } | ConvertTo-Json -Depth 20 -Compress
-          $startResp = Invoke-RestMethod -Method Post "http://localhost:3001/api/device/hikvision/sdk-users/merge/jobs" `
-            -Headers $headers -ContentType "application/json" -Body $startBody -TimeoutSec 120
-          $state.activeJobId = $startResp.data.jobId
-          $state.planId = $planId
-          ($startResp | ConvertTo-Json -Depth 8) | Set-Content (Join-Path $EvidenceRoot "job-start-retry-c$cycle.json")
-        } catch {
-          $_ | Out-String | Set-Content (Join-Path $EvidenceRoot "replan-error-c$cycle.txt")
-        }
-      }
-      Start-Sleep -Seconds $PollSeconds
-      continue
+      Write-Hb -Cycle $cycle -Checklist "safe_stop" -LastProof "no_job" -Next "explicit_remaining_only_review_required" -Extra @{ tunnelOpen = $tunnelOpen }
+      $state.notes += "No active job; automatic broad replan/restart is forbidden."
+      break
     }
   }
 
@@ -422,15 +363,15 @@ for ($cycle = 1; $cycle -le $MaxCycles; $cycle++) {
     if ($payload.status -eq "failed" -or $payload.stale) {
       ($payload | ConvertTo-Json -Depth 12) | Set-Content (Join-Path $EvidenceRoot ("job-terminal-{0}.json" -f $payload.status))
       $state.notes += "job $($payload.status) stale=$($payload.stale)"
-      # self-repair then replan remaining
+      # Preserve failure evidence. A fresh, remaining-only reviewed plan must be
+      # supplied explicitly; this loop never repeats successful rows.
       [void](Ensure-Tunnels)
       [void](Ensure-Api)
       $headers = Get-AdminHeaders
       $health = Get-DeviceHealth $headers
       $health | ConvertTo-Json | Set-Content (Join-Path $EvidenceRoot ("health-after-fail-c$cycle.json"))
-      # clear active and allow replan on next cycles
-      $state.activeJobId = $null
-      $state.notes += "cleared_active_for_retry_after_fail"
+      $state.notes += "terminal_failure_requires_explicit_remaining_only_review"
+      break
     }
   } catch {
     $msg = $_.Exception.Message

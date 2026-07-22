@@ -211,6 +211,13 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("persistDeviceUserMergeJob(job)");
 		expect(controller).to.include("workerActive");
 		expect(controller).to.include("failed_stale");
+		expect(controller).to.include('job.status !== "processing" && job.startedAt.getTime() < cutoff');
+		expect(controller).to.include("is already processing. Poll that locked scope");
+		expect(controller).to.include('stage: "db_merge_retry"');
+		expect(controller).to.include('stage: "db_merge_error"');
+		expect(controller).to.include("Never update DeviceUser as though a failed physical copy succeeded");
+		expect(controller).to.include("const sourceDeviceId = user.sourceDeviceId");
+		expect(controller).to.not.include('const selectedRawRecord = selectedRecordFor("fingerprint")');
 		expect(controller).to.include("device-user-merge-jobs");
 		expect(controller).to.include("const settled = await Promise.allSettled(");
 		expect(controller).to.include("preferredHikvisionListenerVmTargetLabel");

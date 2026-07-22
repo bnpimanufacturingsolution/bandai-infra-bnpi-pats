@@ -181,14 +181,30 @@ if (-not $active) {
     }
     $target = $FallbackSshTarget
     $useKey = $true
+    if (-not (Test-SshTarget -Target $target)) {
+      throw "Neither SSH target is reachable: primary=$SshTarget fallback=$FallbackSshTarget. No tunnel process or active-state file was created."
+    }
   }
 
   $process = Start-Tunnel -Target $target -UseKey $useKey -ForwardSpecs $forwardSpecs
-  Start-Sleep -Seconds 3
-  if ($process.HasExited) {
+  $expectedLocalPorts = @($forwardSpecs | Select-Object -ExpandProperty LocalPort)
+  $readyDeadline = (Get-Date).AddSeconds(25)
+  $listeningCount = 0
+  do {
+    Start-Sleep -Milliseconds 500
+    $process.Refresh()
+    if ($process.HasExited) { break }
+    $listeningCount = @($expectedLocalPorts | Where-Object { Test-TcpConnect 127.0.0.1 ([int]$_) 500 }).Count
+  } while ($listeningCount -ne $expectedLocalPorts.Count -and (Get-Date) -lt $readyDeadline)
+
+  if ($process.HasExited -or $listeningCount -ne $expectedLocalPorts.Count) {
     $stderrPath = Join-Path $runRoot 'ssh.stderr.log'
     $stderr = Get-Content -Raw -LiteralPath $stderrPath -ErrorAction SilentlyContinue
-    throw "Hikvision remote device tunnel exited immediately. $stderr"
+    if (-not $process.HasExited) {
+      Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    }
+    Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+    throw "Hikvision remote device tunnel did not open all $($expectedLocalPorts.Count) verified ports (opened=$listeningCount). No active state was recorded. $stderr"
   }
 
   $tunnelMap = (($forwardSpecs | ForEach-Object {

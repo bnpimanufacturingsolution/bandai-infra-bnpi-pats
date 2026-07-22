@@ -14,6 +14,7 @@ describe("Hikvision remote device tunnel contract", () => {
 	const deviceController = readRepoFile("hris-api/app/device/device.controller.ts");
 	const restartLocalApiScript = readRepoFile("scripts/restart-local-hris-api-dev.ps1");
 	const vmBridgeEnsureScript = readRepoFile("hris-api/scripts/ensure-hikvision-vm-bridge.cjs");
+	const overnightMergeScript = readRepoFile("scripts/merge-users-overnight-loop.ps1");
 
 	it("passes the six current Hikvision device IPs as one normalized PowerShell argument", () => {
 		expect(ensureScript).to.include(
@@ -56,6 +57,8 @@ describe("Hikvision remote device tunnel contract", () => {
 		expect(tunnelScript).to.include("$listeningCount -eq $expectedLocalPorts.Count");
 		expect(tunnelScript).to.include("if (-not $active -and (Test-Path -LiteralPath $pidFile))");
 		expect(tunnelScript).to.include("Stop-ExistingTunnel");
+		expect(tunnelScript).to.include("Neither SSH target is reachable");
+		expect(tunnelScript).to.include("No active state was recorded");
 	});
 
 	it("scopes Hikvision UserInfo count cache entries by organization and device", () => {
@@ -103,6 +106,16 @@ describe("Hikvision remote device tunnel contract", () => {
 		expect(restartLocalApiScript.indexOf("Local hris-api is healthy")).to.be.lessThan(
 			restartLocalApiScript.indexOf("Ensuring TEST A SSH reverse bridge"),
 		);
+	});
+
+	it("requires an explicit live scope and reviewed choices before overnight writes", () => {
+		expect(overnightMergeScript).to.include("[string[]]$DeviceIds = @()");
+		expect(overnightMergeScript).to.include("[switch]$ExecuteReviewedPlan");
+		expect(overnightMergeScript).to.include("ReviewedChoicesPath");
+		expect(overnightMergeScript).to.include("This script has no hardcoded merge scope");
+		expect(overnightMergeScript).to.include("automatic broad replan/restart is forbidden");
+		expect(overnightMergeScript).to.not.include("Build-RichestChoices");
+		expect(overnightMergeScript).to.not.include("tie_prefer_A");
 	});
 
 	it("keeps optional TEST A bridge failures compact and non-blocking during npm run dev predev", () => {

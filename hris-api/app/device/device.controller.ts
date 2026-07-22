@@ -591,7 +591,10 @@ const cleanupDeviceUserSyncJobs = () => {
 const cleanupDeviceUserMergeJobs = () => {
 	const cutoff = Date.now() - 60 * 60 * 1000;
 	for (const [jobId, job] of deviceUserMergeJobs.entries()) {
-		if (job.startedAt.getTime() < cutoff) deviceUserMergeJobs.delete(jobId);
+		// A slow physical merge must remain visible while its worker is active.
+		if (job.status !== "processing" && job.startedAt.getTime() < cutoff) {
+			deviceUserMergeJobs.delete(jobId);
+		}
 	}
 };
 
@@ -9913,16 +9916,6 @@ export const controller = (prisma: PrismaClient) => {
 				const validityFromRecord = selectedRecordFor("validFrom");
 				const validityToRecord = selectedRecordFor("validTo");
 				const accessRecord = selectedRecordFor("doorRight");
-				const selectedRawRecord = selectedRecordFor("fingerprint") || sourceRecord;
-				const selectedRaw = selectedRawRecord.rawPayload as any;
-				const targetCredentials = extractHikvisionCredentialSummary(
-					targetRow.rawPayload || {},
-				);
-				const selectedCredentials = extractHikvisionCredentialSummary(selectedRaw || {});
-				const preserveBiometricRaw =
-					targetCredentials.fingerprintCount > selectedCredentials.fingerprintCount ||
-					targetCredentials.faceCount > selectedCredentials.faceCount ||
-					targetCredentials.cardCount > selectedCredentials.cardCount;
 				await (prisma as any).deviceUser.update({
 					where: { id: targetRow.id },
 					data: {
@@ -9945,7 +9938,8 @@ export const controller = (prisma: PrismaClient) => {
 						accessPlan: accessRecord ? accessRecord.accessPlan : targetRow.accessPlan,
 						rawPayload: {
 							...(targetRow.rawPayload || {}),
-							...(preserveBiometricRaw ? {} : selectedRaw || {}),
+							// Physical reread owns biometric truth; never spread one selected
+							// modality's raw payload over another modality.
 							hrisMerge: { reviewed: true, decisions: user.conflicts },
 						},
 					},
@@ -9959,14 +9953,42 @@ export const controller = (prisma: PrismaClient) => {
 					message: `Updated HRIS row for ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 				});
 			};
+			const mergeOverlayDeviceUserRowWithRetry = async (
+				params: Parameters<typeof mergeOverlayDeviceUserRow>[0],
+			) => {
+				let lastError: any = null;
+				for (let attempt = 1; attempt <= 3; attempt += 1) {
+					try {
+						await mergeOverlayDeviceUserRow(params);
+						return;
+					} catch (error: any) {
+						lastError = error;
+						emitMergeProgress?.({
+							stage: "db_merge_retry",
+							userKey: params.user.key,
+							vendorUserId: params.sourceRecord.vendorUserId,
+							sourceDeviceId: params.sourceDevice.id,
+							targetDeviceId: params.targetDeviceId,
+							attempt,
+							error: error?.message || String(error),
+							message: `HRIS overlay attempt ${attempt}/3 failed after physical copy; preserving peer-write truth and retrying the database only.`,
+						});
+						if (attempt < 3) await sleep(attempt * 1000);
+					}
+				}
+				emitMergeProgress?.({
+					stage: "db_merge_error",
+					userKey: params.user.key,
+					vendorUserId: params.sourceRecord.vendorUserId,
+					sourceDeviceId: params.sourceDevice.id,
+					targetDeviceId: params.targetDeviceId,
+					error: lastError?.message || String(lastError),
+					message: "Physical peer copy succeeded, but the HRIS overlay failed after three attempts. Device reread remains authoritative.",
+				});
+			};
 			for (const user of appliedPlan.users) {
-				const selectedConflict = user.conflicts.find((conflict: any) => conflict.choice);
-				const sourceDeviceId =
-					selectedConflict?.choice === "B"
-						? selectedConflict.deviceB.id
-						: selectedConflict?.choice === "A"
-							? selectedConflict.deviceA.id
-							: user.sourceDeviceId;
+				// Field-level A/B choices do not establish raw biometric custody.
+				const sourceDeviceId = user.sourceDeviceId;
 				const sourceDevice =
 					devices.find((device) => device.id === sourceDeviceId) ||
 					devices.find((device) => device.id === user.sourceDeviceId);
@@ -10142,13 +10164,15 @@ export const controller = (prisma: PrismaClient) => {
 									message: `Copy failed for user ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 								});
 							}
-							await mergeOverlayDeviceUserRow({
+							if (batchResult.status === "success") {
+								await mergeOverlayDeviceUserRowWithRetry({
 								user,
 								sourceDevice,
 								sourceRecord,
 								targetDevice,
 								targetDeviceId,
-							});
+								});
+							}
 						}
 						emitMergeProgress?.({
 							stage: "batch_copy_done",
@@ -10199,13 +10223,7 @@ export const controller = (prisma: PrismaClient) => {
 								batchMultiTarget: true,
 								message: `Batch copy failed for user ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 							});
-							await mergeOverlayDeviceUserRow({
-								user,
-								sourceDevice,
-								sourceRecord,
-								targetDevice,
-								targetDeviceId,
-							});
+							// Never update DeviceUser as though a failed physical copy succeeded.
 						}
 					}
 				}
@@ -10524,6 +10542,21 @@ export const controller = (prisma: PrismaClient) => {
 		if (!admin) return;
 		try {
 			cleanupDeviceUserMergeJobs();
+			const activeJob = [...deviceUserMergeJobs.values()].find(
+				(job) =>
+					job.organizationId === String(admin.organizationId) &&
+					job.status === "processing" &&
+					!isDeviceUserMergeJobStale(job),
+			);
+			if (activeJob) {
+				res.status(409).json(
+					buildErrorResponse(
+						`Merge job ${activeJob.jobId} is already processing. Poll that locked scope before starting another job.`,
+						409,
+					),
+				);
+				return;
+			}
 			const planId = String(req.body?.planId || "").trim();
 			const stored = deviceUserMergePlans.get(planId);
 			if (!stored || stored.organizationId !== String(admin.organizationId)) {
