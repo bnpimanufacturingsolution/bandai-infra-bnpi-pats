@@ -451,6 +451,7 @@ type DeviceUserMergeJob = {
 	totalWrites: number;
 	processedWrites: number;
 	successfulWrites: number;
+	alreadyConvergedWrites?: number;
 	failedWrites: number;
 	message: string;
 	currentStage?: string;
@@ -971,6 +972,7 @@ const readDeviceUserMergeJob = (jobId: string): DeviceUserMergeJob | null => {
 			totalWrites: Number(parsed.totalWrites || 0),
 			processedWrites: Number(parsed.processedWrites || 0),
 			successfulWrites: Number(parsed.successfulWrites || 0),
+			alreadyConvergedWrites: Number(parsed.alreadyConvergedWrites || 0),
 			failedWrites: Number(parsed.failedWrites || 0),
 			stale: Boolean(parsed.stale),
 			snapshotPath: filePath,
@@ -10126,6 +10128,7 @@ export const controller = (prisma: PrismaClient) => {
 									includeFingerprints,
 									includeFaceRecognition,
 									batchMultiTarget: true,
+									alreadyConverged: batchResult.alreadyConverged === true,
 									message: `Copied user ${sourceRecord.vendorUserId} to ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 								});
 							} else {
@@ -10370,6 +10373,7 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			let processedWrites = Math.max(0, job.processedWrites || 0);
 			let successfulWrites = Math.max(0, job.successfulWrites || 0);
+			let alreadyConvergedWrites = Math.max(0, job.alreadyConvergedWrites || 0);
 			let failedWrites = Math.max(0, job.failedWrites || 0);
 			const recordProgress = (event: any) => {
 				const stage = String(event?.stage || "working");
@@ -10389,7 +10393,9 @@ export const controller = (prisma: PrismaClient) => {
 					: null;
 				if (terminalCopy) {
 					processedWrites = Math.min(job.totalWrites, processedWrites + 1);
-					if (stage === "copy_success") successfulWrites += 1;
+					if (stage === "copy_success" && event?.alreadyConverged) {
+						alreadyConvergedWrites += 1;
+					} else if (stage === "copy_success") successfulWrites += 1;
 					if (stage === "copy_error") failedWrites += 1;
 					const errText = String(event?.error || "");
 					const isCircuitSkip = /Skipped SDK peer copy after \d+ timeout/i.test(errText);
@@ -10417,7 +10423,8 @@ export const controller = (prisma: PrismaClient) => {
 						batchMultiTarget: event?.batchMultiTarget === true,
 						error: event?.error || null,
 						// Circuit-skips and timeouts must never be counted as peer write success.
-						countsAsPeerWriteSuccess: stage === "copy_success" && !isCircuitSkip,
+						countsAsPeerWriteSuccess:
+							stage === "copy_success" && !isCircuitSkip && !event?.alreadyConverged,
 					});
 				}
 				const latest = deviceUserMergeJobs.get(params.jobId);
@@ -10459,6 +10466,7 @@ export const controller = (prisma: PrismaClient) => {
 					currentTargetDeviceId: event?.targetDeviceId || null,
 					processedWrites,
 					successfulWrites,
+					alreadyConvergedWrites,
 					failedWrites,
 					results: nextResults,
 					copyFailureSummary,
@@ -10485,7 +10493,12 @@ export const controller = (prisma: PrismaClient) => {
 			});
 			const results = Array.isArray(result?.results) ? result.results : [];
 			const finalFailedWrites = results.filter((item: any) => item.status === "error").length;
-			const finalSuccessfulWrites = Math.max(0, results.length - finalFailedWrites);
+			const finalAlreadyConvergedWrites = results.filter(
+				(item: any) => item.status === "success" && item.alreadyConverged === true,
+			).length;
+			const finalSuccessfulWrites = results.filter(
+				(item: any) => item.status === "success" && item.alreadyConverged !== true,
+			).length;
 			const attention = Number(result?.attention || finalFailedWrites || 0);
 			let retryPlanId: string | undefined;
 			const retryPlan = result?.reread?.plan || result?.reread;
@@ -10511,6 +10524,7 @@ export const controller = (prisma: PrismaClient) => {
 				currentTargetDeviceId: null,
 				processedWrites: job.totalWrites,
 				successfulWrites: finalSuccessfulWrites,
+				alreadyConvergedWrites: finalAlreadyConvergedWrites,
 				failedWrites: attention,
 				results,
 				remainingConflicts: Number(result?.remainingConflicts || 0),
@@ -10608,6 +10622,7 @@ export const controller = (prisma: PrismaClient) => {
 				totalWrites,
 				processedWrites: 0,
 				successfulWrites: 0,
+				alreadyConvergedWrites: 0,
 				failedWrites: 0,
 				message:
 					"Merge job queued. HRIS will apply reviewed decisions, copy credentials, then reread devices.",
@@ -10738,6 +10753,7 @@ export const controller = (prisma: PrismaClient) => {
 					totalWrites: job.totalWrites,
 					processedWrites: job.processedWrites,
 					successfulWrites: job.successfulWrites,
+					alreadyConvergedWrites: job.alreadyConvergedWrites || 0,
 					failedWrites: job.failedWrites,
 					message: job.message,
 					currentStage: job.currentStage,

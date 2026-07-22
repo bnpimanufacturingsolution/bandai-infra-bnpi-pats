@@ -609,6 +609,7 @@ export interface DeviceUserMergeJobProgress {
 	totalWrites: number;
 	processedWrites: number;
 	successfulWrites: number;
+	alreadyConvergedWrites?: number;
 	failedWrites: number;
 	message: string;
 	currentStage?: string;

@@ -2447,6 +2447,7 @@ export function DeviceEnrollmentPanel({
 			effectiveSdkMergeJob?.processedWrites ?? 0,
 		],
 		["Applied", effectiveSdkMergeJob?.successfulWrites ?? 0],
+		["Already matched", effectiveSdkMergeJob?.alreadyConvergedWrites ?? 0],
 		["Needs attention", effectiveSdkMergeJob?.failedWrites ?? 0],
 	] as const;
 	const sdkMergeJobScopeItems = sdkMergeJobWriteMatrix
@@ -2530,12 +2531,16 @@ export function DeviceEnrollmentPanel({
 				: "This job was started before detailed merge telemetry was available. The UI is polling, but the backend has not returned per-target results or a live heartbeat for this job."
 			: effectiveSdkMergeJob.status === "failed" &&
 				  Number(sdkMergeJobCopyFailureSummary?.total || 0) > 0
-				? `${mergeMetricValue(effectiveSdkMergeJob.successfulWrites)} writes applied; ${mergeMetricValue(
+				? `${mergeMetricValue(effectiveSdkMergeJob.successfulWrites)} writes applied, ${mergeMetricValue(
+						effectiveSdkMergeJob.alreadyConvergedWrites || 0,
+					)} already matched; ${mergeMetricValue(
 						effectiveSdkMergeJob.failedWrites,
 					)} need attention. Backend grouped ${mergeMetricValue(
 						sdkMergeJobCopyFailureSummary?.total || 0,
 					)} copy failures by source and target.`
 				: `${mergeMetricValue(effectiveSdkMergeJob.successfulWrites)} writes applied, ${mergeMetricValue(
+						effectiveSdkMergeJob.alreadyConvergedWrites || 0,
+					)} already matched, ${mergeMetricValue(
 						effectiveSdkMergeJob.failedWrites,
 					)} need attention.`
 		: "";

@@ -299,6 +299,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Backend update");
 		expect(enroll).toContain("No detailed backend heartbeat yet");
 		expect(enroll).toContain("Applied and Needs attention move only after each target copy returns");
+		expect(enroll).toContain("Already matched");
 		expect(enroll).toContain("This job was started before detailed merge telemetry was available.");
 		expect(enroll).toContain("Copy failures by path");
 		expect(enroll).toContain("Grouped from backend progress. Latest rows below may be capped.");

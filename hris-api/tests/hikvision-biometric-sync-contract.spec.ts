@@ -202,6 +202,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("success.jsonl");
 		expect(controller).to.include("failure.jsonl");
 		expect(controller).to.include("countsAsPeerWriteSuccess");
+		expect(controller).to.include("alreadyConvergedWrites");
+		expect(controller).to.include("!event?.alreadyConverged");
+		expect(controller).to.include("batchResult.alreadyConverged === true");
 		expect(controller).to.include(
 			"params.includeFaceRecognition &&",
 		);
