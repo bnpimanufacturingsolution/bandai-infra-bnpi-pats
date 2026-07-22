@@ -54,10 +54,20 @@ function canConnect(port, host, timeoutMs = 400) {
 
 /**
  * TCP-open is not enough for Prisma. A half-dead SSH hop can accept TCP then
- * stall. Prefer a short Postgres wire handshake (SSLRequest -> N/S/E).
- * Fail-closed is kept short so predev does not look hung.
+ * stall. Prefer a Postgres wire handshake (SSLRequest -> N/S/E).
+ *
+ * Cloudflare SSH local-forwards often need 1–3s for the first wire reply even
+ * when 127.0.0.1 TCP is immediate. 500ms was a false-negative on a healthy
+ * K3s DEV Postgres (firstByte 'N') via project-truth-hris. Override with
+ * PROJECT_TRUTH_PG_HANDSHAKE_TIMEOUT_MS when needed.
  */
-function canConnectPostgres(port, host, timeoutMs = 500) {
+function defaultPostgresHandshakeTimeoutMs() {
+	const raw = Number(process.env.PROJECT_TRUTH_PG_HANDSHAKE_TIMEOUT_MS || 5000);
+	if (!Number.isFinite(raw) || raw < 250) return 5000;
+	return Math.min(Math.floor(raw), 30000);
+}
+
+function canConnectPostgres(port, host, timeoutMs = defaultPostgresHandshakeTimeoutMs()) {
 	return new Promise((resolve) => {
 		const socket = net.createConnection({ port, host });
 		let settled = false;
@@ -83,7 +93,7 @@ function canConnectPostgres(port, host, timeoutMs = 500) {
 /** Fast fail: TCP first (250ms), Postgres wire only if TCP is open. */
 async function canUseLocalPostgres(port) {
 	if (!(await canConnect(port, "127.0.0.1", 250))) return false;
-	return canConnectPostgres(port, "127.0.0.1", 500);
+	return canConnectPostgres(port, "127.0.0.1", defaultPostgresHandshakeTimeoutMs());
 }
 
 function runPowerShell(args) {

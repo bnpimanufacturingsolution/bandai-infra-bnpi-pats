@@ -69,8 +69,24 @@ function Test-TcpConnect {
   }
 }
 
+function Get-PostgresHandshakeTimeoutMs {
+  # Cloudflare SSH local-forwards often need 1–3s for the first Postgres wire
+  # reply even when 127.0.0.1 TCP is immediate. 500ms false-failed healthy DEV.
+  $raw = 0
+  if (-not [int]::TryParse($env:PROJECT_TRUTH_PG_HANDSHAKE_TIMEOUT_MS, [ref]$raw)) {
+    return 5000
+  }
+  if ($raw -lt 250) { return 5000 }
+  if ($raw -gt 30000) { return 30000 }
+  return $raw
+}
+
 function Test-PostgresHandshake {
-  param([string]$HostName, [int]$Port, [int]$TimeoutMs = 500)
+  param(
+    [string]$HostName,
+    [int]$Port,
+    [int]$TimeoutMs = (Get-PostgresHandshakeTimeoutMs)
+  )
   try {
     $client = [System.Net.Sockets.TcpClient]::new()
     $async = $client.BeginConnect($HostName, $Port, $null, $null)
@@ -126,11 +142,13 @@ if (-not (Test-Path -LiteralPath $sshKey)) {
   throw "SSH key not found at $sshKey"
 }
 
+$pgHandshakeTimeoutMs = Get-PostgresHandshakeTimeoutMs
+
 # --- WARM PATH: no PowerShell SSH, no Cloudflare ---
 Write-K8sDbProgress "probe 127.0.0.1:$LocalPort (reuse if open)..."
 if (Test-TcpConnect -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 250) {
-  if (-not (Test-PostgresHandshake -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 500)) {
-    Write-K8sDbProgress "127.0.0.1:$LocalPort accepts TCP but did not answer Postgres handshake; not reusing stale listener"
+  if (-not (Test-PostgresHandshake -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs $pgHandshakeTimeoutMs)) {
+    Write-K8sDbProgress "127.0.0.1:$LocalPort accepts TCP but did not answer Postgres handshake within ${pgHandshakeTimeoutMs}ms; not reusing stale listener"
     Stop-ExistingForward
   } else {
   $reuseRecord = [pscustomobject]@{
@@ -230,6 +248,38 @@ if ($listening) {
   try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
   throw "K3s DEV DB forward did not open 127.0.0.1:$LocalPort within ${maxWaitSec}s via $selectedPath. stderr: $stderrText"
 }
+
+# TCP listen is not enough through Cloudflare SSH: wait for a real Postgres
+# wire reply before declaring the forward usable by Prisma/predev.
+$pgReady = $false
+$pgTimer = [System.Diagnostics.Stopwatch]::StartNew()
+$pgMaxWaitSec = [Math]::Max(8, [Math]::Ceiling($pgHandshakeTimeoutMs / 1000.0) + 5)
+$pgLastTick = -1
+do {
+  $process.Refresh()
+  if ($process.HasExited) { break }
+  if (Test-PostgresHandshake -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs $pgHandshakeTimeoutMs) {
+    $pgReady = $true
+    break
+  }
+  $sec = [int][math]::Floor($pgTimer.Elapsed.TotalSeconds)
+  if ($sec -ne $pgLastTick -and $sec -gt 0) {
+    Write-K8sDbProgress "waiting for Postgres handshake on 127.0.0.1:$LocalPort ($sec/${pgMaxWaitSec}s)..."
+    $pgLastTick = $sec
+  }
+  Start-Sleep -Milliseconds 200
+} while ($pgTimer.Elapsed.TotalSeconds -lt $pgMaxWaitSec)
+
+if (-not $pgReady) {
+  $stderrText = Get-Content -Raw -LiteralPath $stderrPath -ErrorAction SilentlyContinue
+  try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
+  if ($process.HasExited) {
+    throw "K3s DEV DB forward ssh exited before Postgres handshake on 127.0.0.1:$LocalPort. stderr: $stderrText"
+  }
+  throw "K3s DEV DB forward opened TCP on 127.0.0.1:$LocalPort but Postgres handshake failed within ${pgMaxWaitSec}s via $selectedPath (timeout ${pgHandshakeTimeoutMs}ms). Confirm dev/hris-postgres is Ready and 10.43.130.9:5432 answers from the VM. stderr: $stderrText"
+}
+
+Write-K8sDbProgress ("POSTGRES OK after {0:N1}s handshake via $selectedPath" -f $pgTimer.Elapsed.TotalSeconds)
 
 $record = [pscustomobject]@{
   GeneratedAt = (Get-Date).ToString('o')
