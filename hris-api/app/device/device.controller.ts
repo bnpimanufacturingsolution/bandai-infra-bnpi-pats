@@ -61,6 +61,7 @@ import {
 import {
 	applyMergeChoices,
 	buildDeviceUserMergePlan,
+	serializeDeviceUserMergePlanForReview,
 	type DeviceUserMergeField,
 	type DeviceUserMergeRecord,
 } from "../../helper/device-user-merge.helper";
@@ -9674,7 +9675,11 @@ export const controller = (prisma: PrismaClient) => {
 				req,
 			});
 			res.status(200).json(
-				buildSuccessResponse("SDK user merge plan ready", { planId, plan }, 200),
+				buildSuccessResponse(
+					"SDK user merge plan ready",
+					{ planId, plan: serializeDeviceUserMergePlanForReview(plan) },
+					200,
+				),
 			);
 		} catch (error: any) {
 			res.status(error?.statusCode || 500).json(

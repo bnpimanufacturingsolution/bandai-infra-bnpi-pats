@@ -308,6 +308,44 @@ export const buildDeviceUserMergePlan = (params: {
 	};
 };
 
+const compactMergeRecordForReview = (record: DeviceUserMergeRecord) => {
+	const summary = credentials(record);
+	return {
+		...record,
+		rawPayload: {
+			numOfFP: summary.fingerprintCount,
+			numOfFace: summary.faceCount,
+			numOfCard: summary.cardCount,
+		},
+	};
+};
+
+/**
+ * Keep raw SDK payloads in the server-side plan used by apply, but never repeat
+ * biometric template material in the browser review response. The former
+ * unionUsers/onlyOnOneDevice/missingHrisLinks aliases duplicated the complete
+ * user array during JSON serialization and made large six-panel plans unsafe to
+ * inspect or download.
+ */
+export const serializeDeviceUserMergePlanForReview = (plan: any) => ({
+	deviceIds: plan.deviceIds || [],
+	devices: plan.devices || [],
+	users: (plan.users || []).map((user: DeviceUserMergeGroup) => ({
+		...user,
+		records: (user.records || []).map(compactMergeRecordForReview),
+	})),
+	ambiguousMatches: (plan.ambiguousMatches || []).map((match: any) => ({
+		...match,
+		record: match?.record ? compactMergeRecordForReview(match.record) : match?.record,
+	})),
+	unreachableDevices: plan.unreachableDevices || [],
+	sdkErrors: plan.sdkErrors || [],
+	plannedWrites: plan.plannedWrites || [],
+	unresolvedDecisions: plan.unresolvedDecisions || [],
+	counts: plan.counts || {},
+	errors: plan.errors || [],
+});
+
 export const applyMergeChoices = (
 	plan: ReturnType<typeof buildDeviceUserMergePlan>,
 	params: {

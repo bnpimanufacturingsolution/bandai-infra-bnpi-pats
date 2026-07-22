@@ -1,5 +1,9 @@
 import { expect } from "chai";
-import { applyMergeChoices, buildDeviceUserMergePlan } from "../helper/device-user-merge.helper";
+import {
+	applyMergeChoices,
+	buildDeviceUserMergePlan,
+	serializeDeviceUserMergePlanForReview,
+} from "../helper/device-user-merge.helper";
 
 const record = (deviceId: string, patch: any = {}) => ({
 	deviceId,
@@ -230,5 +234,35 @@ describe("device user union merge", () => {
 			"fingerprint",
 			"card",
 		]);
+	});
+
+	it("serializes a compact review plan without SDK biometric payloads or duplicate aliases", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					rawPayload: {
+						numOfFP: 2,
+						numOfFace: 1,
+						numOfCard: 1,
+						fingerprints: ["sensitive-template"],
+						faceData: "sensitive-face",
+					},
+				}),
+			],
+		});
+		const review = serializeDeviceUserMergePlanForReview(plan) as any;
+
+		expect(review).not.to.have.property("unionUsers");
+		expect(review).not.to.have.property("onlyOnOneDevice");
+		expect(review).not.to.have.property("missingHrisLinks");
+		expect(review.users[0].rawPayload).to.equal(undefined);
+		expect(review.users[0].records[0].rawPayload).to.deep.equal({
+			numOfFP: 2,
+			numOfFace: 1,
+			numOfCard: 1,
+		});
+		expect(JSON.stringify(review)).not.to.include("sensitive-template");
+		expect(JSON.stringify(review)).not.to.include("sensitive-face");
 	});
 });
