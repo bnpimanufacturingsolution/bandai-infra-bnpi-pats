@@ -1,5 +1,43 @@
 # Current Task
 
+## Latest Task Addendum - 2026-07-22 Merge Users Overnight Loop Terminal Evidence
+
+- Task mode: mixed live runtime ownership, backend merge-job repair, admin UX hardening, and evidence handoff.
+- Runtime status:
+  - Local API `http://localhost:3001` is healthy after restart and admin login works.
+  - DEV Postgres forward remains on `127.0.0.1:55435`.
+  - Hikvision local tunnels for `.20/.21/.22/.23` remain active; Cloudflare was not disabled.
+  - The original in-memory job `a9d3acf7-7dee-406a-9198-c413fbd699d4` and fast retry job `8498a8cf-81a8-42b1-b836-6f77ca9323ca` are no longer pollable after API restart, so completion was not invented.
+- Job/run truth:
+  - Fast retry job `8498a8cf-81a8-42b1-b836-6f77ca9323ca` processed `2813/2813` observed writes before terminal `failed` at reread/finalize with `Cannot read properties of undefined (reading 'counts')`.
+  - Last honest live processing evidence before failure showed `successfulWrites=366` and `failedWrites=2447`; the terminal failed response collapsed failed writes and is not copy-row truth.
+  - Fresh six-device plan after restart returned `852` unique IDs, `3715` source/device records, `needsDecisionIds=0`, `4260` all planned writes, `1235` conflicts, `1397` missing, and `51` missing HRIS links. This proves the original selected Needs-decision scope was consumed/resolved, but it does not prove all devices are synced.
+  - Fresh four-device plan for the VM-reachable `.20/.21/.22/.23` devices returned `687` unique IDs, `2748` source/device records, `needsDecisionIds=0`, `2061` all planned writes, `952` conflicts, `0` missing, and `47` missing HRIS links.
+- Backend repair:
+  - Reread finalization now accepts both plan shapes (`reread.counts` or `reread.plan.counts`) instead of crashing on `counts`.
+  - Merge job failure catch now preserves latest processed/success/failed write counts instead of resetting to one failed row.
+  - Merge job progress/list responses now expose grouped copy failure summary by source/target and error family.
+  - VM manual-copy SDK preflight/spec generation now bypasses the Windows-local tunnel map and uses physical saved endpoints for the VM-side SDK copy lane.
+- UI repair:
+  - Failed merge monitor shows grouped `Copy failures by path`.
+  - Locked monitor remains non-editable when a job exists and keeps selected unique IDs separate from peer copy attempts.
+- Evidence:
+  - Evidence root: `.runtime/merge-users-final-run-20260722-042955/`.
+  - Fresh plan summary: `fresh-plan-after-restart-corrected-summary-20260721235344.json`.
+  - Four-device plan summary: `fresh-four-direct-plan-summary-20260722-080903.json`.
+  - Failure grouping: `copy-failure-latest-events-summary-20260722-075633.json`.
+  - VM physical SDK proof: `vm-physical-sdk-preflight-simple-20260722-075847.json` (`.20-.23` OK, TEST A/B `.109/.110` failed).
+  - Browser proof: `browser-merge-monitor-proof/summary.json` and `merge-monitor-proof.png`.
+- Validation:
+  - `hris-api`: `npx.cmd tsc --noEmit --pretty false --incremental false --listFiles false` passed.
+  - `hris-api`: `npx.cmd tsx node_modules/mocha/bin/mocha --no-config tests/hikvision-biometric-sync-contract.spec.ts` passed (`16` passing).
+  - `hris-app`: `npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts` passed.
+  - `hris-app`: `npx.cmd eslint app/routes/admin/devices/enroll.tsx --max-warnings=999` had `0` errors with existing warnings only.
+- Boundary:
+  - Do not claim all `852` unique IDs are fully synced.
+  - Do not claim fingerprint/face bytes are fixed from counts.
+  - Do not start a blind six-device retry: current plan has `needsDecisionIds=0`, remaining conflicts/missing require targeted repair, and TEST A/B SDK ports are not reachable from the VM manual-copy lane.
+
 ## Latest Task Addendum - 2026-07-22 Merge users unique-row frontend drift repair
 
 - Task mode: Focused admin UX truth repair.

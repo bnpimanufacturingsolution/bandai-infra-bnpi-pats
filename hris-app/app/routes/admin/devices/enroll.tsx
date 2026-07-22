@@ -2345,6 +2345,13 @@ export function DeviceEnrollmentPanel({
 	const sdkMergeJobSourceRows = sdkMergeJobWriteMatrix?.perSource || [];
 	const sdkMergeJobResults = effectiveSdkMergeJob?.results || [];
 	const sdkMergeJobProgressEvents = effectiveSdkMergeJob?.progressEvents || [];
+	const sdkMergeJobCopyFailureSummary = effectiveSdkMergeJob?.copyFailureSummary;
+	const sdkMergeJobCopyFailurePairs = Object.entries(
+		sdkMergeJobCopyFailureSummary?.byPair || {},
+	)
+		.map(([pair, count]) => ({ pair, count: Number(count || 0) }))
+		.sort((a, b) => b.count - a.count)
+		.slice(0, 6);
 	const sdkMergeJobHasTelemetry = Boolean(
 		effectiveSdkMergeJob?.updatedAt || sdkMergeJobProgressEvents.length > 0,
 	);
@@ -2400,9 +2407,16 @@ export function DeviceEnrollmentPanel({
 			? sdkMergeJobHasTelemetry
 				? "The UI is polling the backend job. Applied and Needs attention move only after each target copy returns, then HRIS rereads devices to verify the result."
 				: "This job was started before detailed merge telemetry was available. The UI is polling, but the backend has not returned per-target results or a live heartbeat for this job."
-			: `${mergeMetricValue(effectiveSdkMergeJob.successfulWrites)} writes applied, ${mergeMetricValue(
-					effectiveSdkMergeJob.failedWrites,
-				)} need attention.`
+			: effectiveSdkMergeJob.status === "failed" &&
+				  Number(sdkMergeJobCopyFailureSummary?.total || 0) > 0
+				? `${mergeMetricValue(effectiveSdkMergeJob.successfulWrites)} writes applied; ${mergeMetricValue(
+						effectiveSdkMergeJob.failedWrites,
+					)} need attention. Backend grouped ${mergeMetricValue(
+						sdkMergeJobCopyFailureSummary?.total || 0,
+					)} copy failures by source and target.`
+				: `${mergeMetricValue(effectiveSdkMergeJob.successfulWrites)} writes applied, ${mergeMetricValue(
+						effectiveSdkMergeJob.failedWrites,
+					)} need attention.`
 		: "";
 	const keepSdkMergeCurrent = (row: SdkMergeIssueRow) => {
 		const fields = row.conflictFields?.length
@@ -7469,6 +7483,30 @@ export function DeviceEnrollmentPanel({
 								<p className="mt-2 text-xs text-red-800">
 									{effectiveSdkMergeJob.error}
 								</p>
+							) : null}
+							{sdkMergeJobCopyFailurePairs.length > 0 ? (
+								<div className="mt-3 overflow-hidden rounded-md border border-white/80 bg-white">
+									<div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+										<p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+											Copy failures by path
+										</p>
+										<p className="mt-0.5 text-xs text-slate-600">
+											Grouped from backend progress. Latest rows below may be capped.
+										</p>
+									</div>
+									{sdkMergeJobCopyFailurePairs.map((item) => (
+										<div
+											key={item.pair}
+											className="grid grid-cols-[minmax(0,1fr)_80px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+											<span className="min-w-0 break-words font-medium text-slate-950">
+												{item.pair}
+											</span>
+											<span className="text-right font-semibold text-slate-950">
+												{mergeMetricValue(item.count)}
+											</span>
+										</div>
+									))}
+								</div>
 							) : null}
 							{sdkMergeJobResults.length > 0 ? (
 								<div className="mt-3 overflow-hidden rounded-md border border-white/80 bg-white">

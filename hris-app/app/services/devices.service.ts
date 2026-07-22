@@ -652,6 +652,19 @@ export interface DeviceUserMergeJobProgress {
 		strategy?: string | null;
 		error?: string | null;
 	}>;
+	copyFailureSummary?: {
+		total?: number;
+		byPair?: Record<string, number>;
+		byError?: Record<string, number>;
+		latest?: {
+			userKey?: string | null;
+			vendorUserId?: string | null;
+			source?: string;
+			target?: string;
+			error?: string;
+			at?: string;
+		};
+	};
 	progressEvents?: Array<{
 		stage?: string;
 		message?: string;

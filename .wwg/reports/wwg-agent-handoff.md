@@ -1,5 +1,21 @@
 # WWG Agent Handoff
 
+## 2026-07-22 - Merge Users Overnight Loop Terminal Evidence
+
+- Status: `PARTIALLY_FULFILLED_WITH_REAL_DEVICE_BOUNDARY`.
+- Task mode: mixed live runtime ownership, backend merge-job repair, admin UX hardening, and evidence handoff.
+- Runtime truth: local API is healthy after restart, admin login works, DEV DB forward remains `127.0.0.1:55435`, and the `.20/.21/.22/.23` Hikvision tunnels remain active. Cloudflare was not disabled. The optional TEST A/B listener/bridge helper still reports a recoverable 502/SSH issue, but API/DB/four-device tunnels are healthy.
+- Job truth: fast retry job `8498a8cf-81a8-42b1-b836-6f77ca9323ca` reached `processedWrites=2813/2813` before reread/finalize failed with `Cannot read properties of undefined (reading 'counts')`. The last honest processing poll showed `successfulWrites=366` and `failedWrites=2447`; the terminal failed payload collapsed failed writes and must not be used as copy-row truth.
+- Fresh backend truth after restart: the six-device merge plan returned `852` unique IDs, `3715` source/device records, `needsDecisionIds=0`, `4260` all planned writes, `1235` conflicts, `1397` missing, and `51` missing HRIS links. This proves the original selected Needs-decision scope was consumed/resolved, but it does not prove all six devices are synced.
+- Fresh four-device truth for the VM-reachable `.20/.21/.22/.23` devices returned `687` unique IDs, `2748` source/device records, `needsDecisionIds=0`, `2061` all planned writes, `952` conflicts, `0` missing, and `47` missing HRIS links. This narrows the remaining device-record missing issue to TEST A/B participation in the six-device scope, but the four-device conflicts/link gaps still need reviewed handling.
+- Backend repaired: reread finalization now accepts the actual plan shape instead of crashing on `counts`; failed jobs preserve latest processed/success/failed counts; progress/list responses expose grouped copy failure summaries; VM manual-copy SDK preflight/spec generation bypasses the Windows-local tunnel map and uses physical saved endpoints for VM-side copy.
+- Failure pattern: capped progress evidence deduped `213` copy-error events, led by D to C (`35`), D to A (`33`), and D to TEST B (`31`). Root samples included timeout circuit skips and `VM cannot reach 127.0.0.1:18003 before SDK login`, which the resolver patch addresses for `.20-.23`.
+- VM SDK reachability proof: `ssh project-truth-hris` showed `.20/.21/.22/.23:8000` OK, while TEST A/B `192.168.254.109/.110:8000` failed. A blind six-device retry is not safe.
+- UI proof: Playwright with a stubbed failed job response verified the modal shows locked scope, `569` selected unique IDs, `2,845` peer copy attempts, grouped copy failures by path, no editable review controls, and no `Preview only` wording while a job exists.
+- Validation: API typecheck passed; `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` passed (`16` passing); Device Users UI contract passed; targeted `enroll.tsx` ESLint had `0` errors with existing warnings only.
+- Evidence root: `.runtime/merge-users-final-run-20260722-042955/`.
+- Important boundary: do not claim all `852` unique IDs are fully synced; do not claim fingerprint/face bytes are fixed from counts; do not retry the six-device job blindly until TEST A/B VM SDK reachability or a scoped non-TEST remaining plan is explicitly reviewed.
+
 ## 2026-07-22 - Merge users unique-row frontend drift repair
 
 - Status: `COMPLETE_LOCAL_API_AND_STATIC_UI_PROOF`.

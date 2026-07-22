@@ -40,8 +40,20 @@ function Get-VmSshCandidates {
 function Select-VmSshCandidate {
   foreach ($candidate in Get-VmSshCandidates) {
     $args = @('-o', 'ConnectTimeout=5', '-o', 'BatchMode=yes') + @($candidate.Args) + @('echo SSH_OK')
-    $out = & ssh.exe @args 2>$null
-    if ($LASTEXITCODE -eq 0 -and (($out | Out-String) -match 'SSH_OK')) {
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $out = $null
+    $exitCode = 1
+    try {
+      $out = & ssh.exe @args 2>$null
+      $exitCode = $LASTEXITCODE
+    } catch {
+      $out = $_
+      $exitCode = 1
+    } finally {
+      $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($exitCode -eq 0 -and (($out | Out-String) -match 'SSH_OK')) {
       Write-Host "Using VM SSH target $($candidate.Label)"
       return $candidate
     }
@@ -223,10 +235,20 @@ $verifyPorts = @($records | ForEach-Object {
   $_.RuntimeConfigHint.hikvisionRuntimePort
   $_.RuntimeConfigHint.hikvisionSdkRuntimePort
 } | Sort-Object -Unique)
-$verifyPattern = ($verifyPorts | ForEach-Object { [string]$_ }) -join '|'
-$verifyArgs = @($sshCandidate.Args) + @("ss -ltn | grep -E ':($verifyPattern)[[:space:]]'")
+$verifyPortList = ($verifyPorts | ForEach-Object { [string]$_ }) -join ' '
+$verifyScript = @'
+for p in __PORTS__; do
+  if ss -ltn | grep -Eq ":${p}[[:space:]]"; then
+    printf '%s|ok\n' "$p"
+  else
+    printf '%s|missing\n' "$p"
+  fi
+done
+'@.Replace('__PORTS__', $verifyPortList)
+$verifyArgs = @($sshCandidate.Args) + @($verifyScript)
 $verifyOutput = & ssh.exe @verifyArgs 2>&1
-if ($LASTEXITCODE -ne 0) {
+$missingPorts = @($verifyOutput | Where-Object { "$_" -match '\|missing$' })
+if ($LASTEXITCODE -ne 0 -or $missingPorts.Count -gt 0) {
   Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
   throw "SSH bridge started but VM did not expose the forwarded ports. ${verifyOutput}"
 }
