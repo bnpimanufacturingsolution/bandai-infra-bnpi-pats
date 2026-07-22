@@ -2304,3 +2304,30 @@ Status: IMPLEMENTED + PROVEN â€” Device admin UX clarity (friendly status, 
 - Remaining gaps: no safe merge retry has been started; TEST A/B final reread remains blocked by fetch failures/TEST A SDK-login boundary, Main D plan path needs a clean reread after health proof, the API restarted during one A-D plan attempt, and listener logs show some invalid biometric reconcile retries with empty `sourceDeviceId`/`employeeNo` rejected by API 400. No SDK files were deleted and Cloudflare was not disabled.
 - Final non-mutating poll in this turn: `.runtime/merge-users-final-run-20260722-042955/fresh-main-a-d-plan-after-d-live-read-20260722-152629/operator-summary.json` still returned `validForFinalCounts=false`, `unionUsers=748`, `sourceRows=1435`, `plannedWrites=2244`, with Main Entrance D `Unauthorized` and Main Entrance B `Unauthorized`. This reinforces the no-write boundary: listener receiving does not equal merge-plan final-count readiness.
 
+# Latest Task Addendum - 2026-07-22 Active Merge Job 77df35c4 Live Watch
+
+- Task mode: mixed live-device operations, running-job observability, frontend polish/hardening, and evidence capture.
+- Original requested job `a9d3acf7-7dee-406a-9198-c413fbd699d4` remains expired/404 and must not be marked complete.
+- A new live merge job appeared in the API and is being watched: `77df35c4-6c9b-4a68-9201-8ffc71fcb14b`, plan `328f5da4-71bd-4619-a281-05aaac6329e5`, started `2026-07-22T07:34:04.123Z`. This job was not started by this agent turn.
+- Scope warning: backend `writeMatrix` for the active job says `selectedUniqueIds=852` and `totalWrites=2551`, not the earlier intended `569 selected needs-decision IDs / 2845 peer copy attempts`. Treat this as a real scope mismatch requiring final documentation, not as corrected truth.
+- Live progress proof is saved continuously under `.runtime/merge-users-final-run-20260722-042955/active-job-77df35c4-6c9b-4a68-9201-8ffc71fcb14b/` (`poll-*.json` and `polls-robust.jsonl`). Polls expose current employee, source, target(s), credential stages, backend stage, `updatedAt`, applied writes, and failed writes.
+- Current observed trajectory during this handoff window: job advanced through employees including `469`, `1340`, `7`, `9`, `927`, `1615`, and `11`; failures increased from timeout/circuit-skip paths such as `Main Entrance Device E -> Main Entrance Device C/F`. Do not hide these as success.
+- Frontend polish/hardening: running merge modal now shows a `Live copy now` block from backend `progressEvents` with Employee now, Source, Targets, Credential stage, and a `Latest backend events` list. Browser proof `.runtime/merge-users-final-run-20260722-042955/browser-merge-live-work-20260722-1545/operator-proof.json` proves the modal shows running job state, locked scope, selected unique IDs, peer copy attempts, live event rows, and no editable pre-run review controls.
+- Validation after patches: `hris-app npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts` passed; targeted frontend ESLint for `events.tsx`/`enroll.tsx` passed with 0 errors and existing warnings; `hris-api npx tsc --noEmit --pretty false --incremental false --listFiles false` passed after literal biometric-status hardening in `device.controller.ts`.
+- Runtime health: API health stayed green, DB forward was checked on `127.0.0.1:55435`, and Cloudflare was not disabled. A transient watcher 503 and one DB-forward blip were recorded; subsequent polls recovered.
+- Finish line remains open: keep polling until job terminal, then run fresh non-mutating reread/merge plan for the same devices and document remaining conflicts, missing users, fingerprint gaps, face gaps, failed rows, and any no-raw/device limitations without invented completion.
+
+# Latest Task Addendum - 2026-07-22 Merge Job 77df35c4 Terminal Failed-Stale
+
+- Terminal status: live job `77df35c4-6c9b-4a68-9201-8ffc71fcb14b` reached `status=failed`, `currentStage=failed_stale`, `processedWrites=428`, `successfulWrites=361`, `failedWrites=67`, `totalWrites=2551`. Evidence: `.runtime/merge-users-final-run-20260722-042955/active-job-77df35c4-6c9b-4a68-9201-8ffc71fcb14b/terminal-poll-20260722-155537.json`.
+- Failure reason from backend: `Merge job interrupted (stale processing snapshot). Worker not active in this API process.` The API had restarted; do not claim completion.
+- Failure grouping from merge ledger: 67 failures = 56 circuit skips, 9 timeouts, 2 other errors. By pair: E -> F 31, E -> C 31, B -> E 3, B -> C 1, B -> F 1. Evidence: `.runtime/merge-ledger/77df35c4-6c9b-4a68-9201-8ffc71fcb14b/failure.jsonl`.
+- Fresh non-mutating post-failure rereads were run by pair because the four-device plan exceeded/closed the request boundary. Evidence root: `.runtime/merge-users-final-run-20260722-042955/pair-rereads-after-77df35c4-failed-stale-20260722-1559/`.
+- Post-failure pair truth:
+  - E-C: both devices read `740`, `missing=0`, `plannedWrites=0`; aligned for presence, conflicts remain `588`.
+  - E-F: E `740`, F `687`, `unionUsers=852`, `missing=277`, `plannedWrites=277`.
+  - B-E: B `687`, E `740`, `missing=53`, `plannedWrites=53`.
+  - B-C: B `687`, C `740`, `missing=53`, `plannedWrites=53`.
+  - B-F: B `687`, F `687`, `unionUsers=837`, `missing=300`, `plannedWrites=300`.
+- Safe retry boundary: backend provided no `retryPlanId`; the running job scope was already a mismatch (`852/2551` vs intended `569/2845`), and fresh plans still include conflicts/source-choice decisions. Do not start a new write retry automatically from guessed choices. A safe retry needs a reviewed remaining-scope plan or backend-generated retry plan.
+

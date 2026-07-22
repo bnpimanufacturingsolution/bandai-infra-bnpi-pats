@@ -116,6 +116,13 @@ describe("Hikvision biometric sync contract", () => {
 		expect(wrapper).to.include('cmd+=(--seconds "${HIKVISION_RUN_SECONDS:-1}")');
 	});
 
+	it("gives the live SDK merge inventory plan the heavy-request timeout budget", () => {
+		const router = routerSource();
+		expect(router).to.include('"/hikvision/sdk-users/merge/plan"');
+		expect(router).to.include('label: "hikvision-sdk-user-merge-plan"');
+		expect(router).to.include("timeoutMs: config.heavyRequestTimeoutMs");
+	});
+
 	it("supports scoped device-user export and gated import execute without plaintext biometric custody", () => {
 		const router = routerSource();
 		const controller = controllerSource();

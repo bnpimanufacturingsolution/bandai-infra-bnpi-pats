@@ -41,9 +41,44 @@ function Get-RepoApiProcesses {
 
 function Stop-RepoApiProcesses {
 	$processes = @(Get-RepoApiProcesses)
-	foreach ($proc in $processes) {
-		Write-Host "[local-api-restart] Stopping PID $($proc.ProcessId)"
-		taskkill /PID $proc.ProcessId /T /F | Out-Null
+	if ($processes.Count -eq 0) { return }
+
+	# Killing only the listening index.ts child leaves tsx-watch/dotenv alive;
+	# those parents can respawn an old worker in the middle of a durable job.
+	# Walk upward through this repo's known dev-watch chain and kill only its
+	# highest roots so the entire tree exits exactly once.
+	$all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+	$byId = @{}
+	foreach ($candidate in $all) { $byId[[int]$candidate.ProcessId] = $candidate }
+	$treeIds = [System.Collections.Generic.HashSet[int]]::new()
+	foreach ($proc in $processes) { [void]$treeIds.Add([int]$proc.ProcessId) }
+
+	$changed = $true
+	while ($changed) {
+		$changed = $false
+		foreach ($processId in @($treeIds)) {
+			$current = $byId[$processId]
+			if (-not $current) { continue }
+			$parent = $byId[[int]$current.ParentProcessId]
+			if (-not $parent) { continue }
+			$parentCommand = ([string]$parent.CommandLine).ToLower().Replace("\", "/")
+			$isKnownWatchParent =
+				$parentCommand.Contains("run-dev-api-watch.cjs") -or
+				$parentCommand.Contains("dotenv-cli/cli.js") -or
+				($parent.Name -eq "cmd.exe" -and $parentCommand.Contains("dotenv") -and $parentCommand.Contains("run-dev-api-watch.cjs"))
+			if ($isKnownWatchParent -and $treeIds.Add([int]$parent.ProcessId)) {
+				$changed = $true
+			}
+		}
+	}
+
+	$roots = @($treeIds | Where-Object {
+		$current = $byId[[int]$_]
+		-not $current -or -not $treeIds.Contains([int]$current.ParentProcessId)
+	})
+	foreach ($processId in $roots) {
+		Write-Host "[local-api-restart] Stopping API watch tree root PID $processId"
+		taskkill /PID $processId /T /F | Out-Null
 	}
 }
 

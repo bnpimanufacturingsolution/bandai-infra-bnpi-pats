@@ -1872,6 +1872,7 @@ class DevicesService extends APIService {
 			const response = await hrisApiClient.post<any>(
 				"/api/device/hikvision/sdk-users/merge/plan",
 				payload,
+				{ timeoutMs: 300_000 },
 			);
 			const data = response.data?.data || response.data;
 			if (!data?.planId || !data?.plan)

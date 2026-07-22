@@ -96,11 +96,44 @@ describe("device user union merge", () => {
 			deviceIds: ["a", "b", "c"],
 			records: [
 				record("a", { rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 1 } }),
-				record("b", { rawPayload: { numOfFP: 3, numOfFace: 1, numOfCard: 1 } }),
+				record("b", {
+					rawPayload: { numOfFP: 3, numOfFace: 1, numOfCard: 1 },
+					biometricEvidence: {
+						fingerprint: { status: "raw_blob_present", reportedCount: 3, rawBlobCount: 3 },
+						face: { status: "raw_blob_present", reportedCount: 1, rawBlobPresent: true },
+					},
+				}),
 			],
 		});
 		expect(plan.users[0].sourceDeviceId).to.equal("b");
-		expect(plan.users[0].targetDeviceIds).to.deep.equal(["a", "c"]);
+		// Device a already has the ID. Only the evidenced missing record on c is a write.
+		expect(plan.users[0].targetDeviceIds).to.deep.equal(["c"]);
+	});
+
+	it("does not use enrollment counts as portable biometric custody evidence", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records: [
+				record("a", {
+					displayName: null,
+					rawPayload: { numOfFP: 9, numOfFace: 2 },
+					biometricEvidence: {
+						fingerprint: { status: "missing_raw_blob", reportedCount: 9, rawBlobCount: 0 },
+						face: { status: "missing_raw_blob", reportedCount: 2, rawBlobPresent: false },
+					},
+				}),
+				record("b", {
+					rawPayload: { numOfFP: 1, numOfFace: 1 },
+					biometricEvidence: {
+						fingerprint: { status: "raw_blob_present", reportedCount: 1, rawBlobCount: 1 },
+						face: { status: "raw_blob_present", reportedCount: 1, rawBlobPresent: true },
+					},
+				}),
+			],
+		});
+
+		expect(plan.users[0].sourceDeviceId).to.equal("b");
+		expect(plan.users[0].targetDeviceIds).to.deep.equal(["c"]);
 	});
 
 	it("is idempotent for identical repeated reads", () => {

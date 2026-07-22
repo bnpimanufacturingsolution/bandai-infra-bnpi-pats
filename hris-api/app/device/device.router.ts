@@ -135,7 +135,14 @@ export const router = (route: Router, controller: IController): Router => {
 		}),
 		controller.copyHikvisionDeviceUserToPeer,
 	);
-	routes.post("/hikvision/sdk-users/merge/plan", controller.planHikvisionSdkUserMerge);
+	routes.post(
+		"/hikvision/sdk-users/merge/plan",
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "hikvision-sdk-user-merge-plan",
+		}),
+		controller.planHikvisionSdkUserMerge,
+	);
 	routes.post("/hikvision/sdk-users/merge/apply", controller.applyHikvisionSdkUserMerge);
 	routes.post("/hikvision/sdk-users/merge/jobs", controller.startHikvisionSdkUserMergeJob);
 	routes.get("/hikvision/sdk-users/merge/jobs", controller.listHikvisionSdkUserMergeJobs);

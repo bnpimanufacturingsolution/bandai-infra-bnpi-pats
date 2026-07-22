@@ -953,3 +953,35 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Remaining real gaps: TEST A/TEST B are not final-reread-clean; Main Entrance D needs a clean merge-plan reread after the health proof; the listener/API log contains invalid biometric reconcile retries rejected with 400 because `sourceDeviceId` and `employeeNo` are empty; no safe retry write job was started. Cloudflare stayed active and no SDK files were deleted.
 - Final non-mutating reread before handoff: `.runtime/merge-users-final-run-20260722-042955/fresh-main-a-d-plan-after-d-live-read-20260722-152629/operator-summary.json` remained invalid with Main Entrance D `Unauthorized` and Main Entrance B `Unauthorized`; listener receiving state must not be treated as merge-plan readiness.
 
+# 2026-07-22 Active Merge Job 77df35c4 Live Watch Handoff
+
+- Status: `ACTIVE_JOB_RUNNING_NOT_TERMINAL`. Keep watching; do not close out.
+- Original job `a9d3acf7-7dee-406a-9198-c413fbd699d4` is still expired/404. The active job now visible through the API is `77df35c4-6c9b-4a68-9201-8ffc71fcb14b`, plan `328f5da4-71bd-4619-a281-05aaac6329e5`, started `2026-07-22T07:34:04.123Z`. This agent turn did not start that job.
+- Important scope mismatch: active job `writeMatrix` reports `selectedUniqueIds=852` and `totalWrites=2551`. That differs from the previously intended selected scope (`569` needs-decision IDs, `2845` peer copy attempts). Do not rewrite history; document this as the scope of the running job and prove final postcondition from a fresh reread after terminal state.
+- Evidence root: `.runtime/merge-users-final-run-20260722-042955/active-job-77df35c4-6c9b-4a68-9201-8ffc71fcb14b/`. The robust watcher writes full `poll-*.json` files and concise `polls-robust.jsonl`.
+- Live progress observed in this window: backend exposed actual `currentStage`, `currentUserKey`, `updatedAt`, real `processedWrites/successfulWrites/failedWrites`, progress events, and `writeMatrix`. Events proved employees/sources/targets/credential stages such as employee `469` from Main Entrance Device E to B/C/F and employee `1340` from Main Entrance Device B to C/E/F. Later polls showed timeout/circuit-skip failures on Main Entrance Device E to C/F paths.
+- Latest direct poll in this handoff window showed the job still `processing`; progress had advanced past `407/2551`, with failures rising from real timeout/circuit-skip paths. Treat failures as real rows to group after terminal state; do not claim all copies succeeded.
+- Frontend changed: `hris-app/app/routes/admin/devices/enroll.tsx` running merge monitor now shows `Live copy now` from backend `progressEvents` with Employee now, Source, Targets, Credential stage, plus `Latest backend events`. It keeps pre-run review/edit controls hidden while `hasSdkMergeJob` is true.
+- Browser proof: `.runtime/merge-users-final-run-20260722-042955/browser-merge-live-work-20260722-1545/operator-proof.json` and `merge-live-work.png` prove the modal shows Merge job running, live copy now, employee/source/targets/credential stage, selected unique IDs, peer copy attempts, latest backend events, and no editable review controls.
+- Validation: frontend device-user UI contract passed after the UI patch; targeted frontend ESLint passed with 0 errors and existing warnings; API TypeScript passed after hardening the merge-plan biometric status assignment in `device.controller.ts`.
+- Runtime guardrails preserved: API remained healthy, DB forward `127.0.0.1:55435` was rechecked, Cloudflare was not disabled, and no SDK files were deleted. TEST B bridge ports were repaired earlier but TEST B HTTP/ISAPI still timed out and is not final-count proof.
+- Next required loop: keep polling job `77df35c4-6c9b-4a68-9201-8ffc71fcb14b`; if `updatedAt` stalls over 2 minutes, inspect `.runtime/local-api-watch/latest.log`, DB forward, and VM listener logs; if terminal failed, group failed rows by user/source/target/error; if terminal completed/attention, run a fresh non-mutating reread/merge plan for the same devices before claiming any final counts.
+
+# 2026-07-22 Merge Job 77df35c4 Terminal Failed-Stale Handoff
+
+- Status: `TERMINAL_FAILED_STALE_NO_SAFE_AUTO_RETRY`.
+- Terminal poll evidence: `.runtime/merge-users-final-run-20260722-042955/active-job-77df35c4-6c9b-4a68-9201-8ffc71fcb14b/terminal-poll-20260722-155537.json`.
+- Backend terminal state: `status=failed`, `currentStage=failed_stale`, `processedWrites=428`, `successfulWrites=361`, `failedWrites=67`, `totalWrites=2551`, message `Device-user merge worker is no longer active after API restart. Last progress was persisted; start a fresh merge for remaining failures only.`
+- This is not completion. The API restarted and the durable snapshot correctly refused to keep pretending the worker was active.
+- Failed rows were inspected from `.runtime/merge-ledger/77df35c4-6c9b-4a68-9201-8ffc71fcb14b/`: 361 success ledger rows and 67 failure ledger rows. Failure groups: E -> F 31, E -> C 31, B -> E 3, B -> C 1, B -> F 1. Failure status groups: 56 `circuit_skip`, 9 `timeout`, 2 `error`.
+- Fresh four-device B/C/E/F plan after failure closed at the request boundary and was saved as invalid evidence under `.runtime/merge-users-final-run-20260722-042955/fresh-bcef-plan-after-77df35c4-failed-stale-20260722-1556/operator-error.json`.
+- Pair reread evidence root: `.runtime/merge-users-final-run-20260722-042955/pair-rereads-after-77df35c4-failed-stale-20260722-1559/`.
+- Pair reread results after terminal failure:
+  - E-C: valid reread, E `740`, C `740`, `unionUsers=740`, `missing=0`, `plannedWrites=0`, conflicts `588`.
+  - E-F: valid reread, E `740`, F `687`, `unionUsers=852`, `missing=277`, `plannedWrites=277`, conflicts `85`.
+  - B-E: valid reread after DB-forward confirmation, B `687`, E `740`, `missing=53`, `plannedWrites=53`, conflicts `725`.
+  - B-C: valid reread, B `687`, C `740`, `missing=53`, `plannedWrites=53`, conflicts `468`.
+  - B-F: valid reread, B `687`, F `687`, `unionUsers=837`, `missing=300`, `plannedWrites=300`, conflicts `579`.
+- Safe retry boundary: no `retryPlanId` was provided; the active job scope already differed from the intended operator scope; and fresh remaining plans still carry conflicts/source-choice decisions. Do not start another write job by guessing `applyAll` or recommended sources. A safe retry requires a reviewed remaining-scope plan or a backend-generated retry plan that locks only remaining actionable rows.
+- Validation during this pass: API typecheck passed after the biometric status literal hardening; frontend device-user contract passed; targeted frontend ESLint passed with 0 errors and existing warnings. Browser proof of the running modal is under `.runtime/merge-users-final-run-20260722-042955/browser-merge-live-work-20260722-1545/`.
+

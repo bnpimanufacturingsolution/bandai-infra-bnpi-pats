@@ -9584,6 +9584,12 @@ export const controller = (prisma: PrismaClient) => {
 					const saved = savedByVendorId.get(candidate.vendorUserId);
 					const decision = resolveDeviceUserLinkDecision(candidate, employees);
 					const employeeId = saved?.employeeId || decision.employeeId || null;
+					const credentialSummary = extractHikvisionCredentialSummary(
+						candidate.rawPayload || {},
+					);
+					// The merge inventory snapshot is UserInfo/count evidence only. It does
+					// not carry portable fingerprint or face bytes, so this plan must remain
+					// conservative even if a separate HRIS custody workflow has blobs.
 					deviceRecords.push({
 						deviceId: device.id,
 						deviceName: device.name || device.address || device.id,
@@ -9597,6 +9603,24 @@ export const controller = (prisma: PrismaClient) => {
 						doorRight: candidate.doorRight,
 						accessPlan: candidate.accessPlan,
 						rawPayload: candidate.rawPayload,
+						biometricEvidence: {
+							fingerprint: {
+								status:
+									Number(credentialSummary.fingerprintCount || 0) > 0
+										? "missing_raw_blob"
+										: "not_enrolled",
+								reportedCount: Number(credentialSummary.fingerprintCount || 0),
+								rawBlobCount: 0,
+							},
+							face: {
+								status:
+									Number(credentialSummary.faceCount || 0) > 0
+										? "missing_raw_blob"
+										: "not_enrolled",
+								reportedCount: Number(credentialSummary.faceCount || 0),
+								rawBlobPresent: false,
+							},
+						},
 						manualLink: Boolean(
 							saved?.employeeId ||
 								saved?.rawPayload?.hrisSync?.matchReason === "manual_existing",
@@ -9836,7 +9860,6 @@ export const controller = (prisma: PrismaClient) => {
 				1,
 				Math.min(Number(process.env.HIKVISION_MERGE_COPY_TIMEOUT_CIRCUIT_LIMIT || 3), 10),
 			);
-			const copyCredentialStages = ["user", "fingerprint", "face"];
 			const mergeOverlayDeviceUserRow = async (params: {
 				user: any;
 				sourceDevice: any;
@@ -9952,6 +9975,17 @@ export const controller = (prisma: PrismaClient) => {
 					(record) => record.deviceId === sourceDevice.id,
 				);
 				if (!sourceRecord) continue;
+				const includeFingerprints =
+					sourceRecord.biometricEvidence?.fingerprint?.status === "raw_blob_present" &&
+					Number(sourceRecord.biometricEvidence?.fingerprint?.rawBlobCount || 0) > 0;
+				const includeFaceRecognition =
+					sourceRecord.biometricEvidence?.face?.status === "raw_blob_present" &&
+					Boolean(sourceRecord.biometricEvidence?.face?.rawBlobPresent);
+				const copyCredentialStages = [
+					"user",
+					...(includeFingerprints ? ["fingerprint"] : []),
+					...(includeFaceRecognition ? ["face"] : []),
+				];
 				// Batch multi-target: one VM SDK session per unique ID → all remaining peers
 				// (reuses copyHikvisionUserToPeersBatch / PRD copy-to-all path).
 				const candidateTargets = user.targetDeviceIds
@@ -9983,8 +10017,8 @@ export const controller = (prisma: PrismaClient) => {
 							targetDeviceId,
 							targetDeviceName: targetDevice.name || targetDevice.address,
 							credentialStages: copyCredentialStages,
-							includeFingerprints: true,
-							includeFaceRecognition: true,
+							includeFingerprints,
+							includeFaceRecognition,
 							error: circuitError,
 							message: `Skipped timed-out copy path for user ${sourceRecord.vendorUserId} from ${sourceDevice.name || sourceDevice.address || sourceDevice.id} to ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 						});
@@ -10003,8 +10037,8 @@ export const controller = (prisma: PrismaClient) => {
 						targetDeviceId,
 						targetDeviceName: targetDevice.name || targetDevice.address,
 						credentialStages: copyCredentialStages,
-						includeFingerprints: true,
-						includeFaceRecognition: true,
+						includeFingerprints,
+						includeFaceRecognition,
 						batchMultiTarget: true,
 						batchTargetCount: batchTargets.length,
 						message: `Copying user ${sourceRecord.vendorUserId} from ${sourceDevice.name || sourceDevice.address || sourceDevice.id} to ${targetDevice.name || targetDevice.address || targetDeviceId} (batched multi-target).`,
@@ -10021,8 +10055,8 @@ export const controller = (prisma: PrismaClient) => {
 							targetCount: batchTargets.length,
 							targetDeviceIds: batchTargets.map((device) => device.id),
 							credentialStages: copyCredentialStages,
-							includeFingerprints: true,
-							includeFaceRecognition: true,
+							includeFingerprints,
+							includeFaceRecognition,
 							message: `Batch peer copy for user ${sourceRecord.vendorUserId} from ${sourceDevice.name || sourceDevice.address || sourceDevice.id} to ${batchTargets.length} target(s) in one VM SDK session.`,
 						});
 						const batch = await copyHikvisionUserToPeersBatch({
@@ -10031,8 +10065,8 @@ export const controller = (prisma: PrismaClient) => {
 							sourceDevice,
 							targetDevices: batchTargets,
 							employeeNo: sourceRecord.vendorUserId,
-							includeFingerprints: true,
-							includeFaceRecognition: true,
+							includeFingerprints,
+							includeFaceRecognition,
 							onProgress: emitMergeProgress,
 						});
 						for (const batchResult of batch.results || []) {
@@ -10067,8 +10101,8 @@ export const controller = (prisma: PrismaClient) => {
 										batchResult.vmCopy?.strategy ||
 										(batch.summary?.vmSessionCount ? "batch_multi_target" : null),
 									credentialStages: copyCredentialStages,
-									includeFingerprints: true,
-									includeFaceRecognition: true,
+									includeFingerprints,
+									includeFaceRecognition,
 									batchMultiTarget: true,
 									message: `Copied user ${sourceRecord.vendorUserId} to ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 								});
@@ -10101,8 +10135,8 @@ export const controller = (prisma: PrismaClient) => {
 									targetDeviceId,
 									targetDeviceName: targetDevice.name || targetDevice.address,
 									credentialStages: copyCredentialStages,
-									includeFingerprints: true,
-									includeFaceRecognition: true,
+									includeFingerprints,
+									includeFaceRecognition,
 									error: copyErrorMessage,
 									batchMultiTarget: true,
 									message: `Copy failed for user ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
@@ -10159,8 +10193,8 @@ export const controller = (prisma: PrismaClient) => {
 								targetDeviceId,
 								targetDeviceName: targetDevice.name || targetDevice.address,
 								credentialStages: copyCredentialStages,
-								includeFingerprints: true,
-								includeFaceRecognition: true,
+								includeFingerprints,
+								includeFaceRecognition,
 								error: copyErrorMessage,
 								batchMultiTarget: true,
 								message: `Batch copy failed for user ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,

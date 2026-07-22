@@ -268,9 +268,12 @@ const mergeValueIsPopulated = (value: unknown) => {
 };
 
 const mergeRecordRichnessScore = (record: any) => {
+	const rawFingerprintCount = Number(
+		record?.biometricEvidence?.fingerprint?.rawBlobCount || 0,
+	);
+	const rawFacePresent = Boolean(record?.biometricEvidence?.face?.rawBlobPresent);
 	const credentials =
-		mergeCredentialCount(record, "fingerprint") * 6 +
-		mergeCredentialCount(record, "face") * 4 +
+		rawFingerprintCount * 6 + Number(rawFacePresent) * 4 +
 		mergeCredentialCount(record, "card") * 3;
 	const fields = (
 		[
@@ -332,14 +335,26 @@ const mergeCredentialSummaryLabel = (record: any) =>
 
 const mergeRecommendationReason = (row: SdkMergeIssueRow) => {
 	const sourceSummary = mergeCredentialSummaryLabel(row.richestRecord);
+	const fingerprintEvidence = row.richestRecord?.biometricEvidence?.fingerprint;
+	const faceEvidence = row.richestRecord?.biometricEvidence?.face;
 	if (row.filter === "decision") {
-		return `Recommended source: ${row.sourceDeviceName || "selected source"}. It has the strongest combined biometric and identity completeness score for this ID (${sourceSummary}).`;
+		return `Recommended profile source: ${row.sourceDeviceName || "selected source"}. It has the strongest current physical profile and evidenced-custody score for this ID (${sourceSummary}). Enrollment counts alone do not authorize biometric copying.`;
 	}
-	if (row.filter === "fingerprint" || row.filter === "face" || row.filter === "card") {
-		return `Recommended source: ${row.sourceDeviceName || "selected source"}. It has more ${mergeFieldLabel(row.filter).toLowerCase()} than the compared record (${sourceSummary}).`;
+	if (row.filter === "fingerprint") {
+		return fingerprintEvidence?.status === "raw_blob_present"
+			? `Fingerprint source evidenced on ${row.sourceDeviceName || "selected source"}: ${mergeMetricValue(fingerprintEvidence.rawBlobCount || 0)} usable raw template(s).`
+			: `No fingerprint copy is recommended. The panel reports enrollment, but usable raw fingerprint custody is ${fingerprintEvidence?.status || "not evidenced"}.`;
+	}
+	if (row.filter === "face") {
+		return faceEvidence?.status === "raw_blob_present"
+			? `Face source evidenced on ${row.sourceDeviceName || "selected source"}: a usable raw face blob is available.`
+			: `No face copy is recommended. The panel reports enrollment, but usable raw face custody is ${faceEvidence?.status || "not evidenced"}.`;
+	}
+	if (row.filter === "card") {
+		return `Recommended profile source: ${row.sourceDeviceName || "selected source"}; card evidence is part of the physical user record (${sourceSummary}).`;
 	}
 	if (row.filter === "missing") {
-		return `Recommended source: ${row.sourceDeviceName || "selected source"}. The target device is missing this user, so copy from the richest available record (${sourceSummary}).`;
+		return `Recommended profile source: ${row.sourceDeviceName || "selected source"}. The target device is missing this ID. Fingerprint or face transfer remains disabled unless this source also has usable raw custody (${sourceSummary}).`;
 	}
 	return row.recommendedAction;
 };
@@ -2557,7 +2572,15 @@ export function DeviceEnrollmentPanel({
 			)[0];
 			for (const conflict of user.conflicts) {
 				const richestDeviceId = String(richestRecord?.deviceId || "");
-				const choice =
+				const rawEvidencePresent =
+					conflict.field === "fingerprint"
+						? richestRecord?.biometricEvidence?.fingerprint?.status === "raw_blob_present"
+						: conflict.field === "face"
+							? richestRecord?.biometricEvidence?.face?.status === "raw_blob_present"
+							: true;
+				const choice = !rawEvidencePresent
+					? "KEEP"
+					:
 					conflict.deviceA.id === richestDeviceId
 						? "A"
 						: conflict.deviceB.id === richestDeviceId
@@ -7648,6 +7671,35 @@ export function DeviceEnrollmentPanel({
 											<span className="text-right font-semibold text-slate-950">
 												{mergeMetricValue(item.count)}
 											</span>
+										</div>
+									))}
+								</div>
+							) : null}
+							{sdkMergeLatestEvents.length > 0 ? (
+								<div className="mt-3 overflow-hidden rounded-md border border-white/80 bg-white">
+									<div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+										<p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+											Latest backend events
+										</p>
+										<p className="mt-0.5 text-xs text-slate-600">
+											Most recent progressEvents from the API heartbeat.
+										</p>
+									</div>
+									{sdkMergeLatestEvents.slice(0, 6).map((event: any, index) => (
+										<div
+											key={`${event?.at || index}:${event?.stage || "event"}`}
+											className="grid gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 lg:grid-cols-[150px_minmax(0,1fr)_160px] lg:items-start">
+											<p className="font-semibold text-slate-950">
+												{sdkMergeStageLabels[String(event?.stage || "")] ||
+													event?.stage ||
+													"Progress"}
+											</p>
+											<p className="min-w-0 break-words text-slate-700">
+												{event?.message || "Backend progress event received."}
+											</p>
+											<p className="text-xs font-medium text-slate-500 lg:text-right">
+												{event?.at ? formatDateTime(event.at) : "-"}
+											</p>
 										</div>
 									))}
 								</div>

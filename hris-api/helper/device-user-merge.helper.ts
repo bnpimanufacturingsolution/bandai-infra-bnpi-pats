@@ -31,6 +31,18 @@ export type DeviceUserMergeRecord = {
 	doorRight?: string | null;
 	accessPlan?: unknown;
 	rawPayload?: unknown;
+	biometricEvidence?: {
+		fingerprint: {
+			status: "raw_blob_present" | "missing_raw_blob" | "not_enrolled" | "not_requested";
+			reportedCount: number;
+			rawBlobCount: number;
+		};
+		face: {
+			status: "raw_blob_present" | "missing_raw_blob" | "not_enrolled" | "not_requested";
+			reportedCount: number;
+			rawBlobPresent: boolean;
+		};
+	};
 	manualLink?: boolean;
 	identityName?: string | null;
 	identityCandidates?: string[];
@@ -78,6 +90,7 @@ const credentials = (record: DeviceUserMergeRecord) =>
 
 const sourceScore = (record: DeviceUserMergeRecord) => {
 	const summary = credentials(record);
+	const evidence = record.biometricEvidence;
 	const populatedFields = DEVICE_USER_MERGE_FIELDS.filter((field) => {
 		if (field === "face" || field === "fingerprint" || field === "card") return false;
 		const value = valueFor(record, field);
@@ -85,8 +98,8 @@ const sourceScore = (record: DeviceUserMergeRecord) => {
 	}).length;
 	return (
 		populatedFields +
-		summary.fingerprintCount * 4 +
-		summary.faceCount * 3 +
+		Number(evidence?.fingerprint.rawBlobCount || 0) * 6 +
+		Number(evidence?.face.rawBlobPresent || false) * 4 +
 		summary.cardCount * 2
 	);
 };
@@ -274,9 +287,11 @@ export const buildDeviceUserMergePlan = (params: {
 			});
 		}
 		const presentOnDeviceIds = new Set(ordered.map((record) => record.deviceId));
-		// Peer copy targets and missing gaps only among successfully read devices.
-		const targetDeviceIds = validDeviceIds.filter((id) => id !== source.deviceId);
 		const missingOnDeviceIds = validDeviceIds.filter((id) => !presentOnDeviceIds.has(id));
+		// A write is an evidenced missing physical record, not every theoretical
+		// source/peer permutation. Existing conflicts remain review decisions and
+		// may not inflate the executable write matrix.
+		const targetDeviceIds = [...missingOnDeviceIds];
 		users.push({
 			key,
 			employeeId: ordered.find((record) => text(record.employeeId))?.employeeId || null,

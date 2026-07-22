@@ -225,6 +225,12 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain('return "Not checked";');
 		expect(enroll).toContain("Review merge by unique ID");
 		expect(enroll).toContain("Use recommended sources");
+		expect(deviceService).toContain("{ timeoutMs: 300_000 }");
+		expect(enroll).toContain("Enrollment counts alone do not authorize biometric copying");
+		expect(enroll).toContain("No fingerprint copy is recommended");
+		expect(enroll).toContain("No face copy is recommended");
+		expect(enroll).toContain('fingerprint?.status === "raw_blob_present"');
+		expect(enroll).toContain('face?.status === "raw_blob_present"');
 		expect(enroll).toContain("selected unique ID");
 		expect(enroll).toContain("selected potential write");
 		expect(enroll).toContain("Select all in scope");
@@ -510,6 +516,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Employee now");
 		expect(enroll).toContain("Credential stage");
 		expect(enroll).toContain("From backend progressEvents");
+		expect(enroll).toContain("Latest backend events");
+		expect(enroll).toContain("Most recent progressEvents from the API heartbeat");
 		expect(enroll).toContain("vm_copy_attempt_started");
 		expect(enroll).toContain("Batch copy started");
 		expect(events).toContain('device.state !== "login_failed"');

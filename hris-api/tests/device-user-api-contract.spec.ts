@@ -110,13 +110,24 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("void currentVendorUserIds");
 	});
 
-	it("reads independent Hikvision merge devices concurrently and preserves per-device failures", () => {
+	it("reads Hikvision merge devices sequentially with bounded recovery and preserves failures", () => {
 		const controller = controllerSource();
-		expect(controller).to.include("const deviceResults = await Promise.all(");
-		expect(controller).to.include("devices.map(async (device) => {");
+		expect(controller).to.include("const deviceResults: Array<{");
+		expect(controller).to.include("for (let recovery = 1; recovery <= 3");
+		expect(controller).to.include("Merge inventory read recovery");
 		expect(controller).to.include("records.push(...result.records)");
 		expect(controller).to.include("if (result.error) errors.push(result.error)");
 		expect(controller).to.include("unreachableDevices: errors.map");
+		expect(controller).to.include("readStatus: error ? \"failed\" : \"ok\"");
+		expect(controller).to.include("idsRead: error ? null : idsRead");
+	});
+
+	it("gates merge biometric copy by usable raw custody instead of reported counts", () => {
+		const controller = controllerSource();
+		expect(controller).to.include('fingerprint?.status === "raw_blob_present"');
+		expect(controller).to.include('face?.status === "raw_blob_present"');
+		expect(controller).to.include("includeFingerprints,");
+		expect(controller).to.include("includeFaceRecognition,");
 	});
 
 	it("uses a fast Hikvision UserInfo count for Device Users preview instead of stale all-device skip copy", () => {
