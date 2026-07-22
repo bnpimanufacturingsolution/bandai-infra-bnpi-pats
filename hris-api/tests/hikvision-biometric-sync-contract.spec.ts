@@ -17,6 +17,7 @@ describe("Hikvision biometric sync contract", () => {
 	const indexSource = () => readFileSync(join(process.cwd(), "index.ts"), "utf8");
 	const securityMiddlewareSource = () =>
 		readFileSync(join(process.cwd(), "middleware/security.ts"), "utf8");
+	const webpackSource = () => readFileSync(join(process.cwd(), "webpack.config.js"), "utf8");
 
 	it("exposes admin-only dry-run and execute reconciliation without template custody", () => {
 		const router = routerSource();
@@ -121,6 +122,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(router).to.include('"/hikvision/sdk-users/merge/plan"');
 		expect(router).to.include('label: "hikvision-sdk-user-merge-plan"');
 		expect(router).to.include("timeoutMs: config.heavyRequestTimeoutMs");
+	});
+
+	it("resolves emitted js import suffixes back to TypeScript during deployment builds", () => {
+		expect(webpackSource()).to.include('extensionAlias');
+		expect(webpackSource()).to.include('".js": [".js", ".ts"]');
 	});
 
 	it("supports scoped device-user export and gated import execute without plaintext biometric custody", () => {
