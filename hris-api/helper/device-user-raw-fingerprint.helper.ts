@@ -499,6 +499,24 @@ export const pollFingerPrintWriteProgress = async (params: {
 	return last;
 };
 
+export const classifyDeferredFingerprintWrite = (
+	writeOk: boolean,
+	progress: FingerPrintWriteProgress,
+): { acceptedForGroupReread: boolean; source: string } => {
+	const explicitlyRejected = progress.cardReaderRecvStatus === 5;
+	const acceptedForGroupReread = writeOk && !explicitlyRejected;
+	return {
+		acceptedForGroupReread,
+		source: !writeOk
+			? "device_fp_write_failed"
+			: explicitlyRejected
+				? `device_fp_write_rejected_progress5:${progress.errorMsg || "unknown"}`
+				: progress.cardReaderRecvStatus === 6
+					? "device_fp_progress_verified_deferred_to_group_userinfo_reread"
+					: "device_fp_progress_bounded_deferred_to_group_userinfo_reread",
+	};
+};
+
 /**
  * Write fingerprint via FingerPrintDownload then verify Progress + re-read Upload.
  * Returns sticky=true only when device re-read yields fingerData for that employeeNo.
@@ -562,27 +580,29 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 	}
 
 	if (params.deferRereadVerification) {
+		// Defer only the expensive raw-template/UserInfo reread. The device handles
+		// FingerPrintDownload asynchronously, so the next slot must not be posted
+		// until this slot reaches a terminal progress state (or the bounded poll
+		// window expires). Skipping this wait caused the second template in a
+		// two-fingerprint bundle to be rejected while slot one was still applying.
+		const progress = await pollFingerPrintWriteProgress({
+			prisma: params.prisma,
+			req: params.req,
+			deviceId: params.deviceId,
+		});
+		const deferred = classifyDeferredFingerprintWrite(writeOk, progress);
 		return {
 			writeOk,
 			writeResponse,
-			progress: {
-				ok: false,
-				cardReaderRecvStatus: null,
-				errorMsg: null,
-				totalStatus: null,
-				raw: null,
-				reason: "deferred_to_group_userinfo_reread",
-			},
+			progress,
 			// The credential merge performs one authoritative UserInfo reread after
-			// every slot in this exact person's bundle has been submitted. Avoid a
-			// duplicate raw-template sweep per slot while retaining the final
-			// physical-count gate.
-			sticky: writeOk,
+			// every slot in this exact person's bundle has been submitted. Progress
+			// polling serializes the device writes; the group reread remains the
+			// authoritative physical-count gate.
+			sticky: deferred.acceptedForGroupReread,
 			numOfFP: 0,
 			fingerprints: [],
-			source: writeOk
-				? "write_ack_deferred_to_group_userinfo_reread"
-				: "device_fp_write_failed",
+			source: deferred.source,
 		};
 	}
 	const progress = await pollFingerPrintWriteProgress({

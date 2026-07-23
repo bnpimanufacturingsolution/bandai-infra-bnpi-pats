@@ -3,6 +3,7 @@ import {
 	applyRawFingerprintCustodyToRow,
 	buildRawFingerprintCustody,
 	captureRawFingerprintsForEnrollment,
+	classifyDeferredFingerprintWrite,
 	classifyHikvisionRawFaceBinaryResponse,
 	isRawFingerprintEnrollCaptureEnabled,
 	normalizeIsapiFingerprintList,
@@ -74,6 +75,41 @@ describe("device-user-raw-fingerprint helper", () => {
 		expect(fail.cardReaderRecvStatus).to.equal(5);
 		expect(fail.errorMsg).to.equal("15");
 		expect(fail.reason).to.include("errorMsg=15");
+	});
+
+	it("keeps deferred bundle writes gated by terminal fingerprint progress", () => {
+		const accepted = classifyDeferredFingerprintWrite(true, {
+			ok: true,
+			cardReaderRecvStatus: 6,
+			errorMsg: null,
+			totalStatus: 1,
+			raw: {},
+			reason: "card_reader_recv_status_6_ok",
+		});
+		expect(accepted.acceptedForGroupReread).to.equal(true);
+		expect(accepted.source).to.include("progress_verified");
+
+		const rejected = classifyDeferredFingerprintWrite(true, {
+			ok: false,
+			cardReaderRecvStatus: 5,
+			errorMsg: "1544",
+			totalStatus: 1,
+			raw: {},
+			reason: "card_reader_recv_status_5_fail_errorMsg=1544",
+		});
+		expect(rejected.acceptedForGroupReread).to.equal(false);
+		expect(rejected.source).to.equal("device_fp_write_rejected_progress5:1544");
+
+		const failedPost = classifyDeferredFingerprintWrite(false, {
+			ok: false,
+			cardReaderRecvStatus: null,
+			errorMsg: null,
+			totalStatus: null,
+			raw: null,
+			reason: "progress_status_missing",
+		});
+		expect(failedPost.acceptedForGroupReread).to.equal(false);
+		expect(failedPost.source).to.equal("device_fp_write_failed");
 	});
 
 	it("keeps raw fingerprint fallback enabled even when env tries to disable it", () => {
