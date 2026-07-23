@@ -2,6 +2,7 @@ import { expect } from "chai";
 import {
 	applyMergeChoices,
 	buildDeviceUserMergePlan,
+	classifyFaceCustody,
 	serializeDeviceUserMergePlanForReview,
 } from "../helper/device-user-merge.helper";
 
@@ -17,6 +18,37 @@ const record = (deviceId: string, patch: any = {}) => ({
 });
 
 describe("device user union merge", () => {
+	it("classifies face custody without treating a picture as an SDK template", () => {
+		expect(classifyFaceCustody({ faceTemplate: "template", facePicture: "picture" })).to.include({
+			kind: "sdk_template_and_picture",
+			hasTemplate: true,
+			hasPicture: true,
+		});
+		expect(classifyFaceCustody({ facePicture: "picture" })).to.include({
+			kind: "picture_only_not_writable",
+			fdlibCapabilitySupported: false,
+		});
+		expect(
+			classifyFaceCustody({
+				facePicture: "picture",
+				fdlibCapabilitySupported: true,
+			}),
+		).to.include({
+			kind: "fdlib_picture",
+			fdlibCapabilitySupported: true,
+		});
+		expect(classifyFaceCustody({ faceTemplate: "template" })).to.include({
+			kind: "missing",
+			hasTemplate: true,
+			hasPicture: false,
+		});
+		expect(classifyFaceCustody({})).to.include({
+			kind: "missing",
+			hasTemplate: false,
+			hasPicture: false,
+		});
+	});
+
 	it("builds a union and preserves a user found on one device", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],
@@ -187,6 +219,106 @@ describe("device user union merge", () => {
 		expect(face?.recommended).to.equal(false);
 		expect(plan.counts.actionableCredentialWrites).to.equal(1);
 		expect(plan.counts.blockedCredentialWrites).to.equal(1);
+	});
+
+	it("keeps every classified face custody kind blocked while its writer is unavailable", () => {
+		for (const faceEvidence of [
+			{
+				custodyKind: "sdk_template_and_picture",
+				fdlibCapabilitySupported: false,
+			},
+			{
+				custodyKind: "fdlib_picture",
+				fdlibCapabilitySupported: true,
+			},
+			{
+				custodyKind: "picture_only_not_writable",
+				fdlibCapabilitySupported: false,
+			},
+		] as const) {
+			const plan = buildDeviceUserMergePlan({
+				deviceIds: ["a", "b"],
+				records: [
+					record("a", {
+						rawPayload: { numOfFP: 0, numOfFace: 1 },
+						biometricEvidence: {
+							fingerprint: {
+								status: "not_enrolled",
+								reportedCount: 0,
+								rawBlobCount: 0,
+							},
+							face: {
+								status: "raw_blob_present",
+								reportedCount: 1,
+								rawBlobPresent: true,
+								...faceEvidence,
+								writerAvailable: false,
+							},
+						},
+					}),
+					record("b", {
+						rawPayload: { numOfFP: 0, numOfFace: 0 },
+						biometricEvidence: {
+							fingerprint: {
+								status: "not_enrolled",
+								reportedCount: 0,
+								rawBlobCount: 0,
+							},
+							face: {
+								status: "not_enrolled",
+								reportedCount: 0,
+								rawBlobPresent: false,
+								custodyKind: "missing",
+								writerAvailable: false,
+							},
+						},
+					}),
+				],
+			});
+			const face = plan.credentialWrites.find((write) => write.modality === "face");
+			expect(face?.executionEligibility).to.equal("blocked");
+			expect(face?.blockingReason).to.equal("target_write_unsupported");
+			expect(face?.recommended).to.equal(false);
+			expect(plan.counts.actionableCredentialWrites).to.equal(0);
+		}
+	});
+
+	it("does not accept FDLib picture custody without affirmative capability evidence", () => {
+		const classified = classifyFaceCustody({
+			facePicture: "picture",
+			fdlibCapabilitySupported: false,
+		});
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					rawPayload: { numOfFP: 0, numOfFace: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobCount: 0,
+						},
+						face: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobPresent: true,
+							custodyKind: classified.kind,
+							fdlibCapabilitySupported: classified.fdlibCapabilitySupported,
+							// Even a future writer flag cannot upgrade unproven capability.
+							writerAvailable: true,
+						},
+					},
+				}),
+				record("b", {
+					rawPayload: { numOfFP: 0, numOfFace: 0 },
+				}),
+			],
+		});
+		const face = plan.credentialWrites.find((write) => write.modality === "face");
+		expect(classified.kind).to.equal("picture_only_not_writable");
+		expect(face?.executionEligibility).to.equal("blocked");
+		expect(face?.blockingReason).to.equal("target_write_unsupported");
 	});
 
 	it("blocks tied count-only sources instead of choosing by device order", () => {

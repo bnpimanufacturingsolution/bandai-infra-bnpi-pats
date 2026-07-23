@@ -312,7 +312,13 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("UI polling");
 		expect(enroll).toContain("Backend update");
 		expect(enroll).toContain("No detailed backend heartbeat yet");
-		expect(enroll).toContain("Applied and Needs attention move only after each target copy returns");
+		expect(enroll).toContain(
+			"Physically retained increases only after a target reread proves the credential stayed on the panel",
+		);
+		expect(enroll).toContain("Physically retained (reread)");
+		expect(enroll).toContain("Fingerprint retained");
+		expect(enroll).toContain("Face retained");
+		expect(enroll).toContain("Gap totals refresh after the terminal five-device reread");
 		expect(enroll).toContain("Already matched");
 		expect(enroll).toContain("This job was started before detailed merge telemetry was available.");
 		expect(enroll).toContain("Copy failures by path");

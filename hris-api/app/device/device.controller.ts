@@ -61,6 +61,7 @@ import {
 import {
 	applyMergeChoices,
 	buildDeviceUserMergePlan,
+	classifyFaceCustody,
 	serializeDeviceUserMergePlanForReview,
 	type DeviceUserMergeField,
 	type DeviceUserMergeRecord,
@@ -10020,6 +10021,17 @@ export const controller = (prisma: PrismaClient) => {
 						saved?.vendorMetadata?.biometricBundle?.facePresent &&
 						saved?.vendorMetadata?.biometricBundle?.encryptedFaceTemplate,
 					);
+					const fdlibCapabilitySupported =
+						saved?.vendorMetadata?.biometricCapabilities?.faceDataRecord === true ||
+						saved?.rawPayload?._hrisDeviceMetadata?.biometricCapabilities
+							?.faceDataRecord === true;
+					const faceCustody = classifyFaceCustody({
+						faceTemplate: rawCustody.face.blob?.faceTemplate,
+						facePicture: rawCustody.face.blob?.base64,
+						fdlibCapabilitySupported,
+					});
+					const rawFaceBlobPresent =
+						portableFaceBundle || rawCustody.face.rawBlobPresent;
 					const fingerprintReportedCount = Number(
 						credentialSummary.fingerprintCount || 0,
 					);
@@ -10052,12 +10064,17 @@ export const controller = (prisma: PrismaClient) => {
 							face: {
 								status:
 									faceReportedCount > 0
-										? portableFaceBundle
+										? rawFaceBlobPresent
 											? "raw_blob_present"
 											: "missing_raw_blob"
 										: "not_enrolled",
 								reportedCount: faceReportedCount,
-								rawBlobPresent: portableFaceBundle,
+								rawBlobPresent: rawFaceBlobPresent,
+								custodyKind: faceCustody.kind,
+								fdlibCapabilitySupported,
+								// No stored-custody face writer exists yet. Classification is
+								// informative, but the merge plan must remain fail-closed.
+								writerAvailable: false,
 							},
 						},
 						manualLink: Boolean(

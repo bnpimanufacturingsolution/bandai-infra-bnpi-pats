@@ -17,6 +17,42 @@ export const DEVICE_USER_MERGE_FIELDS = [
 
 export type DeviceUserMergeField = (typeof DEVICE_USER_MERGE_FIELDS)[number];
 export type MergeChoice = "A" | "B" | "KEEP";
+export type FaceCustodyKind =
+	| "sdk_template_and_picture"
+	| "fdlib_picture"
+	| "picture_only_not_writable"
+	| "missing";
+
+export type FaceCustodyClassification = {
+	kind: FaceCustodyKind;
+	hasTemplate: boolean;
+	hasPicture: boolean;
+	fdlibCapabilitySupported: boolean;
+};
+
+/**
+ * Classify stored face custody without turning enrollment counts into bytes.
+ * FDLib picture custody is only claimed when an affirmative capability probe
+ * is attached to the evidence. Writer availability is a separate planner gate.
+ */
+export const classifyFaceCustody = (params: {
+	faceTemplate?: unknown;
+	facePicture?: unknown;
+	fdlibCapabilitySupported?: boolean;
+}): FaceCustodyClassification => {
+	const hasTemplate = String(params.faceTemplate || "").trim().length > 0;
+	const hasPicture = String(params.facePicture || "").trim().length > 0;
+	const fdlibCapabilitySupported = params.fdlibCapabilitySupported === true;
+	const kind: FaceCustodyKind =
+		hasTemplate && hasPicture
+			? "sdk_template_and_picture"
+			: hasPicture && fdlibCapabilitySupported
+				? "fdlib_picture"
+				: hasPicture
+					? "picture_only_not_writable"
+					: "missing";
+	return { kind, hasTemplate, hasPicture, fdlibCapabilitySupported };
+};
 
 export type DeviceUserMergeRecord = {
 	deviceId: string;
@@ -41,6 +77,10 @@ export type DeviceUserMergeRecord = {
 			status: "raw_blob_present" | "missing_raw_blob" | "not_enrolled" | "not_requested";
 			reportedCount: number;
 			rawBlobPresent: boolean;
+			custodyKind?: FaceCustodyKind;
+			fdlibCapabilitySupported?: boolean;
+			/** True only after a concrete stored-custody writer is implemented and enabled. */
+			writerAvailable?: boolean;
 		};
 	};
 	manualLink?: boolean;
@@ -186,6 +226,18 @@ const credentialCount = (
 	return Number(summary.cardCount || 0);
 };
 
+const faceCustodyIsWritable = (record: DeviceUserMergeRecord) => {
+	const face = record.biometricEvidence?.face;
+	if (!face || face.status !== "raw_blob_present" || face.writerAvailable !== true) {
+		return false;
+	}
+	if (face.custodyKind === "sdk_template_and_picture") return true;
+	return (
+		face.custodyKind === "fdlib_picture" &&
+		face.fdlibCapabilitySupported === true
+	);
+};
+
 const buildCredentialWritesForUser = (
 	user: DeviceUserMergeGroup,
 ): DeviceUserCredentialWrite[] => {
@@ -220,7 +272,7 @@ const buildCredentialWritesForUser = (
 						? "source_conflict"
 						: sourceEvidenceStatus !== "raw_blob_present"
 							? "missing_raw_blob"
-							: modality === "face"
+							: modality === "face" && !faceCustodyIsWritable(uniqueSource.record)
 								? "target_write_unsupported"
 						: null;
 			const executionEligibility = blockingReason

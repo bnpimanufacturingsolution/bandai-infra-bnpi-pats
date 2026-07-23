@@ -2518,10 +2518,9 @@ export function DeviceEnrollmentPanel({
 		sdkMergeSelectedUniqueCount > 0 &&
 		sdkMergeSelectedResolvedCount >= sdkMergeSelectedConflictCount &&
 		sdkMergeBlockingCount === 0;
-	const visibleSdkMergeJob = sdkMergeJobId
-		? sdkMergeJobProgress || sdkMergeLastJob
-		: sdkMergeLastJob;
-	const effectiveSdkMergeJob =
+	const visibleSdkMergeJob: DeviceUserMergeJobProgress | null =
+		(sdkMergeJobId ? sdkMergeJobProgress || sdkMergeLastJob : sdkMergeLastJob) || null;
+	const effectiveSdkMergeJob: DeviceUserMergeJobProgress | null =
 		visibleSdkMergeJob?.jobId && visibleSdkMergeJob.jobId === sdkMergeDismissedJobId
 			? null
 			: visibleSdkMergeJob;
@@ -2563,9 +2562,9 @@ export function DeviceEnrollmentPanel({
 	const sdkMergeJobLastChecked = sdkMergeJobProgress
 		? formatDateTime(new Date(sdkMergeJobClock).toISOString())
 		: "Waiting for first poll";
-	const sdkMergeJobLastBackendUpdate =
+	const sdkMergeJobLastBackendUpdate: string | null =
 		effectiveSdkMergeJob?.updatedAt || effectiveSdkMergeJob?.completedAt || null;
-	const sdkMergeJobBackendAgeSeconds = sdkMergeJobLastBackendUpdate
+	const sdkMergeJobBackendAgeSeconds: number | null = sdkMergeJobLastBackendUpdate
 		? Math.max(
 				0,
 				Math.floor(
@@ -2577,6 +2576,12 @@ export function DeviceEnrollmentPanel({
 	const sdkMergeJobTargetRows = sdkMergeJobWriteMatrix?.perTarget || [];
 	const sdkMergeJobSourceRows = sdkMergeJobWriteMatrix?.perSource || [];
 	const sdkMergeJobResults = effectiveSdkMergeJob?.results || [];
+	const sdkMergeRetainedFingerprintCount = sdkMergeJobResults.filter(
+		(result) => result.status === "success" && result.modality === "fingerprint",
+	).length;
+	const sdkMergeRetainedFaceCount = sdkMergeJobResults.filter(
+		(result) => result.status === "success" && result.modality === "face",
+	).length;
 	const sdkMergeJobProgressEvents = effectiveSdkMergeJob?.progressEvents || [];
 	const sdkMergeJobCopyFailureSummary = effectiveSdkMergeJob?.copyFailureSummary;
 	const sdkMergeJobCopyFailurePairs = Object.entries(sdkMergeJobCopyFailureSummary?.byPair || {})
@@ -2593,8 +2598,9 @@ export function DeviceEnrollmentPanel({
 		source_snapshot_device: "Reading one device",
 		source_snapshot_device_done: "Device snapshot saved",
 		copy_started: "Copying to target",
-		copy_success: "Target copy applied",
-		copy_error: "Target copy needs attention",
+		credential_raw_write_started: "Writing physical credential",
+		copy_success: "Physical target retained + reread",
+		copy_error: "No retained write / needs attention",
 		batch_copy_started: "Batch copy started",
 		batch_copy_done: "Batch copy finished",
 		vm_copy_preflight_started: "Checking VM SDK reachability",
@@ -2628,9 +2634,11 @@ export function DeviceEnrollmentPanel({
 			sdkMergeJobIsProcessing ? "Progress estimate" : "Completed",
 			effectiveSdkMergeJob?.processedWrites ?? 0,
 		],
-		["Applied", effectiveSdkMergeJob?.successfulWrites ?? 0],
+		["Physically retained (reread)", effectiveSdkMergeJob?.successfulWrites ?? 0],
+		["Fingerprint retained", sdkMergeRetainedFingerprintCount],
+		["Face retained", sdkMergeRetainedFaceCount],
 		["Already matched", effectiveSdkMergeJob?.alreadyConvergedWrites ?? 0],
-		["Needs attention", effectiveSdkMergeJob?.failedWrites ?? 0],
+		["Safe no-write / needs attention", effectiveSdkMergeJob?.failedWrites ?? 0],
 	] as const;
 	const sdkMergeJobScopeItems = sdkMergeJobWriteMatrix
 		? sdkMergeJobWriteMatrix.mode === "credentials"
@@ -2719,7 +2727,7 @@ export function DeviceEnrollmentPanel({
 	const sdkMergeJobSummary = effectiveSdkMergeJob
 		? sdkMergeJobIsProcessing
 			? sdkMergeJobHasTelemetry
-				? "The UI is polling the backend job. Applied and Needs attention move only after each target copy returns, then HRIS rereads devices to verify the result."
+				? "The UI is polling the server job. Physically retained increases only after a target reread proves the credential stayed on the panel. Gap totals refresh after the terminal five-device reread."
 				: "This job was started before detailed merge telemetry was available. The UI is polling, but the backend has not returned per-target results or a live heartbeat for this job."
 			: effectiveSdkMergeJob.status === "failed" &&
 				  Number(sdkMergeJobCopyFailureSummary?.total || 0) > 0
@@ -8303,7 +8311,9 @@ export function DeviceEnrollmentPanel({
 														? "success"
 														: "warning"
 												}>
-												{result.status === "success" ? "Applied" : "Retry"}
+												{result.status === "success"
+													? "Retained + reread"
+													: "No retained write / review"}
 											</Badge>
 											<p className="min-w-0 break-words text-sm text-slate-700">
 												{result.status === "success"
