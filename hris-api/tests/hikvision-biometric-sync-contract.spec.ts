@@ -177,6 +177,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include(
 			'rawCustody.face.rawBlobPresent',
 		);
+		expect(controller).to.include("portableFaceBundle");
+		expect(controller).to.include(
+			"stored_raw_fingerprint_write_and_reread",
+		);
 		expect(controller).to.not.include(
 			"even if a separate HRIS custody workflow has blobs",
 		);

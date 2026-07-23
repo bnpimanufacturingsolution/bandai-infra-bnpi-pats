@@ -70,6 +70,7 @@ import { summarizeHikvisionListenerLogs } from "../../helper/hikvision-listener-
 import { resolveHikvisionDeviceHealthNetworkTarget } from "../../helper/device-health.helper";
 import { buildDeviceEventSearchTerms } from "../../helper/device-event-search.helper";
 import { resolveHikvisionRuntimeRoute } from "../../helper/hikvision-runtime-route.helper";
+import { resolveProjectTruthRuntimeRoot } from "../../helper/runtime-storage.helper";
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
 import {
 	decryptPortableBiometricEnvelope,
@@ -203,23 +204,18 @@ const DEVICE_USER_SYNC_CONCURRENCY = Math.max(
 const DEVICE_USER_EXPORT_SCHEMA_VERSION = "project-truth.hikvision-device-users.v1";
 const DEVICE_USER_IMPORT_CONFIRMATION = "IMPORT DEVICE USERS";
 const DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM = "aes-256-gcm";
+const PROJECT_TRUTH_RUNTIME_ROOT = resolveProjectTruthRuntimeRoot();
 const DEVICE_USER_PACKAGE_IMPORT_JOB_DIR = path.join(
-	process.cwd(),
-	"..",
-	".runtime",
+	PROJECT_TRUTH_RUNTIME_ROOT,
 	"device-user-import-jobs",
 );
-const DEVICE_IMPORT_JOB_DIR = path.join(process.cwd(), "..", ".runtime", "device-import-jobs");
+const DEVICE_IMPORT_JOB_DIR = path.join(PROJECT_TRUTH_RUNTIME_ROOT, "device-import-jobs");
 const DEVICE_USER_SYNC_JOB_DIR = path.join(
-	process.cwd(),
-	"..",
-	".runtime",
+	PROJECT_TRUTH_RUNTIME_ROOT,
 	"device-user-sync-jobs",
 );
 const DEVICE_USER_MERGE_JOB_DIR = path.join(
-	process.cwd(),
-	"..",
-	".runtime",
+	PROJECT_TRUTH_RUNTIME_ROOT,
 	"device-user-merge-jobs",
 );
 const DEVICE_IMPORT_JOB_PROCESSING_STALE_MS = 30 * 60 * 1000;
@@ -1185,7 +1181,7 @@ const updateDeviceUserMergeJob = (
 const resolveMergeLedgerDir = (jobId: string) => {
 	const envDir = String(process.env.HIKVISION_MERGE_LEDGER_DIR || "").trim();
 	if (envDir) return path.resolve(envDir);
-	return path.resolve(process.cwd(), "..", ".runtime", "merge-ledger", jobId);
+	return path.resolve(PROJECT_TRUTH_RUNTIME_ROOT, "merge-ledger", jobId);
 };
 
 const appendMergeLedgerRow = (
@@ -9977,6 +9973,7 @@ export const controller = (prisma: PrismaClient) => {
 								employeeId: true,
 								status: true,
 								rawPayload: true,
+								vendorMetadata: true,
 							},
 						})
 					: [];
@@ -9990,9 +9987,23 @@ export const controller = (prisma: PrismaClient) => {
 					const credentialSummary = extractHikvisionCredentialSummary(
 						candidate.rawPayload || {},
 					);
-					// The merge inventory snapshot is UserInfo/count evidence only. It does
-					// not carry portable fingerprint or face bytes, so this plan must remain
-					// conservative even if a separate HRIS custody workflow has blobs.
+					// Live UserInfo supplies current enrollment counts; saved DeviceUser
+					// metadata supplies separately captured raw custody. Neither plane is
+					// sufficient alone. Joining them lets review distinguish a portable,
+					// evidenced template from a count-only claim without exposing bytes.
+					const rawCustody = buildRawDeviceUserBiometricCustody({
+						row: saved || {},
+						includeFingerprints: true,
+						includeFaces: true,
+					});
+					const portableFaceBundle = Boolean(
+						saved?.vendorMetadata?.biometricBundle?.facePresent &&
+						saved?.vendorMetadata?.biometricBundle?.encryptedFaceTemplate,
+					);
+					const fingerprintReportedCount = Number(
+						credentialSummary.fingerprintCount || 0,
+					);
+					const faceReportedCount = Number(credentialSummary.faceCount || 0);
 					deviceRecords.push({
 						deviceId: device.id,
 						deviceName: device.name || device.address || device.id,
@@ -10009,19 +10020,24 @@ export const controller = (prisma: PrismaClient) => {
 						biometricEvidence: {
 							fingerprint: {
 								status:
-									Number(credentialSummary.fingerprintCount || 0) > 0
-										? "missing_raw_blob"
+									fingerprintReportedCount > 0
+										? rawCustody.fingerprint.rawBlobCount >=
+											fingerprintReportedCount
+											? "raw_blob_present"
+											: "missing_raw_blob"
 										: "not_enrolled",
-								reportedCount: Number(credentialSummary.fingerprintCount || 0),
-								rawBlobCount: 0,
+								reportedCount: fingerprintReportedCount,
+								rawBlobCount: Number(rawCustody.fingerprint.rawBlobCount || 0),
 							},
 							face: {
 								status:
-									Number(credentialSummary.faceCount || 0) > 0
-										? "missing_raw_blob"
+									faceReportedCount > 0
+										? portableFaceBundle
+											? "raw_blob_present"
+											: "missing_raw_blob"
 										: "not_enrolled",
-								reportedCount: Number(credentialSummary.faceCount || 0),
-								rawBlobPresent: false,
+								reportedCount: faceReportedCount,
+								rawBlobPresent: portableFaceBundle,
 							},
 						},
 						manualLink: Boolean(
@@ -10231,6 +10247,152 @@ export const controller = (prisma: PrismaClient) => {
 						error,
 						message: error,
 					});
+				}
+				continue;
+			}
+			if (
+				first.modality === "fingerprint" &&
+				first.executionEligibility === "ready_from_raw_blob"
+			) {
+				const sourceRow = await (prisma as any).deviceUser.findUnique({
+					where: {
+						organizationId_deviceId_vendorUserId: {
+							organizationId: params.organizationId,
+							deviceId: first.sourceDeviceId,
+							vendorUserId: first.vendorUserId,
+						},
+					},
+					select: {
+						rawPayload: true,
+						vendorMetadata: true,
+					},
+				});
+				const rawCustody = buildRawDeviceUserBiometricCustody({
+					row: sourceRow || {},
+					includeFingerprints: true,
+					includeFaces: false,
+				});
+				const templates = rawCustody.fingerprint.templates || [];
+				if (
+					templates.length < Number(first.sourceReportedCount || 0) ||
+					templates.some((template: any) => !String(template?.data || "").trim())
+				) {
+					for (const write of writes) {
+						const result = {
+							...write,
+							status: "error",
+							error:
+								"Reviewed raw fingerprint custody is incomplete at execution time",
+						};
+						results.push(result);
+						params.emitProgress?.({
+							stage: "copy_error",
+							...result,
+							message: result.error,
+						});
+					}
+					continue;
+				}
+				params.emitProgress?.({
+					stage: "credential_raw_write_started",
+					userKey: first.userKey,
+					vendorUserId: first.vendorUserId,
+					modality: "fingerprint",
+					sourceDeviceId: sourceDevice.id,
+					targetDeviceIds: targetDevices.map((device) => device.id),
+					templateCount: templates.length,
+					message: `Writing ${templates.length} reviewed raw fingerprint template(s) for ${first.vendorUserId}.`,
+				});
+				for (const write of writes) {
+					const targetDevice = deviceById.get(String(write.targetDeviceId));
+					const user = (params.plan.users || []).find(
+						(candidate: any) => candidate.key === write.userKey,
+					);
+					const before = (user?.records || []).find(
+						(record: any) =>
+							String(record.deviceId) === String(write.targetDeviceId),
+					);
+					try {
+						const writeResult = await writeDecryptedBiometricBundleToHikvisionDevice({
+							req: params.req,
+							targetDevice,
+							employeeNo: write.vendorUserId,
+							decrypted: { fingerprints: templates },
+						});
+						if (
+							writeResult.fingerprintWriteCount < templates.length ||
+							writeResult.fingerprintWrites.some(
+								(item: any) => item.sticky !== true,
+							)
+						) {
+							throw new Error(
+								"Target rejected or failed to retain one or more raw fingerprint templates",
+							);
+						}
+						await syncSingleHikvisionDeviceUserFromSource({
+							req: params.req,
+							organizationId: params.organizationId,
+							device: targetDevice,
+							employeeNo: write.vendorUserId,
+						});
+						const after = await (prisma as any).deviceUser.findUnique({
+							where: {
+								organizationId_deviceId_vendorUserId: {
+									organizationId: params.organizationId,
+									deviceId: write.targetDeviceId,
+									vendorUserId: write.vendorUserId,
+								},
+							},
+						});
+						const beforeCredentials = extractHikvisionCredentialSummary(
+							before?.rawPayload || {},
+						);
+						const afterCredentials = extractHikvisionCredentialSummary(
+							after?.rawPayload || {},
+						);
+						const actualCount = Number(afterCredentials.fingerprintCount || 0);
+						if (actualCount < Number(write.sourceReportedCount || 0)) {
+							throw new Error(
+								`Target reread reports fingerprint count ${actualCount}; expected at least ${write.sourceReportedCount}.`,
+							);
+						}
+						if (
+							Number(beforeCredentials.faceCount || 0) !==
+								Number(afterCredentials.faceCount || 0) ||
+							Number(beforeCredentials.cardCount || 0) !==
+								Number(afterCredentials.cardCount || 0)
+						) {
+							throw new Error(
+								"Credential-only isolation failed after reread (face or card changed)",
+							);
+						}
+						const result = {
+							...write,
+							status: "success",
+							actualCount,
+							strategy: "stored_raw_fingerprint_write_and_reread",
+						};
+						results.push(result);
+						params.emitProgress?.({
+							stage: "copy_success",
+							...result,
+							credentialStages: ["fingerprint"],
+							message: `Stored fingerprint custody reread passed for ${write.vendorUserId} on ${targetDevice?.name || write.targetDeviceId}.`,
+						});
+					} catch (error: any) {
+						const result = {
+							...write,
+							status: "error",
+							error: error?.message || String(error),
+						};
+						results.push(result);
+						params.emitProgress?.({
+							stage: "copy_error",
+							...result,
+							credentialStages: ["fingerprint"],
+							message: result.error,
+						});
+					}
 				}
 				continue;
 			}

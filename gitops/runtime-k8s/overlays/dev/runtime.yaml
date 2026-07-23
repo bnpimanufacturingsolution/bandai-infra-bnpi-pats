@@ -193,6 +193,8 @@ spec:
               value: local
             - name: LOCAL_UPLOAD_ROOT
               value: /app/uploads
+            - name: PROJECT_TRUTH_RUNTIME_ROOT
+              value: /app/uploads/project-truth-runtime
             - name: PG_DATABASE_URL
               value: postgresql://postgres:postgres@hris-postgres:5432/hris
             - name: WRITE_DATABASE_URL
