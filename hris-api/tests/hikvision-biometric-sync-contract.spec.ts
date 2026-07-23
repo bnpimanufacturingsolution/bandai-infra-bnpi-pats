@@ -558,6 +558,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include('arg == "--post-contract-file"');
 		expect(service).to.include('std::getenv("HIKVISION_HRIS_API_TOKEN")');
 		expect(service).to.include("hris_contract_spool_written");
+		expect(service).to.include("hris_contract_spool_quarantined");
+		expect(service).to.include("missing_source_device_id");
+		expect(service).to.include(
+			"/tmp/project-truth-hikvision-reconcile-quarantine",
+		);
 		expect(service).to.include("replay_pending_hris_contract_posts();");
 		expect(service).to.include(
 			'std::string callback_spool_dir = "/tmp/project-truth-hikvision-callback-spool";',

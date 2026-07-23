@@ -142,6 +142,8 @@ std::string hris_api_base;
 std::string hris_api_token;
 std::string min_sdk_time;
 std::string reconcile_spool_dir = "/tmp/project-truth-hikvision-reconcile-spool";
+std::string reconcile_quarantine_dir =
+    "/tmp/project-truth-hikvision-reconcile-quarantine";
 std::string callback_spool_dir = "/tmp/project-truth-hikvision-callback-spool";
 // Long enough for panel create → enroll / modify multipass without inventing ids.
 constexpr auto recent_employee_candidate_ttl = std::chrono::seconds(180);
@@ -3283,6 +3285,21 @@ bool ensure_reconcile_spool_dir() {
     return false;
 }
 
+bool ensure_reconcile_quarantine_dir() {
+    if (::mkdir(reconcile_quarantine_dir.c_str(), 0700) == 0) {
+        return true;
+    }
+    if (errno == EEXIST) {
+        return true;
+    }
+    emit_json({
+        {"event", "hris_contract_spool_quarantine_dir_failed"},
+        {"path", reconcile_quarantine_dir},
+        {"errno", std::to_string(errno)}
+    });
+    return false;
+}
+
 bool ensure_callback_spool_dir() {
     if (::mkdir(callback_spool_dir.c_str(), 0755) == 0 || errno == EEXIST) {
         return true;
@@ -3437,6 +3454,27 @@ void replay_pending_hris_contract_posts() {
             emit_json({
                 {"event", "hris_contract_spool_read_failed"},
                 {"path", path}
+            });
+            continue;
+        }
+        std::smatch source_device_match;
+        const std::regex source_device_pattern(
+            R"reconcile("sourceDeviceId"\s*:\s*"([^"]+)")reconcile");
+        if (!std::regex_search(body, source_device_match, source_device_pattern)) {
+            const size_t separator = path.find_last_of('/');
+            const std::string filename =
+                path.substr(separator == std::string::npos ? 0 : separator + 1);
+            const std::string quarantine_path =
+                reconcile_quarantine_dir + "/" + filename;
+            const bool preserved =
+                ensure_reconcile_quarantine_dir() &&
+                std::rename(path.c_str(), quarantine_path.c_str()) == 0;
+            emit_json({
+                {"event", "hris_contract_spool_quarantined"},
+                {"path", path},
+                {"quarantinePath", preserved ? quarantine_path : ""},
+                {"reason", "missing_source_device_id"},
+                {"preserved", preserved ? "true" : "false"}
             });
             continue;
         }
