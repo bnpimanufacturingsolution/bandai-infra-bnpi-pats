@@ -48,6 +48,37 @@ export type RawFingerprintCustody = {
 	totalDataChars: number;
 };
 
+export const selectMissingFingerprintTemplatesForTarget = (params: {
+	sourceTemplates: RawFingerprintTemplate[];
+	targetTemplates: RawFingerprintTemplate[];
+	targetReportedCount: number;
+}): {
+	targetEvidenceComplete: boolean;
+	missingTemplates: RawFingerprintTemplate[];
+	existingFingerPrintIds: number[];
+} => {
+	const targetReportedCount = Math.max(Number(params.targetReportedCount || 0), 0);
+	const existingFingerPrintIds = [
+		...new Set(
+			(params.targetTemplates || [])
+				.map((template) => Number(template.fingerPrintId || 0))
+				.filter((id) => id > 0),
+		),
+	].sort((left, right) => left - right);
+	const targetEvidenceComplete =
+		targetReportedCount === 0 || existingFingerPrintIds.length >= targetReportedCount;
+	const existing = new Set(existingFingerPrintIds);
+	return {
+		targetEvidenceComplete,
+		existingFingerPrintIds,
+		missingTemplates: (params.sourceTemplates || []).filter(
+			(template) =>
+				String(template.data || "").trim() &&
+				!existing.has(Number(template.fingerPrintId || 0)),
+		),
+	};
+};
+
 /**
  * Legacy JS/ISAPI device pull after enroll identity.
  * Always enabled: when the C++ listener does not provide raw template bytes,

@@ -9,6 +9,7 @@ import {
 	normalizeIsapiFingerprintList,
 	parseFingerPrintProgress,
 	RAW_FINGERPRINT_SCHEMA,
+	selectMissingFingerprintTemplatesForTarget,
 	shouldCaptureRawFingerprintForEventAction,
 } from "../helper/device-user-raw-fingerprint.helper";
 
@@ -110,6 +111,32 @@ describe("device-user-raw-fingerprint helper", () => {
 		});
 		expect(failedPost.acceptedForGroupReread).to.equal(false);
 		expect(failedPost.source).to.equal("device_fp_write_failed");
+	});
+
+	it("writes only target-missing fingerprint slots and blocks incomplete target evidence", () => {
+		const source = [
+			{ fingerPrintId: 1, fingerType: 0, length: 4, data: "AAAA" },
+			{ fingerPrintId: 2, fingerType: 0, length: 4, data: "BBBB" },
+		];
+		const target = [
+			{ fingerPrintId: 1, fingerType: 0, length: 4, data: "KEEP" },
+		];
+		const selection = selectMissingFingerprintTemplatesForTarget({
+			sourceTemplates: source,
+			targetTemplates: target,
+			targetReportedCount: 1,
+		});
+		expect(selection.targetEvidenceComplete).to.equal(true);
+		expect(selection.existingFingerPrintIds).to.deep.equal([1]);
+		expect(selection.missingTemplates.map((item) => item.fingerPrintId)).to.deep.equal([2]);
+
+		const unreadable = selectMissingFingerprintTemplatesForTarget({
+			sourceTemplates: source,
+			targetTemplates: [],
+			targetReportedCount: 1,
+		});
+		expect(unreadable.targetEvidenceComplete).to.equal(false);
+		expect(unreadable.missingTemplates).to.have.length(2);
 	});
 
 	it("keeps raw fingerprint fallback enabled even when env tries to disable it", () => {

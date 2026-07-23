@@ -10348,15 +10348,56 @@ export const controller = (prisma: PrismaClient) => {
 						await withTargetDeviceWriteLock(
 							String(write.targetDeviceId),
 							async () => {
+						let templatesToWrite = templates;
+						if (Number(write.targetReportedCount || 0) > 0) {
+							const {
+								fetchRawFingerprintsViaIsapi,
+								selectMissingFingerprintTemplatesForTarget,
+							} = await import(
+								"../../helper/device-user-raw-fingerprint.helper.js"
+							);
+							const targetRaw = await fetchRawFingerprintsViaIsapi({
+								prisma,
+								req: params.req,
+								deviceId: String(write.targetDeviceId),
+								employeeNo: String(write.vendorUserId),
+								maxFingerId: Math.max(
+									...templates.map((template: any) =>
+										Number(template.fingerPrintId || 0),
+									),
+									Number(write.sourceReportedCount || 0),
+									1,
+								),
+								expectedFingerprintCount: Number(
+									write.targetReportedCount || 0,
+								),
+							});
+							const selection = selectMissingFingerprintTemplatesForTarget({
+								sourceTemplates: templates,
+								targetTemplates: targetRaw.fingerprints || [],
+								targetReportedCount: Number(write.targetReportedCount || 0),
+							});
+							if (!selection.targetEvidenceComplete) {
+								throw new Error(
+									`Target existing fingerprint slots are not readable (${selection.existingFingerPrintIds.length}/${write.targetReportedCount}); refusing to guess or overwrite.`,
+								);
+							}
+							templatesToWrite = selection.missingTemplates;
+							if (!templatesToWrite.length) {
+								throw new Error(
+									"Target fingerprint slot IDs already match the source, but the reported count is lower; refusing an overwrite without stronger evidence.",
+								);
+							}
+						}
 						const writeResult = await writeDecryptedBiometricBundleToHikvisionDevice({
 							req: params.req,
 							targetDevice,
 							employeeNo: write.vendorUserId,
-							decrypted: { fingerprints: templates },
+							decrypted: { fingerprints: templatesToWrite },
 							deferFingerprintRereadVerification: true,
 						});
 						if (
-							writeResult.fingerprintWriteCount < templates.length ||
+							writeResult.fingerprintWriteCount < templatesToWrite.length ||
 							writeResult.fingerprintWrites.some(
 								(item: any) => item.sticky !== true,
 							)
