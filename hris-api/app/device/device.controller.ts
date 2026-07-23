@@ -10974,7 +10974,7 @@ export const controller = (prisma: PrismaClient) => {
 						}
 					}
 					const faceCustodyEvidence =
-						faceTemplate && facePicture && exactCardNo
+						faceTemplate && facePicture
 							? {
 									templateSha256: createHash("sha256")
 										.update(faceTemplate)
@@ -10984,9 +10984,6 @@ export const controller = (prisma: PrismaClient) => {
 										.digest("hex"),
 									templateSize: Buffer.from(faceTemplate, "base64").length,
 									pictureSize: Buffer.from(facePicture, "base64").length,
-									cardNoSha256: createHash("sha256")
-										.update(exactCardNo)
-										.digest("hex"),
 								}
 							: undefined;
 					const rawFaceBlobPresent =
@@ -12119,7 +12116,7 @@ export const controller = (prisma: PrismaClient) => {
 				const facePicture = String(freshSourcePayload?.facePicture || "").trim();
 				const cardNo = String(freshSourcePayload?.cardNo || "").trim();
 				const currentEvidence =
-					faceTemplate && facePicture && cardNo
+					faceTemplate && facePicture
 						? {
 								templateSha256: createHash("sha256")
 									.update(faceTemplate)
@@ -12129,7 +12126,6 @@ export const controller = (prisma: PrismaClient) => {
 									.digest("hex"),
 								templateSize: Buffer.from(faceTemplate, "base64").length,
 								pictureSize: Buffer.from(facePicture, "base64").length,
-								cardNoSha256: createHash("sha256").update(cardNo).digest("hex"),
 							}
 						: null;
 				if (
@@ -12138,8 +12134,7 @@ export const controller = (prisma: PrismaClient) => {
 					reviewed.templateSha256 !== currentEvidence.templateSha256 ||
 					reviewed.pictureSha256 !== currentEvidence.pictureSha256 ||
 					reviewed.templateSize !== currentEvidence.templateSize ||
-					reviewed.pictureSize !== currentEvidence.pictureSize ||
-					reviewed.cardNoSha256 !== currentEvidence.cardNoSha256
+					reviewed.pictureSize !== currentEvidence.pictureSize
 				) {
 					throw new Error(
 						"Fresh physical stored-face custody changed after review; refresh and lock a new exact source scope.",

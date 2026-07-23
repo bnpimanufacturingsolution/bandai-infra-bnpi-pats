@@ -102,7 +102,6 @@ export type DeviceUserMergeRecord = {
 		pictureSha256: string;
 		templateSize: number;
 		pictureSize: number;
-		cardNoSha256: string;
 	};
 	/** Server-only validated picture custody for target-specific FDLib planning. */
 	_fdlibFacePictureEvidence?: {

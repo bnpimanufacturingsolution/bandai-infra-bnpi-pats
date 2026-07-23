@@ -222,6 +222,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include(
 			"Fresh physical stored-face custody changed after review",
 		);
+		expect(controller).not.to.include(
+			"reviewed.cardNoSha256 !== currentEvidence.cardNoSha256",
+		);
 		expect(controller).to.include("runHikvisionBiometricExportOnVm");
 		expect(controller).to.include("Target now reports a face; refusing to overwrite");
 		expect(controller).to.include("Live target card ownership no longer matches");
