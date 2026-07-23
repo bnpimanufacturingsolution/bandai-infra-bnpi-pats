@@ -56,6 +56,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("const executeHikvisionDeviceUserPeerCopy = async");
 		expect(controller).to.include("const copyHikvisionUserToPeerWithRetry = async");
 		expect(controller).to.include("const runHikvisionManualCopyOnVm = async");
+		expect(controller).to.include("credentialOnly?: boolean");
+		expect(controller).to.include("dryRun?: boolean");
+		expect(controller).to.include('"--manual-credential-only"');
+		expect(controller).to.include('...(params.dryRun ? ["--dry-run"] : ["--execute"])');
 		expect(controller).to.include(
 			"const isDryRun = req.body?.dryRun === true || req.body?.execute === false",
 		);
@@ -126,6 +130,12 @@ describe("Hikvision biometric sync contract", () => {
 		expect(wrapper).to.include("--run-once");
 		expect(wrapper).to.include("HIKVISION_DEVICE_ID_FILTER");
 		expect(wrapper).to.include('cmd+=(--seconds "${HIKVISION_RUN_SECONDS:-1}")');
+		expect(serviceSource()).to.include("bool credential_only = false");
+		expect(serviceSource()).to.include('{"reason", "credential_only"}');
+		expect(serviceSource()).to.include('{"event", "peer_face_write_preview"}');
+		expect(serviceSource()).to.include(
+			"if (!execute_mode && manual_job.credential_only)",
+		);
 	});
 
 	it("gives the live SDK merge inventory plan the heavy-request timeout budget", () => {

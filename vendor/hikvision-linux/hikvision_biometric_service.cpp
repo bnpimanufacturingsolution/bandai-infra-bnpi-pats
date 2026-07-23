@@ -65,6 +65,9 @@ struct ReconcileJob {
     std::string sdk_time;
     bool include_fingerprints = false;
     bool include_face_recognition = true;
+    // Manual merge jobs may copy biometric credentials without rewriting the
+    // already-converged user/profile/card plane.
+    bool credential_only = false;
     // Filled by enrich_hris_job_before_post when ACS person was empty or templates needed.
     // identity_source: acs_dwEmployeeNo | inventory_delta | userinfo_touch |
     //                  poll_inventory | empty
@@ -1888,6 +1891,18 @@ bool write_face_and_template(
     const std::string &card_no,
     const std::vector<char> &face_template,
     const std::vector<char> &face_picture) {
+    if (!execute_mode) {
+        emit_json({
+            {"event", "peer_face_write_preview"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"cardNo", card_no},
+            {"templateSize", std::to_string(face_template.size())},
+            {"pictureSize", std::to_string(face_picture.size())},
+            {"wouldCall", "NET_DVR_SET_FACE_AND_TEMPLATE"}
+        });
+        return !face_template.empty() && !face_picture.empty();
+    }
     NET_DVR_FACE_AND_TEMPLATE_COND cond{};
     cond.dwSize = sizeof(cond);
     cond.dwFaceNum = 1;
@@ -4438,7 +4453,7 @@ void process_reconcile_job(const ReconcileJob &job) {
     std::vector<char> face_picture;
     std::string card_json;
     std::string card_no;
-    const bool face_available = !user_delete && user_ok &&
+    const bool face_available = job.include_face_recognition && !user_delete && user_ok &&
         read_source_card(*source, job, &card_json) &&
         !(card_no = extract_string_field_from_json(card_json, "cardNo")).empty() &&
         read_face_and_template(*source, job.employee_no, card_no, &face_template, &face_picture);
@@ -4464,12 +4479,21 @@ void process_reconcile_job(const ReconcileJob &job) {
             continue;
         }
         peer_count += 1;
-        if (retry_peer_operation("user", target, job.employee_no, [&]() {
-                return user_delete ? delete_peer_user(target, job) : (user_ok && write_peer_user(target, job, user_json));
-            })) {
-            peer_write_count += 1;
+        if (!job.credential_only) {
+            if (retry_peer_operation("user", target, job.employee_no, [&]() {
+                    return user_delete ? delete_peer_user(target, job) : (user_ok && write_peer_user(target, job, user_json));
+                })) {
+                peer_write_count += 1;
+            }
+        } else {
+            emit_json({
+                {"event", "peer_user_write_skipped"},
+                {"targetDeviceId", target.config.hris_device_id},
+                {"employeeNo", job.employee_no},
+                {"reason", "credential_only"}
+            });
         }
-        if (!user_delete && !card_no.empty()) {
+        if (!job.credential_only && !user_delete && !card_no.empty()) {
             add_sync_card(target, job.employee_no, card_no);
         }
         if (fingerprint_delete || job.include_fingerprints) {
@@ -4495,6 +4519,7 @@ void process_reconcile_job(const ReconcileJob &job) {
         {"sourceFaceAvailable", face_available ? "true" : "false"},
         {"sourceFaceTemplateSize", std::to_string(face_template.size())},
         {"sourceFacePictureSize", std::to_string(face_picture.size())},
+        {"credentialOnly", job.credential_only ? "true" : "false"},
         {"mode", execute_mode ? "execute" : "dry-run"}
     });
     if (job.event_kind.find("manual_") == 0) {
@@ -4673,7 +4698,7 @@ void usage(const char *program) {
         << "[--replay-spool-only] [--post-contract-file path] "
         << "[--manual-full-mirror-source-device-id id] "
         << "[--manual-employee-no employeeNo] [--manual-include-fingerprints] "
-        << "[--manual-exclude-face] "
+        << "[--manual-exclude-face] [--manual-credential-only] "
         << "[--manual-source-employee-no employeeNo] [--manual-target-device-id id] "
         << "[--manual-target-employee-no employeeNo] "
         << "[--capture-fingerprint-employee-no employeeNo] [--capture-fingerprint-source-device-id id] "
@@ -4695,6 +4720,7 @@ int main(int argc, char **argv) {
     std::string manual_employee_no;
     bool manual_include_fingerprints = false;
     bool manual_include_face_recognition = true;
+    bool manual_credential_only = false;
     std::string manual_source_employee_no;
     std::string manual_target_device_id;
     std::string manual_target_employee_no;
@@ -4770,6 +4796,8 @@ int main(int argc, char **argv) {
             manual_include_fingerprints = true;
         } else if (arg == "--manual-exclude-face") {
             manual_include_face_recognition = false;
+        } else if (arg == "--manual-credential-only") {
+            manual_credential_only = true;
         } else if (arg == "--manual-source-employee-no") {
             if (!next(&manual_source_employee_no)) return 2;
         } else if (arg == "--manual-target-device-id") {
@@ -5218,13 +5246,23 @@ int main(int argc, char **argv) {
                 : "manual_single_user_reconcile";
             manual_job.include_fingerprints = manual_include_fingerprints || manual_employee_no.empty();
             manual_job.include_face_recognition = manual_include_face_recognition;
-            queue_reconcile(manual_job);
+            manual_job.credential_only = manual_credential_only;
+            if (!execute_mode && manual_job.credential_only) {
+                // A credential-only dry run must read the exact source templates
+                // and emit target preview events, but may not enqueue a worker
+                // that is intentionally disabled in global dry-run mode.
+                process_reconcile_job(manual_job);
+            } else {
+                queue_reconcile(manual_job);
+            }
             emit_json({
                 {"event", "manual_reconcile_queued"},
                 {"sourceDeviceId", manual_job.source_device_id},
                 {"sourceHost", manual_job.source_host},
                 {"employeeNo", manual_job.employee_no},
                 {"includeFingerprints", manual_job.include_fingerprints ? "true" : "false"},
+                {"includeFaceRecognition", manual_job.include_face_recognition ? "true" : "false"},
+                {"credentialOnly", manual_job.credential_only ? "true" : "false"},
                 {"mode", execute_mode ? "execute" : "dry-run"}
             });
         }

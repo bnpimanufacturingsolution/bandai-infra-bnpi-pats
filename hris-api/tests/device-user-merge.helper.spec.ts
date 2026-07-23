@@ -91,6 +91,86 @@ describe("device user union merge", () => {
 		expect(fingerprintConflict?.deviceB.value).to.equal(1);
 	});
 
+	it("plans modality-specific credential writes for existing users behind an SDK probe", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records: [
+				record("a", {
+					rawPayload: { numOfFP: 2, numOfFace: 0, numOfCard: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "missing_raw_blob",
+							reportedCount: 2,
+							rawBlobCount: 0,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+				}),
+				record("b", {
+					rawPayload: { numOfFP: 1, numOfFace: 1, numOfCard: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "missing_raw_blob",
+							reportedCount: 1,
+							rawBlobCount: 0,
+						},
+						face: {
+							status: "missing_raw_blob",
+							reportedCount: 1,
+							rawBlobPresent: false,
+						},
+					},
+				}),
+				record("c", {
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobCount: 0,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+				}),
+			],
+		});
+
+		const fingerprintWrites = plan.credentialWrites.filter(
+			(write) => write.modality === "fingerprint",
+		);
+		const faceWrites = plan.credentialWrites.filter((write) => write.modality === "face");
+		expect(plan.plannedWrites).to.have.length(0);
+		expect(fingerprintWrites).to.have.length(2);
+		expect(fingerprintWrites.every((write) => write.sourceDeviceId === "a")).to.equal(true);
+		expect(
+			fingerprintWrites.every(
+				(write) => write.executionEligibility === "sdk_probe_required",
+			),
+		).to.equal(true);
+		expect(faceWrites).to.have.length(2);
+		expect(faceWrites.every((write) => write.sourceDeviceId === "b")).to.equal(true);
+		expect(plan.counts.actionableCredentialWrites).to.equal(4);
+	});
+
+	it("blocks tied count-only sources instead of choosing by device order", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records: [
+				record("a", { rawPayload: { numOfFP: 2, numOfFace: 0, numOfCard: 0 } }),
+				record("b", { rawPayload: { numOfFP: 2, numOfFace: 0, numOfCard: 0 } }),
+				record("c", { rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 0 } }),
+			],
+		});
+
+		const write = plan.credentialWrites.find(
+			(item) => item.modality === "fingerprint" && item.targetDeviceId === "c",
+		);
+		expect(write?.sourceDeviceId).to.equal(null);
+		expect(write?.sourceCandidateDeviceIds).to.have.members(["a", "b"]);
+		expect(write?.executionEligibility).to.equal("blocked");
+		expect(write?.blockingReason).to.equal("source_conflict");
+	});
+
 	it("uses the richest device record as the merge source", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b", "c"],

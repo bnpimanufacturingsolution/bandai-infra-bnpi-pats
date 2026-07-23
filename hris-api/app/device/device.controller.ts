@@ -440,6 +440,7 @@ type DeviceUserMergeJobStatus = "processing" | "completed" | "failed";
 type DeviceUserMergeJob = {
 	jobId: string;
 	planId: string;
+	mode?: "users" | "credentials";
 	scopeHash?: string;
 	retryPlanId?: string;
 	status: DeviceUserMergeJobStatus;
@@ -562,6 +563,67 @@ const buildDeviceUserMergeWriteMatrix = (plan: any) => {
 		perTarget: Array.from(perTarget.values()),
 		perSource: Array.from(perSource.values()),
 		rows,
+	};
+};
+
+const buildDeviceUserCredentialWriteMatrix = (
+	plan: any,
+	selectedCredentialWriteIds?: string[],
+) => {
+	const selectedIds = Array.isArray(selectedCredentialWriteIds)
+		? new Set(selectedCredentialWriteIds.map((id) => String(id || "").trim()).filter(Boolean))
+		: null;
+	const deviceById = new Map<string, any>(
+		(Array.isArray(plan?.devices) ? plan.devices : []).map((device: any) => [
+			String(device.id),
+			device,
+		]),
+	);
+	const label = (deviceId: string) =>
+		deviceById.get(String(deviceId))?.name ||
+		deviceById.get(String(deviceId))?.address ||
+		deviceId;
+	const rows = (Array.isArray(plan?.credentialWrites) ? plan.credentialWrites : [])
+		.filter((write: any) => !selectedIds || selectedIds.has(String(write.id)))
+		.map((write: any) => ({
+			...write,
+			sourceDeviceName: write.sourceDeviceId ? label(write.sourceDeviceId) : null,
+			targetDeviceName: label(write.targetDeviceId),
+		}));
+	const executableRows = rows.filter(
+		(write: any) =>
+			write.executionEligibility !== "blocked" &&
+			write.sourceDeviceId &&
+			(write.modality === "fingerprint" || write.modality === "face"),
+	);
+	const blockedRows = rows.filter(
+		(write: any) => !executableRows.some((candidate: any) => candidate.id === write.id),
+	);
+	const countBy = (values: any[], key: string) =>
+		Object.fromEntries(
+			Array.from(
+				values.reduce((map: Map<string, number>, value: any) => {
+					const itemKey = String(value[key] || "unknown");
+					map.set(itemKey, (map.get(itemKey) || 0) + 1);
+					return map;
+				}, new Map<string, number>()),
+			),
+		);
+	return {
+		mode: "credentials",
+		selectedCredentialWrites: rows.length,
+		totalWrites: executableRows.length,
+		blockedWrites: blockedRows.length,
+		fingerprintWrites: executableRows.filter(
+			(write: any) => write.modality === "fingerprint",
+		).length,
+		faceWrites: executableRows.filter((write: any) => write.modality === "face").length,
+		cardWrites: 0,
+		byModality: countBy(executableRows, "modality"),
+		bySourceDeviceId: countBy(executableRows, "sourceDeviceId"),
+		byTargetDeviceId: countBy(executableRows, "targetDeviceId"),
+		rows: executableRows,
+		blockedRows,
 	};
 };
 
@@ -1695,6 +1757,8 @@ type HikvisionManualCopyParams = {
 	employeeNo: string;
 	includeFingerprints: boolean;
 	includeFaceRecognition: boolean;
+	credentialOnly?: boolean;
+	dryRun?: boolean;
 	waitSeconds?: number;
 	skipPreflight?: boolean;
 	onProgress?: (event: any) => void;
@@ -2056,12 +2120,14 @@ export const controller = (prisma: PrismaClient) => {
 					.map((device) => device?.name || device?.address)
 					.filter(Boolean),
 				credentialStages: [
-					"user",
+					...(params.credentialOnly ? [] : ["user"]),
 					...(params.includeFingerprints ? ["fingerprint"] : []),
 					...(params.includeFaceRecognition ? ["face"] : []),
 				],
 				includeFingerprints: params.includeFingerprints,
 				includeFaceRecognition: params.includeFaceRecognition,
+				credentialOnly: params.credentialOnly === true,
+				dryRun: params.dryRun === true,
 				batchMultiTarget: targetDevices.length > 1,
 			});
 		if (!targetDevices.length) {
@@ -2143,12 +2209,14 @@ export const controller = (prisma: PrismaClient) => {
 						`HIKVISION_RUN_SECONDS=${waitSeconds}`,
 						HIKVISION_VM_WRAPPER_REMOTE_PATH,
 						"--run-once",
+						...(params.dryRun ? ["--dry-run"] : ["--execute"]),
 						"--manual-full-mirror-source-device-id",
 						params.sourceDeviceId,
 						"--manual-employee-no",
 						params.employeeNo,
 						...(params.includeFingerprints ? ["--manual-include-fingerprints"] : []),
 						...(params.includeFaceRecognition ? [] : ["--manual-exclude-face"]),
+						...(params.credentialOnly ? ["--manual-credential-only"] : []),
 					],
 					Math.max(manualCopyTimeoutSeconds * 1000 + 5000, 15000),
 				);
@@ -2185,9 +2253,11 @@ export const controller = (prisma: PrismaClient) => {
 						.map((event) => String(event?.targetDeviceId || "").trim())
 						.filter(Boolean),
 				);
-				const peerUserWriteOk = targetDevices.every((targetDevice) =>
-					successfulTargetIds.has(String(targetDevice?.id || "").trim()),
-				);
+				const peerUserWriteOk =
+					params.credentialOnly === true ||
+					targetDevices.every((targetDevice) =>
+						successfulTargetIds.has(String(targetDevice?.id || "").trim()),
+					);
 				const fingerprintWriteOk =
 					!params.includeFingerprints ||
 					targetDevices.every((targetDevice) =>
@@ -2206,9 +2276,22 @@ export const controller = (prisma: PrismaClient) => {
 										params.employeeNo,
 										String(targetDevice?.id || "").trim(),
 									) ||
-									(event?.event === "peer_fingerprint_write_skipped" &&
+									(event?.event === "peer_fingerprint_write_preview" &&
 										String(event?.targetDeviceId || "").trim() ===
 											String(targetDevice?.id || "").trim())),
+						),
+					);
+				const faceWriteOk =
+					!params.includeFaceRecognition ||
+					targetDevices.every((targetDevice) =>
+						events.some(
+							(event) =>
+								String(event?.employeeNo || "").trim() === params.employeeNo &&
+								String(event?.targetDeviceId || "").trim() ===
+									String(targetDevice?.id || "").trim() &&
+								((event?.event === "peer_face_write" &&
+									String(event?.ok || "").trim().toLowerCase() === "true") ||
+									event?.event === "peer_face_write_preview"),
 						),
 					);
 				const completed = events.some(
@@ -2216,7 +2299,7 @@ export const controller = (prisma: PrismaClient) => {
 						event?.event === "reconcile_completed" &&
 						String(event?.employeeNo || "").trim() === params.employeeNo,
 				);
-				return { peerUserWriteOk, fingerprintWriteOk, completed };
+				return { peerUserWriteOk, fingerprintWriteOk, faceWriteOk, completed };
 			};
 			for (const strategy of strategies) {
 				emitManualCopyProgress({
@@ -2227,7 +2310,7 @@ export const controller = (prisma: PrismaClient) => {
 					apiBase: runtimeRoute.apiBase,
 					timeoutSeconds: manualCopyTimeoutSeconds,
 					targetCount: targetDevices.length,
-					message: `VM SDK ${strategy.name} attempt for user ${params.employeeNo}: user/fingerprint/face to ${targetDevices.length} target(s).`,
+					message: `VM SDK ${strategy.name} ${params.dryRun ? "dry-run" : "write"} for user ${params.employeeNo}: ${params.credentialOnly ? "credential-only" : "user/credential"} to ${targetDevices.length} target(s).`,
 				});
 				let result = await runManualCopy(strategy.extraEnv);
 				const firstAttemptDetail = result.stderr.trim() || result.stdout.trim();
@@ -2237,7 +2320,8 @@ export const controller = (prisma: PrismaClient) => {
 					if (
 						eventProof.peerUserWriteOk &&
 						eventProof.completed &&
-						eventProof.fingerprintWriteOk
+						eventProof.fingerprintWriteOk &&
+						eventProof.faceWriteOk
 					) {
 						return {
 							waitSeconds,
@@ -2282,9 +2366,15 @@ export const controller = (prisma: PrismaClient) => {
 					result = await runManualCopy(strategy.extraEnv);
 				}
 				const events = parseJsonLines(result.stdout);
-				const { peerUserWriteOk, fingerprintWriteOk, completed } =
+				const { peerUserWriteOk, fingerprintWriteOk, faceWriteOk, completed } =
 					evaluateManualCopyEvents(events);
-				if (result.exitCode === 0 && peerUserWriteOk && completed && fingerprintWriteOk) {
+				if (
+					result.exitCode === 0 &&
+					peerUserWriteOk &&
+					completed &&
+					fingerprintWriteOk &&
+					faceWriteOk
+				) {
 					return {
 						waitSeconds,
 						strategy: strategy.name,
@@ -2324,7 +2414,7 @@ export const controller = (prisma: PrismaClient) => {
 					}));
 				const parsedEventSummary =
 					events.length > 0
-						? `events=${events.length}; completed=${completed}; userOk=${peerUserWriteOk}; fingerprintOk=${fingerprintWriteOk}; latest=${JSON.stringify(visibleEvents)}`
+						? `events=${events.length}; completed=${completed}; userOk=${peerUserWriteOk}; fingerprintOk=${fingerprintWriteOk}; faceOk=${faceWriteOk}; latest=${JSON.stringify(visibleEvents)}`
 						: "";
 				failures.push(
 					`${strategy.name}: ${
@@ -10080,6 +10170,259 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const applyHikvisionCredentialMerge = async (params: {
+		req: Request;
+		organizationId: string;
+		plan: any;
+		selectedCredentialWriteIds: string[];
+		emitProgress?: (event: any) => void;
+	}) => {
+		const writeMatrix = buildDeviceUserCredentialWriteMatrix(
+			params.plan,
+			params.selectedCredentialWriteIds,
+		);
+		if (!writeMatrix.totalWrites) {
+			throw Object.assign(
+				new Error("Select at least one evidence-backed fingerprint or face write"),
+				{ statusCode: 409 },
+			);
+		}
+		const devices = await prisma.device.findMany({
+			where: {
+				organizationId: params.organizationId,
+				isDeleted: false,
+				id: { in: params.plan.deviceIds },
+			},
+			select: {
+				id: true,
+				organizationId: true,
+				name: true,
+				address: true,
+				port: true,
+				protocol: true,
+				config: true,
+				access: true,
+			},
+		});
+		const deviceById = new Map(devices.map((device) => [String(device.id), device]));
+		const groups = new Map<string, any[]>();
+		for (const write of writeMatrix.rows) {
+			const key = `${write.userKey}|${write.sourceDeviceId}|${write.modality}`;
+			const group = groups.get(key) || [];
+			group.push(write);
+			groups.set(key, group);
+		}
+		const results: any[] = [];
+		for (const writes of groups.values()) {
+			const first = writes[0];
+			const sourceDevice = deviceById.get(String(first.sourceDeviceId));
+			const targetDevices = writes
+				.map((write) => deviceById.get(String(write.targetDeviceId)))
+				.filter(Boolean) as typeof devices;
+			const includeFingerprints = first.modality === "fingerprint";
+			const includeFaceRecognition = first.modality === "face";
+			if (!sourceDevice || targetDevices.length !== writes.length) {
+				for (const write of writes) {
+					const error = "Credential source or target device is outside the frozen scope";
+					results.push({ ...write, status: "error", error });
+					params.emitProgress?.({
+						stage: "copy_error",
+						...write,
+						error,
+						message: error,
+					});
+				}
+				continue;
+			}
+			params.emitProgress?.({
+				stage: "credential_probe_started",
+				userKey: first.userKey,
+				vendorUserId: first.vendorUserId,
+				modality: first.modality,
+				sourceDeviceId: sourceDevice.id,
+				sourceDeviceName: sourceDevice.name,
+				targetDeviceIds: targetDevices.map((device) => device.id),
+				message: `Dry-running exact ${first.modality} export for ${first.vendorUserId} before any target write.`,
+			});
+			try {
+				const probe = await runHikvisionManualCopyOnVm({
+					sourceDevice,
+					targetDevices,
+					sourceDeviceId: String(sourceDevice.id),
+					employeeNo: first.vendorUserId,
+					includeFingerprints,
+					includeFaceRecognition,
+					credentialOnly: true,
+					dryRun: true,
+					onProgress: params.emitProgress,
+				});
+				params.emitProgress?.({
+					stage: "credential_probe_passed",
+					userKey: first.userKey,
+					vendorUserId: first.vendorUserId,
+					modality: first.modality,
+					sourceDeviceId: sourceDevice.id,
+					targetDeviceIds: targetDevices.map((device) => device.id),
+					probeEvents: probe.events.length,
+					message: `Exact ${first.modality} source export and target preview passed for ${first.vendorUserId}.`,
+				});
+				await runHikvisionManualCopyOnVm({
+					sourceDevice,
+					targetDevices,
+					sourceDeviceId: String(sourceDevice.id),
+					employeeNo: first.vendorUserId,
+					includeFingerprints,
+					includeFaceRecognition,
+					credentialOnly: true,
+					dryRun: false,
+					onProgress: params.emitProgress,
+				});
+				const user = (params.plan.users || []).find(
+					(candidate: any) => candidate.key === first.userKey,
+				);
+				for (const write of writes) {
+					const targetDevice = deviceById.get(String(write.targetDeviceId));
+					const before = (user?.records || []).find(
+						(record: any) => String(record.deviceId) === String(write.targetDeviceId),
+					);
+					try {
+						await syncSingleHikvisionDeviceUserFromSource({
+							req: params.req,
+							organizationId: params.organizationId,
+							device: targetDevice,
+							employeeNo: write.vendorUserId,
+						});
+						const after = await (prisma as any).deviceUser.findUnique({
+							where: {
+								organizationId_deviceId_vendorUserId: {
+									organizationId: params.organizationId,
+									deviceId: write.targetDeviceId,
+									vendorUserId: write.vendorUserId,
+								},
+							},
+						});
+						const beforeCredentials = extractHikvisionCredentialSummary(
+							before?.rawPayload || {},
+						);
+						const afterCredentials = extractHikvisionCredentialSummary(
+							after?.rawPayload || {},
+						);
+						const actualCount =
+							write.modality === "fingerprint"
+								? Number(afterCredentials.fingerprintCount || 0)
+								: Number(afterCredentials.faceCount || 0);
+						if (actualCount < Number(write.sourceReportedCount || 0)) {
+							throw new Error(
+								`Target reread reports ${write.modality} count ${actualCount}; expected at least ${write.sourceReportedCount}.`,
+							);
+						}
+						const normalize = (value: any) =>
+							value instanceof Date
+								? value.toISOString()
+								: value && typeof value === "object"
+									? JSON.stringify(value)
+									: String(value ?? "");
+						const unchangedFields = [
+							"displayName",
+							"status",
+							"validFrom",
+							"validTo",
+							"doorRight",
+							"accessPlan",
+						];
+						const changedField = unchangedFields.find(
+							(field) => normalize(before?.[field]) !== normalize(after?.[field]),
+						);
+						const otherModalityChanged =
+							write.modality === "fingerprint"
+								? Number(beforeCredentials.faceCount || 0) !==
+									Number(afterCredentials.faceCount || 0)
+								: Number(beforeCredentials.fingerprintCount || 0) !==
+									Number(afterCredentials.fingerprintCount || 0);
+						const cardChanged =
+							Number(beforeCredentials.cardCount || 0) !==
+							Number(afterCredentials.cardCount || 0);
+						if (changedField || otherModalityChanged || cardChanged) {
+							throw new Error(
+								`Credential-only isolation failed after reread (${changedField || (cardChanged ? "card" : "other_modality")} changed).`,
+							);
+						}
+						const result = {
+							...write,
+							status: "success",
+							actualCount,
+							strategy: "credential_only_sdk_probe_then_write",
+						};
+						results.push(result);
+						params.emitProgress?.({
+							stage: "copy_success",
+							...result,
+							sourceDeviceName: sourceDevice.name,
+							targetDeviceName: targetDevice?.name,
+							credentialStages: [write.modality],
+							message: `${write.modality} credential reread passed for ${write.vendorUserId} on ${targetDevice?.name || write.targetDeviceId}.`,
+						});
+					} catch (error: any) {
+						const result = {
+							...write,
+							status: "error",
+							error: error?.message || String(error),
+						};
+						results.push(result);
+						params.emitProgress?.({
+							stage: "copy_error",
+							...result,
+							sourceDeviceName: sourceDevice.name,
+							targetDeviceName: targetDevice?.name,
+							credentialStages: [write.modality],
+							message: result.error,
+						});
+					}
+				}
+			} catch (error: any) {
+				for (const write of writes) {
+					const result = {
+						...write,
+						status: "error",
+						error: `SDK probe/write blocked: ${error?.message || String(error)}`,
+					};
+					results.push(result);
+					params.emitProgress?.({
+						stage: "copy_error",
+						...result,
+						sourceDeviceName: sourceDevice.name,
+						targetDeviceName: deviceById.get(String(write.targetDeviceId))?.name,
+						credentialStages: [write.modality],
+						message: result.error,
+					});
+				}
+			}
+		}
+		params.emitProgress?.({
+			stage: "reread_started",
+			message: "Rereading all frozen devices after credential-only writes.",
+		});
+		const reread = await loadHikvisionSdkMergePlan({
+			req: params.req,
+			organizationId: params.organizationId,
+			deviceIds: params.plan.deviceIds,
+		});
+		const rereadCounts = reread?.counts || {};
+		params.emitProgress?.({
+			stage: "reread_done",
+			remainingConflicts: Number(rereadCounts.conflicts || 0),
+			remainingMissing: Number(rereadCounts.missing || 0),
+			message: "Credential reread complete.",
+		});
+		return {
+			results,
+			reread,
+			remainingConflicts: Number(rereadCounts.conflicts || 0),
+			remainingMissing: Number(rereadCounts.missing || 0),
+			attention: results.filter((result) => result.status === "error").length,
+		};
+	};
+
 	const applyHikvisionSdkUserMerge = async (req: Request, res: Response, _next: NextFunction) => {
 		const admin = assertDeviceUserAdmin(req, res);
 		if (!admin) return;
@@ -10091,6 +10434,40 @@ export const controller = (prisma: PrismaClient) => {
 					buildErrorResponse(
 						"Merge plan not found or expired. Refresh the devices and try again.",
 						404,
+					),
+				);
+				return;
+			}
+			const credentialMode = req.body?.mode === "credentials";
+			const selectedCredentialWriteIds = Array.isArray(
+				req.body?.selectedCredentialWriteIds,
+			)
+				? req.body.selectedCredentialWriteIds
+						.map((id: unknown) => String(id || "").trim())
+						.filter(Boolean)
+				: [];
+			if (credentialMode) {
+				const emitProgress =
+					typeof (req as any).deviceUserMergeProgress === "function"
+						? (event: any) =>
+								(req as any).deviceUserMergeProgress({
+									...event,
+									at: new Date().toISOString(),
+								})
+						: undefined;
+				const result = await applyHikvisionCredentialMerge({
+					req,
+					organizationId: String(admin.organizationId),
+					plan: stored.plan,
+					selectedCredentialWriteIds,
+					emitProgress,
+				});
+				deviceUserMergePlans.delete(planId);
+				res.status(200).json(
+					buildSuccessResponse(
+						"Hikvision credential-only merge applied",
+						{ planId, ...result },
+						200,
 					),
 				);
 				return;
@@ -10649,9 +11026,11 @@ export const controller = (prisma: PrismaClient) => {
 	const runHikvisionSdkUserMergeApplyForJob = async (params: {
 		req: Request;
 		planId: string;
+		mode?: "users" | "credentials";
 		choices?: Record<string, any>;
 		applyAll?: "A" | "B";
 		selectedUserKeys?: string[];
+		selectedCredentialWriteIds?: string[];
 		onProgress?: (event: any) => void;
 	}) => {
 		const originalBody = params.req.body;
@@ -10672,9 +11051,11 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			(params.req as any).body = {
 				planId: params.planId,
+				mode: params.mode,
 				choices: params.choices || {},
 				applyAll: params.applyAll,
 				selectedUserKeys: params.selectedUserKeys,
+				selectedCredentialWriteIds: params.selectedCredentialWriteIds,
 			};
 			(params.req as any).deviceUserMergeProgress = params.onProgress;
 			(params.req as any).deviceUserMergeSkipInitialSnapshot = true;
@@ -10703,9 +11084,11 @@ export const controller = (prisma: PrismaClient) => {
 		req: Request;
 		organizationId: string;
 		planId: string;
+		mode?: "users" | "credentials";
 		choices?: Record<string, any>;
 		applyAll?: "A" | "B";
 		selectedUserKeys?: string[];
+		selectedCredentialWriteIds?: string[];
 	}) => {
 		const job = deviceUserMergeJobs.get(params.jobId);
 		if (!job) return;
@@ -10725,6 +11108,10 @@ export const controller = (prisma: PrismaClient) => {
 							sourceDeviceName: event.sourceDeviceName,
 							targetDeviceId: event.targetDeviceId,
 							targetDeviceName: event.targetDeviceName,
+							modality: event.modality || null,
+							sourceReportedCount: event.sourceReportedCount ?? null,
+							targetReportedCount: event.targetReportedCount ?? null,
+							actualCount: event.actualCount ?? null,
 							status: stage === "copy_success" ? "success" : "error",
 							strategy: event.strategy || null,
 							error: event.error || null,
@@ -10747,6 +11134,10 @@ export const controller = (prisma: PrismaClient) => {
 						sourceDeviceName: event?.sourceDeviceName || null,
 						targetDeviceId: event?.targetDeviceId || null,
 						targetDeviceName: event?.targetDeviceName || null,
+						modality: event?.modality || null,
+						sourceReportedCount: event?.sourceReportedCount ?? null,
+						targetReportedCount: event?.targetReportedCount ?? null,
+						actualCount: event?.actualCount ?? null,
 						stage,
 						status:
 							stage === "copy_success"
@@ -10831,9 +11222,11 @@ export const controller = (prisma: PrismaClient) => {
 			const result = await runHikvisionSdkUserMergeApplyForJob({
 				req: params.req,
 				planId: params.planId,
+				mode: params.mode,
 				choices: params.choices,
 				applyAll: params.applyAll,
 				selectedUserKeys: params.selectedUserKeys,
+				selectedCredentialWriteIds: params.selectedCredentialWriteIds,
 				onProgress: recordProgress,
 			});
 			const results = Array.isArray(result?.results) ? result.results : [];
@@ -10907,6 +11300,64 @@ export const controller = (prisma: PrismaClient) => {
 					buildErrorResponse(
 						"Merge plan not found or expired. Refresh the devices and try again.",
 						404,
+					),
+				);
+				return;
+			}
+			if (req.body?.mode === "credentials") {
+				const selectedCredentialWriteIds = Array.isArray(
+					req.body?.selectedCredentialWriteIds,
+				)
+					? req.body.selectedCredentialWriteIds
+							.map((id: unknown) => String(id || "").trim())
+							.filter(Boolean)
+					: [];
+				const writeMatrix = buildDeviceUserCredentialWriteMatrix(
+					stored.plan,
+					selectedCredentialWriteIds,
+				);
+				if (
+					!selectedCredentialWriteIds.length ||
+					writeMatrix.totalWrites !== selectedCredentialWriteIds.length ||
+					writeMatrix.blockedWrites > 0 ||
+					(stored.plan.errors || []).length > 0 ||
+					(stored.plan.ambiguousMatches || []).length > 0
+				) {
+					res.status(409).json(
+						buildErrorResponse(
+							"Credential scope contains blocked, ambiguous, unavailable, or unselected rows",
+							409,
+						),
+					);
+					return;
+				}
+				const selectedUserKeySet = new Set(
+					writeMatrix.rows.map((write: any) => String(write.userKey)),
+				);
+				const appliedPlan = {
+					...stored.plan,
+					mode: "credentials",
+					users: (stored.plan.users || []).filter((user: any) =>
+						selectedUserKeySet.has(String(user.key)),
+					),
+					plannedWrites: [],
+					credentialWrites: writeMatrix.rows,
+				};
+				const lock = buildDeviceUserMergeScopeLock({
+					planId,
+					appliedPlan,
+					writeMatrix,
+				});
+				res.status(200).json(
+					buildSuccessResponse(
+						"SDK credential merge write scope reviewed",
+						{
+							planId,
+							mode: "credentials",
+							scopeHash: lock.scopeHash,
+							...lock.scope,
+						},
+						200,
 					),
 				);
 				return;
@@ -10995,6 +11446,8 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				return;
 			}
+			const mode: "users" | "credentials" =
+				req.body?.mode === "credentials" ? "credentials" : "users";
 			const choices = req.body?.choices || {};
 			const applyAll =
 				req.body?.applyAll === "A" || req.body?.applyAll === "B"
@@ -11005,23 +11458,66 @@ export const controller = (prisma: PrismaClient) => {
 						.map((key: unknown) => String(key || "").trim())
 						.filter(Boolean)
 				: undefined;
-			const selectedAppliedPlan = applyMergeChoices(stored.plan, {
-				choices,
-				applyAll,
-				selectedUserKeys,
-			});
-			if (!selectedAppliedPlan.executable) {
-				const reason = selectedAppliedPlan.ambiguousMatches?.length
-					? "Resolve ambiguous SDK user identities before starting the merge job"
-					: (selectedAppliedPlan as any).errors?.length
-						? "Resolve unreachable or failed SDK reads before starting the merge job"
-						: selectedUserKeys?.length === 0
-							? "Select at least one actionable unique ID before starting the merge job"
-							: "Resolve every selected SDK user conflict before starting the merge job";
-				res.status(409).json(buildErrorResponse(reason, 409));
-				return;
+			const selectedCredentialWriteIds = Array.isArray(
+				req.body?.selectedCredentialWriteIds,
+			)
+				? req.body.selectedCredentialWriteIds
+						.map((id: unknown) => String(id || "").trim())
+						.filter(Boolean)
+				: [];
+			let selectedAppliedPlan: any;
+			let writeMatrix: any;
+			if (mode === "credentials") {
+				writeMatrix = buildDeviceUserCredentialWriteMatrix(
+					stored.plan,
+					selectedCredentialWriteIds,
+				);
+				if (
+					!selectedCredentialWriteIds.length ||
+					writeMatrix.totalWrites !== selectedCredentialWriteIds.length ||
+					writeMatrix.blockedWrites > 0 ||
+					(stored.plan.errors || []).length > 0 ||
+					(stored.plan.ambiguousMatches || []).length > 0
+				) {
+					res.status(409).json(
+						buildErrorResponse(
+							"Credential scope contains blocked, ambiguous, unavailable, or unselected rows",
+							409,
+						),
+					);
+					return;
+				}
+				const selectedUserKeySet = new Set(
+					writeMatrix.rows.map((write: any) => String(write.userKey)),
+				);
+				selectedAppliedPlan = {
+					...stored.plan,
+					mode,
+					users: (stored.plan.users || []).filter((user: any) =>
+						selectedUserKeySet.has(String(user.key)),
+					),
+					plannedWrites: [],
+					credentialWrites: writeMatrix.rows,
+				};
+			} else {
+				selectedAppliedPlan = applyMergeChoices(stored.plan, {
+					choices,
+					applyAll,
+					selectedUserKeys,
+				});
+				if (!selectedAppliedPlan.executable) {
+					const reason = selectedAppliedPlan.ambiguousMatches?.length
+						? "Resolve ambiguous SDK user identities before starting the merge job"
+						: (selectedAppliedPlan as any).errors?.length
+							? "Resolve unreachable or failed SDK reads before starting the merge job"
+							: selectedUserKeys?.length === 0
+								? "Select at least one actionable unique ID before starting the merge job"
+								: "Resolve every selected SDK user conflict before starting the merge job";
+					res.status(409).json(buildErrorResponse(reason, 409));
+					return;
+				}
+				writeMatrix = buildDeviceUserMergeWriteMatrix(selectedAppliedPlan);
 			}
-			const writeMatrix = buildDeviceUserMergeWriteMatrix(selectedAppliedPlan);
 			const scopeLock = buildDeviceUserMergeScopeLock({
 				planId,
 				appliedPlan: selectedAppliedPlan,
@@ -11037,14 +11533,18 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				return;
 			}
-			const totalWrites = Math.max(
-				1,
-				Number(writeMatrix.totalWrites || selectedAppliedPlan.plannedWrites?.length || 0),
+			const totalWrites = Number(
+				writeMatrix.totalWrites || selectedAppliedPlan.plannedWrites?.length || 0,
 			);
+			if (totalWrites <= 0) {
+				res.status(409).json(buildErrorResponse("Reviewed scope contains no writes", 409));
+				return;
+			}
 			const jobId = randomUUID();
 			const job: DeviceUserMergeJob = {
 				jobId,
 				planId,
+				mode,
 				scopeHash: scopeLock.scopeHash,
 				status: "processing",
 				organizationId: String(admin.organizationId),
@@ -11054,7 +11554,9 @@ export const controller = (prisma: PrismaClient) => {
 				alreadyConvergedWrites: 0,
 				failedWrites: 0,
 				message:
-					"Merge job queued. HRIS will apply reviewed decisions, copy credentials, then reread devices.",
+					mode === "credentials"
+						? "Credential job queued. HRIS will probe exact SDK templates, write one modality, then reread devices."
+						: "Merge job queued. HRIS will apply reviewed decisions, copy credentials, then reread devices.",
 				currentStage: "queued",
 				currentUserKey: null,
 				currentTargetDeviceId: null,
@@ -11063,7 +11565,9 @@ export const controller = (prisma: PrismaClient) => {
 					{
 						stage: "queued",
 						message:
-							"Merge job queued. HRIS will apply reviewed decisions, copy credentials, then reread devices.",
+							mode === "credentials"
+								? "Credential job queued. Exact SDK source probes run before every physical write."
+								: "Merge job queued. HRIS will apply reviewed decisions, copy credentials, then reread devices.",
 						at: new Date().toISOString(),
 					},
 				],
@@ -11080,9 +11584,11 @@ export const controller = (prisma: PrismaClient) => {
 				req,
 				organizationId: String(admin.organizationId),
 				planId,
+				mode,
 				choices,
 				applyAll,
 				selectedUserKeys,
+				selectedCredentialWriteIds,
 			}).catch((error: any) => {
 				deviceLogger.error(`Hikvision SDK user merge job ${jobId} failed: ${error}`);
 				updateDeviceUserMergeJob(jobId, {
@@ -11178,6 +11684,7 @@ export const controller = (prisma: PrismaClient) => {
 				return {
 					jobId: job.jobId,
 					planId: job.planId,
+					mode: job.mode || "users",
 					retryPlanId: job.retryPlanId,
 					status: job.status,
 					totalWrites: job.totalWrites,
@@ -11201,10 +11708,16 @@ export const controller = (prisma: PrismaClient) => {
 						: null,
 					writeMatrix: job.writeMatrix
 						? {
+								mode: job.writeMatrix.mode || job.mode || "users",
 								selectedUniqueIds: job.writeMatrix.selectedUniqueIds,
+								selectedCredentialWrites:
+									job.writeMatrix.selectedCredentialWrites || 0,
 								totalWrites: job.writeMatrix.totalWrites,
 								fingerprintGaps: job.writeMatrix.fingerprintGaps,
 								faceGaps: job.writeMatrix.faceGaps,
+								fingerprintWrites: job.writeMatrix.fingerprintWrites || 0,
+								faceWrites: job.writeMatrix.faceWrites || 0,
+								blockedWrites: job.writeMatrix.blockedWrites || 0,
 								conflicts: job.writeMatrix.conflicts,
 							}
 						: null,

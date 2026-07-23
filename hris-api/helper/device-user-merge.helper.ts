@@ -79,6 +79,37 @@ export type DeviceUserMergeGroup = {
 	missingOnDeviceIds: string[];
 };
 
+export type DeviceUserCredentialModality = "fingerprint" | "face" | "card";
+
+export type DeviceUserCredentialWrite = {
+	id: string;
+	userKey: string;
+	vendorUserId: string;
+	modality: DeviceUserCredentialModality;
+	sourceDeviceId: string | null;
+	targetDeviceId: string;
+	sourceReportedCount: number;
+	targetReportedCount: number;
+	sourceEvidenceStatus:
+		| "raw_blob_present"
+		| "missing_raw_blob"
+		| "count_reported"
+		| "not_enrolled"
+		| "not_requested";
+	recommended: boolean;
+	recommendationReason: string;
+	executionEligibility:
+		| "ready_from_raw_blob"
+		| "sdk_probe_required"
+		| "blocked";
+	blockingReason:
+		| "source_conflict"
+		| "source_not_enrolled"
+		| "credential_only_card_not_supported"
+		| null;
+	sourceCandidateDeviceIds: string[];
+};
+
 const text = (value: unknown) => String(value ?? "").trim();
 const stable = (value: unknown) => {
 	if (value instanceof Date) return value.toISOString();
@@ -120,6 +151,107 @@ const identityKey = (record: DeviceUserMergeRecord) => {
 		return `identity:${text(record.identityName).toLocaleLowerCase()}`;
 	return `unmatched:${text(record.deviceId)}:${text(record.vendorUserId)}`;
 };
+
+const credentialEvidenceStatus = (
+	record: DeviceUserMergeRecord,
+	modality: DeviceUserCredentialModality,
+): DeviceUserCredentialWrite["sourceEvidenceStatus"] => {
+	if (modality === "fingerprint") {
+		const evidence = record.biometricEvidence?.fingerprint;
+		if (evidence?.status) return evidence.status;
+		return credentials(record).fingerprintCount > 0 ? "count_reported" : "not_enrolled";
+	}
+	if (modality === "face") {
+		const evidence = record.biometricEvidence?.face;
+		if (evidence?.status) return evidence.status;
+		return credentials(record).faceCount > 0 ? "count_reported" : "not_enrolled";
+	}
+	return credentials(record).cardCount > 0 ? "count_reported" : "not_enrolled";
+};
+
+const credentialCount = (
+	record: DeviceUserMergeRecord,
+	modality: DeviceUserCredentialModality,
+) => {
+	const summary = credentials(record);
+	if (modality === "fingerprint") return Number(summary.fingerprintCount || 0);
+	if (modality === "face") return Number(summary.faceCount || 0);
+	return Number(summary.cardCount || 0);
+};
+
+const buildCredentialWritesForUser = (
+	user: DeviceUserMergeGroup,
+): DeviceUserCredentialWrite[] => {
+	const vendorUserId = text(user.vendorUserIds[0]);
+	if (!vendorUserId) return [];
+	const writes: DeviceUserCredentialWrite[] = [];
+	for (const modality of ["fingerprint", "face", "card"] as const) {
+		const records = user.records.map((record) => ({
+			record,
+			count: credentialCount(record, modality),
+			evidenceStatus: credentialEvidenceStatus(record, modality),
+		}));
+		const maxCount = records.reduce((max, item) => Math.max(max, item.count), 0);
+		if (maxCount <= 0) continue;
+		const maxSources = records.filter((item) => item.count === maxCount);
+		const rawSources =
+			modality === "card"
+				? []
+				: maxSources.filter((item) => item.evidenceStatus === "raw_blob_present");
+		const preferredSources = rawSources.length === 1 ? rawSources : maxSources;
+		const uniqueSource = preferredSources.length === 1 ? preferredSources[0] : null;
+		const sourceDeviceId = uniqueSource?.record.deviceId || null;
+		const sourceEvidenceStatus =
+			uniqueSource?.evidenceStatus ||
+			(maxSources[0]?.evidenceStatus as DeviceUserCredentialWrite["sourceEvidenceStatus"]) ||
+			"not_enrolled";
+		for (const target of records.filter((item) => item.count < maxCount)) {
+			const blockingReason =
+				modality === "card"
+					? "credential_only_card_not_supported"
+					: !uniqueSource
+						? "source_conflict"
+						: null;
+			const executionEligibility = blockingReason
+				? "blocked"
+				: sourceEvidenceStatus === "raw_blob_present"
+					? "ready_from_raw_blob"
+					: "sdk_probe_required";
+			const sourceCandidateDeviceIds = preferredSources.map(
+				(item) => item.record.deviceId,
+			);
+			writes.push({
+				id: [
+					user.key,
+					modality,
+					sourceDeviceId || sourceCandidateDeviceIds.join("+") || "none",
+					target.record.deviceId,
+				].join(":"),
+				userKey: user.key,
+				vendorUserId,
+				modality,
+				sourceDeviceId,
+				targetDeviceId: target.record.deviceId,
+				sourceReportedCount: maxCount,
+				targetReportedCount: target.count,
+				sourceEvidenceStatus,
+				recommended: Boolean(sourceDeviceId) && !blockingReason,
+				recommendationReason: blockingReason
+					? blockingReason === "source_conflict"
+						? `Multiple devices report the same highest ${modality} count; template equality is not proven.`
+						: "Credential-only card writes are not implemented."
+					: sourceEvidenceStatus === "raw_blob_present"
+						? `A single highest-count source has evidenced raw ${modality} custody.`
+						: `A single device reports the highest ${modality} count; exact VM SDK export must pass before any target write.`,
+				executionEligibility,
+				blockingReason,
+				sourceCandidateDeviceIds,
+			});
+		}
+	}
+	return writes;
+};
+
 
 const recordId = (record: DeviceUserMergeRecord, index: number) =>
 	text((record as any).id) ||
@@ -317,6 +449,7 @@ export const buildDeviceUserMergePlan = (params: {
 			else idsReadByDevice[deviceId] = 1;
 		}
 	}
+	const credentialWrites = users.flatMap(buildCredentialWritesForUser);
 	return {
 		deviceIds: selectedDeviceIds,
 		validDeviceIds,
@@ -332,6 +465,7 @@ export const buildDeviceUserMergePlan = (params: {
 		plannedWrites: users.flatMap((user) =>
 			user.targetDeviceIds.map((targetDeviceId) => ({ userKey: user.key, targetDeviceId })),
 		),
+		credentialWrites,
 		unresolvedDecisions: [],
 		counts: {
 			unionUsers: users.length,
@@ -350,6 +484,13 @@ export const buildDeviceUserMergePlan = (params: {
 			missing: users.reduce((sum, user) => sum + user.missingOnDeviceIds.length, 0),
 			ambiguous: ambiguousMatches.length,
 			missingHrisLinks: users.filter((user) => !user.employeeId).length,
+			credentialWrites: credentialWrites.length,
+			actionableCredentialWrites: credentialWrites.filter(
+				(write) => write.executionEligibility !== "blocked",
+			).length,
+			blockedCredentialWrites: credentialWrites.filter(
+				(write) => write.executionEligibility === "blocked",
+			).length,
 			validDevices: validDeviceIds.length,
 			failedDevices: selectedDeviceIds.filter((id) => !validDeviceIdSet.has(id)).length,
 		},
@@ -392,6 +533,7 @@ export const serializeDeviceUserMergePlanForReview = (plan: any) => ({
 	unreachableDevices: plan.unreachableDevices || [],
 	sdkErrors: plan.sdkErrors || [],
 	plannedWrites: plan.plannedWrites || [],
+	credentialWrites: plan.credentialWrites || [],
 	unresolvedDecisions: plan.unresolvedDecisions || [],
 	counts: plan.counts || {},
 	errors: plan.errors || [],

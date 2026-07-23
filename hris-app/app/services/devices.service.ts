@@ -607,10 +607,29 @@ export type DeviceUserMergePlanResponse = {
 			missing: number;
 			ambiguous?: number;
 			missingHrisLinks?: number;
+			credentialWrites?: number;
+			actionableCredentialWrites?: number;
+			blockedCredentialWrites?: number;
 			validDevices?: number;
 			failedDevices?: number;
 		};
 		plannedWrites?: Array<{ userKey: string; targetDeviceId: string }>;
+		credentialWrites?: Array<{
+			id: string;
+			userKey: string;
+			vendorUserId: string;
+			modality: "fingerprint" | "face" | "card";
+			sourceDeviceId: string | null;
+			targetDeviceId: string;
+			sourceReportedCount: number;
+			targetReportedCount: number;
+			sourceEvidenceStatus: string;
+			recommended: boolean;
+			recommendationReason: string;
+			executionEligibility: "ready_from_raw_blob" | "sdk_probe_required" | "blocked";
+			blockingReason?: string | null;
+			sourceCandidateDeviceIds: string[];
+		}>;
 		errors: Array<{ deviceId: string; deviceName: string; error: string }>;
 		sdkErrors?: Array<{ deviceId: string; deviceName: string; error: string }>;
 		unreachableDevices?: Array<{ deviceId: string; deviceName: string; error: string }>;
@@ -625,6 +644,7 @@ export type DeviceUserMergeRequest = {
 export interface DeviceUserMergeJobProgress {
 	jobId: string;
 	planId: string;
+	mode?: "users" | "credentials";
 	scopeHash?: string;
 	retryPlanId?: string;
 	status: "processing" | "completed" | "failed";
@@ -638,24 +658,29 @@ export interface DeviceUserMergeJobProgress {
 	currentUserKey?: string | null;
 	currentTargetDeviceId?: string | null;
 	writeMatrix?: {
-		selectedUniqueIds: number;
+		mode?: "users" | "credentials";
+		selectedUniqueIds?: number;
+		selectedCredentialWrites?: number;
 		totalWrites: number;
-		fingerprintGaps: number;
-		faceGaps: number;
-		conflicts: number;
-		perTarget: Array<{
+		fingerprintGaps?: number;
+		faceGaps?: number;
+		fingerprintWrites?: number;
+		faceWrites?: number;
+		blockedWrites?: number;
+		conflicts?: number;
+		perTarget?: Array<{
 			deviceId: string;
 			deviceName: string;
 			writes: number;
 			sourceDeviceIds: string[];
 		}>;
-		perSource: Array<{
+		perSource?: Array<{
 			deviceId: string;
 			deviceName: string;
 			selectedUniqueIds: number;
 			writes: number;
 		}>;
-		rows: Array<{
+		rows?: Array<{
 			userKey: string;
 			vendorUserIds: string[];
 			sourceDeviceId: string;
@@ -681,6 +706,10 @@ export interface DeviceUserMergeJobProgress {
 		sourceDeviceName?: string;
 		targetDeviceId?: string;
 		targetDeviceName?: string;
+		modality?: "fingerprint" | "face" | "card" | null;
+		sourceReportedCount?: number | null;
+		targetReportedCount?: number | null;
+		actualCount?: number | null;
 		status: "success" | "error" | string;
 		strategy?: string | null;
 		error?: string | null;
@@ -722,9 +751,11 @@ export interface DeviceUserMergeJobProgress {
 
 export type DeviceUserMergeApplyPayload = {
 	planId: string;
+	mode?: "users" | "credentials";
 	choices?: Record<string, Partial<Record<DeviceUserMergeField, "A" | "B" | "KEEP">>>;
 	applyAll?: "A" | "B";
 	selectedUserKeys?: string[];
+	selectedCredentialWriteIds?: string[];
 	expectedScopeHash?: string;
 };
 
