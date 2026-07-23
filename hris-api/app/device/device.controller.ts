@@ -2819,6 +2819,7 @@ export const controller = (prisma: PrismaClient) => {
 		targetDevice: any;
 		employeeNo: string;
 		decrypted: any;
+		deferFingerprintRereadVerification?: boolean;
 	}) => {
 		const fingerprints = Array.isArray(params.decrypted?.fingerprints)
 			? params.decrypted.fingerprints
@@ -2847,6 +2848,7 @@ export const controller = (prisma: PrismaClient) => {
 				fingerPrintID: fingerPrintId,
 				fingerType,
 				enableCardReader: [1],
+				deferRereadVerification: params.deferFingerprintRereadVerification,
 			});
 			results.push({
 				fingerPrintId,
@@ -10340,6 +10342,7 @@ export const controller = (prisma: PrismaClient) => {
 							targetDevice,
 							employeeNo: write.vendorUserId,
 							decrypted: { fingerprints: templates },
+							deferFingerprintRereadVerification: true,
 						});
 						if (
 							writeResult.fingerprintWriteCount < templates.length ||

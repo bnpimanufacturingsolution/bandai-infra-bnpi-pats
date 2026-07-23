@@ -514,6 +514,7 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 	fingerType?: string | number;
 	enableCardReader?: number[];
 	cardNo?: string;
+	deferRereadVerification?: boolean;
 }): Promise<{
 	writeOk: boolean;
 	writeResponse: any;
@@ -565,6 +566,23 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 		req: params.req,
 		deviceId: params.deviceId,
 	});
+	if (params.deferRereadVerification) {
+		return {
+			writeOk,
+			writeResponse,
+			progress,
+			// The credential merge performs one authoritative UserInfo reread after
+			// every slot in this exact person's bundle has been submitted. Avoid a
+			// duplicate raw-template sweep per slot while retaining the final
+			// physical-count gate.
+			sticky: writeOk,
+			numOfFP: 0,
+			fingerprints: [],
+			source: writeOk
+				? "write_ack_deferred_to_group_userinfo_reread"
+				: "device_fp_write_failed",
+		};
+	}
 
 	// Re-read device templates for THIS person only (never promote donor).
 	let fingerprints: RawFingerprintTemplate[] = [];
