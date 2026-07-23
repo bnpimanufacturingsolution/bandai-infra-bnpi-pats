@@ -11759,6 +11759,57 @@ export const controller = (prisma: PrismaClient) => {
 							);
 						}
 						await new Promise((resolve) => setTimeout(resolve, 750));
+						const {
+							buildFingerprintTemplateChecksumEvidence,
+							fetchRawFingerprintsViaIsapi,
+						} = await import(
+							"../../helper/device-user-raw-fingerprint.helper.js"
+						);
+						const physicalReread = await fetchRawFingerprintsViaIsapi({
+							prisma,
+							req: params.req,
+							deviceId: String(write.targetDeviceId),
+							employeeNo: String(write.vendorUserId),
+							maxFingerId: Math.max(
+								...templates.map((template: any) =>
+									Number(template.fingerPrintId || 0),
+								),
+								Number(write.sourceReportedCount || 0),
+								1,
+							),
+							expectedFingerprintCount: Number(write.sourceReportedCount || 0),
+						});
+						const sourceTemplateChecksums =
+							buildFingerprintTemplateChecksumEvidence(templates);
+						const postWriteTemplateChecksums =
+							buildFingerprintTemplateChecksumEvidence(
+								physicalReread.fingerprints || [],
+							);
+						const missingRetainedChecksums = sourceTemplateChecksums.filter(
+							(sourceTemplate) =>
+								!postWriteTemplateChecksums.some(
+									(targetTemplate) =>
+										targetTemplate.fingerPrintId ===
+											sourceTemplate.fingerPrintId &&
+										targetTemplate.checksum === sourceTemplate.checksum,
+								),
+						);
+						if (missingRetainedChecksums.length > 0) {
+							throw new Error(
+								`Target physical fingerprint reread did not retain ${missingRetainedChecksums.length} reviewed slot checksum(s).`,
+							);
+						}
+						const postWriteChecksum = createHash("sha256")
+							.update(
+								JSON.stringify(
+									[...postWriteTemplateChecksums].sort(
+										(left, right) =>
+											left.fingerPrintId - right.fingerPrintId ||
+											left.checksum.localeCompare(right.checksum),
+									),
+								),
+							)
+							.digest("hex");
 						await syncSingleHikvisionDeviceUserFromSource({
 							req: params.req,
 							organizationId: params.organizationId,
@@ -11801,6 +11852,12 @@ export const controller = (prisma: PrismaClient) => {
 							status: "success",
 							actualCount,
 							strategy: "stored_raw_fingerprint_write_and_reread",
+							sourceFingerprintTemplateChecksums: sourceTemplateChecksums,
+							postWriteFingerprintTemplateChecksums: postWriteTemplateChecksums,
+							postWriteChecksum,
+							physicalRereadResult: "exact_slot_checksum_retained",
+							sdkProgressStatus:
+								writeResult.fingerprintWrites.at(-1)?.progressStatus ?? null,
 						};
 						results.push(result);
 						params.emitProgress?.({
@@ -14035,7 +14092,9 @@ export const controller = (prisma: PrismaClient) => {
 					},
 				],
 				writeMatrix,
-				startingGapSummary: summarizeDeviceUserCredentialGaps(selectedAppliedPlan),
+				startingGapSummary: summarizeDeviceUserCredentialGaps(
+					mode === "credentials" ? stored.plan : selectedAppliedPlan,
+				),
 				stale: false,
 				startedAt: new Date(),
 				updatedAt: new Date(),

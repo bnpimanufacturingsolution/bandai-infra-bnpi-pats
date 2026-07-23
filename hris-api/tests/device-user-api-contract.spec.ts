@@ -137,6 +137,26 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("includeFaceRecognition,");
 	});
 
+	it("compares credential job rereads against the full reviewed fleet plan", () => {
+		const controller = controllerSource();
+		expect(controller).to.include(
+			'mode === "credentials" ? stored.plan : selectedAppliedPlan',
+		);
+		expect(controller).to.include("buildDeviceUserCredentialGapDelta(");
+	});
+
+	it("requires an exact physical fingerprint slot-checksum reread after writing", () => {
+		const controller = controllerSource();
+		expect(controller).to.include(
+			"const physicalReread = await fetchRawFingerprintsViaIsapi",
+		);
+		expect(controller).to.include("missingRetainedChecksums.length > 0");
+		expect(controller).to.include(
+			'physicalRereadResult: "exact_slot_checksum_retained"',
+		);
+		expect(controller).to.include("postWriteFingerprintTemplateChecksums");
+	});
+
 	it("uses a fast Hikvision UserInfo count for Device Users preview instead of stale all-device skip copy", () => {
 		const controller = controllerSource();
 		expect(controller).to.include("const getHikvisionFastDeviceUserSourceCount = async");
