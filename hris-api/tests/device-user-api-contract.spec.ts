@@ -188,6 +188,18 @@ describe("DeviceUser API contract", () => {
 		);
 		expect(controller).to.include("sourceFaceChecksumEvidence");
 		expect(controller).to.include(
+			"readHikvisionCardValuesForOwnerFromFullInventory",
+		);
+		expect(controller).to.include("canonicalEmployeeMatch");
+		expect(controller).to.include(
+			"same_canonical_hris_employee_with_target_owned_card",
+		);
+		expect(controller).to.include("targetCardRetainedChecksum");
+		expect(controller).to.include("findExactHikvisionDeviceInfoValue");
+		expect(controller).to.include(
+			'new Set(["firmwareversion", "firmware", "softwareversion"])',
+		);
+		expect(controller).to.include(
 			"All highest-count face sources have exact template and picture checksum equality",
 		);
 		expect(controller).to.include("attestRetainedHikvisionCardCanary");

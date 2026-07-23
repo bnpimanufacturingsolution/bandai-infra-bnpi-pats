@@ -3012,6 +3012,28 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const findExactHikvisionDeviceInfoValue = (
+		value: unknown,
+		keys: Set<string>,
+		depth = 0,
+	): string => {
+		if (!value || typeof value !== "object" || depth > 8) return "";
+		for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+			if (
+				keys.has(key.toLowerCase()) &&
+				(typeof nested === "string" || typeof nested === "number")
+			) {
+				const text = String(nested).trim();
+				if (text) return text;
+			}
+		}
+		for (const nested of Object.values(value as Record<string, unknown>)) {
+			const found = findExactHikvisionDeviceInfoValue(nested, keys, depth + 1);
+			if (found) return found;
+		}
+		return "";
+	};
+
 	const persistPhysicallyProvenHikvisionWriterCapability = async (params: {
 		req: Request;
 		targetDevice: any;
@@ -3043,20 +3065,18 @@ export const controller = (prisma: PrismaClient) => {
 		const deviceInfo =
 			deviceInfoResponse?.DeviceInfo ||
 			deviceInfoResponse?.deviceInfo ||
+			deviceInfoResponse?.data?.DeviceInfo ||
+			deviceInfoResponse?.data?.deviceInfo ||
 			deviceInfoResponse ||
 			{};
-		const model = String(
-			deviceInfo?.model ||
-				deviceInfo?.deviceModel ||
-				deviceInfo?.deviceType ||
-				"",
-		).trim();
-		const firmware = String(
-			deviceInfo?.firmwareVersion ||
-				deviceInfo?.firmware ||
-				deviceInfo?.softwareVersion ||
-				"",
-		).trim();
+		const model = findExactHikvisionDeviceInfoValue(
+			deviceInfo,
+			new Set(["model", "devicemodel", "devicetype"]),
+		);
+		const firmware = findExactHikvisionDeviceInfoValue(
+			deviceInfo,
+			new Set(["firmwareversion", "firmware", "softwareversion"]),
+		);
 		const evidence = createHikvisionWriterCapabilityEvidence({
 			deviceId: String(params.targetDevice.id),
 			model,
@@ -3145,16 +3165,16 @@ export const controller = (prisma: PrismaClient) => {
 		return safeEvidence;
 	};
 
-	const readExactHikvisionCardOwnerFromFullInventory = async (params: {
+	const readHikvisionCardValuesForOwnerFromFullInventory = async (params: {
 		req: Request;
 		deviceId: string;
 		vendorUserId: string;
-		cardNo: string;
 	}) => {
 		let searchResultPosition = 0;
 		let rowsScanned = 0;
 		let pagesRead = 0;
 		let lastResponseStatus = "";
+		const cardValues: string[] = [];
 		// Hikvision searchID fields are bounded; keep one stable compact UUID across pages.
 		const searchID = randomUUID();
 		for (let page = 0; page < 25; page += 1) {
@@ -3183,19 +3203,13 @@ export const controller = (prisma: PrismaClient) => {
 					: [];
 			pagesRead = page + 1;
 			rowsScanned += cards.length;
-			if (
-				cards.some(
-					(card: any) =>
-						String(card?.employeeNo || "").trim() === params.vendorUserId &&
-						String(card?.cardNo || "").trim() === params.cardNo,
-					)
-			) {
-				return {
-					found: true,
-					pagesRead,
-					rowsScanned,
-					responseStatus: String(search?.responseStatusStrg || "") || null,
-				};
+			for (const card of cards) {
+				if (
+					String(card?.employeeNo || "").trim() === params.vendorUserId &&
+					String(card?.cardNo || "").trim()
+				) {
+					cardValues.push(String(card.cardNo).trim());
+				}
 			}
 			lastResponseStatus = String(search?.responseStatusStrg || "").toUpperCase();
 			const numOfMatches = Number(search?.numOfMatches ?? cards.length ?? 0);
@@ -3213,10 +3227,26 @@ export const controller = (prisma: PrismaClient) => {
 			}
 		}
 		return {
-			found: false,
+			cardValues: [...new Set(cardValues)],
 			pagesRead,
 			rowsScanned,
 			responseStatus: lastResponseStatus || null,
+		};
+	};
+
+	const readExactHikvisionCardOwnerFromFullInventory = async (params: {
+		req: Request;
+		deviceId: string;
+		vendorUserId: string;
+		cardNo: string;
+	}) => {
+		const inventory = await readHikvisionCardValuesForOwnerFromFullInventory(params);
+		return {
+			...inventory,
+			found: inventory.cardValues.includes(params.cardNo),
+			// Do not expose raw card values outside the internal custody comparison.
+			cardValues: undefined,
+			ownerCardCount: inventory.cardValues.length,
 		};
 	};
 
@@ -10805,20 +10835,21 @@ export const controller = (prisma: PrismaClient) => {
 						},
 					);
 					const deviceInfo =
-						response?.DeviceInfo || response?.deviceInfo || response || {};
+						response?.DeviceInfo ||
+						response?.deviceInfo ||
+						response?.data?.DeviceInfo ||
+						response?.data?.deviceInfo ||
+						response ||
+						{};
 					deviceWriterTuples.set(String(device.id), {
-						model: String(
-							deviceInfo?.model ||
-								deviceInfo?.deviceModel ||
-								deviceInfo?.deviceType ||
-								"",
-						).trim(),
-						firmware: String(
-							deviceInfo?.firmwareVersion ||
-								deviceInfo?.firmware ||
-								deviceInfo?.softwareVersion ||
-								"",
-						).trim(),
+						model: findExactHikvisionDeviceInfoValue(
+							deviceInfo,
+							new Set(["model", "devicemodel", "devicetype"]),
+						),
+						firmware: findExactHikvisionDeviceInfoValue(
+							deviceInfo,
+							new Set(["firmwareversion", "firmware", "softwareversion"]),
+						),
 					});
 				} catch (error: any) {
 					deviceLogger.warn(
@@ -12393,10 +12424,30 @@ export const controller = (prisma: PrismaClient) => {
 							await withTargetDeviceWriteLock(
 								String(write.targetDeviceId),
 								async () => {
-									const targetCardNo = String(before?._cardNo || "").trim();
-									if (!targetCardNo || targetCardNo !== cardNo) {
+									const sourceEmployeeId = String(
+										sourceRecord?.employeeId || "",
+									).trim();
+									const targetEmployeeId = String(before?.employeeId || "").trim();
+									const canonicalEmployeeMatch =
+										Boolean(sourceEmployeeId) &&
+										sourceEmployeeId === targetEmployeeId;
+									const targetCardInventory =
+										await readHikvisionCardValuesForOwnerFromFullInventory({
+											req: params.req,
+											deviceId: String(write.targetDeviceId),
+											vendorUserId: String(write.vendorUserId),
+										});
+									if (targetCardInventory.cardValues.length !== 1) {
 										throw new Error(
-											"Target card custody does not match the reviewed source; refusing a face association guess.",
+											"Target full CardInfo inventory did not yield exactly one owned card for isolated face association.",
+										);
+									}
+									const targetCardNo = targetCardInventory.cardValues[0];
+									const exactSharedCardMatch =
+										Boolean(cardNo) && targetCardNo === cardNo;
+									if (!exactSharedCardMatch && !canonicalEmployeeMatch) {
+										throw new Error(
+											"Neither exact shared card custody nor the same canonical HRIS employee proves the face association.",
 										);
 									}
 									await syncSingleHikvisionDeviceUserFromSource({
@@ -12426,47 +12477,10 @@ export const controller = (prisma: PrismaClient) => {
 											"Target now reports a face; refusing to overwrite fresh physical enrollment.",
 										);
 									}
-									const targetCardResponse = await hikvisionFetch(
-										"/ISAPI/AccessControl/CardInfo/Search?format=json",
-										{
-											method: "POST",
-											deviceId: String(write.targetDeviceId),
-											prisma,
-											request: params.req,
-											timeoutMs: 12_000,
-											body: {
-												CardInfoSearchCond: {
-													searchID: `merge-face-card-owner-${Date.now()}`,
-													searchResultPosition: 0,
-													maxResults: 5,
-													CardNoList: [{ cardNo }],
-												},
-											},
-										},
-									);
-									const targetCards = Array.isArray(
-										targetCardResponse?.CardInfoSearch?.CardInfo,
-									)
-										? targetCardResponse.CardInfoSearch.CardInfo
-										: targetCardResponse?.CardInfoSearch?.CardInfo
-											? [targetCardResponse.CardInfoSearch.CardInfo]
-											: [];
-									if (
-										!targetCards.some(
-											(card: any) =>
-												String(card?.cardNo || "").trim() === cardNo &&
-												String(card?.employeeNo || "").trim() ===
-													String(write.vendorUserId),
-										)
-									) {
-										throw new Error(
-											"Live target card ownership no longer matches the reviewed device user.",
-										);
-									}
 									const sdkProof = await runHikvisionStoredFaceWriteOnVm({
 										targetDevice,
 										employeeNo: String(write.vendorUserId),
-										cardNo,
+										cardNo: targetCardNo,
 										faceTemplate,
 										facePicture,
 									});
@@ -12522,19 +12536,20 @@ export const controller = (prisma: PrismaClient) => {
 										(field) =>
 											normalize(physicalBefore?.[field]) !== normalize(after?.[field]),
 									);
-									const actualCardNo = String(
-										after?.rawPayload?.cardNo ||
-											after?.rawPayload?.CardInfo?.cardNo ||
-											after?.rawPayload?.UserInfo?.cardNo ||
-											"",
-									).trim();
+									const retainedTargetCard =
+										await readExactHikvisionCardOwnerFromFullInventory({
+											req: params.req,
+											deviceId: String(write.targetDeviceId),
+											vendorUserId: String(write.vendorUserId),
+											cardNo: targetCardNo,
+										});
 									if (
 										changedIdentityField ||
 										Number(physicalBeforeCredentials.fingerprintCount || 0) !==
 											Number(afterCredentials.fingerprintCount || 0) ||
 										Number(physicalBeforeCredentials.cardCount || 0) !==
 											Number(afterCredentials.cardCount || 0) ||
-										actualCardNo !== targetCardNo
+										!retainedTargetCard.found
 									) {
 										throw new Error(
 											`Credential-only face isolation failed after reread (${changedIdentityField || "fingerprint_or_card"} changed).`,
@@ -12587,6 +12602,12 @@ export const controller = (prisma: PrismaClient) => {
 											.digest("hex"),
 										physicalRereadResult:
 											"exact_template_and_picture_checksums_retained",
+										identityAssociationEvidence: exactSharedCardMatch
+											? "exact_shared_card"
+											: "same_canonical_hris_employee_with_target_owned_card",
+										targetCardRetainedChecksum: createHash("sha256")
+											.update(targetCardNo)
+											.digest("hex"),
 									};
 									results.push(result);
 									params.emitProgress?.({
