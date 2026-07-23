@@ -346,6 +346,16 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).not.toContain("dry-run mode prevents writes");
 		expect(enroll).not.toContain("Dry run is on.");
 		expect(enroll).toContain("Potential writes");
+		expect(enroll).toContain("Credential convergence");
+		expect(enroll).toContain("Fingerprint and face are planned independently");
+		expect(enroll).toContain("Use evidence-backed sources");
+		expect(enroll).toContain("Blocked: exact SDK export/copy probe required");
+		expect(enroll).toContain("Review credential-only writes");
+		expect(enroll).toContain("does not rewrite the user record, cards, validity");
+		expect(enroll).toContain('mode: "credentials"');
+		expect(enroll).toContain("selectedCredentialWriteIds");
+		expect(deviceService).toContain('mode?: "users" | "credentials"');
+		expect(deviceService).toContain("credentialWrites?: Array");
 		expect(enroll).toContain("Keep");
 		expect(enroll).toContain("Clear");
 		expect(enroll).toContain("configuredDeviceIds.length < 2");

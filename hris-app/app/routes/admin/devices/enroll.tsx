@@ -741,6 +741,10 @@ export function DeviceEnrollmentPanel({
 	const [sdkMergeHandledJobId, setSdkMergeHandledJobId] = useState<string | null>(null);
 	const [sdkMergeDismissedJobId, setSdkMergeDismissedJobId] = useState<string | null>(null);
 	const [sdkMergeConfirmOpen, setSdkMergeConfirmOpen] = useState(false);
+	const [sdkMergeCredentialConfirmOpen, setSdkMergeCredentialConfirmOpen] = useState(false);
+	const [selectedSdkMergeCredentialWriteIds, setSelectedSdkMergeCredentialWriteIds] = useState<
+		Record<string, boolean>
+	>({});
 	const sdkMergePage = Math.max(Number(searchParams.get("mergePage") || 1), 1);
 	const [activeDeviceUserSyncJob, setActiveDeviceUserSyncJob] =
 		useState<ActiveDeviceUserSyncJob | null>(() => {
@@ -2149,6 +2153,35 @@ export function DeviceEnrollmentPanel({
 		() => sdkMergeState.data?.plan.devices || [],
 		[sdkMergeState.data],
 	);
+	const sdkMergeCredentialWrites = useMemo(
+		() => sdkMergeState.data?.plan.credentialWrites || [],
+		[sdkMergeState.data],
+	);
+	const sdkMergeRecommendedCredentialWrites = useMemo(
+		() =>
+			sdkMergeCredentialWrites.filter(
+				(write) =>
+					write.recommended &&
+					write.executionEligibility !== "blocked" &&
+					(write.modality === "fingerprint" || write.modality === "face"),
+			),
+		[sdkMergeCredentialWrites],
+	);
+	const sdkMergeSelectableCredentialWrites = sdkMergeRecommendedCredentialWrites.filter(
+		(write) => write.executionEligibility === "ready_from_raw_blob",
+	);
+	const sdkMergeSelectedCredentialWrites = sdkMergeSelectableCredentialWrites.filter(
+		(write) => selectedSdkMergeCredentialWriteIds[write.id],
+	);
+	const sdkMergeBlockedCredentialWriteCount = sdkMergeCredentialWrites.filter(
+		(write) => write.executionEligibility === "blocked",
+	).length;
+	const sdkMergeCredentialFingerprintWriteCount = sdkMergeRecommendedCredentialWrites.filter(
+		(write) => write.modality === "fingerprint",
+	).length;
+	const sdkMergeCredentialFaceWriteCount = sdkMergeRecommendedCredentialWrites.filter(
+		(write) => write.modality === "face",
+	).length;
 	const sdkMergeActionableUserKeys = useMemo(() => {
 		if (!sdkMergeState.data?.plan) return [];
 		return sdkMergeState.data.plan.users
@@ -2192,7 +2225,7 @@ export function DeviceEnrollmentPanel({
 			0,
 		) ||
 		0;
-	const sdkMergePotentialWriteCount =
+	const sdkMergeUserPotentialWriteCount =
 		sdkMergeWriteRows.length ||
 		sdkMergeState.data?.plan.plannedWrites?.length ||
 		sdkMergeState.data?.plan.users.reduce(
@@ -2200,6 +2233,8 @@ export function DeviceEnrollmentPanel({
 			0,
 		) ||
 		0;
+	const sdkMergePotentialWriteCount =
+		sdkMergeUserPotentialWriteCount + sdkMergeRecommendedCredentialWrites.length;
 	const sdkMergeSelectedWriteMatrix = useMemo(() => {
 		const plan = sdkMergeState.data?.plan;
 		if (!plan) {
@@ -2598,12 +2633,22 @@ export function DeviceEnrollmentPanel({
 		["Needs attention", effectiveSdkMergeJob?.failedWrites ?? 0],
 	] as const;
 	const sdkMergeJobScopeItems = sdkMergeJobWriteMatrix
-		? [
-				["Selected unique IDs", sdkMergeJobWriteMatrix.selectedUniqueIds],
-				["Peer copy attempts", sdkMergeJobWriteMatrix.totalWrites],
-				["Fingerprint gaps at start", sdkMergeJobWriteMatrix.fingerprintGaps],
-				["Face gaps at start", sdkMergeJobWriteMatrix.faceGaps],
-			]
+		? sdkMergeJobWriteMatrix.mode === "credentials"
+			? [
+					[
+						"Selected credential writes",
+						sdkMergeJobWriteMatrix.selectedCredentialWrites,
+					],
+					["Credential attempts", sdkMergeJobWriteMatrix.totalWrites],
+					["Fingerprint writes", sdkMergeJobWriteMatrix.fingerprintWrites],
+					["Face writes", sdkMergeJobWriteMatrix.faceWrites],
+				]
+			: [
+					["Selected unique IDs", sdkMergeJobWriteMatrix.selectedUniqueIds],
+					["Peer copy attempts", sdkMergeJobWriteMatrix.totalWrites],
+					["Fingerprint gaps at start", sdkMergeJobWriteMatrix.fingerprintGaps],
+					["Face gaps at start", sdkMergeJobWriteMatrix.faceGaps],
+				]
 		: [];
 	const sdkMergeLatestEvents = sdkMergeJobProgressEvents.slice(-8).reverse();
 	const sdkMergeCurrentEvent =
@@ -2759,6 +2804,56 @@ export function DeviceEnrollmentPanel({
 	const openSdkUserMergeConfirm = () => {
 		if (!sdkMergeCanApply) return;
 		setSdkMergeConfirmOpen(true);
+	};
+	const selectRecommendedCredentialWrites = () => {
+		setSelectedSdkMergeCredentialWriteIds(
+			Object.fromEntries(sdkMergeSelectableCredentialWrites.map((write) => [write.id, true])),
+		);
+		setSdkMergeState((current) => ({
+			...current,
+			message: sdkMergeSelectableCredentialWrites.length
+				? `${mergePlural(sdkMergeSelectableCredentialWrites.length, "credential operation")} selected from readable raw/export evidence.`
+				: "No credential operations have readable raw/export evidence yet. Count-only rows remain blocked from UI selection.",
+		}));
+	};
+	const applySdkCredentialMerge = async () => {
+		if (
+			!sdkMergeState.data ||
+			!sdkMergeSelectedCredentialWrites.length ||
+			sdkMergeBlockingCount > 0
+		)
+			return;
+		setSdkMergeCredentialConfirmOpen(false);
+		setSdkMergeState((current) => ({
+			...current,
+			status: "review",
+			message: `Starting credential-only job for ${mergePlural(sdkMergeSelectedCredentialWrites.length, "target operation")}.`,
+		}));
+		try {
+			const result = await startHikvisionSdkUserMergeJobMutation.mutateAsync({
+				planId: sdkMergeState.data.planId,
+				mode: "credentials",
+				selectedCredentialWriteIds: sdkMergeSelectedCredentialWrites.map(
+					(write) => write.id,
+				),
+			});
+			setSdkMergeJobId(result.jobId);
+			setSdkMergeLastJob(result.progress);
+			setSdkMergeHandledJobId(null);
+			setSdkMergeDismissedJobId(null);
+			updateSearchParams((next) => next.set("mergeJobId", result.jobId));
+			setSdkMergeState((current) => ({
+				...current,
+				status: "review",
+				message: result.progress?.message || "Credential-only merge job started.",
+			}));
+		} catch (error: any) {
+			setSdkMergeState((current) => ({
+				...current,
+				status: "error",
+				message: error?.message || "Failed to start credential-only merge job.",
+			}));
+		}
 	};
 	const applySdkUserMerge = async (
 		overrideChoices?: Record<string, Record<string, "A" | "B" | "KEEP">>,
@@ -8350,6 +8445,159 @@ export function DeviceEnrollmentPanel({
 								))}
 							</div>
 
+							<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+								<div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+									<div>
+										<p className="text-sm font-semibold text-slate-950">
+											Credential convergence
+										</p>
+										<p className="mt-0.5 text-xs leading-5 text-slate-600">
+											Fingerprint and face are planned independently. Enrollment counts
+											identify gaps; they do not prove portable biometric bytes.
+										</p>
+									</div>
+									<div className="flex flex-wrap gap-2">
+										<Button
+											type="button"
+											variant="outline"
+											onClick={selectRecommendedCredentialWrites}
+											disabled={
+												sdkMergeBlockingCount > 0 ||
+												sdkMergeSelectableCredentialWrites.length === 0
+											}>
+											<CheckCircle2 className="h-4 w-4" />
+											Use evidence-backed sources
+										</Button>
+										<Button
+											type="button"
+											variant="outline"
+											onClick={() => setSelectedSdkMergeCredentialWriteIds({})}
+											disabled={sdkMergeSelectedCredentialWrites.length === 0}>
+											Clear credential scope
+										</Button>
+									</div>
+								</div>
+								<div className="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-5">
+									{[
+										["Potential operations", sdkMergeRecommendedCredentialWrites.length],
+										["Fingerprint", sdkMergeCredentialFingerprintWriteCount],
+										["Face", sdkMergeCredentialFaceWriteCount],
+										["Ready from raw/export", sdkMergeSelectableCredentialWrites.length],
+										[
+											"Blocked / review",
+											sdkMergeBlockedCredentialWriteCount +
+												sdkMergeRecommendedCredentialWrites.filter(
+													(write) =>
+														write.executionEligibility ===
+														"sdk_probe_required",
+												).length,
+										],
+									].map(([label, value]) => (
+										<div key={String(label)} className="bg-white px-3 py-2">
+											<p className="text-xs text-slate-600">{label}</p>
+											<p className="mt-0.5 text-sm font-semibold text-slate-950">
+												{mergeMetricValue(value)}
+											</p>
+										</div>
+									))}
+								</div>
+								<div className="grid grid-cols-[32px_minmax(130px,0.8fr)_96px_minmax(150px,1fr)_minmax(150px,1fr)_104px_minmax(190px,1.2fr)] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+									<span aria-hidden="true" />
+									<span>User ID</span>
+									<span>Modality</span>
+									<span>Source</span>
+									<span>Target</span>
+									<span>Counts</span>
+									<span>Evidence / decision</span>
+								</div>
+								<div className="max-h-64 overflow-auto">
+									{sdkMergeCredentialWrites.length ? (
+										sdkMergeCredentialWrites.map((write) => {
+											const selectable =
+												write.recommended &&
+												write.executionEligibility === "ready_from_raw_blob";
+											const probeRequired =
+												write.executionEligibility === "sdk_probe_required";
+											return (
+												<div
+													key={write.id}
+													className="grid grid-cols-[32px_minmax(130px,0.8fr)_96px_minmax(150px,1fr)_minmax(150px,1fr)_104px_minmax(190px,1.2fr)] items-center gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+													<input
+														type="checkbox"
+														aria-label={`Select ${write.modality} operation for ${write.vendorUserId}`}
+														checked={Boolean(
+															selectedSdkMergeCredentialWriteIds[write.id],
+														)}
+														disabled={!selectable}
+														onChange={(event) =>
+															setSelectedSdkMergeCredentialWriteIds(
+																(current) => ({
+																	...current,
+																	[write.id]: event.target.checked,
+																}),
+															)
+														}
+														className="h-4 w-4 accent-orange-600"
+													/>
+													<span className="truncate font-medium text-slate-950">
+														{write.vendorUserId}
+													</span>
+													<Badge
+														variant={
+															write.modality === "fingerprint"
+																? "warning"
+																: write.modality === "face"
+																	? "success"
+																	: "default"
+														}>
+														{write.modality}
+													</Badge>
+													<span className="truncate text-slate-700">
+														{write.sourceDeviceId
+															? mergeDeviceName(
+																	sdkMergePlanDevices,
+																	write.sourceDeviceId,
+																)
+															: "No source"}
+													</span>
+													<span className="truncate text-slate-700">
+														{mergeDeviceName(
+															sdkMergePlanDevices,
+															write.targetDeviceId,
+														)}
+													</span>
+													<span className="font-medium text-slate-950">
+														{write.sourceReportedCount} →{" "}
+														{write.targetReportedCount}
+													</span>
+													<div className="min-w-0">
+														<p
+															className={`truncate text-xs font-semibold ${
+																selectable
+																	? "text-emerald-700"
+																	: "text-amber-800"
+															}`}>
+															{selectable
+																? "Raw/export evidence ready"
+																: probeRequired
+																	? "Blocked: exact SDK export/copy probe required"
+																	: `Blocked: ${write.blockingReason || "review required"}`}
+														</p>
+														<p className="truncate text-xs text-slate-600">
+															{write.recommendationReason}
+														</p>
+													</div>
+												</div>
+											);
+										})
+									) : (
+										<p className="px-3 py-4 text-sm text-slate-600">
+											No credential differences were found in this plan.
+										</p>
+									)}
+								</div>
+							</div>
+
 							<div className="flex flex-wrap gap-2">
 								{sdkMergeFilterItems.map((item) => (
 									<button
@@ -8936,6 +9184,23 @@ export function DeviceEnrollmentPanel({
 						{sdkMergeState.data && !hasSdkMergeJob ? (
 							<Button
 								type="button"
+								variant="outline"
+								disabled={
+									sdkMergeSelectedCredentialWrites.length === 0 ||
+									sdkMergeBlockingCount > 0 ||
+									sdkMergeJobIsProcessing ||
+									startHikvisionSdkUserMergeJobMutation.isPending
+								}
+								onClick={() => setSdkMergeCredentialConfirmOpen(true)}>
+								<Lock className="h-4 w-4" />
+								{sdkMergeSelectedCredentialWrites.length
+									? `Review credential writes (${sdkMergeSelectedCredentialWrites.length})`
+									: "No evidence-backed credential writes selected"}
+							</Button>
+						) : null}
+						{sdkMergeState.data && !hasSdkMergeJob ? (
+							<Button
+								type="button"
 								disabled={
 									!sdkMergeCanApply ||
 									sdkMergeJobIsProcessing ||
@@ -8960,6 +9225,121 @@ export function DeviceEnrollmentPanel({
 												: `Review selected merge (${sdkMergeSelectedUniqueCount})`}
 							</Button>
 						) : null}
+					</div>
+				</div>
+			</Modal>
+
+			<Modal
+				open={
+					sdkMergeCredentialConfirmOpen &&
+					Boolean(sdkMergeState.data) &&
+					!hasSdkMergeJob
+				}
+				onOpenChange={(open) => {
+					if (!open && !startHikvisionSdkUserMergeJobMutation.isPending) {
+						setSdkMergeCredentialConfirmOpen(false);
+					}
+				}}
+				title="Review credential-only writes"
+				description="The frozen scope changes fingerprint or face credentials only; it does not rewrite the user record, cards, validity, or the other biometric modality."
+				className="max-w-4xl"
+				showCloseButton={!startHikvisionSdkUserMergeJobMutation.isPending}
+				closeOnBackdropClick={!startHikvisionSdkUserMergeJobMutation.isPending}>
+				<div className="space-y-4">
+					<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+						<p className="font-semibold">This starts physical device writes.</p>
+						<p className="mt-1 text-xs leading-5">
+							Only rows with readable raw/export evidence can enter this UI scope.
+							The backend freezes the exact source, target, modality, and scope hash,
+							then rereads the target after every successful write.
+						</p>
+					</div>
+					<div className="grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 sm:grid-cols-3">
+						{[
+							["Target operations", sdkMergeSelectedCredentialWrites.length],
+							[
+								"Fingerprint",
+								sdkMergeSelectedCredentialWrites.filter(
+									(write) => write.modality === "fingerprint",
+								).length,
+							],
+							[
+								"Face",
+								sdkMergeSelectedCredentialWrites.filter(
+									(write) => write.modality === "face",
+								).length,
+							],
+						].map(([label, value]) => (
+							<div key={String(label)} className="bg-white px-3 py-3">
+								<p className="text-xs text-slate-600">{label}</p>
+								<p className="mt-1 text-base font-semibold text-slate-950">
+									{mergeMetricValue(value)}
+								</p>
+							</div>
+						))}
+					</div>
+					<div className="overflow-hidden rounded-md border border-slate-200">
+						<div className="grid grid-cols-[minmax(120px,0.8fr)_96px_minmax(140px,1fr)_minmax(140px,1fr)_96px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+							<span>User ID</span>
+							<span>Modality</span>
+							<span>Source</span>
+							<span>Target</span>
+							<span>Counts</span>
+						</div>
+						<div className="max-h-[42vh] overflow-auto">
+							{sdkMergeSelectedCredentialWrites.map((write) => (
+								<div
+									key={`credential-confirm:${write.id}`}
+									className="grid grid-cols-[minmax(120px,0.8fr)_96px_minmax(140px,1fr)_minmax(140px,1fr)_96px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+									<span className="truncate font-medium text-slate-950">
+										{write.vendorUserId}
+									</span>
+									<span className="capitalize text-slate-700">{write.modality}</span>
+									<span className="truncate text-slate-700">
+										{write.sourceDeviceId
+											? mergeDeviceName(
+													sdkMergePlanDevices,
+													write.sourceDeviceId,
+												)
+											: "No source"}
+									</span>
+									<span className="truncate text-slate-700">
+										{mergeDeviceName(
+											sdkMergePlanDevices,
+											write.targetDeviceId,
+										)}
+									</span>
+									<span className="font-medium text-slate-950">
+										{write.sourceReportedCount} → {write.targetReportedCount}
+									</span>
+								</div>
+							))}
+						</div>
+					</div>
+					<div className="flex flex-col-reverse gap-2 border-t pt-3 sm:flex-row sm:justify-end">
+						<Button
+							type="button"
+							variant="outline"
+							disabled={startHikvisionSdkUserMergeJobMutation.isPending}
+							onClick={() => setSdkMergeCredentialConfirmOpen(false)}>
+							Back to review
+						</Button>
+						<Button
+							type="button"
+							disabled={
+								sdkMergeSelectedCredentialWrites.length === 0 ||
+								startHikvisionSdkUserMergeJobMutation.isPending
+							}
+							onClick={() => void applySdkCredentialMerge()}>
+							{startHikvisionSdkUserMergeJobMutation.isPending ? (
+								<Loader2 className="h-4 w-4 animate-spin" />
+							) : (
+								<Lock className="h-4 w-4" />
+							)}
+							{startHikvisionSdkUserMergeJobMutation.isPending
+								? "Starting..."
+								: `Start credential-only job (${sdkMergeSelectedCredentialWrites.length})`}
+						</Button>
 					</div>
 				</div>
 			</Modal>
