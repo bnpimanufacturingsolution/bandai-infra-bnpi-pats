@@ -68,6 +68,11 @@ interface IController {
 		res: Response,
 		next: NextFunction,
 	): Promise<void>;
+	attestRetainedHikvisionFaceCanary(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
 	mirrorHikvisionFaceToPeers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	mockHikvisionFingerprintTally(req: Request, res: Response, next: NextFunction): Promise<void>;
 	mockHikvisionFaceTally(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -152,6 +157,10 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post(
 		"/hikvision/sdk-users/merge/jobs/:jobId/attest-retained-card",
 		controller.attestRetainedHikvisionCardCanary,
+	);
+	routes.post(
+		"/hikvision/sdk-users/merge/jobs/:jobId/attest-retained-face",
+		controller.attestRetainedHikvisionFaceCanary,
 	);
 	routes.get("/hikvision/sdk-users/merge/jobs/:jobId", controller.getHikvisionSdkUserMergeJob);
 	routes.post("/hikvision/mirror-face", controller.mirrorHikvisionFaceToPeers);

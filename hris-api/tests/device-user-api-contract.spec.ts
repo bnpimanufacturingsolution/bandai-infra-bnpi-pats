@@ -195,6 +195,9 @@ describe("DeviceUser API contract", () => {
 			"same_canonical_hris_employee_with_target_owned_card",
 		);
 		expect(controller).to.include("targetCardRetainedChecksum");
+		expect(controller).to.include(
+			"if (!hasCredential && body.refreshBiometricBundle !== true)",
+		);
 		expect(controller).to.include("findExactHikvisionDeviceInfoValue");
 		expect(controller).to.include(
 			"`<(?:[a-z0-9_-]+:)?${tag}(?:\\\\s[^>]*)?>([^<]+)</(?:[a-z0-9_-]+:)?${tag}>`",
@@ -213,8 +216,18 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include(
 			"Retained card canary attestation failed at ${attestationStage}",
 		);
+		expect(controller).to.include("attestRetainedHikvisionFaceCanary");
+		expect(controller).to.include(
+			"sdk_wrapper_exit_after_exact_physical_retention",
+		);
+		expect(controller).to.include(
+			"Fresh SDK exports proved exact source/target template and picture checksums",
+		);
 		expect(router).to.include(
 			'"/hikvision/sdk-users/merge/jobs/:jobId/attest-retained-card"',
+		);
+		expect(router).to.include(
+			'"/hikvision/sdk-users/merge/jobs/:jobId/attest-retained-face"',
 		);
 	});
 

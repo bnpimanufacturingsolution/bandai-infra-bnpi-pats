@@ -9323,7 +9323,7 @@ export const controller = (prisma: PrismaClient) => {
 					deviceUserId: row.hrisDeviceUser?.id || row.id || null,
 					employeeNo: String(row.employeeNo || row.vendorUserId || "").trim(),
 				});
-				if (!hasCredential) {
+				if (!hasCredential && body.refreshBiometricBundle !== true) {
 					results.push({
 						vendorUserId: row.vendorUserId,
 						employeeNo: row.employeeNo,
@@ -14683,6 +14683,319 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(error?.statusCode || 500).json(
 				buildErrorResponse(
 					`Retained card canary attestation failed at ${attestationStage}: ${cause}`,
+					error?.statusCode || 500,
+				),
+			);
+		}
+	};
+
+	const attestRetainedHikvisionFaceCanary = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		const admin = assertDeviceUserAdmin(req, res);
+		if (!admin) return;
+		let attestationStage = "validating_failed_face_canary";
+		try {
+			const jobId = String(req.params.jobId || "").trim();
+			const job = resolveDeviceUserMergeJob(jobId);
+			if (!job || job.organizationId !== String(admin.organizationId)) {
+				res.status(404).json(
+					buildErrorResponse("SDK user merge job not found or expired", 404),
+				);
+				return;
+			}
+			const activeJob = [...deviceUserMergeJobs.values()].find(
+				(candidate) =>
+					candidate.organizationId === String(admin.organizationId) &&
+					candidate.status === "processing" &&
+					!isDeviceUserMergeJobStale(candidate),
+			);
+			if (activeJob) {
+				res.status(409).json(
+					buildErrorResponse(
+						`Merge job ${activeJob.jobId} is processing; retained-face attestation must not contend with a physical write.`,
+						409,
+					),
+				);
+				return;
+			}
+			const rows = Array.isArray(job.writeMatrix?.rows) ? job.writeMatrix.rows : [];
+			const resultRows = Array.isArray(job.results) ? job.results : [];
+			const row = rows[0];
+			const failedResult = resultRows[0];
+			const faceGapDelta = Number((job as any)?.gapDelta?.modalities?.face || 0);
+			if (
+				job.mode !== "credentials" ||
+				job.totalWrites !== 1 ||
+				job.processedWrites !== 1 ||
+				rows.length !== 1 ||
+				resultRows.length !== 1 ||
+				String(row?.modality || "") !== "face" ||
+				String(failedResult?.modality || "") !== "face" ||
+				String(failedResult?.status || "") !== "error" ||
+				Number(row?.sourceReportedCount || 0) < 1 ||
+				Number(row?.targetReportedCount || 0) !== 0 ||
+				faceGapDelta !== 1
+			) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Only a failed one-row face canary with a fresh five-device face gap delta may be attested.",
+						409,
+					),
+				);
+				return;
+			}
+			const authorizedTargetId = String(
+				process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID || "",
+			).trim();
+			if (
+				!authorizedTargetId ||
+				authorizedTargetId !== String(row.targetDeviceId || "")
+			) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Retained-face attestation requires the exact target-specific authorized face canary gate.",
+						409,
+					),
+				);
+				return;
+			}
+			const deviceIds = [
+				String(row.sourceDeviceId || ""),
+				String(row.targetDeviceId || ""),
+			];
+			const devices = await prisma.device.findMany({
+				where: {
+					organizationId: String(admin.organizationId),
+					id: { in: deviceIds },
+				},
+			});
+			const sourceDevice = devices.find(
+				(device) => String(device.id) === String(row.sourceDeviceId),
+			);
+			const targetDevice = devices.find(
+				(device) => String(device.id) === String(row.targetDeviceId),
+			);
+			if (!sourceDevice || !targetDevice || devices.length !== 2) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Reviewed face source and target are not both present in this organization.",
+						409,
+					),
+				);
+				return;
+			}
+			attestationStage = "verifying_canonical_face_identity";
+			const identityRows = await (prisma as any).deviceUser.findMany({
+				where: {
+					organizationId: String(admin.organizationId),
+					deviceId: { in: deviceIds },
+					vendorUserId: String(row.vendorUserId || ""),
+				},
+				select: {
+					deviceId: true,
+					vendorUserId: true,
+					employeeId: true,
+				},
+			});
+			const sourceIdentity = identityRows.find(
+				(identity: any) =>
+					String(identity.deviceId) === String(row.sourceDeviceId),
+			);
+			const targetIdentity = identityRows.find(
+				(identity: any) =>
+					String(identity.deviceId) === String(row.targetDeviceId),
+			);
+			const canonicalEmployeeId = String(sourceIdentity?.employeeId || "").trim();
+			if (
+				!canonicalEmployeeId ||
+				canonicalEmployeeId !== String(targetIdentity?.employeeId || "").trim()
+			) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Source and target do not share the same non-empty canonical HRIS employee.",
+						409,
+					),
+				);
+				return;
+			}
+			const readFace = async (device: any) => {
+				const exported = await runHikvisionBiometricExportOnVm({
+					device,
+					organizationId: String(admin.organizationId),
+					vendorUserId: String(row.vendorUserId || ""),
+					includeFingerprints: false,
+					includeFaces: true,
+				});
+				const payload = decryptDeviceUserBiometricPayload({
+					organizationId: String(admin.organizationId),
+					deviceId: String(device.id),
+					encrypted: exported.encryptedFace,
+					allowLegacyServerEnvelope: true,
+					expectedVendorUserId: String(row.vendorUserId || ""),
+					expectedModality: "face",
+				});
+				const faceTemplate = String(payload?.faceTemplate || "").trim();
+				const facePicture = String(payload?.facePicture || "").trim();
+				if (!faceTemplate || !facePicture) {
+					throw new Error(
+						"Fresh SDK face export did not return both template and picture custody.",
+					);
+				}
+				return {
+					templateSha256: createHash("sha256")
+						.update(faceTemplate)
+						.digest("hex"),
+					pictureSha256: createHash("sha256")
+						.update(facePicture)
+						.digest("hex"),
+					templateSize: Buffer.from(faceTemplate, "base64").length,
+					pictureSize: Buffer.from(facePicture, "base64").length,
+				};
+			};
+			attestationStage = "exporting_fresh_source_and_target_face";
+			// Stored-face SDK work remains serial, including recovery rereads.
+			const sourceFace = await readFace(sourceDevice);
+			const targetFace = await readFace(targetDevice);
+			if (
+				sourceFace.templateSha256 !== targetFace.templateSha256 ||
+				sourceFace.pictureSha256 !== targetFace.pictureSha256 ||
+				sourceFace.templateSize !== targetFace.templateSize ||
+				sourceFace.pictureSize !== targetFace.pictureSize
+			) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Fresh target face template/picture checksums do not equal the reviewed physical source.",
+						409,
+					),
+				);
+				return;
+			}
+			attestationStage = "verifying_target_card_retention";
+			const targetCards = await readHikvisionCardValuesForOwnerFromFullInventory({
+				req,
+				deviceId: String(targetDevice.id),
+				vendorUserId: String(row.vendorUserId || ""),
+			});
+			if (targetCards.cardValues.length !== 1) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Target full CardInfo inventory did not retain exactly one owned association card.",
+						409,
+					),
+				);
+				return;
+			}
+			const targetCardRetainedChecksum = createHash("sha256")
+				.update(targetCards.cardValues[0])
+				.digest("hex");
+			const retainedFaceChecksum = createHash("sha256")
+				.update(`${targetFace.templateSha256}\0${targetFace.pictureSha256}`)
+				.digest("hex");
+			attestationStage = "persisting_face_writer_capability";
+			const capabilityEvidence =
+				await persistPhysicallyProvenHikvisionWriterCapability({
+					req,
+					targetDevice,
+					vendorUserId: String(row.vendorUserId || ""),
+					writer: "sdk_face_template_picture",
+					endpoint: "NET_DVR_SET_FACE_AND_TEMPLATE",
+					retainedChecksum: retainedFaceChecksum,
+					responseBody: {
+						jobId,
+						scopeHash: job.scopeHash,
+						templateSha256: targetFace.templateSha256,
+						pictureSha256: targetFace.pictureSha256,
+						templateSize: targetFace.templateSize,
+						pictureSize: targetFace.pictureSize,
+						targetCardRetainedChecksum,
+						identityAssociation:
+							"same_canonical_hris_employee_with_target_owned_card",
+						recoveredFromFailure:
+							"sdk_wrapper_exit_after_exact_physical_retention",
+					},
+				});
+			const recoveredAt = new Date();
+			const recoveredResult = {
+				...failedResult,
+				status: "success",
+				error: undefined,
+				strategy: "sdk_face_full_export_recovery_attestation",
+				sourceFaceTemplateChecksum: sourceFace.templateSha256,
+				sourceFacePictureChecksum: sourceFace.pictureSha256,
+				postWriteChecksum: retainedFaceChecksum,
+				physicalRereadResult:
+					"exact_template_and_picture_checksums_retained",
+				identityAssociationEvidence:
+					"same_canonical_hris_employee_with_target_owned_card",
+				targetCardRetainedChecksum,
+				capabilityEvidence,
+				capabilityEvidenceChecksum:
+					capabilityEvidence.responseBodyChecksum || null,
+				recoveredAt: recoveredAt.toISOString(),
+			};
+			attestationStage = "updating_durable_face_canary_snapshot";
+			updateDeviceUserMergeJob(jobId, {
+				status: "completed",
+				message:
+					"Face canary physically retained; fresh SDK source/target exports proved exact template and picture checksums.",
+				successfulWrites: 1,
+				failedWrites: 0,
+				results: [recoveredResult],
+				error: undefined,
+				currentStage: "physically_retained",
+				completedAt: recoveredAt,
+				appendProgressEvent: {
+					stage: "physically_retained",
+					modality: "face",
+					vendorUserId: String(row.vendorUserId || ""),
+					sourceDeviceId: String(row.sourceDeviceId || ""),
+					targetDeviceId: String(row.targetDeviceId || ""),
+					writerStrategy: "sdk_face_template_picture",
+					physicalRereadResult:
+						"exact_template_and_picture_checksums_retained",
+					postWriteChecksum: retainedFaceChecksum,
+					capabilityEvidenceChecksum:
+						capabilityEvidence.responseBodyChecksum || null,
+					message:
+						"Fresh SDK exports proved exact source/target template and picture checksums; no panel write was replayed.",
+					at: recoveredAt.toISOString(),
+				},
+			});
+			res.status(200).json(
+				buildSuccessResponse(
+					"Retained face canary attested without replaying a physical write",
+					{
+						jobId,
+						scopeHash: job.scopeHash,
+						status: "completed",
+						modality: "face",
+						sourceDeviceId: String(row.sourceDeviceId || ""),
+						targetDeviceId: String(row.targetDeviceId || ""),
+						vendorUserId: String(row.vendorUserId || ""),
+						templateSha256: targetFace.templateSha256,
+						pictureSha256: targetFace.pictureSha256,
+						templateSize: targetFace.templateSize,
+						pictureSize: targetFace.pictureSize,
+						physicalRereadResult:
+							"exact_template_and_picture_checksums_retained",
+						targetCardRetainedChecksum,
+						capabilityEvidence,
+						physicalWriteReplayed: false,
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			const cause = error?.message || "Failed to attest retained face canary";
+			deviceLogger.error(
+				`Retained face canary attestation failed at ${attestationStage}: ${cause}`,
+			);
+			res.status(error?.statusCode || 500).json(
+				buildErrorResponse(
+					`Retained face canary attestation failed at ${attestationStage}: ${cause}`,
 					error?.statusCode || 500,
 				),
 			);
@@ -23529,6 +23842,7 @@ export const controller = (prisma: PrismaClient) => {
 		listHikvisionSdkUserMergeJobs,
 		getHikvisionSdkUserMergeJob,
 		attestRetainedHikvisionCardCanary,
+		attestRetainedHikvisionFaceCanary,
 		mirrorHikvisionFaceToPeers,
 		createSyntheticKioskLoginTap,
 		mockHikvisionFingerprintTally,
