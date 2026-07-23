@@ -151,6 +151,77 @@ type SdkMergeFilter = "all" | "missing" | "decision" | "fingerprint" | "face" | 
 type SdkMergeListMode = "unique" | "records" | "review" | "writes" | "issues";
 type SdkMergeRowAction = "copy" | "choose-richest" | "keep" | "details";
 type SdkMergeCredentialKind = "fingerprint" | "face" | "card";
+type SdkMergeCredentialWrite = NonNullable<
+	DeviceUserMergePlanResponse["plan"]["credentialWrites"]
+>[number];
+
+const SDK_MERGE_PHYSICAL_ACTION_REASONS = new Set([
+	"physical_identity_adjudication_required",
+	"physical_reenrollment_required",
+	"device_firmware_unsupported",
+	"source_not_enrolled",
+]);
+
+const isSdkMergePhysicalActionRequired = (write: SdkMergeCredentialWrite) => {
+	const reason = String(write.blockingReason || "").trim();
+	if (SDK_MERGE_PHYSICAL_ACTION_REASONS.has(reason)) return true;
+	if (reason !== "source_conflict") return false;
+	return /(already (?:enrolled|owned)|duplicate protection|different .* checksum|overwrite (?:is )?forbidden|another (?:person|owner)|identity (?:conflict|adjudication))/i.test(
+		write.recommendationReason || "",
+	);
+};
+
+const formatSdkMergeRecoveryStage = (write: SdkMergeCredentialWrite) => {
+	const stage = String(write.recoveryStage || "").trim();
+	const labels: Record<string, string> = {
+		queued_source_custody_recovery: "Queued source custody recovery",
+		exporting_source_credential: "Exporting source credential",
+		comparing_sources: "Comparing physical sources",
+		resolving_richest_source: "Resolving richest safe source",
+		probing_target_capability: "Probing target capability",
+		preparing_writer: "Preparing writer",
+		ready_to_write: "Ready to write",
+		writing: "Writing",
+		rereading_target: "Rereading physical target",
+		physically_retained: "Physically retained",
+		retrying_recoverable_failure: "Retrying recoverable failure",
+		physical_identity_action_required: "Physical identity action required",
+		physical_reenrollment_required: "Physical reenrollment required",
+		device_firmware_unsupported: "Device firmware unsupported",
+	};
+	if (labels[stage]) return labels[stage];
+	if (write.executionEligibility === "sdk_probe_required") {
+		return "Run the exact SDK export/copy capability probe";
+	}
+	if (write.blockingReason === "missing_raw_blob") {
+		return "Capture current source custody";
+	}
+	if (write.blockingReason === "source_conflict") {
+		return "Compare source checksums and select the richest safe custody";
+	}
+	if (write.blockingReason === "target_write_unsupported") {
+		return "Probe and attest a supported target writer";
+	}
+	if (write.blockingReason === "credential_only_card_not_supported") {
+		return "Probe card writer and verify ownership";
+	}
+	return "Resolve the recorded evidence stage";
+};
+
+const formatSdkMergePhysicalAction = (write: SdkMergeCredentialWrite) => {
+	const reason = String(write.blockingReason || "").trim();
+	if (reason === "physical_identity_adjudication_required" || reason === "source_conflict") {
+		return "Resolve biometric ownership";
+	}
+	if (reason === "physical_reenrollment_required" || reason === "source_not_enrolled") {
+		return "Enroll the credential on a physical source";
+	}
+	if (reason === "device_firmware_unsupported") {
+		return "Target firmware requires a physical or firmware change";
+	}
+	return "Resolve the proven physical boundary";
+};
+
 type SdkMergeIssueRow = {
 	id: string;
 	filter: SdkMergeFilter;
@@ -2157,31 +2228,39 @@ export function DeviceEnrollmentPanel({
 		() => sdkMergeState.data?.plan.credentialWrites || [],
 		[sdkMergeState.data],
 	);
-	const sdkMergeRecommendedCredentialWrites = useMemo(
-		() =>
-			sdkMergeCredentialWrites.filter(
-				(write) =>
-					write.recommended &&
-					write.executionEligibility !== "blocked" &&
-					(write.modality === "fingerprint" || write.modality === "face"),
-			),
-		[sdkMergeCredentialWrites],
-	);
-	const sdkMergeSelectableCredentialWrites = sdkMergeRecommendedCredentialWrites.filter(
-		(write) => write.executionEligibility === "ready_from_raw_blob",
+	const sdkMergePotentialOperationSummary =
+		sdkMergeState.data?.plan.potentialOperations;
+	const sdkMergeSelectableCredentialWrites = sdkMergeCredentialWrites.filter(
+		(write) =>
+			write.recommended &&
+			write.executionEligibility === "ready_from_raw_blob" &&
+			!isSdkMergePhysicalActionRequired(write),
 	);
 	const sdkMergeSelectedCredentialWrites = sdkMergeSelectableCredentialWrites.filter(
 		(write) => selectedSdkMergeCredentialWriteIds[write.id],
 	);
-	const sdkMergeBlockedCredentialWriteCount = sdkMergeCredentialWrites.filter(
-		(write) => write.executionEligibility === "blocked",
+	const sdkMergePhysicalActionCredentialWrites = sdkMergeCredentialWrites.filter(
+		isSdkMergePhysicalActionRequired,
+	);
+	const sdkMergeRecoveryQueuedCredentialWriteCount = sdkMergeCredentialWrites.filter(
+		(write) =>
+			!sdkMergeSelectableCredentialWrites.some((ready) => ready.id === write.id) &&
+			!isSdkMergePhysicalActionRequired(write),
 	).length;
-	const sdkMergeCredentialFingerprintWriteCount = sdkMergeRecommendedCredentialWrites.filter(
+	const sdkMergeCredentialFingerprintWriteCount = sdkMergeCredentialWrites.filter(
 		(write) => write.modality === "fingerprint",
 	).length;
-	const sdkMergeCredentialFaceWriteCount = sdkMergeRecommendedCredentialWrites.filter(
+	const sdkMergeCredentialFaceWriteCount = sdkMergeCredentialWrites.filter(
 		(write) => write.modality === "face",
 	).length;
+	const sdkMergeCredentialCardWriteCount = sdkMergeCredentialWrites.filter(
+		(write) => write.modality === "card",
+	).length;
+	const sdkMergeRecoveryStageEntries = Object.entries(
+		sdkMergePotentialOperationSummary?.byRecoveryStage || {},
+	)
+		.filter(([, count]) => Number(count || 0) > 0)
+		.sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0));
 	const sdkMergeActionableUserKeys = useMemo(() => {
 		if (!sdkMergeState.data?.plan) return [];
 		return sdkMergeState.data.plan.users
@@ -2234,7 +2313,7 @@ export function DeviceEnrollmentPanel({
 		) ||
 		0;
 	const sdkMergePotentialWriteCount =
-		sdkMergeUserPotentialWriteCount + sdkMergeRecommendedCredentialWrites.length;
+		sdkMergeUserPotentialWriteCount + sdkMergeCredentialWrites.length;
 	const sdkMergeSelectedWriteMatrix = useMemo(() => {
 		const plan = sdkMergeState.data?.plan;
 		if (!plan) {
@@ -2563,7 +2642,10 @@ export function DeviceEnrollmentPanel({
 		? formatDateTime(new Date(sdkMergeJobClock).toISOString())
 		: "Waiting for first poll";
 	const sdkMergeJobLastBackendUpdate: string | null =
-		effectiveSdkMergeJob?.updatedAt || effectiveSdkMergeJob?.completedAt || null;
+		effectiveSdkMergeJob?.heartbeatAt ||
+		effectiveSdkMergeJob?.updatedAt ||
+		effectiveSdkMergeJob?.completedAt ||
+		null;
 	const sdkMergeJobBackendAgeSeconds: number | null = sdkMergeJobLastBackendUpdate
 		? Math.max(
 				0,
@@ -2581,6 +2663,9 @@ export function DeviceEnrollmentPanel({
 	).length;
 	const sdkMergeRetainedFaceCount = sdkMergeJobResults.filter(
 		(result) => result.status === "success" && result.modality === "face",
+	).length;
+	const sdkMergeRetainedCardCount = sdkMergeJobResults.filter(
+		(result) => result.status === "success" && result.modality === "card",
 	).length;
 	const sdkMergeJobProgressEvents = effectiveSdkMergeJob?.progressEvents || [];
 	const sdkMergeJobCopyFailureSummary = effectiveSdkMergeJob?.copyFailureSummary;
@@ -2615,6 +2700,20 @@ export function DeviceEnrollmentPanel({
 		completed: "Completed",
 		completed_with_attention: "Completed with attention",
 		failed: "Failed",
+		queued_source_custody_recovery: "Queued source custody recovery",
+		exporting_source_credential: "Exporting source credential",
+		comparing_sources: "Comparing sources",
+		resolving_richest_source: "Resolving richest source",
+		probing_target_capability: "Probing target capability",
+		preparing_writer: "Preparing writer",
+		ready_to_write: "Ready to write",
+		writing: "Writing",
+		rereading_target: "Rereading target",
+		physically_retained: "Physically retained",
+		retrying_recoverable_failure: "Retrying recoverable failure",
+		physical_identity_action_required: "Physical identity action required",
+		physical_reenrollment_required: "Physical reenrollment required",
+		device_firmware_unsupported: "Device firmware unsupported",
 	};
 	const sdkMergeJobPhase = sdkMergeJobIsProcessing
 		? effectiveSdkMergeJob?.currentStage
@@ -2637,9 +2736,22 @@ export function DeviceEnrollmentPanel({
 		["Physically retained (reread)", effectiveSdkMergeJob?.successfulWrites ?? 0],
 		["Fingerprint retained", sdkMergeRetainedFingerprintCount],
 		["Face retained", sdkMergeRetainedFaceCount],
+		["Card retained", sdkMergeRetainedCardCount],
 		["Already matched", effectiveSdkMergeJob?.alreadyConvergedWrites ?? 0],
 		["Safe no-write / needs attention", effectiveSdkMergeJob?.failedWrites ?? 0],
 	] as const;
+	const sdkMergeGapSummaryRows = [
+		["Starting gaps", effectiveSdkMergeJob?.startingGapSummary],
+		["Ending gaps", effectiveSdkMergeJob?.endingGapSummary],
+		["Physically closed delta", effectiveSdkMergeJob?.gapDelta],
+	] as const;
+	const sdkMergeGapTargetIds = Array.from(
+		new Set(
+			sdkMergeGapSummaryRows.flatMap(([, summary]) =>
+				Object.keys(summary?.perTarget || {}),
+			),
+		),
+	);
 	const sdkMergeJobScopeItems = sdkMergeJobWriteMatrix
 		? sdkMergeJobWriteMatrix.mode === "credentials"
 			? [
@@ -2720,7 +2832,19 @@ export function DeviceEnrollmentPanel({
 					"Credential stage",
 					sdkMergeCurrentCredentialStages.length
 						? sdkMergeCurrentCredentialStages.join(" + ")
-						: "User row / HRIS metadata",
+						: sdkMergeStageLabels[
+								String(
+									(sdkMergeCurrentEvent as any)?.operationTelemetry?.stage ||
+										"",
+								)
+							] || "User row / HRIS metadata",
+				],
+				[
+					"Writer",
+					(sdkMergeCurrentEvent as any)?.operationTelemetry
+						?.writerStrategy ||
+						(sdkMergeCurrentEvent as any)?.strategy ||
+						"Preparing",
 				],
 			]
 		: [];
@@ -8047,13 +8171,17 @@ export function DeviceEnrollmentPanel({
 									style={{ width: `${sdkMergeJobPercent}%` }}
 								/>
 							</div>
-							<div className="mt-3 grid gap-2 sm:grid-cols-4">
+							<div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
 								{[
 									["Current phase", sdkMergeJobPhase],
 									["Elapsed", sdkMergeJobElapsed],
 									["UI polling", sdkMergeJobLastChecked],
 									[
-										"Backend update",
+										"Execution",
+										effectiveSdkMergeJob?.executionLocation || "VM container",
+									],
+									[
+										"Backend heartbeat",
 										sdkMergeJobBackendAgeSeconds === null
 											? "Waiting"
 											: sdkMergeJobBackendAgeSeconds <= 3
@@ -8091,7 +8219,7 @@ export function DeviceEnrollmentPanel({
 											</p>
 										) : null}
 									</div>
-									<div className="mt-3 grid gap-2 sm:grid-cols-4">
+									<div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
 										{sdkMergeCurrentWorkItems.map(([label, value]) => (
 											<div
 												key={String(label)}
@@ -8130,6 +8258,63 @@ export function DeviceEnrollmentPanel({
 								{sdkMergeJobSummary ||
 									"HRIS is applying the reviewed recommended-source plan, copying credentials, then rereading devices."}
 							</p>
+							{effectiveSdkMergeJob?.startingGapSummary ? (
+								<div className="mt-3 overflow-hidden rounded-md border border-white/80 bg-white">
+									<div className="grid grid-cols-[minmax(150px,1fr)_80px_90px_80px_70px] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+										<span>Five-device reread</span>
+										<span className="text-right">Total</span>
+										<span className="text-right">Fingerprint</span>
+										<span className="text-right">Face</span>
+										<span className="text-right">Card</span>
+									</div>
+									{sdkMergeGapSummaryRows.map(([label, summary]) => (
+										<div
+											key={label}
+											className="grid grid-cols-[minmax(150px,1fr)_80px_90px_80px_70px] gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+											<span className="font-medium text-slate-950">{label}</span>
+											<span className="text-right font-semibold text-slate-950">
+												{mergeMetricValue(summary?.total)}
+											</span>
+											<span className="text-right text-slate-700">
+												{mergeMetricValue(summary?.modalities?.fingerprint)}
+											</span>
+											<span className="text-right text-slate-700">
+												{mergeMetricValue(summary?.modalities?.face)}
+											</span>
+											<span className="text-right text-slate-700">
+												{mergeMetricValue(summary?.modalities?.card)}
+											</span>
+										</div>
+									))}
+									{sdkMergeGapTargetIds.length ? (
+										<div className="border-t border-slate-200 bg-slate-50 px-3 py-2">
+											<p className="text-xs font-semibold text-slate-700">
+												Closed delta by physical target
+											</p>
+											<div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-700">
+												{sdkMergeGapTargetIds.map((deviceId) => {
+													const delta =
+														effectiveSdkMergeJob?.gapDelta?.perTarget?.[
+															deviceId
+														];
+													return (
+														<span key={deviceId}>
+															{mergeDeviceName(
+																sdkMergePlanDevices,
+																deviceId,
+															)}
+															: {mergeMetricValue(delta?.total)} (
+															{mergeMetricValue(delta?.fingerprint)} FP,{" "}
+															{mergeMetricValue(delta?.face)} face,{" "}
+															{mergeMetricValue(delta?.card)} card)
+														</span>
+													);
+												})}
+											</div>
+										</div>
+									) : null}
+								</div>
+							) : null}
 							{sdkMergeJobScopeItems.length ? (
 								<div className="mt-3 rounded-md border border-white/80 bg-white/80 p-3">
 									<div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
@@ -8271,7 +8456,13 @@ export function DeviceEnrollmentPanel({
 											key={`${event?.at || index}:${event?.stage || "event"}`}
 											className="grid gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 lg:grid-cols-[150px_minmax(0,1fr)_160px] lg:items-start">
 											<p className="font-semibold text-slate-950">
-												{sdkMergeStageLabels[String(event?.stage || "")] ||
+												{sdkMergeStageLabels[
+													String(
+														event?.operationTelemetry?.stage ||
+															event?.stage ||
+															"",
+													)
+												] ||
 													event?.stage ||
 													"Progress"}
 											</p>
@@ -8476,7 +8667,7 @@ export function DeviceEnrollmentPanel({
 												sdkMergeSelectableCredentialWrites.length === 0
 											}>
 											<CheckCircle2 className="h-4 w-4" />
-											Use evidence-backed sources
+											Select ready operations
 										</Button>
 										<Button
 											type="button"
@@ -8487,20 +8678,37 @@ export function DeviceEnrollmentPanel({
 										</Button>
 									</div>
 								</div>
-								<div className="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-5">
+								<div className="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-4 xl:grid-cols-7">
 									{[
-										["Potential operations", sdkMergeRecommendedCredentialWrites.length],
-										["Fingerprint", sdkMergeCredentialFingerprintWriteCount],
-										["Face", sdkMergeCredentialFaceWriteCount],
-										["Ready from raw/export", sdkMergeSelectableCredentialWrites.length],
 										[
-											"Blocked / review",
-											sdkMergeBlockedCredentialWriteCount +
-												sdkMergeRecommendedCredentialWrites.filter(
-													(write) =>
-														write.executionEligibility ===
-														"sdk_probe_required",
-												).length,
+											"Potential operations",
+											sdkMergePotentialOperationSummary?.totalPotentialOperations ??
+												sdkMergeCredentialWrites.length,
+										],
+										[
+											"Fingerprint",
+											sdkMergePotentialOperationSummary?.byModality
+												?.fingerprint ??
+												sdkMergeCredentialFingerprintWriteCount,
+										],
+										[
+											"Face",
+											sdkMergePotentialOperationSummary?.byModality?.face ??
+												sdkMergeCredentialFaceWriteCount,
+										],
+										[
+											"Card",
+											sdkMergePotentialOperationSummary?.byModality?.card ??
+												sdkMergeCredentialCardWriteCount,
+										],
+										["Ready now", sdkMergeSelectableCredentialWrites.length],
+										[
+											"Recovery queued",
+											sdkMergeRecoveryQueuedCredentialWriteCount,
+										],
+										[
+											"Physical action required",
+											sdkMergePhysicalActionCredentialWrites.length,
 										],
 									].map(([label, value]) => (
 										<div key={String(label)} className="bg-white px-3 py-2">
@@ -8511,6 +8719,21 @@ export function DeviceEnrollmentPanel({
 										</div>
 									))}
 								</div>
+								{sdkMergeRecoveryStageEntries.length ? (
+									<div className="flex flex-wrap gap-x-4 gap-y-1 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+										<span className="font-semibold text-slate-950">
+											Operations by recovery stage
+										</span>
+										{sdkMergeRecoveryStageEntries.map(([stage, count]) => (
+											<span key={stage}>
+												{formatSdkMergeRecoveryStage({
+													recoveryStage: stage,
+												} as SdkMergeCredentialWrite)}
+												: {mergeMetricValue(count)}
+											</span>
+										))}
+									</div>
+								) : null}
 								<div className="grid grid-cols-[32px_minmax(130px,0.8fr)_96px_minmax(150px,1fr)_minmax(150px,1fr)_104px_minmax(190px,1.2fr)] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
 									<span aria-hidden="true" />
 									<span>User ID</span>
@@ -8525,9 +8748,10 @@ export function DeviceEnrollmentPanel({
 										sdkMergeCredentialWrites.map((write) => {
 											const selectable =
 												write.recommended &&
-												write.executionEligibility === "ready_from_raw_blob";
-											const probeRequired =
-												write.executionEligibility === "sdk_probe_required";
+												write.executionEligibility === "ready_from_raw_blob" &&
+												!isSdkMergePhysicalActionRequired(write);
+											const physicalActionRequired =
+												isSdkMergePhysicalActionRequired(write);
 											return (
 												<div
 													key={write.id}
@@ -8568,7 +8792,9 @@ export function DeviceEnrollmentPanel({
 																	sdkMergePlanDevices,
 																	write.sourceDeviceId,
 																)
-															: "No source"}
+															: physicalActionRequired
+																? "Physical source required"
+																: "Source recovery queued"}
 													</span>
 													<span className="truncate text-slate-700">
 														{mergeDeviceName(
@@ -8582,18 +8808,21 @@ export function DeviceEnrollmentPanel({
 													</span>
 													<div className="min-w-0">
 														<p
-															className={`truncate text-xs font-semibold ${
+															className={`text-xs font-semibold ${
 																selectable
 																	? "text-emerald-700"
-																	: "text-amber-800"
-															}`}>
+																	: physicalActionRequired
+																		? "text-red-700"
+																		: "text-amber-800"
+															}`}
+															title={write.recommendationReason}>
 															{selectable
-																? "Raw/export evidence ready"
-																: probeRequired
-																	? "Blocked: exact SDK export/copy probe required"
-																	: `Blocked: ${write.blockingReason || "review required"}`}
+																? "Ready now: raw/export evidence verified"
+																: physicalActionRequired
+																	? `Physical action required: ${formatSdkMergePhysicalAction(write)}`
+																	: `Recovery queued: ${formatSdkMergeRecoveryStage(write)}`}
 														</p>
-														<p className="truncate text-xs text-slate-600">
+														<p className="mt-0.5 break-words text-xs leading-4 text-slate-600">
 															{write.recommendationReason}
 														</p>
 													</div>

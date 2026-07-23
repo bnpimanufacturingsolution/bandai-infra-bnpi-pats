@@ -176,6 +176,22 @@ export type DeviceUserCredentialWrite = {
 		| "target_write_unsupported"
 		| "credential_only_card_not_supported"
 		| null;
+	recoveryStage:
+		| "queued_source_custody_recovery"
+		| "exporting_source_credential"
+		| "comparing_sources"
+		| "resolving_richest_source"
+		| "probing_target_capability"
+		| "preparing_writer"
+		| "ready_to_write"
+		| "writing"
+		| "rereading_target"
+		| "physically_retained"
+		| "retrying_recoverable_failure"
+		| "physical_identity_action_required"
+		| "physical_reenrollment_required"
+		| "device_firmware_unsupported"
+		| null;
 	sourceCandidateDeviceIds: string[];
 	/** Frozen, sorted slot:sha256 custody bound into the reviewed scope hash. */
 	sourceFingerprintTemplateChecksums: Array<{
@@ -212,7 +228,10 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 }>(
 	plan: T,
 	evidence: DurableFingerprintOwnerConflictEvidence[],
-): T => {
+): T & {
+	credentialWrites: DeviceUserCredentialWrite[];
+	credentialResolutions: unknown[];
+} => {
 	const writes = Array.isArray(plan.credentialWrites) ? plan.credentialWrites : [];
 	const users = Array.isArray(plan.users) ? plan.users : [];
 	const records = users.flatMap((user) =>
@@ -228,11 +247,16 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 			retainedWrites.push(write);
 			continue;
 		}
+		const sourceSlotIds = new Set(
+			write.sourceFingerprintTemplateChecksums.map(
+				(template) => template.fingerPrintId,
+			),
+		);
 		const collisions = evidence.filter(
 			(item) =>
 				item.vendorUserId === write.vendorUserId &&
-				item.sourceDeviceId === write.sourceDeviceId &&
-				item.targetDeviceId === write.targetDeviceId,
+				item.targetDeviceId === write.targetDeviceId &&
+				sourceSlotIds.has(item.fingerPrintId),
 		);
 		if (!collisions.length) {
 			retainedWrites.push(write);
@@ -242,6 +266,20 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 			(item) =>
 				item.record.deviceId === write.sourceDeviceId &&
 				item.record.vendorUserId === write.vendorUserId,
+		);
+		const intendedTarget = records.find(
+			(item) =>
+				item.record.deviceId === write.targetDeviceId &&
+				item.record.vendorUserId === write.vendorUserId,
+		);
+		const intendedTargetSlots = new Map(
+			normalizedFingerprintChecksums(intendedTarget?.record || ({} as DeviceUserMergeRecord))
+				.map((template) => [template.fingerPrintId, template.checksum]),
+		);
+		const pendingSlots = write.sourceFingerprintTemplateChecksums.filter(
+			(template) =>
+				intendedTargetSlots.get(template.fingerPrintId) !==
+				text(template.checksum).toLowerCase(),
 		);
 		const equivalence = collisions.map((collision) => {
 			const owner = records.find(
@@ -271,7 +309,18 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 						String(ownerChecksum).toLowerCase(),
 			};
 		});
-		if (equivalence.every((item) => item.equivalent)) {
+		const equivalentSlots = new Set(
+			equivalence
+				.filter((item) => item.equivalent)
+				.map((item) => item.collision.fingerPrintId),
+		);
+		if (
+			pendingSlots.length > 0 &&
+			equivalence.every((item) => item.equivalent) &&
+			pendingSlots.every((template) =>
+				equivalentSlots.has(template.fingerPrintId),
+			)
+		) {
 			resolutions.push({
 				writeId: write.id,
 				modality: "fingerprint",
@@ -295,6 +344,7 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 			recommended: false,
 			executionEligibility: "blocked",
 			blockingReason: "physical_identity_adjudication_required",
+			recoveryStage: "physical_identity_action_required",
 			recommendationReason:
 				`Physical SDK owner protection reports target vendor user ${owners.join(
 					", ",
@@ -317,7 +367,10 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 		next.counts.blockedCredentialWrites =
 			retainedWrites.length - next.counts.actionableCredentialWrites;
 	}
-	return next;
+	return next as T & {
+		credentialWrites: DeviceUserCredentialWrite[];
+		credentialResolutions: unknown[];
+	};
 };
 
 const text = (value: unknown) => String(value ?? "").trim();
@@ -453,6 +506,104 @@ export const fingerprintCustodyMatchesReview = (
 		JSON.stringify(normalizedReviewed) ===
 			JSON.stringify(normalizeFingerprintCustodyEvidence(current))
 	);
+};
+
+export type FingerprintPhysicalRereadProof = {
+	physicallyRetained: boolean;
+	reason:
+		| "physically_retained"
+		| "target_identity_not_reread"
+		| "reviewed_slot_not_retained"
+		| "different_target_owner_detected";
+	retainedSlots: number[];
+	missingOrChangedSlots: number[];
+	conflictingOwners: Array<{
+		vendorUserId: string;
+		fingerPrintId: number;
+		checksum: string;
+	}>;
+};
+
+/**
+ * A write is physically retained only when a fresh target-wide read proves
+ * every reviewed slot/checksum on the intended vendor identity and proves
+ * that none of those checksums is owned by another target identity.
+ */
+export const proveFingerprintPhysicalReread = (params: {
+	targetDeviceId: string;
+	vendorUserId: string;
+	reviewedTemplates: Array<{ fingerPrintId: number; checksum: string }>;
+	targetRecords: DeviceUserMergeRecord[];
+}): FingerprintPhysicalRereadProof => {
+	const reviewed = normalizeFingerprintCustodyEvidence(params.reviewedTemplates);
+	const intended = params.targetRecords.find(
+		(record) =>
+			record.deviceId === params.targetDeviceId &&
+			text(record.vendorUserId) === text(params.vendorUserId),
+	);
+	if (!intended) {
+		return {
+			physicallyRetained: false,
+			reason: "target_identity_not_reread",
+			retainedSlots: [],
+			missingOrChangedSlots: reviewed.map((template) => template.fingerPrintId),
+			conflictingOwners: [],
+		};
+	}
+	const intendedBySlot = new Map(
+		normalizedFingerprintChecksums(intended).map((template) => [
+			template.fingerPrintId,
+			template.checksum,
+		]),
+	);
+	const retainedSlots = reviewed
+		.filter(
+			(template) =>
+				intendedBySlot.get(template.fingerPrintId) === template.checksum,
+		)
+		.map((template) => template.fingerPrintId);
+	const missingOrChangedSlots = reviewed
+		.filter(
+			(template) =>
+				intendedBySlot.get(template.fingerPrintId) !== template.checksum,
+		)
+		.map((template) => template.fingerPrintId);
+	const reviewedChecksums = new Set(reviewed.map((template) => template.checksum));
+	const conflictingOwners = params.targetRecords
+		.filter(
+			(record) =>
+				record.deviceId === params.targetDeviceId &&
+				text(record.vendorUserId) !== text(params.vendorUserId),
+		)
+		.flatMap((record) =>
+			normalizedFingerprintChecksums(record)
+				.filter((template) => reviewedChecksums.has(template.checksum))
+				.map((template) => ({
+					vendorUserId: text(record.vendorUserId),
+					fingerPrintId: template.fingerPrintId,
+					checksum: template.checksum,
+				})),
+		)
+		.sort(
+			(left, right) =>
+				left.vendorUserId.localeCompare(right.vendorUserId) ||
+				left.fingerPrintId - right.fingerPrintId,
+		);
+	return {
+		physicallyRetained:
+			reviewed.length > 0 &&
+			missingOrChangedSlots.length === 0 &&
+			conflictingOwners.length === 0,
+		reason:
+			missingOrChangedSlots.length > 0
+				? "reviewed_slot_not_retained"
+				: conflictingOwners.length > 0
+					? "different_target_owner_detected"
+					: "physically_retained",
+		retainedSlots,
+		missingOrChangedSlots,
+		conflictingOwners,
+	};
 };
 
 const completeFingerprintChecksumEvidence = (record: DeviceUserMergeRecord) => {
@@ -707,10 +858,10 @@ const buildCredentialWritesForUser = (
 								? "Multiple devices report the same highest card count; exact card-value equality is not proven."
 								: `Multiple devices report the same highest ${modality} count; template equality is not proven.`
 						: blockingReason === "missing_raw_blob"
-							? `The source reports a ${modality} enrollment count but has no reviewed portable bytes.`
+							? `Recovery stage: capture current physical ${modality} custody from each evidenced source, checksum it, and regenerate the plan.`
 							: blockingReason === "target_write_unsupported"
-								? "Credential-only face writes from stored custody are not implemented."
-								: "Credential-only card writes are not implemented."
+								? "Recovery stage: probe and attest the target's SDK face-template or FDLib picture writer, then run one serial reread-proven canary."
+								: "Recovery stage: prove CardInfo record capability and exact card ownership, then run one serial reread-proven canary."
 					: modality === "fingerprint" &&
 						  fingerprintResolution?.reason === "equal_checksum_sets"
 						? "Equivalent raw fingerprint custody is proven by equal checksum sets; the stable source representative is safe."
@@ -720,6 +871,16 @@ const buildCredentialWritesForUser = (
 							: `A single highest-count source has evidenced raw ${modality} custody and a credential-only target write path.`,
 				executionEligibility,
 				blockingReason,
+				recoveryStage:
+					blockingReason === "missing_raw_blob"
+						? "queued_source_custody_recovery"
+						: blockingReason === "source_conflict"
+							? "comparing_sources"
+							: blockingReason === "target_write_unsupported"
+								? "probing_target_capability"
+								: blockingReason === "credential_only_card_not_supported"
+									? "probing_target_capability"
+									: "ready_to_write",
 				sourceCandidateDeviceIds,
 				sourceFingerprintTemplateChecksums:
 					modality === "fingerprint" && uniqueSource

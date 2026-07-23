@@ -45,6 +45,8 @@ services:
     build:
       context: ../hris-api
       dockerfile: Dockerfile
+      args:
+        PROJECT_TRUTH_BUILD_SHA: ${PROJECT_TRUTH_BUILD_SHA:-local-unattested}
     image: hris-api-local:develop
     container_name: hris-api-dev
     restart: unless-stopped

@@ -148,13 +148,49 @@ describe("Hikvision biometric sync contract", () => {
 		expect(router).to.include("timeoutMs: config.heavyRequestTimeoutMs");
 	});
 
-	it("keeps credential-only card writes dormant and physically reread-gated", () => {
+	it("reuses durable SDK owner-conflict evidence before recommending fingerprint writes", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("readDurableFingerprintOwnerConflicts");
+		expect(controller).to.include("progressStatus");
+		expect(controller).to.include("progressErrorMsg");
+		expect(controller).to.include("reconcileDurableFingerprintOwnerConflicts(");
+	});
+
+	it("persists complete correlated credential operation telemetry without truncating rows", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("buildHikvisionCredentialOperationTelemetry");
+		expect(controller).to.include("operationTelemetry");
+		expect(controller).to.include("heartbeatAt");
+		expect(controller).to.include("executionLocation");
+		expect(controller).not.to.include(
+			"[...(latest?.results || []), resultRow].slice(-250)",
+		);
+		expect(controller).not.to.include(
+			"[...(job.progressEvents || []), appendProgressEvent].slice(-100)",
+		);
+	});
+
+	it("keeps face and card recovery serial and auto-attests a physically retained canary", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("serialFaceCardGroups");
+		expect(controller).to.include("for (const group of serialFaceCardGroups)");
+		expect(controller).to.include(
+			"persistPhysicallyProvenHikvisionWriterCapability",
+		);
+		expect(controller).to.include("HIKVISION_AUTHORIZED_CARD_CANARY_DEVICE_ID");
+		expect(controller).to.include("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID");
+		expect(controller).to.include("CardInfo custody inventory");
+		expect(controller).not.to.include("authorizedCanaryVendorUserIds.includes");
+	});
+
+	it("keeps credential-only card writes exact-build and physically reread-gated", () => {
 		const controller = controllerSource();
 		const service = serviceSource();
-		expect(controller).to.include("project-truth-hikvision-card-writer-v1");
+		expect(controller).to.include("currentProjectTruthBuildAttestation()");
 		expect(controller).to.include("cardRecordCapability");
 		expect(controller).to.include("testedBuildAttested");
-		expect(controller).to.include("authorizedCanaryVendorUserIds");
+		expect(controller).to.include("physicallyRetained === true");
+		expect(controller).not.to.include("authorizedCanaryVendorUserIds.includes");
 		expect(controller).to.include('"--manual-include-card"');
 		expect(controller).to.include("withTargetDeviceWriteLocks");
 		expect(controller).to.include("Target reciprocal CardInfo reread did not prove");
@@ -175,10 +211,13 @@ describe("Hikvision biometric sync contract", () => {
 		const controller = controllerSource();
 		const service = serviceSource();
 		expect(controller).to.include("runHikvisionStoredFaceWriteOnVm");
-		expect(controller).to.include("HIKVISION_STORED_FACE_WRITER_BUILD_ATTESTATION");
+		expect(controller).not.to.include("HIKVISION_STORED_FACE_WRITER_BUILD_ATTESTATION");
+		expect(controller).to.include("resolveHikvisionDeployedBuildAttestation");
+		expect(controller).to.include("resolveFleetWriterCapability");
 		expect(controller).to.include("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID");
 		expect(controller).to.include("faceAndTemplateRecord");
 		expect(controller).to.include("testedBuildAttestation");
+		expect(controller).to.include("currentStoredFaceWriterBuildAttestation");
 		expect(controller).to.include("root-owned mode-0600 stored-face custody");
 		expect(controller).to.include(
 			"Fresh physical stored-face custody changed after review",
@@ -208,6 +247,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include(
 			"Fresh physical FDLib source picture changed after review",
 		);
+		expect(controller).to.include("hikvisionCredentialCapabilityEvidence");
+		expect(controller).to.include("capabilityEvidenceSha256");
 		expect(controller).to.include("verifyHikvisionFdlibPhysicalReread");
 		expect(controller).to.include("withTargetDeviceWriteLock");
 		expect(router).not.to.include("fdlib-face-delivery/:token");

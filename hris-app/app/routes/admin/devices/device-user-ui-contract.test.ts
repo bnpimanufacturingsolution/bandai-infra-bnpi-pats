@@ -310,7 +310,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Progress estimate");
 		expect(enroll).toContain("Current phase");
 		expect(enroll).toContain("UI polling");
-		expect(enroll).toContain("Backend update");
+		expect(enroll).toContain("Backend heartbeat");
 		expect(enroll).toContain("No detailed backend heartbeat yet");
 		expect(enroll).toContain(
 			"Physically retained increases only after a target reread proves the credential stayed on the panel",
@@ -354,8 +354,22 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Potential writes");
 		expect(enroll).toContain("Credential convergence");
 		expect(enroll).toContain("Fingerprint and face are planned independently");
-		expect(enroll).toContain("Use evidence-backed sources");
-		expect(enroll).toContain("Blocked: exact SDK export/copy probe required");
+		expect(enroll).toContain("Select ready operations");
+		expect(enroll).toContain('"Potential operations"');
+		expect(enroll).toContain(
+			"sdkMergePotentialOperationSummary?.totalPotentialOperations",
+		);
+		expect(enroll).toContain("sdkMergePotentialOperationSummary?.byModality?.card");
+		expect(enroll).toContain('"Ready now"');
+		expect(enroll).toContain('"Recovery queued"');
+		expect(enroll).toContain('"Physical action required"');
+		expect(enroll).toContain("Recovery queued: ${formatSdkMergeRecoveryStage(write)}");
+		expect(enroll).toContain(
+			"Physical action required: ${formatSdkMergePhysicalAction(write)}",
+		);
+		expect(enroll).toContain("!isSdkMergePhysicalActionRequired(write)");
+		expect(enroll).not.toContain("Blocked: exact SDK export/copy probe required");
+		expect(enroll).not.toContain('"Blocked / review"');
 		expect(enroll).toContain("Review credential-only writes");
 		expect(enroll).toContain("does not rewrite the user record, cards, validity");
 		expect(enroll).toContain('mode: "credentials"');

@@ -89,6 +89,17 @@ import {
 	type HikvisionFdlibTargetClassification,
 } from "../../helper/hikvision-fdlib-face.helper";
 import { withCredentialDeviceLeases } from "../../helper/credential-device-lease.helper";
+import { buildHikvisionCredentialOperationTelemetry } from "../../helper/hikvision-credential-operation-telemetry.helper";
+import {
+	classifyHikvisionWriterCapability,
+	createHikvisionWriterCapabilityEvidence,
+	redactHikvisionWriterCapabilityEvidence,
+	resolveHikvisionDeployedBuildAttestation,
+	summarizeHikvisionPotentialOperations,
+	type HikvisionFaceCardWriter,
+	type HikvisionWriterCapabilityEvidence,
+	type HikvisionCredentialRecoveryStage,
+} from "../../helper/hikvision-face-card-recovery.helper";
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
 import {
 	decryptPortableBiometricEnvelope,
@@ -105,6 +116,16 @@ import path from "path";
 
 const logger = getLogger();
 const deviceLogger = logger.child({ module: "device" });
+const currentProjectTruthBuildAttestation = () => {
+	try {
+		return resolveHikvisionDeployedBuildAttestation(process.env).exactBuildSha;
+	} catch {
+		return "";
+	}
+};
+const currentStoredFaceWriterBuildAttestation = () => {
+	return currentProjectTruthBuildAttestation();
+};
 const DEVICE_EVENT_STATUSES = new Set([
 	"RECEIVED",
 	"MATCHED",
@@ -457,6 +478,7 @@ type DeviceUserMergeJobStatus = "processing" | "completed" | "failed";
 
 type DeviceUserMergeJob = {
 	jobId: string;
+	requestId?: string;
 	planId: string;
 	mode?: "users" | "credentials";
 	scopeHash?: string;
@@ -472,9 +494,14 @@ type DeviceUserMergeJob = {
 	currentStage?: string;
 	currentUserKey?: string | null;
 	currentTargetDeviceId?: string | null;
+	executionLocation?: string;
+	heartbeatAt?: Date;
 	results: any[];
 	progressEvents?: any[];
 	writeMatrix?: any;
+	startingGapSummary?: any;
+	endingGapSummary?: any;
+	gapDelta?: any;
 	copyFailureSummary?: any;
 	remainingConflicts?: number;
 	remainingMissing?: number;
@@ -606,7 +633,12 @@ const buildDeviceUserCredentialWriteMatrix = (
 		.map((write: any) => ({
 			...write,
 			sourceDeviceName: write.sourceDeviceId ? label(write.sourceDeviceId) : null,
+			sourceDeviceAddress: write.sourceDeviceId
+				? String(deviceById.get(String(write.sourceDeviceId))?.address || "")
+				: null,
 			targetDeviceName: label(write.targetDeviceId),
+			targetDeviceAddress:
+				String(deviceById.get(String(write.targetDeviceId))?.address || "") || null,
 		}));
 	const executableRows = rows.filter(
 		(write: any) =>
@@ -644,6 +676,75 @@ const buildDeviceUserCredentialWriteMatrix = (
 		byTargetDeviceId: countBy(executableRows, "targetDeviceId"),
 		rows: executableRows,
 		blockedRows,
+	};
+};
+
+const summarizeDeviceUserCredentialGaps = (plan: any) => {
+	const rows = Array.isArray(plan?.credentialWrites) ? plan.credentialWrites : [];
+	const modalities = { fingerprint: 0, face: 0, card: 0 } as Record<string, number>;
+	const perTarget: Record<string, { total: number; fingerprint: number; face: number; card: number }> =
+		{};
+	for (const row of rows) {
+		const modality = String(row?.modality || "");
+		if (!(modality in modalities)) continue;
+		modalities[modality] += 1;
+		const targetDeviceId = String(row?.targetDeviceId || "").trim();
+		if (!targetDeviceId) continue;
+		const target = perTarget[targetDeviceId] || {
+			total: 0,
+			fingerprint: 0,
+			face: 0,
+			card: 0,
+		};
+		target.total += 1;
+		target[modality as "fingerprint" | "face" | "card"] += 1;
+		perTarget[targetDeviceId] = target;
+	}
+	return { total: rows.length, modalities, perTarget };
+};
+
+const buildDeviceUserCredentialGapDelta = (starting: any, ending: any) => {
+	const subtract = (start: unknown, end: unknown) =>
+		Math.max(0, Number(start || 0) - Number(end || 0));
+	const targetIds = Array.from(
+		new Set([
+			...Object.keys(starting?.perTarget || {}),
+			...Object.keys(ending?.perTarget || {}),
+		]),
+	);
+	return {
+		total: subtract(starting?.total, ending?.total),
+		modalities: {
+			fingerprint: subtract(
+				starting?.modalities?.fingerprint,
+				ending?.modalities?.fingerprint,
+			),
+			face: subtract(starting?.modalities?.face, ending?.modalities?.face),
+			card: subtract(starting?.modalities?.card, ending?.modalities?.card),
+		},
+		perTarget: Object.fromEntries(
+			targetIds.map((deviceId) => [
+				deviceId,
+				{
+					total: subtract(
+						starting?.perTarget?.[deviceId]?.total,
+						ending?.perTarget?.[deviceId]?.total,
+					),
+					fingerprint: subtract(
+						starting?.perTarget?.[deviceId]?.fingerprint,
+						ending?.perTarget?.[deviceId]?.fingerprint,
+					),
+					face: subtract(
+						starting?.perTarget?.[deviceId]?.face,
+						ending?.perTarget?.[deviceId]?.face,
+					),
+					card: subtract(
+						starting?.perTarget?.[deviceId]?.card,
+						ending?.perTarget?.[deviceId]?.card,
+					),
+				},
+			]),
+		),
 	};
 };
 
@@ -997,10 +1098,12 @@ const readDeviceUserSyncJob = (jobId: string): DeviceUserSyncJob | null => {
 		const startedAt = parsed.startedAt ? new Date(parsed.startedAt) : new Date();
 		const completedAt = parsed.completedAt ? new Date(parsed.completedAt) : undefined;
 		const updatedAt = parsed.updatedAt ? new Date(parsed.updatedAt) : completedAt || startedAt;
+		const heartbeatAt = parsed.heartbeatAt ? new Date(parsed.heartbeatAt) : updatedAt;
 		return {
 			...parsed,
 			startedAt,
 			updatedAt,
+			heartbeatAt,
 			completedAt,
 			results: Array.isArray(parsed.results) ? parsed.results : [],
 			biometricTotal: Number(parsed.biometricTotal || 0),
@@ -1049,6 +1152,8 @@ const serializeDeviceUserMergeJob = (job: DeviceUserMergeJob) => ({
 	progressEvents: Array.isArray(job.progressEvents) ? job.progressEvents : [],
 	startedAt: job.startedAt instanceof Date ? job.startedAt.toISOString() : job.startedAt,
 	updatedAt: job.updatedAt instanceof Date ? job.updatedAt.toISOString() : job.updatedAt,
+	heartbeatAt:
+		job.heartbeatAt instanceof Date ? job.heartbeatAt.toISOString() : job.heartbeatAt || null,
 	completedAt:
 		job.completedAt instanceof Date ? job.completedAt.toISOString() : job.completedAt || null,
 });
@@ -1265,7 +1370,7 @@ const updateDeviceUserMergeJob = (
 	if (!job) return;
 	const { appendProgressEvent, ...jobPatch } = patch;
 	const progressEvents = patch.appendProgressEvent
-		? [...(job.progressEvents || []), appendProgressEvent].slice(-100)
+		? [...(job.progressEvents || []), appendProgressEvent]
 		: jobPatch.progressEvents || job.progressEvents;
 	const nextJob: DeviceUserMergeJob = {
 		...job,
@@ -2582,9 +2687,7 @@ export const controller = (prisma: PrismaClient) => {
 	}) => {
 		const targetDeviceId = String(params.targetDevice?.id || "").trim();
 		const targetConfig = (params.targetDevice?.config || {}) as any;
-		const buildAttestation = String(
-			process.env.HIKVISION_STORED_FACE_WRITER_BUILD_ATTESTATION || "",
-		).trim();
+		const buildAttestation = currentStoredFaceWriterBuildAttestation();
 		const capabilityTested =
 			targetConfig?.biometricCapabilities?.faceAndTemplateRecord === true &&
 			Boolean(buildAttestation) &&
@@ -2901,6 +3004,139 @@ export const controller = (prisma: PrismaClient) => {
 		} finally {
 			hikvisionFdlibFaceDeliveryRegistry.revoke(delivery.token);
 		}
+	};
+
+	const persistPhysicallyProvenHikvisionWriterCapability = async (params: {
+		req: Request;
+		targetDevice: any;
+		vendorUserId: string;
+		writer:
+			| "sdk_face_template_picture"
+			| "fdlib_picture_import"
+			| "card_info_record";
+		endpoint: string;
+		retainedChecksum: string;
+		responseBody: unknown;
+		fdlibAttestation?: {
+			fdId?: string | null;
+			faceLibType?: string | null;
+			allowedRequesterAddresses?: string[];
+		};
+	}) => {
+		const build = resolveHikvisionDeployedBuildAttestation(process.env);
+		const deviceInfoResponse = await hikvisionFetch(
+			"/ISAPI/System/deviceInfo?format=json",
+			{
+				method: "GET",
+				deviceId: String(params.targetDevice.id),
+				prisma,
+				request: params.req,
+				timeoutMs: 12_000,
+			},
+		);
+		const deviceInfo =
+			deviceInfoResponse?.DeviceInfo ||
+			deviceInfoResponse?.deviceInfo ||
+			deviceInfoResponse ||
+			{};
+		const model = String(
+			deviceInfo?.model ||
+				deviceInfo?.deviceModel ||
+				deviceInfo?.deviceType ||
+				"",
+		).trim();
+		const firmware = String(
+			deviceInfo?.firmwareVersion ||
+				deviceInfo?.firmware ||
+				deviceInfo?.softwareVersion ||
+				"",
+		).trim();
+		const evidence = createHikvisionWriterCapabilityEvidence({
+			deviceId: String(params.targetDevice.id),
+			model,
+			firmware,
+			endpoint: params.endpoint,
+			responseStatus: "physically_retained",
+			responseBody: {
+				deviceInfo,
+				writerResult: params.responseBody,
+			},
+			testedWriter: params.writer,
+			build,
+			canaryUserId: params.vendorUserId,
+			canaryTargetDeviceId: String(params.targetDevice.id),
+			canaryRetainedChecksum: params.retainedChecksum,
+			physicallyRetained: true,
+		});
+		const safeEvidence = redactHikvisionWriterCapabilityEvidence(evidence);
+		const currentConfig = ((params.targetDevice.config || {}) as Record<string, any>);
+		const capabilityKey = params.writer;
+		const nextConfig: Record<string, any> = {
+			...currentConfig,
+			hikvisionWriterCapabilities: {
+				...(currentConfig.hikvisionWriterCapabilities || {}),
+				[capabilityKey]: safeEvidence,
+			},
+		};
+		if (params.writer === "sdk_face_template_picture") {
+			nextConfig.biometricCapabilities = {
+				...(currentConfig.biometricCapabilities || {}),
+				faceAndTemplateRecord: true,
+			};
+			nextConfig.storedFaceWriter = {
+				...(currentConfig.storedFaceWriter || {}),
+				status: "tested",
+				testedBuildAttestation: build.exactBuildSha,
+				model,
+				firmware,
+				canaryUserId: params.vendorUserId,
+				canaryTargetDeviceId: String(params.targetDevice.id),
+				canaryRetainedChecksum: params.retainedChecksum,
+				physicallyRetained: true,
+				testedAt: safeEvidence.timestamp,
+			};
+		} else if (params.writer === "fdlib_picture_import") {
+			nextConfig.fdlibPictureWriter = {
+				status: "tested",
+				endpoint: HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT,
+				uploadMode: "url",
+				testedBuildAttestation: build.exactBuildSha,
+				fdId: params.fdlibAttestation?.fdId || null,
+				faceLibType: params.fdlibAttestation?.faceLibType || null,
+				allowedRequesterAddresses:
+					params.fdlibAttestation?.allowedRequesterAddresses || [],
+				model,
+				firmware,
+				canaryUserId: params.vendorUserId,
+				canaryTargetDeviceId: String(params.targetDevice.id),
+				canaryRetainedChecksum: params.retainedChecksum,
+				physicallyRetained: true,
+				testedAt: safeEvidence.timestamp,
+			};
+		} else {
+			nextConfig.biometricCapabilities = {
+				...(currentConfig.biometricCapabilities || {}),
+				cardInfoRecord: true,
+			};
+			nextConfig.credentialCardWriter = {
+				...(currentConfig.credentialCardWriter || {}),
+				status: "tested",
+				testedBuildAttestation: build.exactBuildSha,
+				model,
+				firmware,
+				canaryUserId: params.vendorUserId,
+				canaryTargetDeviceId: String(params.targetDevice.id),
+				canaryRetainedChecksum: params.retainedChecksum,
+				physicallyRetained: true,
+				testedAt: safeEvidence.timestamp,
+			};
+		}
+		await (prisma as any).device.update({
+			where: { id: params.targetDevice.id },
+			data: { config: nextConfig },
+		});
+		params.targetDevice.config = nextConfig;
+		return safeEvidence;
 	};
 
 	const getDeviceUserBiometricBundleSecret = (organizationId: string, deviceId: string) => {
@@ -10459,15 +10695,55 @@ export const controller = (prisma: PrismaClient) => {
 			string,
 			HikvisionFdlibTargetClassification
 		>();
-		const currentBuildAttestation = String(
-			process.env.PROJECT_TRUTH_BUILD_SHA ||
-				process.env.GIT_COMMIT_SHA ||
-				process.env.GITHUB_SHA ||
-				"",
-		).trim();
+		const deviceWriterTuples = new Map<
+			string,
+			{ model: string; firmware: string }
+		>();
+		const currentBuildAttestation = currentProjectTruthBuildAttestation();
+		const deployedBuild = resolveHikvisionDeployedBuildAttestation(process.env);
+		const fleetWriterEvidence = devices.flatMap((device) =>
+			Object.values(
+				((device.config as any)?.hikvisionWriterCapabilities || {}) as Record<
+					string,
+					HikvisionWriterCapabilityEvidence
+				>,
+			),
+		);
 		const loadDeviceRecords = async (device: (typeof devices)[number]) => {
 			const deviceRecords: DeviceUserMergeRecord[] = [];
 			try {
+				try {
+					const response = await hikvisionFetch(
+						"/ISAPI/System/deviceInfo?format=json",
+						{
+							method: "GET",
+							deviceId: String(device.id),
+							prisma,
+							request: params.req,
+							timeoutMs: 6_000,
+						},
+					);
+					const deviceInfo =
+						response?.DeviceInfo || response?.deviceInfo || response || {};
+					deviceWriterTuples.set(String(device.id), {
+						model: String(
+							deviceInfo?.model ||
+								deviceInfo?.deviceModel ||
+								deviceInfo?.deviceType ||
+								"",
+						).trim(),
+						firmware: String(
+							deviceInfo?.firmwareVersion ||
+								deviceInfo?.firmware ||
+								deviceInfo?.softwareVersion ||
+								"",
+						).trim(),
+					});
+				} catch (error: any) {
+					deviceLogger.warn(
+						`Device writer tuple probe failed for ${device.id}; cross-target capability reuse remains fail-closed: ${error?.message || error}`,
+					);
+				}
 				let capabilityProbe: { status: string; response?: unknown } = {
 					status: "unknown",
 				};
@@ -10490,14 +10766,61 @@ export const controller = (prisma: PrismaClient) => {
 						status: classifyHikvisionProbeError(error),
 					};
 				}
-				fdlibTargetCapabilities.set(
-					String(device.id),
-					classifyHikvisionFdlibPictureTarget({
-						capabilityProbe,
-						attestation: (device.config as any)?.fdlibPictureWriter,
-						currentBuildAttestation,
-					}),
+				const fdlibClassification = classifyHikvisionFdlibPictureTarget({
+					capabilityProbe,
+					attestation: (device.config as any)?.fdlibPictureWriter,
+					currentBuildAttestation,
+				});
+				fdlibTargetCapabilities.set(String(device.id), fdlibClassification);
+				const deviceConfig = ((device.config as any) || {}) as Record<string, any>;
+				const existingCapabilityEvidence =
+					deviceConfig?.hikvisionCredentialCapabilityEvidence?.fdlibPictureWriter ||
+					{};
+				const capabilityEvidenceChanged =
+					String(existingCapabilityEvidence.capabilityEvidenceSha256 || "") !==
+						fdlibClassification.capabilityEvidenceSha256 ||
+					String(existingCapabilityEvidence.reason || "") !==
+						fdlibClassification.reason ||
+					String(existingCapabilityEvidence.buildAttestation || "") !==
+						currentBuildAttestation;
+				const existingCheckedAt = Date.parse(
+					String(existingCapabilityEvidence.checkedAt || ""),
 				);
+				if (
+					capabilityEvidenceChanged ||
+					!Number.isFinite(existingCheckedAt) ||
+					Date.now() - existingCheckedAt > 24 * 60 * 60 * 1000
+				) {
+					await (prisma as any).device
+						.update({
+							where: { id: device.id },
+							data: {
+								config: {
+									...deviceConfig,
+									hikvisionCredentialCapabilityEvidence: {
+										...(deviceConfig.hikvisionCredentialCapabilityEvidence || {}),
+										fdlibPictureWriter: {
+											endpoint:
+												"/ISAPI/Intelligent/FDLib/FaceDataRecord/capabilities?format=json",
+											probeStatus: capabilityProbe.status,
+											writer: fdlibClassification.writer,
+											reason: fdlibClassification.reason,
+											actionable: fdlibClassification.actionable,
+											capabilityEvidenceSha256:
+												fdlibClassification.capabilityEvidenceSha256,
+											buildAttestation: currentBuildAttestation || null,
+											checkedAt: new Date().toISOString(),
+										},
+									},
+								},
+							},
+						})
+						.catch((error: any) => {
+							deviceLogger.warn(
+								`Failed to persist FDLib capability evidence for ${device.id}: ${error?.message || error}`,
+							);
+						});
+				}
 				const { candidates } = await loadHikvisionDeviceUserSnapshot(params.req, device);
 				const employees = await loadEmployeesForDeviceUserCandidates(
 					params.organizationId,
@@ -10525,6 +10848,65 @@ export const controller = (prisma: PrismaClient) => {
 				const savedByVendorId = new Map<string, any>(
 					savedRows.map((row: any) => [String(row.vendorUserId), row] as [string, any]),
 				);
+				const liveCardsByVendorId = new Map<string, string>();
+				try {
+					const cardsByVendor = new Map<string, Set<string>>();
+					let searchResultPosition = 0;
+					for (let page = 0; page < 20; page += 1) {
+						const cardResponse = await hikvisionFetch(
+							"/ISAPI/AccessControl/CardInfo/Search?format=json",
+							{
+								method: "POST",
+								deviceId: String(device.id),
+								prisma,
+								request: params.req,
+								timeoutMs: 12_000,
+								body: {
+									CardInfoSearchCond: {
+										searchID: `merge-card-inventory-${device.id}-${page}`,
+										searchResultPosition,
+										maxResults: 100,
+									},
+								},
+							},
+						);
+						const search = cardResponse?.CardInfoSearch || cardResponse || {};
+						const rows = Array.isArray(search?.CardInfo)
+							? search.CardInfo
+							: search?.CardInfo
+								? [search.CardInfo]
+								: [];
+						for (const card of rows) {
+							const vendorUserId = String(card?.employeeNo || "").trim();
+							const cardNo = String(card?.cardNo || "").trim();
+							if (!vendorUserId || !cardNo) continue;
+							const values = cardsByVendor.get(vendorUserId) || new Set<string>();
+							values.add(cardNo);
+							cardsByVendor.set(vendorUserId, values);
+						}
+						const numOfMatches = Number(search?.numOfMatches ?? rows.length);
+						const totalMatches = Number(search?.totalMatches ?? 0);
+						searchResultPosition += rows.length;
+						if (
+							rows.length === 0 ||
+							numOfMatches < 100 ||
+							(Number.isFinite(totalMatches) &&
+								totalMatches > 0 &&
+								searchResultPosition >= totalMatches)
+						) {
+							break;
+						}
+					}
+					for (const [vendorUserId, values] of cardsByVendor) {
+						if (values.size === 1) {
+							liveCardsByVendorId.set(vendorUserId, [...values][0]);
+						}
+					}
+				} catch (error: any) {
+					deviceLogger.warn(
+						`CardInfo custody inventory failed for ${device.id}; rows remain in queued recovery: ${error?.message || error}`,
+					);
+				}
 				for (const candidate of candidates) {
 					const saved = savedByVendorId.get(candidate.vendorUserId);
 					const decision = resolveDeviceUserLinkDecision(candidate, employees);
@@ -10552,6 +10934,7 @@ export const controller = (prisma: PrismaClient) => {
 						(candidate.rawPayload as any)?.cardNo ||
 							(candidate.rawPayload as any)?.CardInfo?.cardNo ||
 							(candidate.rawPayload as any)?.UserInfo?.cardNo ||
+							liveCardsByVendorId.get(String(candidate.vendorUserId)) ||
 							"",
 					).trim();
 					const portableFaceBundle = Boolean(
@@ -10614,29 +10997,24 @@ export const controller = (prisma: PrismaClient) => {
 					const faceReportedCount = Number(credentialSummary.faceCount || 0);
 					const cardReportedCount = Number(credentialSummary.cardCount || 0);
 					const cardWriterBuildAttestation =
-						"project-truth-hikvision-card-writer-v1";
+						currentProjectTruthBuildAttestation();
 					const deviceConfig = (device.config || {}) as any;
 					const cardRecordCapability =
 						deviceConfig?.biometricCapabilities?.cardInfoRecord === true ||
 						deviceConfig?.hikvisionCapabilities?.cardInfoRecord === true;
 					const testedBuildAttested =
+						Boolean(cardWriterBuildAttestation) &&
 						String(
 							deviceConfig?.credentialCardWriter?.testedBuildAttestation ||
 								"",
 						) === cardWriterBuildAttestation;
-					const authorizedCanaryVendorUserIds = Array.isArray(
-						deviceConfig?.credentialCardWriter?.authorizedCanaryVendorUserIds,
-					)
-						? deviceConfig.credentialCardWriter.authorizedCanaryVendorUserIds.map(
-								(value: unknown) => String(value).trim(),
-							)
-						: [];
 					const cardWriterAvailable =
-						cardRecordCapability &&
-						testedBuildAttested &&
-						authorizedCanaryVendorUserIds.includes(
-							String(candidate.vendorUserId),
-						);
+						String(
+							process.env.HIKVISION_AUTHORIZED_CARD_CANARY_DEVICE_ID || "",
+						).trim() === String(device.id) ||
+						(cardRecordCapability &&
+							testedBuildAttested &&
+							deviceConfig?.credentialCardWriter?.physicallyRetained === true);
 					deviceRecords.push({
 						deviceId: device.id,
 						deviceName: device.name || device.address || device.id,
@@ -10757,6 +11135,25 @@ export const controller = (prisma: PrismaClient) => {
 			records.push(...result.records);
 			if (result.error) errors.push(result.error);
 		}
+		const resolveFleetWriterCapability = (
+			targetDeviceId: string,
+			writer: HikvisionFaceCardWriter,
+		) => {
+			const tuple = deviceWriterTuples.get(String(targetDeviceId));
+			if (!tuple?.model || !tuple?.firmware) return null;
+			for (const evidence of fleetWriterEvidence) {
+				const decision = classifyHikvisionWriterCapability({
+					evidence,
+					deviceId: targetDeviceId,
+					model: tuple.model,
+					firmware: tuple.firmware,
+					writer,
+					build: deployedBuild,
+				});
+				if (decision.actionable) return decision;
+			}
+			return null;
+		};
 		const failedDeviceIds = new Set(errors.map((error) => error.deviceId));
 		const validDeviceIds = (params.deviceIds as string[]).filter(
 			(deviceId) => !failedDeviceIds.has(deviceId),
@@ -10790,7 +11187,8 @@ export const controller = (prisma: PrismaClient) => {
 		plan.credentialWrites = (plan.credentialWrites || []).map((write: any) => {
 			if (
 				write.modality === "face" &&
-				write.executionEligibility === "ready_from_raw_blob"
+				(write.executionEligibility === "ready_from_raw_blob" ||
+					write.blockingReason === "target_write_unsupported")
 			) {
 				const user = (plan.users || []).find(
 					(candidate: any) => String(candidate.key) === String(write.userKey),
@@ -10803,20 +11201,37 @@ export const controller = (prisma: PrismaClient) => {
 					(device) => String(device.id) === String(write.targetDeviceId),
 				);
 				const targetConfig = (targetDevice?.config || {}) as any;
-				const buildAttestation = String(
-					process.env.HIKVISION_STORED_FACE_WRITER_BUILD_ATTESTATION || "",
-				).trim();
-				const targetCapabilityTested =
-					targetConfig?.biometricCapabilities?.faceAndTemplateRecord === true &&
-					Boolean(buildAttestation) &&
+				const buildAttestation = currentStoredFaceWriterBuildAttestation();
+				const authorizedFaceCanaryTarget =
 					String(
-						targetConfig?.storedFaceWriter?.testedBuildAttestation || "",
-					) === buildAttestation;
+						process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID || "",
+					).trim() === String(write.targetDeviceId);
+				const targetCapabilityTested =
+					authorizedFaceCanaryTarget ||
+					Boolean(
+						resolveFleetWriterCapability(
+							String(write.targetDeviceId),
+							"sdk_face_template_picture",
+						),
+					) ||
+					(targetConfig?.biometricCapabilities?.faceAndTemplateRecord === true &&
+						Boolean(buildAttestation) &&
+						String(
+							targetConfig?.storedFaceWriter?.testedBuildAttestation || "",
+						) === buildAttestation &&
+						targetConfig?.storedFaceWriter?.physicallyRetained === true);
 				if (
 					targetCapabilityTested &&
 					sourceRecord?._faceCustodyEvidence
 				) {
-					return { ...write, writerStrategy: "sdk_face_template_writer" };
+					return {
+						...write,
+						recommended: true,
+						executionEligibility: "ready_from_raw_blob",
+						blockingReason: null,
+						recoveryStage: "ready_to_write",
+						writerStrategy: "sdk_face_template_writer",
+					};
 				}
 				const fdlibCapability = fdlibTargetCapabilities.get(
 					String(write.targetDeviceId),
@@ -10850,6 +11265,10 @@ export const controller = (prisma: PrismaClient) => {
 					}
 					return {
 						...write,
+						recommended: true,
+						executionEligibility: "ready_from_raw_blob",
+						blockingReason: null,
+						recoveryStage: "ready_to_write",
 						writerStrategy: "fdlib_picture_import",
 						fdlibTarget: {
 							fdId: fdlibCapability.fdId,
@@ -10868,8 +11287,56 @@ export const controller = (prisma: PrismaClient) => {
 					recommended: false,
 					executionEligibility: "blocked",
 					blockingReason: "target_write_unsupported",
-					recommendationReason:
-						"This target has neither an exact-build SDK face writer nor a current capability-attested FDLib picture writer.",
+					recoveryStage: "probing_target_capability",
+					recommendationReason: `Face recovery stage: ${
+						fdlibCapability?.reason || "fdlib_capability_not_available"
+					}. The target needs either the exact-build SDK writer or current FDLib picture capability evidence before a serial canary.`,
+				};
+			}
+			if (
+				write.modality === "card" &&
+				(write.executionEligibility === "ready_from_raw_blob" ||
+					write.blockingReason === "target_write_unsupported")
+			) {
+				const user = (plan.users || []).find(
+					(candidate: any) => String(candidate.key) === String(write.userKey),
+				);
+				const sourceRecord = (user?.records || []).find(
+					(record: any) =>
+						String(record.deviceId) === String(write.sourceDeviceId),
+				);
+				const authorizedCardCanaryTarget =
+					String(
+						process.env.HIKVISION_AUTHORIZED_CARD_CANARY_DEVICE_ID || "",
+					).trim() === String(write.targetDeviceId);
+				const targetCapabilityTested =
+					authorizedCardCanaryTarget ||
+					Boolean(
+						resolveFleetWriterCapability(
+							String(write.targetDeviceId),
+							"card_info_record",
+						),
+					);
+				if (targetCapabilityTested && sourceRecord?._cardNo) {
+					return {
+						...write,
+						recommended: true,
+						executionEligibility: "ready_from_raw_blob",
+						blockingReason: null,
+						recoveryStage: "ready_to_write",
+						writerStrategy: "card_info_record",
+					};
+				}
+				return {
+					...write,
+					recommended: false,
+					executionEligibility: "blocked",
+					blockingReason: sourceRecord?._cardNo
+						? "target_write_unsupported"
+						: "missing_raw_blob",
+					recoveryStage: sourceRecord?._cardNo
+						? "probing_target_capability"
+						: "queued_source_custody_recovery",
 				};
 			}
 			if (
@@ -10918,12 +11385,54 @@ export const controller = (prisma: PrismaClient) => {
 				recommended: false,
 				executionEligibility: "blocked",
 				blockingReason: "source_conflict",
+				recoveryStage: "physical_identity_action_required",
 				recommendationReason: `The missing source fingerprint checksum is already enrolled to target user ${duplicateOwners.join(", ")}; physical duplicate protection forbids this write.`,
 			};
 		});
 		plan = reconcileDurableFingerprintOwnerConflicts(
 			plan,
 			readDurableFingerprintOwnerConflicts(params.organizationId),
+		);
+		const normalizeRecoveryStage = (write: any): HikvisionCredentialRecoveryStage => {
+			const exactStages = new Set([
+				"queued_source_custody_recovery",
+				"exporting_source_credential",
+				"comparing_sources",
+				"resolving_richest_source",
+				"probing_target_capability",
+				"preparing_writer",
+				"ready_to_write",
+				"writing",
+				"rereading_target",
+				"physically_retained",
+				"retrying_recoverable_failure",
+				"physical_identity_action_required",
+				"physical_reenrollment_required",
+				"device_firmware_unsupported",
+			]);
+			if (exactStages.has(String(write.recoveryStage || ""))) {
+				return write.recoveryStage as HikvisionCredentialRecoveryStage;
+			}
+			if (write.executionEligibility === "ready_from_raw_blob") return "ready_to_write";
+			if (write.blockingReason === "missing_raw_blob")
+				return "queued_source_custody_recovery";
+			if (write.blockingReason === "target_write_unsupported")
+				return "probing_target_capability";
+			if (write.blockingReason === "physical_identity_adjudication_required")
+				return "physical_identity_action_required";
+			if (write.blockingReason === "source_conflict") return "comparing_sources";
+			return "preparing_writer";
+		};
+		plan.credentialWrites = (plan.credentialWrites || []).map((write: any) => ({
+			...write,
+			recoveryStage: normalizeRecoveryStage(write),
+		}));
+		plan.potentialOperations = summarizeHikvisionPotentialOperations(
+			plan.credentialWrites.map((write: any) => ({
+				operationId: String(write.id),
+				modality: write.modality,
+				recoveryStage: write.recoveryStage,
+			})),
 		);
 		if (plan.counts) {
 			plan.counts.credentialWrites = plan.credentialWrites.length;
@@ -11514,12 +12023,44 @@ export const controller = (prisma: PrismaClient) => {
 										cardDigestAfter: digest(afterCredentials.cardCount),
 									},
 								});
+								let capabilityEvidence: unknown = null;
+								let capabilityPersistenceError: string | null = null;
+								try {
+									capabilityEvidence =
+										await persistPhysicallyProvenHikvisionWriterCapability({
+											req: params.req,
+											targetDevice,
+											vendorUserId: String(write.vendorUserId),
+											writer: "fdlib_picture_import",
+											endpoint: HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT,
+											retainedChecksum: retained.pictureSha256,
+											responseBody: {
+												capabilityEvidenceSha256:
+													classification.capabilityEvidenceSha256,
+												faceCount: retained.faceCount,
+											},
+											fdlibAttestation: {
+												fdId: classification.fdId,
+												faceLibType: classification.faceLibType,
+												allowedRequesterAddresses:
+													classification.allowedRequesterAddresses,
+											},
+										});
+								} catch (capabilityError: any) {
+									capabilityPersistenceError =
+										capabilityError?.message || String(capabilityError);
+									deviceLogger.warn(
+										`FDLib writer canary retained but capability evidence persistence failed for ${write.targetDeviceId}: ${capabilityPersistenceError}`,
+									);
+								}
 								const result = {
 									...write,
 									status: "success",
 									actualCount: retained.faceCount,
 									pictureSha256: retained.pictureSha256,
 									strategy: proof.strategy,
+									capabilityEvidence,
+									capabilityPersistenceError,
 								};
 								results.push(result);
 								params.emitProgress?.({
@@ -11773,6 +12314,31 @@ export const controller = (prisma: PrismaClient) => {
 											`Credential-only face isolation failed after reread (${changedIdentityField || "fingerprint_or_card"} changed).`,
 										);
 									}
+									let capabilityEvidence: unknown = null;
+									let capabilityPersistenceError: string | null = null;
+									try {
+										capabilityEvidence =
+											await persistPhysicallyProvenHikvisionWriterCapability({
+												req: params.req,
+												targetDevice,
+												vendorUserId: String(write.vendorUserId),
+												writer: "sdk_face_template_picture",
+												endpoint: "NET_DVR_SET_FACE_AND_TEMPLATE",
+												retainedChecksum: currentEvidence.templateSha256,
+												responseBody: {
+													templateSize: sdkProof.templateSize,
+													pictureSize: sdkProof.pictureSize,
+													rereadTemplateSize: sdkProof.rereadTemplateSize,
+													rereadPictureSize: sdkProof.rereadPictureSize,
+												},
+											});
+									} catch (capabilityError: any) {
+										capabilityPersistenceError =
+											capabilityError?.message || String(capabilityError);
+										deviceLogger.warn(
+											`SDK face writer canary retained but capability evidence persistence failed for ${write.targetDeviceId}: ${capabilityPersistenceError}`,
+										);
+									}
 									const result = {
 										...write,
 										status: "success",
@@ -11780,6 +12346,8 @@ export const controller = (prisma: PrismaClient) => {
 										templateSize: sdkProof.templateSize,
 										pictureSize: sdkProof.pictureSize,
 										strategy: sdkProof.strategy,
+										capabilityEvidence,
+										capabilityPersistenceError,
 									};
 									results.push(result);
 									params.emitProgress?.({
@@ -12110,6 +12678,32 @@ export const controller = (prisma: PrismaClient) => {
 							actualCount,
 							strategy: "credential_only_sdk_probe_then_write",
 						};
+						if (write.modality === "card") {
+							try {
+								(result as any).capabilityEvidence =
+									await persistPhysicallyProvenHikvisionWriterCapability({
+										req: params.req,
+										targetDevice,
+										vendorUserId: String(write.vendorUserId),
+										writer: "card_info_record",
+										endpoint:
+											"/ISAPI/AccessControl/CardInfo/Record?format=json",
+										retainedChecksum: createHash("sha256")
+											.update(expectedCardNo)
+											.digest("hex"),
+										responseBody: {
+											actualCount,
+											reciprocalCardOwnerVerified,
+										},
+									});
+							} catch (capabilityError: any) {
+								(result as any).capabilityPersistenceError =
+									capabilityError?.message || String(capabilityError);
+								deviceLogger.warn(
+									`Card writer canary retained but capability evidence persistence failed for ${write.targetDeviceId}: ${(result as any).capabilityPersistenceError}`,
+								);
+							}
+						}
 						results.push(result);
 						params.emitProgress?.({
 							stage: "copy_success",
@@ -12170,20 +12764,29 @@ export const controller = (prisma: PrismaClient) => {
 				if (group) pendingGroups.push(group);
 			}
 		}
-		let nextGroupIndex = 0;
-		// Bound concurrency across people while allowing each person's distinct target
-		// devices to run together. This keeps the device job observable without
-		// serializing thousands of independent credential writes.
-		const workerCount = Math.min(8, pendingGroups.length);
+		const fingerprintGroups = pendingGroups.filter(
+			(group) => group[0]?.modality === "fingerprint",
+		);
+		const serialFaceCardGroups = pendingGroups.filter(
+			(group) => group[0]?.modality !== "fingerprint",
+		);
+		let nextFingerprintGroupIndex = 0;
+		// Fingerprint writes retain sorted per-target leases. Face and card are
+		// deliberately serial until each exact model/firmware/build tuple has a
+		// physically reread-proven canary and equivalent target locking evidence.
+		const fingerprintWorkerCount = Math.min(8, fingerprintGroups.length);
 		await Promise.all(
-			Array.from({ length: workerCount }, async () => {
+			Array.from({ length: fingerprintWorkerCount }, async () => {
 				while (true) {
-					const groupIndex = nextGroupIndex++;
-					if (groupIndex >= pendingGroups.length) return;
-					await processCredentialGroup(pendingGroups[groupIndex]);
+					const groupIndex = nextFingerprintGroupIndex++;
+					if (groupIndex >= fingerprintGroups.length) return;
+					await processCredentialGroup(fingerprintGroups[groupIndex]);
 				}
 			}),
 		);
+		for (const group of serialFaceCardGroups) {
+			await processCredentialGroup(group);
+		}
 		params.emitProgress?.({
 			stage: "reread_started",
 			message: "Rereading all frozen devices after credential-only writes.",
@@ -12899,6 +13502,26 @@ export const controller = (prisma: PrismaClient) => {
 			let failedWrites = Math.max(0, job.failedWrites || 0);
 			const recordProgress = (event: any) => {
 				const stage = String(event?.stage || "working");
+				const operationTelemetry =
+					event?.vendorUserId || event?.userKey || event?.targetDeviceId
+						? buildHikvisionCredentialOperationTelemetry(
+								{
+									requestId: job.requestId,
+									jobId: params.jobId,
+									planId: params.planId,
+									scopeHash: String(job.scopeHash || ""),
+									organizationId: params.organizationId,
+									buildAttestation: currentProjectTruthBuildAttestation(),
+									executionLocation:
+										job.executionLocation ||
+										String(
+											process.env.PROJECT_TRUTH_HIKVISION_RUNTIME_LOCATION ||
+												"vm-container",
+										),
+								},
+								event,
+							)
+						: null;
 				const terminalCopy = stage === "copy_success" || stage === "copy_error";
 				const resultRow = terminalCopy
 					? {
@@ -12915,6 +13538,7 @@ export const controller = (prisma: PrismaClient) => {
 							status: stage === "copy_success" ? "success" : "error",
 							strategy: event.strategy || null,
 							error: event.error || null,
+							operationTelemetry,
 						}
 					: null;
 				if (terminalCopy) {
@@ -12955,11 +13579,12 @@ export const controller = (prisma: PrismaClient) => {
 						// Circuit-skips and timeouts must never be counted as peer write success.
 						countsAsPeerWriteSuccess:
 							stage === "copy_success" && !isCircuitSkip && !event?.alreadyConverged,
+						operationTelemetry,
 					});
 				}
 				const latest = deviceUserMergeJobs.get(params.jobId);
 				const nextResults = resultRow
-					? [...(latest?.results || []), resultRow].slice(-250)
+					? [...(latest?.results || []), resultRow]
 					: latest?.results;
 				let copyFailureSummary = latest?.copyFailureSummary;
 				if (stage === "copy_error") {
@@ -13006,7 +13631,10 @@ export const controller = (prisma: PrismaClient) => {
 					failedWrites,
 					results: nextResults,
 					copyFailureSummary,
-					appendProgressEvent: event,
+					heartbeatAt: new Date(),
+					appendProgressEvent: operationTelemetry
+						? { ...event, operationTelemetry }
+						: event,
 				});
 			};
 			updateDeviceUserMergeJob(params.jobId, {
@@ -13050,6 +13678,9 @@ export const controller = (prisma: PrismaClient) => {
 			const attention = Number(result?.attention || finalFailedWrites || 0);
 			let retryPlanId: string | undefined;
 			const retryPlan = result?.reread?.plan || result?.reread;
+			const endingGapSummary = retryPlan
+				? summarizeDeviceUserCredentialGaps(retryPlan)
+				: job.startingGapSummary;
 			if (attention > 0 && retryPlan?.deviceIds?.length) {
 				retryPlanId = randomUUID();
 				deviceUserMergePlans.set(retryPlanId, {
@@ -13078,6 +13709,11 @@ export const controller = (prisma: PrismaClient) => {
 				remainingConflicts: Number(result?.remainingConflicts || 0),
 				remainingMissing: Number(result?.remainingMissing || 0),
 				attention,
+				endingGapSummary,
+				gapDelta: buildDeviceUserCredentialGapDelta(
+					job.startingGapSummary || {},
+					endingGapSummary,
+				),
 				completedAt: new Date(),
 			});
 		} catch (error: any) {
@@ -13367,6 +14003,9 @@ export const controller = (prisma: PrismaClient) => {
 			const jobId = randomUUID();
 			const job: DeviceUserMergeJob = {
 				jobId,
+				requestId:
+					String(req.headers["x-request-id"] || (req as any).requestId || "").trim() ||
+					randomUUID(),
 				planId,
 				mode,
 				scopeHash: scopeLock.scopeHash,
@@ -13384,6 +14023,11 @@ export const controller = (prisma: PrismaClient) => {
 				currentStage: "queued",
 				currentUserKey: null,
 				currentTargetDeviceId: null,
+				executionLocation:
+					String(
+						process.env.PROJECT_TRUTH_HIKVISION_RUNTIME_LOCATION || "vm-container",
+					).trim() || "vm-container",
+				heartbeatAt: new Date(),
 				results: [],
 				progressEvents: [
 					{
@@ -13396,6 +14040,7 @@ export const controller = (prisma: PrismaClient) => {
 					},
 				],
 				writeMatrix,
+				startingGapSummary: summarizeDeviceUserCredentialGaps(selectedAppliedPlan),
 				stale: false,
 				startedAt: new Date(),
 				updatedAt: new Date(),

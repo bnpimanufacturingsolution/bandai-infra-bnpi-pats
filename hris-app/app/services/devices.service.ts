@@ -628,8 +628,20 @@ export type DeviceUserMergePlanResponse = {
 			recommendationReason: string;
 			executionEligibility: "ready_from_raw_blob" | "sdk_probe_required" | "blocked";
 			blockingReason?: string | null;
+			recoveryStage?: string | null;
 			sourceCandidateDeviceIds: string[];
 		}>;
+		potentialOperations?: {
+			totalPotentialOperations: number;
+			byModality: {
+				fingerprint: number;
+				face: number;
+				card: number;
+			};
+			byRecoveryStage: Record<string, number>;
+			alreadyConverged: number;
+			physicalBoundaryOperations: number;
+		};
 		errors: Array<{ deviceId: string; deviceName: string; error: string }>;
 		sdkErrors?: Array<{ deviceId: string; deviceName: string; error: string }>;
 		unreachableDevices?: Array<{ deviceId: string; deviceName: string; error: string }>;
@@ -643,6 +655,7 @@ export type DeviceUserMergeRequest = {
 
 export interface DeviceUserMergeJobProgress {
 	jobId: string;
+	requestId?: string;
 	planId: string;
 	mode?: "users" | "credentials";
 	scopeHash?: string;
@@ -655,6 +668,8 @@ export interface DeviceUserMergeJobProgress {
 	failedWrites: number;
 	message: string;
 	currentStage?: string;
+	executionLocation?: string;
+	heartbeatAt?: string;
 	currentUserKey?: string | null;
 	currentTargetDeviceId?: string | null;
 	writeMatrix?: {
@@ -699,6 +714,9 @@ export interface DeviceUserMergeJobProgress {
 			conflicts: number;
 		}>;
 	};
+	startingGapSummary?: DeviceUserCredentialGapSummary;
+	endingGapSummary?: DeviceUserCredentialGapSummary;
+	gapDelta?: DeviceUserCredentialGapSummary;
 	results: Array<{
 		userKey?: string;
 		vendorUserId?: string;
@@ -713,6 +731,7 @@ export interface DeviceUserMergeJobProgress {
 		status: "success" | "error" | string;
 		strategy?: string | null;
 		error?: string | null;
+		operationTelemetry?: DeviceUserCredentialOperationTelemetry | null;
 	}>;
 	copyFailureSummary?: {
 		total?: number;
@@ -747,6 +766,60 @@ export interface DeviceUserMergeJobProgress {
 	startedAt: string;
 	updatedAt?: string;
 	completedAt?: string;
+}
+
+export interface DeviceUserCredentialGapSummary {
+	total?: number;
+	modalities?: {
+		fingerprint?: number;
+		face?: number;
+		card?: number;
+	};
+	perTarget?: Record<
+		string,
+		{
+			total?: number;
+			fingerprint?: number;
+			face?: number;
+			card?: number;
+		}
+	>;
+}
+
+export interface DeviceUserCredentialOperationTelemetry {
+	requestId: string;
+	jobId: string;
+	operationId: string;
+	planId: string;
+	scopeHash: string;
+	organization: string;
+	vendorUserId?: string | null;
+	modality?: "fingerprint" | "face" | "card" | null;
+	sourceDeviceId?: string | null;
+	sourcePhysicalTarget?: string | null;
+	targetDeviceId?: string | null;
+	targetPhysicalTarget?: string | null;
+	writerStrategy?: string | null;
+	buildAttestation?: string | null;
+	capabilityEvidenceChecksum?: string | null;
+	stage: string;
+	attempt: number;
+	startedAt: string;
+	updatedAt: string;
+	endedAt?: string | null;
+	durationMs?: number | null;
+	sdkProgressStatus?: number | null;
+	sdkLastError?: number | null;
+	isapiStatus?: number | null;
+	safeResponseClassification?: string | null;
+	preWriteCount?: number | null;
+	preWriteChecksum?: string | null;
+	postWriteCount?: number | null;
+	postWriteChecksum?: string | null;
+	physicalRereadResult?: string | null;
+	namedCause?: string | null;
+	retryDecision?: string | null;
+	executionLocation?: string | null;
 }
 
 export type DeviceUserMergeApplyPayload = {

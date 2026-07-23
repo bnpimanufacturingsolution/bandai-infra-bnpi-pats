@@ -119,6 +119,7 @@
         done
 
         cd "{{ project_truth_install_root }}/appliance"
+        export PROJECT_TRUTH_BUILD_SHA="$commit"
         if docker compose version >/dev/null 2>&1; then
           docker compose build hris-api hris-api-db-init hris-app
         else
