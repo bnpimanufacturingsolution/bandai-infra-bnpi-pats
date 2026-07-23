@@ -591,7 +591,9 @@ const buildDeviceUserCredentialWriteMatrix = (
 		(write: any) =>
 			write.executionEligibility !== "blocked" &&
 			write.sourceDeviceId &&
-			(write.modality === "fingerprint" || write.modality === "face"),
+			(write.modality === "fingerprint" ||
+				write.modality === "face" ||
+				write.modality === "card"),
 	);
 	const blockedRows = rows.filter(
 		(write: any) => !executableRows.some((candidate: any) => candidate.id === write.id),
@@ -615,7 +617,7 @@ const buildDeviceUserCredentialWriteMatrix = (
 			(write: any) => write.modality === "fingerprint",
 		).length,
 		faceWrites: executableRows.filter((write: any) => write.modality === "face").length,
-		cardWrites: 0,
+		cardWrites: executableRows.filter((write: any) => write.modality === "card").length,
 		byModality: countBy(executableRows, "modality"),
 		bySourceDeviceId: countBy(executableRows, "sourceDeviceId"),
 		byTargetDeviceId: countBy(executableRows, "targetDeviceId"),
@@ -1754,6 +1756,7 @@ type HikvisionManualCopyParams = {
 	employeeNo: string;
 	includeFingerprints: boolean;
 	includeFaceRecognition: boolean;
+	includeCard?: boolean;
 	credentialOnly?: boolean;
 	dryRun?: boolean;
 	waitSeconds?: number;
@@ -2120,9 +2123,11 @@ export const controller = (prisma: PrismaClient) => {
 					...(params.credentialOnly ? [] : ["user"]),
 					...(params.includeFingerprints ? ["fingerprint"] : []),
 					...(params.includeFaceRecognition ? ["face"] : []),
+					...(params.includeCard ? ["card"] : []),
 				],
 				includeFingerprints: params.includeFingerprints,
 				includeFaceRecognition: params.includeFaceRecognition,
+				includeCard: params.includeCard === true,
 				credentialOnly: params.credentialOnly === true,
 				dryRun: params.dryRun === true,
 				batchMultiTarget: targetDevices.length > 1,
@@ -2213,6 +2218,7 @@ export const controller = (prisma: PrismaClient) => {
 						params.employeeNo,
 						...(params.includeFingerprints ? ["--manual-include-fingerprints"] : []),
 						...(params.includeFaceRecognition ? [] : ["--manual-exclude-face"]),
+						...(params.includeCard ? ["--manual-include-card"] : []),
 						...(params.credentialOnly ? ["--manual-credential-only"] : []),
 					],
 					Math.max(manualCopyTimeoutSeconds * 1000 + 5000, 15000),
@@ -2291,12 +2297,35 @@ export const controller = (prisma: PrismaClient) => {
 									event?.event === "peer_face_write_preview"),
 						),
 					);
+				const cardWriteOk =
+					!params.includeCard ||
+					targetDevices.every((targetDevice) =>
+						events.some(
+							(event) =>
+								String(event?.employeeNo || "").trim() === params.employeeNo &&
+								String(event?.targetDeviceId || "").trim() ===
+									String(targetDevice?.id || "").trim() &&
+								((event?.event === "peer_sync_card" &&
+									String(event?.ok || "").trim().toLowerCase() === "true") ||
+									(event?.event === "peer_sync_attempt" &&
+										String(event?.operation || "").trim() === "card" &&
+										String(event?.ok || "").trim().toLowerCase() === "true") ||
+									(event?.event === "peer_card_write_preview" &&
+										String(event?.ok || "").trim().toLowerCase() === "true")),
+						),
+					);
 				const completed = events.some(
 					(event) =>
 						event?.event === "reconcile_completed" &&
 						String(event?.employeeNo || "").trim() === params.employeeNo,
 				);
-				return { peerUserWriteOk, fingerprintWriteOk, faceWriteOk, completed };
+				return {
+					peerUserWriteOk,
+					fingerprintWriteOk,
+					faceWriteOk,
+					cardWriteOk,
+					completed,
+				};
 			};
 			for (const strategy of strategies) {
 				emitManualCopyProgress({
@@ -2319,6 +2348,7 @@ export const controller = (prisma: PrismaClient) => {
 						eventProof.completed &&
 						eventProof.fingerprintWriteOk &&
 						eventProof.faceWriteOk
+						&& eventProof.cardWriteOk
 					) {
 						return {
 							waitSeconds,
@@ -2363,14 +2393,21 @@ export const controller = (prisma: PrismaClient) => {
 					result = await runManualCopy(strategy.extraEnv);
 				}
 				const events = parseJsonLines(result.stdout);
-				const { peerUserWriteOk, fingerprintWriteOk, faceWriteOk, completed } =
+				const {
+					peerUserWriteOk,
+					fingerprintWriteOk,
+					faceWriteOk,
+					cardWriteOk,
+					completed,
+				} =
 					evaluateManualCopyEvents(events);
 				if (
 					result.exitCode === 0 &&
 					peerUserWriteOk &&
 					completed &&
 					fingerprintWriteOk &&
-					faceWriteOk
+					faceWriteOk &&
+					cardWriteOk
 				) {
 					return {
 						waitSeconds,
@@ -10036,6 +10073,15 @@ export const controller = (prisma: PrismaClient) => {
 						credentialSummary.fingerprintCount || 0,
 					);
 					const faceReportedCount = Number(credentialSummary.faceCount || 0);
+					const exactCardNo = String(
+						(candidate.rawPayload as any)?.cardNo ||
+							(candidate.rawPayload as any)?.CardInfo?.cardNo ||
+							(candidate.rawPayload as any)?.UserInfo?.cardNo ||
+							"",
+					).trim();
+					const cardReportedCount = Number(credentialSummary.cardCount || 0);
+					const cardWriterAvailable =
+						process.env.HIKVISION_CREDENTIAL_CARD_WRITER_ENABLED === "true";
 					deviceRecords.push({
 						deviceId: device.id,
 						deviceName: device.name || device.address || device.id,
@@ -10076,12 +10122,23 @@ export const controller = (prisma: PrismaClient) => {
 								// informative, but the merge plan must remain fail-closed.
 								writerAvailable: false,
 							},
+							card: {
+								status:
+									cardReportedCount > 0
+										? exactCardNo
+											? "raw_blob_present"
+											: "missing_raw_blob"
+										: "not_enrolled",
+								cardNoPresent: Boolean(exactCardNo),
+								writerAvailable: cardWriterAvailable,
+							},
 						},
 						manualLink: Boolean(
 							saved?.employeeId ||
 							saved?.rawPayload?.hrisSync?.matchReason === "manual_existing",
 						),
 						_fingerprintTemplateChecksums: fingerprintTemplateChecksums,
+						_cardNo: exactCardNo || null,
 					});
 				}
 				return { records: deviceRecords, error: null };
@@ -10347,6 +10404,19 @@ export const controller = (prisma: PrismaClient) => {
 			);
 			return current;
 		};
+		const withTargetDeviceWriteLocks = async <T>(
+			deviceIds: string[],
+			work: () => Promise<T>,
+		): Promise<T> => {
+			const ordered = [...new Set(deviceIds.map(String))].sort();
+			const acquire = (index: number): Promise<T> =>
+				index >= ordered.length
+					? work()
+					: withTargetDeviceWriteLock(ordered[index], () =>
+							acquire(index + 1),
+						);
+			return acquire(0);
+		};
 		const processCredentialGroup = async (writes: any[]) => {
 			const first = writes[0];
 			const sourceDevice = deviceById.get(String(first.sourceDeviceId));
@@ -10355,6 +10425,7 @@ export const controller = (prisma: PrismaClient) => {
 				.filter(Boolean) as typeof devices;
 			const includeFingerprints = first.modality === "fingerprint";
 			const includeFaceRecognition = first.modality === "face";
+			const includeCard = first.modality === "card";
 			if (!sourceDevice || targetDevices.length !== writes.length) {
 				await Promise.all(writes.map(async (write: any) => {
 					const error = "Credential source or target device is outside the frozen scope";
@@ -10591,6 +10662,7 @@ export const controller = (prisma: PrismaClient) => {
 					employeeNo: first.vendorUserId,
 					includeFingerprints,
 					includeFaceRecognition,
+					includeCard,
 					credentialOnly: true,
 					dryRun: true,
 					onProgress: params.emitProgress,
@@ -10605,17 +10677,22 @@ export const controller = (prisma: PrismaClient) => {
 					probeEvents: probe.events.length,
 					message: `Exact ${first.modality} source export and target preview passed for ${first.vendorUserId}.`,
 				});
-				await runHikvisionManualCopyOnVm({
-					sourceDevice,
-					targetDevices,
-					sourceDeviceId: String(sourceDevice.id),
-					employeeNo: first.vendorUserId,
-					includeFingerprints,
-					includeFaceRecognition,
-					credentialOnly: true,
-					dryRun: false,
-					onProgress: params.emitProgress,
-				});
+				await withTargetDeviceWriteLocks(
+					targetDevices.map((device) => String(device.id)),
+					() =>
+						runHikvisionManualCopyOnVm({
+							sourceDevice,
+							targetDevices,
+							sourceDeviceId: String(sourceDevice.id),
+							employeeNo: first.vendorUserId,
+							includeFingerprints,
+							includeFaceRecognition,
+							includeCard,
+							credentialOnly: true,
+							dryRun: false,
+							onProgress: params.emitProgress,
+						}),
+				);
 				const user = (params.plan.users || []).find(
 					(candidate: any) => candidate.key === first.userKey,
 				);
@@ -10649,7 +10726,9 @@ export const controller = (prisma: PrismaClient) => {
 						const actualCount =
 							write.modality === "fingerprint"
 								? Number(afterCredentials.fingerprintCount || 0)
-								: Number(afterCredentials.faceCount || 0);
+								: write.modality === "face"
+									? Number(afterCredentials.faceCount || 0)
+									: Number(afterCredentials.cardCount || 0);
 						if (actualCount < Number(write.sourceReportedCount || 0)) {
 							throw new Error(
 								`Target reread reports ${write.modality} count ${actualCount}; expected at least ${write.sourceReportedCount}.`,
@@ -10676,11 +10755,44 @@ export const controller = (prisma: PrismaClient) => {
 							write.modality === "fingerprint"
 								? Number(beforeCredentials.faceCount || 0) !==
 									Number(afterCredentials.faceCount || 0)
-								: Number(beforeCredentials.fingerprintCount || 0) !==
-									Number(afterCredentials.fingerprintCount || 0);
+								: write.modality === "face"
+									? Number(beforeCredentials.fingerprintCount || 0) !==
+										Number(afterCredentials.fingerprintCount || 0)
+									: Number(beforeCredentials.fingerprintCount || 0) !==
+											Number(afterCredentials.fingerprintCount || 0) ||
+										Number(beforeCredentials.faceCount || 0) !==
+											Number(afterCredentials.faceCount || 0);
 						const cardChanged =
+							write.modality !== "card" &&
 							Number(beforeCredentials.cardCount || 0) !==
-							Number(afterCredentials.cardCount || 0);
+								Number(afterCredentials.cardCount || 0);
+						const expectedCardNo =
+							write.modality === "card"
+								? String(
+										(user?.records || []).find(
+											(record: any) =>
+												String(record.deviceId) ===
+												String(write.sourceDeviceId),
+										)?._cardNo || "",
+									).trim()
+								: "";
+						const actualCardNo =
+							write.modality === "card"
+								? String(
+										after?.rawPayload?.cardNo ||
+											after?.rawPayload?.CardInfo?.cardNo ||
+											after?.rawPayload?.UserInfo?.cardNo ||
+											"",
+									).trim()
+								: "";
+						if (
+							write.modality === "card" &&
+							(!expectedCardNo || actualCardNo !== expectedCardNo)
+						) {
+							throw new Error(
+								"Target physical card reread did not match the reviewed exact source card value.",
+							);
+						}
 						if (changedField || otherModalityChanged || cardChanged) {
 							throw new Error(
 								`Credential-only isolation failed after reread (${changedField || (cardChanged ? "card" : "other_modality")} changed).`,

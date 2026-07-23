@@ -345,6 +345,24 @@ Do not stop at preview merely because preview passed. Do not start writes for
 unreviewed identities, unresolved conflicts, unavailable devices, or invented
 biometric bytes.
 
+## Recoverable Credential Blocker Rule
+
+Device merge labels such as `missing_raw_blob`, `source_conflict`,
+`credential_only_card_not_supported`, and `target_write_unsupported` are
+diagnosis categories, not automatic stop conditions.
+
+- Recover missing custody from current physical source reads and classify the
+  exact bytes/capability before replanning.
+- Resolve equal raw-template sources by checksum and strict supersets by
+  evidenced custody; do not leave them as ambiguous "No source" rows.
+- Implement missing card/face writers when the current device exposes a safe
+  SDK/ISAPI capability, then prove retention by physical reread.
+- Convert only genuinely different same-slot biometrics, duplicate owners,
+  absent source bytes, or unsupported firmware into explicit physical/firmware
+  boundaries. Never guess or fabricate biometric truth to make a counter zero.
+- A software-recoverable blocker remains agent-owned work under the Non-Stop
+  Execution Rule.
+
 ## Browser Verification Tool
 
 Temporary 2026-07-09 local rule: prefer headless Playwright for Project Truth

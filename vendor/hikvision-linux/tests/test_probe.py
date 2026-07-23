@@ -169,6 +169,36 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("!manual_reconcile_mode && automatic_peer_reconcile_enabled", text)
         self.assertIn('"automaticPeerReconcile"', text)
 
+    def test_stored_face_writer_is_secure_serial_disabled_and_reread_verified(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
+        text = source.read_text(encoding="utf-8")
+
+        self.assertIn("--stored-face-payload-file", text)
+        self.assertIn("payload_permissions_must_be_0600", text)
+        self.assertIn("(file_stat.st_mode & 0777) != 0600", text)
+        self.assertIn("HIKVISION_ENABLE_STORED_FACE_WRITE", text)
+        self.assertIn("feature_disabled_pending_authorized_canary", text)
+        self.assertIn("flock(lock_fd, LOCK_EX | LOCK_NB)", text)
+        self.assertIn("write_face_and_template(", text)
+        self.assertIn("read_face_and_template(", text)
+        self.assertIn('"stored_face_write_reread_completed"', text)
+        self.assertIn('"templateMatch"', text)
+        self.assertIn('"pictureMatch"', text)
+
+        stored_writer = text.split("bool write_stored_face_with_reread(", 1)[1].split(
+            "NET_DVR_FINGER_PRINT_CFG_V50 build_fingerprint_record", 1
+        )[0]
+        self.assertLess(
+            stored_writer.index('std::getenv("HIKVISION_ENABLE_STORED_FACE_WRITE")'),
+            stored_writer.index("write_face_and_template("),
+        )
+        self.assertLess(
+            stored_writer.index("write_face_and_template("),
+            stored_writer.index("read_face_and_template("),
+        )
+        self.assertNotIn("faceTemplate", stored_writer.split("emit_json", 1)[1])
+        self.assertNotIn("facePicture", stored_writer.split("emit_json", 1)[1])
+
     def test_build_script_produces_project_truth_named_service(self) -> None:
         script = Path(__file__).resolve().parents[1] / "scripts" / "build-hikvision-biometric-service.sh"
         text = script.read_text(encoding="utf-8")

@@ -24,6 +24,8 @@
 #include <functional>
 
 #include <dirent.h>
+#include <fcntl.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -65,6 +67,7 @@ struct ReconcileJob {
     std::string sdk_time;
     bool include_fingerprints = false;
     bool include_face_recognition = true;
+    bool include_card = false;
     // Manual merge jobs may copy biometric credentials without rewriting the
     // already-converged user/profile/card plane.
     bool credential_only = false;
@@ -457,6 +460,27 @@ std::string base64_encode(const BYTE *data, size_t length) {
         encoded.push_back(remaining > 2 ? alphabet[c & 0x3f] : '=');
     }
     return encoded;
+}
+
+bool base64_decode(const std::string &input, std::vector<char> *output) {
+    static const std::string alphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    output->clear();
+    unsigned int value = 0;
+    int bits = -8;
+    for (unsigned char c : input) {
+        if (std::isspace(c)) continue;
+        if (c == '=') break;
+        const auto position = alphabet.find(static_cast<char>(c));
+        if (position == std::string::npos) return false;
+        value = (value << 6) + static_cast<unsigned int>(position);
+        bits += 6;
+        if (bits >= 0) {
+            output->push_back(static_cast<char>((value >> bits) & 0xff));
+            bits -= 8;
+        }
+    }
+    return !output->empty();
 }
 
 DeviceSession *find_session_by_host(const std::string &host) {
@@ -2010,6 +2034,238 @@ bool read_face_and_template(
         {"lastError", ok ? "0" : std::to_string(ctx.sdk_error ? ctx.sdk_error : NET_DVR_GetLastError())}
     });
     return ok;
+}
+
+std::string extract_string_field_from_json(
+    const std::string &json,
+    const std::string &field_name);
+
+bool target_card_allows_owner(
+    DeviceSession &target,
+    const std::string &employee_no,
+    const std::string &card_no,
+    bool *already_owned_by_employee) {
+    if (already_owned_by_employee != nullptr) *already_owned_by_employee = false;
+    std::ostringstream body;
+    body << "{\"CardInfoSearchCond\":{\"searchID\":\"pt-card-owner-"
+         << json_escape(employee_no)
+         << "\",\"searchResultPosition\":0,\"maxResults\":5,\"CardNoList\":[{\"cardNo\":\""
+         << json_escape(card_no) << "\"}]}}";
+    std::string response;
+    const bool read_ok = stdxml_json_request(
+        target,
+        "POST /ISAPI/AccessControl/CardInfo/Search?format=json",
+        body.str(),
+        &response);
+    if (!read_ok) {
+        emit_json({
+            {"event", "peer_card_owner_probe"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"ok", "false"},
+            {"reason", "target_card_owner_read_failed"}
+        });
+        return false;
+    }
+    const std::string owner = extract_string_field_from_json(response, "employeeNo");
+    if (!owner.empty() && owner != employee_no) {
+        emit_json({
+            {"event", "peer_card_owner_conflict"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"existingOwner", owner},
+            {"ok", "false"}
+        });
+        return false;
+    }
+    if (already_owned_by_employee != nullptr) {
+        *already_owned_by_employee = owner == employee_no;
+    }
+    return true;
+}
+
+bool add_sync_card_if_unowned(
+    DeviceSession &target,
+    const std::string &employee_no,
+    const std::string &card_no) {
+    bool already_owned = false;
+    if (!target_card_allows_owner(target, employee_no, card_no, &already_owned)) {
+        return false;
+    }
+    if (already_owned) {
+        emit_json({
+            {"event", "peer_sync_card"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"cardNo", card_no},
+            {"ok", "true"},
+            {"retained", "true"}
+        });
+        return true;
+    }
+    return add_sync_card(target, employee_no, card_no);
+}
+
+struct StoredFaceWritePayload {
+    std::string target_device_id;
+    std::string employee_no;
+    std::string card_no;
+    std::vector<char> face_template;
+    std::vector<char> face_picture;
+};
+
+bool load_stored_face_write_payload(
+    const std::string &payload_path,
+    StoredFaceWritePayload *payload,
+    std::string *reason) {
+    const int payload_fd = open(payload_path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (payload_fd < 0) {
+        *reason = "payload_open_failed";
+        return false;
+    }
+    struct stat file_stat {};
+    if (fstat(payload_fd, &file_stat) != 0) {
+        close(payload_fd);
+        *reason = "payload_stat_failed";
+        return false;
+    }
+    if (!S_ISREG(file_stat.st_mode) || file_stat.st_uid != geteuid()) {
+        close(payload_fd);
+        *reason = "payload_owner_or_type_invalid";
+        return false;
+    }
+    if ((file_stat.st_mode & 0777) != 0600) {
+        close(payload_fd);
+        *reason = "payload_permissions_must_be_0600";
+        return false;
+    }
+    if (file_stat.st_size <= 0 || file_stat.st_size > 16 * 1024 * 1024) {
+        close(payload_fd);
+        *reason = "payload_size_invalid";
+        return false;
+    }
+    std::string body(static_cast<size_t>(file_stat.st_size), '\0');
+    size_t offset = 0;
+    while (offset < body.size()) {
+        const ssize_t count = read(payload_fd, &body[offset], body.size() - offset);
+        if (count <= 0) break;
+        offset += static_cast<size_t>(count);
+    }
+    close(payload_fd);
+    if (offset != body.size()) {
+        *reason = "payload_read_failed";
+        return false;
+    }
+    payload->target_device_id = extract_string_field_from_json(body, "targetDeviceId");
+    payload->employee_no = extract_string_field_from_json(body, "employeeNo");
+    payload->card_no = extract_string_field_from_json(body, "cardNo");
+    const std::string template_b64 = extract_string_field_from_json(body, "faceTemplate");
+    const std::string picture_b64 = extract_string_field_from_json(body, "facePicture");
+    if (payload->target_device_id.empty() || payload->employee_no.empty() ||
+        payload->card_no.empty()) {
+        *reason = "payload_identity_or_card_missing";
+        return false;
+    }
+    if (!base64_decode(template_b64, &payload->face_template) ||
+        !base64_decode(picture_b64, &payload->face_picture)) {
+        *reason = "payload_face_template_and_picture_required";
+        return false;
+    }
+    return true;
+}
+
+std::string stored_face_lock_path(const std::string &device_id) {
+    std::string safe;
+    safe.reserve(device_id.size());
+    for (unsigned char c : device_id) {
+        safe.push_back(std::isalnum(c) || c == '-' || c == '_' ? static_cast<char>(c) : '_');
+    }
+    return "/tmp/project-truth-hikvision-face-" + safe + ".lock";
+}
+
+bool write_stored_face_with_reread(
+    DeviceSession &target,
+    const StoredFaceWritePayload &payload) {
+    const std::string lock_path = stored_face_lock_path(payload.target_device_id);
+    const int lock_fd = open(lock_path.c_str(), O_CREAT | O_CLOEXEC | O_RDWR, 0600);
+    if (lock_fd < 0 || flock(lock_fd, LOCK_EX | LOCK_NB) != 0) {
+        if (lock_fd >= 0) close(lock_fd);
+        emit_json({
+            {"event", "stored_face_write_blocked"},
+            {"targetDeviceId", payload.target_device_id},
+            {"employeeNo", payload.employee_no},
+            {"reason", "device_write_lock_busy"}
+        });
+        return false;
+    }
+    auto release_lock = [&]() {
+        flock(lock_fd, LOCK_UN);
+        close(lock_fd);
+    };
+    if (!execute_mode) {
+        const bool preview = write_face_and_template(
+            target,
+            payload.employee_no,
+            payload.card_no,
+            payload.face_template,
+            payload.face_picture);
+        emit_json({
+            {"event", "stored_face_write_preview_completed"},
+            {"targetDeviceId", payload.target_device_id},
+            {"employeeNo", payload.employee_no},
+            {"ok", preview ? "true" : "false"},
+            {"templateSize", std::to_string(payload.face_template.size())},
+            {"pictureSize", std::to_string(payload.face_picture.size())},
+            {"physicalRereadRequired", "true"}
+        });
+        release_lock();
+        return preview;
+    }
+    const char *enabled = std::getenv("HIKVISION_ENABLE_STORED_FACE_WRITE");
+    if (enabled == nullptr || std::string(enabled) != "1") {
+        emit_json({
+            {"event", "stored_face_write_blocked"},
+            {"targetDeviceId", payload.target_device_id},
+            {"employeeNo", payload.employee_no},
+            {"reason", "feature_disabled_pending_authorized_canary"}
+        });
+        release_lock();
+        return false;
+    }
+    const bool wrote = write_face_and_template(
+        target,
+        payload.employee_no,
+        payload.card_no,
+        payload.face_template,
+        payload.face_picture);
+    if (wrote) std::this_thread::sleep_for(std::chrono::milliseconds(750));
+    std::vector<char> reread_template;
+    std::vector<char> reread_picture;
+    const bool reread = wrote && read_face_and_template(
+        target,
+        payload.employee_no,
+        payload.card_no,
+        &reread_template,
+        &reread_picture);
+    const bool template_match = reread && reread_template == payload.face_template;
+    const bool picture_match = reread && reread_picture == payload.face_picture;
+    const bool verified = wrote && reread && template_match && picture_match;
+    emit_json({
+        {"event", "stored_face_write_reread_completed"},
+        {"targetDeviceId", payload.target_device_id},
+        {"employeeNo", payload.employee_no},
+        {"ok", verified ? "true" : "false"},
+        {"writeOk", wrote ? "true" : "false"},
+        {"rereadOk", reread ? "true" : "false"},
+        {"templateMatch", template_match ? "true" : "false"},
+        {"pictureMatch", picture_match ? "true" : "false"},
+        {"templateSize", std::to_string(payload.face_template.size())},
+        {"pictureSize", std::to_string(payload.face_picture.size())},
+        {"rereadTemplateSize", std::to_string(reread_template.size())},
+        {"rereadPictureSize", std::to_string(reread_picture.size())}
+    });
+    release_lock();
+    return verified;
 }
 
 NET_DVR_FINGER_PRINT_CFG_V50 build_fingerprint_record(
@@ -4453,9 +4709,12 @@ void process_reconcile_job(const ReconcileJob &job) {
     std::vector<char> face_picture;
     std::string card_json;
     std::string card_no;
-    const bool face_available = job.include_face_recognition && !user_delete && user_ok &&
+    const bool card_available =
+        (job.include_card || job.include_face_recognition) &&
+        !user_delete && user_ok &&
         read_source_card(*source, job, &card_json) &&
-        !(card_no = extract_string_field_from_json(card_json, "cardNo")).empty() &&
+        !(card_no = extract_string_field_from_json(card_json, "cardNo")).empty();
+    const bool face_available = job.include_face_recognition && card_available &&
         read_face_and_template(*source, job.employee_no, card_no, &face_template, &face_picture);
 
     const bool new_user_sync = job.event_kind == "poll_missing_user" ||
@@ -4493,8 +4752,24 @@ void process_reconcile_job(const ReconcileJob &job) {
                 {"reason", "credential_only"}
             });
         }
-        if (!job.credential_only && !user_delete && !card_no.empty()) {
-            add_sync_card(target, job.employee_no, card_no);
+        if (!user_delete && card_available && (!job.credential_only || job.include_card)) {
+            if (!execute_mode) {
+                bool already_owned = false;
+                const bool owner_ok =
+                    target_card_allows_owner(target, job.employee_no, card_no, &already_owned);
+                emit_json({
+                    {"event", "peer_card_write_preview"},
+                    {"targetDeviceId", target.config.hris_device_id},
+                    {"employeeNo", job.employee_no},
+                    {"ok", owner_ok ? "true" : "false"},
+                    {"alreadyOwned", already_owned ? "true" : "false"}
+                });
+            } else {
+                retry_peer_operation("card", target, job.employee_no, [&]() {
+                    return add_sync_card_if_unowned(
+                        target, job.employee_no, card_no);
+                });
+            }
         }
         if (fingerprint_delete || job.include_fingerprints) {
             retry_peer_operation("fingerprint", target, job.employee_no, [&]() {
@@ -4698,7 +4973,7 @@ void usage(const char *program) {
         << "[--replay-spool-only] [--post-contract-file path] "
         << "[--manual-full-mirror-source-device-id id] "
         << "[--manual-employee-no employeeNo] [--manual-include-fingerprints] "
-        << "[--manual-exclude-face] [--manual-credential-only] "
+        << "[--manual-exclude-face] [--manual-include-card] [--manual-credential-only] "
         << "[--manual-source-employee-no employeeNo] [--manual-target-device-id id] "
         << "[--manual-target-employee-no employeeNo] "
         << "[--capture-fingerprint-employee-no employeeNo] [--capture-fingerprint-source-device-id id] "
@@ -4706,7 +4981,8 @@ void usage(const char *program) {
         << "[--capture-face-employee-no employeeNo] [--capture-face-source-device-id id] "
         << "[--mirror-face-employee-no employeeNo] [--mirror-face-source-device-id id] "
         << "[--export-biometric-employee-no employeeNo] [--export-biometric-source-device-id id] "
-        << "[--export-biometric-no-fingerprints] [--export-biometric-no-face]\n";
+        << "[--export-biometric-no-fingerprints] [--export-biometric-no-face] "
+        << "[--stored-face-payload-file mode-0600-json]\n";
 }
 
 }  // namespace
@@ -4720,6 +4996,7 @@ int main(int argc, char **argv) {
     std::string manual_employee_no;
     bool manual_include_fingerprints = false;
     bool manual_include_face_recognition = true;
+    bool manual_include_card = false;
     bool manual_credential_only = false;
     std::string manual_source_employee_no;
     std::string manual_target_device_id;
@@ -4736,6 +5013,7 @@ int main(int argc, char **argv) {
     std::string export_biometric_source_device_id;
     bool export_biometric_include_fingerprints = true;
     bool export_biometric_include_face = true;
+    std::string stored_face_payload_file;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -4796,6 +5074,8 @@ int main(int argc, char **argv) {
             manual_include_fingerprints = true;
         } else if (arg == "--manual-exclude-face") {
             manual_include_face_recognition = false;
+        } else if (arg == "--manual-include-card") {
+            manual_include_card = true;
         } else if (arg == "--manual-credential-only") {
             manual_credential_only = true;
         } else if (arg == "--manual-source-employee-no") {
@@ -4832,6 +5112,8 @@ int main(int argc, char **argv) {
             export_biometric_include_fingerprints = false;
         } else if (arg == "--export-biometric-no-face") {
             export_biometric_include_face = false;
+        } else if (arg == "--stored-face-payload-file") {
+            if (!next(&stored_face_payload_file)) return 2;
         } else if (arg == "--min-sdk-time") {
             if (!next(&min_sdk_time)) return 2;
         } else if (arg == "--execute") {
@@ -4900,12 +5182,13 @@ int main(int argc, char **argv) {
         !mirror_face_employee_no.empty() && !mirror_face_source_device_id.empty();
     const bool manual_biometric_export_mode =
         !export_biometric_employee_no.empty() && !export_biometric_source_device_id.empty();
+    const bool stored_face_write_mode = !stored_face_payload_file.empty();
     const bool manual_reconcile_queue_mode =
         !manual_full_mirror_source_device_id.empty() && !manual_fingerprint_clone_mode;
     const bool manual_reconcile_mode =
         manual_reconcile_queue_mode || !manual_employee_no.empty() || manual_fingerprint_clone_mode ||
         manual_fingerprint_capture_mode || manual_face_capture_mode || manual_face_mirror_mode ||
-        manual_biometric_export_mode;
+        manual_biometric_export_mode || stored_face_write_mode;
 
     if (configs.empty()) {
         usage(argv[0]);
@@ -5081,6 +5364,39 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    if (stored_face_write_mode) {
+        StoredFaceWritePayload payload;
+        std::string reason;
+        bool ok = load_stored_face_write_payload(stored_face_payload_file, &payload, &reason);
+        DeviceSession *target = nullptr;
+        if (ok) {
+            for (auto &session : sessions) {
+                if (session.config.hris_device_id == payload.target_device_id) {
+                    target = &session;
+                    break;
+                }
+            }
+            if (target == nullptr) {
+                ok = false;
+                reason = "target_device_not_armed";
+            }
+        }
+        if (!ok) {
+            emit_json({
+                {"event", "stored_face_write_blocked"},
+                {"targetDeviceId", payload.target_device_id},
+                {"employeeNo", payload.employee_no},
+                {"reason", reason}
+            });
+        } else {
+            ok = write_stored_face_with_reread(*target, payload);
+        }
+        close_sessions();
+        NET_DVR_Cleanup();
+        emit_json({{"event", "sdk_cleanup"}, {"ok", "true"}});
+        return ok ? 0 : 1;
+    }
+
     // Start worker threads after the initial session list is stable. SDK callbacks
     // can arrive during arming; they queue jobs, then workers process them once
     // all reachable devices are added, avoiding arm-time session-vector races.
@@ -5247,6 +5563,7 @@ int main(int argc, char **argv) {
                 : "manual_single_user_reconcile";
             manual_job.include_fingerprints = manual_include_fingerprints || manual_employee_no.empty();
             manual_job.include_face_recognition = manual_include_face_recognition;
+            manual_job.include_card = manual_include_card;
             manual_job.credential_only = manual_credential_only;
             if (!execute_mode && manual_job.credential_only) {
                 // A credential-only dry run must read the exact source templates
@@ -5263,6 +5580,7 @@ int main(int argc, char **argv) {
                 {"employeeNo", manual_job.employee_no},
                 {"includeFingerprints", manual_job.include_fingerprints ? "true" : "false"},
                 {"includeFaceRecognition", manual_job.include_face_recognition ? "true" : "false"},
+                {"includeCard", manual_job.include_card ? "true" : "false"},
                 {"credentialOnly", manual_job.credential_only ? "true" : "false"},
                 {"mode", execute_mode ? "execute" : "dry-run"}
             });
