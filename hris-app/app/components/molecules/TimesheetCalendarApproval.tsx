@@ -11,10 +11,7 @@ import {
 	isVirtualAbsentLikeRecord,
 } from "~/lib/utils/attendance-status";
 import { TimesheetDayTooltipContent } from "~/components/molecules/TimesheetDayTooltipContent";
-import {
-	getOvertimeCandidateBadge,
-	readOvertimeCandidateFromMetadata,
-} from "~/lib/utils/overtime-candidate";
+import { resolveOvertimeDayBadge } from "~/lib/utils/overtime-candidate";
 
 // Extend the base breakdown type with optional leaveType
 export type TimesheetBreakdownDay = TimesheetBreakdown & {
@@ -552,11 +549,7 @@ export function TimesheetCalendarApproval({
 															: primaryMarker === "HOLIDAY"
 																? "marker"
 																: "hours";
-									const overtimeCandidate = readOvertimeCandidateFromMetadata(day.metadata);
-									const overtimeBadge =
-										day.overtimeHours && day.overtimeHours !== "0:00"
-											? { label: "+OT", tone: "ot-approved" as const }
-											: getOvertimeCandidateBadge(overtimeCandidate);
+									const overtimeBadge = resolveOvertimeDayBadge(day);
 									const cellBadges = [
 										...(hasHoliday
 											? [{ label: "HOL", tone: "meta" as const }]

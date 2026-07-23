@@ -19,16 +19,15 @@ import {
 	formatMinutesAsTime,
 } from "../../../helper/timekeeping.helper";
 import { applyAttendanceToObligation } from "../../../helper/attendance-obligation.helper";
+import { resolveOvertimePolicyApplication } from "../../../helper/overtime-approval.helper";
 import { invalidateCache } from "../../../middleware/cache";
 import {
 	buildHikvisionDeviceEventDedupeKey,
 	DEFAULT_HIKVISION_MIN_PUNCH_PAIR_GAP_MINUTES,
 	extractHikvisionEventData,
-	hikvisionEventMatchesConfiguredDevice,
 	isHikvisionAttendancePunchEvent,
 	normalizeHikvisionDeviceEventSource,
 	normalizeHikvisionFutureSkewedEventTime,
-	normalizeHikvisionSdkCallbackEvidence,
 	parseHikvisionBodyPayload,
 	parseHikvisionEventTime,
 	selectHikvisionPunchPair,
@@ -37,116 +36,10 @@ import {
 import { emitDeviceEventSaved } from "../../../helper/device-event-realtime.helper";
 import { emitAttendanceRealtimeEvent } from "../../../helper/attendance-realtime.helper";
 import { refreshTimesheetForAttendanceDate } from "../../../helper/timesheet.helper";
-import { buildPersistedDeviceEventTaxonomy } from "../../../helper/device-event-taxonomy.helper";
-import {
-	applyFastEnrollmentIdentityOnSdkCallback,
-	isHikvisionEnrollmentLifecycleCallback,
-	isHikvisionSdkOperationSignal,
-	scheduleFastEnrollmentIdentityOnSdkCallback,
-	scheduleOperationLogResolveAfterSdkSignal,
-} from "../../../helper/device-person-token.helper";
 
 export const controller = (prisma: PrismaClient) => {
-	const getEmployeeDisplayNameFromSnapshot = (employee: any) => {
-		const personalInfo = employee?.person?.personalInfo || {};
-		return [
-			personalInfo.firstName,
-			personalInfo.middleName,
-			personalInfo.lastName,
-		]
-			.map((part) => String(part || "").trim())
-			.filter(Boolean)
-			.join(" ")
-			.trim();
-	};
-
-	const getRealtimeDeviceEventRecord = async (eventRecord: any) => {
-		const event = eventRecord?.id
-			? await (prisma as any).deviceEvent.findUnique({
-					where: { id: eventRecord.id },
-					select: {
-						id: true,
-						organizationId: true,
-						deviceId: true,
-						employeeId: true,
-						attendanceId: true,
-						eventTime: true,
-						receivedAt: true,
-						employeeNo: true,
-						source: true,
-						status: true,
-						eventCategory: true,
-						eventAction: true,
-						eventLabel: true,
-						eventConfidence: true,
-						eventType: true,
-						major: true,
-						minor: true,
-						doorNo: true,
-						verifyMode: true,
-						dedupeKey: true,
-						payload: true,
-						errorMessage: true,
-						createdAt: true,
-						updatedAt: true,
-					},
-				})
-			: null;
-		const hydratedEvent = event || eventRecord;
-		if (!hydratedEvent?.id) return eventRecord;
-
-		const [device, employee] = await Promise.all([
-			hydratedEvent.deviceId
-				? (prisma as any).device.findFirst({
-						where: {
-							id: hydratedEvent.deviceId,
-							isDeleted: false,
-						},
-						select: {
-							id: true,
-							name: true,
-							address: true,
-							port: true,
-							protocol: true,
-						},
-					})
-				: null,
-			hydratedEvent.employeeId
-				? (prisma as any).employee.findFirst({
-						where: {
-							id: hydratedEvent.employeeId,
-							isDeleted: false,
-						},
-						select: {
-							id: true,
-							employeeId: true,
-							deviceEmpId: true,
-							person: {
-								select: {
-									personalInfo: true,
-								},
-							},
-						},
-					})
-				: null,
-		]);
-
-		return {
-			...hydratedEvent,
-			device,
-			employee: employee
-				? {
-						id: employee.id,
-						employeeId: employee.employeeId,
-						deviceEmpId: employee.deviceEmpId,
-						fullName: getEmployeeDisplayNameFromSnapshot(employee) || employee.employeeId,
-					}
-				: null,
-		};
-	};
-
-	const publishDeviceEventSaved = async (req: Request, eventRecord: any) =>
-		emitDeviceEventSaved((req as any).io, await getRealtimeDeviceEventRecord(eventRecord));
+	const publishDeviceEventSaved = (req: Request, eventRecord: any) =>
+		emitDeviceEventSaved((req as any).io, eventRecord);
 
 	const getOvertimeFlagThresholdMinutes = async (organizationId: string): Promise<number> => {
 		try {
@@ -176,7 +69,7 @@ export const controller = (prisma: PrismaClient) => {
 		const deviceIP = String(event.deviceIP || "").trim();
 
 		if (requestedDeviceId) {
-			const device = await (prisma as any).device.findFirst({
+			return (prisma as any).device.findFirst({
 				where: {
 					id: requestedDeviceId,
 					isDeleted: false,
@@ -191,13 +84,6 @@ export const controller = (prisma: PrismaClient) => {
 					config: true,
 				},
 			});
-			if (device && !hikvisionEventMatchesConfiguredDevice(event, device)) {
-				console.warn(
-					`[HIKVISION_CALLBACK][CTRL] ignored deviceId ${requestedDeviceId} because observed deviceIP ${deviceIP} does not match configured address ${device.address}`,
-				);
-				return null;
-			}
-			return device;
 		}
 
 		if (deviceIP) {
@@ -229,7 +115,6 @@ export const controller = (prisma: PrismaClient) => {
 		employeeNo: string;
 		source: string;
 		dedupeKey: string;
-		req?: Request;
 	}) => {
 		const eventClient = (prisma as any).deviceEvent;
 		const existing = await eventClient.findFirst({
@@ -272,35 +157,18 @@ export const controller = (prisma: PrismaClient) => {
 				return String(candidateSerial || "").trim() === serialNo;
 			});
 			if (existingBySerial) {
-				const taxonomy = buildPersistedDeviceEventTaxonomy({
-					source: data.source,
-					status: existingBySerial.status || "RECEIVED",
-					eventType: data.event.eventType ? String(data.event.eventType) : null,
-					major: data.event.major ? String(data.event.major) : null,
-					minor: data.event.minor ? String(data.event.minor) : null,
-					payload: data.payload,
-				});
 				const updated = await eventClient.update({
 					where: { id: existingBySerial.id },
 					data: {
 						eventTime: data.eventTime,
 						dedupeKey: data.dedupeKey,
 						payload: data.payload,
-						...taxonomy,
 					},
 				});
 				return { eventRecord: updated, isDuplicate: true };
 			}
 		}
 
-		const taxonomy = buildPersistedDeviceEventTaxonomy({
-			source: data.source,
-			status: "RECEIVED",
-			eventType: data.event.eventType ? String(data.event.eventType) : null,
-			major: data.event.major ? String(data.event.major) : null,
-			minor: data.event.minor ? String(data.event.minor) : null,
-			payload: data.payload,
-		});
 		const eventRecord = await eventClient.create({
 			data: {
 				organizationId: data.device.organizationId,
@@ -309,7 +177,6 @@ export const controller = (prisma: PrismaClient) => {
 				employeeNo: data.employeeNo || null,
 				source: data.source,
 				status: "RECEIVED",
-				...taxonomy,
 				eventType: data.event.eventType ? String(data.event.eventType) : null,
 				major: data.event.major ? String(data.event.major) : null,
 				minor: data.event.minor ? String(data.event.minor) : null,
@@ -319,16 +186,6 @@ export const controller = (prisma: PrismaClient) => {
 				payload: data.payload,
 			},
 		});
-		// Socket immediately on create so Device Events live row lands before status/identity
-		// finish. Follow-up updateDeviceEventStatus / applyFastEnrollment re-emits the healed row.
-		try {
-			await invalidateCache.byPattern("cache:device:events:*");
-		} catch {
-			// ignore
-		}
-		if (data.req) {
-			await publishDeviceEventSaved(data.req, eventRecord);
-		}
 
 		return { eventRecord, isDuplicate: false };
 	};
@@ -338,7 +195,6 @@ export const controller = (prisma: PrismaClient) => {
 		eventId: string,
 		data: {
 			status: string;
-			deviceUserId?: string | null;
 			employeeId?: string | null;
 			attendanceId?: string | null;
 			errorMessage?: string | null;
@@ -353,7 +209,7 @@ export const controller = (prisma: PrismaClient) => {
 		} catch {
 			// Event cache expiry is short; callback processing should not fail on cache cleanup.
 		}
-		await publishDeviceEventSaved(req, updated);
+		publishDeviceEventSaved(req, updated);
 		return updated;
 	};
 
@@ -366,32 +222,8 @@ export const controller = (prisma: PrismaClient) => {
 				console.log(
 					`[HIKVISION_CALLBACK][CTRL] content-type=${req.get("content-type") || "unknown"}`,
 				);
-				const rawPayload = parseHikvisionBodyPayload(req.body);
-				const evidence = normalizeHikvisionSdkCallbackEvidence(rawPayload);
-				const payload = {
-					...rawPayload,
-					actionCode: evidence.actionCode || (rawPayload as any).actionCode,
-					evidenceSource: evidence.evidenceSource,
-					directDeviceEvidence: evidence.directDeviceEvidence,
-					vendorAction:
-						evidence.actionCode || evidence.minor || (rawPayload as any).actionCode || null,
-					vendorCode: evidence.actionCode || evidence.minor || null,
-					rawDeviceTime:
-						evidence.time || (rawPayload as any).time || (rawPayload as any).dateTime || null,
-					operator:
-						(rawPayload as any).operator ||
-						(rawPayload as any).userName ||
-						(rawPayload as any).rawAlarm?.operator ||
-						null,
-					remoteHost:
-						(rawPayload as any).remoteHost ||
-						(rawPayload as any).rawAlarm?.remoteHost ||
-						evidence.deviceIP ||
-						null,
-					rawEvidence: rawPayload,
-				};
+				const payload = parseHikvisionBodyPayload(req.body);
 				const event = extractHikvisionEventData(payload);
-				event.actionCode = evidence.actionCode;
 				console.log("[HIKVISION_CALLBACK][CTRL] parsed payload:", payload);
 				console.log("[HIKVISION_CALLBACK][CTRL] extracted event:", event);
 
@@ -411,50 +243,11 @@ export const controller = (prisma: PrismaClient) => {
 					return;
 				}
 
-				// Prefer plain id already on ACS/callback body. C++ may have filled it via
-				// inventory_delta enrich when dwEmployeeNo was empty (see hikvision_biometric_service.cpp).
-				const {
-					extractPlainDevicePersonIdFromCallbackPayload,
-					isOpaqueHikvisionPersonToken,
-				} = await import("../../../helper/hikvision-event-contract.helper.js");
-				let employeeNo =
-					String(event.employeeNo || "").trim() ||
-					extractPlainDevicePersonIdFromCallbackPayload(payload as any) ||
-					"";
-				if (employeeNo === "0") employeeNo = "";
-				let opaquePersonToken: string | null = null;
-				let personTokenResolved = false;
-				// Resolve opaque log/callback person tokens via write-time map (future-proof).
-				try {
-					const {
-						resolveDevicePersonToken,
-					} = await import("../../../helper/device-person-token.helper.js");
-					if (employeeNo && isOpaqueHikvisionPersonToken(employeeNo)) {
-						const resolved = await resolveDevicePersonToken(prisma as any, {
-							organizationId: String(device.organizationId),
-							deviceId: String(device.id),
-							opaqueToken: employeeNo,
-						});
-						if (resolved?.employeeNo) {
-							opaquePersonToken = employeeNo;
-							employeeNo = resolved.employeeNo;
-							personTokenResolved = true;
-							(event as any).employeeNo = employeeNo;
-							(event as any).opaquePersonToken = opaquePersonToken;
-							(event as any).personTokenResolved = true;
-							(event as any).resolvedEmployeeNo = employeeNo;
-							(event as any).resolvedDisplayName = resolved.displayName;
-						}
-					}
-				} catch {
-					// Token table may be missing on older DBs; never fail callback.
-				}
+				const employeeNo = String(event.employeeNo || "").trim();
 				const receivedAt = new Date();
 				const knownSkewSeconds = Number(
 					(device.config as any)?.hikvisionClockSkewSeconds || 0,
 				);
-				const allowClockSkewCorrection =
-					(device.config as any)?.hikvisionAllowClockSkewCorrection === true;
 				const eventWasAlreadyAdjusted = Boolean((event as any).timeAdjusted);
 				const normalizedTime = eventWasAlreadyAdjusted
 					? {
@@ -467,13 +260,9 @@ export const controller = (prisma: PrismaClient) => {
 							event.time,
 							receivedAt,
 							knownSkewSeconds,
-							{
-								allowStoredSkew: allowClockSkewCorrection,
-								allowAutoAdjust: allowClockSkewCorrection,
-							},
 						);
 				const eventTime = normalizedTime.eventTime;
-				if (allowClockSkewCorrection && normalizedTime.adjusted) {
+				if (normalizedTime.adjusted) {
 					(event as any).deviceTime = event.time;
 					(event as any).time = eventTime.toISOString();
 					(event as any).timeAdjusted = true;
@@ -499,189 +288,19 @@ export const controller = (prisma: PrismaClient) => {
 					employeeNo,
 					event,
 				});
-				const previewOnly =
-					(req.query as any)?.preview === "true" ||
-					(req.query as any)?.dryRun === "true" ||
-					(req.body as any)?.preview === true ||
-					(req.body as any)?.dryRun === true;
-				if (previewOnly) {
-					const successResponse = buildSuccessResponse(
-						"Hikvision callback preview completed",
-						{
-							received: true,
-							preview: true,
-							matched: true,
-							wouldPersistDeviceEvent: true,
-							wouldProcessAttendance: isHikvisionAttendancePunchEvent(event),
-							device: {
-								id: device.id,
-								name: device.name,
-								address: device.address,
-								port: device.port,
-								protocol: device.protocol,
-							},
-							employeeNo,
-							source,
-							dedupeKey,
-							event,
-						},
-						200,
-					);
-					res.status(200).json(successResponse);
-					return;
-				}
-				const callbackPayload = {
-					...payload,
-					...(personTokenResolved
-						? {
-								personTokenResolved: true,
-								opaquePersonToken,
-								resolvedEmployeeNo: employeeNo,
-								resolvedDisplayName: (event as any).resolvedDisplayName || null,
-							}
-						: {}),
-				};
 				const { eventRecord, isDuplicate } = await saveInitialDeviceEvent({
 					device,
 					event,
-					payload: callbackPayload,
+					payload,
 					eventTime,
 					employeeNo,
 					source,
 					dedupeKey,
-					req,
 				});
 				savedEventId = eventRecord.id;
 
-				const enrollmentLifecycle = isHikvisionEnrollmentLifecycleCallback({
-					major: event.major,
-					minor: event.minor,
-					eventKind: (event as any).eventKind || (payload as any).eventKind,
-					actionCode: (event as any).actionCode || (payload as any).actionCode,
-					eventAction: eventRecord.eventAction,
-					payload,
-				});
-				const operationSignal = isHikvisionSdkOperationSignal({
-					major: event.major,
-					minor: event.minor,
-					eventKind: (event as any).eventKind || (payload as any).eventKind,
-					actionCode: (event as any).actionCode || (payload as any).actionCode,
-					payload,
-				});
-				const runEnrollmentIdentityIfNeeded = async () => {
-					// Plain (or mapped opaque) person id on this SDK callback → DeviceUser + socket now.
-					// Empty person still needs multipass logSearch (not inventing ids).
-					if (!employeeNo && !opaquePersonToken && !enrollmentLifecycle && !operationSignal) {
-						return null;
-					}
-					// Await when person ref is present so MATCHED/UNMATCHED wins over IGNORED.
-					// Fire-and-forget only when we are only hoping a later resolve fills person.
-					if (employeeNo || opaquePersonToken) {
-						return applyFastEnrollmentIdentityOnSdkCallback({
-							prisma,
-							req,
-							organizationId: String(device.organizationId),
-							deviceId: String(device.id),
-							eventId: String(eventRecord.id),
-							eventAction: eventRecord.eventAction || null,
-							employeeNo: employeeNo || null,
-							opaqueToken: opaquePersonToken || null,
-							displayName: (event as any).resolvedDisplayName || null,
-						});
-					}
-					scheduleFastEnrollmentIdentityOnSdkCallback({
-						prisma,
-						req,
-						organizationId: String(device.organizationId),
-						deviceId: String(device.id),
-						eventId: String(eventRecord.id),
-						eventAction: eventRecord.eventAction || null,
-						employeeNo: null,
-						opaqueToken: null,
-						displayName: (event as any).resolvedDisplayName || null,
-					});
-					return {
-						ok: false,
-						plainEmployeeNo: null,
-						opaqueToken: null,
-						deviceUserId: null,
-						linkedEmployeeId: null,
-						path: "pending_log_resolve" as const,
-						reason: "plain_employee_no_not_on_callback",
-					};
-				};
-
-				// C++ may attach raw fingerprints/face after inventory enrich on any solid
-				// callback POST — including retries that dedupe to an existing DeviceEvent.
-				// Extract blobs from this payload and store on DeviceUser (cpp_sdk_callback_raw).
-				// Do not skip on isDuplicate: person-15 FP bodies often re-fire same major=3 serial.
-				const persistCallbackTemplatesIfPresent = async (
-					identityResult: Awaited<ReturnType<typeof runEnrollmentIdentityIfNeeded>>,
-				) => {
-					const plainForTemplates =
-						String(identityResult?.plainEmployeeNo || employeeNo || "").trim() || "";
-					const callbackFingerprints =
-						(payload as any)?.fingerprints || (rawPayload as any)?.fingerprints;
-					const callbackFaceTemplate =
-						(payload as any)?.faceTemplate || (rawPayload as any)?.faceTemplate;
-					const callbackFacePicture =
-						(payload as any)?.facePicture || (rawPayload as any)?.facePicture;
-					if (
-						!plainForTemplates ||
-						isOpaqueHikvisionPersonToken(plainForTemplates) ||
-						!(Array.isArray(callbackFingerprints)
-							? callbackFingerprints.length > 0
-							: Boolean(callbackFaceTemplate || callbackFacePicture))
-					) {
-						return null;
-					}
-					try {
-						const {
-							persistRawFingerprintsFromSdkCallback,
-						} = await import("../../../helper/device-user-raw-fingerprint.helper.js");
-						return await persistRawFingerprintsFromSdkCallback({
-							prisma,
-							req,
-							organizationId: String(device.organizationId),
-							deviceId: String(device.id),
-							employeeNo: plainForTemplates,
-							deviceUserId: identityResult?.deviceUserId || null,
-							eventId: String(eventRecord.id),
-							fingerprints: callbackFingerprints,
-							faceTemplate: callbackFaceTemplate,
-							facePicture: callbackFacePicture,
-							source: "cpp_sdk_callback_raw",
-						});
-					} catch (templateError: any) {
-						console.warn(
-							"[HIKVISION_CALLBACK][CTRL] raw template persist failed",
-							templateError?.message || templateError,
-						);
-						return null;
-					}
-				};
-
 				if (isDuplicate) {
-					await publishDeviceEventSaved(req, eventRecord);
-					// Still schedule logSearch resolve: enroll create/FP often re-fires the same
-					// major=3 serial while typed leaves only appear a few seconds later.
-					if (operationSignal) {
-						scheduleOperationLogResolveAfterSdkSignal({
-							prisma,
-							req,
-							deviceId: device.id,
-							organizationId: device.organizationId,
-							deviceName: device.name,
-							deviceAddress: device.address,
-							triggerMinor: event.minor,
-						});
-					}
-					// Re-apply identity when the device finally posts plain employeeNo on a retry.
-					const identity = await runEnrollmentIdentityIfNeeded();
-					// Still extract fingerprints/face from payload on duplicate path and persist
-					// to DeviceUser with source cpp_sdk_callback_raw (first solid spool often
-					// reuses serial / dedupeKey after template_repost or multipass enrich).
-					const templatePersist = await persistCallbackTemplatesIfPresent(identity);
+					publishDeviceEventSaved(req, eventRecord);
 					const successResponse = buildSuccessResponse(
 						"Duplicate callback received; existing event reused",
 						{
@@ -689,14 +308,9 @@ export const controller = (prisma: PrismaClient) => {
 							duplicate: true,
 							eventId: eventRecord.id,
 							status: eventRecord.status,
-							employeeNo: identity?.plainEmployeeNo || eventRecord.employeeNo,
-							employeeId: identity?.linkedEmployeeId || eventRecord.employeeId,
+							employeeNo: eventRecord.employeeNo,
+							employeeId: eventRecord.employeeId,
 							attendanceId: eventRecord.attendanceId,
-							enrollmentIdentityPath: identity?.path || null,
-							deviceUserId:
-								templatePersist?.deviceUserId || identity?.deviceUserId || null,
-							rawTemplatesFromCallback: Boolean(templatePersist?.ok),
-							rawFingerprintCount: templatePersist?.fingerprintCount || 0,
 							dedupeKey,
 						},
 						200,
@@ -707,63 +321,19 @@ export const controller = (prisma: PrismaClient) => {
 
 				if (!isHikvisionAttendancePunchEvent(event)) {
 					console.log(
-						`[HIKVISION_CALLBACK][CTRL] non-attendance event major=${event.major} minor=${event.minor} employeeNo=${employeeNo || ""} enrollment=${enrollmentLifecycle} opSignal=${operationSignal}`,
+						`[HIKVISION_CALLBACK][CTRL] ignored non-attendance event major=${event.major} minor=${event.minor}`,
 					);
-					// Major=3 SDK ops are often opaque SYNC_SIGNAL rows until logSearch leaves exist.
-					// Multipass logSearch still creates typed USER_CREATED / FP rows — not a parallel poller inventing people.
-					if (operationSignal) {
-						scheduleOperationLogResolveAfterSdkSignal({
-							prisma,
-							req,
-							deviceId: device.id,
-							organizationId: device.organizationId,
-							deviceName: device.name,
-							deviceAddress: device.address,
-							triggerMinor: event.minor,
-						});
-					}
-
-					// When SDK already carried plain (or mapped) person id, identity + DeviceUser raw metadata
-					// go on the fast path and socket immediately. Do not force IGNORED over MATCHED/UNMATCHED.
-					const identity = await runEnrollmentIdentityIfNeeded();
-					const identityApplied = Boolean(identity?.ok && identity.plainEmployeeNo);
-					if (!identityApplied) {
-						await updateDeviceEventStatus(req, eventRecord.id, {
-							status: "IGNORED",
-							errorMessage: operationSignal
-								? "sdk_operation_signal_resolving"
-								: "non_attendance_device_event",
-						});
-					}
-
-					// C++ may attach raw fingerprints/face on the callback after inventory enrich.
-					// Store on DeviceUser immediately so Device Users shows blobs without second ISAPI.
-					const templatePersist = await persistCallbackTemplatesIfPresent(identity);
-
+					await updateDeviceEventStatus(req, eventRecord.id, {
+						status: "IGNORED",
+						errorMessage: "non_attendance_device_event",
+					});
 					const successResponse = buildSuccessResponse(
-						identityApplied
-							? "Enrollment/user-management callback accepted; plain person id applied on fast path"
-							: "Callback received but event is not an attendance punch",
+						"Callback received but event is not an attendance punch",
 						{
 							received: true,
-							matched: Boolean(identity?.linkedEmployeeId),
-							employeeNo: identity?.plainEmployeeNo || employeeNo,
-							deviceUserId:
-								templatePersist?.deviceUserId || identity?.deviceUserId || null,
-							employeeId: identity?.linkedEmployeeId || null,
-							reason: identityApplied
-								? "enrollment_identity_fast_path"
-								: operationSignal
-									? "sdk_operation_signal_resolving"
-									: "non_attendance_device_event",
-							operationLogResolveScheduled: operationSignal,
-							enrollmentIdentityPath: identity?.path || null,
-							identitySource:
-								(payload as any)?.identitySource ||
-								(rawPayload as any)?.identitySource ||
-								null,
-							rawTemplatesFromCallback: Boolean(templatePersist?.ok),
-							rawFingerprintCount: templatePersist?.fingerprintCount || 0,
+							matched: false,
+							employeeNo,
+							reason: "non_attendance_device_event",
 							eventId: eventRecord.id,
 							dedupeKey,
 							event,
@@ -798,60 +368,29 @@ export const controller = (prisma: PrismaClient) => {
 					return;
 				}
 
-				const deviceUser = employeeNo
-					? await (prisma as any).deviceUser.findFirst({
-							where: {
-								organizationId: device.organizationId,
-								deviceId: device.id,
-								vendorUserId: employeeNo,
-							},
-							select: {
-								id: true,
-								employeeId: true,
-								status: true,
-							},
-						})
-					: null;
-				const linkedDeviceUserEmployee = deviceUser?.employeeId
-					? await prisma.employee.findFirst({
-							where: {
-								id: deviceUser.employeeId,
-								isDeleted: false,
-								organizationId: device.organizationId,
-							},
-							select: {
-								id: true,
-								organizationId: true,
-								deviceEmpId: true,
-							},
-						})
-					: null;
-				const employee =
-					linkedDeviceUserEmployee ||
-					(await prisma.employee.findFirst({
-						where: {
-							isDeleted: false,
-							organizationId: device.organizationId,
-							deviceEmpId: employeeNo,
-						},
-						select: {
-							id: true,
-							organizationId: true,
-							deviceEmpId: true,
-						},
-					}));
+				const employee = await prisma.employee.findFirst({
+					where: {
+						isDeleted: false,
+						organizationId: device.organizationId,
+						deviceEmpId: employeeNo,
+					},
+					select: {
+						id: true,
+						organizationId: true,
+						deviceEmpId: true,
+					},
+				});
 
 				if (!employee) {
 					console.log(
-						`[HIKVISION_CALLBACK][CTRL] no employee matched by deviceUser or deviceEmpId=${employeeNo}`,
+						`[HIKVISION_CALLBACK][CTRL] no employee matched by deviceEmpId=${employeeNo}`,
 					);
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "UNMATCHED",
-						deviceUserId: deviceUser?.id || null,
 						errorMessage: "employee_not_found",
 					});
 					const successResponse = buildSuccessResponse(
-						"Callback received but no employee matched by device user or legacy deviceEmpId",
+						"Callback received but no employee matched by deviceEmpId",
 						{
 							received: true,
 							matched: false,
@@ -891,7 +430,6 @@ export const controller = (prisma: PrismaClient) => {
 				const sameDayDeviceEvents = await (prisma as any).deviceEvent.findMany({
 					where: {
 						organizationId: employee.organizationId,
-						deviceId: device.id,
 						employeeNo,
 						eventTime: {
 							gte: normalizedStartOfDay,
@@ -956,12 +494,21 @@ export const controller = (prisma: PrismaClient) => {
 					scheduleForCalculation,
 					punchTimeIn,
 				);
-				const overtimeFlagThresholdMinutes = await getOvertimeFlagThresholdMinutes(
-					employee.organizationId,
-				);
 				const finalStatus = determineAttendanceStatus(
 					timekeepingCalc,
 					Boolean(punchTimeOut),
+				);
+				const overtimeApplication = await resolveOvertimePolicyApplication(
+					prisma,
+					employee.organizationId,
+					{
+						calc: timekeepingCalc,
+						timeIn: punchTimeIn,
+						timeOut: punchTimeOut,
+						schedule: scheduleForCalculation,
+						date: punchTimeIn,
+						attendanceStatus: finalStatus,
+					},
 				);
 				const attendanceTimekeepingData = {
 					timeIn: punchTimeIn,
@@ -978,18 +525,9 @@ export const controller = (prisma: PrismaClient) => {
 						pairPunchesAsClockOut,
 					},
 					behaviorFlags:
-						finalStatus === "LEAVE"
-							? []
-							: deriveBehaviorFlags({
-									timeIn: punchTimeIn,
-									timeOut: punchTimeOut,
-									schedule: scheduleForCalculation,
-									date: punchTimeIn,
-									overtimeThresholdMinutes:
-										overtimeFlagThresholdMinutes,
-								}),
+						finalStatus === "LEAVE" ? [] : overtimeApplication.behaviorFlags,
 					...(await fetchAttendanceEmployeeSnapshotFields(prisma, employee.id)),
-					...buildAttendanceTimekeepingFields(timekeepingCalc),
+					...overtimeApplication.timekeepingFields,
 				};
 
 				if (isRepeatPunchWithinGap || isOutOfOrderOrAlreadyCovered) {
@@ -1065,7 +603,6 @@ export const controller = (prisma: PrismaClient) => {
 				if (attendanceAction === "clock_in_created") {
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "ATTENDANCE_CREATED",
-						deviceUserId: deviceUser?.id || null,
 						employeeId: employee.id,
 						attendanceId,
 						errorMessage: null,
@@ -1073,7 +610,6 @@ export const controller = (prisma: PrismaClient) => {
 				} else if (attendanceAction === "clock_out_updated") {
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "ATTENDANCE_UPDATED",
-						deviceUserId: deviceUser?.id || null,
 						employeeId: employee.id,
 						attendanceId,
 						errorMessage: null,
@@ -1084,7 +620,6 @@ export const controller = (prisma: PrismaClient) => {
 				) {
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "MATCHED",
-						deviceUserId: deviceUser?.id || null,
 						employeeId: employee.id,
 						attendanceId,
 						errorMessage: attendanceAction,
@@ -1100,7 +635,6 @@ export const controller = (prisma: PrismaClient) => {
 						deviceId: device.id,
 						dedupeKey,
 						employeeNo,
-						deviceUserId: deviceUser?.id || null,
 						employeeId: employee.id,
 						attendanceAction,
 						attendanceId,

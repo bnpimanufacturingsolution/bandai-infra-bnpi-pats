@@ -10,24 +10,25 @@ Backend authority: `../hris-api/docs/BENEFIT_SCHEDULE_MODES.md`
 
 HR benefit enrollments use an explicit schedule type instead of combining a date range with a hidden default of six installments. The frontend owns field visibility and informational previews; the API remains authoritative for validation, persistence, and installment generation.
 
-## Schedule modes
+## Schedule modes (enrollment UI)
 
-| Mode | UI label | Required fields | How installments are formed |
-|---|---|---|---|
-| `TIME_BOUND` | Time-bound | Start date, end date, **total** amount | API selects organization payroll periods that overlap the inclusive date range and generates one `SCHEDULED` installment per period |
-| `FIXED_INSTALLMENTS` | Fixed installments | Start date, positive whole-number installment count, **total** amount | API generates exactly that many installments on the existing cadence; total amount is divided across rows |
-| `RECURRING` | Recurring | Start date, **per-period** amount; end date optional | No bulk schedule at create. Payroll lazily ensures one installment per period while active and in range |
+**HR enrollment form (v2):** always **`RECURRING`**. Schedule mode selector removed. UI fields:
+
+| Field | Required | Notes |
+|---|---|---|
+| Recurrence | Yes | `EVERY_CUTOFF` (default) / `MONTHLY` / `YEARLY` |
+| Start date | Yes | When the benefit can begin |
+| End date | Optional | Open-ended when empty |
+| Amount | Yes | Per payment event (or full cut-off when pro-rate is on) |
+
+Payload always sends `scheduleMode: "RECURRING"`. API still supports `TIME_BOUND` / `FIXED_INSTALLMENTS` for other clients; enrollment UI does not expose them.
 
 ### Shared rules
 
-- New create payloads must send an explicit `scheduleMode`.
-- Do not silently default new records to six installments.
-- Mode-specific fields only: time-bound payloads send end date; fixed payloads send `totalInstallments`; recurring payloads send optional end date and no installment count.
-- Switching modes in the modal clears irrelevant values before submit.
-- The modal schedule preview is informational only. Final installment count, amounts, and dates come from the API (except recurring, which is always one full per-period amount).
-- Centavo remainder, if any, is applied to the final installment for finite modes.
+- New enrollments from HR app are recurring only.
+- Optional end date: leave empty for open-ended; when set, periods after the end date no longer receive installments.
+- The modal schedule preview is informational only.
 - Payroll direction (compensation vs deduction) still comes from the selected benefit type.
-- Existing records without `scheduleMode` remain editable; the UI treats them as time-bound for form defaults while the API continues to use their already-generated installments.
 
 ### Recurring amount & stop rules
 
@@ -85,16 +86,26 @@ On create/edit, when **Schedule mode = Recurring**, show **Recurrence**:
 
 Hints explain period-2 / sole monthly period and fiscal year-end last period. Schedule preview reflects cadence. Payload includes `recurrenceFrequency` only for Recurring (null for other modes). Domain rules: `../hris-api/docs/BENEFIT_SCHEDULE_MODES.md`.
 
+### Attendance UI (two optional toggles)
+
+Enrollment form **Attendance (optional)** card — both off = normal fixed benefit:
+
+| Toggle | API mapping | Behavior |
+|---|---|---|
+| **Perfect Attendance** | `eligibilityMode=ATTENDANCE_QUALIFIED` + classic disqualify flags (absent/late/undertime/leave); `attendanceBased=false` | All-or-nothing: full amount or ₱0 |
+| **Pro-rate from attendance** | `attendanceBased=true`, `attendanceAmountBasis=PER_CUTOFF`; `eligibilityMode=ENROLLED_ALWAYS` | Reduce amount for ABSENT only |
+
+Toggles are **mutually exclusive**. Selecting type code **PFA** prefills Perfect Attendance on.
+
+Benefit type admin may still store eligibility policy defaults for API prefill.
+
 ### Perfect Attendance (PFA) UI notes
 
 - Benefit type code **`PFA`** is grouped under payroll adjustment filter **attendance** and benefits preset `attendance: ["PFA"]` (not the allowance preset list).
 - Product label in run-payroll / register language: **Perfect Attendance** → field `perfectAttendance`.
 - Seeded API catalog name may still be **Performance Bonus** — display should prefer enrollment/register product labels; do not invent auto-award from the Perfect Attendance **metrics report** tab.
-- **Attendance-based vs fixed PFA (product semantics):**
-  - **`attendanceBased` off** → fixed enrolled amount when due (all-or-nothing enrollment pay; no pro-rate).
-  - **`attendanceBased` on** → ABSENT-only pro-rate; employee can still receive PFA money when absences exist. Late / undertime / leave do not zero the amount. **Not** the metrics report and not auto-eligibility.
-  - HR enrollment form shows a **warning banner** (`data-testid="pfa-attendance-based-warning"`) when type code is `PFA` and Compute from attendance is on. Warn only — save is not blocked.
-  - Helpers: `shouldShowPfaAttendanceBasedWarning` / `isPerfectAttendanceBenefitTypeCode` in `employee-benefit-form.tsx`.
+- **Classic PFA** = `ATTENDANCE_QUALIFIED` + disqualify flags + fixed amount (`attendanceBased` off).
+- Helpers: `shouldShowPfaAttendanceBasedWarning` / `PFA_ELIGIBILITY_FORM_DEFAULTS` / `isPerfectAttendanceBenefitTypeCode` in `employee-benefit-form.tsx`.
 - Domain SOT: `../hris-api/.wwg/wiki/project-truth.md` and `../hris-api/.wwg/wiki/terminology.md`.
 
 Types: `TimesheetPayrollSourceDetail` includes optional `benefitTypeName` (`app/services/payroll-periods.service.ts`).

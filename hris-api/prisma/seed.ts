@@ -4,6 +4,7 @@ import { seedKioskLoginContent } from "./seeds/kioskLoginSeeder";
 import { resolveDefaultSeedOrganizationId } from "./seeds/seedOrganizationResolver";
 import { assertSeedDryRunNotRequested } from "./seeds/seedDryRunGuard";
 import { ensureDefaultBenefitTypes } from "./seeds/benefitTypeSeeder";
+import { seedAuditLoggingDemo } from "./seeds/auditLoggingSeeder";
 const prisma = new PrismaClient();
 
 const generalEmployeeSeedConfig = {
@@ -35,6 +36,10 @@ async function main() {
 			organizationName: organization?.name || null,
 		},
 	);
+
+	// HR change history (`/hr/audit-logs`) demo rows: payroll, requests, approvals, timesheets.
+	const auditSeedSummary = await seedAuditLoggingDemo(prisma, organizationId);
+	console.log("Audit logging seed summary:", auditSeedSummary);
 
 	console.log("Seeding completed successfully!");
 }

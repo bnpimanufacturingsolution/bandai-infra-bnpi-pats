@@ -1,13 +1,11 @@
 # Changelog
 
-> Merged during bandai-infra union recombine. Standalone history is primary; develop-only bullets appended if unique.
-
-## From standalone develop snapshot
-
 All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Benefit **attendance eligibility** configuration: `eligibilityMode` (`ENROLLED_ALWAYS` \| `ATTENDANCE_QUALIFIED`) plus disqualify flags (absent/late/undertime/leave) on `EmployeeBenefit`, independent of amount pro-rate. Payroll zeros the period when qualification fails. `BenefitType` policy defaults + PFA seed classic Perfect Attendance defaults. See `docs/BENEFIT_SCHEDULE_MODES.md`.
+- Payroll benefit **tax grouping** on details and payslip: freeze `isTaxable` on `metadata.payrollSourceDetails`; group applied benefits under **Benefits applied → Non-taxable / Taxable** on PDF payslip, computation view flags, and live enrich on GET/payslip for older rows. See `docs/BENEFIT_SCHEDULE_MODES.md`.
 - Payroll adjustment **display names**: source details and payslips use enrollment/`EmployeeBenefit.name` as the primary label and `BenefitType.name` as category (`benefitTypeName`). Multiple enrollments under one type (e.g. Rice Subsidy + Travel Allowance under De Minimis) appear as separate lines. Bandai register still matches by code, enrollment name, or type name. See `docs/BENEFIT_SCHEDULE_MODES.md`.
 - **Payslip view/download** (`GET /api/employeePayroll/:id/payslip`) regenerates PDF live from payroll + source details (with live enrollment label enrichment; rebuilds benefit lines when frozen details are empty). Payroll-run PDF generation passes `metadata.payrollSourceDetails`. Period generate-payslips supports `force=true` to overwrite stored PDFs.
 - Attendance-based payroll source path: timesheet line select uses `hoursWorked` / `status` (not invalid `hours` / `isRestDay`) so attendance-based benefits resolve during payroll generation.
@@ -17,3 +15,4 @@ All notable changes to this project will be documented in this file.
 - Governance and WWG adoption scaffolding added for project readiness.
 - Validation and audit reports generated and synchronized.
 - Controller logging contract documentation was synchronized with the current `logActivity()` / `logAudit()` rollout.
+

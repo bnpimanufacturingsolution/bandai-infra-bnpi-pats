@@ -5,6 +5,8 @@ import {
 	formatPayrollSourceLabelWithCategory,
 	getCoveredRegisterFieldsFromSourceDetails,
 	groupPayrollSourceDetailsByRole,
+	groupPayrollSourceDetailsByTaxability,
+	type PayrollSourceDisplayDetail,
 } from "./payroll-source-display.helper";
 
 const logger = getLogger();
@@ -98,6 +100,8 @@ type PayslipComputationRow = {
 type PayslipAmountRow = {
 	label: string;
 	amount: number;
+	/** group = section header (no amount contribution); item = normal line (default). */
+	kind?: "group" | "item";
 };
 
 /** Map applied PayrollCorrection lines into payslip earnings rows (label + amount). */
@@ -232,6 +236,35 @@ const roundPayslipMoney = (value: unknown) => {
 
 const nonZeroPayslipAmount = (value: unknown) => Math.abs(Number(value || 0)) >= 0.005;
 
+/** Benefit lines under Non-taxable / Taxable group headers for payslip display. */
+const sourceAmountRowsWithTaxGroups = (
+	details: PayrollSourceDisplayDetail[],
+	sectionLabel = "Benefits applied",
+): PayslipAmountRow[] => {
+	if (!details.length) return [];
+	const { nonTaxable, taxable } = groupPayrollSourceDetailsByTaxability(details);
+	const rows: PayslipAmountRow[] = [];
+	const pushGroup = (taxLabel: string, groupDetails: PayrollSourceDisplayDetail[]) => {
+		if (!groupDetails.length) return;
+		rows.push({
+			kind: "group",
+			label: `${sectionLabel} — ${taxLabel}`,
+			amount: 0,
+		});
+		for (const detail of groupDetails) {
+			rows.push({
+				kind: "item",
+				label: formatPayrollSourceLabelWithCategory(detail),
+				amount: Number(detail.amount || 0),
+			});
+		}
+	};
+	// Non-taxable first (common de minimis), then taxable
+	pushGroup("Non-taxable", nonTaxable);
+	pushGroup("Taxable", taxable);
+	return rows;
+};
+
 export const buildPayslipFormulaProof = (payroll: PayslipPayrollLike): PayslipFormulaProof => {
 	const sssSalaryLoan = Number(payroll.sssSalaryLoan ?? payroll.loanDeductions ?? 0);
 	const modifiedHdmf2 = Number(payroll.modifiedHdmf2 ?? payroll.otherDeductions ?? 0);
@@ -243,46 +276,64 @@ export const buildPayslipFormulaProof = (payroll: PayslipPayrollLike): PayslipFo
 		details.map((detail) => ({
 			label: formatPayrollSourceLabelWithCategory(detail),
 			amount: Number(detail.amount || 0),
+			kind: "item" as const,
 		}));
 
-	const postNetRows = [
+	const postNetSourceGrouped = sourceAmountRowsWithTaxGroups(
+		sourceByRole.postNet,
+		"Post-net benefits",
+	);
+	const postNetRegisterRows = [
 		...(includeRegisterField("perfectAttendance")
-			? [{ label: "Perfect Attendance", amount: Number(payroll.perfectAttendance || 0) }]
+			? [{ label: "Perfect Attendance", amount: Number(payroll.perfectAttendance || 0), kind: "item" as const }]
 			: []),
 		...(includeRegisterField("mealAllowance")
-			? [{ label: "Meal Allowance", amount: Number(payroll.mealAllowance || 0) }]
+			? [{ label: "Meal Allowance", amount: Number(payroll.mealAllowance || 0), kind: "item" as const }]
 			: []),
 		...(includeRegisterField("lineLeaderAllowance")
-			? [{ label: "Line Leader Allowance", amount: Number(payroll.lineLeaderAllowance || 0) }]
+			? [
+					{
+						label: "Line Leader Allowance",
+						amount: Number(payroll.lineLeaderAllowance || 0),
+						kind: "item" as const,
+					},
+				]
 			: []),
-		...sourceAmountRows(sourceByRole.postNet),
 	].filter((row) => nonZeroPayslipAmount(row.amount));
+	const postNetRows = [...postNetRegisterRows, ...postNetSourceGrouped];
 	const postNetTotal = roundPayslipMoney(
-		postNetRows.reduce((sum, row) => sum + row.amount, 0),
+		postNetRows.reduce((sum, row) => sum + (row.kind === "group" ? 0 : row.amount), 0),
 	);
 	const totalReceivable = roundPayslipMoney(
 		payroll.totalReceivable ?? Number(payroll.netPay || 0) + postNetTotal,
 	);
+	const benefitGrossRows = sourceAmountRowsWithTaxGroups(sourceByRole.gross).map((row) => ({
+		...row,
+		operation: "ADD" as const,
+	}));
 	const grossRows = [
-		{ label: "Basic Pay", amount: Number(payroll.basicPay || 0), operation: "ADD" as const },
+		{ label: "Basic Pay", amount: Number(payroll.basicPay || 0), operation: "ADD" as const, kind: "item" as const },
 		{
 			label: "Absent Deduction",
 			amount: Number(payroll.absentDeduction || 0),
 			operation: "SUBTRACT" as const,
+			kind: "item" as const,
 		},
-		{ label: "Overtime Pay", amount: Number(payroll.overtimePay || 0), operation: "ADD" as const },
+		{ label: "Overtime Pay", amount: Number(payroll.overtimePay || 0), operation: "ADD" as const, kind: "item" as const },
 		{
 			label: "Night Differential Pay",
 			amount: Number(payroll.nightDiffPay || 0),
 			operation: "ADD" as const,
+			kind: "item" as const,
 		},
-		{ label: "Holiday Pay", amount: Number(payroll.holidayPay || 0), operation: "ADD" as const },
+		{ label: "Holiday Pay", amount: Number(payroll.holidayPay || 0), operation: "ADD" as const, kind: "item" as const },
 		...(includeRegisterField("obAllowance")
 			? [
 					{
 						label: "OB Allowance",
 						amount: Number(payroll.obAllowance || 0),
 						operation: "ADD" as const,
+						kind: "item" as const,
 					},
 				]
 			: []),
@@ -292,6 +343,7 @@ export const buildPayslipFormulaProof = (payroll: PayslipPayrollLike): PayslipFo
 						label: "De Minimis Allowance",
 						amount: Number(payroll.deMinimisAllowance || 0),
 						operation: "ADD" as const,
+						kind: "item" as const,
 					},
 				]
 			: []),
@@ -301,15 +353,16 @@ export const buildPayslipFormulaProof = (payroll: PayslipPayrollLike): PayslipFo
 						label: "Adjustment OT/ND",
 						amount: Number(payroll.adjustmentOtNd || 0),
 						operation: "ADD" as const,
+						kind: "item" as const,
 					},
 				]
 			: []),
-		...sourceAmountRows(sourceByRole.gross).map((row) => ({
-			...row,
-			operation: "ADD" as const,
-		})),
+		...benefitGrossRows,
 		// Explicit next-period retro lines (PayrollCorrection apply → metadata.payrollCorrections)
-		...extractPayrollCorrectionEarningsRows(payroll.metadata),
+		...extractPayrollCorrectionEarningsRows(payroll.metadata).map((row) => ({
+			...row,
+			kind: "item" as const,
+		})),
 		// Fallback when compensation was increased without labeled correction lines
 		...(() => {
 			const correctionRows = extractPayrollCorrectionEarningsRows(payroll.metadata);
@@ -326,6 +379,7 @@ export const buildPayslipFormulaProof = (payroll: PayslipPayrollLike): PayslipFo
 						label: "Other Compensation",
 						amount: otherCompensation,
 						operation: "ADD" as const,
+						kind: "item" as const,
 					},
 				];
 			}
@@ -335,17 +389,24 @@ export const buildPayslipFormulaProof = (payroll: PayslipPayrollLike): PayslipFo
 						label: "Other Compensation",
 						amount: residual,
 						operation: "ADD" as const,
+						kind: "item" as const,
 					},
 				];
 			}
 			return [];
 		})(),
-	].filter((row) => row.label === "Basic Pay" || row.label === "Absent Deduction" || nonZeroPayslipAmount(row.amount));
+	].filter(
+		(row) =>
+			row.kind === "group" ||
+			row.label === "Basic Pay" ||
+			row.label === "Absent Deduction" ||
+			nonZeroPayslipAmount(row.amount),
+	);
 	const grossRowsTotal = roundPayslipMoney(
-		grossRows.reduce(
-			(sum, row) => sum + (row.operation === "SUBTRACT" ? -row.amount : row.amount),
-			0,
-		),
+		grossRows.reduce((sum, row) => {
+			if (row.kind === "group") return sum;
+			return sum + (row.operation === "SUBTRACT" ? -row.amount : row.amount);
+		}, 0),
 	);
 	const hasLoanSourceDetails = sourceByRole.deduction.some(
 		(detail) => String(detail.direction || "").toUpperCase() === "LOAN",
@@ -362,7 +423,7 @@ export const buildPayslipFormulaProof = (payroll: PayslipPayrollLike): PayslipFo
 		...sourceAmountRows(sourceByRole.deduction),
 	];
 	const deductionRowsTotal = roundPayslipMoney(
-		deductionRows.reduce((sum, row) => sum + row.amount, 0),
+		deductionRows.reduce((sum, row) => sum + (row.kind === "group" ? 0 : row.amount), 0),
 	);
 	const grossPay = roundPayslipMoney(payroll.grossPay);
 	const totalDeductions = roundPayslipMoney(payroll.totalDeductions);
@@ -390,20 +451,25 @@ export const buildPayslipComputationRows = (
 	payroll: PayslipPayrollLike,
 ): PayslipComputationRow[] => {
 	const proof = buildPayslipFormulaProof(payroll);
-	const grossRows: PayslipComputationRow[] = proof.grossRows.map((row) => ({
-		label: row.label,
-		amount: row.amount,
-		operation: row.operation,
-	}));
+	// Skip group headers — computation proof rows are amount-only
+	const grossRows: PayslipComputationRow[] = proof.grossRows
+		.filter((row) => row.kind !== "group")
+		.map((row) => ({
+			label: row.label,
+			amount: row.amount,
+			operation: row.operation,
+		}));
 
 	const rows: PayslipComputationRow[] = [
 		...grossRows,
 		{ label: "GrossPay", amount: payroll.grossPay, operation: "RESULT", emphasis: "gross" },
-		...proof.deductionRows.map((row) => ({
-			label: row.label,
-			amount: row.amount,
-			operation: "SUBTRACT" as const,
-		})),
+		...proof.deductionRows
+			.filter((row) => row.kind !== "group")
+			.map((row) => ({
+				label: row.label,
+				amount: row.amount,
+				operation: "SUBTRACT" as const,
+			})),
 		{
 			label: "Total Deductions",
 			amount: payroll.totalDeductions,
@@ -411,11 +477,13 @@ export const buildPayslipComputationRows = (
 			emphasis: "deduction",
 		},
 		{ label: "NetPay", amount: payroll.netPay, operation: "RESULT", emphasis: "net" },
-		...proof.postNetRows.map((row) => ({
-			label: row.label,
-			amount: row.amount,
-			operation: "ADD" as const,
-		})),
+		...proof.postNetRows
+			.filter((row) => row.kind !== "group")
+			.map((row) => ({
+				label: row.label,
+				amount: row.amount,
+				operation: "ADD" as const,
+			})),
 		{
 			label: "TotalReceivable",
 			amount: proof.totalReceivable,
@@ -644,6 +712,17 @@ export async function generatePayslipPdfBuffer(input: PayslipPdfInput): Promise<
 		});
 		drawRightAmount(amountText, amountAnchorX, y, isBold ? 10 : 9.5, isBold);
 	};
+	const drawGroupHeader = (label: string, x: number, y: number) => {
+		const clipped =
+			label.length > 42 ? `${label.slice(0, 41)}…` : label;
+		page.drawText(clipped, {
+			x,
+			y,
+			size: 8,
+			font: boldFont,
+			color: rgb(0.4, 0.4, 0.4),
+		});
+	};
 
 	let cursorY = pageHeight - TOP_MARGIN;
 
@@ -785,19 +864,29 @@ export async function generatePayslipPdfBuffer(input: PayslipPdfInput): Promise<
 	const sectionStartY = cursorY;
 	for (let index = 0; index < earningsRows.length; index++) {
 		const row = earningsRows[index];
+		const y = sectionStartY - index * 20;
+		if (row.kind === "group") {
+			drawGroupHeader(row.label, leftX, y);
+			continue;
+		}
 		const amountText = row.operation === "SUBTRACT"
 			? formatDeductionCurrency(row.amount)
 			: formatCurrency(row.amount);
-		drawLineItem(row.label, amountText, leftX, leftAmountX, sectionStartY - index * 20);
+		drawLineItem(row.label, amountText, leftX, leftAmountX, y);
 	}
 	for (let index = 0; index < deductionRows.length; index++) {
 		const row = deductionRows[index];
+		const y = sectionStartY - index * 20;
+		if (row.kind === "group") {
+			drawGroupHeader(row.label, rightX, y);
+			continue;
+		}
 		drawLineItem(
 			row.label,
 			formatDeductionCurrency(row.amount),
 			rightX,
 			rightAmountX,
-			sectionStartY - index * 20,
+			y,
 		);
 	}
 
@@ -834,7 +923,12 @@ export async function generatePayslipPdfBuffer(input: PayslipPdfInput): Promise<
 		});
 		for (let index = 0; index < postNetRows.length; index++) {
 			const row = postNetRows[index];
-			drawLineItem(row.label, formatCurrency(row.amount), leftX, leftAmountX, cursorY - 18 - index * 18);
+			const y = cursorY - 18 - index * 18;
+			if (row.kind === "group") {
+				drawGroupHeader(row.label, leftX, y);
+				continue;
+			}
+			drawLineItem(row.label, formatCurrency(row.amount), leftX, leftAmountX, y);
 		}
 		cursorY -= 18 + postNetRows.length * 18;
 	}

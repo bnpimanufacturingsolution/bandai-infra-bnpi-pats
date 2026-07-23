@@ -226,6 +226,7 @@ export const buildEmployeePayrollComputationView = (employeePayroll: Record<stri
 			| "DEDUCTED_AFTER_GROSSPAY"
 			| "ADDED_AFTER_NETPAY",
 		explanation: string,
+		extras?: { isTaxable?: boolean | null; isBenefitSource?: boolean },
 	) => ({
 		label,
 		field,
@@ -233,6 +234,10 @@ export const buildEmployeePayrollComputationView = (employeePayroll: Record<stri
 		amount: roundMoney(amount),
 		payrollRole,
 		explanation,
+		...(extras?.isBenefitSource !== undefined
+			? { isBenefitSource: extras.isBenefitSource }
+			: {}),
+		...(extras && "isTaxable" in extras ? { isTaxable: extras.isTaxable ?? null } : {}),
 	});
 	const nonZero = (item: { amount: number }) => Math.abs(item.amount) >= 0.005;
 	const sourceDetails = asPayrollSourceDetails(metadata.payrollSourceDetails);
@@ -268,13 +273,31 @@ export const buildEmployeePayrollComputationView = (employeePayroll: Record<stri
 				typeName && typeName.toLowerCase() !== primary.toLowerCase()
 					? ` Category: ${typeName}.`
 					: "";
+			const taxNote =
+				detail.isTaxable === true
+					? " Taxable benefit."
+					: detail.isTaxable === false
+						? " Non-taxable benefit."
+						: "";
+			const isEmployeeBenefit =
+				String(detail.source || "employeeBenefit") === "employeeBenefit";
 			return row(
 				primary,
 				`source:${detail.source || "employeeBenefit"}:${detail.id || primary}`,
 				operation,
 				detail.amount,
 				payrollRole,
-				`Payroll adjustment from source details.${categoryNote}`,
+				`Payroll adjustment from source details.${categoryNote}${taxNote}`,
+				{
+					isBenefitSource: true,
+					isTaxable: isEmployeeBenefit
+						? detail.isTaxable === true
+							? true
+							: detail.isTaxable === false
+								? false
+								: null
+						: null,
+				},
 			);
 		});
 
@@ -741,6 +764,73 @@ export const controller = (prisma: PrismaClient) => {
 				`${config.SUCCESS.EMPLOYEEPAYROLL.RETRIEVED}: ${(employeePayroll as any).id}`,
 			);
 			if (employeePayroll && typeof employeePayroll === "object") {
+				// Enrich frozen source details with live isTaxable / labels for older payrolls
+				// so HR detail + computation view can group taxable vs non-taxable benefits.
+				try {
+					const meta = asRecord((employeePayroll as any).metadata);
+					const details = asArray(meta.payrollSourceDetails);
+					const benefitIds = details
+						.filter(
+							(d) =>
+								String(d?.source || "") === "employeeBenefit" &&
+								d?.id &&
+								d?.isTaxable !== true &&
+								d?.isTaxable !== false,
+						)
+						.map((d) => String(d.id));
+					if (benefitIds.length > 0) {
+						const benefits = await (prisma as any).employeeBenefit.findMany({
+							where: { id: { in: benefitIds }, isDeleted: false },
+							select: {
+								id: true,
+								name: true,
+								benefitType: {
+									select: { code: true, name: true, isTaxable: true },
+								},
+							},
+						});
+						const byId = new Map<string, any>(
+							(benefits as any[]).map((row) => [String(row.id), row]),
+						);
+						const enriched = details.map((detail) => {
+							if (String(detail?.source || "") !== "employeeBenefit") return detail;
+							const benefit = byId.get(String(detail.id));
+							if (!benefit) return detail;
+							const typeName = String(benefit.benefitType?.name || "").trim();
+							const enrollmentName = String(benefit.name || "").trim();
+							const liveTaxable =
+								benefit.benefitType?.isTaxable === true
+									? true
+									: benefit.benefitType?.isTaxable === false
+										? false
+										: null;
+							return {
+								...detail,
+								name:
+									enrollmentName ||
+									typeName ||
+									String(detail.name || "").trim() ||
+									detail.name,
+								benefitTypeName: typeName || detail.benefitTypeName || null,
+								code: benefit.benefitType?.code || detail.code || null,
+								isTaxable:
+									detail.isTaxable === true || detail.isTaxable === false
+										? detail.isTaxable
+										: liveTaxable,
+							};
+						});
+						(employeePayroll as Record<string, any>).metadata = {
+							...meta,
+							payrollSourceDetails: enriched,
+						};
+					}
+				} catch (enrichError) {
+					employeePayrollLogger.warn(
+						`Failed to enrich payrollSourceDetails tax flags for ${(employeePayroll as any).id}:`,
+						enrichError,
+					);
+				}
+
 				(employeePayroll as Record<string, any>).employeePayrollComputationView =
 					EmployeePayrollComputationViewSchema.parse(
 						buildEmployeePayrollComputationView(employeePayroll as Record<string, any>),
@@ -2851,6 +2941,7 @@ export const controller = (prisma: PrismaClient) => {
 							direction: benefit.benefitType?.payrollDirection || "COMPENSATION",
 							reconciliationAction:
 								benefit.benefitType?.reconciliationAction || null,
+							isTaxable: benefit.benefitType?.isTaxable === true,
 							amount: Math.round((amount + Number.EPSILON) * 100) / 100,
 							startDate: benefit.startDate || null,
 							endDate: benefit.endDate || null,
@@ -2860,9 +2951,9 @@ export const controller = (prisma: PrismaClient) => {
 					})
 					.filter(Boolean);
 			} else {
-				// Enrich enrollment labels from live EmployeeBenefit rows when details exist,
+				// Enrich enrollment labels + isTaxable from live EmployeeBenefit rows when details exist,
 				// so payslip view shows adjustment name + type category even if frozen metadata
-				// still stores only the benefit type name.
+				// still stores only the benefit type name / lacks tax flags.
 				const benefitDetailIds = payrollSourceDetails
 					.filter(
 						(detail) =>
@@ -2882,6 +2973,7 @@ export const controller = (prisma: PrismaClient) => {
 								select: {
 									code: true,
 									name: true,
+									isTaxable: true,
 								},
 							},
 						},
@@ -2897,11 +2989,21 @@ export const controller = (prisma: PrismaClient) => {
 						const enrollmentName = String(benefit.name || "").trim();
 						const displayName =
 							enrollmentName || typeName || String(detail.name || "").trim();
+						const liveTaxable =
+							benefit.benefitType?.isTaxable === true
+								? true
+								: benefit.benefitType?.isTaxable === false
+									? false
+									: null;
 						return {
 							...detail,
 							name: displayName || detail.name,
 							benefitTypeName: typeName || detail.benefitTypeName || null,
 							code: benefit.benefitType?.code || detail.code || null,
+							isTaxable:
+								detail.isTaxable === true || detail.isTaxable === false
+									? detail.isTaxable
+									: liveTaxable,
 						};
 					});
 				}

@@ -197,6 +197,23 @@ const sanitizeBenefitTypeFormData = (data: BenefitTypeFormData): BenefitTypeForm
 		minServiceMonths: policy.showMinServiceMonths
 			? toOptionalNumber(data.minServiceMonths)
 			: undefined,
+		defaultEligibilityMode: data.defaultEligibilityMode || null,
+		defaultEligibilityDisqualifyOnAbsent:
+			data.defaultEligibilityMode === "ATTENDANCE_QUALIFIED"
+				? data.defaultEligibilityDisqualifyOnAbsent !== false
+				: null,
+		defaultEligibilityDisqualifyOnLate:
+			data.defaultEligibilityMode === "ATTENDANCE_QUALIFIED"
+				? data.defaultEligibilityDisqualifyOnLate === true
+				: null,
+		defaultEligibilityDisqualifyOnUndertime:
+			data.defaultEligibilityMode === "ATTENDANCE_QUALIFIED"
+				? data.defaultEligibilityDisqualifyOnUndertime === true
+				: null,
+		defaultEligibilityDisqualifyOnLeave:
+			data.defaultEligibilityMode === "ATTENDANCE_QUALIFIED"
+				? data.defaultEligibilityDisqualifyOnLeave === true
+				: null,
 	};
 };
 const IMPORT_FIELDS = {
@@ -295,6 +312,11 @@ export function BenefitTypesTemplate({
 			coverage: undefined,
 			minAmount: undefined,
 			maxAmount: undefined,
+			defaultEligibilityMode: null,
+			defaultEligibilityDisqualifyOnAbsent: true,
+			defaultEligibilityDisqualifyOnLate: false,
+			defaultEligibilityDisqualifyOnUndertime: false,
+			defaultEligibilityDisqualifyOnLeave: false,
 		},
 	});
 
@@ -322,6 +344,15 @@ export function BenefitTypesTemplate({
 				coverage: activeItem.coverage,
 				minAmount: activeItem.minAmount,
 				maxAmount: activeItem.maxAmount,
+				defaultEligibilityMode: activeItem.defaultEligibilityMode || null,
+				defaultEligibilityDisqualifyOnAbsent:
+					activeItem.defaultEligibilityDisqualifyOnAbsent !== false,
+				defaultEligibilityDisqualifyOnLate:
+					activeItem.defaultEligibilityDisqualifyOnLate === true,
+				defaultEligibilityDisqualifyOnUndertime:
+					activeItem.defaultEligibilityDisqualifyOnUndertime === true,
+				defaultEligibilityDisqualifyOnLeave:
+					activeItem.defaultEligibilityDisqualifyOnLeave === true,
 			});
 		}
 	}, [action, isLoadingItem, activeItem, reset]);
@@ -332,6 +363,7 @@ export function BenefitTypesTemplate({
 	const watchedIsTaxable = watch("isTaxable");
 	const watchedIsActive = watch("isActive");
 	const watchedIsDefault = watch("isDefault");
+	const watchedDefaultEligibilityMode = watch("defaultEligibilityMode");
 	const currentCategoryPolicy = CATEGORY_FIELD_POLICY[watchedCategory];
 	const handleInvalidSubmit = useAdminFormErrorNavigation();
 
@@ -371,6 +403,11 @@ export function BenefitTypesTemplate({
 			isTaxable: false,
 			isActive: true,
 			isDefault: false,
+			defaultEligibilityMode: null,
+			defaultEligibilityDisqualifyOnAbsent: true,
+			defaultEligibilityDisqualifyOnLate: false,
+			defaultEligibilityDisqualifyOnUndertime: false,
+			defaultEligibilityDisqualifyOnLeave: false,
 		});
 		updateSearchParams((next) => {
 			next.set("action", "create");
@@ -836,6 +873,84 @@ CA,Cash Advance,OTHER,DEDUCTION,Recurring cash advance deduction,TRUE,TRUE,FALSE
 													valueAsNumber: true,
 												})}
 											/>
+										</div>
+										<div
+											className="md:col-span-2"
+											data-field-path="defaultEligibilityMode"
+											data-testid="benefit-type-eligibility-defaults">
+											<label className="mb-1 block text-sm font-medium text-gray-700">
+												Enrollment eligibility default
+											</label>
+											<p className="mb-2 text-xs text-slate-500">
+												Prefills employee enrollments. Independent of amount
+												pro-rate (Compute from attendance).
+											</p>
+											<Select
+												options={[
+													{
+														value: "",
+														label: "None (always pay when enrolled)",
+													},
+													{
+														value: "ENROLLED_ALWAYS",
+														label: "Always pay when enrolled",
+													},
+													{
+														value: "ATTENDANCE_QUALIFIED",
+														label: "Must pass attendance qualification",
+													},
+												]}
+												value={watchedDefaultEligibilityMode || ""}
+												onChange={(value) =>
+													setValue(
+														"defaultEligibilityMode",
+														value === "ATTENDANCE_QUALIFIED" ||
+															value === "ENROLLED_ALWAYS"
+															? value
+															: null,
+														{ shouldDirty: true, shouldValidate: true },
+													)
+												}
+												placeholder="Select eligibility default"
+											/>
+											{watchedDefaultEligibilityMode ===
+												"ATTENDANCE_QUALIFIED" && (
+												<div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+													{(
+														[
+															[
+																"defaultEligibilityDisqualifyOnAbsent",
+																"Disqualify on ABSENT",
+															],
+															[
+																"defaultEligibilityDisqualifyOnLate",
+																"Disqualify on late",
+															],
+															[
+																"defaultEligibilityDisqualifyOnUndertime",
+																"Disqualify on undertime",
+															],
+															[
+																"defaultEligibilityDisqualifyOnLeave",
+																"Disqualify on leave",
+															],
+														] as const
+													).map(([field, label]) => (
+														<label
+															key={field}
+															className="flex items-center gap-2 text-sm text-slate-700"
+															htmlFor={field}>
+															<input
+																id={field}
+																type="checkbox"
+																className="h-4 w-4 rounded border-slate-300"
+																{...register(field)}
+															/>
+															{label}
+														</label>
+													))}
+												</div>
+											)}
 										</div>
 										<div data-field-path="payrollCycleDays">
 											<label className="mb-1 block text-sm font-medium text-gray-700">

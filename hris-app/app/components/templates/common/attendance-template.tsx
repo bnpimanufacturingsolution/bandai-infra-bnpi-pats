@@ -62,6 +62,9 @@ interface AttendanceTemplateProps {
 	hideTimesheetActions?: boolean;
 }
 
+/** Temporary product flag: hide Clock In/Out action until re-enabled. */
+const SHOW_CLOCK_IN_BUTTON = false;
+
 /** Raw attendance record from API (subset we use for details) */
 interface AttendanceRawRecord {
 	id: string;
@@ -1598,64 +1601,67 @@ export default function AttendanceTemplate({
 											</span>
 										</div>
 									)}
-									<Button
-										className={
-											isClockActionDisabled
-												? "w-full flex items-center justify-center gap-2 mb-3 bg-gray-400 hover:bg-gray-400 cursor-not-allowed text-white"
-												: "w-full flex items-center justify-center gap-2 mb-3 bg-red-600 hover:bg-red-700 text-white"
-										}
-										onClick={handleClockAction}
-										disabled={isClockActionDisabled}>
-										{clockInMutation.isPending || clockOutMutation.isPending ? (
-											<>
-												<Timer className="w-4 h-4 animate-spin" />
-												Processing...
-											</>
-										) : todayAttendance.isPreStart ? (
-											<>
-												<Clock className="w-4 h-4" />
-												Not Yet Started
-											</>
-										) : todayAttendance.nonWorkReason ? (
-											<>
-												<CalendarOff className="w-4 h-4" />
-												{todayAttendance.nonWorkReason.buttonLabel}
-											</>
-										) : todayAttendance.hasTimeIn &&
-										  todayAttendance.hasTimeOut ? (
-											<>
-												<CheckCircle className="w-4 h-4" />
-												Already Clocked Out
-											</>
-										) : isBeforeClockInWindow ? (
-											<>
-												<Clock className="w-4 h-4" />
-												Opens at{" "}
-												{clockInOpensAt
-													? format(clockInOpensAt, "h:mm a")
-													: "3h before shift"}
-											</>
-										) : todayAttendance.hasTimeIn &&
-										  !todayAttendance.hasTimeOut ? (
-											<>
-												<Pause className="w-4 h-4" />
-												Clock Out
-											</>
-										) : (
-											<>
-												<Play className="w-4 h-4" />
-												Clock In
-											</>
-										)}
-									</Button>
+									{SHOW_CLOCK_IN_BUTTON && (
+										<Button
+											className={
+												isClockActionDisabled
+													? "w-full flex items-center justify-center gap-2 mb-3 bg-gray-400 hover:bg-gray-400 cursor-not-allowed text-white"
+													: "w-full flex items-center justify-center gap-2 mb-3 bg-red-600 hover:bg-red-700 text-white"
+											}
+											onClick={handleClockAction}
+											disabled={isClockActionDisabled}>
+											{clockInMutation.isPending ||
+											clockOutMutation.isPending ? (
+												<>
+													<Timer className="w-4 h-4 animate-spin" />
+													Processing...
+												</>
+											) : todayAttendance.isPreStart ? (
+												<>
+													<Clock className="w-4 h-4" />
+													Not Yet Started
+												</>
+											) : todayAttendance.nonWorkReason ? (
+												<>
+													<CalendarOff className="w-4 h-4" />
+													{todayAttendance.nonWorkReason.buttonLabel}
+												</>
+											) : todayAttendance.hasTimeIn &&
+											  todayAttendance.hasTimeOut ? (
+												<>
+													<CheckCircle className="w-4 h-4" />
+													Already Clocked Out
+												</>
+											) : isBeforeClockInWindow ? (
+												<>
+													<Clock className="w-4 h-4" />
+													Opens at{" "}
+													{clockInOpensAt
+														? format(clockInOpensAt, "h:mm a")
+														: "3h before shift"}
+												</>
+											) : todayAttendance.hasTimeIn &&
+											  !todayAttendance.hasTimeOut ? (
+												<>
+													<Pause className="w-4 h-4" />
+													Clock Out
+												</>
+											) : (
+												<>
+													<Play className="w-4 h-4" />
+													Clock In
+												</>
+											)}
+										</Button>
+									)}
 								</>
 							)}
 							{!hideTimesheetActions && (
 								<Button
 									variant="outline"
-									className="w-full flex items-center justify-center gap-2"
+									className="attendance-timesheet-btn w-full flex h-[3.75rem] min-h-[3.75rem] items-center justify-center gap-2 rounded-[10px] text-base font-bold"
 									onClick={handleOpenTimesheetModal}>
-									<CheckCircle className="w-4 h-4" />
+									<CheckCircle className="w-5 h-5" />
 									View Timesheet
 								</Button>
 							)}

@@ -1,4 +1,3 @@
-<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/docs/testing-strategy.md) -->
 # HRIS App Testing Strategy
 
 Status: ACTIVE_DRAFT

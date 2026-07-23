@@ -375,4 +375,35 @@ describe("employee benefit schedule contract", () => {
 		assert.equal(parsed.attendanceBased, false);
 		assert.equal(parsed.attendanceAmountBasis, null);
 	});
+
+	it("defaults eligibility to ENROLLED_ALWAYS with absent flag default true", () => {
+		const parsed = CreateEmployeeBenefitSchema.parse({
+			...validBenefit,
+			scheduleMode: "RECURRING",
+			startDate: "2026-01-01",
+		});
+
+		assert.equal(parsed.eligibilityMode, "ENROLLED_ALWAYS");
+		assert.equal(parsed.eligibilityDisqualifyOnAbsent, true);
+		assert.equal(parsed.eligibilityDisqualifyOnLate, false);
+		assert.equal(parsed.eligibilityDisqualifyOnUndertime, false);
+		assert.equal(parsed.eligibilityDisqualifyOnLeave, false);
+	});
+
+	it("accepts ATTENDANCE_QUALIFIED eligibility with disqualify flags", () => {
+		const parsed = CreateEmployeeBenefitSchema.parse({
+			...validBenefit,
+			scheduleMode: "RECURRING",
+			startDate: "2026-01-01",
+			eligibilityMode: "ATTENDANCE_QUALIFIED",
+			eligibilityDisqualifyOnAbsent: true,
+			eligibilityDisqualifyOnLate: true,
+			eligibilityDisqualifyOnUndertime: true,
+			eligibilityDisqualifyOnLeave: true,
+		});
+
+		assert.equal(parsed.eligibilityMode, "ATTENDANCE_QUALIFIED");
+		assert.equal(parsed.eligibilityDisqualifyOnLate, true);
+		assert.equal(parsed.eligibilityDisqualifyOnLeave, true);
+	});
 });

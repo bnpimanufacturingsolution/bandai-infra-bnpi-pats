@@ -29,6 +29,11 @@ export interface EmployeeBenefit {
 	totalInstallments?: number | null;
 	attendanceBased?: boolean | null;
 	attendanceAmountBasis?: BenefitAttendanceAmountBasis | null;
+	eligibilityMode?: "ENROLLED_ALWAYS" | "ATTENDANCE_QUALIFIED" | null;
+	eligibilityDisqualifyOnAbsent?: boolean | null;
+	eligibilityDisqualifyOnLate?: boolean | null;
+	eligibilityDisqualifyOnUndertime?: boolean | null;
+	eligibilityDisqualifyOnLeave?: boolean | null;
 	status?: "PENDING" | "APPROVED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "DEFAULTED";
 	isActive: boolean;
 	approvedBy?: string | null;
@@ -93,6 +98,11 @@ export interface CreateEmployeeBenefitRequest {
 	totalInstallments?: number;
 	attendanceBased?: boolean;
 	attendanceAmountBasis?: BenefitAttendanceAmountBasis | null;
+	eligibilityMode?: "ENROLLED_ALWAYS" | "ATTENDANCE_QUALIFIED";
+	eligibilityDisqualifyOnAbsent?: boolean;
+	eligibilityDisqualifyOnLate?: boolean;
+	eligibilityDisqualifyOnUndertime?: boolean;
+	eligibilityDisqualifyOnLeave?: boolean;
 	status?: "PENDING" | "APPROVED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "DEFAULTED";
 	notes?: string;
 	isActive?: boolean;
@@ -123,6 +133,11 @@ export interface UpdateEmployeeBenefitRequest {
 	totalInstallments?: number;
 	attendanceBased?: boolean;
 	attendanceAmountBasis?: BenefitAttendanceAmountBasis | null;
+	eligibilityMode?: "ENROLLED_ALWAYS" | "ATTENDANCE_QUALIFIED";
+	eligibilityDisqualifyOnAbsent?: boolean;
+	eligibilityDisqualifyOnLate?: boolean;
+	eligibilityDisqualifyOnUndertime?: boolean;
+	eligibilityDisqualifyOnLeave?: boolean;
 	status?: "PENDING" | "APPROVED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "DEFAULTED";
 	notes?: string;
 	isActive?: boolean;
@@ -165,6 +180,7 @@ class EmployeeBenefitService extends APIService {
 			const finalQueryString = this.getQueryString();
 			const defaultFields =
 				"id,organizationId,employeeId,benefitTypeId,name,description,amount,startDate,endDate,scheduleMode,recurrenceFrequency,totalInstallments,attendanceBased,attendanceAmountBasis,payrollPeriodId,status,isActive,notes,employee.id,employee.employeeId,employee.person.personalInfo,employee.position.title,benefitType.id,benefitType.code,benefitType.name,benefitType.category,benefitType.payrollDirection,payrollPeriod.id,payrollPeriod.name,payrollPeriod.code,payrollPeriod.startDate,payrollPeriod.endDate";
+			// Note: eligibilityMode / disqualify flags require regenerated Prisma client + migration.
 			const endpoint = finalQueryString.includes("fields=")
 				? `/api/employeeBenefit${finalQueryString}`
 				: `/api/employeeBenefit${finalQueryString}${finalQueryString ? "&" : "?"}fields=${defaultFields}`;

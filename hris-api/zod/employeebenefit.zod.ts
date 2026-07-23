@@ -35,6 +35,10 @@ export const BenefitRecurrenceFrequency = z.enum(["EVERY_CUTOFF", "MONTHLY", "YE
 
 export type BenefitRecurrenceFrequency = z.infer<typeof BenefitRecurrenceFrequency>;
 
+export const BenefitEligibilityMode = z.enum(["ENROLLED_ALWAYS", "ATTENDANCE_QUALIFIED"]);
+
+export type BenefitEligibilityMode = z.infer<typeof BenefitEligibilityMode>;
+
 export const EmployeeBenefitInstallmentSchema = z.object({
 	id: z.string().refine((val) => isValidObjectId(val)),
 	employeeBenefitId: z.string().refine((val) => isValidObjectId(val)),
@@ -79,6 +83,11 @@ export const EmployeeBenefitSchema = z.object({
 	recurrenceFrequency: BenefitRecurrenceFrequency.nullable().optional(),
 	attendanceBased: z.boolean().optional(),
 	attendanceAmountBasis: BenefitAttendanceAmountBasis.nullable().optional(),
+	eligibilityMode: BenefitEligibilityMode.optional(),
+	eligibilityDisqualifyOnAbsent: z.boolean().optional(),
+	eligibilityDisqualifyOnLate: z.boolean().optional(),
+	eligibilityDisqualifyOnUndertime: z.boolean().optional(),
+	eligibilityDisqualifyOnLeave: z.boolean().optional(),
 	amount: z.number().optional(),
 	startDate: z.coerce.date().optional(),
 	endDate: z.coerce.date().optional(),
@@ -143,6 +152,11 @@ export const CreateEmployeeBenefitInputSchema = EmployeeBenefitSchema.omit({
 		attendanceBased: z.boolean().default(false),
 		attendanceAmountBasis: BenefitAttendanceAmountBasis.nullable().optional(),
 		recurrenceFrequency: BenefitRecurrenceFrequency.nullable().optional(),
+		eligibilityMode: BenefitEligibilityMode.default("ENROLLED_ALWAYS"),
+		eligibilityDisqualifyOnAbsent: z.boolean().default(true),
+		eligibilityDisqualifyOnLate: z.boolean().default(false),
+		eligibilityDisqualifyOnUndertime: z.boolean().default(false),
+		eligibilityDisqualifyOnLeave: z.boolean().default(false),
 	});
 
 function validateEmployeeBenefitSchedule(
@@ -240,48 +254,55 @@ export function createEmployeeBenefitScheduleSchema<T extends z.AnyZodObject>(sc
 			),
 		)
 		.transform((data) => {
-			const scheduleMode = (data as { scheduleMode?: BenefitScheduleMode }).scheduleMode;
-			const attendanceBased = (data as { attendanceBased?: boolean }).attendanceBased === true;
+			const row = data as Record<string, any>;
+			const scheduleMode = row.scheduleMode as BenefitScheduleMode | undefined;
+			const attendanceBased = row.attendanceBased === true;
 			const attendanceAmountBasis = attendanceBased
-				? (data as { attendanceAmountBasis?: BenefitAttendanceAmountBasis | null })
-						.attendanceAmountBasis
+				? (row.attendanceAmountBasis as BenefitAttendanceAmountBasis | null | undefined)
 				: null;
-			const rawFrequency = (data as { recurrenceFrequency?: BenefitRecurrenceFrequency | null })
-				.recurrenceFrequency;
+			const rawFrequency = row.recurrenceFrequency as BenefitRecurrenceFrequency | null | undefined;
 			const recurrenceFrequency =
 				scheduleMode === "RECURRING"
 					? rawFrequency === "MONTHLY" || rawFrequency === "YEARLY" || rawFrequency === "EVERY_CUTOFF"
 						? rawFrequency
 						: "EVERY_CUTOFF"
 					: null;
+			const rawEligibilityMode = String(row.eligibilityMode || "").toUpperCase();
+			const eligibilityMode: BenefitEligibilityMode =
+				rawEligibilityMode === "ATTENDANCE_QUALIFIED"
+					? "ATTENDANCE_QUALIFIED"
+					: "ENROLLED_ALWAYS";
 
-			if (scheduleMode === "RECURRING") {
-				return {
-					...data,
-					totalInstallments: data.totalInstallments ?? 0,
-					attendanceBased,
-					attendanceAmountBasis,
-					recurrenceFrequency,
-				};
-			}
-			if (scheduleMode === "TIME_BOUND" || scheduleMode === "FIXED_INSTALLMENTS") {
-				return {
-					...data,
-					// Explicit modes must not silently fall back to the legacy six default
-					// when totalInstallments is intentionally omitted (e.g. TIME_BOUND).
-					totalInstallments: data.totalInstallments,
-					attendanceBased,
-					attendanceAmountBasis,
-					recurrenceFrequency,
-				};
-			}
-			return {
-				...data,
-				totalInstallments: data.totalInstallments ?? 6,
+			const next = {
+				...row,
 				attendanceBased,
 				attendanceAmountBasis,
 				recurrenceFrequency,
+				eligibilityMode,
+				eligibilityDisqualifyOnAbsent: row.eligibilityDisqualifyOnAbsent !== false,
+				eligibilityDisqualifyOnLate: row.eligibilityDisqualifyOnLate === true,
+				eligibilityDisqualifyOnUndertime: row.eligibilityDisqualifyOnUndertime === true,
+				eligibilityDisqualifyOnLeave: row.eligibilityDisqualifyOnLeave === true,
 			};
+
+			if (scheduleMode === "RECURRING") {
+				return {
+					...next,
+					totalInstallments: row.totalInstallments ?? 0,
+				} as typeof data & Record<string, unknown>;
+			}
+			if (scheduleMode === "TIME_BOUND" || scheduleMode === "FIXED_INSTALLMENTS") {
+				return {
+					...next,
+					// Explicit modes must not silently fall back to the legacy six default
+					// when totalInstallments is intentionally omitted (e.g. TIME_BOUND).
+					totalInstallments: row.totalInstallments,
+				} as typeof data & Record<string, unknown>;
+			}
+			return {
+				...next,
+				totalInstallments: row.totalInstallments ?? 6,
+			} as typeof data & Record<string, unknown>;
 		});
 }
 

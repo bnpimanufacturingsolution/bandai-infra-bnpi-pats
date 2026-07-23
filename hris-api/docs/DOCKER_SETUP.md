@@ -1,4 +1,3 @@
-<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/docs/DOCKER_SETUP.md) -->
 # Docker Setup (Local via Terraform)
 
 Local Docker setup is now managed with Terraform in `infrastructure/onprem`.

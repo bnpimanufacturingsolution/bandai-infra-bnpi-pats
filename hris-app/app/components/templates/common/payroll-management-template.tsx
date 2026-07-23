@@ -1136,6 +1136,13 @@ export function PayrollManagement({
 		}));
 	});
 	const baseGrossFormulaRows = payrollComputationView?.grossPayRows || [];
+	const isBenefitComputationRow = (row: {
+		field?: string;
+		isBenefitSource?: boolean;
+	}) =>
+		row.isBenefitSource === true ||
+		String(row.field || "").startsWith("source:employeeBenefit") ||
+		String(row.field || "").startsWith("source:employeeLoan");
 	const hasCorrectionInComputationView = baseGrossFormulaRows.some((row) =>
 		String((row as { field?: string }).field || "").startsWith("payrollCorrection:"),
 	);
@@ -1163,6 +1170,29 @@ export function PayrollManagement({
 						})
 						.filter((row): row is NonNullable<typeof row> => Boolean(row)),
 				];
+	// Partition: base earnings → benefits (tax groups) → corrections / residual
+	const isCorrectionComputationRow = (row: { field?: string }) =>
+		String(row.field || "").startsWith("payrollCorrection:") ||
+		String(row.field || "") === "otherCompensation";
+	const grossBenefitRows = grossFormulaDisplayRows.filter((row) =>
+		isBenefitComputationRow(row as { field?: string; isBenefitSource?: boolean }),
+	);
+	const grossBaseRows = grossFormulaDisplayRows.filter(
+		(row) =>
+			!isBenefitComputationRow(row as { field?: string; isBenefitSource?: boolean }) &&
+			!isCorrectionComputationRow(row as { field?: string }),
+	);
+	const grossTrailingRows = grossFormulaDisplayRows.filter(
+		(row) =>
+			!isBenefitComputationRow(row as { field?: string; isBenefitSource?: boolean }) &&
+			isCorrectionComputationRow(row as { field?: string }),
+	);
+	const grossBenefitTaxableRows = grossBenefitRows.filter(
+		(row) => (row as { isTaxable?: boolean | null }).isTaxable !== false,
+	);
+	const grossBenefitNonTaxableRows = grossBenefitRows.filter(
+		(row) => (row as { isTaxable?: boolean | null }).isTaxable === false,
+	);
 	const deductionFormulaRows = payrollComputationView?.deductionRows || [];
 	const postNetFormulaRows = payrollComputationView?.postNetRows || [];
 	const payrollSummaryCells = [
@@ -2006,7 +2036,72 @@ export function PayrollManagement({
 												<span className="text-right">Amount</span>
 											</div>
 											<div className="divide-y divide-gray-100">
-												{grossFormulaDisplayRows.map((row) => {
+												{grossBaseRows.map((row) => (
+													<div
+														key={`gross-${(row as { field?: string }).field || row.label}-${row.amount}`}
+														className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+														<span className="min-w-0 truncate font-medium text-gray-900">
+															{row.label}
+														</span>
+														<span
+															className={`whitespace-nowrap text-right font-mono font-semibold tabular-nums ${
+																row.operation === "SUBTRACT"
+																	? "text-rose-700"
+																	: "text-gray-950"
+															}`}>
+															{row.operation === "SUBTRACT" ? "-" : "+"}
+															{formatCurrency(row.amount)}
+														</span>
+													</div>
+												))}
+												{grossBenefitRows.length > 0 && (
+													<div className="bg-slate-50/80">
+														<div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+															Benefits applied
+														</div>
+														{grossBenefitNonTaxableRows.length > 0 && (
+															<div>
+																<div className="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-emerald-800/80">
+																	Non-taxable
+																</div>
+																{grossBenefitNonTaxableRows.map((row) => (
+																	<div
+																		key={`gross-nt-${(row as { field?: string }).field || row.label}-${row.amount}`}
+																		className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+																		<span className="min-w-0 truncate font-medium text-gray-900">
+																			{row.label}
+																		</span>
+																		<span className="whitespace-nowrap text-right font-mono font-semibold tabular-nums text-gray-950">
+																			{row.operation === "SUBTRACT" ? "-" : "+"}
+																			{formatCurrency(row.amount)}
+																		</span>
+																	</div>
+																))}
+															</div>
+														)}
+														{grossBenefitTaxableRows.length > 0 && (
+															<div>
+																<div className="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-amber-900/80">
+																	Taxable
+																</div>
+																{grossBenefitTaxableRows.map((row) => (
+																	<div
+																		key={`gross-t-${(row as { field?: string }).field || row.label}-${row.amount}`}
+																		className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+																		<span className="min-w-0 truncate font-medium text-gray-900">
+																			{row.label}
+																		</span>
+																		<span className="whitespace-nowrap text-right font-mono font-semibold tabular-nums text-gray-950">
+																			{row.operation === "SUBTRACT" ? "-" : "+"}
+																			{formatCurrency(row.amount)}
+																		</span>
+																	</div>
+																))}
+															</div>
+														)}
+													</div>
+												)}
+												{grossTrailingRows.map((row) => {
 													const isCorrection = String(
 														(row as { field?: string }).field || "",
 													).startsWith("payrollCorrection:");
@@ -2015,7 +2110,7 @@ export function PayrollManagement({
 													).trim();
 													return (
 														<div
-															key={`gross-${(row as { field?: string }).field || row.label}-${row.amount}`}
+															key={`gross-trail-${(row as { field?: string }).field || row.label}-${row.amount}`}
 															className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
 															<div className="min-w-0">
 																<span className="block truncate font-medium text-gray-900">

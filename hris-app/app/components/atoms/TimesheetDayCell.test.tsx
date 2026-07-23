@@ -67,4 +67,19 @@ describe("TimesheetDayCell", () => {
 		expect(screen.queryByText("NS")).not.toBeInTheDocument();
 		expect(screen.getByLabelText("Night shift")).toBeInTheDocument();
 	});
+
+	it("styles filed OT (+OT ot-filed) in sky blue distinct from unfiled green", () => {
+		render(
+			<TimesheetDayCell
+				dayNumber={20}
+				kind="hours"
+				hoursLabel="10:00"
+				badges={[{ label: "+OT", tone: "ot-filed" }]}
+			/>,
+		);
+
+		const badge = screen.getByText("+OT");
+		expect(badge.className).toContain("text-sky-600");
+		expect(badge.className).not.toContain("text-green-700");
+	});
 });

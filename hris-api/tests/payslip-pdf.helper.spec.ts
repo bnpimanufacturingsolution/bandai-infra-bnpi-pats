@@ -129,6 +129,7 @@ describe("payslip PDF calculation proof", () => {
 						benefitTypeName: "De Minimis Allowance",
 						direction: "COMPENSATION",
 						reconciliationAction: "GROSS_INCLUDED",
+						isTaxable: false,
 						amount: 3000,
 					},
 					{
@@ -139,6 +140,7 @@ describe("payslip PDF calculation proof", () => {
 						benefitTypeName: "De Minimis Allowance",
 						direction: "COMPENSATION",
 						reconciliationAction: "GROSS_INCLUDED",
+						isTaxable: false,
 						amount: 3500,
 					},
 				],
@@ -150,11 +152,100 @@ describe("payslip PDF calculation proof", () => {
 		assert.ok(!labels.includes("De Minimis Allowance"), "register total must not appear");
 		assert.ok(labels.some((label) => label.startsWith("Rice Subsidy")));
 		assert.ok(labels.some((label) => label.startsWith("Travel Allowance")));
+		assert.ok(
+			labels.includes("Benefits applied — Non-taxable"),
+			"non-taxable group header expected",
+		);
 		assert.equal(
 			proof.grossRows
 				.filter((row) => row.label.startsWith("Rice Subsidy") || row.label.startsWith("Travel Allowance"))
 				.reduce((sum, row) => sum + row.amount, 0),
 			6500,
+		);
+	});
+
+	it("groups taxable and non-taxable benefits under section headers without changing gross total", () => {
+		const payroll = {
+			id: "payroll-tax-groups",
+			basicPay: 25000,
+			absentDeduction: 0,
+			overtimePay: 8102.27,
+			nightDiffPay: 1295.27,
+			deMinimisAllowance: 1000,
+			grossPay: 35200,
+			taxAmount: 3989.29,
+			sssContribution: 0,
+			philHealthContribution: 0,
+			pagibigContribution: 0,
+			totalDeductions: 3989.29,
+			netPay: 31210.71,
+			metadata: {
+				payrollSourceDetails: [
+					{
+						id: "b1",
+						source: "employeeBenefit",
+						code: "DMA",
+						name: "Rice Subsidy",
+						benefitTypeName: "De Minimis Allowance",
+						direction: "COMPENSATION",
+						reconciliationAction: "GROSS_INCLUDED",
+						isTaxable: false,
+						amount: 500,
+					},
+					{
+						id: "b2",
+						source: "employeeBenefit",
+						code: "PFA",
+						name: "Performance Bonus",
+						benefitTypeName: "Performance Bonus",
+						direction: "COMPENSATION",
+						reconciliationAction: "GROSS_INCLUDED",
+						isTaxable: true,
+						amount: 800,
+					},
+					{
+						id: "b3",
+						source: "employeeBenefit",
+						code: "DMA",
+						name: "Transport Allowance",
+						benefitTypeName: "De Minimis Allowance",
+						direction: "COMPENSATION",
+						reconciliationAction: "GROSS_INCLUDED",
+						isTaxable: false,
+						amount: 500,
+					},
+				],
+			},
+		};
+
+		const proof = buildPayslipFormulaProof(payroll);
+		const labels = proof.grossRows.map((row) => row.label);
+		const nonTaxIdx = labels.indexOf("Benefits applied — Non-taxable");
+		const taxIdx = labels.indexOf("Benefits applied — Taxable");
+		assert.ok(nonTaxIdx >= 0, "non-taxable header");
+		assert.ok(taxIdx >= 0, "taxable header");
+		assert.ok(nonTaxIdx < taxIdx, "non-taxable section before taxable");
+		assert.ok(labels.some((l) => l.startsWith("Rice Subsidy")));
+		assert.ok(labels.some((l) => l.startsWith("Transport Allowance")));
+		assert.ok(labels.some((l) => l.startsWith("Performance Bonus")));
+		// Group headers do not contribute to amount total
+		assert.equal(
+			proof.grossRows
+				.filter((row) => row.kind === "group")
+				.reduce((sum, row) => sum + row.amount, 0),
+			0,
+		);
+		assert.equal(
+			proof.grossRows
+				.filter(
+					(row) =>
+						row.kind !== "group" &&
+						(row.label.startsWith("Rice Subsidy") ||
+							row.label.startsWith("Transport Allowance") ||
+							row.label.startsWith("Performance Bonus")),
+				)
+				.reduce((sum, row) => sum + row.amount, 0),
+			1800,
 		);
 	});
 

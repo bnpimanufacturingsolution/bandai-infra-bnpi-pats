@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useForm, Controller, type Resolver } from "react-hook-form";
 import { useSearchParams } from "react-router-dom";
 import { Loader2, Users } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
-import { Alert, AlertDescription } from "~/components/atoms/Alert";
 import { Button } from "~/components/atoms/Button";
 import { DatePicker } from "~/components/atoms/DatePicker";
 import { Input } from "~/components/atoms/Input";
@@ -44,36 +43,14 @@ const BenefitStatusSchema = z.enum([
 
 const scheduleRefine = (
 	data: {
-		scheduleMode: string;
 		endDate?: string;
 		startDate?: string;
-		totalInstallments?: number;
 		attendanceBased?: boolean;
 		attendanceAmountBasis?: string;
 	},
 	ctx: z.RefinementCtx,
 ) => {
-	if (data.scheduleMode === "TIME_BOUND" && !data.endDate) {
-		ctx.addIssue({
-			code: z.ZodIssueCode.custom,
-			message: "End date is required for time-bound schedules",
-			path: ["endDate"],
-		});
-	}
-	if (
-		data.scheduleMode === "FIXED_INSTALLMENTS" &&
-		(!Number.isInteger(data.totalInstallments) || (data.totalInstallments || 0) <= 0)
-	) {
-		ctx.addIssue({
-			code: z.ZodIssueCode.custom,
-			message: "Installment count must be a positive whole number",
-			path: ["totalInstallments"],
-		});
-	}
-	if (
-		(data.scheduleMode === "TIME_BOUND" || data.scheduleMode === "RECURRING") &&
-		data.endDate
-	) {
+	if (data.endDate) {
 		const start = new Date(data.startDate || "");
 		const end = new Date(data.endDate);
 		if (
@@ -109,11 +86,16 @@ const EmployeeBenefitFormFieldsSchema = z.object({
 	amount: z.coerce.number().positive("Amount must be greater than zero"),
 	startDate: z.string().trim().min(1, "Start date is required"),
 	endDate: z.string().trim().optional(),
-	scheduleMode: z.enum(["TIME_BOUND", "FIXED_INSTALLMENTS", "RECURRING"]),
+	/** Always recurring for new enrollments (UI no longer offers other modes). */
+	scheduleMode: z.literal("RECURRING").default("RECURRING"),
 	recurrenceFrequency: z.enum(["EVERY_CUTOFF", "MONTHLY", "YEARLY"]).default("EVERY_CUTOFF"),
-	totalInstallments: z.coerce.number().optional(),
 	attendanceBased: z.boolean().default(false),
 	attendanceAmountBasis: z.enum(["PER_DAY", "PER_CUTOFF"]).optional(),
+	eligibilityMode: z.enum(["ENROLLED_ALWAYS", "ATTENDANCE_QUALIFIED"]).default("ENROLLED_ALWAYS"),
+	eligibilityDisqualifyOnAbsent: z.boolean().default(true),
+	eligibilityDisqualifyOnLate: z.boolean().default(false),
+	eligibilityDisqualifyOnUndertime: z.boolean().default(false),
+	eligibilityDisqualifyOnLeave: z.boolean().default(false),
 	status: BenefitStatusSchema.default("ACTIVE"),
 	isActive: z.boolean().default(true),
 	notes: z.string().trim().max(500, "Notes are too long").optional(),
@@ -134,18 +116,6 @@ const statusOptions: SelectOption[] = [
 	{ value: "DEFAULTED", label: "Defaulted" },
 ];
 
-const scheduleModeOptions: SelectOption[] = [
-	{ value: "TIME_BOUND", label: "Time-bound" },
-	{ value: "FIXED_INSTALLMENTS", label: "Fixed installments" },
-	{ value: "RECURRING", label: "Recurring" },
-];
-
-const scheduleModeDescription = (mode: string) => {
-	if (mode === "TIME_BOUND") return "Split across payroll periods in a date range";
-	if (mode === "FIXED_INSTALLMENTS") return "Split into a fixed number of installments";
-	return "Repeat on a chosen payroll cadence until end date or cancelled";
-};
-
 const recurrenceFrequencyOptions: SelectOption[] = [
 	{ value: "EVERY_CUTOFF", label: "Every payroll period (cutoff)" },
 	{ value: "MONTHLY", label: "Monthly (2nd cutoff)" },
@@ -162,16 +132,8 @@ const recurrenceFrequencyDescription = (value: string) => {
 	return "Pays on every eligible payroll period while active.";
 };
 
-const attendanceAmountBasisOptions: SelectOption[] = [
-	{ value: "PER_DAY", label: "Per present day" },
-	{ value: "PER_CUTOFF", label: "Full cut-off (deduct absences)" },
-];
-
 /** Bandai Perfect Attendance compensation benefit type code. */
 export const PERFECT_ATTENDANCE_BENEFIT_TYPE_CODE = "PFA";
-
-/** data-testid for the PFA + attendance-based product warning banner. */
-export const PFA_ATTENDANCE_BASED_WARNING_TEST_ID = "pfa-attendance-based-warning";
 
 /**
  * Whether a benefit type code is Perfect Attendance (PFA).
@@ -181,29 +143,80 @@ export function isPerfectAttendanceBenefitTypeCode(code?: string | null): boolea
 	return String(code || "").trim().toUpperCase() === PERFECT_ATTENDANCE_BENEFIT_TYPE_CODE;
 }
 
-/**
- * Show the product warning when PFA enrollment has attendance-based amount ON.
- * PFA with attendance off = fixed enrolled amount (all-or-nothing enrollment pay).
- * PFA with attendance on = ABSENT-only pro-rate (still pays with absences).
- */
-export function shouldShowPfaAttendanceBasedWarning(params: {
-	benefitTypeCode?: string | null;
-	attendanceBased?: boolean | null;
+/** Classic Perfect Attendance: all-or-nothing with fixed full amount when clean. */
+export const PFA_ELIGIBILITY_FORM_DEFAULTS = {
+	eligibilityMode: "ATTENDANCE_QUALIFIED" as const,
+	eligibilityDisqualifyOnAbsent: true,
+	eligibilityDisqualifyOnLate: true,
+	eligibilityDisqualifyOnUndertime: true,
+	eligibilityDisqualifyOnLeave: true,
+	attendanceBased: false,
+	attendanceAmountBasis: undefined as undefined,
+};
+
+/** Perfect Attendance toggle maps to ATTENDANCE_QUALIFIED + classic flags. */
+export function isPerfectAttendanceToggleOn(params: {
+	eligibilityMode?: string | null;
 }): boolean {
-	return (
-		params.attendanceBased === true && isPerfectAttendanceBenefitTypeCode(params.benefitTypeCode)
-	);
+	return String(params.eligibilityMode || "").toUpperCase() === "ATTENDANCE_QUALIFIED";
 }
 
-export const PFA_ATTENDANCE_BASED_WARNING_TITLE =
-	"Perfect Attendance with attendance-based amount";
+/** Form fields when Perfect Attendance toggle turns ON (clears pro-rate). */
+export function perfectAttendanceToggleFields(on: boolean) {
+	if (on) {
+		return {
+			eligibilityMode: "ATTENDANCE_QUALIFIED" as const,
+			eligibilityDisqualifyOnAbsent: true,
+			eligibilityDisqualifyOnLate: true,
+			eligibilityDisqualifyOnUndertime: true,
+			eligibilityDisqualifyOnLeave: true,
+			attendanceBased: false,
+			attendanceAmountBasis: undefined as undefined,
+		};
+	}
+	return {
+		eligibilityMode: "ENROLLED_ALWAYS" as const,
+		eligibilityDisqualifyOnAbsent: true,
+		eligibilityDisqualifyOnLate: false,
+		eligibilityDisqualifyOnUndertime: false,
+		eligibilityDisqualifyOnLeave: false,
+	};
+}
 
-export const PFA_ATTENDANCE_BASED_WARNING_BODY =
-	'With "Compute from attendance" on, this is not an all-or-nothing Perfect Attendance award. ' +
-	"Payroll pro-rates the amount from timesheet attendance (ABSENT days only reduce the amount). " +
-	"Late, undertime, and leave do not zero the benefit. " +
-	"This is not the Perfect Attendance metrics report and does not auto-qualify eligibility. " +
-	"Leave the toggle off for a fixed enrolled amount (full amount when due).";
+/** Form fields when Pro-rate from attendance turns ON (clears perfect attendance). */
+export function proRateAttendanceToggleFields(on: boolean) {
+	if (on) {
+		return {
+			attendanceBased: true,
+			attendanceAmountBasis: "PER_CUTOFF" as const,
+			eligibilityMode: "ENROLLED_ALWAYS" as const,
+			eligibilityDisqualifyOnAbsent: true,
+			eligibilityDisqualifyOnLate: false,
+			eligibilityDisqualifyOnUndertime: false,
+			eligibilityDisqualifyOnLeave: false,
+		};
+	}
+	return {
+		attendanceBased: false,
+		attendanceAmountBasis: undefined as undefined,
+	};
+}
+
+/** Short summary for the two optional toggles. */
+export function buildAttendancePolicySummary(params: {
+	eligibilityMode?: string | null;
+	attendanceBased?: boolean | null;
+}): string {
+	const perfect = isPerfectAttendanceToggleOn(params);
+	const proRate = params.attendanceBased === true;
+	if (perfect) {
+		return "Perfect Attendance on: full amount only if no absent, late, undertime, or leave; otherwise ₱0.";
+	}
+	if (proRate) {
+		return "Pro-rate on: enrolled amount is reduced for ABSENT days only (still pays if enrolled).";
+	}
+	return "Both off: normal benefit — full enrolled amount when the schedule is due.";
+}
 
 const fieldLabelClass = "mb-1.5 block text-xs font-medium text-neutral-600";
 const fieldErrorClass = "mt-1.5 text-xs text-red-600";
@@ -212,6 +225,8 @@ const sectionCardClass =
 	"space-y-4 rounded-xl border border-neutral-100 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]";
 const sectionTitleClass =
 	"text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400";
+const toggleRowClass =
+	"flex items-start justify-between gap-4 rounded-xl border border-neutral-200/80 bg-neutral-50/50 px-4 py-3.5";
 
 export const PAYROLL_PERIOD_NONE_VALUE = "__none__";
 
@@ -316,6 +331,9 @@ export function EmployeeBenefitForm({
 		[isPage, setSearchParams],
 	);
 
+	const preselectedBenefitTypeId =
+		!isEditing ? searchParams.get("benefitTypeId") || "" : "";
+
 	const { data: activeItem, isLoading: isLoadingItem } = useEmployeeBenefit(
 		isEditing ? benefitId || "" : "",
 	);
@@ -383,18 +401,22 @@ export function EmployeeBenefitForm({
 		resolver: zodResolver(EmployeeBenefitFormSchema) as Resolver<EmployeeBenefitFormData>,
 		defaultValues: {
 			employeeIds: [],
-			benefitTypeId: "",
+			benefitTypeId: preselectedBenefitTypeId,
 			payrollPeriodId: payrollPeriodId,
 			name: "",
 			description: "",
 			amount: 0,
 			startDate: periodStart || formatDateForInput(new Date()),
 			endDate: periodEnd,
-			scheduleMode: "TIME_BOUND",
+			scheduleMode: "RECURRING",
 			recurrenceFrequency: "EVERY_CUTOFF",
-			totalInstallments: undefined,
 			attendanceBased: false,
 			attendanceAmountBasis: undefined,
+			eligibilityMode: "ENROLLED_ALWAYS",
+			eligibilityDisqualifyOnAbsent: true,
+			eligibilityDisqualifyOnLate: false,
+			eligibilityDisqualifyOnUndertime: false,
+			eligibilityDisqualifyOnLeave: false,
 			status: "ACTIVE",
 			isActive: true,
 			notes: "",
@@ -402,16 +424,17 @@ export function EmployeeBenefitForm({
 	});
 
 	const watchedBenefitTypeId = watch("benefitTypeId");
-	const watchedScheduleMode = watch("scheduleMode");
 	const watchedRecurrenceFrequency = watch("recurrenceFrequency");
 	const watchedAmount = watch("amount");
 	const watchedStartDate = watch("startDate");
 	const watchedEndDate = watch("endDate");
-	const watchedTotalInstallments = watch("totalInstallments");
 	const watchedAttendanceBased = watch("attendanceBased");
-	const watchedAttendanceAmountBasis = watch("attendanceAmountBasis");
+	const watchedEligibilityMode = watch("eligibilityMode");
 	const watchedStatus = watch("status");
 	const watchedIsActive = watch("isActive");
+	const perfectAttendanceOn = isPerfectAttendanceToggleOn({
+		eligibilityMode: watchedEligibilityMode,
+	});
 
 	useEffect(() => {
 		if (isEditing && !isLoadingItem && activeItem) {
@@ -427,21 +450,28 @@ export function EmployeeBenefitForm({
 					periodStart ||
 					formatDateForInput(new Date()),
 				endDate: formatDateForInput(activeItem.endDate) || "",
-				scheduleMode:
-					(activeItem.scheduleMode as BenefitScheduleMode | undefined) || "TIME_BOUND",
+				scheduleMode: "RECURRING",
 				recurrenceFrequency:
 					activeItem.recurrenceFrequency === "MONTHLY" ||
 					activeItem.recurrenceFrequency === "YEARLY" ||
 					activeItem.recurrenceFrequency === "EVERY_CUTOFF"
 						? activeItem.recurrenceFrequency
 						: "EVERY_CUTOFF",
-				totalInstallments: activeItem.totalInstallments || undefined,
 				attendanceBased: activeItem.attendanceBased === true,
 				attendanceAmountBasis:
 					activeItem.attendanceAmountBasis === "PER_DAY" ||
 					activeItem.attendanceAmountBasis === "PER_CUTOFF"
 						? activeItem.attendanceAmountBasis
 						: undefined,
+				eligibilityMode:
+					activeItem.eligibilityMode === "ATTENDANCE_QUALIFIED"
+						? "ATTENDANCE_QUALIFIED"
+						: "ENROLLED_ALWAYS",
+				eligibilityDisqualifyOnAbsent: activeItem.eligibilityDisqualifyOnAbsent !== false,
+				eligibilityDisqualifyOnLate: activeItem.eligibilityDisqualifyOnLate === true,
+				eligibilityDisqualifyOnUndertime:
+					activeItem.eligibilityDisqualifyOnUndertime === true,
+				eligibilityDisqualifyOnLeave: activeItem.eligibilityDisqualifyOnLeave === true,
 				status: (activeItem.status as EmployeeBenefitFormData["status"]) || "ACTIVE",
 				isActive: activeItem.isActive ?? true,
 				notes: activeItem.notes || "",
@@ -456,35 +486,100 @@ export function EmployeeBenefitForm({
 		reset,
 	]);
 
+	// Prefill name/amount/eligibility only when the selected type **id** changes (not when
+	// benefitTypes list identity churns from query re-renders), so HR toggles are not reset.
+	const lastPrefillBenefitTypeIdRef = useRef<string>("");
+
 	useEffect(() => {
 		if (mode !== "create") return;
 		reset({
 			employeeIds: [],
-			benefitTypeId: "",
+			benefitTypeId: preselectedBenefitTypeId,
 			payrollPeriodId: payrollPeriodId,
 			name: "",
 			description: "",
 			amount: 0,
 			startDate: periodStart || formatDateForInput(new Date()),
 			endDate: periodEnd,
-			scheduleMode: "TIME_BOUND",
+			scheduleMode: "RECURRING",
 			recurrenceFrequency: "EVERY_CUTOFF",
-			totalInstallments: undefined,
 			attendanceBased: false,
 			attendanceAmountBasis: undefined,
+			eligibilityMode: "ENROLLED_ALWAYS",
+			eligibilityDisqualifyOnAbsent: true,
+			eligibilityDisqualifyOnLate: false,
+			eligibilityDisqualifyOnUndertime: false,
+			eligibilityDisqualifyOnLeave: false,
 			status: "ACTIVE",
 			isActive: true,
 			notes: "",
 		});
-	}, [mode, payrollPeriodId, periodEnd, periodStart, reset]);
+		// Allow prefill effect to run for preselected type (name, PFA defaults).
+		lastPrefillBenefitTypeIdRef.current = "";
+	}, [mode, payrollPeriodId, periodEnd, periodStart, preselectedBenefitTypeId, reset]);
 
 	useEffect(() => {
 		if (!watchedBenefitTypeId || isEditing) return;
 		const benefitType = benefitTypes.find((item) => item.id === watchedBenefitTypeId);
 		if (!benefitType) return;
+		if (lastPrefillBenefitTypeIdRef.current === watchedBenefitTypeId) return;
+		lastPrefillBenefitTypeIdRef.current = watchedBenefitTypeId;
+
 		setValue("name", benefitType.name, { shouldValidate: true });
 		if (benefitType.fixedAmount !== undefined && benefitType.fixedAmount !== null) {
 			setValue("amount", Number(benefitType.fixedAmount), { shouldValidate: true });
+		}
+
+		// Prefill eligibility from type defaults, else classic PFA product defaults for code PFA.
+		const typeMode = benefitType.defaultEligibilityMode;
+		const isPfa = isPerfectAttendanceBenefitTypeCode(benefitType.code);
+		if (typeMode === "ATTENDANCE_QUALIFIED" || typeMode === "ENROLLED_ALWAYS") {
+			setValue("eligibilityMode", typeMode, { shouldValidate: true });
+			if (benefitType.defaultEligibilityDisqualifyOnAbsent != null) {
+				setValue(
+					"eligibilityDisqualifyOnAbsent",
+					benefitType.defaultEligibilityDisqualifyOnAbsent === true,
+					{ shouldValidate: true },
+				);
+			}
+			if (benefitType.defaultEligibilityDisqualifyOnLate != null) {
+				setValue(
+					"eligibilityDisqualifyOnLate",
+					benefitType.defaultEligibilityDisqualifyOnLate === true,
+					{ shouldValidate: true },
+				);
+			}
+			if (benefitType.defaultEligibilityDisqualifyOnUndertime != null) {
+				setValue(
+					"eligibilityDisqualifyOnUndertime",
+					benefitType.defaultEligibilityDisqualifyOnUndertime === true,
+					{ shouldValidate: true },
+				);
+			}
+			if (benefitType.defaultEligibilityDisqualifyOnLeave != null) {
+				setValue(
+					"eligibilityDisqualifyOnLeave",
+					benefitType.defaultEligibilityDisqualifyOnLeave === true,
+					{ shouldValidate: true },
+				);
+			}
+		} else if (isPfa) {
+			const pfa = perfectAttendanceToggleFields(true);
+			setValue("eligibilityMode", pfa.eligibilityMode, { shouldValidate: true });
+			setValue("eligibilityDisqualifyOnAbsent", pfa.eligibilityDisqualifyOnAbsent, {
+				shouldValidate: true,
+			});
+			setValue("eligibilityDisqualifyOnLate", pfa.eligibilityDisqualifyOnLate!, {
+				shouldValidate: true,
+			});
+			setValue("eligibilityDisqualifyOnUndertime", pfa.eligibilityDisqualifyOnUndertime!, {
+				shouldValidate: true,
+			});
+			setValue("eligibilityDisqualifyOnLeave", pfa.eligibilityDisqualifyOnLeave!, {
+				shouldValidate: true,
+			});
+			setValue("attendanceBased", false, { shouldValidate: true });
+			setValue("attendanceAmountBasis", undefined, { shouldValidate: true });
 		}
 	}, [benefitTypes, isEditing, setValue, watchedBenefitTypeId]);
 
@@ -494,75 +589,95 @@ export function EmployeeBenefitForm({
 			? activeItem.benefitType
 			: undefined);
 
-	const showPfaAttendanceBasedWarning = shouldShowPfaAttendanceBasedWarning({
-		benefitTypeCode: selectedBenefitType?.code,
+	const attendancePolicySummary = buildAttendancePolicySummary({
+		eligibilityMode: watchedEligibilityMode,
 		attendanceBased: watchedAttendanceBased,
 	});
 
+	const applyPerfectAttendanceToggle = (on: boolean) => {
+		const fields = perfectAttendanceToggleFields(on);
+		setValue("eligibilityMode", fields.eligibilityMode, { shouldValidate: true });
+		setValue("eligibilityDisqualifyOnAbsent", fields.eligibilityDisqualifyOnAbsent, {
+			shouldValidate: true,
+		});
+		setValue("eligibilityDisqualifyOnLate", fields.eligibilityDisqualifyOnLate ?? false, {
+			shouldValidate: true,
+		});
+		setValue(
+			"eligibilityDisqualifyOnUndertime",
+			fields.eligibilityDisqualifyOnUndertime ?? false,
+			{ shouldValidate: true },
+		);
+		setValue("eligibilityDisqualifyOnLeave", fields.eligibilityDisqualifyOnLeave ?? false, {
+			shouldValidate: true,
+		});
+		if (on) {
+			setValue("attendanceBased", false, { shouldValidate: true });
+			setValue("attendanceAmountBasis", undefined, { shouldValidate: true });
+		}
+	};
+
+	const applyProRateAttendanceToggle = (on: boolean) => {
+		const fields = proRateAttendanceToggleFields(on);
+		setValue("attendanceBased", fields.attendanceBased, { shouldValidate: true });
+		setValue("attendanceAmountBasis", fields.attendanceAmountBasis, {
+			shouldValidate: true,
+		});
+		if (on) {
+			setValue("eligibilityMode", fields.eligibilityMode!, { shouldValidate: true });
+			setValue(
+				"eligibilityDisqualifyOnAbsent",
+				fields.eligibilityDisqualifyOnAbsent ?? true,
+				{ shouldValidate: true },
+			);
+			setValue("eligibilityDisqualifyOnLate", fields.eligibilityDisqualifyOnLate ?? false, {
+				shouldValidate: true,
+			});
+			setValue(
+				"eligibilityDisqualifyOnUndertime",
+				fields.eligibilityDisqualifyOnUndertime ?? false,
+				{ shouldValidate: true },
+			);
+			setValue(
+				"eligibilityDisqualifyOnLeave",
+				fields.eligibilityDisqualifyOnLeave ?? false,
+				{ shouldValidate: true },
+			);
+		}
+	};
+
 	const schedulePreview = useMemo(() => {
 		const amount = Number(watchedAmount || 0);
-		if (watchedAttendanceBased) {
-			if (amount <= 0) return null;
-			if (watchedAttendanceAmountBasis === "PER_DAY") {
-				return `${formatCurrency(amount)} × present days each eligible payroll period. Final amount is computed at payroll from attendance (ABSENT days only reduce pay).`;
-			}
-			if (watchedAttendanceAmountBasis === "PER_CUTOFF") {
-				return `${formatCurrency(amount)} full cut-off amount, pro-rated for ABSENT days only. Final amount is computed at payroll.`;
-			}
-			return "Choose an amount basis to preview attendance-based computation.";
-		}
-		if (watchedScheduleMode === "FIXED_INSTALLMENTS") {
-			const installments = Number(watchedTotalInstallments || 0);
-			if (!Number.isInteger(installments) || installments <= 0 || amount <= 0) return null;
-			const totalCentavos = Math.round(amount * 100);
-			const baseCentavos = Math.floor(totalCentavos / installments);
-			const remainderCentavos = totalCentavos - baseCentavos * installments;
-			const finalCentavos = baseCentavos + remainderCentavos;
-			return `Estimated ${installments} installments at ${formatCurrency(baseCentavos / 100)} per installment${
-				remainderCentavos > 0
-					? `; final installment ${formatCurrency(finalCentavos / 100)}`
-					: ""
-			}.`;
-		}
-
-		if (watchedScheduleMode === "RECURRING") {
-			if (amount <= 0 || !watchedStartDate) return null;
-			const start = new Date(watchedStartDate);
-			if (Number.isNaN(start.getTime())) return null;
-			const cadence =
-				watchedRecurrenceFrequency === "MONTHLY"
-					? "each month on the 2nd cutoff (or sole monthly period)"
-					: watchedRecurrenceFrequency === "YEARLY"
-						? "once per fiscal year on the year-end cutoff"
-						: "each payroll period";
-			if (watchedEndDate) {
-				const end = new Date(watchedEndDate);
-				if (Number.isNaN(end.getTime()) || end < start) return null;
-				return `${formatCurrency(amount)} ${cadence} from ${formatDate(watchedStartDate, "short")} to ${formatDate(watchedEndDate, "short")}.`;
-			}
-			return `${formatCurrency(amount)} ${cadence} from ${formatDate(watchedStartDate, "short")} until cancelled.`;
-		}
-
-		if (!watchedStartDate || !watchedEndDate) return null;
+		if (amount <= 0 || !watchedStartDate) return null;
 		const start = new Date(watchedStartDate);
-		const end = new Date(watchedEndDate);
-		if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return null;
-		const installments = payrollPeriods.filter((period) => {
-			const periodStartDate = new Date(period.startDate);
-			const periodEndDate = new Date(period.endDate);
-			return periodStartDate <= end && periodEndDate >= start;
-		}).length;
-		return `Estimated ${installments} payroll-period installment${installments === 1 ? "" : "s"}.`;
+		if (Number.isNaN(start.getTime())) return null;
+
+		const cadence =
+			watchedRecurrenceFrequency === "MONTHLY"
+				? "each month on the 2nd cutoff (or sole monthly period)"
+				: watchedRecurrenceFrequency === "YEARLY"
+					? "once per fiscal year on the year-end cutoff"
+					: "each payroll period";
+
+		const amountPhrase = watchedAttendanceBased
+			? `${formatCurrency(amount)} (pro-rated for ABSENT at payroll)`
+			: perfectAttendanceOn
+				? `${formatCurrency(amount)} when Perfect Attendance qualifies`
+				: formatCurrency(amount);
+
+		if (watchedEndDate) {
+			const end = new Date(watchedEndDate);
+			if (Number.isNaN(end.getTime()) || end < start) return null;
+			return `${amountPhrase} ${cadence} from ${formatDate(watchedStartDate, "short")} to ${formatDate(watchedEndDate, "short")}.`;
+		}
+		return `${amountPhrase} ${cadence} from ${formatDate(watchedStartDate, "short")} until cancelled.`;
 	}, [
-		payrollPeriods,
+		perfectAttendanceOn,
 		watchedAmount,
-		watchedAttendanceAmountBasis,
 		watchedAttendanceBased,
 		watchedEndDate,
 		watchedRecurrenceFrequency,
-		watchedScheduleMode,
 		watchedStartDate,
-		watchedTotalInstallments,
 	]);
 
 	const onSubmit = (data: EmployeeBenefitFormData) => {
@@ -576,23 +691,21 @@ export function EmployeeBenefitForm({
 			description: normalizeOptional(data.description),
 			amount: Number(data.amount),
 			startDate: data.startDate,
-			scheduleMode: data.scheduleMode,
-			recurrenceFrequency:
-				data.scheduleMode === "RECURRING"
-					? data.recurrenceFrequency || "EVERY_CUTOFF"
-					: null,
+			scheduleMode: "RECURRING" as BenefitScheduleMode,
+			recurrenceFrequency: data.recurrenceFrequency || "EVERY_CUTOFF",
 			attendanceBased: data.attendanceBased === true,
 			attendanceAmountBasis:
-				data.attendanceBased === true ? data.attendanceAmountBasis ?? null : null,
-			...(data.scheduleMode === "TIME_BOUND"
+				data.attendanceBased === true
+					? data.attendanceAmountBasis ?? "PER_CUTOFF"
+					: null,
+			eligibilityMode: data.eligibilityMode || "ENROLLED_ALWAYS",
+			eligibilityDisqualifyOnAbsent: data.eligibilityDisqualifyOnAbsent !== false,
+			eligibilityDisqualifyOnLate: data.eligibilityDisqualifyOnLate === true,
+			eligibilityDisqualifyOnUndertime: data.eligibilityDisqualifyOnUndertime === true,
+			eligibilityDisqualifyOnLeave: data.eligibilityDisqualifyOnLeave === true,
+			...(normalizeOptional(data.endDate)
 				? { endDate: normalizeOptional(data.endDate) }
-				: data.scheduleMode === "FIXED_INSTALLMENTS"
-					? { totalInstallments: data.totalInstallments }
-					: {
-							...(normalizeOptional(data.endDate)
-								? { endDate: normalizeOptional(data.endDate) }
-								: {}),
-						}),
+				: {}),
 			status: data.status,
 			isActive: data.isActive,
 			notes: normalizeOptional(data.notes),
@@ -802,14 +915,8 @@ export function EmployeeBenefitForm({
 						<div>
 							<label htmlFor="benefit-adjustment-amount" className={fieldLabelClass}>
 								{watchedAttendanceBased
-									? watchedAttendanceAmountBasis === "PER_DAY"
-										? "Rate per present day *"
-										: watchedAttendanceAmountBasis === "PER_CUTOFF"
-											? "Full amount for cut-off *"
-											: "Amount *"
-									: watchedScheduleMode === "RECURRING"
-										? "Amount per payroll period *"
-										: "Amount *"}
+									? "Full amount for cut-off *"
+									: "Amount per payroll period *"}
 							</label>
 							<Input
 								id="benefit-adjustment-amount"
@@ -825,273 +932,150 @@ export function EmployeeBenefitForm({
 							)}
 							{watchedAttendanceBased ? (
 								<p className={fieldHintClass}>
-									{watchedAttendanceAmountBasis === "PER_DAY"
-										? "Payroll multiplies this rate by present days (scheduled work days minus ABSENT)."
-										: watchedAttendanceAmountBasis === "PER_CUTOFF"
-											? "Payroll pro-rates this full cut-off amount for ABSENT days only."
-											: "Select an attendance amount basis below."}
+									Full cut-off amount; payroll reduces for ABSENT days only when Pro-rate
+									from attendance is on.
+								</p>
+							) : perfectAttendanceOn ? (
+								<p className={fieldHintClass}>
+									Full amount only with perfect attendance this period; otherwise ₱0.
 								</p>
 							) : (
-								watchedScheduleMode === "RECURRING" && (
-									<p className={fieldHintClass}>
-										Applied in full on each eligible payroll period while active.
-									</p>
-								)
+								<p className={fieldHintClass}>
+									Applied on each eligible payroll period for the chosen recurrence
+									while active.
+								</p>
 							)}
 						</div>
 						</div>
 					</div>
+				</section>
 
-					<div className="space-y-3 border-t border-neutral-100 pt-4">
-						<div className="flex items-start justify-between gap-3">
-							<div>
-								<p className={fieldLabelClass}>Compute from attendance</p>
-								<p className={fieldHintClass}>
-									When on, the payslip amount is calculated from timesheet attendance at
-									payroll run.
-								</p>
-							</div>
-							<Controller
-								control={control}
-								name="attendanceBased"
-								render={({ field }) => (
-									<Switch
-										checked={field.value === true}
-										data-testid="attendance-based-toggle"
-										onCheckedChange={(checked) => {
-											field.onChange(checked);
-											if (!checked) {
-												setValue("attendanceAmountBasis", undefined, {
-													shouldValidate: true,
-												});
-											} else if (!watchedAttendanceAmountBasis) {
-												setValue("attendanceAmountBasis", "PER_CUTOFF", {
-													shouldValidate: true,
-												});
-											}
-										}}
-										className="mt-0.5 shrink-0 data-[state=checked]:bg-primary data-[state=unchecked]:bg-neutral-300"
-									/>
-								)}
-							/>
+				<section className={sectionCardClass} data-testid="attendance-rules-section">
+					<div>
+						<h3 className={sectionTitleClass}>Attendance (optional)</h3>
+						<p className="mt-1 text-xs text-neutral-500">
+							Leave both off for a normal fixed benefit. Use at most one option — they turn
+							each other off.
+						</p>
+						<p
+							className="mt-2 rounded-lg border border-neutral-100 bg-neutral-50 px-3 py-2 text-[11px] leading-relaxed text-neutral-600"
+							data-testid="attendance-policy-summary">
+							{attendancePolicySummary}
+						</p>
+					</div>
+
+					<div className={toggleRowClass}>
+						<div className="min-w-0 pr-2">
+							<p className="text-sm font-semibold text-neutral-900">
+								Perfect Attendance
+							</p>
+							<p className="mt-0.5 text-[11px] leading-snug text-neutral-500">
+								All-or-nothing. Full enrolled amount only if the period has no absent,
+								late, undertime, or leave — otherwise ₱0.
+							</p>
+							<p className="mt-1 text-[11px] text-neutral-400">
+								Example: ₱1,000 bonus; late once → ₱0 for that cutoff.
+							</p>
 						</div>
-						{watchedAttendanceBased && (
-							<div>
-								<span className={fieldLabelClass}>Amount basis *</span>
-								<Controller
-									control={control}
-									name="attendanceAmountBasis"
-									render={({ field }) => (
-										<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-											{attendanceAmountBasisOptions.map((option) => {
-												const selected = field.value === option.value;
-												return (
-													<button
-														key={option.value}
-														type="button"
-														onClick={() => field.onChange(option.value)}
-														className={[
-															"rounded-xl border px-3.5 py-3 text-left transition-all",
-															selected
-																? "border-neutral-900 bg-neutral-50 shadow-sm ring-1 ring-neutral-200"
-																: "border-neutral-200 bg-neutral-50/50 hover:border-neutral-300 hover:bg-white",
-														].join(" ")}>
-														<span
-															className={[
-																"block text-sm font-medium",
-																selected ? "text-neutral-900" : "text-neutral-800",
-															].join(" ")}>
-															{option.label}
-														</span>
-														<span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">
-															{option.value === "PER_DAY"
-																? "Enter a daily rate; paid = rate × present days"
-																: "Enter full cut-off amount; reduced for each ABSENT day"}
-														</span>
-													</button>
-												);
-											})}
-										</div>
-									)}
-								/>
-								{errors.attendanceAmountBasis && (
-									<p className={fieldErrorClass}>
-										{errors.attendanceAmountBasis.message}
-									</p>
-								)}
-							</div>
-						)}
-						{showPfaAttendanceBasedWarning && (
-							<div data-testid={PFA_ATTENDANCE_BASED_WARNING_TEST_ID}>
-								<Alert variant="warning" className="mt-1">
-									<p className="text-sm font-semibold text-yellow-900">
-										{PFA_ATTENDANCE_BASED_WARNING_TITLE}
-									</p>
-									<AlertDescription className="mt-1 text-yellow-900/90">
-										{PFA_ATTENDANCE_BASED_WARNING_BODY}
-									</AlertDescription>
-								</Alert>
-							</div>
-						)}
+						<Switch
+							checked={perfectAttendanceOn}
+							data-testid="perfect-attendance-toggle"
+							onCheckedChange={(checked) => applyPerfectAttendanceToggle(checked === true)}
+							className="mt-0.5 shrink-0 data-[state=checked]:bg-primary data-[state=unchecked]:bg-neutral-300"
+						/>
+					</div>
+
+					<div className={toggleRowClass}>
+						<div className="min-w-0 pr-2">
+							<p className="text-sm font-semibold text-neutral-900">
+								Pro-rate from attendance
+							</p>
+							<p className="mt-0.5 text-[11px] leading-snug text-neutral-500">
+								Still pays when enrolled. Amount is reduced only for ABSENT days (full
+								cut-off pro-rate). Late and leave do not zero the benefit.
+							</p>
+							<p className="mt-1 text-[11px] text-neutral-400">
+								Example: ₱500 allowance; 2 of 10 work days absent → about ₱400.
+							</p>
+						</div>
+						{/* Keep data-testid for existing tests */}
+						<Switch
+							checked={watchedAttendanceBased === true}
+							data-testid="attendance-based-toggle"
+							onCheckedChange={(checked) =>
+								applyProRateAttendanceToggle(checked === true)
+							}
+							className="mt-0.5 shrink-0 data-[state=checked]:bg-primary data-[state=unchecked]:bg-neutral-300"
+						/>
 					</div>
 				</section>
 
-				<section className={sectionCardClass}>
+				<section className={sectionCardClass} data-testid="schedule-section">
 					<div>
 						<h3 className={sectionTitleClass}>Schedule</h3>
-						<p className="mt-1 text-xs text-neutral-400">
-							Choose how installments are generated. The API confirms the final schedule.
+						<p className="mt-1 text-xs text-neutral-500">
+							Recurring benefit: pays on the cadence below from the start date until
+							cancelled or the optional end date.
 						</p>
 					</div>
 
 					<div>
-						<span className={fieldLabelClass}>Schedule mode *</span>
+						<span className={fieldLabelClass}>Recurrence *</span>
 						<Controller
 							control={control}
-							name="scheduleMode"
-							render={({ field }) => {
-								const applyScheduleMode = (value: BenefitScheduleMode) => {
-									field.onChange(value);
-									if (value === "FIXED_INSTALLMENTS") {
-										setValue("endDate", "", { shouldValidate: true });
-										setValue("recurrenceFrequency", "EVERY_CUTOFF", {
-											shouldValidate: true,
-										});
-									} else if (value === "RECURRING") {
-										setValue("totalInstallments", undefined, {
-											shouldValidate: true,
-										});
-										if (!watchedRecurrenceFrequency) {
-											setValue("recurrenceFrequency", "EVERY_CUTOFF", {
-												shouldValidate: true,
-											});
-										}
-									} else {
-										setValue("totalInstallments", undefined, {
-											shouldValidate: true,
-										});
-										setValue("recurrenceFrequency", "EVERY_CUTOFF", {
-											shouldValidate: true,
-										});
-									}
-								};
-								return (
-									<div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-										{scheduleModeOptions.map((option) => {
-											const selected = field.value === option.value;
-											return (
-												<button
-													key={option.value}
-													type="button"
-													onClick={() =>
-														applyScheduleMode(option.value as BenefitScheduleMode)
-													}
+							name="recurrenceFrequency"
+							render={({ field }) => (
+								<div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+									{recurrenceFrequencyOptions.map((option) => {
+										const selected = field.value === option.value;
+										return (
+											<button
+												key={option.value}
+												type="button"
+												onClick={() => field.onChange(option.value)}
+												className={[
+													"rounded-xl border px-3.5 py-3 text-left transition-all",
+													selected
+														? "border-neutral-900 bg-neutral-50 shadow-sm ring-1 ring-neutral-200"
+														: "border-neutral-200 bg-neutral-50/50 hover:border-neutral-300 hover:bg-white",
+												].join(" ")}>
+												<span
 													className={[
-														"rounded-xl border px-3.5 py-3 text-left transition-all",
-														selected
-															? "border-neutral-900 bg-neutral-50 shadow-sm ring-1 ring-neutral-200"
-															: "border-neutral-200 bg-neutral-50/50 hover:border-neutral-300 hover:bg-white",
+														"block text-sm font-medium",
+														selected ? "text-neutral-900" : "text-neutral-800",
 													].join(" ")}>
-													<span
-														className={[
-															"block text-sm font-medium",
-															selected ? "text-neutral-900" : "text-neutral-800",
-														].join(" ")}>
-														{option.label}
-													</span>
-													<span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">
-														{scheduleModeDescription(option.value)}
-													</span>
-												</button>
-											);
-										})}
-										<select
-											data-testid="schedule-mode"
-											className="sr-only"
-											aria-hidden="true"
-											tabIndex={-1}
-											value={field.value}
-											onChange={(event) =>
-												applyScheduleMode(
-													event.target.value as BenefitScheduleMode,
-												)
-											}>
-											{scheduleModeOptions.map((option) => (
-												<option key={option.value} value={option.value}>
 													{option.label}
-												</option>
-											))}
-										</select>
-									</div>
-								);
-							}}
-						/>
-						{errors.scheduleMode && (
-							<p className={fieldErrorClass}>{errors.scheduleMode.message}</p>
-						)}
-					</div>
-
-					{watchedScheduleMode === "RECURRING" && (
-						<div>
-							<span className={fieldLabelClass}>Recurrence *</span>
-							<Controller
-								control={control}
-								name="recurrenceFrequency"
-								render={({ field }) => (
-									<div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-										{recurrenceFrequencyOptions.map((option) => {
-											const selected = field.value === option.value;
-											return (
-												<button
-													key={option.value}
-													type="button"
-													onClick={() => field.onChange(option.value)}
-													className={[
-														"rounded-xl border px-3.5 py-3 text-left transition-all",
-														selected
-															? "border-neutral-900 bg-neutral-50 shadow-sm ring-1 ring-neutral-200"
-															: "border-neutral-200 bg-neutral-50/50 hover:border-neutral-300 hover:bg-white",
-													].join(" ")}>
-													<span
-														className={[
-															"block text-sm font-medium",
-															selected ? "text-neutral-900" : "text-neutral-800",
-														].join(" ")}>
-														{option.label}
-													</span>
-													<span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">
-														{recurrenceFrequencyDescription(option.value)}
-													</span>
-												</button>
-											);
-										})}
-										<select
-											data-testid="recurrence-frequency"
-											className="sr-only"
-											aria-hidden="true"
-											tabIndex={-1}
-											value={field.value || "EVERY_CUTOFF"}
-											onChange={(event) => field.onChange(event.target.value)}>
-											{recurrenceFrequencyOptions.map((option) => (
-												<option key={option.value} value={option.value}>
-													{option.label}
-												</option>
-											))}
-										</select>
-									</div>
-								)}
-							/>
-							{errors.recurrenceFrequency && (
-								<p className={fieldErrorClass}>
-									{errors.recurrenceFrequency.message}
-								</p>
+												</span>
+												<span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">
+													{recurrenceFrequencyDescription(option.value)}
+												</span>
+											</button>
+										);
+									})}
+									<select
+										data-testid="recurrence-frequency"
+										className="sr-only"
+										aria-hidden="true"
+										tabIndex={-1}
+										value={field.value || "EVERY_CUTOFF"}
+										onChange={(event) => field.onChange(event.target.value)}>
+										{recurrenceFrequencyOptions.map((option) => (
+											<option key={option.value} value={option.value}>
+												{option.label}
+											</option>
+										))}
+									</select>
+								</div>
 							)}
-							<p className={fieldHintClass}>
-								Amount is per payment event (not annualized). Payroll creates an
-								installment only on eligible periods for this cadence.
-							</p>
-						</div>
-					)}
+						/>
+						{errors.recurrenceFrequency && (
+							<p className={fieldErrorClass}>{errors.recurrenceFrequency.message}</p>
+						)}
+						<p className={fieldHintClass}>
+							Amount is per payment event (not annualized). Payroll creates an installment
+							only on eligible periods for this cadence.
+						</p>
+					</div>
 
 					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 						<div>
@@ -1112,64 +1096,27 @@ export function EmployeeBenefitForm({
 								<p className={fieldErrorClass}>{errors.startDate.message}</p>
 							)}
 						</div>
-						{watchedScheduleMode === "FIXED_INSTALLMENTS" ? (
-							<div>
-								<label
-									htmlFor="benefit-adjustment-installments"
-									className={fieldLabelClass}>
-									Installment Count *
-								</label>
-								<Input
-									id="benefit-adjustment-installments"
-									className="h-10 rounded-lg border-neutral-200"
-									type="number"
-									min="1"
-									step="1"
-									placeholder="e.g. 6"
-									{...register("totalInstallments")}
-								/>
-								{errors.totalInstallments && (
-									<p className={fieldErrorClass}>
-										{errors.totalInstallments.message}
-									</p>
+						<div>
+							<span className={fieldLabelClass}>End date (optional)</span>
+							<Controller
+								control={control}
+								name="endDate"
+								render={({ field }) => (
+									<DatePicker
+										value={field.value}
+										onChange={field.onChange}
+										placeholder="Leave empty for open-ended"
+										className={errors.endDate ? "border-red-300" : ""}
+									/>
 								)}
-								<p className={fieldHintClass}>
-									Positive whole number. Remainder goes to the final installment.
-								</p>
-							</div>
-						) : (
-							<div>
-								<span className={fieldLabelClass}>
-									{watchedScheduleMode === "TIME_BOUND"
-										? "End date *"
-										: "End date (optional)"}
-								</span>
-								<Controller
-									control={control}
-									name="endDate"
-									render={({ field }) => (
-										<DatePicker
-											value={field.value}
-											onChange={field.onChange}
-											placeholder={
-												watchedScheduleMode === "RECURRING"
-													? "Leave empty for open-ended"
-													: "Select end date"
-											}
-											className={errors.endDate ? "border-red-300" : ""}
-										/>
-									)}
-								/>
-								{errors.endDate && (
-									<p className={fieldErrorClass}>{errors.endDate.message}</p>
-								)}
-								<p className={fieldHintClass}>
-									{watchedScheduleMode === "TIME_BOUND"
-										? "One installment per overlapping payroll period."
-										: "Leave empty to apply every payroll period until cancelled or deactivated."}
-								</p>
-							</div>
-						)}
+							/>
+							{errors.endDate && (
+								<p className={fieldErrorClass}>{errors.endDate.message}</p>
+							)}
+							<p className={fieldHintClass}>
+								Leave empty to apply until cancelled or deactivated.
+							</p>
+						</div>
 					</div>
 
 					<div
@@ -1184,11 +1131,7 @@ export function EmployeeBenefitForm({
 						</p>
 						<p className="mt-1 text-sm font-medium leading-relaxed">
 							{schedulePreview ||
-								(watchedScheduleMode === "TIME_BOUND"
-									? "Select a start and end date to estimate payroll periods."
-									: watchedScheduleMode === "RECURRING"
-										? "Enter amount and start date to preview the recurring schedule."
-										: "Enter amount and installment count to estimate per-period amounts.")}
+								"Enter amount and start date to preview the recurring schedule."}
 						</p>
 					</div>
 				</section>

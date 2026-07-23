@@ -32,6 +32,13 @@ enum BenefitRecurrenceFrequency {
   YEARLY
 }
 
+/// Whether a period installment may pay based on attendance quality.
+/// ENROLLED_ALWAYS = schedule-only (legacy default). ATTENDANCE_QUALIFIED = all-or-nothing flags.
+enum BenefitEligibilityMode {
+  ENROLLED_ALWAYS
+  ATTENDANCE_QUALIFIED
+}
+
 model   EmployeeBenefit {
   id             String      @id @default(auto()) @map("_id") @db.ObjectId
   organizationId String // Multi-tenancy support
@@ -60,6 +67,13 @@ model   EmployeeBenefit {
   // Attendance-linked amount computation (optional; default fixed amount)
   attendanceBased       Boolean                        @default(false)
   attendanceAmountBasis BenefitAttendanceAmountBasis?
+
+  // Attendance eligibility (optional; independent of amount pro-rate)
+  eligibilityMode                    BenefitEligibilityMode @default(ENROLLED_ALWAYS)
+  eligibilityDisqualifyOnAbsent      Boolean                @default(true)
+  eligibilityDisqualifyOnLate        Boolean                @default(false)
+  eligibilityDisqualifyOnUndertime   Boolean                @default(false)
+  eligibilityDisqualifyOnLeave       Boolean                @default(false)
 
   // Legacy/simple details (kept for backward compatibility)
   amount    Float?

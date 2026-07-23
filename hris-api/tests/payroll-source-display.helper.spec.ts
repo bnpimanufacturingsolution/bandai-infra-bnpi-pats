@@ -4,7 +4,10 @@ import {
 	formatPayrollSourcePrimaryLabel,
 	getCoveredRegisterFieldsFromSourceDetails,
 	getPayrollSourceDisplayRole,
+	getPayrollSourceTaxability,
 	groupPayrollSourceDetailsByRole,
+	groupPayrollSourceDetailsByTaxability,
+	isPayrollSourceDisplayedAsTaxable,
 } from "../helper/payroll-source-display.helper";
 
 describe("payroll-source-display.helper", () => {
@@ -81,5 +84,35 @@ describe("payroll-source-display.helper", () => {
 		assert.equal(grouped.postNet.length, 1);
 		assert.equal(grouped.deduction.length, 1);
 		assert.equal(grouped.postNet[0]?.name, "Perfect Attendance Bonus");
+	});
+
+	it("splits benefits into non-taxable vs taxable (unknown defaults to taxable)", () => {
+		const grouped = groupPayrollSourceDetailsByTaxability([
+			{
+				name: "Rice Subsidy",
+				benefitTypeName: "De Minimis Allowance",
+				isTaxable: false,
+				amount: 500,
+			},
+			{
+				name: "Performance Bonus",
+				benefitTypeName: "Performance Bonus",
+				isTaxable: true,
+				amount: 800,
+			},
+			{
+				name: "Legacy Benefit",
+				amount: 100,
+			},
+		]);
+
+		assert.equal(grouped.nonTaxable.length, 1);
+		assert.equal(grouped.nonTaxable[0]?.name, "Rice Subsidy");
+		assert.equal(grouped.taxable.length, 2);
+		assert.equal(getPayrollSourceTaxability({ isTaxable: false }), "nonTaxable");
+		assert.equal(getPayrollSourceTaxability({ isTaxable: true }), "taxable");
+		assert.equal(getPayrollSourceTaxability({}), "unknown");
+		assert.equal(isPayrollSourceDisplayedAsTaxable({}), true);
+		assert.equal(isPayrollSourceDisplayedAsTaxable({ isTaxable: false }), false);
 	});
 });

@@ -1,4 +1,3 @@
-<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/.wwg/wiki/terminology-summary.md) -->
 # Terminology Summary
 
 Status: RECONCILED_FROM_EXISTING_PROJECT
@@ -31,8 +30,9 @@ Last reviewed: 2026-07-17
 - Source period vs apply period: correction is for a locked **source** period; money appears on a later **apply** period.
 - Benefit schedule modes: `TIME_BOUND` and `FIXED_INSTALLMENTS` (finite totals + bulk installments); `RECURRING` (per-payment amount, optional end date, lazy ensure; `recurrenceFrequency` EVERY_CUTOFF/MONTHLY/YEARLY).
 - Attendance-based benefit amounts: `attendanceBased` with basis `PER_DAY` (rate × present) or `PER_CUTOFF` (full cut-off pro-rated); present = scheduled non-rest minus ABSENT only.
+- Benefit attendance eligibility: `eligibilityMode` `ENROLLED_ALWAYS` | `ATTENDANCE_QUALIFIED` + disqualify flags (absent/late/undertime/leave). Independent of amount pro-rate. QUALIFIED fail → period amount 0.
 - `EmployeeBenefitInstallment`: payroll execution rows (`SCHEDULED` / `DEDUCTED`); preferred apply source over raw benefit totals when present.
-- `PFA` / Perfect Attendance (payroll): benefit code → `EmployeePayroll.perfectAttendance` (register CT). Seed type name **Performance Bonus** is CONFLICTING; prefer product label Perfect Attendance + code PFA. Fixed when attendanceBased off; ABSENT pro-rate when on (HR warns).
+- `PFA` / Perfect Attendance (payroll): benefit code → `EmployeePayroll.perfectAttendance` (register CT). Classic = QUALIFIED + flags + fixed amount (type/seed defaults). Seed name **Performance Bonus** is CONFLICTING.
 - `perfectAttendanceMetrics`: analytics report only (not payroll award).
 
 ## Preferred Language
@@ -64,9 +64,6 @@ Last reviewed: 2026-07-17
 - A task changes naming, layer boundaries, governance terms, source-of-truth terms, benefit schedule modes, test ownership, or cross-repo handoff language.
 - This summary appears to conflict with `.wwg/wiki/terminology.md`.
 
-### bandai-infra develop notes (same section: Load Full Terminology When)
-
-- A task changes naming, layer boundaries, governance terms, source-of-truth terms, test ownership, or cross-repo handoff language.
 ## References
 
 - `.wwg/wiki/terminology.md`

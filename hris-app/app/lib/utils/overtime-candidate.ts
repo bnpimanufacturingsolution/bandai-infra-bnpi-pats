@@ -52,26 +52,118 @@ export type OvertimeCandidateBadgeView = {
 	tone: OvertimeCandidateBadgeTone;
 };
 
+/** Shared surfaces so day-cell +OT text and tooltip OT box stay the same color family. */
+export type OvertimeCandidateToneSurface = {
+	/** Tailwind classes for the day-cell +OT text */
+	badgeText: string;
+	/** Tooltip / callout box border + background */
+	box: string;
+	/** Tooltip title / status line */
+	title: string;
+	/** Tooltip primary body (e.g. "2:09 detected") */
+	body: string;
+};
+
+export const OVERTIME_CANDIDATE_TONE_SURFACES: Record<
+	OvertimeCandidateBadgeTone,
+	OvertimeCandidateToneSurface
+> = {
+	// Unfiled — still needs request (green, matches TimesheetDayCell `ot`)
+	ot: {
+		badgeText: "text-green-700",
+		box: "border-green-200 bg-green-50",
+		title: "text-green-800",
+		body: "text-green-900",
+	},
+	// Filed / pending manager (sky, matches TimesheetDayCell `ot-filed`)
+	"ot-filed": {
+		badgeText: "text-sky-600 font-semibold",
+		box: "border-sky-200 bg-sky-50",
+		title: "text-sky-800",
+		body: "text-sky-900",
+	},
+	// Approved payable OT
+	"ot-approved": {
+		badgeText: "text-emerald-700",
+		box: "border-emerald-200 bg-emerald-50",
+		title: "text-emerald-800",
+		body: "text-emerald-900",
+	},
+	// Rejected
+	"ot-rejected": {
+		badgeText: "text-rose-600",
+		box: "border-rose-200 bg-rose-50",
+		title: "text-rose-800",
+		body: "text-rose-900",
+	},
+};
+
+export const getOvertimeCandidateToneSurface = (
+	tone: OvertimeCandidateBadgeTone | null | undefined,
+): OvertimeCandidateToneSurface =>
+	OVERTIME_CANDIDATE_TONE_SURFACES[tone || "ot"] || OVERTIME_CANDIDATE_TONE_SURFACES.ot;
+
+const hasPayableOvertimeHours = (overtimeHours?: string | null): boolean =>
+	parseDurationToMinutes(overtimeHours) > 0;
+
+/**
+ * Badge for OT candidate metadata only.
+ * Unfiled: green +OT · Filed (requested): blue +OT · Approved: emerald +OT · Rejected: rose OT
+ */
 export const getOvertimeCandidateBadge = (
 	candidate: OvertimeCandidateView,
 ): OvertimeCandidateBadgeView | null => {
 	if (!candidate.isCandidate) return null;
 
+	// Status first: approved/rejected must not look like "still pending request".
+	if (candidate.overtimeApprovalStatus === "APPROVED") {
+		return { label: "+OT", tone: "ot-approved" };
+	}
+	if (candidate.overtimeApprovalStatus === "REJECTED") {
+		return { label: "+OT", tone: "ot-rejected" };
+	}
+	// Filed and awaiting manager approval (REQUESTED or request id present).
 	if (
 		candidate.overtimeApprovalStatus === "REQUESTED" ||
 		candidate.overtimeRequestId
 	) {
-		return { label: "OT", tone: "ot-filed" };
+		// Keep "+OT" label so the mark is recognizable; color distinguishes "already requested".
+		return { label: "+OT", tone: "ot-filed" };
 	}
 
-	switch (candidate.overtimeApprovalStatus) {
-		case "APPROVED":
-			return { label: "+OT", tone: "ot-approved" };
-		case "REJECTED":
-			return { label: "OT", tone: "ot-rejected" };
-		default:
-			return { label: "OT", tone: "ot" };
+	// Unfiled candidate — still needs employee OT request.
+	return { label: "+OT", tone: "ot" };
+};
+
+/**
+ * Resolve the day-cell OT badge for a timesheet breakdown day.
+ * Prefer request status over raw payable hours so REQUESTED days do not look "approved".
+ */
+export const resolveOvertimeDayBadge = (day: {
+	overtimeHours?: string | null;
+	metadata?: Record<string, unknown> | null;
+}): OvertimeCandidateBadgeView | null => {
+	const candidate = readOvertimeCandidateFromDay(day);
+	const candidateBadge = getOvertimeCandidateBadge(candidate);
+	if (candidateBadge) return candidateBadge;
+
+	// Filed/approved request without isCandidate (edge: pending minutes cleared) still needs a mark.
+	if (
+		candidate.overtimeApprovalStatus === "REQUESTED" ||
+		candidate.overtimeRequestId
+	) {
+		return { label: "+OT", tone: "ot-filed" };
 	}
+	if (candidate.overtimeApprovalStatus === "APPROVED") {
+		return { label: "+OT", tone: "ot-approved" };
+	}
+
+	// Legacy payable OT with no candidate metadata.
+	if (hasPayableOvertimeHours(day.overtimeHours)) {
+		return { label: "+OT", tone: "ot-approved" };
+	}
+
+	return null;
 };
 
 export const getOvertimeCandidateBadgeLabel = (candidate: OvertimeCandidateView): string | null =>

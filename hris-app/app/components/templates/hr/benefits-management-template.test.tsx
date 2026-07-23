@@ -4,12 +4,12 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	EmployeeBenefitForm,
+	buildAttendancePolicySummary,
 	isPerfectAttendanceBenefitTypeCode,
-	PFA_ATTENDANCE_BASED_WARNING_BODY,
-	PFA_ATTENDANCE_BASED_WARNING_TEST_ID,
-	PFA_ATTENDANCE_BASED_WARNING_TITLE,
+	isPerfectAttendanceToggleOn,
+	perfectAttendanceToggleFields,
+	proRateAttendanceToggleFields,
 	SELECT_EMPLOYEES_ACTION,
-	shouldShowPfaAttendanceBasedWarning,
 } from "./employee-benefit-form";
 
 let activeBenefit: any = undefined;
@@ -173,10 +173,13 @@ const fillRequiredFields = () => {
 	selectEmployees();
 	fireEvent.change(screen.getByTestId("benefit-type"), { target: { value: "benefit-type-1" } });
 	fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "HMO" } });
-	fireEvent.change(screen.getByLabelText("Amount *"), { target: { value: "1000" } });
+	fireEvent.change(screen.getByLabelText("Amount per payroll period *"), {
+		target: { value: "1000" },
+	});
+	fireEvent.change(screen.getByTestId("start-date"), { target: { value: "2026-06-01" } });
 };
 
-describe("EmployeeBenefitForm schedule modes", () => {
+describe("EmployeeBenefitForm schedule (recurring-only)", () => {
 	beforeEach(() => {
 		activeBenefit = undefined;
 		bulkCreateMutate.mockReset();
@@ -185,121 +188,25 @@ describe("EmployeeBenefitForm schedule modes", () => {
 		onSuccess.mockReset();
 	});
 
-	it("defaults new adjustments to the time-bound schedule mode", () => {
+	it("defaults new adjustments to recurring with every-cutoff recurrence", () => {
 		renderCreateForm();
-		expect(screen.getByTestId("schedule-mode")).toHaveValue("TIME_BOUND");
-	});
-
-	it("shows the end date for time-bound schedules", () => {
-		renderCreateForm();
+		expect(screen.getByTestId("recurrence-frequency")).toHaveValue("EVERY_CUTOFF");
+		expect(screen.queryByTestId("schedule-mode")).not.toBeInTheDocument();
+		expect(screen.getByLabelText("Amount per payroll period *")).toBeInTheDocument();
 		expect(screen.getByTestId("end-date")).toBeInTheDocument();
-		expect(screen.queryByLabelText("Installment Count *")).not.toBeInTheDocument();
 	});
 
-	it("shows the installment count instead of an end date for fixed schedules", () => {
-		renderCreateForm();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "FIXED_INSTALLMENTS" } });
-		expect(screen.getByLabelText("Installment Count *")).toBeInTheDocument();
-		expect(screen.queryByTestId("end-date")).not.toBeInTheDocument();
-	});
-
-	it("clears the irrelevant end date after changing to fixed installments", () => {
-		renderCreateForm();
-		fireEvent.change(screen.getByTestId("end-date"), { target: { value: "2026-06-30" } });
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "FIXED_INSTALLMENTS" } });
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "TIME_BOUND" } });
-		expect(screen.getByTestId("end-date")).toHaveValue("");
-	});
-
-	it("requires employees and an end date before a time-bound benefit can be submitted", async () => {
+	it("requires employees before submit", async () => {
 		renderCreateForm();
 		fireEvent.change(screen.getByTestId("benefit-type"), { target: { value: "benefit-type-1" } });
 		fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "HMO" } });
-		fireEvent.change(screen.getByLabelText("Amount *"), { target: { value: "1000" } });
+		fireEvent.change(screen.getByLabelText("Amount per payroll period *"), {
+			target: { value: "1000" },
+		});
 		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
 		await waitFor(() =>
 			expect(screen.getByText("Select at least one employee")).toBeInTheDocument(),
 		);
-	});
-
-	it("requires an end date before a time-bound benefit can be submitted", async () => {
-		renderCreateForm();
-		fillRequiredFields();
-		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
-		await waitFor(() => expect(screen.getByText("End date is required for time-bound schedules")).toBeInTheDocument());
-	});
-
-	it("rejects a non-integer fixed installment count", async () => {
-		renderCreateForm();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "FIXED_INSTALLMENTS" } });
-		fillRequiredFields();
-		fireEvent.change(screen.getByLabelText("Installment Count *"), { target: { value: "1.5" } });
-		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
-		await waitFor(() => expect(screen.getByText("Installment count must be a positive whole number")).toBeInTheDocument());
-	});
-
-	it("previews the number of payroll periods covered by a time-bound schedule", () => {
-		renderCreateForm();
-		fireEvent.change(screen.getByTestId("start-date"), { target: { value: "2026-06-01" } });
-		fireEvent.change(screen.getByTestId("end-date"), { target: { value: "2026-06-30" } });
-		expect(screen.getByText(/Estimated 2 payroll-period installments/)).toBeInTheDocument();
-	});
-
-	it("previews a fixed per-installment amount", () => {
-		renderCreateForm();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "FIXED_INSTALLMENTS" } });
-		fireEvent.change(screen.getByLabelText("Amount *"), { target: { value: "1000" } });
-		fireEvent.change(screen.getByLabelText("Installment Count *"), { target: { value: "4" } });
-		expect(screen.getByText(/₱250.00 per installment/)).toBeInTheDocument();
-	});
-
-	it("previews the final-centavo rounding remainder for fixed installments", () => {
-		renderCreateForm();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "FIXED_INSTALLMENTS" } });
-		fireEvent.change(screen.getByLabelText("Amount *"), { target: { value: "1000" } });
-		fireEvent.change(screen.getByLabelText("Installment Count *"), { target: { value: "3" } });
-		expect(screen.getByText(/final installment ₱333.34/)).toBeInTheDocument();
-	});
-
-	it("sends a bulk fixed schedule payload with multiple employeeIds", async () => {
-		renderCreateForm();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "FIXED_INSTALLMENTS" } });
-		fillRequiredFields();
-		fireEvent.change(screen.getByLabelText("Installment Count *"), { target: { value: "4" } });
-		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
-		await waitFor(() => expect(bulkCreateMutate).toHaveBeenCalledTimes(1));
-		expect(bulkCreateMutate.mock.calls[0][0]).toMatchObject({
-			organizationId: "org-1",
-			scheduleMode: "FIXED_INSTALLMENTS",
-			totalInstallments: 4,
-			employeeIds: ["employee-1", "employee-2"],
-		});
-		expect(bulkCreateMutate.mock.calls[0][0]).not.toHaveProperty("endDate");
-		expect(bulkCreateMutate.mock.calls[0][0]).not.toHaveProperty("employeeId");
-	});
-
-	it("keeps legacy edit records editable by using the time-bound default", async () => {
-		activeBenefit = {
-			id: "benefit-1", employeeId: "employee-1", benefitTypeId: "benefit-type-1", name: "Legacy HMO",
-			amount: 1200, startDate: "2026-06-01", endDate: "2026-06-30", isActive: true, status: "ACTIVE",
-		};
-		render(
-			<MemoryRouter>
-				<EmployeeBenefitForm
-					mode="edit"
-					presentation="modal"
-					benefitId="benefit-1"
-					onCancel={onCancel}
-					onSuccess={onSuccess}
-				/>
-			</MemoryRouter>,
-		);
-		await waitFor(() => expect(screen.getByTestId("schedule-mode")).toHaveValue("TIME_BOUND"));
-		expect(screen.getByTestId("end-date")).toHaveValue("2026-06-30");
-		expect(screen.getByTestId("selected-employee-count")).toHaveTextContent(
-			"1 employee selected",
-		);
-		expect(screen.queryByTestId("selected-employee-chips")).not.toBeInTheDocument();
 	});
 
 	it("does not render selected employee chips on the create page after picking employees", () => {
@@ -325,28 +232,41 @@ describe("EmployeeBenefitForm schedule modes", () => {
 		);
 	});
 
-	it("shows optional end date and per-period amount for recurring schedules", () => {
-		renderCreateForm();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "RECURRING" } });
-		expect(screen.getByLabelText("Amount per payroll period *")).toBeInTheDocument();
-		expect(screen.getByTestId("end-date")).toBeInTheDocument();
-		expect(screen.queryByLabelText("Installment Count *")).not.toBeInTheDocument();
-		expect(screen.getByTestId("recurrence-frequency")).toBeInTheDocument();
-		expect(screen.getByTestId("recurrence-frequency")).toHaveValue("EVERY_CUTOFF");
-	});
-
-	it("hides recurrence control when schedule is not recurring", () => {
-		renderCreateForm();
-		expect(screen.queryByTestId("recurrence-frequency")).not.toBeInTheDocument();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "RECURRING" } });
-		expect(screen.getByTestId("recurrence-frequency")).toBeInTheDocument();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "TIME_BOUND" } });
-		expect(screen.queryByTestId("recurrence-frequency")).not.toBeInTheDocument();
+	it("loads edit as recurring with optional end date", async () => {
+		activeBenefit = {
+			id: "benefit-1",
+			employeeId: "employee-1",
+			benefitTypeId: "benefit-type-1",
+			name: "HMO",
+			amount: 1200,
+			startDate: "2026-06-01",
+			endDate: "2026-06-30",
+			isActive: true,
+			status: "ACTIVE",
+			recurrenceFrequency: "MONTHLY",
+		};
+		render(
+			<MemoryRouter>
+				<EmployeeBenefitForm
+					mode="edit"
+					presentation="modal"
+					benefitId="benefit-1"
+					onCancel={onCancel}
+					onSuccess={onSuccess}
+				/>
+			</MemoryRouter>,
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("recurrence-frequency")).toHaveValue("MONTHLY"),
+		);
+		expect(screen.getByTestId("end-date")).toHaveValue("2026-06-30");
+		expect(screen.getByTestId("selected-employee-count")).toHaveTextContent(
+			"1 employee selected",
+		);
 	});
 
 	it("previews an open-ended recurring schedule", () => {
 		renderCreateForm();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "RECURRING" } });
 		fireEvent.change(screen.getByLabelText("Amount per payroll period *"), {
 			target: { value: "500" },
 		});
@@ -358,7 +278,6 @@ describe("EmployeeBenefitForm schedule modes", () => {
 
 	it("previews monthly and yearly recurring cadence", () => {
 		renderCreateForm();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "RECURRING" } });
 		fireEvent.change(screen.getByLabelText("Amount per payroll period *"), {
 			target: { value: "500" },
 		});
@@ -379,14 +298,11 @@ describe("EmployeeBenefitForm schedule modes", () => {
 
 	it("allows submitting a recurring benefit without an end date for multiple employees", async () => {
 		renderCreateForm();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "RECURRING" } });
-		selectEmployees();
-		fireEvent.change(screen.getByTestId("benefit-type"), { target: { value: "benefit-type-1" } });
+		fillRequiredFields();
 		fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "Monthly allowance" } });
 		fireEvent.change(screen.getByLabelText("Amount per payroll period *"), {
 			target: { value: "500" },
 		});
-		fireEvent.change(screen.getByTestId("start-date"), { target: { value: "2026-06-01" } });
 		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
 		await waitFor(() => expect(bulkCreateMutate).toHaveBeenCalledTimes(1));
 		expect(bulkCreateMutate.mock.calls[0][0]).toMatchObject({
@@ -401,16 +317,13 @@ describe("EmployeeBenefitForm schedule modes", () => {
 		expect(bulkCreateMutate.mock.calls[0][0]).not.toHaveProperty("totalInstallments");
 	});
 
-	it("submits MONTHLY and YEARLY recurrenceFrequency on recurring create", async () => {
+	it("submits MONTHLY and YEARLY recurrenceFrequency on create", async () => {
 		renderCreateForm();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "RECURRING" } });
-		selectEmployees();
-		fireEvent.change(screen.getByTestId("benefit-type"), { target: { value: "benefit-type-1" } });
+		fillRequiredFields();
 		fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "Yearly bonus" } });
 		fireEvent.change(screen.getByLabelText("Amount per payroll period *"), {
 			target: { value: "1000" },
 		});
-		fireEvent.change(screen.getByTestId("start-date"), { target: { value: "2026-01-01" } });
 		fireEvent.change(screen.getByTestId("recurrence-frequency"), {
 			target: { value: "YEARLY" },
 		});
@@ -423,16 +336,13 @@ describe("EmployeeBenefitForm schedule modes", () => {
 		});
 	});
 
-	it("includes an optional end date on a recurring create payload", async () => {
+	it("includes an optional end date on create payload", async () => {
 		renderCreateForm();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "RECURRING" } });
-		selectEmployees();
-		fireEvent.change(screen.getByTestId("benefit-type"), { target: { value: "benefit-type-1" } });
+		fillRequiredFields();
 		fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "Monthly allowance" } });
 		fireEvent.change(screen.getByLabelText("Amount per payroll period *"), {
 			target: { value: "500" },
 		});
-		fireEvent.change(screen.getByTestId("start-date"), { target: { value: "2026-06-01" } });
 		fireEvent.change(screen.getByTestId("end-date"), { target: { value: "2026-12-31" } });
 		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
 		await waitFor(() => expect(bulkCreateMutate).toHaveBeenCalledTimes(1));
@@ -473,45 +383,56 @@ describe("EmployeeBenefitForm schedule modes", () => {
 	});
 });
 
-describe("PFA + attendance-based warning helpers", () => {
+describe("Attendance toggle helpers", () => {
 	it("recognizes PFA benefit type codes case-insensitively", () => {
 		expect(isPerfectAttendanceBenefitTypeCode("PFA")).toBe(true);
 		expect(isPerfectAttendanceBenefitTypeCode("pfa")).toBe(true);
-		expect(isPerfectAttendanceBenefitTypeCode(" PFA ")).toBe(true);
 		expect(isPerfectAttendanceBenefitTypeCode("HMO")).toBe(false);
-		expect(isPerfectAttendanceBenefitTypeCode("Performance Bonus")).toBe(false);
-		expect(isPerfectAttendanceBenefitTypeCode(null)).toBe(false);
 	});
 
-	it("shows the warning only when PFA and attendance-based are both active", () => {
+	it("maps Perfect Attendance toggle to classic all-or-nothing fields", () => {
+		expect(isPerfectAttendanceToggleOn({ eligibilityMode: "ATTENDANCE_QUALIFIED" })).toBe(
+			true,
+		);
+		const on = perfectAttendanceToggleFields(true);
+		expect(on.eligibilityMode).toBe("ATTENDANCE_QUALIFIED");
+		expect(on.eligibilityDisqualifyOnLate).toBe(true);
+		expect(on.attendanceBased).toBe(false);
+		const off = perfectAttendanceToggleFields(false);
+		expect(off.eligibilityMode).toBe("ENROLLED_ALWAYS");
+	});
+
+	it("maps Pro-rate toggle to PER_CUTOFF and clears perfect attendance", () => {
+		const on = proRateAttendanceToggleFields(true);
+		expect(on.attendanceBased).toBe(true);
+		expect(on.attendanceAmountBasis).toBe("PER_CUTOFF");
+		expect(on.eligibilityMode).toBe("ENROLLED_ALWAYS");
+		expect(proRateAttendanceToggleFields(false).attendanceBased).toBe(false);
+	});
+
+	it("builds a short attendance policy summary for the form", () => {
 		expect(
-			shouldShowPfaAttendanceBasedWarning({
-				benefitTypeCode: "PFA",
-				attendanceBased: true,
-			}),
-		).toBe(true);
-		expect(
-			shouldShowPfaAttendanceBasedWarning({
-				benefitTypeCode: "PFA",
+			buildAttendancePolicySummary({
+				eligibilityMode: "ENROLLED_ALWAYS",
 				attendanceBased: false,
 			}),
-		).toBe(false);
+		).toMatch(/both off/i);
 		expect(
-			shouldShowPfaAttendanceBasedWarning({
-				benefitTypeCode: "HMO",
+			buildAttendancePolicySummary({
+				eligibilityMode: "ATTENDANCE_QUALIFIED",
+				attendanceBased: false,
+			}),
+		).toMatch(/perfect attendance on/i);
+		expect(
+			buildAttendancePolicySummary({
+				eligibilityMode: "ENROLLED_ALWAYS",
 				attendanceBased: true,
 			}),
-		).toBe(false);
-		expect(
-			shouldShowPfaAttendanceBasedWarning({
-				benefitTypeCode: "PFA",
-				attendanceBased: null,
-			}),
-		).toBe(false);
+		).toMatch(/pro-rate on/i);
 	});
 });
 
-describe("EmployeeBenefitForm Perfect Attendance (PFA) attendance-based warning", () => {
+describe("EmployeeBenefitForm attendance toggles", () => {
 	beforeEach(() => {
 		activeBenefit = undefined;
 		bulkCreateMutate.mockReset();
@@ -520,112 +441,69 @@ describe("EmployeeBenefitForm Perfect Attendance (PFA) attendance-based warning"
 		onSuccess.mockReset();
 	});
 
-	it("does not show the PFA warning when attendance-based is off for PFA", () => {
+	it("prefills Perfect Attendance on when type is PFA", async () => {
 		renderCreateForm();
 		fireEvent.change(screen.getByTestId("benefit-type"), {
 			target: { value: "benefit-type-pfa" },
 		});
+		await waitFor(() =>
+			expect(screen.getByTestId("perfect-attendance-toggle")).toHaveAttribute(
+				"aria-checked",
+				"true",
+			),
+		);
 		expect(screen.getByTestId("attendance-based-toggle")).toHaveAttribute(
 			"aria-checked",
 			"false",
 		);
-		expect(screen.queryByTestId(PFA_ATTENDANCE_BASED_WARNING_TEST_ID)).not.toBeInTheDocument();
 	});
 
-	it("shows the PFA warning when attendance-based is enabled for PFA", () => {
+	it("makes Perfect Attendance and Pro-rate mutually exclusive", async () => {
 		renderCreateForm();
-		fireEvent.change(screen.getByTestId("benefit-type"), {
-			target: { value: "benefit-type-pfa" },
-		});
-		fireEvent.click(screen.getByTestId("attendance-based-toggle"));
-		const warning = screen.getByTestId(PFA_ATTENDANCE_BASED_WARNING_TEST_ID);
-		expect(warning).toBeInTheDocument();
-		expect(warning).toHaveTextContent(PFA_ATTENDANCE_BASED_WARNING_TITLE);
-		expect(warning).toHaveTextContent(/not an all-or-nothing Perfect Attendance award/i);
-		expect(warning).toHaveTextContent(/ABSENT days only/i);
-		expect(warning).toHaveTextContent(/Late, undertime, and leave/i);
-		expect(warning).toHaveTextContent(/metrics report/i);
-		// Body constant stays the source of truth for copy.
-		expect(warning).toHaveTextContent(PFA_ATTENDANCE_BASED_WARNING_BODY);
-	});
-
-	it("does not show the PFA warning when attendance-based is on for a non-PFA type", () => {
-		renderCreateForm();
-		fireEvent.change(screen.getByTestId("benefit-type"), {
-			target: { value: "benefit-type-1" },
-		});
-		fireEvent.click(screen.getByTestId("attendance-based-toggle"));
-		expect(screen.getByTestId("attendance-based-toggle")).toHaveAttribute(
-			"aria-checked",
-			"true",
-		);
-		expect(screen.queryByTestId(PFA_ATTENDANCE_BASED_WARNING_TEST_ID)).not.toBeInTheDocument();
-	});
-
-	it("hides the PFA warning when attendance-based is turned back off", () => {
-		renderCreateForm();
-		fireEvent.change(screen.getByTestId("benefit-type"), {
-			target: { value: "benefit-type-pfa" },
-		});
-		fireEvent.click(screen.getByTestId("attendance-based-toggle"));
-		expect(screen.getByTestId(PFA_ATTENDANCE_BASED_WARNING_TEST_ID)).toBeInTheDocument();
-		fireEvent.click(screen.getByTestId("attendance-based-toggle"));
-		expect(screen.queryByTestId(PFA_ATTENDANCE_BASED_WARNING_TEST_ID)).not.toBeInTheDocument();
-	});
-
-	it("shows the PFA warning on edit when an existing PFA enrollment is attendance-based", async () => {
-		activeBenefit = {
-			id: "benefit-pfa-1",
-			employeeId: "employee-1",
-			benefitTypeId: "benefit-type-pfa",
-			benefitType: {
-				id: "benefit-type-pfa",
-				name: "Performance Bonus",
-				code: "PFA",
-				payrollDirection: "COMPENSATION",
-			},
-			name: "Perfect Attendance",
-			amount: 200,
-			startDate: "2026-06-01",
-			scheduleMode: "RECURRING",
-			attendanceBased: true,
-			attendanceAmountBasis: "PER_CUTOFF",
-			isActive: true,
-			status: "ACTIVE",
-		};
-		render(
-			<MemoryRouter>
-				<EmployeeBenefitForm
-					mode="edit"
-					presentation="modal"
-					benefitId="benefit-pfa-1"
-					onCancel={onCancel}
-					onSuccess={onSuccess}
-				/>
-			</MemoryRouter>,
-		);
+		fireEvent.click(screen.getByTestId("perfect-attendance-toggle"));
 		await waitFor(() =>
-			expect(screen.getByTestId(PFA_ATTENDANCE_BASED_WARNING_TEST_ID)).toBeInTheDocument(),
+			expect(screen.getByTestId("perfect-attendance-toggle")).toHaveAttribute(
+				"aria-checked",
+				"true",
+			),
+		);
+		fireEvent.click(screen.getByTestId("attendance-based-toggle"));
+		await waitFor(() =>
+			expect(screen.getByTestId("attendance-based-toggle")).toHaveAttribute(
+				"aria-checked",
+				"true",
+			),
+		);
+		expect(screen.getByTestId("perfect-attendance-toggle")).toHaveAttribute(
+			"aria-checked",
+			"false",
+		);
+		fireEvent.click(screen.getByTestId("perfect-attendance-toggle"));
+		await waitFor(() =>
+			expect(screen.getByTestId("perfect-attendance-toggle")).toHaveAttribute(
+				"aria-checked",
+				"true",
+			),
 		);
 		expect(screen.getByTestId("attendance-based-toggle")).toHaveAttribute(
 			"aria-checked",
-			"true",
+			"false",
 		);
 	});
 
-	it("still allows submitting PFA with attendance-based enabled (warn only, no block)", async () => {
+	it("submits Perfect Attendance payload for PFA with pro-rate off", async () => {
 		renderCreateForm();
-		fireEvent.change(screen.getByTestId("schedule-mode"), { target: { value: "RECURRING" } });
 		selectEmployees();
 		fireEvent.change(screen.getByTestId("benefit-type"), {
 			target: { value: "benefit-type-pfa" },
 		});
+		await waitFor(() =>
+			expect(screen.getByLabelText("Name *")).toHaveValue("Performance Bonus"),
+		);
 		fireEvent.change(screen.getByLabelText("Name *"), {
 			target: { value: "Perfect Attendance" },
 		});
-		fireEvent.click(screen.getByTestId("attendance-based-toggle"));
-		expect(screen.getByTestId(PFA_ATTENDANCE_BASED_WARNING_TEST_ID)).toBeInTheDocument();
-		fireEvent.change(screen.getByLabelText("Full amount for cut-off *"), {
+		fireEvent.change(screen.getByLabelText(/Amount per payroll period/i), {
 			target: { value: "200" },
 		});
 		fireEvent.change(screen.getByTestId("start-date"), { target: { value: "2026-06-01" } });
@@ -633,11 +511,44 @@ describe("EmployeeBenefitForm Perfect Attendance (PFA) attendance-based warning"
 		await waitFor(() => expect(bulkCreateMutate).toHaveBeenCalledTimes(1));
 		expect(bulkCreateMutate.mock.calls[0][0]).toMatchObject({
 			benefitTypeId: "benefit-type-pfa",
-			attendanceBased: true,
-			attendanceAmountBasis: "PER_CUTOFF",
+			attendanceBased: false,
+			attendanceAmountBasis: null,
+			eligibilityMode: "ATTENDANCE_QUALIFIED",
+			eligibilityDisqualifyOnAbsent: true,
+			eligibilityDisqualifyOnLate: true,
 			amount: 200,
 			scheduleMode: "RECURRING",
 			employeeIds: ["employee-1", "employee-2"],
+		});
+	});
+
+	it("submits pro-rate payload with PER_CUTOFF and enrolled-always", async () => {
+		renderCreateForm();
+		selectEmployees();
+		fireEvent.change(screen.getByTestId("benefit-type"), {
+			target: { value: "benefit-type-1" },
+		});
+		await waitFor(() => expect(screen.getByLabelText("Name *")).toHaveValue("HMO"));
+		fireEvent.click(screen.getByTestId("attendance-based-toggle"));
+		await waitFor(() =>
+			expect(screen.getByTestId("attendance-based-toggle")).toHaveAttribute(
+				"aria-checked",
+				"true",
+			),
+		);
+		fireEvent.change(screen.getByLabelText("Full amount for cut-off *"), {
+			target: { value: "500" },
+		});
+		fireEvent.change(screen.getByTestId("start-date"), { target: { value: "2026-06-01" } });
+		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
+		await waitFor(() => expect(bulkCreateMutate).toHaveBeenCalledTimes(1));
+		expect(bulkCreateMutate.mock.calls[0][0]).toMatchObject({
+			benefitTypeId: "benefit-type-1",
+			attendanceBased: true,
+			attendanceAmountBasis: "PER_CUTOFF",
+			eligibilityMode: "ENROLLED_ALWAYS",
+			amount: 500,
+			scheduleMode: "RECURRING",
 		});
 	});
 });

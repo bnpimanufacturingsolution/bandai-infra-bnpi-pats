@@ -1,4 +1,3 @@
-<!-- docs-union: standalone snapshot preferred; bandai-infra develop version was near-identical (no unique schema sections retained) -->
 # HRIS Consolidated Schema Documentation
 
 This document contains all Prisma models in a single file for documentation and reference purposes.

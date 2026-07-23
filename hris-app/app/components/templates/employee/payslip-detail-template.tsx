@@ -5,6 +5,11 @@ import { useEmployeePayroll, useDownloadPayslip } from "~/lib/hooks/useEmployeeP
 import { useEmployee } from "~/lib/hooks/useEmployees";
 import { useAuth } from "~/lib/hooks/use-auth";
 import { format } from "date-fns";
+import {
+	benefitTaxSections,
+	primaryBenefitLabel,
+	secondaryBenefitCategory,
+} from "~/lib/utils/payroll-benefit-display";
 
 export default function PayslipDetailTemplate() {
 	const { id, payslipId } = useParams();
@@ -326,42 +331,53 @@ export default function PayslipDetailTemplate() {
 									</div>
 								</div>
 							)}
-							{hasSourceBenefitLines
-								? grossSourceDetails.map((detail: any) => (
-										<div
-											key={`${detail.source || "benefit"}-${detail.id || detail.name}`}
-											className="flex justify-between items-center py-2 border-b border-gray-50 text-sm">
-											<div>
-												<div className="font-medium text-gray-800">
-													{String(detail.name || "Benefit").trim() || "Benefit"}
-												</div>
-												{detail.benefitTypeName &&
-													String(detail.benefitTypeName).trim().toLowerCase() !==
-														String(detail.name || "")
-															.trim()
-															.toLowerCase() && (
-														<div className="text-xs text-gray-500">
-															{detail.benefitTypeName}
+							{hasSourceBenefitLines ? (
+								<div className="pt-2 space-y-3">
+									<div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">
+										Benefits applied
+									</div>
+									{benefitTaxSections(grossSourceDetails).map((section) => (
+										<div key={section.key} className="space-y-1">
+											<div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+												{section.label}
+											</div>
+											{section.items.map((detail: any) => {
+												const category = secondaryBenefitCategory(detail);
+												return (
+													<div
+														key={`${detail.source || "benefit"}-${detail.id || detail.name}`}
+														className="flex justify-between items-center py-2 border-b border-gray-50 text-sm">
+														<div>
+															<div className="font-medium text-gray-800">
+																{primaryBenefitLabel(detail)}
+															</div>
+															{category && (
+																<div className="text-xs text-gray-500">{category}</div>
+															)}
 														</div>
-													)}
-											</div>
-											<div className="font-semibold text-gray-900 tabular-nums">
-												{formatCurrency(Number(detail.amount || 0))}
+														<div className="font-semibold text-gray-900 tabular-nums">
+															{formatCurrency(Number(detail.amount || 0))}
+														</div>
+													</div>
+												);
+											})}
+										</div>
+									))}
+								</div>
+							) : (
+								(allowances > 0 || bonuses > 0) && (
+									<div className="flex justify-between items-center py-2 border-b border-gray-50 text-sm">
+										<div>
+											<div className="font-medium text-gray-800">
+												Allowances & Bonuses
 											</div>
 										</div>
-									))
-								: (allowances > 0 || bonuses > 0) && (
-										<div className="flex justify-between items-center py-2 border-b border-gray-50 text-sm">
-											<div>
-												<div className="font-medium text-gray-800">
-													Allowances & Bonuses
-												</div>
-											</div>
-											<div className="font-semibold text-gray-900 tabular-nums">
-												{formatCurrency(allowances + bonuses)}
-											</div>
+										<div className="font-semibold text-gray-900 tabular-nums">
+											{formatCurrency(allowances + bonuses)}
 										</div>
-									)}
+									</div>
+								)
+							)}
 							{payrollCorrections.length > 0 && (
 								<div className="pt-2 space-y-2">
 									<div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">
@@ -393,23 +409,40 @@ export default function PayslipDetailTemplate() {
 									))}
 								</div>
 							)}
-							{postNetSourceDetails.map((detail: any) => (
-								<div
-									key={`postnet-${detail.source || "benefit"}-${detail.id || detail.name}`}
-									className="flex justify-between items-center py-2 border-b border-gray-50 text-sm">
-									<div>
-										<div className="font-medium text-gray-800">
-											{String(detail.name || "Benefit").trim() || "Benefit"}
-										</div>
-										<div className="text-xs text-gray-500">
-											{[detail.benefitTypeName, "After net pay"].filter(Boolean).join(" · ")}
-										</div>
+							{postNetSourceDetails.length > 0 && (
+								<div className="pt-2 space-y-3">
+									<div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">
+										Post-net benefits
 									</div>
-									<div className="font-semibold text-emerald-700 tabular-nums">
-										{formatCurrency(Number(detail.amount || 0))}
-									</div>
+									{benefitTaxSections(postNetSourceDetails).map((section) => (
+										<div key={`postnet-${section.key}`} className="space-y-1">
+											<div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+												{section.label}
+											</div>
+											{section.items.map((detail: any) => {
+												const category = secondaryBenefitCategory(detail);
+												return (
+													<div
+														key={`postnet-${detail.source || "benefit"}-${detail.id || detail.name}`}
+														className="flex justify-between items-center py-2 border-b border-gray-50 text-sm">
+														<div>
+															<div className="font-medium text-gray-800">
+																{primaryBenefitLabel(detail)}
+															</div>
+															<div className="text-xs text-gray-500">
+																{[category, "After net pay"].filter(Boolean).join(" · ")}
+															</div>
+														</div>
+														<div className="font-semibold text-emerald-700 tabular-nums">
+															{formatCurrency(Number(detail.amount || 0))}
+														</div>
+													</div>
+												);
+											})}
+										</div>
+									))}
 								</div>
-							))}
+							)}
 							<div className="flex justify-between items-center py-2 border-t border-gray-200 text-sm">
 								<div className="font-semibold text-gray-800">TOTAL EARNINGS</div>
 								<div className="font-bold text-gray-900 tabular-nums">

@@ -107,6 +107,10 @@ export const EmployeePayrollComputationRowSchema = z.object({
 		"ADDED_AFTER_NETPAY",
 	]),
 	explanation: z.string(),
+	/** Present on employeeBenefit source lines for tax grouping in UI. */
+	isTaxable: z.boolean().nullable().optional(),
+	/** True when row comes from metadata.payrollSourceDetails (benefit/loan). */
+	isBenefitSource: z.boolean().optional(),
 });
 
 export const EmployeePayrollComputationViewSchema = z.object({

@@ -1,4 +1,3 @@
-<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/project-truth.md) -->
 # Project Truth
 
 Adoption status: INFERRED_FROM_EXISTING_PROJECT
@@ -60,6 +59,9 @@ Currently includes:
 - Feature / agent contract: Dual-app UI parity with `hris-emp-app` for timesheets, attendance, employee payroll/payslips, leave-request patterns, and shared molecules/utils. Agents must update both packages when a surface exists in both (see package `AGENTS.md` and monorepo `AGENTS.md` / `.grok/rules/hris-dual-app-ui-parity.md`). HR-admin-only surfaces are exempt.
   - Status: ACCEPTED_TRUTH
   - Evidence: user directive 2026-07-15; `AGENTS.md`; `../AGENTS.md`; `../.grok/rules/hris-dual-app-ui-parity.md`; `.wwg/governance/drift-guard.md`.
+- Feature / temporary UX: On employee attendance (`AttendanceTemplate` / `/employee/:id/attendance`) Today card, the **Clock In/Out action button is hidden** (`SHOW_CLOCK_IN_BUTTON = false`). Clock In/Out time cards remain. Primary CTA is a larger **View Timesheet** button. Parity with emp-app `/attendance`. Re-enable by flipping the flag.
+  - Status: CONFIRMED temporary product choice
+  - Evidence: user request 2026-07-21; `app/components/templates/common/attendance-template.tsx`
 - Feature: Perfect Attendance appears in two UI surfaces that must not be conflated: (1) **HR Attendance reports** tab “Perfect Attendance” via metrics `perfectAttendanceMetrics` (analytics only); (2) **payroll / benefits** compensation code **`PFA`** labeled Perfect Attendance on register/payslip (`perfectAttendance` field), filtered under benefits “attendance” preset. Money is enrollment-driven on the API; the report does not award pay. Seed catalog may still show type name Performance Bonus — **CONFLICTING** with product label; prefer PFA + Perfect Attendance in payroll UI language. Domain SOT: `../hris-api/.wwg/wiki/project-truth.md` (reconciled 2026-07-17).
   - Status: CONFIRMED_FROM_IMPLEMENTATION (UI wiring); CONFLICTING (catalog display name on API seed)
   - Evidence: `app/routes/hr/reports/tabs/PerfectAttendanceTab.tsx`; `app/components/templates/hr/benefits-management-template.tsx` (`attendance: ["PFA"]`); `app/components/templates/common/run-payroll-template.tsx`; `app/components/templates/common/payroll-management-template.tsx`; API payroll field mapping.

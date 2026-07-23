@@ -11,6 +11,8 @@ export type PayrollSourceDisplayDetail = {
 	benefitTypeName?: string | null;
 	direction?: string | null;
 	reconciliationAction?: string | null;
+	/** BenefitType.isTaxable when known; null/undefined = unknown (display as taxable). */
+	isTaxable?: boolean | null;
 	amount?: number | null;
 };
 
@@ -120,6 +122,38 @@ export function groupPayrollSourceDetailsByRole(details: PayrollSourceDisplayDet
 		else gross.push(detail);
 	}
 	return { gross, postNet, deduction };
+}
+
+/**
+ * Explicit tax flag when present. Missing/null is treated as unknown (callers may
+ * conservatively display unknown under Taxable).
+ */
+export function getPayrollSourceTaxability(
+	detail: PayrollSourceDisplayDetail,
+): "taxable" | "nonTaxable" | "unknown" {
+	if (detail.isTaxable === true) return "taxable";
+	if (detail.isTaxable === false) return "nonTaxable";
+	return "unknown";
+}
+
+/** True when the line should appear under Taxable (unknown defaults to taxable). */
+export function isPayrollSourceDisplayedAsTaxable(detail: PayrollSourceDisplayDetail): boolean {
+	return getPayrollSourceTaxability(detail) !== "nonTaxable";
+}
+
+/**
+ * Split benefit/source lines into non-taxable vs taxable for payslip/details.
+ * Unknown isTaxable is grouped under taxable (safer disclosure for old frozen rows).
+ */
+export function groupPayrollSourceDetailsByTaxability(details: PayrollSourceDisplayDetail[]) {
+	const nonTaxable: PayrollSourceDisplayDetail[] = [];
+	const taxable: PayrollSourceDisplayDetail[] = [];
+	for (const detail of details) {
+		if (Math.abs(Number(detail.amount || 0)) < 0.005) continue;
+		if (isPayrollSourceDisplayedAsTaxable(detail)) taxable.push(detail);
+		else nonTaxable.push(detail);
+	}
+	return { nonTaxable, taxable };
 }
 
 export function asPayrollSourceDetails(value: unknown): PayrollSourceDisplayDetail[] {

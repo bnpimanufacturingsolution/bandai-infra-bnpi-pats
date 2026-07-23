@@ -101,4 +101,28 @@ describe("TimesheetDayTooltipContent overtime notes", () => {
 		expect(screen.getByText("2:00 detected")).toBeInTheDocument();
 		expect(screen.getByText("File overtime request before submit")).toBeInTheDocument();
 	});
+
+	it("uses sky (filed) colors when OT request is pending manager approval", () => {
+		const { container } = render(
+			<TimesheetDayTooltipContent
+				day={{
+					...manilaBusinessDay,
+					overtimeHours: "0:00",
+					metadata: {
+						overtimeCandidate: true,
+						pendingOvertimeMinutes: 129,
+						pendingOvertimeHours: "2:09",
+						overtimeApprovalStatus: "REQUESTED",
+						overtimeRequestId: "req-1",
+					},
+				}}
+			/>,
+		);
+
+		expect(screen.getByText("Overtime requested")).toBeInTheDocument();
+		expect(screen.getByText("Pending manager approval")).toBeInTheDocument();
+		const callout = container.querySelector(".bg-sky-50");
+		expect(callout).not.toBeNull();
+		expect(callout?.className).toContain("border-sky-200");
+	});
 });

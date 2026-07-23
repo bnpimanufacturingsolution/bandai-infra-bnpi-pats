@@ -3,6 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 const seedSource = fs.readFileSync(path.resolve(process.cwd(), "prisma/seed.ts"), "utf8");
+const benefitTypeSeederSource = fs.readFileSync(
+	path.resolve(process.cwd(), "prisma/seeds/benefitTypeSeeder.ts"),
+	"utf8",
+);
 
 describe("Prisma baseline seed benefit types", () => {
 	it("imports the idempotent default benefit type seeder", () => {
@@ -15,5 +19,21 @@ describe("Prisma baseline seed benefit types", () => {
 
 	it("keeps benefit type seeding before the kiosk content seed", () => {
 		assert.ok(seedSource.indexOf("ensureDefaultBenefitTypes(prisma, organizationId)") < seedSource.indexOf("seedKioskLoginContent(prisma, organizationId)"));
+	});
+
+	it("seeds PFA with ATTENDANCE_QUALIFIED eligibility defaults", () => {
+		assert.match(benefitTypeSeederSource, /code:\s*"PFA"/);
+		assert.match(
+			benefitTypeSeederSource,
+			/defaultEligibilityMode:\s*"ATTENDANCE_QUALIFIED"/,
+		);
+		assert.match(
+			benefitTypeSeederSource,
+			/defaultEligibilityDisqualifyOnAbsent:\s*true/,
+		);
+		assert.match(
+			benefitTypeSeederSource,
+			/defaultEligibilityDisqualifyOnLate:\s*true/,
+		);
 	});
 });

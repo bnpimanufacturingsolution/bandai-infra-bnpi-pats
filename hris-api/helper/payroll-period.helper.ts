@@ -40,6 +40,11 @@ import {
 	countAttendanceBenefitDaysFromBreakdown,
 	type BenefitAttendanceAmountBasis,
 } from "./attendance-benefit-amount.helper";
+import {
+	countEligibilitySignalsFromBreakdown,
+	evaluateBenefitAttendanceEligibility,
+	normalizeBenefitEligibilityMode,
+} from "./benefit-attendance-eligibility.helper";
 import { getUtcMonthRangeContaining } from "./benefit-recurrence.helper";
 import { getMergedCycleRules } from "../app/payrollperiod/payroll-cycle.helper";
 import {
@@ -3579,6 +3584,8 @@ type PayrollSourceDetail = {
 	benefitTypeName?: string | null;
 	direction: "COMPENSATION" | "DEDUCTION" | "LOAN";
 	reconciliationAction: string | null;
+	/** From BenefitType.isTaxable; frozen for payslip/details tax grouping. */
+	isTaxable?: boolean | null;
 	amount: number;
 	startDate: Date | null;
 	endDate: Date | null;
@@ -3906,6 +3913,11 @@ export async function buildPayrollSourceAmountsByEmployeeId(
 				recurrenceFrequency: true,
 				attendanceBased: true,
 				attendanceAmountBasis: true,
+				eligibilityMode: true,
+				eligibilityDisqualifyOnAbsent: true,
+				eligibilityDisqualifyOnLate: true,
+				eligibilityDisqualifyOnUndertime: true,
+				eligibilityDisqualifyOnLeave: true,
 				startDate: true,
 				endDate: true,
 				startPayrollCutOff: true,
@@ -3983,10 +3995,12 @@ export async function buildPayrollSourceAmountsByEmployeeId(
 					},
 					select: {
 						// Timesheetline has hoursWorked (String?), not hours; rest days are status === REST_DAY.
-						// Attendance-based benefits only need status (ABSENT vs scheduled vs REST_DAY).
+						// Amount pro-rate needs status; eligibility also needs late/undertime durations.
 						date: true,
 						status: true,
 						hoursWorked: true,
+						lateHours: true,
+						undertimeHours: true,
 						isDeleted: true,
 						isEffective: true,
 					},
@@ -4039,6 +4053,10 @@ export async function buildPayrollSourceAmountsByEmployeeId(
 		string,
 		ReturnType<typeof countAttendanceBenefitDaysFromBreakdown>
 	>();
+	const eligibilitySignalsByEmployeeId = new Map<
+		string,
+		ReturnType<typeof countEligibilitySignalsFromBreakdown>
+	>();
 	for (const timesheet of timesheetsForAttendance as any[]) {
 		const employeeId = String(timesheet.employeeId || "");
 		if (!employeeId) continue;
@@ -4047,38 +4065,87 @@ export async function buildPayrollSourceAmountsByEmployeeId(
 			employeeId,
 			countAttendanceBenefitDaysFromBreakdown(breakdown),
 		);
+		eligibilitySignalsByEmployeeId.set(
+			employeeId,
+			countEligibilitySignalsFromBreakdown(breakdown),
+		);
 	}
 
 	// Lazy-create / recompute installments before resolve.
+	// Order: eligibility (all-or-nothing) → amount pro-rate → recurring ensure.
 	for (const row of employeeBenefits as any[]) {
 		if (!Array.isArray(row.installments)) {
 			row.installments = [];
 		}
 
-		if (row.attendanceBased === true) {
-			const basis = String(row.attendanceAmountBasis || "").toUpperCase();
-			if (basis !== "PER_DAY" && basis !== "PER_CUTOFF") {
-				continue;
+		const eligibilityMode = normalizeBenefitEligibilityMode(row.eligibilityMode);
+		const employeeId = String(row.employeeId || "");
+		const amountMetrics = attendanceMetricsByEmployeeId.get(employeeId) || {
+			scheduledWorkDays: 0,
+			absentDays: 0,
+			presentDays: 0,
+		};
+		const eligibilitySignals = eligibilitySignalsByEmployeeId.get(employeeId) || {
+			scheduledWorkDays: 0,
+			absentDays: 0,
+			lateDays: 0,
+			undertimeDays: 0,
+			leaveDays: 0,
+		};
+		const eligibility = evaluateBenefitAttendanceEligibility({
+			mode: eligibilityMode,
+			flags: {
+				disqualifyOnAbsent: row.eligibilityDisqualifyOnAbsent,
+				disqualifyOnLate: row.eligibilityDisqualifyOnLate,
+				disqualifyOnUndertime: row.eligibilityDisqualifyOnUndertime,
+				disqualifyOnLeave: row.eligibilityDisqualifyOnLeave,
+			},
+			signals: eligibilitySignals,
+		});
+
+		const enrolledAmount = Number(
+			row.installmentAmount ?? row.amount ?? row.totalAmount ?? 0,
+		);
+		const needsPeriodAmountRecompute =
+			eligibilityMode === "ATTENDANCE_QUALIFIED" || row.attendanceBased === true;
+
+		if (needsPeriodAmountRecompute) {
+			let computedAmount: number;
+			if (!eligibility.eligible) {
+				computedAmount = 0;
+			} else if (row.attendanceBased === true) {
+				const basis = String(row.attendanceAmountBasis || "").toUpperCase();
+				if (basis !== "PER_DAY" && basis !== "PER_CUTOFF") {
+					// Invalid attendance config: fall through to recurring ensure if needed
+					if (row.scheduleMode === "RECURRING") {
+						await ensureRecurringBenefitInstallmentForPeriod(
+							prisma as any,
+							row,
+							periodForEnsure,
+						);
+					}
+					continue;
+				}
+				computedAmount = computeAttendanceBenefitAmount({
+					basis: basis as BenefitAttendanceAmountBasis,
+					enrolledAmount,
+					scheduledWorkDays: amountMetrics.scheduledWorkDays,
+					absentDays: amountMetrics.absentDays,
+				});
+			} else {
+				// ATTENDANCE_QUALIFIED pass + fixed amount
+				computedAmount = enrolledAmount > 0 ? enrolledAmount : 0;
 			}
-			const metrics = attendanceMetricsByEmployeeId.get(String(row.employeeId || "")) || {
-				scheduledWorkDays: 0,
-				absentDays: 0,
-				presentDays: 0,
-			};
-			const enrolledAmount = Number(
-				row.installmentAmount ?? row.amount ?? row.totalAmount ?? 0,
-			);
-			const computedAmount = computeAttendanceBenefitAmount({
-				basis: basis as BenefitAttendanceAmountBasis,
-				enrolledAmount,
-				scheduledWorkDays: metrics.scheduledWorkDays,
-				absentDays: metrics.absentDays,
-			});
+
 			await ensureAttendanceBenefitInstallmentForPeriod(
 				prisma as any,
 				row,
 				periodForEnsure,
 				computedAmount,
+				{
+					requireAttendanceBased: false,
+					allowZero: true,
+				},
 			);
 			continue;
 		}
@@ -4109,6 +4176,7 @@ export async function buildPayrollSourceAmountsByEmployeeId(
 			benefitTypeName: source.benefitTypeName,
 			direction: source.direction,
 			reconciliationAction: source.reconciliationAction,
+			isTaxable: source.isTaxable === true,
 			amount: roundToCentavo(amount),
 			startDate: source.startDate,
 			endDate: source.endDate,

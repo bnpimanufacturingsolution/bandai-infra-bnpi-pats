@@ -1,8 +1,7 @@
-<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/.wwg/wiki/project-truth-summary.md) -->
 # Project Truth Summary
 
 Status: RECONCILED_FROM_EXISTING_PROJECT
-Last reviewed: 2026-07-17
+Last reviewed: 2026-07-23
 
 ## Accepted With Evidence
 
@@ -14,8 +13,8 @@ Last reviewed: 2026-07-17
 - High-risk areas: auth, authorization, employee data, attendance/timesheets, payroll/billing, public applicant data, persistence, migrations/backfills/repairs, secrets, deployment, deletion scripts, load testing, soak testing, and DB fault injection.
 - Binding attendance/timesheet/payroll source split: `AttendanceObligation` for live/current/future operational attendance, `Attendance` for biometric/raw/effective clock ledger, effective `Timesheetline` rows for past submitted/approved/payroll-ready totals and approved OT, and `EmployeePayroll.timesheetSnapshot` for paid payroll history.
 - Post-lock payable corrections use durable `PayrollCorrection` + `PAYROLL_CORRECTION` request workflow; applied as explicit retro lines on next open payroll generate without rewriting locked timesheet or Period A snapshot. Request UI (emp + hris-app) uses Time In/Time Out; settlement is minute dayDeltas. Apply-period surfaces: `metadata.payrollCorrections[]`, computation-view gross rows, payslip PDF, HR Payroll summary prior-period accordion + daily detail category, employee payslip Adjustments/Retro.
-- Employee benefit payroll adjustments use explicit `scheduleMode`: `TIME_BOUND` and `FIXED_INSTALLMENTS` bulk-generate installments from total amount; `RECURRING` applies a per-payment-event amount with optional end date, lazy installment ensure, and optional `recurrenceFrequency` (`EVERY_CUTOFF` default / `MONTHLY` period 2 / `YEARLY` fiscal year-end). Optional `attendanceBased` + `PER_DAY`/`PER_CUTOFF` recomputes amounts (ABSENT-only) at payroll. See `docs/BENEFIT_SCHEDULE_MODES.md`.
-- Perfect Attendance **payroll** money: benefit type code **`PFA`** → `EmployeePayroll.perfectAttendance` (Bandai CT, post-net receivable with MLA/LLA). Driven by **EmployeeBenefit enrollment**, not by the perfect-attendance **metrics report**. Seed catalog currently names PFA **Performance Bonus** (`BONUS`) — **CONFLICTING** with product label Perfect Attendance; prefer code `PFA` + product label in agent language. No auto-award from analytics. PFA + `attendanceBased` off = fixed amount when due; on = ABSENT-only pro-rate (still pays with absences). HR form warn-only banner for the combo.
+- Employee benefit payroll adjustments use explicit `scheduleMode`: `TIME_BOUND` and `FIXED_INSTALLMENTS` bulk-generate installments from total amount; `RECURRING` applies a per-payment-event amount with optional end date, lazy installment ensure, and optional `recurrenceFrequency` (`EVERY_CUTOFF` default / `MONTHLY` period 2 / `YEARLY` fiscal year-end). Optional `attendanceBased` + `PER_DAY`/`PER_CUTOFF` recomputes amounts (ABSENT-only) at payroll. Separate **eligibility** knobs: `eligibilityMode` (`ENROLLED_ALWAYS` default | `ATTENDANCE_QUALIFIED`) + disqualify flags. See `docs/BENEFIT_SCHEDULE_MODES.md`.
+- Perfect Attendance **payroll** money: benefit type code **`PFA`** → `EmployeePayroll.perfectAttendance` (Bandai CT). Driven by **EmployeeBenefit enrollment**, not metrics report. Classic PFA = type defaults `ATTENDANCE_QUALIFIED` + all disqualify flags + fixed amount. Seed name **Performance Bonus** remains **CONFLICTING**. No auto-award from analytics.
 - Approved leave is a governed attendance event: leave approval may create or supersede `Attendance` rows, recompute `AttendanceObligation`, refresh mutable timesheet snapshots from obligations, and preserve locked submitted/approved snapshots as explicit adjustment-required follow-up instead of rewriting them.
 - Approved overtime now has a governed post-approval side effect: when a timesheet becomes `APPROVED`, effective overtime lines remain the tally source and the backend may credit `COMPENSATORY` leave through `Timesheet.metadata.compensatoryLeaveCredit` plus `Employee.leaveBalances`.
 - Current fast API CI gate: `.github/workflows/api-ci.yml` blocks PR/push verification on `npm run test:ci:source-truth`.
@@ -46,6 +45,7 @@ The repository clearly represents the HRIS backend API and the stale Web3/eComme
 - Do not mix the attendance/timesheet/payroll source-of-truth models, now re-grounded directly in `prisma/schema-postgres/attendanceobligation.prisma`, `attendance.prisma`, `timesheetline.prisma`, `employeepayroll.prisma`, and `helper/timesheet.helper.ts` after `../docs/attendance-timesheet-payroll-tally-prd.md` was confirmed permanently unrecoverable on 2026-06-26.
 - Do not treat benefit `amount` as the same semantic for all schedule modes: finite modes use **program total**; `RECURRING` uses **per payroll period**. Do not bulk-pregenerate infinite recurring installments; payroll lazy-ensure is the accepted path.
 - Do not equate perfect attendance **metrics** with PFA **payroll money**, or invent auto-award of Perfect Attendance from the report.
+- Do not treat `attendanceBased` pro-rate as perfect-attendance eligibility; use `eligibilityMode` / disqualify flags for all-or-nothing qualification.
 - Do not mutate `.vorter/`.
 
 ## Load Full Truth When
@@ -53,9 +53,6 @@ The repository clearly represents the HRIS backend API and the stale Web3/eComme
 - A task touches API behavior, persistence, Prisma schemas, authorization, attendance, timesheets, payroll, employee benefits schedule modes, migrations, deployment, tests, load/soak infrastructure, or cross-repo app/API responsibilities.
 - This summary appears to conflict with `.wwg/wiki/project-truth.md`.
 
-### bandai-infra develop notes (same section: Load Full Truth When)
-
-- A task touches API behavior, persistence, Prisma schemas, authorization, attendance, timesheets, payroll, migrations, deployment, tests, load/soak infrastructure, or cross-repo app/API responsibilities.
 ## References
 
 - `.wwg/wiki/project-truth.md`

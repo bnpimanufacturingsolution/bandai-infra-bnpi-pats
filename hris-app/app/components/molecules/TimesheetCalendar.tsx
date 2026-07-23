@@ -10,8 +10,8 @@ import type { TimesheetBreakdown } from "~/services/timesheet.service";
 import { TimesheetDayCell } from "~/components/atoms/TimesheetDayCell";
 import {
 	canFileOvertimeRequest,
-	getOvertimeCandidateBadge,
 	readOvertimeCandidateFromDay,
+	resolveOvertimeDayBadge,
 } from "~/lib/utils/overtime-candidate";
 import { TimesheetDayTooltipContent } from "~/components/molecules/TimesheetDayTooltipContent";
 import type { DayPayrollCorrectionMarker } from "~/lib/utils/payroll-correction-day-markers";
@@ -393,10 +393,7 @@ export function TimesheetCalendar({
 														: "hours";
 
 								const overtimeCandidate = readOvertimeCandidateFromDay(day);
-								const overtimeBadge =
-									day.overtimeHours && day.overtimeHours !== "0:00"
-										? { label: "+OT", tone: "ot-approved" as const }
-										: getOvertimeCandidateBadge(overtimeCandidate);
+								const overtimeBadge = resolveOvertimeDayBadge(day);
 								const correctionMarker =
 									payrollCorrectionByDate?.get(dayKey) || null;
 								const isDaySelected = selectedDaysSet.has(dayKey);

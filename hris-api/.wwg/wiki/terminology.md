@@ -1,4 +1,3 @@
-<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/.wwg/wiki/terminology.md) -->
 # Terminology
 
 This file defines canonical and observed project language.
@@ -10,6 +9,7 @@ Update 2026-06-26: `../docs/attendance-timesheet-payroll-tally-prd.md` was never
 Update 2026-07-14: Employee benefit payroll schedule terms expanded to include `RECURRING` (per-period amount, optional end date, lazy installment ensure). See section **Employee Benefit Payroll Schedule Terms**.
 Update 2026-07-14: Attendance-based benefit amount terms (`attendanceBased`, `PER_DAY`, `PER_CUTOFF`) added.
 Update 2026-07-17: Perfect Attendance payroll benefit (`PFA` / `perfectAttendance`) vs perfect attendance metrics report documented; seed name conflict recorded.
+Update 2026-07-23: Benefit attendance eligibility mode + disqualify flags (independent of amount pro-rate); PFA type defaults for classic perfect attendance.
 
 ## Canonical Terms
 
@@ -75,7 +75,9 @@ Update 2026-07-17: Perfect Attendance payroll benefit (`PFA` / `perfectAttendanc
 | PER_CUTOFF | Attendance amount basis: enrolled amount is **full cut-off** if zero absences; paid = full × (present/scheduled). | CONFIRMED_FROM_IMPLEMENTATION | `computeAttendanceBenefitAmount`; owner decisions 2026-07-14. |
 | present days (benefit attendance v1) | scheduled non-`REST_DAY` days minus days with status `ABSENT` only. Leave does not reduce. | CONFIRMED_FROM_IMPLEMENTATION | `countAttendanceBenefitDaysFromBreakdown`; payroll basic-pay absence alignment. |
 | PFA | Benefit type **code** for Perfect Attendance compensation. Payroll maps `PFA` → `EmployeePayroll.perfectAttendance`. | CONFIRMED_FROM_IMPLEMENTATION | `helper/payroll-source-display.helper.ts`; `helper/payroll-period.helper.ts`; import map `"Perfect Attendance": "PFA"`. |
-| Perfect Attendance (payroll) | Product / Bandai register label for the PFA compensation field (column CT). Post-net receivable on computation view when treated as receivable-only / saved post-net field. **Not** Prisma `BenefitCategory.ALLOWANCE` by seed (seed category is `BONUS`). With `attendanceBased` off: fixed enrolled amount when due. With `attendanceBased` on: ABSENT-only pro-rate (still pays with absences); HR form warns only. | CONFIRMED_FROM_IMPLEMENTATION | register CT; payslip “Perfect Attendance”; `EmployeePayroll.perfectAttendance`; hris-app `shouldShowPfaAttendanceBasedWarning`. |
+| Perfect Attendance (payroll) | Product / Bandai register label for the PFA compensation field (column CT). Classic config: `eligibilityMode=ATTENDANCE_QUALIFIED` + disqualify flags + fixed amount. Amount pro-rate (`attendanceBased`) is separate. | CONFIRMED_FROM_IMPLEMENTATION | register CT; seeder PFA defaults; `benefit-attendance-eligibility.helper.ts`; hris-app eligibility form. |
+| Benefit eligibility mode | `ENROLLED_ALWAYS` (schedule only) or `ATTENDANCE_QUALIFIED` (period all-or-nothing from disqualify flags). | CONFIRMED_FROM_IMPLEMENTATION | `EmployeeBenefit.eligibilityMode`; payroll evaluate order. |
+| Benefit eligibility disqualify flags | `eligibilityDisqualifyOnAbsent` / `Late` / `Undertime` / `Leave` — when QUALIFIED, any matching signal → period amount 0. | CONFIRMED_FROM_IMPLEMENTATION | employeebenefit schema; eligibility helper. |
 | Performance Bonus (PFA seed name) | Default seeded `BenefitType.name` for code `PFA`. Conflicts with product label “Perfect Attendance”; money path still keys on code. | CONFLICTING | `prisma/seeds/benefitTypeSeeder.ts` vs payroll/UI labels. |
 | EmployeePayroll.perfectAttendance | Named payroll register amount for Perfect Attendance compensation. | CONFIRMED_FROM_IMPLEMENTATION | `prisma/schema/employeepayroll.prisma`; employee payroll computation view. |
 | perfectAttendanceMetrics | Metrics API key / report for employees with no late, no undertime, and no `LEAVE` attendance rows in range (≥1 attendance). Analytics only; does not award PFA. | CONFIRMED_FROM_IMPLEMENTATION | `helper/perfect-attendance-metrics.helper.ts`; `zod/metrics.zod.ts`; HR reports Perfect Attendance tab. |
@@ -98,9 +100,6 @@ Update 2026-07-17: Perfect Attendance payroll benefit (`PFA` / `perfectAttendanc
 | Audit logging | Compliance trail for CUD mutations only via `logAudit()` → `AuditLogging`. Reads are excluded. | CONFIRMED | `utils/auditLogger.ts`, `shouldSkipAuditLog()`, `docs/LOGGING_STANDARDS.md`. |
 | Metrics / reports | Backend reporting and aggregate API surface. | CONFIRMED | metrics and report modules. |
 
-### bandai-infra develop notes (same section: HRIS Domain Terms)
-
-| Audit logging | Server-side audit trail behavior for sensitive actions. | INFERRED | auditLogging and activityLogging modules/schemas. |
 ## Incorrect Or Stale Language
 
 | Term | Status | Rule | Evidence |
@@ -148,7 +147,7 @@ Update 2026-07-17: Perfect Attendance payroll benefit (`PFA` / `perfectAttendanc
 | Previous Product Truth described the repo as Web3/eCommerce while README/package/source describe HRIS API. | stale `.wwg/wiki/project-truth.md` content before 2026-05-25 reconciliation. | Use HRIS API language and keep stale terms only as drift warnings. |
 | Generic role labels (`admin`, `user`, `agent`) are too broad for HRIS authorization work. | previous adoption audit vs app/API route and domain evidence. | Use inferred HRIS role labels until the canonical permission matrix is confirmed. |
 | Benefit type code `PFA` is seeded as **Performance Bonus** (`BONUS`) but payroll register, payslip, Bandai import, and HR UI call it **Perfect Attendance** (often informal “allowance” / post-net receivable). | `prisma/seeds/benefitTypeSeeder.ts` vs `payroll-period.helper.ts` CT / `sourceBy(PFA)`; HR run-payroll + benefits filters. | Prefer product label **Perfect Attendance** and code **PFA** in payroll/agent language. Do not rename seed without owner decision. Do not confuse with `perfectAttendanceMetrics` report. |
-| “Perfect attendance” report eligibility vs PFA money. | Metrics: no late/undertime/LEAVE. Attendance-based benefits: ABSENT-only pro-rate. PFA money: enrollment-driven; fixed when attendanceBased off, pro-rated when on. | Keep three concepts separate. HR form warns on PFA+attendanceBased (warn only). |
+| “Perfect attendance” report eligibility vs PFA money. | Metrics: no late/undertime/LEAVE. Amount pro-rate: ABSENT-only. Eligibility mode: configurable QUALIFIED flags. PFA money: enrollment + optional QUALIFIED gate + optional pro-rate. | Keep concepts separate. Prefer eligibility for classic all-or-nothing PFA. |
 
 ## Rules
 

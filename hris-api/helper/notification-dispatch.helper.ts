@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from "../generated/prisma";
 import type { Server as SocketIOServer } from "socket.io";
+import { invalidateCache } from "../middleware/cache";
 
 type PrismaExecutor = PrismaClient | Prisma.TransactionClient;
 const asRecord = (value: unknown): Record<string, any> =>
@@ -256,6 +257,17 @@ export const publishNotification = async ({
 		recipientsToEmit.forEach((employeeId) => {
 			io.to(toEmployeeRoom(employeeId)).emit("notification:new", notification);
 		});
+	}
+
+	// Keep list/count GET responses fresh after dispatch (request approval, decisions, etc.).
+	// HTTP create/update/mark-read already invalidate; publish paths must do the same.
+	try {
+		await invalidateCache.byPattern("cache:notification:list:*");
+	} catch (cacheError) {
+		console.warn(
+			`[publishNotification] Failed to invalidate notification list cache for eventKey=${eventKey}:`,
+			cacheError,
+		);
 	}
 
 	return notification;

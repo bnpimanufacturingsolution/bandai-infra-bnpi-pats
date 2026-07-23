@@ -12,7 +12,7 @@ export default function BenefitsManagementPage() {
 	return (
 		<BenefitsManagement
 			title="Benefits Management"
-			description="Manage employee benefit enrollments and coverage"
+			description="Browse benefit types and see who is enrolled in each"
 		/>
 	);
 }

@@ -1,5 +1,6 @@
 import { Moon } from "lucide-react";
 import { forwardRef, type HTMLAttributes } from "react";
+import { OVERTIME_CANDIDATE_TONE_SURFACES } from "~/lib/utils/overtime-candidate";
 
 type TimesheetDayCellKind =
 	| "hours"
@@ -44,10 +45,11 @@ interface TimesheetDayCellProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const toneClassMap: Record<TimesheetDayCellBadgeTone, string> = {
-	ot: "text-green-700",
-	"ot-filed": "text-indigo-600",
-	"ot-approved": "text-emerald-700",
-	"ot-rejected": "text-rose-600",
+	// Keep OT tones in lockstep with tooltip surfaces (overtime-candidate util).
+	ot: OVERTIME_CANDIDATE_TONE_SURFACES.ot.badgeText,
+	"ot-filed": OVERTIME_CANDIDATE_TONE_SURFACES["ot-filed"].badgeText,
+	"ot-approved": OVERTIME_CANDIDATE_TONE_SURFACES["ot-approved"].badgeText,
+	"ot-rejected": OVERTIME_CANDIDATE_TONE_SURFACES["ot-rejected"].badgeText,
 	late: "text-amber-700",
 	eo: "text-orange-700",
 	meta: "text-slate-600",

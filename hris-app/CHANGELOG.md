@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Benefits enrollment **Attendance rules**: eligibility mode (`ENROLLED_ALWAYS` / `ATTENDANCE_QUALIFIED`) + disqualify flags beside Compute from attendance. Benefit type admin can set eligibility policy defaults; PFA create prefills classic perfect attendance. Contract: `docs/BENEFIT_SCHEDULE_MODES.md`.
+- Payroll benefits on HR detail + HTML payslip: group applied benefits under **Benefits applied → Non-taxable / Taxable** using source `isTaxable` (API freeze/enrich). Helper: `app/lib/utils/payroll-benefit-display.ts`.
 - Sidebar scrollbar: hidden by default; thin scrollbar only while the sidebar is hovered (role-aware `Sidebar` and admin configuration shell).
 - Payroll adjustment **display names**: employee payroll summary, Payroll Adjustments list, and payslip detail show **enrollment name** as primary and **benefit type** as category when multiple benefits share one type (e.g. Rice Subsidy / Travel Allowance under De Minimis). `TimesheetPayrollSourceDetail` includes `benefitTypeName`. HR past-payroll **View payslip** still opens the API PDF, which expands enrollment breakdown live. Contract: `docs/BENEFIT_SCHEDULE_MODES.md` (backend authority `../hris-api/docs/BENEFIT_SCHEDULE_MODES.md`).
 - Attendance-based benefit amounts in HR benefits management: **Compute from attendance** toggle with `PER_DAY` (rate × present days) or `PER_CUTOFF` (full cut-off pro-rated for ABSENT days). Amount labels, preview copy, detail view, and create/update payloads send `attendanceBased` / `attendanceAmountBasis`. Contract: `docs/BENEFIT_SCHEDULE_MODES.md`.

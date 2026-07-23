@@ -124,6 +124,10 @@ export interface EmployeePayrollComputationRow {
 		| "DEDUCTED_AFTER_GROSSPAY"
 		| "ADDED_AFTER_NETPAY";
 	explanation: string;
+	/** Present on employeeBenefit source lines for tax grouping. */
+	isTaxable?: boolean | null;
+	/** True when row comes from metadata.payrollSourceDetails. */
+	isBenefitSource?: boolean;
 }
 
 export interface EmployeePayrollComputationView {

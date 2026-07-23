@@ -1,11 +1,8 @@
-<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/docs/PAYROLL_CYCLE_RULES_CONFIG.md) -->
 # Payroll Cycle Rules Configuration (Template-Based)
 
 This project uses a single `cycleRules` JSON object on `PayrollCycleConfig` to control period boundaries by frequency. The authoritative implementation is `app/payrollperiod/payroll-cycle.helper.ts` (`getMergedCycleRules`, `buildPeriodsFromRange`).
 
 ## Sample `cycleRules`
-
-Current (standalone / product) shape:
 
 ```json
 {
@@ -18,21 +15,6 @@ Current (standalone / product) shape:
 }
 ```
 
-### Alternate `SEMI_MONTHLY` sample from bandai-infra develop (`rangeA` / `rangeB`)
-
-Some monorepo develop docs described semi-monthly periods as two explicit ranges instead of `firstStartDay` / `secondStartDay` / `secondEndDay`:
-
-```json
-{
-  "SEMI_MONTHLY": {
-    "rangeA": { "startDay": 5, "endDay": 20 },
-    "rangeB": { "startDay": 21, "endDay": 4 }
-  }
-}
-```
-
-Treat the `firstStartDay` / `secondStartDay` / `secondEndDay` form as the current product sample unless code still accepts `rangeA`/`rangeB`. When both shapes appear in older ops docs, prefer matching the live helper implementation.
-
 ## Behavior by Frequency
 
 - `SEMI_MONTHLY.firstStartDay`, `secondStartDay`, `secondEndDay`
@@ -42,10 +24,6 @@ Treat the `firstStartDay` / `secondStartDay` / `secondEndDay` form as the curren
   - The rule is only accepted if it leaves no gap between periods: `secondStartDay > firstStartDay`, and either `secondEndDay === "LAST_DAY"` with `firstStartDay === 1`, or `firstStartDay === secondEndDay + 1`. An invalid combination silently falls back to the default `1-15/16-end` rule.
   - The 4 supported app-side presets are: `1-15/16-End`, `1-14/15-End`, `5-19/20-4`, `10-24/25-9`.
   - A legacy `SEMI_MONTHLY.splitDay` shape (a single cutoff day) is auto-migrated on read into `firstStartDay: 1, secondStartDay: splitDay + 1, secondEndDay: "LAST_DAY"` — see `getOrCreatePayrollCycleConfig` in `payrollperiod.controller.ts`.
-- `SEMI_MONTHLY.rangeA` and `SEMI_MONTHLY.rangeB` (documented on bandai-infra develop; verify against helper before relying on it)
-  - Two explicit ranges define each semi-monthly period.
-  - If `startDay > endDay`, the range crosses into next month.
-  - Example: `rangeA: 5-20`, `rangeB: 21-4` (cross-month).
 - `WEEKLY.anchorWeekday`
   - Week starts on `anchorWeekday` (`0=Sun` ... `6=Sat`).
 - `BIWEEKLY.anchorWeekday`
@@ -65,8 +43,6 @@ Numeric day values are clamped to the real calendar month length:
 - `31` in April becomes Apr `30`.
 
 So `SEMI_MONTHLY.secondEndDay = "LAST_DAY"` always lands on the real last day of the month, regardless of month length.
-
-For explicit semi-monthly ranges (`rangeA`/`rangeB`), day values are still clamped by real month length during date resolution (bandai-infra develop note).
 
 ## Pay Date Rule
 

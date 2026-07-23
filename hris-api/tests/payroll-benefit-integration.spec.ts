@@ -37,6 +37,19 @@ const prismaFor = (benefits: unknown[], timesheets: unknown[] = []) => ({
 	employeeBenefit: { findMany: async () => benefits },
 	employeeLoan: { findMany: async () => [] },
 	timesheet: { findMany: async () => timesheets },
+	payrollPeriod: {
+		findUnique: async () => ({
+			id: period.id,
+			periodNumber: 1,
+			payFrequency: "SEMI_MONTHLY",
+			startDate: period.startDate,
+			endDate: period.endDate,
+		}),
+		count: async () => 1,
+	},
+	payrollCycleConfig: {
+		findFirst: async () => null,
+	},
 	employeeBenefitInstallment: {
 		create: async (args: any) => ({ id: `created-${Date.now()}`, ...args.data }),
 		update: async (args: any) => ({ id: args.where.id, ...args.data }),
@@ -220,16 +233,16 @@ describe("payroll benefit integration", () => {
 				installments: [],
 			}),
 		];
+		const base = prismaFor(benefits);
 		const prisma = {
-			employeeBenefit: { findMany: async () => benefits },
-			employeeLoan: { findMany: async () => [] },
-			timesheet: { findMany: async () => [] },
+			...base,
 			employeeBenefitInstallment: {
 				create: async ({ data }: { data: any }) => {
 					const row = { id: `created-${created.length + 1}`, ...data };
 					created.push(row);
 					return row;
 				},
+				update: async (args: any) => ({ id: args.where.id, ...args.data }),
 			},
 		} as any;
 
@@ -250,33 +263,32 @@ describe("payroll benefit integration", () => {
 
 	it("does not duplicate a recurring installment already present for the period", async () => {
 		const created: any[] = [];
-		const prisma = {
-			employeeBenefit: {
-				findMany: async () => [
-					source({
-						scheduleMode: "RECURRING",
+		const benefits = [
+			source({
+				scheduleMode: "RECURRING",
+				amount: 500,
+				installmentAmount: 500,
+				endDate: null,
+				installments: [
+					{
+						id: "i-existing",
+						installmentNumber: 1,
 						amount: 500,
-						installmentAmount: 500,
-						endDate: null,
-						installments: [
-							{
-								id: "i-existing",
-								installmentNumber: 1,
-								amount: 500,
-								scheduledDate: period.startDate,
-								status: "SCHEDULED",
-							},
-						],
-					}),
+						scheduledDate: period.startDate,
+						status: "SCHEDULED",
+					},
 				],
-			},
-			employeeLoan: { findMany: async () => [] },
-			timesheet: { findMany: async () => [] },
+			}),
+		];
+		const base = prismaFor(benefits);
+		const prisma = {
+			...base,
 			employeeBenefitInstallment: {
 				create: async ({ data }: { data: any }) => {
 					created.push(data);
 					return { id: "should-not-create", ...data };
 				},
+				update: async (args: any) => ({ id: args.where.id, ...args.data }),
 			},
 		} as any;
 
@@ -295,26 +307,25 @@ describe("payroll benefit integration", () => {
 
 	it("skips recurring ensure when the benefit ends before the payroll period", async () => {
 		const created: any[] = [];
+		const benefits = [
+			source({
+				scheduleMode: "RECURRING",
+				amount: 500,
+				installmentAmount: 500,
+				startDate: new Date("2025-01-01T00:00:00.000Z"),
+				endDate: new Date("2025-12-31T00:00:00.000Z"),
+				installments: [],
+			}),
+		];
+		const base = prismaFor(benefits);
 		const prisma = {
-			employeeBenefit: {
-				findMany: async () => [
-					source({
-						scheduleMode: "RECURRING",
-						amount: 500,
-						installmentAmount: 500,
-						startDate: new Date("2025-01-01T00:00:00.000Z"),
-						endDate: new Date("2025-12-31T00:00:00.000Z"),
-						installments: [],
-					}),
-				],
-			},
-			employeeLoan: { findMany: async () => [] },
-			timesheet: { findMany: async () => [] },
+			...base,
 			employeeBenefitInstallment: {
 				create: async ({ data }: { data: any }) => {
 					created.push(data);
 					return { id: "x", ...data };
 				},
+				update: async (args: any) => ({ id: args.where.id, ...args.data }),
 			},
 		} as any;
 
@@ -328,6 +339,129 @@ describe("payroll benefit integration", () => {
 
 		assert.equal(created.length, 0);
 		assert.equal(result.has("employee-1"), false);
+	});
+
+	it("zeros ATTENDANCE_QUALIFIED benefit when period has ABSENT", async () => {
+		const updates: any[] = [];
+		const benefits = [
+			source({
+				id: "pfa-1",
+				scheduleMode: "RECURRING",
+				eligibilityMode: "ATTENDANCE_QUALIFIED",
+				eligibilityDisqualifyOnAbsent: true,
+				eligibilityDisqualifyOnLate: false,
+				eligibilityDisqualifyOnUndertime: false,
+				eligibilityDisqualifyOnLeave: false,
+				attendanceBased: false,
+				amount: 1000,
+				totalAmount: 1000,
+				installmentAmount: 1000,
+				endDate: null,
+				benefitType: {
+					...source().benefitType,
+					payrollDirection: "COMPENSATION",
+					code: "PFA",
+					name: "Perfect Attendance",
+					reconciliationAction: "KEEP_AS_BENEFIT",
+				},
+				installments: [
+					{
+						id: "i-pfa-1",
+						installmentNumber: 1,
+						amount: 1000,
+						scheduledDate: period.startDate,
+						status: "SCHEDULED",
+					},
+				],
+			}),
+		];
+		const timesheets = [
+			{
+				employeeId: "employee-1",
+				timesheetlines: [
+					{ date: period.startDate, status: "PRESENT", lateHours: "0:00", undertimeHours: "0:00", isDeleted: false, isEffective: true },
+					{ date: new Date("2026-01-02T00:00:00.000Z"), status: "ABSENT", lateHours: "0:00", undertimeHours: "0:00", isDeleted: false, isEffective: true },
+				],
+			},
+		];
+		const base = prismaFor(benefits, timesheets);
+		const prisma = {
+			...base,
+			employeeBenefitInstallment: {
+				create: async ({ data }: { data: any }) => ({ id: "new", ...data }),
+				update: async (args: any) => {
+					updates.push(args);
+					return { id: args.where.id, ...args.data };
+				},
+			},
+		} as any;
+
+		const result = await buildPayrollSourceAmountsByEmployeeId(prisma, {
+			employeeIds: ["employee-1"],
+			organizationId: "org-1",
+			payrollPeriodId: period.id,
+			startDate: period.startDate,
+			endDate: period.endDate,
+		});
+
+		assert.equal(updates.length, 1);
+		assert.equal(updates[0].data.amount, 0);
+		assert.equal(result.has("employee-1"), false);
+	});
+
+	it("pays full fixed amount when ATTENDANCE_QUALIFIED and period is clean", async () => {
+		const benefits = [
+			source({
+				id: "pfa-2",
+				scheduleMode: "RECURRING",
+				eligibilityMode: "ATTENDANCE_QUALIFIED",
+				eligibilityDisqualifyOnAbsent: true,
+				eligibilityDisqualifyOnLate: true,
+				eligibilityDisqualifyOnUndertime: true,
+				eligibilityDisqualifyOnLeave: true,
+				attendanceBased: false,
+				amount: 500,
+				totalAmount: 500,
+				installmentAmount: 500,
+				endDate: null,
+				benefitType: {
+					...source().benefitType,
+					payrollDirection: "COMPENSATION",
+					code: "PFA",
+					name: "Perfect Attendance",
+				},
+				installments: [
+					{
+						id: "i-pfa-2",
+						installmentNumber: 1,
+						amount: 500,
+						scheduledDate: period.startDate,
+						status: "SCHEDULED",
+					},
+				],
+			}),
+		];
+		const timesheets = [
+			{
+				employeeId: "employee-1",
+				timesheetlines: [
+					{ date: period.startDate, status: "PRESENT", lateHours: "0:00", undertimeHours: "0:00", isDeleted: false, isEffective: true },
+					{ date: new Date("2026-01-02T00:00:00.000Z"), status: "PRESENT", lateHours: "0:00", undertimeHours: "0:00", isDeleted: false, isEffective: true },
+				],
+			},
+		];
+		const prisma = prismaFor(benefits, timesheets);
+
+		const result = await buildPayrollSourceAmountsByEmployeeId(prisma, {
+			employeeIds: ["employee-1"],
+			organizationId: "org-1",
+			payrollPeriodId: period.id,
+			startDate: period.startDate,
+			endDate: period.endDate,
+		});
+
+		// amount already 500 — may skip update when unchanged
+		assert.equal(result.get("employee-1")?.amounts.totalCompensationBenefits, 500);
 	});
 
 	it("computes PER_DAY attendance-based benefit as rate × present days", async () => {
@@ -371,10 +505,9 @@ describe("payroll benefit integration", () => {
 				],
 			},
 		];
+		const base = prismaFor(benefits, timesheets);
 		const prisma = {
-			employeeBenefit: { findMany: async () => benefits },
-			employeeLoan: { findMany: async () => [] },
-			timesheet: { findMany: async () => timesheets },
+			...base,
 			employeeBenefitInstallment: {
 				create: async ({ data }: { data: any }) => ({ id: "new", ...data }),
 				update: async (args: any) => {
@@ -432,10 +565,9 @@ describe("payroll benefit integration", () => {
 				],
 			},
 		];
+		const base = prismaFor(benefits, timesheets);
 		const prisma = {
-			employeeBenefit: { findMany: async () => benefits },
-			employeeLoan: { findMany: async () => [] },
-			timesheet: { findMany: async () => timesheets },
+			...base,
 			employeeBenefitInstallment: {
 				create: async ({ data }: { data: any }) => {
 					const row = { id: "created-att-1", ...data };

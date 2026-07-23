@@ -4444,20 +4444,28 @@ const generateAttendanceRecords = async (params: {
 										graceLateMinutes + 24,
 									);
 
-			const outPatternRoll = deterministicInt(`${seedPrefix}-out-pattern`, 0, 99);
-			const timeOutOffsetMinutes = perfectAttendance
-				? 0
-				: outPatternRoll < 20
-					? deterministicInt(`${seedPrefix}-out-early`, -35, -10)
-					: outPatternRoll < 80
-						? deterministicInt(`${seedPrefix}-out-normal`, -10, 8)
-						: deterministicInt(`${seedPrefix}-out-late`, 8, 18);
+			// Intentional OT demo days: 2h or 3h past scheduled end (never 1h-only / sub-hour).
+			// Non-OT days must not clock out slightly past end — that creates tiny +OT candidates
+			// (e.g. 8–18m) that look like overtime without meaningful OT hours.
+			// ~55% of workdays for includeOvertime employees (covers demo weekdays like Jul 20–21).
 			const hasOvertime =
 				!perfectAttendance &&
 				includeOvertime &&
-				deterministicInt(`${seedPrefix}-ot-flag`, 0, 99) < 40;
+				deterministicInt(`${seedPrefix}-ot-flag`, 0, 99) < 55;
+			const outPatternRoll = deterministicInt(`${seedPrefix}-out-pattern`, 0, 99);
+			const timeOutOffsetMinutes = perfectAttendance
+				? 0
+				: hasOvertime
+					? // Stay at/after schedule end; OT block below supplies the 2–3h excess.
+						deterministicInt(`${seedPrefix}-out-ot`, 0, 10)
+					: outPatternRoll < 20
+						? deterministicInt(`${seedPrefix}-out-early`, -35, -10)
+						: outPatternRoll < 80
+							? deterministicInt(`${seedPrefix}-out-normal`, -10, 0)
+							: // Near end without post-shift excess (no accidental OT candidate).
+								deterministicInt(`${seedPrefix}-out-near-end`, -5, 0);
 			const overtimeMinutes = hasOvertime
-				? deterministicInt(`${seedPrefix}-ot-minutes`, 1, 2) * 60
+				? deterministicInt(`${seedPrefix}-ot-minutes`, 2, 3) * 60
 				: 0;
 
 			// Deterministic attendance generation: varied per day/employee but stable across reruns.

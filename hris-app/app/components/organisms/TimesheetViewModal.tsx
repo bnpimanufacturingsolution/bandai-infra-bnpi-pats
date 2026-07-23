@@ -44,6 +44,7 @@ import {
 	canFileOvertimeRequest,
 	findUnfiledOvertimeCandidateDays,
 	readOvertimeCandidateFromDay,
+	resolveOvertimeDayBadge,
 } from "~/lib/utils/overtime-candidate";
 import {
 	buildPayrollCorrectionMarkersByDate,
@@ -2049,6 +2050,10 @@ export function TimesheetViewModal({
 																			: isRestDay
 																				? "rest"
 																				: "hours";
+																	const overtimeBadge =
+																		resolveOvertimeDayBadge(
+																			dayPreview || {},
+																		);
 																	return (
 																		<TimesheetDayCell
 																			dayNumber={getDayNumberFromIsoDate(
@@ -2081,15 +2086,8 @@ export function TimesheetViewModal({
 																							},
 																						]
 																					: []),
-																				...(dayPreview?.overtimeHours &&
-																				dayPreview.overtimeHours !==
-																					"0:00"
-																					? [
-																							{
-																								label: "+OT",
-																								tone: "ot" as const,
-																							},
-																						]
+																				...(overtimeBadge
+																					? [overtimeBadge]
 																					: []),
 																				...(dayPreview
 																					?.metadata

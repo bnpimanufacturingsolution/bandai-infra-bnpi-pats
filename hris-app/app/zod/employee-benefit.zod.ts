@@ -16,6 +16,9 @@ export type BenefitAttendanceAmountBasis = z.infer<typeof BenefitAttendanceAmoun
 export const BenefitRecurrenceFrequencySchema = z.enum(["EVERY_CUTOFF", "MONTHLY", "YEARLY"]);
 export type BenefitRecurrenceFrequency = z.infer<typeof BenefitRecurrenceFrequencySchema>;
 
+export const BenefitEligibilityModeSchema = z.enum(["ENROLLED_ALWAYS", "ATTENDANCE_QUALIFIED"]);
+export type BenefitEligibilityMode = z.infer<typeof BenefitEligibilityModeSchema>;
+
 const validateScheduleFields = (
 	data: {
 		scheduleMode?: BenefitScheduleMode;
@@ -114,6 +117,11 @@ const EmployeeBenefitBaseSchema = z.object({
 	totalInstallments: z.number().int().positive().optional(),
 	attendanceBased: z.boolean().optional(),
 	attendanceAmountBasis: BenefitAttendanceAmountBasisSchema.nullable().optional(),
+	eligibilityMode: BenefitEligibilityModeSchema.optional(),
+	eligibilityDisqualifyOnAbsent: z.boolean().optional(),
+	eligibilityDisqualifyOnLate: z.boolean().optional(),
+	eligibilityDisqualifyOnUndertime: z.boolean().optional(),
+	eligibilityDisqualifyOnLeave: z.boolean().optional(),
 	isActive: z.boolean(),
 	approvedBy: z
 		.string()

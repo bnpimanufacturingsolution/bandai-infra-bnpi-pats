@@ -40,6 +40,11 @@ export type RecurringInstallmentEnsureInput = {
 	installmentAmount?: number | null;
 	attendanceBased?: boolean | null;
 	attendanceAmountBasis?: string | null;
+	eligibilityMode?: string | null;
+	eligibilityDisqualifyOnAbsent?: boolean | null;
+	eligibilityDisqualifyOnLate?: boolean | null;
+	eligibilityDisqualifyOnUndertime?: boolean | null;
+	eligibilityDisqualifyOnLeave?: boolean | null;
 	/** When set, overrides enrolled installment amount for create (attendance-computed). */
 	computedPeriodAmount?: number | null;
 	installments?: Array<{
@@ -108,6 +113,20 @@ export const normalizeEmployeeBenefitPayload = (payload: AnyRecord): AnyRecord =
 			? payload.attendanceAmountBasis
 			: null
 		: null;
+	const eligibilityMode =
+		String(payload.eligibilityMode || "")
+			.trim()
+			.toUpperCase() === "ATTENDANCE_QUALIFIED"
+			? "ATTENDANCE_QUALIFIED"
+			: "ENROLLED_ALWAYS";
+	const eligibilityDisqualifyOnAbsent =
+		payload.eligibilityDisqualifyOnAbsent === undefined ||
+		payload.eligibilityDisqualifyOnAbsent === null
+			? true
+			: payload.eligibilityDisqualifyOnAbsent === true;
+	const eligibilityDisqualifyOnLate = payload.eligibilityDisqualifyOnLate === true;
+	const eligibilityDisqualifyOnUndertime = payload.eligibilityDisqualifyOnUndertime === true;
+	const eligibilityDisqualifyOnLeave = payload.eligibilityDisqualifyOnLeave === true;
 	const requestedInstallments = toNumber(payload.totalInstallments, Number.NaN);
 	const totalInstallments =
 		payload.scheduleMode === "RECURRING"
@@ -163,6 +182,11 @@ export const normalizeEmployeeBenefitPayload = (payload: AnyRecord): AnyRecord =
 		recurrenceFrequency,
 		attendanceBased,
 		attendanceAmountBasis,
+		eligibilityMode,
+		eligibilityDisqualifyOnAbsent,
+		eligibilityDisqualifyOnLate,
+		eligibilityDisqualifyOnUndertime,
+		eligibilityDisqualifyOnLeave,
 		amount: payload.amount !== undefined ? toNumber(payload.amount, totalAmount) : totalAmount,
 		startDate: payload.startDate ?? startPayrollCutOff ?? undefined,
 		endDate: payload.endDate ?? endPayrollCutOff ?? undefined,
@@ -429,10 +453,18 @@ const isWritableInstallmentForPeriod = (
  * Pure eligibility for creating/updating a period installment for attendance-based benefits.
  * TIME_BOUND / RECURRING may create a period row; FIXED only updates an existing due row.
  */
+export type PlanPeriodBenefitAmountOptions = {
+	/** When true (default), require attendanceBased === true. Set false for eligibility recompute. */
+	requireAttendanceBased?: boolean;
+	/** When true, allow computed amount 0 (eligibility fail / full absence). Default false. */
+	allowZero?: boolean;
+};
+
 export const planAttendanceBenefitInstallmentForPeriod = (
 	benefit: RecurringInstallmentEnsureInput,
 	period: BenefitSchedulePeriod,
 	computedAmount: number,
+	options?: PlanPeriodBenefitAmountOptions,
 ):
 	| { action: "skipped"; reason: string }
 	| {
@@ -456,7 +488,10 @@ export const planAttendanceBenefitInstallmentForPeriod = (
 				status: "SCHEDULED";
 			};
 	  } => {
-	if (benefit.attendanceBased !== true) {
+	const requireAttendanceBased = options?.requireAttendanceBased !== false;
+	const allowZero = options?.allowZero === true;
+
+	if (requireAttendanceBased && benefit.attendanceBased !== true) {
 		return { action: "skipped", reason: "not_attendance_based" };
 	}
 	if (benefit.isDeleted === true) {
@@ -501,7 +536,11 @@ export const planAttendanceBenefitInstallmentForPeriod = (
 	}
 
 	const amount = roundMoney(toNumber(computedAmount, 0));
-	if (!(amount > 0)) {
+	if (allowZero) {
+		if (!(amount >= 0) || !Number.isFinite(amount)) {
+			return { action: "skipped", reason: "invalid_amount" };
+		}
+	} else if (!(amount > 0)) {
 		return { action: "skipped", reason: "invalid_amount" };
 	}
 
@@ -567,6 +606,7 @@ export const ensureAttendanceBenefitInstallmentForPeriod = async (
 	benefit: RecurringInstallmentEnsureInput,
 	period: BenefitSchedulePeriod,
 	computedAmount: number,
+	options?: PlanPeriodBenefitAmountOptions,
 ): Promise<
 	| { action: "skipped"; reason: string }
 	| {
@@ -580,7 +620,12 @@ export const ensureAttendanceBenefitInstallmentForPeriod = async (
 			};
 	  }
 > => {
-	const plan = planAttendanceBenefitInstallmentForPeriod(benefit, period, computedAmount);
+	const plan = planAttendanceBenefitInstallmentForPeriod(
+		benefit,
+		period,
+		computedAmount,
+		options,
+	);
 	if (plan.action === "skipped") {
 		return plan;
 	}

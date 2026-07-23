@@ -1,4 +1,3 @@
-<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/.wwg/wiki/project-truth.md) -->
 # Project Truth
 
 Adoption status: INFERRED_FROM_EXISTING_PROJECT
@@ -61,6 +60,10 @@ Currently includes:
 - Feature: Optional attendance-based benefit amounts (`attendanceBased`, `attendanceAmountBasis` = `PER_DAY` | `PER_CUTOFF`). When enabled, payroll recomputes the period installment from timesheet attendance (ABSENT-only reduction in v1) before resolve.
   - Status: CONFIRMED_FROM_IMPLEMENTATION
   - Evidence: `prisma/schema/employeebenefit.prisma`; `prisma/schema-postgres/employeebenefit.prisma`; `zod/employeebenefit.zod.ts`; `helper/employee-benefit-program.helper.ts`; `helper/payroll-benefit-source.helper.ts`; `helper/payroll-period.helper.ts`; `app/employeeBenefit/employeeBenefit.controller.ts`; `docs/BENEFIT_SCHEDULE_MODES.md`; focused tests under `tests/employee-benefit-schedule.*.spec.ts` and `tests/payroll-benefit-*.spec.ts`. Owner product decisions for recurring (per-period amount, optional end date, lazy ensure) confirmed 2026-07-14.
+- Feature: Benefit attendance **eligibility** (all-or-nothing qualification), independent of amount pro-rate.
+  - Meaning: `EmployeeBenefit.eligibilityMode` = `ENROLLED_ALWAYS` (default; legacy-safe) or `ATTENDANCE_QUALIFIED`. When qualified, disqualify flags (`eligibilityDisqualifyOnAbsent` default true; late/undertime/leave default false) zero the period amount if any matching timesheet signal exists. Evaluation order: eligibility → amount pro-rate → resolve. `BenefitType` optional policy defaults prefill create/bulk when keys omitted. Seeded **PFA** defaults: `ATTENDANCE_QUALIFIED` + all four flags true. Existing enrollments not backfilled.
+  - Status: CONFIRMED_FROM_IMPLEMENTATION (2026-07-23)
+  - Evidence: `helper/benefit-attendance-eligibility.helper.ts`; `helper/payroll-period.helper.ts` (`buildPayrollSourceAmountsByEmployeeId`); `prisma/schema/employeebenefit.prisma` + postgres twin + migration `20260723_add_benefit_attendance_eligibility_fields.sql`; `prisma/schema/benefittype.prisma` defaults; `zod/employeebenefit.zod.ts`; seeder PFA row; `docs/BENEFIT_SCHEDULE_MODES.md`; tests `tests/benefit-attendance-eligibility.helper.spec.ts`, `tests/payroll-benefit-integration.spec.ts`.
 - Feature: RECURRING benefit `recurrenceFrequency` cadence filter (`EVERY_CUTOFF` | `MONTHLY` | `YEARLY`).
   - Meaning: Under `scheduleMode: RECURRING`, payroll lazy-ensure creates an installment only on eligible periods. Null/missing = **EVERY_CUTOFF**. **MONTHLY** = `periodNumber === 2` or sole period in that UTC calendar month. **YEARLY** = last period of fiscal-year-end month from org `cycleRules.ANNUALLY.startMonth` (default 1 → December). Amount is per payment event.
   - Status: CONFIRMED_FROM_IMPLEMENTATION
@@ -70,13 +73,13 @@ Currently includes:
   - Status: CONFIRMED_FROM_IMPLEMENTATION
   - Evidence: `prisma/schema/employeepayroll.prisma` (`perfectAttendance`); `helper/payroll-period.helper.ts` (register CT + `sourceBy(["PFA"], ["Perfect Attendance"], …)`); `helper/payroll-source-display.helper.ts` (`PFA` → `perfectAttendance`); `app/employeepayroll/employeepayroll.controller.ts` (post-net register row); `scripts/generate-bandai-payroll-benefit-imports.ts` (`"Perfect Attendance": "PFA"`); `tests/payroll-source-display.helper.spec.ts`; `tests/payslip-pdf.helper.spec.ts`.
   - Not the same as: metrics report `perfectAttendanceMetrics` / `helper/perfect-attendance-metrics.helper.ts` (analytics only; does **not** enroll or award PFA).
-  - Not the same as: optional `attendanceBased` pro-rating (ABSENT-only amount math on any benefit). That path does **not** auto-qualify Perfect Attendance eligibility (no late/leave perfect-attendance rule).
-  - Product semantics for PFA + `attendanceBased` (owner-confirmed 2026-07-17):
-    - **`attendanceBased` off**: fixed enrolled amount when due (all-or-nothing enrollment pay; no ABSENT pro-rate).
-    - **`attendanceBased` on**: ABSENT-only pro-rate; employee can still receive PFA money when absences exist (late/undertime/leave do not zero). Allowed composition; not blocked by API.
-    - HR enrollment form (`hris-app` `employee-benefit-form.tsx`) shows a **warn-only** banner when type code is `PFA` and attendance-based is on (`pfa-attendance-based-warning`). Save is not blocked.
+  - Not the same as: optional `attendanceBased` pro-rating alone (ABSENT-only amount math). Classic perfect attendance uses **eligibility** `ATTENDANCE_QUALIFIED` + fixed amount.
+  - Product semantics (updated 2026-07-23):
+    - **Classic PFA**: type defaults + create prefill → `ATTENDANCE_QUALIFIED`, all disqualify flags on, `attendanceBased` off → full amount when period qualifies else 0.
+    - **Legacy enrollment** (`ENROLLED_ALWAYS`): fixed amount when due if attendanceBased off; pro-rate if attendanceBased on (no quality gate).
+    - HR form: eligibility + amount sections; warn-only for PFA+pro-rate and QUALIFIED+pro-rate.
 - Catalog / seed naming for PFA:
-  - Seeded `BenefitType` code `PFA` uses name **`Performance Bonus`**, category **`BONUS`**, description “attendance incentive”, default `reconciliationAction: KEEP_AS_BENEFIT`.
+  - Seeded `BenefitType` code `PFA` uses name **`Performance Bonus`**, category **`BONUS`**, description “attendance incentive”, default `reconciliationAction: KEEP_AS_BENEFIT`, plus **eligibility policy defaults** (`ATTENDANCE_QUALIFIED` + all disqualify flags).
   - Product / payroll / HR UI language uses **Perfect Attendance** (register, payslip, import workbook, run-payroll attendance filter).
   - Status: **CONFLICTING** (seed catalog name vs payroll/product label); money path still works by **code `PFA`**.
   - Evidence: `prisma/seeds/benefitTypeSeeder.ts` vs register/import/display helpers above; HR app `benefits-management-template.tsx` (`attendance: ["PFA"]`) and `run-payroll-template.tsx` (PFA → Perfect Attendance).
@@ -172,6 +175,9 @@ Accepted or observed architecture:
 - Item: Named Bandai post-net receivable compensation fields include at least `perfectAttendance` (PFA), `mealAllowance` (MLA), and `lineLeaderAllowance` (LLA). These are filled from active EmployeeBenefit sources (and/or saved register values), not from the perfect-attendance **metrics report**. Do not invent auto-award from analytics.
   - Status: CONFIRMED_FROM_IMPLEMENTATION
   - Evidence: `helper/payroll-period.helper.ts`; `helper/payroll-source-display.helper.ts`; `app/employeepayroll/employeepayroll.controller.ts`.
+- Item: Payroll source benefit lines freeze `isTaxable` from `BenefitType.isTaxable` on `metadata.payrollSourceDetails`. HR payroll detail, HTML payslip, and PDF payslip **group applied benefits** under **Benefits applied → Non-taxable / Taxable** (display only; does not change GrossPay/tax math). Unknown/missing flags display as Taxable until live enrich or re-run. GET employeePayroll and payslip enrich missing flags from live enrollments.
+  - Status: CONFIRMED
+  - Evidence: `helper/payroll-period.helper.ts`; `helper/payroll-source-display.helper.ts`; `helper/payslip-pdf.helper.ts`; `app/employeepayroll/employeepayroll.controller.ts`; `docs/BENEFIT_SCHEDULE_MODES.md`; `tests/payroll-source-display.helper.spec.ts`; `tests/payslip-pdf.helper.spec.ts`.
 - Item: Approved leave requests are attendance-side reconciliation events: they may create or supersede `Attendance` ledger rows, must recompute `AttendanceObligation`, must refresh mutable draft/revised/rejected timesheet snapshots from obligations, and must leave submitted/approved locked snapshots unchanged while surfacing explicit adjustment-required follow-up metadata.
   - Status: CONFIRMED_FROM_IMPLEMENTATION
   - Evidence: `app/request/request.controller.ts`, `app/request/leave-attendance-reconciliation.service.ts`, `helper/timesheet.helper.ts`, and `tests/leave-attendance-reconciliation.service.spec.ts`.
@@ -287,9 +293,6 @@ Avoid drifting into:
   - Why it matters: HR import/UI, payslip labels, and seed data currently diverge; agents must not invent auto-award or rename casually.
   - Evidence / uncertainty: implementation confirms money path by code `PFA`; seed name and default reconciliation action are **CONFLICTING** / **NEEDS_CONFIRMATION** relative to Bandai register/post-net treatment.
 
-### bandai-infra develop notes (same section: Open Questions)
-
-  - Evidence / uncertainty: payroll/timesheet modules and the source-of-truth PRD define core source selection but not every workflow policy.
 ## Update Rules
 
 Update this file when:

@@ -64,6 +64,44 @@ Rules:
 - Payroll loads `periodNumber`, sole-period-in-month count, and fiscal start once in `buildPayrollSourceAmountsByEmployeeId`.
 - Custom every-N / free-form cadence is out of scope for v1.
 
+### Attendance eligibility (all-or-nothing) vs amount pro-rate
+
+Two **independent** knobs on `EmployeeBenefit` (and optional defaults on `BenefitType`):
+
+| Concern | Fields | Role |
+|---|---|---|
+| **Eligibility** | `eligibilityMode` + disqualify flags | Whether the period installment may pay |
+| **Amount** | `attendanceBased` + `attendanceAmountBasis` | How much if eligible |
+
+#### Eligibility modes
+
+| `eligibilityMode` | Behavior |
+|---|---|
+| `ENROLLED_ALWAYS` (default; legacy-safe) | Schedule/installment due → pay (no attendance quality gate) |
+| `ATTENDANCE_QUALIFIED` | Evaluate period timesheet; any enabled disqualify rule fails → **amount 0** for the period |
+
+Disqualify flags (meaningful only when `ATTENDANCE_QUALIFIED`):
+
+| Field | Default | Fail when |
+|---|---|---|
+| `eligibilityDisqualifyOnAbsent` | `true` | Any non-rest day with `status === ABSENT` |
+| `eligibilityDisqualifyOnLate` | `false` | Any day with positive late duration |
+| `eligibilityDisqualifyOnUndertime` | `false` | Any day with positive undertime |
+| `eligibilityDisqualifyOnLeave` | `false` | Any day with `status === LEAVE` |
+
+- Pure helper: `helper/benefit-attendance-eligibility.helper.ts`
+- Period scope v1: current payroll period timesheet reporting breakdown only
+- **Not** the analytics metrics report (`perfectAttendanceMetrics`); no auto-enroll from metrics
+
+#### BenefitType policy defaults
+
+Optional catalog fields for enrollment prefill:
+
+- `defaultEligibilityMode`
+- `defaultEligibilityDisqualifyOnAbsent` / `Late` / `Undertime` / `Leave`
+
+Create/bulk API merges type defaults when request omits eligibility keys. Seeded **PFA** sets `ATTENDANCE_QUALIFIED` + all four disqualify flags true (classic Perfect Attendance). Existing enrollments stay `ENROLLED_ALWAYS` (no silent backfill).
+
 ### Attendance-based amount computation
 
 Optional enrollment flags on `EmployeeBenefit`:
@@ -86,11 +124,22 @@ PER_CUTOFF: paid = full_cutoff × (present_days / scheduled_work_days)  // 0 if 
 
 Rules:
 
-- **ABSENT only** reduces the amount in v1. Leave / half-day / tardy do not reduce.
+- **ABSENT only** reduces the amount in v1. Leave / half-day / tardy do not reduce (unless eligibility disqualify flags are on).
 - When attendance is ON, enrolled `amount` is **rate** (`PER_DAY`) or **full cut-off amount** (`PER_CUTOFF`) — not a multi-period program total. Finite modes do **not** equal-split that enrolled amount across installments at create; shells use the enrolled amount as a placeholder and payroll overwrites the due installment.
 - Applies to **all** schedule modes. `FIXED_INSTALLMENTS` only updates an installment already due in the period; `TIME_BOUND` / `RECURRING` may lazy-create a period installment.
 - Metrics are loaded from the period timesheet inside `buildPayrollSourceAmountsByEmployeeId` (before resolve), so preview and generation share the same path.
-- Pure helper: `helper/attendance-benefit-amount.helper.ts`. Ensure/update: `ensureAttendanceBenefitInstallmentForPeriod`.
+- Pure helper: `helper/attendance-benefit-amount.helper.ts`. Ensure/update: `ensureAttendanceBenefitInstallmentForPeriod` (also used for eligibility recompute; supports amount 0).
+
+### Payroll evaluation order
+
+```text
+1. Installment/schedule due for period
+2. If eligibilityMode = ATTENDANCE_QUALIFIED → evaluate flags; fail → period amount 0
+3. Else if attendanceBased → ABSENT-only pro-rate
+4. Else if ATTENDANCE_QUALIFIED pass → fixed enrolled amount
+5. Else RECURRING ensure / existing installments
+6. Resolve sources; code PFA → EmployeePayroll.perfectAttendance (register mapping only)
+```
 
 ### API create/update (`app/employeeBenefit/employeeBenefit.controller.ts`)
 
@@ -104,10 +153,10 @@ Rules:
 ## Payroll consumption
 
 - Before resolve, `buildPayrollSourceAmountsByEmployeeId`:
-  - loads period timesheets and derives attendance metrics for attendance-based benefits;
-  - for `attendanceBased` benefits, ensures/updates the period installment with `computeAttendanceBenefitAmount`;
-  - for non-attendance `RECURRING` benefits, ensures one installment (`ensureRecurringBenefitInstallmentForPeriod`).
-  - timesheet line select uses `hoursWorked` / `status` (not legacy `hours` / `isRestDay` fields).
+  - loads period timesheets (`status`, `lateHours`, `undertimeHours`, `hoursWorked`);
+  - evaluates **eligibility** then **amount** (see evaluation order above);
+  - for eligibility and/or attendance-based amount, ensures/updates the period installment (zero allowed when disqualified);
+  - for non-attendance `RECURRING` benefits with `ENROLLED_ALWAYS`, ensures one installment (`ensureRecurringBenefitInstallmentForPeriod`).
 - `resolvePayrollBenefitSource` continues to prefer due generated installments over a raw total amount.
 - A `SCHEDULED` installment is eligible only when it has no `payrollCutOffId` or the cutoff matches the payroll period being processed.
 - A `DEDUCTED` installment is reusable only for the same payroll period (rerun safety).
@@ -151,9 +200,12 @@ Canonical WWG write-up: `.wwg/wiki/project-truth.md` (Perfect Attendance payroll
 |---|---|
 | Employee payroll summary (HR run payroll view) | Lists each `payrollSourceDetails` line: primary = enrollment `name`, category = `benefitTypeName` |
 | Payroll Adjustments list | Primary = enrollment name; employee under it; type/code as meta |
-| Computation view (`buildEmployeePayrollComputationView`) | Expands source details; omits aggregate register rows (e.g. De Minimis) when covered by details |
-| Payslip PDF (generate during payroll + **view/download**) | Same expansion; label may be `Rice Subsidy (De Minimis Allowance)` when names differ |
-| HTML payslip detail template (app) | Same when `metadata.payrollSourceDetails` is present; otherwise lumped Allowances & Bonuses fallback |
+| Computation view (`buildEmployeePayrollComputationView`) | Expands source details; omits aggregate register rows (e.g. De Minimis) when covered by details; source rows carry `isTaxable` / `isBenefitSource` for UI grouping |
+| Payslip PDF (generate during payroll + **view/download**) | Same expansion; label may be `Rice Subsidy (De Minimis Allowance)` when names differ; **Benefits applied** section grouped as **Non-taxable** / **Taxable** using frozen or live-enriched `isTaxable` |
+| HTML payslip detail template (hris-app + hris-emp-app) | Same tax grouping when `metadata.payrollSourceDetails` is present; otherwise lumped Allowances & Bonuses fallback |
+| HR payroll detail (computation accordion) | Base earnings, then **Benefits applied** → Non-taxable / Taxable, then retro/corrections |
+
+`isTaxable` is frozen on each `metadata.payrollSourceDetails` benefit line from `BenefitType.isTaxable` at payroll generation. Payslip GET and employee payroll GET enrich missing flags from live enrollments so older periods still group correctly. Missing/unknown flags display under **Taxable** (safer disclosure).
 
 #### Live payslip view (HR table “View payslip”)
 

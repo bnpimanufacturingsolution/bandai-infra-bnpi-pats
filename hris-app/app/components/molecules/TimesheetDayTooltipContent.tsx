@@ -2,7 +2,11 @@ import { Edit } from "lucide-react";
 import { format12HourTime, formatDuration } from "~/lib/utils";
 import { isVirtualAbsentLikeRecord } from "~/lib/utils/attendance-status";
 import { formatNightWindow } from "~/lib/utils/night-shift";
-import { readOvertimeCandidateFromMetadata } from "~/lib/utils/overtime-candidate";
+import {
+	getOvertimeCandidateToneSurface,
+	readOvertimeCandidateFromDay,
+	resolveOvertimeDayBadge,
+} from "~/lib/utils/overtime-candidate";
 import type { DayPayrollCorrectionMarker } from "~/lib/utils/payroll-correction-day-markers";
 import { formatMinutesShort } from "~/lib/utils/payroll-correction-day-markers";
 
@@ -235,13 +239,15 @@ export function TimesheetDayTooltipContent({
 	const employeeNote = String(day.employeeNotes || "").trim();
 	const hasApproverNote = approverNote.length > 0;
 	const hasEmployeeNote = employeeNote.length > 0;
-	const overtimeCandidate = readOvertimeCandidateFromMetadata(day.metadata);
+	const overtimeCandidate = readOvertimeCandidateFromDay(day);
+	const overtimeBadge = resolveOvertimeDayBadge(day);
+	const overtimeToneSurface = getOvertimeCandidateToneSurface(overtimeBadge?.tone);
 	const approvalReasonLabel =
 		day.approvalStatus === "APPROVED" && parseDurationToMinutes(day.overtimeHours || "0:00") > 0
 			? "Approval reason"
 			: "Approver note";
 	const overtimeCandidateStatusLabel = (() => {
-		if (!overtimeCandidate.isCandidate) return null;
+		if (!overtimeCandidate.isCandidate && !overtimeBadge) return null;
 		switch (overtimeCandidate.overtimeApprovalStatus) {
 			case "REQUESTED":
 				return "Pending manager approval";
@@ -250,9 +256,20 @@ export function TimesheetDayTooltipContent({
 			case "REJECTED":
 				return "Rejected — file again";
 			default:
+				if (overtimeCandidate.overtimeRequestId) {
+					return "Pending manager approval";
+				}
 				return "File overtime request before submit";
 		}
 	})();
+	const overtimeCalloutTitle =
+		overtimeBadge?.tone === "ot-filed"
+			? "Overtime requested"
+			: overtimeBadge?.tone === "ot-approved"
+				? "Overtime approved"
+				: overtimeBadge?.tone === "ot-rejected"
+					? "Overtime rejected"
+					: "Overtime candidate";
 
 	return (
 		<div className="min-w-[260px] max-w-[320px] space-y-3">
@@ -361,16 +378,22 @@ export function TimesheetDayTooltipContent({
 							</p>
 						</div>
 					</div>
-					{overtimeCandidate.isCandidate ? (
-						<div className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm">
-							<p className="text-xs font-semibold uppercase tracking-wide text-orange-800">
-								Overtime candidate
+					{overtimeCandidate.isCandidate || overtimeBadge ? (
+						<div
+							className={`rounded-md border px-3 py-2 text-sm ${overtimeToneSurface.box}`}>
+							<p
+								className={`text-xs font-semibold uppercase tracking-wide ${overtimeToneSurface.title}`}>
+								{overtimeCalloutTitle}
 							</p>
-							<p className="mt-0.5 font-semibold text-orange-900">
-								{overtimeCandidate.pendingOvertimeHours} detected
+							<p className={`mt-0.5 font-semibold ${overtimeToneSurface.body}`}>
+								{overtimeCandidate.pendingOvertimeHours ||
+									formatDuration(day.overtimeHours || "0:00")}{" "}
+								detected
 							</p>
 							{overtimeCandidateStatusLabel ? (
-								<p className="mt-0.5 text-orange-800">{overtimeCandidateStatusLabel}</p>
+								<p className={`mt-0.5 ${overtimeToneSurface.title}`}>
+									{overtimeCandidateStatusLabel}
+								</p>
 							) : null}
 						</div>
 					) : null}

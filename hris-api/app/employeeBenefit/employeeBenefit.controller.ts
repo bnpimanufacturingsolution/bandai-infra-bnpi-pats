@@ -79,6 +79,81 @@ const getTimeBoundPayrollPeriods = async (
 	});
 };
 
+const ELIGIBILITY_PAYLOAD_KEYS = [
+	"eligibilityMode",
+	"eligibilityDisqualifyOnAbsent",
+	"eligibilityDisqualifyOnLate",
+	"eligibilityDisqualifyOnUndertime",
+	"eligibilityDisqualifyOnLeave",
+] as const;
+
+/**
+ * When create/bulk payload omits eligibility keys, prefill from BenefitType policy defaults.
+ * Explicit request keys always win (even if type defaults exist).
+ */
+const mergeEligibilityDefaultsFromBenefitType = async (
+	prisma: PrismaClient,
+	requestData: Record<string, any>,
+): Promise<Record<string, any>> => {
+	const benefitTypeId = requestData?.benefitTypeId;
+	if (!benefitTypeId) return requestData;
+
+	const missingKeys = ELIGIBILITY_PAYLOAD_KEYS.filter(
+		(key) => requestData[key] === undefined || requestData[key] === null,
+	);
+	if (missingKeys.length === 0) return requestData;
+
+	const benefitType = await prisma.benefitType.findFirst({
+		where: { id: String(benefitTypeId), isDeleted: false },
+		select: {
+			defaultEligibilityMode: true,
+			defaultEligibilityDisqualifyOnAbsent: true,
+			defaultEligibilityDisqualifyOnLate: true,
+			defaultEligibilityDisqualifyOnUndertime: true,
+			defaultEligibilityDisqualifyOnLeave: true,
+		},
+	});
+	if (!benefitType) return requestData;
+
+	const merged = { ...requestData };
+	if (
+		(merged.eligibilityMode === undefined || merged.eligibilityMode === null) &&
+		benefitType.defaultEligibilityMode
+	) {
+		merged.eligibilityMode = benefitType.defaultEligibilityMode;
+	}
+	if (
+		(merged.eligibilityDisqualifyOnAbsent === undefined ||
+			merged.eligibilityDisqualifyOnAbsent === null) &&
+		benefitType.defaultEligibilityDisqualifyOnAbsent != null
+	) {
+		merged.eligibilityDisqualifyOnAbsent = benefitType.defaultEligibilityDisqualifyOnAbsent;
+	}
+	if (
+		(merged.eligibilityDisqualifyOnLate === undefined ||
+			merged.eligibilityDisqualifyOnLate === null) &&
+		benefitType.defaultEligibilityDisqualifyOnLate != null
+	) {
+		merged.eligibilityDisqualifyOnLate = benefitType.defaultEligibilityDisqualifyOnLate;
+	}
+	if (
+		(merged.eligibilityDisqualifyOnUndertime === undefined ||
+			merged.eligibilityDisqualifyOnUndertime === null) &&
+		benefitType.defaultEligibilityDisqualifyOnUndertime != null
+	) {
+		merged.eligibilityDisqualifyOnUndertime =
+			benefitType.defaultEligibilityDisqualifyOnUndertime;
+	}
+	if (
+		(merged.eligibilityDisqualifyOnLeave === undefined ||
+			merged.eligibilityDisqualifyOnLeave === null) &&
+		benefitType.defaultEligibilityDisqualifyOnLeave != null
+	) {
+		merged.eligibilityDisqualifyOnLeave = benefitType.defaultEligibilityDisqualifyOnLeave;
+	}
+	return merged;
+};
+
 /**
  * Shared create path for single and bulk employee benefit enrollments.
  * Creates the program row and non-RECURRING installments when active.
@@ -140,7 +215,11 @@ export const controller = (prisma: PrismaClient) => {
 			);
 		}
 
-		const validation = CreateEmployeeBenefitSchema.safeParse(requestData);
+		const requestWithTypeDefaults = await mergeEligibilityDefaultsFromBenefitType(
+			prisma,
+			requestData as Record<string, any>,
+		);
+		const validation = CreateEmployeeBenefitSchema.safeParse(requestWithTypeDefaults);
 		if (!validation.success) {
 			const formattedErrors = formatZodErrors(validation.error.format());
 			employeeBenefitLogger.error(`Validation failed: ${JSON.stringify(formattedErrors)}`);
@@ -221,7 +300,11 @@ export const controller = (prisma: PrismaClient) => {
 			requestData = transformFormDataToObject(req.body);
 		}
 
-		const validation = BulkCreateEmployeeBenefitSchema.safeParse(requestData);
+		const requestWithTypeDefaults = await mergeEligibilityDefaultsFromBenefitType(
+			prisma,
+			requestData as Record<string, any>,
+		);
+		const validation = BulkCreateEmployeeBenefitSchema.safeParse(requestWithTypeDefaults);
 		if (!validation.success) {
 			const formattedErrors = formatZodErrors(validation.error.format());
 			employeeBenefitLogger.error(
