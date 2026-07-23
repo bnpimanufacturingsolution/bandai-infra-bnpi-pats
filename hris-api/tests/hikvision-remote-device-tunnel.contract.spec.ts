@@ -159,7 +159,8 @@ describe("Hikvision remote device tunnel contract", () => {
 		expect(devWatchScript).to.include("vm-api-reverse");
 		expect(devWatchScript).to.include("dependency-status.json");
 		expect(devWatchScript).to.include("watchdog.unref()");
-		expect(devWatchScript).to.include("fastTunnelPassRunning");
+		expect(devWatchScript).to.include("remoteTunnelPassPromise");
+		expect(devWatchScript).to.include("remote tunnel pass already active");
 		expect(devWatchScript).to.include("hikvision-a-f-fast-watch");
 		expect(devWatchScript).to.include("HRIS_DEV_TUNNEL_WATCH_INTERVAL_MS");
 		expect(devWatchScript).to.include("fastTunnelWatchdog.unref()");

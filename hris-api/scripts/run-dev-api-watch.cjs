@@ -138,27 +138,32 @@ function runBoundedHelper({
 
 let dependencyPassRunning = false;
 let lastDependencyStatus = [];
-let fastTunnelPassRunning = false;
+let remoteTunnelPassPromise = null;
 
-async function runFastTunnelPass() {
-	if (
-		process.env.HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL === "true" ||
-		fastTunnelPassRunning
-	) {
-		return;
-	}
-	fastTunnelPassRunning = true;
-	try {
-		await runBoundedHelper({
-			id: "hikvision-a-f-fast-watch",
+function runRemoteTunnelPass(id) {
+	if (!remoteTunnelPassPromise) {
+		remoteTunnelPassPromise = runBoundedHelper({
+			id,
 			script: remoteTunnelScript,
 			required: true,
 			target: "managed SSH PID + 127.0.0.1:10080-10085,10443-10448,18000-18005",
 			timeoutMs: 75_000,
+		}).finally(() => {
+			remoteTunnelPassPromise = null;
 		});
-	} finally {
-		fastTunnelPassRunning = false;
+	} else {
+		console.log(`[dev-watch] remote tunnel pass already active; ${id} request coalesced.`);
 	}
+	return remoteTunnelPassPromise;
+}
+
+async function runFastTunnelPass() {
+	if (
+		process.env.HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL === "true"
+	) {
+		return;
+	}
+	await runRemoteTunnelPass("hikvision-a-f-fast-watch");
 }
 
 async function runDependencyPass(reason) {
@@ -187,15 +192,7 @@ async function runDependencyPass(reason) {
 
 		const results = [];
 		if (process.env.HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL !== "true") {
-			results.push(
-				await runBoundedHelper({
-					id: "hikvision-a-f-forwards",
-					script: remoteTunnelScript,
-					required: true,
-					target: "127.0.0.1:10080-10085,10443-10448,18000-18005",
-					timeoutMs: 75_000,
-				}),
-			);
+			results.push(await runRemoteTunnelPass("hikvision-a-f-forwards"));
 		}
 		if (process.env.HRIS_SKIP_DEVICE_LIVE_PATH !== "true") {
 			results.push(

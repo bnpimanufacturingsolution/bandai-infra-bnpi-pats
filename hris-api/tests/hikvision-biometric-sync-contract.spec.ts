@@ -144,6 +144,16 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("Merge scope hash does not match the reviewed write matrix");
 	});
 
+	it("waits for tunnel recovery before failing a reviewed merge source row", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("HIKVISION_MERGE_SOURCE_REFRESH_RETRY_LIMIT");
+		expect(controller).to.include('stage: "source_refresh_retry_wait"');
+		expect(controller).to.include("waiting for tunnel recovery before retry");
+		expect(controller).to.include("4_000 * sourceAttempt");
+		expect(controller).to.include("HIKVISION_MERGE_BATCH_VM_RETRY_LIMIT || 3");
+		expect(controller).to.include("2_000 * vmAttempt");
+	});
+
 	it("resolves emitted js import suffixes back to TypeScript during deployment builds", () => {
 		expect(webpackSource()).to.include("extensionAlias");
 		expect(webpackSource()).to.include('".js": [".js", ".ts"]');

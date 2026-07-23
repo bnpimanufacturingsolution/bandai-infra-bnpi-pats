@@ -11865,15 +11865,48 @@ export const controller = (prisma: PrismaClient) => {
 		const sourceDeviceId = String(params.sourceDevice.id);
 		const targetDeviceIds = params.targetDevices.map((device) => String(device.id));
 		const sourceRefreshStartedAt = Date.now();
+		const sourceRefreshRetryLimit = Math.max(
+			1,
+			Math.min(
+				Number(process.env.HIKVISION_MERGE_SOURCE_REFRESH_RETRY_LIMIT || 4),
+				6,
+			),
+		);
 		// Refresh source AND every target from live device truth before planning.
 		// Prior merge overlays often polluted DeviceUser.numOfFP/numOfFace without a real
 		// peer write, which made alreadyConverged=true and skipped needed physical copies.
-		await syncSingleHikvisionDeviceUserFromSource({
-			req: params.req,
-			organizationId: params.organizationId,
-			device: params.sourceDevice,
-			employeeNo: params.employeeNo,
-		});
+		for (let sourceAttempt = 1; sourceAttempt <= sourceRefreshRetryLimit; sourceAttempt += 1) {
+			try {
+				await syncSingleHikvisionDeviceUserFromSource({
+					req: params.req,
+					organizationId: params.organizationId,
+					device: params.sourceDevice,
+					employeeNo: params.employeeNo,
+				});
+				break;
+			} catch (error: any) {
+				const detail = String(error?.message || error || "");
+				const retryable =
+					isHikvisionTransportFailure(detail) ||
+					/(fetch failed|ECONNREFUSED|Unauthorized|timed out|timeout)/i.test(detail);
+				if (!retryable || sourceAttempt >= sourceRefreshRetryLimit) throw error;
+				const retryDelayMs = Math.min(12_000, 4_000 * sourceAttempt);
+				params.onProgress?.({
+					stage: "source_refresh_retry_wait",
+					userKey: `vendor:${params.employeeNo}`,
+					vendorUserId: params.employeeNo,
+					sourceDeviceId,
+					sourceDeviceName:
+						params.sourceDevice?.name || params.sourceDevice?.address || sourceDeviceId,
+					attempt: sourceAttempt,
+					retryLimit: sourceRefreshRetryLimit,
+					retryDelayMs,
+					error: detail,
+					message: `Source refresh transport failed for user ${params.employeeNo}; waiting for tunnel recovery before retry ${sourceAttempt + 1}/${sourceRefreshRetryLimit}.`,
+				});
+				await sleep(retryDelayMs);
+			}
+		}
 		await Promise.all(
 			params.targetDevices.map(async (targetDevice) => {
 				try {
@@ -11987,7 +12020,7 @@ export const controller = (prisma: PrismaClient) => {
 					const batchVmRetryLimit = Math.max(
 						1,
 						Math.min(
-							Number(process.env.HIKVISION_MERGE_BATCH_VM_RETRY_LIMIT || 1),
+							Number(process.env.HIKVISION_MERGE_BATCH_VM_RETRY_LIMIT || 3),
 							HIKVISION_PEER_COPY_RETRY_LIMIT,
 						),
 					);
@@ -12027,7 +12060,7 @@ export const controller = (prisma: PrismaClient) => {
 								error: sharedVmCopyError,
 								message: `VM SDK batch attempt ${vmAttempt}/${batchVmRetryLimit} failed for user ${params.employeeNo}.`,
 							});
-							if (vmAttempt < batchVmRetryLimit) await sleep(600 * vmAttempt);
+							if (vmAttempt < batchVmRetryLimit) await sleep(2_000 * vmAttempt);
 						}
 					}
 				}
