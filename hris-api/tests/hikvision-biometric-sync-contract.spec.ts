@@ -248,6 +248,20 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include("--stored-face-payload-file");
 		expect(service).to.include("NET_DVR_SET_FACE_AND_TEMPLATE");
 		expect(service).to.include("NET_DVR_GET_FACE_AND_TEMPLATE");
+		const activityLogging = readFileSync(
+			join(process.cwd(), "middleware/apiActivityLogging.ts"),
+			"utf8",
+		);
+		for (const field of [
+			"cardno",
+			"fingerprint",
+			"facetemplate",
+			"facepicture",
+			"rawface",
+			"rawblob",
+		]) {
+			expect(activityLogging).to.include(`normalized.includes("${field}")`);
+		}
 	});
 
 	it("keeps FDLib picture writes target-capability-gated, one-use delivered, and reread-proven", () => {
