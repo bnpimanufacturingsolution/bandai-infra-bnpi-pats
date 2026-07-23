@@ -148,6 +148,64 @@ describe("Hikvision biometric sync contract", () => {
 		expect(router).to.include("timeoutMs: config.heavyRequestTimeoutMs");
 	});
 
+	it("keeps credential-only card writes dormant and physically reread-gated", () => {
+		const controller = controllerSource();
+		const service = serviceSource();
+		expect(controller).to.include("project-truth-hikvision-card-writer-v1");
+		expect(controller).to.include("cardRecordCapability");
+		expect(controller).to.include("testedBuildAttested");
+		expect(controller).to.include("authorizedCanaryVendorUserIds");
+		expect(controller).to.include('"--manual-include-card"');
+		expect(controller).to.include("withTargetDeviceWriteLocks");
+		expect(controller).to.include("Target reciprocal CardInfo reread did not prove");
+		expect(controller).to.include("EmployeeNoList");
+		expect(controller).to.include("CardNoList");
+		expect(controller).to.include("fingerprintCustodyMatchesReview");
+		expect(controller).to.include("sourceFingerprintTemplateChecksums");
+		expect(controller).to.include('write.modality === "card"');
+		expect(service).to.include("bool include_card = false");
+		expect(service).to.include('arg == "--manual-include-card"');
+		expect(service).to.include("target_card_allows_owner");
+		expect(service).to.include('"peer_card_owner_conflict"');
+		expect(service).to.include("add_sync_card_if_unowned");
+		expect(service).to.include('"peer_card_write_preview"');
+	});
+
+	it("keeps stored-face custody canary-only with exact SDK reread proof", () => {
+		const controller = controllerSource();
+		const service = serviceSource();
+		expect(controller).to.include("runHikvisionStoredFaceWriteOnVm");
+		expect(controller).to.include("HIKVISION_STORED_FACE_WRITER_BUILD_ATTESTATION");
+		expect(controller).to.include("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID");
+		expect(controller).to.include("faceAndTemplateRecord");
+		expect(controller).to.include("testedBuildAttestation");
+		expect(controller).to.include("root-owned mode-0600 stored-face custody");
+		expect(controller).to.include("Stored-face custody changed after review");
+		expect(controller).to.include("Target now reports a face; refusing to overwrite");
+		expect(controller).to.include("Live target card ownership no longer matches");
+		expect(controller).to.include('"stored_face_write_reread_completed"');
+		expect(controller).to.include("templateMatch");
+		expect(controller).to.include("pictureMatch");
+		expect(controller).to.include("withTargetDeviceWriteLock");
+		expect(service).to.include("--stored-face-payload-file");
+		expect(service).to.include("NET_DVR_SET_FACE_AND_TEMPLATE");
+		expect(service).to.include("NET_DVR_GET_FACE_AND_TEMPLATE");
+	});
+
+	it("keeps FDLib picture writes target-capability-gated, one-use delivered, and reread-proven", () => {
+		const controller = controllerSource();
+		const router = routerSource();
+		expect(controller).to.include("classifyHikvisionFdlibPictureTarget");
+		expect(controller).to.include("writerStrategy: \"fdlib_picture_import\"");
+		expect(controller).to.include("runHikvisionFdlibPictureWrite");
+		expect(controller).to.include("HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT");
+		expect(controller).to.include("HIKVISION_FDLIB_FACE_SEARCH_ENDPOINT");
+		expect(controller).to.include("assertHikvisionFdlibPrewriteEvidence");
+		expect(controller).to.include("verifyHikvisionFdlibPhysicalReread");
+		expect(controller).to.include("withTargetDeviceWriteLock");
+		expect(router).not.to.include("fdlib-face-delivery/:token");
+	});
+
 	it("locks physical merge execution to the reviewed scope hash", () => {
 		const router = routerSource();
 		const controller = controllerSource();

@@ -466,18 +466,41 @@ bool base64_decode(const std::string &input, std::vector<char> *output) {
     static const std::string alphabet =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     output->clear();
-    unsigned int value = 0;
-    int bits = -8;
+    std::string compact;
+    compact.reserve(input.size());
     for (unsigned char c : input) {
-        if (std::isspace(c)) continue;
-        if (c == '=') break;
-        const auto position = alphabet.find(static_cast<char>(c));
+        if (!std::isspace(c)) compact.push_back(static_cast<char>(c));
+    }
+    if (compact.empty() || compact.size() % 4 != 0) return false;
+    auto sextet = [&](char c, unsigned int *value) {
+        const auto position = alphabet.find(c);
         if (position == std::string::npos) return false;
-        value = (value << 6) + static_cast<unsigned int>(position);
-        bits += 6;
-        if (bits >= 0) {
-            output->push_back(static_cast<char>((value >> bits) & 0xff));
-            bits -= 8;
+        *value = static_cast<unsigned int>(position);
+        return true;
+    };
+    for (size_t i = 0; i < compact.size(); i += 4) {
+        const bool final_group = i + 4 == compact.size();
+        const bool third_padding = compact[i + 2] == '=';
+        const bool fourth_padding = compact[i + 3] == '=';
+        if ((!final_group && (third_padding || fourth_padding)) ||
+            (third_padding && !fourth_padding)) {
+            return false;
+        }
+        unsigned int a = 0;
+        unsigned int b = 0;
+        unsigned int c = 0;
+        unsigned int d = 0;
+        if (!sextet(compact[i], &a) || !sextet(compact[i + 1], &b) ||
+            (!third_padding && !sextet(compact[i + 2], &c)) ||
+            (!fourth_padding && !sextet(compact[i + 3], &d))) {
+            return false;
+        }
+        output->push_back(static_cast<char>((a << 2) | (b >> 4)));
+        if (!third_padding) {
+            output->push_back(static_cast<char>((b << 4) | (c >> 2)));
+        }
+        if (!fourth_padding) {
+            output->push_back(static_cast<char>((c << 6) | d));
         }
     }
     return !output->empty();
@@ -970,7 +993,7 @@ bool add_sync_card(DeviceSession &target, const std::string &employee_no, const 
         {"event", "peer_sync_card"},
         {"targetDeviceId", target.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardPresent", "true"},
         {"ok", ok ? "true" : "false"},
         {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
     });
@@ -1914,13 +1937,14 @@ bool write_face_and_template(
     const std::string &employee_no,
     const std::string &card_no,
     const std::vector<char> &face_template,
-    const std::vector<char> &face_picture) {
+    const std::vector<char> &face_picture,
+    bool redact_card_no = false) {
     if (!execute_mode) {
         emit_json({
             {"event", "peer_face_write_preview"},
             {"targetDeviceId", target.config.hris_device_id},
             {"employeeNo", employee_no},
-            {"cardNo", card_no},
+            {"cardNo", redact_card_no ? "[redacted]" : card_no},
             {"templateSize", std::to_string(face_template.size())},
             {"pictureSize", std::to_string(face_picture.size())},
             {"wouldCall", "NET_DVR_SET_FACE_AND_TEMPLATE"}
@@ -1973,7 +1997,7 @@ bool write_face_and_template(
         {"event", "peer_face_write"},
         {"targetDeviceId", target.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardNo", redact_card_no ? "[redacted]" : card_no},
         {"ok", ok ? "true" : "false"},
         {"templateSize", std::to_string(face_template.size())},
         {"pictureSize", std::to_string(face_picture.size())},
@@ -1987,7 +2011,8 @@ bool read_face_and_template(
     const std::string &employee_no,
     const std::string &card_no,
     std::vector<char> *face_template,
-    std::vector<char> *face_picture) {
+    std::vector<char> *face_picture,
+    bool redact_card_no = false) {
     NET_DVR_FACE_AND_TEMPLATE_COND cond{};
     cond.dwSize = sizeof(cond);
     cond.dwFaceNum = 1;
@@ -2006,7 +2031,7 @@ bool read_face_and_template(
             {"event", "source_face_read"},
             {"sourceDeviceId", source.config.hris_device_id},
             {"employeeNo", employee_no},
-            {"cardNo", card_no},
+            {"cardNo", redact_card_no ? "[redacted]" : card_no},
             {"ok", "false"},
             {"lastError", std::to_string(NET_DVR_GetLastError())}
         });
@@ -2027,7 +2052,7 @@ bool read_face_and_template(
         {"event", "source_face_read"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardNo", redact_card_no ? "[redacted]" : card_no},
         {"ok", ok ? "true" : "false"},
         {"templateSize", std::to_string(ctx.face_template.size())},
         {"pictureSize", std::to_string(ctx.face_picture.size())},
@@ -2097,7 +2122,7 @@ bool add_sync_card_if_unowned(
             {"event", "peer_sync_card"},
             {"targetDeviceId", target.config.hris_device_id},
             {"employeeNo", employee_no},
-            {"cardNo", card_no},
+            {"cardPresent", "true"},
             {"ok", "true"},
             {"retained", "true"}
         });
@@ -2187,14 +2212,24 @@ bool write_stored_face_with_reread(
     DeviceSession &target,
     const StoredFaceWritePayload &payload) {
     const std::string lock_path = stored_face_lock_path(payload.target_device_id);
-    const int lock_fd = open(lock_path.c_str(), O_CREAT | O_CLOEXEC | O_RDWR, 0600);
-    if (lock_fd < 0 || flock(lock_fd, LOCK_EX | LOCK_NB) != 0) {
+    const int lock_fd = open(
+        lock_path.c_str(),
+        O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_RDWR,
+        0600);
+    struct stat lock_stat {};
+    const bool secure_lock =
+        lock_fd >= 0 &&
+        fstat(lock_fd, &lock_stat) == 0 &&
+        S_ISREG(lock_stat.st_mode) &&
+        lock_stat.st_uid == geteuid() &&
+        (lock_stat.st_mode & 0777) == 0600;
+    if (!secure_lock || flock(lock_fd, LOCK_EX | LOCK_NB) != 0) {
         if (lock_fd >= 0) close(lock_fd);
         emit_json({
             {"event", "stored_face_write_blocked"},
             {"targetDeviceId", payload.target_device_id},
             {"employeeNo", payload.employee_no},
-            {"reason", "device_write_lock_busy"}
+            {"reason", secure_lock ? "device_write_lock_busy" : "device_write_lock_unsafe"}
         });
         return false;
     }
@@ -2208,7 +2243,8 @@ bool write_stored_face_with_reread(
             payload.employee_no,
             payload.card_no,
             payload.face_template,
-            payload.face_picture);
+            payload.face_picture,
+            true);
         emit_json({
             {"event", "stored_face_write_preview_completed"},
             {"targetDeviceId", payload.target_device_id},
@@ -2222,7 +2258,13 @@ bool write_stored_face_with_reread(
         return preview;
     }
     const char *enabled = std::getenv("HIKVISION_ENABLE_STORED_FACE_WRITE");
-    if (enabled == nullptr || std::string(enabled) != "1") {
+    const char *writer_tested = std::getenv("HIKVISION_STORED_FACE_WRITER_TESTED");
+    const char *authorized_canary =
+        std::getenv("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID");
+    if (enabled == nullptr || std::string(enabled) != "1" ||
+        writer_tested == nullptr || std::string(writer_tested) != "1" ||
+        authorized_canary == nullptr ||
+        std::string(authorized_canary) != payload.target_device_id) {
         emit_json({
             {"event", "stored_face_write_blocked"},
             {"targetDeviceId", payload.target_device_id},
@@ -2237,7 +2279,8 @@ bool write_stored_face_with_reread(
         payload.employee_no,
         payload.card_no,
         payload.face_template,
-        payload.face_picture);
+        payload.face_picture,
+        true);
     if (wrote) std::this_thread::sleep_for(std::chrono::milliseconds(750));
     std::vector<char> reread_template;
     std::vector<char> reread_picture;
@@ -2246,7 +2289,8 @@ bool write_stored_face_with_reread(
         payload.employee_no,
         payload.card_no,
         &reread_template,
-        &reread_picture);
+        &reread_picture,
+        true);
     const bool template_match = reread && reread_template == payload.face_template;
     const bool picture_match = reread && reread_picture == payload.face_picture;
     const bool verified = wrote && reread && template_match && picture_match;

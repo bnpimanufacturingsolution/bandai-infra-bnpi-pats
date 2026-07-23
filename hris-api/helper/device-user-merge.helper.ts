@@ -96,6 +96,20 @@ export type DeviceUserMergeRecord = {
 		fingerPrintId: number;
 		checksum: string;
 	}>;
+	/** Server-only exact stored-face custody proof; compactMergeRecordForReview strips it. */
+	_faceCustodyEvidence?: {
+		templateSha256: string;
+		pictureSha256: string;
+		templateSize: number;
+		pictureSize: number;
+		cardNoSha256: string;
+	};
+	/** Server-only validated picture custody for target-specific FDLib planning. */
+	_fdlibFacePictureEvidence?: {
+		pictureSha256: string;
+		pictureSize: number;
+		contentType: "image/jpeg" | "image/png";
+	};
 	/** Server-only exact source custody; compactMergeRecordForReview strips it. */
 	_cardNo?: string | null;
 };
@@ -162,6 +176,11 @@ export type DeviceUserCredentialWrite = {
 		| "credential_only_card_not_supported"
 		| null;
 	sourceCandidateDeviceIds: string[];
+	/** Frozen, sorted slot:sha256 custody bound into the reviewed scope hash. */
+	sourceFingerprintTemplateChecksums: Array<{
+		fingerPrintId: number;
+		checksum: string;
+	}>;
 	/** A transport/SDK success is never enough; execution must re-read this target. */
 	physicalRereadRequired: true;
 };
@@ -273,6 +292,33 @@ const normalizedFingerprintChecksums = (record: DeviceUserMergeRecord) =>
 				left.fingerPrintId - right.fingerPrintId ||
 				left.checksum.localeCompare(right.checksum),
 		);
+
+export const normalizeFingerprintCustodyEvidence = (
+	items: Array<{ fingerPrintId: number; checksum: string }>,
+) =>
+	(items || [])
+		.map((item) => ({
+			fingerPrintId: Number(item.fingerPrintId || 0),
+			checksum: text(item.checksum).toLowerCase(),
+		}))
+		.filter((item) => item.fingerPrintId > 0 && Boolean(item.checksum))
+		.sort(
+			(left, right) =>
+				left.fingerPrintId - right.fingerPrintId ||
+				left.checksum.localeCompare(right.checksum),
+		);
+
+export const fingerprintCustodyMatchesReview = (
+	reviewed: Array<{ fingerPrintId: number; checksum: string }>,
+	current: Array<{ fingerPrintId: number; checksum: string }>,
+) => {
+	const normalizedReviewed = normalizeFingerprintCustodyEvidence(reviewed);
+	return (
+		normalizedReviewed.length > 0 &&
+		JSON.stringify(normalizedReviewed) ===
+			JSON.stringify(normalizeFingerprintCustodyEvidence(current))
+	);
+};
 
 const completeFingerprintChecksumEvidence = (record: DeviceUserMergeRecord) => {
 	const templates = normalizedFingerprintChecksums(record);
@@ -484,7 +530,7 @@ const buildCredentialWritesForUser = (
 						? "source_conflict"
 						: sourceEvidenceStatus !== "raw_blob_present"
 							? "missing_raw_blob"
-							: uniqueSource.record.biometricEvidence?.card?.writerAvailable ===
+							: target.record.biometricEvidence?.card?.writerAvailable ===
 								  true
 								? null
 								: "credential_only_card_not_supported"
@@ -540,6 +586,10 @@ const buildCredentialWritesForUser = (
 				executionEligibility,
 				blockingReason,
 				sourceCandidateDeviceIds,
+				sourceFingerprintTemplateChecksums:
+					modality === "fingerprint" && uniqueSource
+						? normalizedFingerprintChecksums(uniqueSource.record)
+						: [],
 				physicalRereadRequired: true,
 			});
 		}
@@ -796,11 +846,15 @@ const compactMergeRecordForReview = (record: DeviceUserMergeRecord) => {
 	const summary = credentials(record);
 	const {
 		_fingerprintTemplateChecksums: _omittedChecksums,
+		_faceCustodyEvidence: _omittedFaceCustodyEvidence,
+		_fdlibFacePictureEvidence: _omittedFdlibFacePictureEvidence,
 		_cardNo: _omittedCardNo,
 		...safeRecord
 	} =
 		record as DeviceUserMergeRecord & {
 			_fingerprintTemplateChecksums?: unknown;
+			_faceCustodyEvidence?: unknown;
+			_fdlibFacePictureEvidence?: unknown;
 			_cardNo?: unknown;
 		};
 	return {

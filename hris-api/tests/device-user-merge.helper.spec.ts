@@ -3,6 +3,7 @@ import {
 	applyMergeChoices,
 	buildDeviceUserMergePlan,
 	classifyFaceCustody,
+	fingerprintCustodyMatchesReview,
 	resolveFingerprintCredentialSource,
 	serializeDeviceUserMergePlanForReview,
 } from "../helper/device-user-merge.helper";
@@ -400,7 +401,36 @@ describe("device user union merge", () => {
 		expect(write?.sourceDeviceId).to.equal("a");
 		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
 		expect(write?.recommendationReason).to.include("equal checksum sets");
+		expect(write?.sourceFingerprintTemplateChecksums).to.deep.equal([
+			{ fingerPrintId: 1, checksum: "alpha" },
+			{ fingerPrintId: 2, checksum: "beta" },
+		]);
 		expect(write?.physicalRereadRequired).to.equal(true);
+	});
+
+	it("rejects changed fingerprint slot/checksum custody after review", () => {
+		const reviewed = [
+			{ fingerPrintId: 2, checksum: "BETA" },
+			{ fingerPrintId: 1, checksum: "alpha" },
+		];
+		expect(
+			fingerprintCustodyMatchesReview(reviewed, [
+				{ fingerPrintId: 1, checksum: "alpha" },
+				{ fingerPrintId: 2, checksum: "beta" },
+			]),
+		).to.equal(true);
+		expect(
+			fingerprintCustodyMatchesReview(reviewed, [
+				{ fingerPrintId: 1, checksum: "different" },
+				{ fingerPrintId: 2, checksum: "beta" },
+			]),
+		).to.equal(false);
+		expect(
+			fingerprintCustodyMatchesReview(reviewed, [
+				{ fingerPrintId: 2, checksum: "alpha" },
+				{ fingerPrintId: 1, checksum: "beta" },
+			]),
+		).to.equal(false);
 	});
 
 	it("selects the only strict fingerprint checksum superset", () => {
@@ -498,6 +528,7 @@ describe("device user union merge", () => {
 			deviceIds: ["a", "b"],
 			records: [
 				record("a", {
+					_cardNo: "sensitive-card-number",
 					rawPayload: {
 						numOfFP: 0,
 						numOfFace: 0,
@@ -545,6 +576,23 @@ describe("device user union merge", () => {
 				}),
 				record("b", {
 					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 0 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobCount: 0,
+						},
+						face: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobPresent: false,
+						},
+						card: {
+							status: "not_enrolled",
+							cardNoPresent: false,
+							writerAvailable: true,
+						},
+					},
 				}),
 			],
 		});
@@ -846,5 +894,6 @@ describe("device user union merge", () => {
 		});
 		expect(JSON.stringify(review)).not.to.include("sensitive-template");
 		expect(JSON.stringify(review)).not.to.include("sensitive-face");
+		expect(JSON.stringify(review)).not.to.include("sensitive-card-number");
 	});
 });

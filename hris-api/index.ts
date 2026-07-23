@@ -17,6 +17,7 @@ import { getLogger } from "./helper/logger.helper";
 import { httpMetricsMiddleware, metricsHandler } from "./middleware/observability";
 import { apiActivityLoggingMiddleware } from "./middleware/apiActivityLogging";
 import { apiDebugLoggingMiddleware } from "./middleware/apiDebugLogging";
+import { hikvisionFdlibFaceDeliveryRegistry } from "./helper/hikvision-fdlib-face.helper";
 import { shutdownTelemetry } from "./helper/telemetry";
 import { recordHttpOutcome, startStatusSampler } from "./app/status/status.service";
 
@@ -404,6 +405,29 @@ app.use(
 			res.removeHeader("Content-Security-Policy");
 		},
 	}),
+);
+// FaceDataRecord.faceURL fetches cannot attach an HRIS bearer token. This
+// endpoint instead authenticates a high-entropy, one-use token plus the
+// attested target address. It is intentionally mounted before request logging
+// so the live URL token never enters application logs.
+app.get(
+	`${config.baseApiPath}/hikvision/fdlib-face-delivery/:token`,
+	(req: Request, res: Response) => {
+		try {
+			const picture = hikvisionFdlibFaceDeliveryRegistry.consume({
+				token: req.params.token,
+				requesterAddress: req.ip || req.socket.remoteAddress || "",
+			});
+			res.setHeader("Content-Type", picture.contentType);
+			res.setHeader("Content-Length", String(picture.size));
+			res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+			res.setHeader("Pragma", "no-cache");
+			res.setHeader("X-Content-Type-Options", "nosniff");
+			res.status(200).send(picture.buffer);
+		} catch {
+			res.status(404).end();
+		}
+	},
 );
 app.use(apiDebugLoggingMiddleware);
 

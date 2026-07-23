@@ -362,6 +362,12 @@ diagnosis categories, not automatic stop conditions.
   boundaries. Never guess or fabricate biometric truth to make a counter zero.
 - A software-recoverable blocker remains agent-owned work under the Non-Stop
   Execution Rule.
+- A completed writer must not remain permanently hidden behind a manual
+  operator toggle. Keep it fail-closed while its build, capability probe, and
+  serial physical canary are unproven; after those gates pass, make supported
+  targets automatically actionable from current per-target capability
+  evidence. Retain target/user-scoped canary gates, duplicate-owner refusal,
+  shared device locks, reviewed-byte hashes, and physical reread proof.
 
 ## Browser Verification Tool
 

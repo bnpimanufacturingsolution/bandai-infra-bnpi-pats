@@ -62,6 +62,8 @@ import {
 	applyMergeChoices,
 	buildDeviceUserMergePlan,
 	classifyFaceCustody,
+	fingerprintCustodyMatchesReview,
+	normalizeFingerprintCustodyEvidence,
 	serializeDeviceUserMergePlanForReview,
 	type DeviceUserMergeField,
 	type DeviceUserMergeRecord,
@@ -72,6 +74,18 @@ import { resolveHikvisionDeviceHealthNetworkTarget } from "../../helper/device-h
 import { buildDeviceEventSearchTerms } from "../../helper/device-event-search.helper";
 import { resolveHikvisionRuntimeRoute } from "../../helper/hikvision-runtime-route.helper";
 import { resolveProjectTruthRuntimeRoot } from "../../helper/runtime-storage.helper";
+import {
+	HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT,
+	HIKVISION_FDLIB_FACE_SEARCH_ENDPOINT,
+	assertHikvisionFdlibPrewriteEvidence,
+	buildHikvisionFdlibFaceDataRecordBody,
+	classifyHikvisionFdlibPictureTarget,
+	hikvisionFdlibFaceDeliveryRegistry,
+	validateHikvisionFdlibFacePicture,
+	verifyHikvisionFdlibPhysicalReread,
+	type HikvisionFdlibTargetClassification,
+} from "../../helper/hikvision-fdlib-face.helper";
+import { withCredentialDeviceLeases } from "../../helper/credential-device-lease.helper";
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
 import {
 	decryptPortableBiometricEnvelope,
@@ -218,6 +232,10 @@ const DEVICE_USER_SYNC_JOB_DIR = path.join(
 const DEVICE_USER_MERGE_JOB_DIR = path.join(
 	PROJECT_TRUTH_RUNTIME_ROOT,
 	"device-user-merge-jobs",
+);
+const CREDENTIAL_DEVICE_LEASE_DIR = path.join(
+	PROJECT_TRUTH_RUNTIME_ROOT,
+	"credential-device-leases",
 );
 const DEVICE_IMPORT_JOB_PROCESSING_STALE_MS = 30 * 60 * 1000;
 const DEVICE_USER_SYNC_PROCESSING_STALE_MS = 30 * 60 * 1000;
@@ -2475,6 +2493,350 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const runHikvisionStoredFaceWriteOnVm = async (params: {
+		targetDevice: any;
+		employeeNo: string;
+		cardNo: string;
+		faceTemplate: string;
+		facePicture: string;
+	}) => {
+		const targetDeviceId = String(params.targetDevice?.id || "").trim();
+		const targetConfig = (params.targetDevice?.config || {}) as any;
+		const buildAttestation = String(
+			process.env.HIKVISION_STORED_FACE_WRITER_BUILD_ATTESTATION || "",
+		).trim();
+		const capabilityTested =
+			targetConfig?.biometricCapabilities?.faceAndTemplateRecord === true &&
+			Boolean(buildAttestation) &&
+			String(targetConfig?.storedFaceWriter?.testedBuildAttestation || "") ===
+				buildAttestation;
+		if (!targetDeviceId || !capabilityTested) {
+			throw new Error(
+				"Stored-face writer remains disabled pending tested target capability and an exact authorized canary.",
+			);
+		}
+		if (
+			!params.employeeNo ||
+			!params.cardNo ||
+			!params.faceTemplate ||
+			!params.facePicture
+		) {
+			throw new Error(
+				"Stored-face writer requires exact employee, card, template, and picture custody.",
+			);
+		}
+		await preflightHikvisionManualCopyEndpoint(
+			params.targetDevice,
+			"target",
+			params.employeeNo,
+		);
+		const nonce = `${Date.now()}-${randomUUID()}`;
+		const localSpecPath = path.join(
+			os.tmpdir(),
+			`project-truth-hikvision-stored-face-${nonce}.spec`,
+		);
+		const localPayloadPath = path.join(
+			os.tmpdir(),
+			`project-truth-hikvision-stored-face-${nonce}.json`,
+		);
+		const remoteSpecPath = `/tmp/project-truth-hikvision-stored-face-${nonce}.spec`;
+		const remotePayloadPath = `/tmp/project-truth-hikvision-stored-face-${nonce}.json`;
+		fsSync.writeFileSync(
+			localSpecPath,
+			`${buildHikvisionManualCopySpecLine(params.targetDevice)}\n`,
+			{ mode: 0o600 },
+		);
+		fsSync.writeFileSync(
+			localPayloadPath,
+			JSON.stringify({
+				targetDeviceId,
+				employeeNo: params.employeeNo,
+				cardNo: params.cardNo,
+				faceTemplate: params.faceTemplate,
+				facePicture: params.facePicture,
+			}),
+			{ mode: 0o600 },
+		);
+		try {
+			for (const [localPath, remotePath] of [
+				[localSpecPath, remoteSpecPath],
+				[localPayloadPath, remotePayloadPath],
+			]) {
+				const copied = await runHikvisionListenerVmCopy(localPath, remotePath, 12_000);
+				if (copied.exitCode !== 0) {
+					throw new Error(
+						copied.stderr.trim() ||
+							copied.stdout.trim() ||
+							"Failed to stage the stored-face SDK custody input.",
+					);
+				}
+			}
+			const owned = await runHikvisionListenerVmCommand(
+				["sudo", "chown", "0:0", remoteSpecPath, remotePayloadPath],
+				12_000,
+			);
+			const secured =
+				owned.exitCode === 0
+					? await runHikvisionListenerVmCommand(
+							["sudo", "chmod", "600", remoteSpecPath, remotePayloadPath],
+							12_000,
+						)
+					: owned;
+			if (owned.exitCode !== 0 || secured.exitCode !== 0) {
+				throw new Error(
+					owned.stderr.trim() ||
+						secured.stderr.trim() ||
+						owned.stdout.trim() ||
+						secured.stdout.trim() ||
+						"Failed to enforce root-owned mode-0600 stored-face custody.",
+				);
+			}
+			const run = (execute: boolean) =>
+				runHikvisionListenerVmCommand(
+					[
+						"sudo",
+						"timeout",
+						"-k",
+						"5s",
+						"45s",
+						"env",
+						"HIKVISION_ALLOW_STATIC_DEVICE_SPEC=1",
+						"HIKVISION_SKIP_SPOOL_REPLAY=1",
+						`HIKVISION_DEVICE_SPEC_OVERRIDE=${remoteSpecPath}`,
+						"HIKVISION_RUN_SECONDS=1",
+						...(execute
+							? [
+									"HIKVISION_ENABLE_STORED_FACE_WRITE=1",
+									"HIKVISION_STORED_FACE_WRITER_TESTED=1",
+									`HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID=${targetDeviceId}`,
+								]
+							: []),
+						HIKVISION_VM_WRAPPER_REMOTE_PATH,
+						"--run-once",
+						execute ? "--execute" : "--dry-run",
+						"--stored-face-payload-file",
+						remotePayloadPath,
+					],
+					55_000,
+				);
+			const preview = await run(false);
+			const previewEvents = parseJsonLines(preview.stdout);
+			const previewPassed = previewEvents.some(
+				(event) =>
+					event?.event === "stored_face_write_preview_completed" &&
+					String(event?.targetDeviceId || "") === targetDeviceId &&
+					String(event?.employeeNo || "") === params.employeeNo &&
+					String(event?.ok || "").toLowerCase() === "true",
+			);
+			if (preview.exitCode !== 0 || !previewPassed) {
+				throw new Error(
+					preview.stderr.trim() ||
+						"Stored-face SDK preview did not accept the exact custody payload.",
+				);
+			}
+			const executed = await run(true);
+			const events = parseJsonLines(executed.stdout);
+			const verified = events.find(
+				(event) =>
+					event?.event === "stored_face_write_reread_completed" &&
+					String(event?.targetDeviceId || "") === targetDeviceId &&
+					String(event?.employeeNo || "") === params.employeeNo,
+			);
+			if (
+				executed.exitCode !== 0 ||
+				!verified ||
+				String(verified?.ok || "").toLowerCase() !== "true" ||
+				String(verified?.templateMatch || "").toLowerCase() !== "true" ||
+				String(verified?.pictureMatch || "").toLowerCase() !== "true"
+			) {
+				throw new Error(
+					executed.stderr.trim() ||
+						"Stored-face SDK write lacked exact template-and-picture reread proof.",
+				);
+			}
+			return {
+				targetDeviceId,
+				templateSize: Number(verified.templateSize || 0),
+				pictureSize: Number(verified.pictureSize || 0),
+				rereadTemplateSize: Number(verified.rereadTemplateSize || 0),
+				rereadPictureSize: Number(verified.rereadPictureSize || 0),
+				strategy: "stored_face_sdk_write_exact_reread",
+			};
+		} finally {
+			for (const localPath of [localSpecPath, localPayloadPath]) {
+				try {
+					fsSync.unlinkSync(localPath);
+				} catch {}
+			}
+			await runHikvisionListenerVmCommand(
+				["sudo", "rm", "-f", remoteSpecPath, remotePayloadPath],
+				7_000,
+			).catch(() => undefined);
+		}
+	};
+
+	const fdlibRecordForVendorUser = (value: unknown, vendorUserId: string): any | null => {
+		if (Array.isArray(value)) {
+			for (const item of value) {
+				const found = fdlibRecordForVendorUser(item, vendorUserId);
+				if (found) return found;
+			}
+			return null;
+		}
+		if (!value || typeof value !== "object") return null;
+		const record = value as Record<string, any>;
+		if (
+			String(record.FPID || record.fpid || record.employeeNo || "").trim() ===
+			vendorUserId
+		) {
+			return record;
+		}
+		for (const item of Object.values(record)) {
+			const found = fdlibRecordForVendorUser(item, vendorUserId);
+			if (found) return found;
+		}
+		return null;
+	};
+
+	const runHikvisionFdlibPictureWrite = async (params: {
+		req: Request;
+		targetDevice: any;
+		vendorUserId: string;
+		displayName: string;
+		pictureBase64: string;
+		classification: HikvisionFdlibTargetClassification;
+	}) => {
+		if (
+			!params.classification.actionable ||
+			!params.classification.fdId ||
+			!params.classification.faceLibType
+		) {
+			throw new Error("Current target FDLib picture capability is not actionable.");
+		}
+		const origin = new URL(
+			String(process.env.HIKVISION_FDLIB_FACE_DELIVERY_ORIGIN || "").trim(),
+		);
+		if (
+			(origin.protocol !== "https:" && origin.protocol !== "http:") ||
+			origin.username ||
+			origin.password ||
+			origin.search ||
+			origin.hash
+		) {
+			throw new Error("HIKVISION_FDLIB_FACE_DELIVERY_ORIGIN is not a safe origin.");
+		}
+		const picture = validateHikvisionFdlibFacePicture(params.pictureBase64);
+		const delivery = hikvisionFdlibFaceDeliveryRegistry.create({
+			picture,
+			allowedRequesterAddresses: params.classification.allowedRequesterAddresses,
+			ttlMs: 45_000,
+		});
+		try {
+			const faceUrl = new URL(
+				`/api/hikvision/fdlib-face-delivery/${delivery.token}`,
+				origin,
+			).toString();
+			const body = buildHikvisionFdlibFaceDataRecordBody({
+				faceUrl,
+				fdId: params.classification.fdId,
+				faceLibType: params.classification.faceLibType,
+				vendorUserId: params.vendorUserId,
+				name: params.displayName || params.vendorUserId,
+			});
+			const response = await hikvisionFetch(HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT, {
+				method: "POST",
+				deviceId: String(params.targetDevice.id),
+				prisma,
+				request: params.req,
+				timeoutMs: 45_000,
+				headers: { "Content-Type": "application/json" },
+				body,
+			});
+			const responseStatus = response?.ResponseStatus || response || {};
+			const statusCode = Number(responseStatus?.statusCode);
+			const statusText = String(
+				responseStatus?.statusString || responseStatus?.subStatusCode || "",
+			).toLowerCase();
+			if (
+				Number.isFinite(statusCode) &&
+				statusCode !== 0 &&
+				statusCode !== 1 &&
+				statusText !== "ok"
+			) {
+				throw new Error(
+					`FaceDataRecord rejected the reviewed picture (${statusText || statusCode}).`,
+				);
+			}
+
+			let rereadPicture: ReturnType<typeof validateHikvisionFdlibFacePicture> | null =
+				null;
+			for (let attempt = 1; attempt <= 3 && !rereadPicture; attempt += 1) {
+				if (attempt > 1) {
+					await new Promise((resolve) => setTimeout(resolve, 750 * attempt));
+				}
+				const search = await hikvisionFetch(HIKVISION_FDLIB_FACE_SEARCH_ENDPOINT, {
+					method: "POST",
+					deviceId: String(params.targetDevice.id),
+					prisma,
+					request: params.req,
+					timeoutMs: 15_000,
+					headers: { "Content-Type": "application/json" },
+					body: {
+						FDSearchDescription: {
+							searchID: `merge-fdlib-reread-${Date.now()}-${attempt}`,
+							searchResultPosition: 0,
+							maxResults: 5,
+							FDID: params.classification.fdId,
+							FPID: params.vendorUserId,
+							faceLibType: params.classification.faceLibType,
+						},
+					},
+				});
+				const record = fdlibRecordForVendorUser(search, params.vendorUserId);
+				const rereadUrl = String(record?.faceURL || record?.faceUrl || "").trim();
+				if (!rereadUrl) continue;
+				const parsed = new URL(
+					rereadUrl,
+					buildHikvisionDeviceBaseUrl(params.targetDevice),
+				);
+				if (
+					!getAllowedDeviceHosts(params.targetDevice).has(
+						parsed.hostname.toLowerCase(),
+					)
+				) {
+					throw new Error("FDSearch reread URL escaped the reviewed target device.");
+				}
+				const binary = await hikvisionFetchBinary(
+					`${parsed.pathname}${parsed.search}`,
+					{
+						deviceId: String(params.targetDevice.id),
+						prisma,
+						request: params.req,
+						timeoutMs: 15_000,
+						headers: { Accept: "image/jpeg,image/png" },
+					},
+				);
+				rereadPicture = validateHikvisionFdlibFacePicture(
+					binary.buffer.toString("base64"),
+				);
+			}
+			if (!rereadPicture || rereadPicture.sha256 !== picture.sha256) {
+				throw new Error(
+					"FDLib physical reread did not retain the exact reviewed face picture checksum.",
+				);
+			}
+			return {
+				picture,
+				rereadPicture,
+				strategy: "fdlib_picture_import",
+				capabilityEvidenceSha256:
+					params.classification.capabilityEvidenceSha256,
+			};
+		} finally {
+			hikvisionFdlibFaceDeliveryRegistry.revoke(delivery.token);
+		}
+	};
+
 	const getDeviceUserBiometricBundleSecret = (organizationId: string, deviceId: string) => {
 		const configured = String(process.env.DEVICE_USER_BIOMETRIC_BUNDLE_KEY || "").trim();
 		if (configured) return { secret: configured, source: "DEVICE_USER_BIOMETRIC_BUNDLE_KEY" };
@@ -4661,14 +5023,27 @@ export const controller = (prisma: PrismaClient) => {
 			});
 			const { captureRawFingerprintsForEnrollment } =
 				await import("../../helper/device-user-raw-fingerprint.helper.js");
-			const result = await captureRawFingerprintsForEnrollment({
-				prisma,
-				req,
-				organizationId,
-				deviceId,
-				employeeNo: vendorUserId,
-				deviceUserId: existing?.id || null,
-			});
+			const result = await withCredentialDeviceLeases(
+				{
+					rootDir: CREDENTIAL_DEVICE_LEASE_DIR,
+					organizationId,
+					deviceIds: [deviceId],
+					ownerId: `manual-fingerprint-capture:${randomUUID()}`,
+					jobId: `manual-fingerprint-capture:${vendorUserId}`,
+					scopeHash: createHash("sha256")
+						.update(`${organizationId}\0${deviceId}\0${vendorUserId}\0fingerprint`)
+						.digest("hex"),
+				},
+				() =>
+					captureRawFingerprintsForEnrollment({
+						prisma,
+						req,
+						organizationId,
+						deviceId,
+						employeeNo: vendorUserId,
+						deviceUserId: existing?.id || null,
+					}),
+			);
 			if (!result.ok) {
 				const reason = result.reason || "Raw fingerprint capture failed";
 				const response: any = buildErrorResponse(reason, 422, [
@@ -4772,14 +5147,27 @@ export const controller = (prisma: PrismaClient) => {
 			});
 			const { captureRawFaceForEnrollment } =
 				await import("../../helper/device-user-raw-fingerprint.helper.js");
-			const result = await captureRawFaceForEnrollment({
-				prisma,
-				req,
-				organizationId,
-				deviceId,
-				employeeNo: vendorUserId,
-				deviceUserId: existing?.id || null,
-			});
+			const result = await withCredentialDeviceLeases(
+				{
+					rootDir: CREDENTIAL_DEVICE_LEASE_DIR,
+					organizationId,
+					deviceIds: [deviceId],
+					ownerId: `manual-face-capture:${randomUUID()}`,
+					jobId: `manual-face-capture:${vendorUserId}`,
+					scopeHash: createHash("sha256")
+						.update(`${organizationId}\0${deviceId}\0${vendorUserId}\0face`)
+						.digest("hex"),
+				},
+				() =>
+					captureRawFaceForEnrollment({
+						prisma,
+						req,
+						organizationId,
+						deviceId,
+						employeeNo: vendorUserId,
+						deviceUserId: existing?.id || null,
+					}),
+			);
 			if (!result.ok) {
 				const reason = result.reason || "Raw face capture failed";
 				const response: any = buildErrorResponse(reason, 422, [
@@ -10001,9 +10389,49 @@ export const controller = (prisma: PrismaClient) => {
 
 		const records: DeviceUserMergeRecord[] = [];
 		const errors: Array<{ deviceId: string; deviceName: string; error: string }> = [];
+		const fdlibTargetCapabilities = new Map<
+			string,
+			HikvisionFdlibTargetClassification
+		>();
+		const currentBuildAttestation = String(
+			process.env.PROJECT_TRUTH_BUILD_SHA ||
+				process.env.GIT_COMMIT_SHA ||
+				process.env.GITHUB_SHA ||
+				"",
+		).trim();
 		const loadDeviceRecords = async (device: (typeof devices)[number]) => {
 			const deviceRecords: DeviceUserMergeRecord[] = [];
 			try {
+				let capabilityProbe: { status: string; response?: unknown } = {
+					status: "unknown",
+				};
+				try {
+					capabilityProbe = {
+						status: "supported",
+						response: await hikvisionFetch(
+							"/ISAPI/Intelligent/FDLib/FaceDataRecord/capabilities?format=json",
+							{
+								method: "GET",
+								deviceId: String(device.id),
+								prisma,
+								request: params.req,
+								timeoutMs: 6_000,
+							},
+						),
+					};
+				} catch (error: any) {
+					capabilityProbe = {
+						status: classifyHikvisionProbeError(error),
+					};
+				}
+				fdlibTargetCapabilities.set(
+					String(device.id),
+					classifyHikvisionFdlibPictureTarget({
+						capabilityProbe,
+						attestation: (device.config as any)?.fdlibPictureWriter,
+						currentBuildAttestation,
+					}),
+				);
 				const { candidates } = await loadHikvisionDeviceUserSnapshot(params.req, device);
 				const employees = await loadEmployeesForDeviceUserCandidates(
 					params.organizationId,
@@ -10054,6 +10482,12 @@ export const controller = (prisma: PrismaClient) => {
 						buildFingerprintTemplateChecksumEvidence(
 							rawCustody.fingerprint.templates || [],
 						);
+					const exactCardNo = String(
+						(candidate.rawPayload as any)?.cardNo ||
+							(candidate.rawPayload as any)?.CardInfo?.cardNo ||
+							(candidate.rawPayload as any)?.UserInfo?.cardNo ||
+							"",
+					).trim();
 					const portableFaceBundle = Boolean(
 						saved?.vendorMetadata?.biometricBundle?.facePresent &&
 						saved?.vendorMetadata?.biometricBundle?.encryptedFaceTemplate,
@@ -10067,21 +10501,76 @@ export const controller = (prisma: PrismaClient) => {
 						facePicture: rawCustody.face.blob?.base64,
 						fdlibCapabilitySupported,
 					});
+					const faceTemplate = String(
+						rawCustody.face.blob?.faceTemplate || "",
+					).trim();
+					const facePicture = String(rawCustody.face.blob?.base64 || "").trim();
+					let fdlibFacePictureEvidence:
+						| {
+								pictureSha256: string;
+								pictureSize: number;
+								contentType: "image/jpeg" | "image/png";
+						  }
+						| undefined;
+					if (facePicture) {
+						try {
+							const validated = validateHikvisionFdlibFacePicture(facePicture);
+							fdlibFacePictureEvidence = {
+								pictureSha256: validated.sha256,
+								pictureSize: validated.size,
+								contentType: validated.contentType,
+							};
+						} catch {
+							// Invalid/HTML/count-only custody remains non-actionable.
+						}
+					}
+					const faceCustodyEvidence =
+						faceTemplate && facePicture && exactCardNo
+							? {
+									templateSha256: createHash("sha256")
+										.update(faceTemplate)
+										.digest("hex"),
+									pictureSha256: createHash("sha256")
+										.update(facePicture)
+										.digest("hex"),
+									templateSize: Buffer.from(faceTemplate, "base64").length,
+									pictureSize: Buffer.from(facePicture, "base64").length,
+									cardNoSha256: createHash("sha256")
+										.update(exactCardNo)
+										.digest("hex"),
+								}
+							: undefined;
 					const rawFaceBlobPresent =
 						portableFaceBundle || rawCustody.face.rawBlobPresent;
 					const fingerprintReportedCount = Number(
 						credentialSummary.fingerprintCount || 0,
 					);
 					const faceReportedCount = Number(credentialSummary.faceCount || 0);
-					const exactCardNo = String(
-						(candidate.rawPayload as any)?.cardNo ||
-							(candidate.rawPayload as any)?.CardInfo?.cardNo ||
-							(candidate.rawPayload as any)?.UserInfo?.cardNo ||
-							"",
-					).trim();
 					const cardReportedCount = Number(credentialSummary.cardCount || 0);
+					const cardWriterBuildAttestation =
+						"project-truth-hikvision-card-writer-v1";
+					const deviceConfig = (device.config || {}) as any;
+					const cardRecordCapability =
+						deviceConfig?.biometricCapabilities?.cardInfoRecord === true ||
+						deviceConfig?.hikvisionCapabilities?.cardInfoRecord === true;
+					const testedBuildAttested =
+						String(
+							deviceConfig?.credentialCardWriter?.testedBuildAttestation ||
+								"",
+						) === cardWriterBuildAttestation;
+					const authorizedCanaryVendorUserIds = Array.isArray(
+						deviceConfig?.credentialCardWriter?.authorizedCanaryVendorUserIds,
+					)
+						? deviceConfig.credentialCardWriter.authorizedCanaryVendorUserIds.map(
+								(value: unknown) => String(value).trim(),
+							)
+						: [];
 					const cardWriterAvailable =
-						process.env.HIKVISION_CREDENTIAL_CARD_WRITER_ENABLED === "true";
+						cardRecordCapability &&
+						testedBuildAttested &&
+						authorizedCanaryVendorUserIds.includes(
+							String(candidate.vendorUserId),
+						);
 					deviceRecords.push({
 						deviceId: device.id,
 						deviceName: device.name || device.address || device.id,
@@ -10118,9 +10607,9 @@ export const controller = (prisma: PrismaClient) => {
 								rawBlobPresent: rawFaceBlobPresent,
 								custodyKind: faceCustody.kind,
 								fdlibCapabilitySupported,
-								// No stored-custody face writer exists yet. Classification is
-								// informative, but the merge plan must remain fail-closed.
-								writerAvailable: false,
+								writerAvailable:
+									faceCustody.kind === "sdk_template_and_picture" &&
+									Boolean(faceCustodyEvidence),
 							},
 							card: {
 								status:
@@ -10138,6 +10627,8 @@ export const controller = (prisma: PrismaClient) => {
 							saved?.rawPayload?.hrisSync?.matchReason === "manual_existing",
 						),
 						_fingerprintTemplateChecksums: fingerprintTemplateChecksums,
+						_faceCustodyEvidence: faceCustodyEvidence,
+						_fdlibFacePictureEvidence: fdlibFacePictureEvidence,
 						_cardNo: exactCardNo || null,
 					});
 				}
@@ -10204,6 +10695,24 @@ export const controller = (prisma: PrismaClient) => {
 		const validDeviceIds = (params.deviceIds as string[]).filter(
 			(deviceId) => !failedDeviceIds.has(deviceId),
 		);
+		const anyFdlibTargetActionable = [...fdlibTargetCapabilities.values()].some(
+			(capability) => capability.actionable,
+		);
+		if (anyFdlibTargetActionable) {
+			for (const record of records) {
+				const face = record.biometricEvidence?.face;
+				if (
+					face?.reportedCount &&
+					record._fdlibFacePictureEvidence &&
+					(face.custodyKind === "picture_only_not_writable" ||
+						face.custodyKind === "fdlib_picture")
+				) {
+					face.custodyKind = "fdlib_picture";
+					face.fdlibCapabilitySupported = true;
+					face.writerAvailable = true;
+				}
+			}
+		}
 		const plan: any = buildDeviceUserMergePlan({
 			records,
 			deviceIds: params.deviceIds as string[],
@@ -10213,6 +10722,90 @@ export const controller = (prisma: PrismaClient) => {
 			"../../helper/device-user-raw-fingerprint.helper.js"
 		);
 		plan.credentialWrites = (plan.credentialWrites || []).map((write: any) => {
+			if (
+				write.modality === "face" &&
+				write.executionEligibility === "ready_from_raw_blob"
+			) {
+				const user = (plan.users || []).find(
+					(candidate: any) => String(candidate.key) === String(write.userKey),
+				);
+				const sourceRecord = (user?.records || []).find(
+					(record: any) =>
+						String(record.deviceId) === String(write.sourceDeviceId),
+				);
+				const targetDevice = devices.find(
+					(device) => String(device.id) === String(write.targetDeviceId),
+				);
+				const targetConfig = (targetDevice?.config || {}) as any;
+				const buildAttestation = String(
+					process.env.HIKVISION_STORED_FACE_WRITER_BUILD_ATTESTATION || "",
+				).trim();
+				const targetCapabilityTested =
+					targetConfig?.biometricCapabilities?.faceAndTemplateRecord === true &&
+					Boolean(buildAttestation) &&
+					String(
+						targetConfig?.storedFaceWriter?.testedBuildAttestation || "",
+					) === buildAttestation;
+				if (
+					targetCapabilityTested &&
+					sourceRecord?._faceCustodyEvidence
+				) {
+					return { ...write, writerStrategy: "sdk_face_template_writer" };
+				}
+				const fdlibCapability = fdlibTargetCapabilities.get(
+					String(write.targetDeviceId),
+				);
+				const sourcePicture = sourceRecord?._fdlibFacePictureEvidence;
+				if (fdlibCapability?.actionable && sourcePicture) {
+					const duplicateOwners = (plan.users || [])
+						.flatMap((candidate: any) => candidate.records || [])
+						.filter(
+							(record: any) =>
+								String(record.deviceId) === String(write.targetDeviceId) &&
+								String(record.vendorUserId || record.employeeNo || "") !==
+									String(write.vendorUserId) &&
+								record?._fdlibFacePictureEvidence?.pictureSha256 ===
+									sourcePicture.pictureSha256,
+						)
+						.map((record: any) =>
+							String(record.vendorUserId || record.employeeNo || ""),
+						)
+						.filter(Boolean);
+					if (duplicateOwners.length > 0) {
+						return {
+							...write,
+							recommended: false,
+							executionEligibility: "blocked",
+							blockingReason: "source_conflict",
+							recommendationReason: `The exact face picture checksum is already owned by target user ${[
+								...new Set(duplicateOwners),
+							].join(", ")}; automatic duplication is forbidden.`,
+						};
+					}
+					return {
+						...write,
+						writerStrategy: "fdlib_picture_import",
+						fdlibTarget: {
+							fdId: fdlibCapability.fdId,
+							faceLibType: fdlibCapability.faceLibType,
+							allowedRequesterAddresses:
+								fdlibCapability.allowedRequesterAddresses,
+							capabilityEvidenceSha256:
+								fdlibCapability.capabilityEvidenceSha256,
+						},
+						sourcePictureSha256: sourcePicture.pictureSha256,
+						sourcePictureSize: sourcePicture.pictureSize,
+					};
+				}
+				return {
+					...write,
+					recommended: false,
+					executionEligibility: "blocked",
+					blockingReason: "target_write_unsupported",
+					recommendationReason:
+						"This target has neither an exact-build SDK face writer nor a current capability-attested FDLib picture writer.",
+				};
+			}
 			if (
 				write.modality !== "fingerprint" ||
 				write.executionEligibility !== "ready_from_raw_blob"
@@ -10381,42 +10974,44 @@ export const controller = (prisma: PrismaClient) => {
 		const deviceById = new Map(devices.map((device) => [String(device.id), device]));
 		const groups = new Map<string, any[]>();
 		for (const write of writeMatrix.rows) {
-			const key = `${write.userKey}|${write.sourceDeviceId}|${write.modality}`;
+			const key = `${write.userKey}|${write.sourceDeviceId}|${write.modality}|${write.writerStrategy || "default"}`;
 			const group = groups.get(key) || [];
 			group.push(write);
 			groups.set(key, group);
 		}
 		const results: any[] = [];
-		const targetDeviceWriteChains = new Map<string, Promise<void>>();
-		const withTargetDeviceWriteLock = async <T>(
-			deviceId: string,
-			work: () => Promise<T>,
-		): Promise<T> => {
-			const previous =
-				targetDeviceWriteChains.get(deviceId) || Promise.resolve();
-			const current = previous.catch(() => undefined).then(work);
-			targetDeviceWriteChains.set(
-				deviceId,
-				current.then(
-					() => undefined,
-					() => undefined,
-				),
-			);
-			return current;
-		};
+		const leaseContext = (params.req as any).credentialDeviceLeaseContext || {};
+		const leaseOwnerId = String(leaseContext.ownerId || randomUUID());
+		const leaseJobId = String(leaseContext.jobId || `direct-${randomUUID()}`);
+		const leaseScopeHash = String(
+			leaseContext.scopeHash ||
+				createHash("sha256")
+					.update(
+						JSON.stringify(
+							[...params.selectedCredentialWriteIds].map(String).sort(),
+						),
+					)
+					.digest("hex"),
+		);
 		const withTargetDeviceWriteLocks = async <T>(
 			deviceIds: string[],
 			work: () => Promise<T>,
-		): Promise<T> => {
-			const ordered = [...new Set(deviceIds.map(String))].sort();
-			const acquire = (index: number): Promise<T> =>
-				index >= ordered.length
-					? work()
-					: withTargetDeviceWriteLock(ordered[index], () =>
-							acquire(index + 1),
-						);
-			return acquire(0);
-		};
+		): Promise<T> =>
+			withCredentialDeviceLeases(
+				{
+					rootDir: CREDENTIAL_DEVICE_LEASE_DIR,
+					organizationId: params.organizationId,
+					deviceIds,
+					ownerId: leaseOwnerId,
+					jobId: leaseJobId,
+					scopeHash: leaseScopeHash,
+				},
+				work,
+			);
+		const withTargetDeviceWriteLock = <T>(
+			deviceId: string,
+			work: () => Promise<T>,
+		) => withTargetDeviceWriteLocks([deviceId], work);
 		const processCredentialGroup = async (writes: any[]) => {
 			const first = writes[0];
 			const sourceDevice = deviceById.get(String(first.sourceDeviceId));
@@ -10462,16 +11057,29 @@ export const controller = (prisma: PrismaClient) => {
 					includeFaces: false,
 				});
 				const templates = rawCustody.fingerprint.templates || [];
+				const { buildFingerprintTemplateChecksumEvidence } = await import(
+					"../../helper/device-user-raw-fingerprint.helper.js"
+				);
+				const reviewedFingerprintCustody = normalizeFingerprintCustodyEvidence(
+					first.sourceFingerprintTemplateChecksums || [],
+				);
+				const currentFingerprintCustody = normalizeFingerprintCustodyEvidence(
+					buildFingerprintTemplateChecksumEvidence(templates),
+				);
 				if (
 					templates.length < Number(first.sourceReportedCount || 0) ||
-					templates.some((template: any) => !String(template?.data || "").trim())
+					templates.some((template: any) => !String(template?.data || "").trim()) ||
+					!fingerprintCustodyMatchesReview(
+						reviewedFingerprintCustody,
+						currentFingerprintCustody,
+					)
 				) {
 					for (const write of writes) {
 						const result = {
 							...write,
 							status: "error",
 							error:
-								"Reviewed raw fingerprint custody is incomplete at execution time",
+								"Reviewed raw fingerprint slot/checksum custody changed or is incomplete at execution time",
 						};
 						results.push(result);
 						params.emitProgress?.({
@@ -10644,6 +11252,578 @@ export const controller = (prisma: PrismaClient) => {
 				}));
 				return;
 			}
+			if (
+				first.modality === "face" &&
+				first.writerStrategy === "fdlib_picture_import" &&
+				first.executionEligibility === "ready_from_raw_blob"
+			) {
+				const user = (params.plan.users || []).find(
+					(candidate: any) => candidate.key === first.userKey,
+				);
+				const sourceRecord = (user?.records || []).find(
+					(record: any) =>
+						String(record.deviceId) === String(first.sourceDeviceId),
+				);
+				const reviewedPicture = sourceRecord?._fdlibFacePictureEvidence;
+				const sourceRow = await (prisma as any).deviceUser.findUnique({
+					where: {
+						organizationId_deviceId_vendorUserId: {
+							organizationId: params.organizationId,
+							deviceId: first.sourceDeviceId,
+							vendorUserId: first.vendorUserId,
+						},
+					},
+					select: { rawPayload: true, vendorMetadata: true },
+				});
+				const sourceCustody = buildRawDeviceUserBiometricCustody({
+					row: sourceRow || {},
+					includeFingerprints: false,
+					includeFaces: true,
+				});
+				const facePicture = String(
+					sourceCustody.face.blob?.base64 || "",
+				).trim();
+				const validatedSourcePicture =
+					validateHikvisionFdlibFacePicture(facePicture);
+				if (
+					!reviewedPicture ||
+					reviewedPicture.pictureSha256 !== validatedSourcePicture.sha256 ||
+					reviewedPicture.pictureSize !== validatedSourcePicture.size
+				) {
+					throw new Error(
+						"FDLib source picture custody changed after review; refresh the plan.",
+					);
+				}
+				for (const write of writes) {
+					const targetDevice = deviceById.get(String(write.targetDeviceId));
+					const before = (user?.records || []).find(
+						(record: any) =>
+							String(record.deviceId) === String(write.targetDeviceId),
+					);
+					try {
+						await withTargetDeviceWriteLock(
+							String(write.targetDeviceId),
+							async () => {
+								await syncSingleHikvisionDeviceUserFromSource({
+									req: params.req,
+									organizationId: params.organizationId,
+									device: targetDevice,
+									employeeNo: write.vendorUserId,
+								});
+								const physicalBefore = await (prisma as any).deviceUser.findUnique({
+									where: {
+										organizationId_deviceId_vendorUserId: {
+											organizationId: params.organizationId,
+											deviceId: write.targetDeviceId,
+											vendorUserId: write.vendorUserId,
+										},
+									},
+								});
+								const beforeCredentials = extractHikvisionCredentialSummary(
+									physicalBefore?.rawPayload || {},
+								);
+								let targetCardOwner: string | null = null;
+								const targetCardNo = String(before?._cardNo || "").trim();
+								if (targetCardNo) {
+									const cardSearch = await hikvisionFetch(
+										"/ISAPI/AccessControl/CardInfo/Search?format=json",
+										{
+											method: "POST",
+											deviceId: String(write.targetDeviceId),
+											prisma,
+											request: params.req,
+											timeoutMs: 12_000,
+											body: {
+												CardInfoSearchCond: {
+													searchID: `fdlib-card-owner-${Date.now()}`,
+													searchResultPosition: 0,
+													maxResults: 5,
+													CardNoList: [{ cardNo: targetCardNo }],
+												},
+											},
+										},
+									);
+									targetCardOwner = String(
+										cardSearch?.CardInfoSearch?.CardInfo?.[0]?.employeeNo ||
+											cardSearch?.CardInfoSearch?.CardInfo?.employeeNo ||
+											"",
+									).trim() || null;
+								}
+								assertHikvisionFdlibPrewriteEvidence({
+									expectedVendorUserId: String(write.vendorUserId),
+									targetIdentityVendorUserId: String(
+										physicalBefore?.vendorUserId || "",
+									),
+									targetCardOwnerVendorUserId: targetCardOwner,
+									targetFaceCount: Number(beforeCredentials.faceCount || 0),
+									duplicateFaceOwnerVendorUserIds: [],
+								});
+								const classification: HikvisionFdlibTargetClassification = {
+									actionable: true,
+									writer: "fdlib_picture_import",
+									reason: "ready",
+									fdId: write.fdlibTarget?.fdId || null,
+									faceLibType: write.fdlibTarget?.faceLibType || null,
+									allowedRequesterAddresses:
+										write.fdlibTarget?.allowedRequesterAddresses || [],
+									capabilityEvidenceSha256:
+										write.fdlibTarget?.capabilityEvidenceSha256 || "",
+								};
+								const proof = await runHikvisionFdlibPictureWrite({
+									req: params.req,
+									targetDevice,
+									vendorUserId: String(write.vendorUserId),
+									displayName: String(
+										sourceRecord?.displayName || write.vendorUserId,
+									),
+									pictureBase64: facePicture,
+									classification,
+								});
+								await syncSingleHikvisionDeviceUserFromSource({
+									req: params.req,
+									organizationId: params.organizationId,
+									device: targetDevice,
+									employeeNo: write.vendorUserId,
+								});
+								const after = await (prisma as any).deviceUser.findUnique({
+									where: {
+										organizationId_deviceId_vendorUserId: {
+											organizationId: params.organizationId,
+											deviceId: write.targetDeviceId,
+											vendorUserId: write.vendorUserId,
+										},
+									},
+								});
+								const afterCredentials = extractHikvisionCredentialSummary(
+									after?.rawPayload || {},
+								);
+								const digest = (value: unknown) =>
+									createHash("sha256")
+										.update(JSON.stringify(value ?? null))
+										.digest("hex");
+								const retained = verifyHikvisionFdlibPhysicalReread({
+									sourcePicture: validatedSourcePicture,
+									reread: {
+										vendorUserId: String(after?.vendorUserId || ""),
+										faceCount: Number(afterCredentials.faceCount || 0),
+										pictureBase64: proof.rereadPicture.buffer.toString("base64"),
+										identityDigestBefore: digest({
+											displayName: physicalBefore?.displayName,
+											status: physicalBefore?.status,
+											validFrom: physicalBefore?.validFrom,
+											validTo: physicalBefore?.validTo,
+											doorRight: physicalBefore?.doorRight,
+											accessPlan: physicalBefore?.accessPlan,
+										}),
+										identityDigestAfter: digest({
+											displayName: after?.displayName,
+											status: after?.status,
+											validFrom: after?.validFrom,
+											validTo: after?.validTo,
+											doorRight: after?.doorRight,
+											accessPlan: after?.accessPlan,
+										}),
+										fingerprintDigestBefore: digest(
+											beforeCredentials.fingerprintCount,
+										),
+										fingerprintDigestAfter: digest(
+											afterCredentials.fingerprintCount,
+										),
+										cardDigestBefore: digest(beforeCredentials.cardCount),
+										cardDigestAfter: digest(afterCredentials.cardCount),
+									},
+								});
+								const result = {
+									...write,
+									status: "success",
+									actualCount: retained.faceCount,
+									pictureSha256: retained.pictureSha256,
+									strategy: proof.strategy,
+								};
+								results.push(result);
+								params.emitProgress?.({
+									stage: "copy_success",
+									...result,
+									credentialStages: ["face"],
+									message: `FDLib face picture reread passed for ${write.vendorUserId} on ${targetDevice?.name || write.targetDeviceId}.`,
+								});
+							},
+						);
+					} catch (error: any) {
+						const result = {
+							...write,
+							status: "error",
+							error: error?.message || String(error),
+						};
+						results.push(result);
+						params.emitProgress?.({
+							stage: "copy_error",
+							...result,
+							credentialStages: ["face"],
+							message: result.error,
+						});
+					}
+				}
+				return;
+			}
+			if (
+				first.modality === "face" &&
+				first.executionEligibility === "ready_from_raw_blob"
+			) {
+				const user = (params.plan.users || []).find(
+					(candidate: any) => candidate.key === first.userKey,
+				);
+				const sourceRecord = (user?.records || []).find(
+					(record: any) =>
+						String(record.deviceId) === String(first.sourceDeviceId),
+				);
+				const reviewed = sourceRecord?._faceCustodyEvidence;
+				const sourceRow = await (prisma as any).deviceUser.findUnique({
+					where: {
+						organizationId_deviceId_vendorUserId: {
+							organizationId: params.organizationId,
+							deviceId: first.sourceDeviceId,
+							vendorUserId: first.vendorUserId,
+						},
+					},
+					select: {
+						rawPayload: true,
+						vendorMetadata: true,
+					},
+				});
+				const rawCustody = buildRawDeviceUserBiometricCustody({
+					row: sourceRow || {},
+					includeFingerprints: false,
+					includeFaces: true,
+				});
+				const faceTemplate = String(
+					rawCustody.face.blob?.faceTemplate || "",
+				).trim();
+				const facePicture = String(rawCustody.face.blob?.base64 || "").trim();
+				const cardNo = String(sourceRecord?._cardNo || "").trim();
+				const currentEvidence =
+					faceTemplate && facePicture && cardNo
+						? {
+								templateSha256: createHash("sha256")
+									.update(faceTemplate)
+									.digest("hex"),
+								pictureSha256: createHash("sha256")
+									.update(facePicture)
+									.digest("hex"),
+								templateSize: Buffer.from(faceTemplate, "base64").length,
+								pictureSize: Buffer.from(facePicture, "base64").length,
+								cardNoSha256: createHash("sha256").update(cardNo).digest("hex"),
+							}
+						: null;
+				if (
+					!reviewed ||
+					!currentEvidence ||
+					reviewed.templateSha256 !== currentEvidence.templateSha256 ||
+					reviewed.pictureSha256 !== currentEvidence.pictureSha256 ||
+					reviewed.templateSize !== currentEvidence.templateSize ||
+					reviewed.pictureSize !== currentEvidence.pictureSize ||
+					reviewed.cardNoSha256 !== currentEvidence.cardNoSha256
+				) {
+					throw new Error(
+						"Stored-face custody changed after review; refresh and lock a new exact source scope.",
+					);
+				}
+				params.emitProgress?.({
+					stage: "credential_raw_write_started",
+					userKey: first.userKey,
+					vendorUserId: first.vendorUserId,
+					modality: "face",
+					sourceDeviceId: sourceDevice.id,
+					targetDeviceIds: targetDevices.map((device) => device.id),
+					templateSize: reviewed.templateSize,
+					pictureSize: reviewed.pictureSize,
+					message: `Writing reviewed stored face custody for ${first.vendorUserId}.`,
+				});
+				await Promise.all(
+					writes.map(async (write: any) => {
+						const targetDevice = deviceById.get(String(write.targetDeviceId));
+						const before = (user?.records || []).find(
+							(record: any) =>
+								String(record.deviceId) === String(write.targetDeviceId),
+						);
+						try {
+							await withTargetDeviceWriteLock(
+								String(write.targetDeviceId),
+								async () => {
+									const targetCardNo = String(before?._cardNo || "").trim();
+									if (!targetCardNo || targetCardNo !== cardNo) {
+										throw new Error(
+											"Target card custody does not match the reviewed source; refusing a face association guess.",
+										);
+									}
+									await syncSingleHikvisionDeviceUserFromSource({
+										req: params.req,
+										organizationId: params.organizationId,
+										device: targetDevice,
+										employeeNo: write.vendorUserId,
+									});
+									const physicalBefore = await (prisma as any).deviceUser.findUnique({
+										where: {
+											organizationId_deviceId_vendorUserId: {
+												organizationId: params.organizationId,
+												deviceId: write.targetDeviceId,
+												vendorUserId: write.vendorUserId,
+											},
+										},
+									});
+									const physicalBeforeCredentials =
+										extractHikvisionCredentialSummary(
+											physicalBefore?.rawPayload || {},
+										);
+									if (
+										Number(physicalBeforeCredentials.faceCount || 0) !== 0 ||
+										Number(write.targetReportedCount || 0) !== 0
+									) {
+										throw new Error(
+											"Target now reports a face; refusing to overwrite fresh physical enrollment.",
+										);
+									}
+									const targetCardResponse = await hikvisionFetch(
+										"/ISAPI/AccessControl/CardInfo/Search?format=json",
+										{
+											method: "POST",
+											deviceId: String(write.targetDeviceId),
+											prisma,
+											request: params.req,
+											timeoutMs: 12_000,
+											body: {
+												CardInfoSearchCond: {
+													searchID: `merge-face-card-owner-${Date.now()}`,
+													searchResultPosition: 0,
+													maxResults: 5,
+													CardNoList: [{ cardNo }],
+												},
+											},
+										},
+									);
+									const targetCards = Array.isArray(
+										targetCardResponse?.CardInfoSearch?.CardInfo,
+									)
+										? targetCardResponse.CardInfoSearch.CardInfo
+										: targetCardResponse?.CardInfoSearch?.CardInfo
+											? [targetCardResponse.CardInfoSearch.CardInfo]
+											: [];
+									if (
+										!targetCards.some(
+											(card: any) =>
+												String(card?.cardNo || "").trim() === cardNo &&
+												String(card?.employeeNo || "").trim() ===
+													String(write.vendorUserId),
+										)
+									) {
+										throw new Error(
+											"Live target card ownership no longer matches the reviewed device user.",
+										);
+									}
+									const sdkProof = await runHikvisionStoredFaceWriteOnVm({
+										targetDevice,
+										employeeNo: String(write.vendorUserId),
+										cardNo,
+										faceTemplate,
+										facePicture,
+									});
+									if (
+										sdkProof.templateSize !== reviewed.templateSize ||
+										sdkProof.pictureSize !== reviewed.pictureSize ||
+										sdkProof.rereadTemplateSize !== reviewed.templateSize ||
+										sdkProof.rereadPictureSize !== reviewed.pictureSize
+									) {
+										throw new Error(
+											"SDK reread sizes do not match the reviewed exact face custody.",
+										);
+									}
+									await syncSingleHikvisionDeviceUserFromSource({
+										req: params.req,
+										organizationId: params.organizationId,
+										device: targetDevice,
+										employeeNo: write.vendorUserId,
+									});
+									const after = await (prisma as any).deviceUser.findUnique({
+										where: {
+											organizationId_deviceId_vendorUserId: {
+												organizationId: params.organizationId,
+												deviceId: write.targetDeviceId,
+												vendorUserId: write.vendorUserId,
+											},
+										},
+									});
+									const afterCredentials = extractHikvisionCredentialSummary(
+										after?.rawPayload || {},
+									);
+									const actualCount = Number(afterCredentials.faceCount || 0);
+									if (actualCount < Number(write.sourceReportedCount || 0)) {
+										throw new Error(
+											`Target reread reports face count ${actualCount}; expected at least ${write.sourceReportedCount}.`,
+										);
+									}
+									const normalize = (value: any) =>
+										value instanceof Date
+											? value.toISOString()
+											: value && typeof value === "object"
+												? JSON.stringify(value)
+												: String(value ?? "");
+									const unchangedFields = [
+										"displayName",
+										"status",
+										"validFrom",
+										"validTo",
+										"doorRight",
+										"accessPlan",
+									];
+									const changedIdentityField = unchangedFields.find(
+										(field) =>
+											normalize(physicalBefore?.[field]) !== normalize(after?.[field]),
+									);
+									const actualCardNo = String(
+										after?.rawPayload?.cardNo ||
+											after?.rawPayload?.CardInfo?.cardNo ||
+											after?.rawPayload?.UserInfo?.cardNo ||
+											"",
+									).trim();
+									if (
+										changedIdentityField ||
+										Number(physicalBeforeCredentials.fingerprintCount || 0) !==
+											Number(afterCredentials.fingerprintCount || 0) ||
+										Number(physicalBeforeCredentials.cardCount || 0) !==
+											Number(afterCredentials.cardCount || 0) ||
+										actualCardNo !== targetCardNo
+									) {
+										throw new Error(
+											`Credential-only face isolation failed after reread (${changedIdentityField || "fingerprint_or_card"} changed).`,
+										);
+									}
+									const result = {
+										...write,
+										status: "success",
+										actualCount,
+										templateSize: sdkProof.templateSize,
+										pictureSize: sdkProof.pictureSize,
+										strategy: sdkProof.strategy,
+									};
+									results.push(result);
+									params.emitProgress?.({
+										stage: "copy_success",
+										...result,
+										sourceDeviceName: sourceDevice.name,
+										targetDeviceName: targetDevice?.name,
+										credentialStages: ["face"],
+										message: `Stored face exact SDK reread passed for ${write.vendorUserId} on ${targetDevice?.name || write.targetDeviceId}.`,
+									});
+								},
+							);
+						} catch (error: any) {
+							const result = {
+								...write,
+								status: "error",
+								error: error?.message || String(error),
+							};
+							results.push(result);
+							params.emitProgress?.({
+								stage: "copy_error",
+								...result,
+								credentialStages: ["face"],
+								message: result.error,
+							});
+						}
+					}),
+				);
+				return;
+			}
+			if (includeCard) {
+				const user = (params.plan.users || []).find(
+					(candidate: any) => candidate.key === first.userKey,
+				);
+				const sourceRecord = (user?.records || []).find(
+					(record: any) =>
+						String(record.deviceId) === String(first.sourceDeviceId),
+				);
+				const reviewedCardNo = String(sourceRecord?._cardNo || "").trim();
+				if (!reviewedCardNo) {
+					throw new Error(
+						"Reviewed exact source CardInfo custody is missing; card write remains disabled.",
+					);
+				}
+				const sourceCardResponse = await hikvisionFetch(
+					"/ISAPI/AccessControl/CardInfo/Search?format=json",
+					{
+						method: "POST",
+						deviceId: String(sourceDevice.id),
+						prisma,
+						request: params.req,
+						timeoutMs: 12_000,
+						body: {
+							CardInfoSearchCond: {
+								searchID: `merge-card-source-${Date.now()}`,
+								searchResultPosition: 0,
+								maxResults: 5,
+								EmployeeNoList: [{ employeeNo: first.vendorUserId }],
+							},
+						},
+					},
+				);
+				const sourceCards = Array.isArray(
+					sourceCardResponse?.CardInfoSearch?.CardInfo,
+				)
+					? sourceCardResponse.CardInfoSearch.CardInfo
+					: sourceCardResponse?.CardInfoSearch?.CardInfo
+						? [sourceCardResponse.CardInfoSearch.CardInfo]
+						: [];
+				const currentSourceCardNo = String(
+					sourceCards.find(
+						(card: any) =>
+							String(card?.employeeNo || "").trim() ===
+							String(first.vendorUserId),
+					)?.cardNo || "",
+				).trim();
+				if (currentSourceCardNo !== reviewedCardNo) {
+					throw new Error(
+						"Current source CardInfo no longer matches the reviewed exact card custody.",
+					);
+				}
+				for (const targetDevice of targetDevices) {
+					const targetCardResponse = await hikvisionFetch(
+						"/ISAPI/AccessControl/CardInfo/Search?format=json",
+						{
+							method: "POST",
+							deviceId: String(targetDevice.id),
+							prisma,
+							request: params.req,
+							timeoutMs: 12_000,
+							body: {
+								CardInfoSearchCond: {
+									searchID: `merge-card-owner-${Date.now()}`,
+									searchResultPosition: 0,
+									maxResults: 5,
+									CardNoList: [{ cardNo: reviewedCardNo }],
+								},
+							},
+						},
+					);
+					const targetCards = Array.isArray(
+						targetCardResponse?.CardInfoSearch?.CardInfo,
+					)
+						? targetCardResponse.CardInfoSearch.CardInfo
+						: targetCardResponse?.CardInfoSearch?.CardInfo
+							? [targetCardResponse.CardInfoSearch.CardInfo]
+							: [];
+					const duplicateOwner = targetCards.find(
+						(card: any) =>
+							String(card?.employeeNo || "").trim() &&
+							String(card.employeeNo).trim() !==
+								String(first.vendorUserId),
+					);
+					if (duplicateOwner) {
+						throw new Error(
+							`Target card is already owned by another device user; refusing duplicate credential assignment.`,
+						);
+					}
+				}
+			}
 			params.emitProgress?.({
 				stage: "credential_probe_started",
 				userKey: first.userKey,
@@ -10785,12 +11965,62 @@ export const controller = (prisma: PrismaClient) => {
 											"",
 									).trim()
 								: "";
+						let reciprocalCardOwnerVerified = write.modality !== "card";
+						if (write.modality === "card" && expectedCardNo) {
+							const readTargetCards = async (
+								condition: Record<string, unknown>,
+								label: string,
+							) => {
+								const response = await hikvisionFetch(
+									"/ISAPI/AccessControl/CardInfo/Search?format=json",
+									{
+										method: "POST",
+										deviceId: String(write.targetDeviceId),
+										prisma,
+										request: params.req,
+										timeoutMs: 12_000,
+										body: {
+											CardInfoSearchCond: {
+												searchID: `merge-card-reread-${label}-${Date.now()}`,
+												searchResultPosition: 0,
+												maxResults: 5,
+												...condition,
+											},
+										},
+									},
+								);
+								const cards = response?.CardInfoSearch?.CardInfo;
+								return Array.isArray(cards) ? cards : cards ? [cards] : [];
+							};
+							const [byEmployee, byCard] = await Promise.all([
+								readTargetCards(
+									{
+										EmployeeNoList: [
+											{ employeeNo: String(write.vendorUserId) },
+										],
+									},
+									"employee",
+								),
+								readTargetCards(
+									{ CardNoList: [{ cardNo: expectedCardNo }] },
+									"card",
+								),
+							]);
+							const exactPair = (card: any) =>
+								String(card?.employeeNo || "").trim() ===
+									String(write.vendorUserId) &&
+								String(card?.cardNo || "").trim() === expectedCardNo;
+							reciprocalCardOwnerVerified =
+								byEmployee.some(exactPair) && byCard.some(exactPair);
+						}
 						if (
 							write.modality === "card" &&
-							(!expectedCardNo || actualCardNo !== expectedCardNo)
+							(!expectedCardNo ||
+								actualCardNo !== expectedCardNo ||
+								!reciprocalCardOwnerVerified)
 						) {
 							throw new Error(
-								"Target physical card reread did not match the reviewed exact source card value.",
+								"Target reciprocal CardInfo reread did not prove the reviewed exact owner/value pair.",
 							);
 						}
 						if (changedField || otherModalityChanged || cardChanged) {
@@ -11713,16 +12943,26 @@ export const controller = (prisma: PrismaClient) => {
 					at: new Date().toISOString(),
 				},
 			});
-			const result = await runHikvisionSdkUserMergeApplyForJob({
-				req: params.req,
-				planId: params.planId,
-				mode: params.mode,
-				choices: params.choices,
-				applyAll: params.applyAll,
-				selectedUserKeys: params.selectedUserKeys,
-				selectedCredentialWriteIds: params.selectedCredentialWriteIds,
-				onProgress: recordProgress,
-			});
+			(params.req as any).credentialDeviceLeaseContext = {
+				ownerId: `merge-job:${params.jobId}`,
+				jobId: params.jobId,
+				scopeHash: String(job.scopeHash || ""),
+			};
+			let result: any;
+			try {
+				result = await runHikvisionSdkUserMergeApplyForJob({
+					req: params.req,
+					planId: params.planId,
+					mode: params.mode,
+					choices: params.choices,
+					applyAll: params.applyAll,
+					selectedUserKeys: params.selectedUserKeys,
+					selectedCredentialWriteIds: params.selectedCredentialWriteIds,
+					onProgress: recordProgress,
+				});
+			} finally {
+				delete (params.req as any).credentialDeviceLeaseContext;
+			}
 			const results = Array.isArray(result?.results) ? result.results : [];
 			const finalFailedWrites = results.filter((item: any) => item.status === "error").length;
 			const finalAlreadyConvergedWrites = results.filter(
@@ -14789,12 +16029,30 @@ export const controller = (prisma: PrismaClient) => {
 							device,
 							startedByUserId: params.startedByUserId || null,
 						});
-				const biometricSummary = await captureMissingBiometricCustodyForDevice({
-					jobId: params.jobId,
-					req: params.req,
-					organizationId: params.organizationId,
-					device,
-				});
+				const biometricSummary = await withCredentialDeviceLeases(
+					{
+						rootDir: CREDENTIAL_DEVICE_LEASE_DIR,
+						organizationId: params.organizationId,
+						deviceIds: [String(device.id)],
+						ownerId: `biometric-recovery:${params.jobId}`,
+						jobId: params.jobId,
+						scopeHash: createHash("sha256")
+							.update(
+								JSON.stringify({
+									mode: params.syncMode,
+									deviceId: String(device.id),
+								}),
+							)
+							.digest("hex"),
+					},
+					() =>
+						captureMissingBiometricCustodyForDevice({
+							jobId: params.jobId,
+							req: params.req,
+							organizationId: params.organizationId,
+							device,
+						}),
+				);
 				const biometricFailed = Number((biometricSummary as any)?.biometricFailed || 0);
 				const biometricFailureReasons = sanitizeDeviceUserSyncFailureReasons(
 					(biometricSummary as any)?.biometricFailureReasons || {},

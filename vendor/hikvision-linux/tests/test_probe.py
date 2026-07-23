@@ -176,7 +176,10 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("--stored-face-payload-file", text)
         self.assertIn("payload_permissions_must_be_0600", text)
         self.assertIn("(file_stat.st_mode & 0777) != 0600", text)
+        self.assertIn("O_RDONLY | O_CLOEXEC | O_NOFOLLOW", text)
         self.assertIn("HIKVISION_ENABLE_STORED_FACE_WRITE", text)
+        self.assertIn("HIKVISION_STORED_FACE_WRITER_TESTED", text)
+        self.assertIn("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID", text)
         self.assertIn("feature_disabled_pending_authorized_canary", text)
         self.assertIn("flock(lock_fd, LOCK_EX | LOCK_NB)", text)
         self.assertIn("write_face_and_template(", text)
@@ -184,17 +187,21 @@ class ProbeTests(unittest.TestCase):
         self.assertIn('"stored_face_write_reread_completed"', text)
         self.assertIn('"templateMatch"', text)
         self.assertIn('"pictureMatch"', text)
+        self.assertIn('redact_card_no ? "[redacted]" : card_no', text)
 
         stored_writer = text.split("bool write_stored_face_with_reread(", 1)[1].split(
             "NET_DVR_FINGER_PRINT_CFG_V50 build_fingerprint_record", 1
         )[0]
-        self.assertLess(
-            stored_writer.index('std::getenv("HIKVISION_ENABLE_STORED_FACE_WRITE")'),
-            stored_writer.index("write_face_and_template("),
+        gate_position = stored_writer.index(
+            'std::getenv("HIKVISION_ENABLE_STORED_FACE_WRITE")'
         )
+        execute_write_position = stored_writer.index(
+            "write_face_and_template(", gate_position
+        )
+        self.assertLess(gate_position, execute_write_position)
         self.assertLess(
-            stored_writer.index("write_face_and_template("),
-            stored_writer.index("read_face_and_template("),
+            execute_write_position,
+            stored_writer.index("read_face_and_template(", execute_write_position),
         )
         self.assertNotIn("faceTemplate", stored_writer.split("emit_json", 1)[1])
         self.assertNotIn("facePicture", stored_writer.split("emit_json", 1)[1])
