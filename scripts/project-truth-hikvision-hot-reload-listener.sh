@@ -117,19 +117,32 @@ ensure_work_tree() {
   local build_script="$WORK/scripts/build-hikvision-biometric-service.sh"
   local source_file="$WORK/hikvision_biometric_service.cpp"
   local binary="$WORK/build/hikvision-biometric-service"
+  local deployed_build_script="$SOURCE_ROOT/scripts/build-hikvision-biometric-service.sh"
+  local deployed_source_file="$SOURCE_ROOT/hikvision_biometric_service.cpp"
+  local rebuild_required=0
 
-  if [[ ! -f "$source_file" || ! -f "$build_script" ]]; then
-    mkdir -p "$WORK/scripts"
-    cp "$SOURCE_ROOT/hikvision_biometric_service.cpp" "$source_file"
-    cp "$SOURCE_ROOT/scripts/build-hikvision-biometric-service.sh" "$build_script"
+  if [[ ! -f "$deployed_source_file" || ! -f "$deployed_build_script" ]]; then
+    echo "missing deployed Hikvision source or build script under $SOURCE_ROOT" >&2
+    return 1
+  fi
+
+  mkdir -p "$WORK/scripts"
+
+  # Deployment tools preserve timestamps, so mtime ordering cannot prove that
+  # the long-lived work tree contains the deployed source. Compare content and
+  # force a rebuild whenever either input differs.
+  if [[ ! -f "$source_file" ]] || ! cmp --silent "$deployed_source_file" "$source_file"; then
+    cp "$deployed_source_file" "$source_file"
+    rebuild_required=1
+  fi
+
+  if [[ ! -f "$build_script" ]] || ! cmp --silent "$deployed_build_script" "$build_script"; then
+    cp "$deployed_build_script" "$build_script"
     chmod 0755 "$build_script"
+    rebuild_required=1
   fi
 
-  if [[ ! -x "$binary" || "$SOURCE_ROOT/hikvision_biometric_service.cpp" -nt "$source_file" ]]; then
-    cp "$SOURCE_ROOT/hikvision_biometric_service.cpp" "$source_file"
-  fi
-
-  if [[ ! -x "$binary" || "$source_file" -nt "$binary" || "$build_script" -nt "$binary" ]]; then
+  if [[ ! -x "$binary" || "$rebuild_required" == "1" ]]; then
     HIKVISION_LINUX_SDK_ROOT="$SDK_ROOT" bash "$build_script" >/dev/null
   fi
 }

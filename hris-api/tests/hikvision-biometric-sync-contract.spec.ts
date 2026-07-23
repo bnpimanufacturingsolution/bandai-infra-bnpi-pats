@@ -732,6 +732,16 @@ describe("Hikvision biometric sync contract", () => {
 		expect(wrapper).to.include('case "$DEVICE_SOURCE" in');
 		expect(wrapper).to.include('rows="$(fetch_hikvision_device_rows_from_api "$hris_token")"');
 		expect(wrapper).to.include("ensure_work_tree()");
+		expect(wrapper).to.include(
+			'! cmp --silent "$deployed_source_file" "$source_file"',
+		);
+		expect(wrapper).to.include(
+			'! cmp --silent "$deployed_build_script" "$build_script"',
+		);
+		expect(wrapper).to.include('if [[ ! -x "$binary" || "$rebuild_required" == "1" ]]');
+		expect(wrapper).to.not.include(
+			'"$SOURCE_ROOT/hikvision_biometric_service.cpp" -nt "$source_file"',
+		);
 		expect(wrapper).to.include('--device-file "$SPEC"');
 		expect(wrapper).to.include("fetch_hikvision_hris_token()");
 		expect(wrapper).to.include("/api/auth/login");
