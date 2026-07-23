@@ -163,6 +163,7 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include(
 			"process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID",
 		);
+		expect(controller).to.include("Stored-face SDK writes remain serial");
 		expect(controller).to.include(
 			'"exact_template_and_picture_checksums_retained"',
 		);

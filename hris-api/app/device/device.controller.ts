@@ -11944,6 +11944,8 @@ export const controller = (prisma: PrismaClient) => {
 						"Fresh physical FDLib source picture changed after review; refresh the plan.",
 					);
 				}
+				// Stored-face SDK writes remain serial even after a canary proves the
+				// tuple; a panel must finish exact reread before the next target starts.
 				for (const write of writes) {
 					const targetDevice = deviceById.get(String(write.targetDeviceId));
 					const before = (user?.records || []).find(
@@ -12214,8 +12216,7 @@ export const controller = (prisma: PrismaClient) => {
 					pictureSize: reviewed.pictureSize,
 					message: `Writing reviewed stored face custody for ${first.vendorUserId}.`,
 				});
-				await Promise.all(
-					writes.map(async (write: any) => {
+				for (const write of writes) {
 						const targetDevice = deviceById.get(String(write.targetDeviceId));
 						const before = (user?.records || []).find(
 							(record: any) =>
@@ -12445,8 +12446,7 @@ export const controller = (prisma: PrismaClient) => {
 								message: result.error,
 							});
 						}
-					}),
-				);
+				}
 				return;
 			}
 			if (includeCard) {
