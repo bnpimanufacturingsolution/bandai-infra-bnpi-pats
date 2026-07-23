@@ -3153,7 +3153,10 @@ export const controller = (prisma: PrismaClient) => {
 	}) => {
 		let searchResultPosition = 0;
 		let rowsScanned = 0;
-		for (let page = 0; page < 20; page += 1) {
+		let pagesRead = 0;
+		let lastResponseStatus = "";
+		const searchID = `merge-card-full-reread-${Date.now()}-${randomUUID()}`;
+		for (let page = 0; page < 25; page += 1) {
 			const response = await hikvisionFetch(
 				"/ISAPI/AccessControl/CardInfo/Search?format=json",
 				{
@@ -3164,7 +3167,7 @@ export const controller = (prisma: PrismaClient) => {
 					timeoutMs: 12_000,
 					body: {
 						CardInfoSearchCond: {
-							searchID: `merge-card-full-reread-${page}-${Date.now()}`,
+							searchID,
 							searchResultPosition,
 							maxResults: 100,
 						},
@@ -3177,30 +3180,43 @@ export const controller = (prisma: PrismaClient) => {
 				: search?.CardInfo
 					? [search.CardInfo]
 					: [];
+			pagesRead = page + 1;
 			rowsScanned += cards.length;
 			if (
 				cards.some(
 					(card: any) =>
 						String(card?.employeeNo || "").trim() === params.vendorUserId &&
 						String(card?.cardNo || "").trim() === params.cardNo,
-				)
+					)
 			) {
-				return { found: true, pagesRead: page + 1, rowsScanned };
+				return {
+					found: true,
+					pagesRead,
+					rowsScanned,
+					responseStatus: String(search?.responseStatusStrg || "") || null,
+				};
 			}
-			const numOfMatches = Number(search?.numOfMatches ?? cards.length);
-			const totalMatches = Number(search?.totalMatches ?? 0);
-			searchResultPosition += cards.length;
+			lastResponseStatus = String(search?.responseStatusStrg || "").toUpperCase();
+			const numOfMatches = Number(search?.numOfMatches ?? cards.length ?? 0);
+			const advanceBy =
+				Number.isFinite(numOfMatches) && numOfMatches > 0
+					? numOfMatches
+					: cards.length;
+			searchResultPosition += advanceBy;
 			if (
 				cards.length === 0 ||
-				numOfMatches < 100 ||
-				(Number.isFinite(totalMatches) &&
-					totalMatches > 0 &&
-					searchResultPosition >= totalMatches)
+				advanceBy <= 0 ||
+				(lastResponseStatus && lastResponseStatus !== "MORE")
 			) {
 				break;
 			}
 		}
-		return { found: false, pagesRead: 20, rowsScanned };
+		return {
+			found: false,
+			pagesRead,
+			rowsScanned,
+			responseStatus: lastResponseStatus || null,
+		};
 	};
 
 	const getDeviceUserBiometricBundleSecret = (organizationId: string, deviceId: string) => {

@@ -180,6 +180,12 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include(
 			"readExactHikvisionCardOwnerFromFullInventory",
 		);
+		expect(controller).to.include(
+			"const searchID = `merge-card-full-reread-${Date.now()}-${randomUUID()}`",
+		);
+		expect(controller).to.include(
+			'lastResponseStatus && lastResponseStatus !== "MORE"',
+		);
 		expect(controller).to.include("sourceFaceChecksumEvidence");
 		expect(controller).to.include(
 			"All highest-count face sources have exact template and picture checksum equality",
