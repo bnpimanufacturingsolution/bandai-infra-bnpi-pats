@@ -561,16 +561,18 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 		writeOk = false;
 	}
 
-	const progress = await pollFingerPrintWriteProgress({
-		prisma: params.prisma,
-		req: params.req,
-		deviceId: params.deviceId,
-	});
 	if (params.deferRereadVerification) {
 		return {
 			writeOk,
 			writeResponse,
-			progress,
+			progress: {
+				ok: false,
+				cardReaderRecvStatus: null,
+				errorMsg: null,
+				totalStatus: null,
+				raw: null,
+				reason: "deferred_to_group_userinfo_reread",
+			},
 			// The credential merge performs one authoritative UserInfo reread after
 			// every slot in this exact person's bundle has been submitted. Avoid a
 			// duplicate raw-template sweep per slot while retaining the final
@@ -583,6 +585,11 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 				: "device_fp_write_failed",
 		};
 	}
+	const progress = await pollFingerPrintWriteProgress({
+		prisma: params.prisma,
+		req: params.req,
+		deviceId: params.deviceId,
+	});
 
 	// Re-read device templates for THIS person only (never promote donor).
 	let fingerprints: RawFingerprintTemplate[] = [];

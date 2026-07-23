@@ -10365,6 +10365,7 @@ export const controller = (prisma: PrismaClient) => {
 								`Target rejected or failed to retain one or more raw fingerprint templates: ${JSON.stringify(diagnostics)}`,
 							);
 						}
+						await new Promise((resolve) => setTimeout(resolve, 750));
 						await syncSingleHikvisionDeviceUserFromSource({
 							req: params.req,
 							organizationId: params.organizationId,
