@@ -2828,7 +2828,8 @@ export const controller = (prisma: PrismaClient) => {
 		// Prefer write+progress+re-read verify. HTTP OK alone is not sticky (TEST A 2026-07-19).
 		const { writeAndVerifyFingerprintOnDevice } =
 			await import("../../helper/device-user-raw-fingerprint.helper.js");
-		for (const fingerprint of fingerprints) {
+		for (let fingerprintIndex = 0; fingerprintIndex < fingerprints.length; fingerprintIndex += 1) {
+			const fingerprint = fingerprints[fingerprintIndex];
 			const fingerData = String(fingerprint?.data || "").trim();
 			if (!fingerData) continue;
 			const fingerPrintId = Number(fingerprint.fingerPrintId || 1);
@@ -2865,6 +2866,16 @@ export const controller = (prisma: PrismaClient) => {
 				numOfFP: verified.numOfFP,
 				source: verified.source,
 			});
+			if (
+				params.deferFingerprintRereadVerification &&
+				fingerprintIndex < fingerprints.length - 1
+			) {
+				// FingerPrintDownload is asynchronous even when its HTTP response is
+				// already OK. Give this panel family time to release the reader before
+				// submitting the next slot; the bundle-level UserInfo reread remains
+				// the authoritative success gate.
+				await new Promise((resolve) => setTimeout(resolve, 750));
+			}
 		}
 		return {
 			fingerprintWrites: results,
