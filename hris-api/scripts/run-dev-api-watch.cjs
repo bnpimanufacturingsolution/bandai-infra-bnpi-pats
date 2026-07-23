@@ -27,6 +27,10 @@ const watchdogIntervalMs = Math.max(
 	15_000,
 	Number(process.env.HRIS_DEV_DEPENDENCY_WATCH_INTERVAL_MS || 45_000) || 45_000,
 );
+const fastTunnelWatchIntervalMs = Math.max(
+	2_000,
+	Number(process.env.HRIS_DEV_TUNNEL_WATCH_INTERVAL_MS || 5_000) || 5_000,
+);
 
 process.env.CHOKIDAR_USEPOLLING = String(
 	process.env.CHOKIDAR_USEPOLLING || "true",
@@ -134,6 +138,28 @@ function runBoundedHelper({
 
 let dependencyPassRunning = false;
 let lastDependencyStatus = [];
+let fastTunnelPassRunning = false;
+
+async function runFastTunnelPass() {
+	if (
+		process.env.HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL === "true" ||
+		fastTunnelPassRunning
+	) {
+		return;
+	}
+	fastTunnelPassRunning = true;
+	try {
+		await runBoundedHelper({
+			id: "hikvision-a-f-fast-watch",
+			script: remoteTunnelScript,
+			required: true,
+			target: "managed SSH PID + 127.0.0.1:10080-10085,10443-10448,18000-18005",
+			timeoutMs: 75_000,
+		});
+	} finally {
+		fastTunnelPassRunning = false;
+	}
+}
 
 async function runDependencyPass(reason) {
 	if (dependencyPassRunning) {
@@ -241,8 +267,16 @@ const watchdog = setInterval(() => {
 }, watchdogIntervalMs);
 watchdog.unref();
 
+const fastTunnelWatchdog = setInterval(() => {
+	runFastTunnelPass().catch((error) => {
+		console.warn(`[dev-watch] fast tunnel watchdog failed: ${error?.message || error}`);
+	});
+}, fastTunnelWatchIntervalMs);
+fastTunnelWatchdog.unref();
+
 child.on("exit", (code, signal) => {
 	clearInterval(watchdog);
+	clearInterval(fastTunnelWatchdog);
 	if (signal) {
 		process.kill(process.pid, signal);
 		return;

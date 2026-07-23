@@ -75,12 +75,14 @@ describe("Hikvision remote device tunnel contract", () => {
 		expect(accessControlRouter).to.not.include("return `cache:hikvision:userinfo:count`;");
 	});
 
-	it("uses bounded live UserInfo counts during quick Sync Center preview", () => {
+	it("uses a credentialed protocol response, not source counts, for quick health", () => {
 		expect(deviceController).to.include("quickSavedPreview");
-		expect(deviceController).to.include("await getHikvisionFastDeviceUserSourceCount(req, device.id)");
-		expect(deviceController).to.include("Promise.allSettled(");
-		expect(deviceController).to.include("HIKVISION_FAST_USER_COUNT_TIMEOUT_MS");
-		expect(deviceController).to.not.include("Live source counts skipped for quick Sync Center preview");
+		expect(deviceController).to.include("hikvisionEndpoint.system.time");
+		expect(deviceController).to.include('provenBy: "systemTime"');
+		expect(deviceController).to.include("Skipped in quick health mode");
+		expect(deviceController).to.not.include(
+			"await getHikvisionFastDeviceUserSourceCount(req, device.id)",
+		);
 	});
 
 	it("falls back to the lighter UserInfo count endpoint when UserInfo/Search does not yield a count", () => {
@@ -157,6 +159,10 @@ describe("Hikvision remote device tunnel contract", () => {
 		expect(devWatchScript).to.include("vm-api-reverse");
 		expect(devWatchScript).to.include("dependency-status.json");
 		expect(devWatchScript).to.include("watchdog.unref()");
+		expect(devWatchScript).to.include("fastTunnelPassRunning");
+		expect(devWatchScript).to.include("hikvision-a-f-fast-watch");
+		expect(devWatchScript).to.include("HRIS_DEV_TUNNEL_WATCH_INTERVAL_MS");
+		expect(devWatchScript).to.include("fastTunnelWatchdog.unref()");
 		expect(devWatchScript).to.include("timeoutMs: 75_000");
 		expect(devWatchScript).to.include("timeoutMs: 45_000");
 	});
@@ -165,6 +171,9 @@ describe("Hikvision remote device tunnel contract", () => {
 		expect(ensureScript).to.include("timeout: 75_000");
 		expect(ensureScript).to.include('result.error?.code === "ETIMEDOUT"');
 		expect(ensureScript).to.include("allForwardPortsOpen");
+		expect(ensureScript).to.include("activeTunnelProcessAlive");
+		expect(ensureScript).to.include("managedTunnelReady");
+		expect(ensureScript).to.include('process.kill(processId, 0)');
 		expect(ensureScript).to.include("DONE (fast path)");
 		expect(ensureScript).to.include('stdio: "ignore"');
 		expect(livePathEnsureScript).to.include("timeout: 90_000");

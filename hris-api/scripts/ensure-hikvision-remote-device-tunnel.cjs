@@ -6,6 +6,12 @@ const { spawnSync } = require("child_process");
 const apiRoot = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(apiRoot, "..");
 const scriptPath = path.join(repoRoot, "scripts", "start-hikvision-remote-device-tunnel.ps1");
+const activeTunnelPath = path.join(
+	repoRoot,
+	".runtime",
+	"hikvision-remote-device-tunnel",
+	"active.json",
+);
 
 if (process.env.HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL === "true") {
 	console.log("[hikvision-device-tunnel] Skipped because HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL=true.");
@@ -67,10 +73,26 @@ async function allForwardPortsOpen() {
 	return proof.every(Boolean);
 }
 
+function activeTunnelProcessAlive() {
+	try {
+		const record = JSON.parse(fs.readFileSync(activeTunnelPath, "utf8"));
+		const processId = Number(record?.ProcessId || 0);
+		if (!Number.isInteger(processId) || processId <= 0) return false;
+		process.kill(processId, 0);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+async function managedTunnelReady() {
+	return activeTunnelProcessAlive() && (await allForwardPortsOpen());
+}
+
 async function main() {
-	if (await allForwardPortsOpen()) {
+	if (await managedTunnelReady()) {
 		console.log(
-			`[hikvision-device-tunnel] DONE (fast path) — all ${deviceIps.length * 3} forwarded ports carry TCP traffic.`,
+			`[hikvision-device-tunnel] DONE (fast path) — managed SSH PID is alive and all ${deviceIps.length * 3} local forward listeners are ready.`,
 		);
 		return;
 	}
@@ -85,9 +107,9 @@ async function main() {
 		killSignal: "SIGTERM",
 	});
 
-	if (await allForwardPortsOpen()) {
+	if (await managedTunnelReady()) {
 		console.log(
-			`[hikvision-device-tunnel] DONE (recovered) — all ${deviceIps.length * 3} forwarded ports carry TCP traffic.`,
+			`[hikvision-device-tunnel] DONE (recovered) — managed SSH PID is alive and all ${deviceIps.length * 3} local forward listeners are ready.`,
 		);
 		return;
 	}
