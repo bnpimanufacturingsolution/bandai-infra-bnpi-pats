@@ -122,7 +122,12 @@ export interface DeviceEventsResponse {
 		total: number;
 		byCategory: Partial<Record<DeviceEventCategory | string, number>>;
 		byAction: Partial<Record<DeviceEventAction | string, number>>;
-		byActionCategory?: Partial<Record<DeviceEventAction | string, Partial<Record<DeviceEventCategory | string, number>>>>;
+		byActionCategory?: Partial<
+			Record<
+				DeviceEventAction | string,
+				Partial<Record<DeviceEventCategory | string, number>>
+			>
+		>;
 		byProcessingResult: Partial<Record<DeviceEventStatus | string, number>>;
 		byRuntimePath: Partial<Record<DeviceEventSource | string, number>>;
 		byConfidence: Partial<Record<DeviceEventConfidence | string, number>>;
@@ -368,7 +373,14 @@ export interface DeviceSyncPreviewEventRow {
 	readsFrom: "ContentMgmt/logSearch" | "AccessControl/AcsEvent" | string;
 	filterAfterSync: string;
 	whereToFind?: string;
-	status: "Ready" | "Needs review" | "Unavailable" | "No new rows" | "Partial" | "Failed" | string;
+	status:
+		| "Ready"
+		| "Needs review"
+		| "Unavailable"
+		| "No new rows"
+		| "Partial"
+		| "Failed"
+		| string;
 	confidenceLabel?: string | null;
 	reviewReason?: string | null;
 	sourceDetail?: string | null;
@@ -451,7 +463,16 @@ export interface DeviceActivityResponse {
 		protocol?: string | null;
 		config?: Record<string, unknown> | null;
 	};
-	status: "idle" | "listening" | "reconciling" | "importing" | "adjusting" | "failed" | "completed" | "running" | string;
+	status:
+		| "idle"
+		| "listening"
+		| "reconciling"
+		| "importing"
+		| "adjusting"
+		| "failed"
+		| "completed"
+		| "running"
+		| string;
 	activeRun?: DeviceSyncRun | null;
 	activeJob?: Record<string, unknown> | null;
 	lastRun?: DeviceSyncRun | null;
@@ -604,6 +625,7 @@ export type DeviceUserMergeRequest = {
 export interface DeviceUserMergeJobProgress {
 	jobId: string;
 	planId: string;
+	scopeHash?: string;
 	retryPlanId?: string;
 	status: "processing" | "completed" | "failed";
 	totalWrites: number;
@@ -703,6 +725,7 @@ export type DeviceUserMergeApplyPayload = {
 	choices?: Record<string, Partial<Record<DeviceUserMergeField, "A" | "B" | "KEEP">>>;
 	applyAll?: "A" | "B";
 	selectedUserKeys?: string[];
+	expectedScopeHash?: string;
 };
 
 export interface DeviceUserSyncJobStartRequest {
@@ -1909,17 +1932,29 @@ class DevicesService extends APIService {
 		}
 	}
 
-	async startHikvisionSdkUserMergeJob(
-		payload: DeviceUserMergeApplyPayload,
-	): Promise<{ jobId: string; progress: DeviceUserMergeJobProgress }> {
+	async startHikvisionSdkUserMergeJob(payload: DeviceUserMergeApplyPayload): Promise<{
+		jobId: string;
+		scopeHash: string;
+		progress: DeviceUserMergeJobProgress;
+		review: any;
+	}> {
 		try {
+			const reviewResponse = await hrisApiClient.post<any>(
+				"/api/device/hikvision/sdk-users/merge/review",
+				payload,
+			);
+			const review = reviewResponse.data?.data || reviewResponse.data;
+			if (!review?.scopeHash) throw new Error("Merge scope review returned no scope hash");
 			const response = await hrisApiClient.post<any>(
 				"/api/device/hikvision/sdk-users/merge/jobs",
-				payload,
+				{ ...payload, expectedScopeHash: review.scopeHash },
 			);
 			const data = response.data?.data || response.data;
 			if (!data?.jobId) throw new Error("Failed to start SDK user merge job");
-			return data as { jobId: string; progress: DeviceUserMergeJobProgress };
+			if (data.scopeHash !== review.scopeHash) {
+				throw new Error("Started merge scope does not match the reviewed scope");
+			}
+			return { ...data, review };
 		} catch (error: any) {
 			throw new Error(
 				error.data?.errors?.[0]?.message ||
@@ -2121,18 +2156,19 @@ class DevicesService extends APIService {
 		try {
 			const deviceId = String(payload.deviceId || "").trim();
 			const vendorUserIds = Array.from(
-				new Set((payload.vendorUserIds || []).map((value) => String(value || "").trim()).filter(Boolean)),
+				new Set(
+					(payload.vendorUserIds || [])
+						.map((value) => String(value || "").trim())
+						.filter(Boolean),
+				),
 			);
 			if (!deviceId || vendorUserIds.length === 0) {
 				throw new Error("Device and selected device users are required");
 			}
-			const response = await hrisApiClient.post<any>(
-				`/api/device/${deviceId}/users/delete`,
-				{
-					execute: payload.execute === true,
-					vendorUserIds,
-				},
-			);
+			const response = await hrisApiClient.post<any>(`/api/device/${deviceId}/users/delete`, {
+				execute: payload.execute === true,
+				vendorUserIds,
+			});
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Failed to delete selected device users");
 			return data as DeleteDeviceUsersResponse;
@@ -2397,9 +2433,11 @@ class DevicesService extends APIService {
 		}
 	}
 
-	async getHikvisionListenerStatus(options: {
-		signal?: AbortSignal;
-	} = {}): Promise<HikvisionListenerStatus> {
+	async getHikvisionListenerStatus(
+		options: {
+			signal?: AbortSignal;
+		} = {},
+	): Promise<HikvisionListenerStatus> {
 		try {
 			// Cap client wait so the Listener modal never spins forever if SSH stalls.
 			const response = await hrisApiClient.get<any>(
@@ -2427,9 +2465,8 @@ class DevicesService extends APIService {
 	 * Does not depend on a dedicated route that can collide with /device/:id.
 	 */
 	async getDeviceLiveReadiness(): Promise<DeviceLiveReadiness> {
-		const { buildClientDeviceLiveReadiness } = await import(
-			"../lib/device-live-readiness-client"
-		);
+		const { buildClientDeviceLiveReadiness } =
+			await import("../lib/device-live-readiness-client");
 
 		let databaseOk = false;
 		let databaseLatencyMs: number | null = null;
@@ -2481,9 +2518,7 @@ class DevicesService extends APIService {
 	 * Prefer server prove (runs ensure-device-live-path.ps1 like predev: DB + reverse bridge
 	 * + listener re-arm). Falls back to browser-only restart if API route unavailable.
 	 */
-	async proveDeviceLivePath(options?: {
-		forceReArm?: boolean;
-	}): Promise<{
+	async proveDeviceLivePath(options?: { forceReArm?: boolean }): Promise<{
 		proven: boolean;
 		restartAttempted?: boolean;
 		steps: Array<{ step: string; ok: boolean; detail: string }>;
@@ -2513,8 +2548,7 @@ class DevicesService extends APIService {
 					steps: Array.isArray(data.steps) ? data.steps : [],
 					readiness,
 					operatorHint: readinessGreen
-						? readiness.headline ||
-							"Safe to tap and enroll — realtime path is truthful"
+						? readiness.headline || "Safe to tap and enroll — realtime path is truthful"
 						: data.operatorHint,
 					message: response.data?.message || data.message,
 				};
@@ -2554,7 +2588,8 @@ class DevicesService extends APIService {
 			const lastAlarm = listener.sdk?.lastAlarmAt
 				? Date.parse(String(listener.sdk.lastAlarmAt))
 				: NaN;
-			const proofStale = !Number.isFinite(lastAlarm) || Date.now() - lastAlarm > 15 * 60 * 1000;
+			const proofStale =
+				!Number.isFinite(lastAlarm) || Date.now() - lastAlarm > 15 * 60 * 1000;
 			steps.push({
 				step: "listener_status",
 				ok: Boolean(listener.running) && state !== "login_failed",
@@ -2581,7 +2616,9 @@ class DevicesService extends APIService {
 					listener = await this.getHikvisionListenerStatus();
 					steps.push({
 						step: "listener_status_after_restart",
-						ok: Boolean(listener.running) && String(listener.sdk?.state) !== "login_failed",
+						ok:
+							Boolean(listener.running) &&
+							String(listener.sdk?.state) !== "login_failed",
 						detail: listener.running
 							? `Listener ${listener.status} / sdk=${listener.sdk?.state}`
 							: "Still not running after restart",

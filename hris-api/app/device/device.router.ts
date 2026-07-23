@@ -42,11 +42,7 @@ interface IController {
 		res: Response,
 		next: NextFunction,
 	): Promise<void>;
-	captureDeviceUserRawFace(
-		req: Request,
-		res: Response,
-		next: NextFunction,
-	): Promise<void>;
+	captureDeviceUserRawFace(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceUserPhoto(req: Request, res: Response, next: NextFunction): Promise<void>;
 	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 	backfillDeviceUserLifecycleEvents(
@@ -63,6 +59,7 @@ interface IController {
 	copyHikvisionDeviceUserToPeer(req: Request, res: Response, next: NextFunction): Promise<void>;
 	planHikvisionSdkUserMerge(req: Request, res: Response, next: NextFunction): Promise<void>;
 	applyHikvisionSdkUserMerge(req: Request, res: Response, next: NextFunction): Promise<void>;
+	reviewHikvisionSdkUserMergeJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	startHikvisionSdkUserMergeJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	listHikvisionSdkUserMergeJobs(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getHikvisionSdkUserMergeJob(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -117,14 +114,14 @@ export const router = (route: Router, controller: IController): Router => {
 		"/:id/users/:vendorUserId/raw-fingerprints/capture",
 		controller.captureDeviceUserRawFingerprints,
 	);
-	routes.post(
-		"/:id/users/:vendorUserId/raw-face/capture",
-		controller.captureDeviceUserRawFace,
-	);
+	routes.post("/:id/users/:vendorUserId/raw-face/capture", controller.captureDeviceUserRawFace);
 	routes.get("/users/:userId/photo", controller.getDeviceUserPhoto);
 	routes.post("/:id/users/sync", controller.syncDeviceUsers);
 	routes.post("/:id/users/lifecycle-backfill", controller.backfillDeviceUserLifecycleEvents);
-	routes.post("/:id/users/biometric-metadata/backfill", controller.backfillDeviceUserBiometricMetadata);
+	routes.post(
+		"/:id/users/biometric-metadata/backfill",
+		controller.backfillDeviceUserBiometricMetadata,
+	);
 	routes.post("/:id/users/backfill", controller.backfillDeviceUsers);
 	routes.post("/biometric-sync/reconcile", controller.reconcileBiometricSync);
 	routes.post(
@@ -144,6 +141,7 @@ export const router = (route: Router, controller: IController): Router => {
 		controller.planHikvisionSdkUserMerge,
 	);
 	routes.post("/hikvision/sdk-users/merge/apply", controller.applyHikvisionSdkUserMerge);
+	routes.post("/hikvision/sdk-users/merge/review", controller.reviewHikvisionSdkUserMergeJob);
 	routes.post("/hikvision/sdk-users/merge/jobs", controller.startHikvisionSdkUserMergeJob);
 	routes.get("/hikvision/sdk-users/merge/jobs", controller.listHikvisionSdkUserMergeJobs);
 	routes.get("/hikvision/sdk-users/merge/jobs/:jobId", controller.getHikvisionSdkUserMergeJob);

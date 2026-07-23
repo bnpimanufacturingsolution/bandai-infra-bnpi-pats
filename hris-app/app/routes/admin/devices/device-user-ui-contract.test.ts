@@ -149,8 +149,12 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Device returned non-image data");
 		expect(enroll).toContain("face_image_not_found_on_device");
 		expect(enroll).toContain("face_image_unauthorized");
-		expect(enroll).toContain("{formatDeviceUserSyncRawFailureReason(failure.reason)}");
-		expect(enroll).toContain("formatDeviceUserSyncRawFailureMessage(result.error)");
+		expect(enroll).toMatch(
+			/\{formatDeviceUserSyncRawFailureReason\(\s*failure\.reason,\s*\)\}/,
+		);
+		expect(enroll).toMatch(
+			/formatDeviceUserSyncRawFailureMessage\(\s*result\.error,\s*\)/,
+		);
 		expect(enroll).toContain("Building raw-custody plan");
 		expect(enroll).toContain("Retry raw blobs only");
 		expect(enroll).toContain("What Sync can fix");
@@ -231,7 +235,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Enrollment counts alone do not authorize biometric copying");
 		expect(enroll).toContain("No fingerprint copy is recommended");
 		expect(enroll).toContain("No face copy is recommended");
-		expect(enroll).toContain('fingerprint?.status === "raw_blob_present"');
+		expect(enroll).toMatch(
+			/fingerprint\?\.status ===\s*"raw_blob_present"/,
+		);
 		expect(enroll).toContain('face?.status === "raw_blob_present"');
 		expect(enroll).toContain("selected unique ID");
 		expect(enroll).toContain("selected potential write");
@@ -291,7 +297,13 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("source evidence and current gaps");
 		expect(enroll).toContain("setSelectedMergeUser(row.key)");
 		expect(enroll).toContain("Locked job scope");
-		expect(enroll).toContain("This is the frozen source/target matrix from the job start request.");
+		expect(enroll).toContain('"Authenticated"');
+		expect(enroll).toContain('"Excluded"');
+		expect(enroll).toContain("credentialed protocol response");
+		expect(enroll).toContain("checkedAt");
+		expect(enroll).toMatch(
+			/This is the frozen source\/target matrix from the job\s+start request\./,
+		);
 		expect(enroll).toContain("sdkMergeState.status !== \"loading\" && !hasSdkMergeJob");
 		expect(enroll).toContain("Targets receiving copies");
 		expect(enroll).toContain("Physical sources used");
@@ -304,7 +316,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Already matched");
 		expect(enroll).toContain("This job was started before detailed merge telemetry was available.");
 		expect(enroll).toContain("Copy failures by path");
-		expect(enroll).toContain("Grouped from backend progress. Latest rows below may be capped.");
+		expect(enroll).toMatch(
+			/Grouped from backend progress\. Latest rows below may be\s+capped\./,
+		);
 		expect(enroll).toContain("sdkMergeJobCopyFailurePairs");
 		expect(deviceService).toContain("copyFailureSummary");
 		expect(deviceController).toContain("copyFailureSummary: job.copyFailureSummary");
@@ -384,7 +398,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("rawBiometricPackage");
 		expect(enroll).toContain("Biometric custody package");
 		expect(enroll).toMatch(
-			/const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = \[\s*"rawFingerprintBlob",\s*"rawFaceBlob",\s*\] as const;/,
+			/const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = \[\s*"rawFingerprintBlob",\s*"rawFaceBlob",?\s*\] as const;/,
 		);
 		expect(enroll).not.toContain("DEVICE_USER_SPREADSHEET_TEMPLATE_PREFIX");
 		expect(enroll).not.toContain("encrypted:v2:");
