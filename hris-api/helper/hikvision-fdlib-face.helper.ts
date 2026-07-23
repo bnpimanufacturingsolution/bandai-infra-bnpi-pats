@@ -336,6 +336,31 @@ export const assertHikvisionFdlibPrewriteEvidence = (
 	}
 };
 
+export const assertHikvisionFdlibWriteAccepted = (response: unknown) => {
+	const root =
+		response && typeof response === "object"
+			? (response as Record<string, unknown>)
+			: {};
+	const status =
+		root.ResponseStatus && typeof root.ResponseStatus === "object"
+			? (root.ResponseStatus as Record<string, unknown>)
+			: root;
+	const statusCode = Number(status.statusCode);
+	const statusText = text(status.statusString || status.subStatusCode).toLowerCase();
+	const accepted = Number.isFinite(statusCode)
+		? statusCode === 0 || statusCode === 1
+		: statusText === "ok";
+	if (!accepted) {
+		throw new Error(
+			`FaceDataRecord did not return an explicit success status (${statusText || (Number.isFinite(statusCode) ? statusCode : "missing_status")}).`,
+		);
+	}
+	return {
+		statusCode: Number.isFinite(statusCode) ? statusCode : null,
+		statusText: statusText || null,
+	};
+};
+
 export const buildHikvisionFdlibFaceDataRecordBody = (params: {
 	faceUrl: string;
 	fdId: string;

@@ -4,6 +4,7 @@ import {
 	HikvisionFdlibFaceDeliveryRegistry,
 	assertHikvisionCredentialWriteLease,
 	assertHikvisionFdlibPrewriteEvidence,
+	assertHikvisionFdlibWriteAccepted,
 	buildHikvisionFdlibFaceDataRecordBody,
 	classifyHikvisionFdlibPictureTarget,
 	validateHikvisionFdlibFacePicture,
@@ -179,6 +180,27 @@ describe("Hikvision FDLib picture face contract", () => {
 			name: "Employee 13",
 		});
 		expect(JSON.stringify(body)).not.to.include("base64");
+	});
+
+	it("requires an explicit FaceDataRecord success body before reread", () => {
+		expect(
+			assertHikvisionFdlibWriteAccepted({
+				ResponseStatus: { statusCode: 1, statusString: "OK" },
+			}),
+		).to.deep.equal({ statusCode: 1, statusText: "ok" });
+		expect(
+			assertHikvisionFdlibWriteAccepted({
+				ResponseStatus: { statusString: "OK" },
+			}),
+		).to.deep.equal({ statusCode: null, statusText: "ok" });
+		expect(() => assertHikvisionFdlibWriteAccepted({})).to.throw(
+			"explicit success status",
+		);
+		expect(() =>
+			assertHikvisionFdlibWriteAccepted({
+				ResponseStatus: { statusCode: 6, statusString: "Invalid Content" },
+			}),
+		).to.throw("invalid content");
 	});
 
 	it("serves an image once, only to the attested physical target address", () => {

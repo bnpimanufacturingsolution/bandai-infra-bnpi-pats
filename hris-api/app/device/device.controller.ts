@@ -64,7 +64,9 @@ import {
 	classifyFaceCustody,
 	fingerprintCustodyMatchesReview,
 	normalizeFingerprintCustodyEvidence,
+	reconcileDurableFingerprintOwnerConflicts,
 	serializeDeviceUserMergePlanForReview,
+	type DurableFingerprintOwnerConflictEvidence,
 	type DeviceUserMergeField,
 	type DeviceUserMergeRecord,
 } from "../../helper/device-user-merge.helper";
@@ -78,6 +80,7 @@ import {
 	HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT,
 	HIKVISION_FDLIB_FACE_SEARCH_ENDPOINT,
 	assertHikvisionFdlibPrewriteEvidence,
+	assertHikvisionFdlibWriteAccepted,
 	buildHikvisionFdlibFaceDataRecordBody,
 	classifyHikvisionFdlibPictureTarget,
 	hikvisionFdlibFaceDeliveryRegistry,
@@ -1103,6 +1106,83 @@ const readDeviceUserMergeJob = (jobId: string): DeviceUserMergeJob | null => {
 	} catch (error) {
 		deviceLogger.warn(`Failed to read device-user merge job snapshot: ${error}`);
 		return null;
+	}
+};
+
+const readDurableFingerprintOwnerConflicts = (
+	organizationId: string,
+): DurableFingerprintOwnerConflictEvidence[] => {
+	try {
+		if (!fsSync.existsSync(DEVICE_USER_MERGE_JOB_DIR)) return [];
+		const evidence: DurableFingerprintOwnerConflictEvidence[] = [];
+		for (const name of fsSync.readdirSync(DEVICE_USER_MERGE_JOB_DIR)) {
+			if (!/^[a-zA-Z0-9-]+\.json$/.test(name)) continue;
+			const job = readDeviceUserMergeJob(name.slice(0, -5));
+			if (!job || job.organizationId !== organizationId) continue;
+			for (const result of job.results || []) {
+				if (
+					String(result?.modality || "") !== "fingerprint" ||
+					String(result?.status || "") !== "error"
+				) {
+					continue;
+				}
+				const error = String(result?.error || "");
+				const start = error.indexOf("[");
+				const end = error.lastIndexOf("]");
+				if (start < 0 || end <= start) continue;
+				let attempts: any[] = [];
+				try {
+					const parsed = JSON.parse(error.slice(start, end + 1));
+					attempts = Array.isArray(parsed) ? parsed : [];
+				} catch {
+					continue;
+				}
+				for (const attempt of attempts) {
+					const conflictingVendorUserId = String(
+						attempt?.progressErrorMsg || "",
+					).trim();
+					const fingerPrintId = Number(attempt?.fingerPrintId || 0);
+					if (
+						Number(attempt?.progressStatus) !== 5 ||
+						!conflictingVendorUserId ||
+						!fingerPrintId ||
+						conflictingVendorUserId === String(result?.vendorUserId || "")
+					) {
+						continue;
+					}
+					evidence.push({
+						jobId: job.jobId,
+						vendorUserId: String(result?.vendorUserId || "").trim(),
+						sourceDeviceId: String(result?.sourceDeviceId || "").trim(),
+						targetDeviceId: String(result?.targetDeviceId || "").trim(),
+						fingerPrintId,
+						conflictingVendorUserId,
+						observedAt:
+							job.completedAt?.toISOString() ||
+							job.updatedAt?.toISOString() ||
+							null,
+					});
+				}
+			}
+		}
+		return evidence.filter(
+			(item, index, items) =>
+				index ===
+				items.findIndex(
+					(candidate) =>
+						candidate.vendorUserId === item.vendorUserId &&
+						candidate.sourceDeviceId === item.sourceDeviceId &&
+						candidate.targetDeviceId === item.targetDeviceId &&
+						candidate.fingerPrintId === item.fingerPrintId &&
+						candidate.conflictingVendorUserId ===
+							item.conflictingVendorUserId,
+				),
+		);
+	} catch (error) {
+		deviceLogger.warn(
+			`Failed to read durable fingerprint owner-conflict evidence: ${error}`,
+		);
+		return [];
 	}
 };
 
@@ -2752,21 +2832,7 @@ export const controller = (prisma: PrismaClient) => {
 				headers: { "Content-Type": "application/json" },
 				body,
 			});
-			const responseStatus = response?.ResponseStatus || response || {};
-			const statusCode = Number(responseStatus?.statusCode);
-			const statusText = String(
-				responseStatus?.statusString || responseStatus?.subStatusCode || "",
-			).toLowerCase();
-			if (
-				Number.isFinite(statusCode) &&
-				statusCode !== 0 &&
-				statusCode !== 1 &&
-				statusText !== "ok"
-			) {
-				throw new Error(
-					`FaceDataRecord rejected the reviewed picture (${statusText || statusCode}).`,
-				);
-			}
+			assertHikvisionFdlibWriteAccepted(response);
 
 			let rereadPicture: ReturnType<typeof validateHikvisionFdlibFacePicture> | null =
 				null;
@@ -10713,7 +10779,7 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 		}
-		const plan: any = buildDeviceUserMergePlan({
+		let plan: any = buildDeviceUserMergePlan({
 			records,
 			deviceIds: params.deviceIds as string[],
 			validDeviceIds,
@@ -10855,6 +10921,10 @@ export const controller = (prisma: PrismaClient) => {
 				recommendationReason: `The missing source fingerprint checksum is already enrolled to target user ${duplicateOwners.join(", ")}; physical duplicate protection forbids this write.`,
 			};
 		});
+		plan = reconcileDurableFingerprintOwnerConflicts(
+			plan,
+			readDurableFingerprintOwnerConflicts(params.organizationId),
+		);
 		if (plan.counts) {
 			plan.counts.credentialWrites = plan.credentialWrites.length;
 			plan.counts.actionableCredentialWrites = plan.credentialWrites.filter(
@@ -11275,23 +11345,34 @@ export const controller = (prisma: PrismaClient) => {
 					},
 					select: { rawPayload: true, vendorMetadata: true },
 				});
-				const sourceCustody = buildRawDeviceUserBiometricCustody({
-					row: sourceRow || {},
-					includeFingerprints: false,
-					includeFaces: true,
+				const freshSourcePhoto =
+					await captureDeviceUserFacePhotoForEncryptedCustody({
+						req: params.req,
+						device: sourceDevice,
+						row: {
+							rawPayload:
+								sourceRecord?.rawPayload || sourceRow?.rawPayload || {},
+						},
+						organizationId: params.organizationId,
+						vendorUserId: String(first.vendorUserId),
+					});
+				const freshSourcePayload = decryptDeviceUserBiometricPayload({
+					organizationId: params.organizationId,
+					deviceId: String(first.sourceDeviceId),
+					encrypted: freshSourcePhoto.encryptedFace,
+					allowLegacyServerEnvelope: true,
+					expectedVendorUserId: String(first.vendorUserId),
+					expectedModality: "face",
 				});
-				const facePicture = String(
-					sourceCustody.face.blob?.base64 || "",
-				).trim();
-				const validatedSourcePicture =
-					validateHikvisionFdlibFacePicture(facePicture);
+				const facePicture = String(freshSourcePayload?.facePicture || "").trim();
+				const validatedSourcePicture = validateHikvisionFdlibFacePicture(facePicture);
 				if (
 					!reviewedPicture ||
 					reviewedPicture.pictureSha256 !== validatedSourcePicture.sha256 ||
 					reviewedPicture.pictureSize !== validatedSourcePicture.size
 				) {
 					throw new Error(
-						"FDLib source picture custody changed after review; refresh the plan.",
+						"Fresh physical FDLib source picture changed after review; refresh the plan.",
 					);
 				}
 				for (const write of writes) {
@@ -11478,29 +11559,24 @@ export const controller = (prisma: PrismaClient) => {
 						String(record.deviceId) === String(first.sourceDeviceId),
 				);
 				const reviewed = sourceRecord?._faceCustodyEvidence;
-				const sourceRow = await (prisma as any).deviceUser.findUnique({
-					where: {
-						organizationId_deviceId_vendorUserId: {
-							organizationId: params.organizationId,
-							deviceId: first.sourceDeviceId,
-							vendorUserId: first.vendorUserId,
-						},
-					},
-					select: {
-						rawPayload: true,
-						vendorMetadata: true,
-					},
-				});
-				const rawCustody = buildRawDeviceUserBiometricCustody({
-					row: sourceRow || {},
+				const freshSourceExport = await runHikvisionBiometricExportOnVm({
+					device: sourceDevice,
+					organizationId: params.organizationId,
+					vendorUserId: String(first.vendorUserId),
 					includeFingerprints: false,
 					includeFaces: true,
 				});
-				const faceTemplate = String(
-					rawCustody.face.blob?.faceTemplate || "",
-				).trim();
-				const facePicture = String(rawCustody.face.blob?.base64 || "").trim();
-				const cardNo = String(sourceRecord?._cardNo || "").trim();
+				const freshSourcePayload = decryptDeviceUserBiometricPayload({
+					organizationId: params.organizationId,
+					deviceId: String(first.sourceDeviceId),
+					encrypted: freshSourceExport.encryptedFace,
+					allowLegacyServerEnvelope: true,
+					expectedVendorUserId: String(first.vendorUserId),
+					expectedModality: "face",
+				});
+				const faceTemplate = String(freshSourcePayload?.faceTemplate || "").trim();
+				const facePicture = String(freshSourcePayload?.facePicture || "").trim();
+				const cardNo = String(freshSourcePayload?.cardNo || "").trim();
 				const currentEvidence =
 					faceTemplate && facePicture && cardNo
 						? {
@@ -11525,7 +11601,7 @@ export const controller = (prisma: PrismaClient) => {
 					reviewed.cardNoSha256 !== currentEvidence.cardNoSha256
 				) {
 					throw new Error(
-						"Stored-face custody changed after review; refresh and lock a new exact source scope.",
+						"Fresh physical stored-face custody changed after review; refresh and lock a new exact source scope.",
 					);
 				}
 				params.emitProgress?.({

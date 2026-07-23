@@ -170,6 +170,7 @@ export type DeviceUserCredentialWrite = {
 		| "blocked";
 	blockingReason:
 		| "source_conflict"
+		| "physical_identity_adjudication_required"
 		| "source_not_enrolled"
 		| "missing_raw_blob"
 		| "target_write_unsupported"
@@ -183,6 +184,140 @@ export type DeviceUserCredentialWrite = {
 	}>;
 	/** A transport/SDK success is never enough; execution must re-read this target. */
 	physicalRereadRequired: true;
+};
+
+export type DurableFingerprintOwnerConflictEvidence = {
+	jobId: string;
+	vendorUserId: string;
+	sourceDeviceId: string;
+	targetDeviceId: string;
+	fingerPrintId: number;
+	conflictingVendorUserId: string;
+	observedAt?: string | null;
+};
+
+/**
+ * A panel progress-status 5 naming another employee is stronger than a later
+ * count-only planner inference. Preserve that physical owner evidence across
+ * replans. The row may disappear as a safe no-write only when the current
+ * exact-five inventory proves both vendor IDs map to the same canonical HRIS
+ * employee and the conflicting target slot carries the reviewed source
+ * checksum. Otherwise a physical identity adjudication is required.
+ */
+export const reconcileDurableFingerprintOwnerConflicts = <T extends {
+	credentialWrites?: DeviceUserCredentialWrite[];
+	users?: DeviceUserMergeGroup[];
+	counts?: Record<string, number>;
+	credentialResolutions?: unknown[];
+}>(
+	plan: T,
+	evidence: DurableFingerprintOwnerConflictEvidence[],
+): T => {
+	const writes = Array.isArray(plan.credentialWrites) ? plan.credentialWrites : [];
+	const users = Array.isArray(plan.users) ? plan.users : [];
+	const records = users.flatMap((user) =>
+		user.records.map((record) => ({ user, record })),
+	);
+	const resolutions = Array.isArray(plan.credentialResolutions)
+		? [...plan.credentialResolutions]
+		: [];
+	const retainedWrites: DeviceUserCredentialWrite[] = [];
+
+	for (const write of writes) {
+		if (write.modality !== "fingerprint") {
+			retainedWrites.push(write);
+			continue;
+		}
+		const collisions = evidence.filter(
+			(item) =>
+				item.vendorUserId === write.vendorUserId &&
+				item.sourceDeviceId === write.sourceDeviceId &&
+				item.targetDeviceId === write.targetDeviceId,
+		);
+		if (!collisions.length) {
+			retainedWrites.push(write);
+			continue;
+		}
+		const source = records.find(
+			(item) =>
+				item.record.deviceId === write.sourceDeviceId &&
+				item.record.vendorUserId === write.vendorUserId,
+		);
+		const equivalence = collisions.map((collision) => {
+			const owner = records.find(
+				(item) =>
+					item.record.deviceId === collision.targetDeviceId &&
+					item.record.vendorUserId === collision.conflictingVendorUserId,
+			);
+			const sourceChecksum = write.sourceFingerprintTemplateChecksums.find(
+				(template) => template.fingerPrintId === collision.fingerPrintId,
+			)?.checksum;
+			const ownerChecksum = owner?.record._fingerprintTemplateChecksums?.find(
+				(template) => template.fingerPrintId === collision.fingerPrintId,
+			)?.checksum;
+			const sameCanonicalEmployee = Boolean(
+				source?.record.employeeId &&
+					owner?.record.employeeId &&
+					source.record.employeeId === owner.record.employeeId,
+			);
+			return {
+				collision,
+				owner,
+				equivalent:
+					sameCanonicalEmployee &&
+					Boolean(sourceChecksum) &&
+					Boolean(ownerChecksum) &&
+					String(sourceChecksum).toLowerCase() ===
+						String(ownerChecksum).toLowerCase(),
+			};
+		});
+		if (equivalence.every((item) => item.equivalent)) {
+			resolutions.push({
+				writeId: write.id,
+				modality: "fingerprint",
+				resolution: "equivalent_owner_safe_no_write",
+				vendorUserId: write.vendorUserId,
+				targetDeviceId: write.targetDeviceId,
+				conflictingVendorUserIds: [
+					...new Set(
+						collisions.map((item) => item.conflictingVendorUserId),
+					),
+				],
+				jobIds: [...new Set(collisions.map((item) => item.jobId))],
+				physicalRereadRequired: true,
+			});
+			continue;
+		}
+		const owners = [...new Set(collisions.map((item) => item.conflictingVendorUserId))];
+		const slots = [...new Set(collisions.map((item) => item.fingerPrintId))];
+		retainedWrites.push({
+			...write,
+			recommended: false,
+			executionEligibility: "blocked",
+			blockingReason: "physical_identity_adjudication_required",
+			recommendationReason:
+				`Physical SDK owner protection reports target vendor user ${owners.join(
+					", ",
+				)} for fingerprint slot ${slots.join(
+					", ",
+				)}. Canonical employee plus checksum equivalence is not proven; overwrite is forbidden.`,
+		});
+	}
+
+	const next = {
+		...plan,
+		credentialWrites: retainedWrites,
+		credentialResolutions: resolutions,
+	};
+	if (next.counts) {
+		next.counts.credentialWrites = retainedWrites.length;
+		next.counts.actionableCredentialWrites = retainedWrites.filter(
+			(write) => write.executionEligibility === "ready_from_raw_blob",
+		).length;
+		next.counts.blockedCredentialWrites =
+			retainedWrites.length - next.counts.actionableCredentialWrites;
+	}
+	return next;
 };
 
 const text = (value: unknown) => String(value ?? "").trim();

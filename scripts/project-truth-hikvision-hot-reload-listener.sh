@@ -44,18 +44,25 @@ resolve_local_api_base() {
     return 0
   fi
 
-  if [[ -n "$preferred" ]]; then
+  # A configured default is not a force flag. Only keep it when it is healthy;
+  # otherwise a dead host reverse must not prevent the VM-owned listener from
+  # falling back to the K3s DEV API.
+  if [[ -n "$preferred" ]] && api_health_ok "$preferred"; then
     echo "$preferred"
     return 0
   fi
 
   if api_health_ok "$vm_base"; then
+    if [[ -n "$preferred" && "$preferred" != "$vm_base" ]]; then
+      echo "WARN: HIKVISION_HOT_RELOAD_API_BASE=$preferred is unhealthy; using healthy VM DEV API $vm_base." >&2
+    fi
     echo "$vm_base"
     return 0
   fi
 
-  # Prefer host reverse target even if not up yet (predev will open the tunnel).
-  echo "$host_base"
+  # Nothing is healthy yet. Retain the configured/default target so the daemon
+  # can retry without silently changing an explicitly prepared startup path.
+  echo "${preferred:-$host_base}"
 }
 
 LOCAL_API_BASE="$(resolve_local_api_base)"

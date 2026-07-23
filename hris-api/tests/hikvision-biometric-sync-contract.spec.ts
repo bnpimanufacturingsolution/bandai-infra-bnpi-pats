@@ -180,7 +180,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("faceAndTemplateRecord");
 		expect(controller).to.include("testedBuildAttestation");
 		expect(controller).to.include("root-owned mode-0600 stored-face custody");
-		expect(controller).to.include("Stored-face custody changed after review");
+		expect(controller).to.include(
+			"Fresh physical stored-face custody changed after review",
+		);
+		expect(controller).to.include("runHikvisionBiometricExportOnVm");
 		expect(controller).to.include("Target now reports a face; refusing to overwrite");
 		expect(controller).to.include("Live target card ownership no longer matches");
 		expect(controller).to.include('"stored_face_write_reread_completed"');
@@ -201,6 +204,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT");
 		expect(controller).to.include("HIKVISION_FDLIB_FACE_SEARCH_ENDPOINT");
 		expect(controller).to.include("assertHikvisionFdlibPrewriteEvidence");
+		expect(controller).to.include("assertHikvisionFdlibWriteAccepted");
+		expect(controller).to.include(
+			"Fresh physical FDLib source picture changed after review",
+		);
 		expect(controller).to.include("verifyHikvisionFdlibPhysicalReread");
 		expect(controller).to.include("withTargetDeviceWriteLock");
 		expect(router).not.to.include("fdlib-face-delivery/:token");

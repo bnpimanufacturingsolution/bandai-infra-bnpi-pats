@@ -183,6 +183,9 @@ foreach ($arg in @(
 $records = New-Object System.Collections.Generic.List[object]
 $runtimeProtocol = if ($HttpDevicePort -eq 443) { 'https' } else { 'http' }
 $remoteListenPorts = New-Object System.Collections.Generic.List[int]
+$remoteListenPorts.Add([int]$ApiRemotePort) | Out-Null
+$forwardArgs.Add('-R')
+$forwardArgs.Add("${ApiRemotePort}:127.0.0.1:${ApiLocalPort}")
 
 for ($deviceIndex = 0; $deviceIndex -lt $targetDeviceIps.Count; $deviceIndex++) {
   $targetDeviceIp = $targetDeviceIps[$deviceIndex]

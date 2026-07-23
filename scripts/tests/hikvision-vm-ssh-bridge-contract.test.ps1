@@ -36,6 +36,8 @@ Assert-Contains -Path 'scripts/project-truth.ps1' -Pattern 'start-host-hikvision
 Assert-Contains -Path 'scripts/project-truth-hikvision-hot-reload-listener.sh' -Pattern 'resolve_local_api_base' -Message 'Listener must resolve API base (prefer host reverse)'
 Assert-Contains -Path 'scripts/project-truth-hikvision-hot-reload-listener.sh' -Pattern '127\.0\.0\.1:53001' -Message 'Listener must know host reverse 53001'
 Assert-Contains -Path 'scripts/project-truth-hikvision-hot-reload-listener.sh' -Pattern 'HIKVISION_HOT_RELOAD_FORCE_API_BASE' -Message 'Listener must allow force override for pure-VM 3101'
+Assert-Contains -Path 'scripts/project-truth-hikvision-hot-reload-listener.sh' -Pattern 'if \[\[ -n "\$preferred" \]\] && api_health_ok "\$preferred"; then' -Message 'Configured API default must be health-proven before it can suppress VM fallback'
+Assert-Contains -Path 'scripts/project-truth-hikvision-hot-reload-listener.sh' -Pattern 'HIKVISION_HOT_RELOAD_API_BASE=\$preferred is unhealthy; using healthy VM DEV API \$vm_base' -Message 'Listener must explain dead host-reverse to VM DEV fallback'
 Assert-Contains -Path 'appliance/systemd/project-truth-hikvision-hot-reload-listener.service' -Pattern '(?m)^Environment=HIKVISION_HOT_RELOAD_API_BASE=http://127\.0\.0\.1:53001\s*$' -Message 'Unit default must be host reverse 53001 not K3s 3101'
 $unitLines = Get-Content -LiteralPath (Join-Path $repoRoot 'appliance/systemd/project-truth-hikvision-hot-reload-listener.service')
 $envLines = $unitLines | Where-Object { $_ -match '^Environment=HIKVISION_HOT_RELOAD_API_BASE=' }
