@@ -179,6 +179,19 @@ spec:
       securityContext:
         fsGroup: 1001
         fsGroupChangePolicy: OnRootMismatch
+      initContainers:
+        - name: runtime-volume-permissions
+          image: hris-api-local:develop
+          imagePullPolicy: Never
+          command:
+            - sh
+            - -lc
+            - mkdir -p /app/uploads/project-truth-runtime && chown -R 1001:1001 /app/uploads
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
       containers:
         - name: api
           image: hris-api-local:develop
