@@ -3017,6 +3017,19 @@ export const controller = (prisma: PrismaClient) => {
 		keys: Set<string>,
 		depth = 0,
 	): string => {
+		if (typeof value === "string") {
+			for (const key of keys) {
+				const tag = key.replace(/[^a-z0-9]/gi, "");
+				const match = value.match(
+					new RegExp(
+						`<(?:[a-z0-9_-]+:)?${tag}(?:\\s[^>]*)?>([^<]+)</(?:[a-z0-9_-]+:)?${tag}>`,
+						"i",
+					),
+				);
+				if (match?.[1]?.trim()) return match[1].trim();
+			}
+			return "";
+		}
 		if (!value || typeof value !== "object" || depth > 8) return "";
 		for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
 			if (

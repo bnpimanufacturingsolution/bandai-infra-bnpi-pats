@@ -197,6 +197,9 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("targetCardRetainedChecksum");
 		expect(controller).to.include("findExactHikvisionDeviceInfoValue");
 		expect(controller).to.include(
+			"`<(?:[a-z0-9_-]+:)?${tag}(?:\\\\s[^>]*)?>([^<]+)</(?:[a-z0-9_-]+:)?${tag}>`",
+		);
+		expect(controller).to.include(
 			'new Set(["firmwareversion", "firmware", "softwareversion"])',
 		);
 		expect(controller).to.include(
