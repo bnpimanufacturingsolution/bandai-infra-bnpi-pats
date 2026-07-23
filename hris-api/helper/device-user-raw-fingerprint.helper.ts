@@ -67,6 +67,32 @@ export const buildFingerprintTemplateChecksumEvidence = (
 		}))
 		.filter((template) => template.fingerPrintId > 0);
 
+/**
+ * Convert a decrypted SDK custody payload into planner-only templates.
+ * Envelope authentication is handled before this boundary. These redundant
+ * payload bindings keep an envelope copied between rows fail-closed, and the
+ * caller must retain only counts/checksums rather than the returned raw bytes.
+ */
+export const recoverPlannerFingerprintTemplates = (params: {
+	payload: any;
+	expectedDeviceId: string;
+	expectedVendorUserId: string;
+}): RawFingerprintTemplate[] => {
+	const payload = params.payload || {};
+	if (
+		String(payload.sourceDeviceId || "") !== params.expectedDeviceId ||
+		String(payload.vendorUserId || "") !== params.expectedVendorUserId ||
+		payload.identityOwnerVerified !== true
+	) {
+		throw new Error("Decrypted fingerprint custody source binding mismatch");
+	}
+	const templates = normalizeCallbackFingerprintArray(payload.fingerprints);
+	if (!templates.length) {
+		throw new Error("Decrypted fingerprint custody contains no usable templates");
+	}
+	return templates;
+};
+
 export const findTargetFingerprintDuplicateOwners = (params: {
 	vendorUserId: string;
 	sourceTemplates: FingerprintTemplateChecksumEvidence[];

@@ -137,6 +137,30 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("includeFaceRecognition,");
 	});
 
+	it("joins encrypted SDK fingerprint custody into planner evidence without exposing bytes", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("const encryptedStoredFingerprint =");
+		expect(controller).to.include("recoverPlannerFingerprintTemplates");
+		expect(controller).to.include('expectedModality: "fingerprint"');
+		expect(controller).to.include("const identityOwnerVerified =");
+		expect(controller).to.include("exportEvent.userReadOk");
+		expect(controller).to.include(
+			"exact UserInfo identity read was not proven",
+		);
+		expect(controller).to.include(
+			"Stored fingerprint custody envelope validation failed",
+		);
+		expect(controller).to.include(
+			"buildFingerprintTemplateChecksumEvidence(",
+		);
+		expect(controller).to.include(
+			"rawBlobCount: plannerFingerprintTemplates.length",
+		);
+		expect(controller).not.to.include(
+			"_fingerprintRawTemplates: plannerFingerprintTemplates",
+		);
+	});
+
 	it("compares credential job rereads against the full reviewed fleet plan", () => {
 		const controller = controllerSource();
 		expect(controller).to.include(

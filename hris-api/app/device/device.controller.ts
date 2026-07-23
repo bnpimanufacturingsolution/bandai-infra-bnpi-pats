@@ -102,7 +102,9 @@ import {
 } from "../../helper/hikvision-face-card-recovery.helper";
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
 import {
+	decryptServerBiometricEnvelope,
 	decryptPortableBiometricEnvelope,
+	encryptServerBiometricEnvelope,
 	encryptPortableBiometricEnvelope,
 	PORTABLE_BIOMETRIC_ENVELOPE_FORMAT,
 } from "./biometric-envelope.helper";
@@ -2680,10 +2682,24 @@ export const controller = (prisma: PrismaClient) => {
 
 	const runHikvisionStoredFaceWriteOnVm = async (params: {
 		targetDevice: any;
+		operationId: string;
 		employeeNo: string;
+		sourceDeviceId: string;
 		cardNo: string;
 		faceTemplate: string;
 		facePicture: string;
+		reviewedFleetCapability?: {
+			operationId: string;
+			vendorUserId: string;
+			sourceDeviceId: string;
+			targetDeviceId: string;
+			writer: "sdk_face_template_picture";
+			targetModel: string;
+			targetFirmware: string;
+			exactBuildSha: string;
+			imageDigest: string | null;
+			evidenceChecksum: string;
+		} | null;
 	}) => {
 		const targetDeviceId = String(params.targetDevice?.id || "").trim();
 		const targetConfig = (params.targetDevice?.config || {}) as any;
@@ -2694,6 +2710,19 @@ export const controller = (prisma: PrismaClient) => {
 				targetDeviceId;
 		const capabilityTested =
 			authorizedCanaryTarget ||
+			(Boolean(params.reviewedFleetCapability) &&
+				params.reviewedFleetCapability?.operationId === params.operationId &&
+				params.reviewedFleetCapability?.vendorUserId === params.employeeNo &&
+				params.reviewedFleetCapability?.sourceDeviceId === params.sourceDeviceId &&
+				params.reviewedFleetCapability?.targetDeviceId === targetDeviceId &&
+				params.reviewedFleetCapability?.writer ===
+					"sdk_face_template_picture" &&
+				params.reviewedFleetCapability?.exactBuildSha === buildAttestation &&
+				Boolean(params.reviewedFleetCapability?.targetModel) &&
+				Boolean(params.reviewedFleetCapability?.targetFirmware) &&
+				/^[a-f0-9]{64}$/.test(
+					String(params.reviewedFleetCapability?.evidenceChecksum || ""),
+				)) ||
 			(targetConfig?.biometricCapabilities?.faceAndTemplateRecord === true &&
 				Boolean(buildAttestation) &&
 				String(targetConfig?.storedFaceWriter?.testedBuildAttestation || "") ===
@@ -3178,6 +3207,107 @@ export const controller = (prisma: PrismaClient) => {
 		return safeEvidence;
 	};
 
+	const revalidateFrozenHikvisionFaceWriterCapability = async (params: {
+		req: Request;
+		targetDevice: any;
+		write: any;
+	}) => {
+		const proof = params.write?.writerCapabilityProof;
+		if (!proof || typeof proof !== "object") {
+			throw new Error(
+				"Fleet-enabled face execution requires its frozen capability evidence proof.",
+			);
+		}
+		const expectedWriter: HikvisionFaceCardWriter =
+			"sdk_face_template_picture";
+		if (
+			String(proof.operationId || "") !== String(params.write.id || "") ||
+			String(proof.vendorUserId || "") !==
+				String(params.write.vendorUserId || "") ||
+			String(proof.sourceDeviceId || "") !==
+				String(params.write.sourceDeviceId || "") ||
+			String(proof.targetDeviceId || "") !==
+				String(params.write.targetDeviceId || "") ||
+			String(proof.targetDeviceId || "") !==
+				String(params.targetDevice?.id || "") ||
+			String(proof.writer || "") !== expectedWriter
+		) {
+			throw new Error(
+				"Frozen face writer capability proof does not match the reviewed operation scope.",
+			);
+		}
+		const response = await hikvisionFetch(
+			"/ISAPI/System/deviceInfo?format=json",
+			{
+				method: "GET",
+				deviceId: String(params.targetDevice.id),
+				prisma,
+				request: params.req,
+				timeoutMs: 12_000,
+			},
+		);
+		const deviceInfo =
+			response?.DeviceInfo ||
+			response?.deviceInfo ||
+			response?.data?.DeviceInfo ||
+			response?.data?.deviceInfo ||
+			response ||
+			{};
+		const model = findExactHikvisionDeviceInfoValue(
+			deviceInfo,
+			new Set(["model", "devicemodel", "devicetype"]),
+		);
+		const firmware = findExactHikvisionDeviceInfoValue(
+			deviceInfo,
+			new Set(["firmwareversion", "firmware", "softwareversion"]),
+		);
+		const build = resolveHikvisionDeployedBuildAttestation(process.env);
+		if (
+			!model ||
+			!firmware ||
+			model !== String(proof.targetModel || "") ||
+			firmware !== String(proof.targetFirmware || "") ||
+			build.exactBuildSha !== String(proof.exactBuildSha || "") ||
+			build.imageDigest !== (proof.imageDigest || null)
+		) {
+			throw new Error(
+				"Current target model/firmware/build no longer matches the reviewed face writer capability proof.",
+			);
+		}
+		const evidence = proof.evidence as
+			| HikvisionWriterCapabilityEvidence
+			| undefined;
+		const decision = classifyHikvisionWriterCapability({
+			evidence,
+			deviceId: String(params.targetDevice.id),
+			model,
+			firmware,
+			writer: expectedWriter,
+			build,
+		});
+		if (
+			!decision.actionable ||
+			!decision.evidenceChecksum ||
+			decision.evidenceChecksum !== String(proof.evidenceChecksum || "")
+		) {
+			throw new Error(
+				"Frozen face writer evidence failed current tuple/build/checksum revalidation.",
+			);
+		}
+		return {
+			operationId: String(params.write.id),
+			vendorUserId: String(params.write.vendorUserId),
+			sourceDeviceId: String(params.write.sourceDeviceId),
+			targetDeviceId: String(params.write.targetDeviceId),
+			writer: expectedWriter,
+			targetModel: model,
+			targetFirmware: firmware,
+			exactBuildSha: build.exactBuildSha,
+			imageDigest: build.imageDigest,
+			evidenceChecksum: decision.evidenceChecksum,
+		};
+	};
+
 	const readHikvisionCardValuesForOwnerFromFullInventory = async (params: {
 		req: Request;
 		deviceId: string;
@@ -3297,27 +3427,14 @@ export const controller = (prisma: PrismaClient) => {
 			params.organizationId,
 			params.deviceId,
 		);
-		const salt = randomBytes(16);
-		const iv = randomBytes(12);
-		const key = createHash("sha256").update(secret).update(salt).digest();
-		const cipher = createCipheriv("aes-256-gcm", key, iv);
-		const plaintext = Buffer.from(JSON.stringify(params.payload), "utf8");
-		const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-		const authTag = cipher.getAuthTag();
-		return {
-			format: "project-truth.hikvision-biometric-template.v1",
-			algorithm: DEVICE_USER_BIOMETRIC_BUNDLE_ALGORITHM,
+		return encryptServerBiometricEnvelope({
+			secret,
 			keySource: source,
 			deviceId: params.deviceId,
 			vendorUserId: params.vendorUserId,
 			modality: params.modality || "combined",
-			salt: salt.toString("base64"),
-			iv: iv.toString("base64"),
-			authTag: authTag.toString("base64"),
-			ciphertext: ciphertext.toString("base64"),
-			plaintextSha256: createHash("sha256").update(plaintext).digest("hex"),
-			createdAt: new Date().toISOString(),
-		};
+			payload: params.payload,
+		});
 	};
 
 	const decryptDeviceUserBiometricPayload = (params: {
@@ -3341,10 +3458,6 @@ export const controller = (prisma: PrismaClient) => {
 					params.expectedModality || (encrypted.modality as "fingerprint" | "face"),
 			});
 		}
-		const salt = Buffer.from(String(encrypted.salt || ""), "base64");
-		const iv = Buffer.from(String(encrypted.iv || ""), "base64");
-		const authTag = Buffer.from(String(encrypted.authTag || ""), "base64");
-		const ciphertext = Buffer.from(String(encrypted.ciphertext || ""), "base64");
 		if (!params.allowLegacyServerEnvelope) {
 			throw new Error(
 				"Legacy server-key biometric envelope must be re-exported as a portable v2 package",
@@ -3354,15 +3467,15 @@ export const controller = (prisma: PrismaClient) => {
 			params.organizationId,
 			params.deviceId,
 		);
-		const key = createHash("sha256").update(secret).update(salt).digest();
-		const decipher = createDecipheriv("aes-256-gcm", key, iv);
-		decipher.setAuthTag(authTag);
-		const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-		const plaintextSha256 = createHash("sha256").update(plaintext).digest("hex");
-		if (encrypted.plaintextSha256 && encrypted.plaintextSha256 !== plaintextSha256) {
-			throw new Error("Encrypted biometric bundle hash mismatch");
-		}
-		return JSON.parse(plaintext.toString("utf8"));
+		return decryptServerBiometricEnvelope({
+			encrypted,
+			secret,
+			expectedDeviceId: params.deviceId,
+			expectedVendorUserId:
+				params.expectedVendorUserId || String(encrypted.vendorUserId || ""),
+			expectedModality:
+				params.expectedModality || (encrypted.modality as "fingerprint" | "face"),
+		});
 	};
 
 	const encryptPortableDeviceUserBiometricPayload = (params: {
@@ -3807,6 +3920,18 @@ export const controller = (prisma: PrismaClient) => {
 					: exportEvent.fingerprints || [];
 			const cardOwnerVerified =
 				String(exportEvent.cardOwnerVerified || "").trim().toLowerCase() === "true";
+			const identityOwnerVerified =
+				String(exportEvent.userReadOk || "").trim().toLowerCase() === "true";
+			if (
+				params.includeFingerprints &&
+				Array.isArray(fingerprints) &&
+				fingerprints.length &&
+				!identityOwnerVerified
+			) {
+				throw new Error(
+					`Hikvision SDK fingerprint export rejected for ${params.device.id}/${params.vendorUserId}: exact UserInfo identity read was not proven`,
+				);
+			}
 			if (
 				params.includeFaces &&
 				(exportEvent.faceTemplate || exportEvent.facePicture) &&
@@ -3821,6 +3946,7 @@ export const controller = (prisma: PrismaClient) => {
 				sourceDeviceName: params.device.name || params.device.id,
 				vendorUserId: params.vendorUserId,
 				cardOwnerVerified,
+				identityOwnerVerified,
 				cardAssociationStrategy: String(
 					exportEvent.cardAssociationStrategy || "none",
 				),
@@ -3863,6 +3989,7 @@ export const controller = (prisma: PrismaClient) => {
 				faceTemplateSize: Number(exportEvent.faceTemplateSize || 0),
 				facePictureSize: Number(exportEvent.facePictureSize || 0),
 				cardOwnerVerified,
+				identityOwnerVerified,
 				cardAssociationStrategy: String(
 					exportEvent.cardAssociationStrategy || "none",
 				),
@@ -11068,12 +11195,48 @@ export const controller = (prisma: PrismaClient) => {
 						includeFingerprints: true,
 						includeFaces: true,
 					});
-					const { buildFingerprintTemplateChecksumEvidence } = await import(
+					const {
+						buildFingerprintTemplateChecksumEvidence,
+						recoverPlannerFingerprintTemplates,
+					} = await import(
 						"../../helper/device-user-raw-fingerprint.helper.js"
 					);
+					let plannerFingerprintTemplates =
+						rawCustody.fingerprint.templates || [];
+					const encryptedStoredFingerprint =
+						parseCachedDeviceUserBiometricTemplates(saved || {}).fingerprint;
+					if (encryptedStoredFingerprint) {
+						try {
+							const decryptedStoredFingerprint =
+								decryptDeviceUserBiometricPayload({
+									organizationId: params.organizationId,
+									deviceId: String(device.id),
+									encrypted: encryptedStoredFingerprint,
+									allowLegacyServerEnvelope: true,
+									expectedVendorUserId: String(candidate.vendorUserId),
+									expectedModality: "fingerprint",
+								});
+							const recoveredTemplates =
+								recoverPlannerFingerprintTemplates({
+									payload: decryptedStoredFingerprint,
+									expectedDeviceId: String(device.id),
+									expectedVendorUserId: String(candidate.vendorUserId),
+								});
+							if (
+								recoveredTemplates.length >=
+								plannerFingerprintTemplates.length
+							) {
+								plannerFingerprintTemplates = recoveredTemplates;
+							}
+						} catch (error: any) {
+							deviceLogger.warn(
+								`Stored fingerprint custody envelope validation failed for ${device.id}/${candidate.vendorUserId}; recovery remains fail-closed: ${error?.message || error}`,
+							);
+						}
+					}
 					const fingerprintTemplateChecksums =
 						buildFingerprintTemplateChecksumEvidence(
-							rawCustody.fingerprint.templates || [],
+							plannerFingerprintTemplates,
 						);
 					const exactCardNo = String(
 						(candidate.rawPayload as any)?.cardNo ||
@@ -11213,13 +11376,13 @@ export const controller = (prisma: PrismaClient) => {
 							fingerprint: {
 								status:
 									fingerprintReportedCount > 0
-										? rawCustody.fingerprint.rawBlobCount >=
+										? plannerFingerprintTemplates.length >=
 											fingerprintReportedCount
 											? "raw_blob_present"
 											: "missing_raw_blob"
 										: "not_enrolled",
 								reportedCount: fingerprintReportedCount,
-								rawBlobCount: Number(rawCustody.fingerprint.rawBlobCount || 0),
+								rawBlobCount: plannerFingerprintTemplates.length,
 							},
 							face: {
 								status:
@@ -11331,7 +11494,16 @@ export const controller = (prisma: PrismaClient) => {
 					writer,
 					build: deployedBuild,
 				});
-				if (decision.actionable) return decision;
+				if (decision.actionable) {
+					return {
+						decision,
+						evidence: redactHikvisionWriterCapabilityEvidence(evidence),
+						targetModel: tuple.model,
+						targetFirmware: tuple.firmware,
+						exactBuildSha: deployedBuild.exactBuildSha,
+						imageDigest: deployedBuild.imageDigest,
+					};
+				}
 			}
 			return null;
 		};
@@ -11454,14 +11626,13 @@ export const controller = (prisma: PrismaClient) => {
 					String(
 						process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID || "",
 					).trim() === String(write.targetDeviceId);
+				const fleetFaceCapability = resolveFleetWriterCapability(
+					String(write.targetDeviceId),
+					"sdk_face_template_picture",
+				);
 				const targetCapabilityTested =
 					authorizedFaceCanaryTarget ||
-					Boolean(
-						resolveFleetWriterCapability(
-							String(write.targetDeviceId),
-							"sdk_face_template_picture",
-						),
-					) ||
+					Boolean(fleetFaceCapability) ||
 					(targetConfig?.biometricCapabilities?.faceAndTemplateRecord === true &&
 						Boolean(buildAttestation) &&
 						String(
@@ -11479,6 +11650,22 @@ export const controller = (prisma: PrismaClient) => {
 						blockingReason: null,
 						recoveryStage: "ready_to_write",
 						writerStrategy: "sdk_face_template_writer",
+						writerCapabilityProof: fleetFaceCapability
+							? {
+									operationId: String(write.id),
+									vendorUserId: String(write.vendorUserId),
+									sourceDeviceId: String(write.sourceDeviceId),
+									targetDeviceId: String(write.targetDeviceId),
+									writer: "sdk_face_template_picture",
+									targetModel: fleetFaceCapability.targetModel,
+									targetFirmware: fleetFaceCapability.targetFirmware,
+									exactBuildSha: fleetFaceCapability.exactBuildSha,
+									imageDigest: fleetFaceCapability.imageDigest,
+									evidenceChecksum:
+										fleetFaceCapability.decision.evidenceChecksum,
+									evidence: fleetFaceCapability.evidence,
+								}
+							: undefined,
 					};
 				}
 				const fdlibCapability = fdlibTargetCapabilities.get(
@@ -12524,12 +12711,23 @@ export const controller = (prisma: PrismaClient) => {
 											"Target now reports a face; refusing to overwrite fresh physical enrollment.",
 										);
 									}
+									const reviewedFleetCapability =
+										write.writerCapabilityProof
+											? await revalidateFrozenHikvisionFaceWriterCapability({
+													req: params.req,
+													targetDevice,
+													write,
+												})
+											: null;
 									const sdkProof = await runHikvisionStoredFaceWriteOnVm({
 										targetDevice,
+										operationId: String(write.id),
 										employeeNo: String(write.vendorUserId),
+										sourceDeviceId: String(write.sourceDeviceId),
 										cardNo: targetCardNo,
 										faceTemplate,
 										facePicture,
+										reviewedFleetCapability,
 									});
 									if (
 										sdkProof.templateSize !== reviewed.templateSize ||

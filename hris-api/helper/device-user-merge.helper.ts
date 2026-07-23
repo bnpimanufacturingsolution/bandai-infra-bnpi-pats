@@ -1,4 +1,5 @@
 import { extractHikvisionCredentialSummary } from "./device-user-sync.helper";
+import { createHash } from "crypto";
 
 export const DEVICE_USER_MERGE_FIELDS = [
 	"vendorUserId",
@@ -169,6 +170,8 @@ export type DeviceUserCredentialWrite = {
 		| "blocked";
 	blockingReason:
 		| "source_conflict"
+		| "canonical_identity_unproven"
+		| "target_owner_scan_incomplete"
 		| "physical_identity_adjudication_required"
 		| "source_not_enrolled"
 		| "missing_raw_blob"
@@ -192,6 +195,15 @@ export type DeviceUserCredentialWrite = {
 		| "device_firmware_unsupported"
 		| null;
 	sourceCandidateDeviceIds: string[];
+	/** True only when source and target resolve to the same canonical HRIS employee. */
+	canonicalIdentityProven?: boolean;
+	/** True only when every enrolled identity on the target has exact slot/checksum custody. */
+	targetOwnerScanComplete?: boolean;
+	targetOwnerScanMissingCount?: number;
+	/** Stable digest of the sorted recovery IDs; biometric bytes/checksums are excluded. */
+	targetOwnerScanEvidenceHash?: string;
+	/** Bounded operator hint. The complete ID list lives once in the per-target summary. */
+	targetOwnerScanMissingVendorUserIdSample?: string[];
 	/** Frozen, sorted slot:sha256 custody bound into the reviewed scope hash. */
 	sourceFingerprintTemplateChecksums: Array<{
 		fingerPrintId: number;
@@ -209,6 +221,15 @@ export type DurableFingerprintOwnerConflictEvidence = {
 	fingerPrintId: number;
 	conflictingVendorUserId: string;
 	observedAt?: string | null;
+};
+
+export type FingerprintTargetOwnerScanSummary = {
+	targetDeviceId: string;
+	complete: boolean;
+	missingCount: number;
+	evidenceHash: string;
+	/** Stored once per physical target, never repeated on every write. */
+	missingVendorUserIds: string[];
 };
 
 /**
@@ -613,6 +634,133 @@ const completeFingerprintChecksumEvidence = (record: DeviceUserMergeRecord) => {
 		templates.length >= reportedCount &&
 		new Set(templates.map((template) => template.fingerPrintId)).size >= reportedCount
 	);
+};
+
+/**
+ * Final fingerprint readiness gate.
+ *
+ * A negative duplicate lookup is meaningful only after every enrolled
+ * fingerprint owner on the target has exact slot/checksum custody. Unknown
+ * owners remain executable custody-export work, not a terminal blocker.
+ * Source and target must also resolve to the same canonical HRIS employee;
+ * matching vendor numbers alone are not enough for a physical write.
+ */
+export const gateFingerprintWritesForTargetOwnerScan = (params: {
+	users: DeviceUserMergeGroup[];
+	writes: DeviceUserCredentialWrite[];
+}): {
+	writes: DeviceUserCredentialWrite[];
+	targetOwnerScans: FingerprintTargetOwnerScanSummary[];
+} => {
+	const records = params.users.flatMap((user) => user.records);
+	const targetDeviceIds = [
+		...new Set(
+			params.writes
+				.filter((write) => write.modality === "fingerprint")
+				.map((write) => write.targetDeviceId),
+		),
+	].sort((left, right) => left.localeCompare(right));
+	const targetOwnerScans = targetDeviceIds.map((targetDeviceId) => {
+		const missingVendorUserIds = [
+			...new Set(
+				records
+					.filter(
+						(record) =>
+							record.deviceId === targetDeviceId &&
+							credentialCount(record, "fingerprint") > 0 &&
+							!completeFingerprintChecksumEvidence(record),
+					)
+					.map((record) => text(record.vendorUserId || record.employeeNo))
+					.filter(Boolean),
+			),
+		].sort((left, right) => left.localeCompare(right));
+		return {
+			targetDeviceId,
+			complete: missingVendorUserIds.length === 0,
+			missingCount: missingVendorUserIds.length,
+			evidenceHash: createHash("sha256")
+				.update(JSON.stringify(missingVendorUserIds))
+				.digest("hex"),
+			missingVendorUserIds,
+		};
+	});
+	const targetOwnerScanByDeviceId = new Map(
+		targetOwnerScans.map((scan) => [scan.targetDeviceId, scan]),
+	);
+	const writes = params.writes.map(
+		(write): DeviceUserCredentialWrite => {
+		if (
+			write.modality !== "fingerprint" ||
+			write.executionEligibility !== "ready_from_raw_blob"
+		) {
+			return write;
+		}
+		const user = params.users.find(
+			(candidate) => text(candidate.key) === text(write.userKey),
+		);
+		const source = user?.records.find(
+			(record) => record.deviceId === write.sourceDeviceId,
+		);
+		const target = user?.records.find(
+			(record) => record.deviceId === write.targetDeviceId,
+		);
+		const sourceEmployeeId = text(source?.employeeId);
+		const targetEmployeeId = text(target?.employeeId);
+		const groupEmployeeIds = (user?.records || []).map((record) =>
+			text(record.employeeId),
+		);
+		const canonicalIdentityProven = Boolean(
+			sourceEmployeeId &&
+				targetEmployeeId &&
+				sourceEmployeeId === targetEmployeeId &&
+				groupEmployeeIds.length > 0 &&
+				groupEmployeeIds.every(
+					(employeeId) => employeeId === sourceEmployeeId,
+				),
+		);
+		const targetOwnerScan = targetOwnerScanByDeviceId.get(
+			write.targetDeviceId,
+		) || {
+			targetDeviceId: write.targetDeviceId,
+			complete: true,
+			missingCount: 0,
+			evidenceHash: createHash("sha256").update("[]").digest("hex"),
+			missingVendorUserIds: [],
+		};
+		const targetOwnerScanComplete = targetOwnerScan.complete;
+		const boundedOwnerScanEvidence = {
+			targetOwnerScanComplete,
+			targetOwnerScanMissingCount: targetOwnerScan.missingCount,
+			targetOwnerScanEvidenceHash: targetOwnerScan.evidenceHash,
+			targetOwnerScanMissingVendorUserIdSample:
+				targetOwnerScan.missingVendorUserIds.slice(0, 3),
+		};
+		if (canonicalIdentityProven && targetOwnerScanComplete) {
+			return {
+				...write,
+				canonicalIdentityProven,
+				...boundedOwnerScanEvidence,
+			};
+		}
+		return {
+			...write,
+			recommended: false,
+			executionEligibility: "blocked",
+			blockingReason: canonicalIdentityProven
+				? "target_owner_scan_incomplete"
+				: "canonical_identity_unproven",
+			recoveryStage: canonicalIdentityProven
+				? "exporting_source_credential"
+				: "comparing_sources",
+			recommendationReason: canonicalIdentityProven
+				? `Target-wide fingerprint owner scan is incomplete for ${targetOwnerScan.missingCount} enrolled identities. Export and checksum every target owner before mutation.`
+				: "Canonical source/target HRIS identity is not proven. Resolve the exact employee linkage before mutation.",
+			canonicalIdentityProven,
+			...boundedOwnerScanEvidence,
+		};
+		},
+	);
+	return { writes, targetOwnerScans };
 };
 
 const checksumSet = (record: DeviceUserMergeRecord) =>
@@ -1089,7 +1237,11 @@ export const buildDeviceUserMergePlan = (params: {
 			else idsReadByDevice[deviceId] = 1;
 		}
 	}
-	const credentialWrites = users.flatMap(buildCredentialWritesForUser);
+	const fingerprintReadiness = gateFingerprintWritesForTargetOwnerScan({
+		users,
+		writes: users.flatMap(buildCredentialWritesForUser),
+	});
+	const credentialWrites = fingerprintReadiness.writes;
 	return {
 		deviceIds: selectedDeviceIds,
 		validDeviceIds,
@@ -1106,6 +1258,7 @@ export const buildDeviceUserMergePlan = (params: {
 			user.targetDeviceIds.map((targetDeviceId) => ({ userKey: user.key, targetDeviceId })),
 		),
 		credentialWrites,
+		fingerprintTargetOwnerScans: fingerprintReadiness.targetOwnerScans,
 		unresolvedDecisions: [],
 		counts: {
 			unionUsers: users.length,

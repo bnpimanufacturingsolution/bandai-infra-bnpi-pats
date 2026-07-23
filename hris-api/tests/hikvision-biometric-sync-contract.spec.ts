@@ -214,6 +214,21 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).not.to.include("HIKVISION_STORED_FACE_WRITER_BUILD_ATTESTATION");
 		expect(controller).to.include("resolveHikvisionDeployedBuildAttestation");
 		expect(controller).to.include("resolveFleetWriterCapability");
+		expect(controller).to.include("writerCapabilityProof");
+		expect(controller).to.include(
+			"revalidateFrozenHikvisionFaceWriterCapability",
+		);
+		expect(controller).to.include(
+			"Frozen face writer capability proof does not match the reviewed operation scope",
+		);
+		expect(controller).to.include(
+			"Current target model/firmware/build no longer matches",
+		);
+		expect(controller).to.include(
+			'decision.evidenceChecksum !== String(proof.evidenceChecksum || "")',
+		);
+		expect(controller).to.include("reviewedFleetCapability");
+		expect(controller).not.to.include("fleetCapabilityValidated: true");
 		expect(controller).to.include("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID");
 		expect(controller).to.include("faceAndTemplateRecord");
 		expect(controller).to.include("testedBuildAttestation");
@@ -308,7 +323,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("vendorMetadata: true");
 		expect(controller).to.include("buildRawDeviceUserBiometricCustody({");
 		expect(controller).to.include(
-			"rawCustody.fingerprint.rawBlobCount >=",
+			"plannerFingerprintTemplates.length >=",
 		);
 		expect(controller).to.include(
 			'rawCustody.face.rawBlobPresent',

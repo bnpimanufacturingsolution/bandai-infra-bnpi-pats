@@ -2666,6 +2666,39 @@ bool delete_face_for_exact_owner(
     job.source_device_id = target.config.hris_device_id;
     job.source_host = target.config.host;
     job.employee_no = employee_no;
+    std::string pre_user_json;
+    if (!read_source_user(target, job, &pre_user_json)) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"reason", "exact_employee_userinfo_not_found"}
+        });
+        return false;
+    }
+    const int pre_face_count = extract_int_field_from_json(pre_user_json, "numOfFace");
+    const int pre_fingerprint_count = extract_int_field_from_json(pre_user_json, "numOfFP");
+    const int pre_card_count = extract_int_field_from_json(pre_user_json, "numOfCard");
+    const std::string pre_name = extract_string_field_from_json(pre_user_json, "name");
+    if (pre_face_count < 1 ||
+        pre_fingerprint_count < 0 ||
+        pre_card_count < 0) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"reason", pre_face_count < 1
+                ? "exact_employee_has_no_face"
+                : "predelete_credential_counts_unreadable"},
+            {"preDeleteFaceCount",
+             pre_face_count >= 0 ? std::to_string(pre_face_count) : ""},
+            {"preDeleteFingerprintCount",
+             pre_fingerprint_count >= 0 ? std::to_string(pre_fingerprint_count) : ""},
+            {"preDeleteCardCount",
+             pre_card_count >= 0 ? std::to_string(pre_card_count) : ""}
+        });
+        return false;
+    }
     std::string card_json;
     if (!read_source_card(target, job, &card_json)) {
         emit_json({
@@ -2686,7 +2719,11 @@ bool delete_face_for_exact_owner(
             {"targetDeviceId", target.config.hris_device_id},
             {"employeeNo", employee_no},
             {"exactCardOwnerVerified", "true"},
-            {"wouldCall", "NET_DVR_DEL_FACE_PARAM_CFG"}
+            {"preDeleteFaceCount", std::to_string(pre_face_count)},
+            {"preDeleteFingerprintCount", std::to_string(pre_fingerprint_count)},
+            {"preDeleteCardCount", std::to_string(pre_card_count)},
+            {"wouldCall", "NET_DVR_DEL_FACE_PARAM_CFG"},
+            {"postDeleteIsolationRequired", "true"}
         });
         return true;
     }
@@ -2713,17 +2750,51 @@ bool delete_face_for_exact_owner(
     std::string user_json;
     const bool reread_ok = read_source_user(target, job, &user_json);
     const int face_count = extract_int_field_from_json(user_json, "numOfFace");
+    const int fingerprint_count = extract_int_field_from_json(user_json, "numOfFP");
+    const int card_count = extract_int_field_from_json(user_json, "numOfCard");
+    const std::string post_name = extract_string_field_from_json(user_json, "name");
+    std::string post_card_json;
+    const bool post_card_owner_verified =
+        reread_ok && read_source_card(target, job, &post_card_json);
+    const std::string post_card_no =
+        extract_string_field_from_json(post_card_json, "cardNo");
+    const bool identity_retained =
+        reread_ok && pre_name == post_name;
+    const bool fingerprint_retained =
+        reread_ok && fingerprint_count == pre_fingerprint_count;
+    const bool card_count_retained =
+        reread_ok && card_count == pre_card_count;
+    const bool exact_card_retained =
+        post_card_owner_verified && post_card_no == card_no;
     const bool physically_absent = reread_ok && face_count == 0;
+    const bool credential_isolation_retained =
+        physically_absent &&
+        identity_retained &&
+        fingerprint_retained &&
+        card_count_retained &&
+        exact_card_retained;
     emit_json({
         {"event", "face_delete_reread_completed"},
         {"targetDeviceId", target.config.hris_device_id},
         {"employeeNo", employee_no},
         {"deleteAccepted", deleted == TRUE ? "true" : "false"},
         {"sdkLastError", std::to_string(delete_error)},
+        {"preDeleteFaceCount", std::to_string(pre_face_count)},
         {"postDeleteFaceCount", face_count >= 0 ? std::to_string(face_count) : ""},
-        {"physicallyAbsent", physically_absent ? "true" : "false"}
+        {"preDeleteFingerprintCount", std::to_string(pre_fingerprint_count)},
+        {"postDeleteFingerprintCount",
+         fingerprint_count >= 0 ? std::to_string(fingerprint_count) : ""},
+        {"preDeleteCardCount", std::to_string(pre_card_count)},
+        {"postDeleteCardCount", card_count >= 0 ? std::to_string(card_count) : ""},
+        {"identityRetained", identity_retained ? "true" : "false"},
+        {"fingerprintCountRetained", fingerprint_retained ? "true" : "false"},
+        {"cardCountRetained", card_count_retained ? "true" : "false"},
+        {"exactCardAssociationRetained", exact_card_retained ? "true" : "false"},
+        {"physicallyAbsent", physically_absent ? "true" : "false"},
+        {"credentialIsolationRetained",
+         credential_isolation_retained ? "true" : "false"}
     });
-    return deleted == TRUE && physically_absent;
+    return deleted == TRUE && credential_isolation_retained;
 }
 
 bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::string &user_json) {
@@ -5532,8 +5603,10 @@ int main(int argc, char **argv) {
         !mirror_face_employee_no.empty() && !mirror_face_source_device_id.empty();
     const bool manual_biometric_export_mode =
         !export_biometric_employee_no.empty() && !export_biometric_source_device_id.empty();
+    const bool delete_face_device_arg_present = !delete_face_device_id.empty();
+    const bool delete_face_employee_arg_present = !delete_face_employee_no.empty();
     const bool delete_face_mode =
-        !delete_face_device_id.empty() && !delete_face_employee_no.empty();
+        delete_face_device_arg_present && delete_face_employee_arg_present;
     const bool stored_face_write_mode = !stored_face_payload_file.empty();
     const bool manual_reconcile_queue_mode =
         !manual_full_mirror_source_device_id.empty() && !manual_fingerprint_clone_mode;
@@ -5544,6 +5617,54 @@ int main(int argc, char **argv) {
 
     if (configs.empty()) {
         usage(argv[0]);
+        return 2;
+    }
+    if (delete_face_device_arg_present != delete_face_employee_arg_present) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", delete_face_device_id},
+            {"employeeNo", delete_face_employee_no},
+            {"reason", "paired_delete_face_device_and_employee_required"}
+        });
+        return 2;
+    }
+    const bool another_manual_action_requested =
+        stored_face_write_mode ||
+        !manual_full_mirror_source_device_id.empty() ||
+        !manual_employee_no.empty() ||
+        manual_include_fingerprints ||
+        manual_include_card ||
+        manual_credential_only ||
+        !manual_source_employee_no.empty() ||
+        !manual_target_device_id.empty() ||
+        !manual_target_employee_no.empty() ||
+        !capture_fingerprint_employee_no.empty() ||
+        !capture_fingerprint_source_device_id.empty() ||
+        !capture_face_employee_no.empty() ||
+        !capture_face_source_device_id.empty() ||
+        !mirror_face_employee_no.empty() ||
+        !mirror_face_source_device_id.empty() ||
+        !export_biometric_employee_no.empty() ||
+        !export_biometric_source_device_id.empty();
+    if (delete_face_mode &&
+        (configs.size() != 1 ||
+         configs.front().hris_device_id != delete_face_device_id)) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", delete_face_device_id},
+            {"employeeNo", delete_face_employee_no},
+            {"configuredDeviceCount", std::to_string(configs.size())},
+            {"reason", "delete_face_requires_single_exact_target_config"}
+        });
+        return 2;
+    }
+    if (delete_face_mode && another_manual_action_requested) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", delete_face_device_id},
+            {"employeeNo", delete_face_employee_no},
+            {"reason", "delete_face_requires_exclusive_manual_mode"}
+        });
         return 2;
     }
 

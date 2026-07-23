@@ -234,10 +234,51 @@ class ProbeTests(unittest.TestCase):
 
         self.assertIn("--delete-face-device-id", text)
         self.assertIn("--delete-face-employee-no", text)
+        self.assertIn('"paired_delete_face_device_and_employee_required"', text)
+        self.assertIn('"delete_face_requires_single_exact_target_config"', text)
+        self.assertIn('"delete_face_requires_exclusive_manual_mode"', text)
+        self.assertIn("configs.size() != 1", text)
+        self.assertIn(
+            "configs.front().hris_device_id != delete_face_device_id",
+            text,
+        )
         self.assertIn("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID", text)
         self.assertIn("NET_DVR_DEL_FACE_PARAM_CFG", text)
         self.assertIn('"face_delete_reread_completed"', text)
         self.assertIn('"physicallyAbsent"', text)
+        self.assertIn('"exact_employee_has_no_face"', text)
+        self.assertIn('"postDeleteIsolationRequired"', text)
+        self.assertIn('"preDeleteFaceCount"', text)
+        self.assertIn('"postDeleteFaceCount"', text)
+        self.assertIn('"fingerprintCountRetained"', text)
+        self.assertIn('"cardCountRetained"', text)
+        self.assertIn('"exactCardAssociationRetained"', text)
+        self.assertIn('"credentialIsolationRetained"', text)
+        self.assertIn("return deleted == TRUE && credential_isolation_retained;", text)
+        delete_face = text.split("bool delete_face_for_exact_owner(", 1)[1].split(
+            "bool write_peer_user", 1
+        )[0]
+        self.assertNotIn("delete_peer_user(", delete_face)
+        self.assertNotIn("delete_peer_fingerprints(", delete_face)
+        self.assertNotIn("NET_DVR_DEL_CARD", delete_face)
+        self.assertNotIn("NET_DVR_DEL_FINGERPRINT", delete_face)
+        self.assertNotIn("post_hris_contract", delete_face)
+        self.assertLess(
+            text.index('"delete_face_requires_single_exact_target_config"'),
+            text.index("if (!NET_DVR_Init())"),
+        )
+        self.assertLess(
+            delete_face.index("if (pre_face_count < 1"),
+            delete_face.index("NET_DVR_DEL_FACE_PARAM_CFG"),
+        )
+        self.assertLess(
+            delete_face.index("read_source_card(target, job, &card_json)"),
+            delete_face.index("NET_DVR_DEL_FACE_PARAM_CFG"),
+        )
+        self.assertLess(
+            delete_face.index("NET_DVR_DEL_FACE_PARAM_CFG"),
+            delete_face.index("read_source_user(target, job, &user_json)"),
+        )
 
     def test_build_script_produces_project_truth_named_service(self) -> None:
         script = Path(__file__).resolve().parents[1] / "scripts" / "build-hikvision-biometric-service.sh"

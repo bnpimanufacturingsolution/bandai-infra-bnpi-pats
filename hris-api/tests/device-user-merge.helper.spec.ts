@@ -702,6 +702,281 @@ describe("device user union merge", () => {
 		expect(write?.recommendationReason).to.include("overwrite is forbidden");
 	});
 
+	it("keeps fingerprint writes in custody recovery until every target owner has exact slot checksums", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 2 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "one" },
+						{ fingerPrintId: 2, checksum: "two" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "8",
+					employeeId: "employee-8",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "missing_raw_blob",
+							reportedCount: 1,
+							rawBlobCount: 0,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1" &&
+				item.targetDeviceId === "target",
+		);
+		expect(write?.executionEligibility).to.equal("blocked");
+		expect(write?.blockingReason).to.equal("target_owner_scan_incomplete");
+		expect(write?.recoveryStage).to.equal("exporting_source_credential");
+		expect(write?.canonicalIdentityProven).to.equal(true);
+		expect(write?.targetOwnerScanComplete).to.equal(false);
+		expect(write?.targetOwnerScanMissingCount).to.equal(1);
+		expect(write?.targetOwnerScanMissingVendorUserIdSample).to.deep.equal(["8"]);
+		expect(write?.targetOwnerScanEvidenceHash).to.match(/^[a-f0-9]{64}$/);
+		expect(plan.fingerprintTargetOwnerScans).to.deep.include({
+			targetDeviceId: "target",
+			complete: false,
+			missingCount: 1,
+			evidenceHash: write?.targetOwnerScanEvidenceHash,
+			missingVendorUserIds: ["8"],
+		});
+		expect(write?.recommendationReason).to.include(
+			"Export and checksum every target owner",
+		);
+	});
+
+	it("requires exact canonical source/target identity before fingerprint readiness", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "one" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: null,
+					rawPayload: { numOfFP: 0 },
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find(
+			(item) => item.modality === "fingerprint",
+		);
+		expect(write?.executionEligibility).to.equal("blocked");
+		expect(write?.blockingReason).to.equal("canonical_identity_unproven");
+		expect(write?.recoveryStage).to.equal("comparing_sources");
+		expect(write?.canonicalIdentityProven).to.equal(false);
+	});
+
+	it("rejects a fingerprint write when another fleet record maps the same vendor id to a different employee", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target", "peer"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "one" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("peer", {
+					vendorUserId: "1",
+					employeeId: "employee-2",
+					rawPayload: { numOfFP: 0 },
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.targetDeviceId === "target",
+		);
+		expect(write?.blockingReason).to.equal("canonical_identity_unproven");
+		expect(write?.recoveryStage).to.equal("comparing_sources");
+	});
+
+	it("allows fingerprint readiness after canonical identity and the full target owner scan are complete", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 2 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "one" },
+						{ fingerPrintId: 2, checksum: "two" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "8",
+					employeeId: "employee-8",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 4, checksum: "other-owner" },
+					],
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1" &&
+				item.targetDeviceId === "target",
+		);
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.recoveryStage).to.equal("ready_to_write");
+		expect(write?.canonicalIdentityProven).to.equal(true);
+		expect(write?.targetOwnerScanComplete).to.equal(true);
+		expect(write?.targetOwnerScanMissingCount).to.equal(0);
+		expect(write?.targetOwnerScanMissingVendorUserIdSample).to.deep.equal([]);
+	});
+
+	it("stores complete target-owner recovery IDs once instead of repeating them per write", () => {
+		const actionableRecords = Array.from({ length: 40 }, (_, index) => {
+			const vendorUserId = `ready-${String(index).padStart(3, "0")}`;
+			const employeeId = `employee-ready-${index}`;
+			return [
+				record("source", {
+					vendorUserId,
+					employeeId,
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: `checksum-${index}` },
+					],
+				}),
+				record("target", {
+					vendorUserId,
+					employeeId,
+					rawPayload: { numOfFP: 0 },
+				}),
+			];
+		}).flat();
+		const unknownOwnerRecords = Array.from({ length: 120 }, (_, index) =>
+			record("target", {
+				vendorUserId: `unknown-${String(index).padStart(3, "0")}`,
+				employeeId: `employee-unknown-${index}`,
+				rawPayload: { numOfFP: 1 },
+				biometricEvidence: {
+					fingerprint: {
+						status: "missing_raw_blob",
+						reportedCount: 1,
+						rawBlobCount: 0,
+					},
+					face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+				},
+			}),
+		);
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [...actionableRecords, ...unknownOwnerRecords],
+		});
+		const guardedWrites = plan.credentialWrites.filter(
+			(write) =>
+				write.modality === "fingerprint" &&
+				write.targetDeviceId === "target" &&
+				write.blockingReason === "target_owner_scan_incomplete",
+		);
+		expect(guardedWrites).to.have.length(40);
+		expect(
+			guardedWrites.every(
+				(write) =>
+					write.targetOwnerScanMissingCount === 120 &&
+					write.targetOwnerScanMissingVendorUserIdSample?.length === 3 &&
+					!("targetOwnerScanMissingVendorUserIds" in write),
+			),
+		).to.equal(true);
+		const summary = plan.fingerprintTargetOwnerScans.find(
+			(scan) => scan.targetDeviceId === "target",
+		);
+		expect(summary?.missingCount).to.equal(120);
+		expect(summary?.missingVendorUserIds).to.have.length(120);
+		expect(plan.fingerprintTargetOwnerScans).to.have.length(1);
+		const serializedWrites = JSON.stringify(guardedWrites);
+		expect(serializedWrites).not.to.include("unknown-119");
+		expect(JSON.stringify(summary)).to.include("unknown-119");
+	});
+
 	it("resolves a durable owner collision as a safe no-write only for canonical identity and checksum equality", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["source", "target"],
