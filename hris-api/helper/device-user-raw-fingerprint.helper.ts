@@ -577,6 +577,8 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 			req: params.req,
 			deviceId: params.deviceId,
 			employeeNo,
+			maxFingerId: fingerPrintID,
+			expectedFingerprintCount: fingerPrintID,
 		});
 		fingerprints = fetched.fingerprints;
 		try {
@@ -605,10 +607,20 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 		} catch {
 			/* keep */
 		}
-		if (fingerprints.length > 0 || numOfFP > 0) break;
+		if (
+			fingerprints.some(
+				(fingerprint) => Number(fingerprint.fingerPrintId) === fingerPrintID,
+			) ||
+			numOfFP >= fingerPrintID
+		) {
+			break;
+		}
 	}
 
-	const sticky = fingerprints.length > 0 || numOfFP > 0;
+	const sticky =
+		fingerprints.some(
+			(fingerprint) => Number(fingerprint.fingerPrintId) === fingerPrintID,
+		) || numOfFP >= fingerPrintID;
 	const source = sticky
 		? "device_fp_read_after_write_verified"
 		: progress.cardReaderRecvStatus === 5

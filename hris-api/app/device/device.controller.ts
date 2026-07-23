@@ -10229,7 +10229,24 @@ export const controller = (prisma: PrismaClient) => {
 			groups.set(key, group);
 		}
 		const results: any[] = [];
-		for (const writes of groups.values()) {
+		const targetDeviceWriteChains = new Map<string, Promise<void>>();
+		const withTargetDeviceWriteLock = async <T>(
+			deviceId: string,
+			work: () => Promise<T>,
+		): Promise<T> => {
+			const previous =
+				targetDeviceWriteChains.get(deviceId) || Promise.resolve();
+			const current = previous.catch(() => undefined).then(work);
+			targetDeviceWriteChains.set(
+				deviceId,
+				current.then(
+					() => undefined,
+					() => undefined,
+				),
+			);
+			return current;
+		};
+		const processCredentialGroup = async (writes: any[]) => {
 			const first = writes[0];
 			const sourceDevice = deviceById.get(String(first.sourceDeviceId));
 			const targetDevices = writes
@@ -10238,7 +10255,7 @@ export const controller = (prisma: PrismaClient) => {
 			const includeFingerprints = first.modality === "fingerprint";
 			const includeFaceRecognition = first.modality === "face";
 			if (!sourceDevice || targetDevices.length !== writes.length) {
-				for (const write of writes) {
+				await Promise.all(writes.map(async (write: any) => {
 					const error = "Credential source or target device is outside the frozen scope";
 					results.push({ ...write, status: "error", error });
 					params.emitProgress?.({
@@ -10247,8 +10264,8 @@ export const controller = (prisma: PrismaClient) => {
 						error,
 						message: error,
 					});
-				}
-				continue;
+				}));
+				return;
 			}
 			if (
 				first.modality === "fingerprint" &&
@@ -10291,7 +10308,7 @@ export const controller = (prisma: PrismaClient) => {
 							message: result.error,
 						});
 					}
-					continue;
+					return;
 				}
 				params.emitProgress?.({
 					stage: "credential_raw_write_started",
@@ -10303,7 +10320,7 @@ export const controller = (prisma: PrismaClient) => {
 					templateCount: templates.length,
 					message: `Writing ${templates.length} reviewed raw fingerprint template(s) for ${first.vendorUserId}.`,
 				});
-				for (const write of writes) {
+				await Promise.all(writes.map(async (write: any) => {
 					const targetDevice = deviceById.get(String(write.targetDeviceId));
 					const user = (params.plan.users || []).find(
 						(candidate: any) => candidate.key === write.userKey,
@@ -10313,6 +10330,9 @@ export const controller = (prisma: PrismaClient) => {
 							String(record.deviceId) === String(write.targetDeviceId),
 					);
 					try {
+						await withTargetDeviceWriteLock(
+							String(write.targetDeviceId),
+							async () => {
 						const writeResult = await writeDecryptedBiometricBundleToHikvisionDevice({
 							req: params.req,
 							targetDevice,
@@ -10325,8 +10345,19 @@ export const controller = (prisma: PrismaClient) => {
 								(item: any) => item.sticky !== true,
 							)
 						) {
+							const diagnostics = writeResult.fingerprintWrites.map(
+								(item: any) => ({
+									fingerPrintId: item.fingerPrintId,
+									writeOk: item.writeOk,
+									sticky: item.sticky,
+									progressStatus: item.progressStatus,
+									progressErrorMsg: item.progressErrorMsg,
+									numOfFP: item.numOfFP,
+									source: item.source,
+								}),
+							);
 							throw new Error(
-								"Target rejected or failed to retain one or more raw fingerprint templates",
+								`Target rejected or failed to retain one or more raw fingerprint templates: ${JSON.stringify(diagnostics)}`,
 							);
 						}
 						await syncSingleHikvisionDeviceUserFromSource({
@@ -10379,6 +10410,8 @@ export const controller = (prisma: PrismaClient) => {
 							credentialStages: ["fingerprint"],
 							message: `Stored fingerprint custody reread passed for ${write.vendorUserId} on ${targetDevice?.name || write.targetDeviceId}.`,
 						});
+							},
+						);
 					} catch (error: any) {
 						const result = {
 							...write,
@@ -10393,8 +10426,8 @@ export const controller = (prisma: PrismaClient) => {
 							message: result.error,
 						});
 					}
-				}
-				continue;
+				}));
+				return;
 			}
 			params.emitProgress?.({
 				stage: "credential_probe_started",
@@ -10559,7 +10592,22 @@ export const controller = (prisma: PrismaClient) => {
 					});
 				}
 			}
-		}
+		};
+		const pendingGroups = [...groups.values()];
+		let nextGroupIndex = 0;
+		// Bound concurrency across people while allowing each person's distinct target
+		// devices to run together. This keeps the device job observable without
+		// serializing thousands of independent credential writes.
+		const workerCount = Math.min(8, pendingGroups.length);
+		await Promise.all(
+			Array.from({ length: workerCount }, async () => {
+				while (true) {
+					const groupIndex = nextGroupIndex++;
+					if (groupIndex >= pendingGroups.length) return;
+					await processCredentialGroup(pendingGroups[groupIndex]);
+				}
+			}),
+		);
 		params.emitProgress?.({
 			stage: "reread_started",
 			message: "Rereading all frozen devices after credential-only writes.",
