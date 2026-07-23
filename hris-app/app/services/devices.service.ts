@@ -1566,7 +1566,7 @@ class DevicesService extends APIService {
 
 	async getDeviceHealth(
 		deviceId: string,
-		options: { quick?: boolean; timeoutMs?: number } = {},
+		options: { quick?: boolean; timeoutMs?: number; signal?: AbortSignal } = {},
 	): Promise<DeviceHealthResponse> {
 		try {
 			if (!String(deviceId || "").trim()) {
@@ -1574,8 +1574,8 @@ class DevicesService extends APIService {
 			}
 			const response = await hrisApiClient.get<any>(
 				`/api/device/${deviceId}/health`,
-				options.quick ? { quick: "true" } : undefined,
-				{ timeoutMs: options.timeoutMs ?? 6000 },
+				options.quick ? ({ quick: "true" } as any) : undefined,
+				{ timeoutMs: options.timeoutMs ?? 6000, signal: options.signal },
 			);
 			let healthData = response.data;
 			if (healthData && typeof healthData === "object" && "data" in healthData) {
@@ -1586,7 +1586,7 @@ class DevicesService extends APIService {
 			}
 			return healthData as DeviceHealthResponse;
 		} catch (error: any) {
-			console.error("Error checking device health:", error);
+			if (options.signal?.aborted) throw error;
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error checking device health",
 			);
@@ -1595,6 +1595,7 @@ class DevicesService extends APIService {
 
 	async getDeviceSyncPreview(
 		params: { deviceId?: string; source?: string; quick?: boolean } = {},
+		options: { signal?: AbortSignal } = {},
 	): Promise<DeviceSyncPreviewResponse> {
 		try {
 			const query = new URLSearchParams();
@@ -1603,15 +1604,19 @@ class DevicesService extends APIService {
 			if (params.source && params.source !== "all") query.set("source", params.source);
 			if (params.quick) query.set("quick", "true");
 			const endpoint = `/api/device/sync-preview${query.toString() ? `?${query.toString()}` : ""}`;
-			// Sync logs / Sync Center must not hang the UI. Abort if preview exceeds budget.
-			const response = await hrisApiClient.get<any>(endpoint, undefined, { timeoutMs: 8000 });
+			// The server's bounded parallel quick reads can settle just above 8s on
+			// six panels. Keep the client budget above that contract.
+			const response = await hrisApiClient.get<any>(endpoint, undefined, {
+				timeoutMs: 15_000,
+				signal: options.signal,
+			});
 			const previewData = response.data?.data || response.data;
 			if (!previewData) {
 				throw new Error("Failed to build device sync preview");
 			}
 			return previewData as DeviceSyncPreviewResponse;
 		} catch (error: any) {
-			console.error("Error building device sync preview:", error);
+			if (options.signal?.aborted) throw error;
 			throw new Error(
 				error.data?.errors?.[0]?.message ||
 					error.message ||
@@ -2392,19 +2397,21 @@ class DevicesService extends APIService {
 		}
 	}
 
-	async getHikvisionListenerStatus(): Promise<HikvisionListenerStatus> {
+	async getHikvisionListenerStatus(options: {
+		signal?: AbortSignal;
+	} = {}): Promise<HikvisionListenerStatus> {
 		try {
 			// Cap client wait so the Listener modal never spins forever if SSH stalls.
 			const response = await hrisApiClient.get<any>(
 				"/api/device/hikvision/listener",
 				undefined,
-				{ timeoutMs: 15_000 },
+				{ timeoutMs: 15_000, signal: options.signal },
 			);
 			const data = response.data?.data || response.data;
 			if (!data) throw new Error("Failed to load Hikvision listener status");
 			return data as HikvisionListenerStatus;
 		} catch (error: any) {
-			console.error("Error loading Hikvision listener status:", error);
+			if (options.signal?.aborted) throw error;
 			throw new Error(
 				error.data?.errors?.[0]?.message ||
 					error.message ||

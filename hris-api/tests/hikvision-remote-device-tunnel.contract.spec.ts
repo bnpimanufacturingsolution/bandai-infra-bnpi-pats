@@ -14,6 +14,11 @@ describe("Hikvision remote device tunnel contract", () => {
 	const deviceController = readRepoFile("hris-api/app/device/device.controller.ts");
 	const restartLocalApiScript = readRepoFile("scripts/restart-local-hris-api-dev.ps1");
 	const predevScript = readRepoFile("hris-api/scripts/predev-run.cjs");
+	const devWatchScript = readRepoFile("hris-api/scripts/run-dev-api-watch.cjs");
+	const livePathEnsureScript = readRepoFile("hris-api/scripts/ensure-device-live-path.cjs");
+	const apiReverseEnsureScript = readRepoFile(
+		"hris-api/scripts/ensure-hikvision-api-reverse.cjs",
+	);
 	const dbWatchScript = readRepoFile("scripts/watch-k8s-dev-db-access.ps1");
 	const vmBridgeEnsureScript = readRepoFile("hris-api/scripts/ensure-hikvision-vm-bridge.cjs");
 	const overnightMergeScript = readRepoFile("scripts/merge-users-overnight-loop.ps1");
@@ -115,6 +120,12 @@ describe("Hikvision remote device tunnel contract", () => {
 	it("does not let optional TEST A bridge stderr fail the local restart after API health is green", () => {
 		expect(restartLocalApiScript).to.include("optional TEST A bridge exited");
 		expect(restartLocalApiScript).to.include("2>&1 | ForEach-Object { Write-Host $_ }");
+		expect(restartLocalApiScript).to.include(
+			'HRIS_RESTART_RUN_OPTIONAL_TEST_BRIDGE -eq "true"',
+		);
+		expect(restartLocalApiScript).to.include(
+			"required live paths are managed by the dependency watchdog",
+		);
 		expect(restartLocalApiScript.indexOf("Local hris-api is healthy")).to.be.lessThan(
 			restartLocalApiScript.indexOf("Ensuring TEST A SSH reverse bridge"),
 		);
@@ -136,5 +147,35 @@ describe("Hikvision remote device tunnel contract", () => {
 		expect(vmBridgeEnsureScript).to.include("process.exit(0);");
 		expect(vmBridgeEnsureScript).to.include("slice(-6)");
 		expect(vmBridgeEnsureScript).to.include("timeout: 45_000");
+	});
+
+	it("keeps required local DEV dependencies under a bounded single-flight watchdog", () => {
+		expect(devWatchScript).to.include("dependencyPassRunning");
+		expect(devWatchScript).to.include("request coalesced");
+		expect(devWatchScript).to.include("hikvision-a-f-forwards");
+		expect(devWatchScript).to.include("vm-callback-and-listener");
+		expect(devWatchScript).to.include("vm-api-reverse");
+		expect(devWatchScript).to.include("dependency-status.json");
+		expect(devWatchScript).to.include("watchdog.unref()");
+		expect(devWatchScript).to.include("timeoutMs: 75_000");
+		expect(devWatchScript).to.include("timeoutMs: 45_000");
+	});
+
+	it("bounds helpers that previously held npm run dev open after starting SSH", () => {
+		expect(ensureScript).to.include("timeout: 75_000");
+		expect(ensureScript).to.include('result.error?.code === "ETIMEDOUT"');
+		expect(ensureScript).to.include("allForwardPortsOpen");
+		expect(ensureScript).to.include("DONE (fast path)");
+		expect(ensureScript).to.include('stdio: "ignore"');
+		expect(livePathEnsureScript).to.include("timeout: 90_000");
+		expect(livePathEnsureScript).to.include("watchdog will probe/retry");
+		expect(livePathEnsureScript).to.include("HOST_API_HEALTHY_LISTENER_ACTIVE");
+		expect(livePathEnsureScript).to.include("VM :53001 reaches host API health");
+		expect(livePathEnsureScript).to.include("readVmLiveTruth");
+		expect(livePathEnsureScript).to.include("LISTENER_PATH_OK");
+		expect(apiReverseEnsureScript).to.include("detached: true");
+		expect(apiReverseEnsureScript).to.include('stdio: "ignore"');
+		expect(apiReverseEnsureScript).to.include("child.unref()");
+		expect(apiReverseEnsureScript).to.include("API_REVERSE_HEALTHY");
 	});
 });

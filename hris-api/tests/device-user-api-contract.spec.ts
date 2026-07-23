@@ -110,10 +110,14 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("void currentVendorUserIds");
 	});
 
-	it("reads Hikvision merge devices sequentially with bounded recovery and preserves failures", () => {
+	it("reads Hikvision merge devices with bounded concurrency/recovery and preserves failures", () => {
 		const controller = controllerSource();
 		expect(controller).to.include("const deviceResults: Array<{");
-		expect(controller).to.include("for (let recovery = 1; recovery <= 3");
+		expect(controller).to.include("const mergeReadConcurrency = Math.min(2, devices.length)");
+		expect(controller).to.include("Array.from({ length: mergeReadConcurrency }");
+		expect(controller).to.include("await readNextDevice()");
+		expect(controller).to.include("recovery <= 1 && retryable");
+		expect(controller).to.include("Authentication/validation failures are deterministic");
 		expect(controller).to.include("Merge inventory read recovery");
 		expect(controller).to.include("records.push(...result.records)");
 		expect(controller).to.include("if (result.error) errors.push(result.error)");

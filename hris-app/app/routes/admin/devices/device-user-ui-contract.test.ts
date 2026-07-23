@@ -204,12 +204,14 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain(
 			"Issue counts are not computed for devices that failed inventory read",
 		);
-		expect(enroll).toContain("Checking which Hikvision devices are available (up to 5 seconds).");
+		expect(enroll).toContain("Checking which Hikvision devices are available (up to 10 seconds).");
 		expect(enroll).toContain("offline or unavailable skipped");
 		expect(enroll).toContain("Searching live device-user records");
 		expect(enroll).toContain("No live device-user records matched this search");
 		expect(enroll).toContain("Merge needs at least two available devices.");
-		expect(enroll).toContain("typeof preview.vendorUserCount === \"number\"");
+		expect(enroll).toContain("deviceService.getDeviceHealth(deviceId");
+		expect(enroll).toContain('result.value?.summary?.status === "online"');
+		expect(enroll).not.toContain("typeof preview.vendorUserCount === \"number\"");
 		expect(enroll).not.toContain("DeviceLiveReadinessStrip");
 		expect(enroll).not.toContain("Checking DB + live path");
 		expect(enroll).not.toContain("useDeviceLiveReadiness");
@@ -494,7 +496,20 @@ describe("admin device user and log sync UI contract", () => {
 		expect(events).toContain("showSyncPreviewSkeleton");
 		expect(events).toContain("Sync-preview only when Sync logs modal is open");
 		expect(deviceHooks).toContain("options.refetchInterval ?? false");
-		expect(deviceService).toContain("{ timeoutMs: 15_000 }");
+		expect(deviceService).toContain("{ timeoutMs: 15_000, signal: options.signal }");
+		expect(deviceService).toContain("timeoutMs: 15_000");
+		expect(deviceHooks).toContain("meta: { timeoutMs: 15_000 }");
+		expect(deviceHooks).toContain("queryFn: ({ signal })");
+		expect(deviceHooks).toContain("placeholderData: (previous) => previous");
+		expect(enroll).toContain("Checking listener status");
+		expect(enroll).toContain("Refresh status");
+		expect(enroll).toContain("Retry status");
+		expect(enroll).toContain("Retry availability");
+		expect(enroll).toContain("Refresh tunnels/status");
+		expect(enroll).toContain("checks complete");
+		expect(enroll).toContain("sdkMergeAvailabilityRequest");
+		expect(enroll).toContain("readableDeviceCount");
+		expect(enroll).toContain("live inventory read");
 
 		expect(events).toContain("Sync logs");
 		expect(events).toContain("Sync device logs");

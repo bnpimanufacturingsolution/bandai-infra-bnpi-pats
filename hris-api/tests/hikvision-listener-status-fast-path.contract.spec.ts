@@ -12,7 +12,7 @@ const controllerSource = readFileSync(
 describe("hikvision listener status fast path contract", () => {
 	it("uses one SSH status round-trip with a hard budget", () => {
 		expect(controllerSource).to.contain("HIKVISION_LISTENER_STATUS_TIMEOUT_MS");
-		expect(controllerSource).to.contain("HIKVISION_LISTENER_STATUS_TIMEOUT_MS || 9000");
+		expect(controllerSource).to.contain("HIKVISION_LISTENER_STATUS_TIMEOUT_MS || 12000");
 		expect(controllerSource).to.contain("ACTIVE=");
 		expect(controllerSource).to.contain("---SHOW---");
 		expect(controllerSource).to.contain("---SPEC---");
@@ -36,6 +36,16 @@ describe("hikvision listener status fast path contract", () => {
 		expect(lanIndex).to.be.lessThan(aliasIndex);
 	});
 
+	it("allows the Cloudflare SSH alias a longer bounded handshake than direct LAN", () => {
+		expect(controllerSource).to.contain(
+			"HIKVISION_VM_CLOUDFLARE_SSH_CONNECT_TIMEOUT_SECONDS",
+		);
+		expect(controllerSource).to.contain(
+			"PROJECT_TRUTH_VM_CLOUDFLARE_SSH_CONNECT_TIMEOUT_SECONDS || 10",
+		);
+		expect(controllerSource).to.contain('target.label.startsWith("alias:")');
+	});
+
 	it("caches listener status briefly so readiness and listener UI share one VM read", () => {
 		expect(controllerSource).to.contain("hikvisionListenerStatusCache");
 		expect(controllerSource).to.contain("HIKVISION_LISTENER_STATUS_CACHE_MS || 5000");
@@ -49,5 +59,14 @@ describe("hikvision listener status fast path contract", () => {
 		expect(controllerSource).to.contain("sdk?.receivingCallbacks");
 		expect(controllerSource).to.contain('activeState === "deactivating"');
 		expect(controllerSource).to.contain('activeState === "activating"');
+	});
+
+	it("does not recopy the managed listener runtime on every safe restart", () => {
+		expect(controllerSource).to.contain("const runtimeProbe = await runHikvisionListenerVmCommand");
+		expect(controllerSource).to.contain("HIKVISION_VM_WRAPPER_REMOTE_PATH");
+		expect(controllerSource).to.contain("if (runtimeProbe.exitCode !== 0)");
+		expect(controllerSource).to.contain(
+			"const managedWrapper = await installManagedHikvisionListenerWrapperOnVm()",
+		);
 	});
 });

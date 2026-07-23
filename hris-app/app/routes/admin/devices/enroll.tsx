@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState, useCallback, useMemo } from "react";
 import { Button } from "~/components/atoms/Button";
+import { useRef } from "react";
 import { Modal } from "~/components/atoms/Modal";
 import { Badge } from "~/components/atoms/Badge";
 import { Select } from "~/components/atoms/Select";
@@ -39,6 +40,7 @@ import * as XLSX from "xlsx";
 import { useEmployee, useEmployees } from "~/lib/hooks/useEmployees";
 import {
 	useDevices,
+	useDeviceHealthMap,
 	useDeviceSyncPreview,
 	useDeviceSyncRuns,
 	useDeviceActivity,
@@ -61,6 +63,7 @@ import {
 	useUnlinkDeviceUser,
 	useDeleteDeviceUser,
 	useDeleteDeviceUsers,
+	type DeviceHealthMapEntry,
 } from "~/lib/hooks/useDevices";
 import { useHikvisionDeviceUsers } from "~/lib/hooks/use-hikvision";
 import { useQueryClient } from "@tanstack/react-query";
@@ -103,6 +106,7 @@ interface DeviceEnrollmentPanelProps {
 type SyncCenterDeviceItem = {
 	device: any;
 	preview?: DeviceSyncPreviewRow;
+	healthEntry?: DeviceHealthMapEntry;
 	vendor: string;
 	status: string;
 };
@@ -573,6 +577,11 @@ export function DeviceEnrollmentPanel({
 	const activePanel = ["overview", "users", "logs", "runs"].includes(activePanelParam)
 		? activePanelParam
 		: "overview";
+	const syncCenterHealth = useDeviceHealthMap(
+		devices.map((device: any) => String(device.id || "")).filter(Boolean),
+		activePanel === "overview" || activePanel === "users",
+		{ staleTime: 30_000, quick: true },
+	);
 	const deviceUserStatus = searchParams.get("deviceUserStatus") || "all";
 	const deviceUserSearch = searchParams.get("deviceUserSearch") || "";
 	const deviceUserVendorRange = searchParams.get("deviceUserVendorRange") || "";
@@ -652,6 +661,8 @@ export function DeviceEnrollmentPanel({
 	const {
 		data: hikvisionListenerStatus,
 		isLoading: isLoadingHikvisionListenerStatus,
+		isFetching: isFetchingHikvisionListenerStatus,
+		dataUpdatedAt: hikvisionListenerUpdatedAt,
 		error: hikvisionListenerStatusError,
 		refetch: refetchHikvisionListenerStatus,
 	} = useHikvisionListenerStatus(
@@ -705,7 +716,17 @@ export function DeviceEnrollmentPanel({
 		data?: DeviceUserMergePlanResponse;
 		choices: Record<string, Record<string, "A" | "B" | "KEEP">>;
 		applyAll?: "A" | "B";
+		availability?: Array<{
+			deviceId: string;
+			deviceName: string;
+			status: "checking" | "online" | "unavailable";
+			reason?: string;
+		}>;
 	}>({ open: false, status: "idle", message: "", choices: {} });
+	const sdkMergeAvailabilityRequest = useRef<{
+		sequence: number;
+		controller: AbortController | null;
+	}>({ sequence: 0, controller: null });
 	const [sdkMergeCredentialPicker, setSdkMergeCredentialPicker] =
 		useState<SdkMergeCredentialPickerState>(null);
 	const [sdkMergeSourceReview, setSdkMergeSourceReview] =
@@ -1357,7 +1378,11 @@ export function DeviceEnrollmentPanel({
 		void refetchSyncPreview();
 	};
 	const refreshDeviceUserSummary = async () => {
-		await Promise.allSettled([refetchSyncPreview(), refetchSyncRuns()]);
+		await Promise.allSettled([
+			refetchSyncPreview(),
+			refetchSyncRuns(),
+			syncCenterHealth.refetchAll(),
+		]);
 	};
 	const openBulkDeviceUserSyncReview = () => {
 		if (activeDeviceUserSyncJob || bulkDeviceUserSyncState.lastProgress) {
@@ -1382,6 +1407,18 @@ export function DeviceEnrollmentPanel({
 			toast.error("Merge needs at least two configured Hikvision devices");
 			return;
 		}
+		sdkMergeAvailabilityRequest.current.controller?.abort();
+		const availabilityController = new AbortController();
+		const availabilitySequence = sdkMergeAvailabilityRequest.current.sequence + 1;
+		sdkMergeAvailabilityRequest.current = {
+			sequence: availabilitySequence,
+			controller: availabilityController,
+		};
+		const configuredAvailability = hikvisionDeviceOptions.map((device: any) => ({
+			deviceId: String(device.id || "").trim(),
+			deviceName: String(device.name || device.address || device.id || "Hikvision device"),
+			status: "checking" as const,
+		}));
 		updateSearchParams((next) => {
 			next.delete("mergeList");
 			if (searchScope) {
@@ -1397,8 +1434,9 @@ export function DeviceEnrollmentPanel({
 		setSdkMergeState({
 			open: true,
 			status: "loading",
-			message: "Checking which Hikvision devices are available (up to 5 seconds).",
+			message: "Checking which Hikvision devices are available (up to 10 seconds).",
 			choices: {},
+			availability: configuredAvailability,
 		});
 		// window.setTimeout returns number under DOM; ReturnType can resolve to NodeJS.Timeout when @types/node is loaded.
 		let liveReadSlowTimer: number | undefined;
@@ -1414,23 +1452,103 @@ export function DeviceEnrollmentPanel({
 			);
 		}, 5000);
 		try {
-			const previewRows = syncPreview?.devices?.length
-				? syncPreview.devices
-				: (await refetchSyncPreview()).data?.devices || [];
-			window.clearTimeout(availabilitySlowTimer);
-			const previewById = new Map(
-				previewRows.map((row: DeviceSyncPreviewRow) => [String(row.deviceId), row]),
+			// Quick sync preview intentionally skips live source-user reads, so its
+			// vendorUserCount stays null even when the transport is online. It cannot
+			// be used as the Merge availability gate.
+			let completedChecks = 0;
+			const healthResults = await Promise.all(
+				configuredDeviceIds.map(async (deviceId, index) => {
+					try {
+						const health = await deviceService.getDeviceHealth(deviceId, {
+							quick: true,
+							timeoutMs: 10_000,
+							signal: availabilityController.signal,
+						});
+						completedChecks += 1;
+						const online = health?.summary?.status === "online";
+						if (
+							sdkMergeAvailabilityRequest.current.sequence ===
+							availabilitySequence
+						) {
+							setSdkMergeState((current) => ({
+								...current,
+								message: `${completedChecks}/${configuredDeviceIds.length} checks complete · ${online ? "Online" : health?.summary?.status || "Unavailable"}: ${configuredAvailability[index].deviceName}`,
+								availability: (current.availability || configuredAvailability).map(
+									(row) =>
+										row.deviceId === deviceId
+											? {
+													...row,
+													status: online ? "online" : "unavailable",
+													reason:
+														health?.checks?.deviceApi?.error ||
+														health?.checks?.network?.error ||
+														health?.summary?.status ||
+														"Quick health did not report online",
+												}
+											: row,
+								),
+							}));
+						}
+						return { status: "fulfilled" as const, value: health };
+					} catch (error: any) {
+						completedChecks += 1;
+						const reason =
+							error?.message ||
+							(availabilityController.signal.aborted
+								? "Canceled"
+								: "Health check failed");
+						if (
+							sdkMergeAvailabilityRequest.current.sequence ===
+							availabilitySequence
+						) {
+							setSdkMergeState((current) => ({
+								...current,
+								message: `${completedChecks}/${configuredDeviceIds.length} checks complete · Unavailable: ${configuredAvailability[index].deviceName}`,
+								availability: (current.availability || configuredAvailability).map(
+									(row) =>
+										row.deviceId === deviceId
+											? { ...row, status: "unavailable", reason }
+											: row,
+								),
+							}));
+						}
+						return { status: "rejected" as const, reason };
+					}
+				}),
 			);
-			const deviceIds = configuredDeviceIds.filter((deviceId) => {
-				const preview = previewById.get(deviceId);
-				return Boolean(
-					preview &&
-						!preview.error &&
-						typeof preview.vendorUserCount === "number" &&
-						Number.isFinite(preview.vendorUserCount),
+			if (
+				availabilityController.signal.aborted ||
+				sdkMergeAvailabilityRequest.current.sequence !== availabilitySequence
+			) {
+				return;
+			}
+			window.clearTimeout(availabilitySlowTimer);
+			const deviceIds = configuredDeviceIds.filter((_, index) => {
+				const result = healthResults[index];
+				return (
+					result?.status === "fulfilled" &&
+					result.value?.summary?.status === "online"
 				);
 			});
 			const skippedCount = configuredDeviceIds.length - deviceIds.length;
+			const finalAvailability = configuredAvailability.map((row, index) => {
+				const result = healthResults[index];
+				const online =
+					result?.status === "fulfilled" &&
+					result.value?.summary?.status === "online";
+				return {
+					...row,
+					status: online ? ("online" as const) : ("unavailable" as const),
+					reason: online
+						? "Quick health is online"
+						: result?.status === "fulfilled"
+							? result.value?.checks?.deviceApi?.error ||
+								result.value?.checks?.network?.error ||
+								result.value?.summary?.status ||
+								"Quick health did not report online"
+							: result?.reason || "Health check failed",
+				};
+			});
 			if (deviceIds.length < 2) {
 				if (searchScope && deviceIds.length === 1) {
 					setSdkMergeState({
@@ -1463,6 +1581,7 @@ export function DeviceEnrollmentPanel({
 						? `${deviceIds.length} of ${configuredDeviceIds.length} Hikvision devices are available. ${skippedCount} offline or unavailable device${skippedCount === 1 ? " was" : "s were"} skipped. No device-user search results can be shown until at least one device is available.`
 						: `${deviceIds.length} of ${configuredDeviceIds.length} Hikvision devices are available. ${skippedCount} offline or unavailable device${skippedCount === 1 ? " was" : "s were"} skipped. Merge needs at least two available devices.`,
 					choices: {},
+					availability: finalAvailability,
 				});
 				return;
 			}
@@ -1473,6 +1592,7 @@ export function DeviceEnrollmentPanel({
 					? `Searching live users from ${deviceIds.length} available devices; ${skippedCount} offline or unavailable skipped.`
 					: `Reading live users from ${deviceIds.length} available devices; ${skippedCount} offline or unavailable skipped.`,
 				choices: {},
+				availability: finalAvailability,
 			});
 			liveReadSlowTimer = window.setTimeout(() => {
 				setSdkMergeState((current) =>
@@ -1488,6 +1608,12 @@ export function DeviceEnrollmentPanel({
 			}, 5000);
 			const data = await planHikvisionSdkUserMergeMutation.mutateAsync({ deviceIds });
 			if (liveReadSlowTimer) window.clearTimeout(liveReadSlowTimer);
+			const readableDeviceCount =
+				data.plan.validDeviceIds?.length ??
+				data.plan.devices.filter((device) => device.readStatus !== "failed").length;
+			const readFailedDeviceCount =
+				data.plan.failedDeviceIds?.length ??
+				data.plan.devices.filter((device) => device.readStatus === "failed").length;
 			const actionableKeys = Object.fromEntries(
 				(data.plan.users || [])
 					.filter((user) => {
@@ -1510,20 +1636,28 @@ export function DeviceEnrollmentPanel({
 				open: true,
 				status: "review",
 				message: searchScope
-					? `Search is scoped to "${searchScope}" across ${deviceIds.length} available devices. ${skippedCount} offline or unavailable skipped.`
-					: `Review conflicts from ${deviceIds.length} available devices. ${skippedCount} offline or unavailable skipped.`,
+					? `Search is scoped to "${searchScope}" across ${readableDeviceCount} readable devices. ${readFailedDeviceCount} live inventory read${readFailedDeviceCount === 1 ? "" : "s"} failed; ${skippedCount} offline or unavailable skipped.`
+					: `Review conflicts from ${readableDeviceCount} readable devices. ${readFailedDeviceCount} live inventory read${readFailedDeviceCount === 1 ? "" : "s"} failed; ${skippedCount} offline or unavailable skipped.`,
 				data,
 				choices: {},
+				availability: finalAvailability,
 			});
 		} catch (error: any) {
 			window.clearTimeout(availabilitySlowTimer);
 			if (liveReadSlowTimer) window.clearTimeout(liveReadSlowTimer);
-			setSdkMergeState({
+			if (
+				availabilityController.signal.aborted ||
+				sdkMergeAvailabilityRequest.current.sequence !== availabilitySequence
+			) {
+				return;
+			}
+			setSdkMergeState((current) => ({
+				...current,
 				open: true,
 				status: "error",
 				message: error?.message || "Could not read live users.",
 				choices: {},
-			});
+			}));
 		}
 	};
 	const setSdkMergeFilter = (filter: SdkMergeFilter) => {
@@ -3474,6 +3608,7 @@ export function DeviceEnrollmentPanel({
 	const isSyncPreviewPending = (isLoadingSyncPreview || isFetchingSyncPreview) && devices.length > 0;
 	const syncCenterDevices: SyncCenterDeviceItem[] = devices.map((device: any) => {
 		const preview = previewByDeviceId.get(device.id);
+		const healthEntry = syncCenterHealth.get(device.id);
 		const vendor = preview?.vendor || getDeviceVendor(device);
 		const missingCount = preview?.missingEventCount ?? preview?.needsSyncEvents;
 		const failedCount = preview?.failedEventCount;
@@ -3491,7 +3626,7 @@ export function DeviceEnrollmentPanel({
 				: hasMissing
 					? "needs_sync"
 					: preview.status || "synced";
-		return { device, preview, vendor, status };
+		return { device, preview, healthEntry, vendor, status };
 	});
 	const deviceNeedsUserRefresh = (item: SyncCenterDeviceItem) => {
 		const sourceCount = item.preview?.vendorUserCount;
@@ -3522,6 +3657,8 @@ export function DeviceEnrollmentPanel({
 		(item) => item.vendor === "Hikvision",
 	);
 	const hikvisionListenerRunning = Boolean(hikvisionListenerStatus?.running);
+	const isInitialListenerCheck =
+		!hikvisionListenerStatus && isLoadingHikvisionListenerStatus;
 	const hikvisionSdkState = String(hikvisionListenerStatus?.sdk?.state || "unknown").trim();
 	const hikvisionSdkReceiving = Boolean(hikvisionListenerStatus?.sdk?.receivingCallbacks);
 	const hikvisionSdkArmed = Boolean(hikvisionListenerStatus?.sdk?.armed);
@@ -3532,13 +3669,15 @@ export function DeviceEnrollmentPanel({
 			hikvisionListenerStatus?.error),
 	);
 	const hikvisionListenerToneClass =
-		hikvisionSdkReceiving || hikvisionSdkArmed
+		isInitialListenerCheck
+			? "border-slate-200 bg-slate-50 text-slate-950"
+			: hikvisionSdkReceiving || hikvisionSdkArmed
 			? "border-emerald-200 bg-emerald-50 text-emerald-950"
 			: hikvisionListenerUnavailable
 				? "border-red-200 bg-red-50 text-red-950"
 				: "border-amber-200 bg-amber-50 text-amber-950";
-	const hikvisionListenerTitle = isLoadingHikvisionListenerStatus
-		? "Checking"
+	const hikvisionListenerTitle = isInitialListenerCheck
+		? "Checking status"
 		: hikvisionSdkReceiving
 			? "Live"
 			: hikvisionSdkState === "posting_failed"
@@ -5252,11 +5391,13 @@ export function DeviceEnrollmentPanel({
 				</TabsList>
 
 				{syncCenterHasHikvisionDevices ? (
-					<section className={`rounded-xl border p-2.5 ${hikvisionListenerToneClass}`}>
+					<section
+						aria-live="polite"
+						className={`flex items-center gap-2 rounded-xl border p-2.5 ${hikvisionListenerToneClass}`}>
 						<button
 							type="button"
 							onClick={() => setIsListenerDetailsOpen(true)}
-							className="flex w-full min-w-0 items-center gap-3 rounded-lg bg-white/80 px-3 py-2 text-left transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300">
+							className="flex min-w-0 flex-1 items-center gap-3 rounded-lg bg-white/80 px-3 py-2 text-left transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300">
 							<div
 								className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
 									hikvisionSdkReceiving || hikvisionSdkArmed
@@ -5265,7 +5406,7 @@ export function DeviceEnrollmentPanel({
 											? "bg-red-100 text-red-700"
 											: "bg-amber-100 text-amber-700"
 								}`}>
-								{isLoadingHikvisionListenerStatus ? (
+								{isInitialListenerCheck ? (
 									<Loader2 className="h-4 w-4 animate-spin" />
 								) : hikvisionSdkReceiving ? (
 									<Wifi className="h-4 w-4" />
@@ -5294,23 +5435,50 @@ export function DeviceEnrollmentPanel({
 								</div>
 								<div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
 									<span className="truncate">
-										{hikvisionListenerUnavailable
+										{isInitialListenerCheck
+											? "Checking listener status"
+											: hikvisionListenerUnavailable
 											? "VM status unreachable"
 											: hikvisionListenerRunning
 												? "VM running"
 												: "VM stopped"}
 									</span>
-									<span className="opacity-40">â€¢</span>
-									<span className="truncate">
-										Checked{" "}
-										{formatSyncCenterTime(hikvisionListenerStatus?.checkedAt)}
-									</span>
+									{hikvisionListenerStatus ? (
+										<>
+											<span className="opacity-40">â€¢</span>
+											<span className="truncate">
+												{isFetchingHikvisionListenerStatus
+													? "Refreshing · "
+													: "Checked "}
+												{formatSyncCenterTime(
+													hikvisionListenerStatus.checkedAt ||
+														(hikvisionListenerUpdatedAt
+															? new Date(hikvisionListenerUpdatedAt).toISOString()
+															: null),
+												)}
+											</span>
+										</>
+									) : null}
 								</div>
 							</div>
 							<span className="shrink-0 text-xs font-medium text-slate-500">
 								Open
 							</span>
 						</button>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="h-9 shrink-0 gap-1.5 bg-white"
+							disabled={isFetchingHikvisionListenerStatus}
+							onClick={() => void refetchHikvisionListenerStatus()}>
+							<RefreshCw
+								className={`h-4 w-4 ${isFetchingHikvisionListenerStatus ? "animate-spin" : ""}`}
+							/>
+							<span className="hidden sm:inline">
+								{isFetchingHikvisionListenerStatus ? "Refreshing" : "Refresh status"}
+							</span>
+						</Button>
 					</section>
 				) : null}
 
@@ -5333,9 +5501,12 @@ export function DeviceEnrollmentPanel({
 					) : (
 						<>
 							{isSyncPreviewPending ? (
-								<div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+								<div
+									aria-live="polite"
+									className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
 									<Loader2 className="mr-2 inline-block h-3.5 w-3.5 animate-spin" />
-									Showing devices now. Per-device source counts will fill in as each check finishes.
+									Refreshing source counts. Saved values remain visible while
+									per-device transport checks settle independently.
 								</div>
 							) : null}
 							<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
@@ -5359,7 +5530,7 @@ export function DeviceEnrollmentPanel({
 											String(right.device.name || ""),
 										);
 									})
-									.map(({ device, preview, status, vendor }) => {
+									.map(({ device, preview, healthEntry, status, vendor }) => {
 									const isSelected = device.id === selectedDeviceId;
 									const isPreviewPending = !preview && isSyncPreviewPending;
 									const sourceUserTotal = preview?.vendorUserCount;
@@ -5419,9 +5590,18 @@ export function DeviceEnrollmentPanel({
 													Status
 												</span>
 												<Badge
-													variant={getSyncStatusBadge(status) as any}
+													variant={
+														(healthEntry?.reachability.status === "online"
+															? "success"
+															: healthEntry?.reachability.status === "offline"
+																? "destructive"
+																: healthEntry?.reachability.status === "degraded"
+																	? "warning"
+																	: getSyncStatusBadge(status)) as any
+													}
 													className="inline-flex min-h-6 max-w-full items-center whitespace-normal break-words border border-current/20 px-2 py-0.5 text-left leading-4">
-													{getSyncStatusLabel(status)}
+													{healthEntry?.reachability.label ||
+														getSyncStatusLabel(status)}
 												</Badge>
 											</div>
 											<div className="min-w-0 space-y-1">
@@ -5520,6 +5700,16 @@ export function DeviceEnrollmentPanel({
 													<DropdownMenuContent
 														align="end"
 														className="w-48">
+														<DropdownMenuItem
+															disabled={healthEntry?.isFetching}
+															onClick={() =>
+																void syncCenterHealth.refetch(device.id)
+															}>
+															<RefreshCw className="mr-2 h-4 w-4" />
+															{healthEntry?.isFetching
+																? "Checking status"
+																: "Retry status"}
+														</DropdownMenuItem>
 														<DropdownMenuItem
 															onClick={() =>
 																openDevicePanel(device.id, "users")
@@ -5647,9 +5837,25 @@ export function DeviceEnrollmentPanel({
 										type="button"
 										variant="outline"
 										className="h-8 shrink-0 gap-1.5 px-3"
+										disabled={
+											isFetchingSyncPreview ||
+											syncCenterHealth.isFetchingAny
+										}
 										onClick={() => void refreshDeviceUserSummary()}>
-										<RefreshCw className="h-4 w-4 shrink-0" />
-										<span className="whitespace-nowrap">Refresh summary</span>
+										<RefreshCw
+											className={`h-4 w-4 shrink-0 ${
+												isFetchingSyncPreview ||
+												syncCenterHealth.isFetchingAny
+													? "animate-spin"
+													: ""
+											}`}
+										/>
+										<span className="whitespace-nowrap">
+											{isFetchingSyncPreview ||
+											syncCenterHealth.isFetchingAny
+												? "Refreshing"
+												: "Refresh summary"}
+										</span>
 									</Button>
 									<Button
 										type="button"
@@ -7434,7 +7640,11 @@ export function DeviceEnrollmentPanel({
 			<Modal
 				open={sdkMergeState.open}
 				onOpenChange={(open) => {
-					if (!open) setSdkMergeConfirmOpen(false);
+					if (!open) {
+						setSdkMergeConfirmOpen(false);
+						sdkMergeAvailabilityRequest.current.controller?.abort();
+						sdkMergeAvailabilityRequest.current.sequence += 1;
+					}
 					setSdkMergeState((current) => ({ ...current, open }));
 				}}
 				title="Merge device users"
@@ -7443,6 +7653,7 @@ export function DeviceEnrollmentPanel({
 				closeOnBackdropClick={!sdkMergeJobIsProcessing}>
 				<div className="space-y-3">
 					<div
+						aria-live="polite"
 						className={`rounded-md border px-3 py-2 ${
 							sdkMergeState.status === "error"
 								? "border-red-200 bg-red-50 text-red-950"
@@ -7461,6 +7672,53 @@ export function DeviceEnrollmentPanel({
 							</div>
 						</div>
 					</div>
+					{sdkMergeState.availability?.length ? (
+						<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+							<div className="grid grid-cols-[minmax(0,1fr)_120px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+								<span>Availability evidence</span>
+								<span>Status</span>
+							</div>
+							<div className="max-h-44 overflow-auto">
+								{sdkMergeState.availability.map((row) => (
+									<div
+										key={`merge-availability:${row.deviceId}`}
+										className="grid grid-cols-[minmax(0,1fr)_120px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+										<div className="min-w-0">
+											<p className="truncate font-medium text-slate-950">
+												{row.deviceName}
+											</p>
+											<p className="truncate text-xs text-slate-600">
+												{row.reason || "Bounded quick-health check in progress"}
+											</p>
+										</div>
+										<div className="flex items-center gap-2">
+											{row.status === "checking" ? (
+												<Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />
+											) : row.status === "online" ? (
+												<CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+											) : (
+												<AlertTriangle className="h-3.5 w-3.5 text-red-600" />
+											)}
+											<span
+												className={
+													row.status === "online"
+														? "text-emerald-700"
+														: row.status === "unavailable"
+															? "text-red-700"
+															: "text-slate-600"
+												}>
+												{row.status === "checking"
+													? "Checking"
+													: row.status === "online"
+														? "Online"
+														: "Unavailable"}
+											</span>
+										</div>
+									</div>
+								))}
+							</div>
+						</div>
+					) : null}
 
 					{hasSdkMergeJob ? (
 						<div className={`rounded-lg border p-4 ${sdkMergeJobToneClass}`}>
@@ -8342,6 +8600,29 @@ export function DeviceEnrollmentPanel({
 							}}>
 							Close
 						</Button>
+						{sdkMergeState.status === "error" ? (
+							<>
+								<Button
+									type="button"
+									variant="outline"
+									disabled={isFetchingHikvisionListenerStatus}
+									onClick={() => {
+										void Promise.allSettled([
+											refetchHikvisionListenerStatus(),
+											syncCenterHealth.refetchAll(),
+										]).then(() => openSdkUserMerge(sdkMergeSearch));
+									}}>
+									<RefreshCw className="h-4 w-4" />
+									Refresh tunnels/status
+								</Button>
+								<Button
+									type="button"
+									onClick={() => void openSdkUserMerge(sdkMergeSearch)}>
+									<RefreshCw className="h-4 w-4" />
+									Retry availability
+								</Button>
+							</>
+						) : null}
 						{hasSdkMergeJob && !sdkMergeJobIsProcessing ? (
 							<Button
 								type="button"

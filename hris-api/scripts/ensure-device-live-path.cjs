@@ -67,10 +67,29 @@ function sshTargetCandidates() {
 	const direct = fs.existsSync(directSshKey)
 		? ["-i", directSshKey, "infra@10.184.37.19"]
 		: ["infra@10.184.37.19"];
-	return [
+	const candidates = [
 		{ label: "lan:infra@10.184.37.19", args: direct },
 		{ label: "alias:project-truth-hris", args: ["project-truth-hris"] },
 	];
+	try {
+		const tunnelState = JSON.parse(
+			fs.readFileSync(
+				path.join(
+					repoRoot,
+					".runtime",
+					"hikvision-remote-device-tunnel",
+					"active.json",
+				),
+				"utf8",
+			),
+		);
+		if (String(tunnelState?.SshTarget || "") === "project-truth-hris") {
+			return [candidates[1], candidates[0]];
+		}
+	} catch {
+		// No current tunnel evidence: retain the required direct-LAN-first order.
+	}
+	return candidates;
 }
 
 function vmSsHasPort(port) {
@@ -95,7 +114,8 @@ function vmSsHasPort(port) {
 }
 
 function listenerPostsHostApi() {
-	// Prove last service_started / contract post targets reverse, not VM K3s 3101.
+	// Current wire proof beats historical journal text: the VM callback port must
+	// return host API health and the managed listener unit must be active.
 	for (const target of sshTargetCandidates()) {
 		const result = spawnSync(
 			"ssh.exe",
@@ -107,21 +127,52 @@ function listenerPostsHostApi() {
 			"-o",
 			"StrictHostKeyChecking=accept-new",
 			...target.args,
-			`sudo -n journalctl -u project-truth-hikvision-hot-reload-listener.service -n 40 --no-pager 2>/dev/null | grep -E 'service_started|hrisApiBase|apiBase' | tail -n 5`,
+			`curl -fsS --max-time 4 http://127.0.0.1:53001/health >/dev/null && systemctl is-active --quiet project-truth-hikvision-hot-reload-listener.service && printf 'HOST_API_HEALTHY_LISTENER_ACTIVE'`,
 			],
 			{ cwd: repoRoot, stdio: "pipe", windowsHide: true, encoding: "utf8" },
 		);
 		if (result.status !== 0) continue;
 		const out = `${result.stdout || ""}\n${result.stderr || ""}`;
-		if (/127\.0\.0\.1:53001|localhost:53001/.test(out) && !/localhost:3101/.test(out)) {
-			return { ok: true, detail: out.trim().split("\n").slice(-2).join(" | ") };
-		}
-		if (/localhost:3101/.test(out)) {
-			return { ok: false, detail: "listener still posting localhost:3101" };
+		if (/HOST_API_HEALTHY_LISTENER_ACTIVE/.test(out)) {
+			return {
+				ok: true,
+				detail: "VM :53001 reaches host API health and listener service is active",
+			};
 		}
 		return { ok: false, detail: out.trim().slice(0, 240) || "no recent listener apiBase log" };
 	}
 	return { ok: false, detail: "no reachable VM SSH target for listener apiBase proof" };
+}
+
+function readVmLiveTruth() {
+	for (const target of sshTargetCandidates()) {
+		const result = spawnSync(
+			"ssh.exe",
+			[
+				"-o",
+				"BatchMode=yes",
+				"-o",
+				target.label.startsWith("alias:") ? "ConnectTimeout=10" : "ConnectTimeout=3",
+				"-o",
+				"StrictHostKeyChecking=accept-new",
+				...target.args,
+				[
+					`ss -ltn 2>/dev/null | grep -q ':${apiRemotePort} ' && printf 'API_REVERSE_OK\\n' || true`,
+					`ss -ltn 2>/dev/null | grep -q ':${sdkPort} ' && printf 'SDK_REVERSE_OK\\n' || true`,
+					`curl -fsS --max-time 4 http://127.0.0.1:${apiRemotePort}/health >/dev/null && systemctl is-active --quiet project-truth-hikvision-hot-reload-listener.service && printf 'LISTENER_PATH_OK\\n' || true`,
+				].join("; "),
+			],
+			{ cwd: repoRoot, stdio: "pipe", windowsHide: true, encoding: "utf8" },
+		);
+		if (result.status !== 0) continue;
+		const out = `${result.stdout || ""}\n${result.stderr || ""}`;
+		return {
+			api: /API_REVERSE_OK/.test(out),
+			sdk: /SDK_REVERSE_OK/.test(out),
+			listener: /LISTENER_PATH_OK/.test(out),
+		};
+	}
+	return { api: false, sdk: false, listener: false };
 }
 
 async function main() {
@@ -132,8 +183,9 @@ async function main() {
 
 	const [dbOk, hostSdkOk] = await Promise.all([tcpOpen(dbPort), tcpOpen(sdkPort)]);
 	const apiOk = await tcpOpen(apiLocalPort);
-	const vmApi = vmSsHasPort(apiRemotePort);
-	const vmSdk = vmSsHasPort(sdkPort);
+	const vmTruth = readVmLiveTruth();
+	const vmApi = vmTruth.api;
+	const vmSdk = vmTruth.sdk;
 
 	console.log(
 		`[device-live-path] probes host db:${dbPort}=${dbOk} sdk:${sdkPort}=${hostSdkOk} api:${apiLocalPort}=${apiOk} | vm :${apiRemotePort}=${vmApi} :${sdkPort}=${vmSdk}`,
@@ -150,7 +202,12 @@ async function main() {
 	}
 
 	if (dbOk && vmSdk && apiOk && vmApi) {
-		const listener = listenerPostsHostApi();
+		const listener = vmTruth.listener
+			? {
+					ok: true,
+					detail: "VM :53001 reaches host API health and listener service is active",
+				}
+			: listenerPostsHostApi();
 		if (listener.ok) {
 			console.log(
 				`[device-live-path] DONE (fast path) in ${((Date.now() - t0) / 1000).toFixed(1)}s — ${listener.detail || "listener on 53001"}`,
@@ -189,6 +246,8 @@ async function main() {
 			windowsHide: true,
 			encoding: "utf8",
 			env: process.env,
+			timeout: 90_000,
+			killSignal: "SIGTERM",
 		},
 	);
 
@@ -206,6 +265,12 @@ async function main() {
 	}
 
 	const sec = ((Date.now() - t0) / 1000).toFixed(1);
+	if (result.error?.code === "ETIMEDOUT") {
+		console.warn(
+			`[device-live-path] ensure exceeded 90s after ${sec}s; API remains available and the watchdog will probe/retry.`,
+		);
+		process.exit(0);
+	}
 	if (result.status !== 0) {
 		console.warn(
 			`[device-live-path] ensure exited ${result.status || 1} after ${sec}s (API still boots; Keep ready can retry).`,

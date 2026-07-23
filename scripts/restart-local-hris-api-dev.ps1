@@ -163,10 +163,15 @@ if (-not (Wait-ForApiHealth)) {
 
 Write-Host "[local-api-restart] Local hris-api is healthy on http://localhost:$Port/health"
 
-# Keep Live capture usable for TEST A after every local API restart.
+# Required A-F forwards, VM callback reverse, and listener recovery are owned by
+# run-dev-api-watch.cjs. The TEST A/B lab bridge is optional and must never hold
+# an otherwise healthy local API restart open.
 $bridgeScript = Join-Path $repoRoot "scripts\start-host-hikvision-vm-ssh-bridge.ps1"
 $listenerRestartScript = Join-Path $repoRoot "scripts\restart-local-hikvision-listener.ps1"
-if (Test-Path $bridgeScript) {
+if (
+	$env:HRIS_RESTART_RUN_OPTIONAL_TEST_BRIDGE -eq "true" -and
+	(Test-Path $bridgeScript)
+) {
 	try {
 		Write-Host "[local-api-restart] Ensuring TEST A SSH reverse bridge for Live capture"
 		$previousErrorActionPreference = $ErrorActionPreference
@@ -188,11 +193,18 @@ if (Test-Path $bridgeScript) {
 		$ErrorActionPreference = "Stop"
 		Write-Host "[local-api-restart] Bridge ensure skipped: $($_.Exception.Message)"
 	}
+} else {
+	Write-Host "[local-api-restart] Optional TEST A/B bridge skipped; required live paths are managed by the dependency watchdog"
 }
-if (Test-Path $listenerRestartScript) {
+if (
+	$env:HRIS_RESTART_RUN_OPTIONAL_LISTENER_RESTART -eq "true" -and
+	(Test-Path $listenerRestartScript)
+) {
 	try {
 		& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $listenerRestartScript -ApiBase "http://localhost:$Port" -WaitHealthSeconds 0
 	} catch {
 		Write-Host "[local-api-restart] Listener restart skipped: $($_.Exception.Message)"
 	}
+} else {
+	Write-Host "[local-api-restart] Synchronous listener restart skipped; dependency watchdog verifies it after 53001 is healthy"
 }

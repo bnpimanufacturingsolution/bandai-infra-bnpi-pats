@@ -1172,7 +1172,17 @@ const HIKVISION_VM_SSH_CONNECT_TIMEOUT_SECONDS = Math.min(
 );
 const HIKVISION_LISTENER_STATUS_TIMEOUT_MS = Math.max(
 	2000,
-	Math.min(Number(process.env.HIKVISION_LISTENER_STATUS_TIMEOUT_MS || 9000), 12000),
+	Math.min(Number(process.env.HIKVISION_LISTENER_STATUS_TIMEOUT_MS || 12000), 12000),
+);
+
+const HIKVISION_VM_CLOUDFLARE_SSH_CONNECT_TIMEOUT_SECONDS = Math.min(
+	Math.max(
+		Number(
+			process.env.PROJECT_TRUTH_VM_CLOUDFLARE_SSH_CONNECT_TIMEOUT_SECONDS || 10,
+		),
+		HIKVISION_VM_SSH_CONNECT_TIMEOUT_SECONDS,
+	),
+	30,
 );
 
 const isHikvisionTransportFailure = (value: unknown) =>
@@ -1269,7 +1279,11 @@ const runHikvisionListenerVmCommand = (remoteArgs: string[], timeoutMs = 7000) =
 			"-o",
 			"BatchMode=yes",
 			"-o",
-			`ConnectTimeout=${HIKVISION_VM_SSH_CONNECT_TIMEOUT_SECONDS}`,
+			`ConnectTimeout=${
+				target.label.startsWith("alias:")
+					? HIKVISION_VM_CLOUDFLARE_SSH_CONNECT_TIMEOUT_SECONDS
+					: HIKVISION_VM_SSH_CONNECT_TIMEOUT_SECONDS
+			}`,
 			"-o",
 			"StrictHostKeyChecking=accept-new",
 		];
@@ -9656,31 +9670,49 @@ export const controller = (prisma: PrismaClient) => {
 				};
 			}
 		};
-		// Sequential inventory reads reduce concurrent digest/auth pressure that
-		// previously produced Unauthorized on some panels while others succeeded,
-		// which the UI then rendered as "IDs read: 0" + "Missing: all unique IDs".
+		// A small worker pool keeps total review latency bounded without flooding a
+		// panel or creating the broad digest/auth burst that caused false reads.
 		const deviceResults: Array<{
 			records: DeviceUserMergeRecord[];
 			error: { deviceId: string; deviceName: string; error: string } | null;
-		}> = [];
-		for (let index = 0; index < devices.length; index += 1) {
+		}> = new Array(devices.length);
+		let nextDeviceIndex = 0;
+		const readNextDevice = async (): Promise<void> => {
+			const index = nextDeviceIndex;
+			nextDeviceIndex += 1;
+			if (index >= devices.length) return;
 			const device = devices[index];
 			let result = await loadDeviceRecords(device);
 			if (result.error) {
-				for (let recovery = 1; recovery <= 3 && result.error; recovery += 1) {
-					const delayMs = recovery === 1 ? 500 : recovery === 2 ? 1500 : 3000;
+				const firstError = result.error.error.toLowerCase();
+				const retryable =
+					firstError.includes("fetch failed") ||
+					firstError.includes("timed out") ||
+					firstError.includes("timeout") ||
+					firstError.includes("aborted") ||
+					firstError.includes("econn");
+				// Authentication/validation failures are deterministic for this plan.
+				// Retry one transient transport failure, then return partial truth so
+				// the operator is never trapped in an unbounded modal.
+				for (let recovery = 1; recovery <= 1 && retryable && result.error; recovery += 1) {
+					const delayMs = 750;
 					deviceLogger.warn(
-						`Merge inventory read recovery ${recovery}/3 for ${device.name || device.address || device.id} after ${result.error.error}; retrying in ${delayMs}ms`,
+						`Merge inventory read recovery ${recovery}/1 for ${device.name || device.address || device.id} after ${result.error.error}; retrying in ${delayMs}ms`,
 					);
 					await new Promise((resolve) => setTimeout(resolve, delayMs));
 					result = await loadDeviceRecords(device);
 				}
 			}
-			deviceResults.push(result);
-			if (index + 1 < devices.length) {
-				await new Promise((resolve) => setTimeout(resolve, 200));
-			}
-		}
+			deviceResults[index] = result;
+			await readNextDevice();
+		};
+		// These embedded readers can pass quick health while rejecting or timing
+		// out concurrent UserInfo pagination. Two workers is the proven stable
+		// ceiling across the A-F tunnel set; preserve per-device retries.
+		const mergeReadConcurrency = Math.min(2, devices.length);
+		await Promise.all(
+			Array.from({ length: mergeReadConcurrency }, () => readNextDevice()),
+		);
 		for (const result of deviceResults) {
 			records.push(...result.records);
 			if (result.error) errors.push(result.error);
@@ -17489,15 +17521,32 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			if (action !== "stop") {
-				const managedWrapper = await installManagedHikvisionListenerWrapperOnVm();
-				if (!managedWrapper.ok) {
-					res.status(502).json(
-						buildErrorResponse(
-							managedWrapper.error || "Failed to prepare Hikvision listener runtime",
-							502,
-						),
-					);
-					return;
+				const runtimeProbe = await runHikvisionListenerVmCommand(
+					[
+						"test",
+						"-x",
+						HIKVISION_VM_WRAPPER_REMOTE_PATH,
+						"-a",
+						"-x",
+						HIKVISION_VM_DAEMON_REMOTE_PATH,
+						"-a",
+						"-f",
+						HIKVISION_VM_SERVICE_REMOTE_PATH,
+					],
+					12000,
+				);
+				if (runtimeProbe.exitCode !== 0) {
+					const managedWrapper = await installManagedHikvisionListenerWrapperOnVm();
+					if (!managedWrapper.ok) {
+						res.status(502).json(
+							buildErrorResponse(
+								managedWrapper.error ||
+									"Failed to prepare Hikvision listener runtime",
+								502,
+							),
+						);
+						return;
+					}
 				}
 			}
 

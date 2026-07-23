@@ -1,4 +1,5 @@
 const fs = require("fs");
+const net = require("net");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
@@ -41,14 +42,72 @@ const args = [
 	deviceIps.join(","),
 ];
 
-const result = spawnSync("powershell.exe", args, {
-	cwd: repoRoot,
-	stdio: "inherit",
-	windowsHide: true,
-	env: process.env,
-});
-
-if (result.status !== 0) {
-	console.error("[hikvision-device-tunnel] Could not start the Hikvision remote device tunnel.");
-	process.exit(result.status || 1);
+function tcpOpen(port, timeoutMs = 500) {
+	return new Promise((resolve) => {
+		const socket = net.createConnection({ host: "127.0.0.1", port });
+		const done = (ok) => {
+			socket.removeAllListeners();
+			socket.destroy();
+			resolve(ok);
+		};
+		socket.setTimeout(timeoutMs);
+		socket.once("connect", () => done(true));
+		socket.once("timeout", () => done(false));
+		socket.once("error", () => done(false));
+	});
 }
+
+async function allForwardPortsOpen() {
+	const localPorts = deviceIps.flatMap((_, index) => [
+		10080 + index,
+		10443 + index,
+		18000 + index,
+	]);
+	const proof = await Promise.all(localPorts.map((port) => tcpOpen(port)));
+	return proof.every(Boolean);
+}
+
+async function main() {
+	if (await allForwardPortsOpen()) {
+		console.log(
+			`[hikvision-device-tunnel] DONE (fast path) — all ${deviceIps.length * 3} forwarded ports carry TCP traffic.`,
+		);
+		return;
+	}
+
+	const result = spawnSync("powershell.exe", args, {
+		cwd: repoRoot,
+		// Do not attach the managed long-lived SSH child's console handles to npm.
+		stdio: "ignore",
+		windowsHide: true,
+		env: process.env,
+		timeout: 75_000,
+		killSignal: "SIGTERM",
+	});
+
+	if (await allForwardPortsOpen()) {
+		console.log(
+			`[hikvision-device-tunnel] DONE (recovered) — all ${deviceIps.length * 3} forwarded ports carry TCP traffic.`,
+		);
+		return;
+	}
+
+	if (result.error?.code === "ETIMEDOUT") {
+		console.error(
+			"[hikvision-device-tunnel] Recovery exceeded 75 seconds and traffic proof is still incomplete.",
+		);
+		process.exit(124);
+	}
+
+	if (result.status !== 0) {
+		console.error(
+			"[hikvision-device-tunnel] Could not start the Hikvision remote device tunnel.",
+		);
+		process.exit(result.status || 1);
+	}
+}
+
+main().catch((error) => {
+	console.error(`[hikvision-device-tunnel] ${error?.message || error}`);
+	process.exit(1);
+});

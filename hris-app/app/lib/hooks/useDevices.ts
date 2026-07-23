@@ -154,10 +154,11 @@ export const useDeviceHealth = (
 	const healthMode = options.quick === false ? "full" : "quick";
 	return useQuery<DeviceHealthResponse>({
 		queryKey: queryKeys.devices.health(deviceId, healthMode),
-		queryFn: () =>
+		queryFn: ({ signal }) =>
 			devicesService.getDeviceHealth(deviceId || "", {
 				quick: options.quick !== false,
 				timeoutMs: options.quick === false ? 10000 : 6000,
+				signal,
 			}),
 		enabled: Boolean(deviceId) && enabled,
 		staleTime: options.staleTime ?? 60 * 1000,
@@ -211,10 +212,11 @@ export const useDeviceHealthMap = (
 	const queries = useQueries({
 		queries: uniqueIds.map((deviceId) => ({
 			queryKey: queryKeys.devices.health(deviceId, healthMode),
-			queryFn: () =>
+			queryFn: ({ signal }: { signal: AbortSignal }) =>
 				devicesService.getDeviceHealth(deviceId, {
 					quick: options.quick !== false,
 					timeoutMs: options.quick === false ? 10000 : 6000,
+					signal,
 				}),
 			enabled: enabled && Boolean(deviceId),
 			staleTime,
@@ -265,6 +267,11 @@ export const useDeviceHealthMap = (
 		deviceIds: uniqueIds,
 		isLoadingAny,
 		isFetchingAny,
+		refetchAll: () => Promise.all(queries.map((query) => query.refetch())),
+		refetch: (deviceId?: string | null) => {
+			const index = uniqueIds.indexOf(String(deviceId || ""));
+			return index >= 0 ? queries[index]?.refetch() : Promise.resolve(undefined);
+		},
 		get: (deviceId?: string | null) => {
 			if (!deviceId) return undefined;
 			return byId.get(String(deviceId));
@@ -278,7 +285,7 @@ export const useHikvisionListenerStatus = (
 ) => {
 	return useQuery<HikvisionListenerStatus>({
 		queryKey: queryKeys.devices.hikvisionListener(),
-		queryFn: () => devicesService.getHikvisionListenerStatus(),
+		queryFn: ({ signal }) => devicesService.getHikvisionListenerStatus({ signal }),
 		enabled,
 		// Default: cache status; only the open Listener modal should poll.
 		staleTime: options.staleTime ?? 45 * 1000,
@@ -467,7 +474,7 @@ export const useDeviceSyncPreview = (
 		options?.refetchIntervalMs === undefined ? false : options.refetchIntervalMs;
 	return useQuery<DeviceSyncPreviewResponse>({
 		queryKey: queryKeys.devices.syncPreview(params),
-		queryFn: () => devicesService.getDeviceSyncPreview(params),
+		queryFn: ({ signal }) => devicesService.getDeviceSyncPreview(params, { signal }),
 		enabled,
 		// Keep last good preview while refetching so modals never stick on skeleton forever.
 		placeholderData: (previous) => previous,
@@ -476,8 +483,8 @@ export const useDeviceSyncPreview = (
 		refetchInterval: enabled ? refetchIntervalMs : false,
 		refetchOnWindowFocus: false,
 		retry: 0,
-		// Fail open to the UI within ~8s so Sync logs / Sync Center never spin indefinitely.
-		meta: { timeoutMs: 8000 },
+		// Server quick reads are bounded but may finish just above 8s across six panels.
+		meta: { timeoutMs: 15_000 },
 	});
 };
 
