@@ -13356,17 +13356,22 @@ export const controller = (prisma: PrismaClient) => {
 		const serialFaceCardGroups = pendingGroups.filter(
 			(group) => group[0]?.modality !== "fingerprint",
 		);
-		let nextFingerprintGroupIndex = 0;
-		// Fingerprint writes retain sorted per-target leases. Face and card are
-		// deliberately serial until each exact model/firmware/build tuple has a
-		// physically reread-proven canary and equivalent target locking evidence.
-		const fingerprintWorkerCount = Math.min(8, fingerprintGroups.length);
+		const fingerprintGroupsByTarget = new Map<string, any[][]>();
+		for (const group of fingerprintGroups) {
+			const targetKey = String(group[0]?.targetDeviceId || "");
+			const targetGroups = fingerprintGroupsByTarget.get(targetKey) || [];
+			targetGroups.push(group);
+			fingerprintGroupsByTarget.set(targetKey, targetGroups);
+		}
+		// Different targets may progress concurrently, but writes to one physical
+		// target must remain serial. A shared job/owner can legitimately re-enter
+		// its lease, so the filesystem lease alone is not an in-process queue.
+		// Face and card remain globally serial until every exact
+		// model/firmware/build tuple has equivalent canary evidence.
 		await Promise.all(
-			Array.from({ length: fingerprintWorkerCount }, async () => {
-				while (true) {
-					const groupIndex = nextFingerprintGroupIndex++;
-					if (groupIndex >= fingerprintGroups.length) return;
-					await processCredentialGroup(fingerprintGroups[groupIndex]);
+			[...fingerprintGroupsByTarget.values()].map(async (targetGroups) => {
+				for (const group of targetGroups) {
+					await processCredentialGroup(group);
 				}
 			}),
 		);

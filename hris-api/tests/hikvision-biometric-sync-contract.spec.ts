@@ -196,6 +196,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("Target reciprocal CardInfo reread did not prove");
 		expect(controller).to.include("EmployeeNoList");
 		expect(controller).to.include("CardNoList");
+		expect(controller).to.include("fingerprintGroupsByTarget");
+		expect(controller).to.include(
+			"for (const group of targetGroups)",
+		);
 		expect(controller).to.include("fingerprintCustodyMatchesReview");
 		expect(controller).to.include("sourceFingerprintTemplateChecksums");
 		expect(controller).to.include(
