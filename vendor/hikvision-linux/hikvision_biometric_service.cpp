@@ -4890,7 +4890,8 @@ int main(int argc, char **argv) {
     const bool manual_fingerprint_clone_mode =
         !manual_full_mirror_source_device_id.empty() &&
         !manual_source_employee_no.empty() &&
-        !manual_target_employee_no.empty();
+        !manual_target_employee_no.empty() &&
+        manual_include_fingerprints;
     const bool manual_fingerprint_capture_mode =
         !capture_fingerprint_employee_no.empty() && !capture_fingerprint_source_device_id.empty();
     const bool manual_face_capture_mode =

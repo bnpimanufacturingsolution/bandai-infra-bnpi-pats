@@ -131,6 +131,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(wrapper).to.include("HIKVISION_DEVICE_ID_FILTER");
 		expect(wrapper).to.include('cmd+=(--seconds "${HIKVISION_RUN_SECONDS:-1}")');
 		expect(serviceSource()).to.include("bool credential_only = false");
+		expect(serviceSource()).to.match(
+			/const bool manual_fingerprint_clone_mode =[\s\S]*manual_include_fingerprints;/,
+		);
 		expect(serviceSource()).to.include('{"reason", "credential_only"}');
 		expect(serviceSource()).to.include('{"event", "peer_face_write_preview"}');
 		expect(serviceSource()).to.include(
@@ -162,6 +165,21 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("4_000 * sourceAttempt");
 		expect(controller).to.include("HIKVISION_MERGE_BATCH_VM_RETRY_LIMIT || 3");
 		expect(controller).to.include("2_000 * vmAttempt");
+	});
+
+	it("joins live merge counts with saved raw biometric custody", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("vendorMetadata: true");
+		expect(controller).to.include("buildRawDeviceUserBiometricCustody({");
+		expect(controller).to.include(
+			"rawCustody.fingerprint.rawBlobCount >=",
+		);
+		expect(controller).to.include(
+			'rawCustody.face.rawBlobPresent',
+		);
+		expect(controller).to.not.include(
+			"even if a separate HRIS custody workflow has blobs",
+		);
 	});
 
 	it("resolves emitted js import suffixes back to TypeScript during deployment builds", () => {
