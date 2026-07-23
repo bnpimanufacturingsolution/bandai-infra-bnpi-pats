@@ -198,6 +198,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("CardNoList");
 		expect(controller).to.include("fingerprintCustodyMatchesReview");
 		expect(controller).to.include("sourceFingerprintTemplateChecksums");
+		expect(controller).to.include(
+			"Reviewed fingerprint custody recovery failed closed",
+		);
+		expect(controller).to.include("exactFreshOwners.length === 1");
+		expect(controller).to.include("freshUserInfoOwnerVerified: true");
 		expect(controller).to.include('write.modality === "card"');
 		expect(service).to.include("bool include_card = false");
 		expect(service).to.include('arg == "--manual-include-card"');

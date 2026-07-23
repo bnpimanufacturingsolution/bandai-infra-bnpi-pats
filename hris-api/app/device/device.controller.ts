@@ -12076,16 +12076,73 @@ export const controller = (prisma: PrismaClient) => {
 					includeFingerprints: true,
 					includeFaces: false,
 				});
-				const templates = rawCustody.fingerprint.templates || [];
+				let templates = rawCustody.fingerprint.templates || [];
 				const { buildFingerprintTemplateChecksumEvidence } = await import(
 					"../../helper/device-user-raw-fingerprint.helper.js"
 				);
 				const reviewedFingerprintCustody = normalizeFingerprintCustodyEvidence(
 					first.sourceFingerprintTemplateChecksums || [],
 				);
-				const currentFingerprintCustody = normalizeFingerprintCustodyEvidence(
+				let currentFingerprintCustody = normalizeFingerprintCustodyEvidence(
 					buildFingerprintTemplateChecksumEvidence(templates),
 				);
+				if (
+					(templates.length < Number(first.sourceReportedCount || 0) ||
+						!fingerprintCustodyMatchesReview(
+							reviewedFingerprintCustody,
+							currentFingerprintCustody,
+						)) &&
+					sourceRow
+				) {
+					const encryptedStoredFingerprint =
+						parseCachedDeviceUserBiometricTemplates(sourceRow).fingerprint;
+					if (encryptedStoredFingerprint) {
+						try {
+							const sourceSnapshot = await loadSingleHikvisionDeviceUserSnapshot(
+								params.req,
+								sourceDevice,
+								String(first.vendorUserId),
+							);
+							const exactFreshOwners = sourceSnapshot.rawUsers.filter(
+								(user: any) =>
+									String(
+										user?.employeeNo ||
+											user?.employeeNoString ||
+											user?.userId ||
+											"",
+									).trim() === String(first.vendorUserId),
+							);
+							if (exactFreshOwners.length === 1) {
+								const decryptedStoredFingerprint =
+									decryptDeviceUserBiometricPayload({
+										organizationId: params.organizationId,
+										deviceId: String(sourceDevice.id),
+										encrypted: encryptedStoredFingerprint,
+										allowLegacyServerEnvelope: true,
+										expectedVendorUserId: String(first.vendorUserId),
+										expectedModality: "fingerprint",
+									});
+								const { recoverPlannerFingerprintTemplates } = await import(
+									"../../helper/device-user-raw-fingerprint.helper.js"
+								);
+								templates = recoverPlannerFingerprintTemplates({
+									payload: decryptedStoredFingerprint,
+									expectedDeviceId: String(sourceDevice.id),
+									expectedVendorUserId: String(first.vendorUserId),
+									freshUserInfoOwnerVerified: true,
+								});
+								currentFingerprintCustody =
+									normalizeFingerprintCustodyEvidence(
+										buildFingerprintTemplateChecksumEvidence(templates),
+									);
+							}
+						} catch (error: any) {
+							deviceLogger.warn(
+								`Reviewed fingerprint custody recovery failed closed for ${sourceDevice.id}/${first.vendorUserId}: ${error?.message || error}`,
+							);
+						}
+					}
+				}
 				if (
 					templates.length < Number(first.sourceReportedCount || 0) ||
 					templates.some((template: any) => !String(template?.data || "").trim()) ||
