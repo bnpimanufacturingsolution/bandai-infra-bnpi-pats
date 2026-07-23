@@ -10075,17 +10075,19 @@ export const controller = (prisma: PrismaClient) => {
 				const firstError = result.error.error.toLowerCase();
 				const retryable =
 					firstError.includes("fetch failed") ||
+					firstError.includes("unauthorized") ||
 					firstError.includes("timed out") ||
 					firstError.includes("timeout") ||
 					firstError.includes("aborted") ||
 					firstError.includes("econn");
-				// Authentication/validation failures are deterministic for this plan.
-				// Retry one transient transport failure, then return partial truth so
-				// the operator is never trapped in an unbounded modal.
-				for (let recovery = 1; recovery <= 1 && retryable && result.error; recovery += 1) {
-					const delayMs = 750;
+				// These panels can transiently reject a digest/session immediately
+				// after a long write burst. A current Unauthorized is still a failed
+				// authenticated read, but it is recoverable only when a fresh exact
+				// UserInfo request succeeds; never promote tunnel health instead.
+				for (let recovery = 1; recovery <= 3 && retryable && result.error; recovery += 1) {
+					const delayMs = 750 * 2 ** (recovery - 1);
 					deviceLogger.warn(
-						`Merge inventory read recovery ${recovery}/1 for ${device.name || device.address || device.id} after ${result.error.error}; retrying in ${delayMs}ms`,
+						`Merge inventory read recovery ${recovery}/3 for ${device.name || device.address || device.id} after ${result.error.error}; retrying in ${delayMs}ms`,
 					);
 					await new Promise((resolve) => setTimeout(resolve, delayMs));
 					result = await loadDeviceRecords(device);
@@ -10593,7 +10595,21 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 		};
-		const pendingGroups = [...groups.values()];
+		const groupsByFirstTarget = new Map<string, any[][]>();
+		for (const group of groups.values()) {
+			const targetKey = String(group[0]?.targetDeviceId || "");
+			const bucket = groupsByFirstTarget.get(targetKey) || [];
+			bucket.push(group);
+			groupsByFirstTarget.set(targetKey, bucket);
+		}
+		const pendingGroups: any[][] = [];
+		const targetBuckets = [...groupsByFirstTarget.values()];
+		while (targetBuckets.some((bucket) => bucket.length > 0)) {
+			for (const bucket of targetBuckets) {
+				const group = bucket.shift();
+				if (group) pendingGroups.push(group);
+			}
+		}
 		let nextGroupIndex = 0;
 		// Bound concurrency across people while allowing each person's distinct target
 		// devices to run together. This keeps the device job observable without
@@ -10649,6 +10665,20 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 			const credentialMode = req.body?.mode === "credentials";
+			if (
+				credentialMode &&
+				String(process.env.PROJECT_TRUTH_HIKVISION_RUNTIME_LOCATION || "")
+					.trim()
+					.toLowerCase() !== "vm-container"
+			) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Physical credential merge writes must run through the VM-local K3s API.",
+						409,
+					),
+				);
+				return;
+			}
 			const selectedCredentialWriteIds = Array.isArray(
 				req.body?.selectedCredentialWriteIds,
 			)
@@ -11658,6 +11688,20 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const mode: "users" | "credentials" =
 				req.body?.mode === "credentials" ? "credentials" : "users";
+			if (
+				mode === "credentials" &&
+				String(process.env.PROJECT_TRUTH_HIKVISION_RUNTIME_LOCATION || "")
+					.trim()
+					.toLowerCase() !== "vm-container"
+			) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Physical credential merge writes must run through the VM-local K3s API.",
+						409,
+					),
+				);
+				return;
+			}
 			const choices = req.body?.choices || {};
 			const applyAll =
 				req.body?.applyAll === "A" || req.body?.applyAll === "B"

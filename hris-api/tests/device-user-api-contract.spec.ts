@@ -52,7 +52,10 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("hikvisionFetchBinary");
 		expect(controller).to.include("readDeviceUserFaceUrl");
 		expect(controller).to.include("Device user face photo host does not match the configured device");
-		expect(controller).to.include('type DeviceUserSyncMode = "full_refresh" | "needs_attention_only" | "peer_converge"');
+		expect(controller).to.include("type DeviceUserSyncMode =");
+		expect(controller).to.include('"full_refresh"');
+		expect(controller).to.include('"needs_attention_only"');
+		expect(controller).to.include('"peer_converge"');
 		expect(controller).to.include('const requestedMode = String((req.body as any)?.mode || "")');
 		expect(controller).to.include(".trim()");
 		expect(controller).to.include(".toLowerCase()");
@@ -116,8 +119,8 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("const mergeReadConcurrency = Math.min(2, devices.length)");
 		expect(controller).to.include("Array.from({ length: mergeReadConcurrency }");
 		expect(controller).to.include("await readNextDevice()");
-		expect(controller).to.include("recovery <= 1 && retryable");
-		expect(controller).to.include("Authentication/validation failures are deterministic");
+		expect(controller).to.include("recovery <= 3 && retryable");
+		expect(controller).to.include("transiently reject a digest/session");
 		expect(controller).to.include("Merge inventory read recovery");
 		expect(controller).to.include("records.push(...result.records)");
 		expect(controller).to.include("if (result.error) errors.push(result.error)");

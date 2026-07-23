@@ -525,6 +525,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include('runtimeRoute.commandTransport === "local"');
 		expect(controller).to.include("runtimeRoute.allowCloudflareSshFallback");
 		expect(controller).to.include('runtimeRoute.location === "vm-container"');
+		expect(controller).to.include(
+			"Physical credential merge writes must run through the VM-local K3s API.",
+		);
 		expect(controller).to.include('"10.184.37.19"');
 		expect(controller).to.include("project-truth-hikvision-hot-reload-daemon");
 		expect(controller).to.include('["sudo", "systemctl", "daemon-reload"]');
