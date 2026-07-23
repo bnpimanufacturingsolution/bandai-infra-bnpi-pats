@@ -3040,7 +3040,7 @@ export function RunPayrollTemplate() {
 
 							<div className="mt-3 flex items-center justify-between gap-3">
 								<p className="truncate text-xs text-gray-500">
-									Period rows are added from employee benefits.
+									Period rows come from employee benefit enrollments.
 								</p>
 								<Button
 									variant="ghost"
@@ -3051,7 +3051,7 @@ export function RunPayrollTemplate() {
 									}}
 									className="shrink-0 text-gray-700 hover:bg-orange-50 hover:text-orange-600">
 									<ExternalLink className="mr-2 h-4 w-4" />
-									Add/Edit
+									Enroll employees
 								</Button>
 							</div>
 						</div>

@@ -81,7 +81,11 @@ const EmployeeBenefitFormFieldsSchema = z.object({
 	employeeIds: z.array(z.string().trim().min(1)).min(1, "Select at least one employee"),
 	benefitTypeId: z.string().trim().min(1, "Benefit type is required"),
 	payrollPeriodId: z.string().trim().optional(),
-	name: z.string().trim().min(1, "Name is required").max(160, "Name is too long"),
+	name: z
+		.string()
+		.trim()
+		.min(1, "Enrollment name is required")
+		.max(160, "Enrollment name is too long"),
 	description: z.string().trim().max(500, "Description is too long").optional(),
 	amount: z.coerce.number().positive("Amount must be greater than zero"),
 	startDate: z.string().trim().min(1, "Start date is required"),
@@ -431,7 +435,6 @@ export function EmployeeBenefitForm({
 	const watchedAttendanceBased = watch("attendanceBased");
 	const watchedEligibilityMode = watch("eligibilityMode");
 	const watchedStatus = watch("status");
-	const watchedIsActive = watch("isActive");
 	const perfectAttendanceOn = isPerfectAttendanceToggleOn({
 		eligibilityMode: watchedEligibilityMode,
 	});
@@ -707,7 +710,8 @@ export function EmployeeBenefitForm({
 				? { endDate: normalizeOptional(data.endDate) }
 				: {}),
 			status: data.status,
-			isActive: data.isActive,
+			// Always active unless cancelled; UI no longer exposes isActive.
+			isActive: data.status !== "CANCELLED",
 			notes: normalizeOptional(data.notes),
 		};
 
@@ -763,13 +767,13 @@ export function EmployeeBenefitForm({
 
 	const isMutationPending = bulkCreateMutation.isPending || updateMutation.isPending;
 	const resolvedSubmitLabel =
-		submitLabel || (isEditing ? "Save benefit" : "Add benefit");
+		submitLabel || (isEditing ? "Save enrollment" : "Enroll employees");
 
 	if (isEditing && isLoadingItem) {
 		return (
 			<div className="flex h-56 items-center justify-center text-sm text-neutral-500">
 				<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-				Loading benefit...
+				Loading enrollment...
 			</div>
 		);
 	}
@@ -797,10 +801,11 @@ export function EmployeeBenefitForm({
 				<section className={sectionCardClass}>
 					<div className="flex items-center justify-between gap-3">
 						<div>
-							<h3 className={sectionTitleClass}>Assignment</h3>
+							<h3 className={sectionTitleClass}>Enrollment</h3>
 							{isPage && (
 								<p className="mt-1 text-xs text-neutral-400">
-									Who receives this payroll adjustment and which benefit type applies.
+									Who is being enrolled, which benefit type applies, and what to call this
+									enrollment on payroll.
 								</p>
 							)}
 						</div>
@@ -899,18 +904,22 @@ export function EmployeeBenefitForm({
 							)}
 						</div>
 						<div>
-							<label htmlFor="benefit-adjustment-name" className={fieldLabelClass}>
-								Name *
+							<label htmlFor="benefit-enrollment-name" className={fieldLabelClass}>
+								Enrollment name *
 							</label>
 							<Input
-								id="benefit-adjustment-name"
+								id="benefit-enrollment-name"
 								className="h-10 rounded-lg border-neutral-200"
-								placeholder="e.g. De Minimis Allowance"
+								placeholder="e.g. Rice Subsidy"
 								{...register("name")}
 							/>
 							{errors.name && (
 								<p className={fieldErrorClass}>{errors.name.message}</p>
 							)}
+							<p className={fieldHintClass}>
+								Shown on payroll and payslips for this enrollment (can differ from the benefit
+								type name).
+							</p>
 						</div>
 						<div>
 							<label htmlFor="benefit-adjustment-amount" className={fieldLabelClass}>
@@ -1237,7 +1246,7 @@ export function EmployeeBenefitForm({
 					</div>
 				</section>
 
-				<div className="grid grid-cols-3 gap-2 rounded-xl border border-neutral-100 bg-white px-3 py-2.5 text-xs shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+				<div className="grid grid-cols-2 gap-2 rounded-xl border border-neutral-100 bg-white px-3 py-2.5 text-xs shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
 					<div className="min-w-0">
 						<span className="block text-[11px] text-neutral-400">Direction</span>
 						<span className="mt-0.5 block truncate font-medium text-neutral-800">
@@ -1248,12 +1257,6 @@ export function EmployeeBenefitForm({
 						<span className="block text-[11px] text-neutral-400">Status</span>
 						<span className="mt-0.5 block truncate font-medium text-neutral-800">
 							{watchedStatus}
-						</span>
-					</div>
-					<div className="min-w-0">
-						<span className="block text-[11px] text-neutral-400">Active</span>
-						<span className="mt-0.5 block truncate font-medium text-neutral-800">
-							{watchedIsActive ? "Yes" : "No"}
 						</span>
 					</div>
 				</div>

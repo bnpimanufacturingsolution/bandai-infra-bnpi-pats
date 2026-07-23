@@ -119,6 +119,12 @@ export interface BulkCreateEmployeeBenefitResult {
 	failed: { employeeId: string; message: string }[];
 }
 
+export interface ImportEmployeeBenefitsResult {
+	success: number;
+	failed: number;
+	errors: Array<{ row: number; error: string; data?: Record<string, unknown> }>;
+}
+
 export interface UpdateEmployeeBenefitRequest {
 	employeeId?: string;
 	benefitTypeId?: string;
@@ -322,6 +328,47 @@ class EmployeeBenefitService extends APIService {
 				error.data?.errors?.[0]?.message ||
 					error.message ||
 					"Error bulk creating employee benefits",
+			);
+		}
+	}
+
+	/**
+	 * Bulk import employee benefit enrollments from CSV/Excel (mapped canonical columns).
+	 */
+	async importEmployeeBenefits(file: File): Promise<ImportEmployeeBenefitsResult> {
+		try {
+			const formData = new FormData();
+			formData.append("file", file);
+
+			const response = await hrisApiClient.post<any>("/api/employeeBenefit/import", formData, {
+				timeoutMs: 5 * 60 * 1000,
+			});
+
+			let responseData = response.data;
+			if (responseData && typeof responseData === "object" && "data" in responseData) {
+				responseData = responseData.data;
+			}
+
+			return {
+				success: Number(responseData?.success || 0),
+				failed: Number(responseData?.failed || 0),
+				errors: Array.isArray(responseData?.errors) ? responseData.errors : [],
+			};
+		} catch (error: any) {
+			console.error("Error importing employee benefits:", error);
+			// Partial/all-fail responses may still include row results
+			const nested = error?.data?.data || error?.data || error?.response?.data?.data;
+			if (nested && (nested.success !== undefined || nested.failed !== undefined)) {
+				return {
+					success: Number(nested.success || 0),
+					failed: Number(nested.failed || 0),
+					errors: Array.isArray(nested.errors) ? nested.errors : [],
+				};
+			}
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error importing employee benefits",
 			);
 		}
 	}

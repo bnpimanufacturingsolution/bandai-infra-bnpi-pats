@@ -3,10 +3,11 @@ import { type MetaFunction } from "react-router";
 
 export const meta: MetaFunction = () => {
 	return [
-		{ title: "Add Payroll Adjustment | Benefits Management | HRIS" },
+		{ title: "Enroll Employees | Benefits Management | HRIS" },
 		{
 			name: "description",
-			content: "Create an employee benefit payroll adjustment",
+			content:
+				"Enroll employees in a benefit type and set how it pays on payroll",
 		},
 	];
 };

@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- HR **Benefits Management** bulk upload enrollments: toolbar **Bulk upload** opens a 3-step modal (Upload → Map columns → Verify) for Excel/CSV; maps sample headers (`COMCODE`, `Amount`, `EmployeeID`, `EmployeeName`, `StartPayDate`) to canonical import fields; posts mapped CSV to `POST /api/employeeBenefit/import`. Components: `BenefitEnrollmentImportModal`, `app/lib/utils/benefit-enrollment-import.ts`.
 - Benefits enrollment **Attendance rules**: eligibility mode (`ENROLLED_ALWAYS` / `ATTENDANCE_QUALIFIED`) + disqualify flags beside Compute from attendance. Benefit type admin can set eligibility policy defaults; PFA create prefills classic perfect attendance. Contract: `docs/BENEFIT_SCHEDULE_MODES.md`.
 - Payroll benefits on HR detail + HTML payslip: group applied benefits under **Benefits applied → Non-taxable / Taxable** using source `isTaxable` (API freeze/enrich). Helper: `app/lib/utils/payroll-benefit-display.ts`.
 - Sidebar scrollbar: hidden by default; thin scrollbar only while the sidebar is hovered (role-aware `Sidebar` and admin configuration shell).

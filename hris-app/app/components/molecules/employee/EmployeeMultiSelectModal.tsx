@@ -340,7 +340,7 @@ export function EmployeeMultiSelectModal({
 	const resolvedDescription =
 		description ||
 		(multi
-			? "Choose one or more employees to receive this payroll adjustment."
+			? "Choose one or more employees to enroll in this benefit."
 			: "Choose the employee for this benefit enrollment.");
 
 	return (

@@ -4,23 +4,25 @@
 done
 
 ## Summary
-HR benefits enrollment eligibility UI + benefit-type defaults (paired with hris-api attendance eligibility feature).
+Rebalanced `/hr/benefits-management` DataTable column widths so the layout is no longer sparse/uneven.
 
 ## Category
-feature / ui-ux
+ui-ux / bugfix
 
 ## Packages
 - hris-app
-- Dual-app: HR/emp-only (no counterpart)
+- Dual-app: **HR/emp-only (no counterpart)**
 
-## Code changes
-- employee-benefit-form Attendance rules
-- benefit-types-template eligibility defaults
-- services/zod fields
-- docs/BENEFIT_SCHEDULE_MODES.md, CHANGELOG
+## Changes
+- `app/components/templates/hr/benefits-management-template.tsx`
+  - **Benefit**: flexible primary column (`width: 100%` + truncate) absorbs leftover space
+  - **Direction**: fixed `10.5rem` (fits COMPENSATION/DEDUCTION badge)
+  - **Tax**: fixed `7.5rem` (fits Non-taxable)
+  - **Enrolled**: fixed `7rem` (fits header + icon/count)
+  - Actions remains DataTable sticky `132px`
 
-## Truth synchronization
-- Backend SOT in hris-api WWG; app docs updated
+## Truth delta
+NO — layout polish only; no domain/API/product truth change.
 
 ## Drift
-- LOW
+NONE

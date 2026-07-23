@@ -4,7 +4,10 @@ import { type MetaFunction } from "react-router";
 export const meta: MetaFunction = () => {
 	return [
 		{ title: "Benefits Management | HRIS" },
-		{ name: "description", content: "Manage employee benefits" },
+		{
+			name: "description",
+			content: "Browse benefit types and see who is enrolled in each",
+		},
 	];
 };
 

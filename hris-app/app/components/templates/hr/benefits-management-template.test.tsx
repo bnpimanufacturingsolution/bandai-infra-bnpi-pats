@@ -172,7 +172,7 @@ const selectEmployees = () => {
 const fillRequiredFields = () => {
 	selectEmployees();
 	fireEvent.change(screen.getByTestId("benefit-type"), { target: { value: "benefit-type-1" } });
-	fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "HMO" } });
+	fireEvent.change(screen.getByLabelText("Enrollment name *"), { target: { value: "HMO" } });
 	fireEvent.change(screen.getByLabelText("Amount per payroll period *"), {
 		target: { value: "1000" },
 	});
@@ -199,11 +199,11 @@ describe("EmployeeBenefitForm schedule (recurring-only)", () => {
 	it("requires employees before submit", async () => {
 		renderCreateForm();
 		fireEvent.change(screen.getByTestId("benefit-type"), { target: { value: "benefit-type-1" } });
-		fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "HMO" } });
+		fireEvent.change(screen.getByLabelText("Enrollment name *"), { target: { value: "HMO" } });
 		fireEvent.change(screen.getByLabelText("Amount per payroll period *"), {
 			target: { value: "1000" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
+		fireEvent.click(screen.getByRole("button", { name: "Enroll employees" }));
 		await waitFor(() =>
 			expect(screen.getByText("Select at least one employee")).toBeInTheDocument(),
 		);
@@ -299,11 +299,11 @@ describe("EmployeeBenefitForm schedule (recurring-only)", () => {
 	it("allows submitting a recurring benefit without an end date for multiple employees", async () => {
 		renderCreateForm();
 		fillRequiredFields();
-		fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "Monthly allowance" } });
+		fireEvent.change(screen.getByLabelText("Enrollment name *"), { target: { value: "Monthly allowance" } });
 		fireEvent.change(screen.getByLabelText("Amount per payroll period *"), {
 			target: { value: "500" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
+		fireEvent.click(screen.getByRole("button", { name: "Enroll employees" }));
 		await waitFor(() => expect(bulkCreateMutate).toHaveBeenCalledTimes(1));
 		expect(bulkCreateMutate.mock.calls[0][0]).toMatchObject({
 			organizationId: "org-1",
@@ -320,14 +320,14 @@ describe("EmployeeBenefitForm schedule (recurring-only)", () => {
 	it("submits MONTHLY and YEARLY recurrenceFrequency on create", async () => {
 		renderCreateForm();
 		fillRequiredFields();
-		fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "Yearly bonus" } });
+		fireEvent.change(screen.getByLabelText("Enrollment name *"), { target: { value: "Yearly bonus" } });
 		fireEvent.change(screen.getByLabelText("Amount per payroll period *"), {
 			target: { value: "1000" },
 		});
 		fireEvent.change(screen.getByTestId("recurrence-frequency"), {
 			target: { value: "YEARLY" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
+		fireEvent.click(screen.getByRole("button", { name: "Enroll employees" }));
 		await waitFor(() => expect(bulkCreateMutate).toHaveBeenCalledTimes(1));
 		expect(bulkCreateMutate.mock.calls[0][0]).toMatchObject({
 			scheduleMode: "RECURRING",
@@ -339,12 +339,12 @@ describe("EmployeeBenefitForm schedule (recurring-only)", () => {
 	it("includes an optional end date on create payload", async () => {
 		renderCreateForm();
 		fillRequiredFields();
-		fireEvent.change(screen.getByLabelText("Name *"), { target: { value: "Monthly allowance" } });
+		fireEvent.change(screen.getByLabelText("Enrollment name *"), { target: { value: "Monthly allowance" } });
 		fireEvent.change(screen.getByLabelText("Amount per payroll period *"), {
 			target: { value: "500" },
 		});
 		fireEvent.change(screen.getByTestId("end-date"), { target: { value: "2026-12-31" } });
-		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
+		fireEvent.click(screen.getByRole("button", { name: "Enroll employees" }));
 		await waitFor(() => expect(bulkCreateMutate).toHaveBeenCalledTimes(1));
 		expect(bulkCreateMutate.mock.calls[0][0]).toMatchObject({
 			scheduleMode: "RECURRING",
@@ -498,16 +498,16 @@ describe("EmployeeBenefitForm attendance toggles", () => {
 			target: { value: "benefit-type-pfa" },
 		});
 		await waitFor(() =>
-			expect(screen.getByLabelText("Name *")).toHaveValue("Performance Bonus"),
+			expect(screen.getByLabelText("Enrollment name *")).toHaveValue("Performance Bonus"),
 		);
-		fireEvent.change(screen.getByLabelText("Name *"), {
+		fireEvent.change(screen.getByLabelText("Enrollment name *"), {
 			target: { value: "Perfect Attendance" },
 		});
 		fireEvent.change(screen.getByLabelText(/Amount per payroll period/i), {
 			target: { value: "200" },
 		});
 		fireEvent.change(screen.getByTestId("start-date"), { target: { value: "2026-06-01" } });
-		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
+		fireEvent.click(screen.getByRole("button", { name: "Enroll employees" }));
 		await waitFor(() => expect(bulkCreateMutate).toHaveBeenCalledTimes(1));
 		expect(bulkCreateMutate.mock.calls[0][0]).toMatchObject({
 			benefitTypeId: "benefit-type-pfa",
@@ -528,7 +528,7 @@ describe("EmployeeBenefitForm attendance toggles", () => {
 		fireEvent.change(screen.getByTestId("benefit-type"), {
 			target: { value: "benefit-type-1" },
 		});
-		await waitFor(() => expect(screen.getByLabelText("Name *")).toHaveValue("HMO"));
+		await waitFor(() => expect(screen.getByLabelText("Enrollment name *")).toHaveValue("HMO"));
 		fireEvent.click(screen.getByTestId("attendance-based-toggle"));
 		await waitFor(() =>
 			expect(screen.getByTestId("attendance-based-toggle")).toHaveAttribute(
@@ -540,7 +540,7 @@ describe("EmployeeBenefitForm attendance toggles", () => {
 			target: { value: "500" },
 		});
 		fireEvent.change(screen.getByTestId("start-date"), { target: { value: "2026-06-01" } });
-		fireEvent.click(screen.getByRole("button", { name: "Add benefit" }));
+		fireEvent.click(screen.getByRole("button", { name: "Enroll employees" }));
 		await waitFor(() => expect(bulkCreateMutate).toHaveBeenCalledTimes(1));
 		expect(bulkCreateMutate.mock.calls[0][0]).toMatchObject({
 			benefitTypeId: "benefit-type-1",

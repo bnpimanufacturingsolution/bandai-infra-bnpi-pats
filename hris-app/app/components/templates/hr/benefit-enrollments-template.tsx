@@ -332,16 +332,15 @@ export function BenefitEnrollmentsTemplate({
 	};
 
 	const handleDownloadTemplate = () => {
-		const template = `EMPLOYEE_NUMBER,BENEFIT_TYPE,NAME,DESCRIPTION,AMOUNT,START_DATE,END_DATE,IS_ACTIVE,NOTES
-EMP-EXEC-CEO-001,Health Insurance,VIP Health Plan,Comprehensive global coverage,15000,2024-01-01,,TRUE,Executive benefit
-EMP-HR-MGR-001,Health Insurance,Standard Health Plan,Standard medical coverage,5000,2024-01-01,,TRUE,Standard benefit
-EMP-SW-DEV-001,Health Insurance,Standard Health Plan,Standard medical coverage,5000,2024-02-01,,TRUE,Standard benefit`;
+		// Keep legacy page aligned with canonical enrollment template.
+		const template = `BENEFIT_CODE,AMOUNT,EMPLOYEE_NUMBER,EMPLOYEE_NAME,START_DATE,END_DATE,NAME,DESCRIPTION,NOTES
+LLA,250.00,01466,Ma Angelica N. Leyesa,26/06/2026,,,,`;
 
-		const blob = new Blob([template], { type: "text/csv" });
+		const blob = new Blob([template], { type: "text/csv;charset=utf-8" });
 		const url = window.URL.createObjectURL(blob);
 		const a = document.createElement("a");
 		a.href = url;
-		a.download = "employee-benefits-import-template.csv";
+		a.download = "benefit-enrollment-import-template.csv";
 		a.click();
 		window.URL.revokeObjectURL(url);
 
@@ -966,10 +965,11 @@ EMP-SW-DEV-001,Health Insurance,Standard Health Plan,Standard medical coverage,5
 						</h4>
 						<ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
 							<li>Download the template file to see the required format</li>
-							<li>Employee Number must match existing employees</li>
-							<li>Benefit Type must match existing benefit types</li>
-							<li>Dates should be in YYYY-MM-DD format</li>
-							<li>IS_ACTIVE should be TRUE or FALSE</li>
+							<li>Columns: BENEFIT_CODE, AMOUNT, EMPLOYEE_NUMBER, EMPLOYEE_NAME, START_DATE, END_DATE, …</li>
+							<li>Employee number must match existing employees</li>
+							<li>Benefit code must match an existing benefit type code</li>
+							<li>Dates: DD/MM/YYYY or YYYY-MM-DD; leave END_DATE empty for open-ended</li>
+							<li>Imported enrollments are always active</li>
 						</ul>
 					</div>
 

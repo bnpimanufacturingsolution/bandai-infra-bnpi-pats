@@ -5,6 +5,7 @@ import employeeBenefitService, {
 	type CreateEmployeeBenefitRequest,
 	type BulkCreateEmployeeBenefitRequest,
 	type BulkCreateEmployeeBenefitResult,
+	type ImportEmployeeBenefitsResult,
 	type UpdateEmployeeBenefitRequest,
 } from "~/services/employee-benefit.service";
 import { toast as sonnerToast } from "sonner";
@@ -144,6 +145,31 @@ export const useBulkCreateEmployeeBenefits = () => {
 			} else {
 				sonnerToast.error(error?.message || "Failed to bulk create employee benefits");
 			}
+		},
+	});
+};
+
+export const useImportEmployeeBenefits = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: (file: File) => employeeBenefitService.importEmployeeBenefits(file),
+		onSuccess: (result: ImportEmployeeBenefitsResult) => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.employeeBenefits.all });
+			const ok = result.success || 0;
+			const fail = result.failed || 0;
+			if (ok > 0 && fail === 0) {
+				sonnerToast.success(
+					ok === 1 ? "1 enrollment imported" : `${ok} enrollments imported`,
+				);
+			} else if (ok > 0 && fail > 0) {
+				sonnerToast.warning(`Imported ${ok}; ${fail} row(s) failed`);
+			} else if (fail > 0) {
+				sonnerToast.error(`Import failed for ${fail} row(s)`);
+			}
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to import benefit enrollments");
 		},
 	});
 };

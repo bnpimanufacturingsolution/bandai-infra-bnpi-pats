@@ -5,8 +5,10 @@ import { Button } from "~/components/atoms/Button";
 import { EmployeeBenefitForm } from "~/components/templates/hr/employee-benefit-form";
 
 /**
- * Full-page create flow for employee benefit / payroll adjustments.
+ * Full-page enroll flow for Benefits Management.
+ * Creates employee benefit enrollments (which then pay as scheduled payroll amounts).
  * Replaces the previous modal opened via `/hr/benefits-management?action=create`.
+ * Route: `/hr/benefits-management/new` (kept for deep links from Run Payroll and list CTAs).
  */
 export function BenefitsManagementCreate() {
 	const navigate = useNavigate();
@@ -66,7 +68,9 @@ export function BenefitsManagementCreate() {
 					onClick={handleCancel}
 					className="-ml-2 h-9 gap-1.5 px-2 text-neutral-600 hover:text-neutral-900">
 					<ArrowLeft className="h-4 w-4" />
-					{returnTo === "run-payroll" ? "Back to Run Payroll" : "Back to benefits"}
+					{returnTo === "run-payroll"
+						? "Back to Run Payroll"
+						: "Back to Benefits Management"}
 				</Button>
 
 				<header className="space-y-1 border-b border-neutral-100 pb-3">
@@ -74,8 +78,12 @@ export function BenefitsManagementCreate() {
 						Benefits management
 					</p>
 					<h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
-						Add payroll adjustment
+						Enroll employees
 					</h1>
+					<p className="max-w-xl text-sm text-neutral-500">
+						Assign a benefit type to one or more employees, name the enrollment, and set
+						how much pays each payroll period.
+					</p>
 				</header>
 			</div>
 
@@ -89,6 +97,7 @@ export function BenefitsManagementCreate() {
 				onCancel={handleCancel}
 				onSuccess={handleSuccess}
 				cancelLabel={returnTo === "run-payroll" ? "Back" : "Cancel"}
+				submitLabel="Enroll employees"
 			/>
 		</div>
 	);

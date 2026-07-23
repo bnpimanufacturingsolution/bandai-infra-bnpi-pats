@@ -30,6 +30,10 @@ import {
 	BENEFIT_PROGRAM_ACTIVE_STATUSES,
 	type BenefitSchedulePeriod,
 } from "../../helper/employee-benefit-program.helper";
+import {
+	normalizeBenefitImportRow,
+	validateBenefitImportRow,
+} from "../../helper/employee-benefit-import.helper";
 
 const logger = getLogger();
 const employeeBenefitLogger = logger.child({ module: "employeeBenefit" });
@@ -818,26 +822,27 @@ export const controller = (prisma: PrismaClient) => {
 
 	const importBenefits = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
-			console.log("Import benefits request received");
 			if (!req.file) {
-				console.error("No file uploaded");
 				const errorResponse = buildErrorResponse("No file uploaded", 400);
 				res.status(400).json(errorResponse);
 				return;
 			}
 
-			console.log("File received:", req.file.originalname, "Size:", req.file.size);
-
 			const buffer = req.file.buffer;
-			const workbook = xlsx.read(buffer, { type: "buffer" });
+			const workbook = xlsx.read(buffer, { type: "buffer", cellDates: true });
 			const sheetName = workbook.SheetNames[0];
+			if (!sheetName) {
+				const errorResponse = buildErrorResponse("File has no worksheets", 400);
+				res.status(400).json(errorResponse);
+				return;
+			}
 			const sheet = workbook.Sheets[sheetName];
-			const rawData = xlsx.utils.sheet_to_json(sheet);
+			const rawData = xlsx.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+				defval: "",
+				raw: true,
+			});
 
-			console.log("Parsed raw data length:", rawData.length);
-
-			if (rawData.length === 0) {
-				console.error("File is empty or could not be parsed");
+			if (!rawData.length) {
 				const errorResponse = buildErrorResponse("File is empty", 400);
 				res.status(400).json(errorResponse);
 				return;
@@ -846,160 +851,202 @@ export const controller = (prisma: PrismaClient) => {
 			const results = {
 				success: 0,
 				failed: 0,
-				errors: [] as any[],
+				errors: [] as Array<{ row: number; error: string; data?: Record<string, unknown> }>,
 			};
 
-			const processedData = rawData.map((row: any) => {
-				// Normalize keys to upper case to match template
-				const normalizedRow: any = {};
-				Object.keys(row).forEach((key) => {
-					normalizedRow[key.toUpperCase().trim()] = row[key];
+			const orgFromAuth =
+				(req as any).user?.organizationId ||
+				(req as any).organizationId ||
+				undefined;
+
+			// Cache lookups within this import
+			const employeeCache = new Map<string, { id: string; organizationId: string } | null>();
+			const benefitTypesByOrg = new Map<
+				string,
+				Array<{ id: string; name: string; code: string | null }>
+			>();
+
+			const resolveEmployee = async (employeeNumber: string, organizationId?: string) => {
+				const cacheKey = `${organizationId || "*"}:${employeeNumber}`;
+				if (employeeCache.has(cacheKey)) return employeeCache.get(cacheKey)!;
+				const employee = await prisma.employee.findFirst({
+					where: {
+						employeeId: employeeNumber,
+						isDeleted: false,
+						...(organizationId ? { organizationId } : {}),
+					},
+					select: { id: true, organizationId: true },
 				});
-				return normalizedRow;
-			});
+				employeeCache.set(cacheKey, employee);
+				return employee;
+			};
 
-			console.log("Processed data sample (first row):", processedData[0]);
+			const loadBenefitTypes = async (organizationId: string) => {
+				if (benefitTypesByOrg.has(organizationId)) {
+					return benefitTypesByOrg.get(organizationId)!;
+				}
+				const types = await prisma.benefitType.findMany({
+					where: { organizationId, isDeleted: false },
+					select: { id: true, name: true, code: true },
+				});
+				benefitTypesByOrg.set(organizationId, types);
+				return types;
+			};
 
-			for (const [index, row] of processedData.entries()) {
+			const resolveBenefitType = async (
+				organizationId: string,
+				code: string | null,
+				name: string | null,
+			) => {
+				const types = await loadBenefitTypes(organizationId);
+				if (code) {
+					const upper = code.toUpperCase();
+					const byCode = types.find(
+						(t) => String(t.code || "").trim().toUpperCase() === upper,
+					);
+					if (byCode) return byCode;
+				}
+				if (name) {
+					const upperName = name.toUpperCase();
+					const byName = types.find(
+						(t) => String(t.name || "").trim().toUpperCase() === upperName,
+					);
+					if (byName) return byName;
+				}
+				return null;
+			};
+
+			for (const [index, rawRow] of rawData.entries()) {
+				const sheetRow = index + 2; // header is row 1
+				const row = normalizeBenefitImportRow(rawRow as Record<string, unknown>);
 				try {
-					const employeeNumber = row["EMPLOYEE_NUMBER"];
-					const benefitTypeName = row["BENEFIT_TYPE"];
-
-					if (!employeeNumber || !benefitTypeName) {
-						throw new Error(
-							`Missing EMPLOYEE_NUMBER or BENEFIT_TYPE. Row data: ${JSON.stringify(row)}`,
-						);
+					const validated = validateBenefitImportRow(row);
+					if (!validated.ok) {
+						throw new Error(validated.error);
 					}
 
-					console.log(
-						`Processing row ${index + 1}: Employee ${employeeNumber}, Benefit ${benefitTypeName}`,
+					const employee = await resolveEmployee(
+						validated.employeeNumber,
+						orgFromAuth ? String(orgFromAuth) : undefined,
 					);
-
-					// Find Employee - Try exact match first, then maybe fallback if needed (but currently exact)
-					// Verify what 'employeeId' field in Employee model actually holds (is it the user-facing ID?)
-					const employee = await prisma.employee.findFirst({
-						where: { employeeId: String(employeeNumber) },
-						select: { id: true, organizationId: true },
-					});
-
 					if (!employee) {
-						console.error(`Employee not found for number: ${employeeNumber}`);
-						throw new Error(`Employee not found: ${employeeNumber}`);
+						throw new Error(`Employee not found: ${validated.employeeNumber}`);
 					}
-
-					// Find Benefit Type
-					const benefitType = await prisma.benefitType.findFirst({
-						where: {
-							name: String(benefitTypeName),
-							organizationId: employee.organizationId,
-						},
-						select: { id: true },
-					});
-
-					if (!benefitType) {
-						console.error(
-							`Benefit Type not found: ${benefitTypeName} for org ${employee.organizationId}`,
+					if (orgFromAuth && String(employee.organizationId) !== String(orgFromAuth)) {
+						throw new Error(
+							`Employee ${validated.employeeNumber} is outside your organization`,
 						);
-						throw new Error(`Benefit Type not found: ${benefitTypeName}`);
 					}
 
-					// Prepare data
-					const amount = parseFloat(row["AMOUNT"] || "0");
-					const startDate = row["START_DATE"] ? new Date(row["START_DATE"]) : new Date();
-					const endDate = row["END_DATE"] ? new Date(row["END_DATE"]) : null;
-					const isActive =
-						row["IS_ACTIVE"] === "TRUE" ||
-						row["IS_ACTIVE"] === true ||
-						row["IS_ACTIVE"] === "true";
-					const notes = row["NOTES"] || "";
-					const description = row["DESCRIPTION"] || row["NAME"] || "";
-					const name = row["NAME"] || benefitTypeName;
-
-					console.log(
-						`Upserting benefit for Employee ID ${employee.id} and BenefitType ID ${benefitType.id}`,
+					const benefitType = await resolveBenefitType(
+						employee.organizationId,
+						validated.benefitCode,
+						validated.benefitTypeName,
 					);
+					if (!benefitType) {
+						const label = validated.benefitCode || validated.benefitTypeName || "unknown";
+						throw new Error(`Benefit type not found: ${label}`);
+					}
 
-					console.log(
-						`Checking for existing benefit for Employee ID ${employee.id} and BenefitType ID ${benefitType.id}`,
-					);
-
-					// Check for existing benefit
 					const existingBenefit = await prisma.employeeBenefit.findFirst({
 						where: {
 							employeeId: employee.id,
 							benefitTypeId: benefitType.id,
+							isDeleted: false,
 						},
+						select: { id: true },
 					});
+					if (existingBenefit) {
+						throw new Error(
+							`Employee ${validated.employeeNumber} is already enrolled in benefit ${
+								benefitType.code || benefitType.name
+							}`,
+						);
+					}
 
-					const normalizedPayload = normalizeEmployeeBenefitPayload({
+					const enrollmentName = validated.name || benefitType.name;
+					// Always active on import (no IS_ACTIVE column in template).
+					const isActive = true;
+					const status = "ACTIVE";
+
+					let createPayload: Record<string, any> = {
 						organizationId: employee.organizationId,
 						employeeId: employee.id,
 						benefitTypeId: benefitType.id,
-						amount,
-						totalAmount: amount,
-						totalInstallments: 6,
-						startDate,
-						endDate,
-						startPayrollCutOff: startDate,
-						endPayrollCutOff: endDate || undefined,
+						amount: validated.amount,
+						totalAmount: validated.amount,
+						startDate: validated.startDate,
+						endDate: validated.endDate || undefined,
+						startPayrollCutOff: validated.startDate,
+						endPayrollCutOff: validated.endDate || undefined,
+						scheduleMode: "RECURRING",
+						recurrenceFrequency: "EVERY_CUTOFF",
+						totalInstallments: 0,
+						attendanceBased: false,
+						attendanceAmountBasis: null,
 						isActive,
-						status: isActive ? "ACTIVE" : "PENDING",
-						notes,
-						description,
-						name,
-					}) as Prisma.EmployeeBenefitUncheckedCreateInput;
+						status,
+						name: enrollmentName,
+						description: validated.description || undefined,
+						notes: validated.notes || undefined,
+						currency: "PHP",
+						agreedToTerms: true,
+					};
 
-					if (existingBenefit) {
-						console.log(`Updating existing benefit: ${existingBenefit.id}`);
-						await prisma.employeeBenefit.update({
-							where: { id: existingBenefit.id },
-							data: normalizedPayload,
-						});
-						if (isActive) {
-							const installmentCount = await prisma.employeeBenefitInstallment.count({
-								where: { employeeBenefitId: existingBenefit.id },
-							});
-							if (installmentCount === 0) {
-								const rows = buildBenefitInstallments(existingBenefit.id, normalizedPayload);
-								for (const schedule of rows) {
-									await prisma.employeeBenefitInstallment.create({ data: schedule });
-								}
-							}
-						}
-						results.success++;
-					} else {
-						console.log(`Creating new benefit`);
-						const createdBenefit = await prisma.employeeBenefit.create({ data: normalizedPayload });
-						if (isActive) {
-							const rows = buildBenefitInstallments(createdBenefit.id, createdBenefit);
-							for (const schedule of rows) {
-								await prisma.employeeBenefitInstallment.create({ data: schedule });
-							}
-						}
-						results.success++;
-					}
+					createPayload = await mergeEligibilityDefaultsFromBenefitType(
+						prisma,
+						createPayload,
+					);
+
+					await createEmployeeBenefitRecord(prisma, createPayload);
+					results.success += 1;
 				} catch (error: any) {
-					console.error(`Row ${index + 1} failed:`, error.message);
-					results.failed++;
+					const message = error?.message || "Failed to import row";
+					employeeBenefitLogger.warn(`Benefit import row ${sheetRow} failed: ${message}`);
+					results.failed += 1;
 					results.errors.push({
-						row: index + 2, // +1 for 0-index, +1 for header
-						error: error.message,
+						row: sheetRow,
+						error: message,
 						data: row,
 					});
 				}
 			}
 
 			employeeBenefitLogger.info(
-				`Import completed. Success: ${results.success}, Failed: ${results.failed}`,
+				`Benefit import completed. Success: ${results.success}, Failed: ${results.failed}`,
 			);
 
-			console.log("Import results:", results);
+			try {
+				await invalidateCache.byPattern("cache:employeeBenefit:list:*");
+			} catch (cacheError) {
+				employeeBenefitLogger.warn(
+					"Failed to invalidate cache after benefit import:",
+					cacheError,
+				);
+			}
+
+			if (results.success === 0 && results.failed > 0) {
+				const errorResponse = buildErrorResponse(
+					"Import failed for all rows",
+					400,
+					results.errors.map((e) => ({
+						field: `row ${e.row}`,
+						message: e.error,
+					})),
+				);
+				// Still return row details for the UI
+				(errorResponse as any).data = results;
+				res.status(400).json({
+					...errorResponse,
+					data: results,
+				});
+				return;
+			}
 
 			const successResponse = buildSuccessResponse("Import completed", results, 200);
 			res.status(200).json(successResponse);
 		} catch (error) {
 			employeeBenefitLogger.error(`Import failed: ${error}`);
-			console.error("Import critical error:", error);
 			const errorResponse = buildErrorResponse(
 				config.ERROR.COMMON.INTERNAL_SERVER_ERROR,
 				500,

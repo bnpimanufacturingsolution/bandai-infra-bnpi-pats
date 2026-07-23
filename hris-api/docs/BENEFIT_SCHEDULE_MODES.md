@@ -231,6 +231,26 @@ Payroll-run PDF generation also passes `metadata.payrollSourceDetails` into `gen
 - Do not run shared/production migrations or backfills as part of schedule-mode rollout without a separate approved change.
 - **Display-name / payslip breakdown:** already-generated payroll rows keep frozen `metadata.payrollSourceDetails` until payroll is re-run. Live payslip view still enriches labels from current enrollments and can rebuild lines when details are missing. Stored Cloudinary PDFs used only for archival release packages may lag until regenerate-with-force or re-run payroll.
 
+## Bulk Excel/CSV enrollment import
+
+`POST /api/employeeBenefit/import` (multipart `file`) enrolls many employees with **per-row** benefit code and amount.
+
+| Canonical column | Required | Notes |
+|---|---|---|
+| `EMPLOYEE_NUMBER` | Yes | HR `Employee.employeeId` (aliases: `EmployeeID`) |
+| `BENEFIT_CODE` or `BENEFIT_TYPE` | Yes | Prefer code (aliases: `COMCODE`); name is legacy fallback |
+| `AMOUNT` | Yes | Per-period amount (> 0) |
+| `START_DATE` | Yes | Aliases: `StartPayDate`; supports `DD/MM/YYYY`, ISO, Excel serial |
+| `END_DATE`, `NAME`, `DESCRIPTION`, `NOTES`, `IS_ACTIVE`, `EMPLOYEE_NAME` | No | Name display-only; enrollment name defaults to type name |
+
+**Defaults (not in file):** `scheduleMode=RECURRING`, `recurrenceFrequency=EVERY_CUTOFF`, `status=ACTIVE`, attendance off, eligibility from type policy, open-ended end date.
+
+**Duplicate policy:** if a non-deleted enrollment already exists for the same employee + benefit type, the row **fails** (no upsert). Partial success is allowed.
+
+**Create path:** `createEmployeeBenefitRecord` (not legacy 6-installment). Helper: `helper/employee-benefit-import.helper.ts`.
+
+HR app: Benefits Management **Bulk upload** modal (upload → map columns → verify) builds a mapped CSV before calling import.
+
 ## Focused test evidence
 
 | Suite | File(s) | Ownership |
@@ -238,6 +258,7 @@ Payroll-run PDF generation also passes `metadata.payrollSourceDetails` into `gen
 | Contract / Zod | `tests/employee-benefit-schedule.contract.spec.ts` | Mode validation, legacy defaults, recurring open-ended, normalization |
 | Helper generation | `tests/employee-benefit-schedule.helper.spec.ts` | Fixed/time-bound generation, recurring plan/ensure decisions |
 | Controller wiring | `tests/employee-benefit-schedule.controller.spec.ts` | Period query, gates, recurring no bulk create |
+| Bulk import | `tests/employee-benefit-import.helper.spec.ts`, `tests/employee-benefit-import.controller.spec.ts` | Column aliases, date parse, fail-on-duplicate, RECURRING defaults |
 | Payroll source | `tests/payroll-benefit-source.helper.spec.ts` | Due-row selection, cutoff mismatch exclusion, aggregation, enrollment vs type name |
 | Payroll source display | `tests/payroll-source-display.helper.spec.ts` | Primary/category labels, DMA coverage, role grouping |
 | Payslip formula | `tests/payslip-pdf.helper.spec.ts` | Enrollment breakdown replaces register De Minimis total |

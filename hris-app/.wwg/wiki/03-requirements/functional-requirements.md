@@ -67,7 +67,7 @@ Source basis: route map, service clients, type models, tests, docs, Firebase con
 - CONFIRMED: Support payroll settings, payroll periods, payroll run routes, employee payroll, HR payroll, payslips, billings, and statements of account.
 - CONFIRMED: Payroll models include earnings, deductions, bonuses, overtime, net pay, gross pay, and paid/processed/pending/cancelled states.
 - INFERRED: Payroll depends on employee, attendance, timesheet, leave, and benefit data.
-- CONFIRMED: HR benefits management can create/edit employee benefit payroll adjustments with explicit schedule modes (`TIME_BOUND`, `FIXED_INSTALLMENTS`, `RECURRING`); create uses full page `/hr/benefits-management/new`; recurring uses per-period amount and optional open-ended end date. API owns installment generation/ensure and payroll apply.
+- CONFIRMED: HR benefits management can create/edit employee benefit enrollments (page title/CTA: Enroll employees) with schedule fields; create uses full page `/hr/benefits-management/new`; recurring uses per-period amount and optional open-ended end date. API owns installment generation/ensure and payroll apply. Domain may still call resulting payroll money a “payroll adjustment.”
 - NEEDS_CONFIRMATION: Whether payroll is production-grade calculation, preview-only, or integration support.
 
 ## Recruitment And Public Applications

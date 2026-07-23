@@ -4,29 +4,37 @@
 done
 
 ## Summary
-Benefit attendance eligibility configuration (mode + disqualify flags) independent of attendance-based amount; payroll evaluation; HR form + benefit-type defaults; PFA seed defaults; WWG/docs.
+Bulk upload benefit enrollments from Excel/CSV: modernized `POST /api/employeeBenefit/import` (RECURRING defaults, fail-on-duplicate, COMCODE aliases) + HR Benefits Management 3-step import modal.
 
 ## Category
-feature / data-model / mixed
+feature / ui-ux
 
 ## Packages
 - hris-api
 - hris-app
-- Dual-app: **HR/emp-only (no counterpart)** — enrollment + benefit-type admin live in hris-app only
+- Dual-app: **HR/emp-only (no counterpart)**
 
 ## Code changes
-- API: eligibility fields on EmployeeBenefit + BenefitType defaults; helper; payroll order; create merge from type; seeder PFA; migration SQL; tests
-- App: employee-benefit-form Attendance rules; benefit-types eligibility defaults; services/zod
+### hris-api
+- `helper/employee-benefit-import.helper.ts` — column normalize, date/amount parse, row validate
+- `app/employeebenefit/employeeBenefit.controller.ts` — rewrite `importBenefits`
+- tests: `employee-benefit-import.helper.spec.ts`, `employee-benefit-import.controller.spec.ts`
+- docs: `docs/BENEFIT_SCHEDULE_MODES.md`, CHANGELOG, WWG
 
-## Truth synchronization
-- New truth detected: YES
-- Wiki updated: YES — project-truth, terminology, summaries, BENEFIT_SCHEDULE_MODES (api+app), CHANGELOGs
-- Evidence labels: CONFIRMED_FROM_IMPLEMENTATION
+### hris-app
+- `BenefitEnrollmentImportModal` + parse/map helpers + field constants
+- Benefits Management **Bulk upload** button (`data-testid=benefit-bulk-upload-button`)
+- service/hook `importEmployeeBenefits`
+- `xlsx` dependency for client Excel parse
+- tests: `benefit-enrollment-import.test.ts`
+- docs/CHANGELOG/WWG
+
+## Truth delta
+YES — bulk Excel enrollment import contract (columns, fail-on-duplicate, create-form defaults)
 
 ## Drift
-- Status: LOW — seed name Performance Bonus vs Perfect Attendance still CONFLICTING (pre-existing)
+LOW
 
 ## Follow-ups
-- Optional backfill script for existing PFA enrollments to ATTENDANCE_QUALIFIED (owner opt-in)
-- bandai-infra standalone sync not in this task
-- Apply postgres migration on deploy envs
+- Optional: async job for very large sheets
+- Optional: uniqueness by (employee, type, enrollment name) for multi-named DMA lines

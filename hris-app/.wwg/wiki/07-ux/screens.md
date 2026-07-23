@@ -42,7 +42,7 @@ HR routes include:
 - Attendance and time corrections.
 - Performance, tasks, messages, notifications.
 - Payroll, HR payroll, billings, payroll periods, run payroll.
-- Benefit types and benefit enrollments / benefits management (create page at `/hr/benefits-management/new` with multi-employee select modal; edit modal with single-employee picker; schedule modes: time-bound, fixed installments, recurring).
+- Benefit types and benefit enrollments / benefits management (list: browse types + enrolled counts; create page at `/hr/benefits-management/new` titled Enroll employees with multi-employee select modal; edit modal with single-employee picker; schedule: recurring cadence).
 - Announcements and document viewer.
 - Add user.
 - Reports for attendance, workforce, and payroll.

@@ -8,9 +8,11 @@ import {
 	MoreVertical,
 	Search,
 	Trash2,
+	Upload,
 	Users,
 	X,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "~/components/atoms/Button";
 import { Badge } from "~/components/atoms/Badge";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
@@ -19,6 +21,7 @@ import { Modal } from "~/components/atoms/Modal";
 import { type SelectOption } from "~/components/atoms/Select";
 import { StatusBadge } from "~/components/atoms/StatusBadge";
 import { EmployeeTableCell } from "~/components/molecules/EmployeeTableCell";
+import { BenefitEnrollmentImportModal } from "~/components/organisms/hr/BenefitEnrollmentImportModal";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -35,8 +38,12 @@ import {
 	DrawerTitle,
 } from "~/components/ui/drawer";
 import { EmployeeBenefitForm } from "~/components/templates/hr/employee-benefit-form";
-import { useBenefitTypes } from "~/lib/hooks/useBenefitTypes";
 import {
+	queryKeys as benefitTypeQueryKeys,
+	useBenefitTypes,
+} from "~/lib/hooks/useBenefitTypes";
+import {
+	queryKeys as employeeBenefitQueryKeys,
 	useDeleteEmployeeBenefit,
 	useEmployeeBenefit,
 	useEmployeeBenefits,
@@ -105,7 +112,9 @@ export function BenefitsManagement({
 }: BenefitsManagementProps) {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const navigate = useNavigate();
+	const queryClient = useQueryClient();
 	const [employeeSearch, setEmployeeSearch] = useState("");
+	const [bulkImportOpen, setBulkImportOpen] = useState(false);
 
 	const searchQuery = searchParams.get("search") || "";
 	const statusFilter = searchParams.get("status") || "";
@@ -343,16 +352,19 @@ export function BenefitsManagement({
 		direction: directionParam || "",
 	};
 
+	// Column balance: Benefit absorbs remaining width; Direction / Tax / Enrolled
+	// are content-sized so badges and short values don't leave large empty gaps.
 	const columns: Column<BenefitType>[] = [
 		{
 			key: "name",
 			label: "Benefit",
-			width: "28%",
-			className: "max-w-0 overflow-hidden",
+			// Flexible primary column: takes leftover width after fixed siblings + actions.
+			width: "100%",
+			className: "min-w-0 max-w-0 overflow-hidden",
 			render: (_value, item) => (
 				<button
 					type="button"
-					className="min-w-0 max-w-full text-left"
+					className="block min-w-0 w-full max-w-full text-left"
 					onClick={() => openDrawer(item)}
 					data-testid={`benefit-type-row-${item.id}`}>
 					<p className="truncate text-sm font-semibold text-gray-900 hover:text-primary">
@@ -368,10 +380,11 @@ export function BenefitsManagement({
 		{
 			key: "payrollDirection",
 			label: "Direction",
-			width: "14%",
-			className: "overflow-hidden",
+			width: "10.5rem",
+			className: "whitespace-nowrap align-middle",
+			headerClassName: "whitespace-nowrap",
 			render: (value) => (
-				<Badge variant="outline" className="font-normal">
+				<Badge variant="outline" className="max-w-full truncate font-normal">
 					{String(value || "—")}
 				</Badge>
 			),
@@ -379,8 +392,10 @@ export function BenefitsManagement({
 		{
 			key: "isTaxable",
 			label: "Tax",
-			width: "10%",
+			width: "7.5rem",
 			hideBelow: "md",
+			className: "whitespace-nowrap align-middle",
+			headerClassName: "whitespace-nowrap",
 			render: (value) => (
 				<span className="text-sm text-gray-700">
 					{value === true ? "Taxable" : "Non-taxable"}
@@ -388,23 +403,16 @@ export function BenefitsManagement({
 			),
 		},
 		{
-			key: "isActive",
-			label: "Status",
-			width: "12%",
-			render: (value) => (
-				<StatusBadge status={value === false ? "INACTIVE" : "ACTIVE"} />
-			),
-		},
-		{
 			key: "enrolled",
 			label: "Enrolled",
-			width: "12%",
-			className: "whitespace-nowrap",
+			width: "7rem",
+			className: "whitespace-nowrap align-middle",
+			headerClassName: "whitespace-nowrap",
 			render: (_value, item) => {
 				const count = enrollmentCountByTypeId.get(item.id) || 0;
 				return (
 					<span className="inline-flex items-center gap-1.5 text-sm font-medium tabular-nums text-gray-900">
-						<Users className="h-3.5 w-3.5 text-neutral-400" />
+						<Users className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
 						{count}
 					</span>
 				);
@@ -528,9 +536,34 @@ export function BenefitsManagement({
 						next.set("page", "1");
 					});
 				}}
+				headerActions={
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="h-9 gap-1.5"
+						onClick={() => setBulkImportOpen(true)}
+						data-testid="benefit-bulk-upload-button">
+						<Upload className="h-4 w-4" />
+						Bulk upload
+					</Button>
+				}
 				onAdd={openCreate}
 				addButtonLabel="Enroll employees"
 				addButtonClassName="bg-orange-600 hover:bg-orange-700 text-white"
+			/>
+
+			<BenefitEnrollmentImportModal
+				open={bulkImportOpen}
+				onOpenChange={setBulkImportOpen}
+				onImported={() => {
+					queryClient.invalidateQueries({
+						queryKey: employeeBenefitQueryKeys.employeeBenefits.all,
+					});
+					queryClient.invalidateQueries({
+						queryKey: benefitTypeQueryKeys.benefitTypes.all,
+					});
+				}}
 			/>
 
 			{/* Right drawer: benefit type + enrolled employees */}

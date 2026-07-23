@@ -114,7 +114,10 @@ Types: `TimesheetPayrollSourceDetail` includes optional `benefitTypeName` (`app/
 
 | Surface | Responsibility |
 |---|---|
-| `app/components/templates/hr/benefits-management-template.tsx` | Schedule selector (including Recurring), attendance toggle + amount basis, conditional fields, mode-switch cleanup, preview, create/update payload shaping; enrollment `name` defaults from type |
+| `app/components/templates/hr/benefits-management-template.tsx` | Schedule selector (including Recurring), attendance toggle + amount basis, conditional fields, mode-switch cleanup, preview, create/update payload shaping; enrollment `name` defaults from type; **Bulk upload** entry |
+| `app/components/organisms/hr/BenefitEnrollmentImportModal.tsx` | 3-step bulk enrollment import (Upload → Map → Verify); match/unmatch status on map step; schema template download |
+| `app/lib/utils/benefit-enrollment-import.ts` | Excel/CSV parse, auto-map (schema keys + COMCODE aliases), mapped CSV build, client validation |
+| `app/constants/benefit-enrollment-import-fields.ts` | Canonical fields; template headers = schema keys (zero manual map when unchanged) |
 | `app/components/templates/common/run-payroll-template.tsx` | Payroll Adjustments list + employee summary source lines (enrollment primary, type category) |
 | `app/components/templates/employee/payslip-detail-template.tsx` | Payslip earnings/deduction lines from `metadata.payrollSourceDetails` when present |
 | `app/components/templates/common/payroll-management-template.tsx` | Past payroll table **View payslip** → live PDF via employee payroll service |
