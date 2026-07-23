@@ -3155,7 +3155,8 @@ export const controller = (prisma: PrismaClient) => {
 		let rowsScanned = 0;
 		let pagesRead = 0;
 		let lastResponseStatus = "";
-		const searchID = `merge-card-full-reread-${Date.now()}-${randomUUID()}`;
+		// Hikvision searchID fields are bounded; keep one stable compact UUID across pages.
+		const searchID = randomUUID();
 		for (let page = 0; page < 25; page += 1) {
 			const response = await hikvisionFetch(
 				"/ISAPI/AccessControl/CardInfo/Search?format=json",
@@ -14394,6 +14395,7 @@ export const controller = (prisma: PrismaClient) => {
 	) => {
 		const admin = assertDeviceUserAdmin(req, res);
 		if (!admin) return;
+		let attestationStage = "validating_failed_canary";
 		try {
 			const jobId = String(req.params.jobId || "").trim();
 			const job = resolveDeviceUserMergeJob(jobId);
@@ -14490,6 +14492,7 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				return;
 			}
+			attestationStage = "rereading_source_card_owner";
 			const sourceResponse = await hikvisionFetch(
 				"/ISAPI/AccessControl/CardInfo/Search?format=json",
 				{
@@ -14537,6 +14540,7 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 			const expectedCardNo = sourceValues[0];
+			attestationStage = "rereading_target_full_card_inventory";
 			const targetInventory = await readExactHikvisionCardOwnerFromFullInventory({
 				req,
 				deviceId: String(targetDevice.id),
@@ -14555,6 +14559,7 @@ export const controller = (prisma: PrismaClient) => {
 			const retainedCardChecksum = createHash("sha256")
 				.update(expectedCardNo)
 				.digest("hex");
+			attestationStage = "persisting_card_writer_capability";
 			const capabilityEvidence =
 				await persistPhysicallyProvenHikvisionWriterCapability({
 					req,
@@ -14586,6 +14591,7 @@ export const controller = (prisma: PrismaClient) => {
 					capabilityEvidence.responseBodyChecksum || null,
 				recoveredAt: recoveredAt.toISOString(),
 			};
+			attestationStage = "updating_durable_canary_snapshot";
 			updateDeviceUserMergeJob(jobId, {
 				status: "completed",
 				message:
@@ -14636,9 +14642,13 @@ export const controller = (prisma: PrismaClient) => {
 				),
 			);
 		} catch (error: any) {
+			const cause = error?.message || "Failed to attest retained card canary";
+			deviceLogger.error(
+				`Retained card canary attestation failed at ${attestationStage}: ${cause}`,
+			);
 			res.status(error?.statusCode || 500).json(
 				buildErrorResponse(
-					error?.message || "Failed to attest retained card canary",
+					`Retained card canary attestation failed at ${attestationStage}: ${cause}`,
 					error?.statusCode || 500,
 				),
 			);

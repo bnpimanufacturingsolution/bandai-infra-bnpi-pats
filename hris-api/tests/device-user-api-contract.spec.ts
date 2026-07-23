@@ -181,7 +181,7 @@ describe("DeviceUser API contract", () => {
 			"readExactHikvisionCardOwnerFromFullInventory",
 		);
 		expect(controller).to.include(
-			"const searchID = `merge-card-full-reread-${Date.now()}-${randomUUID()}`",
+			"const searchID = randomUUID()",
 		);
 		expect(controller).to.include(
 			'lastResponseStatus && lastResponseStatus !== "MORE"',
@@ -195,6 +195,9 @@ describe("DeviceUser API contract", () => {
 			"narrow_reciprocal_card_query_false_negative",
 		);
 		expect(controller).to.include("physicalWriteReplayed: false");
+		expect(controller).to.include(
+			"Retained card canary attestation failed at ${attestationStage}",
+		);
 		expect(router).to.include(
 			'"/hikvision/sdk-users/merge/jobs/:jobId/attest-retained-card"',
 		);
