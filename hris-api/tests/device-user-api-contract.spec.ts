@@ -159,6 +159,10 @@ describe("DeviceUser API contract", () => {
 
 	it("publishes safe exact-reread checksums for face and card canaries", () => {
 		const controller = controllerSource();
+		expect(controller).to.include("const authorizedCanaryTarget =");
+		expect(controller).to.include(
+			"process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID",
+		);
 		expect(controller).to.include(
 			'"exact_template_and_picture_checksums_retained"',
 		);

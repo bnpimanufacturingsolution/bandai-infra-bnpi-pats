@@ -2688,11 +2688,17 @@ export const controller = (prisma: PrismaClient) => {
 		const targetDeviceId = String(params.targetDevice?.id || "").trim();
 		const targetConfig = (params.targetDevice?.config || {}) as any;
 		const buildAttestation = currentStoredFaceWriterBuildAttestation();
+		const authorizedCanaryTarget =
+			Boolean(targetDeviceId) &&
+			String(process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID || "").trim() ===
+				targetDeviceId;
 		const capabilityTested =
-			targetConfig?.biometricCapabilities?.faceAndTemplateRecord === true &&
-			Boolean(buildAttestation) &&
-			String(targetConfig?.storedFaceWriter?.testedBuildAttestation || "") ===
-				buildAttestation;
+			authorizedCanaryTarget ||
+			(targetConfig?.biometricCapabilities?.faceAndTemplateRecord === true &&
+				Boolean(buildAttestation) &&
+				String(targetConfig?.storedFaceWriter?.testedBuildAttestation || "") ===
+					buildAttestation &&
+				targetConfig?.storedFaceWriter?.physicallyRetained === true);
 		if (!targetDeviceId || !capabilityTested) {
 			throw new Error(
 				"Stored-face writer remains disabled pending tested target capability and an exact authorized canary.",
