@@ -1,5 +1,17 @@
 ﻿# WWG Agent Handoff
 
+## 2026-07-23 - Hikvision execution-location routing
+
+- Status: `LOCAL_IMPLEMENTED_AND_VALIDATED_DEPLOYMENT_PENDING`.
+- Safety: live merge job `bc087d4c-52f1-4df8-8455-2c9e1c0a3039` reached terminal `completed_with_attention` before watched API source changed: `194/194`, `102` success, `92` failed. No active worker was killed by this patch.
+- Runtime contract: `windows-host` uses VM SSH plus reverse API `53001` and retains direct-LAN/Cloudflare fallback; native `vm-host` executes locally with no SSH; `vm-container` uses only the direct same-VM control target and VM-local environment API (`3001/3101/3201`), never the Cloudflare alias or Windows reverse API.
+- K3s/Docker boundary: HCNetSDK remains managed by the VM host systemd service, so containers still require an internal same-VM SSH control hop. This is explicitly reported as `vm-container`, not mislabeled local.
+- Runtime configuration: K3s PROD/DEV/UAT and VM Docker Compose now declare the execution location and correct environment API base; K3s PROD/UAT received the same read-only SSH-key mount already used by DEV.
+- Observability: merge `vm_copy_attempt_started` progress events now include `runtimeLocation`, `commandTransport`, and `apiBase`.
+- Validation: seven route-helper tests passed; combined Hikvision contracts passed `29`; API TypeScript passed; five YAML documents parsed without errors; restarted local API health passed. Evidence: `.runtime/hikvision-runtime-route-20260723-160450/`.
+- Deployment boundary: source/manifests are validated but VM/GitOps rollout and a non-mutating K3s route probe remain required before calling the server path proven.
+- Recommendation: `REC-20260723-HIKVISION-VM-LOCAL-CONTROL-SERVICE`.
+
 ## 2026-07-23 - Correction: five-device physical truth and incomplete write
 
 - Status: `NOT_FULFILLED_WRITE_NOT_EXECUTED`.

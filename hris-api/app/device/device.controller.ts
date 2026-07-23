@@ -69,6 +69,7 @@ import { buildDeviceRuntimeConfig } from "../../helper/device-config-defaults.he
 import { summarizeHikvisionListenerLogs } from "../../helper/hikvision-listener-status.helper";
 import { resolveHikvisionDeviceHealthNetworkTarget } from "../../helper/device-health.helper";
 import { buildDeviceEventSearchTerms } from "../../helper/device-event-search.helper";
+import { resolveHikvisionRuntimeRoute } from "../../helper/hikvision-runtime-route.helper";
 import { controller as callbackController } from "../hikvision/controller/callback.controller";
 import {
 	decryptPortableBiometricEnvelope,
@@ -1241,11 +1242,11 @@ type HikvisionListenerVmTarget = {
 };
 
 const getHikvisionListenerVmTargets = (): HikvisionListenerVmTarget[] => {
+	const runtimeRoute = resolveHikvisionRuntimeRoute();
 	const configuredHost = String(process.env.PROJECT_TRUTH_VM_HOST || "").trim();
 	const configuredAlias = String(
 		process.env.PROJECT_TRUTH_VM_SSH_ALIAS || "project-truth-hris",
 	).trim();
-	const isLinuxRuntime = process.platform === "linux";
 	const host = configuredHost || "10.184.37.19";
 	const configuredPort = Math.min(
 		Math.max(Number(process.env.PROJECT_TRUTH_VM_SSH_PORT || 22), 1),
@@ -1255,7 +1256,7 @@ const getHikvisionListenerVmTargets = (): HikvisionListenerVmTarget[] => {
 	const key =
 		process.env.PROJECT_TRUTH_VM_SSH_KEY ||
 		path.join(os.homedir(), ".ssh", "node-health-appliance_ed25519");
-	if (!configuredHost && isLinuxRuntime) {
+	if (runtimeRoute.commandTransport === "local") {
 		return [
 			{
 				mode: "local",
@@ -1263,7 +1264,7 @@ const getHikvisionListenerVmTargets = (): HikvisionListenerVmTarget[] => {
 				user,
 				key,
 				destination: "local",
-				label: "local",
+				label: runtimeRoute.location,
 			},
 		];
 	}
@@ -1278,9 +1279,17 @@ const getHikvisionListenerVmTargets = (): HikvisionListenerVmTarget[] => {
 		user,
 		key,
 		destination: `${user}@${host}`,
-		label: `lan:${host}`,
+		label:
+			runtimeRoute.location === "vm-container"
+				? `vm-container:${host}`
+				: `lan:${host}`,
 	});
-	if (configuredAlias && configuredAlias !== host && configuredAlias !== `${user}@${host}`) {
+	if (
+		runtimeRoute.allowCloudflareSshFallback &&
+		configuredAlias &&
+		configuredAlias !== host &&
+		configuredAlias !== `${user}@${host}`
+	) {
 		targets.push({
 			mode: "ssh",
 			host,
@@ -2111,10 +2120,11 @@ export const controller = (prisma: PrismaClient) => {
 			);
 			// Force wrapper to mint HRIS bearer token even when static device spec is used.
 			// Without this, curl to http://127.0.0.1:53001 returns 401 and every peer copy fails.
+			const runtimeRoute = resolveHikvisionRuntimeRoute();
 			const manualCopyAuthEnv = [
 				"HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api",
-				"HIKVISION_HOST_REVERSE_API_BASE=http://127.0.0.1:53001",
-				"HIKVISION_HOT_RELOAD_API_BASE=http://127.0.0.1:53001",
+				`HIKVISION_HOST_REVERSE_API_BASE=${runtimeRoute.apiBase}`,
+				`HIKVISION_HOT_RELOAD_API_BASE=${runtimeRoute.apiBase}`,
 			];
 			const runManualCopy = (extraEnv: string[] = []) =>
 				runHikvisionListenerVmCommand(
@@ -2212,6 +2222,9 @@ export const controller = (prisma: PrismaClient) => {
 				emitManualCopyProgress({
 					stage: "vm_copy_attempt_started",
 					strategy: strategy.name,
+					runtimeLocation: runtimeRoute.location,
+					commandTransport: runtimeRoute.commandTransport,
+					apiBase: runtimeRoute.apiBase,
 					timeoutSeconds: manualCopyTimeoutSeconds,
 					targetCount: targetDevices.length,
 					message: `VM SDK ${strategy.name} attempt for user ${params.employeeNo}: user/fingerprint/face to ${targetDevices.length} target(s).`,

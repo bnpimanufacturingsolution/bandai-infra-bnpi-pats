@@ -72,7 +72,15 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("HIKVISION_ALLOW_STATIC_DEVICE_SPEC=1");
 		// Manual copy must mint HRIS token (static override previously left 401 on VM curl).
 		expect(controller).to.include("HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api");
-		expect(controller).to.include("HIKVISION_HOST_REVERSE_API_BASE=http://127.0.0.1:53001");
+		expect(controller).to.include("resolveHikvisionRuntimeRoute");
+		expect(controller).to.include(
+			"`HIKVISION_HOST_REVERSE_API_BASE=${runtimeRoute.apiBase}`",
+		);
+		expect(controller).to.include(
+			"`HIKVISION_HOT_RELOAD_API_BASE=${runtimeRoute.apiBase}`",
+		);
+		expect(controller).to.include("runtimeLocation: runtimeRoute.location");
+		expect(controller).to.include("commandTransport: runtimeRoute.commandTransport");
 		expect(controller).to.include("HIKVISION_DEVICE_SPEC_OVERRIDE=");
 		expect(controller).to.include('name: "static_spec"');
 		expect(controller).to.include("const preflightHikvisionManualCopyEndpoint = async");
@@ -472,7 +480,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include('"project-truth-hikvision-hot-reload-listener.service"');
 		expect(controller).to.include("HIKVISION_LISTENER_CONTROL_ACTIONS.has(action)");
 		expect(controller).to.include("installManagedHikvisionListenerWrapperOnVm");
-		expect(controller).to.include('process.platform === "linux"');
+		expect(controller).to.include('runtimeRoute.commandTransport === "local"');
+		expect(controller).to.include("runtimeRoute.allowCloudflareSshFallback");
+		expect(controller).to.include('runtimeRoute.location === "vm-container"');
 		expect(controller).to.include('"10.184.37.19"');
 		expect(controller).to.include("project-truth-hikvision-hot-reload-daemon");
 		expect(controller).to.include('["sudo", "systemctl", "daemon-reload"]');

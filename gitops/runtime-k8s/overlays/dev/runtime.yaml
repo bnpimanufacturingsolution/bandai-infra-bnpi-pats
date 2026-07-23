@@ -231,6 +231,10 @@ spec:
               value: infra
             - name: PROJECT_TRUTH_VM_SSH_KEY
               value: /var/run/project-truth/ssh/node-health-appliance_ed25519
+            - name: PROJECT_TRUTH_HIKVISION_RUNTIME_LOCATION
+              value: vm-container
+            - name: PROJECT_TRUTH_HIKVISION_VM_API_BASE
+              value: http://127.0.0.1:3101
           ports:
             - name: http
               containerPort: 3001

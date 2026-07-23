@@ -21,6 +21,7 @@ Project Truth must not be silently overwritten. Requirement evolution is allowed
 - Sync Center merge availability is sourced from bounded per-device quick health. Missing `vendorUserCount` from `sync-preview?quick=true` is not offline evidence.
 - Transport-online and full inventory-readable are separate truths. Read-only merge planning preserves partial reads, reports exact failures, and must not start physical writes without reviewed scope.
 - Saved `DeviceEvent` rows are PostgreSQL truth independent of listener readiness; background listener checks cannot clear or replace the saved ledger.
+- Hikvision SDK command routing is execution-location aware. Windows hot reload uses the VM bridge and reverse API `53001`; a native API process on the Linux VM executes the SDK wrapper locally with no SSH; K3s/Docker API containers use only the direct same-VM control target and their VM-local API port (`3001` PROD, `3101` DEV, `3201` UAT), with no Cloudflare SSH fallback and no callback route back to Windows. Container-to-host command execution remains an internal SSH boundary until a VM-local SDK control service or sidecar replaces it.
 - Evidence: `.runtime/sync-center-dev-green-20260723-114317/` and `.wwg/reports/wwg-agent-handoff.md`.
 
 ### Current device-count conflict and write boundary

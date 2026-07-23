@@ -21,6 +21,23 @@
 
 ## 2. What the merge pipeline actually does
 
+### 2.1 Execution-location routing
+
+The API must not assume every merge starts on the Windows development host.
+`PROJECT_TRUTH_HIKVISION_RUNTIME_LOCATION` has three explicit values:
+
+| Location | SDK command route | Wrapper API base | Cloudflare SSH fallback |
+|---|---|---|---|
+| `windows-host` | Windows API → VM SSH | `http://127.0.0.1:53001` → Windows `:3001` | Allowed after direct LAN failure |
+| `vm-host` | Local VM process, no SSH | Current API port | Never |
+| `vm-container` | K3s/Docker → direct same-VM host control | PROD `:3001`, DEV `:3101`, UAT `:3201` | Never |
+
+Auto-detection uses Windows, native Linux, or K3s/Docker evidence; manifests set
+`vm-container` explicitly. The container route still has a same-VM SSH control
+boundary because HCNetSDK is currently host/systemd-managed. It does not use the
+Cloudflare alias and does not route back to Windows. Replacing that internal hop
+requires a VM-local SDK control service or sidecar.
+
 | Phase | What runs | Slow? | Fails often? |
 |---|---|---|---|
 | **Plan / inventory** | ISAPI-style user snapshot per selected device (`UserInfo/Search` etc.) | Medium (once per plan) | Sometimes **Unauthorized** under concurrent load (separate from write timeouts) |
