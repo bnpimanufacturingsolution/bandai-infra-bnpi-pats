@@ -159,6 +159,12 @@ describe("DeviceUser API contract", () => {
 
 	it("publishes safe exact-reread checksums for face and card canaries", () => {
 		const controller = controllerSource();
+		expect(controller).to.include("const encryptedStoredFace =");
+		expect(controller).to.include("decryptedStoredFace?.faceTemplate");
+		expect(controller).to.include("decryptedStoredFace?.facePicture");
+		expect(controller).to.include(
+			"Stored face custody envelope validation failed",
+		);
 		expect(controller).to.include("const authorizedCanaryTarget =");
 		expect(controller).to.include(
 			"process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID",

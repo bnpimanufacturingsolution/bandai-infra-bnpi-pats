@@ -10947,19 +10947,44 @@ export const controller = (prisma: PrismaClient) => {
 						saved?.vendorMetadata?.biometricBundle?.facePresent &&
 						saved?.vendorMetadata?.biometricBundle?.encryptedFaceTemplate,
 					);
+					let decryptedStoredFace: any = null;
+					const encryptedStoredFace =
+						parseCachedDeviceUserBiometricTemplates(saved || {}).face;
+					if (encryptedStoredFace) {
+						try {
+							decryptedStoredFace = decryptDeviceUserBiometricPayload({
+								organizationId: params.organizationId,
+								deviceId: String(device.id),
+								encrypted: encryptedStoredFace,
+								allowLegacyServerEnvelope: true,
+								expectedVendorUserId: String(candidate.vendorUserId),
+								expectedModality: "face",
+							});
+						} catch (error: any) {
+							deviceLogger.warn(
+								`Stored face custody envelope validation failed for ${device.id}/${candidate.vendorUserId}; recovery remains fail-closed: ${error?.message || error}`,
+							);
+						}
+					}
 					const fdlibCapabilitySupported =
 						saved?.vendorMetadata?.biometricCapabilities?.faceDataRecord === true ||
 						saved?.rawPayload?._hrisDeviceMetadata?.biometricCapabilities
 							?.faceDataRecord === true;
+					const faceTemplate = String(
+						decryptedStoredFace?.faceTemplate ||
+							rawCustody.face.blob?.faceTemplate ||
+							"",
+					).trim();
+					const facePicture = String(
+						decryptedStoredFace?.facePicture ||
+							rawCustody.face.blob?.base64 ||
+							"",
+					).trim();
 					const faceCustody = classifyFaceCustody({
-						faceTemplate: rawCustody.face.blob?.faceTemplate,
-						facePicture: rawCustody.face.blob?.base64,
+						faceTemplate,
+						facePicture,
 						fdlibCapabilitySupported,
 					});
-					const faceTemplate = String(
-						rawCustody.face.blob?.faceTemplate || "",
-					).trim();
-					const facePicture = String(rawCustody.face.blob?.base64 || "").trim();
 					let fdlibFacePictureEvidence:
 						| {
 								pictureSha256: string;
