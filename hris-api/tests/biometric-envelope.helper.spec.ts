@@ -172,4 +172,31 @@ describe("server biometric envelope planner custody", () => {
 			).to.throw("binding mismatch");
 		}
 	});
+
+	it("reuses device-and-user-bound custody when the current plan freshly verified exact UserInfo ownership", () => {
+		const templates = recoverPlannerFingerprintTemplates({
+			payload: {
+				...payload,
+				identityOwnerVerified: undefined,
+			},
+			expectedDeviceId: "device-b",
+			expectedVendorUserId: "1001",
+			freshUserInfoOwnerVerified: true,
+		});
+		expect(templates).to.have.length(1);
+		expect(templates[0].fingerPrintId).to.equal(2);
+
+		expect(() =>
+			recoverPlannerFingerprintTemplates({
+				payload: {
+					...payload,
+					sourceDeviceId: "device-c",
+					identityOwnerVerified: undefined,
+				},
+				expectedDeviceId: "device-b",
+				expectedVendorUserId: "1001",
+				freshUserInfoOwnerVerified: true,
+			}),
+		).to.throw("binding mismatch");
+	});
 });

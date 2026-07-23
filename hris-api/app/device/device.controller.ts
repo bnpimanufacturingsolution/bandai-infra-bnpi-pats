@@ -11221,6 +11221,12 @@ export const controller = (prisma: PrismaClient) => {
 									payload: decryptedStoredFingerprint,
 									expectedDeviceId: String(device.id),
 									expectedVendorUserId: String(candidate.vendorUserId),
+									// `candidate` came from this plan's fresh physical
+									// UserInfo/Search inventory for this exact device and
+									// vendor user. Reuse the already-bound custody bytes;
+									// do not export or re-encrypt identical templates just
+									// to add a newer ownership flag to the envelope.
+									freshUserInfoOwnerVerified: true,
 								});
 							if (
 								recoveredTemplates.length >=

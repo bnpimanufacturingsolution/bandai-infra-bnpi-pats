@@ -77,12 +77,14 @@ export const recoverPlannerFingerprintTemplates = (params: {
 	payload: any;
 	expectedDeviceId: string;
 	expectedVendorUserId: string;
+	freshUserInfoOwnerVerified?: boolean;
 }): RawFingerprintTemplate[] => {
 	const payload = params.payload || {};
 	if (
 		String(payload.sourceDeviceId || "") !== params.expectedDeviceId ||
 		String(payload.vendorUserId || "") !== params.expectedVendorUserId ||
-		payload.identityOwnerVerified !== true
+		(payload.identityOwnerVerified !== true &&
+			params.freshUserInfoOwnerVerified !== true)
 	) {
 		throw new Error("Decrypted fingerprint custody source binding mismatch");
 	}
