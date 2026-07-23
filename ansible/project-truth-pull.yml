@@ -104,17 +104,19 @@
           exit 0
         fi
 
-        merge_job_dir="/var/lib/project-truth/k8s/dev/uploads/project-truth-runtime/device-user-merge-jobs"
-        if [ -d "$merge_job_dir" ]; then
-          for snapshot in "$merge_job_dir"/*.json; do
+        runtime_job_root="/var/lib/project-truth/k8s/dev/uploads/project-truth-runtime"
+        for job_kind in device-user-merge-jobs device-user-sync-jobs; do
+          job_dir="$runtime_job_root/$job_kind"
+          [ -d "$job_dir" ] || continue
+          for snapshot in "$job_dir"/*.json; do
             [ -f "$snapshot" ] || continue
             if [ -n "$(find "$snapshot" -mmin -5 -print -quit)" ] &&
                jq -e '.status == "processing"' "$snapshot" >/dev/null 2>&1; then
-              echo "Deferring runtime image rollout: active DEV credential merge snapshot $snapshot"
+              echo "Deferring runtime image rollout: active DEV device job snapshot $snapshot"
               exit 0
             fi
           done
-        fi
+        done
 
         cd "{{ project_truth_install_root }}/appliance"
         if docker compose version >/dev/null 2>&1; then

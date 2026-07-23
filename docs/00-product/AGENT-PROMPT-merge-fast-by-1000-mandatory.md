@@ -1,5 +1,12 @@
 # PROJECT TRUTH — MERGE FAST BY 10:00 (MANDATORY MULTI-AGENT)
 
+> **Historical job card — do not use as the current live-write standard.**
+> Its device scope and mandatory-agent assumptions predate the five-device
+> physical-truth correction. For current live biometric writes, follow
+> `docs/00-product/HIKVISION_CREDENTIAL_MERGE_EXECUTION_STANDARD.md`: exactly
+> one write-owning server job, parallelism only across different target panels,
+> serialization within each panel, and other agents limited to read-only work.
+
 **Paste this entire file as the agent job card.**  
 **Deadline: today 10:00 local (operator wall clock). Work until EXIT GATE is green or Real Stop.**  
 **Branch: `develop`. Agent-owned. Non-stop. No plan-only closeout.**
