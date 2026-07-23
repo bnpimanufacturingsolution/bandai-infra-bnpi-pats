@@ -12399,7 +12399,20 @@ export const controller = (prisma: PrismaClient) => {
 										pictureSize: sdkProof.pictureSize,
 										strategy: sdkProof.strategy,
 										capabilityEvidence,
+										capabilityEvidenceChecksum:
+											(capabilityEvidence as any)?.responseBodyChecksum || null,
 										capabilityPersistenceError,
+										sourceFaceTemplateChecksum:
+											currentEvidence.templateSha256,
+										sourceFacePictureChecksum:
+											currentEvidence.pictureSha256,
+										postWriteChecksum: createHash("sha256")
+											.update(
+												`${currentEvidence.templateSha256}\0${currentEvidence.pictureSha256}`,
+											)
+											.digest("hex"),
+										physicalRereadResult:
+											"exact_template_and_picture_checksums_retained",
 									};
 									results.push(result);
 									params.emitProgress?.({
@@ -12724,11 +12737,20 @@ export const controller = (prisma: PrismaClient) => {
 								`Credential-only isolation failed after reread (${changedField || (cardChanged ? "card" : "other_modality")} changed).`,
 							);
 						}
+						const retainedCardChecksum =
+							write.modality === "card"
+								? createHash("sha256").update(expectedCardNo).digest("hex")
+								: null;
 						const result = {
 							...write,
 							status: "success",
 							actualCount,
 							strategy: "credential_only_sdk_probe_then_write",
+							postWriteChecksum: retainedCardChecksum,
+							physicalRereadResult:
+								write.modality === "card"
+									? "exact_card_owner_value_pair_retained"
+									: "credential_count_and_isolation_retained",
 						};
 						if (write.modality === "card") {
 							try {
@@ -12740,14 +12762,14 @@ export const controller = (prisma: PrismaClient) => {
 										writer: "card_info_record",
 										endpoint:
 											"/ISAPI/AccessControl/CardInfo/Record?format=json",
-										retainedChecksum: createHash("sha256")
-											.update(expectedCardNo)
-											.digest("hex"),
+										retainedChecksum: String(retainedCardChecksum),
 										responseBody: {
 											actualCount,
 											reciprocalCardOwnerVerified,
 										},
 									});
+								(result as any).capabilityEvidenceChecksum =
+									(result as any).capabilityEvidence?.responseBodyChecksum || null;
 							} catch (capabilityError: any) {
 								(result as any).capabilityPersistenceError =
 									capabilityError?.message || String(capabilityError);

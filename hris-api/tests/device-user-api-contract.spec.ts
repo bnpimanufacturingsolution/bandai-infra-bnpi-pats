@@ -157,6 +157,16 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("postWriteFingerprintTemplateChecksums");
 	});
 
+	it("publishes safe exact-reread checksums for face and card canaries", () => {
+		const controller = controllerSource();
+		expect(controller).to.include(
+			'"exact_template_and_picture_checksums_retained"',
+		);
+		expect(controller).to.include('"exact_card_owner_value_pair_retained"');
+		expect(controller).to.include("capabilityEvidenceChecksum:");
+		expect(controller).to.include("retainedCardChecksum");
+	});
+
 	it("uses a fast Hikvision UserInfo count for Device Users preview instead of stale all-device skip copy", () => {
 		const controller = controllerSource();
 		expect(controller).to.include("const getHikvisionFastDeviceUserSourceCount = async");
