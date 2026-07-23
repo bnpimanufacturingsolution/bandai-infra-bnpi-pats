@@ -1,5 +1,20 @@
 ﻿# WWG Agent Handoff
 
+## 2026-07-23 - Local DEV and Sync Center bounded green loop
+
+- Status: `FULFILLED_WITH_REAL_DEVICE_BOUNDARY`.
+- Runtime repair: canonical DEV startup now probes/restores K3s PostgreSQL `127.0.0.1:55435`, all A-F HTTP/HTTPS/SDK forwards, VM reverse callback/API `53001`, and listener dependencies through a single-flight structured watchdog. Optional TEST A/B bridge failures no longer block API startup. A documented restart completed healthy in 18.4 seconds.
+- Runtime proof: all 18 A-F ports carry TCP, VM `53001` curls host API health, Cloudflare stayed active, and listener reads were `running=true` three consecutive times in 4.453s / 0.589s / 0.404s.
+- State/UX repair: TanStack Query owns listener/preview/per-device health state with AbortSignal propagation, cached data preservation, targeted refresh, independent per-device settling, and no premature `VM stopped`. Recoverable merge failures expose Retry availability and Refresh tunnels/status instead of a Close-only dead end.
+- Merge contract repair: availability uses bounded per-device quick health, never missing quick-preview source counts. Full inventory uses two workers, does not retry deterministic authentication failures, retries a transient transport failure once, preserves partial results, and blocks writes when any selected device read failed.
+- Browser proof: final read-only review settled in 142 seconds with 865 union IDs, 4 readable devices, 2 exact live-read failures, 2 offline TEST devices, and zero physical-write requests. The page emitted zero console errors and zero non-aborted failed requests. Screenshot: `.runtime/sync-center-dev-green-20260723-114317/browser-merge-final.png`; trace: `browser-merge-trace.zip`.
+- Saved Events proof: persisted rows rendered before listener status settled and remained visible during background work; final screenshot shows 18,803 saved rows and a separate listener/tap-proof surface. Evidence: `browser-saved-events-independent.png` and `browser-critical-proof.json`.
+- API evidence: `.runtime/sync-center-dev-green-20260723-114317/api-proof-final.json`; current quick health is A-F online, TEST A/B offline; preview completed in 8.299s; saved-event API reports 18,835 rows.
+- Validation: API typecheck passed; focused backend contracts `30 passing`; focused Device Users/Device Events contracts `31 passing`; targeted frontend ESLint zero errors; `git diff --check` passed.
+- Commit: implementation `59be99dff6e2acefce007c4c3ca07c3abad20967`, pushed to `develop`.
+- Physical boundary: Main A-F are transport-online, but one bounded all-main plan had two full UserInfo read failures (`Unauthorized`/transport-class). The UI now reports that boundary and remains usable; no fake six-readable claim and no write was attempted. TEST A/B remain offline.
+- Recommendation capture: `REC-20260721-HIKVISION-API-REVERSE-ENSURE-BUG` is now implemented. No new recommendations were identified.
+
 ## 2026-07-22 - Merge listener truth and TEST A/B boundary
 
 - Status: `PARTIALLY_FULFILLED_WITH_REAL_DEVICE_BOUNDARY`.

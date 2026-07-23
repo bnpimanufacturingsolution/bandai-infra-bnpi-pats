@@ -1,5 +1,17 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-23 Local DEV + Sync Center green owner loop
+
+- Task mode: mixed runtime regression repair, backend timeout/partial-result hardening, and admin Sync Center UX repair.
+- Current local runtime: `127.0.0.1:55435`, API `:3001`, and app `:5175` are healthy; one frontend dev process owns `5175`; all 18 A-F host tunnel ports carry TCP; VM `53001 -> host 3001` is healthy; the named Cloudflare service stayed active.
+- Current device truth: bounded quick health reports Main Entrance A-F `online`; TEST A/B are `offline`. Online transport is not full inventory proof.
+- Merge truth: the final read-only browser plan settled in 142 seconds with 865 union IDs from 4 readable A-F devices, 2 exact live inventory failures, and 2 offline TEST devices. The review blocked writes until read failures are resolved and issued zero merge apply/job requests.
+- UI truth: Sync Center keeps saved counts visible while refreshing, no longer derives availability from quick-preview `vendorUserCount`, exposes Retry/Refresh recovery controls, and distinguishes readable inventory from transport availability. Saved Events rendered 18,803+ persisted rows independently of listener status.
+- Evidence root: `.runtime/sync-center-dev-green-20260723-114317/`.
+- Validation: API typecheck passed; 30 focused backend contracts passed; 31 Device Users/Device Events frontend contracts passed; targeted ESLint has zero errors; Playwright critical and merge paths have zero console errors/failed requests; `git diff --check` passed.
+- Implementation commit: `59be99dff6e2acefce007c4c3ca07c3abad20967` (already on `origin/develop` during validation).
+- Remaining real boundary: Main A-F all pass transport health, but the full live inventory endpoint is currently reliable for four devices in one bounded plan; the other two return exact `Unauthorized`/transport failures and are not treated as readable. No physical write was attempted.
+
 ## Latest Task Addendum - 2026-07-22 Overnight local dev stack recovery (login + DB + device health)
 
 - Task mode: recoverable overnight loop for host-local `npm run dev` stack.
