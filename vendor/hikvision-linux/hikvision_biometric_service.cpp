@@ -723,7 +723,7 @@ void CALLBACK alarm_callback(
         {"employeeNoExt", employee_no_ext},
         {"acsIdentitySource", identity_from_acs},
         {"acsEventInfoExtend", acs->byAcsEventInfoExtend == 1 ? "true" : "false"},
-        {"cardNo", card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"doorNo", door_no},
         {"verifyMode", verify_mode},
         {"serialNo", serial_no},
@@ -932,6 +932,36 @@ bool read_source_user(DeviceSession &source, const ReconcileJob &job, std::strin
     return ok;
 }
 
+std::string extract_enclosing_json_object(const std::string &json, size_t pos_inside);
+std::string extract_string_field_from_json(
+    const std::string &json,
+    const std::string &field_name);
+int extract_int_field_from_json(const std::string &json, const std::string &field_name);
+std::set<std::string> extract_employee_numbers_from_search_response(
+    const std::string &response);
+
+std::string extract_card_object_for_employee(
+    const std::string &response,
+    const std::string &employee_no) {
+    if (response.empty() || employee_no.empty()) {
+        return "";
+    }
+    static const std::regex employee_regex("\"employeeNo\"\\s*:\\s*\"([^\"]+)\"");
+    for (std::sregex_iterator it(response.begin(), response.end(), employee_regex), end;
+         it != end;
+         ++it) {
+        if ((*it)[1].str() != employee_no) {
+            continue;
+        }
+        const size_t pos = static_cast<size_t>((*it).position(0));
+        const std::string object = extract_enclosing_json_object(response, pos);
+        if (!object.empty() && !extract_string_field_from_json(object, "cardNo").empty()) {
+            return object;
+        }
+    }
+    return "";
+}
+
 bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::string *card_json) {
     if (job.employee_no.empty()) {
         emit_json({
@@ -950,24 +980,129 @@ bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::strin
          << "\"}]}}";
 
     std::string response;
-    const bool ok = stdxml_json_request(
+    const bool filtered_ok = stdxml_json_request(
         source,
         "POST /ISAPI/AccessControl/CardInfo/Search?format=json",
         body.str(),
         &response);
+    std::string exact_card = filtered_ok
+        ? extract_card_object_for_employee(response, job.employee_no)
+        : "";
 
     emit_json({
         {"event", "source_card_read"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", job.employee_no},
-        {"ok", ok ? "true" : "false"},
-        {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
+        {"strategy", "filtered_exact_owner"},
+        {"ok", !exact_card.empty() ? "true" : "false"},
+        {"responseAccepted", filtered_ok ? "true" : "false"},
+        {"lastError", filtered_ok ? "0" : std::to_string(NET_DVR_GetLastError())}
     });
 
-    if (ok && card_json != nullptr) {
-        *card_json = response;
+    if (!exact_card.empty()) {
+        if (card_json != nullptr) {
+            *card_json = std::string("{\"CardInfo\":") + exact_card + "}";
+        }
+        return true;
     }
-    return ok;
+
+    // Some deployed panels return an empty or failed response for EmployeeNoList
+    // CardInfo searches even though the exact owned card is present. Fall back to a
+    // complete, stable-search-ID inventory scan and accept only an exact employee owner.
+    constexpr int request_page_size = 200;
+    constexpr int max_pages = 100;
+    const std::string search_id = "pt-card-full-" + job.employee_no;
+    int position = 0;
+    int total_matches = -1;
+    int scanned_rows = 0;
+    bool read_failed = false;
+    for (int page = 0; page < max_pages; ++page) {
+        std::ostringstream full_body;
+        full_body << "{\"CardInfoSearchCond\":{\"searchID\":\""
+                  << json_escape(search_id)
+                  << "\",\"searchResultPosition\":" << position
+                  << ",\"maxResults\":" << request_page_size << "}}";
+
+        std::string full_response;
+        const bool page_ok = stdxml_json_request(
+            source,
+            "POST /ISAPI/AccessControl/CardInfo/Search?format=json",
+            full_body.str(),
+            &full_response);
+        if (!page_ok) {
+            read_failed = true;
+            emit_json({
+                {"event", "source_card_inventory_page"},
+                {"sourceDeviceId", source.config.hris_device_id},
+                {"employeeNo", job.employee_no},
+                {"ok", "false"},
+                {"offset", std::to_string(position)},
+                {"lastError", std::to_string(NET_DVR_GetLastError())}
+            });
+            break;
+        }
+
+        const int page_matches = extract_int_field_from_json(full_response, "numOfMatches");
+        const int response_total = extract_int_field_from_json(full_response, "totalMatches");
+        if (response_total >= 0) {
+            total_matches = response_total;
+        }
+        exact_card = extract_card_object_for_employee(full_response, job.employee_no);
+        const int advance = page_matches > 0
+            ? page_matches
+            : static_cast<int>(
+                extract_employee_numbers_from_search_response(full_response).size());
+        scanned_rows += std::max(advance, 0);
+
+        emit_json({
+            {"event", "source_card_inventory_page"},
+            {"sourceDeviceId", source.config.hris_device_id},
+            {"employeeNo", job.employee_no},
+            {"ok", "true"},
+            {"offset", std::to_string(position)},
+            {"pageRows", std::to_string(std::max(advance, 0))},
+            {"scannedRows", std::to_string(scanned_rows)},
+            {"totalMatches", total_matches >= 0 ? std::to_string(total_matches) : ""},
+            {"exactOwnerFound", !exact_card.empty() ? "true" : "false"}
+        });
+
+        if (!exact_card.empty()) {
+            if (card_json != nullptr) {
+                *card_json = std::string("{\"CardInfo\":") + exact_card + "}";
+            }
+            emit_json({
+                {"event", "source_card_read"},
+                {"sourceDeviceId", source.config.hris_device_id},
+                {"employeeNo", job.employee_no},
+                {"strategy", "full_inventory_exact_owner"},
+                {"ok", "true"},
+                {"scannedRows", std::to_string(scanned_rows)}
+            });
+            return true;
+        }
+        if (advance <= 0) {
+            break;
+        }
+        position += advance;
+        if ((total_matches >= 0 && position >= total_matches) ||
+            (page_matches >= 0 && page_matches < request_page_size &&
+             full_response.find("\"MORE\"") == std::string::npos &&
+             full_response.find("\"More\"") == std::string::npos)) {
+            break;
+        }
+    }
+
+    emit_json({
+        {"event", "source_card_read"},
+        {"sourceDeviceId", source.config.hris_device_id},
+        {"employeeNo", job.employee_no},
+        {"strategy", "full_inventory_exact_owner"},
+        {"ok", "false"},
+        {"complete", !read_failed && total_matches >= 0 && position >= total_matches ? "true" : "false"},
+        {"scannedRows", std::to_string(scanned_rows)},
+        {"totalMatches", total_matches >= 0 ? std::to_string(total_matches) : ""}
+    });
+    return false;
 }
 
 std::string build_sync_card_no(const std::string &employee_no) {
@@ -1946,7 +2081,7 @@ bool write_face_and_template(
             {"event", "peer_face_write_preview"},
             {"targetDeviceId", target.config.hris_device_id},
             {"employeeNo", employee_no},
-            {"cardNo", redact_card_no ? "[redacted]" : card_no},
+            {"cardNo", card_no.empty() ? "" : "[redacted]"},
             {"templateSize", std::to_string(face_template.size())},
             {"pictureSize", std::to_string(face_picture.size())},
             {"wouldCall", "NET_DVR_SET_FACE_AND_TEMPLATE"}
@@ -1999,7 +2134,7 @@ bool write_face_and_template(
         {"event", "peer_face_write"},
         {"targetDeviceId", target.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", redact_card_no ? "[redacted]" : card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"ok", ok ? "true" : "false"},
         {"templateSize", std::to_string(face_template.size())},
         {"pictureSize", std::to_string(face_picture.size())},
@@ -2033,7 +2168,7 @@ bool read_face_and_template(
             {"event", "source_face_read"},
             {"sourceDeviceId", source.config.hris_device_id},
             {"employeeNo", employee_no},
-            {"cardNo", redact_card_no ? "[redacted]" : card_no},
+            {"cardNo", card_no.empty() ? "" : "[redacted]"},
             {"ok", "false"},
             {"lastError", std::to_string(NET_DVR_GetLastError())}
         });
@@ -2054,7 +2189,7 @@ bool read_face_and_template(
         {"event", "source_face_read"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", redact_card_no ? "[redacted]" : card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"ok", ok ? "true" : "false"},
         {"templateSize", std::to_string(ctx.face_template.size())},
         {"pictureSize", std::to_string(ctx.face_picture.size())},
@@ -2452,7 +2587,7 @@ bool export_biometric_templates_for_employee(
         {"event", "manual_biometric_export_completed"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"ok", (!include_fingerprints || !fingerprints.empty() || !include_face || face_ok) ? "true" : "false"},
         {"fingerprintCount", std::to_string(fingerprints.size())},
         {"faceTemplateSize", std::to_string(face_template.size())},
@@ -2741,7 +2876,7 @@ bool write_peer_fingerprints(
             {"event", "peer_fingerprint_write_legacy_attempt"},
             {"targetDeviceId", target.config.hris_device_id},
             {"employeeNo", job.employee_no},
-            {"cardNo", job.card_no},
+            {"cardNo", "[redacted]"},
             {"templateCount", std::to_string(templates.size())}
         });
 
@@ -2786,7 +2921,7 @@ bool write_peer_fingerprints(
                         {"event", "peer_fingerprint_write_legacy_send_failed"},
                         {"targetDeviceId", target.config.hris_device_id},
                         {"employeeNo", job.employee_no},
-                        {"cardNo", job.card_no},
+                        {"cardNo", "[redacted]"},
                         {"lastError", std::to_string(NET_DVR_GetLastError())}
                     });
                     break;
@@ -2807,7 +2942,7 @@ bool write_peer_fingerprints(
                 {"event", "peer_fingerprint_write_legacy_start_failed"},
                 {"targetDeviceId", target.config.hris_device_id},
                 {"employeeNo", job.employee_no},
-                {"cardNo", job.card_no},
+                {"cardNo", "[redacted]"},
                 {"lastError", std::to_string(NET_DVR_GetLastError())}
             });
         }
@@ -2817,7 +2952,7 @@ bool write_peer_fingerprints(
         {"event", "peer_fingerprint_write"},
         {"targetDeviceId", target.config.hris_device_id},
         {"employeeNo", job.employee_no},
-        {"cardNo", job.card_no},
+        {"cardNo", job.card_no.empty() ? "" : "[redacted]"},
         {"ok", ok ? "true" : "false"},
         {"templateCount", std::to_string(templates.size())},
         {"rawFingerprintTemplateStored", "false"},
@@ -2904,7 +3039,7 @@ bool capture_and_sync_fingerprint_for_employee(
         {"event", "manual_fingerprint_capture_sync_started"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"fingerNo", std::to_string(finger_no)},
         {"fingerType", std::to_string(finger_type)},
         {"mode", execute_mode ? "execute" : "dry-run"}
@@ -2977,7 +3112,7 @@ bool capture_and_sync_face_for_employee(
         {"event", "manual_face_capture_sync_started"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"mode", execute_mode ? "execute" : "dry-run"}
     });
     if (card_no.empty()) {
@@ -3044,7 +3179,7 @@ bool mirror_face_for_employee(
         {"event", "manual_face_mirror_started"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"mode", execute_mode ? "execute" : "dry-run"}
     });
     if (card_no.empty()) {
@@ -4808,7 +4943,7 @@ void process_reconcile_job(const ReconcileJob &job) {
                 {"event", "source_sync_card_created"},
                 {"sourceDeviceId", source->config.hris_device_id},
                 {"employeeNo", job.employee_no},
-                {"cardNo", card_no}
+                {"cardNo", "[redacted]"}
             });
         } else {
             card_no.clear();

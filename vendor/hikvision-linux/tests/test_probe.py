@@ -187,7 +187,8 @@ class ProbeTests(unittest.TestCase):
         self.assertIn('"stored_face_write_reread_completed"', text)
         self.assertIn('"templateMatch"', text)
         self.assertIn('"pictureMatch"', text)
-        self.assertIn('redact_card_no ? "[redacted]" : card_no', text)
+        self.assertNotIn('redact_card_no ? "[redacted]" : card_no', text)
+        self.assertIn('card_no.empty() ? "" : "[redacted]"', text)
 
         stored_writer = text.split("bool write_stored_face_with_reread(", 1)[1].split(
             "NET_DVR_FINGER_PRINT_CFG_V50 build_fingerprint_record", 1
@@ -205,6 +206,21 @@ class ProbeTests(unittest.TestCase):
         )
         self.assertNotIn("faceTemplate", stored_writer.split("emit_json", 1)[1])
         self.assertNotIn("facePicture", stored_writer.split("emit_json", 1)[1])
+
+    def test_card_lookup_falls_back_to_exact_owner_full_inventory_without_logging_values(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
+        text = source.read_text(encoding="utf-8")
+
+        card_reader = text.split("bool read_source_card(", 1)[1].split(
+            "std::string build_sync_card_no", 1
+        )[0]
+        self.assertIn('"pt-card-full-" + job.employee_no', card_reader)
+        self.assertIn('"searchResultPosition\\":" << position', card_reader)
+        self.assertIn('"numOfMatches"', card_reader)
+        self.assertIn("extract_card_object_for_employee", card_reader)
+        self.assertIn('"full_inventory_exact_owner"', card_reader)
+        self.assertNotIn('{"cardNo", job.card_no}', text)
+        self.assertNotIn('{"cardNo", card_no}', text)
 
     def test_build_script_produces_project_truth_named_service(self) -> None:
         script = Path(__file__).resolve().parents[1] / "scripts" / "build-hikvision-biometric-service.sh"
