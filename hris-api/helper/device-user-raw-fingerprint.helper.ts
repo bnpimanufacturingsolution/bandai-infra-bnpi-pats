@@ -9,6 +9,7 @@
  * payloads also keep the same usable base64 templates for a complete ledger journey.
  */
 import type { PrismaClient } from "../generated/prisma";
+import { createHash } from "crypto";
 import { hikvisionFetch, hikvisionFetchBinary } from "../lib/hikvision-client";
 import { emitDeviceEventSaved } from "./device-event-realtime.helper";
 import { isOpaqueHikvisionPersonToken } from "./hikvision-event-contract.helper";
@@ -46,6 +47,56 @@ export type RawFingerprintCustody = {
 	/** True when at least one finger has non-empty data. */
 	rawPresent: boolean;
 	totalDataChars: number;
+};
+
+export type FingerprintTemplateChecksumEvidence = {
+	fingerPrintId: number;
+	checksum: string;
+};
+
+export const buildFingerprintTemplateChecksumEvidence = (
+	templates: RawFingerprintTemplate[],
+): FingerprintTemplateChecksumEvidence[] =>
+	(templates || [])
+		.filter((template) => String(template.data || "").trim())
+		.map((template) => ({
+			fingerPrintId: Number(template.fingerPrintId || 0),
+			checksum: createHash("sha256")
+				.update(String(template.data || "").trim())
+				.digest("hex"),
+		}))
+		.filter((template) => template.fingerPrintId > 0);
+
+export const findTargetFingerprintDuplicateOwners = (params: {
+	vendorUserId: string;
+	sourceTemplates: FingerprintTemplateChecksumEvidence[];
+	targetExistingTemplates: FingerprintTemplateChecksumEvidence[];
+	targetDeviceTemplates: Array<{
+		vendorUserId: string;
+		templates: FingerprintTemplateChecksumEvidence[];
+	}>;
+}): string[] => {
+	const existingIds = new Set(
+		(params.targetExistingTemplates || []).map((template) => template.fingerPrintId),
+	);
+	const missingChecksums = new Set(
+		(params.sourceTemplates || [])
+			.filter((template) => !existingIds.has(template.fingerPrintId))
+			.map((template) => template.checksum),
+	);
+	return [
+		...new Set(
+			(params.targetDeviceTemplates || [])
+				.filter(
+					(row) =>
+						String(row.vendorUserId) !== String(params.vendorUserId) &&
+						(row.templates || []).some((template) =>
+							missingChecksums.has(template.checksum),
+						),
+				)
+				.map((row) => String(row.vendorUserId)),
+		),
+	].sort();
 };
 
 export const selectMissingFingerprintTemplatesForTarget = (params: {

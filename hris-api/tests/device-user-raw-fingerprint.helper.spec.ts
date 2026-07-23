@@ -2,9 +2,11 @@ import { expect } from "chai";
 import {
 	applyRawFingerprintCustodyToRow,
 	buildRawFingerprintCustody,
+	buildFingerprintTemplateChecksumEvidence,
 	captureRawFingerprintsForEnrollment,
 	classifyDeferredFingerprintWrite,
 	classifyHikvisionRawFaceBinaryResponse,
+	findTargetFingerprintDuplicateOwners,
 	isRawFingerprintEnrollCaptureEnabled,
 	normalizeIsapiFingerprintList,
 	parseFingerPrintProgress,
@@ -137,6 +139,31 @@ describe("device-user-raw-fingerprint helper", () => {
 		});
 		expect(unreadable.targetEvidenceComplete).to.equal(false);
 		expect(unreadable.missingTemplates).to.have.length(2);
+	});
+
+	it("classifies a missing source slot already owned by another target user", () => {
+		const source = buildFingerprintTemplateChecksumEvidence([
+			{ fingerPrintId: 1, fingerType: 0, length: 4, data: "KEEP" },
+			{ fingerPrintId: 2, fingerType: 0, length: 4, data: "DUPLICATE" },
+		]);
+		const targetExisting = buildFingerprintTemplateChecksumEvidence([
+			{ fingerPrintId: 1, fingerType: 0, length: 4, data: "KEEP" },
+		]);
+		const owners = findTargetFingerprintDuplicateOwners({
+			vendorUserId: "1715",
+			sourceTemplates: source,
+			targetExistingTemplates: targetExisting,
+			targetDeviceTemplates: [
+				{ vendorUserId: "1715", templates: targetExisting },
+				{
+					vendorUserId: "1544",
+					templates: buildFingerprintTemplateChecksumEvidence([
+						{ fingerPrintId: 1, fingerType: 0, length: 9, data: "DUPLICATE" },
+					]),
+				},
+			],
+		});
+		expect(owners).to.deep.equal(["1544"]);
 	});
 
 	it("keeps raw fingerprint fallback enabled even when env tries to disable it", () => {

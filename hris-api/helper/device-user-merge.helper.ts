@@ -46,6 +46,11 @@ export type DeviceUserMergeRecord = {
 	manualLink?: boolean;
 	identityName?: string | null;
 	identityCandidates?: string[];
+	/** Server-only checksum evidence; compactMergeRecordForReview strips this field. */
+	_fingerprintTemplateChecksums?: Array<{
+		fingerPrintId: number;
+		checksum: string;
+	}>;
 };
 
 export type DeviceUserMergeConflict = {
@@ -507,8 +512,12 @@ export const buildDeviceUserMergePlan = (params: {
 
 const compactMergeRecordForReview = (record: DeviceUserMergeRecord) => {
 	const summary = credentials(record);
+	const { _fingerprintTemplateChecksums: _omittedChecksums, ...safeRecord } =
+		record as DeviceUserMergeRecord & {
+			_fingerprintTemplateChecksums?: unknown;
+		};
 	return {
-		...record,
+		...safeRecord,
 		rawPayload: {
 			numOfFP: summary.fingerprintCount,
 			numOfFace: summary.faceCount,

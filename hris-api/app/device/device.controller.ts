@@ -10009,6 +10009,13 @@ export const controller = (prisma: PrismaClient) => {
 						includeFingerprints: true,
 						includeFaces: true,
 					});
+					const { buildFingerprintTemplateChecksumEvidence } = await import(
+						"../../helper/device-user-raw-fingerprint.helper.js"
+					);
+					const fingerprintTemplateChecksums =
+						buildFingerprintTemplateChecksumEvidence(
+							rawCustody.fingerprint.templates || [],
+						);
 					const portableFaceBundle = Boolean(
 						saved?.vendorMetadata?.biometricBundle?.facePresent &&
 						saved?.vendorMetadata?.biometricBundle?.encryptedFaceTemplate,
@@ -10057,6 +10064,7 @@ export const controller = (prisma: PrismaClient) => {
 							saved?.employeeId ||
 							saved?.rawPayload?.hrisSync?.matchReason === "manual_existing",
 						),
+						_fingerprintTemplateChecksums: fingerprintTemplateChecksums,
 					});
 				}
 				return { records: deviceRecords, error: null };
@@ -10127,6 +10135,67 @@ export const controller = (prisma: PrismaClient) => {
 			deviceIds: params.deviceIds as string[],
 			validDeviceIds,
 		});
+		const { findTargetFingerprintDuplicateOwners } = await import(
+			"../../helper/device-user-raw-fingerprint.helper.js"
+		);
+		plan.credentialWrites = (plan.credentialWrites || []).map((write: any) => {
+			if (
+				write.modality !== "fingerprint" ||
+				write.executionEligibility !== "ready_from_raw_blob"
+			) {
+				return write;
+			}
+			const user = (plan.users || []).find(
+				(candidate: any) => String(candidate.key) === String(write.userKey),
+			);
+			const sourceRecord = (user?.records || []).find(
+				(record: any) =>
+					String(record.deviceId) === String(write.sourceDeviceId),
+			);
+			const targetRecord = (user?.records || []).find(
+				(record: any) =>
+					String(record.deviceId) === String(write.targetDeviceId),
+			);
+			const targetDeviceTemplates = (plan.users || []).flatMap((candidate: any) => {
+				const record = (candidate.records || []).find(
+					(item: any) =>
+						String(item.deviceId) === String(write.targetDeviceId),
+				);
+				return record
+					? [
+							{
+								vendorUserId: String(
+									record.vendorUserId || record.employeeNo || "",
+								),
+								templates: record._fingerprintTemplateChecksums || [],
+							},
+						]
+					: [];
+			});
+			const duplicateOwners = findTargetFingerprintDuplicateOwners({
+				vendorUserId: String(write.vendorUserId),
+				sourceTemplates: sourceRecord?._fingerprintTemplateChecksums || [],
+				targetExistingTemplates:
+					targetRecord?._fingerprintTemplateChecksums || [],
+				targetDeviceTemplates,
+			});
+			if (!duplicateOwners.length) return write;
+			return {
+				...write,
+				recommended: false,
+				executionEligibility: "blocked",
+				blockingReason: "source_conflict",
+				recommendationReason: `The missing source fingerprint checksum is already enrolled to target user ${duplicateOwners.join(", ")}; physical duplicate protection forbids this write.`,
+			};
+		});
+		if (plan.counts) {
+			plan.counts.credentialWrites = plan.credentialWrites.length;
+			plan.counts.actionableCredentialWrites = plan.credentialWrites.filter(
+				(write: any) => write.executionEligibility === "ready_from_raw_blob",
+			).length;
+			plan.counts.blockedCredentialWrites =
+				plan.credentialWrites.length - plan.counts.actionableCredentialWrites;
+		}
 		const idsReadByDevice = plan.idsReadByDevice || {};
 		return {
 			...plan,
