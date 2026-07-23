@@ -1258,6 +1258,7 @@ describe("device user union merge", () => {
 		expect(review).not.to.have.property("unionUsers");
 		expect(review).not.to.have.property("onlyOnOneDevice");
 		expect(review).not.to.have.property("missingHrisLinks");
+		expect(review).to.have.property("potentialOperations");
 		expect(review.users[0].rawPayload).to.equal(undefined);
 		expect(review.users[0].records[0].rawPayload).to.deep.equal({
 			numOfFP: 2,

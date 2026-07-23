@@ -1188,6 +1188,13 @@ export const serializeDeviceUserMergePlanForReview = (plan: any) => ({
 	sdkErrors: plan.sdkErrors || [],
 	plannedWrites: plan.plannedWrites || [],
 	credentialWrites: plan.credentialWrites || [],
+	potentialOperations: plan.potentialOperations || {
+		totalPotentialOperations: (plan.credentialWrites || []).length,
+		byModality: { fingerprint: 0, face: 0, card: 0 },
+		byRecoveryStage: {},
+		alreadyConverged: 0,
+		physicalBoundaryOperations: 0,
+	},
 	unresolvedDecisions: plan.unresolvedDecisions || [],
 	counts: plan.counts || {},
 	errors: plan.errors || [],
