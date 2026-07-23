@@ -2,14 +2,15 @@
 
 ## 2026-07-23 - Hikvision execution-location routing
 
-- Status: `LOCAL_IMPLEMENTED_AND_VALIDATED_DEPLOYMENT_PENDING`.
+- Status: `DEPLOYED_AND_PROVEN_WITH_PREEXISTING_ARGO_JOB_WARNING`.
 - Safety: live merge job `bc087d4c-52f1-4df8-8455-2c9e1c0a3039` reached terminal `completed_with_attention` before watched API source changed: `194/194`, `102` success, `92` failed. No active worker was killed by this patch.
 - Runtime contract: `windows-host` uses VM SSH plus reverse API `53001` and retains direct-LAN/Cloudflare fallback; native `vm-host` executes locally with no SSH; `vm-container` uses only the direct same-VM control target and VM-local environment API (`3001/3101/3201`), never the Cloudflare alias or Windows reverse API.
 - K3s/Docker boundary: HCNetSDK remains managed by the VM host systemd service, so containers still require an internal same-VM SSH control hop. This is explicitly reported as `vm-container`, not mislabeled local.
 - Runtime configuration: K3s PROD/DEV/UAT and VM Docker Compose now declare the execution location and correct environment API base; K3s PROD/UAT received the same read-only SSH-key mount already used by DEV.
 - Observability: merge `vm_copy_attempt_started` progress events now include `runtimeLocation`, `commandTransport`, and `apiBase`.
-- Validation: seven route-helper tests passed; combined Hikvision contracts passed `29`; API TypeScript passed; five YAML documents parsed without errors; restarted local API health passed. Evidence: `.runtime/hikvision-runtime-route-20260723-160450/`.
-- Deployment boundary: source/manifests are validated but VM/GitOps rollout and a non-mutating K3s route probe remain required before calling the server path proven.
+- Validation: seven route-helper tests passed; combined Hikvision contracts passed `29`; API TypeScript passed; five YAML documents parsed without errors; restarted local API health passed. GitHub Actions run `29990599061` passed every validation step for commit `6fbcbff`.
+- Deployment proof: VM ansible-pull synced exact commit `6fbcbff` with `failed=0`, rebuilt/imported the API image, and rolled DEV. The live pod contains the runtime-location code and reports `vm-container`, API base `http://127.0.0.1:3101`, readable direct-VM key, and successful internal direct SSH. VM API health and all DEV Deployments/StatefulSet are ready; `cloudflared-bnpi-hris.service` remained active. Evidence: `.runtime/hikvision-runtime-route-20260723-160450/`.
+- Warning: Argo reports `Synced/Degraded` solely alongside the pre-existing six-hour-old failed `hris-api-db-init` Job; current API/app/employee-app/watcher/Postgres workloads are ready. The failed seed/schema Job was not deleted or rerun because that would be an unrelated database mutation.
 - Recommendation: `REC-20260723-HIKVISION-VM-LOCAL-CONTROL-SERVICE`.
 
 ## 2026-07-23 - Correction: five-device physical truth and incomplete write
