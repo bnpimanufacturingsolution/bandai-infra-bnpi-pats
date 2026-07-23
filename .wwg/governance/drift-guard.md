@@ -129,6 +129,30 @@ Measure-Command {
 } | Select-Object TotalSeconds
 ```
 
+## Device Evidence Conflict Guard
+
+- Record device counts by evidence class: physical/operator, TCP transport,
+  authenticated API, full inventory read, listener arm, and callback receipt.
+- If any two classes disagree, status is `CONFLICTING`; do not publish one
+  ambiguous “online” total.
+- Correlate browser, API, tunnel, listener, and device logs by device and time.
+- A symptom without a named root cause remains an open defect.
+- If logs are insufficient to determine cause, add request/device/stage/error
+  observability and reproduce before closeout.
+- Re-run the original failing journey after repair; weaker substitute probes do
+  not close the conflict.
+
+## Authorized Device Write Guard
+
+- When a user explicitly authorizes the actual merge/sync write, require a
+  reviewed dry-run first, then execute the frozen safe scope.
+- Assert that execution scope equals reviewed scope before starting.
+- Monitor real writes and errors to terminal state; repair and retry safe failed
+  scope where possible.
+- Reread every target after completion and compare with the plan.
+- Do not count a plan, queued job, progress badge, or API 200 as completed
+  physical writes.
+
 ## Browser Verification Guard
 
 - Temporary 2026-07-09 local rule: browser verification should prefer headless

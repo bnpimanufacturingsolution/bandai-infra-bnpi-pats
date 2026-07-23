@@ -1,5 +1,14 @@
 ﻿# WWG Agent Handoff
 
+## 2026-07-23 - Correction: five-device physical truth and incomplete write
+
+- Status: `NOT_FULFILLED_WRITE_NOT_EXECUTED`.
+- Operator correction: exactly five Main Entrance devices are physically online and Main Entrance Device C is not. The prior quick-health result showing A-F transport-positive conflicts with this and must not be summarized as six online.
+- Evidence correction: quick health proved a response through the configured transport/tunnel path; it did not prove current physical device identity, operator-room state, or full inventory readability.
+- Completion correction: the prior loop generated a read-only plan and zero physical write requests. The actual merge job was not started, watched, repaired, or post-write verified.
+- Required next execution is governed by `docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md`: root-cause the five-versus-six conflict, freeze exactly five excluding Main C, validate the plan, execute the authorized write, monitor logs/job to terminal, and reread all five targets.
+- Every `Unauthorized`, `fetch failed`, timeout, or unknown result remains an open defect until correlated logs name the failing layer/root cause. Missing diagnostic detail is itself an observability bug.
+
 ## 2026-07-23 - Local DEV and Sync Center bounded green loop
 
 - Status: `FULFILLED_WITH_REAL_DEVICE_BOUNDARY`.

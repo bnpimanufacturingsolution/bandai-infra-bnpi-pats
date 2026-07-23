@@ -1,10 +1,18 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-23 Five-device truth and actual merge execution
+
+- Operator evidence: exactly five Main Entrance biometric devices are currently online; Main Entrance Device C is not. Any API/UI claim of six online is `CONFLICTING` until its cache/mapping/probe semantics are root-caused.
+- Prior loop boundary: it stopped at a read-only partial merge plan and issued zero write requests. That did not fulfill the requested merge.
+- Active execution contract: `docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md`.
+- Finish line: reconcile the five-versus-six conflict, prove exactly five authenticated/full-readable devices excluding Main C, validate the frozen five-device plan, start the authorized physical merge job, monitor and repair it to terminal state, reread all five targets, prove convergence, then truth-sync/push/exact-SHA CI.
+- Unknown errors are open defects. Logs must identify device, target, request/stage, duration, and underlying API/SDK/tunnel cause; insufficient observability must be repaired.
+
 ## Latest Task Addendum - 2026-07-23 Local DEV + Sync Center green owner loop
 
 - Task mode: mixed runtime regression repair, backend timeout/partial-result hardening, and admin Sync Center UX repair.
 - Current local runtime: `127.0.0.1:55435`, API `:3001`, and app `:5175` are healthy; one frontend dev process owns `5175`; all 18 A-F host tunnel ports carry TCP; VM `53001 -> host 3001` is healthy; the named Cloudflare service stayed active.
-- Current device truth: bounded quick health reports Main Entrance A-F `online`; TEST A/B are `offline`. Online transport is not full inventory proof.
+- Superseded/conflicting device claim: bounded quick health reported Main Entrance A-F transport-positive while the operator reports exactly five physically online and Main C down. Do not call this six online; root cause remains open.
 - Merge truth: the final read-only browser plan settled in 142 seconds with 865 union IDs from 4 readable A-F devices, 2 exact live inventory failures, and 2 offline TEST devices. The review blocked writes until read failures are resolved and issued zero merge apply/job requests.
 - UI truth: Sync Center keeps saved counts visible while refreshing, no longer derives availability from quick-preview `vendorUserCount`, exposes Retry/Refresh recovery controls, and distinguishes readable inventory from transport availability. Saved Events rendered 18,803+ persisted rows independently of listener status.
 - Evidence root: `.runtime/sync-center-dev-green-20260723-114317/`.

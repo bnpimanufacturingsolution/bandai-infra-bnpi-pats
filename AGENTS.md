@@ -302,6 +302,49 @@ estimated, queued, applying, rereading, completed, failed, or needs attention.
 Counts must distinguish selected unique IDs, source records, peer copy attempts,
 successful writes, failed writes, and biometric evidence/gaps.
 
+## Evidence Conflict and Root-Cause Closure Rule
+
+Never collapse conflicting evidence into the most convenient status. If the
+operator, physical room, device screen, quick-health endpoint, full-read
+endpoint, saved database state, browser, or logs disagree, mark the claim
+`CONFLICTING` and investigate the disagreement itself.
+
+- Ping, TCP, SSH, a listening tunnel, cached success, and lightweight quick
+  health are transport evidence only. They do not prove authentication, full
+  inventory readability, listener arm state, or callback delivery.
+- A device count must name the evidence class: physically powered/reachable,
+  transport-online, authenticated, inventory-readable, listener-armed, or
+  callback-proven. Never shorten one class to the ambiguous word `online`.
+- Operator physical evidence is a first-class source. It does not get silently
+  overwritten by a cached or weaker endpoint response.
+- Every observed error must be traced to a named cause or remain an explicit
+  unresolved defect. “Unknown,” “intermittent,” “fetch failed,” and “probably
+  network” are symptoms, not root causes.
+- Read the exact API/server/tunnel/listener/device logs for the same request and
+  timestamp. If logs lack enough identifiers or stages to explain the failure,
+  insufficient observability is itself a bug to repair.
+- After a repair, reproduce the original conflict and prove the sources now
+  agree. Do not declare green from a different, easier probe.
+
+## Authorized Write-Job Completion Rule
+
+When the user explicitly requests an actual sync/merge/write job, a read-only
+plan is a safety gate, not the finish line.
+
+1. Discover and freeze the exact verified device and record scope.
+2. Run the non-mutating plan and validate its logic, exclusions, conflicts,
+   source selections, and expected write matrix.
+3. Preserve a rollback/evidence snapshot and refuse scope expansion.
+4. Start the authorized write using the reviewed scope.
+5. Watch pollable job state and correlated logs until terminal.
+6. Repair recoverable failures and retry only the failed safe scope.
+7. Reread source and targets and prove convergence; a `completed` badge alone
+   is not write proof.
+
+Do not stop at preview merely because preview passed. Do not start writes for
+unreviewed identities, unresolved conflicts, unavailable devices, or invented
+biometric bytes.
+
 ## Browser Verification Tool
 
 Temporary 2026-07-09 local rule: prefer headless Playwright for Project Truth

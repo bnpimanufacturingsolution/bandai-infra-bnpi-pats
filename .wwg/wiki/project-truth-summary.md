@@ -6,7 +6,7 @@ Last updated: 2026-07-23
 
 - Local Windows hot-reload uses canonical K3s DEV PostgreSQL at `127.0.0.1:55435`, API `http://localhost:3001`, and app `http://localhost:5175`. The API dependency watchdog probe-first repairs A-F device forwards, VM reverse API/callback port `53001`, and the managed listener while keeping optional TEST A/B bridges non-blocking.
 - The current A-F host-forward map is HTTP `10080-10085`, HTTPS `10443-10448`, and SDK `18000-18005`. A listening SSH process alone is not health proof; every port must carry traffic.
-- Sync Center transport availability is sourced from bounded quick health, not `sync-preview?quick=true` source-user counts. Full merge inventory is separate evidence and may return a partial review. As of 2026-07-23, A-F pass quick health, TEST A/B are offline, and the latest all-main read-only plan returned 865 union IDs from 4 readable devices with 2 live-read failures; no physical write was started.
+- Sync Center transport availability is sourced from bounded quick health, not `sync-preview?quick=true` source-user counts. Full merge inventory and physical/operator state are separate evidence. Current operator truth is exactly five Main Entrance devices online with Main C down; the earlier A-F quick-health result is `CONFLICTING` transport evidence until its mapping/cache/probe semantics are root-caused. The latest plan was read-only and no physical write was started, so the merge is not fulfilled.
 - Saved `DeviceEvent` rows are independent of listener readiness. The Saved Events UI preserves database rows while listener/tap status loads or refreshes.
 
 - Hyper-V is available from the elevated Windows host context.

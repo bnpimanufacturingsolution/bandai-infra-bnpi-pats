@@ -23,6 +23,19 @@ Project Truth must not be silently overwritten. Requirement evolution is allowed
 - Saved `DeviceEvent` rows are PostgreSQL truth independent of listener readiness; background listener checks cannot clear or replace the saved ledger.
 - Evidence: `.runtime/sync-center-dev-green-20260723-114317/` and `.wwg/reports/wwg-agent-handoff.md`.
 
+### Current device-count conflict and write boundary
+
+- Operator physical evidence reports exactly five Main Entrance devices online
+  and Main Entrance Device C down.
+- Earlier A-F quick-health responses are weaker, conflicting transport evidence;
+  they do not establish six physically online or inventory-readable devices.
+- The conflict must be root-caused across device identity, tunnel mapping, cache,
+  endpoint semantics, authentication, and full inventory logs.
+- The previous merge pass stopped at a read-only plan with zero write requests.
+  It is not a completed merge. An explicitly authorized merge task must continue
+  through frozen-scope write execution, terminal monitoring, failure repair, and
+  post-write physical rereads.
+
 ## Product Identity
 
 - Product name: project_truth_hyperv_fresh

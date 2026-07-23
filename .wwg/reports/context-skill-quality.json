@@ -84,6 +84,7 @@
     "docs/00-product/AGENT-PROMPT-device-admin-ux-clarity-loop.md",
     "docs/00-product/AGENT-PROMPT-device-truth-matrix-week.md",
     "docs/00-product/AGENT-PROMPT-device-user-enroll-journey-truth.md",
+    "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
     "docs/00-product/AGENT-PROMPT-merge-device-users-speed-overnight-marathon.md",
     "docs/00-product/AGENT-PROMPT-merge-fast-by-1000-mandatory.md",
     "docs/00-product/AGENT-PROMPT-nonstop-loop-engineering.md",
@@ -559,6 +560,11 @@
     },
     {
       "path": "docs/00-product/AGENT-PROMPT-device-user-enroll-journey-truth.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -1593,6 +1599,15 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-merge-device-users-speed-overnight-marathon.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -2101,7 +2116,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/drift-guard.md",
       "fileType": "governance",
-      "line": 125,
+      "line": 149,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2256,7 +2271,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 603,
+      "line": 612,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -2265,7 +2280,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 604,
+      "line": 613,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -2274,7 +2289,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 605,
+      "line": 614,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -2283,7 +2298,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 616,
+      "line": 625,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -2292,7 +2307,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 620,
+      "line": 629,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -2542,15 +2557,6 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 9,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
       "line": 89,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
@@ -2583,6 +2589,15 @@
     },
     {
       "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 115,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
       "code": "markdown-possible-vague-pronouns",
       "message": "File has many pronouns that may be ambiguous for agents.",
       "affectedFile": ".wwg/wiki/project-truth.md",
@@ -2595,7 +2610,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 168,
+      "line": 34,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2604,7 +2619,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 170,
+      "line": 191,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2613,7 +2628,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 182,
+      "line": 193,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2622,7 +2637,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 203,
+      "line": 205,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2631,7 +2646,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 233,
+      "line": 226,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2649,7 +2664,7 @@
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
       "affectedSection": "Latest Task Addendum - 2026-07-12 Hikvision Remote-Site Agent And Local Dev Tunnel Proof",
-      "line": 765,
+      "line": 773,
       "recommendedFix": "Fill the section or state 'Not applicable' with a short reason."
     },
     {
@@ -2666,7 +2681,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 13,
+      "line": 21,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2675,7 +2690,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 644,
+      "line": 652,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2684,7 +2699,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 810,
+      "line": 818,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2693,7 +2708,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 812,
+      "line": 820,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2702,7 +2717,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 816,
+      "line": 824,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2719,7 +2734,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 242,
+      "line": 285,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2728,7 +2743,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 367,
+      "line": 410,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2753,7 +2768,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "Agent-Meta-Prompt-Template.md",
       "fileType": "template",
-      "line": 104,
+      "line": 114,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2762,7 +2777,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "Agent-Meta-Prompt-Template.md",
       "fileType": "template",
-      "line": 158,
+      "line": 168,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2771,7 +2786,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "Agent-Meta-Prompt-Template.md",
       "fileType": "template",
-      "line": 186,
+      "line": 196,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2780,7 +2795,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "Agent-Meta-Prompt-Template.md",
       "fileType": "template",
-      "line": 187,
+      "line": 197,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2789,7 +2804,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "Agent-Meta-Prompt-Template.md",
       "fileType": "template",
-      "line": 188,
+      "line": 198,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2799,6 +2814,15 @@
       "affectedFile": "docs/00-product/AGENT-PROMPT-cpp-first-create-enroll-raw-truth.md",
       "fileType": "public_doc",
       "line": 14,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
+      "fileType": "public_doc",
+      "line": 201,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4060,6 +4084,15 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-merge-device-users-speed-overnight-marathon.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -4685,15 +4718,6 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 9,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
       "line": 89,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
@@ -4725,6 +4749,15 @@
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 115,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
       "severity": "warning",
       "code": "context-contract-missing-sections",
       "message": "Context is missing contract section(s): Purpose, Scope, Current State, Canonical Terms, Decisions, Constraints, References.",
@@ -4747,7 +4780,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 168,
+      "line": 34,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4756,7 +4789,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 170,
+      "line": 191,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4765,7 +4798,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 182,
+      "line": 193,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4774,7 +4807,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 203,
+      "line": 205,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4783,7 +4816,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 233,
+      "line": 226,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4838,7 +4871,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/drift-guard.md",
       "fileType": "governance",
-      "line": 125,
+      "line": 149,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -5400,7 +5433,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 603,
+      "line": 612,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -5409,7 +5442,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 604,
+      "line": 613,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -5418,7 +5451,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 605,
+      "line": 614,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -5427,7 +5460,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 616,
+      "line": 625,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -5436,7 +5469,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 620,
+      "line": 629,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -5853,6 +5886,24 @@
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
+      "fileType": "public_doc",
+      "line": 201,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
       "severity": "warning",
@@ -6889,7 +6940,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 242,
+      "line": 285,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -6898,7 +6949,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 367,
+      "line": 410,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     }
   ],
@@ -6919,7 +6970,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/drift-guard.md",
       "fileType": "governance",
-      "line": 125,
+      "line": 149,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7074,7 +7125,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 603,
+      "line": 612,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -7083,7 +7134,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 604,
+      "line": 613,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -7092,7 +7143,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 605,
+      "line": 614,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -7101,7 +7152,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 616,
+      "line": 625,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -7110,7 +7161,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 620,
+      "line": 629,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -7360,15 +7411,6 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 9,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
       "line": 89,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
@@ -7401,6 +7443,15 @@
     },
     {
       "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 115,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
       "code": "markdown-possible-vague-pronouns",
       "message": "File has many pronouns that may be ambiguous for agents.",
       "affectedFile": ".wwg/wiki/project-truth.md",
@@ -7413,7 +7464,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 168,
+      "line": 34,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7422,7 +7473,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 170,
+      "line": 191,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7431,7 +7482,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 182,
+      "line": 193,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7440,7 +7491,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 203,
+      "line": 205,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7449,7 +7500,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 233,
+      "line": 226,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7467,7 +7518,7 @@
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
       "affectedSection": "Latest Task Addendum - 2026-07-12 Hikvision Remote-Site Agent And Local Dev Tunnel Proof",
-      "line": 765,
+      "line": 773,
       "recommendedFix": "Fill the section or state 'Not applicable' with a short reason."
     },
     {
@@ -7484,7 +7535,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 13,
+      "line": 21,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7493,7 +7544,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 644,
+      "line": 652,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7502,7 +7553,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 810,
+      "line": 818,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7511,7 +7562,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 812,
+      "line": 820,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7520,7 +7571,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 816,
+      "line": 824,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7537,7 +7588,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 242,
+      "line": 285,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7546,7 +7597,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 367,
+      "line": 410,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7571,7 +7622,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "Agent-Meta-Prompt-Template.md",
       "fileType": "template",
-      "line": 104,
+      "line": 114,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7580,7 +7631,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "Agent-Meta-Prompt-Template.md",
       "fileType": "template",
-      "line": 158,
+      "line": 168,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7589,7 +7640,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "Agent-Meta-Prompt-Template.md",
       "fileType": "template",
-      "line": 186,
+      "line": 196,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7598,7 +7649,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "Agent-Meta-Prompt-Template.md",
       "fileType": "template",
-      "line": 187,
+      "line": 197,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7607,7 +7658,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "Agent-Meta-Prompt-Template.md",
       "fileType": "template",
-      "line": 188,
+      "line": 198,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7617,6 +7668,15 @@
       "affectedFile": "docs/00-product/AGENT-PROMPT-cpp-first-create-enroll-raw-truth.md",
       "fileType": "public_doc",
       "line": 14,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
+      "fileType": "public_doc",
+      "line": 201,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -8218,17 +8278,17 @@
   ],
   "metadataPolicyApplied": "Option C: Skill Registry metadata is canonical; skill files may include lightweight metadata when beneficial, and package-side skills do not require frontmatter.",
   "summary": {
-    "checkedFileCount": 140,
+    "checkedFileCount": 141,
     "skippedFileCount": 1,
     "errorCount": 0,
-    "warningCount": 137,
-    "suggestionCount": 138,
+    "warningCount": 138,
+    "suggestionCount": 139,
     "classificationCounts": {
       "context": 11,
       "skill": 0,
       "governance": 8,
       "report": 48,
-      "public_doc": 63,
+      "public_doc": 64,
       "agent_instruction": 1,
       "changelog_governance": 0,
       "changelog_or_release_note": 0,
