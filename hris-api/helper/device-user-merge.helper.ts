@@ -105,6 +105,8 @@ export type DeviceUserCredentialWrite = {
 	blockingReason:
 		| "source_conflict"
 		| "source_not_enrolled"
+		| "missing_raw_blob"
+		| "target_write_unsupported"
 		| "credential_only_card_not_supported"
 		| null;
 	sourceCandidateDeviceIds: string[];
@@ -211,12 +213,14 @@ const buildCredentialWritesForUser = (
 					? "credential_only_card_not_supported"
 					: !uniqueSource
 						? "source_conflict"
+						: sourceEvidenceStatus !== "raw_blob_present"
+							? "missing_raw_blob"
+							: modality === "face"
+								? "target_write_unsupported"
 						: null;
 			const executionEligibility = blockingReason
 				? "blocked"
-				: sourceEvidenceStatus === "raw_blob_present"
-					? "ready_from_raw_blob"
-					: "sdk_probe_required";
+				: "ready_from_raw_blob";
 			const sourceCandidateDeviceIds = preferredSources.map(
 				(item) => item.record.deviceId,
 			);
@@ -235,14 +239,18 @@ const buildCredentialWritesForUser = (
 				sourceReportedCount: maxCount,
 				targetReportedCount: target.count,
 				sourceEvidenceStatus,
-				recommended: Boolean(sourceDeviceId) && !blockingReason,
+				recommended:
+					Boolean(sourceDeviceId) &&
+					executionEligibility === "ready_from_raw_blob",
 				recommendationReason: blockingReason
 					? blockingReason === "source_conflict"
 						? `Multiple devices report the same highest ${modality} count; template equality is not proven.`
-						: "Credential-only card writes are not implemented."
-					: sourceEvidenceStatus === "raw_blob_present"
-						? `A single highest-count source has evidenced raw ${modality} custody.`
-						: `A single device reports the highest ${modality} count; exact VM SDK export must pass before any target write.`,
+						: blockingReason === "missing_raw_blob"
+							? `The source reports a ${modality} enrollment count but has no reviewed portable bytes.`
+							: blockingReason === "target_write_unsupported"
+								? "Credential-only face writes from stored custody are not implemented."
+								: "Credential-only card writes are not implemented."
+					: `A single highest-count source has evidenced raw ${modality} custody and a credential-only target write path.`,
 				executionEligibility,
 				blockingReason,
 				sourceCandidateDeviceIds,
@@ -486,10 +494,10 @@ export const buildDeviceUserMergePlan = (params: {
 			missingHrisLinks: users.filter((user) => !user.employeeId).length,
 			credentialWrites: credentialWrites.length,
 			actionableCredentialWrites: credentialWrites.filter(
-				(write) => write.executionEligibility !== "blocked",
+				(write) => write.executionEligibility === "ready_from_raw_blob",
 			).length,
 			blockedCredentialWrites: credentialWrites.filter(
-				(write) => write.executionEligibility === "blocked",
+				(write) => write.executionEligibility !== "ready_from_raw_blob",
 			).length,
 			validDevices: validDeviceIds.length,
 			failedDevices: selectedDeviceIds.filter((id) => !validDeviceIdSet.has(id)).length,

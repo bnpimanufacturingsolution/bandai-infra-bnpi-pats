@@ -91,7 +91,7 @@ describe("device user union merge", () => {
 		expect(fingerprintConflict?.deviceB.value).to.equal(1);
 	});
 
-	it("plans modality-specific credential writes for existing users behind an SDK probe", () => {
+	it("blocks count-only credential gaps until portable bytes are reviewed", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b", "c"],
 			records: [
@@ -144,12 +144,49 @@ describe("device user union merge", () => {
 		expect(fingerprintWrites.every((write) => write.sourceDeviceId === "a")).to.equal(true);
 		expect(
 			fingerprintWrites.every(
-				(write) => write.executionEligibility === "sdk_probe_required",
+				(write) =>
+					write.executionEligibility === "blocked" &&
+					write.blockingReason === "missing_raw_blob" &&
+					write.recommended === false,
 			),
 		).to.equal(true);
 		expect(faceWrites).to.have.length(2);
 		expect(faceWrites.every((write) => write.sourceDeviceId === "b")).to.equal(true);
-		expect(plan.counts.actionableCredentialWrites).to.equal(4);
+		expect(plan.counts.actionableCredentialWrites).to.equal(0);
+		expect(plan.counts.blockedCredentialWrites).to.equal(4);
+	});
+
+	it("selects only raw fingerprint custody and blocks stored faces without a write path", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					rawPayload: { numOfFP: 2, numOfFace: 1 },
+					biometricEvidence: {
+						fingerprint: { status: "raw_blob_present", reportedCount: 2, rawBlobCount: 2 },
+						face: { status: "raw_blob_present", reportedCount: 1, rawBlobPresent: true },
+					},
+				}),
+				record("b", {
+					rawPayload: { numOfFP: 0, numOfFace: 0 },
+					biometricEvidence: {
+						fingerprint: { status: "not_enrolled", reportedCount: 0, rawBlobCount: 0 },
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+				}),
+			],
+		});
+		const fingerprint = plan.credentialWrites.find(
+			(write) => write.modality === "fingerprint",
+		);
+		const face = plan.credentialWrites.find((write) => write.modality === "face");
+		expect(fingerprint?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(fingerprint?.recommended).to.equal(true);
+		expect(face?.executionEligibility).to.equal("blocked");
+		expect(face?.blockingReason).to.equal("target_write_unsupported");
+		expect(face?.recommended).to.equal(false);
+		expect(plan.counts.actionableCredentialWrites).to.equal(1);
+		expect(plan.counts.blockedCredentialWrites).to.equal(1);
 	});
 
 	it("blocks tied count-only sources instead of choosing by device order", () => {
