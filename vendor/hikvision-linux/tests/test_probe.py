@@ -232,6 +232,13 @@ class ProbeTests(unittest.TestCase):
         self.assertNotIn("card_no = extract_string_field_from_json(user_json", exporter)
         self.assertIn("(!include_face || face_ok)", exporter)
 
+        self.assertIn("--delete-face-device-id", text)
+        self.assertIn("--delete-face-employee-no", text)
+        self.assertIn("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID", text)
+        self.assertIn("NET_DVR_DEL_FACE_PARAM_CFG", text)
+        self.assertIn('"face_delete_reread_completed"', text)
+        self.assertIn('"physicallyAbsent"', text)
+
     def test_build_script_produces_project_truth_named_service(self) -> None:
         script = Path(__file__).resolve().parents[1] / "scripts" / "build-hikvision-biometric-service.sh"
         text = script.read_text(encoding="utf-8")

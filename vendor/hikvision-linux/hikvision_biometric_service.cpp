@@ -908,6 +908,9 @@ std::string build_hikvision_callback_json(const ReconcileJob &job) {
     return body.str();
 }
 
+std::set<std::string> extract_employee_numbers_from_search_response(
+    const std::string &response);
+
 bool read_source_user(DeviceSession &source, const ReconcileJob &job, std::string *user_json) {
     if (job.employee_no.empty()) {
         emit_json({
@@ -932,18 +935,27 @@ bool read_source_user(DeviceSession &source, const ReconcileJob &job, std::strin
         body.str(),
         &response);
 
+    const std::set<std::string> returned_employees =
+        extract_employee_numbers_from_search_response(response);
+    const bool exact_owner =
+        ok && returned_employees.size() == 1 &&
+        returned_employees.count(job.employee_no) == 1;
     emit_json({
         {"event", "source_user_read"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", job.employee_no},
-        {"ok", ok ? "true" : "false"},
+        {"ok", exact_owner ? "true" : "false"},
+        {"responseAccepted", ok ? "true" : "false"},
+        {"returnedEmployeeCount", std::to_string(returned_employees.size())},
+        {"exactEmployeePresent",
+         returned_employees.count(job.employee_no) == 1 ? "true" : "false"},
         {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
     });
 
-    if (ok && user_json != nullptr) {
+    if (exact_owner && user_json != nullptr) {
         *user_json = response;
     }
-    return ok;
+    return exact_owner;
 }
 
 std::string extract_enclosing_json_object(const std::string &json, size_t pos_inside);
@@ -951,8 +963,6 @@ std::string extract_string_field_from_json(
     const std::string &json,
     const std::string &field_name);
 int extract_int_field_from_json(const std::string &json, const std::string &field_name);
-std::set<std::string> extract_employee_numbers_from_search_response(
-    const std::string &response);
 
 std::string extract_card_object_for_employee(
     const std::string &response,
@@ -2631,6 +2641,89 @@ bool export_biometric_templates_for_employee(
 
     return (!include_fingerprints || !fingerprints.empty()) &&
         (!include_face || (card_owner_verified && !face_template.empty() && !face_picture.empty()));
+}
+
+bool delete_face_for_exact_owner(
+    DeviceSession &target,
+    const std::string &employee_no) {
+    const char *authorized_target_env =
+        std::getenv("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID");
+    const std::string authorized_target =
+        authorized_target_env == nullptr ? "" : authorized_target_env;
+    if (authorized_target.empty() ||
+        authorized_target != target.config.hris_device_id ||
+        employee_no.empty()) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"reason", "authorized_exact_canary_target_required"}
+        });
+        return false;
+    }
+
+    ReconcileJob job;
+    job.source_device_id = target.config.hris_device_id;
+    job.source_host = target.config.host;
+    job.employee_no = employee_no;
+    std::string card_json;
+    if (!read_source_card(target, job, &card_json)) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"reason", "exact_employee_owned_card_not_found"}
+        });
+        return false;
+    }
+    const std::string card_no = extract_string_field_from_json(card_json, "cardNo");
+    if (card_no.empty()) {
+        return false;
+    }
+    if (!execute_mode) {
+        emit_json({
+            {"event", "face_delete_preview"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"exactCardOwnerVerified", "true"},
+            {"wouldCall", "NET_DVR_DEL_FACE_PARAM_CFG"}
+        });
+        return true;
+    }
+
+    NET_DVR_FACE_PARAM_CTRL control{};
+    control.dwSize = sizeof(control);
+    control.byMode = 0;
+    std::strncpy(
+        reinterpret_cast<char *>(control.struProcessMode.struByCard.byCardNo),
+        card_no.c_str(),
+        ACS_CARD_NO_LEN - 1);
+    control.struProcessMode.struByCard.byEnableCardReader[0] = 1;
+    control.struProcessMode.struByCard.byFaceID[0] = 1;
+    std::unique_lock<std::mutex> sdk_lock(sdk_request_mutex);
+    const BOOL deleted = NET_DVR_RemoteControl(
+        target.user_id,
+        NET_DVR_DEL_FACE_PARAM_CFG,
+        &control,
+        sizeof(control));
+    const DWORD delete_error = deleted == TRUE ? 0 : NET_DVR_GetLastError();
+    sdk_lock.unlock();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+    std::string user_json;
+    const bool reread_ok = read_source_user(target, job, &user_json);
+    const int face_count = extract_int_field_from_json(user_json, "numOfFace");
+    const bool physically_absent = reread_ok && face_count == 0;
+    emit_json({
+        {"event", "face_delete_reread_completed"},
+        {"targetDeviceId", target.config.hris_device_id},
+        {"employeeNo", employee_no},
+        {"deleteAccepted", deleted == TRUE ? "true" : "false"},
+        {"sdkLastError", std::to_string(delete_error)},
+        {"postDeleteFaceCount", face_count >= 0 ? std::to_string(face_count) : ""},
+        {"physicallyAbsent", physically_absent ? "true" : "false"}
+    });
+    return deleted == TRUE && physically_absent;
 }
 
 bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::string &user_json) {
@@ -5232,6 +5325,7 @@ void usage(const char *program) {
         << "[--mirror-face-employee-no employeeNo] [--mirror-face-source-device-id id] "
         << "[--export-biometric-employee-no employeeNo] [--export-biometric-source-device-id id] "
         << "[--export-biometric-no-fingerprints] [--export-biometric-no-face] "
+        << "[--delete-face-device-id id] [--delete-face-employee-no employeeNo] "
         << "[--stored-face-payload-file mode-0600-json]\n";
 }
 
@@ -5263,6 +5357,8 @@ int main(int argc, char **argv) {
     std::string export_biometric_source_device_id;
     bool export_biometric_include_fingerprints = true;
     bool export_biometric_include_face = true;
+    std::string delete_face_device_id;
+    std::string delete_face_employee_no;
     std::string stored_face_payload_file;
 
     for (int i = 1; i < argc; ++i) {
@@ -5362,6 +5458,10 @@ int main(int argc, char **argv) {
             export_biometric_include_fingerprints = false;
         } else if (arg == "--export-biometric-no-face") {
             export_biometric_include_face = false;
+        } else if (arg == "--delete-face-device-id") {
+            if (!next(&delete_face_device_id)) return 2;
+        } else if (arg == "--delete-face-employee-no") {
+            if (!next(&delete_face_employee_no)) return 2;
         } else if (arg == "--stored-face-payload-file") {
             if (!next(&stored_face_payload_file)) return 2;
         } else if (arg == "--min-sdk-time") {
@@ -5432,13 +5532,15 @@ int main(int argc, char **argv) {
         !mirror_face_employee_no.empty() && !mirror_face_source_device_id.empty();
     const bool manual_biometric_export_mode =
         !export_biometric_employee_no.empty() && !export_biometric_source_device_id.empty();
+    const bool delete_face_mode =
+        !delete_face_device_id.empty() && !delete_face_employee_no.empty();
     const bool stored_face_write_mode = !stored_face_payload_file.empty();
     const bool manual_reconcile_queue_mode =
         !manual_full_mirror_source_device_id.empty() && !manual_fingerprint_clone_mode;
     const bool manual_reconcile_mode =
         manual_reconcile_queue_mode || !manual_employee_no.empty() || manual_fingerprint_clone_mode ||
         manual_fingerprint_capture_mode || manual_face_capture_mode || manual_face_mirror_mode ||
-        manual_biometric_export_mode || stored_face_write_mode;
+        manual_biometric_export_mode || delete_face_mode || stored_face_write_mode;
 
     if (configs.empty()) {
         usage(argv[0]);
@@ -5640,6 +5742,30 @@ int main(int argc, char **argv) {
             });
         } else {
             ok = write_stored_face_with_reread(*target, payload);
+        }
+        close_sessions();
+        NET_DVR_Cleanup();
+        emit_json({{"event", "sdk_cleanup"}, {"ok", "true"}});
+        return ok ? 0 : 1;
+    }
+
+    if (delete_face_mode) {
+        DeviceSession *target = nullptr;
+        for (auto &session : sessions) {
+            if (session.config.hris_device_id == delete_face_device_id) {
+                target = &session;
+                break;
+            }
+        }
+        const bool ok =
+            target != nullptr && delete_face_for_exact_owner(*target, delete_face_employee_no);
+        if (target == nullptr) {
+            emit_json({
+                {"event", "face_delete_blocked"},
+                {"targetDeviceId", delete_face_device_id},
+                {"employeeNo", delete_face_employee_no},
+                {"reason", "target_device_not_armed"}
+            });
         }
         close_sessions();
         NET_DVR_Cleanup();
