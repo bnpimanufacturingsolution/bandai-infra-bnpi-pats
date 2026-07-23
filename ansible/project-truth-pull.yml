@@ -104,6 +104,18 @@
           exit 0
         fi
 
+        merge_job_dir="/var/lib/project-truth/k8s/dev/uploads/project-truth-runtime/device-user-merge-jobs"
+        if [ -d "$merge_job_dir" ]; then
+          for snapshot in "$merge_job_dir"/*.json; do
+            [ -f "$snapshot" ] || continue
+            if [ -n "$(find "$snapshot" -mmin -5 -print -quit)" ] &&
+               jq -e '.status == "processing"' "$snapshot" >/dev/null 2>&1; then
+              echo "Deferring runtime image rollout: active DEV credential merge snapshot $snapshot"
+              exit 0
+            fi
+          done
+        fi
+
         cd "{{ project_truth_install_root }}/appliance"
         if docker compose version >/dev/null 2>&1; then
           docker compose build hris-api hris-api-db-init hris-app
@@ -127,11 +139,10 @@
           hris-app-local:develop
         cp /tmp/project-truth-k8s-runtime-images.tar /var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-images.tar
         k3s ctr -n k8s.io images import /tmp/project-truth-k8s-runtime-images.tar
-        for env_name in dev uat prod; do
-          kubectl -n "$env_name" rollout restart deployment/hris-api deployment/hris-app >/dev/null 2>&1 || true
-          kubectl -n "$env_name" rollout status deployment/hris-api --timeout=180s >/dev/null 2>&1 || true
-          kubectl -n "$env_name" rollout status deployment/hris-app --timeout=180s >/dev/null 2>&1 || true
-        done
+        env_name=dev
+        kubectl -n "$env_name" rollout restart deployment/hris-api deployment/hris-app >/dev/null 2>&1 || true
+        kubectl -n "$env_name" rollout status deployment/hris-api --timeout=180s >/dev/null 2>&1 || true
+        kubectl -n "$env_name" rollout status deployment/hris-app --timeout=180s >/dev/null 2>&1 || true
         printf 'commit=%s\nsynced_at=%s\n' "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$state_file"
       args:
         executable: /bin/bash
