@@ -219,8 +219,18 @@ class ProbeTests(unittest.TestCase):
         self.assertIn('"numOfMatches"', card_reader)
         self.assertIn("extract_card_object_for_employee", card_reader)
         self.assertIn('"full_inventory_exact_owner"', card_reader)
+        self.assertIn("employees.size() == 1", text)
+        self.assertIn('"exactEmployeePresent"', card_reader)
         self.assertNotIn('{"cardNo", job.card_no}', text)
         self.assertNotIn('{"cardNo", card_no}', text)
+
+        exporter = text.split("bool export_biometric_templates_for_employee(", 1)[1].split(
+            "bool write_peer_user", 1
+        )[0]
+        self.assertIn("emit_sensitive_json_stdout_only", exporter)
+        self.assertIn('"cardOwnerVerified"', exporter)
+        self.assertNotIn("card_no = extract_string_field_from_json(user_json", exporter)
+        self.assertIn("(!include_face || face_ok)", exporter)
 
     def test_build_script_produces_project_truth_named_service(self) -> None:
         script = Path(__file__).resolve().parents[1] / "scripts" / "build-hikvision-biometric-service.sh"

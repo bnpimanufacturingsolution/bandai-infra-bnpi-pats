@@ -226,8 +226,21 @@ describe("Hikvision biometric sync contract", () => {
 			"reviewed.cardNoSha256 !== currentEvidence.cardNoSha256",
 		);
 		expect(controller).to.include("runHikvisionBiometricExportOnVm");
+		expect(controller).to.include("cardOwnerVerified");
+		expect(controller).to.include(
+			"no exact employee-owned CardInfo association",
+		);
+		expect(controller).to.include("storedFaceOwnerVerified");
+		expect(controller).to.include(
+			"exact physical identity ownership was not attested",
+		);
 		expect(controller).to.include("Target now reports a face; refusing to overwrite");
-		expect(controller).to.include("Live target card ownership no longer matches");
+		expect(controller).to.include(
+			"Target full CardInfo inventory did not yield exactly one owned card",
+		);
+		expect(controller).to.include(
+			"Neither exact shared card custody nor the same canonical HRIS employee proves",
+		);
 		expect(controller).to.include('"stored_face_write_reread_completed"');
 		expect(controller).to.include("templateMatch");
 		expect(controller).to.include("pictureMatch");

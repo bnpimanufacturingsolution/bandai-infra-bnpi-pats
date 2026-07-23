@@ -85,6 +85,7 @@ export type HikvisionSdkFaceCustody = {
 	pictureSha256: string;
 	templateSize: number;
 	pictureSize: number;
+	cardOwnerVerified: true;
 };
 
 export type HikvisionCardCustody = {
@@ -324,6 +325,7 @@ export const validateHikvisionSdkFaceCustody = (params: {
 	exportedAt: unknown;
 	templateBase64: unknown;
 	pictureBase64: unknown;
+	cardOwnerVerified: unknown;
 	now?: number;
 	maxAgeMs?: number;
 }): HikvisionSdkFaceCustody => {
@@ -331,6 +333,11 @@ export const validateHikvisionSdkFaceCustody = (params: {
 	const sourceDeviceId = text(params.sourceDeviceId);
 	if (!vendorUserId || !sourceDeviceId) {
 		throw new Error("SDK face custody requires an exact source identity.");
+	}
+	if (params.cardOwnerVerified !== true) {
+		throw new Error(
+			"SDK face custody requires an exact employee-owned CardInfo association.",
+		);
 	}
 	const exportedAt = assertTimestamp(params.exportedAt, "SDK face export");
 	const now = params.now ?? Date.now();
@@ -353,6 +360,7 @@ export const validateHikvisionSdkFaceCustody = (params: {
 		pictureSha256: picture.sha256,
 		templateSize: template.buffer.length,
 		pictureSize: picture.size,
+		cardOwnerVerified: true,
 	};
 };
 

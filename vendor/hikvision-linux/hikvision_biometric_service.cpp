@@ -240,6 +240,20 @@ void emit_json(const std::map<std::string, std::string> &fields) {
     }
 }
 
+// Raw biometric custody is a process-to-process transport contract only. It must
+// never be duplicated into the durable listener JSONL evidence stream.
+void emit_sensitive_json_stdout_only(const std::map<std::string, std::string> &fields) {
+    std::ostringstream line;
+    line << "{\"ts\":\"" << now_utc() << "\"";
+    for (const auto &field : fields) {
+        line << ",\"" << json_escape(field.first) << "\":\"" << json_escape(field.second) << "\"";
+    }
+    line << "}";
+
+    std::lock_guard<std::mutex> lock(evidence_mutex);
+    std::cout << line.str() << std::endl;
+}
+
 std::string minor_name(DWORD minor) {
     switch (minor) {
         case 80: return "OBSERVED_OPERATION_MINOR_80";
@@ -959,6 +973,18 @@ std::string extract_card_object_for_employee(
             return object;
         }
     }
+    // Some HCNetSDK STDXML responses wrap the single CardInfo record such that
+    // object-bound extraction is not stable. A one-row response is still safe
+    // when its complete employee set contains only the requested exact owner.
+    const std::set<std::string> employees =
+        extract_employee_numbers_from_search_response(response);
+    const std::string sole_card_no = extract_string_field_from_json(response, "cardNo");
+    if (employees.size() == 1 &&
+        employees.count(employee_no) == 1 &&
+        !sole_card_no.empty()) {
+        return std::string("{\"employeeNo\":\"") + json_escape(employee_no) +
+            "\",\"cardNo\":\"" + json_escape(sole_card_no) + "\"}";
+    }
     return "";
 }
 
@@ -988,6 +1014,8 @@ bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::strin
     std::string exact_card = filtered_ok
         ? extract_card_object_for_employee(response, job.employee_no)
         : "";
+    const std::set<std::string> filtered_employees =
+        extract_employee_numbers_from_search_response(response);
 
     emit_json({
         {"event", "source_card_read"},
@@ -996,6 +1024,9 @@ bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::strin
         {"strategy", "filtered_exact_owner"},
         {"ok", !exact_card.empty() ? "true" : "false"},
         {"responseAccepted", filtered_ok ? "true" : "false"},
+        {"returnedEmployeeCount", std::to_string(filtered_employees.size())},
+        {"exactEmployeePresent",
+         filtered_employees.count(job.employee_no) == 1 ? "true" : "false"},
         {"lastError", filtered_ok ? "0" : std::to_string(NET_DVR_GetLastError())}
     });
 
@@ -2549,12 +2580,9 @@ bool export_biometric_templates_for_employee(
 
     std::string user_json;
     std::string card_json;
-    read_source_user(source, job, &user_json);
-    read_source_card(source, job, &card_json);
+    const bool user_read_ok = read_source_user(source, job, &user_json);
+    const bool card_owner_verified = read_source_card(source, job, &card_json);
     std::string card_no = extract_string_field_from_json(card_json, "cardNo");
-    if (card_no.empty()) {
-        card_no = extract_string_field_from_json(user_json, "cardNo");
-    }
 
     std::vector<NET_DVR_FINGER_PRINT_CFG_V50> fingerprints;
     if (include_fingerprints) {
@@ -2583,12 +2611,16 @@ bool export_biometric_templates_for_employee(
     }
     fingerprint_json << "]";
 
-    emit_json({
+    emit_sensitive_json_stdout_only({
         {"event", "manual_biometric_export_completed"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
         {"cardNo", card_no.empty() ? "" : "[redacted]"},
-        {"ok", (!include_fingerprints || !fingerprints.empty() || !include_face || face_ok) ? "true" : "false"},
+        {"userReadOk", user_read_ok ? "true" : "false"},
+        {"cardOwnerVerified", card_owner_verified ? "true" : "false"},
+        {"cardAssociationStrategy", card_owner_verified ? "exact_employee_owner" : "none"},
+        {"ok", ((!include_fingerprints || !fingerprints.empty()) &&
+                (!include_face || face_ok)) ? "true" : "false"},
         {"fingerprintCount", std::to_string(fingerprints.size())},
         {"faceTemplateSize", std::to_string(face_template.size())},
         {"facePictureSize", std::to_string(face_picture.size())},
@@ -2597,7 +2629,8 @@ bool export_biometric_templates_for_employee(
         {"facePicture", face_picture.empty() ? "" : base64_encode(reinterpret_cast<const BYTE *>(face_picture.data()), face_picture.size())}
     });
 
-    return !fingerprints.empty() || !face_template.empty() || !face_picture.empty();
+    return (!include_fingerprints || !fingerprints.empty()) &&
+        (!include_face || (card_owner_verified && !face_template.empty() && !face_picture.empty()));
 }
 
 bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::string &user_json) {

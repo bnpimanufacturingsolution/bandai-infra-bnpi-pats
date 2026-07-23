@@ -157,6 +157,7 @@ describe("Hikvision face/card recovery contract", () => {
 			exportedAt: "2026-07-23T12:00:00.000Z",
 			templateBase64: Buffer.alloc(128, 0x33).toString("base64"),
 			pictureBase64: jpegBase64(),
+			cardOwnerVerified: true,
 			now,
 		});
 		expect(custody.templateSha256).to.match(/^[a-f0-9]{64}$/);
@@ -211,9 +212,21 @@ describe("Hikvision face/card recovery contract", () => {
 				exportedAt: "2026-07-23T11:00:00.000Z",
 				templateBase64: Buffer.alloc(128).toString("base64"),
 				pictureBase64: jpegBase64(),
+				cardOwnerVerified: true,
 				now,
 			}),
 		).to.throw("stale");
+		expect(() =>
+			validateHikvisionSdkFaceCustody({
+				vendorUserId: "13",
+				sourceDeviceId: "device-a",
+				exportedAt: "2026-07-23T12:00:00.000Z",
+				templateBase64: Buffer.alloc(128).toString("base64"),
+				pictureBase64: jpegBase64(),
+				cardOwnerVerified: false,
+				now,
+			}),
+		).to.throw("employee-owned CardInfo");
 	});
 
 	it("extracts exact CardInfo custody, refuses another owner/overwrite, and requires reciprocal reread", () => {

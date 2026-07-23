@@ -3805,11 +3805,25 @@ export const controller = (prisma: PrismaClient) => {
 				typeof exportEvent.fingerprints === "string"
 					? JSON.parse(exportEvent.fingerprints || "[]")
 					: exportEvent.fingerprints || [];
+			const cardOwnerVerified =
+				String(exportEvent.cardOwnerVerified || "").trim().toLowerCase() === "true";
+			if (
+				params.includeFaces &&
+				(exportEvent.faceTemplate || exportEvent.facePicture) &&
+				!cardOwnerVerified
+			) {
+				throw new Error(
+					`Hikvision SDK face export rejected for ${params.device.id}/${params.vendorUserId}: no exact employee-owned CardInfo association`,
+				);
+			}
 			const sharedPayload = {
 				sourceDeviceId: params.device.id,
 				sourceDeviceName: params.device.name || params.device.id,
 				vendorUserId: params.vendorUserId,
-				cardNo: exportEvent.cardNo || "",
+				cardOwnerVerified,
+				cardAssociationStrategy: String(
+					exportEvent.cardAssociationStrategy || "none",
+				),
 				exportedAt: new Date().toISOString(),
 			};
 			const encryptedFingerprint =
@@ -3848,7 +3862,10 @@ export const controller = (prisma: PrismaClient) => {
 				fingerprintCount: Array.isArray(fingerprints) ? fingerprints.length : 0,
 				faceTemplateSize: Number(exportEvent.faceTemplateSize || 0),
 				facePictureSize: Number(exportEvent.facePictureSize || 0),
-				cardNo: exportEvent.cardNo || "",
+				cardOwnerVerified,
+				cardAssociationStrategy: String(
+					exportEvent.cardAssociationStrategy || "none",
+				),
 				events: events.map((event) =>
 					event?.event === "manual_biometric_export_completed"
 						? {
@@ -8468,6 +8485,9 @@ export const controller = (prisma: PrismaClient) => {
 			faceURL: value?.faceURL || null,
 			source: value?.source || "device_user_raw_custody",
 			capturedAt: value?.capturedAt || null,
+			cardOwnerVerified: value?.cardOwnerVerified === true,
+			identityOwnerVerified: value?.identityOwnerVerified === true,
+			identityAssociation: value?.identityAssociation || null,
 		};
 	};
 
@@ -11062,10 +11082,6 @@ export const controller = (prisma: PrismaClient) => {
 							liveCardsByVendorId.get(String(candidate.vendorUserId)) ||
 							"",
 					).trim();
-					const portableFaceBundle = Boolean(
-						saved?.vendorMetadata?.biometricBundle?.facePresent &&
-						saved?.vendorMetadata?.biometricBundle?.encryptedFaceTemplate,
-					);
 					let decryptedStoredFace: any = null;
 					const encryptedStoredFace =
 						parseCachedDeviceUserBiometricTemplates(saved || {}).face;
@@ -11085,18 +11101,35 @@ export const controller = (prisma: PrismaClient) => {
 							);
 						}
 					}
+					const storedFaceOwnerVerified =
+						decryptedStoredFace?.cardOwnerVerified === true ||
+						decryptedStoredFace?.identityOwnerVerified === true;
+					if (decryptedStoredFace && !storedFaceOwnerVerified) {
+						deviceLogger.warn(
+							`Stored face custody rejected for ${device.id}/${candidate.vendorUserId}; exact physical identity ownership was not attested`,
+						);
+						decryptedStoredFace = null;
+					}
+					const portableFaceBundle = Boolean(
+						storedFaceOwnerVerified &&
+						saved?.vendorMetadata?.biometricBundle?.facePresent &&
+						saved?.vendorMetadata?.biometricBundle?.encryptedFaceTemplate,
+					);
 					const fdlibCapabilitySupported =
 						saved?.vendorMetadata?.biometricCapabilities?.faceDataRecord === true ||
 						saved?.rawPayload?._hrisDeviceMetadata?.biometricCapabilities
 							?.faceDataRecord === true;
+					const rawFaceOwnerVerified =
+						rawCustody.face.blob?.cardOwnerVerified === true ||
+						rawCustody.face.blob?.identityOwnerVerified === true;
 					const faceTemplate = String(
 						decryptedStoredFace?.faceTemplate ||
-							rawCustody.face.blob?.faceTemplate ||
+							(rawFaceOwnerVerified ? rawCustody.face.blob?.faceTemplate : "") ||
 							"",
 					).trim();
 					const facePicture = String(
 						decryptedStoredFace?.facePicture ||
-							rawCustody.face.blob?.base64 ||
+							(rawFaceOwnerVerified ? rawCustody.face.blob?.base64 : "") ||
 							"",
 					).trim();
 					const faceCustody = classifyFaceCustody({
@@ -11137,7 +11170,8 @@ export const controller = (prisma: PrismaClient) => {
 								}
 							: undefined;
 					const rawFaceBlobPresent =
-						portableFaceBundle || rawCustody.face.rawBlobPresent;
+						portableFaceBundle ||
+						(rawCustody.face.rawBlobPresent && rawFaceOwnerVerified);
 					const fingerprintReportedCount = Number(
 						credentialSummary.fingerprintCount || 0,
 					);
@@ -14822,13 +14856,20 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 			const readFace = async (device: any) => {
-				const exported = await runHikvisionBiometricExportOnVm({
-					device,
-					organizationId: String(admin.organizationId),
-					vendorUserId: String(row.vendorUserId || ""),
-					includeFingerprints: false,
-					includeFaces: true,
-				});
+				let exported: any;
+				try {
+					exported = await runHikvisionBiometricExportOnVm({
+						device,
+						organizationId: String(admin.organizationId),
+						vendorUserId: String(row.vendorUserId || ""),
+						includeFingerprints: false,
+						includeFaces: true,
+					});
+				} catch (error: any) {
+					throw new Error(
+						`Fresh SDK face export failed on ${device.id}/${row.vendorUserId}: ${error?.message || error}`,
+					);
+				}
 				const payload = decryptDeviceUserBiometricPayload({
 					organizationId: String(admin.organizationId),
 					deviceId: String(device.id),
