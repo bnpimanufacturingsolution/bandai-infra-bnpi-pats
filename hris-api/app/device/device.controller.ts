@@ -3145,6 +3145,64 @@ export const controller = (prisma: PrismaClient) => {
 		return safeEvidence;
 	};
 
+	const readExactHikvisionCardOwnerFromFullInventory = async (params: {
+		req: Request;
+		deviceId: string;
+		vendorUserId: string;
+		cardNo: string;
+	}) => {
+		let searchResultPosition = 0;
+		let rowsScanned = 0;
+		for (let page = 0; page < 20; page += 1) {
+			const response = await hikvisionFetch(
+				"/ISAPI/AccessControl/CardInfo/Search?format=json",
+				{
+					method: "POST",
+					deviceId: params.deviceId,
+					prisma,
+					request: params.req,
+					timeoutMs: 12_000,
+					body: {
+						CardInfoSearchCond: {
+							searchID: `merge-card-full-reread-${page}-${Date.now()}`,
+							searchResultPosition,
+							maxResults: 100,
+						},
+					},
+				},
+			);
+			const search = response?.CardInfoSearch || response || {};
+			const cards = Array.isArray(search?.CardInfo)
+				? search.CardInfo
+				: search?.CardInfo
+					? [search.CardInfo]
+					: [];
+			rowsScanned += cards.length;
+			if (
+				cards.some(
+					(card: any) =>
+						String(card?.employeeNo || "").trim() === params.vendorUserId &&
+						String(card?.cardNo || "").trim() === params.cardNo,
+				)
+			) {
+				return { found: true, pagesRead: page + 1, rowsScanned };
+			}
+			const numOfMatches = Number(search?.numOfMatches ?? cards.length);
+			const totalMatches = Number(search?.totalMatches ?? 0);
+			searchResultPosition += cards.length;
+			if (
+				cards.length === 0 ||
+				numOfMatches < 100 ||
+				(Number.isFinite(totalMatches) &&
+					totalMatches > 0 &&
+					searchResultPosition >= totalMatches)
+			) {
+				break;
+			}
+		}
+		return { found: false, pagesRead: 20, rowsScanned };
+	};
+
 	const getDeviceUserBiometricBundleSecret = (organizationId: string, deviceId: string) => {
 		const configured = String(process.env.DEVICE_USER_BIOMETRIC_BUNDLE_KEY || "").trim();
 		if (configured) return { secret: configured, source: "DEVICE_USER_BIOMETRIC_BUNDLE_KEY" };
@@ -11213,6 +11271,73 @@ export const controller = (prisma: PrismaClient) => {
 			"../../helper/device-user-raw-fingerprint.helper.js"
 		);
 		plan.credentialWrites = (plan.credentialWrites || []).map((write: any) => {
+			if (write.modality !== "face" || write.blockingReason !== "source_conflict") {
+				return write;
+			}
+			const user = (plan.users || []).find(
+				(candidate: any) => String(candidate.key) === String(write.userKey),
+			);
+			const candidateDeviceIds = [...new Set(write.sourceCandidateDeviceIds || [])]
+				.map(String)
+				.sort();
+			const checksumEvidence = candidateDeviceIds
+				.map((deviceId) => {
+					const record = (user?.records || []).find(
+						(candidate: any) => String(candidate.deviceId) === deviceId,
+					);
+					const evidence = record?._faceCustodyEvidence;
+					return evidence
+						? {
+								deviceId,
+								templateSha256: evidence.templateSha256,
+								pictureSha256: evidence.pictureSha256,
+								templateSize: evidence.templateSize,
+								pictureSize: evidence.pictureSize,
+							}
+						: { deviceId, unavailable: true };
+				});
+			const available = checksumEvidence.filter(
+				(evidence: any) => evidence.unavailable !== true,
+			);
+			const checksumSets = new Set(
+				available.map(
+					(evidence: any) =>
+						`${evidence.templateSha256}:${evidence.pictureSha256}:${evidence.templateSize}:${evidence.pictureSize}`,
+				),
+			);
+			if (
+				available.length === candidateDeviceIds.length &&
+				available.length > 0 &&
+				checksumSets.size === 1
+			) {
+				const sourceDeviceId = candidateDeviceIds[0];
+				return {
+					...write,
+					sourceDeviceId,
+					sourceEvidenceStatus: "raw_blob_present",
+					recommended: true,
+					recommendationReason:
+						"All highest-count face sources have exact template and picture checksum equality; the stable source representative is safe.",
+					executionEligibility: "blocked",
+					blockingReason: "target_write_unsupported",
+					recoveryStage: "probing_target_capability",
+					sourceFaceChecksumEvidence: checksumEvidence,
+				};
+			}
+			return {
+				...write,
+				sourceFaceChecksumEvidence: checksumEvidence,
+				recommendationReason:
+					available.length < candidateDeviceIds.length
+						? "Face source comparison remains open because at least one highest-count physical source has not yielded exact template+picture custody."
+						: "Highest-count face sources have incompatible template or picture checksums; physical identity action is required before mutation.",
+				recoveryStage:
+					available.length < candidateDeviceIds.length
+						? "exporting_source_credential"
+						: "physical_identity_action_required",
+			};
+		});
+		plan.credentialWrites = (plan.credentialWrites || []).map((write: any) => {
 			if (
 				write.modality === "face" &&
 				(write.executionEligibility === "ready_from_raw_blob" ||
@@ -12752,6 +12877,16 @@ export const controller = (prisma: PrismaClient) => {
 								String(card?.cardNo || "").trim() === expectedCardNo;
 							reciprocalCardOwnerVerified =
 								byEmployee.some(exactPair) && byCard.some(exactPair);
+							if (!reciprocalCardOwnerVerified) {
+								const fullInventory =
+									await readExactHikvisionCardOwnerFromFullInventory({
+										req: params.req,
+										deviceId: String(write.targetDeviceId),
+										vendorUserId: String(write.vendorUserId),
+										cardNo: expectedCardNo,
+									});
+								reciprocalCardOwnerVerified = fullInventory.found;
+							}
 						}
 						if (
 							write.modality === "card" &&
@@ -14234,6 +14369,264 @@ export const controller = (prisma: PrismaClient) => {
 				200,
 			),
 		);
+	};
+
+	const attestRetainedHikvisionCardCanary = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		const admin = assertDeviceUserAdmin(req, res);
+		if (!admin) return;
+		try {
+			const jobId = String(req.params.jobId || "").trim();
+			const job = resolveDeviceUserMergeJob(jobId);
+			if (!job || job.organizationId !== String(admin.organizationId)) {
+				res.status(404).json(
+					buildErrorResponse("SDK user merge job not found or expired", 404),
+				);
+				return;
+			}
+			const activeJob = [...deviceUserMergeJobs.values()].find(
+				(candidate) =>
+					candidate.organizationId === String(admin.organizationId) &&
+					candidate.status === "processing" &&
+					!isDeviceUserMergeJobStale(candidate),
+			);
+			if (activeJob) {
+				res.status(409).json(
+					buildErrorResponse(
+						`Merge job ${activeJob.jobId} is processing; retained-card attestation is read-only but must not contend with a physical write.`,
+						409,
+					),
+				);
+				return;
+			}
+			const rows = Array.isArray(job.writeMatrix?.rows) ? job.writeMatrix.rows : [];
+			const resultRows = Array.isArray(job.results) ? job.results : [];
+			const row = rows[0];
+			const failedResult = resultRows[0];
+			const exactVerificationError =
+				"Target reciprocal CardInfo reread did not prove the reviewed exact owner/value pair.";
+			const completedPhysicalWrite = (job.progressEvents || []).some(
+				(event: any) =>
+					event?.stage === "vm_copy_attempt_finished" &&
+					event?.dryRun === false &&
+					Number(event?.exitCode) === 0 &&
+					String(event?.vendorUserId || "") === String(row?.vendorUserId || ""),
+			);
+			if (
+				job.mode !== "credentials" ||
+				job.totalWrites !== 1 ||
+				job.processedWrites !== 1 ||
+				rows.length !== 1 ||
+				resultRows.length !== 1 ||
+				String(row?.modality || "") !== "card" ||
+				String(failedResult?.modality || "") !== "card" ||
+				String(failedResult?.error || "") !== exactVerificationError ||
+				!completedPhysicalWrite
+			) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Only a one-row card canary whose physical write exited successfully and whose sole failure was the obsolete narrow reciprocal reread may be attested.",
+						409,
+					),
+				);
+				return;
+			}
+			const authorizedTargetId = String(
+				process.env.HIKVISION_AUTHORIZED_CARD_CANARY_DEVICE_ID || "",
+			).trim();
+			if (
+				!authorizedTargetId ||
+				authorizedTargetId !== String(row.targetDeviceId || "")
+			) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Retained-card attestation requires the exact target-specific authorized card canary gate.",
+						409,
+					),
+				);
+				return;
+			}
+			const deviceIds = [
+				String(row.sourceDeviceId || ""),
+				String(row.targetDeviceId || ""),
+			];
+			const devices = await prisma.device.findMany({
+				where: {
+					organizationId: String(admin.organizationId),
+					id: { in: deviceIds },
+				},
+			});
+			const sourceDevice = devices.find(
+				(device) => String(device.id) === String(row.sourceDeviceId),
+			);
+			const targetDevice = devices.find(
+				(device) => String(device.id) === String(row.targetDeviceId),
+			);
+			if (!sourceDevice || !targetDevice || devices.length !== 2) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Reviewed source and target devices are not both present in this organization.",
+						409,
+					),
+				);
+				return;
+			}
+			const sourceResponse = await hikvisionFetch(
+				"/ISAPI/AccessControl/CardInfo/Search?format=json",
+				{
+					method: "POST",
+					deviceId: String(sourceDevice.id),
+					prisma,
+					request: req,
+					timeoutMs: 12_000,
+					body: {
+						CardInfoSearchCond: {
+							searchID: `merge-card-attest-source-${Date.now()}`,
+							searchResultPosition: 0,
+							maxResults: 5,
+							EmployeeNoList: [
+								{ employeeNo: String(row.vendorUserId || "") },
+							],
+						},
+					},
+				},
+			);
+			const sourceCardsRaw = sourceResponse?.CardInfoSearch?.CardInfo;
+			const sourceCards = Array.isArray(sourceCardsRaw)
+				? sourceCardsRaw
+				: sourceCardsRaw
+					? [sourceCardsRaw]
+					: [];
+			const sourcePairs = sourceCards.filter(
+				(card: any) =>
+					String(card?.employeeNo || "").trim() ===
+						String(row.vendorUserId || "") &&
+					Boolean(String(card?.cardNo || "").trim()),
+			);
+			const sourceValues = [
+				...new Set(
+					sourcePairs.map((card: any) => String(card.cardNo || "").trim()),
+				),
+			];
+			if (sourceValues.length !== 1) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Current source CardInfo did not yield exactly one reviewed owner/value pair.",
+						409,
+					),
+				);
+				return;
+			}
+			const expectedCardNo = sourceValues[0];
+			const targetInventory = await readExactHikvisionCardOwnerFromFullInventory({
+				req,
+				deviceId: String(targetDevice.id),
+				vendorUserId: String(row.vendorUserId || ""),
+				cardNo: expectedCardNo,
+			});
+			if (!targetInventory.found) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Full target CardInfo inventory did not physically retain the reviewed exact owner/value pair.",
+						409,
+					),
+				);
+				return;
+			}
+			const retainedCardChecksum = createHash("sha256")
+				.update(expectedCardNo)
+				.digest("hex");
+			const capabilityEvidence =
+				await persistPhysicallyProvenHikvisionWriterCapability({
+					req,
+					targetDevice,
+					vendorUserId: String(row.vendorUserId || ""),
+					writer: "card_info_record",
+					endpoint: "/ISAPI/AccessControl/CardInfo/Record?format=json",
+					retainedChecksum: retainedCardChecksum,
+					responseBody: {
+						jobId,
+						scopeHash: job.scopeHash,
+						sourceExactOwnerValuePair: true,
+						targetExactOwnerValuePair: true,
+						targetInventoryPagesRead: targetInventory.pagesRead,
+						targetInventoryRowsScanned: targetInventory.rowsScanned,
+						recoveredFromFailure: "narrow_reciprocal_card_query_false_negative",
+					},
+				});
+			const recoveredAt = new Date();
+			const recoveredResult = {
+				...failedResult,
+				status: "success",
+				error: undefined,
+				strategy: "card_info_record_full_inventory_recovery_attestation",
+				postWriteChecksum: retainedCardChecksum,
+				physicalRereadResult: "exact_card_owner_value_pair_retained",
+				capabilityEvidence,
+				capabilityEvidenceChecksum:
+					capabilityEvidence.responseBodyChecksum || null,
+				recoveredAt: recoveredAt.toISOString(),
+			};
+			updateDeviceUserMergeJob(jobId, {
+				status: "completed",
+				message:
+					"Card canary physically retained; full CardInfo inventory corrected the narrow-query false negative.",
+				successfulWrites: 1,
+				failedWrites: 0,
+				results: [recoveredResult],
+				error: undefined,
+				currentStage: "physically_retained",
+				completedAt: recoveredAt,
+				appendProgressEvent: {
+					stage: "physically_retained",
+					modality: "card",
+					vendorUserId: String(row.vendorUserId || ""),
+					sourceDeviceId: String(row.sourceDeviceId || ""),
+					targetDeviceId: String(row.targetDeviceId || ""),
+					writerStrategy: "card_info_record",
+					physicalRereadResult: "exact_card_owner_value_pair_retained",
+					postWriteChecksum: retainedCardChecksum,
+					capabilityEvidenceChecksum:
+						capabilityEvidence.responseBodyChecksum || null,
+					message:
+						"Full target CardInfo inventory proved the exact reviewed owner/value pair; no panel write was replayed.",
+					at: recoveredAt.toISOString(),
+				},
+			});
+			res.status(200).json(
+				buildSuccessResponse(
+					"Retained card canary attested without replaying a physical write",
+					{
+						jobId,
+						scopeHash: job.scopeHash,
+						status: "completed",
+						modality: "card",
+						sourceDeviceId: String(row.sourceDeviceId || ""),
+						targetDeviceId: String(row.targetDeviceId || ""),
+						vendorUserId: String(row.vendorUserId || ""),
+						physicalRereadResult: "exact_card_owner_value_pair_retained",
+						retainedCardChecksum,
+						capabilityEvidence,
+						targetInventory: {
+							pagesRead: targetInventory.pagesRead,
+							rowsScanned: targetInventory.rowsScanned,
+						},
+						physicalWriteReplayed: false,
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			res.status(error?.statusCode || 500).json(
+				buildErrorResponse(
+					error?.message || "Failed to attest retained card canary",
+					error?.statusCode || 500,
+				),
+			);
+		}
 	};
 
 	const listHikvisionSdkUserMergeJobs = async (
@@ -23075,6 +23468,7 @@ export const controller = (prisma: PrismaClient) => {
 		reviewHikvisionSdkUserMergeJob,
 		listHikvisionSdkUserMergeJobs,
 		getHikvisionSdkUserMergeJob,
+		attestRetainedHikvisionCardCanary,
 		mirrorHikvisionFaceToPeers,
 		createSyntheticKioskLoginTap,
 		mockHikvisionFingerprintTally,

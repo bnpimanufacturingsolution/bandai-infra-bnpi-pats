@@ -159,6 +159,7 @@ describe("DeviceUser API contract", () => {
 
 	it("publishes safe exact-reread checksums for face and card canaries", () => {
 		const controller = controllerSource();
+		const router = routerSource();
 		expect(controller).to.include("const encryptedStoredFace =");
 		expect(controller).to.include("decryptedStoredFace?.faceTemplate");
 		expect(controller).to.include("decryptedStoredFace?.facePicture");
@@ -176,6 +177,21 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include('"exact_card_owner_value_pair_retained"');
 		expect(controller).to.include("capabilityEvidenceChecksum:");
 		expect(controller).to.include("retainedCardChecksum");
+		expect(controller).to.include(
+			"readExactHikvisionCardOwnerFromFullInventory",
+		);
+		expect(controller).to.include("sourceFaceChecksumEvidence");
+		expect(controller).to.include(
+			"All highest-count face sources have exact template and picture checksum equality",
+		);
+		expect(controller).to.include("attestRetainedHikvisionCardCanary");
+		expect(controller).to.include(
+			"narrow_reciprocal_card_query_false_negative",
+		);
+		expect(controller).to.include("physicalWriteReplayed: false");
+		expect(router).to.include(
+			'"/hikvision/sdk-users/merge/jobs/:jobId/attest-retained-card"',
+		);
 	});
 
 	it("uses a fast Hikvision UserInfo count for Device Users preview instead of stale all-device skip copy", () => {
