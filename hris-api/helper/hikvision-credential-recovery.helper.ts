@@ -10,6 +10,7 @@ export type CredentialRecoveryErrorClassification = {
 		| "database_transport"
 		| "device_authentication"
 		| "device_transport"
+		| "worker_fencing"
 		| "inventory_read_safety_gate"
 		| "identity_safety"
 		| "writer_capability"
@@ -20,6 +21,7 @@ export type CredentialRecoveryErrorClassification = {
 		| "persistence"
 		| "authentication"
 		| "transport"
+		| "concurrency"
 		| "safety_gate"
 		| "identity"
 		| "capability"
@@ -52,6 +54,23 @@ export const classifyCredentialRecoveryError = (
 			category: "persistence",
 			message,
 			retryable: true,
+			observabilityDefect: false,
+		};
+	}
+	if (
+		matches(
+			/write-attempt fence refused/,
+			/worker lease expired/,
+			/lease (?:was )?lost/,
+			/lease owner/,
+			/duplicate write risk/,
+		)
+	) {
+		return {
+			code: "worker_fencing",
+			category: "concurrency",
+			message,
+			retryable: false,
 			observabilityDefect: false,
 		};
 	}

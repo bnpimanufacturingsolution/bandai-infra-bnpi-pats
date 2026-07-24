@@ -2117,6 +2117,11 @@ bool write_face_and_template(
     const std::vector<char> &face_template,
     const std::vector<char> &face_picture,
     bool redact_card_no = false) {
+    const auto operation_started_at = std::chrono::steady_clock::now();
+    const auto elapsed_ms = [&]() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - operation_started_at).count();
+    };
     if (!execute_mode) {
         emit_json({
             {"event", "peer_face_write_preview"},
@@ -2135,6 +2140,7 @@ bool write_face_and_template(
     std::strncpy(reinterpret_cast<char *>(cond.byCardNo), card_no.c_str(), ACS_CARD_NO_LEN - 1);
     FaceWriteContext ctx;
     std::unique_lock<std::mutex> sdk_lock(sdk_request_mutex);
+    const auto remote_config_started_at = std::chrono::steady_clock::now();
     const LONG handle = NET_DVR_StartRemoteConfig(
         target.user_id,
         NET_DVR_SET_FACE_AND_TEMPLATE,
@@ -2142,12 +2148,17 @@ bool write_face_and_template(
         sizeof(cond),
         face_write_callback,
         &ctx);
+    const auto start_remote_config_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - remote_config_started_at).count();
     if (handle < 0) {
         emit_json({
             {"event", "peer_face_write"},
             {"targetDeviceId", target.config.hris_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"},
+            {"startRemoteConfigMs", std::to_string(start_remote_config_ms)},
+            {"durationMs", std::to_string(elapsed_ms())},
             {"lastError", std::to_string(NET_DVR_GetLastError())}
         });
         return false;
@@ -2159,6 +2170,7 @@ bool write_face_and_template(
     record.pFaceBuffer = const_cast<char *>(face_picture.data());
     record.dwFaceTemplateLen = static_cast<DWORD>(face_template.size());
     record.pFaceTemplateBuffer = const_cast<char *>(face_template.data());
+    const auto send_started_at = std::chrono::steady_clock::now();
     const BOOL send_ok = NET_DVR_SendRemoteConfig(
         handle,
         ENUM_ACS_SEND_DATA,
@@ -2168,6 +2180,9 @@ bool write_face_and_template(
         std::unique_lock<std::mutex> lock(ctx.mutex);
         ctx.cv.wait_for(lock, std::chrono::seconds(10), [&ctx] { return ctx.done; });
     }
+    const auto send_and_callback_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - send_started_at).count();
     NET_DVR_StopRemoteConfig(handle);
     sdk_lock.unlock();
     const bool ok = send_ok == TRUE && ctx.ok;
@@ -2179,6 +2194,10 @@ bool write_face_and_template(
         {"ok", ok ? "true" : "false"},
         {"templateSize", std::to_string(face_template.size())},
         {"pictureSize", std::to_string(face_picture.size())},
+        {"startRemoteConfigMs", std::to_string(start_remote_config_ms)},
+        {"sendAndCallbackMs", std::to_string(send_and_callback_ms)},
+        {"callbackCompleted", ctx.done ? "true" : "false"},
+        {"durationMs", std::to_string(elapsed_ms())},
         {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
     });
     return ok;
@@ -2389,6 +2408,7 @@ std::string stored_face_lock_path(const std::string &device_id) {
 bool write_stored_face_with_reread(
     DeviceSession &target,
     const StoredFaceWritePayload &payload) {
+    const auto operation_started_at = std::chrono::steady_clock::now();
     const std::string lock_path = stored_face_lock_path(payload.target_device_id);
     const int lock_fd = open(
         lock_path.c_str(),
@@ -2452,6 +2472,7 @@ bool write_stored_face_with_reread(
         release_lock();
         return false;
     }
+    const auto write_started_at = std::chrono::steady_clock::now();
     const bool wrote = write_face_and_template(
         target,
         payload.employee_no,
@@ -2459,9 +2480,12 @@ bool write_stored_face_with_reread(
         payload.face_template,
         payload.face_picture,
         true);
+    const auto write_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - write_started_at).count();
     if (wrote) std::this_thread::sleep_for(std::chrono::milliseconds(750));
     std::vector<char> reread_template;
     std::vector<char> reread_picture;
+    const auto reread_started_at = std::chrono::steady_clock::now();
     const bool reread = wrote && read_face_and_template(
         target,
         payload.employee_no,
@@ -2469,6 +2493,8 @@ bool write_stored_face_with_reread(
         &reread_template,
         &reread_picture,
         true);
+    const auto reread_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - reread_started_at).count();
     const bool template_match = reread && reread_template == payload.face_template;
     const bool picture_match = reread && reread_picture == payload.face_picture;
     const bool verified = wrote && reread && template_match && picture_match;
@@ -2484,7 +2510,13 @@ bool write_stored_face_with_reread(
         {"templateSize", std::to_string(payload.face_template.size())},
         {"pictureSize", std::to_string(payload.face_picture.size())},
         {"rereadTemplateSize", std::to_string(reread_template.size())},
-        {"rereadPictureSize", std::to_string(reread_picture.size())}
+        {"rereadPictureSize", std::to_string(reread_picture.size())},
+        {"writeMs", std::to_string(write_ms)},
+        {"stabilizationWaitMs", wrote ? "750" : "0"},
+        {"rereadMs", std::to_string(reread_ms)},
+        {"durationMs", std::to_string(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - operation_started_at).count())}
     });
     release_lock();
     return verified;

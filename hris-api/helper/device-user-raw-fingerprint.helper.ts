@@ -498,6 +498,12 @@ export type FingerPrintWriteProgress = {
 	totalStatus: number | null;
 	raw: any;
 	reason: string;
+	timing?: {
+		durationMs: number;
+		attempts: number;
+		requestMs: number;
+		waitMs: number;
+	};
 };
 
 export const parseFingerPrintProgress = (response: any): FingerPrintWriteProgress => {
@@ -565,6 +571,7 @@ export const pollFingerPrintWriteProgress = async (params: {
 	attempts?: number;
 	delayMs?: number;
 }): Promise<FingerPrintWriteProgress> => {
+	const pollStartedAt = Date.now();
 	const attempts = Math.min(Math.max(Number(params.attempts) || 6, 1), 12);
 	const delayMs = Math.min(Math.max(Number(params.delayMs) || 500, 100), 5000);
 	const timeoutMs = Number(params.timeoutMs) || 10_000;
@@ -576,10 +583,17 @@ export const pollFingerPrintWriteProgress = async (params: {
 		raw: null,
 		reason: "no_progress_polls",
 	};
+	let completedAttempts = 0;
+	let requestMs = 0;
+	let waitMs = 0;
 	for (let i = 0; i < attempts; i += 1) {
 		if (i > 0) {
+			const waitStartedAt = Date.now();
 			await new Promise((r) => setTimeout(r, delayMs * i));
+			waitMs += Date.now() - waitStartedAt;
 		}
+		completedAttempts += 1;
+		const requestStartedAt = Date.now();
 		try {
 			const raw = await hikvisionFetch(
 				"/ISAPI/AccessControl/FingerPrintProgress?format=json",
@@ -591,11 +605,21 @@ export const pollFingerPrintWriteProgress = async (params: {
 					timeoutMs,
 				},
 			);
+			requestMs += Date.now() - requestStartedAt;
 			last = parseFingerPrintProgress(raw);
 			if (last.cardReaderRecvStatus === 6 || last.cardReaderRecvStatus === 5) {
-				return last;
+				return {
+					...last,
+					timing: {
+						durationMs: Date.now() - pollStartedAt,
+						attempts: completedAttempts,
+						requestMs,
+						waitMs,
+					},
+				};
 			}
 		} catch (error: any) {
+			requestMs += Date.now() - requestStartedAt;
 			last = {
 				ok: false,
 				cardReaderRecvStatus: null,
@@ -606,7 +630,15 @@ export const pollFingerPrintWriteProgress = async (params: {
 			};
 		}
 	}
-	return last;
+	return {
+		...last,
+		timing: {
+			durationMs: Date.now() - pollStartedAt,
+			attempts: completedAttempts,
+			requestMs,
+			waitMs,
+		},
+	};
 };
 
 export const classifyDeferredFingerprintWrite = (
@@ -651,7 +683,16 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 	numOfFP: number;
 	fingerprints: RawFingerprintTemplate[];
 	source: string;
+	timing: {
+		durationMs: number;
+		downloadMs: number;
+		progressMs: number;
+		progressAttempts: number;
+		progressRequestMs: number;
+		progressWaitMs: number;
+	};
 }> => {
+	const operationStartedAt = Date.now();
 	const employeeNo = String(params.employeeNo || "").trim();
 	const fingerData = String(params.fingerData || "").trim();
 	const fingerPrintID = Number(params.fingerPrintID || 1) || 1;
@@ -668,6 +709,7 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 
 	let writeResponse: any = null;
 	let writeOk = false;
+	const downloadStartedAt = Date.now();
 	try {
 		writeResponse = await hikvisionFetch(
 			"/ISAPI/AccessControl/FingerPrintDownload?format=json",
@@ -688,6 +730,7 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 		writeResponse = { error: String(error?.message || error) };
 		writeOk = false;
 	}
+	const downloadMs = Date.now() - downloadStartedAt;
 
 	if (params.deferRereadVerification) {
 		// Defer only the expensive raw-template/UserInfo reread. The device handles
@@ -713,6 +756,14 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 			numOfFP: 0,
 			fingerprints: [],
 			source: deferred.source,
+			timing: {
+				durationMs: Date.now() - operationStartedAt,
+				downloadMs,
+				progressMs: Number(progress.timing?.durationMs || 0),
+				progressAttempts: Number(progress.timing?.attempts || 0),
+				progressRequestMs: Number(progress.timing?.requestMs || 0),
+				progressWaitMs: Number(progress.timing?.waitMs || 0),
+			},
 		};
 	}
 	const progress = await pollFingerPrintWriteProgress({
@@ -792,6 +843,14 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 		numOfFP,
 		fingerprints,
 		source,
+		timing: {
+			durationMs: Date.now() - operationStartedAt,
+			downloadMs,
+			progressMs: Number(progress.timing?.durationMs || 0),
+			progressAttempts: Number(progress.timing?.attempts || 0),
+			progressRequestMs: Number(progress.timing?.requestMs || 0),
+			progressWaitMs: Number(progress.timing?.waitMs || 0),
+		},
 	};
 };
 

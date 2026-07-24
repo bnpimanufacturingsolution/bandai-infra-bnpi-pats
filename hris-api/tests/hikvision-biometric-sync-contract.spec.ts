@@ -270,6 +270,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("pictureMatch");
 		expect(controller).to.include("withTargetDeviceWriteLock");
 		expect(service).to.include("--stored-face-payload-file");
+		expect(service).to.include('"startRemoteConfigMs"');
+		expect(service).to.include('"sendAndCallbackMs"');
+		expect(service).to.include('"callbackCompleted"');
+		expect(service).to.include('"rereadMs"');
 		expect(service).to.include("NET_DVR_SET_FACE_AND_TEMPLATE");
 		expect(service).to.include("NET_DVR_GET_FACE_AND_TEMPLATE");
 		const activityLogging = readFileSync(
@@ -339,6 +343,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("attemptedWriteTaskKeys");
 		expect(controller).to.include("remainingWriteAttemptBudget");
 		expect(controller).to.include("Credential recovery write-attempt fence refused the canary");
+		expect(controller).to.include('status: recoveryDecision.shouldRetry ? "retrying" : "failed"');
+		expect(controller).to.include('status: "processing"');
 		expect(controller).to.include("expired_physical_stage_requires_adjudication");
 		expect(controller).to.include(
 			"Automatic resume is forbidden until the target is physically reread",
@@ -346,6 +352,15 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("successfulOperationIds");
 		expect(controller).to.include("verified !== readyWrites.length");
 		expect(controller).to.include("credential_recovery_write_progress");
+		expect(controller).to.include("hikvision_merge_device_inventory_timing");
+		expect(controller).to.include("credential_recovery_replan_completed");
+		expect(controller).to.include("stageDurationMs");
+		expect(controller).to.include("physicalApplyElapsedMs");
+		expect(controller).to.include("fingerprintBundleWriteMs");
+		expect(controller).to.include("targetFingerprintRereadMs");
+		expect(controller).to.include("targetUserSyncMs");
+		expect(controller).to.include("fleet_reconciliation_deferred");
+		expect(controller).to.include("skipFinalFleetReread: true");
 		expect(controller).to.include(
 			"Credential recovery replan lost full-inventory readability for the frozen device scope",
 		);

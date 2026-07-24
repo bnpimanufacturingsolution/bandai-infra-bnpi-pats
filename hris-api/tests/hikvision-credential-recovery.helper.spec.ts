@@ -59,6 +59,18 @@ describe("Hikvision credential recovery graph", () => {
 			retryable: false,
 			observabilityDefect: false,
 		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
+					"Credential recovery write-attempt fence refused the canary: claimed 0 of 1 target writes.",
+				),
+			),
+		).to.include({
+			code: "worker_fencing",
+			category: "concurrency",
+			retryable: false,
+			observabilityDefect: false,
+		});
 	});
 
 	it("retries transient database transport loss without retrying forever", () => {
@@ -148,6 +160,8 @@ describe("Hikvision credential recovery graph", () => {
 			"physical_reread",
 		]);
 		expect(tasks[0].reviewedByteHash).to.match(/^[a-f0-9]{64}$/);
+		expect(tasks[0].status).to.equal("pending");
+		expect(tasks[0].stage).to.equal("ready_to_write");
 		expect(tasks[1].payload.dependsOn).to.equal("target_write:op-1");
 	});
 

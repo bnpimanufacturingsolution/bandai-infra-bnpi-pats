@@ -2889,6 +2889,12 @@ export const controller = (prisma: PrismaClient) => {
 				pictureSize: Number(verified.pictureSize || 0),
 				rereadTemplateSize: Number(verified.rereadTemplateSize || 0),
 				rereadPictureSize: Number(verified.rereadPictureSize || 0),
+				operationTiming: {
+					writeMs: Number(verified.writeMs || 0),
+					stabilizationWaitMs: Number(verified.stabilizationWaitMs || 0),
+					rereadMs: Number(verified.rereadMs || 0),
+					totalMs: Number(verified.durationMs || 0),
+				},
 				strategy: "stored_face_sdk_write_exact_reread",
 			};
 		} finally {
@@ -3813,6 +3819,7 @@ export const controller = (prisma: PrismaClient) => {
 				sticky: verified.sticky,
 				progressStatus: verified.progress.cardReaderRecvStatus,
 				progressErrorMsg: verified.progress.errorMsg,
+				timing: verified.timing,
 				numOfFP: verified.numOfFP,
 				source: verified.source,
 			});
@@ -10977,18 +10984,27 @@ export const controller = (prisma: PrismaClient) => {
 			),
 		);
 		const loadDeviceRecords = async (device: (typeof devices)[number]) => {
+			const deviceReadStartedAt = Date.now();
+			const timings: Record<string, number> = {};
+			const measureStage = async <T>(stage: string, action: () => Promise<T>) => {
+				const startedAt = Date.now();
+				try {
+					return await action();
+				} finally {
+					timings[stage] = (timings[stage] || 0) + (Date.now() - startedAt);
+				}
+			};
 			const deviceRecords: DeviceUserMergeRecord[] = [];
 			try {
 				try {
-					const response = await hikvisionFetch(
-						"/ISAPI/System/deviceInfo?format=json",
-						{
+					const response = await measureStage("deviceInfoProbeMs", () =>
+						hikvisionFetch("/ISAPI/System/deviceInfo?format=json", {
 							method: "GET",
 							deviceId: String(device.id),
 							prisma,
 							request: params.req,
 							timeoutMs: 6_000,
-						},
+						}),
 					);
 					const deviceInfo =
 						response?.DeviceInfo ||
@@ -11018,15 +11034,17 @@ export const controller = (prisma: PrismaClient) => {
 				try {
 					capabilityProbe = {
 						status: "supported",
-						response: await hikvisionFetch(
-							"/ISAPI/Intelligent/FDLib/FaceDataRecord/capabilities?format=json",
-							{
+						response: await measureStage("faceCapabilityProbeMs", () =>
+							hikvisionFetch(
+								"/ISAPI/Intelligent/FDLib/FaceDataRecord/capabilities?format=json",
+								{
 								method: "GET",
 								deviceId: String(device.id),
 								prisma,
 								request: params.req,
 								timeoutMs: 6_000,
-							},
+								},
+							),
 						),
 					};
 				} catch (error: any) {
@@ -11089,16 +11107,21 @@ export const controller = (prisma: PrismaClient) => {
 							);
 						});
 				}
-				const { candidates } = await loadHikvisionDeviceUserSnapshot(params.req, device);
-				const employees = await loadEmployeesForDeviceUserCandidates(
-					params.organizationId,
-					candidates,
+				const { candidates } = await measureStage("userInventoryMs", () =>
+					loadHikvisionDeviceUserSnapshot(params.req, device),
+				);
+				const employees = await measureStage("employeeResolutionMs", () =>
+					loadEmployeesForDeviceUserCandidates(
+						params.organizationId,
+						candidates,
+					),
 				);
 				const vendorUserIds = candidates
 					.map((candidate) => candidate.vendorUserId)
 					.filter(Boolean);
-				const savedRows = vendorUserIds.length
-					? await (prisma as any).deviceUser.findMany({
+				const savedRows: any[] = vendorUserIds.length
+					? await measureStage("savedCustodyQueryMs", () =>
+							(prisma as any).deviceUser.findMany({
 							where: {
 								organizationId: params.organizationId,
 								deviceId: device.id,
@@ -11111,12 +11134,14 @@ export const controller = (prisma: PrismaClient) => {
 								rawPayload: true,
 								vendorMetadata: true,
 							},
-						})
+							}),
+						)
 					: [];
 				const savedByVendorId = new Map<string, any>(
 					savedRows.map((row: any) => [String(row.vendorUserId), row] as [string, any]),
 				);
 				const liveCardsByVendorId = new Map<string, string>();
+				const cardInventoryStartedAt = Date.now();
 				try {
 					const cardsByVendor = new Map<string, Set<string>>();
 					let searchResultPosition = 0;
@@ -11174,7 +11199,11 @@ export const controller = (prisma: PrismaClient) => {
 					deviceLogger.warn(
 						`CardInfo custody inventory failed for ${device.id}; rows remain in queued recovery: ${error?.message || error}`,
 					);
+				} finally {
+					timings.cardInventoryMs =
+						Date.now() - cardInventoryStartedAt;
 				}
+				const recordAssemblyStartedAt = Date.now();
 				for (const candidate of candidates) {
 					const saved = savedByVendorId.get(candidate.vendorUserId);
 					const decision = resolveDeviceUserLinkDecision(candidate, employees);
@@ -11422,7 +11451,13 @@ export const controller = (prisma: PrismaClient) => {
 						_cardNo: exactCardNo || null,
 					});
 				}
-				return { records: deviceRecords, error: null };
+				timings.recordAssemblyMs = Date.now() - recordAssemblyStartedAt;
+				return {
+					records: deviceRecords,
+					error: null,
+					timings,
+					durationMs: Date.now() - deviceReadStartedAt,
+				};
 			} catch (error: any) {
 				return {
 					records: deviceRecords,
@@ -11431,6 +11466,8 @@ export const controller = (prisma: PrismaClient) => {
 						deviceName: device.name || device.address || device.id,
 						error: error?.message || "SDK user read failed",
 					},
+					timings,
+					durationMs: Date.now() - deviceReadStartedAt,
 				};
 			}
 		};
@@ -11439,6 +11476,8 @@ export const controller = (prisma: PrismaClient) => {
 		const deviceResults: Array<{
 			records: DeviceUserMergeRecord[];
 			error: { deviceId: string; deviceName: string; error: string } | null;
+			timings: Record<string, number>;
+			durationMs: number;
 		}> = new Array(devices.length);
 		let nextDeviceIndex = 0;
 		const readNextDevice = async (): Promise<void> => {
@@ -11446,7 +11485,19 @@ export const controller = (prisma: PrismaClient) => {
 			nextDeviceIndex += 1;
 			if (index >= devices.length) return;
 			const device = devices[index];
+			let attempt = 1;
 			let result = await loadDeviceRecords(device);
+			deviceLogger.info("Hikvision merge device inventory timing", {
+				event: "hikvision_merge_device_inventory_timing",
+				deviceId: device.id,
+				deviceName: device.name || device.address || device.id,
+				attempt,
+				outcome: result.error ? "failed" : "succeeded",
+				recordCount: result.records.length,
+				durationMs: result.durationMs,
+				...result.timings,
+				error: result.error?.error || null,
+			});
 			if (result.error) {
 				const firstError = result.error.error.toLowerCase();
 				const retryable =
@@ -11466,7 +11517,19 @@ export const controller = (prisma: PrismaClient) => {
 						`Merge inventory read recovery ${recovery}/3 for ${device.name || device.address || device.id} after ${result.error.error}; retrying in ${delayMs}ms`,
 					);
 					await new Promise((resolve) => setTimeout(resolve, delayMs));
+					attempt += 1;
 					result = await loadDeviceRecords(device);
+					deviceLogger.info("Hikvision merge device inventory timing", {
+						event: "hikvision_merge_device_inventory_timing",
+						deviceId: device.id,
+						deviceName: device.name || device.address || device.id,
+						attempt,
+						outcome: result.error ? "failed" : "succeeded",
+						recordCount: result.records.length,
+						durationMs: result.durationMs,
+						...result.timings,
+						error: result.error?.error || null,
+					});
 				}
 			}
 			deviceResults[index] = result;
@@ -12331,6 +12394,14 @@ export const controller = (prisma: PrismaClient) => {
 			let writeFailure: Record<string, unknown> | null = null;
 			if (!failed && remainingWriteAttemptBudget > 0) {
 				await heartbeat({ currentStage: "replanning_recovered_custody" });
+				const replanStartedAt = Date.now();
+				deviceLogger.info("Credential recovery replan started", {
+					event: "credential_recovery_replan_started",
+					jobId: params.jobId,
+					stage: "replanning_recovered_custody",
+					deviceIds: persistedJob.deviceIds,
+					deviceCount: (persistedJob.deviceIds || []).length,
+				});
 				const replanHeartbeat = setInterval(() => {
 					heartbeat({ currentStage: "replanning_recovered_custody" }).catch(
 						(error: unknown) =>
@@ -12349,6 +12420,16 @@ export const controller = (prisma: PrismaClient) => {
 				} finally {
 					clearInterval(replanHeartbeat);
 				}
+				deviceLogger.info("Credential recovery replan completed", {
+					event: "credential_recovery_replan_completed",
+					jobId: params.jobId,
+					stage: "replanning_recovered_custody",
+					deviceIds: persistedJob.deviceIds,
+					deviceCount: (persistedJob.deviceIds || []).length,
+					durationMs: Date.now() - replanStartedAt,
+					validDevices: Number(freshPlan?.validDeviceIds?.length || 0),
+					failedDevices: Number(freshPlan?.errors?.length || 0),
+				});
 				const expectedDeviceIds = (persistedJob.deviceIds || []).map(String);
 				if (
 					(freshPlan.errors || []).length > 0 ||
@@ -12402,7 +12483,7 @@ export const controller = (prisma: PrismaClient) => {
 							targetDeviceId: task.targetDeviceId,
 							vendorUserId: task.vendorUserId,
 							userKey: task.userKey,
-							status: task.kind === "target_write" ? "processing" : "blocked",
+							status: task.status,
 							stage: task.stage,
 							priority: task.priority,
 							unlockCount: task.unlockCount,
@@ -12441,8 +12522,16 @@ export const controller = (prisma: PrismaClient) => {
 						currentTaskKey: `target_write:${readyWrites[0].id}`,
 					});
 					let progressUpdateChain = Promise.resolve();
+					const physicalApplyStartedAt = Date.now();
+					let priorWriteProgressAt = physicalApplyStartedAt;
 					const recordDurableWriteProgress = (event: any) => {
 						progressUpdateChain = progressUpdateChain.then(async () => {
+							const progressObservedAt = Date.now();
+							const stageDurationMs =
+								progressObservedAt - priorWriteProgressAt;
+							const physicalApplyElapsedMs =
+								progressObservedAt - physicalApplyStartedAt;
+							priorWriteProgressAt = progressObservedAt;
 							const stage = String(event?.stage || "writing_canary");
 							const targetDeviceId = String(
 								event?.targetDeviceId || event?.targetDeviceIds?.[0] || "",
@@ -12498,6 +12587,8 @@ export const controller = (prisma: PrismaClient) => {
 												targetDeviceId: event?.targetDeviceId || null,
 												vendorUserId: event?.vendorUserId || null,
 												attempt: 1,
+												stageDurationMs,
+												physicalApplyElapsedMs,
 											},
 										}
 									: {}),
@@ -12513,6 +12604,9 @@ export const controller = (prisma: PrismaClient) => {
 								targetDeviceIds: event?.targetDeviceIds || null,
 								vendorUserId: event?.vendorUserId || null,
 								message: event?.message || null,
+								stageDurationMs,
+								physicalApplyElapsedMs,
+								observedAt: new Date(progressObservedAt).toISOString(),
 								...(errorClassification || {}),
 							};
 							if (errorClassification) {
@@ -12535,6 +12629,7 @@ export const controller = (prisma: PrismaClient) => {
 							req: params.req,
 							planId: freshPlanId,
 							mode: "credentials",
+							skipFinalFleetReread: true,
 							selectedCredentialWriteIds: readyWrites.map((write: any) =>
 								String(write.id),
 							),
@@ -12688,7 +12783,7 @@ export const controller = (prisma: PrismaClient) => {
 			const persistFailure = async () => {
 				const current = await jobStore.findUnique({
 					where: { id: params.jobId },
-					select: { request: true },
+					select: { request: true, currentStage: true },
 				});
 				const currentRequest = (current?.request || {}) as Record<string, unknown>;
 				recoveryDecision = planCredentialRecoveryWorkerFailure(
@@ -12727,6 +12822,28 @@ export const controller = (prisma: PrismaClient) => {
 					staleLeaseError.code = "CREDENTIAL_RECOVERY_STALE_LEASE";
 					throw staleLeaseError;
 				}
+				await taskStore.updateMany({
+					where: {
+						jobId: params.jobId,
+						status: "processing",
+						leaseOwner,
+					},
+					data: {
+						status: recoveryDecision.shouldRetry ? "retrying" : "failed",
+						stage: recoveryDecision.shouldRetry
+							? "worker_retrying"
+							: "worker_failed",
+						error: {
+							...recoveryDecision,
+							at: new Date().toISOString(),
+							jobId: params.jobId,
+							stage: String(current?.currentStage || "worker_failed"),
+						},
+						leaseOwner: null,
+						leaseExpiresAt: null,
+						completedAt: recoveryDecision.shouldRetry ? null : new Date(),
+					},
+				});
 				return persisted;
 			};
 			await withHikvisionPrismaTransportRetry(persistFailure, [
@@ -12979,6 +13096,7 @@ export const controller = (prisma: PrismaClient) => {
 		plan: any;
 		selectedCredentialWriteIds: string[];
 		emitProgress?: (event: any) => void;
+		skipFinalFleetReread?: boolean;
 	}) => {
 		const writeMatrix = buildDeviceUserCredentialWriteMatrix(
 			params.plan,
@@ -13203,6 +13321,8 @@ export const controller = (prisma: PrismaClient) => {
 							String(record.deviceId) === String(write.targetDeviceId),
 					);
 					try {
+						const fingerprintOperationStartedAt = Date.now();
+						const operationTiming: Record<string, number> = {};
 						await withTargetDeviceWriteLock(
 							String(write.targetDeviceId),
 							async () => {
@@ -13247,6 +13367,7 @@ export const controller = (prisma: PrismaClient) => {
 								);
 							}
 						}
+						const bundleWriteStartedAt = Date.now();
 						const writeResult = await writeDecryptedBiometricBundleToHikvisionDevice({
 							req: params.req,
 							targetDevice,
@@ -13254,6 +13375,8 @@ export const controller = (prisma: PrismaClient) => {
 							decrypted: { fingerprints: templatesToWrite },
 							deferFingerprintRereadVerification: true,
 						});
+						operationTiming.fingerprintBundleWriteMs =
+							Date.now() - bundleWriteStartedAt;
 						if (
 							writeResult.fingerprintWriteCount < templatesToWrite.length ||
 							writeResult.fingerprintWrites.some(
@@ -13275,13 +13398,17 @@ export const controller = (prisma: PrismaClient) => {
 								`Target rejected or failed to retain one or more raw fingerprint templates: ${JSON.stringify(diagnostics)}`,
 							);
 						}
+						const stabilizationStartedAt = Date.now();
 						await new Promise((resolve) => setTimeout(resolve, 750));
+						operationTiming.stabilizationWaitMs =
+							Date.now() - stabilizationStartedAt;
 						const {
 							buildFingerprintTemplateChecksumEvidence,
 							fetchRawFingerprintsViaIsapi,
 						} = await import(
 							"../../helper/device-user-raw-fingerprint.helper.js"
 						);
+						const fingerprintRereadStartedAt = Date.now();
 						const physicalReread = await fetchRawFingerprintsViaIsapi({
 							prisma,
 							req: params.req,
@@ -13296,6 +13423,8 @@ export const controller = (prisma: PrismaClient) => {
 							),
 							expectedFingerprintCount: Number(write.sourceReportedCount || 0),
 						});
+						operationTiming.targetFingerprintRereadMs =
+							Date.now() - fingerprintRereadStartedAt;
 						const sourceTemplateChecksums =
 							buildFingerprintTemplateChecksumEvidence(templates);
 						const postWriteTemplateChecksums =
@@ -13327,12 +13456,16 @@ export const controller = (prisma: PrismaClient) => {
 								),
 							)
 							.digest("hex");
+						const targetUserSyncStartedAt = Date.now();
 						await syncSingleHikvisionDeviceUserFromSource({
 							req: params.req,
 							organizationId: params.organizationId,
 							device: targetDevice,
 							employeeNo: write.vendorUserId,
 						});
+						operationTiming.targetUserSyncMs =
+							Date.now() - targetUserSyncStartedAt;
+						const targetRowReadStartedAt = Date.now();
 						const after = await (prisma as any).deviceUser.findUnique({
 							where: {
 								organizationId_deviceId_vendorUserId: {
@@ -13342,6 +13475,10 @@ export const controller = (prisma: PrismaClient) => {
 								},
 							},
 						});
+						operationTiming.targetRowReadMs =
+							Date.now() - targetRowReadStartedAt;
+						operationTiming.totalMs =
+							Date.now() - fingerprintOperationStartedAt;
 						const beforeCredentials = extractHikvisionCredentialSummary(
 							before?.rawPayload || {},
 						);
@@ -13375,6 +13512,8 @@ export const controller = (prisma: PrismaClient) => {
 							physicalRereadResult: "exact_slot_checksum_retained",
 							sdkProgressStatus:
 								writeResult.fingerprintWrites.at(-1)?.progressStatus ?? null,
+							fingerprintWrites: writeResult.fingerprintWrites,
+							operationTiming,
 						};
 						results.push(result);
 						params.emitProgress?.({
@@ -14394,27 +14533,42 @@ export const controller = (prisma: PrismaClient) => {
 		for (const group of serialFaceCardGroups) {
 			await processCredentialGroup(group);
 		}
-		params.emitProgress?.({
-			stage: "reread_started",
-			message: "Rereading all frozen devices after credential-only writes.",
-		});
-		const reread = await loadHikvisionSdkMergePlan({
-			req: params.req,
-			organizationId: params.organizationId,
-			deviceIds: params.plan.deviceIds,
-		});
-		const rereadCounts = reread?.counts || {};
-		params.emitProgress?.({
-			stage: "reread_done",
-			remainingConflicts: Number(rereadCounts.conflicts || 0),
-			remainingMissing: Number(rereadCounts.missing || 0),
-			message: "Credential reread complete.",
-		});
+		let reread: any = null;
+		let rereadCounts: any = null;
+		if (params.skipFinalFleetReread) {
+			params.emitProgress?.({
+				stage: "fleet_reconciliation_deferred",
+				message:
+					"Exact target reread passed; full-fleet reconciliation is deferred to the next checkpoint.",
+			});
+		} else {
+			params.emitProgress?.({
+				stage: "reread_started",
+				message: "Rereading all frozen devices after credential-only writes.",
+			});
+			const fleetRereadStartedAt = Date.now();
+			reread = await loadHikvisionSdkMergePlan({
+				req: params.req,
+				organizationId: params.organizationId,
+				deviceIds: params.plan.deviceIds,
+			});
+			rereadCounts = reread?.counts || {};
+			params.emitProgress?.({
+				stage: "reread_done",
+				remainingConflicts: Number(rereadCounts.conflicts || 0),
+				remainingMissing: Number(rereadCounts.missing || 0),
+				durationMs: Date.now() - fleetRereadStartedAt,
+				message: "Credential reread complete.",
+			});
+		}
 		return {
 			results,
 			reread,
-			remainingConflicts: Number(rereadCounts.conflicts || 0),
-			remainingMissing: Number(rereadCounts.missing || 0),
+			fleetReconciliationDeferred: Boolean(params.skipFinalFleetReread),
+			remainingConflicts:
+				rereadCounts == null ? null : Number(rereadCounts.conflicts || 0),
+			remainingMissing:
+				rereadCounts == null ? null : Number(rereadCounts.missing || 0),
 			attention: results.filter((result) => result.status === "error").length,
 		};
 	};
@@ -14471,6 +14625,9 @@ export const controller = (prisma: PrismaClient) => {
 					plan: stored.plan,
 					selectedCredentialWriteIds,
 					emitProgress,
+					skipFinalFleetReread: Boolean(
+						(req as any).deviceUserMergeSkipFinalFleetReread,
+					),
 				});
 				deviceUserMergePlans.delete(planId);
 				res.status(200).json(
@@ -15042,10 +15199,13 @@ export const controller = (prisma: PrismaClient) => {
 		selectedUserKeys?: string[];
 		selectedCredentialWriteIds?: string[];
 		onProgress?: (event: any) => void;
+		skipFinalFleetReread?: boolean;
 	}) => {
 		const originalBody = params.req.body;
 		const originalProgress = (params.req as any).deviceUserMergeProgress;
 		const originalSkipInitialSnapshot = (params.req as any).deviceUserMergeSkipInitialSnapshot;
+		const originalSkipFinalFleetReread = (params.req as any)
+			.deviceUserMergeSkipFinalFleetReread;
 		let statusCode = 200;
 		let responsePayload: any = null;
 		const fakeRes = {
@@ -15069,6 +15229,8 @@ export const controller = (prisma: PrismaClient) => {
 			};
 			(params.req as any).deviceUserMergeProgress = params.onProgress;
 			(params.req as any).deviceUserMergeSkipInitialSnapshot = true;
+			(params.req as any).deviceUserMergeSkipFinalFleetReread =
+				params.skipFinalFleetReread === true;
 			await applyHikvisionSdkUserMerge(
 				params.req,
 				fakeRes,
@@ -15078,6 +15240,8 @@ export const controller = (prisma: PrismaClient) => {
 			(params.req as any).body = originalBody;
 			(params.req as any).deviceUserMergeProgress = originalProgress;
 			(params.req as any).deviceUserMergeSkipInitialSnapshot = originalSkipInitialSnapshot;
+			(params.req as any).deviceUserMergeSkipFinalFleetReread =
+				originalSkipFinalFleetReread;
 		}
 		if (statusCode >= 400) {
 			const message =
