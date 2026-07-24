@@ -59,6 +59,12 @@ import {
 	buildCloseWorkbookUploadSearchParams,
 	buildOpenWorkbookSearchParams,
 	buildOpenWorkbookUploadSearchParams,
+	buildWorkbookImportProgressFromRun,
+	formatWorkbookImportProgressDescription,
+	formatWorkbookImportProgressTitle,
+	getWorkbookImportProgressToastId,
+	isMigrationRunStatusSuccess,
+	isMigrationRunStatusTerminal,
 	isWorkbookUploadOpen,
 } from "~/lib/admin-migration-ui";
 
@@ -2247,6 +2253,8 @@ export default function AdminMigrationPage() {
 		message: "Not started",
 	});
 	const workbookInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+	/** Tracks which run/client session currently owns the progress toast per workbook. */
+	const importProgressToastRunsRef = useRef<Record<string, string | null>>({});
 	const resumedWorkbookJobRefs = useRef<Set<string>>(new Set());
 	const dm4SourceResolutionKeyRef = useRef("");
 	const dm4ProofEventKeyRef = useRef("");
@@ -3179,6 +3187,13 @@ export default function AdminMigrationPage() {
 			}));
 		}
 	}, [dm3EffectiveSourceFilename, dm3RunProgressData, workbookGroups]);
+
+	// Durable DM3 runs can take many minutes — keep a progress toast updated from poll data.
+	useEffect(() => {
+		if (!dm3RunProgressData) return;
+		syncDurableRunProgressToast("dm3", dm3RunProgressData);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- toast helpers are stable for this page lifecycle
+	}, [dm3RunProgressData]);
 	useEffect(() => {
 		if (!dm3RunEventsData || dm3RunEventsData.length === 0) return;
 		const mappedEvents: MigrationLiveEvent[] = dm3RunEventsData
@@ -3289,6 +3304,14 @@ export default function AdminMigrationPage() {
 			dm4: [...proofRowEvents, ...mappedEvents].slice(0, 200),
 		}));
 	}, [dm4ProofReport, dm4RunEventsData, dm4RunProgressData?.proof, effectiveDm4RunId]);
+
+	// Durable DM4 runs can also run long — mirror progress into the same toast pattern.
+	useEffect(() => {
+		if (!dm4RunProgressData) return;
+		syncDurableRunProgressToast("dm4", dm4RunProgressData);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- toast helpers are stable for this page lifecycle
+	}, [dm4RunProgressData]);
+
 	const dm4SourcePaths = parseDm4SourceFiles(dm4SourceFilesText);
 	const storedActiveWorkbookReport =
 		activeWorkbookGroup && migrationReports[activeWorkbookGroup.id]
@@ -3736,6 +3759,121 @@ export default function AdminMigrationPage() {
 			next.delete("importDefaultLeaveBalances");
 			next.delete("importCreateTimesheets");
 			return next;
+		});
+	};
+
+	const showWorkbookImportProgressToast = (
+		workbookId: string,
+		options?: {
+			runKey?: string | null;
+			status?: string | null;
+			description?: string | null;
+		},
+	) => {
+		const toastId = getWorkbookImportProgressToastId(workbookId);
+		const runKey = options?.runKey ?? "active";
+		importProgressToastRunsRef.current[workbookId] = runKey;
+		toast.loading(formatWorkbookImportProgressTitle(workbookId, options?.status || "RUNNING"), {
+			id: toastId,
+			description: options?.description || "Working…",
+			duration: Infinity,
+		});
+	};
+
+	const finishWorkbookImportProgressToast = (
+		workbookId: string,
+		outcome: "success" | "error",
+		options?: {
+			runKey?: string | null;
+			status?: string | null;
+			description?: string | null;
+			title?: string | null;
+		},
+	) => {
+		const toastId = getWorkbookImportProgressToastId(workbookId);
+		const runKey = options?.runKey;
+		if (
+			runKey &&
+			importProgressToastRunsRef.current[workbookId] &&
+			importProgressToastRunsRef.current[workbookId] !== runKey
+		) {
+			return;
+		}
+		const title =
+			options?.title ||
+			formatWorkbookImportProgressTitle(
+				workbookId,
+				options?.status || (outcome === "success" ? "COMPLETED" : "FAILED"),
+			);
+		if (outcome === "success") {
+			toast.success(title, {
+				id: toastId,
+				description: options?.description || undefined,
+				duration: 6_000,
+			});
+		} else {
+			toast.error(title, {
+				id: toastId,
+				description: options?.description || undefined,
+				duration: 8_000,
+			});
+		}
+		importProgressToastRunsRef.current[workbookId] = null;
+	};
+
+	const syncDurableRunProgressToast = (
+		workbookId: string,
+		progress:
+			| MigrationRunProgress
+			| MigrationRunProgressResponse["progress"]
+			| null
+			| undefined,
+	) => {
+		if (!progress?.runId && !(progress as MigrationRunProgress | undefined)?.status) return;
+		const runId = String(
+			(progress as MigrationRunProgress).runId ||
+				(progress as { runId?: string }).runId ||
+				"",
+		);
+		const status = String((progress as MigrationRunProgress).status || "");
+		if (!status) return;
+
+		const description = formatWorkbookImportProgressDescription(
+			buildWorkbookImportProgressFromRun(progress as MigrationRunProgress),
+		);
+
+		if (!isMigrationRunStatusTerminal(status)) {
+			// Keep toast alive for long durable runs (DM3/DM4) even after refresh.
+			showWorkbookImportProgressToast(workbookId, {
+				runKey: runId || "active",
+				status,
+				description,
+			});
+			return;
+		}
+
+		const tracked = importProgressToastRunsRef.current[workbookId];
+		if (!tracked || (runId && tracked !== runId && tracked !== "active" && tracked !== "pending")) {
+			// Historical terminal run on page load — do not flash a completion toast.
+			return;
+		}
+
+		if (isMigrationRunStatusSuccess(status)) {
+			finishWorkbookImportProgressToast(workbookId, "success", {
+				runKey: tracked,
+				status,
+				description,
+			});
+			return;
+		}
+
+		finishWorkbookImportProgressToast(workbookId, "error", {
+			runKey: tracked,
+			status,
+			description:
+				(progress as MigrationRunProgress).latestEvent?.message ||
+				description ||
+				`${workbookId.toUpperCase()} import failed`,
 		});
 	};
 
@@ -4884,6 +5022,11 @@ export default function AdminMigrationPage() {
 			message: "DM4 durable migration run started. Source workbooks are being scanned.",
 			rowCount: sourceFiles.length,
 		});
+		showWorkbookImportProgressToast("dm4", {
+			runKey: "pending",
+			status: "RUNNING",
+			description: "Starting durable DM4 run…",
+		});
 		try {
 			const idempotencyKey =
 				typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -4921,6 +5064,11 @@ export default function AdminMigrationPage() {
 			if (!runId) {
 				throw new Error(startResponse.message || "DM4 migration run was not started.");
 			}
+			showWorkbookImportProgressToast("dm4", {
+				runKey: runId,
+				status: "RUNNING",
+				description: "Durable run started · scanning source workbooks…",
+			});
 			setSearchParams((prev) => {
 				const next = new URLSearchParams(prev);
 				next.set("workbook", "dm4");
@@ -4962,6 +5110,16 @@ export default function AdminMigrationPage() {
 							job.progress?.materializedMissingLines,
 					},
 				);
+				showWorkbookImportProgressToast("dm4", {
+					runKey: runId,
+					status: "RUNNING",
+					description: formatWorkbookImportProgressDescription({
+						currentStepLabel: phaseLabel,
+						percent: progressPercent,
+						elapsedSeconds: job.progress?.elapsedSeconds,
+						latestMessage: job.message || null,
+					}),
+				});
 				setDm4ProofRun((current) => ({
 					...current,
 					message: job.message || current.message,
@@ -4990,7 +5148,15 @@ export default function AdminMigrationPage() {
 				startedAt,
 				sourceFiles,
 			});
-			toast.success("DM4 attendance proof imported");
+			finishWorkbookImportProgressToast("dm4", "success", {
+				runKey: runId,
+				status: "COMPLETED",
+				description: formatWorkbookImportProgressDescription({
+					currentStepLabel: "Attendance & timesheet proof imported",
+					percent: 100,
+					elapsedSeconds: Math.max(1, Math.floor((Date.now() - startedAt) / 1000)),
+				}),
+			});
 		} catch (error: any) {
 			const message = error?.message || "Failed to import DM4 proof";
 			appendDm4ProofEventOnce(`error:${message}`, {
@@ -5009,7 +5175,11 @@ export default function AdminMigrationPage() {
 				sourceCount: sourceFiles.length,
 				sourceWorkbookCount: sourceFiles.length,
 			});
-			toast.error(message);
+			finishWorkbookImportProgressToast("dm4", "error", {
+				runKey: importProgressToastRunsRef.current.dm4 || "pending",
+				status: "FAILED",
+				description: message,
+			});
 		} finally {
 			setIsLoadingDm4Proof(false);
 		}
@@ -5520,12 +5690,22 @@ export default function AdminMigrationPage() {
 			status: "Importing",
 			message: "Starting durable DM3 migration run",
 		});
+		showWorkbookImportProgressToast("dm3", {
+			runKey: "pending",
+			status: "RUNNING",
+			description: `Uploading ${file.name} and starting durable run…`,
+		});
 		const response = await hrisApiClient.post<any>("/api/migration/runs", formData, {
 			headers: { "Content-Type": "multipart/form-data" },
 		});
 		const runId = String(response.data?.runId || response.data?.run?.id || "");
 		if (!runId) throw new Error("DM3 migration run did not return a run id.");
 		setDm3ActiveRunId(runId);
+		showWorkbookImportProgressToast("dm3", {
+			runKey: runId,
+			status: "RUNNING",
+			description: "Durable run started · polling step progress…",
+		});
 		setSearchParams((prev) => {
 			const next = new URLSearchParams(prev);
 			next.set("workbook", group.id);
@@ -5533,7 +5713,6 @@ export default function AdminMigrationPage() {
 			next.delete("importJobId");
 			return next;
 		});
-		toast.success("DM3 migration run started.");
 		await queryClient.invalidateQueries({ queryKey: ["migration-run-progress", runId] });
 		await queryClient.invalidateQueries({
 			queryKey: ["migration-run-latest", "dm3", organizationId],
@@ -5551,7 +5730,11 @@ export default function AdminMigrationPage() {
 			try {
 				await handleDurableDm3WorkbookUpload(group, file);
 			} catch (error: any) {
-				toast.error(error?.message || "DM3 migration run failed to start.");
+				finishWorkbookImportProgressToast("dm3", "error", {
+					runKey: importProgressToastRunsRef.current.dm3 || "pending",
+					status: "FAILED",
+					description: error?.message || "DM3 migration run failed to start.",
+				});
 			} finally {
 				const input = workbookInputRefs.current[group.id];
 				if (input) input.value = "";
@@ -5591,6 +5774,15 @@ export default function AdminMigrationPage() {
 			],
 		}));
 		void logWorkbookAudit({ event: "start", report });
+		showWorkbookImportProgressToast(group.id, {
+			runKey: runId,
+			status: "RUNNING",
+			description: formatWorkbookImportProgressDescription({
+				sheetIndex: 0,
+				sheetTotal: group.steps.length,
+				sheetLabel: "Reading workbook sheets",
+			}),
+		});
 
 		setWorkbookProgress((current) => ({
 			...current,
@@ -5665,17 +5857,40 @@ export default function AdminMigrationPage() {
 					status: "blocked",
 					message: `Missing sheet: ${missingSheets.join(", ")}`,
 				});
-				toast.error(`Missing sheet: ${missingSheets.join(", ")}`);
+				finishWorkbookImportProgressToast(group.id, "error", {
+					runKey: runId,
+					status: "BLOCKED",
+					description: `Missing sheet: ${missingSheets.join(", ")}`,
+				});
 				return;
 			}
 
 			let dm3EmployeeFinalizeFile: File | null = null;
 			let dm3EmployeeFinalizeRowCount = 0;
+			const importableSteps = group.steps.filter((step) => Boolean(step.sheetName));
+			let completedSheetCount = 0;
 
 			for (const step of group.steps) {
 				const sheet = sheetsByName.get(step.sheetName || "");
 				const rowCount = Number(sheet?.rowCount || 0);
 				if (!sheet) continue;
+				const sheetIndex = Math.min(
+					importableSteps.findIndex((candidate) => candidate.id === step.id) + 1,
+					importableSteps.length || 1,
+				);
+				showWorkbookImportProgressToast(group.id, {
+					runKey: runId,
+					status: "RUNNING",
+					description: formatWorkbookImportProgressDescription({
+						sheetIndex,
+						sheetTotal: importableSteps.length || group.steps.length,
+						sheetLabel: step.sheetName || step.label,
+						latestMessage: `${rowCount.toLocaleString()} rows detected`,
+						percent: Math.round(
+							(completedSheetCount / Math.max(1, importableSteps.length)) * 100,
+						),
+					}),
+				});
 				appendWorkbookLiveEvent(group.id, {
 					sheetName: step.sheetName || step.label,
 					status: step.unavailable ? "Skipped" : rowCount === 0 ? "Imported" : "Checking",
@@ -5712,6 +5927,7 @@ export default function AdminMigrationPage() {
 						rowCount,
 					});
 					void logWorkbookAudit({ event: "sheet", report, sheet: sheetReport });
+					completedSheetCount += 1;
 					continue;
 				}
 
@@ -5743,6 +5959,7 @@ export default function AdminMigrationPage() {
 						rowCount: 0,
 					});
 					void logWorkbookAudit({ event: "sheet", report, sheet: sheetReport });
+					completedSheetCount += 1;
 					continue;
 				}
 
@@ -5784,10 +6001,24 @@ export default function AdminMigrationPage() {
 						rowCount,
 					});
 					void logWorkbookAudit({ event: "sheet", report, sheet: sheetReport });
+					completedSheetCount += 1;
 					continue;
 				}
 
 				setWorkbookStepProgress(group.id, step.id, { status: "Importing", rowCount });
+				showWorkbookImportProgressToast(group.id, {
+					runKey: runId,
+					status: "RUNNING",
+					description: formatWorkbookImportProgressDescription({
+						sheetIndex,
+						sheetTotal: importableSteps.length || group.steps.length,
+						sheetLabel: `Importing ${step.sheetName || step.label}`,
+						latestMessage: `${rowCount.toLocaleString()} rows`,
+						percent: Math.round(
+							(completedSheetCount / Math.max(1, importableSteps.length)) * 100,
+						),
+					}),
+				});
 				appendWorkbookLiveEvent(group.id, {
 					sheetName: step.sheetName || step.label,
 					status: "Importing",
@@ -5831,6 +6062,33 @@ export default function AdminMigrationPage() {
 									...current,
 									[group.id]: progressReport,
 								}));
+								const processed = Number(
+									(sheetProgress as any)?.processed ||
+										sheetProgress.created +
+											sheetProgress.updated +
+											sheetProgress.skipped +
+											sheetProgress.failed ||
+										0,
+								);
+								const total = Number(sheetProgress.totalRows || rowCount || 0);
+								showWorkbookImportProgressToast(group.id, {
+									runKey: runId,
+									status: "RUNNING",
+									description: formatWorkbookImportProgressDescription({
+										sheetIndex,
+										sheetTotal: importableSteps.length || group.steps.length,
+										sheetLabel: step.sheetName || step.label,
+										childLabel: "Rows",
+										childProcessed: processed,
+										childTotal: total,
+										percent: Math.round(
+											((completedSheetCount +
+												(total > 0 ? processed / total : 0)) /
+												Math.max(1, importableSteps.length)) *
+												100,
+										),
+									}),
+								});
 								void logWorkbookAudit({
 									event: "sheet",
 									report: progressReport,
@@ -5857,6 +6115,7 @@ export default function AdminMigrationPage() {
 							rowCount: sheetReport.totalRows,
 						});
 						void logWorkbookAudit({ event: "sheet", report, sheet: sheetReport });
+						completedSheetCount += 1;
 						continue;
 					}
 					const issueMessage = getImportIssueMessage(result);
@@ -5882,6 +6141,7 @@ export default function AdminMigrationPage() {
 						rowCount,
 					});
 					void logWorkbookAudit({ event: "sheet", report, sheet: sheetReport });
+					completedSheetCount += 1;
 				} catch (error: any) {
 					const sheetReport: MigrationReportSheet = {
 						sheetName: step.sheetName || step.label,
@@ -5919,6 +6179,7 @@ export default function AdminMigrationPage() {
 						rowCount,
 					});
 					void logWorkbookAudit({ event: "sheet", report, sheet: sheetReport });
+					completedSheetCount += 1;
 				}
 			}
 
@@ -6067,10 +6328,29 @@ export default function AdminMigrationPage() {
 						? `${group.id.toUpperCase()} workbook import completed`
 						: `${group.id.toUpperCase()} workbook import finished with issues`,
 			});
+			const totals = getReportTotals(report);
+			const elapsedSeconds = Math.max(1, Math.floor((report.elapsedMs || 0) / 1000));
 			if (report.status === "completed") {
-				toast.success(`${group.id.toUpperCase()} workbook import completed`);
+				finishWorkbookImportProgressToast(group.id, "success", {
+					runKey: runId,
+					status: "COMPLETED",
+					description: formatWorkbookImportProgressDescription({
+						sheetIndex: importableSteps.length || group.steps.length,
+						sheetTotal: importableSteps.length || group.steps.length,
+						latestMessage: `${totals.created.toLocaleString()} created · ${totals.failed.toLocaleString()} failed`,
+						percent: 100,
+						elapsedSeconds,
+					}),
+				});
 			} else {
-				toast.error(`${group.id.toUpperCase()} workbook import finished with issues`);
+				finishWorkbookImportProgressToast(group.id, "error", {
+					runKey: runId,
+					status: "FAILED",
+					description: formatWorkbookImportProgressDescription({
+						latestMessage: `${group.id.toUpperCase()} finished with issues · ${totals.failed.toLocaleString()} failed`,
+						elapsedSeconds,
+					}),
+				});
 			}
 		} catch (error: any) {
 			report = {
@@ -6115,7 +6395,11 @@ export default function AdminMigrationPage() {
 				status: "failed",
 				message: error?.message || "Workbook import failed",
 			});
-			toast.error(error?.message || "Workbook import failed");
+			finishWorkbookImportProgressToast(group.id, "error", {
+				runKey: runId,
+				status: "FAILED",
+				description: error?.message || "Workbook import failed",
+			});
 		} finally {
 			const input = workbookInputRefs.current[group.id];
 			if (input) input.value = "";
@@ -7172,7 +7456,7 @@ return (
 
 			<section className="space-y-3">
 				<h2 className="text-sm font-semibold text-gray-950">Workbook imports</h2>
-				<div className="grid min-w-0 gap-4 xl:grid-cols-2">
+				<div className="flex min-w-0 flex-col gap-4">
 					{workbookGroups.map((group) => {
 						const resumeTarget = getWorkbookResumeTarget(group);
 						return (
@@ -7209,7 +7493,6 @@ return (
 										<Button
 											type="button"
 											size="sm"
-											variant="outline"
 											className="h-8 px-2.5 text-xs"
 											aria-label={`Open ${group.id.toUpperCase()} workbook`}
 											onClick={() => openWorkbookPage(group.id)}
@@ -7217,20 +7500,6 @@ return (
 											<FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
 											Open
 										</Button>
-										{group.id !== "dm4" ? (
-											<Button
-												type="button"
-												size="sm"
-												className="h-8 px-2.5 text-xs"
-												aria-label={`Upload ${group.id.toUpperCase()} workbook`}
-												onClick={() =>
-													openWorkbookPage(group.id, { upload: true })
-												}
-												disabled={extractWorkbook.isPending}>
-												<Upload className="mr-1.5 h-3.5 w-3.5" />
-												Upload
-											</Button>
-										) : null}
 									</div>
 								</div>
 								<div className="divide-y divide-gray-100">
@@ -7300,17 +7569,6 @@ return (
 																Recover
 															</Button>
 														) : null}
-														<Button
-															type="button"
-															size="sm"
-															variant="outline"
-															className="h-8 px-2.5 text-xs"
-															onClick={() =>
-																openWorkbookPage(group.id)
-															}>
-															<FileText className="mr-1.5 h-3.5 w-3.5" />
-															Open workbook
-														</Button>
 														<Button
 															type="button"
 															size="sm"

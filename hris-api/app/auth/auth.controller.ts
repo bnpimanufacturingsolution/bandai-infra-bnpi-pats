@@ -694,6 +694,40 @@ const loadLocalUserProfile = async (prisma: PrismaClient, req: AuthRequest): Pro
 		}
 	}
 
+	// HRIS app role for linked accounts comes from Employee.role (org structure /
+	// DM import). User.role can lag after section IS_HR repairs; prefer employee.
+	const employeeRole = String(employee?.role || "")
+		.trim()
+		.toLowerCase();
+	const localUserRole = String(localUser?.role || "")
+		.trim()
+		.toLowerCase();
+	const effectiveRole =
+		employeeRole ||
+		localUserRole ||
+		String(req.role || "")
+			.trim()
+			.toLowerCase() ||
+		undefined;
+
+	// Best-effort heal: keep User.role aligned so JWT/admin user lists match app role.
+	if (
+		effectiveRole &&
+		localUser?.id &&
+		employeeRole &&
+		localUserRole &&
+		employeeRole !== localUserRole
+	) {
+		try {
+			await prisma.user.update({
+				where: { id: localUser.id },
+				data: { role: employeeRole },
+			});
+		} catch (roleHealError) {
+			console.warn("Best-effort User.role auto-heal failed:", roleHealError);
+		}
+	}
+
 	return {
 		id: localUser.id || userId,
 		email: localUser?.email || jsonStringField(employee?.person?.contactInfo, "email") || undefined,
@@ -705,7 +739,7 @@ const loadLocalUserProfile = async (prisma: PrismaClient, req: AuthRequest): Pro
 		updatedAt: localUser?.updatedAt || undefined,
 		organizationId: localOrganizationId || undefined,
 		organization,
-		role: localUser?.role || req.role || undefined,
+		role: effectiveRole,
 		roleId: req.roleId || undefined,
 		metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
 	};

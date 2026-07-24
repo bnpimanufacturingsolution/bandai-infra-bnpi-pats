@@ -2010,6 +2010,21 @@ export function RunPayrollTemplate() {
 					: lastPayrollGenerationSnapshot?.processed
 						? String(lastPayrollGenerationSnapshot.processed)
 						: null;
+	/** Reopen the run modal — action-oriented, not vague "status". */
+	const payrollProgressResumeLabel = isPayrollProgressUnavailable
+		? "View stuck payroll run"
+		: isPayrollRunProcessing
+			? "View running payroll"
+			: visiblePayrollProgress?.status === "paused"
+				? "View paused payroll"
+				: visiblePayrollProgress?.status === "completed"
+					? "View payroll progress"
+					: visiblePayrollProgress?.status === "failed" ||
+						  visiblePayrollProgress?.status === "cancelled"
+						? "View payroll progress"
+						: isSelectedPeriodProcessing
+							? "View running payroll"
+							: "View payroll progress";
 
 	const handleCloseProgressModal = () => {
 		if (isPayrollActionPending) return;
@@ -2129,12 +2144,12 @@ export function RunPayrollTemplate() {
 						<Button
 							type="button"
 							variant="outline"
-							title="Open payroll run status"
-							aria-label="Open payroll run status"
+							title={payrollProgressResumeLabel}
+							aria-label={payrollProgressResumeLabel}
 							onClick={handleOpenPayrollRunStatus}
 							className="relative h-9 gap-2 border-orange-200 bg-orange-50 px-3 text-orange-700 hover:bg-orange-100 hover:text-orange-800">
 							<RefreshCw className="h-4 w-4" />
-							<span className="text-sm font-medium">Payroll status</span>
+							<span className="text-sm font-medium">{payrollProgressResumeLabel}</span>
 							{payrollStatusBubbleLabel && (
 								<span className="ml-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
 									{payrollStatusBubbleLabel}
@@ -3101,7 +3116,7 @@ export function RunPayrollTemplate() {
 									onClick={handleOpenPayrollRunStatus}
 									className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-5 text-base gap-2">
 									<RefreshCw className="h-5 w-5" />
-									Check Payroll Status
+									{payrollProgressResumeLabel}
 								</Button>
 							) : (
 								<Button
@@ -3899,16 +3914,16 @@ export function RunPayrollTemplate() {
 													? "Payroll paused"
 													: visiblePayrollProgress?.status === "cancelled"
 														? "Payroll cancelled"
-														: "Payroll status"
+														: "Payroll progress"
 								: isSelectedPeriodProcessing
-									? "Check Payroll Run Status"
+									? "View Payroll Progress"
 									: "Start Payroll Processing"}
 						</h2>
 						<p className="mt-1 text-sm text-neutral-500">
 							{showPayrollProgressContent
-								? "You can close this window and reopen status from Run Payroll."
+								? "You can close this window and reopen progress from Run Payroll."
 								: isSelectedPeriodProcessing
-									? "This period is marked processing. Check the active background job before taking another action."
+									? "This period is marked processing. Open the active background job before taking another action."
 									: payrollCoverageLabel !== "N/A"
 										? `Start payroll for ${payrollCoverageLabel}`
 										: "Processing payroll..."}

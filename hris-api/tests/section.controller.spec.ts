@@ -892,6 +892,91 @@ describe("Section Controller", () => {
 			expect(sentData).to.have.property("status", "success");
 		});
 	});
+
+	describe(".importFromXLSX()", () => {
+		it("updates existing section when DM1 re-import changes CODE but keeps department+name", async function () {
+			this.timeout(TEST_TIMEOUT);
+			const XLSX = require("xlsx");
+			const existingLegacy = {
+				id: "sec-legacy-60",
+				organizationId: mockOrganizationId,
+				code: "60",
+				name: "Quality and Compliance Unit",
+				departmentId: mockDepartmentId,
+				isDeleted: false,
+				isHr: false,
+				isActive: true,
+			};
+			let updatedPayload: any = null;
+			let createdPayload: any = null;
+
+			prisma.department = {
+				findMany: async () => [
+					{
+						id: mockDepartmentId,
+						code: "16",
+						name: "N/A",
+					},
+				],
+			};
+			prisma.scheduleTemplate = {
+				findMany: async () => [],
+			};
+			prisma.section.findUnique = async (params: any) => {
+				const code = params?.where?.organizationId_code?.code;
+				if (code === "60") return existingLegacy;
+				return null;
+			};
+			prisma.section.findFirst = async (params: any) => {
+				if (
+					params?.where?.departmentId === mockDepartmentId &&
+					params?.where?.name === "Quality and Compliance Unit"
+				) {
+					return existingLegacy;
+				}
+				return null;
+			};
+			prisma.section.update = async (params: any) => {
+				updatedPayload = params;
+				return { ...existingLegacy, ...params.data };
+			};
+			prisma.section.create = async (params: any) => {
+				createdPayload = params.data;
+				return { id: "new", ...params.data };
+			};
+
+			const sheetRows = [
+				{
+					CODE: "QCU",
+					NAME: "Quality and Compliance Unit",
+					DEPARTMENT: "N/A",
+					DESCRIPTION: "From Manpower Databank",
+					IS_ACTIVE: "TRUE",
+					IS_HR: "FALSE",
+				},
+			];
+			const workbook = XLSX.utils.book_new();
+			const worksheet = XLSX.utils.json_to_sheet(sheetRows);
+			XLSX.utils.book_append_sheet(workbook, worksheet, "Sections");
+			const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+			(req as any).file = { buffer };
+			(req as any).organizationId = mockOrganizationId;
+
+			await sectionController.importFromXLSX(req as Request, res, next);
+
+			expect(statusCode).to.equal(200);
+			expect(sentData?.status).to.equal("success");
+			expect(sentData?.data?.summary?.updated).to.equal(1);
+			expect(sentData?.data?.summary?.created).to.equal(0);
+			expect(sentData?.data?.summary?.skipped).to.equal(0);
+			expect(sentData?.data?.summary?.errors || []).to.have.length(0);
+			expect(createdPayload).to.equal(null);
+			expect(updatedPayload?.where?.id).to.equal("sec-legacy-60");
+			expect(updatedPayload?.data?.code).to.equal("QCU");
+			expect(updatedPayload?.data?.name).to.equal("Quality and Compliance Unit");
+		});
+	});
 });
 
 describe("Data Grouping Helper", () => {

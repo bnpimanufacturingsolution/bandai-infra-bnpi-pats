@@ -2,11 +2,15 @@
  * Single entry: npm run dev:local
  *
  * 1) Ensure Docker Postgres clone container (hris-local-dev-clone :5433)
+ *    with named volume hris-local-dev-clone-pgdata (distinguishable in `docker volume ls`)
  * 2) Ensure .env.local-clone (from example if missing)
- * 3) Run predev with BNPI tunnel + device bridges skipped
- * 4) Start API watch with .env + .env.local-clone
+ * 3) Apply Prisma schema via `prisma db push` against the local clone
+ * 4) Run predev with BNPI tunnel + device bridges skipped
+ * 5) Start API watch with .env + .env.local-clone
  *
  * Does not touch shared VM DEV (55435). For that use: npm run dev
+ *
+ * Skip schema push: HRIS_SKIP_LOCAL_CLONE_SCHEMA_PUSH=true
  */
 const fs = require("fs");
 const path = require("path");
@@ -16,8 +20,12 @@ const apiRoot = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(apiRoot, "..");
 const localCloneEnv = path.join(apiRoot, ".env.local-clone");
 const exampleEnv = path.join(apiRoot, ".env.local-clone.example");
+const postgresSchemaDir = path.join("prisma", "schema-postgres");
 const containerName = process.env.HRIS_LOCAL_CLONE_CONTAINER || "hris-local-dev-clone";
+const volumeName =
+	process.env.HRIS_LOCAL_CLONE_VOLUME || "hris-local-dev-clone-pgdata";
 const localPort = String(process.env.HRIS_LOCAL_CLONE_PORT || "5433");
+const defaultLocalCloneDbUrl = `postgresql://postgres:postgres@127.0.0.1:${localPort}/hris?schema=public`;
 const isWin = process.platform === "win32";
 
 function log(msg) {
@@ -74,6 +82,71 @@ function containerState() {
 	return { exists: true, running };
 }
 
+function containerVolumeMounts() {
+	const r = runCapture("docker", [
+		"inspect",
+		"--format",
+		"{{range .Mounts}}{{.Type}}|{{.Name}}|{{.Destination}};{{end}}",
+		containerName,
+	]);
+	if (r.status !== 0) return [];
+	return String(r.stdout || "")
+		.trim()
+		.split(";")
+		.map((s) => s.trim())
+		.filter(Boolean)
+		.map((entry) => {
+			const [type, name, destination] = entry.split("|");
+			return { type, name: name || "", destination: destination || "" };
+		});
+}
+
+function ensureNamedVolume() {
+	const exists = runCapture("docker", [
+		"volume",
+		"inspect",
+		volumeName,
+		"--format",
+		"{{.Name}}",
+	]);
+	if (exists.status === 0 && String(exists.stdout || "").trim() === volumeName) {
+		log(`Docker volume ready: ${volumeName}`);
+		return;
+	}
+	log(`Creating Docker volume ${volumeName}...`);
+	const create = run("docker", ["volume", "create", volumeName]);
+	if (create.status !== 0) {
+		fail(`Failed to create Docker volume ${volumeName}`);
+	}
+	log(`Docker volume created: ${volumeName}`);
+}
+
+function logVolumeHintForExistingContainer() {
+	const mounts = containerVolumeMounts();
+	const pgdata = mounts.find((m) =>
+		m.destination.includes("/var/lib/postgresql/data"),
+	);
+	if (!pgdata) {
+		log(
+			`Warning: existing ${containerName} has no /var/lib/postgresql/data mount (unexpected)`,
+		);
+		return;
+	}
+	if (pgdata.type === "volume" && pgdata.name === volumeName) {
+		log(`Postgres data volume: ${volumeName}`);
+		return;
+	}
+	const label =
+		pgdata.type === "volume" && pgdata.name
+			? `volume ${pgdata.name}`
+			: `${pgdata.type || "unknown"} mount`;
+	log(
+		`Note: existing ${containerName} uses ${label}, not named volume ${volumeName}. ` +
+			`Recreate to adopt the named volume (data moves only if you re-point the same volume or restore a dump): ` +
+			`docker stop ${containerName} && docker rm ${containerName} then re-run npm run dev:local`,
+	);
+}
+
 function ensureContainer() {
 	if (!dockerAvailable()) {
 		fail(
@@ -84,6 +157,7 @@ function ensureContainer() {
 	const state = containerState();
 	if (state.running) {
 		log(`Postgres clone already running (${containerName} → 127.0.0.1:${localPort})`);
+		logVolumeHintForExistingContainer();
 		return;
 	}
 
@@ -91,9 +165,12 @@ function ensureContainer() {
 		log(`Starting existing container ${containerName}...`);
 		const start = run("docker", ["start", containerName]);
 		if (start.status !== 0) fail(`docker start ${containerName} failed`);
+		logVolumeHintForExistingContainer();
 	} else {
+		ensureNamedVolume();
 		log(
-			`Creating Postgres clone container ${containerName} on port ${localPort} (empty until you restore a dump)...`,
+			`Creating Postgres clone container ${containerName} on port ${localPort} ` +
+				`with volume ${volumeName} (schema applied next via prisma db push)...`,
 		);
 		const create = run("docker", [
 			"run",
@@ -108,6 +185,8 @@ function ensureContainer() {
 			"POSTGRES_PASSWORD=postgres",
 			"-p",
 			`${localPort}:5432`,
+			"-v",
+			`${volumeName}:/var/lib/postgresql/data`,
 			"postgres:16-alpine",
 		]);
 		if (create.status !== 0) {
@@ -115,6 +194,7 @@ function ensureContainer() {
 				`Failed to create ${containerName}. If a dump already exists under .runtime/local-db-clone-*, restore it after the container is up.`,
 			);
 		}
+		log(`Postgres data volume: ${volumeName}`);
 	}
 
 	log("Waiting for Postgres ready...");
@@ -173,6 +253,71 @@ function loadEnvFile(filePath, { overwrite = false } = {}) {
 	}
 }
 
+function redactDbUrl(raw) {
+	return String(raw || "").replace(/:[^:@/]+@/, ":***@") || "(unset)";
+}
+
+function getLocalCloneDatabaseUrl() {
+	loadEnvFile(localCloneEnv, { overwrite: true });
+	return (
+		process.env.DATABASE_URL ||
+		process.env.WRITE_DATABASE_URL ||
+		process.env.PG_DATABASE_URL ||
+		defaultLocalCloneDbUrl
+	);
+}
+
+function runPrisma(args, envOverrides = {}) {
+	const localPrismaCli = path.join(apiRoot, "node_modules", "prisma", "build", "index.js");
+	const env = { ...process.env, ...envOverrides };
+	if (fs.existsSync(localPrismaCli)) {
+		return run(process.execPath, [localPrismaCli, ...args], { env });
+	}
+	const npx = isWin ? "npx.cmd" : "npx";
+	return run(npx, ["prisma", ...args], { env, shell: isWin });
+}
+
+/**
+ * Keep the local clone schema in sync with prisma/schema-postgres.
+ * Safe/idempotent: already-synced DBs just report "in sync".
+ * Opt out: HRIS_SKIP_LOCAL_CLONE_SCHEMA_PUSH=true
+ */
+function ensureLocalCloneSchema() {
+	if (String(process.env.HRIS_SKIP_LOCAL_CLONE_SCHEMA_PUSH || "").toLowerCase() === "true") {
+		log("Skipping prisma db push (HRIS_SKIP_LOCAL_CLONE_SCHEMA_PUSH=true)");
+		return;
+	}
+
+	const dbUrl = getLocalCloneDatabaseUrl();
+	if (!/127\.0\.0\.1|localhost/i.test(dbUrl)) {
+		fail(
+			`Refusing prisma db push: local-clone DATABASE_URL is not localhost (${redactDbUrl(dbUrl)}). ` +
+				`Fix .env.local-clone or set HRIS_SKIP_LOCAL_CLONE_SCHEMA_PUSH=true.`,
+		);
+	}
+
+	const schemaPath = path.join(apiRoot, postgresSchemaDir);
+	if (!fs.existsSync(schemaPath)) {
+		fail(`Missing Prisma schema path: ${schemaPath}`);
+	}
+
+	log(`Applying Prisma schema to local clone (${redactDbUrl(dbUrl)})...`);
+	const result = runPrisma(
+		["db", "push", "--schema", postgresSchemaDir, "--skip-generate"],
+		{
+			DATABASE_URL: dbUrl,
+			WRITE_DATABASE_URL: dbUrl,
+			PG_DATABASE_URL: dbUrl,
+		},
+	);
+	if (result.status !== 0) {
+		fail(
+			`prisma db push failed for local clone. Check Docker Postgres on port ${localPort}, then re-run npm run dev:local.`,
+		);
+	}
+	log("Local clone schema is in sync with prisma/schema-postgres");
+}
+
 function runPredevLocal() {
 	loadEnvFile(localCloneEnv, { overwrite: true });
 	process.env.HRIS_SKIP_BNPI_DB_ACCESS = "true";
@@ -181,6 +326,8 @@ function runPredevLocal() {
 		process.env.HIKVISION_VM_BRIDGE_ENABLED || "false";
 	process.env.HRIS_SKIP_DEVICE_LIVE_PATH =
 		process.env.HRIS_SKIP_DEVICE_LIVE_PATH || "true";
+	// Keep ensure-local-dev-services from double-pushing / touching other local compose stacks.
+	// Schema for the clone is handled by ensureLocalCloneSchema() above.
 	process.env.HRIS_SKIP_LOCAL_DB_BOOTSTRAP =
 		process.env.HRIS_SKIP_LOCAL_DB_BOOTSTRAP || "true";
 
@@ -242,6 +389,7 @@ function main() {
 	log(`repo=${repoRoot}`);
 	ensureEnvFile();
 	ensureContainer();
+	ensureLocalCloneSchema();
 	runPredevLocal();
 	startApiWatch();
 }

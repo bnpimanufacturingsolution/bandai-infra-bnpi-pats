@@ -67,13 +67,25 @@ npm.cmd run dev:local
 Single command (`scripts/run-dev-local.cjs`) does all of:
 
 1. Ensure `.env.local-clone` (copy from example if missing)
-2. Start/create Docker `hris-local-dev-clone` on `5433`
+2. Start/create Docker `hris-local-dev-clone` on `5433` with named volume `hris-local-dev-clone-pgdata`
 3. Wait until Postgres is ready
-4. Run predev with BNPI tunnel + Hikvision bridges skipped
-5. Start API watch against the local clone
+4. Run `prisma db push` against the local clone (`prisma/schema-postgres`) so tables exist for `/setup`
+5. Run predev with BNPI tunnel + Hikvision bridges skipped
+6. Start API watch against the local clone
+
+Named volume (distinguishable in Docker Desktop / `docker volume ls`):
+
+- Default name: `hris-local-dev-clone-pgdata`
+- Override: `HRIS_LOCAL_CLONE_VOLUME`
+- Container override: `HRIS_LOCAL_CLONE_CONTAINER` (default `hris-local-dev-clone`)
+- Schema push opt-out: `HRIS_SKIP_LOCAL_CLONE_SCHEMA_PUSH=true`
+
+Existing containers created before the named-volume change keep their old mount; recreate the container to adopt `hris-local-dev-clone-pgdata` (restore dump after if needed).
 
 Writes only to **local clone** — safe for destructive local testing.
-First-time data still requires a one-time dump/restore into that container (see clone evidence under `.runtime/local-db-clone-*`).
+
+- **Schema**: auto-applied every `dev:local` (idempotent `db push`)
+- **Business data**: still empty until you complete `/setup` initialize or restore a dump (see `.runtime/local-db-clone-*`)
 
 Success line (both):
 

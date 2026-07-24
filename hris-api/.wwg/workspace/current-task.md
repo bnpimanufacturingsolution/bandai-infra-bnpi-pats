@@ -4,37 +4,33 @@
 done
 
 ## Summary
-Bulk upload benefit enrollments from Excel/CSV: modernized `POST /api/employeeBenefit/import` (RECURRING defaults, fail-on-duplicate, COMCODE aliases) + HR Benefits Management 3-step import modal.
+`npm run dev:local` now auto-runs `prisma db push` against the local clone Postgres so a wiped/fresh volume has schema (and `/setup` works without a manual push).
 
 ## Category
-feature / ui-ux
+infra
 
 ## Packages
-- hris-api
-- hris-app
+- bandai-infra/hris-api
 - Dual-app: **HR/emp-only (no counterpart)**
 
 ## Code changes
-### hris-api
-- `helper/employee-benefit-import.helper.ts` — column normalize, date/amount parse, row validate
-- `app/employeebenefit/employeeBenefit.controller.ts` — rewrite `importBenefits`
-- tests: `employee-benefit-import.helper.spec.ts`, `employee-benefit-import.controller.spec.ts`
-- docs: `docs/BENEFIT_SCHEDULE_MODES.md`, CHANGELOG, WWG
+- `scripts/run-dev-local.cjs` — `ensureLocalCloneSchema()` after container ready; localhost guard; opt-out `HRIS_SKIP_LOCAL_CLONE_SCHEMA_PUSH=true`
+- `.env.local-clone.example` — document auto schema push
+- `bandai-infra/docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md` — document step
 
-### hris-app
-- `BenefitEnrollmentImportModal` + parse/map helpers + field constants
-- Benefits Management **Bulk upload** button (`data-testid=benefit-bulk-upload-button`)
-- service/hook `importEmployeeBenefits`
-- `xlsx` dependency for client Excel parse
-- tests: `benefit-enrollment-import.test.ts`
-- docs/CHANGELOG/WWG
+## Behavior
+| Step | Behavior |
+|---|---|
+| Container/volume | create/start as before |
+| Schema | always `prisma db push --schema prisma/schema-postgres --skip-generate` on local clone URL |
+| Skip push | `HRIS_SKIP_LOCAL_CLONE_SCHEMA_PUSH=true` |
+| ensure-local-dev-services bootstrap | still skipped (`HRIS_SKIP_LOCAL_DB_BOOTSTRAP=true`) to avoid double work / other compose stacks |
 
 ## Truth delta
-YES — bulk Excel enrollment import contract (columns, fail-on-duplicate, create-form defaults)
+NO — local-dev tooling only.
 
 ## Drift
-LOW
+NONE
 
 ## Follow-ups
-- Optional: async job for very large sheets
-- Optional: uniqueness by (employee, type, enrollment name) for multi-named DMA lines
+- Optional: seed minimal org defaults only after push (status already auto-creates org on first status hit)

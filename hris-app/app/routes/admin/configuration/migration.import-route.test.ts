@@ -12,7 +12,13 @@ import {
 	buildOpenImportSearchParams,
 	buildOpenWorkbookSearchParams,
 	buildOpenWorkbookUploadSearchParams,
+	buildWorkbookImportProgressFromRun,
+	formatWorkbookImportProgressDescription,
+	formatWorkbookImportProgressTitle,
+	getWorkbookImportProgressToastId,
 	isAdminMigrationWorkbookId,
+	isMigrationRunStatusSuccess,
+	isMigrationRunStatusTerminal,
 	isWorkbookUploadOpen,
 } from "~/lib/admin-migration-ui";
 
@@ -77,12 +83,18 @@ describe("admin migration route contract", () => {
 		expect(closedPage.get("tab")).toBe("migration");
 	});
 
-	it("can open workbook page with upload modal already open from hub CTA", () => {
+	it("can open workbook page with upload modal already open (deep link / in-page CTA)", () => {
+		// Hub no longer exposes a direct Upload button; upload opens only after Open workbook.
+		// Helper still supports upload=1 for in-workbook modal and deep links.
 		const opened = buildOpenWorkbookSearchParams(new URLSearchParams(), "dm1", {
 			upload: true,
 		});
 		expect(opened.get("workbook")).toBe("dm1");
 		expect(isWorkbookUploadOpen(opened)).toBe(true);
+
+		const openOnly = buildOpenWorkbookSearchParams(new URLSearchParams(), "dm2");
+		expect(openOnly.get("workbook")).toBe("dm2");
+		expect(isWorkbookUploadOpen(openOnly)).toBe(false);
 	});
 
 	it("opens employee import with auto-create explicitly disabled by route helper contract", () => {
