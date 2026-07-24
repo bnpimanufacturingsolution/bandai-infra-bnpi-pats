@@ -11678,11 +11678,7 @@ export const controller = (prisma: PrismaClient) => {
 			};
 		});
 		plan.credentialWrites = (plan.credentialWrites || []).map((write: any) => {
-			if (
-				write.modality === "face" &&
-				(write.executionEligibility === "ready_from_raw_blob" ||
-					write.blockingReason === "target_write_unsupported")
-			) {
+			if (write.modality === "face") {
 				const user = (plan.users || []).find(
 					(candidate: any) => String(candidate.key) === String(write.userKey),
 				);
@@ -11717,6 +11713,15 @@ export const controller = (prisma: PrismaClient) => {
 						faceAssociationStrategy: null,
 						recommendationReason:
 							"Neither an exact shared physical card nor the same canonical HRIS employee proves this face source/target association.",
+					};
+				}
+				if (
+					write.executionEligibility !== "ready_from_raw_blob" &&
+					write.blockingReason !== "target_write_unsupported"
+				) {
+					return {
+						...write,
+						faceAssociationStrategy,
 					};
 				}
 				const targetDevice = devices.find(
@@ -12239,7 +12244,11 @@ export const controller = (prisma: PrismaClient) => {
 						recoveryCanaryModality,
 					),
 					orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
-					take: 25,
+					// The graph is ordered by priority and task key. A small prefix can
+					// contain only one device, which accidentally serializes the fleet.
+					// Read the bounded frozen job graph so the selector can take one
+					// highest-priority task per independent device.
+					take: 5_000,
 				});
 				if (!pending.length) break;
 

@@ -920,9 +920,19 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include(
 			'blockingReason: "physical_identity_adjudication_required"',
 		);
+		expect(controller).to.include("write.modality === \"face\"");
+		expect(controller).to.include("faceAssociationStrategy,");
 		expect(controller.indexOf("if (!faceAssociationStrategy)")).to.be.lessThan(
 			controller.indexOf('writerStrategy: "sdk_face_template_writer"'),
 		);
+	});
+
+	it("selects recovery work across the full bounded graph instead of one sorted-device prefix", () => {
+		const controller = controllerSource();
+
+		expect(controller).to.include("take: 5_000");
+		expect(controller).to.include("if (deviceId && !independent.has(deviceId))");
+		expect(controller).to.include("if (independent.size >= 5) break");
 	});
 
 	it("sanitizes Hikvision faceURL non-image failures before recording raw custody status", () => {
