@@ -582,10 +582,19 @@ export const summarizeCredentialRecovery = (plan: any, tasks: CredentialRecovery
 	const classifications: CredentialRecoveryClassification[] = writes.map(
 		classifyCredentialRecoveryWrite,
 	);
+	const readyWrites = writes.filter(
+		(write: any) => classifyCredentialRecoveryWrite(write) === "ready_to_write",
+	);
+	const faceReady = readyWrites.filter((write: any) => String(write?.modality) === "face").length;
+	const fingerprintReady = readyWrites.filter(
+		(write: any) => String(write?.modality) === "fingerprint",
+	).length;
 	return {
 		physicallyVerifiedRemaining: writes.length,
 		recoveryNeeded: classifications.filter((value) => value === "recovery_needed").length,
 		readyToWrite: classifications.filter((value) => value === "ready_to_write").length,
+		faceReady,
+		fingerprintReady,
 		physicalActionRequired: classifications.filter(
 			(value) => value === "physical_action_required",
 		).length,
@@ -597,6 +606,213 @@ export const summarizeCredentialRecovery = (plan: any, tasks: CredentialRecovery
 		tasksTotal: tasks.length,
 		tasksPending: tasks.filter((task) => task.status === "pending").length,
 		tasksBlocked: tasks.filter((task) => task.status === "blocked").length,
+	};
+};
+
+const modalityRank = (value: unknown) =>
+	String(value) === "fingerprint" ? 0 : String(value) === "face" ? 1 : 2;
+
+const faceAssociationRank = (value: unknown) =>
+	String(value) === "exact_shared_card"
+		? 0
+		: String(value) === "canonical_hris_employee"
+			? 1
+			: 2;
+
+/**
+ * Exact same selection the recovery worker uses before physical writes.
+ * Pure: given plan writes + canary/cap, returns the ordered would-write list.
+ */
+export const selectCredentialRecoveryReadyWrites = (params: {
+	credentialWrites: unknown;
+	canaryModality?: unknown;
+	maxVerifiedWrites?: unknown;
+	operationIds?: Iterable<unknown> | null;
+	attemptedTaskKeys?: Iterable<unknown> | null;
+}) => {
+	const canaryModality = ["fingerprint", "face"].includes(String(params.canaryModality || ""))
+		? String(params.canaryModality)
+		: null;
+	const maxVerifiedWrites = Math.max(
+		0,
+		Math.min(50, Number(params.maxVerifiedWrites ?? 50) || 0),
+	);
+	const operationIds = params.operationIds
+		? new Set([...params.operationIds].map((id) => String(id || "")).filter(Boolean))
+		: null;
+	const attemptedTaskKeys = new Set(
+		[...(params.attemptedTaskKeys || [])]
+			.map((taskKey) => String(taskKey || ""))
+			.filter(Boolean),
+	);
+	const writes = Array.isArray(params.credentialWrites) ? params.credentialWrites : [];
+	return writes
+		.filter((write: any) => {
+			const id = String(write?.id || "");
+			if (operationIds && !operationIds.has(id)) return false;
+			if (write?.recommended !== true) return false;
+			if (String(write?.executionEligibility || "") !== "ready_from_raw_blob") return false;
+			if (attemptedTaskKeys.has(`target_write:${id}`)) return false;
+			if (canaryModality && String(write?.modality || "") !== canaryModality) return false;
+			return true;
+		})
+		.sort((left: any, right: any) => {
+			return (
+				modalityRank(left?.modality) - modalityRank(right?.modality) ||
+				faceAssociationRank(left?.faceAssociationStrategy) -
+					faceAssociationRank(right?.faceAssociationStrategy) ||
+				String(left?.id || "").localeCompare(String(right?.id || ""))
+			);
+		})
+		.slice(0, maxVerifiedWrites);
+};
+
+export type CredentialRecoveryExecutionPreview = {
+	canaryModality: "fingerprint" | "face" | null;
+	maxVerifiedWrites: number;
+	readyTotal: number;
+	faceReady: number;
+	fingerprintReady: number;
+	wouldWriteCount: number;
+	wouldWriteOperationIds: string[];
+	wouldWriteByTarget: Array<{
+		targetDeviceId: string;
+		modality: string;
+		count: number;
+	}>;
+	readyByModalityTarget: Array<{
+		modality: string;
+		targetDeviceId: string;
+		count: number;
+	}>;
+	blockReasonsWhenZeroReady: Array<{
+		reason: string;
+		modality: string;
+		count: number;
+	}>;
+	certainty: "deterministic_from_plan";
+	gapExpectation: {
+		verifiedWillIncreaseByAtMost: number;
+		uiGapOnlyMovesIfVerifiedGreaterThanZero: true;
+		fpReadyMustBePositiveForFingerprintVerifiedWrites: true;
+		faceReadyMustBePositiveForFaceVerifiedWrites: true;
+	};
+};
+
+/**
+ * Deterministic dry-run of what a recovery job would attempt to write.
+ * Certainty comes from the frozen plan rows, not UI gap labels.
+ */
+export const buildCredentialRecoveryExecutionPreview = (params: {
+	plan: any;
+	canaryModality?: unknown;
+	maxVerifiedWrites?: unknown;
+}): CredentialRecoveryExecutionPreview => {
+	const canaryModality = ["fingerprint", "face"].includes(String(params.canaryModality || ""))
+		? (String(params.canaryModality) as "fingerprint" | "face")
+		: null;
+	const maxVerifiedWrites = Math.max(
+		0,
+		Math.min(50, Number(params.maxVerifiedWrites ?? 50) || 0),
+	);
+	const writes = Array.isArray(params.plan?.credentialWrites)
+		? params.plan.credentialWrites
+		: [];
+	const allReady = selectCredentialRecoveryReadyWrites({
+		credentialWrites: writes,
+		canaryModality,
+		maxVerifiedWrites: 50,
+	});
+	const wouldWrite =
+		maxVerifiedWrites === 0
+			? []
+			: selectCredentialRecoveryReadyWrites({
+					credentialWrites: writes,
+					canaryModality,
+					maxVerifiedWrites,
+				});
+	const faceReady = writes.filter(
+		(write: any) =>
+			String(write?.modality) === "face" &&
+			classifyCredentialRecoveryWrite(write) === "ready_to_write",
+	).length;
+	const fingerprintReady = writes.filter(
+		(write: any) =>
+			String(write?.modality) === "fingerprint" &&
+			classifyCredentialRecoveryWrite(write) === "ready_to_write",
+	).length;
+
+	const readyByModalityTargetMap = new Map<string, number>();
+	for (const write of allReady) {
+		const keyName = `${String(write?.modality || "")}|${String(write?.targetDeviceId || "")}`;
+		readyByModalityTargetMap.set(keyName, (readyByModalityTargetMap.get(keyName) || 0) + 1);
+	}
+	const wouldByTargetMap = new Map<string, number>();
+	for (const write of wouldWrite) {
+		const keyName = `${String(write?.modality || "")}|${String(write?.targetDeviceId || "")}`;
+		wouldByTargetMap.set(keyName, (wouldByTargetMap.get(keyName) || 0) + 1);
+	}
+
+	const blockReasonsWhenZeroReady: Array<{
+		reason: string;
+		modality: string;
+		count: number;
+	}> = [];
+	if (allReady.length === 0) {
+		const reasonCounts = new Map<string, number>();
+		for (const write of writes) {
+			const modality = String(write?.modality || "");
+			if (canaryModality && modality !== canaryModality) continue;
+			const reason = String(
+				write?.blockingReason || write?.executionEligibility || "unknown",
+			);
+			const mapKey = `${modality}|${reason}`;
+			reasonCounts.set(mapKey, (reasonCounts.get(mapKey) || 0) + 1);
+		}
+		for (const [mapKey, count] of [...reasonCounts.entries()].sort(
+			(left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
+		)) {
+			const [modality, reason] = mapKey.split("|");
+			blockReasonsWhenZeroReady.push({ modality, reason, count });
+		}
+	}
+
+	return {
+		canaryModality,
+		maxVerifiedWrites,
+		readyTotal: allReady.length,
+		faceReady,
+		fingerprintReady,
+		wouldWriteCount: wouldWrite.length,
+		wouldWriteOperationIds: wouldWrite.map((write: any) => String(write?.id || "")).filter(Boolean),
+		wouldWriteByTarget: [...wouldByTargetMap.entries()]
+			.map(([mapKey, count]) => {
+				const [modality, targetDeviceId] = mapKey.split("|");
+				return { modality, targetDeviceId, count };
+			})
+			.sort(
+				(left, right) =>
+					right.count - left.count ||
+					left.targetDeviceId.localeCompare(right.targetDeviceId),
+			),
+		readyByModalityTarget: [...readyByModalityTargetMap.entries()]
+			.map(([mapKey, count]) => {
+				const [modality, targetDeviceId] = mapKey.split("|");
+				return { modality, targetDeviceId, count };
+			})
+			.sort(
+				(left, right) =>
+					right.count - left.count ||
+					left.targetDeviceId.localeCompare(right.targetDeviceId),
+			),
+		blockReasonsWhenZeroReady: blockReasonsWhenZeroReady.slice(0, 20),
+		certainty: "deterministic_from_plan",
+		gapExpectation: {
+			verifiedWillIncreaseByAtMost: wouldWrite.length,
+			uiGapOnlyMovesIfVerifiedGreaterThanZero: true,
+			fpReadyMustBePositiveForFingerprintVerifiedWrites: true,
+			faceReadyMustBePositiveForFaceVerifiedWrites: true,
+		},
 	};
 };
 

@@ -96,6 +96,7 @@ import { withCredentialDeviceLeases } from "../../helper/credential-device-lease
 import { buildHikvisionCredentialOperationTelemetry } from "../../helper/hikvision-credential-operation-telemetry.helper";
 import { resolveHikvisionDeviceSuppliedPath } from "../../helper/device-user-raw-fingerprint.helper";
 import {
+	buildCredentialRecoveryExecutionPreview,
 	buildCredentialRecoveryPendingTaskWhere,
 	buildExpiredCredentialRecoverySourceLeaseWhere,
 	buildCredentialRecoveryTaskGraph,
@@ -105,6 +106,7 @@ import {
 	planCredentialRecoveryWorkerFailure,
 	recoveredCustodyCanUnlockWrite,
 	remainingCredentialRecoveryWriteAttemptBudget,
+	selectCredentialRecoveryReadyWrites,
 	selectObsoleteCredentialRecoverySourceTaskIds,
 	summarizeCredentialRecovery,
 } from "../../helper/hikvision-credential-recovery.helper";
@@ -12775,32 +12777,13 @@ export const controller = (prisma: PrismaClient) => {
 						),
 					});
 				}
-				const readyWrites = (freshPlan.credentialWrites || [])
-					.filter(
-						(write: any) =>
-							originalOperationIds.has(String(write.id)) &&
-							write.recommended === true &&
-							write.executionEligibility === "ready_from_raw_blob" &&
-							!attemptedWriteTaskKeys.has(`target_write:${String(write.id)}`) &&
-							(!canaryModality ||
-								String(write.modality) === canaryModality),
-					)
-					.sort((left: any, right: any) => {
-						const modalityRank = (value: any) =>
-							String(value) === "fingerprint" ? 0 : String(value) === "face" ? 1 : 2;
-						const faceAssociationRank = (value: any) =>
-							String(value) === "exact_shared_card"
-								? 0
-								: String(value) === "canonical_hris_employee"
-									? 1
-									: 2;
-						return (
-							modalityRank(left.modality) - modalityRank(right.modality) ||
-							faceAssociationRank(left.faceAssociationStrategy) -
-								faceAssociationRank(right.faceAssociationStrategy)
-						);
-					})
-					.slice(0, remainingWriteAttemptBudget);
+				const readyWrites = selectCredentialRecoveryReadyWrites({
+					credentialWrites: freshPlan.credentialWrites || [],
+					canaryModality,
+					maxVerifiedWrites: remainingWriteAttemptBudget,
+					operationIds: originalOperationIds,
+					attemptedTaskKeys: attemptedWriteTaskKeys,
+				});
 				if (readyWrites.length) {
 					const freshPlanId = randomUUID();
 					deviceUserMergePlans.set(freshPlanId, {
@@ -13229,6 +13212,11 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 		const review = buildHikvisionCredentialRecoveryReview(planId, stored.plan);
+		const executionPreview = buildCredentialRecoveryExecutionPreview({
+			plan: stored.plan,
+			canaryModality: req.body?.canaryModality,
+			maxVerifiedWrites: req.body?.maxVerifiedWrites ?? 50,
+		});
 		res.status(200).json(
 			buildSuccessResponse(
 				"Credential recovery scope reviewed",
@@ -13237,6 +13225,7 @@ export const controller = (prisma: PrismaClient) => {
 					scopeHash: review.scopeHash,
 					deviceIds: review.scope.deviceIds,
 					counters: review.counters,
+					executionPreview,
 					taskSummary: review.tasks.reduce(
 						(summary: Record<string, number>, task) => ({
 							...summary,
@@ -13274,6 +13263,55 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				return;
 			}
+			const maxVerifiedWrites = Math.max(
+				0,
+				Math.min(50, Number(req.body?.maxVerifiedWrites || 0)),
+			);
+			const canaryModality = ["fingerprint", "face"].includes(
+				String(req.body?.canaryModality || ""),
+			)
+				? String(req.body.canaryModality)
+				: null;
+			const executionPreview = buildCredentialRecoveryExecutionPreview({
+				plan: stored.plan,
+				canaryModality,
+				maxVerifiedWrites: maxVerifiedWrites > 0 ? maxVerifiedWrites : 50,
+			});
+			if (req.body?.dryRun === true || req.body?.execute === false) {
+				res.status(200).json(
+					buildSuccessResponse(
+						"Credential recovery dry-run preview (no job started)",
+						{
+							planId,
+							scopeHash: review.scopeHash,
+							deviceIds: review.scope.deviceIds,
+							counters: review.counters,
+							executionPreview: {
+								...executionPreview,
+								maxVerifiedWrites,
+								wouldWriteCount:
+									maxVerifiedWrites === 0
+										? 0
+										: Math.min(
+												executionPreview.readyTotal,
+												maxVerifiedWrites,
+											),
+								wouldWriteOperationIds:
+									maxVerifiedWrites === 0
+										? []
+										: executionPreview.wouldWriteOperationIds.slice(
+												0,
+												maxVerifiedWrites,
+											),
+							},
+							willCreateJob: false,
+							certainty: "deterministic_from_plan",
+						},
+						200,
+					),
+				);
+				return;
+			}
 			const active = await (prisma as any).credentialRecoveryJob.findFirst({
 				where: {
 					organizationId: String(admin.organizationId),
@@ -13296,15 +13334,9 @@ export const controller = (prisma: PrismaClient) => {
 					deviceIds: review.scope.deviceIds,
 					request: {
 						operationIds: review.scope.operationIds,
-						maxVerifiedWrites: Math.max(
-							0,
-							Math.min(50, Number(req.body?.maxVerifiedWrites || 0)),
-						),
-						canaryModality: ["fingerprint", "face"].includes(
-							String(req.body?.canaryModality || ""),
-						)
-							? String(req.body.canaryModality)
-							: null,
+						maxVerifiedWrites,
+						canaryModality,
+						executionPreview,
 					},
 					counters: review.counters,
 					currentStage: "durably_queued",
@@ -13338,7 +13370,10 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(202).json(
 				buildSuccessResponse(
 					"Credential recovery job durably started",
-					{ job: serializeCredentialRecoveryJob(job) },
+					{
+						job: serializeCredentialRecoveryJob(job),
+						executionPreview,
+					},
 					202,
 				),
 			);

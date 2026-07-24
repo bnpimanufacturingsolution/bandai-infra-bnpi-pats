@@ -345,6 +345,9 @@ describe("Hikvision biometric sync contract", () => {
 		const router = routerSource();
 		const controller = controllerSource();
 		expect(router).to.include('"/hikvision/sdk-users/merge/recovery/review"');
+		expect(controller).to.include("buildCredentialRecoveryExecutionPreview");
+		expect(controller).to.include("executionPreview");
+		expect(controller).to.include("dryRun");
 		expect(router).to.include('"/hikvision/sdk-users/merge/recovery/jobs"');
 		expect(controller).to.include("credentialRecoveryJob");
 		expect(controller).to.include("leaseExpiresAt");

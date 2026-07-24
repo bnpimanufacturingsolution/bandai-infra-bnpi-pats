@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import {
+	buildCredentialRecoveryExecutionPreview,
 	buildCredentialRecoveryPendingTaskWhere,
 	buildExpiredCredentialRecoverySourceLeaseWhere,
 	buildCredentialRecoveryTaskGraph,
@@ -10,11 +11,96 @@ import {
 	planCredentialRecoveryWorkerFailure,
 	recoveredCustodyCanUnlockWrite,
 	remainingCredentialRecoveryWriteAttemptBudget,
+	selectCredentialRecoveryReadyWrites,
 	selectObsoleteCredentialRecoverySourceTaskIds,
 	summarizeCredentialRecovery,
 } from "../helper/hikvision-credential-recovery.helper";
 
 describe("Hikvision credential recovery graph", () => {
+	it("freezes deterministic execution preview counts for face and fingerprint canaries", () => {
+		const plan = {
+			credentialWrites: [
+				{
+					id: "fp-b-1",
+					modality: "fingerprint",
+					recommended: true,
+					executionEligibility: "ready_from_raw_blob",
+					targetDeviceId: "device-b",
+					faceAssociationStrategy: null,
+				},
+				{
+					id: "face-a-1",
+					modality: "face",
+					recommended: true,
+					executionEligibility: "ready_from_raw_blob",
+					targetDeviceId: "device-a",
+					faceAssociationStrategy: "exact_shared_card",
+				},
+				{
+					id: "face-e-blocked",
+					modality: "face",
+					recommended: false,
+					executionEligibility: "blocked",
+					blockingReason: "target_write_unsupported",
+					targetDeviceId: "device-e",
+				},
+				{
+					id: "fp-e-scan",
+					modality: "fingerprint",
+					recommended: false,
+					executionEligibility: "blocked",
+					blockingReason: "target_owner_scan_incomplete",
+					targetDeviceId: "device-e",
+				},
+			],
+		};
+		const facePreview = buildCredentialRecoveryExecutionPreview({
+			plan,
+			canaryModality: "face",
+			maxVerifiedWrites: 50,
+		});
+		expect(facePreview.certainty).to.equal("deterministic_from_plan");
+		expect(facePreview.faceReady).to.equal(1);
+		expect(facePreview.fingerprintReady).to.equal(1);
+		expect(facePreview.wouldWriteCount).to.equal(1);
+		expect(facePreview.wouldWriteOperationIds).to.deep.equal(["face-a-1"]);
+		expect(facePreview.wouldWriteByTarget[0]).to.include({
+			targetDeviceId: "device-a",
+			modality: "face",
+			count: 1,
+		});
+
+		const fpPreview = buildCredentialRecoveryExecutionPreview({
+			plan,
+			canaryModality: "fingerprint",
+			maxVerifiedWrites: 10,
+		});
+		expect(fpPreview.wouldWriteCount).to.equal(1);
+		expect(fpPreview.wouldWriteOperationIds).to.deep.equal(["fp-b-1"]);
+
+		const zeroFp = buildCredentialRecoveryExecutionPreview({
+			plan: {
+				credentialWrites: plan.credentialWrites.filter(
+					(row: any) => row.modality !== "fingerprint" || row.id === "fp-e-scan",
+				),
+			},
+			canaryModality: "fingerprint",
+			maxVerifiedWrites: 10,
+		});
+		expect(zeroFp.wouldWriteCount).to.equal(0);
+		expect(zeroFp.blockReasonsWhenZeroReady[0]).to.include({
+			reason: "target_owner_scan_incomplete",
+			modality: "fingerprint",
+		});
+
+		const selected = selectCredentialRecoveryReadyWrites({
+			credentialWrites: plan.credentialWrites,
+			canaryModality: "face",
+			maxVerifiedWrites: 50,
+		});
+		expect(selected.map((row: any) => row.id)).to.deep.equal(["face-a-1"]);
+	});
+
 	it("classifies binary request_timeout_after messages as retryable transport", () => {
 		const classified = classifyCredentialRecoveryError(
 			"Hikvision binary request failed: request_timeout_after_15000ms",
