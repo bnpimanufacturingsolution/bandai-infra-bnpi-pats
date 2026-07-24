@@ -47,6 +47,24 @@ export const selectObsoleteCredentialRecoverySourceTaskIds = (
 		.filter((task) => !currentTaskKeys.has(String(task.taskKey)))
 		.map((task) => String(task.id));
 
+export const recoveredCustodyCanUnlockWrite = (
+	modality: unknown,
+	result: Record<string, unknown> | null | undefined,
+) => {
+	if (String(modality) === "fingerprint") {
+		return Number(result?.fingerprintCount || 0) > 0;
+	}
+	if (String(modality) === "face") {
+		return (
+			Number(result?.faceTemplateSize || 0) > 0 &&
+			Number(result?.facePictureSize || 0) > 0 &&
+			result?.cardOwnerVerified === true &&
+			result?.identityOwnerVerified === true
+		);
+	}
+	return false;
+};
+
 export const classifyCredentialRecoveryError = (
 	error: unknown,
 ): CredentialRecoveryErrorClassification => {
@@ -345,13 +363,16 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 			]);
 			existing.payload.operationIds = [...operationIds];
 			existing.unlockCount = operationIds.size;
-			existing.priority = 10_000 + operationIds.size;
+			existing.priority = Math.max(
+				existing.priority,
+				draft.priority + operationIds.size,
+			);
 			return;
 		}
 		tasks.set(taskKey, {
 			...draft,
 			unlockCount: 1,
-			priority: 10_001,
+			priority: draft.priority + 1,
 			payload: { ...draft.payload, operationIds: [operationId] },
 		});
 	};
@@ -366,6 +387,15 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 		const classification = classifyCredentialRecoveryWrite(write);
 
 		if (String(write.blockingReason) === "missing_raw_blob") {
+			const associationPriority =
+				modality === "fingerprint"
+					? 40_000
+					: String(write.faceAssociationStrategy) === "exact_shared_card"
+						? 30_000
+						: String(write.faceAssociationStrategy) ===
+							  "canonical_hris_employee"
+							? 20_000
+							: 10_000;
 			const taskKey = key("source_capture", sourceDeviceId, vendorUserId, modality);
 			addUnlock(
 				taskKey,
@@ -378,8 +408,11 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 					userKey,
 					status: "pending",
 					stage: "recovering_source_custody",
-					priority: 0,
-					payload: { sourceCandidateDeviceIds: write.sourceCandidateDeviceIds || [] },
+					priority: associationPriority,
+					payload: {
+						sourceCandidateDeviceIds: write.sourceCandidateDeviceIds || [],
+						faceAssociationStrategy: write.faceAssociationStrategy || null,
+					},
 				},
 				operationId,
 			);

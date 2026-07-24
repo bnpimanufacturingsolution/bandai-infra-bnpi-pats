@@ -98,6 +98,7 @@ import {
 	classifyCredentialRecoveryError,
 	isCredentialRecoveryPhysicalStage,
 	planCredentialRecoveryWorkerFailure,
+	recoveredCustodyCanUnlockWrite,
 	remainingCredentialRecoveryWriteAttemptBudget,
 	selectObsoleteCredentialRecoverySourceTaskIds,
 	summarizeCredentialRecovery,
@@ -12279,6 +12280,7 @@ export const controller = (prisma: PrismaClient) => {
 				? String(recoveryRequest.canaryModality)
 				: null;
 			let processedThisLease = 0;
+			let actionableCustodyRecovered = false;
 			while (true) {
 				const pending = await taskStore.findMany({
 					where: buildCredentialRecoveryPendingTaskWhere(
@@ -12444,6 +12446,9 @@ export const controller = (prisma: PrismaClient) => {
 												reason: "card custody recovery is not implemented",
 											};
 							if (!result?.ok) throw new Error(result?.reason || "source capture failed");
+							if (recoveredCustodyCanUnlockWrite(task.modality, result)) {
+								actionableCustodyRecovered = true;
+							}
 							await taskStore.update({
 								where: { id: task.id },
 								data: {
@@ -12548,7 +12553,13 @@ export const controller = (prisma: PrismaClient) => {
 				// Replan after the first independent-device batch so the first
 				// physically verifiable gap can move without waiting for the
 				// entire custody backlog.
-				if (recoveryCanaryRequested && processedThisLease >= 5) break;
+				if (
+					recoveryCanaryRequested &&
+					processedThisLease >= 5 &&
+					actionableCustodyRecovered
+				) {
+					break;
+				}
 			}
 			const [failed, latestFailedTask] = await Promise.all([
 				taskStore.count({ where: { jobId: params.jobId, status: "failed" } }),
@@ -12643,8 +12654,7 @@ export const controller = (prisma: PrismaClient) => {
 				const originalOperationIds = new Set(
 					(Array.isArray(request.operationIds) ? request.operationIds : []).map(String),
 				);
-				const currentSourceTaskKeys = new Set(
-					buildCredentialRecoveryTaskGraph({
+				const currentSourceTasks = buildCredentialRecoveryTaskGraph({
 						...freshPlan,
 						credentialWrites: (freshPlan.credentialWrites || []).filter(
 							(write: any) =>
@@ -12652,10 +12662,26 @@ export const controller = (prisma: PrismaClient) => {
 								(!canaryModality ||
 									String(write.modality) === canaryModality),
 						),
-					})
-						.filter((task) => task.kind === "source_capture")
-						.map((task) => String(task.taskKey)),
+					}).filter((task) => task.kind === "source_capture");
+				const currentSourceTaskKeys = new Set(
+					currentSourceTasks.map((task) => String(task.taskKey)),
 				);
+				for (const priority of new Set(
+					currentSourceTasks.map((task) => Number(task.priority)),
+				)) {
+					await taskStore.updateMany({
+						where: {
+							jobId: params.jobId,
+							taskKey: {
+								in: currentSourceTasks
+									.filter((task) => Number(task.priority) === priority)
+									.map((task) => String(task.taskKey)),
+							},
+							status: { in: ["pending", "retrying"] },
+						},
+						data: { priority },
+					});
+				}
 				const pendingSourceTasks = await taskStore.findMany({
 					where: {
 						jobId: params.jobId,

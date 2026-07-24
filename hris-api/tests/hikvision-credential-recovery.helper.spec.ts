@@ -6,12 +6,81 @@ import {
 	classifyCredentialRecoveryWrite,
 	isCredentialRecoveryPhysicalStage,
 	planCredentialRecoveryWorkerFailure,
+	recoveredCustodyCanUnlockWrite,
 	remainingCredentialRecoveryWriteAttemptBudget,
 	selectObsoleteCredentialRecoverySourceTaskIds,
 	summarizeCredentialRecovery,
 } from "../helper/hikvision-credential-recovery.helper";
 
 describe("Hikvision credential recovery graph", () => {
+	it("replans only for custody that can unlock a safe write", () => {
+		expect(
+			recoveredCustodyCanUnlockWrite("face", {
+				faceTemplateSize: 768,
+				facePictureSize: 12_000,
+				cardOwnerVerified: true,
+				identityOwnerVerified: true,
+			}),
+		).to.equal(true);
+		expect(
+			recoveredCustodyCanUnlockWrite("face", {
+				faceTemplateSize: 0,
+				facePictureSize: 12_000,
+				cardOwnerVerified: false,
+			}),
+		).to.equal(false);
+		expect(
+			recoveredCustodyCanUnlockWrite("fingerprint", { fingerprintCount: 1 }),
+		).to.equal(true);
+	});
+
+	it("orders fingerprint and proven face associations before speculative recovery", () => {
+		const tasks = buildCredentialRecoveryTaskGraph({
+			credentialWrites: [
+				{
+					id: "speculative-face",
+					vendorUserId: "1",
+					modality: "face",
+					sourceDeviceId: "A",
+					targetDeviceId: "B",
+					blockingReason: "missing_raw_blob",
+				},
+				{
+					id: "canonical-face",
+					vendorUserId: "2",
+					modality: "face",
+					sourceDeviceId: "A",
+					targetDeviceId: "B",
+					blockingReason: "missing_raw_blob",
+					faceAssociationStrategy: "canonical_hris_employee",
+				},
+				{
+					id: "shared-card-face",
+					vendorUserId: "3",
+					modality: "face",
+					sourceDeviceId: "A",
+					targetDeviceId: "B",
+					blockingReason: "missing_raw_blob",
+					faceAssociationStrategy: "exact_shared_card",
+				},
+				{
+					id: "fingerprint",
+					vendorUserId: "4",
+					modality: "fingerprint",
+					sourceDeviceId: "A",
+					targetDeviceId: "B",
+					blockingReason: "missing_raw_blob",
+				},
+			],
+		});
+		expect(tasks.map((task) => task.taskKey)).to.deep.equal([
+			"source_capture:A:4:fingerprint",
+			"source_capture:A:3:face",
+			"source_capture:A:2:face",
+			"source_capture:A:1:face",
+		]);
+	});
+
 	it("prunes only pending source tasks absent from the fresh safe graph", () => {
 		expect(
 			selectObsoleteCredentialRecoverySourceTaskIds(
