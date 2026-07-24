@@ -1129,3 +1129,4 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Final browser proof is deliberately red: login and Sync Center pass, Merge says 0/8 available, and Listener says status unreachable. Do not reuse the earlier green browser state as current truth.
 - Required next condition for any future write is a fresh zero-read-error plan with explicit conflict adjudication and a physical canary/reread. This is not operator homework for the current run; it is an external connectivity/decision boundary.
 
+

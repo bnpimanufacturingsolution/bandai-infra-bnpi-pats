@@ -8,8 +8,7 @@
   logs confirm `workerVersion=5a2851c`.
 - Finish line (in progress): reduce face + fingerprint gaps with physical
   reread proof; named observability; stable chained waves.
-- Proven this session: face FDLib A→B path; **351** verified face writes,
-  gap remaining **2903** (from 3254); zero failed writes; Grafana/Loki up.
+- Proven this session: face FDLib A→B path; **~429** verified face writes, gap remaining **2825** (from 3254); zero failed writes; Grafana/Loki up.
 - Fingerprint: not ready (`target_owner_scan_incomplete` dominant). Do not
   fall through from FP canary to face without recording the FP block matrix
   (strict mode in `start-wave.py`).
@@ -2454,4 +2453,5 @@ Status: IMPLEMENTED + PROVEN â€” Device admin UX clarity (friendly status, 
 - Fresh listener execution armed Main Entrance A/B/D/E/F while C returned HCNetSDK error 7. Final SSH status became unavailable after three direct-LAN timeouts and repeated Cloudflare Access banner timeouts, so final armed state is `NEEDS_CONFIRMATION` rather than green.
 - Final Playwright truth: admin login and Sync Center render, but Merge reports 0/8 available and Listener reports status unreachable. This is a failed exit gate, not a completed merge.
 - Focused validation: 37 API Hikvision contracts, 13 frontend device UI/events contracts, the PowerShell bridge contract, and API TypeScript typecheck passed.
+
 
