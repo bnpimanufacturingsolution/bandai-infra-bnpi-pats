@@ -1,6 +1,7 @@
 import { expect } from "chai";
 import {
 	buildCredentialRecoveryPendingTaskWhere,
+	buildExpiredCredentialRecoverySourceLeaseWhere,
 	buildCredentialRecoveryTaskGraph,
 	classifyCredentialRecoveryError,
 	classifyCredentialRecoveryWrite,
@@ -13,6 +14,16 @@ import {
 } from "../helper/hikvision-credential-recovery.helper";
 
 describe("Hikvision credential recovery graph", () => {
+	it("reclaims only expired non-writing source leases after a restart", () => {
+		const now = new Date("2026-07-24T11:00:00.000Z");
+		expect(buildExpiredCredentialRecoverySourceLeaseWhere("job-1", now)).to.deep.equal({
+			jobId: "job-1",
+			kind: { in: ["source_capture", "target_owner_capture"] },
+			status: "processing",
+			OR: [{ leaseExpiresAt: { lt: now } }, { leaseExpiresAt: null }],
+		});
+	});
+
 	it("replans only for custody that can unlock a safe write", () => {
 		expect(
 			recoveredCustodyCanUnlockWrite("face", {

@@ -94,6 +94,7 @@ import { buildHikvisionCredentialOperationTelemetry } from "../../helper/hikvisi
 import { resolveHikvisionDeviceSuppliedPath } from "../../helper/device-user-raw-fingerprint.helper";
 import {
 	buildCredentialRecoveryPendingTaskWhere,
+	buildExpiredCredentialRecoverySourceLeaseWhere,
 	buildCredentialRecoveryTaskGraph,
 	classifyCredentialRecoveryError,
 	isCredentialRecoveryPhysicalStage,
@@ -12269,6 +12270,26 @@ export const controller = (prisma: PrismaClient) => {
 		};
 
 		try {
+			const recoveredExpiredSourceLeases = await taskStore.updateMany({
+				where: buildExpiredCredentialRecoverySourceLeaseWhere(
+					params.jobId,
+					new Date(),
+				),
+				data: {
+					status: "retrying",
+					stage: "retrying_expired_source_lease",
+					leaseOwner: null,
+					leaseExpiresAt: null,
+				},
+			});
+			if (recoveredExpiredSourceLeases.count > 0) {
+				deviceLogger.warn("Credential recovery expired source leases recovered", {
+					event: "credential_recovery_expired_source_leases_recovered",
+					jobId: params.jobId,
+					recoveredCount: recoveredExpiredSourceLeases.count,
+					stage: "retrying_expired_source_lease",
+				});
+			}
 			const recoveryRequest = (
 				await jobStore.findUnique({ where: { id: params.jobId }, select: { request: true } })
 			)?.request as any;

@@ -311,6 +311,16 @@ export const buildCredentialRecoveryPendingTaskWhere = (
 	};
 };
 
+export const buildExpiredCredentialRecoverySourceLeaseWhere = (
+	jobId: string,
+	now: Date,
+) => ({
+	jobId,
+	kind: { in: ["source_capture", "target_owner_capture"] },
+	status: "processing",
+	OR: [{ leaseExpiresAt: { lt: now } }, { leaseExpiresAt: null }],
+});
+
 const physicalBoundaryReasons = new Set([
 	"canonical_identity_unproven",
 	"physical_identity_adjudication_required",
