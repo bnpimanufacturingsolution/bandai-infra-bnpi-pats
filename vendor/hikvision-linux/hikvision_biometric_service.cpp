@@ -117,6 +117,9 @@ std::map<std::string, unsigned long long> delayed_reconcile_by_host;
 // last_seen timestamps (not expiry). TTL applied when reading.
 std::map<std::string, std::chrono::steady_clock::time_point> recent_employee_candidates;
 std::map<std::string, std::chrono::steady_clock::time_point> recent_poll_reconcile_by_key;
+std::mutex callback_identity_scan_mutex;
+std::map<std::string, std::chrono::steady_clock::time_point>
+    recent_callback_identity_scan_by_host;
 std::map<std::string, std::set<std::string>> observed_employee_numbers_by_host;
 std::set<std::string> inventory_baseline_ready_hosts;
 // UserInfo field fingerprint per host/employee for modify detection when ACS person is empty.
@@ -149,6 +152,7 @@ std::string callback_spool_dir = "/tmp/project-truth-hikvision-callback-spool";
 constexpr auto recent_employee_candidate_ttl = std::chrono::seconds(180);
 constexpr auto poll_reconcile_min_interval = std::chrono::seconds(3);
 constexpr auto inventory_poll_interval = std::chrono::seconds(2);
+constexpr auto callback_identity_scan_min_interval = std::chrono::seconds(5);
 
 bool curl_post_json(
     const std::string &url,
@@ -587,6 +591,21 @@ bool should_queue_poll_reconcile_now(const std::string &key) {
         return false;
     }
     recent_poll_reconcile_by_key[key] = now;
+    return true;
+}
+
+bool claim_callback_identity_scan(const std::string &host) {
+    if (host.empty()) {
+        return false;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    std::lock_guard<std::mutex> lock(callback_identity_scan_mutex);
+    const auto found = recent_callback_identity_scan_by_host.find(host);
+    if (found != recent_callback_identity_scan_by_host.end() &&
+        now - found->second < callback_identity_scan_min_interval) {
+        return false;
+    }
+    recent_callback_identity_scan_by_host[host] = now;
     return true;
 }
 
@@ -4476,57 +4495,35 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
 
     if (job.employee_no.empty() && needs_callback_identity_enrich(job)) {
         // Panel UserInfo may lag ACS major=3 — multipass inventory with longer delays on repost.
-        const int *delays = nullptr;
-        int delay_count = 0;
-        static const int first_delays_ms[] = {0, 400, 1200, 2500};
-        static const int repost_delays_ms[] = {0, 800, 2000, 4000};
-        if (is_repost) {
-            delays = repost_delays_ms;
-            delay_count = 4;
-        } else {
-            delays = first_delays_ms;
-            delay_count = 4;
-        }
-        // inventory_delta: stop early after one complete no-new-plain so modify path
-        // reaches userinfo_touch quickly (full inventory is expensive on 300+ user devices).
-        bool inventory_complete_no_new = false;
-        for (int i = 0; i < delay_count; ++i) {
-            if (delays[i] > 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(delays[i]));
-            }
-            const std::string plain = resolve_plain_employee_no_from_inventory(*session);
+        const bool identity_scan_claimed =
+            claim_callback_identity_scan(job.source_host);
+        if (!identity_scan_claimed) {
+            emit_json({
+                {"event", "callback_identity_enrich_throttled"},
+                {"sourceDeviceId", job.source_device_id},
+                {"sourceHost", job.source_host},
+                {"isRepost", is_repost ? "true" : "false"},
+                {"cooldownMs", "5000"},
+                {"reason", "full_inventory_single_flight"}
+            });
+        } else if (!is_repost) {
+            // One initial inventory delta detects a genuinely new identity.
+            const std::string plain =
+                resolve_plain_employee_no_from_inventory(*session);
             if (!plain.empty()) {
                 job.employee_no = plain;
                 job.identity_source = "inventory_delta";
                 mark_recent_employee_candidate(job.source_host, plain);
-                inventory_complete_no_new = false;
-                break;
             }
-            // Second+ pass only helps when UserInfo lag creates a true NEW plain after create.
-            // If baseline is ready and inventory completed empty, further inventory multipass
-            // only delays touch/candidate resolution for modify-of-existing.
-            if (i == 0) {
-                inventory_complete_no_new = true;
-            }
-            if (inventory_complete_no_new && i >= 1 && !is_repost) {
-                break;
-            }
-        }
-        // Modify of existing person: inventory_delta finds no NEW plain.
-        // Prefer UserInfo field-change (name/numOfFP) device truth over recency heuristics.
-        if (job.employee_no.empty()) {
-            static const int touch_delays_ms[] = {0, 800, 2000};
-            for (int delay_ms : touch_delays_ms) {
-                if (delay_ms > 0) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
-                }
-                const std::string plain = resolve_plain_employee_no_from_userinfo_touch(*session);
-                if (!plain.empty()) {
-                    job.employee_no = plain;
-                    job.identity_source = "userinfo_touch";
-                    mark_recent_employee_candidate(job.source_host, plain);
-                    break;
-                }
+        } else {
+            // One delayed touch pass covers lagged creates and changes to an
+            // existing person's name or biometric counts.
+            const std::string plain =
+                resolve_plain_employee_no_from_userinfo_touch(*session);
+            if (!plain.empty()) {
+                job.employee_no = plain;
+                job.identity_source = "userinfo_touch";
+                mark_recent_employee_candidate(job.source_host, plain);
             }
         }
         emit_json({
@@ -4540,11 +4537,10 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
         });
         if (job.employee_no.empty()) {
             job.identity_source = "empty";
-            // First incomplete pass: keep path alive, then delayed re-POST for plain id.
-            if (!is_repost) {
-                schedule_delayed_hris_identity_repost(job, 2000, 1);
-                schedule_delayed_hris_identity_repost(job, 5000, 2);
-                schedule_delayed_hris_identity_repost(job, 10000, 3);
+            // One delayed pass covers UserInfo lag without amplifying empty
+            // callbacks into thousands of full-inventory page reads.
+            if (!is_repost && identity_scan_claimed) {
+                schedule_delayed_hris_identity_repost(job, 5000, 1);
             }
         }
     } else if (!job.employee_no.empty() && job.identity_source.empty()) {

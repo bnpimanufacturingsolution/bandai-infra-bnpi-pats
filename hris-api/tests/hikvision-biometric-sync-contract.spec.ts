@@ -274,6 +274,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include('"sendAndCallbackMs"');
 		expect(service).to.include('"callbackCompleted"');
 		expect(service).to.include('"rereadMs"');
+		expect(service).to.include("claim_callback_identity_scan");
+		expect(service).to.include('"callback_identity_enrich_throttled"');
+		expect(service).to.include("callback_identity_scan_min_interval");
+		expect(service).to.include("schedule_delayed_hris_identity_repost(job, 5000, 1)");
+		expect(service).to.not.include("schedule_delayed_hris_identity_repost(job, 10000, 3)");
 		expect(service).to.include("NET_DVR_SET_FACE_AND_TEMPLATE");
 		expect(service).to.include("NET_DVR_GET_FACE_AND_TEMPLATE");
 		const activityLogging = readFileSync(
