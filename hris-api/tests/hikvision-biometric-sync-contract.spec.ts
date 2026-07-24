@@ -906,6 +906,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("sdkTemplateRecoveryError");
 		expect(controller).to.include('"credential_recovery_face_sdk_fallback"');
 		expect(controller).to.include("faceTemplateSize: Number(result?.faceTemplateSize || 0)");
+		expect(controller).to.include("Hikvision SDK export event missing");
+		expect(controller).to.not.include(
+			'finalResult.stdout.trim() ||\n\t\t\t\t\t\t"No biometric export event returned',
+		);
 		expect(controller.indexOf("await runHikvisionBiometricExportOnVm({")).to.be.lessThan(
 			controller.indexOf("source: \"isapi_face_picture_fallback\""),
 		);

@@ -3926,10 +3926,17 @@ export const controller = (prisma: PrismaClient) => {
 					String(event?.employeeNo || "").trim() === params.vendorUserId,
 			);
 			if (!exportEvent) {
+				const stderrTail = String(finalResult.stderr || "")
+					.trim()
+					.slice(-1_000);
 				throw new Error(
-					finalResult.stderr.trim() ||
-						finalResult.stdout.trim() ||
-						"No biometric export event returned from Hikvision SDK service",
+					`Hikvision SDK export event missing for ${params.device.id}/${params.vendorUserId}; ` +
+						`exitCode=${Number(finalResult.exitCode)}, ` +
+						`parsedEvents=${events
+							.map((event) => String(event?.event || "unnamed"))
+							.filter(Boolean)
+							.join(",") || "none"}, ` +
+						`stderrTail=${stderrTail || "empty"}`,
 				);
 			}
 			const fingerprints =

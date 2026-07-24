@@ -86,6 +86,18 @@ describe("Hikvision credential recovery graph", () => {
 		expect(
 			classifyCredentialRecoveryError(
 				new Error(
+					"Hikvision SDK export event missing for device/user; exitCode=1, parsedEvents=none",
+				),
+			),
+		).to.include({
+			code: "sdk_export_event_missing",
+			category: "observability",
+			retryable: false,
+			observabilityDefect: true,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
 					"Credential recovery write-attempt fence refused the canary: claimed 0 of 1 target writes.",
 				),
 			),

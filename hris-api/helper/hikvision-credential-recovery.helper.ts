@@ -11,6 +11,7 @@ export type CredentialRecoveryErrorClassification = {
 		| "device_authentication"
 		| "face_owner_card_association_missing"
 		| "face_identity_association_unproven"
+		| "sdk_export_event_missing"
 		| "device_transport"
 		| "worker_fencing"
 		| "inventory_read_safety_gate"
@@ -112,6 +113,15 @@ export const classifyCredentialRecoveryError = (
 			message,
 			retryable: false,
 			observabilityDefect: false,
+		};
+	}
+	if (matches(/hikvision sdk export event missing/)) {
+		return {
+			code: "sdk_export_event_missing",
+			category: "observability",
+			message,
+			retryable: false,
+			observabilityDefect: true,
 		};
 	}
 	if (
