@@ -146,6 +146,19 @@ const currentProjectTruthBuildAttestation = () => {
 const currentStoredFaceWriterBuildAttestation = () => {
 	return currentProjectTruthBuildAttestation();
 };
+
+/** Comma/space/semicolon-separated device IDs allowed for serial FDLib face canaries. */
+const authorizedHikvisionFaceCanaryDeviceIds = () =>
+	String(process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID || "")
+		.split(/[,;\s]+/)
+		.map((value) => value.trim())
+		.filter(Boolean);
+
+const isAuthorizedHikvisionFaceCanaryDevice = (deviceId: unknown) => {
+	const id = String(deviceId || "").trim();
+	return Boolean(id) && authorizedHikvisionFaceCanaryDeviceIds().includes(id);
+};
+
 const DEVICE_EVENT_STATUSES = new Set([
 	"RECEIVED",
 	"MATCHED",
@@ -2724,8 +2737,7 @@ export const controller = (prisma: PrismaClient) => {
 		const buildAttestation = currentStoredFaceWriterBuildAttestation();
 		const authorizedCanaryTarget =
 			Boolean(targetDeviceId) &&
-			String(process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID || "").trim() ===
-				targetDeviceId;
+			isAuthorizedHikvisionFaceCanaryDevice(targetDeviceId);
 		const capabilityTested =
 			authorizedCanaryTarget ||
 			(Boolean(params.reviewedFleetCapability) &&
@@ -11113,17 +11125,14 @@ export const controller = (prisma: PrismaClient) => {
 					capabilityProbe,
 					attestation: (device.config as any)?.fdlibPictureWriter,
 					currentBuildAttestation,
-					authorizedCanary:
-						String(
-							process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID || "",
-						).trim() === String(device.id)
-							? {
-									authorized: true,
-									fdId: "1",
-									faceLibType: "blackFD",
-									allowedRequesterAddresses: [String(device.address || "")],
-								}
-							: null,
+					authorizedCanary: isAuthorizedHikvisionFaceCanaryDevice(device.id)
+						? {
+								authorized: true,
+								fdId: "1",
+								faceLibType: "blackFD",
+								allowedRequesterAddresses: [String(device.address || "")],
+							}
+						: null,
 				});
 				fdlibTargetCapabilities.set(String(device.id), fdlibClassification);
 				const deviceConfig = ((device.config as any) || {}) as Record<string, any>;
@@ -11788,10 +11797,9 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				const targetConfig = (targetDevice?.config || {}) as any;
 				const buildAttestation = currentStoredFaceWriterBuildAttestation();
-				const authorizedFaceCanaryTarget =
-					String(
-						process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID || "",
-					).trim() === String(write.targetDeviceId);
+				const authorizedFaceCanaryTarget = isAuthorizedHikvisionFaceCanaryDevice(
+					write.targetDeviceId,
+				);
 				const fleetFaceCapability = resolveFleetWriterCapability(
 					String(write.targetDeviceId),
 					"sdk_face_template_picture",
@@ -16567,13 +16575,7 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				return;
 			}
-			const authorizedTargetId = String(
-				process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID || "",
-			).trim();
-			if (
-				!authorizedTargetId ||
-				authorizedTargetId !== String(row.targetDeviceId || "")
-			) {
+			if (!isAuthorizedHikvisionFaceCanaryDevice(row.targetDeviceId)) {
 				res.status(409).json(
 					buildErrorResponse(
 						"Retained-face attestation requires the exact target-specific authorized face canary gate.",

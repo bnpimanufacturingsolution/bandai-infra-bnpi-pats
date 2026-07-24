@@ -179,6 +179,8 @@ describe("Hikvision biometric sync contract", () => {
 		);
 		expect(controller).to.include("HIKVISION_AUTHORIZED_CARD_CANARY_DEVICE_ID");
 		expect(controller).to.include("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID");
+		expect(controller).to.include("isAuthorizedHikvisionFaceCanaryDevice");
+		expect(controller).to.include("authorizedHikvisionFaceCanaryDeviceIds");
 		expect(controller).to.include("CardInfo custody inventory");
 		expect(controller).not.to.include("authorizedCanaryVendorUserIds.includes");
 	});
@@ -239,6 +241,8 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("reviewedFleetCapability");
 		expect(controller).not.to.include("fleetCapabilityValidated: true");
 		expect(controller).to.include("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID");
+		expect(controller).to.include("isAuthorizedHikvisionFaceCanaryDevice");
+		expect(controller).to.include("authorizedHikvisionFaceCanaryDeviceIds");
 		expect(controller).to.include("faceAndTemplateRecord");
 		expect(controller).to.include("testedBuildAttestation");
 		expect(controller).to.include("currentStoredFaceWriterBuildAttestation");
