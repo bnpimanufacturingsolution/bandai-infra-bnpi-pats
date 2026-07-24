@@ -7,6 +7,7 @@ import {
 	classifyDeferredFingerprintWrite,
 	classifyHikvisionRawFaceBinaryResponse,
 	findTargetFingerprintDuplicateOwners,
+	isExactHikvisionUserInfoOwner,
 	isRawFingerprintEnrollCaptureEnabled,
 	normalizeIsapiFingerprintList,
 	parseFingerPrintProgress,
@@ -17,6 +18,13 @@ import {
 } from "../helper/device-user-raw-fingerprint.helper";
 
 describe("device-user-raw-fingerprint helper", () => {
+	it("attests face ownership only when UserInfo returns the exact requested employee", () => {
+		expect(isExactHikvisionUserInfoOwner({ employeeNo: "722" }, "722")).to.equal(true);
+		expect(isExactHikvisionUserInfoOwner({ EmployeeNo: "722" }, "722")).to.equal(true);
+		expect(isExactHikvisionUserInfoOwner({ employeeNo: "723" }, "722")).to.equal(false);
+		expect(isExactHikvisionUserInfoOwner({}, "722")).to.equal(false);
+	});
+
 	it("pins a device-advertised face URL to the configured device route", () => {
 		expect(
 			resolveHikvisionDeviceSuppliedPath(

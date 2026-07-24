@@ -283,6 +283,19 @@ export const classifyHikvisionRawFaceBinaryResponse = (params: {
 	return { ok: true, reason: null };
 };
 
+export const isExactHikvisionUserInfoOwner = (
+	userInfoNode: unknown,
+	expectedEmployeeNo: unknown,
+): boolean => {
+	const expected = String(expectedEmployeeNo || "").trim();
+	const actual = String(
+		(userInfoNode as any)?.employeeNo ||
+			(userInfoNode as any)?.EmployeeNo ||
+			"",
+	).trim();
+	return Boolean(expected && actual && actual === expected);
+};
+
 export const extractFingerDataFromIsapiNode = (node: any): string => {
 	if (!node || typeof node !== "object") return "";
 	const candidates = [
@@ -1272,6 +1285,13 @@ export const captureRawFaceForEnrollment = async (params: {
 		userInfoNode = Array.isArray(ui?.UserInfoSearch?.UserInfo)
 			? ui.UserInfoSearch.UserInfo[0]
 			: ui?.UserInfoSearch?.UserInfo;
+		if (!isExactHikvisionUserInfoOwner(userInfoNode, employeeNo)) {
+			throw new Error(
+				`face_userinfo_identity_mismatch: expected ${employeeNo}, received ${String(
+					userInfoNode?.employeeNo || userInfoNode?.EmployeeNo || "",
+				).trim() || "[empty]"}`,
+			);
+		}
 		faceURL = String(userInfoNode?.faceURL || "").trim();
 		const numOfFace = Number(userInfoNode?.numOfFace || 0) || 0;
 		if (!faceURL || numOfFace < 1) {
@@ -1394,6 +1414,10 @@ export const captureRawFaceForEnrollment = async (params: {
 	const rawFace = {
 		schema: RAW_FACE_SCHEMA,
 		present: b64.length > 32,
+		// This flag is earned by the exact EmployeeNoList UserInfo response
+		// checked above. It binds the downloaded device-local faceURL bytes to
+		// the requested physical user without relying on a card association.
+		identityOwnerVerified: true,
 		capturedAt: new Date().toISOString(),
 		source: "isapi_faceURL_download",
 		contentType,
