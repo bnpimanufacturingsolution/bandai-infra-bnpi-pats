@@ -94,6 +94,7 @@ import { resolveHikvisionDeviceSuppliedPath } from "../../helper/device-user-raw
 import {
 	buildCredentialRecoveryPendingTaskWhere,
 	buildCredentialRecoveryTaskGraph,
+	classifyCredentialRecoveryError,
 	summarizeCredentialRecovery,
 } from "../../helper/hikvision-credential-recovery.helper";
 import {
@@ -11964,15 +11965,66 @@ export const controller = (prisma: PrismaClient) => {
 		};
 	};
 
-	const serializeCredentialRecoveryJob = (job: any) => ({
-		...job,
-		workerLeaseActive: Boolean(
-			job.leaseOwner &&
-				job.leaseExpiresAt &&
-				new Date(job.leaseExpiresAt).getTime() > Date.now(),
-		),
-		lastAdvancementAt: job.heartbeatAt || job.updatedAt,
-	});
+	const serializeCredentialRecoveryTask = (task: any) =>
+		task
+			? {
+					id: task.id,
+					taskKey: task.taskKey,
+					kind: task.kind,
+					modality: task.modality,
+					sourceDeviceId: task.sourceDeviceId,
+					targetDeviceId: task.targetDeviceId,
+					vendorUserId: task.vendorUserId,
+					status: task.status,
+					stage: task.stage,
+					attempts: task.attempts,
+					maxAttempts: task.maxAttempts,
+					error: task.error,
+					startedAt: task.startedAt,
+					completedAt: task.completedAt,
+					updatedAt: task.updatedAt,
+				}
+			: null;
+
+	const serializeCredentialRecoveryJob = (job: any) => {
+		const tasks = Array.isArray(job.tasks) ? job.tasks : [];
+		const activeTask =
+			tasks.find((task: any) => task.status === "processing") ||
+			tasks.find((task: any) => task.taskKey === job.currentTaskKey) ||
+			null;
+		const latestFailedTask =
+			[...tasks]
+				.filter((task: any) => ["failed", "retrying"].includes(task.status))
+				.sort(
+					(left: any, right: any) =>
+						new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+				)[0] || null;
+		const liveTaskCount = (status: string) =>
+			tasks.filter((task: any) => task.status === status).length;
+		return {
+			...job,
+			counters: tasks.length
+				? {
+						...(job.counters || {}),
+						tasksTotal: tasks.length,
+						tasksPending: liveTaskCount("pending"),
+						recoveringNow: liveTaskCount("processing"),
+						recovered: liveTaskCount("succeeded"),
+						retrying: liveTaskCount("retrying"),
+						failed: liveTaskCount("failed"),
+						blocked: liveTaskCount("blocked"),
+					}
+				: job.counters,
+			workerLeaseActive: Boolean(
+				job.leaseOwner &&
+					job.leaseExpiresAt &&
+					new Date(job.leaseExpiresAt).getTime() > Date.now(),
+			),
+			lastAdvancementAt: job.heartbeatAt || job.updatedAt,
+			activeTask: serializeCredentialRecoveryTask(activeTask),
+			latestFailedTask: serializeCredentialRecoveryTask(latestFailedTask),
+		};
+	};
 
 	const processHikvisionCredentialRecoveryJob = async (params: {
 		jobId: string;
@@ -12013,6 +12065,42 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
+		const refreshLiveCounters = async () => {
+			const [recovered, failed, retrying, recoveringNow, pending, blocked, total] =
+				await Promise.all([
+					taskStore.count({ where: { jobId: params.jobId, status: "succeeded" } }),
+					taskStore.count({ where: { jobId: params.jobId, status: "failed" } }),
+					taskStore.count({ where: { jobId: params.jobId, status: "retrying" } }),
+					taskStore.count({ where: { jobId: params.jobId, status: "processing" } }),
+					taskStore.count({ where: { jobId: params.jobId, status: "pending" } }),
+					taskStore.count({ where: { jobId: params.jobId, status: "blocked" } }),
+					taskStore.count({ where: { jobId: params.jobId } }),
+				]);
+			const current = await jobStore.findUnique({
+				where: { id: params.jobId },
+				select: { counters: true },
+			});
+			const latestAttemptError = await taskStore.findFirst({
+				where: { jobId: params.jobId, status: { in: ["failed", "retrying"] } },
+				orderBy: { updatedAt: "desc" },
+				select: { error: true },
+			});
+			await heartbeat({
+				resumeCursor: recovered,
+				latestError: latestAttemptError?.error || Prisma.JsonNull,
+				counters: {
+					...((current?.counters || {}) as Record<string, unknown>),
+					tasksTotal: total,
+					tasksPending: pending,
+					recoveringNow,
+					recovered,
+					failed,
+					retrying,
+					blocked,
+				},
+			});
+		};
+
 		try {
 			const recoveryRequest = (
 				await jobStore.findUnique({ where: { id: params.jobId }, select: { request: true } })
@@ -12045,6 +12133,7 @@ export const controller = (prisma: PrismaClient) => {
 				await Promise.all(
 					[...independent.values()].map(async (task: any) => {
 						const startedAt = new Date();
+						const attempt = Number(task.attempts || 0) + 1;
 						await taskStore.update({
 							where: { id: task.id },
 							data: {
@@ -12057,6 +12146,18 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						});
 						await heartbeat({ currentTaskKey: task.taskKey });
+						deviceLogger.info("Credential recovery task started", {
+							event: "credential_recovery_task_started",
+							jobId: params.jobId,
+							taskKey: task.taskKey,
+							kind: task.kind,
+							modality: task.modality,
+							sourceDeviceId: task.sourceDeviceId,
+							targetDeviceId: task.targetDeviceId,
+							vendorUserId: task.vendorUserId,
+							attempt,
+							stage: task.stage || "recovering_source_custody",
+						});
 						try {
 							const {
 								captureRawFingerprintsForEnrollment,
@@ -12102,41 +12203,78 @@ export const controller = (prisma: PrismaClient) => {
 									leaseExpiresAt: null,
 								},
 							});
+							deviceLogger.info("Credential recovery task succeeded", {
+								event: "credential_recovery_task_succeeded",
+								jobId: params.jobId,
+								taskKey: task.taskKey,
+								kind: task.kind,
+								modality: task.modality,
+								sourceDeviceId: task.sourceDeviceId,
+								targetDeviceId: task.targetDeviceId,
+								vendorUserId: task.vendorUserId,
+								attempt,
+								stage: "source_custody_recovered",
+								durationMs: Date.now() - startedAt.getTime(),
+							});
 						} catch (error: any) {
-							const attempts = Number(task.attempts || 0) + 1;
+							const classification = classifyCredentialRecoveryError(error);
+							const willRetry =
+								classification.retryable && attempt < Number(task.maxAttempts || 5);
 							await taskStore.update({
 								where: { id: task.id },
 								data: {
-									status: attempts < Number(task.maxAttempts || 5) ? "retrying" : "failed",
+									status: willRetry ? "retrying" : "failed",
 									stage: "source_custody_failed",
 									error: {
-										message: String(error?.message || error),
+										...classification,
 										at: new Date().toISOString(),
 										durationMs: Date.now() - startedAt.getTime(),
+										jobId: params.jobId,
+										taskKey: task.taskKey,
+										kind: task.kind,
+										modality: task.modality,
+										sourceDeviceId: task.sourceDeviceId,
+										targetDeviceId: task.targetDeviceId,
+										vendorUserId: task.vendorUserId,
+										attempt,
+										stage: "source_custody_failed",
 									},
 									leaseOwner: null,
 									leaseExpiresAt: null,
 								},
 							});
+							deviceLogger.warn("Credential recovery task failed", {
+								event: "credential_recovery_task_failed",
+								jobId: params.jobId,
+								taskKey: task.taskKey,
+								kind: task.kind,
+								modality: task.modality,
+								sourceDeviceId: task.sourceDeviceId,
+								targetDeviceId: task.targetDeviceId,
+								vendorUserId: task.vendorUserId,
+								attempt,
+								stage: "source_custody_failed",
+								durationMs: Date.now() - startedAt.getTime(),
+								willRetry,
+								...classification,
+							});
 						}
 					}),
 				);
 				processedThisLease += independent.size;
-				const completed = await taskStore.count({
-					where: { jobId: params.jobId, status: "succeeded" },
-				});
-				await heartbeat({ resumeCursor: completed });
+				await refreshLiveCounters();
 				// Replan after the first independent-device batch so the first
 				// physically verifiable gap can move without waiting for the
 				// entire custody backlog.
 				if (recoveryCanaryRequested && processedThisLease >= 5) break;
 			}
-			const [succeeded, failed, retrying, blocked, total] = await Promise.all([
-				taskStore.count({ where: { jobId: params.jobId, status: "succeeded" } }),
+			const [failed, latestFailedTask] = await Promise.all([
 				taskStore.count({ where: { jobId: params.jobId, status: "failed" } }),
-				taskStore.count({ where: { jobId: params.jobId, status: "retrying" } }),
-				taskStore.count({ where: { jobId: params.jobId, status: "blocked" } }),
-				taskStore.count({ where: { jobId: params.jobId } }),
+				taskStore.findFirst({
+					where: { jobId: params.jobId, status: { in: ["failed", "retrying"] } },
+					orderBy: { updatedAt: "desc" },
+					select: { error: true },
+				}),
 			]);
 			const remainingPending = await taskStore.count({
 				where: buildCredentialRecoveryPendingTaskWhere(
@@ -12157,6 +12295,7 @@ export const controller = (prisma: PrismaClient) => {
 				: null;
 			let writeResult: any = null;
 			let verified = 0;
+			let writeFailure: Record<string, unknown> | null = null;
 			if (!failed && maxVerifiedWrites > 0) {
 				await heartbeat({ currentStage: "replanning_recovered_custody" });
 				const replanHeartbeat = setInterval(() => {
@@ -12242,14 +12381,126 @@ export const controller = (prisma: PrismaClient) => {
 						currentStage: "writing_canary",
 						currentTaskKey: `target_write:${readyWrites[0].id}`,
 					});
-					writeResult = await runHikvisionSdkUserMergeApplyForJob({
-						req: params.req,
-						planId: freshPlanId,
-						mode: "credentials",
-						selectedCredentialWriteIds: readyWrites.map((write: any) => String(write.id)),
-					});
+					let progressUpdateChain = Promise.resolve();
+					const recordDurableWriteProgress = (event: any) => {
+						progressUpdateChain = progressUpdateChain.then(async () => {
+							const stage = String(event?.stage || "writing_canary");
+							const targetDeviceId = String(
+								event?.targetDeviceId || event?.targetDeviceIds?.[0] || "",
+							);
+							const matchingWrite = readyWrites.find(
+								(write: any) =>
+									String(write.vendorUserId || "") ===
+										String(event?.vendorUserId || "") &&
+									String(write.modality || "") === String(event?.modality || "") &&
+									(!targetDeviceId ||
+										String(write.targetDeviceId || "") === targetDeviceId),
+							);
+							const currentTaskKey = matchingWrite
+								? `target_write:${matchingWrite.id}`
+								: `write_event:${stage}`;
+							const errorClassification =
+								stage === "copy_error"
+									? classifyCredentialRecoveryError(
+											event?.error || event?.message || "Unexplained writer failure",
+										)
+									: null;
+							const currentCounters = (
+								await jobStore.findUnique({
+									where: { id: params.jobId },
+									select: { counters: true },
+								})
+							)?.counters as any;
+							const writing = [
+								"credential_probe_started",
+								"credential_probe_passed",
+								"credential_raw_write_started",
+							].includes(stage)
+								? 1
+								: 0;
+							const awaitingPhysicalReread = stage === "reread_started" ? readyWrites.length : 0;
+							await heartbeat({
+								currentStage: stage,
+								currentTaskKey,
+								counters: {
+									...(currentCounters || {}),
+									writing,
+									awaitingPhysicalReread,
+								},
+								...(errorClassification
+									? {
+											latestError: {
+												...errorClassification,
+												at: new Date().toISOString(),
+												jobId: params.jobId,
+												stage,
+												modality: event?.modality || canaryModality,
+												sourceDeviceId: event?.sourceDeviceId || null,
+												targetDeviceId: event?.targetDeviceId || null,
+												vendorUserId: event?.vendorUserId || null,
+												attempt: 1,
+											},
+										}
+									: {}),
+							});
+							const logContext = {
+								event: "credential_recovery_write_progress",
+								jobId: params.jobId,
+								stage,
+								taskKey: currentTaskKey,
+								modality: event?.modality || canaryModality,
+								sourceDeviceId: event?.sourceDeviceId || null,
+								targetDeviceId: event?.targetDeviceId || null,
+								targetDeviceIds: event?.targetDeviceIds || null,
+								vendorUserId: event?.vendorUserId || null,
+								message: event?.message || null,
+								...(errorClassification || {}),
+							};
+							if (errorClassification) {
+								deviceLogger.warn("Credential recovery write progress failed", logContext);
+							} else {
+								deviceLogger.info("Credential recovery write progress", logContext);
+							}
+						});
+					};
+					try {
+						writeResult = await runHikvisionSdkUserMergeApplyForJob({
+							req: params.req,
+							planId: freshPlanId,
+							mode: "credentials",
+							selectedCredentialWriteIds: readyWrites.map((write: any) =>
+								String(write.id),
+							),
+							onProgress: recordDurableWriteProgress,
+						});
+					} finally {
+						await progressUpdateChain;
+					}
 					const attention = Number(writeResult?.attention || 0);
-					verified = attention === 0 ? readyWrites.length : 0;
+					const successfulOperationIds = new Set(
+						(Array.isArray(writeResult?.results) ? writeResult.results : [])
+							.filter((result: any) => result?.status === "success")
+							.map((result: any) => String(result.id || "")),
+					);
+					verified = readyWrites.filter((write: any) =>
+						successfulOperationIds.has(String(write.id)),
+					).length;
+					if (attention > 0 || verified !== readyWrites.length) {
+						const firstWriteError = (writeResult?.results || []).find(
+							(result: any) => result?.status === "error",
+						)?.error;
+						writeFailure = {
+							...classifyCredentialRecoveryError(
+								firstWriteError ||
+									`Physical reread proof was incomplete: ${verified} of ${readyWrites.length} reviewed writes returned a matching success result.`,
+							),
+							at: new Date().toISOString(),
+							jobId: params.jobId,
+							stage: "physical_reread_failed",
+							modality: canaryModality,
+							attempt: 1,
+						};
+					}
 					await taskStore.updateMany({
 						where: {
 							jobId: params.jobId,
@@ -12258,22 +12509,42 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						},
 						data: {
-							status: attention === 0 ? "succeeded" : "failed",
+							status: writeFailure ? "failed" : "succeeded",
 							stage:
-								attention === 0
+								!writeFailure
 									? "physically_retained"
 									: "physical_reread_failed",
 							result: writeResult || {},
+							error: writeFailure || Prisma.JsonNull,
 							completedAt: new Date(),
 						},
 					});
 				}
 			}
+			const [
+				finalRecovered,
+				finalFailed,
+				finalRetrying,
+				finalBlocked,
+				finalTotal,
+			] = await Promise.all([
+				taskStore.count({
+					where: {
+						jobId: params.jobId,
+						kind: { in: ["source_capture", "target_owner_capture"] },
+						status: "succeeded",
+					},
+				}),
+				taskStore.count({ where: { jobId: params.jobId, status: "failed" } }),
+				taskStore.count({ where: { jobId: params.jobId, status: "retrying" } }),
+				taskStore.count({ where: { jobId: params.jobId, status: "blocked" } }),
+				taskStore.count({ where: { jobId: params.jobId } }),
+			]);
 			await jobStore.update({
 				where: { id: params.jobId },
 				data: {
 					status:
-						failed
+						failed || writeFailure
 							? "needs_attention"
 							: verified > 0
 								? "completed"
@@ -12281,8 +12552,10 @@ export const controller = (prisma: PrismaClient) => {
 									? "pending"
 								: "awaiting_replan",
 					currentStage:
-						failed
-							? "recovery_failed"
+						failed || writeFailure
+							? writeFailure
+								? "physical_reread_failed"
+								: "recovery_failed"
 							: verified > 0
 								? "physically_verified"
 								: remainingPending > 0
@@ -12291,11 +12564,13 @@ export const controller = (prisma: PrismaClient) => {
 					currentTaskKey: null,
 					counters: {
 						...(persistedJob?.counters || {}),
-						tasksTotal: total,
-						recovered: succeeded,
-						failed,
-						retrying,
-						blocked,
+						tasksTotal: finalTotal,
+						recovered: finalRecovered,
+						failed: finalFailed,
+						retrying: finalRetrying,
+						blocked: finalBlocked,
+						writing: 0,
+						awaitingPhysicalReread: 0,
 						verified,
 						physicallyVerifiedRemaining: Math.max(
 							0,
@@ -12304,9 +12579,17 @@ export const controller = (prisma: PrismaClient) => {
 						),
 					},
 					latestError:
-						failed
-							? { message: "One or more source-custody tasks exhausted or require retry" }
-							: Prisma.JsonNull,
+						writeFailure ||
+						latestFailedTask?.error ||
+						(failed
+							? {
+									...classifyCredentialRecoveryError(
+										"One or more source-custody tasks exhausted without a captured cause",
+									),
+									at: new Date().toISOString(),
+									stage: "source_custody_failed",
+								}
+							: Prisma.JsonNull),
 					heartbeatAt: new Date(),
 					leaseOwner: null,
 					leaseExpiresAt: null,
@@ -12324,14 +12607,23 @@ export const controller = (prisma: PrismaClient) => {
 				}, 250);
 			}
 		} catch (error: any) {
+			const classification = classifyCredentialRecoveryError(error);
+			deviceLogger.error("Credential recovery worker failed", {
+				event: "credential_recovery_worker_failed",
+				jobId: params.jobId,
+				stage: "worker_failed",
+				...classification,
+			});
 			await jobStore.update({
 				where: { id: params.jobId },
 				data: {
 					status: "failed",
 					currentStage: "worker_failed",
 					latestError: {
-						message: String(error?.message || error),
+						...classification,
 						at: new Date().toISOString(),
+						jobId: params.jobId,
+						stage: "worker_failed",
 					},
 					heartbeatAt: new Date(),
 					leaseOwner: null,

@@ -5,6 +5,138 @@ export type CredentialRecoveryClassification =
 	| "recovery_needed"
 	| "physical_action_required";
 
+export type CredentialRecoveryErrorClassification = {
+	code:
+		| "device_authentication"
+		| "device_transport"
+		| "inventory_read_safety_gate"
+		| "identity_safety"
+		| "writer_capability"
+		| "stale_scope"
+		| "code_or_data_contract"
+		| "unclassified";
+	category:
+		| "authentication"
+		| "transport"
+		| "safety_gate"
+		| "identity"
+		| "capability"
+		| "scope"
+		| "implementation"
+		| "observability";
+	message: string;
+	retryable: boolean;
+	observabilityDefect: boolean;
+};
+
+export const classifyCredentialRecoveryError = (
+	error: unknown,
+): CredentialRecoveryErrorClassification => {
+	const message = String((error as any)?.message || error || "Unknown recovery failure");
+	const normalized = message.toLowerCase();
+	const matches = (...patterns: RegExp[]) => patterns.some((pattern) => pattern.test(normalized));
+
+	if (matches(/\bunauthori[sz]ed\b/, /\b401\b/, /\bauthentication\b/, /invalid credentials/)) {
+		return {
+			code: "device_authentication",
+			category: "authentication",
+			message,
+			retryable: false,
+			observabilityDefect: false,
+		};
+	}
+	if (
+		matches(
+			/fetch failed/,
+			/operation was aborted/,
+			/\btimeout\b/,
+			/\btimed out\b/,
+			/\beconn(?:reset|refused|aborted)\b/,
+			/\bsocket\b/,
+			/network/,
+		)
+	) {
+		return {
+			code: "device_transport",
+			category: "transport",
+			message,
+			retryable: true,
+			observabilityDefect: false,
+		};
+	}
+	if (matches(/full-inventory/, /inventory readability/, /inventory read/)) {
+		return {
+			code: "inventory_read_safety_gate",
+			category: "safety_gate",
+			message,
+			retryable: true,
+			observabilityDefect: false,
+		};
+	}
+	if (
+		matches(
+			/duplicate owner/,
+			/different .*owner/,
+			/identity/,
+			/checksum/,
+			/source bytes/,
+			/missing custody/,
+		)
+	) {
+		return {
+			code: "identity_safety",
+			category: "identity",
+			message,
+			retryable: false,
+			observabilityDefect: false,
+		};
+	}
+	if (matches(/unsupported/, /capability/, /firmware/, /writer probe/)) {
+		return {
+			code: "writer_capability",
+			category: "capability",
+			message,
+			retryable: false,
+			observabilityDefect: false,
+		};
+	}
+	if (matches(/scope hash/, /stale plan/, /scope changed/, /plan .*expired/)) {
+		return {
+			code: "stale_scope",
+			category: "scope",
+			message,
+			retryable: false,
+			observabilityDefect: false,
+		};
+	}
+	if (
+		matches(
+			/unique constraint/,
+			/prisma/,
+			/typeerror/,
+			/referenceerror/,
+			/is not a function/,
+			/cannot read propert/,
+			/undefined/,
+		)
+	) {
+		return {
+			code: "code_or_data_contract",
+			category: "implementation",
+			message,
+			retryable: false,
+			observabilityDefect: false,
+		};
+	}
+	return {
+		code: "unclassified",
+		category: "observability",
+		message,
+		retryable: false,
+		observabilityDefect: true,
+	};
+};
+
 export type CredentialRecoveryTaskDraft = {
 	taskKey: string;
 	kind:

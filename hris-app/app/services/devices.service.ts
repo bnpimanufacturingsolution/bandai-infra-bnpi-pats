@@ -772,6 +772,39 @@ export interface DeviceUserMergeJobProgress {
 	completedAt?: string;
 }
 
+export interface CredentialRecoveryError {
+	code?: string;
+	category?: string;
+	message?: string;
+	retryable?: boolean;
+	observabilityDefect?: boolean;
+	at?: string;
+	durationMs?: number;
+	stage?: string;
+	sourceDeviceId?: string | null;
+	targetDeviceId?: string | null;
+	vendorUserId?: string | null;
+	attempt?: number;
+}
+
+export interface CredentialRecoveryTask {
+	id: string;
+	taskKey: string;
+	kind: string;
+	modality?: string | null;
+	sourceDeviceId?: string | null;
+	targetDeviceId?: string | null;
+	vendorUserId?: string | null;
+	status: string;
+	stage?: string | null;
+	attempts: number;
+	maxAttempts?: number;
+	error?: CredentialRecoveryError | null;
+	startedAt?: string | null;
+	completedAt?: string | null;
+	updatedAt: string;
+}
+
 export interface CredentialRecoveryJob {
 	id: string;
 	planId: string;
@@ -807,21 +840,10 @@ export interface CredentialRecoveryJob {
 		retrying?: number;
 		blocked?: number;
 	};
-	latestError?: { message?: string; at?: string } | null;
-	tasks?: Array<{
-		id: string;
-		taskKey: string;
-		kind: string;
-		modality?: string | null;
-		sourceDeviceId?: string | null;
-		targetDeviceId?: string | null;
-		vendorUserId?: string | null;
-		status: string;
-		stage?: string | null;
-		attempts: number;
-		error?: { message?: string; at?: string; durationMs?: number } | null;
-		updatedAt: string;
-	}>;
+	latestError?: CredentialRecoveryError | null;
+	activeTask?: CredentialRecoveryTask | null;
+	latestFailedTask?: CredentialRecoveryTask | null;
+	tasks?: CredentialRecoveryTask[];
 	startedAt?: string | null;
 	completedAt?: string | null;
 	createdAt: string;

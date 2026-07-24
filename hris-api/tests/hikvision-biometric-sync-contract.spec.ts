@@ -333,6 +333,9 @@ describe("Hikvision biometric sync contract", () => {
 		);
 		expect(controller).to.include("buildCredentialRecoveryPendingTaskWhere");
 		expect(controller).to.include("replanHeartbeat");
+		expect(controller).to.include("successfulOperationIds");
+		expect(controller).to.include("verified !== readyWrites.length");
+		expect(controller).to.include("credential_recovery_write_progress");
 		expect(controller).to.include(
 			"Credential recovery replan lost full-inventory readability for the frozen device scope",
 		);

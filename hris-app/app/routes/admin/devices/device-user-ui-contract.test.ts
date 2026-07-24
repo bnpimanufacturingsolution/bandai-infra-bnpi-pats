@@ -366,6 +366,12 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Recovery needed: ${formatSdkMergeRecoveryStage(write)}");
 		expect(enroll).toContain("Start recovery");
 		expect(enroll).toContain("credentialRecoveryJob.lastAdvancementAt");
+		expect(enroll).toContain("credentialRecoveryJob.activeTask");
+		expect(enroll).toContain("Observability defect");
+		expect(enroll).toContain("credentialRecoveryJob.latestError.code");
+		expect(enroll).toContain("credentialRecoveryJob.latestError.retryable");
+		expect(enroll).toContain('credentialRecoveryJob.status === "completed"');
+		expect(enroll).toContain("(credentialRecoveryJob.counters?.verified ?? 0) > 0");
 		expect(enroll).toContain("worker lease, heartbeat, and");
 		expect(enroll).not.toContain("SDK_MERGE_PHYSICAL_ACTION_REASONS");
 		expect(enroll).toContain(

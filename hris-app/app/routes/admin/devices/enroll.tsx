@@ -8734,12 +8734,42 @@ export function DeviceEnrollmentPanel({
 													credentialRecoveryJob.status === "failed" ||
 													credentialRecoveryJob.status === "needs_attention"
 														? "destructive"
-														: credentialRecoveryJob.status === "awaiting_replan"
+														: credentialRecoveryJob.status === "completed" &&
+															  (credentialRecoveryJob.counters?.verified ?? 0) > 0
 															? "success"
 															: "warning"
 												}>
 												{credentialRecoveryJob.status}
 											</Badge>
+										</div>
+										<div className="mt-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs">
+											<p className="font-semibold text-slate-950">
+												{credentialRecoveryJob.activeTask
+													? `Now: ${credentialRecoveryJob.activeTask.modality || "credential"} ${credentialRecoveryJob.activeTask.stage || credentialRecoveryJob.activeTask.kind}`
+													: `Now: ${credentialRecoveryJob.currentStage || "waiting for worker"}`}
+											</p>
+											{credentialRecoveryJob.activeTask ? (
+												<p className="mt-1 break-all text-slate-600">
+													source{" "}
+													{credentialRecoveryJob.activeTask.sourceDeviceId || "not applicable"}
+													{" → target "}
+													{credentialRecoveryJob.activeTask.targetDeviceId ||
+														"not selected yet"}
+													{" · user "}
+													{credentialRecoveryJob.activeTask.vendorUserId || "not available"}
+													{" · attempt "}
+													{credentialRecoveryJob.activeTask.attempts}
+													{credentialRecoveryJob.activeTask.maxAttempts
+														? `/${credentialRecoveryJob.activeTask.maxAttempts}`
+														: ""}
+												</p>
+											) : null}
+											<p className="mt-1 text-slate-600">
+												Worker lease{" "}
+												{credentialRecoveryJob.workerLeaseActive ? "active" : "inactive"}
+												{" · resume cursor "}
+												{credentialRecoveryJob.resumeCursor ?? 0}
+											</p>
 										</div>
 										<div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:grid-cols-7">
 											{[
@@ -8767,9 +8797,34 @@ export function DeviceEnrollmentPanel({
 											))}
 										</div>
 										{credentialRecoveryJob.latestError?.message ? (
-											<p className="mt-2 text-xs font-medium text-red-700">
-												{credentialRecoveryJob.latestError.message}
-											</p>
+											<div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+												<p className="font-semibold">
+													{credentialRecoveryJob.latestError.observabilityDefect
+														? "Observability defect"
+														: credentialRecoveryJob.latestError.category ||
+															"Recovery failure"}
+													{" · "}
+													{credentialRecoveryJob.latestError.code || "unclassified"}
+													{" · "}
+													{credentialRecoveryJob.latestError.retryable
+														? "retryable"
+														: "not automatically retryable"}
+												</p>
+												<p className="mt-1 break-words">
+													{credentialRecoveryJob.latestError.message}
+												</p>
+												<p className="mt-1 break-all text-red-700">
+													stage {credentialRecoveryJob.latestError.stage || "unknown"}
+													{" · source "}
+													{credentialRecoveryJob.latestError.sourceDeviceId || "unknown"}
+													{" · target "}
+													{credentialRecoveryJob.latestError.targetDeviceId || "unknown"}
+													{" · user "}
+													{credentialRecoveryJob.latestError.vendorUserId || "unknown"}
+													{" · attempt "}
+													{credentialRecoveryJob.latestError.attempt || "unknown"}
+												</p>
+											</div>
 										) : null}
 									</div>
 								) : (

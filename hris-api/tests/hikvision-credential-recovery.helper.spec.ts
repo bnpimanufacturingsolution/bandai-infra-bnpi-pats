@@ -2,6 +2,7 @@ import { expect } from "chai";
 import {
 	buildCredentialRecoveryPendingTaskWhere,
 	buildCredentialRecoveryTaskGraph,
+	classifyCredentialRecoveryError,
 	classifyCredentialRecoveryWrite,
 	summarizeCredentialRecovery,
 } from "../helper/hikvision-credential-recovery.helper";
@@ -19,6 +20,30 @@ describe("Hikvision credential recovery graph", () => {
 		expect(buildCredentialRecoveryPendingTaskWhere("job-1", "unknown")).to.not.have.property(
 			"modality",
 		);
+	});
+
+	it("classifies visible device failures without calling them code defects", () => {
+		expect(classifyCredentialRecoveryError(new Error("fetch failed"))).to.include({
+			code: "device_transport",
+			category: "transport",
+			retryable: true,
+			observabilityDefect: false,
+		});
+		expect(classifyCredentialRecoveryError(new Error("Unauthorized"))).to.include({
+			code: "device_authentication",
+			category: "authentication",
+			retryable: false,
+			observabilityDefect: false,
+		});
+	});
+
+	it("classifies an unexplained failure as an observability defect", () => {
+		expect(classifyCredentialRecoveryError(new Error("credential operation failed"))).to.include({
+			code: "unclassified",
+			category: "observability",
+			retryable: false,
+			observabilityDefect: true,
+		});
 	});
 
 	it("does not classify planner recovery as a running queue", () => {
