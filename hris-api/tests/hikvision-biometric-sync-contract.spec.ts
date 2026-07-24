@@ -937,6 +937,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("take: 5_000");
 		expect(controller).to.include("if (deviceId && !independent.has(deviceId))");
 		expect(controller).to.include("if (independent.size >= 5) break");
+		expect(controller).to.include("if (remainingWriteAttemptBudget > 0)");
+		expect(controller).to.include(
+			"if (!writeFailure && !verified && remainingPending > 0)",
+		);
+		expect(controller).to.include('"exact_shared_card"');
 	});
 
 	it("sanitizes Hikvision faceURL non-image failures before recording raw custody status", () => {

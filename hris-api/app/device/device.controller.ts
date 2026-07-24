@@ -12558,7 +12558,7 @@ export const controller = (prisma: PrismaClient) => {
 			let writeResult: any = null;
 			let verified = 0;
 			let writeFailure: Record<string, unknown> | null = null;
-			if (!failed && remainingWriteAttemptBudget > 0) {
+			if (remainingWriteAttemptBudget > 0) {
 				await heartbeat({ currentStage: "replanning_recovered_custody" });
 				const replanStartedAt = Date.now();
 				deviceLogger.info("Credential recovery replan started", {
@@ -12621,7 +12621,17 @@ export const controller = (prisma: PrismaClient) => {
 					.sort((left: any, right: any) => {
 						const modalityRank = (value: any) =>
 							String(value) === "fingerprint" ? 0 : String(value) === "face" ? 1 : 2;
-						return modalityRank(left.modality) - modalityRank(right.modality);
+						const faceAssociationRank = (value: any) =>
+							String(value) === "exact_shared_card"
+								? 0
+								: String(value) === "canonical_hris_employee"
+									? 1
+									: 2;
+						return (
+							modalityRank(left.modality) - modalityRank(right.modality) ||
+							faceAssociationRank(left.faceAssociationStrategy) -
+								faceAssociationRank(right.faceAssociationStrategy)
+						);
 					})
 					.slice(0, remainingWriteAttemptBudget);
 				if (readyWrites.length) {
@@ -12870,24 +12880,24 @@ export const controller = (prisma: PrismaClient) => {
 				taskStore.count({ where: { jobId: params.jobId } }),
 			]);
 			await updateOwnedJob({
-					status:
-						failed || writeFailure
-							? "needs_attention"
-							: verified > 0
-								? "completed"
-								: remainingPending > 0
-									? "pending"
-								: "awaiting_replan",
-					currentStage:
-						failed || writeFailure
-							? writeFailure
-								? "physical_reread_failed"
-								: "recovery_failed"
-							: verified > 0
-								? "physically_verified"
-								: remainingPending > 0
-									? "recovering_next_batch"
-								: "source_custody_recovered",
+					status: writeFailure
+						? "needs_attention"
+						: verified > 0
+							? "completed"
+							: remainingPending > 0
+								? "pending"
+								: failed
+									? "needs_attention"
+									: "awaiting_replan",
+					currentStage: writeFailure
+						? "physical_reread_failed"
+						: verified > 0
+							? "physically_verified"
+							: remainingPending > 0
+								? "recovering_next_batch"
+								: failed
+									? "recovery_failed"
+									: "source_custody_recovered",
 					currentTaskKey: null,
 					counters: {
 						...(persistedJob?.counters || {}),
@@ -12921,9 +12931,12 @@ export const controller = (prisma: PrismaClient) => {
 					leaseOwner: null,
 					leaseExpiresAt: null,
 					result: writeResult || Prisma.JsonNull,
-					completedAt: failed || verified > 0 ? new Date() : null,
+					completedAt:
+						writeFailure || verified > 0 || (failed > 0 && remainingPending === 0)
+							? new Date()
+							: null,
 			});
-			if (!failed && !verified && remainingPending > 0) {
+			if (!writeFailure && !verified && remainingPending > 0) {
 				setTimeout(() => {
 					processHikvisionCredentialRecoveryJob(params).catch((error) =>
 						deviceLogger.error(

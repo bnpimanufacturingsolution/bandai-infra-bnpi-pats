@@ -103,6 +103,9 @@
         if [ -f "$state_file" ] && grep -qx "commit=${commit}" "$state_file"; then
           exit 0
         fi
+        previous_commit="$(
+          sed -n 's/^commit=//p' "$state_file" 2>/dev/null | head -n 1
+        )"
 
         runtime_job_root="/var/lib/project-truth/k8s/dev/uploads/project-truth-runtime"
         for job_kind in device-user-merge-jobs device-user-sync-jobs; do
@@ -118,35 +121,81 @@
           done
         done
 
+        build_api=1
+        build_db_init=1
+        build_app=1
+        if [ -n "$previous_commit" ] &&
+           git -C "{{ project_truth_repo_root }}" cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
+          changed_files="$(
+            git -C "{{ project_truth_repo_root }}" diff --name-only "$previous_commit" "$commit"
+          )"
+          build_api=0
+          build_db_init=0
+          build_app=0
+          if grep -Eq '^(hris-api/|vendor/hikvision-linux/|scripts/project-truth-hikvision-)' <<<"$changed_files"; then
+            build_api=1
+          fi
+          if grep -Eq '^(hris-api/prisma/|hris-api/scripts/.*seed|hris-api/Dockerfile)' <<<"$changed_files"; then
+            build_db_init=1
+          fi
+          if grep -Eq '^hris-app/' <<<"$changed_files"; then
+            build_app=1
+          fi
+          if grep -Eq '^(appliance/docker-compose|gitops/runtime-k8s/)' <<<"$changed_files"; then
+            build_api=1
+            build_db_init=1
+            build_app=1
+          fi
+        fi
+
+        services=()
+        images=()
+        deployments=()
+        if [ "$build_api" = "1" ]; then
+          services+=(hris-api)
+          images+=(hris-api-local:develop)
+          deployments+=(hris-api)
+        fi
+        if [ "$build_db_init" = "1" ]; then
+          services+=(hris-api-db-init)
+          images+=(hris-api-db-init:develop)
+        fi
+        if [ "$build_app" = "1" ]; then
+          services+=(hris-app)
+          images+=(hris-app-local:develop)
+          deployments+=(hris-app)
+        fi
+        if [ -z "${services[*]:-}" ]; then
+          printf 'commit=%s\nsynced_at=%s\nservices=none\n' \
+            "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$state_file"
+          exit 0
+        fi
+
+        echo "Runtime image selection: services=${services[*]}"
         cd "{{ project_truth_install_root }}/appliance"
         export PROJECT_TRUTH_BUILD_SHA="$commit"
         if docker compose version >/dev/null 2>&1; then
-          docker compose build hris-api hris-api-db-init hris-app
+          docker compose build "${services[@]}"
         else
-          docker-compose build hris-api hris-api-db-init hris-app
+          docker-compose build "${services[@]}"
         fi
 
-        docker image inspect postgres:16-alpine >/dev/null
-        for image in \
-          hris-api-local:develop \
-          hris-api-db-init:develop \
-          hris-app-local:develop; do
+        for image in "${images[@]}"; do
           docker image inspect "$image" >/dev/null
         done
 
         mkdir -p /var/lib/rancher/k3s/agent/images
-        docker save -o /tmp/project-truth-k8s-runtime-images.tar \
-          postgres:16-alpine \
-          hris-api-local:develop \
-          hris-api-db-init:develop \
-          hris-app-local:develop
-        cp /tmp/project-truth-k8s-runtime-images.tar /var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-images.tar
-        k3s ctr -n k8s.io images import /tmp/project-truth-k8s-runtime-images.tar
+        archive="/tmp/project-truth-k8s-runtime-selected-images.tar"
+        docker save -o "$archive" "${images[@]}"
+        cp "$archive" /var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-zz-selected-images.tar
+        k3s ctr -n k8s.io images import "$archive"
         env_name=dev
-        kubectl -n "$env_name" rollout restart deployment/hris-api deployment/hris-app >/dev/null 2>&1 || true
-        kubectl -n "$env_name" rollout status deployment/hris-api --timeout=180s >/dev/null 2>&1 || true
-        kubectl -n "$env_name" rollout status deployment/hris-app --timeout=180s >/dev/null 2>&1 || true
-        printf 'commit=%s\nsynced_at=%s\n' "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$state_file"
+        for deployment in "${deployments[@]}"; do
+          kubectl -n "$env_name" rollout restart "deployment/$deployment" >/dev/null
+          kubectl -n "$env_name" rollout status "deployment/$deployment" --timeout=180s
+        done
+        printf 'commit=%s\nsynced_at=%s\nservices=%s\n' \
+          "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${services[*]}" > "$state_file"
       args:
         executable: /bin/bash
       changed_when: true
