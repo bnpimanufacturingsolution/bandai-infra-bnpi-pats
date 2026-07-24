@@ -911,6 +911,20 @@ describe("Hikvision biometric sync contract", () => {
 		);
 	});
 
+	it("blocks face writes during planning when source and target identity association is unproven", () => {
+		const controller = controllerSource();
+
+		expect(controller).to.include('const faceAssociationStrategy = exactSharedCardMatch');
+		expect(controller).to.include('"exact_shared_card"');
+		expect(controller).to.include('"canonical_hris_employee"');
+		expect(controller).to.include(
+			'blockingReason: "physical_identity_adjudication_required"',
+		);
+		expect(controller.indexOf("if (!faceAssociationStrategy)")).to.be.lessThan(
+			controller.indexOf('writerStrategy: "sdk_face_template_writer"'),
+		);
+	});
+
 	it("sanitizes Hikvision faceURL non-image failures before recording raw custody status", () => {
 		const helper = readFileSync(
 			join(process.cwd(), "helper/device-user-raw-fingerprint.helper.ts"),

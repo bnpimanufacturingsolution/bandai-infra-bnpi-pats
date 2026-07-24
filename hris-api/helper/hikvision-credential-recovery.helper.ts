@@ -10,6 +10,7 @@ export type CredentialRecoveryErrorClassification = {
 		| "database_transport"
 		| "device_authentication"
 		| "face_owner_card_association_missing"
+		| "face_identity_association_unproven"
 		| "device_transport"
 		| "worker_fencing"
 		| "inventory_read_safety_gate"
@@ -93,6 +94,20 @@ export const classifyCredentialRecoveryError = (
 	) {
 		return {
 			code: "face_owner_card_association_missing",
+			category: "identity_custody",
+			message,
+			retryable: false,
+			observabilityDefect: false,
+		};
+	}
+	if (
+		matches(
+			/neither exact shared card custody nor the same canonical hris employee/,
+			/neither an exact shared physical card nor the same canonical hris employee/,
+		)
+	) {
+		return {
+			code: "face_identity_association_unproven",
 			category: "identity_custody",
 			message,
 			retryable: false,

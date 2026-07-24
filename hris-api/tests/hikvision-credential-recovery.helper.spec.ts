@@ -74,6 +74,18 @@ describe("Hikvision credential recovery graph", () => {
 		expect(
 			classifyCredentialRecoveryError(
 				new Error(
+					"Neither exact shared card custody nor the same canonical HRIS employee proves the face association.",
+				),
+			),
+		).to.include({
+			code: "face_identity_association_unproven",
+			category: "identity_custody",
+			retryable: false,
+			observabilityDefect: false,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
 					"Credential recovery write-attempt fence refused the canary: claimed 0 of 1 target writes.",
 				),
 			),

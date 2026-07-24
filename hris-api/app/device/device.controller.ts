@@ -11690,6 +11690,35 @@ export const controller = (prisma: PrismaClient) => {
 					(record: any) =>
 						String(record.deviceId) === String(write.sourceDeviceId),
 				);
+				const targetRecord = (user?.records || []).find(
+					(record: any) =>
+						String(record.deviceId) === String(write.targetDeviceId),
+				);
+				const sourceEmployeeId = String(sourceRecord?.employeeId || "").trim();
+				const targetEmployeeId = String(targetRecord?.employeeId || "").trim();
+				const sourceCardNo = String(sourceRecord?._cardNo || "").trim();
+				const targetCardNo = String(targetRecord?._cardNo || "").trim();
+				const canonicalEmployeeMatch =
+					Boolean(sourceEmployeeId) && sourceEmployeeId === targetEmployeeId;
+				const exactSharedCardMatch =
+					Boolean(sourceCardNo) && sourceCardNo === targetCardNo;
+				const faceAssociationStrategy = exactSharedCardMatch
+					? "exact_shared_card"
+					: canonicalEmployeeMatch
+						? "canonical_hris_employee"
+						: null;
+				if (!faceAssociationStrategy) {
+					return {
+						...write,
+						recommended: false,
+						executionEligibility: "blocked",
+						blockingReason: "physical_identity_adjudication_required",
+						recoveryStage: "physical_identity_action_required",
+						faceAssociationStrategy: null,
+						recommendationReason:
+							"Neither an exact shared physical card nor the same canonical HRIS employee proves this face source/target association.",
+					};
+				}
 				const targetDevice = devices.find(
 					(device) => String(device.id) === String(write.targetDeviceId),
 				);
@@ -11723,6 +11752,7 @@ export const controller = (prisma: PrismaClient) => {
 						blockingReason: null,
 						recoveryStage: "ready_to_write",
 						writerStrategy: "sdk_face_template_writer",
+						faceAssociationStrategy,
 						writerCapabilityProof: fleetFaceCapability
 							? {
 									operationId: String(write.id),
