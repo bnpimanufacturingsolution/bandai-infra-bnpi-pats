@@ -415,3 +415,27 @@ export const summarizeCredentialRecovery = (plan: any, tasks: CredentialRecovery
 		tasksBlocked: tasks.filter((task) => task.status === "blocked").length,
 	};
 };
+
+const physicalCredentialRecoveryStages = new Set([
+	"writing_canary",
+	"credential_write_claimed",
+	"credential_probe_started",
+	"credential_probe_passed",
+	"credential_raw_write_started",
+	"physical_write_or_reread_active",
+	"reread_started",
+]);
+
+export const isCredentialRecoveryPhysicalStage = (stage: unknown) =>
+	physicalCredentialRecoveryStages.has(String(stage || ""));
+
+export const remainingCredentialRecoveryWriteAttemptBudget = (
+	maxWriteAttempts: unknown,
+	attemptedTaskKeys: Iterable<unknown>,
+) => {
+	const maximum = Math.max(0, Math.min(50, Number(maxWriteAttempts || 0)));
+	const attempted = new Set(
+		[...attemptedTaskKeys].map((taskKey) => String(taskKey || "")).filter(Boolean),
+	).size;
+	return Math.max(0, maximum - attempted);
+};

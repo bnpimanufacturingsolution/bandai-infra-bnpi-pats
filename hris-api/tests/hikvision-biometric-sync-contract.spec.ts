@@ -333,6 +333,16 @@ describe("Hikvision biometric sync contract", () => {
 		);
 		expect(controller).to.include("buildCredentialRecoveryPendingTaskWhere");
 		expect(controller).to.include("replanHeartbeat");
+		expect(controller).to.include("physicalHeartbeat");
+		expect(controller).to.include("CREDENTIAL_RECOVERY_STALE_LEASE");
+		expect(controller).to.include("credential_recovery_stale_worker_fenced");
+		expect(controller).to.include("attemptedWriteTaskKeys");
+		expect(controller).to.include("remainingWriteAttemptBudget");
+		expect(controller).to.include("Credential recovery write-attempt fence refused the canary");
+		expect(controller).to.include("expired_physical_stage_requires_adjudication");
+		expect(controller).to.include(
+			"Automatic resume is forbidden until the target is physically reread",
+		);
 		expect(controller).to.include("successfulOperationIds");
 		expect(controller).to.include("verified !== readyWrites.length");
 		expect(controller).to.include("credential_recovery_write_progress");

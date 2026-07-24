@@ -4,11 +4,34 @@ import {
 	buildCredentialRecoveryTaskGraph,
 	classifyCredentialRecoveryError,
 	classifyCredentialRecoveryWrite,
+	isCredentialRecoveryPhysicalStage,
 	planCredentialRecoveryWorkerFailure,
+	remainingCredentialRecoveryWriteAttemptBudget,
 	summarizeCredentialRecovery,
 } from "../helper/hikvision-credential-recovery.helper";
 
 describe("Hikvision credential recovery graph", () => {
+	it("caps a canary by physical write attempts and fail-closes expired physical stages", () => {
+		expect(remainingCredentialRecoveryWriteAttemptBudget(1, [])).to.equal(1);
+		expect(
+			remainingCredentialRecoveryWriteAttemptBudget(1, ["target_write:operation-1"]),
+		).to.equal(0);
+		expect(
+			remainingCredentialRecoveryWriteAttemptBudget(3, [
+				"target_write:operation-1",
+				"target_write:operation-1",
+				"target_write:operation-2",
+			]),
+		).to.equal(1);
+		expect(isCredentialRecoveryPhysicalStage("credential_raw_write_started")).to.equal(
+			true,
+		);
+		expect(isCredentialRecoveryPhysicalStage("reread_started")).to.equal(true);
+		expect(isCredentialRecoveryPhysicalStage("recovering_source_custody")).to.equal(
+			false,
+		);
+	});
+
 	it("constrains source recovery to the requested canary modality", () => {
 		expect(
 			buildCredentialRecoveryPendingTaskWhere("job-1", "fingerprint"),

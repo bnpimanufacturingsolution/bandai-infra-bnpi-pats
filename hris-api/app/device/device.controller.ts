@@ -96,7 +96,9 @@ import {
 	buildCredentialRecoveryPendingTaskWhere,
 	buildCredentialRecoveryTaskGraph,
 	classifyCredentialRecoveryError,
+	isCredentialRecoveryPhysicalStage,
 	planCredentialRecoveryWorkerFailure,
+	remainingCredentialRecoveryWriteAttemptBudget,
 	summarizeCredentialRecovery,
 } from "../../helper/hikvision-credential-recovery.helper";
 import {
@@ -12057,14 +12059,28 @@ export const controller = (prisma: PrismaClient) => {
 		});
 		if (claimed.count !== 1) return;
 
-		const heartbeat = async (patch: Record<string, unknown> = {}) =>
-			jobStore.update({
-				where: { id: params.jobId },
+		const updateOwnedJob = async (data: Record<string, unknown>) => {
+			const updated = await jobStore.updateMany({
+				where: { id: params.jobId, leaseOwner },
 				data: {
-					...patch,
-					heartbeatAt: new Date(),
-					leaseExpiresAt: new Date(Date.now() + 60_000),
+					...data,
 				},
+			});
+			if (updated.count !== 1) {
+				const staleLeaseError: any = new Error(
+					`Credential recovery worker ${leaseOwner} lost its durable lease for job ${params.jobId}`,
+				);
+				staleLeaseError.code = "CREDENTIAL_RECOVERY_STALE_LEASE";
+				throw staleLeaseError;
+			}
+			return updated;
+		};
+
+		const heartbeat = async (patch: Record<string, unknown> = {}) =>
+			updateOwnedJob({
+				...patch,
+				heartbeatAt: new Date(),
+				leaseExpiresAt: new Date(Date.now() + 60_000),
 			});
 
 		const refreshLiveCounters = async () => {
@@ -12295,10 +12311,25 @@ export const controller = (prisma: PrismaClient) => {
 			)
 				? String(request.canaryModality)
 				: null;
+			const attemptedWriteTasks = await taskStore.findMany({
+				where: {
+					jobId: params.jobId,
+					kind: "target_write",
+					attempts: { gt: 0 },
+				},
+				select: { taskKey: true },
+			});
+			const attemptedWriteTaskKeys = new Set(
+				attemptedWriteTasks.map((task: any) => String(task.taskKey)),
+			);
+			const remainingWriteAttemptBudget = remainingCredentialRecoveryWriteAttemptBudget(
+				maxVerifiedWrites,
+				attemptedWriteTaskKeys,
+			);
 			let writeResult: any = null;
 			let verified = 0;
 			let writeFailure: Record<string, unknown> | null = null;
-			if (!failed && maxVerifiedWrites > 0) {
+			if (!failed && remainingWriteAttemptBudget > 0) {
 				await heartbeat({ currentStage: "replanning_recovered_custody" });
 				const replanHeartbeat = setInterval(() => {
 					heartbeat({ currentStage: "replanning_recovered_custody" }).catch(
@@ -12336,6 +12367,7 @@ export const controller = (prisma: PrismaClient) => {
 							originalOperationIds.has(String(write.id)) &&
 							write.recommended === true &&
 							write.executionEligibility === "ready_from_raw_blob" &&
+							!attemptedWriteTaskKeys.has(`target_write:${String(write.id)}`) &&
 							(!canaryModality ||
 								String(write.modality) === canaryModality),
 					)
@@ -12344,7 +12376,7 @@ export const controller = (prisma: PrismaClient) => {
 							String(value) === "fingerprint" ? 0 : String(value) === "face" ? 1 : 2;
 						return modalityRank(left.modality) - modalityRank(right.modality);
 					})
-					.slice(0, maxVerifiedWrites);
+					.slice(0, remainingWriteAttemptBudget);
 				if (readyWrites.length) {
 					const freshPlanId = randomUUID();
 					deviceUserMergePlans.set(freshPlanId, {
@@ -12379,6 +12411,31 @@ export const controller = (prisma: PrismaClient) => {
 						})),
 						skipDuplicates: true,
 					});
+					const claimedWriteTasks = await taskStore.updateMany({
+						where: {
+							jobId: params.jobId,
+							taskKey: {
+								in: readyWrites.map(
+									(write: any) => `target_write:${String(write.id)}`,
+								),
+							},
+							attempts: 0,
+							status: { in: ["pending", "retrying"] },
+						},
+						data: {
+							status: "processing",
+							stage: "credential_write_claimed",
+							attempts: { increment: 1 },
+							leaseOwner,
+							leaseExpiresAt: new Date(Date.now() + 60_000),
+							startedAt: new Date(),
+						},
+					});
+					if (claimedWriteTasks.count !== readyWrites.length) {
+						throw new Error(
+							`Credential recovery write-attempt fence refused the canary: claimed ${claimedWriteTasks.count} of ${readyWrites.length} target writes.`,
+						);
+					}
 					await heartbeat({
 						currentStage: "writing_canary",
 						currentTaskKey: `target_write:${readyWrites[0].id}`,
@@ -12465,6 +12522,14 @@ export const controller = (prisma: PrismaClient) => {
 							}
 						});
 					};
+					const physicalHeartbeat = setInterval(() => {
+						heartbeat().catch(
+							(error: unknown) =>
+								deviceLogger.warn(
+									`Credential recovery job ${params.jobId} physical-stage heartbeat failed: ${error}`,
+								),
+						);
+					}, 10_000);
 					try {
 						writeResult = await runHikvisionSdkUserMergeApplyForJob({
 							req: params.req,
@@ -12476,6 +12541,7 @@ export const controller = (prisma: PrismaClient) => {
 							onProgress: recordDurableWriteProgress,
 						});
 					} finally {
+						clearInterval(physicalHeartbeat);
 						await progressUpdateChain;
 					}
 					const attention = Number(writeResult?.attention || 0);
@@ -12542,9 +12608,7 @@ export const controller = (prisma: PrismaClient) => {
 				taskStore.count({ where: { jobId: params.jobId, status: "blocked" } }),
 				taskStore.count({ where: { jobId: params.jobId } }),
 			]);
-			await jobStore.update({
-				where: { id: params.jobId },
-				data: {
+			await updateOwnedJob({
 					status:
 						failed || writeFailure
 							? "needs_attention"
@@ -12597,7 +12661,6 @@ export const controller = (prisma: PrismaClient) => {
 					leaseExpiresAt: null,
 					result: writeResult || Prisma.JsonNull,
 					completedAt: failed || verified > 0 ? new Date() : null,
-				},
 			});
 			if (!failed && !verified && remainingPending > 0) {
 				setTimeout(() => {
@@ -12609,6 +12672,16 @@ export const controller = (prisma: PrismaClient) => {
 				}, 250);
 			}
 		} catch (error: any) {
+			if (error?.code === "CREDENTIAL_RECOVERY_STALE_LEASE") {
+				deviceLogger.error("Credential recovery stale worker fenced", {
+					event: "credential_recovery_stale_worker_fenced",
+					jobId: params.jobId,
+					leaseOwner,
+					code: error.code,
+					message: error.message,
+				});
+				return;
+			}
 			let recoveryDecision:
 				| ReturnType<typeof planCredentialRecoveryWorkerFailure>
 				| undefined;
@@ -12622,8 +12695,8 @@ export const controller = (prisma: PrismaClient) => {
 					error,
 					Number(currentRequest.workerRetryAttempt || 0),
 				);
-				return jobStore.update({
-					where: { id: params.jobId },
+				const persisted = await jobStore.updateMany({
+					where: { id: params.jobId, leaseOwner },
 					data: {
 						status: recoveryDecision.status,
 						currentStage: recoveryDecision.shouldRetry
@@ -12647,6 +12720,14 @@ export const controller = (prisma: PrismaClient) => {
 						completedAt: recoveryDecision.shouldRetry ? null : new Date(),
 					},
 				});
+				if (persisted.count !== 1) {
+					const staleLeaseError: any = new Error(
+						`Credential recovery worker ${leaseOwner} lost its durable lease while persisting failure for job ${params.jobId}`,
+					);
+					staleLeaseError.code = "CREDENTIAL_RECOVERY_STALE_LEASE";
+					throw staleLeaseError;
+				}
+				return persisted;
 			};
 			await withHikvisionPrismaTransportRetry(persistFailure, [
 				0, 1_000, 2_500, 5_000, 10_000,
@@ -12851,9 +12932,37 @@ export const controller = (prisma: PrismaClient) => {
 			["pending", "recovering", "retrying"].includes(job.status) &&
 			(!job.leaseExpiresAt || new Date(job.leaseExpiresAt).getTime() < Date.now())
 		) {
-			processHikvisionCredentialRecoveryJob({ jobId: job.id, req }).catch((error) =>
-				deviceLogger.error(`Credential recovery job ${job.id} resume failed: ${error}`),
-			);
+			const physicalStageMayHaveMutatedDevice =
+				isCredentialRecoveryPhysicalStage(job.currentStage);
+			if (physicalStageMayHaveMutatedDevice) {
+				await (prisma as any).credentialRecoveryJob.updateMany({
+					where: {
+						id: job.id,
+						status: { in: ["pending", "recovering", "retrying"] },
+						leaseExpiresAt: job.leaseExpiresAt,
+					},
+					data: {
+						status: "needs_attention",
+						currentStage: "expired_physical_stage_requires_adjudication",
+						latestError: {
+							code: "expired_physical_stage",
+							classification: "worker_lease_fencing",
+							retryable: false,
+							message:
+								"The worker lease expired during a physical write or reread stage. Automatic resume is forbidden until the target is physically reread and the write attempt is adjudicated.",
+							stage: String(job.currentStage || "unknown_physical_stage"),
+							at: new Date().toISOString(),
+						},
+						leaseOwner: null,
+						leaseExpiresAt: null,
+						completedAt: new Date(),
+					},
+				});
+			} else {
+				processHikvisionCredentialRecoveryJob({ jobId: job.id, req }).catch((error) =>
+					deviceLogger.error(`Credential recovery job ${job.id} resume failed: ${error}`),
+				);
+			}
 		}
 		res.status(200).json(
 			buildSuccessResponse(
