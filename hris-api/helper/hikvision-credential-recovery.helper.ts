@@ -9,6 +9,7 @@ export type CredentialRecoveryErrorClassification = {
 	code:
 		| "database_transport"
 		| "device_authentication"
+		| "face_owner_card_association_missing"
 		| "device_transport"
 		| "worker_fencing"
 		| "inventory_read_safety_gate"
@@ -20,6 +21,7 @@ export type CredentialRecoveryErrorClassification = {
 	category:
 		| "persistence"
 		| "authentication"
+		| "identity_custody"
 		| "transport"
 		| "concurrency"
 		| "safety_gate"
@@ -78,6 +80,20 @@ export const classifyCredentialRecoveryError = (
 		return {
 			code: "device_authentication",
 			category: "authentication",
+			message,
+			retryable: false,
+			observabilityDefect: false,
+		};
+	}
+	if (
+		matches(
+			/cardownerverified=false/,
+			/no exact employee-owned cardinfo association/,
+		)
+	) {
+		return {
+			code: "face_owner_card_association_missing",
+			category: "identity_custody",
 			message,
 			retryable: false,
 			observabilityDefect: false,

@@ -3996,7 +3996,12 @@ export const controller = (prisma: PrismaClient) => {
 					: null;
 			if (!encryptedFingerprint && !encryptedFace) {
 				throw new Error(
-					`Hikvision SDK returned no fingerprint or face template bytes for device user ${params.vendorUserId}`,
+					`Hikvision SDK returned no fingerprint or face template bytes for device user ${params.vendorUserId}; ` +
+						`userReadOk=${String(exportEvent.userReadOk || "false")}, ` +
+						`cardOwnerVerified=${String(exportEvent.cardOwnerVerified || "false")}, ` +
+						`exportOk=${String(exportEvent.ok || "false")}, ` +
+						`faceTemplateSize=${Number(exportEvent.faceTemplateSize || 0)}, ` +
+						`facePictureSize=${Number(exportEvent.facePictureSize || 0)}`,
 				);
 			}
 			return {

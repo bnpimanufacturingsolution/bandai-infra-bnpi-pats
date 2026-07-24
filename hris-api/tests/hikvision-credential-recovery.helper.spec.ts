@@ -62,6 +62,18 @@ describe("Hikvision credential recovery graph", () => {
 		expect(
 			classifyCredentialRecoveryError(
 				new Error(
+					"Hikvision SDK returned no face bytes; userReadOk=true, cardOwnerVerified=false, faceTemplateSize=0",
+				),
+			),
+		).to.include({
+			code: "face_owner_card_association_missing",
+			category: "identity_custody",
+			retryable: false,
+			observabilityDefect: false,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
 					"Credential recovery write-attempt fence refused the canary: claimed 0 of 1 target writes.",
 				),
 			),
