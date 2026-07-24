@@ -152,7 +152,10 @@ std::string callback_spool_dir = "/tmp/project-truth-hikvision-callback-spool";
 constexpr auto recent_employee_candidate_ttl = std::chrono::seconds(180);
 constexpr auto poll_reconcile_min_interval = std::chrono::seconds(3);
 constexpr auto inventory_poll_interval = std::chrono::seconds(2);
-constexpr auto callback_identity_scan_min_interval = std::chrono::seconds(5);
+// A full UserInfo inventory is 29 SDK pages on the current 865-user panels.
+// Keep it out of the ordinary callback hot path and coalesce the remaining
+// explicit management-event fallback scans for a full minute per device.
+constexpr auto callback_identity_scan_min_interval = std::chrono::minutes(1);
 
 bool curl_post_json(
     const std::string &url,
@@ -4196,6 +4199,24 @@ bool needs_callback_identity_enrich(const ReconcileJob &job) {
            job.event_kind.find("poll_") == 0;
 }
 
+bool should_defer_empty_callback_identity_to_backend(const ReconcileJob &job) {
+    if (!job.employee_no.empty()) {
+        return false;
+    }
+    // Explicit management events may use the bounded inventory-delta fallback
+    // below. Generic major=3/observed operation signals are far more frequent
+    // and already have a durable API-side operation-log resolver. Scanning all
+    // 865 users here blocks the same panel transport needed by plans/writes.
+    if (is_user_management_minor(job.minor) ||
+        is_fingerprint_management_minor(job.minor) ||
+        is_card_management_minor(job.minor)) {
+        return false;
+    }
+    return job.major == 3 ||
+           is_observed_operation_sync_minor(job.minor) ||
+           job.event_kind == "biometric_operation_sync";
+}
+
 bool needs_callback_template_enrich(const ReconcileJob &job) {
     if (job.employee_no.empty()) {
         return false;
@@ -4493,7 +4514,17 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
 
     const bool is_repost = job.event_kind.find("identity_repost") != std::string::npos;
 
-    if (job.employee_no.empty() && needs_callback_identity_enrich(job)) {
+    if (should_defer_empty_callback_identity_to_backend(job)) {
+        job.identity_source = "empty";
+        emit_json({
+            {"event", "callback_identity_enrich_deferred"},
+            {"sourceDeviceId", job.source_device_id},
+            {"sourceHost", job.source_host},
+            {"major", std::to_string(job.major)},
+            {"minor", std::to_string(job.minor)},
+            {"reason", "backend_operation_log_resolution"}
+        });
+    } else if (job.employee_no.empty() && needs_callback_identity_enrich(job)) {
         // Panel UserInfo may lag ACS major=3 — multipass inventory with longer delays on repost.
         const bool identity_scan_claimed =
             claim_callback_identity_scan(job.source_host);
@@ -4503,7 +4534,7 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
                 {"sourceDeviceId", job.source_device_id},
                 {"sourceHost", job.source_host},
                 {"isRepost", is_repost ? "true" : "false"},
-                {"cooldownMs", "5000"},
+                {"cooldownMs", "60000"},
                 {"reason", "full_inventory_single_flight"}
             });
         } else if (!is_repost) {
