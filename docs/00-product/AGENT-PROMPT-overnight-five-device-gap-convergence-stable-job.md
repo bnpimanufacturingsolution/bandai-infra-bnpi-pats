@@ -203,22 +203,52 @@ curl -sS http://127.0.0.1:3110/ready
 
 ## 6. Ordered overnight phases
 
-### Phase B — Fresh plan + target matrix (mandatory)
+### Phase B — Fresh plan + deterministic executionPreview (mandatory)
 
-POST plan for exact five device IDs. Save:
+POST plan for exact five device IDs. Then **always** review with modality + cap:
 
-- raw plan JSON (or truncated with counters)
-- **by-target** breakdown: face/fp row counts, ready counts, top blockingReason
-- script pattern: `.runtime/.../truth-matrix-by-target.py` / `obs-truth-summary.py`
+```json
+POST /api/device/hikvision/sdk-users/merge/recovery/review
+{
+  "planId": "...",
+  "canaryModality": "face",
+  "maxVerifiedWrites": 50
+}
+```
+
+Response includes `executionPreview` (deterministic, same selection as worker):
+
+| Field | Meaning |
+|---|---|
+| `faceReady` / `fingerprintReady` | Ready counts on frozen plan |
+| `wouldWriteCount` | Exact number this job will attempt (≤50) |
+| `wouldWriteOperationIds` | Exact op IDs in write order |
+| `wouldWriteByTarget` | Count by target device |
+| `blockReasonsWhenZeroReady` | Why nothing would write |
+| `certainty` | always `deterministic_from_plan` |
+
+Dry-run without starting a job:
+
+```json
+POST /api/device/hikvision/sdk-users/merge/recovery/jobs
+{
+  "planId": "...",
+  "expectedScopeHash": "...",
+  "canaryModality": "face",
+  "maxVerifiedWrites": 50,
+  "dryRun": true
+}
+```
+
+**Hard rule:** Do not start a write job until `executionPreview.wouldWriteCount > 0`
+for that modality (or you intentionally run custody-only `maxVerifiedWrites: 0`).
+
+If preview says wouldWriteCount=0, the defect is **named** in
+`blockReasonsWhenZeroReady` — fix unlock gates; do not spam jobs.
+
+Save by-target matrix + preview JSON under the stamp.
 
 **Stop for review** only if: <5 valid devices, plan errors, scope creep to C/TEST.
-
-Publish expectation table:
-
-```text
-face_ready / fp_ready now
-if both 0 → unlock phases C/D first, do not spin empty write jobs
-```
 
 ### Phase C — Fingerprint unlock (non-B first priority after B is healthy)
 
