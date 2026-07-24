@@ -327,6 +327,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("heartbeatAt");
 		expect(controller).to.include("resumeCursor");
 		expect(controller).to.include("processHikvisionCredentialRecoveryJob");
+		expect(controller).to.include("canaryModality");
+		expect(controller).to.include(
+			"String(write.modality) === canaryModality",
+		);
 	});
 
 	it("waits for tunnel recovery before failing a reviewed merge source row", () => {

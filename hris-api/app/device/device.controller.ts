@@ -12146,6 +12146,11 @@ export const controller = (prisma: PrismaClient) => {
 				0,
 				Math.min(50, Number(request.maxVerifiedWrites || 0)),
 			);
+			const canaryModality = ["fingerprint", "face"].includes(
+				String(request.canaryModality || ""),
+			)
+				? String(request.canaryModality)
+				: null;
 			let writeResult: any = null;
 			let verified = 0;
 			if (!failed && maxVerifiedWrites > 0) {
@@ -12163,7 +12168,9 @@ export const controller = (prisma: PrismaClient) => {
 						(write: any) =>
 							originalOperationIds.has(String(write.id)) &&
 							write.recommended === true &&
-							write.executionEligibility === "ready_from_raw_blob",
+							write.executionEligibility === "ready_from_raw_blob" &&
+							(!canaryModality ||
+								String(write.modality) === canaryModality),
 					)
 					.sort((left: any, right: any) => {
 						const modalityRank = (value: any) =>
@@ -12394,6 +12401,11 @@ export const controller = (prisma: PrismaClient) => {
 							0,
 							Math.min(50, Number(req.body?.maxVerifiedWrites || 0)),
 						),
+						canaryModality: ["fingerprint", "face"].includes(
+							String(req.body?.canaryModality || ""),
+						)
+							? String(req.body.canaryModality)
+							: null,
 					},
 					counters: review.counters,
 					currentStage: "durably_queued",

@@ -2156,7 +2156,12 @@ class DevicesService extends APIService {
 			if (!review?.scopeHash) throw new Error("Recovery review returned no scope hash");
 			const response = await hrisApiClient.post<any>(
 				"/api/device/hikvision/sdk-users/merge/recovery/jobs",
-				{ planId, expectedScopeHash: review.scopeHash, maxVerifiedWrites: 1 },
+				{
+					planId,
+					expectedScopeHash: review.scopeHash,
+					maxVerifiedWrites: 1,
+					canaryModality: "fingerprint",
+				},
 			);
 			const data = response.data?.data || response.data;
 			if (!data?.job?.id) throw new Error("Recovery job did not return a durable job ID");
