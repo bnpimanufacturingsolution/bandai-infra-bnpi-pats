@@ -39,6 +39,14 @@ export type CredentialRecoveryErrorClassification = {
 	observabilityDefect: boolean;
 };
 
+export const selectObsoleteCredentialRecoverySourceTaskIds = (
+	pendingTasks: Array<{ id: string; taskKey: string }>,
+	currentTaskKeys: ReadonlySet<string>,
+) =>
+	pendingTasks
+		.filter((task) => !currentTaskKeys.has(String(task.taskKey)))
+		.map((task) => String(task.id));
+
 export const classifyCredentialRecoveryError = (
 	error: unknown,
 ): CredentialRecoveryErrorClassification => {

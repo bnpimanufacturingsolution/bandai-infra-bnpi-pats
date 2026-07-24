@@ -99,6 +99,7 @@ import {
 	isCredentialRecoveryPhysicalStage,
 	planCredentialRecoveryWorkerFailure,
 	remainingCredentialRecoveryWriteAttemptBudget,
+	selectObsoleteCredentialRecoverySourceTaskIds,
 	summarizeCredentialRecovery,
 } from "../../helper/hikvision-credential-recovery.helper";
 import {
@@ -12557,7 +12558,7 @@ export const controller = (prisma: PrismaClient) => {
 					select: { error: true },
 				}),
 			]);
-			const remainingPending = await taskStore.count({
+			let remainingPending = await taskStore.count({
 				where: buildCredentialRecoveryPendingTaskWhere(
 					params.jobId,
 					recoveryCanaryModality,
@@ -12642,6 +12643,68 @@ export const controller = (prisma: PrismaClient) => {
 				const originalOperationIds = new Set(
 					(Array.isArray(request.operationIds) ? request.operationIds : []).map(String),
 				);
+				const currentSourceTaskKeys = new Set(
+					buildCredentialRecoveryTaskGraph({
+						...freshPlan,
+						credentialWrites: (freshPlan.credentialWrites || []).filter(
+							(write: any) =>
+								originalOperationIds.has(String(write.id)) &&
+								(!canaryModality ||
+									String(write.modality) === canaryModality),
+						),
+					})
+						.filter((task) => task.kind === "source_capture")
+						.map((task) => String(task.taskKey)),
+				);
+				const pendingSourceTasks = await taskStore.findMany({
+					where: {
+						jobId: params.jobId,
+						kind: "source_capture",
+						status: { in: ["pending", "retrying"] },
+					},
+					select: { id: true, taskKey: true },
+				});
+				const obsoleteSourceTaskIds =
+					selectObsoleteCredentialRecoverySourceTaskIds(
+						pendingSourceTasks,
+						currentSourceTaskKeys,
+					);
+				if (obsoleteSourceTaskIds.length) {
+					await taskStore.updateMany({
+						where: { id: { in: obsoleteSourceTaskIds } },
+						data: {
+							status: "blocked",
+							stage: "superseded_by_current_plan",
+							error: {
+								code: "source_no_longer_unlocks_safe_write",
+								category: "identity_custody",
+								message:
+									"Fresh frozen-scope replan no longer includes this source capture in any safe recoverable write.",
+								retryable: false,
+								observabilityDefect: false,
+								at: new Date().toISOString(),
+								jobId: params.jobId,
+								stage: "superseded_by_current_plan",
+							},
+							leaseOwner: null,
+							leaseExpiresAt: null,
+							completedAt: new Date(),
+						},
+					});
+					deviceLogger.info("Credential recovery obsolete source tasks pruned", {
+						event: "credential_recovery_source_tasks_pruned",
+						jobId: params.jobId,
+						prunedCount: obsoleteSourceTaskIds.length,
+						currentSourceTaskCount: currentSourceTaskKeys.size,
+						stage: "replanning_recovered_custody",
+					});
+					remainingPending = await taskStore.count({
+						where: buildCredentialRecoveryPendingTaskWhere(
+							params.jobId,
+							recoveryCanaryModality,
+						),
+					});
+				}
 				const readyWrites = (freshPlan.credentialWrites || [])
 					.filter(
 						(write: any) =>

@@ -7,10 +7,23 @@ import {
 	isCredentialRecoveryPhysicalStage,
 	planCredentialRecoveryWorkerFailure,
 	remainingCredentialRecoveryWriteAttemptBudget,
+	selectObsoleteCredentialRecoverySourceTaskIds,
 	summarizeCredentialRecovery,
 } from "../helper/hikvision-credential-recovery.helper";
 
 describe("Hikvision credential recovery graph", () => {
+	it("prunes only pending source tasks absent from the fresh safe graph", () => {
+		expect(
+			selectObsoleteCredentialRecoverySourceTaskIds(
+				[
+					{ id: "keep", taskKey: "source_capture:device-a:1:face" },
+					{ id: "prune", taskKey: "source_capture:device-b:2:face" },
+				],
+				new Set(["source_capture:device-a:1:face"]),
+			),
+		).to.deep.equal(["prune"]);
+	});
+
 	it("caps a canary by physical write attempts and fail-closes expired physical stages", () => {
 		expect(remainingCredentialRecoveryWriteAttemptBudget(1, [])).to.equal(1);
 		expect(
