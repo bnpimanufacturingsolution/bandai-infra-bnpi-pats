@@ -1,19 +1,27 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-25 Stable overnight gap-convergence job card
+
+- Task mode: agent-owned ordered overnight job for fleet face/FP gap reduction
+  on five Main Entrance devices (not B-only).
+- Job card (paste this):
+  `docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md`
+- Encodes proven mistakes: B-only face canary env, FP all-or-nothing owner scan,
+  maxVerifiedWrites cap 50, unscoped card recovery burn, timeout misclass,
+  UI gap ≠ ready queue, LOCALS 404 half-success.
+- Fixes already on develop: `ce93414` timeout retry; `a2e9004` multi-device
+  face canary IDs (A/B/D/E/F). Prove live printenv + image SHA before writes.
+- Prior live residual ~2813 credentialWrites; face/FP ready often 0 after B
+  drain until non-B unlock phases run.
+- Evidence baseline:
+  `.runtime/overnight-biometric-convergence-20260724-230000/`.
+
 ## Latest Task Addendum - 2026-07-24 Overnight five-device biometric convergence
 
 - Task mode: authorized durable credential recovery writes on five Main
   Entrance devices (A/B/D/E/F). Exclude Main C and TEST A/B.
-- Active runtime: K3s DEV API at SHA `5a2851c` (API-only deploy), worker
-  logs confirm `workerVersion=5a2851c`.
-- Finish line (in progress): reduce face + fingerprint gaps with physical
-  reread proof; named observability; stable chained waves.
-- Proven this session: ~**429 face** + **2 fingerprint** physical reread
-  verifications; remaining **2823** (from 3254). FP users **1616** (F→B) and
-  **901** (A→B). Grafana/Loki healthy.
-- Residual: FP owner-scan incomplete; face non-B needs FDLib capability.
-  Prefer modality-scoped recovery (not unscoped card mix). Timeout retry fix
-  `ce93414` shipped.
+- Proven session: ~429 face + ~12 FP verified mostly **→ B**; residual non-B
+  blocked by face attestation + FP owner scan. Grafana/Loki used.
 - Evidence:
   `.runtime/overnight-biometric-convergence-20260724-230000/STATUS.md`.
 

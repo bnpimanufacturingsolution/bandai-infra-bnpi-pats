@@ -1,5 +1,21 @@
 ﻿# WWG Agent Handoff
 
+## 2026-07-25 - Stable overnight gap-convergence job card ready
+
+- Status: `JOB_CARD_READY`.
+- Ordered agent-owned overnight prompt (DEV, five devices, multi-agent,
+  learned failure modes, exit gate, expected gap math):
+  `docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md`
+- Paste root line is section 11 of that doc.
+- Code/config prerequisites on `develop`: multi-device face canary `a2e9004`
+  (CI `30133960664` success), timeout retry `ce93414`. Always re-prove live
+  `printenv HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID` lists A/B/D/E/F.
+- Prior run truth: writes were almost all **to B**; UI face~690 / FP~307
+  residual is non-B blocked (`target_attestation_invalid`,
+  `target_owner_scan_incomplete`). Ready queue empty ⇒ gaps flat until unlock.
+- Evidence:
+  `.runtime/overnight-biometric-convergence-20260724-230000/`.
+
 ## 2026-07-24 - Overnight biometric convergence in progress (live writes)
 
 - Status: `IN_PROGRESS_WITH_PROVEN_FACE_AND_FP_PATH`.
