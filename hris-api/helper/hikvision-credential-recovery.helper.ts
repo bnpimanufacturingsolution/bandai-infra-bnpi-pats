@@ -173,6 +173,9 @@ export const classifyCredentialRecoveryError = (
 			/operation was aborted/,
 			/\btimeout\b/,
 			/\btimed out\b/,
+			// Binary/ISAPI client messages use underscores: request_timeout_after_15000ms
+			/request_timeout/,
+			/timeout_after_/,
 			/\beconn(?:reset|refused|aborted)\b/,
 			/\bsocket\b/,
 			/network/,

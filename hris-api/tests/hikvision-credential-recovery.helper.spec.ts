@@ -15,6 +15,25 @@ import {
 } from "../helper/hikvision-credential-recovery.helper";
 
 describe("Hikvision credential recovery graph", () => {
+	it("classifies binary request_timeout_after messages as retryable transport", () => {
+		const classified = classifyCredentialRecoveryError(
+			"Hikvision binary request failed: request_timeout_after_15000ms",
+		);
+		expect(classified).to.include({
+			code: "device_transport",
+			category: "transport",
+			retryable: true,
+			observabilityDefect: false,
+		});
+		const planned = planCredentialRecoveryWorkerFailure(
+			"Hikvision binary request failed: request_timeout_after_15000ms",
+			0,
+			5,
+		);
+		expect(planned.shouldRetry).to.equal(true);
+		expect(planned.status).to.equal("retrying");
+	});
+
 	it("retains safe Hikvision rejection fields without leaking arbitrary response data", () => {
 		const message = describeCredentialRecoveryError({
 			status: 400,
