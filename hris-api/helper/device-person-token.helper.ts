@@ -909,6 +909,7 @@ export const fetchDeviceUserInfoCandidates = async (params: {
 	const maxPages = Math.min(Math.max(Number(params.maxPages) || 12, 1), 20);
 	const out: Array<{ employeeNo: string; displayName: string | null; numOfFP: number }> = [];
 	let position = 0;
+	const searchID = `panel-delta-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 	for (let page = 0; page < maxPages; page += 1) {
 		const response = await hikvisionFetch("/ISAPI/AccessControl/UserInfo/Search?format=json", {
 			method: "POST",
@@ -918,7 +919,7 @@ export const fetchDeviceUserInfoCandidates = async (params: {
 			timeoutMs: 15_000,
 			body: {
 				UserInfoSearchCond: {
-					searchID: `panel-delta-${Date.now()}-${page}`,
+					searchID,
 					searchResultPosition: position,
 					maxResults: pageSize,
 				},

@@ -6536,6 +6536,9 @@ export const controller = (prisma: PrismaClient) => {
 		);
 		const allUsers: any[] = [];
 		let position = 0;
+		// Hikvision retains and accelerates one paginated search by searchID.
+		// Keep this unique per inventory, but stable across every returned page.
+		const searchID = randomUUID();
 		for (let page = 0; page < 100 && allUsers.length < maxUsers; page += 1) {
 			const data = await hikvisionFetch(hikvisionEndpoint.accessControl.userInfo.search, {
 				method: "POST",
@@ -6546,7 +6549,7 @@ export const controller = (prisma: PrismaClient) => {
 				headers: { "Content-Type": "application/json" },
 				body: {
 					UserInfoSearchCond: {
-						searchID: `device-user-sync-${Date.now()}-${position}`,
+						searchID,
 						searchResultPosition: position,
 						maxResults: Math.min(pageSize, maxUsers - allUsers.length),
 					},

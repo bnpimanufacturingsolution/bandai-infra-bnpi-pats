@@ -282,6 +282,12 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include('"callback_identity_enrich_deferred"');
 		expect(service).to.include('"backend_operation_log_resolution"');
 		expect(service).to.include('"cooldownMs", "60000"');
+		expect(service).to.include('"pt-inv-" + std::to_string(');
+		expect(service).to.include('"pt-touch-" + std::to_string(');
+		expect(service).to.not.include('"pt-inv-" << page << "-" << position');
+		expect(service).to.not.include('"pt-touch-" << page << "-" << position');
+		expect(controller).to.include("const searchID = randomUUID();");
+		expect(controller).to.not.include("`device-user-sync-${Date.now()}-${position}`");
 		expect(service).to.include("schedule_delayed_hris_identity_repost(job, 5000, 1)");
 		expect(service).to.not.include("schedule_delayed_hris_identity_repost(job, 10000, 3)");
 		expect(service).to.include("NET_DVR_SET_FACE_AND_TEMPLATE");

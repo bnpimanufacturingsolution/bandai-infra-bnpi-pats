@@ -1403,10 +1403,13 @@ std::map<std::string, UserInfoTouchSnapshot> read_device_userinfo_touch_map(
     int position = 0;
     int total_matches = -1;
     bool read_failed = false;
+    const std::string search_id =
+        "pt-touch-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count());
 
     for (int page = 0; page < 80 && position < 4000; ++page) {
         std::ostringstream body;
-        body << "{\"UserInfoSearchCond\":{\"searchID\":\"pt-touch-" << page << "-" << position
+        body << "{\"UserInfoSearchCond\":{\"searchID\":\"" << search_id
              << "\",\"searchResultPosition\":" << position
              << ",\"maxResults\":" << request_page_size << "}}";
 
@@ -1607,10 +1610,13 @@ std::vector<std::string> read_device_employee_numbers(DeviceSession &device, boo
     int position = 0;
     int total_matches = -1;
     bool read_failed = false;
+    const std::string search_id =
+        "pt-inv-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count());
 
     for (int page = 0; page < 80 && position < 4000; ++page) {
         std::ostringstream body;
-        body << "{\"UserInfoSearchCond\":{\"searchID\":\"pt-inv-" << page << "-" << position
+        body << "{\"UserInfoSearchCond\":{\"searchID\":\"" << search_id
              << "\",\"searchResultPosition\":" << position
              << ",\"maxResults\":" << request_page_size << "}}";
 
