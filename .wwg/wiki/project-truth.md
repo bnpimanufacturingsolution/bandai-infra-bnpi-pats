@@ -1,5 +1,29 @@
 # Project Truth
 
+## DEV/UAT/PROD data parity snapshot (2026-07-24)
+
+- Status: `CONFIRMED_K3S_RUNTIME_WITH_PUBLIC_NETWORK_BOUNDARY`.
+- The verified K3s DEV `hris` PostgreSQL snapshot from 2026-07-24 was restored
+  into UAT and PROD after SHA-256-verified pre-clone backups of all three
+  databases and upload volumes.
+- DEV, UAT, and PROD now match on 75 public tables and current business counts,
+  including 2,225 employees, 2,048 users, 8,680 documents, 42 workflow
+  instances, 87,217 attendances, 10,965 timesheets, 129,255 timesheet lines,
+  5,692 device users, and 20,374 device events.
+- All three environment upload volumes contain the same 71-file SHA-256 set.
+  DM import/source files remain shared VM host paths already mounted into every
+  environment; Kubernetes secrets and per-environment configuration were not
+  replaced.
+- LAN PROD/DEV/UAT app/API routes, admin authentication, `/api/auth/me`, and
+  headless browser dashboard entry passed. All six Argo CD applications were
+  `Synced/Healthy` at revision `3c831d8`.
+- The VM-managed Cloudflare service stayed enabled/active, but public HTTPS
+  from the BNPI workstation still reset at TLS. Public reachability is
+  `NEEDS_CONFIRMATION` from an unfiltered external vantage point.
+- Rollback/evidence:
+  `.runtime/dev-to-uat-prod-20260724-144222/REPORT.md` and VM backup directory
+  `/var/lib/project-truth/backups/dev-to-uat-prod-20260724-144222`.
+
 Adoption status: INFERRED_FROM_EXISTING_PROJECT
 Status: Inferred from repository evidence. Requires human/agent review before becoming accepted project truth.
 Truth confidence: HIGH

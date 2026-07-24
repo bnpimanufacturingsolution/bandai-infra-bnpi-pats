@@ -1,5 +1,34 @@
 ﻿# WWG Agent Handoff
 
+## 2026-07-24 - DEV data cloned to UAT and PROD
+
+- Status: `FULFILLED_WITH_PUBLIC_NETWORK_WARNING`.
+- Backups first: all DEV/UAT/PROD pre-clone PostgreSQL custom dumps and upload
+  archives passed SHA-256 verification and are retained under
+  `/var/lib/project-truth/backups/dev-to-uat-prod-20260724-144222`.
+- Execution: the verified DEV snapshot was restored independently into UAT,
+  then PROD, with each target API writer stopped. DEV's 71 uploads were
+  mirrored to both targets. Kubernetes secrets/config, shared DM source paths,
+  GitOps manifests, devices, and Cloudflare configuration were not changed.
+- Logical parity: all three environments report 75 tables, 2,225 employees,
+  2,048 users, 34 departments, 8,680 documents, 42 workflow instances, 100
+  workflow-step executions, 17 requests, 87,217 attendances, 10,965
+  timesheets, 129,255 timesheet lines, 5,692 device users, and 20,374 device
+  events. The 71-file upload set hash is identical in all three environments.
+- Operational audit/login rows began diverging after environment-specific
+  verification, as expected; business/workflow counts remained equal.
+- Runtime proof: all six LAN app/API routes return 200; admin login and
+  `/api/auth/me` pass as `hris-admin`; Playwright reached `/admin/dashboard`
+  in PROD/DEV/UAT with zero console errors. All six Argo CD apps were
+  `Synced/Healthy` at `3c831d8`; Cloudflare remained enabled/active.
+- Public boundary: this BNPI workstation still gets TLS resets for all public
+  HRIS hosts. With LAN/K3s/Argo/tunnel green, public reachability remains
+  `NEEDS_CONFIRMATION` from an unfiltered external vantage, not a database
+  restore defect.
+- Full evidence and rollback hashes:
+  `.runtime/dev-to-uat-prod-20260724-144222/REPORT.md`.
+- No new recommendations were identified.
+
 ## 2026-07-24 - Credential recovery architecture truth and owner prompt
 
 - Status: `DOCUMENTED_NOT_IMPLEMENTED`.

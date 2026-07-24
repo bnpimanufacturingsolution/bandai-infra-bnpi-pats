@@ -1,5 +1,30 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-24 DEV data clone to UAT and PROD
+
+- Task mode: authorized high-risk K3s PostgreSQL and upload-volume migration.
+- Status: `FULFILLED_WITH_PUBLIC_NETWORK_WARNING`.
+- SHA-256-verified DEV/UAT/PROD pre-clone database dumps and upload archives
+  are retained on the VM under
+  `/var/lib/project-truth/backups/dev-to-uat-prod-20260724-144222`.
+- The same DEV custom dump was restored independently into UAT and PROD while
+  each target API writer was stopped. DEV uploads were mirrored into both
+  target upload volumes; shared DM import/source host paths and Kubernetes
+  environment secrets/config were left unchanged.
+- Business parity proof: 75 public tables, 2,225 employees, 2,048 users, 8,680
+  documents, 42 workflow instances, 87,217 attendances, 10,965 timesheets,
+  129,255 timesheet lines, 5,692 device users, and 20,374 device events in
+  DEV/UAT/PROD. All three upload volumes have 71 files and the same content-set
+  SHA-256.
+- PROD/DEV/UAT LAN app/API HTTP, admin login, `/api/auth/me`, and headless
+  dashboard entry passed. Argo CD reports all six environment/runtime apps
+  `Synced/Healthy`; the VM-managed Cloudflare service remained active.
+- Boundary: public HTTPS resets from the BNPI workstation remain a documented
+  network-vantage issue. This does not contradict the green LAN origins, but
+  public reachability is `NEEDS_CONFIRMATION` from an unfiltered vantage.
+- Evidence: `.runtime/dev-to-uat-prod-20260724-144222/REPORT.md`.
+- No new recommendations were identified.
+
 ## Latest Task Addendum - 2026-07-24 Credential recovery architecture handoff
 
 - Task mode: docs-only architecture truth and ordered execution handoff. No

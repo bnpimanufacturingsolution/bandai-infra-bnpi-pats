@@ -1,6 +1,20 @@
 # Project Truth Summary
 
-Last updated: 2026-07-23
+Last updated: 2026-07-24
+
+## 2026-07-24 environment data parity
+
+- A SHA-256-verified K3s DEV database snapshot and DEV upload set were cloned
+  into UAT and PROD after verified pre-clone backups of every environment.
+- DEV/UAT/PROD match on 75 public tables and current business/workflow counts,
+  including 2,225 employees, 2,048 users, 8,680 documents, 42 workflow
+  instances, 87,217 attendances, 10,965 timesheets, 129,255 timesheet lines,
+  5,692 device users, and 20,374 device events.
+- PROD/DEV/UAT LAN app/API health, admin authentication, and browser dashboard
+  entry pass. Argo CD is `Synced/Healthy`; the VM Cloudflare service is active.
+- Public HTTPS remains `NEEDS_CONFIRMATION` from an unfiltered vantage because
+  the BNPI workstation resets these hosts during TLS.
+- Evidence: `.runtime/dev-to-uat-prod-20260724-144222/REPORT.md`.
 
 ## Current Runtime Truth
 
