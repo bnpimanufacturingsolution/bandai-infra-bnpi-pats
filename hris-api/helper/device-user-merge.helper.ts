@@ -1,4 +1,5 @@
 import { extractHikvisionCredentialSummary } from "./device-user-sync.helper";
+import { classifyCredentialRecoveryWrite } from "./hikvision-credential-recovery.helper";
 import { createHash } from "crypto";
 
 export const DEVICE_USER_MERGE_FIELDS = [
@@ -1339,7 +1340,10 @@ export const serializeDeviceUserMergePlanForReview = (plan: any) => ({
 	unreachableDevices: plan.unreachableDevices || [],
 	sdkErrors: plan.sdkErrors || [],
 	plannedWrites: plan.plannedWrites || [],
-	credentialWrites: plan.credentialWrites || [],
+	credentialWrites: (plan.credentialWrites || []).map((write: any) => ({
+		...write,
+		recoveryClassification: classifyCredentialRecoveryWrite(write),
+	})),
 	potentialOperations: plan.potentialOperations || {
 		totalPotentialOperations: (plan.credentialWrites || []).length,
 		byModality: { fingerprint: 0, face: 0, card: 0 },

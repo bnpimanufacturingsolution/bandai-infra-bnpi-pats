@@ -58,6 +58,26 @@ interface IController {
 	reconcileBiometricSync(req: Request, res: Response, next: NextFunction): Promise<void>;
 	copyHikvisionDeviceUserToPeer(req: Request, res: Response, next: NextFunction): Promise<void>;
 	planHikvisionSdkUserMerge(req: Request, res: Response, next: NextFunction): Promise<void>;
+	reviewHikvisionCredentialRecovery(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	startHikvisionCredentialRecoveryJob(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	listHikvisionCredentialRecoveryJobs(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	getHikvisionCredentialRecoveryJob(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
 	applyHikvisionSdkUserMerge(req: Request, res: Response, next: NextFunction): Promise<void>;
 	reviewHikvisionSdkUserMergeJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	startHikvisionSdkUserMergeJob(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -149,6 +169,22 @@ export const router = (route: Router, controller: IController): Router => {
 			label: "hikvision-sdk-user-merge-plan",
 		}),
 		controller.planHikvisionSdkUserMerge,
+	);
+	routes.post(
+		"/hikvision/sdk-users/merge/recovery/review",
+		controller.reviewHikvisionCredentialRecovery,
+	);
+	routes.post(
+		"/hikvision/sdk-users/merge/recovery/jobs",
+		controller.startHikvisionCredentialRecoveryJob,
+	);
+	routes.get(
+		"/hikvision/sdk-users/merge/recovery/jobs",
+		controller.listHikvisionCredentialRecoveryJobs,
+	);
+	routes.get(
+		"/hikvision/sdk-users/merge/recovery/jobs/:jobId",
+		controller.getHikvisionCredentialRecoveryJob,
 	);
 	routes.post("/hikvision/sdk-users/merge/apply", controller.applyHikvisionSdkUserMerge);
 	routes.post("/hikvision/sdk-users/merge/review", controller.reviewHikvisionSdkUserMergeJob);

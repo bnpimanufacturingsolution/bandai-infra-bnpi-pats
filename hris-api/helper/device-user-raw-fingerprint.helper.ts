@@ -1251,13 +1251,7 @@ export const captureRawFaceForEnrollment = async (params: {
 		};
 	}
 
-	let picPath = faceURL;
-	try {
-		const u = new URL(faceURL);
-		picPath = `${u.pathname}${u.search}`;
-	} catch {
-		/* relative path ok */
-	}
+	const picPath = resolveHikvisionDeviceSuppliedPath(faceURL);
 
 	let buf: Buffer;
 	let contentType = "image/jpeg";
@@ -1415,6 +1409,29 @@ export const captureRawFaceForEnrollment = async (params: {
 		contentType,
 		deviceUserId: updated.id,
 	};
+};
+
+/**
+ * Device firmware may advertise a stale/default authority in faceURL. Use only
+ * its absolute ISAPI path; hikvisionFetchBinary remains pinned to deviceId.
+ */
+export const resolveHikvisionDeviceSuppliedPath = (value: unknown): string => {
+	const raw = String(value || "").trim();
+	if (!raw) throw new Error("Hikvision device path is empty");
+	let path = raw;
+	try {
+		const parsed = new URL(raw);
+		if (!["http:", "https:"].includes(parsed.protocol)) {
+			throw new Error("Hikvision device path uses an unsupported scheme");
+		}
+		path = `${parsed.pathname}${parsed.search}`;
+	} catch (error: any) {
+		if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) throw error;
+	}
+	if (!path.startsWith("/") || path.startsWith("//")) {
+		throw new Error("Hikvision device path must be an absolute device-local path");
+	}
+	return path;
 };
 
 /**

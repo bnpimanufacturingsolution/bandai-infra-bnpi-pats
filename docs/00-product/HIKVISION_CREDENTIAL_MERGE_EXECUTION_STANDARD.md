@@ -6,6 +6,23 @@ This is the stable operating contract for copying real Hikvision identity and
 biometric credentials between physical panels. It applies to live Device Users
 merge jobs and to any agent or operator that can start an SDK write.
 
+For recovery before a row is writable, also follow
+`HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md`.
+
+## Recovery-state naming rule
+
+`Queued` is a runtime claim. Use it only when a durable backend job exists and
+a worker lease, heartbeat, and resume cursor prove the work is owned.
+
+The current merge plan's `recoveryStage` values are classifications, not an
+executing queue. Before the durable recovery architecture is implemented, call
+those rows `Recovery needed`. `Ready now` means selectable in the current
+reviewed plan; it does not mean written or physically retained.
+
+The remaining-gap counter decreases only after a current physical target
+reread. Queue transitions, HTTP success, SDK acceptance, and write attempts do
+not close a gap.
+
 ## Core ownership rule
 
 Exactly one operator-owned API job may write to the physical fleet at a time.
@@ -125,4 +142,3 @@ Record:
 The status is not fulfilled while a face/fingerprint gap is represented only by
 a count, while a duplicate owner is unresolved, or while post-write physical
 rereads are missing.
-

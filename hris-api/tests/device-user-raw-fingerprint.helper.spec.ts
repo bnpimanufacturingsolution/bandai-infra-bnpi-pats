@@ -11,11 +11,26 @@ import {
 	normalizeIsapiFingerprintList,
 	parseFingerPrintProgress,
 	RAW_FINGERPRINT_SCHEMA,
+	resolveHikvisionDeviceSuppliedPath,
 	selectMissingFingerprintTemplatesForTarget,
 	shouldCaptureRawFingerprintForEventAction,
 } from "../helper/device-user-raw-fingerprint.helper";
 
 describe("device-user-raw-fingerprint helper", () => {
+	it("pins a device-advertised face URL to the configured device route", () => {
+		expect(
+			resolveHikvisionDeviceSuppliedPath(
+				"http://192.0.2.88/ISAPI/Intelligent/FDLib/picture?picID=abc",
+			),
+		).to.equal("/ISAPI/Intelligent/FDLib/picture?picID=abc");
+		expect(() => resolveHikvisionDeviceSuppliedPath("file:///etc/passwd")).to.throw(
+			"unsupported scheme",
+		);
+		expect(() => resolveHikvisionDeviceSuppliedPath("//evil.invalid/path")).to.throw(
+			"absolute device-local path",
+		);
+	});
+
 	it("normalizes ISAPI FingerPrintList into raw base64 templates", () => {
 		// Proven TEST A shape (FingerPrintInfo.FingerPrintList[]).
 		const proven = normalizeIsapiFingerprintList({

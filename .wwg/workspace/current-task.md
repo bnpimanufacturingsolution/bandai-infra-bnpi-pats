@@ -1,5 +1,27 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-24 Credential recovery architecture handoff
+
+- Task mode: docs-only architecture truth and ordered execution handoff. No
+  physical credential write or runtime mutation was authorized for this
+  documentation turn.
+- Confirmed defect: `Recovery queued` is currently a planner/UI classification,
+  not a durable worker-owned queue. `Ready now 0` means no selectable reviewed
+  operation in that plan; it does not prove recovery is running.
+- Historical screenshot baseline: 3,257 potential operations, 505 fingerprint,
+  2,630 face, 122 card, ready 0, recovery queued 3,237, and headline physical
+  action 20. Backend stage physical identity action was 18; this classification
+  disagreement remains `CONFLICTING`. These counts must be refreshed before
+  implementation or writes.
+- Architecture record:
+  `docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md`.
+- Ordered owner prompt for the later implementation/write run:
+  `docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md`.
+- Finish line for that later run: durable restart-safe recovery tasks,
+  deduplicated source custody, honest live counters, bounded multi-target
+  concurrency, physical-reread-owned fingerprint/face gap reductions, focused
+  tests, browser proof, GitOps exact-SHA deployment, and truth sync.
+
 ## Latest Task Addendum - 2026-07-23 Five-device truth and actual merge execution
 
 - Operator evidence: exactly five Main Entrance biometric devices are currently online; Main Entrance Device C is not. Any API/UI claim of six online is `CONFLICTING` until its cache/mapping/probe semantics are root-caused.

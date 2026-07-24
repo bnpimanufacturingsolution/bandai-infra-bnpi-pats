@@ -111,22 +111,22 @@ model Device {
  * Historical bulk logs without capture cannot be decoded.
  */
 model DevicePersonToken {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   organizationId   String
-  device           Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  device           Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   deviceId         String
   /// Opaque base64 token from ContentMgmt/logSearch LogAddInfo.EmployeeNo
   opaqueToken      String
   /// Plain device employeeNo we wrote / know (UserInfo.employeeNo)
   employeeNo       String
   displayName      String?
-  source           String   @default("WRITE_TIME_CAPTURE")
+  source           String    @default("WRITE_TIME_CAPTURE")
   captureMetaId    String?
   captureEventTime DateTime?
-  firstSeenAt      DateTime @default(now())
-  lastSeenAt       DateTime @default(now())
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  firstSeenAt      DateTime  @default(now())
+  lastSeenAt       DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([organizationId, deviceId, opaqueToken])
   @@index([organizationId, deviceId, employeeNo])
@@ -144,23 +144,23 @@ model DeviceEvent {
   employeeId     String?
   attendanceId   String?
 
-  eventTime    DateTime
-  receivedAt   DateTime          @default(now())
-  employeeNo   String?
-  source       DeviceEventSource @default(HIKVISION_CALLBACK)
-  status       DeviceEventStatus @default(RECEIVED)
+  eventTime       DateTime
+  receivedAt      DateTime              @default(now())
+  employeeNo      String?
+  source          DeviceEventSource     @default(HIKVISION_CALLBACK)
+  status          DeviceEventStatus     @default(RECEIVED)
   eventCategory   DeviceEventCategory   @default(UNKNOWN_VENDOR)
   eventAction     DeviceEventAction     @default(UNKNOWN)
   eventLabel      String                @default("Device event")
   eventConfidence DeviceEventConfidence @default(UNKNOWN)
-  eventType    String?
-  major        String?
-  minor        String?
-  doorNo       String?
-  verifyMode   String?
-  dedupeKey    String
-  payload      Json?
-  errorMessage String?
+  eventType       String?
+  major           String?
+  minor           String?
+  doorNo          String?
+  verifyMode      String?
+  dedupeKey       String
+  payload         Json?
+  errorMessage    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -236,4 +236,79 @@ model DeviceSyncRun {
   @@index([organizationId, deviceId, runType, startedAt])
   @@index([organizationId, runType, status])
   @@map("device_sync_runs")
+}
+
+/// Durable, restart-safe owner of a frozen Hikvision credential recovery scope.
+/// String states are intentional: recovery state evolves independently of the
+/// database migration cadence and is validated by the backend contract.
+model CredentialRecoveryJob {
+  id             String    @id @default(cuid())
+  organizationId String
+  planId         String
+  scopeHash      String
+  status         String    @default("pending")
+  ownerUserId    String
+  deviceIds      Json
+  request        Json
+  counters       Json
+  currentStage   String?
+  currentTaskKey String?
+  heartbeatAt    DateTime?
+  leaseOwner     String?
+  leaseExpiresAt DateTime?
+  resumeCursor   Int       @default(0)
+  workerVersion  String?
+  latestError    Json?
+  result         Json?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tasks CredentialRecoveryTask[]
+
+  @@index([organizationId, status, updatedAt])
+  @@index([organizationId, planId])
+  @@index([status, leaseExpiresAt])
+  @@map("credential_recovery_jobs")
+}
+
+/// One deduplicated unit in a credential recovery graph. Source capture keys
+/// are (sourceDeviceId, vendorUserId, modality); writes/rereads have separate
+/// task kinds so a queue transition can never masquerade as physical truth.
+model CredentialRecoveryTask {
+  id               String                @id @default(cuid())
+  job              CredentialRecoveryJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobId            String
+  organizationId   String
+  taskKey          String
+  kind             String
+  modality         String?
+  sourceDeviceId   String?
+  targetDeviceId   String?
+  vendorUserId     String?
+  userKey          String?
+  status           String                @default("pending")
+  stage            String?
+  priority         Int                   @default(0)
+  unlockCount      Int                   @default(0)
+  attempts         Int                   @default(0)
+  maxAttempts      Int                   @default(5)
+  reviewedByteHash String?
+  payload          Json
+  result           Json?
+  error            Json?
+  leaseOwner       String?
+  leaseExpiresAt   DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@unique([jobId, taskKey])
+  @@index([jobId, status, priority])
+  @@index([organizationId, status, leaseExpiresAt])
+  @@index([sourceDeviceId, vendorUserId, modality])
+  @@index([targetDeviceId, status])
+  @@map("credential_recovery_tasks")
 }

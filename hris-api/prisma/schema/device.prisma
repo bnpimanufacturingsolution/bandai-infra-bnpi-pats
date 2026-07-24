@@ -112,20 +112,20 @@ model Device {
 
 /// Write-time map: opaque log person token ↔ plain employeeNo (Postgres is source of truth for runtime).
 model DevicePersonToken {
-  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
   organizationId   String
-  device           Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  deviceId         String   @db.ObjectId
+  device           Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId         String    @db.ObjectId
   opaqueToken      String
   employeeNo       String
   displayName      String?
-  source           String   @default("WRITE_TIME_CAPTURE")
+  source           String    @default("WRITE_TIME_CAPTURE")
   captureMetaId    String?
   captureEventTime DateTime?
-  firstSeenAt      DateTime @default(now())
-  lastSeenAt       DateTime @default(now())
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  firstSeenAt      DateTime  @default(now())
+  lastSeenAt       DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([organizationId, deviceId, opaqueToken])
   @@index([organizationId, deviceId, employeeNo])
@@ -134,32 +134,32 @@ model DevicePersonToken {
 }
 
 model DeviceEvent {
-  id             String            @id @default(auto()) @map("_id") @db.ObjectId
+  id             String      @id @default(auto()) @map("_id") @db.ObjectId
   organizationId String
-  device         Device            @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  deviceId       String            @db.ObjectId
-  deviceUser     DeviceUser?       @relation(fields: [deviceUserId], references: [id], onDelete: SetNull)
-  deviceUserId   String?           @db.ObjectId
-  employeeId     String?           @db.ObjectId
-  attendanceId   String?           @db.ObjectId
+  device         Device      @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId       String      @db.ObjectId
+  deviceUser     DeviceUser? @relation(fields: [deviceUserId], references: [id], onDelete: SetNull)
+  deviceUserId   String?     @db.ObjectId
+  employeeId     String?     @db.ObjectId
+  attendanceId   String?     @db.ObjectId
 
-  eventTime    DateTime
-  receivedAt   DateTime          @default(now())
-  employeeNo   String?
-  source       DeviceEventSource @default(HIKVISION_CALLBACK)
-  status       DeviceEventStatus @default(RECEIVED)
+  eventTime       DateTime
+  receivedAt      DateTime              @default(now())
+  employeeNo      String?
+  source          DeviceEventSource     @default(HIKVISION_CALLBACK)
+  status          DeviceEventStatus     @default(RECEIVED)
   eventCategory   DeviceEventCategory   @default(UNKNOWN_VENDOR)
   eventAction     DeviceEventAction     @default(UNKNOWN)
   eventLabel      String                @default("Device event")
   eventConfidence DeviceEventConfidence @default(UNKNOWN)
-  eventType    String?
-  major        String?
-  minor        String?
-  doorNo       String?
-  verifyMode   String?
-  dedupeKey    String
-  payload      Json?
-  errorMessage String?
+  eventType       String?
+  major           String?
+  minor           String?
+  doorNo          String?
+  verifyMode      String?
+  dedupeKey       String
+  payload         Json?
+  errorMessage    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -208,29 +208,98 @@ model DeviceUser {
 }
 
 model DeviceSyncRun {
-  id             String              @id @default(auto()) @map("_id") @db.ObjectId
-  organizationId String
-  device         Device              @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  deviceId       String              @db.ObjectId
-  runType        DeviceSyncRunType
-  status         DeviceSyncRunStatus @default(PROCESSING)
-  source         DeviceEventSource?
-  startedByUserId String?            @db.ObjectId
-  totalSourceRecords Int             @default(0)
-  importableRecords  Int             @default(0)
-  savedRecords       Int             @default(0)
-  skippedRecords     Int             @default(0)
-  failedRecords      Int             @default(0)
-  missingRecords     Int             @default(0)
+  id                 String              @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId     String
+  device             Device              @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId           String              @db.ObjectId
+  runType            DeviceSyncRunType
+  status             DeviceSyncRunStatus @default(PROCESSING)
+  source             DeviceEventSource?
+  startedByUserId    String?             @db.ObjectId
+  totalSourceRecords Int                 @default(0)
+  importableRecords  Int                 @default(0)
+  savedRecords       Int                 @default(0)
+  skippedRecords     Int                 @default(0)
+  failedRecords      Int                 @default(0)
+  missingRecords     Int                 @default(0)
   skipSummary        Json?
   failureSummary     Json?
   rawSummary         Json?
-  startedAt          DateTime        @default(now())
+  startedAt          DateTime            @default(now())
   completedAt        DateTime?
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   @@index([organizationId, deviceId, runType, startedAt])
   @@index([organizationId, runType, status])
   @@map("device_sync_runs")
+}
+
+model CredentialRecoveryJob {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String
+  planId         String
+  scopeHash      String
+  status         String    @default("pending")
+  ownerUserId    String
+  deviceIds      Json
+  request        Json
+  counters       Json
+  currentStage   String?
+  currentTaskKey String?
+  heartbeatAt    DateTime?
+  leaseOwner     String?
+  leaseExpiresAt DateTime?
+  resumeCursor   Int       @default(0)
+  workerVersion  String?
+  latestError    Json?
+  result         Json?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tasks CredentialRecoveryTask[]
+
+  @@index([organizationId, status, updatedAt])
+  @@index([organizationId, planId])
+  @@index([status, leaseExpiresAt])
+  @@map("credential_recovery_jobs")
+}
+
+model CredentialRecoveryTask {
+  id               String                @id @default(auto()) @map("_id") @db.ObjectId
+  job              CredentialRecoveryJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobId            String                @db.ObjectId
+  organizationId   String
+  taskKey          String
+  kind             String
+  modality         String?
+  sourceDeviceId   String?
+  targetDeviceId   String?
+  vendorUserId     String?
+  userKey          String?
+  status           String                @default("pending")
+  stage            String?
+  priority         Int                   @default(0)
+  unlockCount      Int                   @default(0)
+  attempts         Int                   @default(0)
+  maxAttempts      Int                   @default(5)
+  reviewedByteHash String?
+  payload          Json
+  result           Json?
+  error            Json?
+  leaseOwner       String?
+  leaseExpiresAt   DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@unique([jobId, taskKey])
+  @@index([jobId, status, priority])
+  @@index([organizationId, status, leaseExpiresAt])
+  @@index([sourceDeviceId, vendorUserId, modality])
+  @@index([targetDeviceId, status])
+  @@map("credential_recovery_tasks")
 }

@@ -1,5 +1,29 @@
 ﻿# WWG Agent Handoff
 
+## 2026-07-24 - Credential recovery architecture truth and owner prompt
+
+- Status: `DOCUMENTED_NOT_IMPLEMENTED`.
+- Current truth: the Merge device users `Recovery queued` count is a
+  planner/frontend classification, not a durable queue with a worker,
+  heartbeat, or resume cursor. `Ready now 0` means no currently selectable
+  reviewed raw-custody write, not that recovery is active.
+- Operator screenshot baseline is historical only: 3,257 potential operations,
+  505 fingerprint, 2,630 face, 122 card, ready 0, recovery queued 3,237, and
+  headline physical action 20. Backend recovery stages reported physical
+  identity action 18; the classification mismatch is `CONFLICTING`.
+- Existing recovery primitive: exact selected biometric metadata backfill,
+  replan, guarded merge write, then physical reread. Historical batches
+  recovered 209/209 and 21/21 custody rows, but no current backend worker
+  automatically performs that sequence.
+- Architecture:
+  `docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md`.
+- Ordered no-assumption owner prompt:
+  `docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md`.
+- Governance: proposed
+  `REC-20260724-HIKVISION-DURABLE-CREDENTIAL-RECOVERY`. No runtime, database,
+  device, deployment, or physical credential write was changed in this
+  documentation pass.
+
 ## 2026-07-23 - Hikvision execution-location routing
 
 - Status: `DEPLOYED_AND_PROVEN_WITH_PREEXISTING_ARGO_JOB_WARNING`.

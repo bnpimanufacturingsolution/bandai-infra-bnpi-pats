@@ -629,6 +629,10 @@ export type DeviceUserMergePlanResponse = {
 			executionEligibility: "ready_from_raw_blob" | "sdk_probe_required" | "blocked";
 			blockingReason?: string | null;
 			recoveryStage?: string | null;
+			recoveryClassification?:
+				| "ready_to_write"
+				| "recovery_needed"
+				| "physical_action_required";
 			sourceCandidateDeviceIds: string[];
 		}>;
 		potentialOperations?: {
@@ -766,6 +770,62 @@ export interface DeviceUserMergeJobProgress {
 	startedAt: string;
 	updatedAt?: string;
 	completedAt?: string;
+}
+
+export interface CredentialRecoveryJob {
+	id: string;
+	planId: string;
+	scopeHash: string;
+	status:
+		| "pending"
+		| "recovering"
+		| "retrying"
+		| "awaiting_replan"
+		| "needs_attention"
+		| "failed"
+		| "completed"
+		| string;
+	currentStage?: string | null;
+	currentTaskKey?: string | null;
+	heartbeatAt?: string | null;
+	lastAdvancementAt?: string | null;
+	workerLeaseActive?: boolean;
+	resumeCursor: number;
+	counters?: {
+		physicallyVerifiedRemaining?: number;
+		recoveryNeeded?: number;
+		readyToWrite?: number;
+		recoveringNow?: number;
+		writing?: number;
+		awaitingPhysicalReread?: number;
+		verified?: number;
+		failed?: number;
+		tasksTotal?: number;
+		tasksPending?: number;
+		tasksBlocked?: number;
+		recovered?: number;
+		retrying?: number;
+		blocked?: number;
+	};
+	latestError?: { message?: string; at?: string } | null;
+	tasks?: Array<{
+		id: string;
+		taskKey: string;
+		kind: string;
+		modality?: string | null;
+		sourceDeviceId?: string | null;
+		targetDeviceId?: string | null;
+		vendorUserId?: string | null;
+		status: string;
+		stage?: string | null;
+		attempts: number;
+		error?: { message?: string; at?: string; durationMs?: number } | null;
+		updatedAt: string;
+	}>;
+	startedAt?: string | null;
+	completedAt?: string | null;
+	createdAt: string;
+	updatedAt: string;
 }
 
 export interface DeviceUserCredentialGapSummary {
@@ -2082,6 +2142,47 @@ class DevicesService extends APIService {
 				error.data?.errors?.[0]?.message ||
 					error.message ||
 					"SDK user merge job was not found",
+			);
+		}
+	}
+
+	async startHikvisionCredentialRecoveryJob(planId: string): Promise<CredentialRecoveryJob> {
+		try {
+			const reviewResponse = await hrisApiClient.post<any>(
+				"/api/device/hikvision/sdk-users/merge/recovery/review",
+				{ planId },
+			);
+			const review = reviewResponse.data?.data || reviewResponse.data;
+			if (!review?.scopeHash) throw new Error("Recovery review returned no scope hash");
+			const response = await hrisApiClient.post<any>(
+				"/api/device/hikvision/sdk-users/merge/recovery/jobs",
+				{ planId, expectedScopeHash: review.scopeHash, maxVerifiedWrites: 1 },
+			);
+			const data = response.data?.data || response.data;
+			if (!data?.job?.id) throw new Error("Recovery job did not return a durable job ID");
+			return data.job as CredentialRecoveryJob;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Failed to start credential recovery",
+			);
+		}
+	}
+
+	async getHikvisionCredentialRecoveryJob(jobId: string): Promise<CredentialRecoveryJob> {
+		try {
+			const response = await hrisApiClient.get<any>(
+				`/api/device/hikvision/sdk-users/merge/recovery/jobs/${encodeURIComponent(jobId)}`,
+			);
+			const data = response.data?.data || response.data;
+			if (!data?.job) throw new Error("Credential recovery job was not found");
+			return data.job as CredentialRecoveryJob;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Credential recovery job was not found",
 			);
 		}
 	}

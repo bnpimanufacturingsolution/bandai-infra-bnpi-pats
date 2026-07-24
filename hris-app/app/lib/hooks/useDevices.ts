@@ -11,6 +11,7 @@ import devicesService, {
 	type DeviceUserSyncJobStartRequest,
 	type DeviceUserSyncJobProgress,
 	type DeviceUserMergeJobProgress,
+	type CredentialRecoveryJob,
 	type DeviceUserMergeApplyPayload,
 	type DeviceUserExportRequest,
 	type DeviceUserImportPreviewRequest,
@@ -445,6 +446,30 @@ export const useHikvisionSdkUserMergeJob = (jobId?: string | null, enabled = tru
 		retry: false,
 	});
 };
+
+export const useStartHikvisionCredentialRecoveryJob = () =>
+	useMutation({
+		mutationFn: (planId: string) =>
+			devicesService.startHikvisionCredentialRecoveryJob(planId),
+	});
+
+export const useHikvisionCredentialRecoveryJob = (
+	jobId?: string | null,
+	enabled = true,
+) =>
+	useQuery<CredentialRecoveryJob>({
+		queryKey: ["hikvision", "credential-recovery-job", jobId],
+		queryFn: () => devicesService.getHikvisionCredentialRecoveryJob(jobId || ""),
+		enabled: Boolean(jobId) && enabled,
+		refetchInterval: (query) =>
+			["pending", "recovering", "retrying"].includes(
+				String(query.state.data?.status || ""),
+			)
+				? 1500
+				: false,
+		refetchIntervalInBackground: true,
+		retry: false,
+	});
 
 export const useCancelDeviceUserSyncJob = () => {
 	const queryClient = useQueryClient();

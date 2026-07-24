@@ -317,6 +317,18 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("Merge scope hash does not match the reviewed write matrix");
 	});
 
+	it("exposes durable recovery jobs instead of a planner-only queue", () => {
+		const router = routerSource();
+		const controller = controllerSource();
+		expect(router).to.include('"/hikvision/sdk-users/merge/recovery/review"');
+		expect(router).to.include('"/hikvision/sdk-users/merge/recovery/jobs"');
+		expect(controller).to.include("credentialRecoveryJob");
+		expect(controller).to.include("leaseExpiresAt");
+		expect(controller).to.include("heartbeatAt");
+		expect(controller).to.include("resumeCursor");
+		expect(controller).to.include("processHikvisionCredentialRecoveryJob");
+	});
+
 	it("waits for tunnel recovery before failing a reviewed merge source row", () => {
 		const controller = controllerSource();
 		expect(controller).to.include("HIKVISION_MERGE_SOURCE_REFRESH_RETRY_LIMIT");

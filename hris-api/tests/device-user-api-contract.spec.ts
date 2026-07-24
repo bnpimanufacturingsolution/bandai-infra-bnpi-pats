@@ -51,7 +51,10 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("manual_device_user_lifecycle_backfill");
 		expect(controller).to.include("hikvisionFetchBinary");
 		expect(controller).to.include("readDeviceUserFaceUrl");
-		expect(controller).to.include("Device user face photo host does not match the configured device");
+		expect(controller).to.include("resolveHikvisionDeviceSuppliedPath");
+		expect(controller).not.to.include(
+			"Device user face photo host does not match the configured device",
+		);
 		expect(controller).to.include("type DeviceUserSyncMode =");
 		expect(controller).to.include('"full_refresh"');
 		expect(controller).to.include('"needs_attention_only"');

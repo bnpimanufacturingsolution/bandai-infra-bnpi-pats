@@ -55,6 +55,8 @@ import {
 	usePlanHikvisionSdkUserMerge,
 	useStartHikvisionSdkUserMergeJob,
 	useHikvisionSdkUserMergeJob,
+	useStartHikvisionCredentialRecoveryJob,
+	useHikvisionCredentialRecoveryJob,
 	useSyncDeviceUsers,
 	usePreviewDeviceUserExport,
 	useExportDeviceUsers,
@@ -155,21 +157,8 @@ type SdkMergeCredentialWrite = NonNullable<
 	DeviceUserMergePlanResponse["plan"]["credentialWrites"]
 >[number];
 
-const SDK_MERGE_PHYSICAL_ACTION_REASONS = new Set([
-	"physical_identity_adjudication_required",
-	"physical_reenrollment_required",
-	"device_firmware_unsupported",
-	"source_not_enrolled",
-]);
-
-const isSdkMergePhysicalActionRequired = (write: SdkMergeCredentialWrite) => {
-	const reason = String(write.blockingReason || "").trim();
-	if (SDK_MERGE_PHYSICAL_ACTION_REASONS.has(reason)) return true;
-	if (reason !== "source_conflict") return false;
-	return /(already (?:enrolled|owned)|duplicate protection|different .* checksum|overwrite (?:is )?forbidden|another (?:person|owner)|identity (?:conflict|adjudication))/i.test(
-		write.recommendationReason || "",
-	);
-};
+const isSdkMergePhysicalActionRequired = (write: SdkMergeCredentialWrite) =>
+	write.recoveryClassification === "physical_action_required";
 
 const formatSdkMergeRecoveryStage = (write: SdkMergeCredentialWrite) => {
 	const stage = String(write.recoveryStage || "").trim();
@@ -484,6 +473,7 @@ type DeviceUserPeerTallyRow = {
 };
 
 const DEVICE_USER_SYNC_JOB_STORAGE_KEY = "hris.device-user-sync-job";
+const CREDENTIAL_RECOVERY_JOB_STORAGE_KEY = "hris.credential-recovery-job-id";
 const DEVICE_USER_SYNC_PROCESSING_STALE_MS = 30 * 60 * 1000;
 const DEFAULT_BULK_DEVICE_USER_SYNC_MODE: DeviceUserSyncMode = "needs_attention_only";
 const formatDeviceUserSyncJobId = (value?: string | null) => {
@@ -754,6 +744,8 @@ export function DeviceEnrollmentPanel({
 	const cancelDeviceUserSyncJobMutation = useCancelDeviceUserSyncJob();
 	const planHikvisionSdkUserMergeMutation = usePlanHikvisionSdkUserMerge();
 	const startHikvisionSdkUserMergeJobMutation = useStartHikvisionSdkUserMergeJob();
+	const startHikvisionCredentialRecoveryMutation =
+		useStartHikvisionCredentialRecoveryJob();
 	const linkDeviceUserMutation = useLinkDeviceUser();
 	const unlinkDeviceUserMutation = useUnlinkDeviceUser();
 	const deleteDeviceUserMutation = useDeleteDeviceUser();
@@ -808,6 +800,10 @@ export function DeviceEnrollmentPanel({
 		Record<string, boolean>
 	>({});
 	const [sdkMergeJobId, setSdkMergeJobId] = useState<string | null>(sdkMergeJobIdParam || null);
+	const [credentialRecoveryJobId, setCredentialRecoveryJobId] = useState<string | null>(() => {
+		if (typeof window === "undefined") return null;
+		return window.localStorage.getItem(CREDENTIAL_RECOVERY_JOB_STORAGE_KEY);
+	});
 	const [sdkMergeLastJob, setSdkMergeLastJob] = useState<DeviceUserMergeJobProgress | null>(null);
 	const [sdkMergeHandledJobId, setSdkMergeHandledJobId] = useState<string | null>(null);
 	const [sdkMergeDismissedJobId, setSdkMergeDismissedJobId] = useState<string | null>(null);
@@ -2224,6 +2220,10 @@ export function DeviceEnrollmentPanel({
 		() => sdkMergeState.data?.plan.devices || [],
 		[sdkMergeState.data],
 	);
+	const { data: credentialRecoveryJob } = useHikvisionCredentialRecoveryJob(
+		credentialRecoveryJobId,
+		Boolean(credentialRecoveryJobId),
+	);
 	const sdkMergeCredentialWrites = useMemo(
 		() => sdkMergeState.data?.plan.credentialWrites || [],
 		[sdkMergeState.data],
@@ -2947,6 +2947,19 @@ export function DeviceEnrollmentPanel({
 				? `${mergePlural(sdkMergeSelectableCredentialWrites.length, "credential operation")} selected from readable raw/export evidence.`
 				: "No credential operations have readable raw/export evidence yet. Count-only rows remain blocked from UI selection.",
 		}));
+	};
+
+	const startCredentialRecovery = async () => {
+		const planId = sdkMergeState.data?.planId;
+		if (!planId) return;
+		try {
+			const job = await startHikvisionCredentialRecoveryMutation.mutateAsync(planId);
+			setCredentialRecoveryJobId(job.id);
+			window.localStorage.setItem(CREDENTIAL_RECOVERY_JOB_STORAGE_KEY, job.id);
+			toast.success(`Credential recovery ${job.id} started`);
+		} catch (error: any) {
+			toast.error(error?.message || "Credential recovery could not be started");
+		}
 	};
 	const applySdkCredentialMerge = async () => {
 		if (
@@ -8660,6 +8673,26 @@ export function DeviceEnrollmentPanel({
 									<div className="flex flex-wrap gap-2">
 										<Button
 											type="button"
+											onClick={startCredentialRecovery}
+											disabled={
+												sdkMergeRecoveryQueuedCredentialWriteCount === 0 ||
+												startHikvisionCredentialRecoveryMutation.isPending ||
+												["pending", "recovering", "retrying"].includes(
+													String(credentialRecoveryJob?.status || ""),
+												)
+											}>
+											{startHikvisionCredentialRecoveryMutation.isPending ||
+											["pending", "recovering", "retrying"].includes(
+												String(credentialRecoveryJob?.status || ""),
+											) ? (
+												<Loader2 className="h-4 w-4 animate-spin" />
+											) : (
+												<Activity className="h-4 w-4" />
+											)}
+											Start recovery
+										</Button>
+										<Button
+											type="button"
 											variant="outline"
 											onClick={selectRecommendedCredentialWrites}
 											disabled={
@@ -8678,6 +8711,74 @@ export function DeviceEnrollmentPanel({
 										</Button>
 									</div>
 								</div>
+								{credentialRecoveryJob ? (
+									<div className="border-b border-slate-200 bg-slate-50 px-3 py-3">
+										<div className="flex flex-wrap items-center justify-between gap-2">
+											<div>
+												<p className="text-sm font-semibold text-slate-950">
+													Recovery job {credentialRecoveryJob.id}
+												</p>
+												<p className="mt-0.5 text-xs text-slate-600">
+													{credentialRecoveryJob.currentStage || credentialRecoveryJob.status}
+													{" · "}
+													last advanced{" "}
+													{credentialRecoveryJob.lastAdvancementAt
+														? formatDateTime(
+																credentialRecoveryJob.lastAdvancementAt,
+															)
+														: "not yet"}
+												</p>
+											</div>
+											<Badge
+												variant={
+													credentialRecoveryJob.status === "failed" ||
+													credentialRecoveryJob.status === "needs_attention"
+														? "destructive"
+														: credentialRecoveryJob.status === "awaiting_replan"
+															? "success"
+															: "warning"
+												}>
+												{credentialRecoveryJob.status}
+											</Badge>
+										</div>
+										<div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:grid-cols-7">
+											{[
+												["Recovered", credentialRecoveryJob.counters?.recovered ?? 0],
+												["Ready to write", credentialRecoveryJob.counters?.readyToWrite ?? 0],
+												["Writing", credentialRecoveryJob.counters?.writing ?? 0],
+												[
+													"Rereading",
+													credentialRecoveryJob.counters?.awaitingPhysicalReread ?? 0,
+												],
+												["Verified", credentialRecoveryJob.counters?.verified ?? 0],
+												["Failed", credentialRecoveryJob.counters?.failed ?? 0],
+												[
+													"Remaining",
+													credentialRecoveryJob.counters
+														?.physicallyVerifiedRemaining ?? 0,
+												],
+											].map(([label, value]) => (
+												<div key={String(label)} className="rounded border bg-white px-2 py-1.5">
+													<p className="text-slate-600">{label}</p>
+													<p className="font-semibold text-slate-950">
+														{mergeMetricValue(value)}
+													</p>
+												</div>
+											))}
+										</div>
+										{credentialRecoveryJob.latestError?.message ? (
+											<p className="mt-2 text-xs font-medium text-red-700">
+												{credentialRecoveryJob.latestError.message}
+											</p>
+										) : null}
+									</div>
+								) : (
+									<div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+										Ready now 0 means no reviewed write is selectable yet. Start recovery
+										to create durable work with a job ID, worker lease, heartbeat, and
+										resume cursor.
+									</div>
+								)}
 								<div className="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-4 xl:grid-cols-7">
 									{[
 										[
@@ -8703,7 +8804,7 @@ export function DeviceEnrollmentPanel({
 										],
 										["Ready now", sdkMergeSelectableCredentialWrites.length],
 										[
-											"Recovery queued",
+											"Recovery needed",
 											sdkMergeRecoveryQueuedCredentialWriteCount,
 										],
 										[
@@ -8794,7 +8895,7 @@ export function DeviceEnrollmentPanel({
 																)
 															: physicalActionRequired
 																? "Physical source required"
-																: "Source recovery queued"}
+																: "Source recovery needed"}
 													</span>
 													<span className="truncate text-slate-700">
 														{mergeDeviceName(
@@ -8820,7 +8921,7 @@ export function DeviceEnrollmentPanel({
 																? "Ready now: raw/export evidence verified"
 																: physicalActionRequired
 																	? `Physical action required: ${formatSdkMergePhysicalAction(write)}`
-																	: `Recovery queued: ${formatSdkMergeRecoveryStage(write)}`}
+																	: `Recovery needed: ${formatSdkMergeRecoveryStage(write)}`}
 														</p>
 														<p className="mt-0.5 break-words text-xs leading-4 text-slate-600">
 															{write.recommendationReason}

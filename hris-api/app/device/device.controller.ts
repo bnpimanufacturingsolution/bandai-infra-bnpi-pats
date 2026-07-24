@@ -90,6 +90,11 @@ import {
 } from "../../helper/hikvision-fdlib-face.helper";
 import { withCredentialDeviceLeases } from "../../helper/credential-device-lease.helper";
 import { buildHikvisionCredentialOperationTelemetry } from "../../helper/hikvision-credential-operation-telemetry.helper";
+import { resolveHikvisionDeviceSuppliedPath } from "../../helper/device-user-raw-fingerprint.helper";
+import {
+	buildCredentialRecoveryTaskGraph,
+	summarizeCredentialRecovery,
+} from "../../helper/hikvision-credential-recovery.helper";
 import {
 	classifyHikvisionWriterCapability,
 	createHikvisionWriterCapabilityEvidence,
@@ -5360,12 +5365,9 @@ export const controller = (prisma: PrismaClient) => {
 	}) => {
 		const faceUrl = readDeviceUserFaceUrl(params.row.rawPayload);
 		if (!faceUrl) throw new Error("No enrolled face photo URL was returned by the device");
-		const parsedFaceUrl = new URL(faceUrl);
-		if (!getAllowedDeviceHosts(params.device).has(parsedFaceUrl.hostname.toLowerCase())) {
-			throw new Error("Device user face photo host does not match the configured device");
-		}
+		const facePath = resolveHikvisionDeviceSuppliedPath(faceUrl);
 		const binary = await hikvisionFetchBinary(
-			`${parsedFaceUrl.pathname}${parsedFaceUrl.search}`,
+			facePath,
 			{
 				deviceId: params.device.id,
 				prisma,
@@ -5482,19 +5484,7 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const parsedFaceUrl = new URL(faceUrl);
-			const allowedHosts = getAllowedDeviceHosts(deviceUser.device);
-			if (!allowedHosts.has(parsedFaceUrl.hostname.toLowerCase())) {
-				res.status(400).json(
-					buildErrorResponse(
-						"Device user face photo host does not match the configured device",
-						400,
-					),
-				);
-				return;
-			}
-
-			const relativePath = `${parsedFaceUrl.pathname}${parsedFaceUrl.search}`;
+			const relativePath = resolveHikvisionDeviceSuppliedPath(faceUrl);
 			const binary = await hikvisionFetchBinary(relativePath, {
 				deviceId: deviceUser.device.id,
 				prisma,
@@ -11955,6 +11945,556 @@ export const controller = (prisma: PrismaClient) => {
 				),
 			);
 		}
+	};
+
+	const buildHikvisionCredentialRecoveryReview = (planId: string, plan: any) => {
+		const tasks = buildCredentialRecoveryTaskGraph(plan);
+		const scope = {
+			planId,
+			deviceIds: [...(plan.deviceIds || [])].map(String).sort(),
+			taskKeys: tasks.map((task) => task.taskKey).sort(),
+			operationIds: (plan.credentialWrites || []).map((write: any) => String(write.id)).sort(),
+		};
+		return {
+			scopeHash: createHash("sha256").update(JSON.stringify(scope)).digest("hex"),
+			scope,
+			tasks,
+			counters: summarizeCredentialRecovery(plan, tasks),
+		};
+	};
+
+	const serializeCredentialRecoveryJob = (job: any) => ({
+		...job,
+		workerLeaseActive: Boolean(
+			job.leaseOwner &&
+				job.leaseExpiresAt &&
+				new Date(job.leaseExpiresAt).getTime() > Date.now(),
+		),
+		lastAdvancementAt: job.heartbeatAt || job.updatedAt,
+	});
+
+	const processHikvisionCredentialRecoveryJob = async (params: {
+		jobId: string;
+		req: Request;
+	}) => {
+		const jobStore = (prisma as any).credentialRecoveryJob;
+		const taskStore = (prisma as any).credentialRecoveryTask;
+		const leaseOwner = `${os.hostname()}:${process.pid}:${randomUUID()}`;
+		const now = new Date();
+		const claimed = await jobStore.updateMany({
+			where: {
+				id: params.jobId,
+				status: { in: ["pending", "recovering", "retrying"] },
+				OR: [
+					{ leaseExpiresAt: null },
+					{ leaseExpiresAt: { lt: now } },
+					{ leaseOwner },
+				],
+			},
+			data: {
+				status: "recovering",
+				currentStage: "recovering_source_custody",
+				leaseOwner,
+				leaseExpiresAt: new Date(Date.now() + 60_000),
+				heartbeatAt: now,
+				startedAt: now,
+			},
+		});
+		if (claimed.count !== 1) return;
+
+		const heartbeat = async (patch: Record<string, unknown> = {}) =>
+			jobStore.update({
+				where: { id: params.jobId },
+				data: {
+					...patch,
+					heartbeatAt: new Date(),
+					leaseExpiresAt: new Date(Date.now() + 60_000),
+				},
+			});
+
+		try {
+			const recoveryRequest = (
+				await jobStore.findUnique({ where: { id: params.jobId }, select: { request: true } })
+			)?.request as any;
+			const recoveryCanaryRequested =
+				Number(recoveryRequest?.maxVerifiedWrites || 0) > 0;
+			let processedThisLease = 0;
+			while (true) {
+				const pending = await taskStore.findMany({
+					where: {
+						jobId: params.jobId,
+						status: { in: ["pending", "retrying"] },
+						kind: { in: ["source_capture", "target_owner_capture"] },
+					},
+					orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
+					take: 25,
+				});
+				if (!pending.length) break;
+
+				const independent = new Map<string, any>();
+				for (const task of pending) {
+					const deviceId = String(task.sourceDeviceId || task.targetDeviceId || "");
+					if (deviceId && !independent.has(deviceId)) independent.set(deviceId, task);
+					if (independent.size >= 5) break;
+				}
+				await Promise.all(
+					[...independent.values()].map(async (task: any) => {
+						const startedAt = new Date();
+						await taskStore.update({
+							where: { id: task.id },
+							data: {
+								status: "processing",
+								stage: task.stage || "recovering_source_custody",
+								attempts: { increment: 1 },
+								leaseOwner,
+								leaseExpiresAt: new Date(Date.now() + 60_000),
+								startedAt,
+							},
+						});
+						await heartbeat({ currentTaskKey: task.taskKey });
+						try {
+							const {
+								captureRawFingerprintsForEnrollment,
+								captureRawFaceForEnrollment,
+							} = await import(
+								"../../helper/device-user-raw-fingerprint.helper.js"
+							);
+							const deviceId = String(task.sourceDeviceId || task.targetDeviceId);
+							const result =
+								task.modality === "fingerprint"
+									? await captureRawFingerprintsForEnrollment({
+											prisma,
+											req: params.req,
+											organizationId: task.organizationId,
+											deviceId,
+											employeeNo: task.vendorUserId,
+										})
+									: task.modality === "face"
+										? await captureRawFaceForEnrollment({
+												prisma,
+												req: params.req,
+												organizationId: task.organizationId,
+												deviceId,
+												employeeNo: task.vendorUserId,
+											})
+										: {
+												ok: false,
+												reason: "card custody recovery is not implemented",
+											};
+							if (!result?.ok) throw new Error(result?.reason || "source capture failed");
+							await taskStore.update({
+								where: { id: task.id },
+								data: {
+									status: "succeeded",
+									stage: "source_custody_recovered",
+									result: {
+										...result,
+										durationMs: Date.now() - startedAt.getTime(),
+									},
+									error: Prisma.JsonNull,
+									completedAt: new Date(),
+									leaseOwner: null,
+									leaseExpiresAt: null,
+								},
+							});
+						} catch (error: any) {
+							const attempts = Number(task.attempts || 0) + 1;
+							await taskStore.update({
+								where: { id: task.id },
+								data: {
+									status: attempts < Number(task.maxAttempts || 5) ? "retrying" : "failed",
+									stage: "source_custody_failed",
+									error: {
+										message: String(error?.message || error),
+										at: new Date().toISOString(),
+										durationMs: Date.now() - startedAt.getTime(),
+									},
+									leaseOwner: null,
+									leaseExpiresAt: null,
+								},
+							});
+						}
+					}),
+				);
+				processedThisLease += independent.size;
+				const completed = await taskStore.count({
+					where: { jobId: params.jobId, status: "succeeded" },
+				});
+				await heartbeat({ resumeCursor: completed });
+				// Replan after the first independent-device batch so the first
+				// physically verifiable gap can move without waiting for the
+				// entire custody backlog.
+				if (recoveryCanaryRequested && processedThisLease >= 5) break;
+			}
+			const [succeeded, failed, retrying, blocked, total] = await Promise.all([
+				taskStore.count({ where: { jobId: params.jobId, status: "succeeded" } }),
+				taskStore.count({ where: { jobId: params.jobId, status: "failed" } }),
+				taskStore.count({ where: { jobId: params.jobId, status: "retrying" } }),
+				taskStore.count({ where: { jobId: params.jobId, status: "blocked" } }),
+				taskStore.count({ where: { jobId: params.jobId } }),
+			]);
+			const remainingPending = await taskStore.count({
+				where: {
+					jobId: params.jobId,
+					status: { in: ["pending", "retrying"] },
+					kind: { in: ["source_capture", "target_owner_capture"] },
+				},
+			});
+			const persistedJob = await jobStore.findUnique({ where: { id: params.jobId } });
+			const request = (persistedJob?.request || {}) as any;
+			const maxVerifiedWrites = Math.max(
+				0,
+				Math.min(50, Number(request.maxVerifiedWrites || 0)),
+			);
+			let writeResult: any = null;
+			let verified = 0;
+			if (!failed && maxVerifiedWrites > 0) {
+				await heartbeat({ currentStage: "replanning_recovered_custody" });
+				const freshPlan = await loadHikvisionSdkMergePlan({
+					req: params.req,
+					organizationId: persistedJob.organizationId,
+					deviceIds: (persistedJob.deviceIds || []).map(String),
+				});
+				const originalOperationIds = new Set(
+					(Array.isArray(request.operationIds) ? request.operationIds : []).map(String),
+				);
+				const readyWrites = (freshPlan.credentialWrites || [])
+					.filter(
+						(write: any) =>
+							originalOperationIds.has(String(write.id)) &&
+							write.recommended === true &&
+							write.executionEligibility === "ready_from_raw_blob",
+					)
+					.sort((left: any, right: any) => {
+						const modalityRank = (value: any) =>
+							String(value) === "fingerprint" ? 0 : String(value) === "face" ? 1 : 2;
+						return modalityRank(left.modality) - modalityRank(right.modality);
+					})
+					.slice(0, maxVerifiedWrites);
+				if (readyWrites.length) {
+					const freshPlanId = randomUUID();
+					deviceUserMergePlans.set(freshPlanId, {
+						organizationId: persistedJob.organizationId,
+						plan: freshPlan,
+						createdAt: new Date(),
+						req: params.req,
+					});
+					const freshTasks = buildCredentialRecoveryTaskGraph({
+						...freshPlan,
+						credentialWrites: readyWrites,
+					}).filter((task) =>
+						["target_write", "physical_reread"].includes(task.kind),
+					);
+					await taskStore.createMany({
+						data: freshTasks.map((task) => ({
+							jobId: params.jobId,
+							organizationId: persistedJob.organizationId,
+							taskKey: task.taskKey,
+							kind: task.kind,
+							modality: task.modality,
+							sourceDeviceId: task.sourceDeviceId,
+							targetDeviceId: task.targetDeviceId,
+							vendorUserId: task.vendorUserId,
+							userKey: task.userKey,
+							status: task.kind === "target_write" ? "processing" : "blocked",
+							stage: task.stage,
+							priority: task.priority,
+							unlockCount: task.unlockCount,
+							reviewedByteHash: task.reviewedByteHash,
+							payload: task.payload,
+						})),
+						skipDuplicates: true,
+					});
+					await heartbeat({
+						currentStage: "writing_canary",
+						currentTaskKey: `target_write:${readyWrites[0].id}`,
+					});
+					writeResult = await runHikvisionSdkUserMergeApplyForJob({
+						req: params.req,
+						planId: freshPlanId,
+						mode: "credentials",
+						selectedCredentialWriteIds: readyWrites.map((write: any) => String(write.id)),
+					});
+					const attention = Number(writeResult?.attention || 0);
+					verified = attention === 0 ? readyWrites.length : 0;
+					await taskStore.updateMany({
+						where: {
+							jobId: params.jobId,
+							taskKey: {
+								in: freshTasks.map((task) => task.taskKey),
+							},
+						},
+						data: {
+							status: attention === 0 ? "succeeded" : "failed",
+							stage:
+								attention === 0
+									? "physically_retained"
+									: "physical_reread_failed",
+							result: writeResult || {},
+							completedAt: new Date(),
+						},
+					});
+				}
+			}
+			await jobStore.update({
+				where: { id: params.jobId },
+				data: {
+					status:
+						failed
+							? "needs_attention"
+							: verified > 0
+								? "completed"
+								: remainingPending > 0
+									? "pending"
+								: "awaiting_replan",
+					currentStage:
+						failed
+							? "recovery_failed"
+							: verified > 0
+								? "physically_verified"
+								: remainingPending > 0
+									? "recovering_next_batch"
+								: "source_custody_recovered",
+					currentTaskKey: null,
+					counters: {
+						...(persistedJob?.counters || {}),
+						tasksTotal: total,
+						recovered: succeeded,
+						failed,
+						retrying,
+						blocked,
+						verified,
+						physicallyVerifiedRemaining: Math.max(
+							0,
+							Number(persistedJob?.counters?.physicallyVerifiedRemaining || 0) -
+								verified,
+						),
+					},
+					latestError:
+						failed
+							? { message: "One or more source-custody tasks exhausted or require retry" }
+							: Prisma.JsonNull,
+					heartbeatAt: new Date(),
+					leaseOwner: null,
+					leaseExpiresAt: null,
+					result: writeResult || Prisma.JsonNull,
+					completedAt: failed || verified > 0 ? new Date() : null,
+				},
+			});
+			if (!failed && !verified && remainingPending > 0) {
+				setTimeout(() => {
+					processHikvisionCredentialRecoveryJob(params).catch((error) =>
+						deviceLogger.error(
+							`Credential recovery job ${params.jobId} continuation failed: ${error}`,
+						),
+					);
+				}, 250);
+			}
+		} catch (error: any) {
+			await jobStore.update({
+				where: { id: params.jobId },
+				data: {
+					status: "failed",
+					currentStage: "worker_failed",
+					latestError: {
+						message: String(error?.message || error),
+						at: new Date().toISOString(),
+					},
+					heartbeatAt: new Date(),
+					leaseOwner: null,
+					leaseExpiresAt: null,
+					completedAt: new Date(),
+				},
+			});
+		}
+	};
+
+	const reviewHikvisionCredentialRecovery = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		const admin = assertDeviceUserAdmin(req, res);
+		if (!admin) return;
+		const planId = String(req.body?.planId || "").trim();
+		const stored = deviceUserMergePlans.get(planId);
+		if (!stored || stored.organizationId !== String(admin.organizationId)) {
+			res.status(404).json(buildErrorResponse("Merge plan not found or expired", 404));
+			return;
+		}
+		const review = buildHikvisionCredentialRecoveryReview(planId, stored.plan);
+		res.status(200).json(
+			buildSuccessResponse(
+				"Credential recovery scope reviewed",
+				{
+					planId,
+					scopeHash: review.scopeHash,
+					deviceIds: review.scope.deviceIds,
+					counters: review.counters,
+					taskSummary: review.tasks.reduce(
+						(summary: Record<string, number>, task) => ({
+							...summary,
+							[task.kind]: (summary[task.kind] || 0) + 1,
+						}),
+						{},
+					),
+				},
+				200,
+			),
+		);
+	};
+
+	const startHikvisionCredentialRecoveryJob = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		const admin = assertDeviceUserAdmin(req, res);
+		if (!admin) return;
+		try {
+			const planId = String(req.body?.planId || "").trim();
+			const stored = deviceUserMergePlans.get(planId);
+			if (!stored || stored.organizationId !== String(admin.organizationId)) {
+				res.status(404).json(buildErrorResponse("Merge plan not found or expired", 404));
+				return;
+			}
+			const review = buildHikvisionCredentialRecoveryReview(planId, stored.plan);
+			if (String(req.body?.expectedScopeHash || "") !== review.scopeHash) {
+				res.status(409).json(
+					buildErrorResponse(
+						"Recovery scope hash changed. Review the current frozen scope again.",
+						409,
+					),
+				);
+				return;
+			}
+			const active = await (prisma as any).credentialRecoveryJob.findFirst({
+				where: {
+					organizationId: String(admin.organizationId),
+					status: { in: ["pending", "recovering", "retrying"] },
+				},
+			});
+			if (active) {
+				res.status(409).json(
+					buildErrorResponse(`Credential recovery job ${active.id} is already active`, 409),
+				);
+				return;
+			}
+			const job = await (prisma as any).credentialRecoveryJob.create({
+				data: {
+					organizationId: String(admin.organizationId),
+					planId,
+					scopeHash: review.scopeHash,
+					status: "pending",
+					ownerUserId: String((req as any).user?.id || "admin"),
+					deviceIds: review.scope.deviceIds,
+					request: {
+						operationIds: review.scope.operationIds,
+						maxVerifiedWrites: Math.max(
+							0,
+							Math.min(50, Number(req.body?.maxVerifiedWrites || 0)),
+						),
+					},
+					counters: review.counters,
+					currentStage: "durably_queued",
+					heartbeatAt: new Date(),
+					workerVersion: currentProjectTruthBuildAttestation() || "unattested",
+					tasks: {
+						create: review.tasks.map((task) => ({
+							organizationId: String(admin.organizationId),
+							taskKey: task.taskKey,
+							kind: task.kind,
+							modality: task.modality,
+							sourceDeviceId: task.sourceDeviceId,
+							targetDeviceId: task.targetDeviceId,
+							vendorUserId: task.vendorUserId,
+							userKey: task.userKey,
+							status: task.status,
+							stage: task.stage,
+							priority: task.priority,
+							unlockCount: task.unlockCount,
+							maxAttempts: 5,
+							reviewedByteHash: task.reviewedByteHash,
+							payload: task.payload,
+						})),
+					},
+				},
+				include: { tasks: true },
+			});
+			processHikvisionCredentialRecoveryJob({ jobId: job.id, req }).catch((error) =>
+				deviceLogger.error(`Credential recovery job ${job.id} worker failed: ${error}`),
+			);
+			res.status(202).json(
+				buildSuccessResponse(
+					"Credential recovery job durably started",
+					{ job: serializeCredentialRecoveryJob(job) },
+					202,
+				),
+			);
+		} catch (error: any) {
+			res.status(error?.statusCode || 500).json(
+				buildErrorResponse(
+					error?.message || "Failed to start credential recovery job",
+					error?.statusCode || 500,
+				),
+			);
+		}
+	};
+
+	const listHikvisionCredentialRecoveryJobs = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		const admin = assertDeviceUserAdmin(req, res);
+		if (!admin) return;
+		const jobs = await (prisma as any).credentialRecoveryJob.findMany({
+			where: { organizationId: String(admin.organizationId) },
+			orderBy: { createdAt: "desc" },
+			take: 20,
+		});
+		res.status(200).json(
+			buildSuccessResponse(
+				"Credential recovery jobs",
+				{ jobs: jobs.map(serializeCredentialRecoveryJob) },
+				200,
+			),
+		);
+	};
+
+	const getHikvisionCredentialRecoveryJob = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		const admin = assertDeviceUserAdmin(req, res);
+		if (!admin) return;
+		const job = await (prisma as any).credentialRecoveryJob.findFirst({
+			where: {
+				id: String(req.params.jobId || ""),
+				organizationId: String(admin.organizationId),
+			},
+			include: { tasks: { orderBy: [{ priority: "desc" }, { createdAt: "asc" }] } },
+		});
+		if (!job) {
+			res.status(404).json(buildErrorResponse("Credential recovery job not found", 404));
+			return;
+		}
+		if (
+			["pending", "recovering", "retrying"].includes(job.status) &&
+			(!job.leaseExpiresAt || new Date(job.leaseExpiresAt).getTime() < Date.now())
+		) {
+			processHikvisionCredentialRecoveryJob({ jobId: job.id, req }).catch((error) =>
+				deviceLogger.error(`Credential recovery job ${job.id} resume failed: ${error}`),
+			);
+		}
+		res.status(200).json(
+			buildSuccessResponse(
+				"Credential recovery job",
+				{ job: serializeCredentialRecoveryJob(job) },
+				200,
+			),
+		);
 	};
 
 	const applyHikvisionCredentialMerge = async (params: {
@@ -24143,6 +24683,10 @@ export const controller = (prisma: PrismaClient) => {
 		reconcileBiometricSync,
 		copyHikvisionDeviceUserToPeer,
 		planHikvisionSdkUserMerge,
+		reviewHikvisionCredentialRecovery,
+		startHikvisionCredentialRecoveryJob,
+		listHikvisionCredentialRecoveryJobs,
+		getHikvisionCredentialRecoveryJob,
 		applyHikvisionSdkUserMerge,
 		startHikvisionSdkUserMergeJob,
 		reviewHikvisionSdkUserMergeJob,

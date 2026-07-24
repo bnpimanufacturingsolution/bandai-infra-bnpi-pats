@@ -13,6 +13,35 @@ If this file conflicts with lower-priority reports, generated notes, task files,
 
 Project Truth must not be silently overwritten. Requirement evolution is allowed when documented and accepted.
 
+## Credential Recovery Queue Truth (2026-07-24)
+
+- Status: `CONFIRMED_CODE_EVIDENCE_WITH_RUNTIME_BOUNDARY`.
+- The Merge device users UI's current `Recovery queued` headline is not a
+  durable or executing backend queue. The backend assigns recovery-stage
+  classifications while building a plan, and the frontend counts operations
+  that are neither selectable nor locally classified as requiring physical
+  action. No recovery worker consumes that displayed population.
+- `Ready now 0` means the displayed plan has zero recommended operations with
+  `executionEligibility=ready_from_raw_blob` that pass the frontend physical
+  action filter. It does not mean there are no gaps and does not prove recovery
+  is running.
+- The currently callable software-recovery primitive is selected per-device
+  biometric metadata backfill followed by a fresh plan, guarded merge write,
+  and physical target reread. Historical selected batches recovered 209/209
+  and 21/21 source rows, but this does not prove automatic recovery.
+- The 2026-07-24 operator screenshot is historical evidence only: 3,257
+  potential operations, 505 fingerprint, 2,630 face, 122 card, ready 0,
+  recovery queued 3,237, and headline physical action 20. Its backend stage
+  summary reported physical identity action 18. The 18-versus-20 total is
+  `CONFLICTING` because the frontend and backend use different classification
+  logic.
+- A future honest running state requires a durable recovery job, task/worker
+  leases, heartbeat, resume cursor, deduplicated source custody work, shared
+  physical-device locks, pollable stage timings, and physical-reread-owned gap
+  counters. Until then, use `Recovery needed` rather than `queued`.
+- Architecture and evidence:
+  `docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md`.
+
 ## Confirmed Local DEV and Sync Center Runtime Truth (2026-07-23)
 
 - Canonical Windows hot-reload PostgreSQL is the K3s DEV forward at `127.0.0.1:55435`; compose DEV is not an automatic fallback.
