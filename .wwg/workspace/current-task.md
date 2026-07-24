@@ -1,5 +1,22 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-24 Overnight five-device biometric convergence
+
+- Task mode: authorized durable credential recovery writes on five Main
+  Entrance devices (A/B/D/E/F). Exclude Main C and TEST A/B.
+- Active runtime: K3s DEV API at SHA `5a2851c` (API-only deploy), worker
+  logs confirm `workerVersion=5a2851c`.
+- Finish line (in progress): reduce face + fingerprint gaps with physical
+  reread proof; named observability; stable chained waves.
+- Proven this session: face FDLib A→B path; **351** verified face writes,
+  gap remaining **2903** (from 3254); zero failed writes; Grafana/Loki up.
+- Fingerprint: not ready (`target_owner_scan_incomplete` dominant). Do not
+  fall through from FP canary to face without recording the FP block matrix
+  (strict mode in `start-wave.py`).
+- Evidence:
+  `.runtime/overnight-biometric-convergence-20260724-230000/STATUS.md`.
+- Chain driver continues on VM (`chain-waves.py` / face 50-cap jobs).
+
 ## Latest Task Addendum - 2026-07-24 DEV data clone to UAT and PROD
 
 - Task mode: authorized high-risk K3s PostgreSQL and upload-volume migration.
