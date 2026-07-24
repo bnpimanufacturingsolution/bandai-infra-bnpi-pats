@@ -8,6 +8,10 @@ import {
 	ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED,
 	getGeneralEmployeeSeedPreview,
 } from "../prisma/seeds/generalEmployeeSeeder.shared";
+import {
+	LOCAL_ADMIN_SEEDS,
+	orderLocalAdminSeedsForExistingUsers,
+} from "../prisma/seeds/defaultProjectSeeder";
 import { MIGRATION_SCRIPT_SAFETY_REGISTRY } from "../scripts/migration/script-safety";
 
 const packageJson = require("../package.json") as { scripts: Record<string, string> };
@@ -47,6 +51,27 @@ describe("seed script dry-run safety guard", () => {
 
 	it("keeps prisma-seed aligned with the local admin bootstrap contract", () => {
 		expect(ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED).to.equal(true);
+	});
+
+	it("orders a seeded username holder before the seed that needs its old username", () => {
+		const ordered = orderLocalAdminSeedsForExistingUsers(LOCAL_ADMIN_SEEDS, [
+			{ email: "super@admin.com", userName: "super-admin" },
+			{ email: "admin@bandai.local", userName: "hris-admin" },
+		]);
+
+		expect(ordered.map((seed) => seed.email)).to.deep.equal([
+			"super@admin.com",
+			"admin@bandai.local",
+			"hris@admin.com",
+		]);
+	});
+
+	it("fails closed when a configured admin username belongs to a non-seeded identity", () => {
+		expect(() =>
+			orderLocalAdminSeedsForExistingUsers(LOCAL_ADMIN_SEEDS, [
+				{ email: "unrelated@example.com", userName: "hris-admin" },
+			]),
+		).to.throw(/identity conflict/);
 	});
 });
 
