@@ -116,6 +116,42 @@ export type DepartmentDefinition = {
 	isHr: boolean;
 };
 
+export type ExistingDepartmentSeedIdentity = {
+	id: string;
+	name: string;
+	code: string;
+	isActive: boolean;
+	isDeleted: boolean;
+	managerId?: string | null;
+};
+
+export function resolveDepartmentSeedIdentity(
+	definition: DepartmentDefinition,
+	candidates: readonly ExistingDepartmentSeedIdentity[],
+):
+	| { kind: "create" }
+	| { kind: "code"; department: ExistingDepartmentSeedIdentity }
+	| { kind: "name"; department: ExistingDepartmentSeedIdentity } {
+	const codeMatch = candidates.find((candidate) => candidate.code === definition.code);
+	const nameMatch = candidates.find((candidate) => candidate.name === definition.name);
+
+	if (codeMatch && nameMatch && codeMatch.id !== nameMatch.id) {
+		throw new Error(
+			`Department seed identity conflict for ${definition.code}: code and name belong to different records.`,
+		);
+	}
+	if (codeMatch) return { kind: "code", department: codeMatch };
+	if (nameMatch) {
+		if (!nameMatch.isActive || nameMatch.isDeleted) {
+			throw new Error(
+				`Department seed identity conflict for ${definition.code}: the matching name is inactive or deleted.`,
+			);
+		}
+		return { kind: "name", department: nameMatch };
+	}
+	return { kind: "create" };
+}
+
 export type SectionDefinition = {
 	name: string;
 	code: string;
@@ -3492,33 +3528,49 @@ const ensureDepartments = async (
 	const departmentMap = new Map<string, { id: string; managerId?: string | null }>();
 
 	for (const definition of departmentDefinitions) {
-		const department = await withPrismaWriteRetry(
-			() =>
-				prisma.department.upsert({
-					where: {
-						organizationId_code: {
-							organizationId,
-							code: definition.code,
-						},
-					},
-					update: {
-						name: definition.name,
-						description: definition.description,
-						isHr: definition.isHr,
-						isActive: true,
-						isDeleted: false,
-					},
-					create: {
-						organizationId,
-						name: definition.name,
-						code: definition.code,
-						description: definition.description,
-						isHr: definition.isHr,
-						isActive: true,
-					},
-				}),
-			`department upsert ${definition.code}`,
-		);
+		const candidates = await prisma.department.findMany({
+			where: {
+				organizationId,
+				OR: [{ code: definition.code }, { name: definition.name }],
+			},
+			select: {
+				id: true,
+				name: true,
+				code: true,
+				isActive: true,
+				isDeleted: true,
+				managerId: true,
+			},
+		});
+		const resolution = resolveDepartmentSeedIdentity(definition, candidates);
+		const department =
+			resolution.kind === "name"
+				? resolution.department
+				: await withPrismaWriteRetry(
+						() =>
+							resolution.kind === "code"
+								? prisma.department.update({
+										where: { id: resolution.department.id },
+										data: {
+											name: definition.name,
+											description: definition.description,
+											isHr: definition.isHr,
+											isActive: true,
+											isDeleted: false,
+										},
+									})
+								: prisma.department.create({
+										data: {
+											organizationId,
+											name: definition.name,
+											code: definition.code,
+											description: definition.description,
+											isHr: definition.isHr,
+											isActive: true,
+										},
+									}),
+						`department reconcile ${definition.code}`,
+					);
 		departmentMap.set(definition.code, {
 			id: department.id,
 			managerId: department.managerId,

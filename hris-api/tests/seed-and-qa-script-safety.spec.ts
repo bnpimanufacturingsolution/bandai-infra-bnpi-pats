@@ -7,6 +7,7 @@ import {
 import {
 	ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED,
 	getGeneralEmployeeSeedPreview,
+	resolveDepartmentSeedIdentity,
 } from "../prisma/seeds/generalEmployeeSeeder.shared";
 import {
 	LOCAL_ADMIN_SEEDS,
@@ -72,6 +73,66 @@ describe("seed script dry-run safety guard", () => {
 				{ email: "unrelated@example.com", userName: "hris-admin" },
 			]),
 		).to.throw(/identity conflict/);
+	});
+
+	it("reuses an active same-name department without overwriting its imported code", () => {
+		const resolution = resolveDepartmentSeedIdentity(
+			{
+				name: "Product Assurance",
+				code: "PROD-ASSUR",
+				description: "Seed description",
+				isHr: false,
+			},
+			[
+				{
+					id: "department-existing",
+					name: "Product Assurance",
+					code: "13",
+					isActive: true,
+					isDeleted: false,
+				},
+			],
+		);
+
+		expect(resolution).to.deep.equal({
+			kind: "name",
+			department: {
+				id: "department-existing",
+				name: "Product Assurance",
+				code: "13",
+				isActive: true,
+				isDeleted: false,
+			},
+		});
+	});
+
+	it("fails closed when department code and name resolve to different records", () => {
+		expect(() =>
+			resolveDepartmentSeedIdentity(
+				{
+					name: "Product Assurance",
+					code: "PROD-ASSUR",
+					description: "Seed description",
+					isHr: false,
+				},
+				[
+					{
+						id: "department-by-code",
+						name: "Different Name",
+						code: "PROD-ASSUR",
+						isActive: true,
+						isDeleted: false,
+					},
+					{
+						id: "department-by-name",
+						name: "Product Assurance",
+						code: "13",
+						isActive: true,
+						isDeleted: false,
+					},
+				],
+			),
+		).to.throw(/code and name belong to different records/);
 	});
 });
 
