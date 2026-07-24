@@ -2,10 +2,40 @@ import { expect } from "chai";
 import {
 	buildHikvisionDeviceBaseUrl,
 	resolveHikvisionTunnelTarget,
+	withHikvisionDeviceRequestSlot,
 	withHikvisionPrismaTransportRetry,
 } from "../lib/hikvision-client";
 
 describe("hikvision client endpoint resolution", () => {
+	it("serializes one panel while preserving concurrency across panels", async () => {
+		const activeByDevice = new Map<string, number>();
+		let sameDevicePeak = 0;
+		let fleetPeak = 0;
+		let fleetActive = 0;
+		const run = async (deviceId: string, delayMs: number) =>
+			withHikvisionDeviceRequestSlot(deviceId, async () => {
+				const deviceActive = (activeByDevice.get(deviceId) || 0) + 1;
+				activeByDevice.set(deviceId, deviceActive);
+				sameDevicePeak = Math.max(sameDevicePeak, deviceActive);
+				fleetActive += 1;
+				fleetPeak = Math.max(fleetPeak, fleetActive);
+				await new Promise((resolve) => setTimeout(resolve, delayMs));
+				fleetActive -= 1;
+				activeByDevice.set(deviceId, deviceActive - 1);
+				return deviceId;
+			});
+
+		const results = await Promise.all([
+			run("device-f", 20),
+			run("device-f", 5),
+			run("device-a", 20),
+		]);
+
+		expect(results).to.deep.equal(["device-f", "device-f", "device-a"]);
+		expect(sameDevicePeak).to.equal(1);
+		expect(fleetPeak).to.equal(2);
+	});
+
 	it("retries transient Prisma transport loss without retrying permanent errors", async () => {
 		let attempts = 0;
 		const value = await withHikvisionPrismaTransportRetry(async () => {

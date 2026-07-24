@@ -42,6 +42,90 @@ export type HikvisionTunnelTarget = {
 	source: "env_tunnel_map";
 };
 
+type HikvisionDeviceRequestContext = {
+	deviceId?: string;
+	deviceName?: string;
+	endpoint?: string;
+	method?: string;
+};
+
+const hikvisionDeviceRequestTails = new Map<string, Promise<void>>();
+const hikvisionDeviceRequestDepths = new Map<string, number>();
+
+/**
+ * Hikvision panels use a stateful digest-auth exchange and can return 401,
+ * AbortError, or transport failures when independent API paths authenticate
+ * concurrently against the same panel. Keep one request lane per physical
+ * device while preserving concurrency across different devices.
+ */
+export const withHikvisionDeviceRequestSlot = async <T>(
+	deviceKey: string,
+	work: () => Promise<T>,
+	context: HikvisionDeviceRequestContext = {},
+): Promise<T> => {
+	const key = String(deviceKey || "").trim() || "default";
+	const predecessor = hikvisionDeviceRequestTails.get(key) || Promise.resolve();
+	let release!: () => void;
+	const completion = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const tail = predecessor.catch(() => undefined).then(() => completion);
+	hikvisionDeviceRequestTails.set(key, tail);
+	const queueDepth = (hikvisionDeviceRequestDepths.get(key) || 0) + 1;
+	hikvisionDeviceRequestDepths.set(key, queueDepth);
+	const queuedAt = Date.now();
+
+	await predecessor.catch(() => undefined);
+	const queueWaitMs = Date.now() - queuedAt;
+	if (queueWaitMs >= 50) {
+		console.info(
+			JSON.stringify({
+				event: "hikvision.device_request_lane_wait",
+				deviceId: context.deviceId || key,
+				deviceName: context.deviceName || undefined,
+				endpoint: context.endpoint || undefined,
+				method: context.method || undefined,
+				queueDepth,
+				queueWaitMs,
+			}),
+		);
+	}
+
+	try {
+		return await work();
+	} finally {
+		release();
+		const remainingDepth = Math.max(0, (hikvisionDeviceRequestDepths.get(key) || 1) - 1);
+		if (remainingDepth > 0) hikvisionDeviceRequestDepths.set(key, remainingDepth);
+		else hikvisionDeviceRequestDepths.delete(key);
+		if (hikvisionDeviceRequestTails.get(key) === tail) {
+			hikvisionDeviceRequestTails.delete(key);
+		}
+	}
+};
+
+let tlsBypassUsers = 0;
+let tlsBypassPreviousValue: string | undefined;
+
+const acquireHikvisionTlsBypass = () => {
+	if (tlsBypassUsers === 0) {
+		tlsBypassPreviousValue = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+		process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+	}
+	tlsBypassUsers += 1;
+};
+
+const releaseHikvisionTlsBypass = () => {
+	tlsBypassUsers = Math.max(0, tlsBypassUsers - 1);
+	if (tlsBypassUsers !== 0) return;
+	if (tlsBypassPreviousValue === undefined) {
+		delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+	} else {
+		process.env.NODE_TLS_REJECT_UNAUTHORIZED = tlsBypassPreviousValue;
+	}
+	tlsBypassPreviousValue = undefined;
+};
+
 const getRequestOrganizationId = (request?: Request) =>
 	String((request as any)?.organizationId || (request as any)?.userOrganizationId || "").trim();
 
@@ -107,7 +191,11 @@ export const withHikvisionPrismaTransportRetry = async <T>(
 		} catch (error: any) {
 			lastError = error;
 			const detail = `${error?.message || error || ""} ${error?.code || ""}`;
-			if (!/(can't reach database|server has closed the connection|connection.*closed|econnreset|p1001)/i.test(detail)) {
+			if (
+				!/(can't reach database|server has closed the connection|connection.*closed|econnreset|p1001)/i.test(
+					detail,
+				)
+			) {
 				throw error;
 			}
 		}
@@ -178,15 +266,22 @@ export const resolveHikvisionTunnelTarget = (
 const shouldUseLoopbackRuntimeEndpoint = (options?: HikvisionEndpointResolutionOptions) => {
 	if (options?.allowLoopbackRuntime) return true;
 	if (process.env.PROJECT_TRUTH_ALLOW_LOOPBACK_HIKVISION_RUNTIME === "1") return true;
-	return String(options?.runtimePlatform || process.platform).trim().toLowerCase() === "linux";
+	return (
+		String(options?.runtimePlatform || process.platform)
+			.trim()
+			.toLowerCase() === "linux"
+	);
 };
 
-const getHikvisionRuntimeEndpoint = (device: {
-	address: string;
-	port: number;
-	protocol: string;
-	config?: unknown;
-}, options?: HikvisionEndpointResolutionOptions) => {
+const getHikvisionRuntimeEndpoint = (
+	device: {
+		address: string;
+		port: number;
+		protocol: string;
+		config?: unknown;
+	},
+	options?: HikvisionEndpointResolutionOptions,
+) => {
 	const config = device.config && typeof device.config === "object" ? (device.config as any) : {};
 	const runtimeBaseUrl = String(
 		config.hikvisionRuntimeBaseUrl ||
@@ -217,15 +312,16 @@ const getHikvisionRuntimeEndpoint = (device: {
 			config.runtimePort ||
 			getHikvisionDeviceHttpPort(device),
 	);
-	const runtimeProtocol = String(
-		config.hikvisionRuntimeProtocol ||
-			config.hikvisionProxyProtocol ||
-			config.runtimeProtocol ||
-			device.protocol ||
-			"http",
-	).toLowerCase() === "https"
-		? "https"
-		: "http";
+	const runtimeProtocol =
+		String(
+			config.hikvisionRuntimeProtocol ||
+				config.hikvisionProxyProtocol ||
+				config.runtimeProtocol ||
+				device.protocol ||
+				"http",
+		).toLowerCase() === "https"
+			? "https"
+			: "http";
 
 	if (/^https?:\/\//i.test(runtimeAddress)) {
 		const parsed = new URL(runtimeAddress);
@@ -236,21 +332,22 @@ const getHikvisionRuntimeEndpoint = (device: {
 	return `${runtimeProtocol}://${runtimeAddress}:${runtimePort}`;
 };
 
-export const buildHikvisionDeviceBaseUrl = (device: {
-	address: string;
-	port: number;
-	protocol: string;
-	config?: unknown;
-}, options?: HikvisionEndpointResolutionOptions) => {
+export const buildHikvisionDeviceBaseUrl = (
+	device: {
+		address: string;
+		port: number;
+		protocol: string;
+		config?: unknown;
+	},
+	options?: HikvisionEndpointResolutionOptions,
+) => {
 	const runtimeEndpoint = getHikvisionRuntimeEndpoint(device, options);
 	if (runtimeEndpoint) return runtimeEndpoint;
 
 	const address = String(device.address || "").trim();
 	const httpPort = getHikvisionDeviceHttpPort(device);
 	const physicalProtocol = device.protocol === "https" ? "https" : "http";
-	const physicalHost = /^https?:\/\//i.test(address)
-		? new URL(address).hostname
-		: address;
+	const physicalHost = /^https?:\/\//i.test(address) ? new URL(address).hostname : address;
 	const tunnelTarget = resolveHikvisionTunnelTarget(physicalHost, httpPort);
 	if (tunnelTarget) {
 		return `${tunnelTarget.protocol || physicalProtocol}://${tunnelTarget.host}:${tunnelTarget.port}`;
@@ -289,23 +386,25 @@ class HikvisionClient {
 			String((options.request?.query as any)?.deviceId || "").trim();
 
 		if (options.prisma && (requestedDeviceId || organizationId)) {
-			const device = await withHikvisionPrismaTransportRetry(() => options.prisma!.device.findFirst({
-				where: {
-					isDeleted: false,
-					...(requestedDeviceId ? { id: requestedDeviceId } : {}),
-					...(organizationId ? { organizationId } : {}),
-				},
-				orderBy: { createdAt: "asc" },
-				select: {
-					id: true,
-					name: true,
-					address: true,
-					port: true,
-					protocol: true,
-					config: true,
-					access: true,
-				},
-			}));
+			const device = await withHikvisionPrismaTransportRetry(() =>
+				options.prisma!.device.findFirst({
+					where: {
+						isDeleted: false,
+						...(requestedDeviceId ? { id: requestedDeviceId } : {}),
+						...(organizationId ? { organizationId } : {}),
+					},
+					orderBy: { createdAt: "asc" },
+					select: {
+						id: true,
+						name: true,
+						address: true,
+						port: true,
+						protocol: true,
+						config: true,
+						access: true,
+					},
+				}),
+			);
 
 			if (!device) {
 				throw {
@@ -362,7 +461,11 @@ class HikvisionClient {
 		}
 	}
 
-	private buildRequestUrl(connection: HikvisionDeviceConnection, endpoint: string, ensureJsonFormat = true) {
+	private buildRequestUrl(
+		connection: HikvisionDeviceConnection,
+		endpoint: string,
+		ensureJsonFormat = true,
+	) {
 		if (/^https?:\/\//i.test(endpoint)) return endpoint;
 		const normalizedEndpoint = ensureJsonFormat ? this.normalizeEndpoint(endpoint) : endpoint;
 		return `${connection.baseUrl}${normalizedEndpoint}`;
@@ -396,16 +499,15 @@ class HikvisionClient {
 			method: options.method || "GET",
 			headers,
 		};
-		const timeoutMs = Math.max(Number(options.timeoutMs || HIKVISION_CONFIG.timeout || 10000), 1000);
-		const abortController = new AbortController();
-		const timeout = setTimeout(() => abortController.abort(), timeoutMs);
-		fetchOptions.signal = abortController.signal;
+		const timeoutMs = Math.max(
+			Number(options.timeoutMs || HIKVISION_CONFIG.timeout || 10000),
+			1000,
+		);
 
 		// Handle body
 		if (options.body) {
 			const body = stripProxyFields(options.body);
-			fetchOptions.body =
-				typeof body === "string" ? body : JSON.stringify(body);
+			fetchOptions.body = typeof body === "string" ? body : JSON.stringify(body);
 		}
 
 		// For HTTPS with self-signed certificates, we need to configure the agent.
@@ -417,30 +519,58 @@ class HikvisionClient {
 			fetchOptions.agent = httpsAgent;
 		}
 
-		const previousTlsBypass = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
 		try {
 			if (url.startsWith("https")) {
-				process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+				acquireHikvisionTlsBypass();
 			}
 			const client = await this.createClient(connection.username, connection.password);
-			const response = await client.fetch(url, fetchOptions);
-
-			if (!response.ok) {
-				const errorText = await response.text().catch(() => "");
-				let errorData: any = { message: response.statusText };
-				try {
-					errorData = errorText ? JSON.parse(errorText) : errorData;
-				} catch {
-					errorData = { message: response.statusText, raw: errorText };
-				}
-				throw {
-					status: response.status,
-					message: errorData.message || response.statusText,
-					data: errorData,
-				};
-			}
-
-			const responseText = await response.text();
+			const responseText = await withHikvisionDeviceRequestSlot(
+				connection.id || connection.baseUrl,
+				async () => {
+					const abortController = new AbortController();
+					const timeout = setTimeout(() => abortController.abort(), timeoutMs);
+					try {
+						const response = await client.fetch(url, {
+							...fetchOptions,
+							signal: abortController.signal,
+						});
+						if (!response.ok) {
+							const errorText = await response.text().catch(() => "");
+							let errorData: any = { message: response.statusText };
+							try {
+								errorData = errorText ? JSON.parse(errorText) : errorData;
+							} catch {
+								errorData = { message: response.statusText, raw: errorText };
+							}
+							throw {
+								status: response.status,
+								message: errorData.message || response.statusText,
+								data: {
+									...errorData,
+									deviceId: connection.id,
+									deviceName: connection.name,
+									baseUrl: connection.baseUrl,
+									endpoint,
+									method: String(fetchOptions.method || "GET"),
+									errorCategory:
+										response.status === 401 || response.status === 403
+											? "device_authentication"
+											: "device_http_response",
+								},
+							};
+						}
+						return response.text();
+					} finally {
+						clearTimeout(timeout);
+					}
+				},
+				{
+					deviceId: connection.id,
+					deviceName: connection.name,
+					endpoint,
+					method: String(fetchOptions.method || "GET"),
+				},
+			);
 			if (options.rawResponse) {
 				return { raw: responseText };
 			}
@@ -454,28 +584,37 @@ class HikvisionClient {
 			if (error.status) {
 				throw error;
 			}
+			const errorName = String(error?.name || "");
+			const errorCode = String(error?.code || error?.cause?.code || "");
+			const errorCause = String(error?.cause?.message || "");
+			const failureReason =
+				errorName === "AbortError"
+					? `request_timeout_after_${timeoutMs}ms`
+					: [String(error?.message || "request_failed"), errorCode, errorCause]
+							.filter(Boolean)
+							.join(" | ");
 			// Otherwise wrap it
 			throw {
 				status: 502,
-				message: error.message
-					? `Hikvision device request failed: ${error.message}`
-					: "Hikvision device request failed",
+				message: `Hikvision device request failed: ${failureReason}`,
 				data: {
 					deviceId: connection.id,
 					deviceName: connection.name,
 					baseUrl: connection.baseUrl,
 					timeoutMs,
-					errorName: error?.name,
-					errorCode: error?.code || error?.cause?.code,
-					errorCause: error?.cause?.message,
+					endpoint,
+					method: String(fetchOptions.method || "GET"),
+					errorCategory:
+						errorName === "AbortError" ? "device_request_timeout" : "device_transport",
+					errorName,
+					errorCode,
+					errorCause,
 				},
 			};
 		} finally {
 			if (url.startsWith("https")) {
-				if (previousTlsBypass === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-				else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTlsBypass;
+				releaseHikvisionTlsBypass();
 			}
-			clearTimeout(timeout);
 		}
 	}
 
@@ -494,13 +633,13 @@ class HikvisionClient {
 			"X-Requested-With": "XMLHttpRequest",
 			...((options.headers as Record<string, string>) || {}),
 		};
-		const timeoutMs = Math.max(Number(options.timeoutMs || HIKVISION_CONFIG.timeout || 10000), 1000);
-		const abortController = new AbortController();
-		const timeout = setTimeout(() => abortController.abort(), timeoutMs);
+		const timeoutMs = Math.max(
+			Number(options.timeoutMs || HIKVISION_CONFIG.timeout || 10000),
+			1000,
+		);
 		const fetchOptions: RequestInit = {
 			method: options.method || "GET",
 			headers,
-			signal: abortController.signal,
 		};
 
 		if (url.startsWith("https")) {
@@ -511,57 +650,96 @@ class HikvisionClient {
 			fetchOptions.agent = httpsAgent;
 		}
 
-		const previousTlsBypass = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
 		try {
 			if (url.startsWith("https")) {
-				process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+				acquireHikvisionTlsBypass();
 			}
 			const client = await this.createClient(connection.username, connection.password);
-			const response = await client.fetch(url, fetchOptions);
+			return await withHikvisionDeviceRequestSlot(
+				connection.id || connection.baseUrl,
+				async () => {
+					const abortController = new AbortController();
+					const timeout = setTimeout(() => abortController.abort(), timeoutMs);
+					try {
+						const response = await client.fetch(url, {
+							...fetchOptions,
+							signal: abortController.signal,
+						});
+						if (!response.ok) {
+							const errorText = await response.text().catch(() => "");
+							throw {
+								status: response.status,
+								message:
+									errorText ||
+									response.statusText ||
+									"Failed to fetch Hikvision binary content",
+								data: {
+									deviceId: connection.id,
+									deviceName: connection.name,
+									baseUrl: connection.baseUrl,
+									endpoint,
+									method: String(fetchOptions.method || "GET"),
+									errorCategory:
+										response.status === 401 || response.status === 403
+											? "device_authentication"
+											: "device_http_response",
+								},
+							};
+						}
 
-			if (!response.ok) {
-				const errorText = await response.text().catch(() => "");
-				throw {
-					status: response.status,
-					message: errorText || response.statusText || "Failed to fetch Hikvision binary content",
-					data: {
-						deviceId: connection.id,
-						deviceName: connection.name,
-						baseUrl: connection.baseUrl,
-					},
-				};
-			}
-
-			const buffer = Buffer.from(await response.arrayBuffer());
-			return {
-				status: response.status,
-				contentType: response.headers.get("content-type") || "application/octet-stream",
-				contentLength: Number(response.headers.get("content-length") || buffer.length || 0),
-				buffer,
-			};
+						const buffer = Buffer.from(await response.arrayBuffer());
+						return {
+							status: response.status,
+							contentType:
+								response.headers.get("content-type") || "application/octet-stream",
+							contentLength: Number(
+								response.headers.get("content-length") || buffer.length || 0,
+							),
+							buffer,
+						};
+					} finally {
+						clearTimeout(timeout);
+					}
+				},
+				{
+					deviceId: connection.id,
+					deviceName: connection.name,
+					endpoint,
+					method: String(fetchOptions.method || "GET"),
+				},
+			);
 		} catch (error: any) {
 			if (error.status) throw error;
+			const errorName = String(error?.name || "");
+			const errorCode = String(error?.code || error?.cause?.code || "");
+			const errorCause = String(error?.cause?.message || "");
+			const failureReason =
+				errorName === "AbortError"
+					? `request_timeout_after_${timeoutMs}ms`
+					: [String(error?.message || "request_failed"), errorCode, errorCause]
+							.filter(Boolean)
+							.join(" | ");
 			throw {
 				status: 502,
-				message: error.message
-					? `Hikvision binary request failed: ${error.message}`
-					: "Hikvision binary request failed",
+				message: `Hikvision binary request failed: ${failureReason}`,
 				data: {
 					deviceId: connection.id,
 					deviceName: connection.name,
 					baseUrl: connection.baseUrl,
 					timeoutMs,
-					errorName: error?.name,
-					errorCode: error?.code || error?.cause?.code,
-					errorCause: error?.cause?.message,
+					endpoint,
+					method: String(fetchOptions.method || "GET"),
+					errorCategory:
+						errorName === "AbortError" ? "device_request_timeout" : "device_transport",
+					errorName,
+					errorCode,
+					errorCause,
 				},
 			};
 		} finally {
 			if (url.startsWith("https")) {
-				if (previousTlsBypass === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
-				else process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTlsBypass;
+				releaseHikvisionTlsBypass();
 			}
-			clearTimeout(timeout);
 		}
 	}
 }
